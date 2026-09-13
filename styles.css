@@ -69,8 +69,6 @@ button { font: inherit; }
 .document.done > .line > .text { color: #999; text-decoration: line-through; }
 .text .mention { color: #508fbb; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .text .mention:hover { color: #3a75a3; }
-.text .mention .icon { display: inline-block; width: 14px; height: 14px; margin: 0 2px 0 0; vertical-align: -2px; color: #8a8a8a; }
-.text .mention .icon svg { width: 14px; height: 14px; display: block; }
 .h1 > .line > .text { font-size: 24px; font-weight: 700; line-height: 30px; }
 .h2 > .line > .text { font-size: 20px; font-weight: 700; line-height: 28px; }
 .h3 > .line > .text { font-weight: 700; }

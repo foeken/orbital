@@ -81,9 +81,7 @@ function renderSegs(el, segs) {
   el.replaceChildren(...segs.map((s, i) => {
     // Chromium needs a placeholder newline after a trailing soft break to put the caret on the empty line; readSegs strips it
     if ('text' in s) return document.createTextNode(s.text + (i === segs.length - 1 && s.text.endsWith('\n') ? '\n' : ''));
-    const a = document.createElement('a'); a.className = 'mention'; a.dataset.uri = s.mention.uri; a.contentEditable = 'false';
-    const icon = document.createElement('span'); icon.className = 'icon'; icon.innerHTML = PERSON_ICON;
-    a.append(icon, document.createTextNode(s.mention.label));
+    const a = document.createElement('a'); a.className = 'mention'; a.dataset.uri = s.mention.uri; a.contentEditable = 'false'; a.textContent = s.mention.label;
     return a;
   }));
 }
@@ -140,7 +138,6 @@ const keyOfEl = (el) => el.closest('.node').dataset.key;
 const textEl = (key) => outline.querySelector('.node[data-key="' + CSS.escape(key) + '"] > .line > .text');
 const ICONS = window.ICONS || {}; // icons.js: Tana line icon set (Nucleo export), greyscale via currentColor
 const TASK_ICON = ICONS.task || '';
-const PERSON_ICON = ICONS.person || '';
 
 async function loadRoots() { roots = await tana.roots(); }
 async function reload(docId) { kids.set(docId, await tana.children(docId)); }
