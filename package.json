@@ -1,15 +1,19 @@
 {
   "name": "tana-tasks",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Local task list synced with Tana",
+  "description": "Local task list kept live with Tana over its platform sync protocol",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "tana": "node scripts/tana-cli.js"
+    "tana": "electron scripts/platform-cli.js",
+    "check": "node scripts/db-check.js && node scripts/sdk-check.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0"
+    "@bufbuild/protobuf": "^2.15.0",
+    "@connectrpc/connect": "^2.2.0",
+    "@connectrpc/connect-web": "^2.2.0",
+    "loro-crdt": "^1.16.1"
   },
   "devDependencies": {
     "electron": "^44.3.0"

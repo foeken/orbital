@@ -1,11 +1,22 @@
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain } = require('electron');
 const path = require('node:path');
 const db = require('./db');
-const tana = require('./tana');
+const { createTanaSession, peerIdentity } = require('./tana-session');
+const { createTanaClient } = require('./sdk');
+const { readNode, setTitle, setState, contentText } = require('./sdk/node');
 
-const status = { authenticated: false, syncing: false, lastSync: null, error: null };
-let win;
-let pushTimer;
+const OPEN_TASKS_QUERY = (userUri) => ({
+  nodeTypes: ['text'], assignedTo: [userUri], stateTypes: ['open'], limit: 500,
+  sortOptions: [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }],
+});
+
+const status = { authenticated: false, connected: false, syncing: false, lastSync: null, error: null };
+let win, session, client, me;
+let refreshTimer;
+const subscribed = new Set();
+
+const errText = (e) => String((e && e.message) || e);
+const now = () => new Date().toISOString();
 
 function send(channel, payload) {
   if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
@@ -16,27 +27,66 @@ function setStatus(patch) {
   send('sync:status', status);
 }
 
-async function sync() {
-  if (status.syncing) return { ok: true };
+async function start() {
+  me = await session.info();
+  const peer = peerIdentity({ file: path.join(app.getPath('userData'), 'peer.json'), userExternalId: me.userExternalId });
+  client = createTanaClient({ getAccessToken: (o) => session.getAccessToken(o), orgId: me.orgId, ...peer, logger: console });
+  client.sync.on('connected', () => setStatus({ connected: true, error: null }));
+  client.sync.on('disconnected', () => setStatus({ connected: false }));
+  client.sync.on('error', (e) => setStatus({ error: errText(e) }));
+  client.sync.on('change', onChange);
+  setStatus({ authenticated: true });
+  await client.sync.connect();
+  await refresh();
+}
+
+async function refresh() {
+  if (!client || status.syncing) return;
   setStatus({ syncing: true, error: null });
   try {
-    for (const row of db.dirtyRows()) {
-      await tana.pushTask({ id: row.id, title: row.title, done: row.done });
-      db.markClean(row.id);
-    }
-    db.replaceFromTana(await tana.pullTasks());
+    const { nodes } = await client.graph.listNodes(OPEN_TASKS_QUERY(me.userUri));
+    const rows = nodes.map((n) => ({ id: n.id, title: n.title || '', done: 0, space: null, updatedAt: n.updateTime || now() }));
+    db.replaceFromTana(rows);
     send('tasks:changed');
-    setStatus({ syncing: false, lastSync: new Date().toISOString() });
-    return { ok: true };
+    const ids = new Set(rows.map((r) => r.id));
+    for (const id of ids) if (!subscribed.has(id)) subscribe(id);
+    for (const id of subscribed) if (!ids.has(id)) { subscribed.delete(id); client.sync.unsubscribe(id).catch(() => {}); }
+    setStatus({ syncing: false, lastSync: now() });
   } catch (e) {
-    setStatus({ syncing: false, error: String(e && e.message || e) });
-    return { ok: false, error: status.error };
+    setStatus({ syncing: false, error: errText(e) });
   }
 }
 
-function schedulePush() {
-  clearTimeout(pushTimer);
-  pushTimer = setTimeout(sync, 2000);
+function subscribe(id) {
+  subscribed.add(id);
+  return client.sync.subscribe(id).catch((e) => { subscribed.delete(id); setStatus({ error: errText(e) }); return null; });
+}
+
+function scheduleRefresh(ms) {
+  clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(refresh, ms);
+}
+
+function onChange(docId) {
+  try {
+    const doc = client.sync.getDocument(docId);
+    const row = doc && db.get(docId);
+    if (!row) return;
+    const n = readNode(doc);
+    const next = { title: n.title ?? row.title, done: n.stateType === 'closed' ? 1 : 0, content: row.content == null ? null : contentText(doc) };
+    if (next.title === row.title && next.done === row.done && next.content === row.content) return;
+    db.upsert({ ...row, ...next, updatedAt: now() });
+    send('tasks:changed');
+  } catch (e) {
+    setStatus({ error: errText(e) });
+  }
+}
+
+async function document(id) {
+  if (!client) throw new Error('not connected to Tana');
+  const doc = client.sync.getDocument(id) || await subscribe(id);
+  if (!doc) throw new Error(status.error || 'could not subscribe to ' + id);
+  return doc;
 }
 
 function createWindow() {
@@ -47,45 +97,63 @@ function createWindow() {
   win.loadFile(path.join(__dirname, 'index.html'));
 }
 
+function createMenu() {
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    { role: 'appMenu' },
+    { role: 'editMenu' },
+    { label: 'Tasks', submenu: [{ label: 'Sync with Tana', accelerator: 'CmdOrCtrl+R', click: () => refresh() }] },
+    { role: 'windowMenu' },
+  ]));
+}
+
 ipcMain.handle('tasks:list', () => db.list());
-ipcMain.handle('tasks:update', (_e, id, patch) => {
-  const row = db.update(id, patch);
-  schedulePush();
-  return row;
+ipcMain.handle('tasks:update', async (_e, id, patch) => {
+  const row = db.get(id);
+  if (!row) throw new Error('no task ' + id);
+  try {
+    const doc = await document(id);
+    if (patch.title != null && patch.title !== row.title) setTitle(doc, patch.title);
+    if (patch.done != null && (patch.done ? 1 : 0) !== row.done) {
+      setState(doc, patch.done ? 'closed' : 'open', me.userUri);
+      scheduleRefresh(2000); // a closed task drops off the open list
+    }
+  } catch (e) {
+    setStatus({ error: errText(e) });
+    throw e;
+  }
+  return db.upsert({ ...row, ...patch, updatedAt: now() });
 });
 ipcMain.handle('tasks:content', async (_e, id) => {
   const row = db.get(id);
   if (row && row.content != null) return row.content;
-  const content = await tana.readContent(id);
+  const content = contentText(await document(id));
   db.setContent(id, content);
   send('tasks:changed');
   return content;
 });
-ipcMain.handle('sync:now', () => sync());
 ipcMain.handle('sync:status', () => status);
 ipcMain.handle('sync:login', async () => {
   try {
-    await tana.login();
-    setStatus({ authenticated: true, error: null });
+    await session.login();
+    await start();
   } catch (e) {
-    setStatus({ error: String(e && e.message || e) });
-    return;
+    setStatus({ error: errText(e) });
   }
-  await sync();
 });
 
 app.whenReady().then(async () => {
-  const userData = app.getPath('userData');
-  db.open(path.join(userData, 'tasks.sqlite'));
-  tana.init({ authFile: path.join(userData, 'tana-auth.json'), openUrl: shell.openExternal });
+  db.open(path.join(app.getPath('userData'), 'tasks.sqlite'));
+  session = createTanaSession();
+  createMenu();
   createWindow();
   try {
-    status.authenticated = await tana.isAuthenticated();
+    if (await session.isAuthenticated()) await start();
+    else setStatus({ authenticated: false });
   } catch (e) {
-    status.error = String(e && e.message || e);
+    setStatus({ error: errText(e) });
   }
-  if (status.authenticated) sync();
-  setInterval(() => { if (status.authenticated) sync(); }, 60000);
+  setInterval(refresh, 60000);
 });
 
 app.on('window-all-closed', () => app.quit());
+app.on('before-quit', () => { if (client) client.close().catch(() => {}); });

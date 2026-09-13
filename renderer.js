@@ -15,12 +15,6 @@ const tana = window.api || (() => {
     listTasks: async () => tasks.map((t) => ({ ...t })),
     updateTask: async (id, patch) => { const t = tasks.find((t) => t.id === id); Object.assign(t, patch, { dirty: 1 }); return { ...t }; },
     loadContent: async (id) => { await wait(600); return 'Mock content for ' + id + '\n\n- line one\n- line two'; },
-    syncNow: async () => {
-      emitStatus({ syncing: true }); await wait(500);
-      for (let i = tasks.length - 1; i >= 0; i--) if (tasks[i].done) tasks.splice(i, 1);
-      emitStatus({ syncing: false, lastSync: new Date().toISOString() });
-      changed.forEach((cb) => cb()); return { ok: true };
-    },
     status: async () => status,
     login: async () => { await wait(300); emitStatus({ authenticated: true }); },
     onTasksChanged: (cb) => changed.push(cb),
@@ -191,7 +185,6 @@ function showStatus(s) {
   else if (s.lastSync) setStatusText('Last sync ' + new Date(s.lastSync).toLocaleTimeString());
   else setStatusText('Not synced yet');
 }
-$('sync').onclick = async () => { const r = await tana.syncNow(); if (!r.ok) setStatusText('Error: ' + r.error, true); };
 $('login').onclick = () => tana.login().catch((e) => setStatusText(String(e), true));
 
 // ---- data ----
