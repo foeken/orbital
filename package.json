@@ -1,0 +1,17 @@
+{
+  "name": "tana-tasks",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local task list synced with Tana",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "tana": "node scripts/tana-cli.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0"
+  },
+  "devDependencies": {
+    "electron": "^44.3.0"
+  }
+}

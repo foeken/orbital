@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'">
+<title>Open Tasks</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="titlebar"><h1>Open Tasks</h1></header>
+<div class="filter">
+  <input id="filter" type="text" placeholder="Filter" autocomplete="off" spellcheck="false">
+  <button id="clear" class="clear" title="Clear" tabindex="-1">×</button>
+</div>
+<ul id="list" class="list" tabindex="0"></ul>
+<div id="filtered" class="filtered"></div>
+<footer class="status">
+  <span id="statusText"></span>
+  <span class="spacer"></span>
+  <button id="login" hidden>Log in to Tana</button>
+  <button id="sync">Sync</button>
+</footer>
+<script src="renderer.js"></script>
+</body>
+</html>
