@@ -363,6 +363,23 @@ const outline = $('outline'), filterEl = $('filter'), filterRow = $('filterRow')
 // ---- right rail: what a zoomed node is linked to (api.related). These rows are edges, not nodes:
 // they open, and a task row toggles, but nothing here ever takes a caret (docs/OUTLINER.md addendum 15).
 const railEl = $('rail');
+const railGrip = $('railGrip');
+const RAIL_MIN = 200, RAIL_MAX = 620;
+const railWidth = () => Math.min(RAIL_MAX, Math.max(RAIL_MIN, Number(localStorage.getItem('railWidth')) || 272));
+railEl.style.width = railWidth() + 'px';
+// drag the grip to resize the sidebar; the width persists like the other view preferences
+railGrip.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  const startX = e.clientX, startWidth = railEl.getBoundingClientRect().width;
+  railGrip.classList.add('dragging'); railGrip.setPointerCapture(e.pointerId);
+  const move = (ev) => { railEl.style.width = Math.min(RAIL_MAX, Math.max(RAIL_MIN, startWidth - (ev.clientX - startX))) + 'px'; };
+  const up = () => {
+    railGrip.classList.remove('dragging');
+    railGrip.removeEventListener('pointermove', move); railGrip.removeEventListener('pointerup', up);
+    localStorage.setItem('railWidth', String(Math.round(railEl.getBoundingClientRect().width)));
+  };
+  railGrip.addEventListener('pointermove', move); railGrip.addEventListener('pointerup', up);
+});
 const relatedBy = new Map(); // docId -> related payload, or null while loading
 const railClosed = new Set(JSON.parse(localStorage.getItem('railClosed') || '[]'));
 const CHEV = '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4.5L6 8l3.5-3.5"/></svg>';
@@ -740,11 +757,11 @@ function renderRail(parent) {
   const active = document.activeElement, keep = active && active.classList && active.classList.contains('rrow') ? active.dataset.id : null;
   railEl.replaceChildren();
   const docId = parent && parent.node.kind === 'document' && !parent.node.draft ? parent.docId : null;
-  if (!docId) { railEl.hidden = true; return; }
+  if (!docId) { railEl.hidden = railGrip.hidden = true; return; }
   loadRelated(docId);
   const data = relatedBy.get(docId);
   const groups = data ? [['Pinned', data.pinned], ['Outcomes', data.outcomes], ['Notes', data.notes]].filter(([, rows]) => rows && rows.length) : [];
-  railEl.hidden = !groups.length;
+  railEl.hidden = railGrip.hidden = !groups.length;
   for (const [label, rows] of groups) {
     const head = document.createElement('button');
     head.className = 'rhead' + (railClosed.has(label) ? ' closed' : '');

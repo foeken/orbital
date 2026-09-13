@@ -136,6 +136,8 @@ Every request made during the build and its state. ✓ done and verified · ◐ 
 | 123 | Order the Cmd+K views logically | ✓ Inbox, Tasks, Meetings, Library, Chats, People: what is waiting on you, then your work, the calendar, knowledge, conversations, people. | main.js SECTIONS |
 | 124 | The meeting to write-up redirect must work from every route | ✓ It lived in the rail render, so only some routes hit it. Both zoom entry points now call one followSummary helper, and the write-up rule lives in a single writeUpOf in main. Verified live from the Meetings list row and from search. | renderer.js, main.js |
 
+| 125 | Make the relationships rail a real sidebar with plain rows, and resizable | ✓ The rail is now a full-height sidebar beside the document with its own scroll and border, row titles in ordinary text rather than blue links, and a drag handle on its left edge (200-620px, width persisted). Verified live: full window height at x 998, titles rgb(26,26,26), drag resized 272 to 394 and saved. | index.html, styles.css, renderer.js |
+
 Tracking rule: append new requests to the numbered table above using the next integer. Update an existing row for repeated requests; never create a separate unnumbered request list. Preserve status and verification evidence. Orchestrator owns this file.
 
 Latest rounds (three workers, all closed). The live app was inspected over its devtools port against real Tana data, which is how #49, #54, #59, #62, #68, #78, #83, #85, #89, #93, #97 and #98 were confirmed; the interaction-heavy rows (#39, #90, #96, #105 to #108) were driven in the in-file mock, where mutations stay local. `npm run check` passes on the merged tree.
