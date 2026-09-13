@@ -53,9 +53,19 @@ button { font: inherit; }
 .pill svg { width: 16px; height: 16px; }
 .pill:hover, .pill.open { background: #d9e8fa; }
 .pill:focus { outline: none; box-shadow: 0 0 0 2px #b7d2f5; }
-.menu { position: absolute; left: 0; top: calc(100% + 6px); z-index: 5; min-width: 260px; padding: 8px; background: #fff; border-radius: 10px; box-shadow: 0 8px 30px rgba(0, 0, 0, .16), 0 0 0 1px rgba(0, 0, 0, .06); font-weight: 400; color: #1a1a1a; text-align: left; }
+/* MCP toggle contract: grey while off, blue when the renderer adds .active or aria-pressed. */
+.pill[data-id="mcp"] { background: #f1f1f1; color: #777; }
+.pill[data-id="mcp"] b { display: none; }
+.pill[data-id="mcp"]:hover, .pill[data-id="mcp"].open { background: #e6e6e6; }
+.pill[data-id="mcp"].active, .pill[data-id="mcp"][aria-pressed="true"] { background: #e8f1fb; color: #4f8ad9; }
+.pill[data-id="mcp"].active b, .pill[data-id="mcp"][aria-pressed="true"] b { color: #2b6fcf; }
+.pill[data-id="mcp"].active:hover, .pill[data-id="mcp"].active.open,
+.pill[data-id="mcp"][aria-pressed="true"]:hover, .pill[data-id="mcp"][aria-pressed="true"].open { background: #d9e8fa; }
+.menu { position: absolute; left: 0; top: calc(100% + 6px); z-index: 5; min-width: 260px; max-height: min(360px, calc(100dvh - 96px)); overflow-y: auto; overscroll-behavior-y: contain; padding: 8px; background: #fff; border-radius: 10px; box-shadow: 0 8px 30px rgba(0, 0, 0, .16), 0 0 0 1px rgba(0, 0, 0, .06); font-weight: 400; color: #1a1a1a; text-align: left; }
 .menu .mrow { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 8px; font-size: 16px; cursor: pointer; user-select: none; }
 .menu .mrow.active { background: #d6e6fa; }
+.menu .mrow:hover { background: #edf5ff; }
+.menu .mrow.active:hover { background: #d6e6fa; }
 .menu .mrow .micon { flex: none; width: 18px; height: 18px; color: #555; }
 .menu .mrow .micon svg { display: block; width: 18px; height: 18px; }
 .menu .mrow .mlabel { flex: 1; }
@@ -96,6 +106,8 @@ button { font: inherit; }
 .bullet.meeting svg, .collapsed > .line > .bullet.meeting svg { color: #c99b1b; }
 .bullet.meeting:hover svg { color: #8a6a17; }
 .bullet.custom svg, .bullet.custom:hover svg { color: #1a1a1a; } /* custom icons render as-is; currentColor only when the SVG uses it */
+/* Renderer contract: appearance-driven icons add .hue and set --hue, including 0. */
+.bullet.icon.hue svg, .bullet.icon.hue:hover svg, .collapsed > .line > .bullet.icon.hue svg { color: hsl(var(--hue) 45% 30%); }
 .check {
   flex: none; width: 18px; height: 18px; margin: 3px 8px 0 2px; border-radius: 5px; background: #e4e4e4;
   border: 0; padding: 0; cursor: pointer; -webkit-appearance: none; appearance: none; position: relative;
@@ -130,7 +142,7 @@ button { font: inherit; }
 .h1 > .line .text { font-size: 24px; font-weight: 700; line-height: 30px; }
 .h2 > .line .text { font-size: 20px; font-weight: 700; line-height: 28px; }
 .h3 > .line .text { font-weight: 700; }
-.selected > .line { background: #e8f1fb; border-radius: 4px; }
+.selected > .line { background: #e8f1fb; border-radius: 0; }
 .selected > .line .text { caret-color: transparent; }
 .children { margin-left: 33px; padding-left: 0; border-left: 1px solid #ececec; }
 .children.loading { color: #aaa; font-style: italic; padding: 3px 0 3px 22px; }
@@ -203,3 +215,95 @@ button { font: inherit; }
 .drop[hidden] { display: none; }
 .drop .card { border: 2px dashed #ccc; border-radius: 12px; padding: 40px 60px; text-align: center; font-size: 20px; color: #555; }
 .drop .hint { margin-top: 10px; font-size: 13px; color: #999; }
+
+/* Dark theme contract: renderer sets document.documentElement.dataset.theme = "dark". */
+[data-theme="dark"] { color-scheme: dark; }
+[data-theme="dark"] body { color: #c9c9c9; background: #1b1d1e; }
+[data-theme="dark"] .titlebar h1.done { color: #777d80; }
+[data-theme="dark"] .crumbs, [data-theme="dark"] .crumbs a { color: #858b8e; }
+[data-theme="dark"] .crumbs a:hover { color: #c9c9c9; }
+[data-theme="dark"] .crumbs .sep { color: #555b5e; }
+[data-theme="dark"] .crumbs .current { color: #adb1b2; }
+[data-theme="dark"] .error { color: #ed8b83; }
+
+[data-theme="dark"] .filter input { background: #282b2d; color: #c9c9c9; }
+[data-theme="dark"] .filter input:focus { background: #303437; }
+[data-theme="dark"] .filter .clear { color: #9a9fa1; }
+[data-theme="dark"] .filter .clear:hover { background: #3a3e40; }
+[data-theme="dark"] .libsearch svg { color: #9a9fa1; }
+[data-theme="dark"] .libsearch input { border-color: #3b4144; background: #242729; color: #c9c9c9; }
+[data-theme="dark"] .libsearch input:focus { border-color: #7695b2; }
+[data-theme="dark"] .libsearch input::placeholder { color: #858b8e; }
+
+[data-theme="dark"] .pill { background: #263842; color: #9cc9e8; }
+[data-theme="dark"] .pill b { color: #b9dcf2; }
+[data-theme="dark"] .pill:hover, [data-theme="dark"] .pill.open { background: #314955; }
+[data-theme="dark"] .pill:focus { box-shadow: 0 0 0 2px #58768a; }
+[data-theme="dark"] .pill[data-id="mcp"] { background: #2a2d2f; color: #9a9fa1; }
+[data-theme="dark"] .pill[data-id="mcp"]:hover, [data-theme="dark"] .pill[data-id="mcp"].open { background: #363a3c; }
+[data-theme="dark"] .pill[data-id="mcp"].active, [data-theme="dark"] .pill[data-id="mcp"][aria-pressed="true"] { background: #263842; color: #9cc9e8; }
+[data-theme="dark"] .pill[data-id="mcp"].active b, [data-theme="dark"] .pill[data-id="mcp"][aria-pressed="true"] b { color: #b9dcf2; }
+[data-theme="dark"] .menu { background: #242729; color: #c9c9c9; box-shadow: 0 8px 30px rgba(0, 0, 0, .45), 0 0 0 1px rgba(255, 255, 255, .08); }
+[data-theme="dark"] .menu .mrow.active { background: #344047; }
+[data-theme="dark"] .menu .mrow:hover { background: #2d3538; }
+[data-theme="dark"] .menu .mrow.active:hover { background: #344047; }
+[data-theme="dark"] .menu .mrow .micon { color: #aeb4b6; }
+[data-theme="dark"] .menu .mrow .tick { color: #c9c9c9; }
+[data-theme="dark"] .menu .mhead { color: #858b8e; }
+[data-theme="dark"] .menu .mdiv { background: #3a3f41; }
+
+[data-theme="dark"] .chev::before { border-color: #555b5e; background: #282b2d; }
+[data-theme="dark"] .chev::after { border-color: #adb1b2; }
+[data-theme="dark"] .chev:hover::before { border-color: #747b7e; }
+[data-theme="dark"] .bullet::before { background: #aeb4b6; }
+[data-theme="dark"] .bullet:hover::before { background: #e0e1e1; }
+[data-theme="dark"] .collapsed > .line > .bullet::before { box-shadow: 0 0 0 6px #353a3c; }
+[data-theme="dark"] .bullet.icon svg { color: #aeb4b6; }
+[data-theme="dark"] .bullet.icon:hover svg, [data-theme="dark"] .collapsed > .line > .bullet.icon svg { color: #d0d2d2; }
+[data-theme="dark"] .bullet.meeting svg, [data-theme="dark"] .collapsed > .line > .bullet.meeting svg { color: #d7b54d; }
+[data-theme="dark"] .bullet.custom svg, [data-theme="dark"] .bullet.custom:hover svg { color: #c9c9c9; }
+[data-theme="dark"] .bullet.icon.hue svg, [data-theme="dark"] .bullet.icon.hue:hover svg, [data-theme="dark"] .collapsed > .line > .bullet.icon.hue svg { color: hsl(var(--hue) 70% 72%); }
+[data-theme="dark"] .check { background: #3a3e40; }
+[data-theme="dark"] .check:hover { background: #474c4e; }
+[data-theme="dark"] .check:checked { background: #5b976c; }
+[data-theme="dark"] .check:checked::after { border-color: #f4f5f5; }
+[data-theme="dark"] .document.done > .line .text { color: #777d80; }
+[data-theme="dark"] .meta, [data-theme="dark"] .filtered, [data-theme="dark"] .empty-note { color: #858b8e; }
+[data-theme="dark"] .chip.grey { background: #303436; color: #b7bcbe; }
+[data-theme="dark"] .chip.gold { background: #4b4024; color: #e4c968; }
+[data-theme="dark"] .chip.hue { background: hsl(var(--hue) 35% 25%); color: hsl(var(--hue) 75% 78%); }
+[data-theme="dark"] .text.image.loading { background: #303436; }
+[data-theme="dark"] .text.image:focus img, [data-theme="dark"] .selected > .line .text.image img { outline-color: #58768a; }
+[data-theme="dark"] .text .mention { color: #8fc1e1; }
+[data-theme="dark"] .text .mention:hover { color: #b5ddf4; }
+[data-theme="dark"] .selected > .line { background: #2d4149; }
+[data-theme="dark"] .children { border-left-color: #34393b; }
+[data-theme="dark"] .children.loading { color: #858b8e; }
+
+[data-theme="dark"] .skeleton div { background-color: #313537; background-image: linear-gradient(90deg, #313537 0%, #3d4244 50%, #313537 100%); }
+[data-theme="dark"] .skeleton div::before { background: #444a4c; }
+[data-theme="dark"] .login button { border-color: #454b4e; background: #2a2d2f; color: #c9c9c9; }
+[data-theme="dark"] .login button:hover { background: #363a3c; }
+
+[data-theme="dark"] .palette { background: rgba(0, 0, 0, .52); }
+[data-theme="dark"] .palette .card, [data-theme="dark"] .recorder .card { background: #242729; box-shadow: 0 12px 40px rgba(0, 0, 0, .5), 0 0 0 1px rgba(255, 255, 255, .08); }
+[data-theme="dark"] .palette input { color: #c9c9c9; border-bottom-color: #3a3f41; background: #242729; }
+[data-theme="dark"] .palette input::placeholder { color: #858b8e; }
+[data-theme="dark"] .palette .group, [data-theme="dark"] .recorder .rlabel { color: #858b8e; }
+[data-theme="dark"] .palette .row.active { background: #343a3d; }
+[data-theme="dark"] .palette .row:hover { background: #2d3538; }
+[data-theme="dark"] .palette .ricon { color: #aeb4b6; }
+[data-theme="dark"] .palette .ricon.meeting { color: #d7b54d; }
+[data-theme="dark"] .palette .ricon.right { color: #858b8e; }
+[data-theme="dark"] .palette .hint { color: #858b8e; }
+[data-theme="dark"] .palette kbd { color: #b7bcbe; background: #303436; }
+[data-theme="dark"] .palette .row.active kbd { background: #42484a; }
+[data-theme="dark"] .recorder h2 { color: #c9c9c9; }
+[data-theme="dark"] .recorder .rbox { border-color: #454b4e; }
+[data-theme="dark"] .recorder .keys { color: #adb1b2; }
+[data-theme="dark"] .recorder button { background: #303436; color: #c9c9c9; }
+[data-theme="dark"] .recorder button:hover { background: #3b4144; }
+[data-theme="dark"] .recorder button:disabled { color: #777d80; background: #303436; }
+[data-theme="dark"] .drop { background: rgba(27, 29, 30, .94); }
+[data-theme="dark"] .drop .card { border-color: #555b5e; color: #c9c9c9; }
+[data-theme="dark"] .drop .hint { color: #858b8e; }

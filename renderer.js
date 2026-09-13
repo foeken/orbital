@@ -1,5 +1,15 @@
 'use strict';
 
+let theme = localStorage.getItem('theme') === 'dark' ? 'dark' : 'light';
+if (theme === 'dark') document.documentElement.dataset.theme = 'dark';
+function setTheme(next) {
+  theme = next === 'dark' ? 'dark' : 'light';
+  if (theme === 'dark') document.documentElement.dataset.theme = 'dark';
+  else delete document.documentElement.dataset.theme;
+  localStorage.setItem('theme', theme);
+  if (typeof palette !== 'undefined' && !palette.hidden) renderPalette();
+}
+
 // ---- shared helper: find a node in a nested Node[] with its ancestry ----
 function locate(list, id, trail = []) {
   for (let i = 0; i < list.length; i++) {
@@ -18,7 +28,11 @@ function mockApi() {
     'Organise working sessions on guardrails for teams with Foundry', 'Contact Mark W for dinner', 'Ask and tell about Tana DPA', 'The blue laptop discussion',
     'Ask Foundry teams for risks (with deadline Sun, Nov 1)', 'Organise session with Arjan Pragt around the role definition', "Create RvC presentation on Nedap's one-year AI vision"];
   let seq = 0;
-  const block = (text, children = [], heading) => ({ id: 'b' + (++seq), text: plainOf(text), segments: segsOf(text), kind: 'block', heading, hasChildren: children.length > 0, children });
+  const block = (text, children = [], heading, done) => {
+    const node = { id: 'b' + (++seq), text: plainOf(text), segments: segsOf(text), kind: 'block', heading, hasChildren: children.length > 0, children };
+    if (done != null) node.done = done;
+    return node;
+  };
   const task = { label: 'task', color: 'grey' }, meeting = { label: 'meeting', color: 'gold' };
   const project = { label: 'Project', hue: 268 }; // a typed tag with the type's colour (Addendum 12)
   const docs = titles.map((text, i) => ({ id: 'mockdoc' + i, text, kind: 'document', done: 0, hasChildren: true, icon: 'task', tags: [task] }));
@@ -31,7 +45,7 @@ function mockApi() {
     { id: 'mockspacedoc0', text: 'Foundry LT charter', kind: 'document', hasChildren: true, icon: 'doc', tags: [{ label: 'doc', color: 'grey' }] },
     { id: 'mockspacedoc1', text: 'Draft the LT agenda', kind: 'document', done: 0, hasChildren: true, icon: 'task', tags: [task] },
   ];
-  const space = { id: 'tana:space:mock', text: 'Foundry LT', kind: 'document', hasChildren: true, icon: 'space', tags: [{ label: 'space', color: 'grey' }] };
+  const space = { id: 'tana:space:mock', text: 'Foundry LT', kind: 'document', hasChildren: true, icon: 'space', hue: 150, tags: [{ label: 'space', color: 'grey' }] };
   // other library kinds (chats, canvases, agents, skills): read-only rows, plain bullet + kind chip
   const kinds = ['chat', 'canvas', 'agent', 'skill'].map((k, i) => ({ id: 'tana:' + k + ':mock' + i, text: 'Sample ' + k, kind: 'document', hasChildren: true, tags: [{ label: k, color: 'grey' }] }));
   // chats (api.chats): newest first; "MCP: …" ones carry meta 'MCP' and are hidden unless includeMcp
@@ -45,11 +59,19 @@ function mockApi() {
     dateMeta['mockmeeting' + i] = WD[d.getDay()] + ' ' + d.getDate() + time;
     return { id: 'mockmeeting' + i, text, meta: WD[d.getDay()] + time, kind: 'document', hasChildren: true, icon: 'meeting', tags: [meeting] };
   });
-  const sections = [{ id: 'tasks', title: 'Tasks', icon: 'task', nodes: docs }, { id: 'meetings', title: 'Meetings', icon: 'meeting', nodes: meetings }, { id: 'library', title: 'Library', icon: 'doc', nodes: [] }, { id: 'chats', title: 'Chats', icon: 'chat', nodes: [] }];
+  const sections = [{ id: 'tasks', title: 'Tasks', icon: 'task', nodes: docs }, { id: 'meetings', title: 'Meetings', icon: 'meeting', nodes: meetings }, { id: 'library', title: 'Library', icon: 'library', nodes: [] }, { id: 'chats', title: 'Chats', icon: 'chat', nodes: [] }];
   const all = [...docs, ...meetings, ...spaceDocs, space, ...kinds, ...chats];
+  for (const node of all) node.editable = true;
   // org members (user profiles): searchable, linkable, and the "Assigned to" menu; me = the signed-in user
   const members = [['andre', 'André Foeken', true], ['lex', 'Lex van Velsen'], ['brage', 'Brage Bang'], ['rogier', 'Rogier (Nedap)']]
-    .map(([k, text, me]) => ({ id: 'tana:user-profile:' + k, text, kind: 'document', hasChildren: true, icon: 'member', tags: [{ label: 'member', color: 'grey' }], me }));
+    .map(([k, text, me]) => ({ id: 'tana:user-profile:' + k, text, kind: 'document', hasChildren: true, icon: 'member', editable: false, tags: [{ label: 'member', color: 'grey' }], me }));
+  const taskDetails = new Map(docs.map((doc, i) => [doc.id, {
+    assignees: i % 3 ? [members[i % members.length].id] : [],
+    restricted: i % 2 === 0,
+    participants: i % 2 === 0 ? [{ uri: members[0].id, type: 'user', role: 'admin' }] : [{ uri: members[0].id, type: 'user', role: 'admin' }, { uri: members[1].id, type: 'user', role: 'editor' }],
+    audience: i % 2 === 0 ? 'only-me' : 'everyone',
+  }]));
+  sections.splice(2, 0, { id: 'members', title: 'Members', icon: 'member', nodes: members });
   // Tasks view filter (api.taskFilter / setTaskFilter): states null = any; assignee 'me' | 'anyone' | 'unassigned' | member uri (mock tasks are all mine)
   let filter = { states: ['proposed', 'open'], assignee: 'me' };
   const stateOf = (d) => d.state || (d.done ? 'closed' : 'open');
@@ -72,11 +94,11 @@ function mockApi() {
   // an image block (not editable; api.image resolves its uri to a data URL): a 2x2 PNG scaled by width/height
   content.mockdoc0.splice(2, 0, { id: 'img' + (++seq), kind: 'block', type: 'image', image: { uri: 'tana:image:mock', alt: 'Mock image', width: 160, height: 100 }, hasChildren: false, children: [] });
   const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGPoyroWu7WKIX9dU1fWNQAuWQbA8sXmUwAAAABJRU5ErkJggg==';
-  const changed = [], statusCbs = [];
-  let status = { authenticated: false, connected: false, syncing: false, lastSync: null, error: null };
+  const changed = [], removed = [], statusCbs = [], deleted = new Map();
+  let status = { authenticated: false, authChecking: false, connected: false, syncing: false, lastSync: null, error: null };
   const emit = (docId) => setTimeout(() => changed.forEach((cb) => cb(docId)), 0);
   const fix = (n) => { n.hasChildren = n.children.length > 0; };
-  const info = (d) => ({ id: d.id, title: d.text, kind: 'document', done: d.done, icon: d.icon, tags: d.tags, meta: d.meta, me: d.me });
+  const info = (d) => ({ id: d.id, title: d.text, kind: 'document', done: d.done, icon: d.icon, iconSvg: d.iconSvg, hue: d.hue, editable: d.editable, tags: d.tags, meta: d.meta, me: d.me });
   // undo/redo: whole-state snapshots, one step per mutation (main keeps a global order over per-document Loro UndoManagers)
   const undoStack = [], redoStack = [];
   const snapshot = () => structuredClone({ docs: all.map((d) => ({ text: d.text, done: d.done })), content });
@@ -93,6 +115,19 @@ function mockApi() {
       throw new Error('unknown document ' + docId);
     },
     members: async () => members.map(info),
+    accessOptions: async (docId) => { const writable = !!all.find((doc) => doc.id === docId)?.editable; return { sharing: writable, move: writable, deletable: writable, rules: writable ? ['me', 'people', 'inherit'] : [], roles: ['editor', 'admin'], sharingToken: 'mock-sharing', inheritAudience: { scope: 'space', title: space.text } }; },
+    setSharing: async (docId, selection) => { const meta = taskDetails.get(docId); if (!meta) throw new Error('sharing unavailable'); if (selection.rule === 'inherit' && selection.token !== 'mock-sharing') throw new Error('Reload the audience disclosure and explicitly select inherit'); meta.restricted = selection.rule !== 'inherit'; meta.participants = selection.rule === 'people' ? selection.participants : []; meta.audience = selection.rule === 'me' ? 'only-me' : selection.rule === 'people' ? 'people' : 'unknown'; emit(docId); },
+    searchSpaces: async (query) => [info(space)].filter((node) => node.title.toLowerCase().includes(String(query).toLowerCase())).map((node) => ({ ...node, selectable: true })),
+    previewMove: async (docId, spaceId) => {
+      const doc = all.find((node) => node.id === docId);
+      if (!doc || spaceId !== space.id) return { allowed: false, reason: 'space unavailable' };
+      const meta = taskDetails.get(docId), before = meta?.restricted ? { scope: meta.audience || 'only-me' } : { scope: 'everyone' };
+      const after = meta?.restricted ? before : { scope: 'space', title: space.text };
+      return { allowed: true, target: { id: space.id, title: space.text }, before, after, audienceChanged: JSON.stringify(before) !== JSON.stringify(after), requiresConfirmation: JSON.stringify(before) !== JSON.stringify(after), token: 'mock-move' };
+    },
+    moveToSpace: async (docId, spaceId, token) => { const doc = all.find((node) => node.id === docId); if (!doc || spaceId !== space.id || token !== 'mock-move') throw new Error('space unavailable'); doc.ownerUri = spaceId; emit(null); },
+    taskMeta: async (docId) => structuredClone(taskDetails.get(docId) || { assignees: [], restricted: undefined, participants: [], audience: 'unknown' }),
+    setAssignees: async (docId, uris) => { const meta = taskDetails.get(docId); if (!meta) throw new Error('not a task'); meta.assignees = [...new Set(uris)]; emit(docId); },
     image: async (uri) => { await new Promise((r) => setTimeout(r, 30)); if (uri !== 'tana:image:mock') throw new Error('unknown image ' + uri); return PNG; },
     taskFilter: async () => structuredClone(filter),
     setTaskFilter: async (f) => { filter = structuredClone(f); emit(null); },
@@ -111,29 +146,59 @@ function mockApi() {
       const hit = (d, t) => (['task', 'meeting', 'member'].includes(t) ? d.icon === t : (d.tags || []).some((x) => x.label.toLowerCase() === t));
       return [...all, ...members].filter((d) => d.text.toLowerCase().includes(text) && tokens.every((t) => hit(d, t))).slice(0, 20).map((d) => ({ ...info(d), meta: dateMeta[d.id] || d.meta }));
     },
-    createDocument: async (title, { kind = 'doc' } = {}) => {
-      const n = { id: 'mocknew' + (++seq), text: title, kind: 'document', hasChildren: true, icon: kind, tags: [{ label: kind, color: kind === 'meeting' ? 'gold' : 'grey' }] };
-      if (kind === 'task') n.done = 0;
-      if (kind === 'meeting') n.meta = WD[new Date().getDay()] + ' 10:00–10:30';
+    creationOptions: async () => ({ options: [
+      { id: 'task', kind: 'task', title: 'Task', icon: 'task', selectable: true },
+      { id: 'meeting', kind: 'meeting', title: 'Meeting', icon: 'meeting', selectable: true },
+      { id: 'chat', kind: 'chat', title: 'Chat', icon: 'chat', selectable: true },
+      { id: 'tana:type:mockproject', kind: 'custom', typeUri: 'tana:type:mockproject', title: 'Project', icon: 'doc', hue: 268, selectable: true },
+    ], complete: true }),
+    createDocument: async (title, { kind = 'doc', typeUri } = {}) => {
+      const nativeKind = kind === 'custom' ? 'doc' : kind;
+      const n = { id: 'mocknew' + (++seq), text: title, kind: 'document', hasChildren: true, editable: true, icon: nativeKind, tags: kind === 'custom' ? [{ label: 'Project', hue: 268 }] : [{ label: nativeKind, color: nativeKind === 'meeting' ? 'gold' : 'grey' }] };
+      if (nativeKind === 'task') n.done = 0;
+      if (nativeKind === 'meeting') n.meta = WD[new Date().getDay()] + ' 10:00–10:30';
+      if (typeUri) n.typeUri = typeUri;
       created[n.id] = n; content[n.id] = []; all.push(n);
-      if (kind !== 'doc') unlisted.push(n);
+      if (nativeKind !== 'doc') unlisted.push(n);
       return info(n);
     },
     pins: async () => sidebar.map((id) => info(all.find((d) => d.id === id))),
+    pinTree: async () => {
+      const [first, ...rest] = sidebar, node = (id) => info(all.find((d) => d.id === id));
+      return [
+        ...(first ? [{ uri: first, node: node(first), children: [] }] : []),
+        ...(rest.length ? [{ label: 'Foundry', children: rest.map((id) => ({ uri: id, node: node(id), children: [] })) }] : []),
+      ];
+    },
     pinState: async (docId) => ({ sidebar: sidebar.includes(docId), dates: datePins[docId] || [] }),
     pin: async (docId, target) => { if (target === 'sidebar') { if (!sidebar.includes(docId)) sidebar.push(docId); } else (datePins[docId] ||= []).push(localDate()); emit(null); },
     unpin: async (docId, target) => { if (target === 'sidebar') sidebar.splice(sidebar.indexOf(docId) >>> 0, 1); else datePins[docId] = (datePins[docId] || []).filter((d) => d !== localDate()); emit(null); },
+    deleteDocument: async (docId) => {
+      const i = all.findIndex((doc) => doc.id === docId); if (i < 0) throw new Error('unknown document');
+      deleted.set(docId, { doc: all[i], content: content[docId], sections: sections.map((section) => ({ section, index: section.nodes.findIndex((node) => node.id === docId) })).filter((entry) => entry.index >= 0) });
+      all.splice(i, 1); for (const section of sections) section.nodes = section.nodes.filter((node) => node.id !== docId);
+      sidebar.splice(0, sidebar.length, ...sidebar.filter((id) => id !== docId)); delete datePins[docId]; delete content[docId];
+      setTimeout(() => removed.forEach((cb) => cb(docId)), 0);
+    },
+    restoreDocument: async (docId) => {
+      const saved = deleted.get(docId); if (!saved) throw new Error('unknown deleted document');
+      all.push(saved.doc); content[docId] = saved.content;
+      for (const { section, index } of saved.sections) section.nodes.splice(index, 0, saved.doc);
+      deleted.delete(docId); emit(null);
+    },
     setIcon: async (docId, svg) => { (all.find((d) => d.id === docId) || created[docId]).iconSvg = svg || undefined; emit(null); },
     setTitle: async (docId, title) => mut(docId, () => { all.find((d) => d.id === docId).text = title; emit(docId); }),
     setDone: async (docId, done) => mut(docId, () => { const d = all.find((x) => x.id === docId); d.done = done ? 1 : 0; d.state = done ? 'closed' : 'open'; emit(docId); }),
+    toggleCheckbox: async (docId, id) => mut(docId, () => { const n = locate(content[docId], id).node; n.done = n.done == null ? 0 : n.done ? 0 : 1; emit(docId); }),
     setText: async (docId, id, text) => mut(docId, () => { const n = locate(content[docId], id).node; n.text = plainOf(text); n.segments = segsOf(text); emit(docId); }),
     insertAfter: async (docId, id, text) => mut(docId, () => {
-      const n = block(text);
-      if (id == null) content[docId].push(n); else { const f = locate(content[docId], id); f.list.splice(f.index + 1, 0, n); }
+      const f = id == null ? null : locate(content[docId], id), n = block(text, [], undefined, f && f.node.kind === 'block' && f.node.done != null ? 0 : undefined);
+      if (!f) content[docId].push(n); else f.list.splice(f.index + 1, 0, n);
       emit(docId); return n.id;
     }),
-    insertChild: async (docId, id, text) => mut(docId, () => { const n = block(text), f = locate(content[docId], id); f.node.children.unshift(n); fix(f.node); emit(docId); return n.id; }),
+    insertChild: async (docId, id, text) => mut(docId, () => { const f = locate(content[docId], id), n = block(text, [], undefined, f.node.kind === 'block' && f.node.done != null ? 0 : undefined); f.node.children.unshift(n); fix(f.node); emit(docId); return n.id; }),
     remove: async (docId, id) => mut(docId, () => { const f = locate(content[docId], id); f.list.splice(f.index, 1); const p = f.trail.at(-1); if (p) fix(p.node); emit(docId); }),
+    removeMany: async (docId, ids) => mut(docId, () => { for (const id of [...ids].reverse()) { const f = locate(content[docId], id); f.list.splice(f.index, 1); const p = f.trail.at(-1); if (p) fix(p.node); } emit(docId); }),
     indent: async (docId, id) => mut(docId, () => {
       const f = locate(content[docId], id); if (f.index === 0) return;
       const prev = f.list[f.index - 1]; f.list.splice(f.index, 1); prev.children.push(f.node); fix(prev); emit(docId);
@@ -147,11 +212,13 @@ function mockApi() {
       if (j < 0 || j >= f.list.length) return;
       [f.list[f.index], f.list[j]] = [f.list[j], f.list[f.index]]; emit(docId);
     }),
+    moveMany: async (docId, ids, dir) => mut(docId, () => { for (const id of dir === 'up' ? ids : [...ids].reverse()) { const f = locate(content[docId], id), j = f.index + (dir === 'up' ? -1 : 1); if (j >= 0 && j < f.list.length) [f.list[f.index], f.list[j]] = [f.list[j], f.list[f.index]]; } emit(docId); }),
     undo: () => history(undoStack, redoStack),
     redo: () => history(redoStack, undoStack),
     refresh: async () => { for (const n of unlisted.splice(0)) (n.icon === 'task' ? docs : meetings).push(n); emit(null); },
     login: async () => { status = { ...status, authenticated: true, connected: true, lastSync: new Date().toISOString() }; statusCbs.forEach((cb) => cb(status)); },
     status: async () => status,
+    onRemoved: (cb) => removed.push(cb),
     onChanged: (cb) => changed.push(cb),
     onStatus: (cb) => statusCbs.push(cb),
   };
@@ -202,7 +269,7 @@ const tana = window.api || mockApi();
 // ---- state ----
 let sections = [];           // [{ id, title, icon, nodes: document Node[] }]
 let view = localStorage.getItem('view') || 'tasks'; // active section id; the outline shows one view at a time
-let authed = false;
+let authed = false, authChecking = true, signedOut = false;
 const extra = new Map();     // docId -> document Node reached through a mention (not in roots)
 const paths = new Map();     // docId -> [{ id, title }] location in Tana for the breadcrumb (api.path)
 const kids = new Map();      // docId -> Node[] | null (loading)
@@ -215,7 +282,8 @@ let queue = Promise.resolve();
 let scrolledView = null;     // view already scrolled to today's first meeting when it opened
 let linkCtx = null;          // @ linking in progress: { item, segs, start, end, text }
 const hotkeys = JSON.parse(localStorage.getItem('hotkeys') || '{}'); // palette row id -> combo ("⇧⌘M")
-let pins = [], pinInfo = null; // Cmd+K: sidebar pins (api.pins) and { docId, sidebar, dates } of the palette's document (api.pinState)
+if (hotkeys.sync) { delete hotkeys.sync; localStorage.setItem('hotkeys', JSON.stringify(hotkeys)); }
+let pinTree = [], pinInfo = null; // Cmd+K: sidebar pin tree and { docId, sidebar, dates } of the palette's document (api.pinState)
 let palDoc = null;           // document the Cmd+K context actions apply to (zoomed, else the one whose node is focused)
 let dropDoc = null;          // document waiting for an SVG drop ("Set icon…" overlay)
 let palReturn = null, dropReturn = null; // { key, offset } of the node focused when a palette / the drop overlay opened; focus goes back there on close
@@ -225,12 +293,17 @@ const DRAFT_KIND = { tasks: 'task', meetings: 'meeting' }; // what Enter drafts 
 let sel = null;              // multi-select: { anchor: key, focus: key } over visible siblings, rendered as .selected; the caret leaves the text
 // view filters (api.taskFilter / api.libraryFilter, persisted by main); members = api.members() for the Assigned menu ("You" = the one flagged me)
 let taskF = { states: ['proposed', 'open'], assignee: 'me' }, libF = { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me', text: '' };
-let members = null, libRows = null, libSeq = 0, libTimer;
+let members = null, libRows = null, libSeq = 0;
+const taskMetaById = new Map(), taskMetaLoading = new Set(), taskMetaFailed = new Set();
+const accessById = new Map(), accessLoading = new Set();
+let visibilityPeople = new Set();
+let visibilityRoles = new Map();
 let chatRows = null, chatSeq = 0, showMcp = localStorage.getItem('mcp') === '1'; // Chats view: api.chats({ includeMcp }) rows; the MCP toggle persists
 let menu = null;             // open pill menu: { id, index }
 let rootsLoaded = false, connected = false; // for the loading skeleton: shown while the view has no rows and roots/library/connection are still pending
-// font size: native page zoom (⇧⌘+ / ⇧⌘− / ⇧⌘0), persisted
-let zoomFactor = Number(localStorage.getItem('zoom')) || 1;
+// font size: native page zoom (⇧⌘+ / ⇧⌘− / ⌘0), persisted. Default is one step below native.
+const BASE_ZOOM = 0.91;
+let zoomFactor = Number(localStorage.getItem('zoom')) || BASE_ZOOM;
 function setZoom(f) {
   zoomFactor = Math.min(3, Math.max(0.5, Math.round(f * 100) / 100));
   localStorage.setItem('zoom', String(zoomFactor));
@@ -250,18 +323,28 @@ const isSpace = (node) => node.id.startsWith('tana:space:'); // its children are
 const childrenOf = (item) => (item.node.kind === 'document' ? kids.get(item.docId) : item.node.children || []);
 const hasKids = (item) => { const c = childrenOf(item); return Array.isArray(c) ? c.length > 0 : !!item.node.hasChildren; };
 const isOpen = (item) => (open.has(item.key) ? open.get(item.key) : item.node.kind === 'block');
-const draftNode = (parent) => ({ id: 'draft:' + parent.key, text: '', kind: 'block', draft: true }); // shown under an expanded empty node; created on the first typed character
-// draft document for a view: rendered like a real task/meeting/doc, created with api.createDocument(text, { kind }) on the first typed character
-const draftDocNode = (kind) => ({ id: 'draftdoc:' + (++draftSeq), text: '', kind: 'document', draft: kind, icon: kind, tags: [{ label: kind, color: kind === 'meeting' ? 'gold' : 'grey' }], done: 0, hasChildren: false });
+const canExpand = (item) => hasKids(item) || (!item.node.draft && canEditItem(item));
+function draftNode(parent) { // shown under an expanded empty node; created on the first typed character
+  return { id: 'draft:' + parent.key, text: '', kind: 'block', done: parent.node?.kind !== 'document' && parent.node?.done != null ? 0 : undefined, draft: true };
+}
+// Draft documents stay local until their first title character, then use their selected native kind/type.
+function draftDocNode(kind, option = {}) {
+  const nativeKind = kind === 'custom' ? 'doc' : kind;
+  return { id: 'draftdoc:' + (++draftSeq), text: '', kind: 'document', draft: kind, createOptions: { kind, ...(option.typeUri ? { typeUri: option.typeUri } : {}) }, icon: option.icon || nativeKind, tags: option.tags || [{ label: nativeKind, color: nativeKind === 'meeting' ? 'gold' : 'grey' }], done: nativeKind === 'task' ? 0 : undefined, hasChildren: false };
+}
 // a tag chip: { label, color: 'grey' | 'gold' } or { label, hue } (type colour: background hsl(hue 80% 92%), text hsl(hue 45% 30%), see styles.css .chip.hue)
-function chipEl(t) {
+function chipEl(t, nodeHue) {
   const c = document.createElement('span');
-  c.className = 'chip ' + (t.hue != null ? 'hue' : t.color || 'grey'); c.textContent = '# ' + t.label;
-  if (t.hue != null) c.style.setProperty('--hue', String(t.hue));
+  const hue = t.hue != null ? t.hue : nodeHue;
+  c.className = 'chip ' + (hue != null ? 'hue' : t.color || 'grey'); c.textContent = '# ' + t.label;
+  if (hue != null) c.style.setProperty('--hue', String(hue));
   return c;
 }
 const images = new Map(); // image uri -> data URL (or the pending api.image promise)
 const isImage = (node) => node.type === 'image';
+const isReference = (node) => node.type === 'reference';
+const referenceTarget = (node) => node.reference?.node ? asDoc(node.reference.node) : null;
+const referenceLabel = (node) => referenceTarget(node)?.text || node.reference?.label || node.text || node.reference?.uri || 'Unavailable reference';
 const showError = (e) => { const el = $('error'); el.textContent = e ? String(e.message || e) : ''; el.hidden = !e; };
 const run = (fn) => (queue = queue.then(fn).catch(showError));
 const texts = () => [...outline.querySelectorAll('.text')];
@@ -270,6 +353,7 @@ const keyOfEl = (el) => (el.closest('.node') || el).dataset.key;
 const textEl = (key) => outline.querySelector('.node[data-key="' + CSS.escape(key) + '"] > .line .text') || (titleEl.isContentEditable && titleEl.dataset.key === key ? titleEl : null);
 const nodeElOf = (key) => outline.querySelector('.node[data-key="' + CSS.escape(key) + '"]');
 const titleCheck = $('titleCheck'); // zoomed into a task: its checkbox before the title
+const taskInfoEl = $('taskInfo');
 titleCheck.onmousedown = (e) => e.preventDefault();
 const nodeEls = (el) => [...el.parentElement.children].filter((c) => c.classList.contains('node')); // visible siblings of a .node element
 const ICONS = window.ICONS || {}; // icons.js: Tana line icon set (Nucleo export), greyscale via currentColor
@@ -283,12 +367,33 @@ const LIB_ICONS = {
 };
 const iconSvg = (icon) => ICONS[icon === 'meeting' ? 'calendar' : icon] || LIB_ICONS[icon] || '';
 const isTask = (node) => node.kind === 'document' && node.icon === 'task';
-const asDoc = (n) => ({ ...n, kind: 'document', text: n.text ?? n.title ?? '', hasChildren: true }); // api.node / search / library result -> document Node
+const isCheckboxBlock = (node) => node?.kind === 'block' && node.done != null;
+function visibleTags(node) {
+  const tags = node.tags || [];
+  return isTask(node) && tags.some((tag) => tag.label !== 'task') ? tags.filter((tag) => tag.label !== 'task') : tags;
+}
+function appendTags(el, node) { for (const tag of visibleTags(node)) el.append(chipEl(tag, node.hue)); }
+const canEditNode = (node) => !!node && node.editable !== false;
+function canEditItem(item) {
+  if (!canEditNode(item.node)) return false;
+  for (let parent = item.parent; parent; parent = parent.parent) if (parent.node.kind === 'document') return canEditNode(parent.node);
+  return canEditNode(docOf(item.docId) || item.node);
+}
+const canEditStructure = (item) => canEditItem(item) || (item.node.type === 'reference' && canEditNode(docOf(item.docId)));
+const chatIcon = (n) => n.icon || ((n.tags || []).some((t) => t.label === 'chat') ? 'chat' : undefined);
+const nodeIcon = (n) => chatIcon(n) || ((n.tags || []).some((t) => t.label === 'agent') ? 'agent' : undefined);
+const asDoc = (n) => ({ ...n, kind: 'document', text: n.text ?? n.title ?? '', hasChildren: true, icon: nodeIcon(n) }); // api.node / search / library result -> document Node
 // recently viewed documents (localStorage "recent"), most recent first, max 20
-const recent = () => { try { return (JSON.parse(localStorage.getItem('recent')) || []).map((n) => !n.icon && !n.tags?.length && n.id?.startsWith('tana:text:') ? { ...n, icon: 'doc', tags: [{ label: 'doc', color: 'grey' }] } : n); } catch { return []; } };
+const recent = () => { try { return (JSON.parse(localStorage.getItem('recent')) || []).map((n) => asDoc(!n.icon && !n.tags?.length && n.id?.startsWith('tana:text:') ? { ...n, icon: 'doc', tags: [{ label: 'doc', color: 'grey' }] } : n)); } catch { return []; } };
 function recordRecent(n) {
   const entry = { id: n.id, title: n.text ?? n.title ?? '', icon: n.icon, tags: n.tags, meta: n.meta };
   localStorage.setItem('recent', JSON.stringify([entry, ...recent().filter((r) => r.id !== n.id)].slice(0, 20)));
+}
+function forgetRecent(id) {
+  try {
+    const rows = JSON.parse(localStorage.getItem('recent') || '[]');
+    localStorage.setItem('recent', JSON.stringify(rows.filter((row) => row && row.id !== id)));
+  } catch { localStorage.removeItem('recent'); }
 }
 // index of the first meeting dated today or later. The list is oldest first over [today-7, today+7) and the meta
 // only carries a weekday ("Mon 9:00–9:30"), so walk the weekday sequence from the window start (same weekday as today).
@@ -305,7 +410,7 @@ function todayIndex(nodes) {
 }
 
 async function loadRoots() {
-  sections = await tana.roots();
+  sections = (await tana.roots()).map((s) => ({ ...s, icon: s.id === 'library' ? 'library' : s.icon, nodes: s.nodes.map(asDoc) }));
   rootsLoaded = true;
   const lib = sections.find((s) => s.id === 'library');
   if (lib) lib.nodes = libRows || []; // the Library view lists api.library(libF) rows, fetched by loadLibrary
@@ -412,9 +517,9 @@ function render() {
   const parent = trail && trail.at(-1);
   let list, hidden = 0;
   if (parent) {
-    ensureLoaded(parent);
-    list = childrenOf(parent) || [];
-    if (!list.length && childrenOf(parent) && parent.node.kind === 'document' && !isSpace(parent.node)) list = [draftNode(parent)]; // empty document: one draft child, so Down from the title has somewhere to go
+    if (!parent.node.draft) ensureLoaded(parent);
+    list = parent.node.draft ? [] : childrenOf(parent) || [];
+    if (!list.length && childrenOf(parent) && parent.node.kind === 'document' && !isSpace(parent.node) && canEditItem(parent)) list = [draftNode(parent)]; // empty writable document: Down from the title has somewhere to go
     outline.replaceChildren(...list.map((n) => childEl(n, parent)));
   } else {
     const v = viewOf(), docs = v ? v.nodes : [];
@@ -435,24 +540,28 @@ function render() {
     outline.append(note);
   }
   // the page title: editable in place when zoomed into a document (setTitle through the usual debounce)
-  const editable = parent && parent.node.kind === 'document' && !parent.node.draft;
+  const editable = parent && parent.node.kind === 'document' && canEditItem(parent);
   if (editable) titleEl.contentEditable = 'plaintext-only'; else titleEl.removeAttribute('contenteditable');
   titleEl.dataset.key = editable ? parent.key : '';
   titleEl.textContent = editable && pending.has(parent.key) ? plainOf(pending.get(parent.key).segs) : parent ? parent.node.text : viewOf() ? viewOf().title : 'Tana';
   // zoomed task: its checkbox before the title (toggleDone, like row checkboxes; Cmd+Enter in the title too)
-  const zoomedTask = editable && isTask(parent.node);
+  const zoomedTask = parent && isTask(parent.node);
   titleCheck.hidden = !zoomedTask; titleCheck.checked = zoomedTask && !!parent.node.done;
-  titleCheck.onclick = zoomedTask ? () => toggleDone(parent) : null;
+  titleCheck.disabled = zoomedTask && !canEditItem(parent);
+  titleCheck.onclick = zoomedTask && canEditItem(parent) ? () => toggleDone(parent) : null;
   titleEl.classList.toggle('done', zoomedTask && !!parent.node.done);
+  const taskInfo = zoomedTask ? taskSummary(parent.node) : null;
+  taskInfoEl.hidden = !taskInfo; taskInfoEl.replaceChildren();
+  if (taskInfo) { taskInfoEl.append(taskMetaEl(taskInfo)); if (visibleTags(parent.node).some((tag) => tag.label !== 'task')) appendTags(taskInfoEl, parent.node); }
   renderCrumbs(trail);
   const showPills = !parent && authed && (view === 'tasks' || view === 'library' || view === 'chats');
   renderPills(showPills);
-  $('libSearch').hidden = !(showPills && view === 'library');
-  if (!$('libSearch').hidden && document.activeElement !== $('libText')) $('libText').value = libF.text || '';
   filterRow.hidden = !!parent || !(filterShown || filterEl.value);
   filterRow.classList.toggle('empty', !filterEl.value);
   $('filtered').textContent = hidden ? hidden + ' items filtered out' : '';
-  $('skeleton').classList.toggle('gone', !(!parent && !list.length && (!rootsLoaded || (view === 'library' && libRows === null) || (view === 'chats' && chatRows === null) || (authed && !connected))));
+  // Cached rows remain usable while auth and sync reconnect; reserve the skeleton for an empty outline.
+  const loading = !parent && !outline.children.length && (authChecking || !rootsLoaded || (view === 'library' && libRows === null) || (view === 'chats' && chatRows === null) || (authed && !connected));
+  $('skeleton').classList.toggle('gone', !loading);
   applySel();
   if (saved) placeCaret(saved.key, saved.offset);
 }
@@ -502,25 +611,29 @@ function renderCrumbs(trail) {
 const childEl = (n, item) => nodeEl(n, n.kind === 'document' ? n.id : item.docId, item);
 function nodeEl(node, docId, parent) {
   const item = mkItem(docId, node, parent);
+  const target = referenceTarget(node), display = target || node, reference = isReference(node);
   const has = hasKids(item), opened = isOpen(item);
+  const expandable = has || (!node.draft && canEditItem(item));
   const el = document.createElement('div');
-  el.className = 'node ' + node.kind + (node.heading ? ' h' + node.heading : '') + (node.done ? ' done' : '') + (has ? ' has' : '') + (has && !opened ? ' collapsed' : '') + (node.draft ? ' draft' : '');
+  el.className = 'node ' + node.kind + (reference ? ' reference' : '') + (node.heading ? ' h' + node.heading : '') + (display.done ? ' done' : '') + (has ? ' has' : '') + (has && !opened ? ' collapsed' : '') + (node.draft ? ' draft' : '');
   el.dataset.key = item.key;
   const line = document.createElement('div'); line.className = 'line';
   const chev = document.createElement('button'); chev.className = 'chev'; chev.tabIndex = -1; chev.title = opened ? 'Collapse' : 'Expand';
   chev.onmousedown = (e) => e.preventDefault();
+  chev.hidden = !expandable;
   chev.onclick = () => setOpen(item, !opened);
   const bullet = document.createElement('span'); bullet.className = 'bullet'; bullet.title = 'Zoom in';
-  if (node.iconSvg) { bullet.classList.add('icon', 'custom'); bullet.innerHTML = node.iconSvg; }
-  else if (node.icon) { bullet.classList.add('icon', node.icon); bullet.innerHTML = iconSvg(node.icon); }
+  if (display.iconSvg) { bullet.classList.add('icon', 'custom'); bullet.innerHTML = display.iconSvg; }
+  else if (display.icon) { bullet.classList.add('icon', display.icon); bullet.innerHTML = iconSvg(display.icon); if (display.hue != null) { bullet.classList.add('hue'); bullet.style.setProperty('--hue', String(display.hue)); } }
   bullet.onmousedown = (e) => e.preventDefault();
-  if (!node.draft) bullet.onclick = () => zoomTo(item);
+  if (!node.draft) bullet.onclick = () => reference ? openReference(node) : zoomTo(item);
   line.append(chev, bullet);
-  if (isTask(node)) {
+  if (isTask(display) || isCheckboxBlock(display)) {
     const check = document.createElement('input');
-    check.type = 'checkbox'; check.className = 'check'; check.checked = !!node.done; check.tabIndex = -1;
+    check.type = 'checkbox'; check.className = 'check'; check.checked = !!display.done; check.tabIndex = -1;
     check.onmousedown = (e) => e.preventDefault();
-    check.onclick = () => toggleDone(item);
+    check.disabled = reference ? !canEditNode(display) : !canEditItem(item);
+    check.onclick = reference && canEditNode(display) ? () => toggleReference(node) : canEditItem(item) ? () => (isTask(node) ? toggleDone(item) : toggleCheckbox(item)) : null;
     line.append(check);
   }
   const body = document.createElement('div'); body.className = 'body'; // text + meta + chips; only .text is editable
@@ -537,17 +650,20 @@ function nodeEl(node, docId, parent) {
     else { text.classList.add('loading'); (cached || images.set(uri, tana.image(uri)).get(uri)).then(show, (e) => { images.delete(uri); showError(e); }); }
     text.append(img);
   } else {
-    text.contentEditable = 'plaintext-only'; text.spellcheck = false;
-    renderSegs(text, pending.has(item.key) ? pending.get(item.key).segs : segsOf(node));
+    if (canEditItem(item)) text.contentEditable = 'plaintext-only'; else text.tabIndex = -1;
+    text.spellcheck = false;
+    renderSegs(text, reference ? [{ text: referenceLabel(node) }] : pending.has(item.key) ? pending.get(item.key).segs : segsOf(node));
   }
   body.append(text);
-  if (node.meta) { const m = document.createElement('span'); m.className = 'meta'; m.textContent = node.meta; body.append(m); }
-  for (const t of node.tags || []) body.append(chipEl(t));
+  if (display.meta) { const m = document.createElement('span'); m.className = 'meta'; m.textContent = display.meta; body.append(m); }
+  const taskInfo = taskSummary(display);
+  if (taskInfo) body.append(taskMetaEl(taskInfo));
+  appendTags(body, display);
   line.append(body);
-  line.onclick = (e) => { if (e.target === line || e.target === body || e.target.parentElement === text) setCaret(text, text.textContent.length); };
+  line.onclick = (e) => { if (reference && !e.target.closest('.check')) openReference(node); else if (!reference && (e.target === line || e.target === body || e.target.parentElement === text)) setCaret(text, text.textContent.length); };
   el.append(line);
   // expanded = real children shown, or an explicitly opened empty node (which shows one draft child)
-  const expanded = has ? opened : !node.draft && open.get(item.key) === true;
+  const expanded = expandable && (has ? opened : !node.draft && open.get(item.key) === true);
   chev.classList.toggle('closed', !expanded); chev.title = expanded ? 'Collapse' : 'Expand';
   chev.onclick = () => setOpen(item, !expanded);
   if (expanded) {
@@ -555,7 +671,7 @@ function nodeEl(node, docId, parent) {
     const c = childrenOf(item);
     if (c == null) { ensureLoaded(item); wrap.classList.add('loading'); wrap.textContent = 'Loading…'; }
     else if (c.length) wrap.append(...c.map((k) => childEl(k, item)));
-    else if (!isSpace(node)) wrap.append(nodeEl(draftNode(item), docId, item));
+    else if (!isSpace(node) && canEditItem(item)) wrap.append(nodeEl(draftNode(item), docId, item));
     el.append(wrap);
   }
   return el;
@@ -567,13 +683,15 @@ async function materialise(item, el) {
   let key;
   await run(async () => {
     if (node.kind === 'document') {
-      const n = await tana.createDocument(text, { kind: node.draft }), real = { ...n, text: n.title ?? n.text ?? '', hasChildren: true };
+      const n = await tana.createDocument(text, node.createOptions || { kind: node.draft }), real = { ...n, text: n.title ?? n.text ?? '', hasChildren: true };
       const s = sectionOf(node.id), i = s ? s.nodes.indexOf(node) : -1;
       if (i >= 0) { s.nodes.splice(i, 1, real); fresh.set(real.id, { section: s.id, after: i ? s.nodes[i - 1].id : null, node: real }); }
+      if (zoom?.docId === node.id) zoom = { ...zoom, docId: real.id };
       key = real.id;
     } else {
       const id = parent.node.kind === 'document' ? await tana.insertAfter(parent.docId, null, text) : await tana.insertChild(parent.docId, parent.node.id, text);
       await reload(parent.docId);
+      await inheritCheckbox(parent, id); // old preload bridges lack native insert inheritance; current bridge already returns done: 0
       key = parent.docId + '/' + id;
     }
   });
@@ -603,6 +721,7 @@ function draftDoc(after) {
 
 // ---- edits (debounced) ----
 function scheduleSave(item, segs) {
+  if (!canEditItem(item)) return;
   const p = pending.get(item.key);
   if (p) clearTimeout(p.timer);
   pending.set(item.key, { item, segs, timer: setTimeout(() => flush(item.key), 400) });
@@ -613,6 +732,7 @@ function flush(key) {
   if (!p) return;
   dropPending(key);
   const { item, segs } = p, text = plainOf(segs);
+  if (!canEditItem(item)) return;
   if (text === item.node.text && JSON.stringify(segs) === JSON.stringify(segsOf(item.node))) return;
   item.node.text = text; item.node.segments = segs;
   run(() => (item.node.kind === 'document' ? tana.setTitle(item.docId, text) : tana.setText(item.docId, item.node.id, saveValue(segs))));
@@ -624,29 +744,59 @@ function insertAtCaret(el, str) {
 
 // ---- structural operations ----
 async function splitNode(item, el, off) {
+  if (!canEditItem(item)) return;
   const { docId, node } = item;
-  const [before, after] = splitSegs(readSegs(el), off);
-  let newId;
+  const original = readSegs(el), [before, after] = splitSegs(original, off);
+  let newId, asChild = false, splitDraft, splitKey, typed = after, typedOffset = 0;
+  const splitList = (parent) => parent?.node?.kind === 'block' ? parent.node.children : kids.get(docId);
+  const readSplitDraft = () => {
+    const draftEl = splitKey && typeof textEl === 'function' && textEl(splitKey);
+    if (draftEl) { typed = readSegs(draftEl); typedOffset = typeof caretOffset === 'function' ? caretOffset(draftEl) ?? 0 : 0; }
+  };
+  const addSplitDraft = (list, index) => {
+    splitDraft = { id: 'draft:split:' + node.id + ':' + Date.now(), text: plainOf(after), segments: after, kind: 'block', done: node.kind === 'block' && node.done != null ? 0 : undefined, draft: true, pendingSplit: true };
+    list.splice(index, 0, splitDraft);
+    splitKey = docId + '/' + splitDraft.id;
+    render(); placeCaret(splitKey, 0);
+  };
   if (node.kind === 'document') {
     flush(item.key);
+    const list = splitList(item);
+    if (Array.isArray(list)) addSplitDraft(list, list.length);
     // ponytail: no prepend op in the contract; a document's new child is appended (first child when the doc is empty)
-    await run(async () => { newId = await tana.insertAfter(docId, null, ''); await reload(docId); });
+    await run(async () => {
+      newId = await tana.insertAfter(docId, null, '');
+      readSplitDraft();
+      await reload(docId);
+    });
     open.set(item.key, true);
   } else {
     dropPending(item.key);
-    const asChild = hasKids(item) && isOpen(item);
+    asChild = hasKids(item) && isOpen(item);
+    const list = splitList(asChild ? item : item.parent);
+    if (Array.isArray(list)) {
+      if (JSON.stringify(before) !== JSON.stringify(original)) { node.text = plainOf(before); node.segments = before; }
+      addSplitDraft(list, asChild ? 0 : list.indexOf(node) + 1);
+    }
     await run(async () => {
-      if (JSON.stringify(before) !== JSON.stringify(segsOf(node))) { node.text = plainOf(before); node.segments = before; await tana.setText(docId, node.id, saveValue(before)); }
+      if (JSON.stringify(before) !== JSON.stringify(original)) await tana.setText(docId, node.id, saveValue(before));
       newId = asChild ? await tana.insertChild(docId, node.id, plainOf(after)) : await tana.insertAfter(docId, node.id, plainOf(after));
       if (after.some((s) => 'mention' in s)) await tana.setText(docId, newId, after); // insert ops take plain text; restore the mentions
+      readSplitDraft();
       await reload(docId);
+      if (asChild) await inheritCheckbox(item, newId);
     });
   }
   render();
-  if (newId) placeCaret(docId + '/' + newId, 0);
+  if (newId) {
+    const key = docId + '/' + newId, real = typeof items !== 'undefined' && items.get(key);
+    if (real && JSON.stringify(typed) !== JSON.stringify(after)) { renderSegs(textEl(key), typed); scheduleSave(real, typed); }
+    placeCaret(key, typedOffset);
+  }
 }
 
 async function shiftNode(item, el, op, arg) {
+  if (!canEditStructure(item)) return;
   flush(item.key);
   const off = caretOffset(el);
   if (op === 'indent') {
@@ -659,13 +809,28 @@ async function shiftNode(item, el, op, arg) {
 }
 
 async function removeNode(item, el) {
+  if (!canEditStructure(item)) return;
   const keys = texts().map(keyOfEl), i = keys.indexOf(item.key);
   dropPending(item.key);
   await run(async () => { await tana.remove(item.docId, item.node.id); await reload(item.docId); });
   render();
   caretNear(keys, i, null);
 }
-
+async function removeDocument(item) {
+  if (!canEditItem(item) || !tana.deleteDocument || !tana.accessOptions) return;
+  flush(item.key);
+  await run(async () => {
+    const access = await tana.accessOptions(item.docId);
+    if (!access?.deletable) throw new Error(access?.reason || 'This document cannot be deleted');
+    await tana.deleteDocument(item.docId); invalidateNode(item.docId); await loadRoots();
+  });
+  render();
+}
+function removeZoomedBlock() {
+  const item = resolveZoom()?.at(-1);
+  if (item?.node.kind === 'block') removeNode(item);
+  else if (item?.node.kind === 'document') removeDocument(item);
+}
 // Cmd+Z / Cmd+Shift+Z: undo/redo through the API (never the browser's contenteditable history), then re-read what changed
 // ponytail: the API returns only the docId; the caret stays in the focused node or moves to the nearest surviving one
 async function history(op) {
@@ -680,13 +845,27 @@ async function history(op) {
   if (saved && !focused()) caretNear(keys, keys.indexOf(saved.key), saved.offset);
 }
 
-function setOpen(item, value) { open.set(item.key, value); render(); }
+function setOpen(item, value) {
+  if (value && !canExpand(item)) return;
+  open.set(item.key, value); render();
+}
 function toggleDone(item) {
-  if (!isTask(item.node) || item.node.draft) return;
+  if (!canEditItem(item) || !isTask(item.node) || item.node.draft) return;
   item.node.done = item.node.done ? 0 : 1;
   if (zoom && zoom.docId === item.docId) extra.set(item.docId, item.node); // the page stays open when the task leaves the filtered view
   render();
   run(() => tana.setDone(item.docId, item.node.done));
+}
+function toggleCheckbox(item) {
+  if (!canEditItem(item) || item.node.kind !== 'block' || !tana.toggleCheckbox) return;
+  run(async () => { await tana.toggleCheckbox(item.docId, item.node.id); await reload(item.docId); });
+}
+async function inheritCheckbox(parent, nodeId) {
+  if (!nodeId || parent.node?.kind !== 'block' || parent.node.done == null || !tana.toggleCheckbox) return;
+  const child = locate(kids.get(parent.docId) || [], nodeId);
+  if (child && child.node.done != null) return;
+  await tana.toggleCheckbox(parent.docId, nodeId);
+  await reload(parent.docId);
 }
 function zoomTo(item) {
   flushAll(); dropDrafts();
@@ -698,7 +877,21 @@ function zoomTo(item) {
   zoom = { docId: item.docId, nodeId: item.node.kind === 'document' ? null : item.node.id, from: same ? zoom.from : undefined, via };
   render();
 }
-function setView(id) { dropDrafts(); view = id; localStorage.setItem('view', id); zoom = null; sel = null; menu = null; if (id === 'library') loadLibrary(); if (id === 'chats') loadChats(); render(); }
+function openReference(node) {
+  const target = referenceTarget(node);
+  if (!target || !node.reference?.uri) return;
+  extra.set(node.reference.uri, target);
+  openDoc(node.reference.uri, 'Reference');
+}
+function toggleReference(node) {
+  const target = referenceTarget(node);
+  if (!target || !isTask(target) || !canEditNode(target)) return;
+  target.done = target.done ? 0 : 1;
+  extra.set(target.id, target);
+  render();
+  run(() => tana.setDone(target.id, target.done));
+}
+function setView(id) { dropDrafts(); view = id; localStorage.setItem('view', id); zoom = null; sel = null; menu = null; if (id === 'members') loadMembers(); if (id === 'library') loadLibrary(); if (id === 'chats') loadChats(); render(); }
 // zoom into a document, switching to its view first when it belongs to another one; from = breadcrumb root instead of the view
 function openDoc(docId, from) {
   flushAll(); dropDrafts();
@@ -747,7 +940,7 @@ async function removeSel(keys) { // Cmd+Shift+Backspace: every selected block, l
   const all = texts().map(keyOfEl), before = all[all.indexOf(keys[0]) - 1], its = keys.map((k) => items.get(k));
   sel = null;
   for (const it of its) dropPending(it.key);
-  await run(async () => { for (const it of [...its].reverse()) await tana.remove(it.docId, it.node.id); await reload(its[0].docId); });
+  await run(async () => { await tana.removeMany(its[0].docId, its.map((it) => it.node.id)); await reload(its[0].docId); });
   render();
   const k = before || texts().map(keyOfEl)[0];
   if (k) placeCaret(k); else focusAbove();
@@ -755,16 +948,16 @@ async function removeSel(keys) { // Cmd+Shift+Backspace: every selected block, l
 async function moveSel(keys, dir) { // Cmd+Shift+Up/Down: the whole range, one api.move per node in the order that keeps them adjacent; keys are node ids so the selection follows
   const its = keys.map((k) => items.get(k)), sibs = childrenOf(its[0].parent) || [];
   if (dir === 'up' ? sibs.indexOf(its[0].node) === 0 : sibs.indexOf(its.at(-1).node) === sibs.length - 1) return;
-  await run(async () => { for (const it of dir === 'up' ? its : [...its].reverse()) await tana.move(it.docId, it.node.id, dir); await reload(its[0].docId); });
+  await run(async () => { await tana.moveMany(its[0].docId, its.map((it) => it.node.id), dir); await reload(its[0].docId); });
   render();
 }
 function selKey(e) { // keys while a selection is active (nothing focused); document nodes: delete/move ignored
   const mod = e.metaKey || e.ctrlKey, keys = selKeys();
   if (!keys.length) return false;
-  const blocks = items.get(keys[0]).node.kind === 'block', vert = e.key === 'ArrowUp' || e.key === 'ArrowDown';
+  const blocks = items.get(keys[0]).node.kind === 'block', writable = blocks && keys.every((key) => canEditStructure(items.get(key))), vert = e.key === 'ArrowUp' || e.key === 'ArrowDown';
   if (e.shiftKey && !mod && vert) extendSel(items.get(sel.focus), e.key === 'ArrowUp' ? -1 : 1);
-  else if (mod && e.shiftKey && e.key === 'Backspace') { if (blocks) removeSel(keys); }
-  else if (mod && e.shiftKey && vert) { if (blocks) moveSel(keys, e.key === 'ArrowUp' ? 'up' : 'down'); }
+  else if (e.key === 'Backspace' && (!mod || e.shiftKey)) { if (writable) removeSel(keys); }
+  else if (mod && e.shiftKey && vert) { if (writable) moveSel(keys, e.key === 'ArrowUp' ? 'up' : 'down'); }
   else if (e.key === 'Escape' || (e.key.startsWith('Arrow') && !mod)) clearSel(sel.focus);
   else return false;
   return true;
@@ -775,13 +968,188 @@ const STATES = [['proposed', 'Inbox'], ['open', 'In Progress'], ['closed', 'Comp
 const TYPES = [['meetings', 'Meetings', 'meeting'], ['tasks', 'Tasks', 'task'], ['docs', 'Docs', 'doc'], null, ['chats', 'Chats', 'chat'], ['canvases', 'Canvases', 'canvas'], ['agents', 'Agents', 'agent'], ['skills', 'Skills', 'skill']];
 const toggleIn = (all, list, v) => { if (!list) return [v]; const next = all.filter((x) => list.includes(x) !== (x === v)); return next.length ? next : null; }; // null = any
 const names = (pairs, list) => (list ? pairs.filter((p) => p && list.includes(p[0])).map((p) => p[1]).join(', ') : null);
-function loadMembers() { if (!members && tana.members) { members = []; tana.members().then((m) => { members = m; if (!$('pills').hidden) renderPills(true); }, showError); } } // re-render so the Assigned pill reads "You (<name>)"
+function loadMembers() { if (!members && tana.members) { members = []; tana.members().then((m) => { members = m; if (!$('pills').hidden) renderPills(true); if (!palette.hidden) renderPalette(); render(); }, showError); } } // re-render so the Assigned pill reads "You (<name>)"
 const me = () => (members || []).find((m) => m.me);
+const memberName = (uri) => { const member = (members || []).find((m) => m.id === uri); return member ? member.title || member.text : uri; };
+const AUDIENCES = {
+  'only-me': { icon: 'lock', label: 'Visible only to you' },
+  people: { icon: 'userLock', label: 'Visible to selected people' },
+  space: { icon: 'houseLock', label: 'Visible to space members' },
+  everyone: { icon: 'users', label: 'Visible to everyone' },
+};
+function audienceInfo(audience, audienceSpace) {
+  const scope = typeof audience === 'string' ? audience : audience?.scope;
+  const info = AUDIENCES[scope];
+  if (!info) return null;
+  const title = audience?.title || audienceSpace?.title;
+  return scope === 'space' && title ? { ...info, label: 'Visible to members of ' + title } : info;
+}
+function loadTaskMeta(docId) {
+  // Metadata is supplemental. Calling it before the sync client connects retries on every render.
+  if (!connected || !tana.taskMeta || taskMetaById.has(docId) || taskMetaLoading.has(docId) || taskMetaFailed.has(docId)) return;
+  taskMetaLoading.add(docId);
+  tana.taskMeta(docId).then((meta) => {
+    taskMetaLoading.delete(docId); taskMetaFailed.delete(docId); taskMetaById.set(docId, meta);
+    if (!palette.hidden && palDoc && palDoc.id === docId) renderPalette();
+    render();
+  }, () => { taskMetaLoading.delete(docId); taskMetaFailed.add(docId); });
+}
+function taskSummary(node) {
+  if (!isTask(node) || !tana.taskMeta) return null;
+  const meta = taskMetaById.get(node.id);
+  if (!meta) { loadTaskMeta(node.id); return null; }
+  const scope = typeof meta.audience === 'string' ? meta.audience : meta.audience?.scope;
+  return { assignees: meta.assignees.length ? meta.assignees.map(memberName).join(', ') : 'Unassigned', audience: audienceInfo(meta.audience, meta.audienceSpace), unknownAudience: scope === 'unknown' };
+}
+function taskMetaEl(summary) {
+  const el = document.createElement('span');
+  el.className = 'meta'; el.textContent = summary.assignees;
+  if (summary.assignees === 'Unassigned') {
+    const icon = document.createElement('span');
+    icon.setAttribute('aria-hidden', 'true'); icon.title = 'Unassigned';
+    icon.style.cssText = 'display:inline-block;width:14px;height:14px;margin-right:4px;vertical-align:-2px';
+    icon.innerHTML = iconSvg('unassigned');
+    const svg = icon.firstElementChild; if (svg) { svg.setAttribute('width', '14'); svg.setAttribute('height', '14'); }
+    el.prepend(icon);
+  }
+  if (summary.audience) {
+    const icon = document.createElement('span');
+    icon.setAttribute('role', 'img'); icon.setAttribute('aria-label', summary.audience.label); icon.title = summary.audience.label;
+    icon.style.cssText = 'display:inline-block;width:14px;height:14px;margin-left:6px;vertical-align:-2px';
+    icon.innerHTML = iconSvg(summary.audience.icon);
+    const svg = icon.firstElementChild; if (svg) { svg.setAttribute('width', '14'); svg.setAttribute('height', '14'); }
+    el.append(icon);
+  } else if (summary.unknownAudience) el.append(' · Visibility unknown');
+  return el;
+}
+function setTaskAssignees(doc, assignees) {
+  const meta = taskMetaById.get(doc.id);
+  if (!meta || !tana.setAssignees) return;
+  run(async () => {
+    try {
+      await tana.setAssignees(doc.id, assignees);
+      taskMetaById.set(doc.id, { ...meta, assignees });
+      if (!palette.hidden && palMode === 'assignees' && palDoc?.id === doc.id) closePalette();
+      render();
+    } catch (e) {
+      showError(e);
+      if (!palette.hidden && palMode === 'assignees' && palDoc?.id === doc.id) renderPalette();
+    }
+  });
+}
+function assigneeRows(q) {
+  if (!palDoc || !isTask(palDoc)) return [];
+  loadMembers(); loadTaskMeta(palDoc.id);
+  const meta = taskMetaById.get(palDoc.id), ids = meta ? meta.assignees : [];
+  const toggle = (uri) => ids.includes(uri) ? ids.filter((id) => id !== uri) : [...ids, uri];
+  const rows = [{ group: 'Assignees', icon: 'unassigned', label: 'Unassigned', hint: ids.length ? '' : '✓', keepOpen: true, run: () => setTaskAssignees(palDoc, []) }];
+  for (const member of members || []) if (!q || memberName(member.id).toLowerCase().includes(q)) rows.push({ group: 'Assignees', icon: 'member', label: memberName(member.id), hint: ids.includes(member.id) ? '✓' : '', keepOpen: true, run: () => setTaskAssignees(palDoc, toggle(member.id)) });
+  return rows;
+}
+function openAssigneePalette(doc) {
+  palDoc = doc; palMode = 'assignees'; palRows = []; palIndex = 0; palBusy = false;
+  palette.hidden = false; palInput.placeholder = 'Assign task to…'; palInput.value = '';
+  loadMembers(); loadTaskMeta(doc.id); renderPalette(); palInput.focus();
+}
+function loadAccess(docId) {
+  if (!tana.accessOptions || accessById.has(docId) || accessLoading.has(docId)) return;
+  accessLoading.add(docId);
+  tana.accessOptions(docId).then((access) => { accessLoading.delete(docId); accessById.set(docId, access); if (!palette.hidden && palDoc?.id === docId) renderPalette(); }, (e) => { accessLoading.delete(docId); showError(e); });
+}
+function applySharing(doc, selection) {
+  run(async () => {
+    try {
+      await tana.setSharing(doc.id, selection);
+      accessById.delete(doc.id); taskMetaById.delete(doc.id);
+      if (typeof closePalette === 'function') closePalette(); await loadRoots(); render();
+    } catch (e) {
+      if (typeof showError === 'function') showError(e);
+      if (/reload|access changed/i.test(String(e.message || e))) {
+        accessById.delete(doc.id); taskMetaById.delete(doc.id); palMode = 'visibility'; loadAccess(doc.id); loadTaskMeta(doc.id); renderPalette();
+      }
+    }
+  });
+}
+function visibilityRows(q) {
+  if (!palDoc) return [];
+  const access = accessById.get(palDoc.id);
+  if (!access?.sharing) return [{ group: 'Visibility', label: accessLoading.has(palDoc.id) ? 'Checking permission…' : 'Visibility cannot be changed', disabled: true }];
+  loadTaskMeta(palDoc.id);
+  const hasParticipants = taskMetaById.has(palDoc.id);
+  const rules = new Set(access.rules || []), inherit = audienceInfo(access.inheritAudience);
+  return [
+    rules.has('me') && { group: 'Visibility', icon: 'lock', label: 'Only me', keepOpen: true, run: () => applySharing(palDoc, { rule: 'me' }) },
+    rules.has('people') && { group: 'Visibility', icon: 'userLock', label: 'Selected people…', disabled: !hasParticipants, keepOpen: true, run: () => openVisibilityPeople(palDoc) },
+    rules.has('inherit') && { group: 'Visibility', icon: 'houseLock', label: inherit ? 'Inherit: ' + inherit.label : 'Inherit location audience', keepOpen: true, run: () => applySharing(palDoc, { rule: 'inherit', token: access.sharingToken }) },
+  ].filter(Boolean).filter((row) => row.label.toLowerCase().includes(q));
+}
+function openVisibilityPalette(doc) {
+  palDoc = doc; palMode = 'visibility'; palRows = []; palIndex = 0; palette.hidden = false;
+  palInput.placeholder = 'Choose visibility'; palInput.value = ''; loadAccess(doc.id); loadTaskMeta(doc.id); renderPalette(); palInput.focus();
+}
+function openVisibilityPeople(doc) {
+  const meta = taskMetaById.get(doc.id);
+  if (!meta) return;
+  visibilityPeople = new Set(meta.participants.map((p) => p.uri).filter((id) => id && id !== me()?.id));
+  visibilityRoles = new Map(meta.participants.map((p) => [p.uri, p.role]).filter(([id]) => id && id !== me()?.id));
+  palMode = 'visibilityPeople'; palRows = []; palIndex = 0; palInput.placeholder = 'Select people'; palInput.value = '';
+  loadMembers(); renderPalette(); palInput.focus();
+}
+function visibilityPeopleRows(q) {
+  if (!palDoc) return [];
+  loadMembers();
+  const people = (members || []).filter((member) => !member.me && memberName(member.id).toLowerCase().includes(q));
+  const apply = { group: 'Visibility', label: 'Apply selected people', disabled: !visibilityPeople.size, keepOpen: true, run: () => applySharing(palDoc, { rule: 'people', participants: [...visibilityPeople].map((uri) => ({ uri, role: visibilityRoles.get(uri) || 'editor' })) }) };
+  return [apply, ...people.map((member) => ({ group: 'People', icon: 'member', label: memberName(member.id), hint: visibilityPeople.has(member.id) ? '✓' : '', keepOpen: true, run: () => { if (visibilityPeople.has(member.id)) visibilityPeople.delete(member.id); else { visibilityPeople.add(member.id); visibilityRoles.set(member.id, 'editor'); } renderPalette(); } }))];
+}
+function searchSpacesNow() {
+  if (!palDoc || !tana.searchSpaces) return;
+  const query = palInput.value.trim(), seq = ++palSeq; palBusy = true;
+  tana.searchSpaces(query).then((nodes) => {
+    if (seq !== palSeq || palMode !== 'spaces') return;
+    palRows = nodes.map(asDoc).map((node) => ({ group: 'Spaces', ...docRow(node, node.selectable ? '' : 'No permission', () => previewMoveToSpace(palDoc, node)), disabled: !node.selectable, keepOpen: true }));
+    palIndex = 0; palBusy = false; renderPalette();
+  }, showError);
+}
+function openMovePalette(doc) {
+  clearTimeout(palTimer); palTimer = null; ++palSeq;
+  palDoc = doc; palMode = 'spaces'; palRows = []; palIndex = 0; palBusy = false; palette.hidden = false;
+  palInput.placeholder = 'Search spaces'; palInput.value = ''; searchSpacesNow(); palInput.focus();
+}
+function audienceLabel(audience) { return audienceInfo(audience)?.label || 'Audience cannot be verified'; }
+function previewMoveToSpace(doc, space) {
+  if (!tana.previewMove) return;
+  const seq = ++palSeq; palBusy = true;
+  tana.previewMove(doc.id, space.id).then((preview) => {
+    if (seq !== palSeq || palMode !== 'spaces') return;
+    palBusy = false;
+    if (!preview.allowed) { showError(new Error(preview.reason || 'This space cannot be selected')); return renderPalette(); }
+    palMode = 'moveConfirm'; palIndex = 2;
+    palRows = [
+      { group: 'Move', label: 'Before: ' + audienceLabel(preview.before), disabled: true },
+      { group: 'Move', label: 'After: ' + audienceLabel(preview.after), disabled: true },
+      { group: 'Move', icon: 'space', label: 'Move to ' + (preview.target?.title || space.text || 'space'), keepOpen: true, run: () => moveToSpace(doc, space, preview.token) },
+      { group: 'Move', label: 'Cancel', keepOpen: true, run: () => openMovePalette(doc) },
+    ];
+    renderPalette();
+  }, showError);
+}
+function moveToSpace(doc, space, token) {
+  run(async () => {
+    try {
+      await tana.moveToSpace(doc.id, space.id, token);
+      paths.delete(doc.id); extra.set(doc.id, asDoc(doc)); closePalette(); await loadRoots(); render();
+    } catch (e) {
+      showError(e);
+      if (/preview.*again|explicitly confirm|access changed/i.test(String(e.message || e))) openMovePalette(doc);
+    }
+  });
+}
 function pillDefs() {
-  if (view === 'chats') return [{ id: 'mcp', label: 'MCP chats', value: showMcp ? 'shown' : 'hidden', toggle: () => setMcp(!showMcp) }]; // a toggle, no menu
+  if (view === 'chats') return [{ id: 'mcp', label: 'MCP chats', active: showMcp, toggle: () => setMcp(!showMcp) }];
   const lib = view === 'library', f = lib ? libF : taskF, save = lib ? setLibF : setTaskF, defs = [];
-  if (lib) defs.push({ id: 'type', value: names(TYPES, f.types) || 'Any type', icon: f.types && f.types.length === 1 ? TYPES.find((t) => t && t[0] === f.types[0])[2] : null, rows: () => [
-    { label: 'Any type', checked: !f.types, run: () => save({ types: null }) },
+  if (lib) defs.push({ id: 'type', value: names(TYPES, f.types) || 'Any type', icon: f.types && f.types.length === 1 ? TYPES.find((t) => t && t[0] === f.types[0])[2] : 'any', rows: () => [
+    { label: 'Any type', icon: 'any', checked: !f.types, run: () => save({ types: null }) },
     ...TYPES.map((t) => (t ? { label: t[1], icon: t[2], checked: !!f.types && f.types.includes(t[0]), run: () => save({ types: toggleIn(TYPES.filter(Boolean).map((x) => x[0]), f.types, t[0]) }) } : { div: true })),
   ] });
   if (!lib || !f.types || f.types.includes('tasks')) {
@@ -808,10 +1176,11 @@ function renderPills(show) {
   const focusedId = box.contains(document.activeElement) && document.activeElement.closest('.pill') ? document.activeElement.closest('.pill').dataset.id : null;
   if (menu && !defs.some((d) => d.id === menu.id)) menu = null;
   box.replaceChildren(...defs.map((d) => {
-    const pill = document.createElement('div'); pill.className = 'pill' + (menu && menu.id === d.id ? ' open' : ''); pill.tabIndex = 0; pill.dataset.id = d.id; pill.setAttribute('role', 'button');
+    const pill = document.createElement('div'); pill.className = 'pill' + (d.active ? ' active' : '') + (menu && menu.id === d.id ? ' open' : ''); pill.tabIndex = 0; pill.dataset.id = d.id; pill.setAttribute('role', 'button');
+    if (d.toggle) pill.setAttribute('aria-pressed', String(!!d.active));
     if (d.icon) { const s = document.createElement('span'); s.innerHTML = iconSvg(d.icon); pill.append(s.firstChild); }
     if (d.label) pill.append(d.label);
-    const b = document.createElement('b'); b.textContent = d.value; pill.append(b);
+    if (d.value) { const b = document.createElement('b'); b.textContent = d.value; pill.append(b); }
     pill.onmousedown = (e) => { if (e.target.closest('.menu')) e.preventDefault(); }; // menu clicks keep the pill focused
     pill.onclick = (e) => { if (d.toggle) d.toggle(); else if (!e.target.closest('.menu')) { menu = menu && menu.id === d.id ? null : { id: d.id, index: 0 }; renderPills(true); pill.focus(); } };
     pill.onkeydown = (e) => pillKeys(e, d, pill);
@@ -820,6 +1189,8 @@ function renderPills(show) {
   }));
   const again = focusedId && box.querySelector('.pill[data-id="' + focusedId + '"]');
   if (again) again.focus();
+  const active = box.querySelector('.menu .mrow.active');
+  if (active) active.scrollIntoView({ block: 'nearest', inline: 'nearest', container: 'nearest' });
 }
 function menuEl(d) {
   const rows = d.rows(), el = document.createElement('div'); el.className = 'menu';
@@ -850,21 +1221,14 @@ function pillKeys(e, d, pill) {
   else if (!open && e.key === 'Escape') { e.preventDefault(); pill.blur(); }
 }
 document.addEventListener('mousedown', (e) => { if (menu && !(e.target.closest && e.target.closest('.pill'))) { menu = null; renderPills(true); } });
-// Library search box: server-side text, debounced 300 ms; Enter applies now, Down moves on to the pills
-$('libText').addEventListener('input', () => { clearTimeout(libTimer); libTimer = setTimeout(() => setLibF({ text: $('libText').value.trim() }), 300); });
-$('libText').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') { clearTimeout(libTimer); setLibF({ text: $('libText').value.trim() }); }
-  else if (e.key === 'Escape') { e.preventDefault(); $('libText').value = ''; clearTimeout(libTimer); setLibF({ text: '' }); $('libText').blur(); }
-  else if (e.key === 'ArrowDown') { e.preventDefault(); const p = $('pills').firstElementChild; if (p) p.focus(); }
-});
-
 // ---- page title (zoomed into a document): edits go through the same debounce as node text; Enter -> first child, Esc restores ----
-titleEl.addEventListener('input', () => { const item = items.get(titleEl.dataset.key); if (item) scheduleSave(item, [{ text: titleEl.textContent }]); });
-titleEl.addEventListener('blur', () => flush(titleEl.dataset.key));
+titleEl.addEventListener('input', () => { const item = items.get(titleEl.dataset.key); if (!item) return; if (item.node.draft && !item.busy) { item.busy = true; materialise(item, titleEl); } else if (!item.node.draft) scheduleSave(item, [{ text: titleEl.textContent }]); });
+titleEl.addEventListener('blur', () => { const item = items.get(titleEl.dataset.key); if (item?.node.draft && !item.busy && !titleEl.textContent) { zoom = null; return dropDraft(item); } flush(titleEl.dataset.key); });
 titleEl.addEventListener('keydown', (e) => {
   const item = items.get(titleEl.dataset.key);
   if (!titleEl.isContentEditable || !item) return;
-  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); toggleDone(item); }
+  if (e.key === 'Backspace' && (e.metaKey || e.ctrlKey) && e.shiftKey) { e.preventDefault(); removeDocument(item); }
+  else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); toggleDone(item); }
   else if (e.key === 'Enter') { e.preventDefault(); flush(item.key); const first = texts()[0]; if (first) setCaret(first, 0); else titleEl.blur(); }
   else if (e.key === 'Escape') { e.preventDefault(); dropPending(item.key); titleEl.textContent = item.node.text; titleEl.blur(); }
   else if (e.key === '@' && !getSelection().isCollapsed) { const range = selectionOffsets(titleEl); if (range) { e.preventDefault(); startLink(item, titleEl, range); } }
@@ -877,16 +1241,43 @@ function currentDoc() {
   const d = docId && (allDocs().find((x) => x.id === docId) || extra.get(docId));
   return d && !d.draft ? d : null;
 }
-// ---- pins (api.pins / pinState / pin / unpin) ----
+// ---- pins (api.pinTree / pinState / pin / unpin) ----
 function loadPins() {
-  if (!tana.pins) return;
+  if (!tana.pinTree && !tana.pins) return;
   const doc = palDoc;
-  Promise.all([tana.pins(), doc && tana.pinState(doc.id)]).then(([p, s]) => {
-    pins = p; pinInfo = s ? { docId: doc.id, ...s } : null;
+  const tree = tana.pinTree ? tana.pinTree() : tana.pins().then((nodes) => nodes.map((node) => ({ node, children: [] })));
+  Promise.all([tree, doc && tana.pinState(doc.id)]).then(([p, s]) => {
+    pinTree = p; pinInfo = s ? { docId: doc.id, ...s } : null;
     if (!palette.hidden && palMode === 'cmd') renderPalette();
   }, showError);
 }
 function pinAction(op, target) { run(async () => { await tana[op](pinInfo.docId, target); loadPins(); }); }
+function prunedPins(tree, id) {
+  const rows = [];
+  for (const entry of tree || []) {
+    const removed = entry.uri === id || entry.node?.id === id;
+    const children = prunedPins(entry.children, id);
+    if (!removed) rows.push({ ...entry, children });
+    else if (entry.label || children.length) rows.push({ ...entry, uri: undefined, node: undefined, children });
+  }
+  return rows;
+}
+function invalidatePinCaches(id, includeRecent = true) {
+  pinTree = prunedPins(pinTree, id);
+  if (includeRecent) forgetRecent(id);
+  palRows = palRows.filter((row) => row.id !== 'pinned:' + id);
+}
+function invalidateNode(id) {
+  invalidatePinCaches(id);
+  extra.delete(id); paths.delete(id); kids.delete(id); fresh.delete(id); taskMetaById.delete(id);
+  for (const section of sections) section.nodes = section.nodes.filter((node) => node.id !== id);
+  if (libRows) libRows = libRows.filter((node) => node.id !== id);
+  if (chatRows) chatRows = chatRows.filter((node) => node.id !== id);
+  palRows = palRows.filter((row) => row.node?.id !== id);
+  if (palDoc?.id === id) { palDoc = null; pinInfo = null; }
+  if (dropDoc?.id === id) dropDoc = null;
+  if (zoom?.docId === id) zoom = null;
+}
 // ---- custom icons (api.setIcon): "Set icon…" drop overlay, or an .svg dropped straight onto a document line ----
 function setIcon(docId, svg) {
   const d = allDocs().find((x) => x.id === docId) || extra.get(docId);
@@ -956,6 +1347,26 @@ outline.addEventListener('keydown', (e) => {
   const item = items.get(keyOfEl(el)), mod = e.metaKey || e.ctrlKey;
   const off = caretOffset(el), len = el.textContent.length, collapsed = getSelection().isCollapsed;
   const isDoc = item.node.kind === 'document';
+  if (!canEditItem(item)) {
+    if (isReference(item.node) && canEditStructure(item)) {
+      const vert = e.key === 'ArrowUp' || e.key === 'ArrowDown', dir = e.key === 'ArrowUp' ? 'up' : 'down';
+      if (e.key === 'Backspace') removeNode(item, el);
+      else if (vert && e.shiftKey && mod) shiftNode(item, el, 'move', dir);
+      else if (vert && e.shiftKey) extendSel(item, dir === 'up' ? -1 : 1);
+      else if (vert && !mod) moveTo(el, dir === 'up' ? -1 : 1, 0);
+      else if (e.key === 'Escape') el.blur();
+      else if (mod) return;
+      return e.preventDefault();
+    }
+    if (e.key === 'Escape') { e.preventDefault(); el.blur(); }
+    else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && e.shiftKey && !mod) { e.preventDefault(); extendSel(item, e.key === 'ArrowUp' ? -1 : 1); }
+    else if (e.key === 'ArrowUp' && !mod && atEdge(el, 'up')) { e.preventDefault(); moveTo(el, -1, off); }
+    else if (e.key === 'ArrowDown' && !mod && atEdge(el, 'down')) { e.preventDefault(); moveTo(el, 1, off); }
+    else if (e.key === 'ArrowLeft' && !mod && off === 0 && collapsed) { e.preventDefault(); moveTo(el, -1, Infinity); }
+    else if (e.key === 'ArrowRight' && !mod && off === len && collapsed) { e.preventDefault(); moveTo(el, 1, 0); }
+    else if (!(mod && (e.key.toLowerCase() === 'k' || e.key.toLowerCase() === 's'))) e.preventDefault();
+    return;
+  }
   if (item.node.draft) { // empty draft: Enter/Tab do nothing, Backspace drops it (caret to the node above); typing creates it (input handler)
     if (e.key === 'Enter' || e.key === 'Tab') return e.preventDefault();
     if (e.key === 'Backspace' && len === 0) { e.preventDefault(); const all = texts(), prev = all[all.indexOf(el) - 1], k = prev && keyOfEl(prev); dropDraft(item); return k ? placeCaret(k) : focusAbove(); }
@@ -976,7 +1387,7 @@ outline.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') { e.preventDefault(); flush(item.key); el.blur(); }
   else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && e.shiftKey && !mod) { e.preventDefault(); extendSel(item, e.key === 'ArrowUp' ? -1 : 1); } // multi-select over siblings
   else if (e.key === '@' && !collapsed) { const range = selectionOffsets(el); if (range) { e.preventDefault(); startLink(item, el, range); } } // no selection: "@" is typed
-  else if (e.key === 'Enter' && mod) { e.preventDefault(); if (isDoc) toggleDone(item); }
+  else if (e.key === 'Enter' && mod) { e.preventDefault(); if (isDoc) toggleDone(item); else toggleCheckbox(item); }
   else if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); insertAtCaret(el, '\n'); }
   else if (e.key === 'Enter' && isDoc && item.parent) e.preventDefault(); // document child (inside a space): nothing to split or draft yet
   else if (e.key === 'Enter' && isDoc && !zoom && !isOpen(item)) { e.preventDefault(); draftDoc(item); } // collapsed document in a view: draft sibling document
@@ -996,8 +1407,9 @@ outline.addEventListener('input', (e) => {
   const el = e.target.closest && e.target.closest('.text');
   if (!el) return;
   const item = items.get(keyOfEl(el));
+  if (!canEditItem(item)) return;
   if (!item.node.draft) scheduleSave(item, readSegs(el));
-  else if (!item.busy) { item.busy = true; materialise(item, el); }
+  else if (!item.busy && !item.node.pendingSplit) { item.busy = true; materialise(item, el); }
 });
 outline.addEventListener('focusout', (e) => {
   const el = e.target, item = el.classList && el.classList.contains('text') && items.get(keyOfEl(el));
@@ -1031,11 +1443,11 @@ document.addEventListener('keydown', (e) => {
   const hotkey = mod && !inFilter && Object.keys(hotkeys).find((id) => hotkeys[id] === comboOf(e));
   if (dropDoc) { if (e.defaultPrevented) return; if (e.key === 'Escape') { e.preventDefault(); endDrop(); } else if (e.key === 'Enter') { e.preventDefault(); $('dropFile').click(); } } // (the palette's Enter that started drop mode is already handled)
   else if (mod && e.key === 'k') { e.preventDefault(); togglePalette('cmd'); }
-  else if (mod && e.shiftKey && (e.key === '+' || e.key === '=' || e.key === '-' || e.key === '_' || e.key === '0')) { e.preventDefault(); setZoom(e.key === '0' ? 1 : zoomFactor * (e.key === '-' || e.key === '_' ? 1 / 1.1 : 1.1)); }
+  else if (mod && (e.key === '0' || (e.shiftKey && (e.key === '+' || e.key === '=' || e.key === '-' || e.key === '_')))) { e.preventDefault(); setZoom(e.key === '0' ? BASE_ZOOM : zoomFactor * (e.key === '-' || e.key === '_' ? 1 / 1.1 : 1.1)); }
   else if (mod && e.key === 's') { e.preventDefault(); togglePalette('search'); }
-  else if (mod && e.key === 'r') { e.preventDefault(); run(() => tana.refresh()); } // Sync (no native menu item any more)
   else if (!palette.hidden) return;
   else if (sel && document.activeElement === document.body && (e.defaultPrevented || selKey(e))) e.preventDefault(); // selection keys; a Shift+Arrow already handled in the node stops here (focus is on body by now)
+  else if (mod && e.shiftKey && e.key === 'Backspace' && document.activeElement === document.body && zoom) { e.preventDefault(); removeZoomedBlock(); }
   else if (mod && (e.key.toLowerCase() === 'z' || e.key.toLowerCase() === 'y') && !inFilter) { e.preventDefault(); history(e.key.toLowerCase() === 'y' || e.shiftKey ? 'redo' : 'undo'); }
   else if (mod && e.key === 'f') { e.preventDefault(); if (zoom) return; filterShown = true; render(); filterEl.focus(); }
   else if (hotkey) { e.preventDefault(); runAction(hotkey); }
@@ -1049,21 +1461,56 @@ document.addEventListener('keydown', (e) => {
 
 // ---- palette: Cmd+K commands (Views, Actions, matching Documents while typing) or Cmd+S live search (api.search) ----
 const palette = $('palette'), palInput = $('paletteInput'), palList = $('paletteList');
-let palMode = 'cmd', palRows = [], palIndex = 0, palBusy = false, palSeq = 0, palTimer;
-const docRow = (n, hint, run) => ({ node: n, icon: n.icon, svg: n.iconSvg, label: n.text ?? n.title, tags: n.tags, hint, run });
+let palMode = 'cmd', palRows = [], palIndex = 0, palBusy = false, palSeq = 0, palTimer, creationChoices = [];
+const docRow = (n, hint, run) => ({ node: n, icon: n.icon, svg: n.iconSvg, label: n.text ?? n.title, tags: visibleTags(n), hint, run });
+function pinRows(tree) {
+  const unsectioned = [], sections = [];
+  const addNode = (entry, rows, group) => {
+    if (!entry.node) return;
+    const node = asDoc(entry.node);
+    rows.push({ ...docRow(node, undefined, () => openResult(node, sectionOf(node.id) ? undefined : 'Pinned')), id: 'pinned:' + node.id, group, right: 'pin' });
+  };
+  const collect = (entries, rows, label) => {
+    for (const entry of entries || []) {
+      let target = rows, nextLabel = label;
+      if (typeof entry.label === 'string' && entry.label !== label) {
+        const section = { label: entry.label, rows: [] };
+        sections.push(section); target = section.rows; nextLabel = section.label;
+      }
+      addNode(entry, target, nextLabel || 'Pinned');
+      collect(entry.children, target, nextLabel);
+    }
+  };
+  collect(tree, unsectioned, null);
+  return [...unsectioned, ...sections.flatMap((section) => section.rows)];
+}
 function paletteRows(q) {
-  const rows = sections.map((s) => ({ id: 'view:' + s.id, group: 'Views', icon: s.icon, label: s.title, run: () => setView(s.id) }));
-  for (const n of pins) rows.push({ ...docRow(n, undefined, () => openResult(n, sectionOf(n.id) ? undefined : 'Pinned')), id: 'pinned:' + n.id, group: 'Pinned', right: 'pin' }); // in a view: open it there; else breadcrumb "Pinned"
-  rows.push({ id: 'sync', group: 'Actions', icon: 'sync', label: 'Sync', kbd: '⌘R', run: () => run(() => tana.refresh()) });
-  if (!authed) rows.push({ id: 'login', group: 'Actions', label: 'Log in to Tana', run: () => tana.login().catch(showError) });
+  const rows = sections.map((s) => ({ id: 'view:' + s.id, group: 'Views', icon: s.icon, label: s.id === 'members' ? 'People' : s.title, run: () => setView(s.id) }));
+  rows.push(...pinRows(pinTree));
+  if (tana.creationOptions) rows.push({ id: 'create', group: 'Actions', icon: 'createNew', label: 'Create new…', keepOpen: true, run: openCreationPalette });
+  rows.push({ id: 'sync', group: 'Actions', icon: 'sync', label: 'Sync', run: () => run(() => tana.refresh()) });
+  const dark = typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark';
+  rows.push({ id: 'theme', group: 'Actions', icon: 'darkLight', label: 'Toggle ' + (dark ? 'light' : 'dark') + ' mode', run: () => setTheme(dark ? 'light' : 'dark') });
+  if (signedOut) rows.push({ id: 'login', group: 'Actions', label: 'Log in to Tana', run: () => tana.login().catch(showError) });
   if (pinInfo && palDoc && pinInfo.docId === palDoc.id) { // context actions for the current document (no ids: their labels depend on state, so no hotkeys)
     const sb = pinInfo.sidebar, td = pinInfo.dates.includes(localDate());
     rows.push({ group: 'Actions', icon: 'pin', label: sb ? 'Unpin from sidebar' : 'Pin to sidebar', run: () => pinAction(sb ? 'unpin' : 'pin', 'sidebar') });
     rows.push({ group: 'Actions', icon: 'pinDate', label: td ? 'Unpin from today' : 'Pin to today', run: () => pinAction(td ? 'unpin' : 'pin', 'today') });
   }
   if (palDoc && tana.setIcon) {
-    rows.push({ group: 'Actions', label: 'Set icon…', run: () => startDrop(palDoc) });
+    rows.push({ group: 'Actions', icon: 'setIcon', label: 'Set Image', run: () => startDrop(palDoc) });
     if (palDoc.iconSvg) rows.push({ group: 'Actions', label: 'Remove icon', run: () => setIcon(palDoc.id, null) });
+  }
+  if (palDoc && isTask(palDoc) && canEditNode(palDoc) && tana.taskMeta && tana.setAssignees) {
+    loadTaskMeta(palDoc.id);
+    const meta = taskMetaById.get(palDoc.id), hint = meta && meta.assignees.length ? meta.assignees.map(memberName).join(', ') : meta ? 'Unassigned' : 'Loading…';
+    rows.push({ group: 'Actions', icon: 'member', label: 'Edit assignees', hint, keepOpen: true, run: () => openAssigneePalette(palDoc) });
+  }
+  if (palDoc && canEditNode(palDoc) && tana.accessOptions) {
+    loadAccess(palDoc.id);
+    const access = accessById.get(palDoc.id);
+    if (access?.sharing) rows.push({ group: 'Actions', icon: 'lock', label: 'Edit visibility', run: () => openVisibilityPalette(palDoc) });
+    if (access?.move) rows.push({ group: 'Actions', icon: 'space', label: 'Move to space', keepOpen: true, run: () => openMovePalette(palDoc) });
   }
   if (q) for (const s of sections) for (const n of s.nodes) rows.push({ ...docRow(n, s.title, () => openDoc(n.id)), id: 'doc:' + n.id, group: 'Documents' });
   let docsLeft = 8;
@@ -1074,6 +1521,28 @@ function runAction(id) {
   const row = paletteRows('').find((r) => r.id === id);
   if (row) row.run(); else if (id.startsWith('doc:')) goTo(id.slice(4));
 }
+function creationRows(q) {
+  if (palBusy) return [{ group: 'Create new', label: 'Loading choices…', disabled: true }];
+  return creationChoices.filter((choice) => choice.title.toLowerCase().includes(q)).map((choice) => ({ group: choice.kind === 'custom' ? 'Workspace types' : 'Create new', icon: choice.icon, label: choice.title, hint: choice.selectable ? '' : choice.reason || 'Unavailable', disabled: !choice.selectable, keepOpen: true, run: () => startCreation(choice) }));
+}
+function openCreationPalette() {
+  palMode = 'create'; palRows = []; palIndex = 0; palette.hidden = false;
+  palInput.placeholder = 'Choose what to create'; palInput.value = ''; renderPalette(); palInput.focus();
+  const seq = ++palSeq; palBusy = true; tana.creationOptions().then((result) => {
+    if (seq !== palSeq || palMode !== 'create') return;
+    creationChoices = result.options || []; palBusy = false; renderPalette();
+  }, (e) => { if (seq === palSeq && palMode === 'create') { palBusy = false; showError(e); renderPalette(); } });
+}
+function creationSection(choice) {
+  const id = choice.kind === 'task' ? 'tasks' : choice.kind === 'meeting' || choice.appliesTo === 'events' ? 'meetings' : choice.kind === 'chat' ? 'chats' : 'library';
+  return sections.find((section) => section.id === id) || viewOf();
+}
+function startCreation(choice) {
+  const section = creationSection(choice), tags = choice.kind === 'custom' ? [{ label: choice.title, hue: choice.hue }] : undefined;
+  const node = draftDocNode(choice.kind, { typeUri: choice.typeUri, icon: choice.icon, tags });
+  section.nodes.unshift(node); view = section.id; localStorage.setItem('view', view);
+  closePalette(); zoom = { docId: node.id, nodeId: null }; render(); setCaret(titleEl, 0);
+}
 // search result / pin: zoom into it wherever it lives (api.node shape -> extra); from = breadcrumb root when not opened in its view
 function openResult(n, from) {
   if (!allDocs().some((d) => d.id === n.id)) extra.set(n.id, asDoc(n));
@@ -1081,11 +1550,11 @@ function openResult(n, from) {
 }
 // result rows pick a document: open it, or link it when the palette was opened with "@" on a selection (Create row first)
 function resultRows(nodes, group) {
+  nodes = nodes.map(asDoc);
   const ctx = linkCtx;
   const rows = nodes.map((n) => ({ ...docRow(n, n.meta, () => (ctx ? linkTo(ctx, { label: n.title ?? n.text, uri: n.id }) : openResult(n, 'Search'))), group }));
   if (!ctx) return rows;
-  const exists = nodes.some((n) => ((n.title ?? n.text) || '').trim().toLowerCase() === ctx.text.trim().toLowerCase()); // exact title: link, don't offer Create
-  return exists ? rows : [{ label: 'Create “' + ctx.text + '”', hint: '⌘↩', run: () => createAndLink(ctx) }, ...rows];
+  return [{ create: true, label: 'Create “' + ctx.text + '”', hint: '⌘↩', run: () => createAndLink(ctx) }, ...rows];
 }
 function searchNow() {
   const q = palInput.value.trim(), seq = ++palSeq;
@@ -1093,21 +1562,26 @@ function searchNow() {
   if (!q) { palRows = resultRows(recent(), 'RECENTLY VIEWED'); return renderPalette(); }
   tana.search(q).then((nodes) => {
     if (seq !== palSeq || palMode !== 'search') return; // stale response
-    palRows = resultRows(nodes); palIndex = 0; palBusy = false;
+    palRows = resultRows(nodes); palIndex = linkCtx && nodes.length ? 1 : 0; palBusy = false;
     renderPalette();
   }, showError);
 }
 function renderPalette() {
   const q = palInput.value.trim();
   if (palMode === 'cmd') palRows = paletteRows(q.toLowerCase());
+  else if (palMode === 'create') palRows = creationRows(q.toLowerCase());
+  else if (palMode === 'assignees') palRows = assigneeRows(q.toLowerCase());
+  else if (palMode === 'visibility') palRows = visibilityRows(q.toLowerCase());
+  else if (palMode === 'visibilityPeople') palRows = visibilityPeopleRows(q.toLowerCase());
   palIndex = Math.max(0, Math.min(palIndex, palRows.length - 1));
   const els = [];
   palRows.forEach((r, i) => {
     if (r.group && (!i || palRows[i - 1].group !== r.group)) { const h = document.createElement('div'); h.className = 'group'; h.textContent = r.group; els.push(h); }
-    const row = document.createElement('div'); row.className = 'row' + (i === palIndex ? ' active' : ''); row.dataset.index = i;
+    const row = document.createElement('div'); row.className = 'row' + (i === palIndex ? ' active' : '') + (r.disabled ? ' disabled' : ''); row.dataset.index = i;
     const icon = document.createElement('span'); icon.className = 'ricon' + (r.node ? ' ' + (r.svg ? 'custom' : r.icon || 'dot') : ''); icon.innerHTML = r.svg || (r.icon ? iconSvg(r.icon) : '');
+    if (r.node && !r.svg && r.node.hue != null) { icon.classList.add('hue'); icon.style.setProperty('--hue', String(r.node.hue)); }
     const label = document.createElement('span'); label.className = 'label'; label.textContent = r.label;
-    for (const t of r.tags || []) label.append(chipEl(t));
+    for (const t of r.tags || []) label.append(chipEl(t, r.node && r.node.hue));
     row.append(icon, label);
     if (r.right) { const s = document.createElement('span'); s.className = 'ricon right'; s.innerHTML = iconSvg(r.right); row.append(s); }
     if (r.kbd) { const k = document.createElement('kbd'); k.textContent = r.kbd; row.append(k); }
@@ -1140,17 +1614,18 @@ function togglePalette(mode, link) {
 function closePalette() { palette.hidden = true; clearTimeout(palTimer); palTimer = null; cancelLink(); returnFocus(); }
 // back to the node that had the caret when the palette opened (the @ link path places its own caret)
 function returnFocus() { const r = palReturn; palReturn = null; if (r && !focused()) placeCaret(r.key, r.offset); }
-function runRow(r) { closePalette(); r.run(); }
+function runRow(r) { if (!r || r.disabled) return; if (!r.keepOpen) closePalette(); r.run(); }
 palInput.addEventListener('input', () => {
   palIndex = 0;
-  if (palMode === 'cmd') return renderPalette();
+  if (palMode === 'cmd' || palMode === 'create' || palMode === 'assignees' || palMode === 'visibility' || palMode === 'visibilityPeople') return renderPalette();
+  if (palMode === 'spaces') { palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchSpacesNow, 150); return; }
   palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchNow, 150);
 });
 palInput.addEventListener('keydown', (e) => {
   const mod = e.metaKey || e.ctrlKey;
-  if (e.key === 'Escape') { e.preventDefault(); closePalette(); }
-  else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && palRows.length) { e.preventDefault(); palIndex = (palIndex + (e.key === 'ArrowDown' ? 1 : palRows.length - 1)) % palRows.length; renderPalette(); }
-  else if (e.key === 'Enter') { e.preventDefault(); const r = mod && linkCtx ? palRows[0] : palRows[palIndex]; if (r) runRow(r); } // ⌘↩ = Create row
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closePalette(); }
+  else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && palRows.length) { e.preventDefault(); e.stopPropagation(); palIndex = (palIndex + (e.key === 'ArrowDown' ? 1 : palRows.length - 1)) % palRows.length; renderPalette(); }
+  else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); if (palBusy && (palMode === 'spaces' || palMode === 'search')) return; const r = mod && linkCtx ? palRows.find((row) => row.create) : palRows[palIndex]; if (r) runRow(r); } // ⌘↩ always creates for an @ selection
   else if (mod && e.shiftKey && e.key.toLowerCase() === 'k') { e.preventDefault(); e.stopPropagation(); const r = palRows[palIndex]; if (palMode === 'cmd' && r && r.id) openRecorder(r); }
 });
 palette.addEventListener('mousedown', (e) => { if (e.target === palette) closePalette(); });
@@ -1188,23 +1663,42 @@ document.addEventListener('keydown', (e) => { // capture: the recorder sees ever
 }, true);
 
 // ---- status ----
+function authView(s) {
+  const checking = s.authChecking === true, authenticated = s.authenticated === true;
+  const signedOut = s.authChecking === false && s.authenticated === false;
+  const unresolved = !checking && !authenticated && !signedOut;
+  return { checking, authenticated, signedOut, showLogin: signedOut, showOutline: checking || authenticated || unresolved, error: checking ? null : s.error };
+}
 function showStatus(s) {
-  const was = authed;
-  authed = !!s.authenticated; connected = !!s.connected;
-  $('loginBox').hidden = !!s.authenticated;
-  outline.hidden = $('filtered').hidden = !s.authenticated;
-  showError(s.error);
+  const state = authView(s);
+  const wasConnected = connected;
+  authed = state.authenticated; authChecking = state.checking; signedOut = state.signedOut; connected = !!s.connected;
+  if (connected && !wasConnected && typeof taskMetaFailed !== 'undefined') taskMetaFailed.clear();
+  $('loginBox').hidden = !state.showLogin;
+  outline.hidden = $('filtered').hidden = !state.showOutline;
+  showError(state.error);
   render(); // auth/connection state drives the skeleton; a newly visible outline applies the view's opening scroll
 }
 $('login').onclick = () => tana.login().catch(showError);
 
 // ---- live updates ----
 tana.onChanged((docId) => {
+  if (docId) { taskMetaById.delete(docId); if (typeof taskMetaFailed !== 'undefined') taskMetaFailed.delete(docId); }
   const work = [loadRoots()];
   if (docId && kids.has(docId)) work.push(reload(docId));
-  if (!docId) { loadPins(); if (view === 'chats') loadChats(); }
+  if (!docId) loadPins();
+  if (!docId && view === 'chats') loadChats();
   Promise.all(work).then(render, showError);
 });
+function removeStale(id) {
+  invalidateNode(id); loadPins();
+  loadRoots().then(render, showError);
+}
+function unpinStale(id) {
+  invalidatePinCaches(id, false); loadPins(); render();
+}
+if (tana.onRemoved) tana.onRemoved(removeStale);
+if (tana.onUnpinned) tana.onUnpinned(unpinStale);
 tana.onStatus(showStatus);
 loadRoots().then(render, showError).then(loadFilters);
 tana.status().then(showStatus, showError);

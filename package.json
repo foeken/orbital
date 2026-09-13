@@ -7,7 +7,7 @@
   "scripts": {
     "start": "electron .",
     "tana": "electron scripts/platform-cli.js",
-    "check": "node scripts/db-check.js && node scripts/sdk-check.js",
+    "check": "node scripts/db-check.js && node scripts/sdk-check.js && node scripts/renderer-check.js && node scripts/renderer-behavior-check.js",
     "icon": "electron scripts/build-icon.js",
     "package": "electron-packager . 'Tana Companion' --platform=darwin --arch=arm64 --icon=build/icon.icns --out=dist --overwrite --ignore='^/(dist|docs|build/icon\\.png|\\.git)' --app-bundle-id=inc.tana.companion"
   },

@@ -121,6 +121,8 @@ pins (in sidebar order, folders are nodes with `meta.label` and `children`). Bot
 If `pinnedCollectionUri` is missing the user has no pins yet (the web client creates the collection lazily). The web client keeps the profile subscribed for the
 session and the collection via `useUserPinnedCollection`; the same for `pinMapUri` (`rwe`, with a stale-reference recovery that clears `pinMapUri` when the pin-map doc is unavailable).
 
+The SDK's read-only `sidebarTree(sync, userUri)` preserves this as `[{ uri?, label?, children }]` in LoroTree order. A `label` is evidence of a folder node, not an access rule; the schema allows `uri` and `label` independently, so consumers must retain both if present. `listSidebar` is only the legacy depth-first URI projection. We have observed labelled root folders with child pins and unsectioned root pins, but not a nested-folder or combined URI/label node in a live collection.
+
 ## 4. Events and spaces
 
 Different container, same document-sync mechanism. Event (`ode`) and space (`Lle`) docs have a root **MovableList** `pinnedItems`:
@@ -183,4 +185,3 @@ server-derived `HAS_PIN` edge. First-time users: if `pinnedCollectionUri`/`pinMa
 
 Not verified: whether the server enforces that only the profile owner may edit the collection/pin-map (ACLs say `restricted:true`, owner admin), and
 what the UI does with `pinnedAt` beyond dedup (it is written but never read in the bundle paths above).
-

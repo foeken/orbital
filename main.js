@@ -6,14 +6,15 @@ const db = require('./db');
 const { createTanaSession, peerIdentity } = require('./tana-session');
 const { createTanaClient } = require('./sdk');
 const { fetchImage } = require('./sdk/assets');
-const { readNode, setTitle, setState, ulid, initDocument } = require('./sdk/node');
+const access = require('./sdk/access');
+const { readNode, editable, setTitle, setState, taskMeta, audienceMetadata, setAssignees, ulid, initDocument } = require('./sdk/node');
 const { parseQuery, searchParams, needsTypes, taskParams, libraryQueries, DEFAULT_TASK_FILTER, DEFAULT_LIBRARY_FILTER } = require('./sdk/query');
 const content = require('./sdk/content');
 const pins = require('./sdk/pins');
 
-const SECTIONS = [{ id: 'tasks', title: 'Tasks', icon: 'task' }, { id: 'meetings', title: 'Meetings', icon: 'meeting' }, { id: 'library', title: 'Library', icon: 'doc' }, { id: 'chats', title: 'Chats', icon: 'chat' }];
+const SECTIONS = [{ id: 'tasks', title: 'Tasks', icon: 'task' }, { id: 'meetings', title: 'Meetings', icon: 'meeting' }, { id: 'members', title: 'Members', icon: 'member' }, { id: 'library', title: 'Library', icon: 'library' }, { id: 'chats', title: 'Chats', icon: 'chat' }];
 const TAG = { task: { label: 'task', color: 'grey' }, meeting: { label: 'meeting', color: 'gold' }, space: { label: 'space', color: 'grey' }, doc: { label: 'doc', color: 'grey' }, member: { label: 'member', color: 'grey' } };
-const KINDS = { doc: 'tana:text:', task: 'tana:text:', meeting: 'tana:event:' };
+const KINDS = { doc: 'tana:text:', task: 'tana:text:', meeting: 'tana:event:', chat: 'tana:chat:' };
 const PLAIN_KINDS = new Set(['chat', 'canvas', 'agent', 'skill']); // tana:<kind>: ids listed read-only: plain bullet + kind tag
 
 // persisted view filters (db settings table)
@@ -30,13 +31,30 @@ const MEETINGS_QUERY = (userUri) => {
   };
 };
 
-const status = { authenticated: false, connected: false, syncing: false, lastSync: null, error: null };
+const status = { authenticated: null, authChecking: true, connected: false, syncing: false, lastSync: null, error: null };
 let win, session, client, me;
 let refreshTimer;
 const subscribed = new Set();
+const deletedNodes = new Set();
+const isDeleted = n => typeof n.deletedAt === 'number' && n.deletedAt > 0;
+const visibleGraphNodes = nodes => nodes.filter(n => !deletedNodes.has(n.id) && !isDeleted(n));
 const typeTitles = new Map(); // entityType uri -> title, resolved once per session
 const typeHues = new Map(); // type uri -> appearance.hue (0-360), for coloured type tags
+const nodeHues = new Map(); // document uri -> its own appearance.hue; separate from typeHues
+const editability = new Map(); // observed graph/document capabilities, never guessed from ownership
 const rememberType = (n) => { typeTitles.set(n.id, n.title || ''); if (n.appearance && typeof n.appearance.hue === 'number') typeHues.set(n.id, n.appearance.hue); };
+const ownHue = (n) => n && n.appearance && typeof n.appearance.hue === 'number' ? n.appearance.hue : undefined;
+function rememberNodeHue(n) {
+  editability.set(n.id, editable(n, me && me.userUri));
+  const hue = ownHue(n), had = nodeHues.has(n.id), before = nodeHues.get(n.id);
+  if (hue === undefined) nodeHues.delete(n.id); else nodeHues.set(n.id, hue);
+  return had !== (hue !== undefined) || before !== hue;
+}
+const nodeTag = (tag, n) => ownHue(n) === undefined ? tag : { ...tag, hue: ownHue(n) };
+const cachedNodeHue = (r) => {
+  const tag = r.tags && r.tags[0];
+  return (r.icon || ['space', 'chat', 'canvas', 'agent', 'skill'].includes(idKind(r.id))) && tag && typeof tag.hue === 'number' ? tag.hue : undefined;
+};
 
 // Where a document lives in Tana: owner chain root-first as [{ id, title }]; unowned documents are in the Library.
 const pathCache = new Map(); // docId -> path (refreshed on every info() call; cheap enough per open)
@@ -75,17 +93,18 @@ async function resolveTypes(uris) {
 const typeTag = (uri) => (uri && typeTitles.get(uri) ? [typeHues.has(uri) ? { label: typeTitles.get(uri), hue: typeHues.get(uri) } : { label: typeTitles.get(uri), color: 'grey' }] : []);
 // plain untyped document (no state, no type): 'doc' icon + chip; typed documents keep their type tag and the plain bullet
 const isSpace = (id) => id.startsWith('tana:space:');
-const plainRow = (id, title, updatedAt, typeUri) => (isSpace(id)
-  ? { id, title, done: 0, icon: 'space', tags: [TAG.space], sortKey: updatedAt, updatedAt }
-  : { id, title, done: 0, icon: typeUri ? null : 'doc', tags: typeUri ? typeTag(typeUri) : [TAG.doc], sortKey: updatedAt, updatedAt });
-const memberRow = (id, title, updatedAt) => ({ id, title, done: 0, icon: 'member', tags: [TAG.member], sortKey: updatedAt, updatedAt });
-const kindRow = (id, kind, title, updatedAt) => ({ id, title, done: 0, icon: null, tags: [{ label: kind, color: 'grey' }], sortKey: updatedAt, updatedAt });
+const plainRow = (id, title, updatedAt, typeUri, hue) => (isSpace(id)
+  ? { id, title, done: 0, icon: 'space', hue, tags: [hue === undefined ? TAG.space : { ...TAG.space, hue }], sortKey: updatedAt, updatedAt }
+  : { id, title, done: 0, icon: typeUri ? null : 'doc', hue, tags: typeUri ? typeTag(typeUri) : [hue === undefined ? TAG.doc : { ...TAG.doc, hue }], sortKey: updatedAt, updatedAt });
+const memberRow = (id, title, updatedAt, hue) => ({ id, title, done: 0, icon: 'member', hue, tags: [hue === undefined ? TAG.member : { ...TAG.member, hue }], sortKey: updatedAt, updatedAt });
+const kindRow = (id, kind, title, updatedAt, hue) => ({ id, title, done: 0, icon: ['chat', 'agent'].includes(kind) ? kind : null, hue, tags: [hue === undefined ? { label: kind, color: 'grey' } : { label: kind, hue }], sortKey: updatedAt, updatedAt });
 const idKind = (id) => id.split(':')[1];
 const memberTitle = (n) => n.title || (n.userProfile && n.userProfile.name) || '';
 
 // A space's "content" is the documents it owns (graph query), returned as document Nodes.
 async function spaceChildren(id) {
   const { nodes } = await client.graph.listNodes({ ownerIds: [id], limit: 200, sortOptions: [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }] });
+  nodes.forEach(rememberNodeHue);
   await resolveTypes(nodes.map((n) => n.entityType));
   return nodes.map((n) => toNode(graphRow(n)));
 }
@@ -100,25 +119,25 @@ async function typesByTitle() {
 // rows for db.replaceSection from graph Node JSON
 const taskRow = (n) => ({
   id: n.id, title: n.title || '', done: n.state && n.state.type === 'closed' ? 1 : 0, icon: 'task',
-  tags: [TAG.task, ...typeTag(n.entityType)], sortKey: n.updateTime || now(), updatedAt: n.updateTime || now(),
+  hue: ownHue(n), tags: [nodeTag(TAG.task, n), ...typeTag(n.entityType)], sortKey: n.updateTime || now(), updatedAt: n.updateTime || now(),
 });
 const meetingRow = (n, withDate) => {
   const ev = n.calendarEvent || {};
   return {
     id: n.id, title: n.title || '', done: 0, icon: 'meeting', meta: eventMeta(ev.startTime, ev.endTime, withDate),
-    tags: [TAG.meeting, ...typeTag(n.entityType)], sortKey: ev.startTime || now(), updatedAt: n.updateTime || now(),
+    hue: ownHue(n), tags: [nodeTag(TAG.meeting, n), ...typeTag(n.entityType)], sortKey: ev.startTime || now(), updatedAt: n.updateTime || now(),
   };
 };
 
-const toNode = (r) => ({ id: r.id, title: r.title, text: r.title, kind: 'document', done: r.icon === 'task' ? r.done : undefined, hasChildren: true, icon: r.icon || undefined, tags: r.tags, meta: r.meta || undefined, iconSvg: db.icon(r.id) || undefined });
+const toNode = (r) => ({ id: r.id, title: r.title, text: r.title, kind: 'document', editable: editability.has(r.id) ? editability.get(r.id) : editable(r, me && me.userUri), done: r.icon === 'task' ? r.done : undefined, hasChildren: true, icon: ['chat', 'agent'].includes(idKind(r.id)) ? idKind(r.id) : r.icon || undefined, hue: r.hue === undefined ? (nodeHues.has(r.id) ? nodeHues.get(r.id) : cachedNodeHue(r)) : r.hue, tags: r.tags, meta: r.meta || undefined, iconSvg: db.icon(r.id) || undefined });
 
 // Node shape from any graph Node JSON (search results): events, tasks, typed and plain documents.
 function graphRow(n, withDate) {
   if (n.calendarEvent || n.id.startsWith('tana:event:')) return meetingRow(n, withDate);
-  if (n.userProfile || idKind(n.id) === 'user-profile') return memberRow(n.id, memberTitle(n), n.updateTime || now());
-  if (PLAIN_KINDS.has(idKind(n.id))) return kindRow(n.id, idKind(n.id), n.title || '', n.updateTime || now());
+  if (n.userProfile || idKind(n.id) === 'user-profile') return memberRow(n.id, memberTitle(n), n.updateTime || now(), ownHue(n));
+  if (PLAIN_KINDS.has(idKind(n.id))) return kindRow(n.id, idKind(n.id), n.title || '', n.updateTime || now(), ownHue(n));
   if (n.state && n.state.type) return taskRow(n);
-  return plainRow(n.id, n.title || '', n.updateTime || now(), n.entityType);
+  return plainRow(n.id, n.title || '', n.updateTime || now(), n.entityType, ownHue(n));
 }
 
 // all org members, cached per session, by display name
@@ -126,7 +145,7 @@ let membersLoaded;
 function members() {
   if (!client) return Promise.resolve([]);
   membersLoaded ||= client.graph.listNodes({ nodeTypes: ['user-profile'], limit: 500 })
-    .then(({ nodes }) => nodes.map((n) => ({ ...toNode(graphRow(n)), me: n.id === me.userUri || undefined })).sort((a, b) => a.title.localeCompare(b.title)), (e) => { membersLoaded = null; throw e; });
+    .then(({ nodes }) => { nodes.forEach(rememberNodeHue); return nodes.map((n) => ({ ...toNode(graphRow(n)), me: n.id === me.userUri || undefined })).sort((a, b) => a.title.localeCompare(b.title)); }, (e) => { membersLoaded = null; throw e; });
   return membersLoaded;
 }
 
@@ -135,6 +154,7 @@ function members() {
 async function chats({ includeMcp = false } = {}) {
   if (!client) return [];
   const { nodes } = await client.graph.listNodes({ nodeTypes: ['chat'], limit: 200, sortOptions: [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }] });
+  nodes.forEach(rememberNodeHue);
   const isMcp = (n) => (n.invocationContext && n.invocationContext.intent === 'mcp') || /^MCP:/i.test(n.title || '');
   return nodes.filter((n) => includeMcp || !isMcp(n)).map((n) => toNode({ ...graphRow(n), meta: isMcp(n) ? 'MCP' : undefined }));
 }
@@ -149,6 +169,7 @@ async function library(filter) {
   const seen = new Set();
   const nodes = results.flat().filter((n) => !seen.has(n.id) && seen.add(n.id))
     .sort((a, b) => String(b.updateTime || '').localeCompare(String(a.updateTime || ''))).slice(0, 100);
+  nodes.forEach(rememberNodeHue);
   await resolveTypes(nodes.map((n) => n.entityType));
   return nodes.map((n) => toNode(graphRow(n, true)));
 }
@@ -160,6 +181,7 @@ async function search(query) {
   const params = searchParams(parsed, needsTypes(parsed) ? await typesByTitle() : new Map());
   if (!params) return [];
   const { nodes } = await client.graph.listNodes({ ...params, limit: 40 }); // wider net so title matches are not pushed out by full-text hits
+  nodes.forEach(rememberNodeHue);
   await resolveTypes(nodes.map((n) => n.entityType));
   // title matches first (exact, then prefix, then contains), full-text hits keep the server's relevance order
   const q = parsed.text.trim().toLowerCase();
@@ -167,28 +189,77 @@ async function search(query) {
   return nodes.map((n, i) => [rank(n), i, n]).sort((a, b) => a[0] - b[0] || a[1] - b[1]).map(([, , n]) => toNode(graphRow(n, true)));
 }
 
+// Resolve native embeds without replacing the containing block identity or loading target content recursively.
+async function outlineWithReferences(doc) {
+  const nodes = content.readOutline(doc), refs = [];
+  const visit = rows => { for (const n of rows) { if (n.type === 'reference') refs.push(n.reference); visit(n.children || []); } };
+  visit(nodes);
+  const uris = [...new Set(refs.map(r => r.uri).filter(uri => typeof uri === 'string' && /^tana:[a-z-]+:[0-9a-z]{26}$/.test(uri)))];
+  const targets = new Map();
+  for (let i = 0; i < uris.length; i += 200) {
+    try {
+      const result = await client.graph.listNodes({nodeIds: uris.slice(i, i + 200), limit: 200});
+      const visible = visibleGraphNodes(result.nodes);
+      visible.forEach(rememberNodeHue);
+      await resolveTypes(visible.map(n => n.entityType));
+      for (const n of visible) targets.set(n.id, toNode(graphRow(n)));
+    } catch { /* Keep unresolved reference identity; inaccessible targets must not break the surrounding outline. */ }
+  }
+  for (const ref of refs) if (targets.has(ref.uri)) ref.node = targets.get(ref.uri);
+  return nodes;
+}
+
 // New document ('doc' | 'task' | 'meeting'): seeded locally, created on the server by the bootstrap (sdk/sync.js subscribe with init).
-async function createDocument(title, { kind = 'doc' } = {}) {
+async function customCreation(typeUri) {
+  if (typeof typeUri !== 'string' || !/^tana:type:[0-9a-z]{26}$/.test(typeUri)) throw new Error('Select a workspace type');
+  const type = readNode(await document(typeUri));
+  if (type.type !== 'type' || isDeleted(type)) throw new Error('Type is unavailable');
+  const appliesTo = type.appliesTo ?? 'docs';
+  if (!['docs','events'].includes(appliesTo)) throw new Error('Unsupported type target');
+  if (type.ownerUri) {
+    if (!/^tana:space:[0-9a-z]{26}$/.test(type.ownerUri)) throw new Error('Unsupported type scope');
+    if (!await access.canWrite(readNode(await document(type.ownerUri)), me.userUri, await accessContext())) throw new Error('Type home space write permission is unknown or unavailable');
+  }
+  return {kind:appliesTo === 'events' ? 'meeting' : 'doc',entityTypeUri:typeUri,ownerUri:type.ownerUri};
+}
+async function creationOptions() {
   if (!client) throw new Error('not connected to Tana');
-  if (!KINDS[kind]) throw new Error('kind must be doc, task or meeting: ' + kind);
-  const id = KINDS[kind] + ulid();
-  const doc = await subscribe(id, (loro) => initDocument(loro, String(title || ''), me.userUri, { kind }));
+  const result = await client.graph.listNodes({nodeTypes:['type'],limit:1000,mode:'LIST_NODES_MODE_WITH_COUNT'});
+  const options = [{id:'task',kind:'task',title:'Task',icon:'task',selectable:true},{id:'meeting',kind:'meeting',title:'Meeting',icon:'meeting',selectable:true},{id:'chat',kind:'chat',title:'Chat',icon:'chat',selectable:true}];
+  const types = await Promise.all(result.nodes.map(async n => {
+    rememberType(n);
+    try { const config=await customCreation(n.id); return {id:n.id,kind:'custom',typeUri:n.id,title:n.title || '',hue:ownHue(n),icon:config.kind === 'meeting' ? 'meeting' : 'doc',ownerUri:config.ownerUri,appliesTo:config.kind === 'meeting' ? 'events' : 'docs',selectable:true}; }
+    catch(e) { return {id:n.id,kind:'custom',typeUri:n.id,title:n.title || '',selectable:false,reason:errText(e)}; }
+  }));
+  return {options:[...options,...types.sort((a,b)=>a.title.localeCompare(b.title))],complete:result.totalCount !== undefined && result.totalCount === result.nodes.length};
+}
+async function createDocument(title, opts = {}) {
+  if (typeof title !== 'string' || !title.trim()) throw new Error('Keep an empty draft local until it has a title');
+  if (!client) throw new Error('not connected to Tana');
+  let config = {kind:opts.kind || 'doc'};
+  if (config.kind === 'custom') config = await customCreation(opts.typeUri);
+  else if (opts.typeUri !== undefined) throw new Error('Custom type requires kind custom');
+  if (!KINDS[config.kind]) throw new Error('Unsupported creation kind');
+  const id = KINDS[config.kind] + ulid();
+  const doc = await subscribe(id, loro => initDocument(loro, title, me.userUri, config));
   if (!doc) throw new Error(status.error || 'could not create ' + id);
-  return info(doc);
+  const node = await info(doc); scheduleRefresh(0); return node;
 }
 
 // Node shape for any subscribed document: cached row when listed, else derived from the Loro data map.
 async function info(doc) {
   const n = readNode(doc), row = db.get(doc.id);
+  if (isDeleted(n) || deletedNodes.has(doc.id)) throw new Error('Node has been deleted');
+  rememberNodeHue(n);
   if (row) return toNode({ ...row, title: n.title ?? row.title, done: n.stateType === 'closed' ? 1 : 0 });
-  if (idKind(doc.id) === 'user-profile') return toNode(memberRow(doc.id, n.title || doc.data.get('name') || doc.data.get('displayName') || '', now()));
-  if (PLAIN_KINDS.has(idKind(doc.id))) return toNode(kindRow(doc.id, idKind(doc.id), n.title || '', now()));
+  if (idKind(doc.id) === 'user-profile') return toNode(memberRow(doc.id, n.title || doc.data.get('name') || doc.data.get('displayName') || '', now(), ownHue(n)));
+  if (PLAIN_KINDS.has(idKind(doc.id))) return toNode(kindRow(doc.id, idKind(doc.id), n.title || '', now(), ownHue(n)));
   const isEvent = n.type === 'event' || doc.id.startsWith('tana:event:');
   await resolveTypes([n.entityTypeUri]);
-  if (!isEvent && !n.stateType) return toNode(plainRow(doc.id, n.title || '', now(), n.entityTypeUri));
+  if (!isEvent && !n.stateType) return toNode(plainRow(doc.id, n.title || '', now(), n.entityTypeUri, ownHue(n)));
   return toNode({
     id: doc.id, title: n.title || '', done: n.stateType === 'closed' ? 1 : 0, icon: isEvent ? 'meeting' : 'task',
-    meta: isEvent ? eventMeta(n.startTime, n.endTime) : null, tags: [isEvent ? TAG.meeting : TAG.task, ...typeTag(n.entityTypeUri)],
+    hue: ownHue(n), meta: isEvent ? eventMeta(n.startTime, n.endTime) : null, tags: [nodeTag(isEvent ? TAG.meeting : TAG.task, n), ...typeTag(n.entityTypeUri)],
   });
 }
 
@@ -201,11 +272,26 @@ const today = () => new Date().toLocaleDateString('sv-SE'); // local YYYY-MM-DD
 const pinTarget = (target) => { if (target !== 'sidebar' && target !== 'today') throw new Error('pin target must be sidebar or today: ' + target); return target; };
 
 // Sidebar pins as Nodes, in sidebar order; pinned items we cannot subscribe (spaces, types, ...) are skipped quietly.
+async function pinnedNode(uri) {
+  if (deletedNodes.has(uri)) return undefined;
+  const doc = await client.sync.subscribe(uri).catch(() => null); // await bootstrap even when a handle already exists
+  if (doc && isDeleted(readNode(doc))) { onChange(uri); return undefined; }
+  return doc ? info(doc).catch(() => undefined) : undefined;
+}
 async function pinned() {
   if (!client) return [];
   const uris = await pins.listSidebar(client.sync, me.userUri);
-  const docs = await Promise.all(uris.map((u) => client.sync.getDocument(u) || client.sync.subscribe(u).catch(() => null)));
-  return Promise.all(docs.filter(Boolean).map(info));
+  return (await Promise.all(uris.map(pinnedNode))).filter(Boolean);
+}
+async function pinTree() {
+  if (!client) return [];
+  const fill = async (entry) => {
+    const node = entry.uri ? await pinnedNode(entry.uri) : undefined;
+    const children = (await Promise.all(entry.children.map(fill))).filter(Boolean);
+    if (entry.uri && deletedNodes.has(entry.uri)) return children.length || entry.label ? { label: entry.label, children } : null;
+    return { ...entry, node, children };
+  };
+  return (await Promise.all((await pins.sidebarTree(client.sync, me.userUri)).map(fill))).filter(Boolean);
 }
 async function pinState(id) {
   if (!client) throw new Error('not connected to Tana');
@@ -232,6 +318,12 @@ function setStatus(patch) {
   send('sync:status', status);
 }
 
+// A failed session probe is unknown, not a confirmed sign-out. The renderer keeps the login button hidden while authChecking.
+async function resolveInitialAuth(session) {
+  try { return { authenticated: Boolean(await session.isAuthenticated()) }; }
+  catch (error) { return { authenticated: null, error }; }
+}
+
 // ---- images: tana:image: uri -> data URL, cached in memory and under userData/images/<sha1(uri)> (the data URL as text)
 const imageCache = new Map(); // uri -> Promise<data URL>
 function image(uri) {
@@ -254,6 +346,8 @@ async function start() {
   me = await session.info();
   const peer = peerIdentity({ file: path.join(app.getPath('userData'), 'peer.json'), userExternalId: me.userExternalId });
   client = createTanaClient({ getAccessToken: (o) => session.getAccessToken(o), orgId: me.orgId, ...peer, logger: console });
+  const listNodes = client.graph.listNodes.bind(client.graph);
+  client.graph.listNodes = async params => { const result = await listNodes(params); return { ...result, nodes: visibleGraphNodes(result.nodes) }; };
   client.sync.on('connected', () => setStatus({ connected: true, error: null }));
   client.sync.on('disconnected', () => setStatus({ connected: false }));
   client.sync.on('error', (e) => setStatus({ error: errText(e) }));
@@ -273,13 +367,14 @@ async function doRefresh() {
   setStatus({ syncing: true, error: null });
   try {
     const [tasks, meetings] = await Promise.all([client.graph.listNodes(taskParams(taskFilter(), me.userUri)), client.graph.listNodes(MEETINGS_QUERY(me.userUri))]);
+    [...tasks.nodes, ...meetings.nodes].forEach(rememberNodeHue);
     await resolveTypes([...tasks.nodes, ...meetings.nodes].map((n) => n.entityType));
     db.replaceSection('tasks', tasks.nodes.map(taskRow));
     db.replaceSection('meetings', meetings.nodes.map(meetingRow));
     send('outline:changed', null);
     const ids = new Set([...tasks.nodes, ...meetings.nodes].map((n) => n.id));
     for (const id of ids) if (!subscribed.has(id)) subscribe(id);
-    for (const id of subscribed) if (!ids.has(id)) { subscribed.delete(id); client.sync.unsubscribe(id).catch(() => {}); }
+    for (const id of subscribed) if (!ids.has(id) && !deletedNodes.has(id)) { subscribed.delete(id); client.sync.unsubscribe(id).catch(() => {}); }
     setStatus({ syncing: false, lastSync: now() });
   } catch (e) {
     setStatus({ syncing: false, error: errText(e) });
@@ -302,15 +397,34 @@ function scheduleRefresh(ms) {
   refreshTimer = setTimeout(refresh, ms);
 }
 
+function invalidateDeleted(id) {
+  deletedNodes.add(id);
+  db.remove(id);
+  nodeHues.delete(id); editability.delete(id); pathCache.delete(id);
+  typeTitles.delete(id); typeHues.delete(id);
+  send('outline:removed', id); // renderer must evict children/search/pin/zoom caches by id
+  send('outline:changed', null);
+}
+
 function onChange(docId) {
   try {
+    const doc = client.sync.getDocument(docId);
+    if (!doc) return;
+    const n = readNode(doc), row = db.get(docId);
+    if (isDeleted(n)) {
+      invalidateDeleted(docId);
+      return;
+    }
+    const restored = deletedNodes.delete(docId);
+    const hueChanged = rememberNodeHue(n);
+    const done = n.stateType === 'closed' ? 1 : 0, title = n.title ?? row?.title;
+    const rowChanged = row && (title !== row.title || done !== row.done || hueChanged);
+    if (rowChanged) db.upsert({ ...row, title, done, updatedAt: now() });
+    // Collection/profile/date-pin changes do not have cached view rows, but invalidate pins globally.
+    const pinsChanged = docId === me?.userUri || ['collection', 'pin-map'].includes(idKind(docId));
     send('outline:changed', docId);
-    const doc = client.sync.getDocument(docId), row = doc && db.get(docId);
-    if (!row) return;
-    const n = readNode(doc), done = n.stateType === 'closed' ? 1 : 0, title = n.title ?? row.title;
-    if (title === row.title && done === row.done) return;
-    db.upsert({ ...row, title, done, updatedAt: now() });
-    send('outline:changed', null); // a root's title/state changed too
+    if (pinsChanged || rowChanged || restored) send('outline:changed', null);
+    if (restored) scheduleRefresh(0);
   } catch (e) {
     setStatus({ error: errText(e) });
   }
@@ -318,7 +432,7 @@ function onChange(docId) {
 
 async function document(id) {
   if (!client) throw new Error('not connected to Tana');
-  const doc = client.sync.getDocument(id) || await subscribe(id);
+  const doc = await subscribe(id); // getDocument can expose an empty handle before bootstrap completes
   if (!doc) throw new Error(status.error || 'could not subscribe to ' + id);
   return doc;
 }
@@ -343,7 +457,9 @@ function createMenu() {
 // Run fn on the subscribed Document; the ops transact synchronously, so the result is in Loro (and sent) on resolve.
 async function op(id, fn) {
   try {
-    return await fn(await document(id));
+    const doc = await document(id);
+    if (isDeleted(readNode(doc)) || deletedNodes.has(id)) throw new Error('Node has been deleted');
+    return await fn(doc);
   } catch (e) {
     setStatus({ error: errText(e) });
     throw e;
@@ -352,46 +468,116 @@ async function op(id, fn) {
 
 // Mutations: same as op, plus global undo ordering across documents (each Document keeps its own Loro UndoManager).
 const undoStack = [], redoStack = [];
-async function mut(id, fn) {
-  const result = await op(id, fn);
+async function mut(id, fn, accessMutation = false) {
+  if (historyBusy) throw new Error('History operation is still running');
+  const result = await op(id, (doc) => {
+    if (!accessMutation && editable(readNode(doc), me && me.userUri) === false) throw new Error('This node is read-only in the outliner');
+    return fn(doc);
+  });
   undoStack.push(id); redoStack.length = 0;
   return result;
 }
 // ponytail: one undo step per mutation call across docs; Loro merges steps within 500 ms inside a document.
-function history(from, to, action, can) {
-  while (from.length) {
-    const id = from.pop();
-    const doc = client && client.sync.getDocument(id);
-    if (!doc || !doc[can]()) continue;
-    if (doc[action]()) { to.push(id); return id; }
-  }
-  return null;
+let historyBusy = false;
+async function documentAction(id, action, record = true) {
+  if (record && historyBusy) throw new Error('History operation is still running');
+  if (record) historyBusy = true;
+  try {
+  if (typeof id !== 'string' || !/^tana:[a-z-]+:[0-9a-z]{26}$/.test(id)) throw new Error('Invalid document URI');
+  const doc = await document(id), ctx = await accessContext();
+  if (!await access.canDelete(doc, me.userUri, ctx, action === 'restore')) throw new Error('Delete/restore permission is unknown or unavailable');
+  const response = await client.sync[action](id);
+  if (response.responseUnion?.case !== 'documentActionResponse') throw new Error('Document action was not acknowledged');
+  if (action === 'softDelete') invalidateDeleted(id);
+  // Restore visibility comes from the server's live update, not a fabricated local snapshot.
+  if (record) { undoStack.push({ id, documentAction:action }); redoStack.length = 0; }
+  scheduleRefresh(0);
+  return id;
+  } finally { if (record) historyBusy = false; }
+}
+async function history(from, to, action, can) {
+  if (historyBusy) throw new Error('History operation is still running');
+  historyBusy = true;
+  try {
+    while (from.length) {
+      const step = from.at(-1);
+      if (typeof step === 'object') {
+        const command = action === 'undo' ? (step.documentAction === 'softDelete' ? 'restore' : 'softDelete') : step.documentAction;
+        await documentAction(step.id, command, false);
+        from.pop(); to.push(step); return step.id;
+      }
+      const id = step, doc = client && client.sync.getDocument(id);
+      if (!doc || !doc[can]() || isDeleted(readNode(doc)) || editable(readNode(doc), me && me.userUri) === false) { from.pop(); continue; }
+      if (doc[action]()) { from.pop(); to.push(id); return id; }
+      from.pop();
+    }
+    return null;
+  } finally { historyBusy = false; }
 }
 
-ipcMain.handle('outline:roots', () => {
+ipcMain.handle('outline:roots', async () => {
   const rows = db.list();
-  return SECTIONS.map((s) => ({ ...s, nodes: (rows[s.id] || []).map(toNode) }));
+  const memberNodes = await members();
+  return SECTIONS.map((s) => ({ ...s, nodes: s.id === 'members' ? memberNodes : (rows[s.id] || []).map(toNode) }));
 });
 // events start with an empty content map (no doc node yet); readOutline needs the children list
-ipcMain.handle('outline:children', (_e, id) => (isSpace(id) ? spaceChildren(id) : op(id, (doc) => (doc.content.get('children') ? content.readOutline(doc) : []))));
+ipcMain.handle('outline:children', (_e, id) => (isSpace(id) ? spaceChildren(id) : op(id, (doc) => (doc.content.get('children') ? outlineWithReferences(doc) : []))));
 ipcMain.handle('doc:info', (_e, id) => op(id, info));
+ipcMain.handle('doc:creationOptions', () => creationOptions());
 ipcMain.handle('doc:create', (_e, title, opts) => createDocument(title, opts || {}));
 ipcMain.handle('search', (_e, query) => search(query));
 ipcMain.handle('history:undo', () => history(undoStack, redoStack, 'undo', 'canUndo'));
 ipcMain.handle('history:redo', () => history(redoStack, undoStack, 'redo', 'canRedo'));
+ipcMain.handle('doc:delete', (_e, id) => documentAction(id, 'softDelete'));
+ipcMain.handle('doc:restore', (_e, id) => documentAction(id, 'restore'));
 ipcMain.handle('doc:setTitle', (_e, id, title) => mut(id, (doc) => { setTitle(doc, title); }));
 ipcMain.handle('doc:setDone', (_e, id, done) => mut(id, (doc) => {
   setState(doc, done ? 'closed' : 'open', me.userUri);
   scheduleRefresh(2000); // a closed task drops off the open list
 }));
+ipcMain.handle('doc:taskMeta', (_e, id) => op(id, async doc => ({ ...taskMeta(doc), ...await audienceMetadata(doc, me.userUri, client.graph, client.sync) })));
+// Access has native capability checks independent of the outliner's editable-body support.
+async function accessContext() {
+  const token = await session.getAccessToken();
+  const claims = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
+  return {sync:client.sync, graph:client.graph, orgDocUri:me.orgDocUri,
+    orgAdmin:claims.org_id === me.orgId && ['admin','owner'].includes(claims.role)};
+}
+ipcMain.handle('doc:accessOptions', (_e, id) => op(id, async doc => access.capabilities(doc, me.userUri, await accessContext())));
+ipcMain.handle('doc:setSharing', (_e, id, selection) => mut(id, async doc => {
+  await access.setSharing(doc, me.userUri, selection, await accessContext()); scheduleRefresh(2000);
+}, true));
+ipcMain.handle('spaces:search', async (_e, query = '') => {
+  if (typeof query !== 'string' || query.length > 500) throw new Error('Invalid space query');
+  const { nodes } = await client.graph.listNodes({ nodeTypes: ['space'], textQuery: query.trim(), limit: 50 });
+  const ctx = await accessContext();
+  return Promise.all(nodes.map(async n => ({ ...toNode(graphRow(n)), selectable: await access.canWrite(n, me.userUri, ctx) })));
+});
+async function moveTarget(spaceId) {
+  if (typeof spaceId !== 'string' || !/^tana:space:[0-9a-z]{26}$/.test(spaceId)) throw new Error('Select a space');
+  return document(spaceId);
+}
+ipcMain.handle('doc:previewMove', (_e, id, spaceId) => op(id, async doc => access.previewMove(doc, await moveTarget(spaceId), me.userUri, await accessContext())));
+ipcMain.handle('doc:moveToSpace', (_e, id, spaceId, token) => mut(id, async doc => {
+  const result = await access.moveToSpace(doc, await moveTarget(spaceId), me.userUri, await accessContext(), token);
+  pathCache.delete(id); send('outline:changed', null); scheduleRefresh(2000); return result;
+}, true));
+ipcMain.handle('doc:setAssignees', (_e, id, uris) => mut(id, (doc) => {
+  setAssignees(doc, uris, me.userUri);
+  scheduleRefresh(2000); // reassignment may add or remove this task from the active filter
+}));
 ipcMain.handle('block:setText', (_e, id, nodeId, value) => mut(id, (doc) => { content.setText(doc, nodeId, value); })); // value: string or segments
 ipcMain.handle('block:insertAfter', (_e, id, nodeId, text) => mut(id, (doc) => content.insertAfter(doc, nodeId, text)));
 ipcMain.handle('block:insertChild', (_e, id, nodeId, text) => mut(id, (doc) => content.insertChild(doc, nodeId, text)));
+ipcMain.handle('block:removeMany', (_e, id, nodeIds) => mut(id, doc => content.removeMany(doc, nodeIds)));
+ipcMain.handle('block:moveMany', (_e, id, nodeIds, direction) => mut(id, doc => content.moveMany(doc, nodeIds, direction)));
 ipcMain.handle('block:remove', (_e, id, nodeId) => mut(id, (doc) => { content.remove(doc, nodeId); }));
 ipcMain.handle('block:indent', (_e, id, nodeId) => mut(id, (doc) => { content.indent(doc, nodeId); }));
 ipcMain.handle('block:outdent', (_e, id, nodeId) => mut(id, (doc) => { content.outdent(doc, nodeId); }));
 ipcMain.handle('block:move', (_e, id, nodeId, direction) => mut(id, (doc) => { content.move(doc, nodeId, direction); }));
+ipcMain.handle('block:toggleCheckbox', (_e, id, nodeId) => mut(id, (doc) => { content.toggleCheckbox(doc, nodeId); }));
 ipcMain.handle('pins:list', () => pinned());
+ipcMain.handle('pins:tree', () => pinTree()); // [{ uri?, label?, node?, children }] in LoroTree order
 ipcMain.handle('pins:state', (_e, id) => pinState(id));
 ipcMain.handle('pins:pin', (_e, id, target) => setPin(id, target, true));
 ipcMain.handle('pins:unpin', (_e, id, target) => setPin(id, target, false));
@@ -415,23 +601,29 @@ ipcMain.handle('sync:login', async () => {
   }
 });
 
-app.setName('Tana Companion');
-app.setPath('userData', path.join(app.getPath('appData'), 'tana-tasks')); // before 'ready': same session/cache for dev runs, the CLI and the packaged app
+if (process.env.TANA_MAIN_TEST) {
+  module.exports = { resolveInitialAuth, graphRow, cachedNodeHue, SECTIONS, toNode, outlineWithReferences, op, onChange, documentAction, createDocument, creationOptions,
+    undo: () => history(undoStack, redoStack, 'undo', 'canUndo'), redo: () => history(redoStack, undoStack, 'redo', 'canRedo'), visibleGraphNodes, pinTree,
+    testRuntime: (runtime) => { client = runtime.client; me = runtime.me; win = runtime.win; session = runtime.session; } };
+} else {
+  app.setName('Tana Companion');
+  app.setPath('userData', path.join(app.getPath('appData'), 'tana-tasks')); // before 'ready': same session/cache for dev runs, the CLI and the packaged app
 
-app.whenReady().then(async () => {
-  if (!app.isPackaged && app.dock) app.dock.setIcon(path.join(__dirname, 'build', 'icon.png')); // packaged builds carry the icon in the bundle
-  db.open(path.join(app.getPath('userData'), 'tasks.sqlite'));
-  session = createTanaSession();
-  createMenu();
-  createWindow();
-  try {
-    if (await session.isAuthenticated()) await start();
-    else setStatus({ authenticated: false });
-  } catch (e) {
-    setStatus({ error: errText(e) });
-  }
-  setInterval(refresh, 60000);
-});
+  app.whenReady().then(async () => {
+    if (!app.isPackaged && app.dock) app.dock.setIcon(path.join(__dirname, 'build', 'icon.png')); // packaged builds carry the icon in the bundle
+    db.open(path.join(app.getPath('userData'), 'tasks.sqlite'));
+    session = createTanaSession();
+    createMenu();
+    createWindow();
+    const auth = await resolveInitialAuth(session);
+    setStatus({ authChecking: false, authenticated: auth.authenticated, error: auth.error ? errText(auth.error) : null });
+    if (auth.authenticated) {
+      try { await start(); }
+      catch (e) { setStatus({ error: errText(e) }); }
+    }
+    setInterval(refresh, 60000);
+  });
 
-app.on('window-all-closed', () => app.quit());
-app.on('before-quit', () => { if (client) client.close().catch(() => {}); });
+  app.on('window-all-closed', () => app.quit());
+  app.on('before-quit', () => { if (client) client.close().catch(() => {}); });
+}

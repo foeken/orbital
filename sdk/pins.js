@@ -15,20 +15,32 @@ async function pointed(sync, userUri, key) {
 const collection = (sync, userUri) => pointed(sync, userUri, 'pinnedCollectionUri');
 const pinMap = (sync, userUri) => pointed(sync, userUri, 'pinMapUri');
 
-// uris in tree order, recursing into section folders (nodes with meta.label)
-const walk = (nodes) => nodes.flatMap((n) => [...(n.meta && n.meta.uri ? [n.meta.uri] : []), ...walk(n.children || [])]);
+// Keep the collection's tree shape: labels are folders/sections and URI nodes are pins. Schema permits either or both.
+const parseSidebarTree = (nodes) => nodes.map((n) => {
+  const meta = n.meta || {};
+  return {
+    ...(typeof meta.uri === 'string' ? { uri: meta.uri } : {}),
+    ...(typeof meta.label === 'string' ? { label: meta.label } : {}),
+    children: parseSidebarTree(n.children || []),
+  };
+});
+const walk = (nodes) => nodes.flatMap((n) => [...(n.uri ? [n.uri] : []), ...walk(n.children)]);
 const plain = (date) => (p) => p.type === 'plain' && p.datetime === date;
 function checkDate(date) {
   if (!DATE.test(date) || Number.isNaN(Date.parse(date))) throw new Error('date must be YYYY-MM-DD: ' + date);
 }
 
 async function listSidebar(sync, userUri) {
-  return walk((await collection(sync, userUri)).loro.getTree('tree').toJSON());
+  return walk(await sidebarTree(sync, userUri));
+}
+
+async function sidebarTree(sync, userUri) {
+  return parseSidebarTree((await collection(sync, userUri)).loro.getTree('tree').toJSON());
 }
 
 async function pinSidebar(sync, userUri, docUri) {
   const col = await collection(sync, userUri);
-  if (walk(col.loro.getTree('tree').toJSON()).includes(docUri)) return;
+  if (walk(parseSidebarTree(col.loro.getTree('tree').toJSON())).includes(docUri)) return;
   col.transact((loro) => { loro.getTree('tree').createNode().data.set('uri', docUri); });
 }
 
@@ -74,4 +86,4 @@ async function unpinDate(sync, userUri, docUri, date) {
   });
 }
 
-module.exports = { listSidebar, pinSidebar, unpinSidebar, dates, pinDate, unpinDate };
+module.exports = { listSidebar, sidebarTree, pinSidebar, unpinSidebar, dates, pinDate, unpinDate };

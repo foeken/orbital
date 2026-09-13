@@ -23,6 +23,8 @@ function list() {
   return out;
 }
 
+function remove(id) { db.prepare('DELETE FROM nodes WHERE id = ?').run(id); }
+
 function get(id) {
   return parse(db.prepare('SELECT * FROM nodes WHERE id = ?').get(id));
 }
@@ -72,4 +74,4 @@ function setSetting(key, value) {
   else db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, JSON.stringify(value));
 }
 
-module.exports = { open, list, get, upsert, replaceSection, icon, setIcon, setting, setSetting };
+module.exports = { open, list, get, remove, upsert, replaceSection, icon, setIcon, setting, setSetting };

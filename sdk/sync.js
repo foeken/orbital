@@ -87,6 +87,10 @@ class SyncConnection extends EventEmitter {
     return this._command({ case: 'documentAction', value: { documentId: id, action: { case: 'softDelete', value: {} } } });
   }
 
+  restore(id) {
+    return this._command({ case: 'documentAction', value: { documentId: id, action: { case: 'restore', value: {} } } });
+  }
+
   async unsubscribe(id) {
     const entry = this.docs.get(id);
     if (!entry) return;

@@ -41,7 +41,12 @@ function nodes(list, from = 0) {
     const items = kids(b);
     for (let j = 0; j < items.length; j++) {
       const c = kids(items.get(j));
-      if (c.length) out.push(node(c.get(0), nodes(c, 1)));
+      if (c.length) {
+        const n = node(c.get(0), nodes(c, 1));
+        const checked = items.get(j).get('attributes')?.get('checked');
+        if (typeof checked === 'boolean') n.done = checked ? 1 : 0;
+        out.push(n);
+      }
     }
   }
   return out;
@@ -50,6 +55,11 @@ function nodes(list, from = 0) {
 function node(block, children) {
   const n = { id: blockId(block), text: contentText({ content: block }), kind: 'block', hasChildren: children.length > 0, children };
   n.segments = inline(block) || (n.text ? [{ text: n.text }] : []);
+  if (name(block) === 'embed') {
+    const a = block.get('attributes');
+    n.type = 'reference'; n.editable = false;
+    n.reference = { uri: a.get('tanaUri'), ...(typeof a.get('label') === 'string' ? { label: a.get('label') } : {}) };
+  }
   if (name(block) === 'heading') n.heading = block.get('attributes').get('level');
   if (name(block) === 'image') { // { nodeName 'image', attributes { blockId, tanaUri, displayWidth?, displayHeight? }, children [] }; no alt stored
     const a = block.get('attributes');
@@ -104,8 +114,9 @@ function paragraph(list, index, text) {
   return p;
 }
 
-function item(list, index, text) {
+function item(list, index, text, source) {
   const li = create(list, index, 'listItem');
+  if (typeof source?.get('attributes')?.get('checked') === 'boolean') li.get('attributes').set('checked', false);
   paragraph(kids(li), 0, text);
   return li;
 }
@@ -158,6 +169,7 @@ function prevSibling(unit) {
 // is updated in place (diffing update keeps marks and concurrent edits), a mention with the same uri is kept,
 // anything else is replaced; trailing runs are dropped.
 function setText(document, id, value) {
+  if (name(must(document, id).block) === 'embed') throw new Error('Reference blocks cannot contain editable text');
   const segs = (typeof value === 'string' ? [{ text: value }] : value).filter((s) => s.mention || s.text);
   document.transact(() => {
     const c = kids(must(document, id).block);
@@ -184,7 +196,7 @@ function insertAfter(document, id, text) {
     if (id == null) { out = blockId(paragraph(list, list.length, text)); return; }
     const { block, item: li } = must(document, id);
     const unit = li || block, l = unit.parent(), i = indexOf(l, unit) + 1;
-    out = blockId(li ? kids(item(l, i, text)).get(0) : paragraph(l, i, text));
+    out = blockId(li ? kids(item(l, i, text, li)).get(0) : paragraph(l, i, text));
   });
   return out;
 }
@@ -197,18 +209,43 @@ function insertChild(document, id, text) {
     if (!owner) return; // headings/quotes/code cannot own children in this schema
     const c = kids(owner), second = c.length > 1 ? c.get(1) : null;
     const items = second && isList(second) ? kids(second) : kids(create(c, 1, 'bulletList'));
-    out = blockId(kids(item(items, 0, text)).get(0));
+    out = blockId(kids(item(items, 0, text)).get(0)); // only sibling insertion inherits an explicit checkbox
   });
   return out;
 }
 
-function remove(document, id) {
-  document.transact(() => {
-    const { block, item: li } = must(document, id);
-    const unit = li || block, l = unit.parent();
-    l.delete(indexOf(l, unit), 1);
-    prune(l);
+function removeUnit(unit) {
+  const l = unit.parent();
+  l.delete(indexOf(l, unit), 1);
+  prune(l);
+}
+
+function unit(document, id) {
+  const { block, item } = must(document, id);
+  return item || block;
+}
+
+function selectedUnits(document, ids) {
+  if (!Array.isArray(ids) || ids.length === 0) throw new Error('outline selection must contain at least one node');
+  const seen = new Set(), units = ids.map((id) => {
+    if (typeof id !== 'string' || seen.has(id)) throw new Error('outline selection contains duplicate or invalid node ids');
+    seen.add(id);
+    return unit(document, id);
   });
+  const parent = units[0].parent();
+  if (!units.every((unit) => unit.parent().id === parent.id)) throw new Error('outline selection must be siblings');
+  return units;
+}
+
+function remove(document, id) {
+  document.transact(() => removeUnit(unit(document, id)));
+}
+
+// Multi-select is one user action: use one CRDT transaction so undo/redo restores the whole sibling range.
+// ids are in visual order; removal runs last-first to keep all positions valid.
+function removeMany(document, ids) {
+  const units = selectedUnits(document, ids);
+  document.transact(() => { for (const unit of [...units].reverse()) removeUnit(unit); });
 }
 
 function indent(document, id) {
@@ -242,15 +279,37 @@ function outdent(document, id) {
 
 // Swap the node with its previous/next sibling: listItems swap within their list, bare blocks swap with the
 // neighbouring block (a neighbouring list moves as a whole). No-op at the edges.
+function moveUnit(unit, direction) {
+  const l = unit.parent(), i = indexOf(l, unit), up = direction === 'up';
+  const j = up ? i - 1 : i + 1, first = isItem(l.parent()) ? 1 : 0; // index 0 of a listItem is its own paragraph
+  if (j < first || j >= l.length) return;
+  copy(l, up ? j : j + 1, unit);
+  l.delete(up ? i + 1 : i, 1);
+}
+
 function move(document, id, direction) {
+  document.transact(() => moveUnit(unit(document, id), direction));
+}
+
+// ids are in visual order. Moving down works from the end; moving up works from the start.
+function moveMany(document, ids, direction) {
+  if (direction !== 'up' && direction !== 'down') throw new Error('outline move direction must be up or down');
+  const units = selectedUnits(document, ids);
   document.transact(() => {
-    const { block, item: li } = must(document, id);
-    const unit = li || block, l = unit.parent(), i = indexOf(l, unit), up = direction === 'up';
-    const j = up ? i - 1 : i + 1, first = isItem(l.parent()) ? 1 : 0; // index 0 of a listItem is its own paragraph
-    if (j < first || j >= l.length) return;
-    copy(l, up ? j : j + 1, unit);
-    l.delete(up ? i + 1 : i, 1);
+    for (const unit of direction === 'up' ? units : [...units].reverse()) moveUnit(unit, direction);
   });
 }
 
-module.exports = { readOutline, setText, insertAfter, insertChild, remove, indent, outdent, move };
+// Scratchpad: checked belongs to listItem.attributes, never the paragraph or document data.
+// Plain -> unchecked; existing checkbox -> toggle. wrap copies inline marks, mentions and blockId.
+function toggleCheckbox(document, id) {
+  document.transact(() => {
+    const found = must(document, id);
+    if (!['paragraph', 'heading'].includes(name(found.block))) throw new Error('This block cannot become a checkbox');
+    const li = found.item || wrap(found.block);
+    const a = li.get('attributes');
+    a.set('checked', a.get('checked') === false);
+  });
+}
+
+module.exports = { readOutline, setText, insertAfter, insertChild, remove, removeMany, indent, outdent, move, moveMany, toggleCheckbox };

@@ -30,7 +30,7 @@ Or via the builders: `taskParams(filter, me)`, `libraryQueries(filter, me)`.
 ```js
 const { readNode, setTitle, setState } = require('./sdk/node');
 const content = require('./sdk/content');
-const doc = await client.sync.subscribe('tana:text:…');       // resolves when live
+const doc = await client.sync.subscribe('tana:text:…');       // resolves after bootstrap_complete, when live
 readNode(doc).title; content.readOutline(doc);
 client.sync.on('change', (id, { origin }) => { /* re-read */ });
 setTitle(doc, 'New title');                                    // one undo step, sent within 5 ms
@@ -46,8 +46,9 @@ const { ulid, initDocument } = require('./sdk/node');
 const id = 'tana:text:' + ulid();                              // 'tana:event:' for a meeting
 const doc = await client.sync.subscribe(id, (loro) => initDocument(loro, 'Title', me, { kind: 'task' }));
 await client.sync.softDelete(id);                              // graph queries stop returning it
+await client.sync.restore(id);                                 // native restore; needs the stream open
 ```
-The server adopts Tana-created events as real calendar events (adds organizer, externalId, a "Tana Meeting" action).
+The low-level sync commands require an open stream and do not perform the app's capability check. The app path checks `access.canDelete` and the server action response first, then records delete/restore in global history. The server adopts Tana-created events as real calendar events (adds organizer, externalId, a "Tana Meeting" action).
 
 ## Search with filters
 

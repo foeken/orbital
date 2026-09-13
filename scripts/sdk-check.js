@@ -3,10 +3,12 @@
 // Offline self-check for the SDK core: no network, no Electron. Run: node scripts/sdk-check.js
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const vm = require('node:vm');
+const { createRequire } = require('node:module');
 const { create, toBinary, fromBinary, toJson, fromJson } = require('@bufbuild/protobuf');
 const { createRouterTransport, ConnectError, Code } = require('@connectrpc/connect');
 const { message, SyncService } = require('../sdk/proto/descriptors');
-const { createTransport, GraphClient, SyncConnection, Document, derivePeerId, readNode, setTitle, setState, contentText, ulid, initDocument, STATE_TYPES } = require('../sdk');
+const { createTransport, GraphClient, SyncConnection, Document, derivePeerId, readNode, setTitle, setState, taskMeta, setAssignees, contentText, ulid, initDocument, STATE_TYPES } = require('../sdk');
 const outline = require('../sdk/content');
 const { fetchImage } = require('../sdk/assets');
 const { LoroMap, LoroList } = require('loro-crdt');
@@ -17,7 +19,176 @@ const ORG = 'org_01KS7RQSWW68H489ZZZ1NNC40T', DOC = 'tana:text:01m23c1z45gceayt2
 const snapshot = Buffer.from(fs.readFileSync(require('node:path').join(__dirname, 'fixtures', 'task-snapshot.b64'), 'utf8').trim(), 'base64');
 const b64 = (u8) => Buffer.from(u8).toString('base64');
 
+// Load the real main-process helpers without Electron startup or a Tana connection.
+function mainHelpers() {
+  const file = require('node:path').join(__dirname, '..', 'main.js');
+  const mod = { exports: {} };
+  const handlers = new Map();
+  const electron = { app: {}, BrowserWindow: function () {}, Menu: {}, ipcMain: { handle: (name, fn) => handlers.set(name, fn) } };
+  vm.runInNewContext(fs.readFileSync(file, 'utf8'), {
+    require: (id) => id === 'electron' ? electron : createRequire(file)(id), module: mod, exports: mod.exports,
+    __dirname: require('node:path').dirname(file), __filename: file, Buffer, console,
+    setTimeout: () => 0, clearTimeout: () => {}, // no refresh/network timers in offline main helpers
+    process: { env: { ...process.env, TANA_MAIN_TEST: '1' } },
+  }, { filename: file });
+  return {...mod.exports, handlers};
+}
+
 async function main() {
+  {
+    const access = require('../sdk/access'), docs = new Map();
+    const make = (kind, title = kind) => { const d = new Document('tana:' + kind + ':' + ulid()); d.transact(l => { initDocument(l,title,ME); l.getMap('data').set('type',kind); }); docs.set(d.id,d); return d; };
+    const source = make('text'), target = make('space'), otherSpace = make('space'), org = make('org');
+    org.transact(l => l.getMap('data').set('memberUserProfileDocUris',{test:ME}));
+    const ctx = {orgDocUri:org.id,sync:{subscribe:async id=>{if(!docs.has(id)) throw new Error('unavailable'); return docs.get(id);}},graph:{listNodes:async()=>({nodes:[],totalCount:0})}};
+    const child = outline.insertAfter(source,null,'keep child'), beforeContent=source.content.toJSON();
+    const mirror = new Document(source.id,{peerId:'991'}); mirror.applyRemote([source.exportSince()]); source.on('local-update',u=>mirror.applyRemote([u]));
+    assert.equal((await access.capabilities(source,ME,ctx)).move,true);
+    await access.moveToSpace(source,target,ME,ctx);
+    assert.equal(readNode(source).ownerUri,target.id); assert.equal(readNode(source).restricted,true);
+    assert.ok(outline.readOutline(source).some(n=>n.id===child));
+    const stranger='tana:user-profile:'+ulid();
+    await assert.rejects(access.setSharing(source,stranger,{rule:'inherit'},ctx));
+    await assert.rejects(access.setSharing(source,ME,{rule:'people',participants:[{uri:stranger,role:'viewer'}]},ctx));
+    await access.setSharing(source,ME,{rule:'people',participants:[{uri:stranger,role:'editor'}]},ctx);
+    await access.setSharing(source,ME,{rule:'me'},ctx);
+    assert.deepEqual(Object.keys(readNode(source).participants),[ME]);
+    await assert.rejects(access.setSharing(source,ME,{rule:'inherit'},ctx),/audience disclosure/);
+    await access.setSharing(source,ME,{rule:'inherit',token:(await access.capabilities(source,ME,ctx)).sharingToken},ctx);
+    assert.equal(readNode(source).restricted,undefined);
+    otherSpace.transact(l=>{const p=l.getMap('data').get('participants').setContainer(stranger,new LoroMap());p.set('type','user');p.set('role','editor');});
+    const preview=await access.previewMove(source,otherSpace,ME,ctx);
+    assert.equal(preview.allowed,true); assert.equal(preview.requiresConfirmation,true);
+    assert.equal(preview.before.scope,'only-me'); assert.equal(preview.after.scope,'space');
+    await assert.rejects(access.moveToSpace(source,otherSpace,ME,ctx),/explicitly confirm/);
+    otherSpace.transact(l=>l.getMap('data').get('participants').get(stranger).set('role','admin'));
+    await assert.rejects(access.moveToSpace(source,otherSpace,ME,ctx,preview.token),/explicitly confirm/);
+    const refreshedPreview=await access.previewMove(source,otherSpace,ME,ctx);
+    await access.moveToSpace(source,otherSpace,ME,ctx,refreshedPreview.token);
+    assert.equal(readNode(source).restricted,undefined);
+    await assert.rejects(access.moveToSpace(source,target,ME,ctx,preview.token),/explicitly confirm/);
+    const typed=make('type'); source.transact(l=>l.getMap('data').set('entityTypeUri',typed.id));
+    assert.equal((await access.previewMove(source,target,ME,ctx)).allowed,true,'global type permits move');
+    typed.transact(l=>l.getMap('data').set('ownerUri',otherSpace.id));
+    assert.equal((await access.previewMove(source,target,ME,ctx)).allowed,false,'space-scoped type blocks crossing');
+    assert.equal((await access.previewMove(source,otherSpace,ME,ctx)).allowed,true);
+    ctx.graph.listNodes=async q=>({nodes:[],totalCount:q.ownerIds ? 0 : 1});
+    assert.equal((await access.previewMove(typed,target,ME,ctx)).allowed,false,'type instance outside target');
+    ctx.graph.listNodes=async()=>({nodes:[]});
+    assert.equal((await access.previewMove(typed,target,ME,ctx)).allowed,false,'missing instance count remains disabled');
+    ctx.graph.listNodes=async()=>({nodes:[],totalCount:1500});
+    assert.equal((await access.previewMove(typed,target,ME,ctx)).allowed,true);
+    const inherited=make('chat'); inherited.transact(l=>{const d=l.getMap('data'); d.delete('participants');d.delete('restricted');d.set('ownerUri',target.id);});
+    assert.equal((await access.capabilities(inherited,ME,ctx)).sharing,true,'inherited editor/admin grant');
+    await access.setSharing(inherited,ME,{rule:'people',participants:[{uri:stranger,role:'editor'}]},ctx);
+    assert.equal(readNode(inherited).participants[stranger].role,'editor','missing participants map created natively');
+    const open=make('canvas');open.transact(l=>{l.getMap('data').delete('restricted');l.getMap('data').delete('participants');});
+    assert.equal((await access.capabilities(open,ME,ctx)).sharing,true,'verified organization membership');
+    assert.equal((await access.capabilities(open,stranger,ctx)).sharing,false);
+    const event=make('event');event.transact(l=>{const d=l.getMap('data');d.set('externalId','calendar-event');d.get('participants').get(ME).set('role','attendee');});
+    assert.equal((await access.capabilities(event,ME,ctx)).sharing,false,'calendar attendee cannot change sharing');
+    event.transact(l=>l.getMap('data').get('participants').get(ME).set('role','editor'));
+    assert.equal((await access.capabilities(event,ME,ctx)).sharing,true,'native editor is organizer');
+    await access.setSharing(event,ME,{rule:'people',participants:[{uri:stranger,role:'attendee'}]},ctx);
+    assert.equal(readNode(event).participants[ME].role,'editor','people selection preserves actor role');
+    event.transact(l=>{const d=l.getMap('data');d.delete('externalId');d.get('participants').get(ME).set('role','attendee');d.get('participants').get(stranger).set('role','editor');});
+    const eventBefore=event.toJSON();
+    await assert.rejects(access.setSharing(event,ME,{rule:'people',participants:[{uri:stranger,role:'attendee'}]},ctx),/at least one organizer/);
+    assert.deepEqual(event.toJSON(),eventBefore,'rejected organizer removal leaves ACL untouched');
+
+    const agent=make('agent');org.transact(l=>l.getMap('featurePolicy').set('memberOrgWideCreation',false));
+    assert.equal((await access.capabilities(agent,ME,ctx)).rules.includes('inherit'),false,'org policy');
+    assert.equal((await access.capabilities(agent,ME,{...ctx,orgAdmin:true})).rules.includes('inherit'),true);
+    target.transact(l=>l.getMap('data').set('ownerUri',otherSpace.id));
+    assert.equal((await access.previewMove(otherSpace,target,ME,ctx)).allowed,false,'ownership cycle');
+    assert.deepEqual(source.content.toJSON(),beforeContent);assert.deepEqual(source.toJSON(),mirror.toJSON());
+    console.log('ok  native sharing/move: effective grants, org membership/policy, event organizer, type scope, preview confirmation and content preservation');
+  }
+  {
+    // Sync exposes a Document handle immediately, before its bootstrap promise is ready.
+    const backend=mainHelpers(), halfLoaded=new Document(DOC);
+    let finish, reads=0;
+    const ready=new Promise(resolve=>{finish=resolve;});
+    backend.testRuntime({me:{userUri:ME},client:{sync:{getDocument:()=>halfLoaded,subscribe:()=>ready}}});
+    const result=backend.op(DOC, async doc=>{reads++; return require('../sdk/node').audience(doc,ME);});
+    await Promise.resolve(); await Promise.resolve();
+    assert.equal(reads,0,'metadata IPC must not read an unbootstrapped handle');
+    halfLoaded.transact(l=>initDocument(l,'send',ME,{kind:'task'}));
+    setState(halfLoaded,'closed',ME); finish(halfLoaded);
+    assert.equal(await result,'only-me','completed private task resolves after real metadata arrives');
+    console.log('ok  metadata IPC waits for bootstrap rather than caching an unknown audience');
+  }
+  {
+    const backend=mainHelpers(), cache=require('../db');cache.open(':memory:');
+    const serverDoc=new Document(DOC,{peerId:'411'}), local=new Document(DOC,{peerId:'412'});
+    serverDoc.transact(l=>initDocument(l,'reversible delete',ME,{kind:'task'}));
+    outline.insertAfter(serverDoc,null,'preserved content'); local.applyRemote([serverDoc.exportSince()]);
+    const original=local.toJSON(), calls=[], events=[]; let failRestore=false;
+    const apply=async action=>{
+      calls.push(action);if(action==='restore' && failRestore) throw new Error('mock restore failed');
+      serverDoc.transact(l=>{const d=l.getMap('data');if(action==='softDelete')d.set('deletedAt',123);else{d.delete('deletedAt');d.delete('retentionPurgeAfter');}});
+      local.applyRemote([serverDoc.exportSince(local.loro.oplogVersion())]);
+      return {responseUnion:{case:'documentActionResponse'}};
+    };
+    backend.testRuntime({me:{userUri:ME,orgId:ORG},session:{getAccessToken:async()=> 'x.'+Buffer.from(JSON.stringify({org_id:ORG,role:'member'})).toString('base64url')+'.x'},client:{sync:{getDocument:()=>local,subscribe:async()=>local,softDelete:()=>apply('softDelete'),restore:()=>apply('restore')}},win:{isDestroyed:()=>false,webContents:{send:(channel,id)=>events.push([channel,id])}}});
+    local.on('change',()=>backend.onChange(DOC));
+    cache.upsert({id:DOC,title:'reversible delete',section:'tasks'});
+    assert.equal(await backend.documentAction(DOC,'softDelete'),DOC);
+    assert.equal(cache.get(DOC),undefined);assert.ok(events.some(([channel])=>channel==='outline:removed'));
+    failRestore=true;await assert.rejects(backend.undo(),/mock restore failed/);failRestore=false;
+    assert.equal(await backend.undo(),DOC,'failed undo stays available for retry');
+    assert.deepEqual(local.toJSON(),original,'restore preserves original identity, content and ACL');
+    await backend.redo();assert.equal(readNode(local).deletedAt,123);
+    await backend.documentAction(DOC,'restore');assert.deepEqual(local.toJSON(),original);
+    await backend.undo();assert.equal(readNode(local).deletedAt,123);
+    await backend.redo();assert.deepEqual(local.toJSON(),original);
+    assert.deepEqual(calls,['softDelete','restore','restore','softDelete','restore','softDelete','restore']);
+    console.log('ok  document soft-delete/restore IPC, retryable undo/redo and remote cache invalidation');
+  }
+  {
+    const backend=mainHelpers(), cache=require('../db');cache.open(':memory:');
+    const docs=new Map(), created=[];
+    const make=(kind,title,extra={})=>{const d=new Document('tana:'+kind+':'+ulid());d.transact(l=>{initDocument(l,title,ME);const data=l.getMap('data');data.set('type',kind);for(const [k,v] of Object.entries(extra))data.set(k,v);});docs.set(d.id,d);return d;};
+    const space=make('space','Type home'), textType=make('type','Project',{ownerUri:space.id}), eventType=make('type','Workshop',{appliesTo:'events'}), unknownType=make('type','Unknown',{appliesTo:'future'});
+    const typeNodes=[textType,eventType,unknownType].map(d=>({id:d.id,title:readNode(d).title}));
+    backend.testRuntime({me:{userUri:ME,orgId:ORG},session:{getAccessToken:async()=> 'x.'+Buffer.from(JSON.stringify({org_id:ORG,role:'member'})).toString('base64url')+'.x'},client:{graph:{listNodes:async()=>({nodes:typeNodes,totalCount:3})},sync:{subscribe:async(id,init)=>{if(init){const d=new Document(id);d.transact(init);docs.set(id,d);created.push(d);return d;}if(!docs.has(id))throw new Error('unavailable');return docs.get(id);}}}});
+    await assert.rejects(backend.createDocument('   ',{kind:'chat'}),/empty draft/);
+    assert.equal(created.length,0,'empty chooser draft does not start a create');
+    const choices=await backend.creationOptions();assert.equal(choices.complete,true);
+    assert.deepEqual(Array.from(choices.options.slice(0,3),o=>o.kind),['task','meeting','chat']);
+    assert.equal(choices.options.find(o=>o.typeUri===unknownType.id).selectable,false);
+    const chat=await backend.createDocument('New conversation',{kind:'chat'});
+    assert.equal(chat.icon,'chat');assert.ok(chat.id.startsWith('tana:chat:'));
+    const chatData=readNode(docs.get(chat.id));assert.deepEqual(chatData.messages,[]);assert.deepEqual(chatData.participantUris,[]);
+    assert.equal(docs.get(chat.id).content.get('nodeName'),undefined,'chat has no invented outline');
+    const typed=await backend.createDocument('New project',{kind:'custom',typeUri:textType.id});
+    assert.equal(readNode(docs.get(typed.id)).entityTypeUri,textType.id);
+    assert.equal(readNode(docs.get(typed.id)).ownerUri,space.id);assert.equal(readNode(docs.get(typed.id)).restricted,true);
+    const event=await backend.createDocument('Working session',{kind:'custom',typeUri:eventType.id});
+    assert.ok(event.id.startsWith('tana:event:'));assert.equal(readNode(docs.get(event.id)).entityTypeUri,eventType.id);
+    assert.equal(readNode(docs.get(event.id)).origin,'tana');assert.equal(created.length,3);
+    space.transact(l=>l.getMap('data').get('participants').get(ME).set('role','viewer'));
+    await assert.rejects(backend.createDocument('Blocked',{kind:'custom',typeUri:textType.id}),/permission/);
+    await assert.rejects(backend.createDocument('Invalid',{kind:'custom',typeUri:unknownType.id}),/Unsupported type target/);
+    assert.equal(created.length,3,'invalid scope/types do not create partial documents');
+    console.log('ok  creation chooser: native chats, actual typed docs/events, home-space validation and unsaved blank drafts');
+  }
+  {
+    const backend=mainHelpers(), d=new Document(DOC);
+    d.transact(l=>initDocument(l,'batch bridge',ME));
+    const first=outline.readOutline(d)[0].id; outline.setText(d,first,'A');
+    const ids=[first,...['B','C'].map(text=>outline.insertAfter(d,null,text))];
+    backend.testRuntime({me:{userUri:ME},client:{sync:{subscribe:async()=>d,getDocument:()=>d}}});
+    await backend.handlers.get('block:removeMany')(null,DOC,ids.slice(0,2));
+    assert.deepEqual(outline.readOutline(d).map(n=>n.text),['C']);
+    await backend.undo();assert.deepEqual(outline.readOutline(d).map(n=>n.text),['A','B','C']);
+    assert.equal(await backend.undo(),null,'one main history entry for batch remove');
+    await backend.handlers.get('block:moveMany')(null,DOC,ids.slice(0,2),'down');
+    assert.deepEqual(outline.readOutline(d).map(n=>n.text),['C','A','B']);
+    await backend.undo();assert.deepEqual(outline.readOutline(d).map(n=>n.text),['A','B','C']);
+    assert.equal(await backend.undo(),null,'one main history entry for batch move');
+    console.log('ok  removeMany/moveMany IPC bridge each records exactly one undo step');
+  }
   // 1. Request messages: binary round-trip and protobuf-JSON shape from PLATFORM-PROTOCOL.md §1.1/§2
   const Req = message('sync', 'ServerSyncRequest'), Cmd = message('sync', 'ServerSyncCommandRequest');
   const peerId = derivePeerId('01m0f1aqd8p23qhwntbewmpfz2');
@@ -47,6 +218,114 @@ async function main() {
   const list = fromJson(ListReq, { nodeTypes: ['text'], assignedTo: [ME], stateTypes: ['open'], limit: 500, sortOptions: [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }] });
   assert.equal(list.sortOptions[0].field, 2);
   console.log('ok  proto round-trips');
+
+  {
+    const { audience, audienceMetadata } = require('../sdk/node');
+    const doc = (restricted, participants) => ({ id: DOC, data: { toJSON: () => ({ restricted, participants }) } });
+    const meOnly = { [ME]: { type: 'user', role: 'admin' } };
+    const shared = { ...meOnly, ['tana:user-profile:01m0f1aqd8p23qhwntbewmpfz3']: { type: 'user', role: 'viewer' } };
+    assert.equal(await audience(doc(true, meOnly), ME), 'only-me');
+    assert.equal(await audience(doc(true, shared), ME), 'people');
+    assert.equal(await audience(doc(true, { space: { type: 'group' } }), ME), 'unknown');
+    assert.equal(await audience(doc(undefined, meOnly), ME), 'unknown');
+    assert.equal(await audience(doc(false, meOnly), ME, { getOwnerChain: async () => ({ effectivelyRestricted: false }) }), 'everyone');
+    assert.equal(await audience(doc(false, meOnly), ME, { getOwnerChain: async () => ({}) }), 'unknown');
+    const graph = { getOwnerChain: async () => ({ entries: [{ uri: 'tana:space:boundary', restricted: true }] }) };
+    assert.equal(await audience(doc(false, meOnly), ME, graph, { subscribe: async () => doc(true, shared) }), 'space');
+    assert.equal(await audience(doc(undefined, meOnly), ME, graph, { subscribe: async () => doc(true, shared) }), 'space');
+    assert.equal(await audience(doc(false, meOnly), ME, graph, { subscribe: async () => doc(true, meOnly) }), 'only-me');
+    const namedSpace = {id:'tana:space:boundary',data:{toJSON:()=>({title:'Foundry LT',restricted:true,participants:shared})}};
+    assert.deepEqual(await audienceMetadata(doc(false,meOnly),ME,graph,{subscribe:async()=>namedSpace}), {audience:'space',audienceSpace:{uri:'tana:space:boundary',title:'Foundry LT'}});
+    assert.deepEqual(await audienceMetadata(doc(false,meOnly),ME,graph,{subscribe:async()=>doc(true,shared)}), {audience:'space',audienceSpace:{uri:'tana:space:boundary'}});
+    assert.deepEqual(await audienceMetadata(doc(true,meOnly),ME), {audience:'only-me'});
+    assert.deepEqual(await audienceMetadata(doc(false,meOnly),ME,graph,{subscribe:async()=>{throw new Error('unavailable');}}), {audience:'unknown'});
+    console.log('ok  audience: direct/inherited restrictions, everyone and unresolved groups');
+  }
+
+  {
+    const d = new Document(DOC, { peerId: '71' }), mirror = new Document(DOC, { peerId: '72' });
+    d.on('local-update', u => mirror.applyRemote([u]));
+    const id = outline.insertAfter(d, null, 'Keep me');
+    outline.setText(d, id, [{ text: 'Keep ' }, { mention: { label: 'Member', uri: ME } }]);
+    const original = outline.readOutline(d)[0];
+    outline.toggleCheckbox(d, id);
+    assert.deepEqual(outline.readOutline(d)[0], { ...original, done: 0 });
+    outline.insertChild(d, id, 'Child');
+    const nested = outline.readOutline(d)[0];
+    outline.toggleCheckbox(d, id);
+    assert.deepEqual(outline.readOutline(d)[0], { ...nested, done: 1 });
+    outline.toggleCheckbox(d, id);
+    assert.deepEqual(outline.readOutline(d)[0], nested);
+    assert.deepEqual(mirror.content.toJSON(), d.content.toJSON());
+    assert.equal(d.data.get('stateType'), undefined, 'block checkbox never turns its document into a task');
+    assert.equal(d.undo(), true);
+    assert.equal(outline.readOutline(d)[0].done, 1);
+    console.log('ok  native block checkbox conversion/toggle preserves id, mentions, children and converges');
+  }
+
+  {
+    const d = new Document(DOC, { peerId: '73' });
+    const parent = outline.insertAfter(d, null, 'Parent');
+    outline.toggleCheckbox(d, parent);
+    for (const checked of [0, 1]) {
+      const sibling = outline.insertAfter(d, parent, 'Sibling');
+      const child = outline.insertChild(d, parent, 'Child');
+      const tree = outline.readOutline(d);
+      assert.equal(tree[0].done, checked, 'insertion preserves parent state');
+      assert.equal(tree.find(n => n.id === sibling).done, 0);
+      assert.equal(tree[0].children.find(n => n.id === child).done, undefined, 'children do not inherit checkbox state');
+      outline.toggleCheckbox(d, parent);
+    }
+    const plain = outline.insertAfter(d, null, 'Plain');
+    const sibling = outline.insertAfter(d, plain, 'Plain sibling');
+    const child = outline.insertChild(d, plain, 'Plain child');
+    const tree = outline.readOutline(d);
+    assert.equal(tree.find(n => n.id === sibling).done, undefined);
+    assert.equal(tree.find(n => n.id === plain).children.find(n => n.id === child).done, undefined);
+    setState(d, 'open', ME);
+    const taskChild = outline.insertAfter(d, null, 'Task child');
+    const nestedChild = outline.insertChild(d, taskChild, 'Nested task child');
+    const taskTree = outline.readOutline(d);
+    const childNode = taskTree.find(n => n.id === taskChild);
+    assert.equal(childNode.done, undefined, 'document task state never marks content as a checkbox');
+    assert.equal(childNode.children.find(n => n.id === nestedChild).done, undefined);
+    console.log('ok  checkbox inheritance only for explicit checkbox siblings; task/plain children stay plain');
+  }
+
+  {
+    const { editable } = require('../sdk/node');
+    const node = (kind, role) => ({ id: 'tana:' + kind + ':example', participants: { [ME]: { type: 'user', role } } });
+    assert.equal(editable(node('user-profile', 'admin'), ME), false);
+    assert.equal(editable(node('text', 'editor'), ME), true);
+    assert.equal(editable(node('text', 'admin'), ME), true);
+    assert.equal(editable(node('text', 'viewer'), ME), false);
+    assert.equal(editable({ id: DOC, ownerUri: ME }, ME), null, 'ownership does not grant editing');
+    assert.equal(editable(node('event', 'admin'), ME), false, 'calendar protected fields need separate capability');
+    assert.equal(editable(node('chat', 'editor'), ME), false);
+    console.log('ok  outline editability: profiles, ACL roles, unknown ownership, protected events');
+  }
+
+  // Main startup status and node appearance are pure helpers: no Electron app, network, or Tana data.
+  {
+    const { resolveInitialAuth, graphRow, cachedNodeHue, SECTIONS } = mainHelpers();
+    assert.equal((await resolveInitialAuth({ isAuthenticated: async () => true })).authenticated, true);
+    assert.equal((await resolveInitialAuth({ isAuthenticated: async () => false })).authenticated, false);
+    const error = new Error('offline');
+    const failed = await resolveInitialAuth({ isAuthenticated: async () => { throw error; } });
+    assert.equal(failed.authenticated, null);
+    assert.equal(failed.error, error);
+    const space = graphRow({ id: 'tana:space:01m0f1aqd8p23qhwntbewmpfz2', title: 'Space', appearance: { hue: 0 } });
+    assert.equal(space.hue, 0);
+    assert.equal(space.tags[0].hue, 0);
+    const plain = graphRow({ id: 'tana:text:01m0f1aqd8p23qhwntbewmpfz2', title: 'Plain' });
+    assert.equal(plain.hue, undefined);
+    assert.equal(plain.tags[0].hue, undefined);
+    assert.equal(cachedNodeHue(space), 0, 'own hue survives the cached kind tag');
+    assert.equal(cachedNodeHue({ id: plain.id, icon: null, tags: [{ label: 'Type', hue: 0 }] }), undefined, 'type hue is not a node hue');
+    assert.equal(graphRow({ id: 'tana:chat:01m0f1aqd8p23qhwntbewmpfz2', title: 'Chat' }).icon, 'chat');
+    assert.ok(SECTIONS.some((s) => s.id === 'members' && s.icon === 'member'));
+    console.log('ok  initial auth states and node appearance hue');
+  }
 
   // 2. Document: transact/export/import between two documents, both directions
   const a = new Document(DOC, { peerId: '1' }), b = new Document(DOC, { peerId: '2' });
@@ -101,7 +380,21 @@ async function main() {
   assert.equal(doc.version().length, doc.loro.oplogVersion().encode().length);
   assert.equal(new Document(DOC).loro.oplogVersion().length(), 0, 'fresh doc = cold start');
   assert.notEqual(before.compare(doc.loro.oplogVersion()), 0);
-  console.log('ok  readNode/setTitle/setState/contentText');
+  const assigned = new Document(DOC, { peerId: '8' });
+  assigned.applyRemote([snapshot]);
+  const otherAssignee = 'tana:user-profile:01m0f1aqd8p23qhwntbewmpfz3';
+  const assignmentUpdates = [];
+  assigned.on('local-update', (u) => assignmentUpdates.push(u));
+  assert.deepEqual(taskMeta(assigned), { assignees: [ME], restricted: true, participants: [{ uri: ME, type: 'user', role: 'admin' }] });
+  assert.deepEqual(setAssignees(assigned, [otherAssignee, ME, otherAssignee], ME), [otherAssignee, ME]);
+  assert.deepEqual(taskMeta(assigned).assignees, [otherAssignee, ME]);
+  assert.ok(assigned.data.get('assignedToUris') instanceof LoroList, 'assignees remain a LoroList');
+  assert.throws(() => setAssignees(assigned, 'bad', ME), /assignees must be an array/);
+  assert.throws(() => setAssignees(assigned, [ME], 'bad'), /assignedToUrisChangedBy/);
+  const remoteAssignees = new Document(DOC, { peerId: '10' });
+  remoteAssignees.applyRemote([snapshot]); remoteAssignees.applyRemote(assignmentUpdates);
+  assert.deepEqual(taskMeta(remoteAssignees).assignees, [otherAssignee, ME]);
+  console.log('ok  readNode/setTitle/setState/taskMeta/setAssignees/contentText');
 
   // 3a. Search query parsing (#task / #meeting / #Type) and the new-document seed
   {
@@ -139,9 +432,12 @@ async function main() {
     const fresh = new Document('tana:text:' + id, { peerId: '5' });
     fresh.transact((l) => initDocument(l, 'New doc', ME));
     const j = fresh.toJSON();
-    assert.deepEqual(Object.keys(j.data).sort(), ['attributes', 'createdAt', 'participants', 'restricted', 'sharedPinDates', 'title', 'type']);
+    assert.deepEqual(Object.keys(j.data).sort(), ['assignedToUris', 'attributes', 'createdAt', 'participants', 'restricted', 'sharedPinDates', 'title', 'type']);
     assert.deepEqual(j.data.participants, { [ME]: { type: 'user', role: 'admin' } });
-    assert.deepEqual(j.content, { nodeName: 'doc', attributes: {}, children: [] });
+    assert.deepEqual(j.content, { nodeName: 'doc', attributes: {}, children: [{nodeName:'paragraph',attributes:{blockId:j.content.children[0].attributes.blockId},children:[]}] });
+    assert.match(j.content.children[0].attributes.blockId,/^[0-9a-z]{8}$/);
+    assert.deepEqual(j.data.assignedToUris,[]);
+    assert.ok(fresh.data.get('assignedToUris') instanceof LoroList);
     assert.equal(outline.insertAfter(fresh, null, 'first').length, 8, 'content skeleton is writable');
     // kinds: task = open state assigned to me; meeting = Tana-native event layout (next half hour, 30 min)
     const T0 = Date.UTC(2026, 8, 13, 10, 7); // 10:07 -> 10:30
@@ -153,10 +449,14 @@ async function main() {
     const ev = new Document('tana:event:' + ulid(), { peerId: '5' });
     ev.transact((l) => initDocument(l, 'New meeting', ME, { kind: 'meeting', now: T0 }));
     const e = ev.toJSON().data;
-    assert.deepEqual(Object.keys(e).sort(), ['attendees', 'createdAt', 'endTime', 'origin', 'participants', 'restricted', 'sharedPinDates', 'startTime', 'timezone', 'title', 'type']);
+    assert.deepEqual(Object.keys(e).sort(), ['attendees', 'attributes', 'createdAt', 'endTime', 'organizer', 'origin', 'participants', 'restricted', 'sharedPinDates', 'startTime', 'timezone', 'title', 'type']);
     assert.deepEqual([e.type, e.origin, e.startTime, e.endTime, e.attendees, e.timezone], ['event', 'tana', Date.UTC(2026, 8, 13, 10, 30), Date.UTC(2026, 8, 13, 11, 0), [], Intl.DateTimeFormat().resolvedOptions().timeZone]);
     assert.equal(e.stateType, undefined);
-    assert.deepEqual(ev.toJSON().content, { nodeName: 'doc', attributes: {}, children: [] });
+    assert.deepEqual(ev.toJSON().content, {});
+    assert.deepEqual(ev.toJSON().pinnedItems, []);
+    assert.equal(ev.loro.getMovableList('pinnedItems').kind(), 'MovableList');
+    assert.ok(ev.data.get('organizer') instanceof LoroMap);
+    assert.deepEqual(e.organizer, {});
     assert.throws(() => fresh.transact((l) => initDocument(l, 'x', ME, { kind: 'note' })), /unknown kind/);
     console.log('ok  query parsing, ulid, initDocument (doc/task/meeting)');
   }
@@ -274,6 +574,31 @@ async function main() {
   assert.equal(flat(outline.readOutline(c1)), 'Research con,The personal');
   assert.deepEqual(c2.content.toJSON(), c1.content.toJSON(), 'raw structure converges');
   console.log('ok  outline read/segments/setText/insertAfter/insertChild/indent/outdent/move/remove');
+  // A multi-select is one user action: one undo/redo step restores/reapplies its complete range.
+  {
+    const d = new Document(DOC, { peerId: '741' });
+    const a = outline.insertAfter(d, null, 'Detail A');
+    const b = outline.insertAfter(d, a, 'Detail B');
+    outline.removeMany(d, [a, b]);
+    assert.deepEqual(outline.readOutline(d), []);
+    assert.equal(d.undo(), true);
+    assert.deepEqual(outline.readOutline(d).map((n) => n.text), ['Detail A', 'Detail B']);
+    assert.equal(d.redo(), true);
+    assert.deepEqual(outline.readOutline(d), []);
+
+    const m = new Document(DOC, { peerId: '742' });
+    const first = outline.insertAfter(m, null, 'A');
+    const second = outline.insertAfter(m, first, 'B');
+    const third = outline.insertAfter(m, second, 'C');
+    outline.insertAfter(m, third, 'D');
+    outline.moveMany(m, [second, third], 'down');
+    assert.deepEqual(outline.readOutline(m).map((n) => n.text), ['A', 'D', 'B', 'C']);
+    assert.equal(m.undo(), true);
+    assert.deepEqual(outline.readOutline(m).map((n) => n.text), ['A', 'B', 'C', 'D']);
+    assert.equal(m.redo(), true);
+    assert.deepEqual(outline.readOutline(m).map((n) => n.text), ['A', 'D', 'B', 'C']);
+    console.log('ok  atomic multi-remove/move undo and redo');
+  }
   // 3c. Image blocks (addendum 12): { nodeName 'image', attributes { blockId, tanaUri, displayWidth?, displayHeight? }, children [] }
   //     as seen in tana:text:01m2839s1xa7mejzavmaqv2ck9; read as { type 'image', image }, removable and movable like any block.
   {
@@ -356,6 +681,7 @@ async function main() {
     docs[ME].transact((l) => { l.getMap('data').set('pinnedCollectionUri', COL); l.getMap('data').set('pinMapUri', PM); });
     // web-client layout: a pin, then a folder holding a pin
     docs[COL].transact((l) => { const t = l.getTree('tree'); t.createNode().data.set('uri', B); const f = t.createNode(); f.data.set('label', 'Folder'); t.createNode(f.id).data.set('uri', 'tana:space:s'); });
+    assert.deepEqual(await pins.sidebarTree(sync, ME), [{ uri: B, children: [] }, { label: 'Folder', children: [{ uri: 'tana:space:s', children: [] }] }]);
     assert.deepEqual(await pins.listSidebar(sync, ME), [B, 'tana:space:s']);
     await pins.pinSidebar(sync, ME, A);
     await pins.pinSidebar(sync, ME, A); // dedup
@@ -385,6 +711,83 @@ async function main() {
     assert.deepEqual(mirror[PM].toJSON(), docs[PM].toJSON());
     assert.deepEqual([...new Set(sync.subscribed)], [ME, COL, PM], 'only the profile and the two pointed documents are subscribed');
     console.log('ok  pins (sidebar tree, personal date pins, converge)');
+  }
+  {
+    const backend = mainHelpers(), cache = require('../db');
+    cache.open(':memory:');
+    const colId = 'tana:collection:' + ulid(), pinId = 'tana:text:' + ulid();
+    const profile = new Document(ME), collection = new Document(colId), remoteCollection = new Document(colId, {peerId:'888'}), pinDoc = new Document(pinId);
+    profile.transact(l => l.getMap('data').set('pinnedCollectionUri', colId));
+    collection.transact(l => l.getTree('tree').createNode().data.set('uri', pinId));
+    remoteCollection.applyRemote([collection.exportSince()]);
+    pinDoc.transact(l => initDocument(l, 'arbitrary deleted node', ME));
+    cache.upsert({id:pinId, section:'tasks', title:'cached node'});
+    const documents = new Map([[ME,profile],[colId,collection],[pinId,pinDoc]]), events = [];
+    backend.testRuntime({me:{userUri:ME}, client:{sync:{getDocument:id=>documents.get(id), subscribe:async id=>documents.get(id)}}, win:{isDestroyed:()=>false,webContents:{send:(channel,id)=>events.push([channel,id])}}});
+    collection.on('change', () => backend.onChange(colId));
+    remoteCollection.on('local-update', u => collection.applyRemote([u]));
+    assert.equal((await backend.pinTree()).length, 1);
+    const coldDeletedId = 'tana:text:' + ulid(), coldDeleted = new Document(coldDeletedId);
+    coldDeleted.transact(l => { initDocument(l, 'deleted before subscribing', ME); l.getMap('data').set('deletedAt', 100); });
+    documents.set(coldDeletedId, coldDeleted);
+    remoteCollection.transact(l => l.getTree('tree').createNode().data.set('uri', coldDeletedId));
+    assert.equal((await backend.pinTree()).length, 1, 'already-deleted snapshot pin is suppressed before any live notification');
+
+    remoteCollection.transact(l => l.getTree('tree').delete(l.getTree('tree').nodes().find(n => n.data.get('uri') === pinId).id));
+    assert.ok(events.some(([channel,id]) => channel === 'outline:changed' && id === null), 'remote unpin invalidates palette globally despite no cached collection row');
+    assert.equal((await backend.pinTree()).length, 0);
+    assert.ok(cache.get(pinId), 'unpin does not delete the document');
+    const remotePin = new Document(pinId, {peerId:'889'});
+    remotePin.applyRemote([pinDoc.exportSince()]);
+    pinDoc.on('change', () => backend.onChange(pinId));
+    remotePin.on('local-update', u => pinDoc.applyRemote([u]));
+    remotePin.transact(l => l.getMap('data').set('deletedAt', Date.now()));
+    assert.equal(cache.get(pinId), undefined);
+    remoteCollection.transact(l => l.getTree('tree').createNode().data.set('uri', pinId));
+    assert.equal((await backend.pinTree()).length, 0, 'a stale native pin reference cannot display a deleted node');
+    assert.ok(events.some(([channel,id]) => channel === 'outline:removed' && id === pinId));
+    assert.equal(backend.visibleGraphNodes([{id:pinId,title:'stale graph row'}]).length, 0);
+    assert.equal(backend.visibleGraphNodes([{id:'another',deletedAt:123}]).length, 0);
+    remotePin.transact(l => l.getMap('data').delete('deletedAt'));
+    assert.equal(backend.visibleGraphNodes([{id:pinId}]).length, 1, 'native restore clears tombstone');
+    assert.equal(backend.SECTIONS.find(s => s.id === 'library').icon, 'library');
+    const agentId = 'tana:agent:' + ulid();
+    assert.equal(backend.graphRow({id:agentId,title:'Agent'}).icon, 'agent');
+    assert.equal(backend.toNode({id:agentId,title:'cached',icon:'doc'}).icon, 'agent');
+    console.log('ok  remote unpin/deletion invalidation, stale graph suppression, restore and agent cache icon');
+  }
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const host = new Document(DOC), targetUri = 'tana:text:01m2524x1ewvjfvxp68ym77ht1';
+    host.transact(l => initDocument(l, 'reference host', ME));
+    const blockId = outline.readOutline(host)[0].id;
+    host.transact(l => {
+      const embed = l.getMap('content').get('children').get(0);
+      embed.set('nodeName', 'embed'); embed.get('attributes').set('tanaUri', targetUri);
+    });
+    const headingId = outline.insertAfter(host, blockId, 'Strategic Goals 2026-2027');
+    const before = host.toJSON();
+    const raw = outline.readOutline(host)[0];
+    assert.equal(raw.id, blockId); assert.equal(raw.type, 'reference'); assert.equal(raw.editable, false);
+    assert.deepEqual(raw.reference, {uri:targetUri});
+    assert.throws(() => outline.setText(host, blockId, 'overwrite'), /Reference blocks/);
+    assert.deepEqual(host.toJSON(), before, 'reads and rejected text writes preserve the native embed');
+    const requests = [];
+    backend.testRuntime({me:{userUri:ME},client:{graph:{listNodes:async q => { requests.push(q); return {nodes:[{id:targetUri,title:'Actual embedded task',state:{type:'open'},appearance:{hue:0}}]}; }}}});
+    const resolved = await backend.outlineWithReferences(host);
+    assert.equal(resolved[0].id, blockId); assert.equal(resolved[0].reference.node.id, targetUri);
+    assert.equal(resolved[0].reference.node.icon, 'task'); assert.equal(resolved[0].reference.node.done, 0);
+    assert.equal(resolved[0].reference.node.hue, 0); assert.equal(resolved[1].id, headingId);
+    assert.deepEqual(Array.from(requests[0].nodeIds), [targetUri]);
+    assert.deepEqual(host.toJSON(), before, 'resolution never copies target data into the CRDT');
+    backend.testRuntime({me:{userUri:ME},client:{graph:{listNodes:async()=>{throw new Error('unavailable');}}}});
+    const unresolved = await backend.outlineWithReferences(host);
+    assert.deepEqual(unresolved[0].reference, {uri:targetUri});
+    outline.move(host, blockId, 1);
+    assert.equal(outline.readOutline(host)[1].reference.uri, targetUri);
+    outline.remove(host, blockId);
+    assert.equal(outline.readOutline(host).length, 1);
+    console.log('ok  native embed identity, task resolution, unavailable fallback and non-destructive outline operations');
   }
   // 4. Transport: headers and the 401 -> refresh -> retry-once rule, with a fake fetch
   const calls = [];
@@ -450,7 +853,7 @@ async function main() {
         (server.created.get(value.documentId) || server.serverDoc).applyRemote(value.updates);
         return {};
       }
-      if (kind === 'documentAction') return fromJson(message('sync', 'ServerSyncCommandResponse'), { documentActionResponse: {} });
+      if (kind === 'documentAction') { assert.ok(['softDelete','restore'].includes(value.action.case)); return fromJson(message('sync', 'ServerSyncCommandResponse'), { documentActionResponse: {} }); }
       return {};
     },
   }));
@@ -510,10 +913,12 @@ async function main() {
   assert.equal(readNode(server.created.get(NEW)).title, 'created offline');
   assert.deepEqual(readNode(server.created.get(NEW)).participants, { [ME]: { type: 'user', role: 'admin' } });
   assert.equal(server.created.get(NEW).content.get('nodeName'), 'doc');
-  outline.insertAfter(created, null, 'hello');
+  outline.setText(created, outline.readOutline(created)[0].id, 'hello');
   await new Promise((r) => setTimeout(r, 30));
   assert.equal(contentText(server.created.get(NEW)), 'hello');
   assert.equal((await sync.softDelete(NEW)).responseUnion.case, 'documentActionResponse');
+  assert.equal(server.commands.at(-1), 'documentAction');
+  assert.equal((await sync.restore(NEW)).responseUnion.case, 'documentActionResponse');
   assert.equal(server.commands.at(-1), 'documentAction');
   await sync.close();
   assert.equal(sync.connected, false);

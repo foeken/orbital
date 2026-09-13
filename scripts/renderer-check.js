@@ -1,0 +1,260 @@
+'use strict';
+
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+
+const source = fs.readFileSync(require.resolve('../renderer.js'), 'utf8');
+const match = source.match(/function authView\(s\) \{[\s\S]*?\n\}/);
+assert.ok(match, 'renderer auth view helper is present');
+const authView = vm.runInNewContext(match[0] + '; authView');
+
+const state = (input) => JSON.parse(JSON.stringify(authView(input)));
+
+assert.deepEqual(state({ authenticated: false, authChecking: true, error: 'temporary failure' }), {
+  checking: true, authenticated: false, signedOut: false, showLogin: false, showOutline: true, error: null,
+});
+assert.deepEqual(state({ authenticated: true, authChecking: false, error: null }), {
+  checking: false, authenticated: true, signedOut: false, showLogin: false, showOutline: true, error: null,
+});
+assert.deepEqual(state({ authenticated: false, authChecking: false, error: null }), {
+  checking: false, authenticated: false, signedOut: true, showLogin: true, showOutline: false, error: null,
+});
+assert.deepEqual(state({ authenticated: null, authChecking: false, error: 'temporary failure' }), {
+  checking: false, authenticated: false, signedOut: false, showLogin: false, showOutline: true, error: 'temporary failure',
+});
+assert.match(source, /if \(signedOut\) rows\.push\(\{ id: 'login'/);
+assert.match(source, /s\.authChecking === false && s\.authenticated === false/);
+assert.match(source, /if \(hotkeys\.sync\) \{ delete hotkeys\.sync;/);
+assert.doesNotMatch(source, /id: 'sync', group: 'Actions', icon: 'sync', label: 'Sync', kbd:/);
+assert.doesNotMatch(source, /mod && e\.key === 'r'/);
+assert.match(source, /t\.hue != null \? t\.hue : nodeHue/);
+assert.match(source, /node\.hue != null/);
+assert.match(source, /r\.node && !r\.svg && r\.node\.hue != null/);
+assert.match(source, /scrollIntoView\(\{ block: 'nearest', inline: 'nearest', container: 'nearest' \}\)/);
+assert.match(source, /id: 'members', title: 'Members', icon: 'member'/);
+assert.match(source, /s\.id === 'members' \? 'People' : s\.title/);
+assert.match(source, /id: 'library', title: 'Library', icon: 'library'/);
+assert.match(source, /value: names\(TYPES, f\.types\) \|\| 'Any type', icon: f\.types && f\.types\.length === 1 \? TYPES\.find\(\(t\) => t && t\[0\] === f\.types\[0\]\)\[2\] : 'any'/);
+assert.match(source, /icon: s\.id === 'library' \? 'library' : s\.icon/);
+assert.match(source, /if \(id === 'members'\) loadMembers\(\)/);
+assert.match(source, /const chatIcon = \(n\) => n\.icon \|\| \(\(n\.tags \|\| \[\]\)\.some\(\(t\) => t\.label === 'chat'\) \? 'chat' : undefined\);/);
+assert.match(source, /const nodeIcon = \(n\) => chatIcon\(n\) \|\| \(\(n\.tags \|\| \[\]\)\.some\(\(t\) => t\.label === 'agent'\) \? 'agent' : undefined\);/);
+assert.match(source, /tana\.pinTree \? tana\.pinTree\(\)/);
+assert.match(source, /const unsectioned = \[\], sections = \[\];/);
+assert.match(source, /return \[\.\.\.unsectioned, \.\.\.sections\.flatMap/);
+assert.match(source, /\{ create: true, label: 'Create “' \+ ctx\.text/);
+assert.match(source, /palIndex = linkCtx && nodes\.length \? 1 : 0/);
+assert.match(source, /palRows\.find\(\(row\) => row\.create\)/);
+assert.match(source, /tana\.toggleCheckbox\(item\.docId, item\.node\.id\)/);
+assert.match(source, /else toggleCheckbox\(item\)/);
+assert.match(source, /const isCheckboxBlock = \(node\) => node\?\.kind === 'block' && node\.done != null/);
+assert.match(source, /function visibleTags\(node\) \{/);
+assert.match(source, /tags\.some\(\(tag\) => tag\.label !== 'task'\) \? tags\.filter\(\(tag\) => tag\.label !== 'task'\) : tags/);
+assert.match(source, /const docRow = \(n, hint, run\) => \(\{ node: n, icon: n\.icon, svg: n\.iconSvg, label: n\.text \?\? n\.title, tags: visibleTags\(n\)/);
+assert.match(source, /parent\.node\?\.kind !== 'document' && parent\.node\?\.done != null \? 0 : undefined/);
+assert.match(source, /f && f\.node\.kind === 'block' && f\.node\.done != null \? 0 : undefined/);
+assert.match(source, /f\.node\.kind === 'block' && f\.node\.done != null \? 0 : undefined/);
+assert.match(source, /if \(isTask\(display\) \|\| isCheckboxBlock\(display\)\)/);
+assert.match(source, /function inheritCheckbox\(parent, nodeId\)/);
+assert.match(source, /const canEditNode = \(node\) => !!node && node\.editable !== false;/);
+assert.match(source, /check\.disabled = reference \? !canEditNode\(display\) : !canEditItem\(item\);/);
+assert.match(source, /if \(!canEditItem\(item\)\) \{/);
+assert.match(source, /tana\.taskMeta\(docId\)/);
+assert.match(source, /const taskMetaById = new Map\(\), taskMetaLoading = new Set\(\), taskMetaFailed = new Set\(\);/);
+assert.match(source, /if \(!connected \|\| !tana\.taskMeta \|\| taskMetaById\.has\(docId\) \|\| taskMetaLoading\.has\(docId\) \|\| taskMetaFailed\.has\(docId\)\) return;/);
+assert.match(source, /taskMetaLoading\.delete\(docId\); taskMetaFailed\.add\(docId\);/);
+assert.match(source, /const wasConnected = connected;[\s\S]*?if \(connected && !wasConnected && typeof taskMetaFailed !== 'undefined'\) taskMetaFailed\.clear\(\);/);
+assert.match(source, /const loading = !parent && !outline\.children\.length/);
+assert.match(source, /tana\.setAssignees\(doc\.id, assignees\)/);
+assert.match(source, /const AUDIENCES = \{/);
+assert.match(source, /'only-me': \{ icon: 'lock', label: 'Visible only to you' \}/);
+assert.match(source, /people: \{ icon: 'userLock', label: 'Visible to selected people' \}/);
+assert.match(source, /space: \{ icon: 'houseLock', label: 'Visible to space members' \}/);
+assert.match(source, /function audienceInfo\(audience, audienceSpace\) \{/);
+assert.match(source, /const title = audience\?\.title \|\| audienceSpace\?\.title/);
+assert.match(source, /label: 'Visible to members of ' \+ title/);
+assert.match(source, /everyone: \{ icon: 'users', label: 'Visible to everyone' \}/);
+assert.match(source, /el\.textContent = summary\.assignees/);
+assert.match(source, /summary\.assignees === 'Unassigned'/);
+assert.match(source, /iconSvg\('unassigned'\)/);
+assert.match(source, /icon: 'unassigned', label: 'Unassigned'/);
+assert.doesNotMatch(source, /return 'Assigned to ' \+ assignees/);
+assert.match(source, /label: 'Edit assignees'/);
+assert.match(source, /palMode === 'assignees'/);
+assert.match(source, /e\.key === 'Backspace' && \(!mod \|\| e\.shiftKey\)/);
+assert.match(source, /tana\.removeMany\(its\[0\]\.docId, its\.map\(\(it\) => it\.node\.id\)\)/);
+assert.match(source, /tana\.moveMany\(its\[0\]\.docId, its\.map\(\(it\) => it\.node\.id\), dir\)/);
+assert.match(source, /if \(palBusy && \(palMode === 'spaces' \|\| palMode === 'search'\)\) return/);
+assert.match(source, /else if \(e\.key === 'Enter'\) \{ e\.preventDefault\(\); e\.stopPropagation\(\);/);
+assert.match(source, /function openCreationPalette\(\)/);
+assert.match(source, /id: 'create', group: 'Actions', icon: 'createNew', label: 'Create new…'/);
+assert.match(source, /tana\.creationOptions\(\)/);
+assert.match(source, /function startCreation\(choice\)/);
+assert.match(source, /draftDocNode\(choice\.kind, \{ typeUri: choice\.typeUri, icon: choice\.icon, tags \}\)/);
+assert.match(source, /tana\.createDocument\(text, node\.createOptions \|\| \{ kind: node\.draft \}\)/);
+assert.match(source, /keys\.every\(\(key\) => canEditStructure\(items\.get\(key\)\)\)/);
+assert.match(source, /rows\.push\(\.\.\.pinRows\(pinTree\)\)/);
+assert.match(source, /function invalidatePinCaches\(id, includeRecent = true\)/);
+assert.match(source, /function unpinStale\(id\) \{\s*invalidatePinCaches\(id, false\);/);
+assert.match(source, /if \(tana\.onRemoved\) tana\.onRemoved\(removeStale\);/);
+assert.match(source, /if \(tana\.onUnpinned\) tana\.onUnpinned\(unpinStale\);/);
+assert.doesNotMatch(source, /typeof change === 'string'\) return \[change\]/);
+assert.match(source, /const isReference = \(node\) => node\.type === 'reference';/);
+assert.match(source, /referenceTarget\(node\)\?\.text \|\| node\.reference\?\.label \|\| node\.text/);
+assert.match(source, /function toggleReference\(node\)/);
+assert.match(source, /function openReference\(node\)/);
+assert.match(source, /delete document\.documentElement\.dataset\.theme/);
+assert.match(source, /id: 'theme', group: 'Actions', icon: 'darkLight', label: 'Toggle ' \+ \(dark \? 'light' : 'dark'\) \+ ' mode'/);
+assert.match(source, /e\.key === '0' \|\| \(e\.shiftKey/);
+assert.match(source, /pendingSplit: true/);
+assert.match(source, /readSplitDraft\(\);/);
+assert.match(source, /const canExpand = \(item\) => hasKids\(item\) \|\| \(!item\.node\.draft && canEditItem\(item\)\);/);
+assert.match(source, /chev\.hidden = !expandable/);
+assert.match(source, /if \(value && !canExpand\(item\)\) return/);
+assert.match(source, /rules\.has\('inherit'\).*token: access\.sharingToken/s);
+assert.match(source, /tana\.previewMove\(doc\.id, space\.id\)/);
+assert.match(source, /tana\.moveToSpace\(doc\.id, space\.id, token\)/);
+assert.match(source, /function removeZoomedBlock\(\) \{[\s\S]*removeNode\(item\)/);
+assert.match(source, /async function removeDocument\(item\) \{[\s\S]*tana\.deleteDocument\(item\.docId\)/);
+assert.match(source, /const access = await tana\.accessOptions\(item\.docId\);[\s\S]*access\?\.deletable/);
+assert.match(source, /onRemoved: \(cb\) => removed\.push\(cb\)/);
+assert.match(source, /e\.key === 'Backspace' && \(e\.metaKey \|\| e\.ctrlKey\) && e\.shiftKey\) \{ e\.preventDefault\(\); removeDocument\(item\); \}/);
+assert.match(source, /e\.key === 'Backspace' && document\.activeElement === document\.body && zoom\) \{ e\.preventDefault\(\); removeZoomedBlock\(\); \}/);
+
+function functionSource(name) {
+  const asyncStart = source.indexOf('async function ' + name + '(');
+  const start = asyncStart >= 0 ? asyncStart : source.indexOf('function ' + name + '(');
+  assert.notEqual(start, -1, 'renderer function ' + name + ' is present');
+  let depth = 0;
+  for (let end = start; end < source.length; end++) {
+    if (source[end] === '{') depth++;
+    if (source[end] === '}' && --depth === 0) return source.slice(start, end + 1);
+  }
+  assert.fail('renderer function ' + name + ' is complete');
+}
+
+const visibleTags = vm.runInNewContext(`
+  const isTask = (node) => node.kind === 'document' && node.icon === 'task';
+  ${functionSource('visibleTags')}
+  visibleTags;
+`);
+assert.deepEqual(JSON.parse(JSON.stringify(visibleTags({ kind: 'document', icon: 'task', tags: [{ label: 'task', color: 'grey' }, { label: 'Project', hue: 268 }] }))), [{ label: 'Project', hue: 268 }], 'a typed task keeps its custom tag and hides #task');
+assert.deepEqual(JSON.parse(JSON.stringify(visibleTags({ kind: 'document', icon: 'task', tags: [{ label: 'task', color: 'grey' }] }))), [{ label: 'task', color: 'grey' }], 'an untyped task retains #task');
+
+const audienceInfo = vm.runInNewContext(`
+  const AUDIENCES = {
+    'only-me': { icon: 'lock', label: 'Visible only to you' },
+    people: { icon: 'userLock', label: 'Visible to selected people' },
+    space: { icon: 'houseLock', label: 'Visible to space members' },
+    everyone: { icon: 'users', label: 'Visible to everyone' },
+  };
+  ${functionSource('audienceInfo')}
+  audienceInfo;
+`);
+assert.deepEqual(JSON.parse(JSON.stringify(audienceInfo('space', { uri: 'tana:space:foundry', title: 'Foundry LT' }))), { icon: 'houseLock', label: 'Visible to members of Foundry LT' }, 'a resolved space audience names the space in its tooltip');
+assert.deepEqual(JSON.parse(JSON.stringify(audienceInfo('space'))), { icon: 'houseLock', label: 'Visible to space members' }, 'a missing space title keeps the generic fallback');
+assert.equal(audienceInfo('unknown'), null, 'unknown visibility keeps the existing fallback path');
+
+async function splitTypingCheck() {
+  const context = {};
+  vm.runInNewContext(`
+    const checkbox = { id: 'checkbox', kind: 'block', text: 'Checkbox', done: 0, children: [] };
+    const kids = new Map([['doc', [checkbox]]]), open = new Map(), items = new Map();
+    const item = { key: 'doc/checkbox', docId: 'doc', node: checkbox, parent: {} };
+    let draftEl, realEl = { segs: [] }, focused, saved, resolveInsert;
+    const canEditItem = () => true;
+    const readSegs = (el) => el.segs;
+    const splitSegs = (segs) => [segs, []];
+    const plainOf = (segs) => segs.map((s) => s.text || '').join('');
+    const segsOf = (node) => node.segments || (node.text ? [{ text: node.text }] : []);
+    const saveValue = (segs) => segs;
+    const hasKids = () => false, isOpen = () => false, dropPending = () => {};
+    const textEl = (key) => key.includes('draft:split:') ? draftEl : realEl;
+    const caretOffset = (el) => el.offset;
+    const placeCaret = (key, offset) => { focused = { key, offset }; };
+    const render = () => {
+      const draft = kids.get('doc').find((node) => node.pendingSplit);
+      if (draft) draftEl ||= { segs: draft.segments, offset: 0 };
+      const real = kids.get('doc').find((node) => node.id === 'new');
+      if (real) items.set('doc/new', { key: 'doc/new', docId: 'doc', node: real });
+    };
+    const renderSegs = (el, segs) => { el.segs = segs; };
+    const scheduleSave = (_item, segs) => { saved = segs; };
+    const reload = async () => { kids.set('doc', [{ id: 'new', kind: 'block', text: '', done: 0, children: [] }]); };
+    const run = async (fn) => fn();
+    const tana = {
+      setText: async () => {},
+      insertAfter: async () => new Promise((resolve) => { resolveInsert = resolve; }),
+      insertChild: async () => { throw new Error('unexpected child insert'); },
+    };
+    ${functionSource('splitNode')}
+    Object.assign(globalThis, {
+      start: () => splitNode(item, { segs: [{ text: 'Checkbox' }], offset: 8 }, 8),
+      type: (text) => { draftEl.segs = [{ text }]; draftEl.offset = text.length; },
+      finish: () => resolveInsert('new'),
+      state: () => ({ saved, text: realEl.segs, focused }),
+    });
+  `, context);
+  const pendingSplit = context.start();
+  await Promise.resolve();
+  context.type('Checkbox sibling test');
+  context.finish();
+  await pendingSplit;
+  assert.deepEqual(JSON.parse(JSON.stringify(context.state())), {
+    saved: [{ text: 'Checkbox sibling test' }],
+    text: [{ text: 'Checkbox sibling test' }],
+    focused: { key: 'doc/new', offset: 21 },
+  }, 'rapid typing into an Enter-created sibling survives the async insert and reload');
+}
+
+async function cachedBootMetadataCheck() {
+  const context = {};
+  vm.runInNewContext(`
+    let authed = false, authChecking = true, signedOut = false, connected = false, calls = 0, renders = 0, outcome = 'fail';
+    const taskMetaById = new Map(), taskMetaLoading = new Set(), taskMetaFailed = new Set();
+    const tana = { taskMeta: () => {
+      calls++;
+      return outcome === 'fail' ? Promise.reject(new Error('not connected')) : Promise.resolve({ assignees: [] });
+    } };
+    const palette = { hidden: true }, palDoc = null, outline = {};
+    const $ = () => ({}), showError = () => {};
+    const render = () => { renders++; };
+    ${functionSource('authView')}
+    ${functionSource('showStatus')}
+    ${functionSource('loadTaskMeta')}
+    Object.assign(globalThis, {
+      load: () => loadTaskMeta('cached-task'),
+      status: (isConnected) => showStatus({ authenticated: true, authChecking: false, connected: isConnected }),
+      succeed: () => { outcome = 'success'; },
+      state: () => ({ calls, renders, loading: taskMetaLoading.size, failed: taskMetaFailed.has('cached-task'), cached: taskMetaById.has('cached-task') }),
+    });
+  `, context);
+  context.load();
+  assert.deepEqual(JSON.parse(JSON.stringify(context.state())), { calls: 0, renders: 0, loading: 0, failed: false, cached: false }, 'cached boot does not request metadata before sync connects');
+  context.status(true); context.load();
+  await Promise.resolve(); await Promise.resolve();
+  assert.deepEqual(JSON.parse(JSON.stringify(context.state())), { calls: 1, renders: 1, loading: 0, failed: true, cached: false }, 'a failed metadata request is remembered instead of retrying each render');
+  context.load();
+  assert.equal(context.state().calls, 1, 'the failed metadata request stays quiet until a connection recovery');
+  context.status(false); context.status(true); context.succeed(); context.load();
+  await Promise.resolve(); await Promise.resolve();
+  assert.deepEqual(JSON.parse(JSON.stringify(context.state())), { calls: 2, renders: 4, loading: 0, failed: false, cached: true }, 'connection recovery retries metadata once and preserves cached boot content');
+}
+
+async function mockCreationPermissionCheck() {
+  const mockApi = vm.runInNewContext(`
+    const plainOf = (value) => typeof value === 'string' ? value : (value || []).map((segment) => segment.text || '').join('');
+    const segsOf = (value) => typeof value === 'string' ? [{ text: value }] : value || [];
+    const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const localDate = () => '2026-09-13';
+    ${functionSource('mockApi')}
+    mockApi;
+  `);
+  const api = mockApi();
+  const created = await api.createDocument('Created task', { kind: 'task' });
+  assert.equal(created.editable, true, 'a materialized mock document reports the editable capability');
+  assert.equal((await api.accessOptions(created.id)).deletable, true, 'a materialized mock document can be deleted like a native editable document');
+}
+
+Promise.all([splitTypingCheck(), cachedBootMetadataCheck(), mockCreationPermissionCheck()]).then(() => console.log('renderer auth check passed'));

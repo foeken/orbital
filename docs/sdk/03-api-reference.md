@@ -8,7 +8,7 @@ All modules are CommonJS. "Node" below means the plain graph JSON node; "Documen
 createTanaClient({ baseUrl?, getAccessToken, orgId, peerId, storageId?, logger?, clientName? })
   → { transport, graph: GraphClient, sync: SyncConnection, close(): Promise }
 ```
-Also re-exports `createTransport`, `GraphClient`, `SyncConnection`, `Document`, `derivePeerId` and everything in `node.js`.
+Also re-exports `createTransport`, `GraphClient`, `SyncConnection`, `Document`, `derivePeerId`, everything in `node.js`, and `access` (`capabilities`, `setSharing`, `previewMove`, `moveToSpace`, `canWrite`, `canDelete`, `audienceOf`).
 
 ## `sdk/transport.js`
 
@@ -34,7 +34,7 @@ Constructed by `createTanaClient`; `{ transport, orgId, peerId, storageId, logge
 |---|---|
 | `connect(): Promise<void>` | Opens `ServerSync`; resolves after the server's `peer` frame. Keeps reconnecting in the background (backoff 250 ms→5 s before the first success, 1 s→30 s after; watchdog = 3× heartbeat interval). Rejects and stays closed on PermissionDenied / Unauthenticated-before-first-frame. |
 | `subscribe(id, init?): Promise<Document>` | Creates (or returns) the Document for `id` and bootstraps it (begin_document_sync → import server updates → apply_bootstrap_updates catch-up → bootstrap_complete). Resolves once live. `init(loro)` runs in a transact *before* bootstrap: for an unknown id this turns the server's MISSING into a create (the full snapshot is the catch-up). Without `init`, an unknown id rejects with `document not found` after ~60 s / 5 attempts. Idempotent per id. |
-| `getDocument(id)` | Document or undefined. |
+| `getDocument(id)` | Document or undefined. A handle can exist before bootstrap is ready; await `subscribe` before reading it. |
 | `unsubscribe(id): Promise` | Sends `unsubscribeDocument` when live; detaches listeners. |
 | `softDelete(id): Promise` | `documentAction.softDelete`; the doc disappears from graph queries. Needs the stream open. |
 | `close(): Promise` | Unsubscribes everything, aborts the stream, stops reconnecting. |
@@ -45,6 +45,22 @@ Events: `connected` `({ heartbeatIntervalMs })`, `disconnected`, `heartbeat`, `c
 Outbound: local ops are batched 5 ms, one in-flight `liveDocumentUpdate` per document, 256 KiB budget (overflow → re-bootstrap). Inbound frames for a stale `sessionId` are dropped. `resync_required` re-bootstraps; `DISCARD_LOCAL` resets the Document first. After a reconnect every document is re-bootstrapped with the same Document object.
 
 `derivePeerId(userExternalId)` → decimal u64 string: `(sha256(lowercased id)[0..8] >> 16) << 16 | random16`. New nonce per process; keep `storageId` (a UUID you persist) for a non-ephemeral peer.
+
+## `sdk/access.js`
+
+These helpers are the app's verified native capability boundary. Ownership is an audience/location boundary, never a write grant; unknown ACLs fail closed.
+
+| Function | Behaviour |
+|---|---|
+| `canWrite(node, userUri, ctx)` | Accepts a direct `admin`/`editor`/`attendee` participant, or recursively checks an unrestricted owner chain and the organisation membership document. Restricted or unknown access is not guessed. |
+| `audienceOf(node, userUri, ctx)` | Returns a snapshot such as `only-me`, `people`, `space`, `everyone`, or `unknown`, including the boundary and sorted participants where known. |
+| `capabilities(document, userUri, ctx)` | Returns `sharing`, `move`, `deletable`, available `rules`/`roles`, current and inherited audience snapshots, and a `sharingToken` derived from the observed ACL/audience state. |
+| `setSharing(document, userUri, selection, ctx)` | Supports `me`, `people`, and verified `inherit`. Inherit requires the current `sharingToken`; the helper checks that observed documents stayed stable before transacting. |
+| `previewMove(document, targetSpace, userUri, ctx)` | Checks source/target write access, space validity, cycles, type home/count constraints, audience before/after and observation stability. Returns `{ allowed, reason, audienceChanged, requiresConfirmation, token }`. |
+| `moveToSpace(document, targetSpace, userUri, ctx, confirmation)` | Re-runs the preview and requires its exact token when confirmation is required (or when a confirmation was supplied). |
+| `canDelete(document, userUri, ctx, restoring?)` | Checks supported, non-deleted kind, write access and calendar-event organizer rules. Restore checks a copy with `deletedAt` removed and never mutates the document. |
+
+`main.js` calls these helpers for access mutations and for native document actions. The renderer's `editable` flag is only a companion UI capability and does not replace server authorization.
 
 ## `sdk/document.js` — `class Document extends EventEmitter`
 
@@ -72,6 +88,8 @@ Outbound: local ops are batched 5 ms, one in-flight `liveDocumentUpdate` per doc
 | `initDocument(loro, title, byUri, { kind = 'doc' | 'task' | 'meeting', now })` | Seeds a new document's data map like the web client (participants { byUri: admin }, restricted, sharedPinDates, attributes) plus the empty content skeleton; task adds the open state assigned to `byUri`; meeting makes an event (next half hour, 30 min, local timezone, origin 'tana'). Use inside `sync.subscribe(id, init)`. |
 | `STATE_TYPES` | `['proposed', 'open', 'closed', 'not_now']`. |
 
+The native title contract is a plain metadata string. `setTitle` cannot store mention nodes; profiles and unsupported kinds are read-only, and events currently remain read-only because the organizer/calendar write capability is outside the graph contract.
+
 ## `sdk/content.js` — outline over the content tree
 
 Outline node: `{ id: blockId, text, kind: 'block', heading?: level, type?: 'image', image?: { uri, alt, width, height }, segments: [{ text } | { mention: { label, uri } }], hasChildren, children: OutlineNode[] }`.
@@ -87,6 +105,10 @@ Outline node: `{ id: blockId, text, kind: 'block', heading?: level, type?: 'imag
 | `move(document, id, 'up' | 'down')` | Swap with the neighbouring sibling (lists move as a whole). |
 
 All operations run inside `document.transact`, so each is one undo step and one live update. Containers are copied and deleted (Loro cannot move containers); text runs keep their marks via `toDelta/applyDelta`.
+
+## App mutation and history boundary
+
+The SDK's `Document.undo()`/`redo()` only undo local CRDT transactions for that document. `main.js` adds a global stack across documents and routes renderer Cmd+Z, Cmd+Shift+Z and Cmd+Y through it. Native delete/restore is a separate `documentAction` command: the main process checks `access.canDelete`, requires a `documentActionResponse`, and records the action so undo of delete restores and undo of restore deletes. A failed action is not removed from history. Restore visibility and document state arrive through the server's live update.
 
 ## `sdk/query.js`
 
