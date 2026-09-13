@@ -1629,7 +1629,8 @@ document.addEventListener('keydown', (e) => {
 // ---- palette: Cmd+K commands (Views, Actions, matching Documents while typing) or Cmd+S live search (api.search) ----
 const palette = $('palette'), palInput = $('paletteInput'), palList = $('paletteList');
 let palMode = 'cmd', palRows = [], palIndex = 0, palBusy = false, palSeq = 0, palTimer, creationChoices = [];
-const docRow = (n, hint, run) => ({ node: n, icon: n.icon, svg: n.iconSvg, label: n.text ?? n.title, tags: visibleTags(n), hint, run });
+// hint defaults to the node's own meta, so a meeting keeps its date and time in every palette list
+const docRow = (n, hint, run) => ({ node: n, icon: n.icon, svg: n.iconSvg, label: n.text ?? n.title, tags: visibleTags(n), hint: hint === undefined ? n.meta : hint, run });
 function pinRows(tree) {
   const unsectioned = [], sections = [];
   const addNode = (entry, rows, group) => {
@@ -1680,7 +1681,7 @@ function paletteRows(q) {
     if (access?.sharing) rows.push({ group: 'Actions', icon: 'lock', label: 'Edit visibility', run: () => openVisibilityPalette(palDoc) });
     if (access?.move) rows.push({ group: 'Actions', icon: 'space', label: 'Move to space', keepOpen: true, run: () => openMovePalette(palDoc) });
   }
-  if (q) for (const s of sections) for (const n of s.nodes) rows.push({ ...docRow(n, s.title, () => openDoc(n.id)), id: 'doc:' + n.id, group: 'Documents' });
+  if (q) for (const s of sections) for (const n of s.nodes) rows.push({ ...docRow(n, n.meta || s.title, () => openDoc(n.id)), id: 'doc:' + n.id, group: 'Documents' });
   let docsLeft = 8;
   return rows.filter((r) => (!q || r.label.toLowerCase().includes(q)) && (r.group !== 'Documents' || docsLeft-- > 0)).map((r) => (hotkeys[r.id] ? { ...r, kbd: hotkeys[r.id] } : r));
 }
