@@ -10,8 +10,11 @@ contextBridge.exposeInMainWorld('api', {
   node: (docId) => ipcRenderer.invoke('doc:info', docId),
   path: (docId) => ipcRenderer.invoke('doc:path', docId),
   related: (docId) => ipcRenderer.invoke('doc:related', docId), // meeting context: {summary,tagline,pinned[],outcomes[],notes[]}
+  summaryUri: (docId) => ipcRenderer.invoke('doc:summaryUri', docId), // a meeting's write-up document, or null
+  todayNode: () => ipcRenderer.invoke('doc:todayNode'), // the date-titled node pinned to today, created if missing
   setField: (docId, key, text) => ipcRenderer.invoke('doc:setField', docId, key, text), // typed field value (plain text)
   chats: (opts) => ipcRenderer.invoke('chats:list', opts), // { includeMcp }
+  inbox: () => ipcRenderer.invoke('inbox:list'), // everything in Tana's inbox state (proposed)
   deleteDocument: (id) => ipcRenderer.invoke('doc:delete', id), // native soft delete; undo restores
   restoreDocument: (id) => ipcRenderer.invoke('doc:restore', id), // native restore; undo deletes again
   creationOptions: () => ipcRenderer.invoke('doc:creationOptions'), // {options:[{id,kind,title,icon?,typeUri?,appliesTo?,ownerUri?,selectable,reason?}],complete}

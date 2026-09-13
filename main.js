@@ -13,7 +13,9 @@ const content = require('./sdk/content');
 const fields = require('./sdk/fields');
 const pins = require('./sdk/pins');
 
-const SECTIONS = [{ id: 'tasks', title: 'Tasks', icon: 'task' }, { id: 'meetings', title: 'Meetings', icon: 'meeting' }, { id: 'members', title: 'Members', icon: 'member' }, { id: 'library', title: 'Library', icon: 'library' }, { id: 'chats', title: 'Chats', icon: 'chat' }];
+// Order is the Cmd+K Views order: what is waiting on you, then your work, then the calendar, then knowledge,
+// then conversations, then people.
+const SECTIONS = [{ id: 'inbox', title: 'Inbox', icon: 'inbox' }, { id: 'tasks', title: 'Tasks', icon: 'task' }, { id: 'meetings', title: 'Meetings', icon: 'meeting' }, { id: 'library', title: 'Library', icon: 'library' }, { id: 'chats', title: 'Chats', icon: 'chat' }, { id: 'members', title: 'Members', icon: 'member' }];
 const TAG = { task: { label: 'task', color: 'grey' }, meeting: { label: 'meeting', color: 'gold' }, space: { label: 'space', color: 'grey' }, doc: { label: 'doc', color: 'grey' }, member: { label: 'member', color: 'grey' } };
 const KINDS = { doc: 'tana:text:', task: 'tana:text:', meeting: 'tana:event:', chat: 'tana:chat:' };
 const PLAIN_KINDS = new Set(['chat', 'canvas', 'agent', 'skill', 'type']); // tana:<kind>: ids listed read-only: kind icon + kind tag
@@ -172,6 +174,29 @@ async function fieldsOf(id) {
   }
   return out;
 }
+// The write-up of an event has no edge of its own: it is the document the event owns whose title is the event's
+// tagline (Tana generates both together, and it carries the generated appearance.imageUri). Verified in English
+// and Dutch, so the rule is not language-bound. One place: both related() and the navigation redirect use it.
+const writeUpOf = (event, owned) => {
+  const ev = (event && event.calendarEvent) || {};
+  const plain = owned.filter((n) => !(n.state && n.state.type) && idKind(n.id) === 'text' && (n.title || '').trim());
+  return (ev.tagline && plain.find((n) => n.title === ev.tagline)) || plain.find((n) => n.appearance && n.appearance.imageUri) || null;
+};
+// The uri a meeting should open at, or null when it is not an event or has no write-up yet.
+const summaryCache = new Map(); // event uri -> write-up uri or null
+async function summaryUri(id) {
+  if (!client) throw new Error(NOT_CONNECTED);
+  if (idKind(id) !== 'event') return null;
+  if (summaryCache.has(id)) return summaryCache.get(id);
+  const [{ nodes: selfNodes = [] }, { nodes: owned = [] }] = await Promise.all([
+    client.graph.listNodes({ nodeIds: [id], limit: 1 }).catch(() => ({ nodes: [] })),
+    client.graph.listNodes({ ownerIds: [id], limit: 200 }).catch(() => ({ nodes: [] })),
+  ]);
+  const found = writeUpOf(selfNodes[0], owned);
+  const uri = found ? found.id : null;
+  summaryCache.set(id, uri);
+  return uri;
+}
 async function related(id) {
   if (!client) throw new Error(NOT_CONNECTED);
   // The meeting event is the hub: opening its notes document should still show the meeting's pins and outcomes.
@@ -194,10 +219,7 @@ async function related(id) {
   // never list the open document itself, an untitled draft, or something already shown as a pin
   const pinnedIds = new Set(pinIds);
   const owns = (owned.nodes || []).filter((n) => !PLAIN_KINDS.has(idKind(n.id)) && n.id !== id && !pinnedIds.has(n.id) && (n.title || '').trim());
-  // The write-up has no edge of its own: it is the document the event owns whose title is the event's tagline
-  // (Tana generates both together, and it carries the generated appearance.imageUri). Verified on two meetings.
-  const plain = owns.filter((n) => !stated(n) && idKind(n.id) === 'text');
-  const writeUp = (ev.tagline && plain.find((n) => n.title === ev.tagline)) || plain.find((n) => n.appearance && n.appearance.imageUri);
+  const writeUp = writeUpOf(event, owns); // one rule for the rail and for navigation
   return {
     summary: ev.summary || undefined,
     tagline: ev.tagline || undefined,
@@ -258,6 +280,15 @@ async function chats({ includeMcp = false } = {}) {
   nodes.forEach(rememberNodeHue);
   const isMcp = (n) => (n.invocationContext && n.invocationContext.intent === 'mcp') || /^MCP:/i.test(n.title || '');
   return nodes.filter((n) => includeMcp || !isMcp(n)).map((n) => toNode({ ...graphRow(n), meta: isMcp(n) ? 'MCP' : undefined }));
+}
+
+// Inbox: everything still in Tana's inbox state (proposed), whatever kind it is, newest first.
+async function inbox() {
+  if (!client) return [];
+  const { nodes } = await client.graph.listNodes({ stateTypes: ['proposed'], limit: 200, sortOptions: [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }] });
+  nodes.forEach(rememberNodeHue);
+  await resolveTypes(nodes.map((n) => n.entityType));
+  return nodes.map((n) => toNode(graphRow(n, true)));
 }
 
 async function library(filter) {
@@ -695,7 +726,25 @@ ipcMain.handle('pins:pin', (_e, id, target) => setPin(id, target, true));
 ipcMain.handle('pins:unpin', (_e, id, target) => setPin(id, target, false));
 ipcMain.handle('doc:setIcon', (_e, id, svg) => setIcon(id, svg));
 ipcMain.handle('doc:related', (_e, id) => related(id)); // { summary, tagline, pinned[], outcomes[], notes[] }
+ipcMain.handle('doc:summaryUri', (_e, id) => summaryUri(id)); // where a meeting should actually open, or null
 ipcMain.handle('doc:setField', (_e, id, key, text) => mut(id, (doc) => fields.setFieldText(doc, key, text)));
+// The node for today: a document titled with today's date, pinned to today. Created and pinned when missing,
+// so "Show today node" always lands somewhere. Matching is by exact title, the same string the pin uses.
+ipcMain.handle('doc:todayNode', async () => {
+  if (!client) throw new Error(NOT_CONNECTED);
+  const date = today();
+  const { nodes = [] } = await client.graph.listNodes({ textQuery: date, nodeTypes: ['text'], limit: 20 }).catch(() => ({ nodes: [] }));
+  const existing = nodes.find((n) => (n.title || '').trim() === date);
+  if (existing) {
+    const pinnedDates = await pins.dates(client.sync, me.userUri, existing.id).catch(() => []);
+    if (!pinnedDates.includes(date)) await setPin(existing.id, 'today', true);
+    return existing.id;
+  }
+  const created = await createDocument(date, { kind: 'doc' });
+  await setPin(created.id, 'today', true);
+  scheduleRefresh(1000);
+  return created.id;
+});
 // macOS appearance, for the renderer's "follow the system" theme: current value on demand, plus live changes
 const systemTheme = () => (nativeTheme && nativeTheme.shouldUseDarkColors ? 'dark' : 'light');
 ipcMain.handle('theme:system', () => systemTheme());
@@ -706,6 +755,7 @@ ipcMain.handle('tasks:filter', () => taskFilter());
 ipcMain.handle('tasks:setFilter', (_e, f) => setTaskFilter(f));
 ipcMain.handle('library:list', (_e, f) => library(f));
 ipcMain.handle('chats:list', (_e, o) => chats(o || {}));
+ipcMain.handle('inbox:list', () => inbox());
 ipcMain.handle('library:filter', () => libraryFilter());
 ipcMain.handle('library:setFilter', (_e, f) => { db.setSetting('libraryFilter', { ...DEFAULT_LIBRARY_FILTER, ...(f || {}) }); return libraryFilter(); });
 ipcMain.handle('sync:refresh', () => refresh());

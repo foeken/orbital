@@ -131,6 +131,11 @@ Every request made during the build and its state. ✓ done and verified · ◐ 
 | 119 | Decision Record under Foundry renders as a doc instead of a type | ✓ Type nodes are now a listed kind with the supplied shapes.svg icon and a # type tag, keeping their hue. | main.js PLAIN_KINDS, icons |
 | 120 | Assignee names show as raw user-profile URIs | ✓ A task row that needs a name now loads the member list itself, so names resolve without opening the Assigned menu. Verified live: three tasks read André Foeken. | renderer.js taskSummary |
 
+| 121 | Cmd+K "Show today node" (Ctrl+Shift+D): open the node titled with today date, pinned to today, creating it when missing | ✓ Verified live: the shortcut created tana:text:01m2e9ap66vd1203gnwe46x0s5 titled 2026-09-13, pinned it to today and zoomed into it; a second run reuses the same node. The default shortcut is seeded once and stays recordable. | main.js doc:todayNode, renderer.js |
+| 122 | Cmd+K view Inbox, listing everything in the Inbox | ✓ Lists every node still in Tana inbox state (proposed), newest first, with the supplied inbox.svg icon. Verified live: 7 items. | main.js inbox, renderer.js |
+| 123 | Order the Cmd+K views logically | ✓ Inbox, Tasks, Meetings, Library, Chats, People: what is waiting on you, then your work, the calendar, knowledge, conversations, people. | main.js SECTIONS |
+| 124 | The meeting to write-up redirect must work from every route | ✓ It lived in the rail render, so only some routes hit it. Both zoom entry points now call one followSummary helper, and the write-up rule lives in a single writeUpOf in main. Verified live from the Meetings list row and from search. | renderer.js, main.js |
+
 Tracking rule: append new requests to the numbered table above using the next integer. Update an existing row for repeated requests; never create a separate unnumbered request list. Preserve status and verification evidence. Orchestrator owns this file.
 
 Latest rounds (three workers, all closed). The live app was inspected over its devtools port against real Tana data, which is how #49, #54, #59, #62, #68, #78, #83, #85, #89, #93, #97 and #98 were confirmed; the interaction-heavy rows (#39, #90, #96, #105 to #108) were driven in the in-file mock, where mutations stay local. `npm run check` passes on the merged tree.

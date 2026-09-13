@@ -68,7 +68,7 @@ function mockApi() {
     dateMeta['mockmeeting' + i] = WD[d.getDay()] + ' ' + d.getDate() + time;
     return { id: 'mockmeeting' + i, text, meta: WD[d.getDay()] + time, kind: 'document', hasChildren: true, icon: 'meeting', tags: [meeting] };
   });
-  const sections = [{ id: 'tasks', title: 'Tasks', icon: 'task', nodes: docs }, { id: 'meetings', title: 'Meetings', icon: 'meeting', nodes: meetings }, { id: 'library', title: 'Library', icon: 'library', nodes: [] }, { id: 'chats', title: 'Chats', icon: 'chat', nodes: [] }];
+  const sections = [{ id: 'inbox', title: 'Inbox', icon: 'inbox', nodes: [] }, { id: 'tasks', title: 'Tasks', icon: 'task', nodes: docs }, { id: 'meetings', title: 'Meetings', icon: 'meeting', nodes: meetings }, { id: 'library', title: 'Library', icon: 'library', nodes: [] }, { id: 'chats', title: 'Chats', icon: 'chat', nodes: [] }];
   const all = [...docs, ...meetings, ...spaceDocs, space, ...kinds, ...chats];
   for (const node of all) node.editable = true;
   // org members (user profiles): searchable, linkable, and the "Assigned to" menu; me = the signed-in user
@@ -189,6 +189,7 @@ function mockApi() {
       return all.filter((d) => (!ff.types || ff.types.includes(kindOf(d))) && (kindOf(d) !== 'tasks' || listed(d, ff)) && d.text.toLowerCase().includes(text)).slice(0, 100).map(info);
     },
     chats: async ({ includeMcp = false } = {}) => { await new Promise((r) => setTimeout(r, 30)); return chats.filter((d) => includeMcp || d.meta !== 'MCP').map(info); },
+    inbox: async () => docs.slice(0, 3).map(info), // mock: the first few tasks stand in for inbox-state items
     // "#task", "#meeting", "#member", "#<type>" tokens filter; the rest is a substring query; events get date-style meta
     search: async (q) => {
       await new Promise((r) => setTimeout(r, 30));
@@ -226,6 +227,7 @@ function mockApi() {
     deleteDocument: async (docId) => { softDelete(docId); step(docId, 'restore'); },
     restoreDocument: async (docId) => { undelete(docId); step(docId, 'delete'); },
     setIcon: async (docId, svg) => { (all.find((d) => d.id === docId) || created[docId]).iconSvg = svg || undefined; emit(null); },
+    todayNode: async () => { const date = new Date().toLocaleDateString('sv-SE'); const found = all.find((d) => d.text === date); if (found) return found.id; const n = { id: 'mocktoday', text: date, kind: 'document', hasChildren: true, editable: true, icon: 'doc', tags: [{ label: 'doc', color: 'grey' }] }; all.push(n); sections[0].nodes.unshift(n); datePins[n.id] = [date]; emit(null); return n.id; },
     setTitle: async (docId, title) => mut(docId, () => { all.find((d) => d.id === docId).text = title; emit(docId); }),
     setDone: async (docId, done) => mut(docId, () => { const d = all.find((x) => x.id === docId); d.done = done ? 1 : 0; d.state = done ? 'closed' : 'open'; emit(docId); }),
     toggleCheckbox: async (docId, id) => mut(docId, () => { const n = locate(content[docId], id).node; n.done = n.done == null ? 0 : n.done ? 0 : 1; emit(docId); }),
@@ -322,6 +324,10 @@ let scrolledView = null;     // view already scrolled to today's first meeting w
 let linkCtx = null;          // @ linking in progress: { item, segs, start, end, text }
 const hotkeys = JSON.parse(localStorage.getItem('hotkeys') || '{}'); // palette row id -> combo ("⇧⌘M")
 if (hotkeys.sync) { delete hotkeys.sync; localStorage.setItem('hotkeys', JSON.stringify(hotkeys)); }
+// shipped default, recordable and removable like any other: Ctrl+Shift+D opens today's node
+if (hotkeys.today === undefined && !localStorage.getItem('todayHotkeySeeded')) {
+  hotkeys.today = '⌃⇧D'; localStorage.setItem('hotkeys', JSON.stringify(hotkeys)); localStorage.setItem('todayHotkeySeeded', '1');
+}
 let pinTree = [], pinInfo = null; // Cmd+K: sidebar pin tree and { docId, sidebar, dates } of the palette's document (api.pinState)
 let palDoc = null;           // document the Cmd+K context actions apply to (zoomed, else the one whose node is focused)
 let dropDoc = null;          // document waiting for an SVG drop ("Set icon…" overlay)
@@ -339,6 +345,7 @@ const accessById = new Map(), accessLoading = new Set();
 let visibilityPeople = new Set();
 let visibilityRoles = new Map();
 let chatRows = null, chatSeq = 0, showMcp = localStorage.getItem('mcp') === '1'; // Chats view: api.chats({ includeMcp }) rows; the MCP toggle persists
+let inboxRows = null, inboxSeq = 0; // Inbox view: api.inbox() rows (everything still in the inbox state)
 let menu = null;             // open pill menu: { id, index }
 let rootsLoaded = false, connected = false; // for the loading skeleton: shown while the view has no rows and roots/library/connection are still pending
 // font size: native page zoom (⇧⌘+ / ⇧⌘− / ⌘0), persisted. Default is one step below native.
@@ -357,8 +364,6 @@ const outline = $('outline'), filterEl = $('filter'), filterRow = $('filterRow')
 // they open, and a task row toggles, but nothing here ever takes a caret (docs/OUTLINER.md addendum 15).
 const railEl = $('rail');
 const relatedBy = new Map(); // docId -> related payload, or null while loading
-const redirected = new Set(); // meetings already forwarded to their write-up, so a manual zoom back stays put
-const isMeeting = (node) => node.kind === 'document' && node.icon === 'meeting';
 const railClosed = new Set(JSON.parse(localStorage.getItem('railClosed') || '[]'));
 const CHEV = '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4.5L6 8l3.5-3.5"/></svg>';
 const allDocs = () => sections.flatMap((s) => s.nodes);
@@ -469,6 +474,8 @@ async function loadRoots() {
   if (lib) lib.nodes = libRows || []; // the Library view lists api.library(libF) rows, fetched by loadLibrary
   const ch = sections.find((s) => s.id === 'chats');
   if (ch) ch.nodes = chatRows || []; // the Chats view lists api.chats rows, fetched by loadChats
+  const ib = sections.find((s) => s.id === 'inbox');
+  if (ib) ib.nodes = inboxRows || []; // the Inbox view lists api.inbox rows, fetched by loadInbox
   for (const [id, f] of fresh) { // a created document stays where it was drafted until the roots query lists it
     const s = sections.find((x) => x.id === f.section);
     if (!s || s.nodes.some((n) => n.id === id)) fresh.delete(id);
@@ -488,9 +495,14 @@ function loadChats() {
   const seq = ++chatSeq;
   tana.chats({ includeMcp: showMcp }).then(async (rows) => { if (seq !== chatSeq) return; chatRows = rows.map(asDoc); await loadRoots(); render(); }, showError);
 }
+function loadInbox() {
+  if (!tana.inbox) return;
+  const seq = ++inboxSeq;
+  tana.inbox().then(async (rows) => { if (seq !== inboxSeq) return; inboxRows = rows.map(asDoc); await loadRoots(); render(); }, showError);
+}
 function setMcp(on) { showMcp = on; localStorage.setItem('mcp', on ? '1' : '0'); render(); loadChats(); }
 // rows a view fetches for itself: the roots query does not carry them
-function loadView(id = view) { if (id === 'members') loadMembers(); else if (id === 'library') loadLibrary(); else if (id === 'chats') loadChats(); }
+function loadView(id = view) { if (id === 'members') loadMembers(); else if (id === 'library') loadLibrary(); else if (id === 'chats') loadChats(); else if (id === 'inbox') loadInbox(); }
 function loadFilters() {
   Promise.all([tana.taskFilter && tana.taskFilter(), tana.libraryFilter && tana.libraryFilter()]).then(([t, l]) => {
     if (t) taskF = t;
@@ -620,7 +632,7 @@ function renderOutline() {
   filterRow.classList.toggle('empty', !filterEl.value);
   $('filtered').textContent = hidden ? hidden + ' items filtered out' : '';
   // Cached rows remain usable while auth and sync reconnect; reserve the skeleton for an empty outline.
-  const loading = !parent && !outline.children.length && (authChecking || !rootsLoaded || (view === 'library' && libRows === null) || (view === 'chats' && chatRows === null) || (authed && !connected));
+  const loading = !parent && !outline.children.length && (authChecking || !rootsLoaded || (view === 'library' && libRows === null) || (view === 'chats' && chatRows === null) || (view === 'inbox' && inboxRows === null) || (authed && !connected));
   $('skeleton').classList.toggle('gone', !loading);
   applySel();
   if (saved) placeCaret(saved.key, saved.offset);
@@ -731,11 +743,6 @@ function renderRail(parent) {
   if (!docId) { railEl.hidden = true; return; }
   loadRelated(docId);
   const data = relatedBy.get(docId);
-  // An event has no content of its own: its write-up is a document it owns, so zooming a meeting lands there.
-  if (data && isMeeting(parent.node) && data.summaryUri && !redirected.has(docId)) {
-    redirected.add(docId);
-    setTimeout(() => goTo(data.summaryUri), 0); // goTo fetches the write-up when it is not part of a loaded view
-  }
   const groups = data ? [['Pinned', data.pinned], ['Outcomes', data.outcomes], ['Notes', data.notes]].filter(([, rows]) => rows && rows.length) : [];
   railEl.hidden = !groups.length;
   for (const [label, rows] of groups) {
@@ -1062,6 +1069,7 @@ function zoomTo(item) {
   if (via && !docOf(item.docId)) extra.set(item.docId, top.node);
   zoom = { docId: item.docId, nodeId: item.node.kind === 'document' ? null : item.node.id, from: same ? zoom.from : undefined, via };
   render();
+  followSummary(item.docId);
 }
 function openReference(node) {
   const target = referenceTarget(node);
@@ -1088,6 +1096,13 @@ function openDoc(docId, from) {
   if (doc) recordRecent(doc);
   zoom = { docId, nodeId: null, from };
   render();
+  followSummary(docId);
+}
+// An event has no content of its own, so a meeting opens at its write-up. Every zoom passes through here, so the
+// redirect behaves the same from a list row, search, the rail, a pin, a breadcrumb or a link.
+function followSummary(docId) {
+  if (!tana.summaryUri || typeof docId !== 'string' || !docId.startsWith('tana:event:')) return;
+  tana.summaryUri(docId).then((uri) => { if (uri && zoom && zoom.docId === docId) goTo(uri); }, () => {});
 }
 async function goTo(uri) {
   if (!allDocs().some((d) => d.id === uri) && !extra.has(uri)) {
@@ -1690,6 +1705,8 @@ function paletteRows(q) {
   rows.push(...pinRows(pinTree));
   if (tana.creationOptions) rows.push({ id: 'create', group: 'Actions', icon: 'createNew', label: 'Create new…', keepOpen: true, run: openCreationPalette });
   rows.push({ id: 'sync', group: 'Actions', icon: 'sync', label: 'Sync', run: () => run(() => tana.refresh()) });
+  // today's node: a document titled with the date, pinned to today; created and pinned when it does not exist yet
+  if (tana.todayNode) rows.push({ id: 'today', group: 'Actions', icon: 'pinDate', label: 'Show today node', run: () => run(async () => goTo(await tana.todayNode())) });
   const dark = typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark';
   rows.push({ id: 'theme', group: 'Actions', icon: 'darkLight', label: 'Toggle ' + (dark ? 'light' : 'dark') + ' mode', run: () => setTheme(dark ? 'light' : 'dark') });
   if (tana.systemTheme) rows.push({ id: 'systemTheme', group: 'Actions', icon: 'darkLight', label: 'Toggle system dark/light mode', hint: themePref === 'system' ? 'Following macOS' : '', run: () => followSystem(themePref !== 'system') });
