@@ -15,7 +15,7 @@ docs/PLATFORM-PROTOCOL.md for the wire protocol.
 
 Modules: transport.js (auth headers, one retry after a 401), graph.js (GraphService in protobuf-JSON form),
 sync.js (ServerSync stream, watchdog, backoff, per-document bootstrap/live/resync, batching), document.js (LoroDoc wrapper),
-node.js (data-map accessors and content rendering).
+node.js (data-map accessors and content rendering), content.js (outline read/edit ops over the ProseMirror content per docs/OUTLINER.md; require('./sdk/content') directly).
 
 Notes
 - peerId: derivePeerId(userExternalId) gives a fresh nonce per process; pass storageId (persisted UUID) for a non-ephemeral peer, omit it for ephemeral.
@@ -23,4 +23,3 @@ Notes
 - subscribe() before connect() waits until the stream is up. Documents are re-bootstrapped after every reconnect; the same Document object is kept.
 - listNodes only returns totalCount when the request uses mode LIST_NODES_MODE_WITH_COUNT.
 - Offline self-check: node scripts/sdk-check.js (uses scripts/fixtures/task-snapshot.b64).
-

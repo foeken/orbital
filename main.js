@@ -3,7 +3,8 @@ const path = require('node:path');
 const db = require('./db');
 const { createTanaSession, peerIdentity } = require('./tana-session');
 const { createTanaClient } = require('./sdk');
-const { readNode, setTitle, setState, contentText } = require('./sdk/node');
+const { readNode, setTitle, setState } = require('./sdk/node');
+const content = require('./sdk/content');
 
 const OPEN_TASKS_QUERY = (userUri) => ({
   nodeTypes: ['text'], assignedTo: [userUri], stateTypes: ['open'], limit: 500,
@@ -45,9 +46,9 @@ async function refresh() {
   setStatus({ syncing: true, error: null });
   try {
     const { nodes } = await client.graph.listNodes(OPEN_TASKS_QUERY(me.userUri));
-    const rows = nodes.map((n) => ({ id: n.id, title: n.title || '', done: 0, space: null, updatedAt: n.updateTime || now() }));
+    const rows = nodes.map((n) => ({ id: n.id, title: n.title || '', done: 0, updatedAt: n.updateTime || now() }));
     db.replaceFromTana(rows);
-    send('tasks:changed');
+    send('outline:changed', null);
     const ids = new Set(rows.map((r) => r.id));
     for (const id of ids) if (!subscribed.has(id)) subscribe(id);
     for (const id of subscribed) if (!ids.has(id)) { subscribed.delete(id); client.sync.unsubscribe(id).catch(() => {}); }
@@ -69,14 +70,13 @@ function scheduleRefresh(ms) {
 
 function onChange(docId) {
   try {
-    const doc = client.sync.getDocument(docId);
-    const row = doc && db.get(docId);
+    send('outline:changed', docId);
+    const doc = client.sync.getDocument(docId), row = doc && db.get(docId);
     if (!row) return;
-    const n = readNode(doc);
-    const next = { title: n.title ?? row.title, done: n.stateType === 'closed' ? 1 : 0, content: row.content == null ? null : contentText(doc) };
-    if (next.title === row.title && next.done === row.done && next.content === row.content) return;
-    db.upsert({ ...row, ...next, updatedAt: now() });
-    send('tasks:changed');
+    const n = readNode(doc), done = n.stateType === 'closed' ? 1 : 0, title = n.title ?? row.title;
+    if (title === row.title && done === row.done) return;
+    db.upsert({ ...row, title, done, updatedAt: now() });
+    send('outline:changed', null); // a root's title/state changed too
   } catch (e) {
     setStatus({ error: errText(e) });
   }
@@ -91,9 +91,10 @@ async function document(id) {
 
 function createWindow() {
   win = new BrowserWindow({
-    width: 900, height: 700, titleBarStyle: 'hiddenInset',
+    width: 900, height: 700, title: 'Tana', titleBarStyle: 'hiddenInset',
     webPreferences: { preload: path.join(__dirname, 'preload.js') },
   });
+  win.on('page-title-updated', (e) => e.preventDefault());
   win.loadFile(path.join(__dirname, 'index.html'));
 }
 
@@ -106,31 +107,30 @@ function createMenu() {
   ]));
 }
 
-ipcMain.handle('tasks:list', () => db.list());
-ipcMain.handle('tasks:update', async (_e, id, patch) => {
-  const row = db.get(id);
-  if (!row) throw new Error('no task ' + id);
+// Run fn on the subscribed Document; the ops transact synchronously, so the result is in Loro (and sent) on resolve.
+async function op(id, fn) {
   try {
-    const doc = await document(id);
-    if (patch.title != null && patch.title !== row.title) setTitle(doc, patch.title);
-    if (patch.done != null && (patch.done ? 1 : 0) !== row.done) {
-      setState(doc, patch.done ? 'closed' : 'open', me.userUri);
-      scheduleRefresh(2000); // a closed task drops off the open list
-    }
+    return fn(await document(id));
   } catch (e) {
     setStatus({ error: errText(e) });
     throw e;
   }
-  return db.upsert({ ...row, ...patch, updatedAt: now() });
-});
-ipcMain.handle('tasks:content', async (_e, id) => {
-  const row = db.get(id);
-  if (row && row.content != null) return row.content;
-  const content = contentText(await document(id));
-  db.setContent(id, content);
-  send('tasks:changed');
-  return content;
-});
+}
+
+ipcMain.handle('outline:roots', () => db.list().map((r) => ({ id: r.id, text: r.title, kind: 'document', done: r.done, hasChildren: true })));
+ipcMain.handle('outline:children', (_e, id) => op(id, content.readOutline));
+ipcMain.handle('doc:setTitle', (_e, id, title) => op(id, (doc) => { setTitle(doc, title); }));
+ipcMain.handle('doc:setDone', (_e, id, done) => op(id, (doc) => {
+  setState(doc, done ? 'closed' : 'open', me.userUri);
+  scheduleRefresh(2000); // a closed task drops off the open list
+}));
+ipcMain.handle('block:setText', (_e, id, nodeId, text) => op(id, (doc) => { content.setText(doc, nodeId, text); }));
+ipcMain.handle('block:insertAfter', (_e, id, nodeId, text) => op(id, (doc) => content.insertAfter(doc, nodeId, text)));
+ipcMain.handle('block:insertChild', (_e, id, nodeId, text) => op(id, (doc) => content.insertChild(doc, nodeId, text)));
+ipcMain.handle('block:remove', (_e, id, nodeId) => op(id, (doc) => { content.remove(doc, nodeId); }));
+ipcMain.handle('block:indent', (_e, id, nodeId) => op(id, (doc) => { content.indent(doc, nodeId); }));
+ipcMain.handle('block:outdent', (_e, id, nodeId) => op(id, (doc) => { content.outdent(doc, nodeId); }));
+ipcMain.handle('sync:refresh', () => refresh());
 ipcMain.handle('sync:status', () => status);
 ipcMain.handle('sync:login', async () => {
   try {

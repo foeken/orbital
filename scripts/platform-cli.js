@@ -4,7 +4,7 @@
 const { app } = require('electron');
 const path = require('node:path');
 const { createTanaSession, peerIdentity } = require('../tana-session');
-let createTanaClient, readNode, setTitle, contentText; // loaded lazily: login/whoami work without the SDK
+let createTanaClient, readNode, setTitle, contentText, readOutline; // loaded lazily: login/whoami work without the SDK
 
 // Share the cookie partition and peer.json with the real app.
 app.setPath('userData', path.join(app.getPath('appData'), 'tana-tasks'));
@@ -20,6 +20,7 @@ let session, client;
 async function connect() {
   ({ createTanaClient } = require('../sdk'));
   ({ readNode, setTitle, contentText } = require('../sdk/node'));
+  ({ readOutline } = require('../sdk/content'));
   const me = await session.info();
   const peer = peerIdentity({ file: path.join(app.getPath('userData'), 'peer.json'), userExternalId: me.userExternalId });
   client = createTanaClient({ getAccessToken: (o) => session.getAccessToken(o), orgId: me.orgId, ...peer, logger: console });
@@ -53,6 +54,19 @@ const commands = {
     const doc = await client.sync.subscribe(positional[0]);
     out({ ...readNode(doc), content: contentText(doc) });
   },
+  async outline() {
+    if (!positional[0]) throw new Error('usage: outline <id>');
+    await connect();
+    await client.sync.connect();
+    const doc = await client.sync.subscribe(positional[0]);
+    out(readNode(doc).title + '  [' + doc.id + ']');
+    const tree = (nodes, depth) => nodes.forEach((n) => {
+      const pad = '  '.repeat(depth);
+      out(pad + '• ' + (n.heading ? '#'.repeat(n.heading) + ' ' : '') + n.text.replace(/\n/g, '\n' + pad + '  ') + '  [' + n.id + ']');
+      tree(n.children || [], depth + 1);
+    });
+    tree(readOutline(doc), 1);
+  },
   async watch() {
     if (!positional.length) throw new Error('usage: watch <id...>');
     await connect();
@@ -77,7 +91,7 @@ const commands = {
 };
 
 app.whenReady().then(async () => {
-  if (!commands[cmd]) { console.error('usage: platform-cli login | whoami | list [--state open] | get <id> | watch <id...> | set-title <id> <title>'); app.exit(2); return; }
+  if (!commands[cmd]) { console.error('usage: platform-cli login | whoami | list [--state open] | get <id> | outline <id> | watch <id...> | set-title <id> <title>'); app.exit(2); return; }
   session = createTanaSession();
   let code = 0;
   try { await commands[cmd](); } catch (e) { console.error(e && e.stack || e); code = 1; }

@@ -7,6 +7,7 @@ const { create, toBinary, fromBinary, toJson, fromJson } = require('@bufbuild/pr
 const { createRouterTransport, ConnectError, Code } = require('@connectrpc/connect');
 const { message, SyncService } = require('../sdk/proto/descriptors');
 const { createTransport, GraphClient, SyncConnection, Document, derivePeerId, readNode, setTitle, setState, contentText } = require('../sdk');
+const outline = require('../sdk/content');
 
 const ORG = 'org_01KS7RQSWW68H489ZZZ1NNC40T', DOC = 'tana:text:01m23c1z45gceayt2zjk09k63c', ME = 'tana:user-profile:01m0f1aqd8p23qhwntbewmpfz2';
 const snapshot = Buffer.from(fs.readFileSync(require('node:path').join(__dirname, 'fixtures', 'task-snapshot.b64'), 'utf8').trim(), 'base64');
@@ -97,6 +98,76 @@ async function main() {
   assert.equal(new Document(DOC).loro.oplogVersion().length(), 0, 'fresh doc = cold start');
   assert.notEqual(before.compare(doc.loro.oplogVersion()), 0);
   console.log('ok  readNode/setTitle/setState/contentText');
+
+  // 3b. Outline ops on the content tree (docs/OUTLINER.md): every op is checked on readOutline, on the raw Loro
+  // structure, and by replaying its local-update into a second Document.
+  const c1 = new Document(DOC, { peerId: '11' }), c2 = new Document(DOC, { peerId: '12' });
+  c1.applyRemote([snapshot]); c2.applyRemote([snapshot]);
+  c1.on('local-update', (u) => c2.applyRemote([u]));
+  const raw = () => c1.content.toJSON().children;
+  const flat = (ns) => ns.map((n) => n.text.split('\n')[0].slice(0, 12) + (n.children.length ? '(' + flat(n.children) + ')' : '')).join(',');
+  const wellFormed = (blocks) => { // listItem starts with a paragraph, lists only hold non-empty listItems, ids are 8 lowercase alphanumerics
+    for (const b of blocks) {
+      if (typeof b === 'string' || b.nodeName === 'mention') continue;
+      assert.match(b.attributes.blockId, /^[a-z0-9]{8}$/, 'blockId on ' + b.nodeName);
+      if (['bulletList', 'orderedList'].includes(b.nodeName)) { assert.ok(b.children.length, 'empty list'); assert.ok(b.children.every((i) => i.nodeName === 'listItem')); }
+      if (b.nodeName === 'listItem') assert.equal(b.children[0] && b.children[0].nodeName, 'paragraph', 'listItem must start with a paragraph');
+      wellFormed(b.children || []);
+    }
+  };
+  const step = (fn) => { const r = fn(); wellFormed(raw()); assert.deepEqual(outline.readOutline(c2), outline.readOutline(c1), 'second document converges'); return r; };
+  const o0 = outline.readOutline(c1);
+  assert.equal(o0.length, 3);
+  assert.deepEqual(o0.map((n) => [n.id, n.kind, n.heading, n.hasChildren]), [['6s8vb70s', 'block', undefined, false], ['dv8c4sp7', 'block', 2, false], ['r4hz3a0b', 'block', undefined, false]]);
+  assert.equal(o0[1].text, 'Research context — 10 September 2026');
+  assert.match(o0[2].text, /^The personal note-taking compliance task names Nina Boerman/, 'mention rendered as its label');
+  step(() => outline.setText(c1, '6s8vb70s', 'Hello'));
+  assert.equal(outline.readOutline(c1)[0].text, 'Hello');
+  assert.deepEqual(raw()[0].children, ['Hello'], 'single text run');
+  step(() => outline.setText(c1, '6s8vb70s', ''));
+  assert.deepEqual(raw()[0].children, [], 'empty paragraph has no runs');
+  step(() => outline.setText(c1, '6s8vb70s', 'Hello'));
+  assert.throws(() => outline.setText(c1, 'nope0000', 'x'));
+  const end = step(() => outline.insertAfter(c1, null, 'End'));
+  const second = step(() => outline.insertAfter(c1, '6s8vb70s', 'Second'));
+  assert.match(end + second, /^[a-z0-9]{16}$/);
+  assert.equal(flat(outline.readOutline(c1)), 'Hello,Second,Research con,The personal,End');
+  const child = step(() => outline.insertChild(c1, '6s8vb70s', 'Child'));
+  assert.equal(flat(outline.readOutline(c1)), 'Hello(Child),Second,Research con,The personal,End');
+  assert.equal(raw()[0].nodeName, 'bulletList');
+  assert.deepEqual(raw()[0].children[0].children.map((b) => b.nodeName), ['paragraph', 'bulletList'], 'paragraph wrapped into listItem with a nested list');
+  assert.equal(raw()[0].children[0].children[0].attributes.blockId, '6s8vb70s', 'node id survives wrapping');
+  assert.equal(outline.insertChild(c1, 'dv8c4sp7', 'x'), null, 'headings cannot own children');
+  step(() => outline.indent(c1, second));
+  assert.equal(flat(outline.readOutline(c1)), 'Hello(Child,Second),Research con,The personal,End');
+  assert.equal(raw()[0].children.length, 1, 'one listItem in the top list');
+  step(() => outline.outdent(c1, second));
+  assert.equal(flat(outline.readOutline(c1)), 'Hello(Child),Second,Research con,The personal,End');
+  assert.equal(raw()[0].children.length, 2, 'outdented node is a sibling listItem');
+  step(() => outline.indent(c1, '6s8vb70s')); // first node: no previous sibling
+  step(() => outline.outdent(c1, 'r4hz3a0b')); // top level: no-op
+  step(() => outline.indent(c1, 'r4hz3a0b')); // previous sibling is a heading: no-op
+  assert.equal(flat(outline.readOutline(c1)), 'Hello(Child),Second,Research con,The personal,End');
+  const grand = step(() => outline.insertChild(c1, child, 'Grand'));
+  step(() => outline.indent(c1, end)); // becomes last child of the mention paragraph (wrapped)
+  assert.equal(flat(outline.readOutline(c1)), 'Hello(Child(Grand)),Second,Research con,The personal(End)');
+  assert.equal(raw()[2].children[0].children[0].children[1].nodeName, 'mention', 'mention kept through wrapping');
+  const end2 = step(() => outline.insertAfter(c1, end, 'End2'));
+  step(() => outline.outdent(c1, grand));
+  assert.equal(flat(outline.readOutline(c1)), 'Hello(Child,Grand),Second,Research con,The personal(End,End2)');
+  step(() => outline.remove(c1, grand));
+  step(() => outline.remove(c1, end));
+  step(() => outline.remove(c1, end2));
+  assert.equal(flat(outline.readOutline(c1)), 'Hello(Child),Second,Research con,The personal');
+  assert.equal(raw()[2].nodeName, 'bulletList');
+  assert.equal(raw()[2].children[0].children.length, 1, 'emptied nested list removed from the listItem');
+  step(() => outline.remove(c1, child));
+  step(() => outline.remove(c1, second));
+  step(() => outline.remove(c1, '6s8vb70s'));
+  assert.equal(raw()[0].nodeName, 'heading', 'emptied top-level list removed');
+  assert.equal(flat(outline.readOutline(c1)), 'Research con,The personal');
+  assert.deepEqual(c2.content.toJSON(), c1.content.toJSON(), 'raw structure converges');
+  console.log('ok  outline read/setText/insertAfter/insertChild/indent/outdent/remove');
 
   // 4. Transport: headers and the 401 -> refresh -> retry-once rule, with a fake fetch
   const calls = [];

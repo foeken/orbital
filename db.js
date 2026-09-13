@@ -5,9 +5,8 @@ let db;
 function open(path) {
   db = new DatabaseSync(path);
   db.exec(`CREATE TABLE IF NOT EXISTS tasks (
-    id TEXT PRIMARY KEY, title TEXT NOT NULL, done INTEGER NOT NULL DEFAULT 0,
-    space TEXT, content TEXT, updatedAt TEXT NOT NULL)`);
-  try { db.exec('ALTER TABLE tasks DROP COLUMN dirty'); } catch { /* already gone */ }
+    id TEXT PRIMARY KEY, title TEXT NOT NULL, done INTEGER NOT NULL DEFAULT 0, updatedAt TEXT NOT NULL)`);
+  for (const col of ['dirty', 'space', 'content']) { try { db.exec('ALTER TABLE tasks DROP COLUMN ' + col); } catch { /* already gone */ } }
 }
 
 function list() {
@@ -18,16 +17,11 @@ function get(id) {
   return db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
 }
 
-function setContent(id, content) {
-  db.prepare('UPDATE tasks SET content = ? WHERE id = ?').run(content, id);
-}
-
-const UPSERT = `INSERT INTO tasks (id, title, done, space, content, updatedAt) VALUES (?, ?, ?, ?, ?, ?)
-  ON CONFLICT(id) DO UPDATE SET title = excluded.title, done = excluded.done, space = excluded.space,
-    content = COALESCE(excluded.content, content), updatedAt = excluded.updatedAt`;
+const UPSERT = `INSERT INTO tasks (id, title, done, updatedAt) VALUES (?, ?, ?, ?)
+  ON CONFLICT(id) DO UPDATE SET title = excluded.title, done = excluded.done, updatedAt = excluded.updatedAt`;
 
 function upsert(r) {
-  db.prepare(UPSERT).run(r.id, r.title, r.done ? 1 : 0, r.space ?? null, r.content ?? null, r.updatedAt ?? new Date().toISOString());
+  db.prepare(UPSERT).run(r.id, r.title, r.done ? 1 : 0, r.updatedAt ?? new Date().toISOString());
   return get(r.id);
 }
 
@@ -44,4 +38,4 @@ function replaceFromTana(rows) {
   }
 }
 
-module.exports = { open, list, get, setContent, upsert, replaceFromTana };
+module.exports = { open, list, get, upsert, replaceFromTana };
