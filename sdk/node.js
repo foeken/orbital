@@ -1,7 +1,37 @@
 'use strict';
 // Generic accessors for the common 'data' map and the ProseMirror-style 'content' map (protocol doc §3).
+const { randomBytes } = require('node:crypto');
+const { LoroMap, LoroList } = require('loro-crdt');
 
 const STATE_TYPES = ['proposed', 'open', 'closed', 'not_now'];
+const B32 = '0123456789abcdefghjkmnpqrstvwxyz'; // Crockford base32, lowercase as in Tana ids
+
+// 26-char ULID: 48-bit ms timestamp + 80 random bits.
+function ulid(now = Date.now()) {
+  let s = '', t = now;
+  for (let i = 0; i < 10; i++) { s = B32[t % 32] + s; t = Math.floor(t / 32); }
+  for (const b of randomBytes(16)) s += B32[b % 32];
+  return s;
+}
+
+// The data map of a new plain document as the web client creates it (see scripts/fixtures/task-snapshot.b64,
+// minus the task fields) plus an empty content skeleton. Run inside Document.transact.
+function initDocument(loro, title, byUri) {
+  const data = loro.getMap('data');
+  data.set('type', 'text');
+  data.set('title', title);
+  data.set('createdAt', Date.now());
+  data.set('restricted', true);
+  const p = data.setContainer('participants', new LoroMap()).setContainer(byUri, new LoroMap());
+  p.set('type', 'user');
+  p.set('role', 'admin');
+  data.setContainer('attributes', new LoroMap());
+  data.setContainer('sharedPinDates', new LoroList());
+  const c = loro.getMap('content');
+  c.set('nodeName', 'doc');
+  c.setContainer('attributes', new LoroMap());
+  c.setContainer('children', new LoroList());
+}
 
 function readNode(document) {
   return Object.assign({ id: document.id }, document.data.toJSON());
@@ -45,4 +75,4 @@ function render(node) {
   return kids.map(render).join(block ? '\n' : '');
 }
 
-module.exports = { readNode, setTitle, setState, contentText, STATE_TYPES };
+module.exports = { readNode, setTitle, setState, contentText, ulid, initDocument, STATE_TYPES };

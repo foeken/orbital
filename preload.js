@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('api', {
   roots: () => ipcRenderer.invoke('outline:roots'),
   children: (docId) => ipcRenderer.invoke('outline:children', docId),
   node: (docId) => ipcRenderer.invoke('doc:info', docId),
+  createDocument: (title) => ipcRenderer.invoke('doc:create', title),
   search: (query) => ipcRenderer.invoke('search', query),
   setTitle: (docId, title) => ipcRenderer.invoke('doc:setTitle', docId, title),
   setDone: (docId, done) => ipcRenderer.invoke('doc:setDone', docId, done),

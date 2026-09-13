@@ -9,7 +9,7 @@ const { execFileSync } = require('node:child_process');
 const SYMBOL = fs.readFileSync(path.join(__dirname, '..', 'build', 'tana-symbol.svg'), 'utf8');
 const html = '<!doctype html><html><body style="margin:0;background:transparent">'
   + '<div style="position:absolute;left:100px;top:100px;width:824px;height:824px;border-radius:186px;background:#000;display:flex;align-items:center;justify-content:center">'
-  + '<div style="width:340px;height:425px">' + SYMBOL.replace('<svg ', '<svg style="width:100%;height:100%" ') + '</div></div></body></html>';
+  + '<div style="width:340px;height:425px;margin-top:44px">' + SYMBOL.replace('<svg ', '<svg style="width:100%;height:100%" ') + '</div></div></body></html>';
 
 app.dock && app.dock.hide();
 app.whenReady().then(async () => {

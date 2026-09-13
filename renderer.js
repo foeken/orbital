@@ -23,11 +23,18 @@ function mockApi() {
   const docs = titles.map((text, i) => ({ id: 'mockdoc' + i, text, kind: 'document', done: 0, hasChildren: true, icon: 'task', tags: [task] }));
   docs[2].tags = [task, { label: 'project', color: 'grey' }];
   docs.push({ id: 'mockdoc' + titles.length, text: 'Foundry programme', kind: 'document', hasChildren: true, tags: [{ label: 'project', color: 'grey' }] }); // typed, not a task: plain bullet
-  const meetings = [['NLT', 'Mon 9:00–9:30'], ['Heads of Technology', 'Tue 13:00–14:00'], ['Offsite', 'Thu, all day']]
-    .map(([text, meta], i) => ({ id: 'mockmeeting' + i, text, meta, kind: 'document', hasChildren: true, icon: 'meeting', tags: [meeting] }));
+  // meetings over the past and next 7 days (day offset from today, start hour or null = all day); roots meta = weekday + time, search meta = weekday + day of month + time
+  const dateMeta = {};
+  const meetings = [['Last week retro', -6, 10], ['Board prep', -2, 14], ['NLT', 0, 9], ['Heads of Technology', 0, 13], ['1-1 with Lex', 1, 11], ['Offsite', 3, null]].map(([text, off, h], i) => {
+    const d = new Date(); d.setDate(d.getDate() + off);
+    const time = h == null ? ', all day' : ' ' + h + ':00–' + (h + 1) + ':00';
+    dateMeta['mockmeeting' + i] = WD[d.getDay()] + ' ' + d.getDate() + time;
+    return { id: 'mockmeeting' + i, text, meta: WD[d.getDay()] + time, kind: 'document', hasChildren: true, icon: 'meeting', tags: [meeting] };
+  });
   const sections = [{ id: 'tasks', title: 'Tasks', icon: 'task', nodes: docs }, { id: 'meetings', title: 'Meetings', icon: 'meeting', nodes: meetings }];
   const all = [...docs, ...meetings];
   const people = { 'tana:user-profile:lex': 'Lex van Velsen' }; // referenced document that is not in roots
+  const created = {};   // documents made with createDocument (plain, in no section)
   const content = Object.fromEntries(all.map((d, i) => [d.id, [
     block('Context', [], 2),
     block('First point about task ' + i, [block('Detail A'), block('Detail B', [block('Deeper detail')])]),
@@ -53,10 +60,22 @@ function mockApi() {
     node: async (docId) => {
       const d = all.find((x) => x.id === docId);
       if (d) return info(d);
+      if (created[docId]) return created[docId];
       if (people[docId]) return { id: docId, title: people[docId], kind: 'document', tags: [] };
       throw new Error('unknown document ' + docId);
     },
-    search: async (q) => { await new Promise((r) => setTimeout(r, 30)); return all.filter((d) => d.text.toLowerCase().includes(q.toLowerCase())).slice(0, 20).map(info); },
+    // "#task", "#meeting", "#<type>" tokens filter; the rest is a substring query; events get date-style meta
+    search: async (q) => {
+      await new Promise((r) => setTimeout(r, 30));
+      const tokens = (q.match(/#\S+/g) || []).map((t) => t.slice(1).toLowerCase()), text = q.replace(/#\S+/g, '').trim().toLowerCase();
+      const hit = (d, t) => (t === 'task' ? d.icon === 'task' : t === 'meeting' ? d.icon === 'meeting' : (d.tags || []).some((x) => x.label.toLowerCase() === t));
+      return all.filter((d) => d.text.toLowerCase().includes(text) && tokens.every((t) => hit(d, t))).slice(0, 20).map((d) => ({ ...info(d), meta: dateMeta[d.id] || d.meta }));
+    },
+    createDocument: async (title) => {
+      const n = { id: 'mocknew' + (++seq), title, kind: 'document', hasChildren: true, tags: [] };
+      created[n.id] = n; content[n.id] = [];
+      return n;
+    },
     setTitle: async (docId, title) => mut(docId, () => { all.find((d) => d.id === docId).text = title; emit(docId); }),
     setDone: async (docId, done) => mut(docId, () => { all.find((d) => d.id === docId).done = done ? 1 : 0; emit(docId); }),
     setText: async (docId, id, text) => mut(docId, () => { const n = locate(content[docId], id).node; n.text = plainOf(text); n.segments = segsOf(text); emit(docId); }),
@@ -91,6 +110,7 @@ function mockApi() {
 }
 
 // ---- segments: [{ text } | { mention: { label, uri } }] <-> plain text <-> DOM ----
+const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 // accepts segments, a plain string, or a Node
 const segsOf = (v) => (Array.isArray(v) ? v : typeof v === 'string' ? (v ? [{ text: v }] : []) : v.segments || (v.text ? [{ text: v.text }] : []));
 const plainOf = (v) => segsOf(v).map((s) => ('text' in s ? s.text : s.mention.label)).join('');
@@ -142,6 +162,9 @@ const items = new Map();     // key -> { key, node, docId, parent }, rebuilt on 
 const pending = new Map();   // key -> { item, segs, timer } debounced edits
 let filterShown = false;
 let queue = Promise.resolve();
+let scrolledView = null;     // view already scrolled to today's first meeting when it opened
+let linkCtx = null;          // @ linking in progress: { item, segs, start, end, text }
+const hotkeys = JSON.parse(localStorage.getItem('hotkeys') || '{}'); // palette row id -> combo ("⇧⌘M")
 
 const $ = (id) => document.getElementById(id);
 const outline = $('outline'), filterEl = $('filter'), filterRow = $('filterRow');
@@ -159,8 +182,27 @@ const texts = () => [...outline.querySelectorAll('.text')];
 const keyOfEl = (el) => el.closest('.node').dataset.key;
 const textEl = (key) => outline.querySelector('.node[data-key="' + CSS.escape(key) + '"] > .line .text');
 const ICONS = window.ICONS || {}; // icons.js: Tana line icon set (Nucleo export), greyscale via currentColor
-const iconSvg = (icon) => ICONS[icon === 'meeting' ? 'calendar' : 'task'] || '';
+const iconSvg = (icon) => ICONS[icon === 'meeting' ? 'calendar' : icon] || '';
 const isTask = (node) => node.kind === 'document' && node.icon === 'task';
+// recently viewed documents (localStorage "recent"), most recent first, max 20
+const recent = () => { try { return JSON.parse(localStorage.getItem('recent')) || []; } catch { return []; } };
+function recordRecent(n) {
+  const entry = { id: n.id, title: n.text ?? n.title ?? '', icon: n.icon, tags: n.tags, meta: n.meta };
+  localStorage.setItem('recent', JSON.stringify([entry, ...recent().filter((r) => r.id !== n.id)].slice(0, 20)));
+}
+// index of the first meeting dated today or later. The list is oldest first over [today-7, today+7) and the meta
+// only carries a weekday ("Mon 9:00–9:30"), so walk the weekday sequence from the window start (same weekday as today).
+// ponytail: a gap of 7+ days without meetings under-counts a week; then nothing is marked and the view stays at the top
+function todayIndex(nodes) {
+  let d = 0, prev = new Date().getDay();
+  for (let i = 0; i < nodes.length; i++) {
+    const wd = WD.indexOf((nodes[i].meta || '').slice(0, 3));
+    if (wd < 0) continue;
+    d += (wd - prev + 7) % 7; prev = wd;
+    if (d >= 7) return i;
+  }
+  return -1;
+}
 
 async function loadRoots() { sections = await tana.roots(); }
 async function reload(docId) { kids.set(docId, await tana.children(docId)); }
@@ -198,6 +240,17 @@ function focused() {
   const el = document.activeElement;
   return el && el.classList.contains('text') && outline.contains(el) ? { key: keyOfEl(el), offset: caretOffset(el) } : null;
 }
+// [start, end] plain-text offsets of a non-empty selection inside el, else null
+function selectionOffsets(el) {
+  const sel = getSelection();
+  if (!sel.rangeCount || sel.isCollapsed) return null;
+  const r = sel.getRangeAt(0);
+  if (!el.contains(r.startContainer) || !el.contains(r.endContainer)) return null;
+  const pre = document.createRange(); pre.selectNodeContents(el);
+  pre.setEnd(r.startContainer, r.startOffset); const start = pre.toString().length;
+  pre.setEnd(r.endContainer, r.endOffset); const end = pre.toString().length;
+  return end > start ? [start, end] : null;
+}
 function placeCaret(key, offset) {
   const el = textEl(key);
   if (el) setCaret(el, offset == null ? el.textContent.length : offset);
@@ -234,6 +287,12 @@ function render() {
     list = q ? docs.filter((n) => n.text.toLowerCase().includes(q)) : docs;
     hidden = docs.length - list.length;
     outline.replaceChildren(...list.map((n) => nodeEl(n, n.id, null)));
+    const today = outline.children[todayIndex(list)];
+    if (today) today.dataset.today = '';
+    if (list.length && !outline.hidden && scrolledView !== view) { // a view opens scrolled to today's first meeting (else the top)
+      scrolledView = view;
+      if (today) today.scrollIntoView({ block: 'start' }); else outline.parentElement.scrollTop = 0;
+    }
   }
   if (parent && !list.length) {
     const note = document.createElement('div');
@@ -268,13 +327,11 @@ function renderCrumbs(trail) {
   if (!trail) return;
   const home = document.createElement('a'); home.textContent = zoom.from || (viewOf() ? viewOf().title : 'Tana'); home.onclick = () => { zoom = null; render(); };
   nav.replaceChildren(home);
-  trail.forEach((item, i) => {
+  for (const item of trail.slice(0, -1)) { // ancestors only: the page title already shows the current node
     const sep = document.createElement('span'); sep.className = 'sep'; sep.textContent = '›';
-    const a = document.createElement(i === trail.length - 1 ? 'span' : 'a');
-    a.className = i === trail.length - 1 ? 'current' : ''; a.textContent = item.node.text || 'Untitled';
-    if (i < trail.length - 1) a.onclick = () => zoomTo(item);
+    const a = document.createElement('a'); a.textContent = item.node.text || 'Untitled'; a.onclick = () => zoomTo(item);
     nav.append(sep, a);
-  });
+  }
 }
 
 function nodeEl(node, docId, parent) {
@@ -407,6 +464,7 @@ function toggleDone(item) {
 }
 function zoomTo(item) {
   flushAll();
+  if (item.node.kind === 'document') recordRecent(item.node);
   zoom = { docId: item.docId, nodeId: item.node.kind === 'document' ? null : item.node.id, from: zoom && zoom.docId === item.docId ? zoom.from : undefined };
   render();
 }
@@ -416,6 +474,8 @@ function openDoc(docId, from) {
   flushAll();
   const s = from ? null : sectionOf(docId);
   if (s && s.id !== view) { view = s.id; localStorage.setItem('view', view); }
+  const doc = allDocs().find((d) => d.id === docId) || extra.get(docId);
+  if (doc) recordRecent(doc);
   zoom = { docId, nodeId: null, from };
   render();
 }
@@ -427,6 +487,25 @@ async function goTo(uri) {
   openDoc(uri);
 }
 function flushAll() { for (const key of [...pending.keys()]) flush(key); }
+
+// ---- @ linking: replace the selection with a mention chosen (or created) in the search palette ----
+function startLink(item, el, [start, end]) {
+  flush(item.key);
+  const segs = readSegs(el);
+  togglePalette('search', { item, segs, start, end, text: plainOf(segs).slice(start, end) });
+}
+async function linkTo(ctx, mention) {
+  const { item, segs, start, end } = ctx;
+  const next = [...splitSegs(segs, start)[0], { mention }, ...splitSegs(segs, end)[1]];
+  item.node.text = plainOf(next); item.node.segments = next;
+  await run(async () => { await tana.setText(item.docId, item.node.id, next); await reload(item.docId); });
+  render();
+  placeCaret(item.key, start + mention.label.length);
+}
+function createAndLink(ctx) {
+  tana.createDocument(ctx.text).then((n) => { extra.set(n.id, { ...n, text: n.title || '', hasChildren: true }); return linkTo(ctx, { label: n.title, uri: n.id }); }, showError);
+}
+function cancelLink() { const c = linkCtx; linkCtx = null; if (c) placeCaret(c.item.key, c.end); }
 
 // ---- navigation ----
 function moveTo(el, dir, offset) {
@@ -444,6 +523,7 @@ outline.addEventListener('keydown', (e) => {
   const off = caretOffset(el), len = el.textContent.length, collapsed = getSelection().isCollapsed;
   const isDoc = item.node.kind === 'document';
   if (e.key === 'Escape') { e.preventDefault(); flush(item.key); el.blur(); }
+  else if (e.key === '@' && !isDoc && !collapsed) { const range = selectionOffsets(el); if (range) { e.preventDefault(); startLink(item, el, range); } } // no selection: "@" is typed
   else if (e.key === 'Enter' && mod) { e.preventDefault(); if (isDoc) toggleDone(item); }
   else if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); insertAtCaret(el, '\n'); }
   else if (e.key === 'Enter') { e.preventDefault(); splitNode(item, el, off ?? len); }
@@ -475,11 +555,15 @@ filterEl.addEventListener('keydown', (e) => {
 filterEl.addEventListener('blur', () => { if (!filterEl.value) { filterShown = false; render(); } });
 $('clear').onclick = () => { filterEl.value = ''; render(); filterEl.focus(); };
 document.addEventListener('keydown', (e) => {
-  if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); togglePalette('cmd'); }
-  else if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); togglePalette('search'); }
+  const mod = e.metaKey || e.ctrlKey, inFilter = document.activeElement === filterEl;
+  const hotkey = mod && !inFilter && Object.keys(hotkeys).find((id) => hotkeys[id] === comboOf(e));
+  if (mod && e.key === 'k') { e.preventDefault(); togglePalette('cmd'); }
+  else if (mod && e.key === 's') { e.preventDefault(); togglePalette('search'); }
+  else if (mod && e.key === 'r') { e.preventDefault(); run(() => tana.refresh()); } // Sync (no native menu item any more)
   else if (!palette.hidden) return;
-  else if ((e.metaKey || e.ctrlKey) && (e.key.toLowerCase() === 'z' || e.key.toLowerCase() === 'y') && document.activeElement !== filterEl) { e.preventDefault(); history(e.key.toLowerCase() === 'y' || e.shiftKey ? 'redo' : 'undo'); }
-  else if ((e.metaKey || e.ctrlKey) && e.key === 'f') { e.preventDefault(); if (zoom) return; filterShown = true; render(); filterEl.focus(); }
+  else if (mod && (e.key.toLowerCase() === 'z' || e.key.toLowerCase() === 'y') && !inFilter) { e.preventDefault(); history(e.key.toLowerCase() === 'y' || e.shiftKey ? 'redo' : 'undo'); }
+  else if (mod && e.key === 'f') { e.preventDefault(); if (zoom) return; filterShown = true; render(); filterEl.focus(); }
+  else if (hotkey) { e.preventDefault(); runAction(hotkey); }
   else if (e.key === 'Escape' && document.activeElement === document.body && filterEl.value) { filterEl.value = ''; filterShown = false; render(); }
 });
 
@@ -488,25 +572,36 @@ const palette = $('palette'), palInput = $('paletteInput'), palList = $('palette
 let palMode = 'cmd', palRows = [], palIndex = 0, palBusy = false, palSeq = 0, palTimer;
 const docRow = (n, hint, run) => ({ node: n, icon: n.icon, label: n.text ?? n.title, tags: n.tags, hint, run });
 function paletteRows(q) {
-  const rows = sections.map((s) => ({ group: 'Views', icon: s.icon, label: s.title, run: () => setView(s.id) }));
-  rows.push({ group: 'Actions', label: 'Sync', kbd: '⌘R', run: () => run(() => tana.refresh()) });
-  if (!authed) rows.push({ group: 'Actions', label: 'Log in to Tana', run: () => tana.login().catch(showError) });
-  if (q) for (const s of sections) for (const n of s.nodes) rows.push({ ...docRow(n, s.title, () => openDoc(n.id)), group: 'Documents' });
+  const rows = sections.map((s) => ({ id: 'view:' + s.id, group: 'Views', icon: s.icon, label: s.title, run: () => setView(s.id) }));
+  rows.push({ id: 'sync', group: 'Actions', icon: 'sync', label: 'Sync', kbd: '⌘R', run: () => run(() => tana.refresh()) });
+  if (!authed) rows.push({ id: 'login', group: 'Actions', label: 'Log in to Tana', run: () => tana.login().catch(showError) });
+  if (q) for (const s of sections) for (const n of s.nodes) rows.push({ ...docRow(n, s.title, () => openDoc(n.id)), id: 'doc:' + n.id, group: 'Documents' });
   let docsLeft = 8;
-  return rows.filter((r) => (!q || r.label.toLowerCase().includes(q)) && (r.group !== 'Documents' || docsLeft-- > 0));
+  return rows.filter((r) => (!q || r.label.toLowerCase().includes(q)) && (r.group !== 'Documents' || docsLeft-- > 0)).map((r) => (hotkeys[r.id] ? { ...r, kbd: hotkeys[r.id] } : r));
+}
+// a recorded hotkey runs its palette row's action (views/sync/login by id; documents wherever they live)
+function runAction(id) {
+  const row = paletteRows('').find((r) => r.id === id);
+  if (row) row.run(); else if (id.startsWith('doc:')) goTo(id.slice(4));
 }
 // search result: zoom into it wherever it lives (api.node shape -> extra), breadcrumb "Search › title"
 function openResult(n) {
   if (!allDocs().some((d) => d.id === n.id)) extra.set(n.id, { ...n, text: n.title || '', hasChildren: true });
   openDoc(n.id, 'Search');
 }
+// result rows pick a document: open it, or link it when the palette was opened with "@" on a selection (Create row first)
+function resultRows(nodes, group) {
+  const ctx = linkCtx;
+  const rows = nodes.map((n) => ({ ...docRow(n, n.meta, () => (ctx ? linkTo(ctx, { label: n.title ?? n.text, uri: n.id }) : openResult(n))), group }));
+  return ctx ? [{ label: 'Create “' + ctx.text + '”', hint: '⌘↩', run: () => createAndLink(ctx) }, ...rows] : rows;
+}
 function searchNow() {
   const q = palInput.value.trim(), seq = ++palSeq;
-  palTimer = null;
-  if (!q) { palRows = []; palBusy = false; return renderPalette(); }
+  palTimer = null; palBusy = !!q;
+  if (!q) { palRows = resultRows(recent(), 'RECENTLY VIEWED'); return renderPalette(); }
   tana.search(q).then((nodes) => {
     if (seq !== palSeq || palMode !== 'search') return; // stale response
-    palRows = nodes.map((n) => docRow(n, n.meta, () => openResult(n))); palIndex = 0; palBusy = false;
+    palRows = resultRows(nodes); palIndex = 0; palBusy = false;
     renderPalette();
   }, showError);
 }
@@ -528,23 +623,26 @@ function renderPalette() {
     row.onclick = () => runRow(r);
     els.push(row);
   });
-  if (!palRows.length && (palMode === 'cmd' || (q && !palBusy))) { const n = document.createElement('div'); n.className = 'group'; n.textContent = 'No results'; els.push(n); }
+  if (!palRows.some((r) => palMode === 'cmd' || r.node) && (palMode === 'cmd' || (q && !palBusy))) { const n = document.createElement('div'); n.className = 'group'; n.textContent = 'No results'; els.push(n); }
   palList.replaceChildren(...els);
   const active = palList.querySelector('.row.active');
   if (active) active.scrollIntoView({ block: 'nearest' });
 }
-// opens the palette in mode, closes it when already open in that mode; opening one mode closes the other
-function togglePalette(mode) {
-  const show = palette.hidden || palMode !== mode;
+// opens the palette in mode, closes it when already open in that mode; opening one mode closes the other.
+// link = @ linking context: search mode prefilled with the selected text
+function togglePalette(mode, link) {
+  const show = palette.hidden || palMode !== mode || !!link;
+  cancelLink();
   palette.hidden = !show;
-  if (!show) return;
+  if (!show) { clearTimeout(palTimer); palTimer = null; return; }
+  linkCtx = link || null;
   palMode = mode; palRows = []; palIndex = 0; palBusy = false; clearTimeout(palTimer); palTimer = null;
   palInput.placeholder = mode === 'search' ? 'Search Tana' : 'Search or run a command';
-  palInput.value = '';
-  renderPalette();
+  palInput.value = link ? link.text : '';
+  if (mode === 'search') searchNow(); else renderPalette();
   palInput.focus();
 }
-function closePalette() { palette.hidden = true; clearTimeout(palTimer); palTimer = null; }
+function closePalette() { palette.hidden = true; clearTimeout(palTimer); palTimer = null; cancelLink(); }
 function runRow(r) { closePalette(); r.run(); }
 palInput.addEventListener('input', () => {
   palIndex = 0;
@@ -552,18 +650,51 @@ palInput.addEventListener('input', () => {
   palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchNow, 150);
 });
 palInput.addEventListener('keydown', (e) => {
+  const mod = e.metaKey || e.ctrlKey;
   if (e.key === 'Escape') { e.preventDefault(); closePalette(); }
   else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && palRows.length) { e.preventDefault(); palIndex = (palIndex + (e.key === 'ArrowDown' ? 1 : palRows.length - 1)) % palRows.length; renderPalette(); }
-  else if (e.key === 'Enter') { e.preventDefault(); if (palRows[palIndex]) runRow(palRows[palIndex]); }
+  else if (e.key === 'Enter') { e.preventDefault(); const r = mod && linkCtx ? palRows[0] : palRows[palIndex]; if (r) runRow(r); } // ⌘↩ = Create row
+  else if (mod && e.shiftKey && e.key.toLowerCase() === 'k') { e.preventDefault(); e.stopPropagation(); const r = palRows[palIndex]; if (palMode === 'cmd' && r && r.id) openRecorder(r); }
 });
 palette.addEventListener('mousedown', (e) => { if (e.target === palette) closePalette(); });
 
+// ---- hotkeys: Cmd+Shift+K on a Cmd+K row records a combo (localStorage "hotkeys"); the outline dispatches it ----
+const KEYNAMES = { Enter: '↩', Backspace: '⌫', Tab: '⇥', ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', ' ': 'Space' };
+// "⌃⌥⇧⌘" + key ("M", "1", "↩"); modifiers alone while only they are pressed
+function comboOf(e) {
+  const mods = (e.ctrlKey ? '⌃' : '') + (e.altKey ? '⌥' : '') + (e.shiftKey ? '⇧' : '') + (e.metaKey ? '⌘' : '');
+  if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return mods;
+  return mods + (/^(Key|Digit)/.test(e.code) ? e.code.slice(-1) : KEYNAMES[e.key] || (e.key.length === 1 ? e.key.toUpperCase() : e.key));
+}
+const validCombo = (c) => /[⌘⌃]/.test(c) && c.replace(/[⌃⌥⇧⌘]/g, '') !== ''; // ⌘ or ⌃ plus a key, so typing is never hijacked
+const recorder = $('recorder');
+let rec = null; // { row, combo }
+function openRecorder(row) { rec = { row, combo: '' }; $('recTitle').textContent = row.label; recorder.hidden = false; showCombo(); }
+function showCombo() {
+  $('recKeys').replaceChildren(...(rec.combo.match(/[⌃⌥⇧⌘]|[^⌃⌥⇧⌘]+/g) || []).map((s) => { const k = document.createElement('span'); k.textContent = s; return k; }));
+  $('recSave').disabled = !validCombo(rec.combo);
+}
+function closeRecorder() { rec = null; recorder.hidden = true; renderPalette(); palInput.focus(); }
+const saveHotkeys = () => localStorage.setItem('hotkeys', JSON.stringify(hotkeys));
+$('recReset').onclick = () => { delete hotkeys[rec.row.id]; saveHotkeys(); closeRecorder(); };
+$('recCancel').onclick = closeRecorder;
+$('recSave').onclick = () => { if (validCombo(rec.combo)) { hotkeys[rec.row.id] = rec.combo; saveHotkeys(); closeRecorder(); } };
+for (const b of recorder.querySelectorAll('button')) b.onmousedown = (e) => e.preventDefault(); // keep the keyboard focus where it is
+document.addEventListener('keydown', (e) => { // capture: the recorder sees every key before the palette input does
+  if (!rec) return;
+  e.preventDefault(); e.stopPropagation();
+  if (e.key === 'Escape' && !e.metaKey && !e.ctrlKey && !e.altKey) return closeRecorder();
+  rec.combo = comboOf(e); showCombo();
+}, true);
+
 // ---- status ----
 function showStatus(s) {
+  const was = authed;
   authed = !!s.authenticated;
   $('loginBox').hidden = !!s.authenticated;
   outline.hidden = $('filtered').hidden = !s.authenticated;
   showError(s.error);
+  if (authed && !was) render(); // the outline just became visible: apply the view's opening scroll
 }
 $('login').onclick = () => tana.login().catch(showError);
 

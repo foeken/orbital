@@ -64,7 +64,9 @@ class SyncConnection extends EventEmitter {
 
   getDocument(id) { const e = this.docs.get(id); return e && e.document; }
 
-  subscribe(id) {
+  // `init(loro)` seeds a new document before bootstrap: the warm start turns MISSING into a create, the full
+  // snapshot is the catch-up (§2.1). Without it, an unknown id fails with 'document not found'.
+  subscribe(id, init) {
     let entry = this.docs.get(id);
     if (!entry) {
       const document = new Document(id, { peerId: this.peerId });
@@ -74,9 +76,15 @@ class SyncConnection extends EventEmitter {
       document.on('change', entry.onChange);
       document.on('local-update', entry.onLocal);
       this.docs.set(id, entry);
+      if (init) document.transact(init);
       if (this.connected) this._bootstrap(entry);
     }
     return entry.ready.promise;
+  }
+
+  // document_action soft_delete (§2.5); needs the stream open. The document's session, if any, is left to the server.
+  softDelete(id) {
+    return this._command({ case: 'documentAction', value: { documentId: id, action: { case: 'softDelete', value: {} } } });
   }
 
   async unsubscribe(id) {

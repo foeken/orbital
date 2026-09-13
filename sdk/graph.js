@@ -11,7 +11,8 @@ class GraphClient {
   constructor(transport) {
     this.client = createClient(GraphService, transport);
   }
-  listNodes(params) { return this._unary('listNodes', params); }
+  // protobuf JSON omits empty repeated fields: always return a nodes array
+  async listNodes(params) { const r = await this._unary('listNodes', params); r.nodes ||= []; return r; }
   listEdges(params) { return this._unary('listEdges', params); }
   getEdge(params) { return this._unary('getEdge', params); }
   getOwnerChain(nodeId) { return this._unary('getOwnerChain', { nodeId }); }

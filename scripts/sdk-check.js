@@ -6,8 +6,9 @@ const fs = require('node:fs');
 const { create, toBinary, fromBinary, toJson, fromJson } = require('@bufbuild/protobuf');
 const { createRouterTransport, ConnectError, Code } = require('@connectrpc/connect');
 const { message, SyncService } = require('../sdk/proto/descriptors');
-const { createTransport, GraphClient, SyncConnection, Document, derivePeerId, readNode, setTitle, setState, contentText } = require('../sdk');
+const { createTransport, GraphClient, SyncConnection, Document, derivePeerId, readNode, setTitle, setState, contentText, ulid, initDocument, STATE_TYPES } = require('../sdk');
 const outline = require('../sdk/content');
+const { parseQuery, searchParams, needsTypes } = require('../sdk/query');
 
 const ORG = 'org_01KS7RQSWW68H489ZZZ1NNC40T', DOC = 'tana:text:01m23c1z45gceayt2zjk09k63c', ME = 'tana:user-profile:01m0f1aqd8p23qhwntbewmpfz2';
 const snapshot = Buffer.from(fs.readFileSync(require('node:path').join(__dirname, 'fixtures', 'task-snapshot.b64'), 'utf8').trim(), 'base64');
@@ -98,6 +99,36 @@ async function main() {
   assert.equal(new Document(DOC).loro.oplogVersion().length(), 0, 'fresh doc = cold start');
   assert.notEqual(before.compare(doc.loro.oplogVersion()), 0);
   console.log('ok  readNode/setTitle/setState/contentText');
+
+  // 3a. Search query parsing (#task / #meeting / #Type) and the new-document seed
+  {
+    assert.deepEqual(parseQuery('lex #task'), { text: 'lex', tags: ['task'] });
+    assert.deepEqual(parseQuery('#Project  lex #meeting'), { text: 'lex', tags: ['Project', 'meeting'] });
+    assert.deepEqual(parseQuery('  #  '), { text: '#', tags: [] }, 'a bare # is text');
+    assert.deepEqual(parseQuery('a#b'), { text: 'a#b', tags: [] }, 'only word-initial #');
+    const types = new Map([['project', 'tana:type:p']]);
+    assert.equal(searchParams(parseQuery(''), types), null);
+    assert.deepEqual(searchParams(parseQuery('lex'), types), { nodeTypes: ['text', 'event'], textQuery: 'lex', limit: 20, sortOptions: [{ field: 'SORT_FIELD_TEXT_RANK', direction: 'SORT_DIRECTION_DESCENDING' }] });
+    const task = searchParams(parseQuery('lex #task'), types);
+    assert.deepEqual([task.nodeTypes, task.stateTypes, task.textQuery], [['text'], STATE_TYPES, 'lex']);
+    assert.deepEqual(searchParams(parseQuery('#meeting'), types).nodeTypes, ['event']);
+    assert.equal(searchParams(parseQuery('#meeting'), types).textQuery, undefined);
+    assert.deepEqual(searchParams(parseQuery('#PROJECT'), types).entityTypes, ['tana:type:p'], 'type title matched case-insensitively');
+    assert.equal(searchParams(parseQuery('x #Nope'), types), null, 'unknown type = no results');
+    assert.deepEqual([needsTypes(parseQuery('#task #meeting')), needsTypes(parseQuery('#Project'))], [false, true]);
+    const id = ulid();
+    assert.match(id, /^[0-9a-hjkmnp-tv-z]{26}$/);
+    assert.equal(ulid(0).slice(0, 10), '0000000000');
+    assert.notEqual(ulid(), id);
+    const fresh = new Document('tana:text:' + id, { peerId: '5' });
+    fresh.transact((l) => initDocument(l, 'New doc', ME));
+    const j = fresh.toJSON();
+    assert.deepEqual(Object.keys(j.data).sort(), ['attributes', 'createdAt', 'participants', 'restricted', 'sharedPinDates', 'title', 'type']);
+    assert.deepEqual(j.data.participants, { [ME]: { type: 'user', role: 'admin' } });
+    assert.deepEqual(j.content, { nodeName: 'doc', attributes: {}, children: [] });
+    assert.equal(outline.insertAfter(fresh, null, 'first').length, 8, 'content skeleton is writable');
+    console.log('ok  query parsing, ulid, initDocument');
+  }
 
   // 3b. Outline ops on the content tree (docs/OUTLINER.md): every op is checked on readOutline, on the raw Loro
   // structure, and by replaying its local-update into a second Document.
@@ -260,7 +291,7 @@ async function main() {
 
   // 5. Sync lifecycle against an in-process fake SyncService (bootstrap -> live -> updates out/in -> resync -> unsubscribe)
   const Resp2 = message('sync', 'ServerSyncResponse');
-  const server = { frames: [], wake: null, commands: [], serverDoc: new Document(DOC, { peerId: '4242' }), session: 0 };
+  const server = { frames: [], wake: null, commands: [], serverDoc: new Document(DOC, { peerId: '4242' }), session: 0, created: new Map() };
   server.serverDoc.applyRemote([snapshot]);
   const push = (json) => { server.frames.push(fromJson(Resp2, json)); if (server.wake) server.wake(); };
   const router = createRouterTransport(({ service }) => service(SyncService, {
@@ -281,19 +312,28 @@ async function main() {
       if (kind === 'beginDocumentSync') {
         const sessionId = 's' + (++server.session);
         const cold = value.clientVv.length === 0;
+        if (value.documentId !== DOC && !server.created.has(value.documentId)) { // unknown id: MISSING, nothing to send (§2.1)
+          return fromJson(message('sync', 'ServerSyncCommandResponse'), { bootstrapResponse: { sessionId, status: 'BOOTSTRAP_STATUS_MISSING', serverVv: '', serverUpdates: '' } });
+        }
         return fromJson(message('sync', 'ServerSyncCommandResponse'), { bootstrapResponse: { sessionId, status: 'BOOTSTRAP_STATUS_EXISTING',
           serverVv: b64(server.serverDoc.loro.oplogVersion().encode()), serverUpdates: cold ? b64(server.serverDoc.loro.export({ mode: 'snapshot' })) : '' } });
       }
       if (kind === 'applyBootstrapUpdates') {
-        if (value.updates.length) server.serverDoc.applyRemote([value.updates]);
-        setTimeout(() => push({ bootstrapComplete: { documentId: DOC, sessionId: value.sessionId, barrierVv: '' } }), 5);
+        if (value.documentId !== DOC) { // a create: the catch-up must be a full snapshot of a doc the server never saw
+          assert.ok(value.updates.length, 'create sends a non-empty catch-up');
+          const d = new Document(value.documentId, { peerId: '4242' });
+          d.applyRemote([value.updates]);
+          server.created.set(value.documentId, d);
+        } else if (value.updates.length) server.serverDoc.applyRemote([value.updates]);
+        setTimeout(() => push({ bootstrapComplete: { documentId: value.documentId, sessionId: value.sessionId, barrierVv: '' } }), 5);
         return {};
       }
       if (kind === 'liveDocumentUpdate') {
         if (value.sessionId !== 's' + server.session) throw new ConnectError('stale session', Code.FailedPrecondition);
-        server.serverDoc.applyRemote(value.updates);
+        (server.created.get(value.documentId) || server.serverDoc).applyRemote(value.updates);
         return {};
       }
+      if (kind === 'documentAction') return fromJson(message('sync', 'ServerSyncCommandResponse'), { documentActionResponse: {} });
       return {};
     },
   }));
@@ -346,6 +386,18 @@ async function main() {
   setTitle(d, 'after reconnect');
   await new Promise((r) => setTimeout(r, 30));
   assert.equal(readNode(server.serverDoc).title, 'after reconnect');
+  // create: subscribe(id, init) on an unknown id -> MISSING -> full snapshot as catch-up -> live; later edits flow as usual
+  const NEW = 'tana:text:' + ulid();
+  const created = await sync.subscribe(NEW, (l) => initDocument(l, 'created offline', ME));
+  assert.equal(server.commands.slice(-2).join(), 'beginDocumentSync,applyBootstrapUpdates');
+  assert.equal(readNode(server.created.get(NEW)).title, 'created offline');
+  assert.deepEqual(readNode(server.created.get(NEW)).participants, { [ME]: { type: 'user', role: 'admin' } });
+  assert.equal(server.created.get(NEW).content.get('nodeName'), 'doc');
+  outline.insertAfter(created, null, 'hello');
+  await new Promise((r) => setTimeout(r, 30));
+  assert.equal(contentText(server.created.get(NEW)), 'hello');
+  assert.equal((await sync.softDelete(NEW)).responseUnion.case, 'documentActionResponse');
+  assert.equal(server.commands.at(-1), 'documentAction');
   await sync.close();
   assert.equal(sync.connected, false);
   assert.ok(server.commands.includes('unsubscribeDocument'), 'unsubscribe sent on close');

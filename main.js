@@ -3,7 +3,8 @@ const path = require('node:path');
 const db = require('./db');
 const { createTanaSession, peerIdentity } = require('./tana-session');
 const { createTanaClient } = require('./sdk');
-const { readNode, setTitle, setState } = require('./sdk/node');
+const { readNode, setTitle, setState, ulid, initDocument } = require('./sdk/node');
+const { parseQuery, searchParams, needsTypes } = require('./sdk/query');
 const content = require('./sdk/content');
 
 const SECTIONS = [{ id: 'tasks', title: 'Tasks', icon: 'task' }, { id: 'meetings', title: 'Meetings', icon: 'meeting' }];
@@ -14,11 +15,12 @@ const OPEN_TASKS_QUERY = (userUri) => ({
   sortOptions: [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }],
 });
 // events I take part in, from the start of local today to 7 days ahead
+// past week through next week, oldest first
 const MEETINGS_QUERY = (userUri) => {
-  const start = new Date(); start.setHours(0, 0, 0, 0);
+  const start = new Date(); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() - 7);
   return {
-    nodeTypes: ['event'], hasParticipantUris: [userUri], limit: 200,
-    eventStartTimeMin: start.toISOString(), eventStartTimeMax: new Date(start.getTime() + 7 * 864e5).toISOString(),
+    nodeTypes: ['event'], hasParticipantUris: [userUri], limit: 300,
+    eventStartTimeMin: start.toISOString(), eventStartTimeMax: new Date(start.getTime() + 14 * 864e5).toISOString(),
     sortOptions: [{ field: 'SORT_FIELD_EVENT_START_TIME', direction: 'SORT_DIRECTION_ASCENDING' }],
   };
 };
@@ -34,13 +36,15 @@ const now = () => new Date().toISOString();
 
 const WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const hm = (d) => d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
-// "Mon 9:00–9:30" in local time; all-day events come as UTC (or local) midnight with a whole-day span: "Mon, all day"
-function eventMeta(start, end) {
+// "Mon 9:00–9:30" in local time; all-day events come as UTC (or local) midnight with a whole-day span: "Mon, all day".
+// withDate (search results, any week): "Fri 9 9:00–10:00" / "Fri 9".
+function eventMeta(start, end, withDate) {
   if (!start) return undefined;
   const s = new Date(start), e = end ? new Date(end) : null;
   const midnight = s.getUTCHours() + s.getUTCMinutes() === 0 || s.getHours() + s.getMinutes() === 0;
   const allDay = e && midnight && (e - s) % 864e5 === 0;
-  return WEEKDAY[s.getDay()] + (allDay ? ', all day' : ' ' + hm(s) + (e ? '–' + hm(e) : ''));
+  const day = WEEKDAY[s.getDay()] + (withDate ? ' ' + s.getDate() : '');
+  return allDay ? day + (withDate ? '' : ', all day') : day + ' ' + hm(s) + (e ? '–' + hm(e) : '');
 }
 
 async function resolveTypes(uris) {
@@ -50,16 +54,23 @@ async function resolveTypes(uris) {
   for (const n of nodes) typeTitles.set(n.id, n.title || '');
 }
 const typeTag = (uri) => (uri && typeTitles.get(uri) ? [{ label: typeTitles.get(uri), color: 'grey' }] : []);
+// lowercase type title -> uri for #Type search filters; the type list is loaded once per session (and seeds typeTitles)
+let typesLoaded;
+async function typesByTitle() {
+  typesLoaded ||= client.graph.listNodes({ nodeTypes: ['type'], limit: 200 }).then(({ nodes }) => { for (const n of nodes) typeTitles.set(n.id, n.title || ''); }, () => { typesLoaded = null; });
+  await typesLoaded;
+  return new Map([...typeTitles].map(([uri, title]) => [title.toLowerCase(), uri]));
+}
 
 // rows for db.replaceSection from graph Node JSON
 const taskRow = (n) => ({
   id: n.id, title: n.title || '', done: n.state && n.state.type === 'closed' ? 1 : 0, icon: 'task',
   tags: [TAG.task, ...typeTag(n.entityType)], sortKey: n.updateTime || now(), updatedAt: n.updateTime || now(),
 });
-const meetingRow = (n) => {
+const meetingRow = (n, withDate) => {
   const ev = n.calendarEvent || {};
   return {
-    id: n.id, title: n.title || '', done: 0, icon: 'meeting', meta: eventMeta(ev.startTime, ev.endTime),
+    id: n.id, title: n.title || '', done: 0, icon: 'meeting', meta: eventMeta(ev.startTime, ev.endTime, withDate),
     tags: [TAG.meeting, ...typeTag(n.entityType)], sortKey: ev.startTime || now(), updatedAt: n.updateTime || now(),
   };
 };
@@ -67,19 +78,30 @@ const meetingRow = (n) => {
 const toNode = (r) => ({ id: r.id, title: r.title, text: r.title, kind: 'document', done: r.icon === 'task' ? r.done : undefined, hasChildren: true, icon: r.icon || undefined, tags: r.tags, meta: r.meta || undefined });
 
 // Node shape from any graph Node JSON (search results): events, tasks, typed and plain documents.
-function graphRow(n) {
-  if (n.calendarEvent || n.id.startsWith('tana:event:')) return meetingRow(n);
+function graphRow(n, withDate) {
+  if (n.calendarEvent || n.id.startsWith('tana:event:')) return meetingRow(n, withDate);
   if (n.state && n.state.type) return taskRow(n);
   return { id: n.id, title: n.title || '', done: 0, icon: null, tags: typeTag(n.entityType), sortKey: n.updateTime || now(), updatedAt: n.updateTime || now() };
 }
 
-// Live search over all top-level items (graph full-text search, relevance order).
+// Live search over all top-level items (graph full-text search, relevance order) with #task/#meeting/#Type filters.
 async function search(query) {
-  const q = String(query || '').trim();
-  if (!q || !client) return [];
-  const { nodes } = await client.graph.listNodes({ nodeTypes: ['text', 'event'], textQuery: q, limit: 20, sortOptions: [{ field: 'SORT_FIELD_TEXT_RANK', direction: 'SORT_DIRECTION_DESCENDING' }] });
+  if (!client) return [];
+  const parsed = parseQuery(query);
+  const params = searchParams(parsed, needsTypes(parsed) ? await typesByTitle() : new Map());
+  if (!params) return [];
+  const { nodes } = await client.graph.listNodes(params);
   await resolveTypes(nodes.map((n) => n.entityType));
-  return nodes.map((n) => toNode(graphRow(n)));
+  return nodes.map((n) => toNode(graphRow(n, true)));
+}
+
+// New plain document: seeded locally, created on the server by the bootstrap (sdk/sync.js subscribe with init).
+async function createDocument(title) {
+  if (!client) throw new Error('not connected to Tana');
+  const id = 'tana:text:' + ulid();
+  const doc = await subscribe(id, (loro) => initDocument(loro, String(title || ''), me.userUri));
+  if (!doc) throw new Error(status.error || 'could not create ' + id);
+  return info(doc);
 }
 
 // Node shape for any subscribed document: cached row when listed, else derived from the Loro data map.
@@ -134,9 +156,9 @@ async function refresh() {
   }
 }
 
-function subscribe(id) {
+function subscribe(id, init) {
   subscribed.add(id);
-  return client.sync.subscribe(id).catch((e) => { subscribed.delete(id); setStatus({ error: errText(e) }); return null; });
+  return client.sync.subscribe(id, init).catch((e) => { subscribed.delete(id); setStatus({ error: errText(e) }); return null; });
 }
 
 function scheduleRefresh(ms) {
@@ -178,7 +200,6 @@ function createMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     { role: 'appMenu' },
     { role: 'editMenu' },
-    { label: 'Tana', submenu: [{ label: 'Sync', accelerator: 'CmdOrCtrl+R', click: () => refresh() }] },
     { role: 'windowMenu' },
   ]));
 }
@@ -218,6 +239,7 @@ ipcMain.handle('outline:roots', () => {
 // events start with an empty content map (no doc node yet); readOutline needs the children list
 ipcMain.handle('outline:children', (_e, id) => op(id, (doc) => (doc.content.get('children') ? content.readOutline(doc) : [])));
 ipcMain.handle('doc:info', (_e, id) => op(id, info));
+ipcMain.handle('doc:create', (_e, title) => createDocument(title));
 ipcMain.handle('search', (_e, query) => search(query));
 ipcMain.handle('history:undo', () => history(undoStack, redoStack, 'undo', 'canUndo'));
 ipcMain.handle('history:redo', () => history(redoStack, undoStack, 'redo', 'canRedo'));
@@ -244,7 +266,7 @@ ipcMain.handle('sync:login', async () => {
   }
 });
 
-app.setName('Tana');
+app.setName('Tana Companion');
 app.setPath('userData', path.join(app.getPath('appData'), 'tana-tasks')); // before 'ready': same session/cache for dev runs, the CLI and the packaged app
 
 app.whenReady().then(async () => {

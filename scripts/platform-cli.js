@@ -4,7 +4,7 @@
 const { app } = require('electron');
 const path = require('node:path');
 const { createTanaSession, peerIdentity } = require('../tana-session');
-let createTanaClient, readNode, setTitle, setState, contentText, readOutline; // loaded lazily: login/whoami work without the SDK
+let createTanaClient, readNode, setTitle, setState, contentText, readOutline, ulid, initDocument, query; // loaded lazily: login/whoami work without the SDK
 
 // Share the cookie partition and peer.json with the real app.
 app.setPath('userData', path.join(app.getPath('appData'), 'tana-tasks'));
@@ -19,8 +19,9 @@ let session, client;
 
 async function connect() {
   ({ createTanaClient } = require('../sdk'));
-  ({ readNode, setTitle, setState, contentText } = require('../sdk/node'));
+  ({ readNode, setTitle, setState, contentText, ulid, initDocument } = require('../sdk/node'));
   ({ readOutline } = require('../sdk/content'));
+  query = require('../sdk/query');
   const me = await session.info();
   const peer = peerIdentity({ file: path.join(app.getPath('userData'), 'peer.json'), userExternalId: me.userExternalId });
   client = createTanaClient({ getAccessToken: (o) => session.getAccessToken(o), orgId: me.orgId, ...peer, logger: console });
@@ -49,8 +50,33 @@ const commands = {
   },
   async search() {
     await connect();
-    const { nodes } = await client.graph.listNodes({ nodeTypes: ['text', 'event'], textQuery: positional[0], limit: 20, sortOptions: [{ field: 'SORT_FIELD_TEXT_RANK', direction: 'SORT_DIRECTION_DESCENDING' }] });
-    for (const n of nodes) out(n.id + '  ' + (n.calendarEvent ? '[meeting] ' : n.state ? '[task:' + n.state.type + '] ' : n.entityType ? '[typed] ' : '') + (n.title || ''));
+    const parsed = query.parseQuery(positional.join(' '));
+    let types = new Map();
+    if (query.needsTypes(parsed)) types = new Map((await client.graph.listNodes({ nodeTypes: ['type'], limit: 200 })).nodes.map((n) => [(n.title || '').toLowerCase(), n.id]));
+    const params = query.searchParams(parsed, types);
+    if (!params) return out('no results (empty query or unknown #type)');
+    const { nodes } = await client.graph.listNodes(params);
+    const when = (ev) => (ev ? new Date(ev.startTime).toLocaleString('sv-SE').slice(0, 16) + ' ' : '');
+    for (const n of nodes) out(n.id + '  ' + (n.calendarEvent ? '[meeting] ' + when(n.calendarEvent) : n.state ? '[task:' + n.state.type + '] ' : n.entityType ? '[typed] ' : '') + (n.title || ''));
+    out(nodes.length + ' results');
+  },
+  async types() {
+    await connect();
+    for (const n of (await client.graph.listNodes({ nodeTypes: ['type'], limit: 200 })).nodes) out(n.id + '\t' + (n.title || ''));
+  },
+  async create() {
+    if (!positional[0]) throw new Error('usage: create <title>');
+    const me = await connect();
+    await client.sync.connect();
+    const id = 'tana:text:' + ulid();
+    const doc = await client.sync.subscribe(id, (loro) => initDocument(loro, positional[0], me.userUri));
+    out(summary(doc));
+  },
+  async delete() {
+    if (!positional[0]) throw new Error('usage: delete <id>  (document_action soft_delete)');
+    await connect();
+    await client.sync.connect();
+    out(await client.sync.softDelete(positional[0]));
   },
   async meetings() {
     const me = await connect();
@@ -122,7 +148,7 @@ const commands = {
 };
 
 app.whenReady().then(async () => {
-  if (!commands[cmd]) { console.error('usage: platform-cli login | whoami | list [--state open] | search <query> | meetings [--days 7] | get <id> | outline <id> | watch <id...> | set-title <id> <title> | set-state <id> <state>'); app.exit(2); return; }
+  if (!commands[cmd]) { console.error('usage: platform-cli login | whoami | list [--state open] | search <query> [#task|#meeting|#Type] | types | meetings [--days 7] | get <id> | outline <id> | watch <id...> | set-title <id> <title> | set-state <id> <state> | create <title> | delete <id>'); app.exit(2); return; }
   session = createTanaSession();
   let code = 0;
   try { await commands[cmd](); } catch (e) { console.error(e && e.stack || e); code = 1; }

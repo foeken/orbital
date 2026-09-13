@@ -36,18 +36,18 @@ button { font: inherit; }
 /* outline */
 .line { display: flex; align-items: flex-start; line-height: 24px; padding: 3px 0; }
 .chev, .bullet { flex: none; width: 18px; height: 24px; border: 0; background: none; padding: 0; cursor: pointer; position: relative; }
-/* chevron: Outliner-style circle, shown only while hovering the line; down = expanded, right = collapsed */
+/* chevron: 14px Outliner-style circle centred in the gutter, shown only while hovering the line; down = expanded, right = collapsed */
 .chev { visibility: hidden; }
 .chev::before {
-  content: ""; position: absolute; left: -5px; top: 3px; width: 18px; height: 18px;
+  content: ""; position: absolute; left: 2px; top: 5px; width: 14px; height: 14px;
   border-radius: 50%; border: 1px solid #d0d0d0; background: #fff;
 }
 .chev::after {
-  content: ""; position: absolute; left: 1.5px; top: 8.5px; width: 5px; height: 5px;
+  content: ""; position: absolute; left: 6.5px; top: 8px; width: 5px; height: 5px;
   border: solid #888; border-width: 0 1.2px 1.2px 0; transform: rotate(45deg);
 }
 .chev:hover::before { border-color: #bbb; }
-.collapsed > .line > .chev::after { transform: rotate(-45deg); left: 0; top: 9.5px; }
+.collapsed > .line > .chev::after { transform: rotate(-45deg); left: 4.75px; top: 9.5px; }
 .node.has > .line:hover > .chev { visibility: visible; }
 .bullet::before {
   content: ""; position: absolute; left: 6px; top: 9px; width: 6px; height: 6px;
@@ -119,3 +119,22 @@ button { font: inherit; }
 .palette .hint { color: #999; font-size: 14px; white-space: nowrap; }
 .palette kbd { font: inherit; font-size: 13px; color: #666; background: #f1f1f1; border-radius: 6px; padding: 1px 8px; }
 .palette .row.active kbd { background: #e4e4e4; }
+
+/* hotkey recorder (Cmd+Shift+K on a Cmd+K row) */
+.recorder { position: fixed; inset: 0; z-index: 11; display: flex; justify-content: center; align-items: flex-start; padding: 12vh 24px 0; }
+.recorder[hidden] { display: none; }
+.recorder .card {
+  width: 100%; max-width: 620px; padding: 36px 36px 28px; background: #fff; border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .18), 0 0 0 1px rgba(0, 0, 0, .05);
+}
+.recorder .rlabel { font-size: 17px; color: #444; }
+.recorder h2 { margin: 2px 0 22px; font-size: 30px; font-weight: 600; letter-spacing: -0.3px; }
+.recorder .rbox { height: 200px; border: 1px solid #ddd; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 14px; }
+.recorder .keys { display: flex; gap: 14px; font-size: 44px; color: #666; }
+.recorder .dot { flex: none; width: 60px; height: 60px; border-radius: 50%; background: #fde9e6; position: relative; }
+.recorder .dot::after { content: ""; position: absolute; inset: 15px; border-radius: 50%; background: #ef5b4a; }
+.recorder .rbuttons { display: flex; gap: 8px; margin-top: 22px; }
+.recorder .spacer { flex: 1; }
+.recorder button { border: 0; border-radius: 6px; background: #f1f1f1; color: #1a1a1a; font-size: 19px; padding: 6px 14px; cursor: pointer; }
+.recorder button:hover { background: #e6e6e6; }
+.recorder button:disabled { color: #b5b5b5; cursor: default; background: #f1f1f1; }

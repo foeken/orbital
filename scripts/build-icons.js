@@ -4,10 +4,10 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const SRC = process.argv[2] || '/Users/andre.foeken/Documents/Tana icons (line)';
-const WANT = { task: 'list-checkbox.svg', calendar: 'calendar.svg' };
+const WANT = { task: 'list-checkbox.svg', calendar: 'calendar.svg', sync: path.join(__dirname, '..', 'build', 'icons', 'cloud-refresh.svg') };
 const out = {};
 for (const [name, file] of Object.entries(WANT)) {
-  let svg = fs.readFileSync(path.join(SRC, file), 'utf8');
+  let svg = fs.readFileSync(path.isAbsolute(file) ? file : path.join(SRC, file), 'utf8');
   svg = svg.replace(/<title>.*?<\/title>/, '')
     .replace(/^<svg[^>]*>/, (tag) => tag.replace(/\s(height|width)="[^"]*"/g, ''))
     .replace(/(stroke|fill)="#[0-9a-fA-F]{3,6}"/g, '$1="currentColor"').replace(/>\s+</g, '><').trim();
