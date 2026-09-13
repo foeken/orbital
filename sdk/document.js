@@ -20,13 +20,11 @@ class Document extends EventEmitter {
     this.content = loro.getMap('content');
     this._exported = loro.oplogVersion();
     // Local-only, CRDT-aware undo: remote changes are never undone, concurrent edits are transformed against.
-    this.undoManager = new UndoManager(loro, { mergeInterval: 0, maxUndoSteps: 200 }) // one step per transact; typing is already grouped by the caller;
+    // mergeInterval 0 = one step per transact; typing is already grouped by the caller.
+    this.undoManager = new UndoManager(loro, { mergeInterval: 0, maxUndoSteps: 200 });
   }
 
   toJSON() { return this.loro.toJSON(); }
-
-  // Current oplog version vector, encoded (for begin_document_sync).
-  version() { return this.loro.oplogVersion().encode(); }
 
   // Run local mutations, commit, and emit the update since the last exported version.
   transact(fn) {

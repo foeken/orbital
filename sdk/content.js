@@ -26,6 +26,10 @@ function indexOf(list, m) {
   throw new Error('container not in list');
 }
 
+function checkDirection(direction) {
+  if (direction !== 'up' && direction !== 'down') throw new Error('outline move direction must be up or down');
+}
+
 // ---- read
 
 function readOutline(document) {
@@ -288,12 +292,13 @@ function moveUnit(unit, direction) {
 }
 
 function move(document, id, direction) {
+  checkDirection(direction);
   document.transact(() => moveUnit(unit(document, id), direction));
 }
 
 // ids are in visual order. Moving down works from the end; moving up works from the start.
 function moveMany(document, ids, direction) {
-  if (direction !== 'up' && direction !== 'down') throw new Error('outline move direction must be up or down');
+  checkDirection(direction);
   const units = selectedUnits(document, ids);
   document.transact(() => {
     for (const unit of direction === 'up' ? units : [...units].reverse()) moveUnit(unit, direction);

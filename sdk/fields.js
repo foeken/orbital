@@ -12,6 +12,7 @@ function valueText(value) {
   if (value == null) return '';
   if (typeof value === 'string') return value;
   if (Array.isArray(value)) return value.map(valueText).join('');
+  if (value && value.nodeName === 'mention') return (value.attributes && value.attributes.label) || '';
   if (typeof value === 'object') return valueText(value.children);
   return '';
 }

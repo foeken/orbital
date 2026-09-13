@@ -16,6 +16,8 @@ button { font: inherit; }
 .pagehead .check { -webkit-app-region: no-drag; width: 22px; height: 22px; margin: 11px 12px 0 0; border-radius: 6px; }
 .pagehead .check:checked::after { left: 8px; top: 3px; width: 5px; height: 11px; }
 .pagehead h1.done { color: #999; text-decoration: line-through; }
+/* the assignee/visibility line under a zoomed task title: a block, so it lines up with the title, and it may wrap */
+#taskInfo { margin-left: 0; white-space: normal; }
 .crumbs { -webkit-app-region: no-drag; font-size: 13px; color: #888; margin-bottom: 6px; }
 .crumbs a { color: #888; text-decoration: none; cursor: pointer; }
 .crumbs a .ricon { display: inline-flex; vertical-align: -2px; margin-right: 4px; }
@@ -24,7 +26,6 @@ button { font: inherit; }
 [data-theme="dark"] .text a.url { color: #7fb8dd; }
 .crumbs a:hover { color: #1a1a1a; text-decoration: underline; }
 .crumbs .sep { margin: 0 6px; color: #bbb; }
-.crumbs .current { color: #555; }
 .error { font-size: 13px; color: #c0392b; margin-top: 6px; -webkit-app-region: no-drag; }
 /* a zoomed node's fields (type attributes), under the title */
 .fields { -webkit-app-region: no-drag; margin-top: 8px; display: flex; flex-direction: column; gap: 2px; }
@@ -51,14 +52,6 @@ button { font: inherit; }
 }
 .filter .clear:hover { background: #ddd; }
 .filter.empty .clear { display: none; }
-
-/* Library: server-side search box under the title */
-.libsearch { position: relative; margin: 4px 32px 10px; max-width: 560px; }
-.libsearch[hidden] { display: none; }
-.libsearch svg { position: absolute; left: 14px; top: 11px; width: 18px; height: 18px; color: #666; pointer-events: none; }
-.libsearch input { width: 100%; height: 40px; padding: 0 14px 0 42px; border: 1px solid #ddd; border-radius: 999px; background: #fff; font: inherit; font-size: 17px; color: #1a1a1a; outline: none; }
-.libsearch input:focus { border-color: #9cc0f0; }
-.libsearch input::placeholder { color: #999; }
 
 /* filter pills (Tasks / Library): "Status <Inbox, In Progress>", "Assigned to <You>", "<Type>"; each opens a menu below it */
 .pills { position: relative; display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 32px 12px; }
@@ -107,7 +100,6 @@ button { font: inherit; }
 .rail .rrow .check { align-self: center; }
 .rail .rrow .rtitle { flex: 1; min-width: 0; font-size: 14px; line-height: 19px; color: #1a1a1a; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .rail .rrow.done .rtitle { color: #999; text-decoration: line-through; }
-.rail .rempty { padding: 2px 6px 6px; font-size: 13px; color: #bbb; }
 
 /* outline */
 .line { display: flex; align-items: flex-start; line-height: 24px; padding: 3px 0; }
@@ -158,6 +150,8 @@ button { font: inherit; }
 .body { flex: 1; min-width: 0; padding-left: 5px; }
 .text { display: inline; outline: none; white-space: pre-wrap; overflow-wrap: anywhere; }
 .text:empty { display: inline-block; min-width: 1px; min-height: 1lh; vertical-align: top; } /* an empty node still has a box, so the caret shows */
+/* a read-only row takes focus but shows no caret, so the ring is the only sign the keyboard is on it (images ring their own <img>) */
+.text[tabindex]:not(.image):focus { outline: 2px solid #b5d0ee; outline-offset: 2px; border-radius: 3px; }
 .check + .body { padding-left: 0; }
 .document.done > .line .text { color: #999; text-decoration: line-through; }
 .meta { margin-left: 8px; color: #999; font-size: 14px; white-space: nowrap; user-select: none; }
@@ -196,7 +190,7 @@ button { font: inherit; }
 @keyframes breathe { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .skeleton div { animation: none; } .skeleton, .skeleton.gone { transition: none; } }
 
-.filtered { padding: 18px 10px 8px; color: #999; font-weight: 600; }
+.filtered { padding: 18px 10px 8px 16px; color: #999; font-weight: 600; } /* lines up with the title, filter and pills */
 .filtered:empty { display: none; }
 .login { display: flex; justify-content: center; padding: 120px 0; }
 .login[hidden] { display: none; }
@@ -215,7 +209,12 @@ button { font: inherit; }
 .palette .list { overflow-y: auto; padding: 8px 8px 14px; } /* the last row keeps clear of the card edge */
 .palette .group { font-size: 13px; color: #999; padding: 10px 12px 4px; user-select: none; }
 .palette .row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 8px; font-size: 15px; cursor: pointer; user-select: none; }
+.palette .row:hover { background: #f6f6f6; }
 .palette .row.active { background: #f0f0f0; }
+/* rows that cannot run (info lines, unavailable choices): readable, but plainly not a target */
+.palette .row.disabled { color: #8a8a8a; cursor: default; }
+.palette .row.disabled:hover { background: none; }
+.palette .row.disabled .ricon { color: #c0c0c0; }
 .palette .ricon { flex: none; width: 16px; height: 16px; color: #8a8a8a; }
 .palette .ricon svg { display: block; width: 16px; height: 16px; }
 .palette .ricon.meeting { color: #c99b1b; }
@@ -228,7 +227,7 @@ button { font: inherit; }
 .palette .row.active kbd { background: #e4e4e4; }
 
 /* hotkey recorder (Cmd+Shift+K on a Cmd+K row) */
-.recorder { position: fixed; inset: 0; z-index: 11; display: flex; justify-content: center; align-items: flex-start; padding: 12vh 24px 0; }
+.recorder { position: fixed; inset: 0; z-index: 11; display: flex; justify-content: center; align-items: flex-start; padding: 12vh 24px 0; background: rgba(0, 0, 0, .12); } /* same scrim as the palette it opens over */
 .recorder[hidden] { display: none; }
 .recorder .card {
   width: 100%; max-width: 620px; padding: 36px 36px 28px; background: #fff; border-radius: 12px;
@@ -261,17 +260,12 @@ button { font: inherit; }
 [data-theme="dark"] .crumbs, [data-theme="dark"] .crumbs a { color: #858b8e; }
 [data-theme="dark"] .crumbs a:hover { color: #c9c9c9; }
 [data-theme="dark"] .crumbs .sep { color: #555b5e; }
-[data-theme="dark"] .crumbs .current { color: #adb1b2; }
 [data-theme="dark"] .error { color: #ed8b83; }
 
 [data-theme="dark"] .filter input { background: #282b2d; color: #c9c9c9; }
 [data-theme="dark"] .filter input:focus { background: #303437; }
 [data-theme="dark"] .filter .clear { color: #9a9fa1; }
 [data-theme="dark"] .filter .clear:hover { background: #3a3e40; }
-[data-theme="dark"] .libsearch svg { color: #9a9fa1; }
-[data-theme="dark"] .libsearch input { border-color: #3b4144; background: #242729; color: #c9c9c9; }
-[data-theme="dark"] .libsearch input:focus { border-color: #7695b2; }
-[data-theme="dark"] .libsearch input::placeholder { color: #858b8e; }
 
 [data-theme="dark"] .pill { background: #263842; color: #9cc9e8; }
 [data-theme="dark"] .pill b { color: #b9dcf2; }
@@ -315,6 +309,7 @@ button { font: inherit; }
 [data-theme="dark"] .text.image:focus img, [data-theme="dark"] .selected > .line .text.image img { outline-color: #58768a; }
 [data-theme="dark"] .text .mention { color: #8fc1e1; }
 [data-theme="dark"] .text .mention:hover { color: #b5ddf4; }
+[data-theme="dark"] .text[tabindex]:not(.image):focus { outline-color: #58768a; }
 [data-theme="dark"] .selected > .line { background: #2d4149; }
 [data-theme="dark"] .children { border-left-color: #34393b; }
 [data-theme="dark"] .children.loading { color: #858b8e; }
@@ -325,16 +320,19 @@ button { font: inherit; }
 [data-theme="dark"] .login button:hover { background: #363a3c; }
 
 [data-theme="dark"] .palette { background: rgba(0, 0, 0, .52); }
+[data-theme="dark"] .recorder { background: rgba(0, 0, 0, .52); }
 [data-theme="dark"] .palette .card, [data-theme="dark"] .recorder .card { background: #242729; box-shadow: 0 12px 40px rgba(0, 0, 0, .5), 0 0 0 1px rgba(255, 255, 255, .08); }
 [data-theme="dark"] .palette input { color: #c9c9c9; border-bottom-color: #3a3f41; background: #242729; }
 [data-theme="dark"] .palette input::placeholder { color: #858b8e; }
 [data-theme="dark"] .palette .group, [data-theme="dark"] .recorder .rlabel { color: #858b8e; }
-[data-theme="dark"] .palette .row.active { background: #343a3d; }
 [data-theme="dark"] .palette .row:hover { background: #2d3538; }
+[data-theme="dark"] .palette .row.active { background: #343a3d; }
 [data-theme="dark"] .palette .ricon { color: #aeb4b6; }
 [data-theme="dark"] .palette .ricon.meeting { color: #d7b54d; }
 [data-theme="dark"] .palette .ricon.right { color: #858b8e; }
 [data-theme="dark"] .palette .ricon.hue { color: hsl(var(--hue) 70% 72%); }
+[data-theme="dark"] .palette .row.disabled { color: #7e8487; }
+[data-theme="dark"] .palette .row.disabled .ricon { color: #5d6467; }
 [data-theme="dark"] .rail .rhead { color: #858b8e; }
 [data-theme="dark"] .rail .rrow:hover { background: #24282a; }
 [data-theme="dark"] .rail .rrow:focus { background: #2b3237; }

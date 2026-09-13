@@ -210,3 +210,44 @@ not cards.
   The open document, untitled drafts and anything already listed under Pinned never repeat.
 - Keyboard: Cmd+Right enters the rail, Up/Down move, Enter opens, Space toggles a task, Escape or Cmd+Left
   returns the caret to the document.
+
+## Addendum 16 (Inbox, today node, fields, the meeting write-up, Library as a move target)
+
+The rail of addendum 15 is now a full-height **sidebar** beside the document: its own scroll, a border, row titles in
+ordinary text rather than blue links, and a drag handle on its left edge (200-620 px, width persisted). The keyboard
+contract is unchanged.
+
+- **Inbox view**: `api.inbox()` -> Node[] = everything still in Tana's inbox state (`stateTypes: ['proposed']`),
+  whatever kind it is, newest first, icon 'inbox'. It is the first view; the Cmd+K order is Inbox, Tasks, Meetings,
+  Library, Chats, Members (what is waiting on you, then your work, the calendar, knowledge, conversations, people).
+- **Today node** (Cmd+K "Show today node", default Ctrl+Shift+D): `api.todayNode()` -> the id of the document titled
+  with today's local date (`YYYY-MM-DD`) and pinned to today, creating and pinning it when it does not exist yet, so
+  the command always lands somewhere. Matching is on the exact title; a second run reuses the same node.
+- **Fields under the title**: a zoomed node shows its typed fields (text-input icon, label, value) between the title
+  and the outline, from `api.related(docId).fields` (`[{ key, label, text }]`). Values are editable in place -- Enter
+  commits through `api.setField(docId, key, text)`, Escape reverts. Fields are Tana "attributes": the value lives in
+  the node's own data map, the label in its type's template (sdk/fields.js, docs/MEETINGS.md). A field value is written
+  as one plain text run, so editing a reference field flattens it to its label text.
+- **Meetings open at their write-up**: an event has no content of its own, so zooming a meeting forwards to the
+  document it owns whose title is the event's tagline (generated appearance image as the fallback), through
+  `api.summaryUri(docId)`. One rule in main (`writeUpOf`) serves both the navigation and the rail, so every route --
+  the Meetings list, search, pins, recents -- lands in the same place, and the write-up is never repeated under Notes.
+- **Library as a move target**: the move picker offers "Library" beside the spaces. The Library is Tana's name for a
+  document with no owner, so moving there removes `ownerUri` rather than setting it to null; a type still has to live
+  in a space. Audience confirmation is unchanged (sdk/access.js).
+- **Links in node text**: http(s) URLs inside a text run render as underlined links and open in the default browser
+  via `api.openExternal(url)` (http/https only). The stored text is untouched, so the row stays editable.
+- **Type nodes and typed nodes**: `tana:type:` documents are a listed kind (shapes icon, `# type` tag, their own hue);
+  a typed document without its own icon draws the same generic type icon tinted with the type's hue, matching its chip.
+
+### Addendum 16 additions from the review pass
+
+- In the sidebar, Left collapses the section the focused row belongs to and Right expands it again; Up/Down, Enter,
+  Space and Escape are unchanged.
+- A palette row that cannot run is greyed and skipped by Up/Down, so Enter always has an effect.
+- A focused read-only row shows a focus ring; editable rows keep the caret and no ring.
+- A view with no rows and no filter says "Nothing here yet" rather than rendering blank.
+- An error from an action clears as soon as the next action succeeds.
+- Sharing and move never enter the undo stack: their audience disclosure and preview token are the gate, and a raw
+  CRDT undo would bypass both.
+- A zoomed event shows the full date form ("Fri 11 Sep 9:00-10:00"), matching search, not the short list form.

@@ -1,6 +1,9 @@
 # SDK recipes
 
-Every recipe has a CLI twin: `./node_modules/.bin/electron scripts/platform-cli.js <cmd>` (runs under Electron for the cookie session, shares userData with the app). Commands: `login | whoami | list | search <q> | types | image <uri> | create <title> [--kind task|meeting|doc] | delete <id> | meetings [--days n] | get <id> | outline <id> | watch <id…> | set-title <id> <title> | set-state <id> <state> | pins [--dates] | pin <id> <sidebar|today> | unpin <id> <sidebar|today>`.
+Every recipe has a CLI twin: `./node_modules/.bin/electron scripts/platform-cli.js <cmd>` (runs under Electron for the cookie session, shares userData with the app). Run it with no command for the grouped usage line, which marks the writing commands.
+
+Reads: `login | whoami | list [--state open|all] | search <q> | types | fields [<type uri>] | meetings [--days n] | get <id> | outline <id> | graphnode <id> | edges <id> | image <uri> | pins [--dates] | watch <id…>`.
+Writes (never against data you were not asked to change): `create <title> [--kind doc|task|meeting] | delete <id> | set-title <id> <title> | set-state <id> <state> | pin/unpin <id> <sidebar|today>`.
 
 Read-only diagnostics for questions about what the app shows, all safe against real data:
 
@@ -11,6 +14,9 @@ Read-only diagnostics for questions about what the app shows, all safe against r
 | `refs <id>` | Embed blocks of a document resolved through `main.js`'s real `outlineWithReferences`. |
 | `rows <query>` | Search results as the Nodes the renderer receives (icon, hue, tags). |
 | `pinrows` | The sidebar pin tree as the renderer receives it: the only path where a space becomes a row. |
+| `graphnode <id>` | The raw graph Node JSON for one id: attributes, typeDef, calendarEvent, appearance — everything `inspect` summarises away. |
+| `edges <id>` | Raw `ListEdges` in both directions, for learning how Tana links things (pins, outcomes, recordings). See ../MEETINGS.md. |
+| `fields [<type uri>]` | Every type that defines fields with their keys and titles; with a type uri, that type's instances and their values. |
 | `boot [--settle ms]` | Runs the app's real startup path (session → client → sync → first refresh) and reports elapsed time, final status and every warning or error logged. Nothing is written: bootstrap and catch-up carry no local ops. |
 
 ## Get a token (outside Electron)

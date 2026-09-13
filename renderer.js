@@ -432,8 +432,10 @@ const isImage = (node) => node.type === 'image';
 const isReference = (node) => node.type === 'reference';
 const referenceTarget = (node) => node.reference?.node ? asDoc(node.reference.node) : null;
 const referenceLabel = (node) => referenceTarget(node)?.text || node.reference?.label || node.text || node.reference?.uri || 'Unavailable reference';
+// An error from an action is transient: it clears when the next action succeeds, so a stale message never
+// outlives the problem it described.
 const showError = (e) => { const el = $('error'); el.textContent = e ? String(e.message || e) : ''; el.hidden = !e; };
-const run = (fn) => (queue = queue.then(fn).catch(showError));
+const run = (fn) => (queue = queue.then(fn).then((value) => { showError(null); return value; }, showError));
 const texts = () => [...outline.querySelectorAll('.text')];
 const titleEl = $('title');  // zoomed into a document: contenteditable with data-key = that document's key
 const keyOfEl = (el) => (el.closest('.node') || el).dataset.key;
@@ -668,6 +670,11 @@ function renderOutline() {
   // Cached rows remain usable while auth and sync reconnect; reserve the skeleton for an empty outline.
   const loading = !parent && !outline.children.length && (authChecking || !rootsLoaded || (view === 'library' && libRows === null) || (view === 'chats' && chatRows === null) || (view === 'inbox' && inboxRows === null) || (authed && !connected));
   $('skeleton').classList.toggle('gone', !loading);
+  if (!parent && !list.length && !loading && !filterEl.value) { // an empty view says so; a filtered-out list is explained by the count below it
+    const note = document.createElement('div');
+    note.className = 'empty-note'; note.textContent = 'Nothing here yet';
+    outline.append(note);
+  }
   applySel();
   if (saved) placeCaret(saved.key, saved.offset);
 }
@@ -762,6 +769,8 @@ function railKey(e, node, row) {
   else if (e.key === 'ArrowUp') { e.preventDefault(); if (i > 0) rows[i - 1].focus(); }
   else if (e.key === 'Enter') { e.preventDefault(); goTo(node.id); }
   else if (e.key === ' ') { e.preventDefault(); toggleRelated(node); }
+  else if (e.key === 'ArrowLeft' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); toggleRailSection(row.dataset.section); } // collapse the section the focused row is in
+  else if (e.key === 'ArrowRight' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); if (railClosed.has(row.dataset.section)) toggleRailSection(row.dataset.section); }
   else if (e.key === 'Escape' || (e.key === 'ArrowLeft' && (e.metaKey || e.ctrlKey))) { e.preventDefault(); const first = texts()[0]; if (first) setCaret(first, 0); else titleEl.focus(); }
 }
 function toggleRailSection(label) {
@@ -786,7 +795,7 @@ function renderRail(parent) {
     head.onclick = () => toggleRailSection(label);
     railEl.append(head);
     if (railClosed.has(label)) continue;
-    for (const node of rows) railEl.append(railRow(asDoc(node)));
+    for (const node of rows) { const row = railRow(asDoc(node)); row.dataset.section = label; railEl.append(row); }
   }
   if (keep) { const again = railEl.querySelector('.rrow[data-id="' + keep + '"]'); if (again) again.focus(); }
 }
@@ -833,10 +842,9 @@ function nodeEl(node, docId, parent) {
   el.className = 'node ' + node.kind + (reference ? ' reference' : '') + (node.heading ? ' h' + node.heading : '') + (display.done ? ' done' : '') + (has ? ' has' : '') + (has && !opened ? ' collapsed' : '') + (node.draft ? ' draft' : '');
   el.dataset.key = item.key;
   const line = document.createElement('div'); line.className = 'line';
-  const chev = document.createElement('button'); chev.className = 'chev'; chev.tabIndex = -1; chev.title = opened ? 'Collapse' : 'Expand';
+  const chev = document.createElement('button'); chev.className = 'chev'; chev.tabIndex = -1;
   chev.onmousedown = (e) => e.preventDefault();
   chev.classList.toggle('off', !expandable); // hidden glyph, kept in the layout so the row never shifts
-  chev.onclick = () => setOpen(item, !opened);
   const bullet = document.createElement('span'); bullet.className = 'bullet'; bullet.title = 'Zoom in';
   if (display.iconSvg) { bullet.classList.add('icon', 'custom'); bullet.innerHTML = display.iconSvg; }
   else if (display.icon) { bullet.classList.add('icon', display.icon); bullet.innerHTML = iconSvg(display.icon); }
@@ -1876,6 +1884,12 @@ function closePalette() { palette.hidden = true; clearTimeout(palTimer); palTime
 // back to the node that had the caret when the palette opened (the @ link path places its own caret)
 function returnFocus() { const r = palReturn; palReturn = null; if (r && !focused()) placeCaret(r.key, r.offset); }
 function runRow(r) { if (!r || r.disabled) return; if (!r.keepOpen) closePalette(); r.run(); }
+// Up/Down step over rows that cannot run (info lines, unavailable choices) so the keyboard never lands on a dead row
+function nextPalIndex(rows, index, step) {
+  const n = rows.length;
+  for (let i = 1; i <= n; i++) { const next = ((index + step * i) % n + n) % n; if (!rows[next].disabled) return next; }
+  return index;
+}
 palInput.addEventListener('input', () => {
   palIndex = 0;
   if (palMode === 'cmd' || palMode === 'create' || palMode === 'assignees' || palMode === 'visibility' || palMode === 'visibilityPeople') return renderPalette();
@@ -1885,7 +1899,7 @@ palInput.addEventListener('input', () => {
 palInput.addEventListener('keydown', (e) => {
   const mod = e.metaKey || e.ctrlKey;
   if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closePalette(); }
-  else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && palRows.length) { e.preventDefault(); e.stopPropagation(); palIndex = (palIndex + (e.key === 'ArrowDown' ? 1 : palRows.length - 1)) % palRows.length; renderPalette(); }
+  else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && palRows.length) { e.preventDefault(); e.stopPropagation(); palIndex = nextPalIndex(palRows, palIndex, e.key === 'ArrowDown' ? 1 : -1); renderPalette(); }
   else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); if (palBusy && (palMode === 'spaces' || palMode === 'search')) return; const r = mod && linkCtx ? palRows.find((row) => row.create) : palRows[palIndex]; if (r) runRow(r); } // ⌘↩ always creates for an @ selection
   else if (mod && e.shiftKey && e.key.toLowerCase() === 'k') { e.preventDefault(); e.stopPropagation(); const r = palRows[palIndex]; if (palMode === 'cmd' && r && r.id) openRecorder(r); }
 });

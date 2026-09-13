@@ -59,15 +59,6 @@ const commands = {
       for (const n of nodes) out(n.id + ' ' + (n.title || '') + ' attributes=' + JSON.stringify(n.attributes || {}));
       return out(nodes.length + ' instances');
     }
-    if (flag('scan')) { // any node that actually carries attribute values
-      let found = 0, seen = 0;
-      for (const kind of ['text', 'event', 'chat', 'space', 'canvas', 'skill', 'agent']) {
-        const { nodes } = await client.graph.listNodes({ nodeTypes: [kind], limit: 400 });
-        seen += nodes.length;
-        for (const n of nodes) if (n.attributes && Object.keys(n.attributes).length) { found++; out(n.id + ' ' + (n.title || '').slice(0, 50) + ' ' + JSON.stringify(n.attributes)); }
-      }
-      return out(found + ' nodes with attribute values, of ' + seen + ' scanned');
-    }
     const { nodes } = await client.graph.listNodes({ nodeTypes: ['type'], limit: 300 });
     for (const n of nodes) {
       const defs = (n.typeDef && n.typeDef.attributes) || [];
@@ -97,12 +88,10 @@ const commands = {
   async list() {
     const me = await connect();
     const state = flag('state', 'open');
-    const { nodes, totalCount } = await client.graph.listNodes({
-      nodeTypes: ['text'], assignedTo: [me.userUri], stateTypes: state === 'all' ? undefined : [state], limit: 500,
-      sortOptions: [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }],
-    });
+    // the same builder the Tasks view uses (sdk/query.js), so the CLI cannot drift from the app
+    const { nodes } = await client.graph.listNodes(query.taskParams({ states: state === 'all' ? null : [state], assignee: 'me' }, me.userUri));
     for (const n of nodes) out(n.id + '\t' + ((n.state && n.state.type) || '-') + '\t' + (n.title || ''));
-    out(nodes.length + ' nodes (totalCount ' + totalCount + ')');
+    out(nodes.length + ' nodes'); // totalCount needs mode LIST_NODES_MODE_WITH_COUNT
   },
   async search() {
     await connect();
@@ -120,7 +109,6 @@ const commands = {
     await connect();
     for (const n of (await client.graph.listNodes({ nodeTypes: ['type'], limit: 200 })).nodes) out(n.id + '\t' + (n.title || '') + '\thue=' + (n.appearance && n.appearance.hue != null ? n.appearance.hue : '-'));
   },
-  // Read-only: everything the app uses to decide a node's tag colour and visibility label.
   // Read-only sweep: the audience label the app would show for every task/document, to find 'unknown' cases.
   async audiences() {
     const me = await connect();
@@ -319,8 +307,20 @@ commands.boot = async () => {
   out({ startMs: Date.now() - started, failure, status: main.statusSnapshot(), noise: noise.length ? noise : 'none' });
 };
 
+// Grouped so a future agent can see at a glance which commands touch the user's real data.
+const USAGE = [
+  'usage: ./node_modules/.bin/electron scripts/platform-cli.js <command>',
+  '  session    login | whoami',
+  '  read       list [--state open|all] | search <query> [#task|#meeting|#member|#Type] | types | fields [<type uri>] |',
+  '             meetings [--days 7] | get <id> | outline <id> | graphnode <id> | edges <id> | image <tana:image:uri> | pins [--dates]',
+  '  diagnose   inspect <id...> | audiences [--limit 80] [--mine 0] [--kind text] | refs <id> | rows <query> | pinrows | boot [--settle ms]',
+  '  live       watch <id...>',
+  '  WRITES     create <title> [--kind doc|task|meeting] | delete <id> | set-title <id> <title> |',
+  '             set-state <id> <proposed|open|closed|not_now> | pin <id> <sidebar|today> | unpin <id> <sidebar|today>',
+].join('\n');
+
 app.whenReady().then(async () => {
-  if (!commands[cmd]) { console.error('usage: platform-cli login | whoami | list [--state open] | search <query> [#task|#meeting|#Type] | types | inspect <id...> | audiences [--limit 80] [--mine 0] [--kind text] | refs <id> | rows <query> | image <tana:image:id> | meetings [--days 7] | get <id> | outline <id> | watch <id...> | set-title <id> <title> | set-state <id> <state> | create <title> [--kind task|meeting|doc] | delete <id> | pins | pin <id> <sidebar|today> | unpin <id> <sidebar|today>'); app.exit(2); return; }
+  if (!commands[cmd]) { console.error(USAGE); app.exit(2); return; }
   session = createTanaSession();
   let code = 0;
   try { await commands[cmd](); } catch (e) { console.error(e && e.stack || e); code = 1; }

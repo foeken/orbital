@@ -33,7 +33,8 @@ function deferred() {
   return d;
 }
 
-// peerId = (first 48 bits of sha256(userExternalId) << 16) | random 16-bit nonce, as a decimal string (§1.1).
+// peerId = (first 48 bits of sha256(userExternalId) << 16) | a random nonce, as a decimal string (§1.1).
+// The nonce is 15 bits (0..32767): the server only reads the top 48 bits as peerUserHash, the rest is per-process entropy.
 function derivePeerId(userExternalId) {
   const userHash = createHash('sha256').update(userExternalId.trim().toLowerCase()).digest().readBigUInt64BE(0) >> 16n;
   return ((userHash << 16n) | BigInt(Math.floor(Math.random() * 32768))).toString(10);
@@ -209,6 +210,10 @@ class SyncConnection extends EventEmitter {
   }
 
   _resync(entry, reason) {
+    // 15 s of healthy live resets the backoff counter (§2.3). A document nobody edits never flushes, so this
+    // is the only place that can see how long the last live period lasted.
+    if (entry.liveSince && Date.now() - entry.liveSince > STABLE_MS) entry.resyncs = 0;
+    entry.liveSince = 0;
     entry.resyncs++;
     entry.sessionId = null;
     entry.state = 'resyncing';
@@ -290,7 +295,6 @@ class SyncConnection extends EventEmitter {
 
   async _flush(entry) {
     if (entry.inflight || !entry.queue.length || entry.state !== 'live') return;
-    if (entry.liveSince && Date.now() - entry.liveSince > STABLE_MS) entry.resyncs = 0;
     const updates = entry.queue.splice(0);
     if (updates.reduce((n, u) => n + u.length, 0) > OUTBOUND_BUDGET) return this._resync(entry, 'outbound buffer overflow');
     const { id, sessionId } = entry;

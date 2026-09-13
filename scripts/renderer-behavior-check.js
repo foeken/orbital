@@ -876,7 +876,19 @@ async function runTaskMetaRetryCheck() {
   assert.equal(settled.blocked, false, 'a successful retry clears the recorded failure');
 }
 
-const checks = [runPinGrouping, runSelectionChecks, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck];
+// Palette arrows step over rows that cannot run (info lines, unavailable choices) instead of parking on a dead row.
+function runPaletteSkipCheck() {
+  const nextPalIndex = vm.runInNewContext(functionSource('nextPalIndex') + '; nextPalIndex;');
+  const rows = [{ disabled: true }, { label: 'a' }, { disabled: true }, { label: 'b' }];
+  assert.equal(nextPalIndex(rows, 1, 1), 3, 'Down skips a disabled row');
+  assert.equal(nextPalIndex(rows, 3, 1), 1, 'Down wraps past a disabled first row');
+  assert.equal(nextPalIndex(rows, 1, -1), 3, 'Up wraps backwards to the last runnable row');
+  assert.equal(nextPalIndex([{ disabled: true }, { disabled: true }], 0, 1), 0, 'a list with nothing runnable stays put');
+  const styles = fs.readFileSync(require.resolve('../styles.css'), 'utf8');
+  assert.match(styles, /\.palette \.row\.disabled \{/, 'a palette row that cannot run looks different from a runnable one');
+}
+
+const checks = [runPinGrouping, runSelectionChecks, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck];
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);
   if (failures.length) throw new AggregateError(failures, failures.map((failure) => failure.message).join('\n'));

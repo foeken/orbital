@@ -7,8 +7,8 @@ const { createTanaSession, peerIdentity } = require('./tana-session');
 const { createTanaClient } = require('./sdk');
 const { fetchImage } = require('./sdk/assets');
 const access = require('./sdk/access');
-const { readNode, editable, setTitle, setState, taskMeta, audienceMetadata, setAssignees, ulid, initDocument } = require('./sdk/node');
-const { parseQuery, searchParams, needsTypes, taskParams, libraryQueries, DEFAULT_TASK_FILTER, DEFAULT_LIBRARY_FILTER } = require('./sdk/query');
+const { readNode, editable, setTitle, setState, taskMeta, audienceMetadata, setAssignees, ulid, initDocument, STATE_TYPES } = require('./sdk/node');
+const { parseQuery, searchParams, needsTypes, taskParams, libraryQueries, LIBRARY_KINDS, DEFAULT_TASK_FILTER, DEFAULT_LIBRARY_FILTER } = require('./sdk/query');
 const content = require('./sdk/content');
 const fields = require('./sdk/fields');
 const pins = require('./sdk/pins');
@@ -19,10 +19,18 @@ const SECTIONS = [{ id: 'inbox', title: 'Inbox', icon: 'inbox' }, { id: 'tasks',
 const TAG = { task: { label: 'task', color: 'grey' }, meeting: { label: 'meeting', color: 'gold' }, space: { label: 'space', color: 'grey' }, doc: { label: 'doc', color: 'grey' }, member: { label: 'member', color: 'grey' } };
 const KINDS = { doc: 'tana:text:', task: 'tana:text:', meeting: 'tana:event:', chat: 'tana:chat:' };
 const PLAIN_KINDS = new Set(['chat', 'canvas', 'agent', 'skill', 'type']); // tana:<kind>: ids listed read-only: kind icon + kind tag
+const DOC_URI = /^tana:[a-z-]+:[0-9a-z]{26}$/; // a real document id; a renderer draft keeps a local id until it materialises (#112)
 
-// persisted view filters (db settings table)
-const taskFilter = () => db.setting('taskFilter') || DEFAULT_TASK_FILTER;
-const libraryFilter = () => db.setting('libraryFilter') || DEFAULT_LIBRARY_FILTER;
+// Persisted view filters (db settings table), checked on read: a filter written by an older build or by a bad
+// renderer call would otherwise keep its view empty or failing across restarts.
+const okStates = (s) => (Array.isArray(s) && s.length && s.every((x) => STATE_TYPES.includes(x)) ? s : null);
+const okAssignee = (a) => (a === 'anyone' || a === 'unassigned' || /^tana:user-profile:[0-9a-z]{26}$/.test(a || '') ? a : 'me');
+const taskFilter = () => { const f = db.setting('taskFilter') || DEFAULT_TASK_FILTER; return { states: okStates(f.states), assignee: okAssignee(f.assignee) }; };
+const libraryFilter = () => {
+  const f = { ...DEFAULT_LIBRARY_FILTER, ...(db.setting('libraryFilter') || {}) };
+  // types null = any kind, [] = nothing selected; both are meaningful, an unknown kind is not (libraryQueries throws).
+  return { ...f, types: Array.isArray(f.types) ? f.types.filter((t) => LIBRARY_KINDS.includes(t)) : null, states: okStates(f.states), assignee: okAssignee(f.assignee), text: typeof f.text === 'string' ? f.text : '' };
+};
 // events I take part in, from the start of local today to 7 days ahead
 // past week through next week, oldest first
 const MEETINGS_QUERY = (userUri) => {
@@ -37,7 +45,7 @@ const MEETINGS_QUERY = (userUri) => {
 const status = { authenticated: null, authChecking: true, connected: false, syncing: false, lastSync: null, error: null };
 let win, session, client, me;
 let refreshTimer;
-const subscribed = new Set();
+const subscribed = new Set(); // ids the view refresh subscribed: the only ones it unsubscribes again
 const deletedNodes = new Set();
 const isDeleted = n => typeof n.deletedAt === 'number' && n.deletedAt > 0;
 const visibleGraphNodes = nodes => nodes.filter(n => !deletedNodes.has(n.id) && !isDeleted(n));
@@ -140,6 +148,7 @@ const memberTitle = (n) => n.title || (n.userProfile && n.userProfile.name) || '
 
 // A space's "content" is the documents it owns (graph query), returned as document Nodes.
 async function spaceChildren(id) {
+  if (!client) throw new Error(NOT_CONNECTED); // a space opened before the connection is a startup state, not an error (#97)
   const { nodes } = await client.graph.listNodes({ ownerIds: [id], limit: 200, sortOptions: [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }] });
   nodes.forEach(rememberNodeHue);
   await resolveTypes(nodes.map((n) => n.entityType));
@@ -158,10 +167,9 @@ async function spaceChildren(id) {
 const typeAttrTitles = new Map(); // type uri -> { key: title }
 async function attributeTitles(typeUri) {
   if (typeAttrTitles.has(typeUri)) return typeAttrTitles.get(typeUri);
-  let titles = {};
-  try { titles = fields.templateTitles(await client.sync.subscribe(typeUri)); } catch { titles = {}; }
-  typeAttrTitles.set(typeUri, titles);
-  return titles;
+  // A failed lookup is not an answer: caching it would blank this type's field labels for the rest of the session.
+  try { const titles = fields.templateTitles(await client.sync.subscribe(typeUri)); typeAttrTitles.set(typeUri, titles); return titles; }
+  catch { return {}; }
 }
 // A document's own fields, values included, from its data map (the same place an edit writes to).
 async function fieldsOf(id) {
@@ -194,9 +202,9 @@ async function summaryUri(id) {
     client.graph.listNodes({ ownerIds: [id], limit: 200 }).catch(() => ({ nodes: [] })),
   ]);
   const found = writeUpOf(selfNodes[0], owned);
-  const uri = found ? found.id : null;
-  summaryCache.set(id, uri);
-  return uri;
+  // Tana writes the summary after the meeting, so "no write-up yet" is a state to re-check, not an answer to cache.
+  if (found) summaryCache.set(id, found.id);
+  return found ? found.id : null;
 }
 async function related(id) {
   if (!client) throw new Error(NOT_CONNECTED);
@@ -235,7 +243,9 @@ let typesLoaded;
 async function typesByTitle() {
   typesLoaded ||= client.graph.listNodes({ nodeTypes: ['type'], limit: 200 }).then(({ nodes }) => { nodes.forEach(rememberType); }, () => { typesLoaded = null; });
   await typesLoaded;
-  return new Map([...typeTitles].map(([uri, title]) => [title.toLowerCase(), uri]));
+  // typeTitles is the shared id -> title cache (owner chains and entity types land in it too), so a #filter must
+  // look at type nodes only: a space or document sharing a type's title would otherwise be searched as that type.
+  return new Map([...typeTitles].filter(([uri]) => uri.startsWith('tana:type:')).map(([uri, title]) => [title.toLowerCase(), uri]));
 }
 
 // rows for db.replaceSection from graph Node JSON
@@ -327,7 +337,7 @@ async function outlineWithReferences(doc) {
   const nodes = content.readOutline(doc), refs = [];
   const visit = rows => { for (const n of rows) { if (n.type === 'reference') refs.push(n.reference); visit(n.children || []); } };
   visit(nodes);
-  const uris = [...new Set(refs.map(r => r.uri).filter(uri => typeof uri === 'string' && /^tana:[a-z-]+:[0-9a-z]{26}$/.test(uri)))];
+  const uris = [...new Set(refs.map(r => r.uri).filter(uri => typeof uri === 'string' && DOC_URI.test(uri)))];
   const targets = new Map();
   for (let i = 0; i < uris.length; i += 200) {
     try {
@@ -374,7 +384,7 @@ async function createDocument(title, opts = {}) {
   let config = {kind:opts.kind || 'doc'};
   if (config.kind === 'custom') config = await customCreation(opts.typeUri);
   else if (opts.typeUri !== undefined) throw new Error('Custom type requires kind custom');
-  if (!KINDS[config.kind]) throw new Error('Unsupported creation kind');
+  if (!Object.hasOwn(KINDS, config.kind)) throw new Error('Unsupported creation kind'); // 'constructor' is a truthy lookup, not a kind
   const id = KINDS[config.kind] + ulid();
   const doc = await subscribe(id, loro => initDocument(loro, title, me.userUri, config));
   if (!doc) throw new Error(status.error || 'could not create ' + id);
@@ -386,7 +396,10 @@ async function info(doc) {
   const n = readNode(doc), row = db.get(doc.id);
   if (isDeleted(n) || deletedNodes.has(doc.id)) throw new Error('Node has been deleted');
   rememberNodeHue(n);
-  if (row) return toNode({ ...row, title: n.title ?? row.title, done: n.stateType === 'closed' ? 1 : 0 });
+  // A cached row carries the short list form of an event's meta ("Mon 9:00"); a zoomed node shows the full date
+  // like search does (#113), so the meta is rebuilt from the event itself when there is one.
+  const ev = n.type === 'event' || doc.id.startsWith('tana:event:') ? eventMeta(n.startTime, n.endTime, true) : undefined;
+  if (row) return toNode({ ...row, title: n.title ?? row.title, done: n.stateType === 'closed' ? 1 : 0, meta: ev || row.meta });
   await resolveHue(doc.id); // cached rows already carry the hue the refresh learned from the graph
   if (idKind(doc.id) === 'user-profile') return toNode(memberRow(doc.id, n.title || doc.data.get('name') || doc.data.get('displayName') || '', now(), hueOf(n)));
   if (PLAIN_KINDS.has(idKind(doc.id))) return toNode(kindRow(doc.id, idKind(doc.id), n.title || '', now(), hueOf(n)));
@@ -479,6 +492,9 @@ async function loadImage(uri) {
 }
 
 async function start() {
+  // A second login must not leave the previous stream, its listeners and its subscriptions running: the stale client
+  // would keep emitting changes, and the new one would skip every id the old subscription set still claims.
+  if (client) { const previous = client; client = null; subscribed.clear(); previous.sync.removeAllListeners(); previous.close().catch(() => {}); }
   me = await session.info();
   const peer = peerIdentity({ file: path.join(app.getPath('userData'), 'peer.json'), userExternalId: me.userExternalId });
   client = createTanaClient({ getAccessToken: (o) => session.getAccessToken(o), orgId: me.orgId, ...peer, logger: console });
@@ -509,7 +525,7 @@ async function doRefresh() {
     db.replaceSection('meetings', meetings.nodes.map(meetingRow));
     send('outline:changed', null);
     const ids = new Set([...tasks.nodes, ...meetings.nodes].map((n) => n.id));
-    for (const id of ids) if (!subscribed.has(id)) subscribe(id);
+    for (const id of ids) if (!subscribed.has(id)) { subscribed.add(id); subscribe(id); }
     for (const id of subscribed) if (!ids.has(id) && !deletedNodes.has(id)) { subscribed.delete(id); client.sync.unsubscribe(id).catch(() => {}); }
     setStatus({ syncing: false, lastSync: now() });
   } catch (e) {
@@ -523,8 +539,10 @@ async function setTaskFilter(f) {
   return taskFilter();
 }
 
+// Subscribing on demand (zoom, create, metadata) does not put a document in a view, and only the refresh unsubscribes:
+// a document listed here as well would lose its live updates and its Loro undo history under the open editor.
+// ponytail: on-demand subscriptions last for the session; drop the oldest if a long session ever holds too many.
 function subscribe(id, init) {
-  subscribed.add(id);
   return client.sync.subscribe(id, init).catch((e) => { subscribed.delete(id); report(e); return null; });
 }
 
@@ -538,6 +556,8 @@ function invalidateDeleted(id) {
   db.remove(id);
   nodeHues.delete(id); hueLoaded.delete(id); editability.delete(id); pathCache.delete(id);
   typeTitles.delete(id); typeHues.delete(id);
+  summaryCache.delete(id);
+  for (const [event, writeUp] of summaryCache) if (writeUp === id) summaryCache.delete(event); // a deleted write-up is no redirect target
   send('outline:removed', id); // renderer must evict children/search/pin/zoom caches by id
   send('outline:changed', null);
 }
@@ -570,7 +590,7 @@ async function document(id) {
   if (!client || !me) throw new Error(NOT_CONNECTED);
   // A renderer draft carries a local id until it is materialised; subscribing one would create a phantom document
   // whose pending bootstrap then rejects as "unsubscribed <id>" on the next refresh.
-  if (!/^tana:[a-z-]+:[0-9a-z]{26}$/.test(id)) throw new Error(NOT_CONNECTED);
+  if (!DOC_URI.test(id)) throw new Error(NOT_CONNECTED);
   const doc = await subscribe(id); // getDocument can expose an empty handle before bootstrap completes
   if (!doc) throw new Error(status.error || 'could not subscribe to ' + id);
   return doc;
@@ -613,7 +633,9 @@ async function mut(id, fn, accessMutation = false) {
     if (!accessMutation && editable(readNode(doc), me && me.userUri) === false) throw new Error('This node is read-only in the outliner');
     return fn(doc);
   });
-  undoStack.push(id); redoStack.length = 0;
+  // Sharing and moves are gated by an audience disclosure and a preview token; a raw CRDT undo would rewrite
+  // participants, restricted or ownerUri without either, so those mutations do not enter the undo stack.
+  if (!accessMutation) { undoStack.push(id); redoStack.length = 0; }
   return result;
 }
 // ponytail: one undo step per mutation call across docs; Loro merges steps within 500 ms inside a document.
@@ -622,7 +644,7 @@ async function documentAction(id, action, record = true) {
   if (record && historyBusy) throw new Error('History operation is still running');
   if (record) historyBusy = true;
   try {
-  if (typeof id !== 'string' || !/^tana:[a-z-]+:[0-9a-z]{26}$/.test(id)) throw new Error('Invalid document URI');
+  if (typeof id !== 'string' || !DOC_URI.test(id)) throw new Error('Invalid document URI');
   const doc = await document(id), ctx = await accessContext();
   if (!await access.canDelete(doc, me.userUri, ctx, action === 'restore')) throw new Error('Delete/restore permission is unknown or unavailable');
   const response = await client.sync[action](id);
@@ -656,7 +678,9 @@ async function history(from, to, action, can) {
 
 ipcMain.handle('outline:roots', async () => {
   const rows = db.list();
-  const memberNodes = await members();
+  // The member list is one query among many: when it fails the cached views must still render (the Members view has
+  // its own handler, which still reports the failure).
+  const memberNodes = await members().catch(() => []);
   return SECTIONS.map((s) => ({ ...s, nodes: s.id === 'members' ? memberNodes : (rows[s.id] || []).map(toNode) }));
 });
 // events start with an empty content map (no doc node yet); readOutline needs the children list

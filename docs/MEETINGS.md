@@ -21,8 +21,9 @@ The full edge vocabulary is in the descriptors: LINKS_TO, CREATED_IN, BELONGS_TO
 INSTANCE_OF, ASSIGNED_TO, SUBTASK_OF, PART_OF_WORKFLOW, HAS_PROPOSAL, CREATED_BY, EDITED_BY,
 UPDATED_IN, USES_AGENT, HAS_PIN, ATTENDEE_OF, ATTENDED, PROPOSES_CHANGE_TO, COMMENTS_ON.
 
-`main.js related(id)` returns `{ summary, tagline, pinned[], outcomes[], notes[] }` for any node, so
-the same call works for documents that pin things or own documents, not only meetings.
+`main.js related(id)` returns `{ summary, tagline, summaryUri, fields[], pinned[], outcomes[], notes[] }` for any
+node, so the same call works for documents that pin things or own documents, not only meetings. `fields` is the
+zoomed node's own typed fields, not the meeting hub's.
 `scripts/platform-cli.js edges <id>` dumps both directions for exploring this by hand.
 
 ## Which document is the summary

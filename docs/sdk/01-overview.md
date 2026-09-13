@@ -16,6 +16,7 @@ Read in this order: this file → [02-data-model.md](02-data-model.md) → [03-a
 | Access checks | `access.js` | Verified write, sharing, move-preview, delete, audience and confirmation-token checks used by the app boundary. |
 | Outline editing | `content.js` | Read/write the loro-prosemirror content tree as an outline: segments, insert/remove/indent/outdent/move, images. |
 | Query building | `query.js` | Search text + `#task/#meeting/#member/#Type` tokens → ListNodes params; Tasks/Library filter builders. |
+| Typed fields | `fields.js` | Read/write "attributes": the per-field ProseMirror trees in a document's own data map, named by its type's template. |
 | Pins | `pins.js` | Sidebar (collection tree) and date (pin-map) pins, exactly as the web client writes them. |
 | Assets | `assets.js` | Image bytes for a `tana:image:` uri (two-hop CDN fetch). |
 | Schemas | `proto/descriptors.js` | Protobuf descriptors extracted from Tana's bundle, loaded at runtime (no codegen). |

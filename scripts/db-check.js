@@ -61,6 +61,13 @@ assert.strictEqual(db.icon('tana:text:a'), '<svg viewBox="0 0 16 16"><circle r="
 db.setIcon('tana:text:a', null);
 assert.strictEqual(db.icon('tana:text:a'), null);
 
+// a row whose tags column is not a JSON array (older build, interrupted write) still reads as a row
+db.upsert({ id: 'tana:text:bad', section: 'tasks', title: 'Bad', done: 0 });
+new DatabaseSync(file).prepare("UPDATE nodes SET tags = 'not json' WHERE id = ?").run('tana:text:bad');
+assert.deepStrictEqual(db.get('tana:text:bad').tags, []);
+assert.strictEqual(db.list().tasks.length, 1, 'one unreadable row does not take the section down');
+db.replaceSection('tasks', []);
+
 // settings: JSON per key
 assert.strictEqual(db.setting('taskFilter'), undefined);
 db.setSetting('taskFilter', { states: null, assignee: 'anyone' });

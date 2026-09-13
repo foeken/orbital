@@ -96,6 +96,13 @@ async function main() {
       const typeDoc = make('type');
       typeDoc.transact((l) => l.getMap('data').set('template', { attributes: [{ key: 'gcx3bvn5', title: 'Fase' }] }));
       assert.deepEqual(fields.templateTitles(typeDoc), { gcx3bvn5: 'Fase' }, 'field names come from the type template');
+      // a reference value is a mention node: its label is its text, not an empty string
+      typed.transact((l) => {
+        const runs = l.getMap('data').get('attributes').get(key).get('children').get(0).get('children');
+        runs.insertContainer(1, new LoroMap()).set('nodeName', 'mention');
+        runs.get(1).setContainer('attributes', new LoroMap()).set('label', ' / Nedap');
+      });
+      assert.deepEqual(fields.readFields(typed).map((f) => f.text), ['Onderhandeling / Nedap'], 'a mention reads as its label');
     }
     { // Library = no owner: the key goes away, the audience follows the participants, and a type still needs a space
       const loose=make('text'); loose.transact(l=>l.getMap('data').set('ownerUri',target.id));
@@ -406,9 +413,81 @@ async function main() {
     assert.equal((await backend.handlers.get('doc:path')(null, DOC)).length, 0, 'the location falls back to its cache');
     assert.equal((await backend.handlers.get('search')(null, 'anything')).length, 0);
     assert.equal((await backend.handlers.get('library:list')(null, {})).length, 0);
+    const space = await backend.handlers.get('outline:children')(null, 'tana:space:' + ulid()).then(() => null, (e) => String(e.message || e));
+    assert.equal(space, 'not connected to Tana', 'listing a space before the connection is a startup state too');
     assert.equal(backend.statusSnapshot().error, null, 'a startup call is a state, not an error to show');
     assert.deepEqual(sent.filter(([channel, payload]) => channel === 'sync:status' && payload && payload.error), [], 'no error status reaches the renderer during startup');
     console.log('ok  startup: metadata, permission and view calls before the connection stay quiet');
+  }
+
+  // Subscriptions, caches and stored filters around the refresh loop: a document opened on demand (zoom, pin, search
+  // result) is not a view row, so the refresh must leave it subscribed; an answer the backend does not have yet must
+  // not be cached as an answer; and one failing query must not take a whole view down.
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const openId = 'tana:text:' + ulid(), taskId = 'tana:text:' + ulid(), spaceId = 'tana:space:' + ulid();
+    const eventId = 'tana:event:' + ulid(), writeUpId = 'tana:text:' + ulid();
+    const opened = new Document(openId); opened.transact((l) => initDocument(l, 'Opened from a pin', ME));
+    const documents = new Map([[openId, opened]]);
+    const unsubscribed = [], queries = [];
+    let tasks = [{ id: taskId, title: 'Task', state: { type: 'open' }, updateTime: '2026-09-13T10:00:00Z' }];
+    let writeUp = [], membersFail = false, ownerQueries = 0;
+    const listNodes = async (p) => {
+      if (p.ownerIds) { ownerQueries++; return { nodes: p.ownerIds[0] === eventId ? writeUp : [] }; }
+      if (p.nodeIds) return { nodes: p.nodeIds.map((id) => (id === eventId ? { id, calendarEvent: { tagline: 'Notes' } } : { id, title: id === spaceId ? 'Deal' : 'Node' })) };
+      const [kind] = p.nodeTypes || [];
+      if (kind === 'user-profile') { if (membersFail) throw new Error('graph unavailable'); return { nodes: [] }; }
+      if (kind === 'event' || kind === 'type') return { nodes: [] };
+      queries.push(p);
+      return { nodes: tasks };
+    };
+    backend.testRuntime({ me: { userUri: ME }, win: { isDestroyed: () => false, webContents: { send: () => {} } }, client: {
+      sync: { subscribe: async (id) => documents.get(id), getDocument: (id) => documents.get(id), unsubscribe: async (id) => { unsubscribed.push(id); } },
+      graph: { listNodes, getOwnerChain: async () => ({ entries: [{ uri: spaceId }] }) },
+    } });
+
+    assert.equal((await backend.handlers.get('doc:info')(null, openId)).id, openId, 'a document can be opened without being listed');
+    assert.equal(await backend.handlers.get('doc:create')(null, 'Title', { kind: 'constructor' }).then(() => null, (e) => e.message), 'Unsupported creation kind');
+    await backend.refresh();
+    assert.ok(cache.get(taskId), 'the refresh caches the listed task');
+    assert.deepEqual(unsubscribed, [], 'the refresh leaves a document it never listed subscribed, with its live updates and undo history');
+    membersFail = true;
+    const sections = await backend.handlers.get('outline:roots')();
+    assert.equal(sections.map((s) => s.id).join(','), backend.SECTIONS.map((s) => s.id).join(','));
+    assert.equal(sections.find((s) => s.id === 'tasks').nodes.length, 1, 'a failing member query cannot empty the cached views');
+    assert.equal(sections.find((s) => s.id === 'members').nodes.length, 0);
+    membersFail = false;
+    tasks = [];
+    await backend.refresh();
+    assert.deepEqual(unsubscribed, [taskId], 'a row that left the view is still unsubscribed');
+
+    // typeTitles is one id -> title cache: the space in this document's location must not become a searchable type.
+    assert.equal((await backend.handlers.get('doc:path')(null, openId)).map((c) => c.title).join(' > '), 'Library > Deal');
+    tasks = [{ id: taskId, title: 'Task', state: { type: 'open' }, updateTime: '2026-09-13T10:00:00Z' }];
+    queries.length = 0;
+    assert.equal((await backend.handlers.get('search')(null, '#deal')).length, 0, 'a space sharing a type title is not a type filter');
+    assert.deepEqual(queries, [], 'an unknown #type runs no query at all');
+
+    // Tana writes a meeting's summary after the meeting: "none yet" is a state to re-check, not an answer to cache.
+    assert.equal(await backend.handlers.get('doc:summaryUri')(null, eventId), null);
+    writeUp = [{ id: writeUpId, title: 'Notes' }];
+    assert.equal(await backend.handlers.get('doc:summaryUri')(null, eventId), writeUpId, 'a summary written after the first look is still found');
+    const settled = ownerQueries;
+    assert.equal(await backend.handlers.get('doc:summaryUri')(null, eventId), writeUpId);
+    assert.equal(ownerQueries, settled, 'the write-up it did find is cached');
+
+    cache.setSetting('taskFilter', { states: ['open', 'nonsense'], assignee: 'sam' });
+    const stored = await backend.handlers.get('tasks:filter')();
+    assert.equal(stored.states, null, 'a stored filter that is not a query falls back to the default');
+    assert.equal(stored.assignee, 'me');
+    cache.setSetting('libraryFilter', { types: ['tasks', 'wat'], states: [], assignee: 'anyone', text: 7 });
+    const library = await backend.handlers.get('library:filter')();
+    assert.equal(library.types.join(','), 'tasks', 'an unknown library kind cannot keep the view throwing');
+    assert.equal(library.states, null);
+    assert.equal(library.assignee, 'anyone');
+    assert.equal(library.text, '');
+    assert.equal(backend.statusSnapshot().error, null, 'none of this is an error to show');
+    console.log('ok  refresh keeps on-demand subscriptions, survives a failing query, and caches only real answers');
   }
 
   // 2. Document: transact/export/import between two documents, both directions
@@ -461,7 +540,6 @@ async function main() {
   other.applyRemote([snapshot]);
   other.applyRemote(sent);
   assert.equal(readNode(other).stateType, 'closed');
-  assert.equal(doc.version().length, doc.loro.oplogVersion().encode().length);
   assert.equal(new Document(DOC).loro.oplogVersion().length(), 0, 'fresh doc = cold start');
   assert.notEqual(before.compare(doc.loro.oplogVersion()), 0);
   const assigned = new Document(DOC, { peerId: '8' });
@@ -867,7 +945,8 @@ async function main() {
     backend.testRuntime({me:{userUri:ME},client:{graph:{listNodes:async()=>{throw new Error('unavailable');}}}});
     const unresolved = await backend.outlineWithReferences(host);
     assert.deepEqual(unresolved[0].reference, {uri:targetUri});
-    outline.move(host, blockId, 1);
+    assert.throws(() => outline.move(host, blockId, 'sideways'), /up or down/, 'a bad direction is refused, never silently down');
+    outline.move(host, blockId, 'down');
     assert.equal(outline.readOutline(host)[1].reference.uri, targetUri);
     outline.remove(host, blockId);
     assert.equal(outline.readOutline(host).length, 1);
@@ -967,8 +1046,14 @@ async function main() {
   push({ liveDocumentUpdate: { documentId: DOC, sessionId: 's1', updates: remote.map(b64) } });
   await new Promise((r) => setTimeout(r, 60));
   assert.equal(readNode(d).title, 'renamed by server');
-  // frames for another session are dropped
-  push({ liveDocumentUpdate: { documentId: DOC, sessionId: 'old', updates: remote.map(b64) } });
+  // frames for another session are dropped: an update only this stray peer has must not reach the document
+  const stray = new Document(DOC, { peerId: '4343' }), strayUpdates = [];
+  stray.applyRemote([server.serverDoc.loro.export({ mode: 'snapshot' })]);
+  stray.on('local-update', (u) => strayUpdates.push(u));
+  stray.transact((l) => l.getMap('data').set('title', 'written on a stale session'));
+  push({ liveDocumentUpdate: { documentId: DOC, sessionId: 'old', updates: strayUpdates.map(b64) } });
+  await new Promise((r) => setTimeout(r, 60));
+  assert.equal(readNode(d).title, 'renamed by server', 'a frame for another session is ignored');
   // resync_required -> new bootstrap (warm start: empty serverUpdates, catch-up sent), session id changes
   push({ resyncRequired: { documentId: DOC, sessionId: 's1', reason: 'test', recovery: 'RECOVERY_STRATEGY_RETRY' } });
   await new Promise((r) => setTimeout(r, 700));

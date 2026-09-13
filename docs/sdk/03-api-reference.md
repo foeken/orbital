@@ -37,14 +37,15 @@ Constructed by `createTanaClient`; `{ transport, orgId, peerId, storageId, logge
 | `getDocument(id)` | Document or undefined. A handle can exist before bootstrap is ready; await `subscribe` before reading it. |
 | `unsubscribe(id): Promise` | Sends `unsubscribeDocument` when live; detaches listeners. |
 | `softDelete(id): Promise` | `documentAction.softDelete`; the doc disappears from graph queries. Needs the stream open. |
+| `restore(id): Promise` | `documentAction.restore`, the inverse of `softDelete`. Needs the stream open. |
 | `close(): Promise` | Unsubscribes everything, aborts the stream, stops reconnecting. |
 | `connected`, `docs` | State; `docs` maps id → session entry (`state`: new / bootstrapping / retrying / live / resyncing / disconnected / closed). |
 
 Events: `connected` `({ heartbeatIntervalMs })`, `disconnected`, `heartbeat`, `change` `(docId, { origin: 'local' | 'remote' })`, `ephemeral` `(docId, bytes)`, `error` `(err)` (only emitted if a listener exists; always logged).
 
-Outbound: local ops are batched 5 ms, one in-flight `liveDocumentUpdate` per document, 256 KiB budget (overflow → re-bootstrap). Inbound frames for a stale `sessionId` are dropped. `resync_required` re-bootstraps; `DISCARD_LOCAL` resets the Document first. After a reconnect every document is re-bootstrapped with the same Document object.
+Outbound: local ops are batched 5 ms, one in-flight `liveDocumentUpdate` per document, 256 KiB budget (overflow → re-bootstrap). Inbound frames for a stale `sessionId` are dropped. `resync_required` re-bootstraps; `DISCARD_LOCAL` resets the Document first. After a reconnect every document is re-bootstrapped with the same Document object. Per-document resync backoff is 500 ms→5 s, fixed at 30 s after six consecutive resyncs, and the counter is reset by 15 s of healthy live (checked when the next resync starts, so a document nobody edits is counted too).
 
-`derivePeerId(userExternalId)` → decimal u64 string: `(sha256(lowercased id)[0..8] >> 16) << 16 | random16`. New nonce per process; keep `storageId` (a UUID you persist) for a non-ephemeral peer.
+`derivePeerId(userExternalId)` → decimal u64 string: `(sha256(lowercased id)[0..8] >> 16) << 16 | nonce`, where the nonce is 15 random bits (only the top 48 bits matter: the server records them as `peerUserHash`). New nonce per process; keep `storageId` (a UUID you persist) for a non-ephemeral peer.
 
 ## `sdk/access.js`
 
@@ -72,7 +73,6 @@ These helpers are the app's verified native capability boundary. Ownership is an
 | `undo()` / `redo()` → bool, `canUndo()` / `canRedo()` | Local-only, CRDT-aware; the resulting ops flow out like any local change. |
 | `applyRemote(updates: Uint8Array[])` → bool | Imports; emits `change` ({ origin: 'remote' }); true when ops are pending on missing deps. |
 | `exportSince(vv?)` | Update since `vv`, or a full snapshot; marks everything exported. |
-| `version()` | Encoded oplog version vector. |
 | `reset()` | Fresh LoroDoc (DISCARD_LOCAL). |
 | `toJSON()` | `{ data, content, … }` plain JSON. |
 
@@ -85,9 +85,12 @@ These helpers are the app's verified native capability boundary. Ownership is an
 | `setState(document, stateType, byUri)` | `stateType` ∈ `STATE_TYPES`; sets `stateEnteredAt` (now) and `stateChangedBy`; deletes workflow keys. Throws on bad state or non-profile uri. |
 | `contentText(document)` | Plain text of the content tree (blocks joined by \n, mentions as labels). |
 | `taskMeta(document)` | `{ assignees, restricted, participants }` straight from the data map. |
+| `setAssignees(document, uris, byUri)` | Rewrites `assignedToUris` (deduped; `[]` = unassigned) plus `assignedToUrisChangedAt/By`. Throws unless every uri is a `tana:user-profile:` and the document has a task state; a no-op change writes nothing. |
+| `editable(node, userUri)` | Companion UI capability for a plain node (not a Document): `true` for an admin/editor on text/space, `false` for viewers, profiles, events and unsupported kinds, `null` when the ACL is unknown. Never a substitute for server authorization. |
 | `audienceMetadata(document, userUri, graph, sync)` | `{ audience: 'only-me' | 'people' | 'space' | 'everyone' | 'unknown', audienceSpace?: { uri, title? } }`. Direct `restricted` first, then the nearest restricted owner-chain boundary (a space names itself, the org root means everyone), then `effectivelyRestricted === false`. Guest profiles count as people; groups, empty participant sets and inaccessible boundaries stay unknown. See docs/sdk/05-gotchas.md. |
+| `audience(...)` | `audienceMetadata(...).audience`, the label on its own. |
 | `ulid(now?)` | 26-char lowercase Crockford ULID. |
-| `initDocument(loro, title, byUri, { kind = 'doc' | 'task' | 'meeting', now })` | Seeds a new document's data map like the web client (participants { byUri: admin }, restricted, sharedPinDates, attributes) plus the empty content skeleton; task adds the open state assigned to `byUri`; meeting makes an event (next half hour, 30 min, local timezone, origin 'tana'). Use inside `sync.subscribe(id, init)`. |
+| `initDocument(loro, title, byUri, { kind, now, entityTypeUri, ownerUri })` | Seeds a new document's data map like the web client (participants { byUri: admin }, restricted, sharedPinDates, attributes) plus the empty content skeleton. `kind`: `doc` (default), `task` (open state assigned to `byUri`), `meeting` (a `tana:event:` laid out like a Tana-created event: next half hour, 30 min, local timezone, origin 'tana', no content), `chat` (native `participantUris`/`messages`, no outline). `entityTypeUri` sets the document's type (not on a chat), `ownerUri` its home space; both are validated. Use inside `sync.subscribe(id, init)`. |
 | `STATE_TYPES` | `['proposed', 'open', 'closed', 'not_now']`. |
 
 The native title contract is a plain metadata string. `setTitle` cannot store mention nodes; profiles and unsupported kinds are read-only, and events currently remain read-only because the organizer/calendar write capability is outside the graph contract.
@@ -105,8 +108,21 @@ Outline node: `{ id: blockId, text, kind: 'block', heading?: level, type?: 'imag
 | `remove(document, id)` | Removes the node and its children; prunes emptied lists. |
 | `indent(document, id)` / `outdent(document, id)` | Under the previous sibling / after the parent. No-ops at the edges; only paragraphs and listItems can be moved. |
 | `move(document, id, 'up' | 'down')` | Swap with the neighbouring sibling (lists move as a whole). |
+| `moveMany(document, ids, 'up' | 'down')` / `removeMany(document, ids)` | The same for a sibling range in visual order, in **one** transaction, so a multi-select is one undo step. Both reject duplicates, unknown ids and non-siblings before mutating. |
+| `toggleCheckbox(document, id)` | Paragraph or heading only. `checked` lives on the `listItem`, so a bare paragraph is wrapped first (keeping its blockId, marks and mentions); it never touches the document's own task state. |
 
-All operations run inside `document.transact`, so each is one undo step and one live update. Containers are copied and deleted (Loro cannot move containers); text runs keep their marks via `toDelta/applyDelta`.
+All operations run inside `document.transact`, so each is one undo step and one live update. Containers are copied and deleted (Loro cannot move containers); text runs keep their marks via `toDelta/applyDelta`. A direction other than `'up'`/`'down'` throws rather than defaulting to down.
+
+## `sdk/fields.js` — typed fields ("attributes")
+
+A field value is a ProseMirror-style tree in the document's own `data.attributes` map under the key `"<type uri>?attribute=<key>"`: `{ nodeName: 'doc', attributes: {}, children: [{ nodeName: 'paragraph', attributes: { blockId }, children: [text] }] }`. The field's name lives in the *type* document's `data.template.attributes` (`[{ key, title, type?, cardinality?, to? }]`); the graph node's `typeDef` carries the same list but is not always readable, so read the type document.
+
+| Function | Behaviour |
+|---|---|
+| `readFields(document)` | `[{ key, typeUri, attribute, text }]` for every field the document carries; `text` is the flattened value with mentions rendered as their label. `[]` when there are none. |
+| `templateTitles(typeDocument)` | `{ key: title }` for that type's fields (falls back to the key). |
+| `setFieldText(document, key, text)` | Replaces the field's text in place, creating the doc/paragraph shell when the field is empty and dropping any extra runs. One plain text run: it cannot write a mention, so editing a reference field flattens it to text. |
+| `valueText(value)`, `parseKey(key)` | The helpers behind those two. |
 
 ## App mutation and history boundary
 

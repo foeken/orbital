@@ -1,5 +1,9 @@
 # tana-tasks SDK design (platform sync, no MCP)
 
+> **Historical.** This is the original design brief, kept for the layering contract and the reasoning behind it.
+> Where it disagrees with the code it is the doc that is stale (it still shows `tasks:list` IPC, a `'done'` state
+> and `Document.version()`, none of which exist). The current API is docs/sdk/01-overview.md → 05-gotchas.md.
+
 The app talks to the new Tana exactly like the web client does: a cookie session on home.tana.inc, a bearer token from `GET /api/auth/session`, and the Connect-RPC services under `https://home.tana.inc/platform`. Everything Tana-specific lives in `sdk/` and is generic over documents/nodes; "tasks" are only a query and a view on top.
 
 Runtime: Electron 44 (Node 24) main process, CommonJS, no bundler. Dependencies (installed): `@bufbuild/protobuf`, `@connectrpc/connect`, `@connectrpc/connect-web`, `loro-crdt`. The MCP SDK is removed. Protocol details are in docs/PLATFORM-PROTOCOL.md; proto descriptors are loaded at runtime from sdk/proto/descriptors.js (already written; exports `files`, `message(file, name)`, `SyncService`, `GraphService`, `SearchService`).
@@ -109,4 +113,3 @@ Uses Electron's session.fromPartition(...).fetch so cookies are sent; Node's glo
 ## main.js wiring (app level, task-specific)
 
 Boot: db.open; session = createTanaSession(); if not authenticated -> status.authenticated=false (renderer shows "Log in to Tana"). When authenticated: info = session.info(); client = createTanaClient({ getAccessToken: session.getAccessToken, orgId, peerId (persist a UUID in userData/peer.json), ... }); refresh() = graph.listNodes(open tasks assigned to me) -> db.replaceFromTana(rows from Node JSON: id, title, done:0, space: null, updatedAt) -> subscribe each id via sync.subscribe -> send tasks:changed; unsubscribe ids no longer listed. Re-run refresh() every 60s (new/removed tasks) and immediately after a local state change settles. sync 'change' for a doc -> readNode(document) -> db upsert title/done (done = stateType is the completed type) -> tasks:changed. Renderer edits: tasks:update -> setTitle/setState on the Document (optimistic; db updated from the resulting 'change'). tasks:content -> contentText(document) (cached in db.content). Menu: Tasks > Sync with Tana (Cmd+R) runs refresh(). Keep the existing IPC contract for the renderer unchanged (tasks:list, tasks:update, tasks:content, sync:status, sync:login; events tasks:changed, sync:status). dirty/markClean in db.js become unused; delete them and the dirty column.
-

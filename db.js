@@ -13,7 +13,9 @@ function open(path) {
   db.exec('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)'); // JSON values (task filter, ...)
 }
 
-const parse = (r) => r && { ...r, tags: JSON.parse(r.tags) };
+// Rows are display data: a tags column that is not a JSON array (older build, interrupted write) must not take a
+// whole view down with it.
+const parse = (r) => { if (!r) return r; let tags; try { tags = JSON.parse(r.tags); } catch { tags = []; } return { ...r, tags: Array.isArray(tags) ? tags : [] }; };
 
 // -> { [section]: rows[] } in sortKey order (see DESC)
 function list() {
