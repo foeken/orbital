@@ -125,6 +125,8 @@ Every request made during the build and its state. ✓ done and verified · ◐ 
 
 | 116 | Cmd+K results do not show meeting dates and times | ✓ Palette rows passed their section name as the hint, which hid the event meta. A row now defaults to the node meta, so Cmd+K, pins and recents read like Cmd+S: "NTP Sync # meeting Fri 11 Sep 11:00-12:00". | renderer.js docRow |
 
+| 117 | Zooming a meeting should open its summary write-up | ✓ There is no summary edge: the write-up is owned by the event (EDGE_TYPE_BELONGS_TO) and identified by its title matching the event tagline, with the generated appearance.imageUri as fallback. Verified on English and Dutch meetings, so the rule is not language-bound. Zooming a meeting forwards to it and the rail no longer lists it under Notes. | main.js related, renderer.js |
+
 Tracking rule: append new requests to the numbered table above using the next integer. Update an existing row for repeated requests; never create a separate unnumbered request list. Preserve status and verification evidence. Orchestrator owns this file.
 
 Latest rounds (three workers, all closed). The live app was inspected over its devtools port against real Tana data, which is how #49, #54, #59, #62, #68, #78, #83, #85, #89, #93, #97 and #98 were confirmed; the interaction-heavy rows (#39, #90, #96, #105 to #108) were driven in the in-file mock, where mutations stay local. `npm run check` passes on the merged tree.

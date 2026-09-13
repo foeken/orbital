@@ -170,12 +170,17 @@ async function related(id) {
   // never list the open document itself, an untitled draft, or something already shown as a pin
   const pinnedIds = new Set(pinIds);
   const owns = (owned.nodes || []).filter((n) => !PLAIN_KINDS.has(idKind(n.id)) && n.id !== id && !pinnedIds.has(n.id) && (n.title || '').trim());
+  // The write-up has no edge of its own: it is the document the event owns whose title is the event's tagline
+  // (Tana generates both together, and it carries the generated appearance.imageUri). Verified on two meetings.
+  const plain = owns.filter((n) => !stated(n) && idKind(n.id) === 'text');
+  const writeUp = (ev.tagline && plain.find((n) => n.title === ev.tagline)) || plain.find((n) => n.appearance && n.appearance.imageUri);
   return {
     summary: ev.summary || undefined,
     tagline: ev.tagline || undefined,
+    summaryUri: writeUp ? writeUp.id : undefined,
     pinned: pinned.map(row),
     outcomes: owns.filter(stated).map(row),
-    notes: owns.filter((n) => !stated(n)).map(row),
+    notes: owns.filter((n) => !stated(n) && (!writeUp || n.id !== writeUp.id)).map(row),
   };
 }
 let typesLoaded;

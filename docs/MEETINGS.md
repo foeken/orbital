@@ -24,3 +24,16 @@ UPDATED_IN, USES_AGENT, HAS_PIN, ATTENDEE_OF, ATTENDED, PROPOSES_CHANGE_TO, COMM
 `main.js related(id)` returns `{ summary, tagline, pinned[], outcomes[], notes[] }` for any node, so
 the same call works for documents that pin things or own documents, not only meetings.
 `scripts/platform-cli.js edges <id>` dumps both directions for exploring this by hand.
+
+## Which document is the summary
+
+There is no summary edge. The write-up is linked to its meeting only by ownership (ownerUri / spaceUri,
+which the graph reports as EDGE_TYPE_BELONGS_TO), so it has to be identified by data:
+
+- its title equals the event’s calendarEvent.tagline, which Tana generates together with the document, in
+  whatever language the meeting was held (verified on an English and a Dutch meeting);
+- it carries the generated appearance.imageUri sketch, which the other owned documents do not.
+
+related() returns it as summaryUri using the tagline first and the sketch as a fallback, and never guesses
+when neither signal is present. The renderer forwards a zoomed meeting to that document, since an event has no
+content of its own.

@@ -51,6 +51,14 @@ const commands = {
   async whoami() {
     out(await session.info());
   },
+  // graphnode <id>: the raw graph Node JSON, including attributes and any typed links
+  async graphnode() {
+    await connect();
+    const id = positional[0];
+    if (!id) throw new Error('usage: graphnode <id>');
+    const { nodes } = await client.graph.listNodes({ nodeIds: [id], limit: 1 });
+    out(JSON.stringify(nodes[0] || null, null, 1));
+  },
   // edges <id>: raw ListEdges both ways, for learning how Tana links things (pinned items, outcomes, sources)
   async edges() {
     await connect();

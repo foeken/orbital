@@ -357,6 +357,8 @@ const outline = $('outline'), filterEl = $('filter'), filterRow = $('filterRow')
 // they open, and a task row toggles, but nothing here ever takes a caret (docs/OUTLINER.md addendum 15).
 const railEl = $('rail');
 const relatedBy = new Map(); // docId -> related payload, or null while loading
+const redirected = new Set(); // meetings already forwarded to their write-up, so a manual zoom back stays put
+const isMeeting = (node) => node.kind === 'document' && node.icon === 'meeting';
 const railClosed = new Set(JSON.parse(localStorage.getItem('railClosed') || '[]'));
 const CHEV = '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4.5L6 8l3.5-3.5"/></svg>';
 const allDocs = () => sections.flatMap((s) => s.nodes);
@@ -704,6 +706,11 @@ function renderRail(parent) {
   if (!docId) { railEl.hidden = true; return; }
   loadRelated(docId);
   const data = relatedBy.get(docId);
+  // An event has no content of its own: its write-up is a document it owns, so zooming a meeting lands there.
+  if (data && isMeeting(parent.node) && data.summaryUri && !redirected.has(docId)) {
+    redirected.add(docId);
+    setTimeout(() => goTo(data.summaryUri), 0); // goTo fetches the write-up when it is not part of a loaded view
+  }
   const groups = data ? [['Pinned', data.pinned], ['Outcomes', data.outcomes], ['Notes', data.notes]].filter(([, rows]) => rows && rows.length) : [];
   railEl.hidden = !groups.length;
   for (const [label, rows] of groups) {
