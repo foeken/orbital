@@ -51,5 +51,15 @@ assert.strictEqual(all.meetings.length, 2, 'other section untouched');
 db.replaceSection('meetings', []);
 assert.deepStrictEqual(Object.keys(db.list()), ['tasks']);
 
+// icons: app-local SVG per document, independent of the nodes cache
+assert.strictEqual(db.icon('tana:text:a'), null);
+db.setIcon('tana:text:a', '<svg viewBox="0 0 16 16"></svg>');
+db.setIcon('tana:text:a', '<svg viewBox="0 0 16 16"><circle r="8"/></svg>'); // upsert
+assert.strictEqual(db.icon('tana:text:a'), '<svg viewBox="0 0 16 16"><circle r="8"/></svg>');
+db.replaceSection('tasks', []);
+assert.strictEqual(db.icon('tana:text:a'), '<svg viewBox="0 0 16 16"><circle r="8"/></svg>', 'icon survives the row');
+db.setIcon('tana:text:a', null);
+assert.strictEqual(db.icon('tana:text:a'), null);
+
 fs.rmSync(path.dirname(file), { recursive: true });
 console.log('db-check ok');

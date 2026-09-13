@@ -14,19 +14,40 @@ function ulid(now = Date.now()) {
   return s;
 }
 
-// The data map of a new plain document as the web client creates it (see scripts/fixtures/task-snapshot.b64,
-// minus the task fields) plus an empty content skeleton. Run inside Document.transact.
-function initDocument(loro, title, byUri) {
+// The data map of a new document as the web client creates it plus an empty content skeleton. Run inside
+// Document.transact. kind 'doc' (default): a plain text document (scripts/fixtures/task-snapshot.b64 minus the
+// task fields); 'task': plus the open state assigned to byUri; 'meeting': a 'tana:event:' document laid out like a
+// Tana-created event (tana:event:01m1xcnjbykczkxj8x03ttkcad, without the calendar-provider fields), starting at
+// the next half hour for 30 minutes.
+function initDocument(loro, title, byUri, { kind = 'doc', now = Date.now() } = {}) {
+  if (!['doc', 'task', 'meeting'].includes(kind)) throw new Error('unknown kind ' + kind);
   const data = loro.getMap('data');
-  data.set('type', 'text');
+  data.set('type', kind === 'meeting' ? 'event' : 'text');
   data.set('title', title);
-  data.set('createdAt', Date.now());
+  data.set('createdAt', now);
   data.set('restricted', true);
   const p = data.setContainer('participants', new LoroMap()).setContainer(byUri, new LoroMap());
   p.set('type', 'user');
   p.set('role', 'admin');
-  data.setContainer('attributes', new LoroMap());
   data.setContainer('sharedPinDates', new LoroList());
+  if (kind === 'meeting') {
+    const start = Math.ceil(now / 18e5) * 18e5;
+    data.set('startTime', start);
+    data.set('endTime', start + 18e5);
+    data.set('timezone', Intl.DateTimeFormat().resolvedOptions().timeZone);
+    data.set('origin', 'tana');
+    data.setContainer('attendees', new LoroList());
+  } else {
+    data.setContainer('attributes', new LoroMap());
+  }
+  if (kind === 'task') {
+    data.set('stateType', 'open');
+    data.set('stateEnteredAt', now);
+    data.set('stateChangedBy', byUri);
+    data.setContainer('assignedToUris', new LoroList()).push(byUri);
+    data.set('assignedToUrisChangedAt', now);
+    data.set('assignedToUrisChangedBy', byUri);
+  }
   const c = loro.getMap('content');
   c.set('nodeName', 'doc');
   c.setContainer('attributes', new LoroMap());

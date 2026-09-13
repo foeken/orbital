@@ -6,9 +6,11 @@ const { createTanaClient } = require('./sdk');
 const { readNode, setTitle, setState, ulid, initDocument } = require('./sdk/node');
 const { parseQuery, searchParams, needsTypes } = require('./sdk/query');
 const content = require('./sdk/content');
+const pins = require('./sdk/pins');
 
 const SECTIONS = [{ id: 'tasks', title: 'Tasks', icon: 'task' }, { id: 'meetings', title: 'Meetings', icon: 'meeting' }];
-const TAG = { task: { label: 'task', color: 'grey' }, meeting: { label: 'meeting', color: 'gold' } };
+const TAG = { task: { label: 'task', color: 'grey' }, meeting: { label: 'meeting', color: 'gold' }, doc: { label: 'doc', color: 'grey' } };
+const KINDS = { doc: 'tana:text:', task: 'tana:text:', meeting: 'tana:event:' };
 
 const OPEN_TASKS_QUERY = (userUri) => ({
   nodeTypes: ['text'], assignedTo: [userUri], stateTypes: ['open'], limit: 500,
@@ -54,6 +56,8 @@ async function resolveTypes(uris) {
   for (const n of nodes) typeTitles.set(n.id, n.title || '');
 }
 const typeTag = (uri) => (uri && typeTitles.get(uri) ? [{ label: typeTitles.get(uri), color: 'grey' }] : []);
+// plain untyped document (no state, no type): 'doc' icon + chip; typed documents keep their type tag and the plain bullet
+const plainRow = (id, title, updatedAt, typeUri) => ({ id, title, done: 0, icon: typeUri ? null : 'doc', tags: typeUri ? typeTag(typeUri) : [TAG.doc], sortKey: updatedAt, updatedAt });
 // lowercase type title -> uri for #Type search filters; the type list is loaded once per session (and seeds typeTitles)
 let typesLoaded;
 async function typesByTitle() {
@@ -75,13 +79,13 @@ const meetingRow = (n, withDate) => {
   };
 };
 
-const toNode = (r) => ({ id: r.id, title: r.title, text: r.title, kind: 'document', done: r.icon === 'task' ? r.done : undefined, hasChildren: true, icon: r.icon || undefined, tags: r.tags, meta: r.meta || undefined });
+const toNode = (r) => ({ id: r.id, title: r.title, text: r.title, kind: 'document', done: r.icon === 'task' ? r.done : undefined, hasChildren: true, icon: r.icon || undefined, tags: r.tags, meta: r.meta || undefined, iconSvg: db.icon(r.id) || undefined });
 
 // Node shape from any graph Node JSON (search results): events, tasks, typed and plain documents.
 function graphRow(n, withDate) {
   if (n.calendarEvent || n.id.startsWith('tana:event:')) return meetingRow(n, withDate);
   if (n.state && n.state.type) return taskRow(n);
-  return { id: n.id, title: n.title || '', done: 0, icon: null, tags: typeTag(n.entityType), sortKey: n.updateTime || now(), updatedAt: n.updateTime || now() };
+  return plainRow(n.id, n.title || '', n.updateTime || now(), n.entityType);
 }
 
 // Live search over all top-level items (graph full-text search, relevance order) with #task/#meeting/#Type filters.
@@ -95,11 +99,12 @@ async function search(query) {
   return nodes.map((n) => toNode(graphRow(n, true)));
 }
 
-// New plain document: seeded locally, created on the server by the bootstrap (sdk/sync.js subscribe with init).
-async function createDocument(title) {
+// New document ('doc' | 'task' | 'meeting'): seeded locally, created on the server by the bootstrap (sdk/sync.js subscribe with init).
+async function createDocument(title, { kind = 'doc' } = {}) {
   if (!client) throw new Error('not connected to Tana');
-  const id = 'tana:text:' + ulid();
-  const doc = await subscribe(id, (loro) => initDocument(loro, String(title || ''), me.userUri));
+  if (!KINDS[kind]) throw new Error('kind must be doc, task or meeting: ' + kind);
+  const id = KINDS[kind] + ulid();
+  const doc = await subscribe(id, (loro) => initDocument(loro, String(title || ''), me.userUri, { kind }));
   if (!doc) throw new Error(status.error || 'could not create ' + id);
   return info(doc);
 }
@@ -110,14 +115,46 @@ async function info(doc) {
   if (row) return toNode({ ...row, title: n.title ?? row.title, done: n.stateType === 'closed' ? 1 : 0 });
   const isEvent = n.type === 'event' || doc.id.startsWith('tana:event:');
   await resolveTypes([n.entityTypeUri]);
+  if (!isEvent && !n.stateType) return toNode(plainRow(doc.id, n.title || '', now(), n.entityTypeUri));
   return toNode({
-    id: doc.id, title: n.title || '', done: n.stateType === 'closed' ? 1 : 0, icon: isEvent ? 'meeting' : n.stateType ? 'task' : null,
-    meta: isEvent ? eventMeta(n.startTime, n.endTime) : null, tags: [...(isEvent ? [TAG.meeting] : n.stateType ? [TAG.task] : []), ...typeTag(n.entityTypeUri)],
+    id: doc.id, title: n.title || '', done: n.stateType === 'closed' ? 1 : 0, icon: isEvent ? 'meeting' : 'task',
+    meta: isEvent ? eventMeta(n.startTime, n.endTime) : null, tags: [isEvent ? TAG.meeting : TAG.task, ...typeTag(n.entityTypeUri)],
   });
 }
 
 function send(channel, payload) {
   if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
+}
+
+// ---- pins (sdk/pins.js over the user's profile/collection/pin-map docs) and app-local icons ----
+const today = () => new Date().toLocaleDateString('sv-SE'); // local YYYY-MM-DD
+const pinTarget = (target) => { if (target !== 'sidebar' && target !== 'today') throw new Error('pin target must be sidebar or today: ' + target); return target; };
+
+// Sidebar pins as Nodes, in sidebar order; pinned items we cannot subscribe (spaces, types, ...) are skipped quietly.
+async function pinned() {
+  if (!client) return [];
+  const uris = await pins.listSidebar(client.sync, me.userUri);
+  const docs = await Promise.all(uris.map((u) => client.sync.getDocument(u) || client.sync.subscribe(u).catch(() => null)));
+  return Promise.all(docs.filter(Boolean).map(info));
+}
+async function pinState(id) {
+  if (!client) throw new Error('not connected to Tana');
+  return { sidebar: (await pins.listSidebar(client.sync, me.userUri)).includes(id), dates: await pins.dates(client.sync, me.userUri, id) };
+}
+async function setPin(id, target, on) {
+  if (!client) throw new Error('not connected to Tana');
+  const sync = client.sync, user = me.userUri;
+  if (pinTarget(target) === 'sidebar') await (on ? pins.pinSidebar : pins.unpinSidebar)(sync, user, id);
+  else await (on ? pins.pinDate : pins.unpinDate)(sync, user, id, today());
+}
+function setIcon(id, svg) {
+  if (svg != null) {
+    if (typeof svg !== 'string' || Buffer.byteLength(svg) >= 65536) throw new Error('icon must be an SVG string under 64 KB');
+    svg = svg.trim().replace(/^<\?xml[^>]*\?>\s*/, ''); // FileReader text of a .svg may start with an XML declaration
+    if (!svg.startsWith('<svg')) throw new Error('icon must start with <svg');
+  }
+  db.setIcon(id, svg);
+  send('outline:changed', null);
 }
 
 function setStatus(patch) {
@@ -239,7 +276,7 @@ ipcMain.handle('outline:roots', () => {
 // events start with an empty content map (no doc node yet); readOutline needs the children list
 ipcMain.handle('outline:children', (_e, id) => op(id, (doc) => (doc.content.get('children') ? content.readOutline(doc) : [])));
 ipcMain.handle('doc:info', (_e, id) => op(id, info));
-ipcMain.handle('doc:create', (_e, title) => createDocument(title));
+ipcMain.handle('doc:create', (_e, title, opts) => createDocument(title, opts || {}));
 ipcMain.handle('search', (_e, query) => search(query));
 ipcMain.handle('history:undo', () => history(undoStack, redoStack, 'undo', 'canUndo'));
 ipcMain.handle('history:redo', () => history(redoStack, undoStack, 'redo', 'canRedo'));
@@ -255,6 +292,11 @@ ipcMain.handle('block:remove', (_e, id, nodeId) => mut(id, (doc) => { content.re
 ipcMain.handle('block:indent', (_e, id, nodeId) => mut(id, (doc) => { content.indent(doc, nodeId); }));
 ipcMain.handle('block:outdent', (_e, id, nodeId) => mut(id, (doc) => { content.outdent(doc, nodeId); }));
 ipcMain.handle('block:move', (_e, id, nodeId, direction) => mut(id, (doc) => { content.move(doc, nodeId, direction); }));
+ipcMain.handle('pins:list', () => pinned());
+ipcMain.handle('pins:state', (_e, id) => pinState(id));
+ipcMain.handle('pins:pin', (_e, id, target) => setPin(id, target, true));
+ipcMain.handle('pins:unpin', (_e, id, target) => setPin(id, target, false));
+ipcMain.handle('doc:setIcon', (_e, id, svg) => setIcon(id, svg));
 ipcMain.handle('sync:refresh', () => refresh());
 ipcMain.handle('sync:status', () => status);
 ipcMain.handle('sync:login', async () => {

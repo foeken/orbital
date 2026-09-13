@@ -34,7 +34,9 @@ function mockApi() {
   const sections = [{ id: 'tasks', title: 'Tasks', icon: 'task', nodes: docs }, { id: 'meetings', title: 'Meetings', icon: 'meeting', nodes: meetings }];
   const all = [...docs, ...meetings];
   const people = { 'tana:user-profile:lex': 'Lex van Velsen' }; // referenced document that is not in roots
-  const created = {};   // documents made with createDocument (plain, in no section)
+  const created = {};   // documents made with createDocument
+  const unlisted = [];  // created tasks/meetings the roots "query" has not caught up with yet: listed after the next refresh()
+  const sidebar = ['mockdoc2', 'mockmeeting2'], datePins = { mockdoc2: [localDate()] }; // pins: sidebar order, personal date pins per doc
   const content = Object.fromEntries(all.map((d, i) => [d.id, [
     block('Context', [], 2),
     block('First point about task ' + i, [block('Detail A'), block('Detail B', [block('Deeper detail')])]),
@@ -71,11 +73,19 @@ function mockApi() {
       const hit = (d, t) => (t === 'task' ? d.icon === 'task' : t === 'meeting' ? d.icon === 'meeting' : (d.tags || []).some((x) => x.label.toLowerCase() === t));
       return all.filter((d) => d.text.toLowerCase().includes(text) && tokens.every((t) => hit(d, t))).slice(0, 20).map((d) => ({ ...info(d), meta: dateMeta[d.id] || d.meta }));
     },
-    createDocument: async (title) => {
-      const n = { id: 'mocknew' + (++seq), title, kind: 'document', hasChildren: true, tags: [] };
-      created[n.id] = n; content[n.id] = [];
-      return n;
+    createDocument: async (title, { kind = 'doc' } = {}) => {
+      const n = { id: 'mocknew' + (++seq), text: title, kind: 'document', hasChildren: true, icon: kind, tags: [{ label: kind, color: kind === 'meeting' ? 'gold' : 'grey' }] };
+      if (kind === 'task') n.done = 0;
+      if (kind === 'meeting') n.meta = WD[new Date().getDay()] + ' 10:00–10:30';
+      created[n.id] = n; content[n.id] = []; all.push(n);
+      if (kind !== 'doc') unlisted.push(n);
+      return info(n);
     },
+    pins: async () => sidebar.map((id) => info(all.find((d) => d.id === id))),
+    pinState: async (docId) => ({ sidebar: sidebar.includes(docId), dates: datePins[docId] || [] }),
+    pin: async (docId, target) => { if (target === 'sidebar') { if (!sidebar.includes(docId)) sidebar.push(docId); } else (datePins[docId] ||= []).push(localDate()); emit(null); },
+    unpin: async (docId, target) => { if (target === 'sidebar') sidebar.splice(sidebar.indexOf(docId) >>> 0, 1); else datePins[docId] = (datePins[docId] || []).filter((d) => d !== localDate()); emit(null); },
+    setIcon: async (docId, svg) => { (all.find((d) => d.id === docId) || created[docId]).iconSvg = svg || undefined; emit(null); },
     setTitle: async (docId, title) => mut(docId, () => { all.find((d) => d.id === docId).text = title; emit(docId); }),
     setDone: async (docId, done) => mut(docId, () => { all.find((d) => d.id === docId).done = done ? 1 : 0; emit(docId); }),
     setText: async (docId, id, text) => mut(docId, () => { const n = locate(content[docId], id).node; n.text = plainOf(text); n.segments = segsOf(text); emit(docId); }),
@@ -101,7 +111,7 @@ function mockApi() {
     }),
     undo: () => history(undoStack, redoStack),
     redo: () => history(redoStack, undoStack),
-    refresh: async () => emit(null),
+    refresh: async () => { for (const n of unlisted.splice(0)) (n.icon === 'task' ? docs : meetings).push(n); emit(null); },
     login: async () => { status = { ...status, authenticated: true, connected: true, lastSync: new Date().toISOString() }; statusCbs.forEach((cb) => cb(status)); },
     status: async () => status,
     onChanged: (cb) => changed.push(cb),
@@ -111,6 +121,7 @@ function mockApi() {
 
 // ---- segments: [{ text } | { mention: { label, uri } }] <-> plain text <-> DOM ----
 const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const localDate = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }; // today, YYYY-MM-DD
 // accepts segments, a plain string, or a Node
 const segsOf = (v) => (Array.isArray(v) ? v : typeof v === 'string' ? (v ? [{ text: v }] : []) : v.segments || (v.text ? [{ text: v.text }] : []));
 const plainOf = (v) => segsOf(v).map((s) => ('text' in s ? s.text : s.mention.label)).join('');
@@ -165,6 +176,21 @@ let queue = Promise.resolve();
 let scrolledView = null;     // view already scrolled to today's first meeting when it opened
 let linkCtx = null;          // @ linking in progress: { item, segs, start, end, text }
 const hotkeys = JSON.parse(localStorage.getItem('hotkeys') || '{}'); // palette row id -> combo ("⇧⌘M")
+let pins = [], pinInfo = null; // Cmd+K: sidebar pins (api.pins) and { docId, sidebar, dates } of the palette's document (api.pinState)
+let palDoc = null;           // document the Cmd+K context actions apply to (zoomed, else the one whose node is focused)
+let dropDoc = null;          // document waiting for an SVG drop ("Set icon…" overlay)
+let palReturn = null, dropReturn = null; // { key, offset } of the node focused when a palette / the drop overlay opened; focus goes back there on close
+const fresh = new Map();     // docId -> { section, after, node }: documents created here that roots does not list yet, kept in place until it does
+let draftSeq = 0;
+const DRAFT_KIND = { tasks: 'task', meetings: 'meeting' }; // what Enter drafts in a view (any other view: a plain doc)
+// font size: native page zoom (⇧⌘+ / ⇧⌘− / ⇧⌘0), persisted
+let zoomFactor = Number(localStorage.getItem('zoom')) || 1;
+function setZoom(f) {
+  zoomFactor = Math.min(3, Math.max(0.5, Math.round(f * 100) / 100));
+  localStorage.setItem('zoom', String(zoomFactor));
+  if (tana.zoom) tana.zoom(zoomFactor);
+}
+if (zoomFactor !== 1 && tana.zoom) tana.zoom(zoomFactor);
 
 const $ = (id) => document.getElementById(id);
 const outline = $('outline'), filterEl = $('filter'), filterRow = $('filterRow');
@@ -176,6 +202,9 @@ const mkItem = (docId, node, parent) => { const item = { key: keyFor(docId, node
 const childrenOf = (item) => (item.node.kind === 'document' ? kids.get(item.docId) : item.node.children || []);
 const hasKids = (item) => { const c = childrenOf(item); return Array.isArray(c) ? c.length > 0 : !!item.node.hasChildren; };
 const isOpen = (item) => (open.has(item.key) ? open.get(item.key) : item.node.kind === 'block');
+const draftNode = (parent) => ({ id: 'draft:' + parent.key, text: '', kind: 'block', draft: true }); // shown under an expanded empty node; created on the first typed character
+// draft document for a view: rendered like a real task/meeting/doc, created with api.createDocument(text, { kind }) on the first typed character
+const draftDocNode = (kind) => ({ id: 'draftdoc:' + (++draftSeq), text: '', kind: 'document', draft: kind, icon: kind, tags: [{ label: kind, color: kind === 'meeting' ? 'gold' : 'grey' }], done: 0, hasChildren: false });
 const showError = (e) => { const el = $('error'); el.textContent = e ? String(e.message || e) : ''; el.hidden = !e; };
 const run = (fn) => (queue = queue.then(fn).catch(showError));
 const texts = () => [...outline.querySelectorAll('.text')];
@@ -204,7 +233,14 @@ function todayIndex(nodes) {
   return -1;
 }
 
-async function loadRoots() { sections = await tana.roots(); }
+async function loadRoots() {
+  sections = await tana.roots();
+  for (const [id, f] of fresh) { // a created document stays where it was drafted until the roots query lists it
+    const s = sections.find((x) => x.id === f.section);
+    if (!s || s.nodes.some((n) => n.id === id)) fresh.delete(id);
+    else s.nodes.splice(s.nodes.findIndex((n) => n.id === f.after) + 1, 0, f.node);
+  }
+}
 async function reload(docId) { kids.set(docId, await tana.children(docId)); }
 function ensureLoaded(item) {
   if (item.node.kind !== 'document' || kids.has(item.docId)) return;
@@ -338,16 +374,17 @@ function nodeEl(node, docId, parent) {
   const item = mkItem(docId, node, parent);
   const has = hasKids(item), opened = isOpen(item);
   const el = document.createElement('div');
-  el.className = 'node ' + node.kind + (node.heading ? ' h' + node.heading : '') + (node.done ? ' done' : '') + (has ? ' has' : '') + (has && !opened ? ' collapsed' : '');
+  el.className = 'node ' + node.kind + (node.heading ? ' h' + node.heading : '') + (node.done ? ' done' : '') + (has ? ' has' : '') + (has && !opened ? ' collapsed' : '') + (node.draft ? ' draft' : '');
   el.dataset.key = item.key;
   const line = document.createElement('div'); line.className = 'line';
   const chev = document.createElement('button'); chev.className = 'chev'; chev.tabIndex = -1; chev.title = opened ? 'Collapse' : 'Expand';
   chev.onmousedown = (e) => e.preventDefault();
   chev.onclick = () => setOpen(item, !opened);
   const bullet = document.createElement('span'); bullet.className = 'bullet'; bullet.title = 'Zoom in';
-  if (node.icon) { bullet.classList.add('icon', node.icon); bullet.innerHTML = iconSvg(node.icon); }
+  if (node.iconSvg) { bullet.classList.add('icon', 'custom'); bullet.innerHTML = node.iconSvg; }
+  else if (node.icon) { bullet.classList.add('icon', node.icon); bullet.innerHTML = iconSvg(node.icon); }
   bullet.onmousedown = (e) => e.preventDefault();
-  bullet.onclick = () => zoomTo(item);
+  if (!node.draft) bullet.onclick = () => zoomTo(item);
   line.append(chev, bullet);
   if (isTask(node)) {
     const check = document.createElement('input');
@@ -366,14 +403,59 @@ function nodeEl(node, docId, parent) {
   line.append(body);
   line.onclick = (e) => { if (e.target === line || e.target === body) setCaret(text, text.textContent.length); };
   el.append(line);
-  if (has && opened) {
+  // expanded = real children shown, or an explicitly opened empty node (which shows one draft child)
+  const expanded = has ? opened : !node.draft && open.get(item.key) === true;
+  chev.classList.toggle('closed', !expanded); chev.title = expanded ? 'Collapse' : 'Expand';
+  chev.onclick = () => setOpen(item, !expanded);
+  if (expanded) {
     const wrap = document.createElement('div'); wrap.className = 'children';
     const c = childrenOf(item);
     if (c == null) { ensureLoaded(item); wrap.classList.add('loading'); wrap.textContent = 'Loading…'; }
-    else wrap.append(...c.map((k) => nodeEl(k, docId, item)));
+    else if (c.length) wrap.append(...c.map((k) => nodeEl(k, docId, item)));
+    else wrap.append(nodeEl(draftNode(item), docId, item));
     el.append(wrap);
   }
   return el;
+}
+
+// a draft becomes real on its first typed character: created with that text, caret kept
+async function materialise(item, el) {
+  const { parent, node } = item, text = el.textContent, off = caretOffset(el);
+  let key;
+  await run(async () => {
+    if (node.kind === 'document') {
+      const n = await tana.createDocument(text, { kind: node.draft }), real = { ...n, text: n.title ?? n.text ?? '', hasChildren: true };
+      const s = sectionOf(node.id), i = s ? s.nodes.indexOf(node) : -1;
+      if (i >= 0) { s.nodes.splice(i, 1, real); fresh.set(real.id, { section: s.id, after: i ? s.nodes[i - 1].id : null, node: real }); }
+      key = real.id;
+    } else {
+      const id = parent.node.kind === 'document' ? await tana.insertAfter(parent.docId, null, text) : await tana.insertChild(parent.docId, parent.node.id, text);
+      await reload(parent.docId);
+      key = parent.docId + '/' + id;
+    }
+  });
+  const latest = el.textContent, latestOff = caretOffset(el) ?? off; // typed on while the create was in flight
+  render();
+  const real = items.get(key);
+  if (!real) return;
+  if (latest !== text) { renderSegs(textEl(key), [{ text: latest }]); scheduleSave(real, [{ text: latest }]); }
+  placeCaret(key, latestOff);
+}
+function dropDraft(item) {
+  if (item.node.kind === 'document') { const s = sectionOf(item.docId); if (s) s.nodes.splice(s.nodes.indexOf(item.node), 1); }
+  else open.delete(item.parent.key);
+  render();
+}
+function dropDrafts() { for (const s of sections) s.nodes = s.nodes.filter((n) => !n.draft); } // navigating away drops empty draft documents
+// Enter on a collapsed top-level document (or with nothing focused in an empty view): a draft sibling document below it
+function draftDoc(after) {
+  const s = viewOf();
+  if (!s) return;
+  if (after) flush(after.key);
+  const node = draftDocNode(DRAFT_KIND[s.id] || 'doc');
+  s.nodes.splice(after ? s.nodes.indexOf(after.node) + 1 : 0, 0, node);
+  render();
+  placeCaret(node.id, 0);
 }
 
 // ---- edits (debounced) ----
@@ -457,21 +539,21 @@ async function history(op) {
 
 function setOpen(item, value) { open.set(item.key, value); render(); }
 function toggleDone(item) {
-  if (!isTask(item.node)) return;
+  if (!isTask(item.node) || item.node.draft) return;
   item.node.done = item.node.done ? 0 : 1;
   render();
   run(() => tana.setDone(item.docId, item.node.done));
 }
 function zoomTo(item) {
-  flushAll();
+  flushAll(); dropDrafts();
   if (item.node.kind === 'document') recordRecent(item.node);
   zoom = { docId: item.docId, nodeId: item.node.kind === 'document' ? null : item.node.id, from: zoom && zoom.docId === item.docId ? zoom.from : undefined };
   render();
 }
-function setView(id) { view = id; localStorage.setItem('view', id); zoom = null; render(); }
+function setView(id) { dropDrafts(); view = id; localStorage.setItem('view', id); zoom = null; render(); }
 // zoom into a document, switching to its view first when it belongs to another one; from = breadcrumb root instead of the view
 function openDoc(docId, from) {
-  flushAll();
+  flushAll(); dropDrafts();
   const s = from ? null : sectionOf(docId);
   if (s && s.id !== view) { view = s.id; localStorage.setItem('view', view); }
   const doc = allDocs().find((d) => d.id === docId) || extra.get(docId);
@@ -487,6 +569,55 @@ async function goTo(uri) {
   openDoc(uri);
 }
 function flushAll() { for (const key of [...pending.keys()]) flush(key); }
+// the document Cmd+K context actions apply to: the zoomed one, else the document whose node is focused
+function currentDoc() {
+  const f = focused(), item = f && items.get(f.key);
+  const docId = zoom ? zoom.docId : item ? item.docId : null;
+  const d = docId && (allDocs().find((x) => x.id === docId) || extra.get(docId));
+  return d && !d.draft ? d : null;
+}
+// ---- pins (api.pins / pinState / pin / unpin) ----
+function loadPins() {
+  if (!tana.pins) return;
+  const doc = palDoc;
+  Promise.all([tana.pins(), doc && tana.pinState(doc.id)]).then(([p, s]) => {
+    pins = p; pinInfo = s ? { docId: doc.id, ...s } : null;
+    if (!palette.hidden && palMode === 'cmd') renderPalette();
+  }, showError);
+}
+function pinAction(op, target) { run(async () => { await tana[op](pinInfo.docId, target); loadPins(); }); }
+// ---- custom icons (api.setIcon): "Set icon…" drop overlay, or an .svg dropped straight onto a document line ----
+function setIcon(docId, svg) {
+  const d = allDocs().find((x) => x.id === docId) || extra.get(docId);
+  if (d) d.iconSvg = svg || undefined;
+  render();
+  run(() => tana.setIcon(docId, svg));
+}
+function startDrop(doc) {
+  dropDoc = doc; dropReturn = focused();
+  $('dropText').textContent = 'Drop an SVG file to set the icon of ' + (doc.text || doc.title || 'Untitled');
+  $('drop').hidden = false;
+  if (document.activeElement) document.activeElement.blur(); // keys go to the overlay (document listener), not into a node
+}
+function endDrop() {
+  dropDoc = null; $('drop').hidden = true; $('dropFile').value = '';
+  if (dropReturn) placeCaret(dropReturn.key, dropReturn.offset);
+  dropReturn = null;
+}
+function readSvg(file, cb) {
+  if (!file || !(file.type === 'image/svg+xml' || /\.svg$/i.test(file.name))) return showError('Drop an .svg file');
+  const r = new FileReader(); r.onload = () => cb(r.result); r.readAsText(file);
+}
+document.addEventListener('dragover', (e) => e.preventDefault());
+document.addEventListener('drop', (e) => {
+  e.preventDefault();
+  const line = !dropDoc && e.target.closest && e.target.closest('.line'), item = line && items.get(line.parentElement.dataset.key);
+  const doc = dropDoc || (item && item.node.kind === 'document' && item.node);
+  if (!doc) return;
+  readSvg(e.dataTransfer.files[0], (svg) => { endDrop(); setIcon(doc.id, svg); });
+});
+$('drop').onclick = endDrop;
+$('dropFile').onchange = () => { const doc = dropDoc; readSvg($('dropFile').files[0], (svg) => { endDrop(); setIcon(doc.id, svg); }); };
 
 // ---- @ linking: replace the selection with a mention chosen (or created) in the search palette ----
 function startLink(item, el, [start, end]) {
@@ -522,17 +653,23 @@ outline.addEventListener('keydown', (e) => {
   const item = items.get(keyOfEl(el)), mod = e.metaKey || e.ctrlKey;
   const off = caretOffset(el), len = el.textContent.length, collapsed = getSelection().isCollapsed;
   const isDoc = item.node.kind === 'document';
+  if (item.node.draft) { // empty draft: Enter/Tab do nothing, Backspace drops it (caret to the node above); typing creates it (input handler)
+    if (e.key === 'Enter' || e.key === 'Tab') return e.preventDefault();
+    if (e.key === 'Backspace' && len === 0) { e.preventDefault(); const all = texts(), prev = all[all.indexOf(el) - 1], k = prev && keyOfEl(prev); dropDraft(item); return k && placeCaret(k); }
+    if (e.key !== 'Escape' && !(e.key.startsWith('Arrow') && !mod)) return;
+  }
   if (e.key === 'Escape') { e.preventDefault(); flush(item.key); el.blur(); }
   else if (e.key === '@' && !isDoc && !collapsed) { const range = selectionOffsets(el); if (range) { e.preventDefault(); startLink(item, el, range); } } // no selection: "@" is typed
   else if (e.key === 'Enter' && mod) { e.preventDefault(); if (isDoc) toggleDone(item); }
   else if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); insertAtCaret(el, '\n'); }
+  else if (e.key === 'Enter' && isDoc && !zoom && !isOpen(item)) { e.preventDefault(); draftDoc(item); } // collapsed document in a view: draft sibling document
   else if (e.key === 'Enter') { e.preventDefault(); splitNode(item, el, off ?? len); }
   else if (e.key === 'Tab') { e.preventDefault(); if (!isDoc) shiftNode(item, el, e.shiftKey ? 'outdent' : 'indent'); }
   else if (e.key === 'Backspace' && mod && e.shiftKey) { e.preventDefault(); if (!isDoc) removeNode(item, el); }
   else if (e.key === 'Backspace' && off === 0 && collapsed) { e.preventDefault(); if (!isDoc && len === 0) removeNode(item, el); }
   else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && mod && e.shiftKey) { e.preventDefault(); if (!isDoc) shiftNode(item, el, 'move', e.key === 'ArrowUp' ? 'up' : 'down'); }
-  else if (e.key === 'ArrowUp' && mod && !e.shiftKey) { e.preventDefault(); if (hasKids(item)) setOpen(item, false); }
-  else if (e.key === 'ArrowDown' && mod && !e.shiftKey) { e.preventDefault(); if (hasKids(item)) setOpen(item, true); }
+  else if (e.key === 'ArrowUp' && mod && !e.shiftKey) { e.preventDefault(); setOpen(item, false); }
+  else if (e.key === 'ArrowDown' && mod && !e.shiftKey) { e.preventDefault(); setOpen(item, true); } // an empty node opens onto a draft child
   else if (e.key === 'ArrowUp' && !mod && atEdge(el, 'up')) { e.preventDefault(); moveTo(el, -1, off); }
   else if (e.key === 'ArrowDown' && !mod && atEdge(el, 'down')) { e.preventDefault(); moveTo(el, 1, off); }
   else if (e.key === 'ArrowLeft' && off === 0 && collapsed) { e.preventDefault(); moveTo(el, -1, Infinity); }
@@ -541,9 +678,16 @@ outline.addEventListener('keydown', (e) => {
 outline.addEventListener('input', (e) => {
   const el = e.target.closest && e.target.closest('.text');
   if (!el) return;
-  scheduleSave(items.get(keyOfEl(el)), readSegs(el));
+  const item = items.get(keyOfEl(el));
+  if (!item.node.draft) scheduleSave(item, readSegs(el));
+  else if (!item.busy) { item.busy = true; materialise(item, el); }
 });
-outline.addEventListener('focusout', (e) => { if (e.target.classList && e.target.classList.contains('text')) flush(keyOfEl(e.target)); });
+outline.addEventListener('focusout', (e) => {
+  const el = e.target, item = el.classList && el.classList.contains('text') && items.get(keyOfEl(el));
+  if (!item) return;
+  if (!item.node.draft) flush(item.key);
+  else if (!el.textContent && !item.busy && el.isConnected) dropDraft(item); // left empty: no node is created
+});
 outline.addEventListener('mousedown', (e) => { if (e.target.closest && e.target.closest('.mention')) e.preventDefault(); });
 outline.addEventListener('click', (e) => { const a = e.target.closest && e.target.closest('.mention'); if (a) { e.preventDefault(); goTo(a.dataset.uri); } });
 
@@ -557,24 +701,41 @@ $('clear').onclick = () => { filterEl.value = ''; render(); filterEl.focus(); };
 document.addEventListener('keydown', (e) => {
   const mod = e.metaKey || e.ctrlKey, inFilter = document.activeElement === filterEl;
   const hotkey = mod && !inFilter && Object.keys(hotkeys).find((id) => hotkeys[id] === comboOf(e));
-  if (mod && e.key === 'k') { e.preventDefault(); togglePalette('cmd'); }
+  if (dropDoc) { if (e.defaultPrevented) return; if (e.key === 'Escape') { e.preventDefault(); endDrop(); } else if (e.key === 'Enter') { e.preventDefault(); $('dropFile').click(); } } // (the palette's Enter that started drop mode is already handled)
+  else if (mod && e.key === 'k') { e.preventDefault(); togglePalette('cmd'); }
+  else if (mod && e.shiftKey && (e.key === '+' || e.key === '=' || e.key === '-' || e.key === '_' || e.key === '0')) { e.preventDefault(); setZoom(e.key === '0' ? 1 : zoomFactor * (e.key === '-' || e.key === '_' ? 1 / 1.1 : 1.1)); }
   else if (mod && e.key === 's') { e.preventDefault(); togglePalette('search'); }
   else if (mod && e.key === 'r') { e.preventDefault(); run(() => tana.refresh()); } // Sync (no native menu item any more)
   else if (!palette.hidden) return;
   else if (mod && (e.key.toLowerCase() === 'z' || e.key.toLowerCase() === 'y') && !inFilter) { e.preventDefault(); history(e.key.toLowerCase() === 'y' || e.shiftKey ? 'redo' : 'undo'); }
   else if (mod && e.key === 'f') { e.preventDefault(); if (zoom) return; filterShown = true; render(); filterEl.focus(); }
   else if (hotkey) { e.preventDefault(); runAction(hotkey); }
+  else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !mod && document.activeElement === document.body) { // nothing focused: enter the outline
+    const all = texts(), el = e.key === 'ArrowDown' ? all[0] : all.at(-1);
+    if (el) { e.preventDefault(); setCaret(el, e.key === 'ArrowDown' ? 0 : el.textContent.length); }
+  }
+  else if (e.key === 'Enter' && !mod && document.activeElement === document.body && !zoom && viewOf() && !viewOf().nodes.length) { e.preventDefault(); draftDoc(null); } // empty view: first draft
   else if (e.key === 'Escape' && document.activeElement === document.body && filterEl.value) { filterEl.value = ''; filterShown = false; render(); }
 });
 
 // ---- palette: Cmd+K commands (Views, Actions, matching Documents while typing) or Cmd+S live search (api.search) ----
 const palette = $('palette'), palInput = $('paletteInput'), palList = $('paletteList');
 let palMode = 'cmd', palRows = [], palIndex = 0, palBusy = false, palSeq = 0, palTimer;
-const docRow = (n, hint, run) => ({ node: n, icon: n.icon, label: n.text ?? n.title, tags: n.tags, hint, run });
+const docRow = (n, hint, run) => ({ node: n, icon: n.icon, svg: n.iconSvg, label: n.text ?? n.title, tags: n.tags, hint, run });
 function paletteRows(q) {
   const rows = sections.map((s) => ({ id: 'view:' + s.id, group: 'Views', icon: s.icon, label: s.title, run: () => setView(s.id) }));
+  for (const n of pins) rows.push({ ...docRow(n, undefined, () => openResult(n, sectionOf(n.id) ? undefined : 'Pinned')), id: 'pinned:' + n.id, group: 'Pinned' }); // in a view: open it there; else breadcrumb "Pinned"
   rows.push({ id: 'sync', group: 'Actions', icon: 'sync', label: 'Sync', kbd: '⌘R', run: () => run(() => tana.refresh()) });
   if (!authed) rows.push({ id: 'login', group: 'Actions', label: 'Log in to Tana', run: () => tana.login().catch(showError) });
+  if (pinInfo && palDoc && pinInfo.docId === palDoc.id) { // context actions for the current document (no ids: their labels depend on state, so no hotkeys)
+    const sb = pinInfo.sidebar, td = pinInfo.dates.includes(localDate());
+    rows.push({ group: 'Actions', label: sb ? 'Unpin from sidebar' : 'Pin to sidebar', run: () => pinAction(sb ? 'unpin' : 'pin', 'sidebar') });
+    rows.push({ group: 'Actions', label: td ? 'Unpin from today' : 'Pin to today', run: () => pinAction(td ? 'unpin' : 'pin', 'today') });
+  }
+  if (palDoc && tana.setIcon) {
+    rows.push({ group: 'Actions', label: 'Set icon…', run: () => startDrop(palDoc) });
+    if (palDoc.iconSvg) rows.push({ group: 'Actions', label: 'Remove icon', run: () => setIcon(palDoc.id, null) });
+  }
   if (q) for (const s of sections) for (const n of s.nodes) rows.push({ ...docRow(n, s.title, () => openDoc(n.id)), id: 'doc:' + n.id, group: 'Documents' });
   let docsLeft = 8;
   return rows.filter((r) => (!q || r.label.toLowerCase().includes(q)) && (r.group !== 'Documents' || docsLeft-- > 0)).map((r) => (hotkeys[r.id] ? { ...r, kbd: hotkeys[r.id] } : r));
@@ -584,15 +745,15 @@ function runAction(id) {
   const row = paletteRows('').find((r) => r.id === id);
   if (row) row.run(); else if (id.startsWith('doc:')) goTo(id.slice(4));
 }
-// search result: zoom into it wherever it lives (api.node shape -> extra), breadcrumb "Search › title"
-function openResult(n) {
-  if (!allDocs().some((d) => d.id === n.id)) extra.set(n.id, { ...n, text: n.title || '', hasChildren: true });
-  openDoc(n.id, 'Search');
+// search result / pin: zoom into it wherever it lives (api.node shape -> extra); from = breadcrumb root when not opened in its view
+function openResult(n, from) {
+  if (!allDocs().some((d) => d.id === n.id)) extra.set(n.id, { ...n, text: n.text ?? n.title ?? '', hasChildren: true });
+  openDoc(n.id, from);
 }
 // result rows pick a document: open it, or link it when the palette was opened with "@" on a selection (Create row first)
 function resultRows(nodes, group) {
   const ctx = linkCtx;
-  const rows = nodes.map((n) => ({ ...docRow(n, n.meta, () => (ctx ? linkTo(ctx, { label: n.title ?? n.text, uri: n.id }) : openResult(n))), group }));
+  const rows = nodes.map((n) => ({ ...docRow(n, n.meta, () => (ctx ? linkTo(ctx, { label: n.title ?? n.text, uri: n.id }) : openResult(n, 'Search'))), group }));
   return ctx ? [{ label: 'Create “' + ctx.text + '”', hint: '⌘↩', run: () => createAndLink(ctx) }, ...rows] : rows;
 }
 function searchNow() {
@@ -613,7 +774,7 @@ function renderPalette() {
   palRows.forEach((r, i) => {
     if (r.group && (!i || palRows[i - 1].group !== r.group)) { const h = document.createElement('div'); h.className = 'group'; h.textContent = r.group; els.push(h); }
     const row = document.createElement('div'); row.className = 'row' + (i === palIndex ? ' active' : ''); row.dataset.index = i;
-    const icon = document.createElement('span'); icon.className = 'ricon' + (r.node ? ' ' + (r.icon || 'dot') : ''); icon.innerHTML = r.icon ? iconSvg(r.icon) : '';
+    const icon = document.createElement('span'); icon.className = 'ricon' + (r.node ? ' ' + (r.svg ? 'custom' : r.icon || 'dot') : ''); icon.innerHTML = r.svg || (r.icon ? iconSvg(r.icon) : '');
     const label = document.createElement('span'); label.className = 'label'; label.textContent = r.label;
     for (const t of r.tags || []) { const c = document.createElement('span'); c.className = 'chip ' + t.color; c.textContent = '# ' + t.label; label.append(c); }
     row.append(icon, label);
@@ -634,15 +795,19 @@ function togglePalette(mode, link) {
   const show = palette.hidden || palMode !== mode || !!link;
   cancelLink();
   palette.hidden = !show;
-  if (!show) { clearTimeout(palTimer); palTimer = null; return; }
+  if (!show) { clearTimeout(palTimer); palTimer = null; return returnFocus(); }
+  if (!palReturn) palReturn = focused(); // switching modes keeps the original return target
   linkCtx = link || null;
   palMode = mode; palRows = []; palIndex = 0; palBusy = false; clearTimeout(palTimer); palTimer = null;
+  if (mode === 'cmd') { palDoc = currentDoc(); loadPins(); }
   palInput.placeholder = mode === 'search' ? 'Search Tana' : 'Search or run a command';
   palInput.value = link ? link.text : '';
   if (mode === 'search') searchNow(); else renderPalette();
   palInput.focus();
 }
-function closePalette() { palette.hidden = true; clearTimeout(palTimer); palTimer = null; cancelLink(); }
+function closePalette() { palette.hidden = true; clearTimeout(palTimer); palTimer = null; cancelLink(); returnFocus(); }
+// back to the node that had the caret when the palette opened (the @ link path places its own caret)
+function returnFocus() { const r = palReturn; palReturn = null; if (r && !focused()) placeCaret(r.key, r.offset); }
 function runRow(r) { closePalette(); r.run(); }
 palInput.addEventListener('input', () => {
   palIndex = 0;
@@ -683,7 +848,10 @@ for (const b of recorder.querySelectorAll('button')) b.onmousedown = (e) => e.pr
 document.addEventListener('keydown', (e) => { // capture: the recorder sees every key before the palette input does
   if (!rec) return;
   e.preventDefault(); e.stopPropagation();
-  if (e.key === 'Escape' && !e.metaKey && !e.ctrlKey && !e.altKey) return closeRecorder();
+  const plain = !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey; // plain keys drive the buttons (a combo needs ⌘/⌃ anyway)
+  if (plain && e.key === 'Escape') return closeRecorder();
+  if (plain && e.key === 'Enter') return $('recSave').click();
+  if (plain && e.key === 'Backspace') return $('recReset').click();
   rec.combo = comboOf(e); showCombo();
 }, true);
 
@@ -702,6 +870,7 @@ $('login').onclick = () => tana.login().catch(showError);
 tana.onChanged((docId) => {
   const work = [loadRoots()];
   if (docId && kids.has(docId)) work.push(reload(docId));
+  if (!docId) loadPins();
   Promise.all(work).then(render, showError);
 });
 tana.onStatus(showStatus);

@@ -4,7 +4,7 @@
 const { app } = require('electron');
 const path = require('node:path');
 const { createTanaSession, peerIdentity } = require('../tana-session');
-let createTanaClient, readNode, setTitle, setState, contentText, readOutline, ulid, initDocument, query; // loaded lazily: login/whoami work without the SDK
+let createTanaClient, readNode, setTitle, setState, contentText, readOutline, ulid, initDocument, query, pins; // loaded lazily: login/whoami work without the SDK
 
 // Share the cookie partition and peer.json with the real app.
 app.setPath('userData', path.join(app.getPath('appData'), 'tana-tasks'));
@@ -22,6 +22,7 @@ async function connect() {
   ({ readNode, setTitle, setState, contentText, ulid, initDocument } = require('../sdk/node'));
   ({ readOutline } = require('../sdk/content'));
   query = require('../sdk/query');
+  pins = require('../sdk/pins');
   const me = await session.info();
   const peer = peerIdentity({ file: path.join(app.getPath('userData'), 'peer.json'), userExternalId: me.userExternalId });
   client = createTanaClient({ getAccessToken: (o) => session.getAccessToken(o), orgId: me.orgId, ...peer, logger: console });
@@ -29,6 +30,18 @@ async function connect() {
 }
 
 const summary = (doc) => { const n = readNode(doc); return { id: doc.id, title: n.title, stateType: n.stateType, assignedToUris: n.assignedToUris }; };
+const today = () => new Date().toLocaleDateString('sv-SE');
+// pin <id> <sidebar|today> / unpin: mutate, let the live update go out, print the doc's pin state
+async function setPin(on) {
+  const [id, target] = positional;
+  if (!id || !['sidebar', 'today'].includes(target)) throw new Error('usage: ' + (on ? 'pin' : 'unpin') + ' <id> <sidebar|today>');
+  const me = await connect();
+  await client.sync.connect();
+  if (target === 'sidebar') await (on ? pins.pinSidebar : pins.unpinSidebar)(client.sync, me.userUri, id);
+  else await (on ? pins.pinDate : pins.unpinDate)(client.sync, me.userUri, id, today());
+  await new Promise((r) => setTimeout(r, 1500));
+  out({ id, sidebar: (await pins.listSidebar(client.sync, me.userUri)).includes(id), dates: await pins.dates(client.sync, me.userUri, id) });
+}
 
 const commands = {
   async login() {
@@ -65,12 +78,14 @@ const commands = {
     for (const n of (await client.graph.listNodes({ nodeTypes: ['type'], limit: 200 })).nodes) out(n.id + '\t' + (n.title || ''));
   },
   async create() {
-    if (!positional[0]) throw new Error('usage: create <title>');
+    const kind = flag('kind', 'doc');
+    if (!positional[0] || !['doc', 'task', 'meeting'].includes(kind)) throw new Error('usage: create <title> [--kind task|meeting|doc]');
     const me = await connect();
     await client.sync.connect();
-    const id = 'tana:text:' + ulid();
-    const doc = await client.sync.subscribe(id, (loro) => initDocument(loro, positional[0], me.userUri));
-    out(summary(doc));
+    const id = (kind === 'meeting' ? 'tana:event:' : 'tana:text:') + ulid();
+    const doc = await client.sync.subscribe(id, (loro) => initDocument(loro, positional[0], me.userUri, { kind }));
+    const n = readNode(doc);
+    out({ ...summary(doc), type: n.type, startTime: n.startTime, endTime: n.endTime });
   },
   async delete() {
     if (!positional[0]) throw new Error('usage: delete <id>  (document_action soft_delete)');
@@ -145,10 +160,20 @@ const commands = {
     await new Promise((r) => setTimeout(r, 1500));
     out(summary(doc));
   },
+  async pins() {
+    const me = await connect();
+    await client.sync.connect();
+    for (const uri of await pins.listSidebar(client.sync, me.userUri)) {
+      const doc = await client.sync.subscribe(uri).catch(() => null);
+      out(uri + '\t' + (doc ? readNode(doc).title || '' : '(unavailable)') + (doc && args.includes('--dates') ? '\t' + (await pins.dates(client.sync, me.userUri, uri)).join(',') : ''));
+    }
+  },
+  pin: () => setPin(true),
+  unpin: () => setPin(false),
 };
 
 app.whenReady().then(async () => {
-  if (!commands[cmd]) { console.error('usage: platform-cli login | whoami | list [--state open] | search <query> [#task|#meeting|#Type] | types | meetings [--days 7] | get <id> | outline <id> | watch <id...> | set-title <id> <title> | set-state <id> <state> | create <title> | delete <id>'); app.exit(2); return; }
+  if (!commands[cmd]) { console.error('usage: platform-cli login | whoami | list [--state open] | search <query> [#task|#meeting|#Type] | types | meetings [--days 7] | get <id> | outline <id> | watch <id...> | set-title <id> <title> | set-state <id> <state> | create <title> [--kind task|meeting|doc] | delete <id> | pins | pin <id> <sidebar|today> | unpin <id> <sidebar|today>'); app.exit(2); return; }
   session = createTanaSession();
   let code = 0;
   try { await commands[cmd](); } catch (e) { console.error(e && e.stack || e); code = 1; }

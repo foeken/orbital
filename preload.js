@@ -1,10 +1,11 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webFrame } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
+  zoom: (factor) => { webFrame.setZoomFactor(factor); return webFrame.getZoomFactor(); },
   roots: () => ipcRenderer.invoke('outline:roots'),
   children: (docId) => ipcRenderer.invoke('outline:children', docId),
   node: (docId) => ipcRenderer.invoke('doc:info', docId),
-  createDocument: (title) => ipcRenderer.invoke('doc:create', title),
+  createDocument: (title, opts) => ipcRenderer.invoke('doc:create', title, opts), // opts: { kind: 'doc' | 'task' | 'meeting' }
   search: (query) => ipcRenderer.invoke('search', query),
   setTitle: (docId, title) => ipcRenderer.invoke('doc:setTitle', docId, title),
   setDone: (docId, done) => ipcRenderer.invoke('doc:setDone', docId, done),
@@ -15,6 +16,11 @@ contextBridge.exposeInMainWorld('api', {
   indent: (docId, nodeId) => ipcRenderer.invoke('block:indent', docId, nodeId),
   outdent: (docId, nodeId) => ipcRenderer.invoke('block:outdent', docId, nodeId),
   move: (docId, nodeId, direction) => ipcRenderer.invoke('block:move', docId, nodeId, direction),
+  pins: () => ipcRenderer.invoke('pins:list'),
+  pinState: (docId) => ipcRenderer.invoke('pins:state', docId),
+  pin: (docId, target) => ipcRenderer.invoke('pins:pin', docId, target),
+  unpin: (docId, target) => ipcRenderer.invoke('pins:unpin', docId, target),
+  setIcon: (docId, svg) => ipcRenderer.invoke('doc:setIcon', docId, svg),
   refresh: () => ipcRenderer.invoke('sync:refresh'),
   undo: () => ipcRenderer.invoke('history:undo'),
   redo: () => ipcRenderer.invoke('history:redo'),

@@ -9,6 +9,7 @@ const { message, SyncService } = require('../sdk/proto/descriptors');
 const { createTransport, GraphClient, SyncConnection, Document, derivePeerId, readNode, setTitle, setState, contentText, ulid, initDocument, STATE_TYPES } = require('../sdk');
 const outline = require('../sdk/content');
 const { parseQuery, searchParams, needsTypes } = require('../sdk/query');
+const pins = require('../sdk/pins');
 
 const ORG = 'org_01KS7RQSWW68H489ZZZ1NNC40T', DOC = 'tana:text:01m23c1z45gceayt2zjk09k63c', ME = 'tana:user-profile:01m0f1aqd8p23qhwntbewmpfz2';
 const snapshot = Buffer.from(fs.readFileSync(require('node:path').join(__dirname, 'fixtures', 'task-snapshot.b64'), 'utf8').trim(), 'base64');
@@ -127,7 +128,22 @@ async function main() {
     assert.deepEqual(j.data.participants, { [ME]: { type: 'user', role: 'admin' } });
     assert.deepEqual(j.content, { nodeName: 'doc', attributes: {}, children: [] });
     assert.equal(outline.insertAfter(fresh, null, 'first').length, 8, 'content skeleton is writable');
-    console.log('ok  query parsing, ulid, initDocument');
+    // kinds: task = open state assigned to me; meeting = Tana-native event layout (next half hour, 30 min)
+    const T0 = Date.UTC(2026, 8, 13, 10, 7); // 10:07 -> 10:30
+    const td = new Document('tana:text:' + ulid(), { peerId: '5' });
+    td.transact((l) => initDocument(l, 'New task', ME, { kind: 'task', now: T0 }));
+    const t = td.toJSON().data;
+    assert.deepEqual([t.type, t.stateType, t.stateEnteredAt, t.stateChangedBy, t.assignedToUris, t.assignedToUrisChangedAt, t.assignedToUrisChangedBy, t.createdAt], ['text', 'open', T0, ME, [ME], T0, ME, T0]);
+    assert.ok(td.data.get('assignedToUris') instanceof require('loro-crdt').LoroList, 'assignedToUris is a list container');
+    const ev = new Document('tana:event:' + ulid(), { peerId: '5' });
+    ev.transact((l) => initDocument(l, 'New meeting', ME, { kind: 'meeting', now: T0 }));
+    const e = ev.toJSON().data;
+    assert.deepEqual(Object.keys(e).sort(), ['attendees', 'createdAt', 'endTime', 'origin', 'participants', 'restricted', 'sharedPinDates', 'startTime', 'timezone', 'title', 'type']);
+    assert.deepEqual([e.type, e.origin, e.startTime, e.endTime, e.attendees, e.timezone], ['event', 'tana', Date.UTC(2026, 8, 13, 10, 30), Date.UTC(2026, 8, 13, 11, 0), [], Intl.DateTimeFormat().resolvedOptions().timeZone]);
+    assert.equal(e.stateType, undefined);
+    assert.deepEqual(ev.toJSON().content, { nodeName: 'doc', attributes: {}, children: [] });
+    assert.throws(() => fresh.transact((l) => initDocument(l, 'x', ME, { kind: 'note' })), /unknown kind/);
+    console.log('ok  query parsing, ulid, initDocument (doc/task/meeting)');
   }
 
   // 3b. Outline ops on the content tree (docs/OUTLINER.md): every op is checked on readOutline, on the raw Loro
@@ -268,6 +284,48 @@ async function main() {
     assert.equal(a.redo(), true);
     assert.equal(outline.readOutline(b).length, 1);
     console.log('ok  undo/redo (local only, converges, survives concurrent edits)');
+  }
+  // 3c. Pins (docs/PINNING.md) over a fake sync: profile -> collection (LoroTree) + pin-map (entries map); every
+  // mutation is replayed into a mirror Document so the shape the server sees is the shape we read back.
+  {
+    const { LoroMap } = require('loro-crdt');
+    const COL = 'tana:collection:c1', PM = 'tana:pin-map:p1', A = 'tana:text:a', B = 'tana:text:b';
+    const docs = {}, mirror = {};
+    for (const id of [ME, COL, PM]) { docs[id] = new Document(id, { peerId: '21' }); mirror[id] = new Document(id, { peerId: '22' }); docs[id].on('local-update', (u) => mirror[id].applyRemote([u])); }
+    const sync = { subscribed: [], subscribe: async (id) => { sync.subscribed.push(id); if (!docs[id]) throw new Error('document not found: ' + id); return docs[id]; } };
+    await assert.rejects(pins.listSidebar(sync, ME), /no pinnedCollectionUri/, 'no lazy creation');
+    docs[ME].transact((l) => { l.getMap('data').set('pinnedCollectionUri', COL); l.getMap('data').set('pinMapUri', PM); });
+    // web-client layout: a pin, then a folder holding a pin
+    docs[COL].transact((l) => { const t = l.getTree('tree'); t.createNode().data.set('uri', B); const f = t.createNode(); f.data.set('label', 'Folder'); t.createNode(f.id).data.set('uri', 'tana:space:s'); });
+    assert.deepEqual(await pins.listSidebar(sync, ME), [B, 'tana:space:s']);
+    await pins.pinSidebar(sync, ME, A);
+    await pins.pinSidebar(sync, ME, A); // dedup
+    assert.deepEqual(await pins.listSidebar(sync, ME), [B, 'tana:space:s', A], 'appended at the end, in tree order');
+    assert.deepEqual(mirror[COL].loro.getTree('tree').toJSON().map((n) => n.meta), [{ uri: B }, { label: 'Folder' }, { uri: A }]);
+    await pins.unpinSidebar(sync, ME, B);
+    await pins.unpinSidebar(sync, ME, 'tana:text:nope'); // no-op
+    assert.deepEqual(await pins.listSidebar(sync, ME), ['tana:space:s', A]);
+    assert.equal(mirror[COL].loro.getTree('tree').toJSON().length, 2, 'deleted node gone from the mirror tree');
+    assert.deepEqual(await pins.dates(sync, ME, A), [], 'no entry yet');
+    await assert.rejects(pins.pinDate(sync, ME, A, '2026-9-1'), /YYYY-MM-DD/);
+    await pins.pinDate(sync, ME, A, '2026-09-13');
+    await pins.pinDate(sync, ME, A, '2026-09-13'); // dedup
+    await pins.pinDate(sync, ME, A, '2026-09-14');
+    assert.deepEqual(await pins.dates(sync, ME, A), ['2026-09-13', '2026-09-14']);
+    const entry = mirror[PM].loro.getMap('entries').get(A);
+    assert.ok(entry instanceof LoroMap && entry.get('pins').get(0) instanceof LoroMap, 'entry and pins are containers, like the web client');
+    assert.deepEqual(Object.keys(entry.toJSON()).sort(), ['mutedPins', 'pins']);
+    assert.deepEqual(entry.toJSON().pins.map((p) => [p.type, p.datetime, typeof p.pinnedAt]), [['plain', '2026-09-13', 'number'], ['plain', '2026-09-14', 'number']]);
+    // a muted date gets unmuted by pinning it
+    docs[PM].transact((l) => { const m = l.getMap('entries').get(A).get('mutedPins').pushContainer(new LoroMap()); m.set('type', 'plain'); m.set('datetime', '2026-09-15'); });
+    await pins.pinDate(sync, ME, A, '2026-09-15');
+    assert.deepEqual(mirror[PM].loro.getMap('entries').get(A).toJSON().mutedPins, []);
+    await pins.unpinDate(sync, ME, A, '2026-09-14');
+    await pins.unpinDate(sync, ME, B, '2026-09-14'); // no entry: no-op
+    assert.deepEqual(await pins.dates(sync, ME, A), ['2026-09-13', '2026-09-15']);
+    assert.deepEqual(mirror[PM].toJSON(), docs[PM].toJSON());
+    assert.deepEqual([...new Set(sync.subscribed)], [ME, COL, PM], 'only the profile and the two pointed documents are subscribed');
+    console.log('ok  pins (sidebar tree, personal date pins, converge)');
   }
   // 4. Transport: headers and the 401 -> refresh -> retry-once rule, with a fake fetch
   const calls = [];

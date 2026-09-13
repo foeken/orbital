@@ -4,7 +4,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const SRC = process.argv[2] || '/Users/andre.foeken/Documents/Tana icons (line)';
-const WANT = { task: 'list-checkbox.svg', calendar: 'calendar.svg', sync: path.join(__dirname, '..', 'build', 'icons', 'cloud-refresh.svg') };
+const WANT = { task: 'list-checkbox.svg', calendar: 'calendar.svg', sync: path.join(__dirname, '..', 'build', 'icons', 'cloud-refresh.svg'), doc: path.join(__dirname, '..', 'build', 'icons', 'report-file.svg') };
 const out = {};
 for (const [name, file] of Object.entries(WANT)) {
   let svg = fs.readFileSync(path.isAbsolute(file) ? file : path.join(SRC, file), 'utf8');

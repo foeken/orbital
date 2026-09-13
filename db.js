@@ -9,6 +9,7 @@ function open(path) {
   db.exec(`CREATE TABLE IF NOT EXISTS nodes (
     id TEXT PRIMARY KEY, section TEXT NOT NULL, title TEXT NOT NULL, done INTEGER NOT NULL DEFAULT 0,
     icon TEXT, meta TEXT, tags TEXT NOT NULL DEFAULT '[]', sortKey TEXT NOT NULL, updatedAt TEXT NOT NULL)`);
+  db.exec('CREATE TABLE IF NOT EXISTS icons (id TEXT PRIMARY KEY, svg TEXT NOT NULL)'); // app-local custom document icons
 }
 
 const parse = (r) => r && { ...r, tags: JSON.parse(r.tags) };
@@ -48,4 +49,15 @@ function replaceSection(section, rows) {
   }
 }
 
-module.exports = { open, list, get, upsert, replaceSection };
+// custom icon (raw SVG) per document id; null removes it
+function icon(id) {
+  const r = db.prepare('SELECT svg FROM icons WHERE id = ?').get(id);
+  return r ? r.svg : null;
+}
+
+function setIcon(id, svg) {
+  if (svg == null) db.prepare('DELETE FROM icons WHERE id = ?').run(id);
+  else db.prepare('INSERT INTO icons (id, svg) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET svg = excluded.svg').run(id, svg);
+}
+
+module.exports = { open, list, get, upsert, replaceSection, icon, setIcon };
