@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, ipcMain } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, nativeTheme } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const { createHash } = require('node:crypto');
@@ -61,15 +61,17 @@ const cachedNodeHue = (r) => {
   return (r.icon || ['space', 'chat', 'canvas', 'agent', 'skill'].includes(idKind(r.id))) && tag && typeof tag.hue === 'number' ? tag.hue : undefined;
 };
 
-// Where a document lives in Tana: owner chain root-first as [{ id, title }]; unowned documents are in the Library.
+// Where a document lives in Tana: owner chain root-first as [{ id, title, icon }]; unowned documents are in the Library.
+// Ancestors can share a title (a meeting named after its space), so each crumb carries its kind icon to stay distinguishable.
+const crumbIcon = (id) => ({ space: 'space', event: 'meeting', 'user-profile': 'member', chat: 'chat', agent: 'agent' })[idKind(id)] || 'doc';
 const pathCache = new Map(); // docId -> path (refreshed on every info() call; cheap enough per open)
 async function pathOf(id) {
   if (!client) throw new Error(NOT_CONNECTED);
   const { entries = [] } = await client.graph.getOwnerChain(id);
   const owners = entries.map((e) => e.uri).filter((u) => u !== id).reverse();
-  if (!owners.length) return [{ id: 'library', title: 'Library' }];
+  if (!owners.length) return [{ id: 'library', title: 'Library', icon: 'library' }];
   await resolveTypes(owners); // same title cache: any node id -> title
-  return owners.map((u) => ({ id: u, title: typeTitles.get(u) || u }));
+  return owners.map((u) => ({ id: u, title: typeTitles.get(u) || u, icon: crumbIcon(u) }));
 }
 ipcMain.handle('doc:path', async (_e, id) => { try { const p = await pathOf(id); pathCache.set(id, p); return p; } catch (e) { report(e); return pathCache.get(id) || []; } });
 
@@ -100,8 +102,12 @@ async function resolveTypes(uris) {
   const { nodes } = await client.graph.listNodes({ nodeIds: missing, limit: missing.length });
   nodes.forEach(rememberType);
 }
-// { label, hue } when the type node has appearance.hue, else grey (docs/OUTLINER.md addendum 12)
-const typeTag = (uri) => (uri && typeTitles.get(uri) ? [typeHues.has(uri) ? { label: typeTitles.get(uri), hue: typeHues.get(uri) } : { label: typeTitles.get(uri), color: 'grey' }] : []);
+// { label, hue, uri } when the type node has appearance.hue, else grey (docs/OUTLINER.md addendum 12).
+// uri lets a row find its type again through the cache, for the type's hue and its app-local icon.
+const typeTag = (uri) => (uri && typeTitles.get(uri) ? [typeHues.has(uri) ? { label: typeTitles.get(uri), hue: typeHues.get(uri), uri } : { label: typeTitles.get(uri), color: 'grey', uri }] : []);
+const typeUriOf = (r) => (r.tags || []).map((t) => t && t.uri).find(Boolean); // the row's type, from its type tag
+// a node without its own appearance.hue inherits the hue of its type, so icon and tag match (docs/OUTLINER.md addendum 14)
+const hueWithType = (own, typeUri) => (own === undefined && typeUri !== undefined ? typeHues.get(typeUri) : own);
 // A document opened straight from Loro (pins, zoom, spaces) has no appearance in its data map, so its colour needs
 // one graph lookup. Cached per id including "no hue", like resolveTypes caches titles.
 const hueLoaded = new Set();
@@ -115,7 +121,7 @@ async function resolveHue(id) {
 const isSpace = (id) => id.startsWith('tana:space:');
 const plainRow = (id, title, updatedAt, typeUri, hue) => (isSpace(id)
   ? { id, title, done: 0, icon: 'space', hue, tags: [hue === undefined ? TAG.space : { ...TAG.space, hue }], sortKey: updatedAt, updatedAt }
-  : { id, title, done: 0, icon: typeUri ? null : 'doc', hue, tags: typeUri ? typeTag(typeUri) : [hue === undefined ? TAG.doc : { ...TAG.doc, hue }], sortKey: updatedAt, updatedAt });
+  : { id, title, done: 0, icon: typeUri ? null : 'doc', hue: hueWithType(hue, typeUri), tags: typeUri ? typeTag(typeUri) : [hue === undefined ? TAG.doc : { ...TAG.doc, hue }], sortKey: updatedAt, updatedAt });
 const memberRow = (id, title, updatedAt, hue) => ({ id, title, done: 0, icon: 'member', hue, tags: [hue === undefined ? TAG.member : { ...TAG.member, hue }], sortKey: updatedAt, updatedAt });
 const kindRow = (id, kind, title, updatedAt, hue) => ({ id, title, done: 0, icon: ['chat', 'agent'].includes(kind) ? kind : null, hue, tags: [hue === undefined ? { label: kind, color: 'grey' } : { label: kind, hue }], sortKey: updatedAt, updatedAt });
 const idKind = (id) => id.split(':')[1];
@@ -139,17 +145,19 @@ async function typesByTitle() {
 // rows for db.replaceSection from graph Node JSON
 const taskRow = (n) => ({
   id: n.id, title: n.title || '', done: n.state && n.state.type === 'closed' ? 1 : 0, icon: 'task',
-  hue: hueOf(n), tags: [nodeTag(TAG.task, n), ...typeTag(n.entityType)], sortKey: n.updateTime || now(), updatedAt: n.updateTime || now(),
+  hue: hueWithType(hueOf(n), n.entityType), tags: [nodeTag(TAG.task, n), ...typeTag(n.entityType)], sortKey: n.updateTime || now(), updatedAt: n.updateTime || now(),
 });
 const meetingRow = (n, withDate) => {
   const ev = n.calendarEvent || {};
   return {
     id: n.id, title: n.title || '', done: 0, icon: 'meeting', meta: eventMeta(ev.startTime, ev.endTime, withDate),
-    hue: hueOf(n), tags: [nodeTag(TAG.meeting, n), ...typeTag(n.entityType)], sortKey: ev.startTime || now(), updatedAt: n.updateTime || now(),
+    hue: hueWithType(hueOf(n), n.entityType), tags: [nodeTag(TAG.meeting, n), ...typeTag(n.entityType)], sortKey: ev.startTime || now(), updatedAt: n.updateTime || now(),
   };
 };
 
-const toNode = (r) => ({ id: r.id, title: r.title, text: r.title, kind: 'document', editable: editability.has(r.id) ? editability.get(r.id) : editable(r, me && me.userUri), done: r.icon === 'task' ? r.done : undefined, hasChildren: true, icon: ['chat', 'agent'].includes(idKind(r.id)) ? idKind(r.id) : r.icon || undefined, hue: r.hue === undefined ? (nodeHues.has(r.id) ? nodeHues.get(r.id) : cachedNodeHue(r)) : r.hue, tags: r.tags, meta: r.meta || undefined, iconSvg: db.icon(r.id) || undefined });
+// a document's own icon wins; otherwise the icon set on its type applies to every node carrying that type
+const iconSvgOf = (r) => { const type = typeUriOf(r); return db.icon(r.id) || (type ? db.icon(type) : null) || undefined; };
+const toNode = (r) => ({ id: r.id, title: r.title, text: r.title, kind: 'document', editable: editability.has(r.id) ? editability.get(r.id) : editable(r, me && me.userUri), done: r.icon === 'task' ? r.done : undefined, hasChildren: true, icon: ['chat', 'agent'].includes(idKind(r.id)) ? idKind(r.id) : r.icon || undefined, hue: r.hue === undefined ? (nodeHues.has(r.id) ? nodeHues.get(r.id) : cachedNodeHue(r)) : r.hue, tags: r.tags, meta: r.meta || undefined, iconSvg: iconSvgOf(r) });
 
 // Node shape from any graph Node JSON (search results): events, tasks, typed and plain documents.
 function graphRow(n, withDate) {
@@ -248,8 +256,10 @@ async function creationOptions() {
   const options = [{id:'task',kind:'task',title:'Task',icon:'task',selectable:true},{id:'meeting',kind:'meeting',title:'Meeting',icon:'meeting',selectable:true},{id:'chat',kind:'chat',title:'Chat',icon:'chat',selectable:true}];
   const types = await Promise.all(result.nodes.map(async n => {
     rememberType(n);
-    try { const config=await customCreation(n.id); return {id:n.id,kind:'custom',typeUri:n.id,title:n.title || '',hue:hueOf(n),icon:config.kind === 'meeting' ? 'meeting' : 'doc',ownerUri:config.ownerUri,appliesTo:config.kind === 'meeting' ? 'events' : 'docs',selectable:true}; }
-    catch(e) { return {id:n.id,kind:'custom',typeUri:n.id,title:n.title || '',selectable:false,reason:errText(e)}; }
+    // the chooser shows a type the way its documents render: the type's own hue and its app-local icon
+    const look = { hue: ownHue(n) === undefined ? typeHues.get(n.id) : ownHue(n), iconSvg: db.icon(n.id) || undefined };
+    try { const config=await customCreation(n.id); return {id:n.id,kind:'custom',typeUri:n.id,title:n.title || '',...look,icon:config.kind === 'meeting' ? 'meeting' : 'doc',ownerUri:config.ownerUri,appliesTo:config.kind === 'meeting' ? 'events' : 'docs',selectable:true}; }
+    catch(e) { return {id:n.id,kind:'custom',typeUri:n.id,title:n.title || '',...look,icon:'doc',selectable:false,reason:errText(e)}; }
   }));
   return {options:[...options,...types.sort((a,b)=>a.title.localeCompare(b.title))],complete:result.totalCount !== undefined && result.totalCount === result.nodes.length};
 }
@@ -280,7 +290,7 @@ async function info(doc) {
   if (!isEvent && !n.stateType) return toNode(plainRow(doc.id, n.title || '', now(), n.entityTypeUri, hueOf(n)));
   return toNode({
     id: doc.id, title: n.title || '', done: n.stateType === 'closed' ? 1 : 0, icon: isEvent ? 'meeting' : 'task',
-    hue: hueOf(n), meta: isEvent ? eventMeta(n.startTime, n.endTime) : null, tags: [nodeTag(isEvent ? TAG.meeting : TAG.task, n), ...typeTag(n.entityTypeUri)],
+    hue: hueWithType(hueOf(n), n.entityTypeUri), meta: isEvent ? eventMeta(n.startTime, n.endTime) : null, tags: [nodeTag(isEvent ? TAG.meeting : TAG.task, n), ...typeTag(n.entityTypeUri)],
   });
 }
 
@@ -573,9 +583,13 @@ ipcMain.handle('spaces:search', async (_e, query = '') => {
   if (!client) throw new Error(NOT_CONNECTED);
   const { nodes } = await client.graph.listNodes({ nodeTypes: ['space'], textQuery: query.trim(), limit: 50 });
   const ctx = await accessContext();
-  return Promise.all(nodes.map(async n => ({ ...toNode(graphRow(n)), selectable: await access.canWrite(n, me.userUri, ctx) })));
+  const spaces = await Promise.all(nodes.map(async n => ({ ...toNode(graphRow(n)), selectable: await access.canWrite(n, me.userUri, ctx) })));
+  // "Library" moves a document out of every space; it is a target, not a space, so it is added here rather than queried.
+  const library = { id: 'library', title: 'Library', text: 'Library', kind: 'document', icon: 'library', editable: false, selectable: true };
+  return 'library'.startsWith(query.trim().toLowerCase()) || !query.trim() ? [library, ...spaces] : spaces;
 });
 async function moveTarget(spaceId) {
+  if (spaceId === 'library') return access.LIBRARY;
   if (typeof spaceId !== 'string' || !/^tana:space:[0-9a-z]{26}$/.test(spaceId)) throw new Error('Select a space');
   return document(spaceId);
 }
@@ -604,6 +618,10 @@ ipcMain.handle('pins:state', (_e, id) => pinState(id));
 ipcMain.handle('pins:pin', (_e, id, target) => setPin(id, target, true));
 ipcMain.handle('pins:unpin', (_e, id, target) => setPin(id, target, false));
 ipcMain.handle('doc:setIcon', (_e, id, svg) => setIcon(id, svg));
+// macOS appearance, for the renderer's "follow the system" theme: current value on demand, plus live changes
+const systemTheme = () => (nativeTheme && nativeTheme.shouldUseDarkColors ? 'dark' : 'light');
+ipcMain.handle('theme:system', () => systemTheme());
+if (nativeTheme) nativeTheme.on('updated', () => send('theme:system', systemTheme()));
 ipcMain.handle('image', (_e, uri) => image(uri));
 ipcMain.handle('members', () => members());
 ipcMain.handle('tasks:filter', () => taskFilter());

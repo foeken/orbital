@@ -2,6 +2,8 @@ const { contextBridge, ipcRenderer, webFrame } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
   zoom: (factor) => { webFrame.setZoomFactor(factor); return webFrame.getZoomFactor(); },
+  systemTheme: () => ipcRenderer.invoke('theme:system'), // 'dark' | 'light' right now
+  onSystemTheme: (fn) => ipcRenderer.on('theme:system', (_e, theme) => fn(theme)), // macOS appearance changed
   roots: () => ipcRenderer.invoke('outline:roots'),
   // Native embed blocks keep their id; type:reference, reference:{uri,label?,node?}. Target actions use reference.uri.
   children: (docId) => ipcRenderer.invoke('outline:children', docId),

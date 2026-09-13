@@ -7,6 +7,9 @@ const SPACE = /^tana:space:[0-9a-z]{26}$/;
 const KINDS = new Set(['text', 'event', 'space', 'chat', 'canvas', 'agent', 'skill', 'type', 'artifact', 'image', 'video', 'audio', 'workflow']);
 const ORGANIZED = new Set(['agent', 'skill', 'type', 'space']);
 const WRITERS = new Set(['admin', 'editor', 'attendee']);
+// The Library is Tana's name for a document with no owner, so it is a move target without a document of its own.
+const LIBRARY = { id: null, title: 'Library' };
+const isLibrary = target => !target || target.id === null;
 const supported = n => KINDS.has(n.type) && n.id?.split(':')[1] === n.type && !(n.deletedAt > 0);
 const version = doc => Buffer.from(doc.loro.oplogVersion().encode()).toString('hex');
 function observe(ctx, doc) { if (ctx.observed && !ctx.observed.has(doc)) ctx.observed.set(doc, version(doc)); return readNode(doc); }
@@ -112,15 +115,17 @@ async function setSharing(doc, user, selection, ctx = {}) {
 }
 async function previewMove(doc,target,user,ctx = {}) {
   ctx={...ctx, observed:new Map()};
-  const n=observe(ctx,doc), destination=observe(ctx,target);
+  const library=isLibrary(target);
+  const n=observe(ctx,doc), destination=library?LIBRARY:observe(ctx,target);
+  const targetId=library?null:target.id;
   let reason = null;
   if (!supported(n) || !await canWrite(n,user,ctx)) reason='Source write permission is unknown or unavailable';
-  else if (!SPACE.test(target.id) || destination.type !== 'space' || !await canWrite(destination,user,ctx)) reason='Target space write permission is unknown or unavailable';
+  else if (!library && (!SPACE.test(target.id) || destination.type !== 'space' || !await canWrite(destination,user,ctx))) reason='Target space write permission is unknown or unavailable';
   const scope = [];
   try {
     // Guard parent cycles even when moving spaces under spaces.
     let parent=destination; const seen=new Set();
-    for (;;) {
+    for (;!library;) {
       if (parent.id === n.id || seen.has(parent.id)) { reason='A node cannot move into itself or its descendants'; break; }
       seen.add(parent.id); scope.push([parent.id,parent.ownerUri || null]);
       if (!parent.ownerUri) break;
@@ -129,31 +134,34 @@ async function previewMove(doc,target,user,ctx = {}) {
     if (n.entityTypeUri) {
       const type=await load(ctx,n.entityTypeUri); scope.push([type.id,type.ownerUri || null]);
       if (type.type !== 'type' || type.deletedAt > 0) reason='Type scope is unavailable';
-      else if (type.ownerUri && type.ownerUri !== target.id) reason='The node must remain in its type’s home space';
+      else if (type.ownerUri && type.ownerUri !== targetId) reason='The node must remain in its type’s home space';
     }
-    if (n.type === 'type' && n.ownerUri !== target.id) {
+    // A type owns its instances' scope, so counting them needs a space to count in; the Library has no owner id to query.
+    if (n.type === 'type' && library) reason='Move a type to a space, not the Library';
+    else if (n.type === 'type' && n.ownerUri !== targetId) {
       // Count both sets rather than truncate instances at an arbitrary list limit.
       const params={entityTypes:[n.id],limit:1,mode:'LIST_NODES_MODE_WITH_COUNT'};
-      const [all,atTarget]=await Promise.all([ctx.graph.listNodes(params),ctx.graph.listNodes({...params,ownerIds:[target.id]})]);
+      const [all,atTarget]=await Promise.all([ctx.graph.listNodes(params),ctx.graph.listNodes({...params,ownerIds:[targetId]})]);
       const counts=[all.totalCount,atTarget.totalCount];
       if (counts.some(count=>!Number.isSafeInteger(count) || count<0)) reason='Cannot verify all existing type instances';
       else if (counts[0] !== counts[1]) reason='Move existing type instances to the target space first';
       scope.push(counts);
     }
   } catch { reason='Ownership or type scope is unavailable'; }
-  const before=await audienceOf(n,user,ctx), after=await audienceOf({...n,ownerUri:target.id},user,ctx);
+  const before=await audienceOf(n,user,ctx), after=await audienceOf({...n,ownerUri:targetId},user,ctx);
   const audienceChanged=JSON.stringify(before)!==JSON.stringify(after);
   if (before.scope === 'unknown' || after.scope === 'unknown') reason ||= 'Cannot verify the move’s audience';
   if (!stable(ctx)) reason='Access changed while checking; preview again';
   const evidence=[...ctx.observed.keys()].map(d=>{const r=readNode(d);return {id:r.id,ownerUri:r.ownerUri,restricted:r.restricted,participants:r.participants,entityTypeUri:r.entityTypeUri,deletedAt:r.deletedAt};}).sort((a,b)=>a.id.localeCompare(b.id));
-  const token=createHash('sha256').update(JSON.stringify({id:n.id,owner:n.ownerUri,target:target.id,before,after,scope,evidence})).digest('hex');
-  return {allowed:!reason,reason,target:{id:target.id,title:destination.title || ''},before,after,audienceChanged,requiresConfirmation:audienceChanged,token};
+  const token=createHash('sha256').update(JSON.stringify({id:n.id,owner:n.ownerUri,target:targetId,before,after,scope,evidence})).digest('hex');
+  return {allowed:!reason,reason,target:{id:targetId,title:destination.title || ''},before,after,audienceChanged,requiresConfirmation:audienceChanged,token};
 }
 async function moveToSpace(doc,target,user,ctx = {},confirmation) {
   const preview=await previewMove(doc,target,user,ctx);
   if (!preview.allowed) throw new Error(preview.reason);
   if ((preview.requiresConfirmation || confirmation !== undefined) && confirmation !== preview.token) throw new Error('Preview the move again and explicitly confirm its audience');
-  doc.transact(loro=>loro.getMap('data').set('ownerUri',target.id));
+  // out of every space: an unowned document is what Tana shows as the Library, so the key goes away rather than turning null
+  doc.transact(loro=>isLibrary(target)?loro.getMap('data').delete('ownerUri'):loro.getMap('data').set('ownerUri',target.id));
   return preview;
 }
-module.exports={capabilities,setSharing,moveToSpace,previewMove,canWrite,canDelete,audienceOf};
+module.exports={capabilities,setSharing,moveToSpace,previewMove,canWrite,canDelete,audienceOf,LIBRARY};

@@ -78,6 +78,15 @@ async function main() {
     assert.equal((await access.previewMove(typed,target,ME,ctx)).allowed,false,'missing instance count remains disabled');
     ctx.graph.listNodes=async()=>({nodes:[],totalCount:1500});
     assert.equal((await access.previewMove(typed,target,ME,ctx)).allowed,true);
+    { // Library = no owner: the key goes away, the audience follows the participants, and a type still needs a space
+      const loose=make('text'); loose.transact(l=>l.getMap('data').set('ownerUri',target.id));
+      const toLibrary=await access.previewMove(loose,access.LIBRARY,ME,ctx);
+      assert.equal(toLibrary.allowed,true,'a writable document can move to the Library');
+      assert.equal(toLibrary.target.id,null); assert.equal(toLibrary.target.title,'Library');
+      await access.moveToSpace(loose,access.LIBRARY,ME,ctx,toLibrary.requiresConfirmation?toLibrary.token:undefined);
+      assert.equal(readNode(loose).ownerUri,undefined,'ownerUri is removed rather than set to null');
+      assert.equal((await access.previewMove(typed,access.LIBRARY,ME,ctx)).reason,'Move a type to a space, not the Library');
+    }
     const inherited=make('chat'); inherited.transact(l=>{const d=l.getMap('data'); d.delete('participants');d.delete('restricted');d.set('ownerUri',target.id);});
     assert.equal((await access.capabilities(inherited,ME,ctx)).sharing,true,'inherited editor/admin grant');
     await access.setSharing(inherited,ME,{rule:'people',participants:[{uri:stranger,role:'editor'}]},ctx);
