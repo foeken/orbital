@@ -611,6 +611,7 @@ function renderOutline() {
   const taskInfo = zoomedTask ? taskSummary(parent.node) : null;
   taskInfoEl.hidden = !taskInfo; taskInfoEl.replaceChildren();
   if (taskInfo) { taskInfoEl.append(taskMetaEl(taskInfo)); if (visibleTags(parent.node).some((tag) => tag.label !== 'task')) appendTags(taskInfoEl, parent.node); }
+  renderFields(parent);
   renderCrumbs(trail);
   renderRail(parent);
   const showPills = !parent && authed && (view === 'tasks' || view === 'library' || view === 'chats');
@@ -639,6 +640,30 @@ function resolveZoom() {
   return trail;
 }
 
+// The zoomed node's own fields (type attributes) under the title; the values come with api.related.
+function renderFields(parent) {
+  const el = $('fields');
+  const data = parent && parent.node.kind === 'document' ? relatedBy.get(parent.docId) : null;
+  const fields = (data && data.fields) || [];
+  el.hidden = !fields.length;
+  el.replaceChildren();
+  for (const field of fields) {
+    const row = document.createElement('div'); row.className = 'field';
+    const icon = document.createElement('span'); icon.className = 'ricon'; icon.innerHTML = iconSvg('field');
+    row.append(icon);
+    // the type names its fields; an unreadable type leaves the value to speak for itself
+    if (field.label) { const label = document.createElement('span'); label.className = 'flabel'; label.textContent = field.label; row.append(label); }
+    const value = document.createElement('span');
+    value.className = 'fvalue'; value.textContent = field.text || '';
+    if (tana.setField && canEditItem(parent)) { // a field value is ordinary text on this document
+      value.contentEditable = 'plaintext-only'; value.spellcheck = false;
+      value.onblur = () => { const next = value.textContent.trim(); if (next !== (field.text || '')) { field.text = next; run(() => tana.setField(parent.docId, field.key, next)); } };
+      value.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); value.blur(); } else if (e.key === 'Escape') { e.preventDefault(); value.textContent = field.text || ''; value.blur(); } };
+    }
+    row.append(value);
+    el.append(row);
+  }
+}
 // api.related for the zoomed document, fetched once per id; a failure simply leaves the rail empty
 function loadRelated(docId) {
   if (!tana.related || !isRealId(docId) || relatedBy.has(docId)) return;
@@ -1166,6 +1191,7 @@ function taskSummary(node) {
   if (!isTask(node) || !tana.taskMeta) return null;
   const meta = taskMetaById.get(node.id);
   if (!meta) { loadTaskMeta(node.id); return null; }
+  if (meta.assignees.length) loadMembers(); // names need the member list; loading it re-renders when it arrives
   const scope = typeof meta.audience === 'string' ? meta.audience : meta.audience?.scope;
   return { assignees: meta.assignees.length ? meta.assignees.map(memberName).join(', ') : 'Unassigned', audience: audienceInfo(meta.audience, meta.audienceSpace), unknownAudience: scope === 'unknown' };
 }

@@ -78,6 +78,25 @@ async function main() {
     assert.equal((await access.previewMove(typed,target,ME,ctx)).allowed,false,'missing instance count remains disabled');
     ctx.graph.listNodes=async()=>({nodes:[],totalCount:1500});
     assert.equal((await access.previewMove(typed,target,ME,ctx)).allowed,true);
+    { // typed fields: values live in the document's own data map, in the layout observed on a real typed node
+      const fields = require('../sdk/fields');
+      const typed = make('text');
+      const key = 'tana:type:' + ulid() + '?attribute=gcx3bvn5';
+      assert.deepEqual(fields.readFields(typed), [], 'a document without fields reports none');
+      fields.setFieldText(typed, key, 'Oriënterend/verkennend');
+      const value = typed.data.toJSON().attributes[key];
+      assert.equal(value.nodeName, 'doc');
+      assert.equal(value.children[0].nodeName, 'paragraph');
+      assert.equal(typeof value.children[0].attributes.blockId, 'string');
+      assert.deepEqual(value.children[0].children, ['Oriënterend/verkennend']);
+      assert.deepEqual(fields.readFields(typed).map((f) => [f.attribute, f.text]), [['gcx3bvn5', 'Oriënterend/verkennend']]);
+      fields.setFieldText(typed, key, 'Onderhandeling');
+      assert.deepEqual(fields.readFields(typed).map((f) => f.text), ['Onderhandeling'], 'a second write replaces the text in place');
+      assert.equal(typed.data.toJSON().attributes[key].children.length, 1, 'without adding paragraphs');
+      const typeDoc = make('type');
+      typeDoc.transact((l) => l.getMap('data').set('template', { attributes: [{ key: 'gcx3bvn5', title: 'Fase' }] }));
+      assert.deepEqual(fields.templateTitles(typeDoc), { gcx3bvn5: 'Fase' }, 'field names come from the type template');
+    }
     { // Library = no owner: the key goes away, the audience follows the participants, and a type still needs a space
       const loose=make('text'); loose.transact(l=>l.getMap('data').set('ownerUri',target.id));
       const toLibrary=await access.previewMove(loose,access.LIBRARY,ME,ctx);

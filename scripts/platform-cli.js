@@ -51,6 +51,30 @@ const commands = {
   async whoami() {
     out(await session.info());
   },
+  // fields: every type that defines attributes, with their keys and titles
+  async fields() {
+    await connect();
+    if (positional[0]) { // fields <type-uri>: that type's instances and their attribute values
+      const { nodes } = await client.graph.listNodes({ entityTypes: [positional[0]], limit: 20 });
+      for (const n of nodes) out(n.id + ' ' + (n.title || '') + ' attributes=' + JSON.stringify(n.attributes || {}));
+      return out(nodes.length + ' instances');
+    }
+    if (flag('scan')) { // any node that actually carries attribute values
+      let found = 0, seen = 0;
+      for (const kind of ['text', 'event', 'chat', 'space', 'canvas', 'skill', 'agent']) {
+        const { nodes } = await client.graph.listNodes({ nodeTypes: [kind], limit: 400 });
+        seen += nodes.length;
+        for (const n of nodes) if (n.attributes && Object.keys(n.attributes).length) { found++; out(n.id + ' ' + (n.title || '').slice(0, 50) + ' ' + JSON.stringify(n.attributes)); }
+      }
+      return out(found + ' nodes with attribute values, of ' + seen + ' scanned');
+    }
+    const { nodes } = await client.graph.listNodes({ nodeTypes: ['type'], limit: 300 });
+    for (const n of nodes) {
+      const defs = (n.typeDef && n.typeDef.attributes) || [];
+      if (defs.length) out(n.id + '  ' + (n.title || '') + ': ' + defs.map((d) => d.key + ' (' + (d.title || '') + ', ' + (d.type || '') + (d.cardinality ? ', ' + d.cardinality : '') + ')').join(' | '));
+    }
+    out(nodes.length + ' types scanned');
+  },
   // graphnode <id>: the raw graph Node JSON, including attributes and any typed links
   async graphnode() {
     await connect();

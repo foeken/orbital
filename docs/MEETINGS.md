@@ -37,3 +37,12 @@ which the graph reports as EDGE_TYPE_BELONGS_TO), so it has to be identified by 
 related() returns it as summaryUri using the tagline first and the sketch as a fallback, and never guesses
 when neither signal is present. The renderer forwards a zoomed meeting to that document, since an event has no
 content of its own.
+
+## Typed fields
+
+A field value is a ProseMirror-style tree in the document own data map under the key
+"<type uri>?attribute=<key>": { nodeName: doc, children: [{ nodeName: paragraph, attributes: { blockId },
+children: [text] }] }. The field name comes from the type document template.attributes ([{ key, title, type,
+cardinality, to }]); the graph node typeDef carries the same data but is not always readable, so the SDK reads the
+type document instead. sdk/fields.js reads and writes these values, and main exposes them through related() and
+doc:setField.

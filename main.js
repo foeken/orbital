@@ -10,12 +10,13 @@ const access = require('./sdk/access');
 const { readNode, editable, setTitle, setState, taskMeta, audienceMetadata, setAssignees, ulid, initDocument } = require('./sdk/node');
 const { parseQuery, searchParams, needsTypes, taskParams, libraryQueries, DEFAULT_TASK_FILTER, DEFAULT_LIBRARY_FILTER } = require('./sdk/query');
 const content = require('./sdk/content');
+const fields = require('./sdk/fields');
 const pins = require('./sdk/pins');
 
 const SECTIONS = [{ id: 'tasks', title: 'Tasks', icon: 'task' }, { id: 'meetings', title: 'Meetings', icon: 'meeting' }, { id: 'members', title: 'Members', icon: 'member' }, { id: 'library', title: 'Library', icon: 'library' }, { id: 'chats', title: 'Chats', icon: 'chat' }];
 const TAG = { task: { label: 'task', color: 'grey' }, meeting: { label: 'meeting', color: 'gold' }, space: { label: 'space', color: 'grey' }, doc: { label: 'doc', color: 'grey' }, member: { label: 'member', color: 'grey' } };
 const KINDS = { doc: 'tana:text:', task: 'tana:text:', meeting: 'tana:event:', chat: 'tana:chat:' };
-const PLAIN_KINDS = new Set(['chat', 'canvas', 'agent', 'skill']); // tana:<kind>: ids listed read-only: plain bullet + kind tag
+const PLAIN_KINDS = new Set(['chat', 'canvas', 'agent', 'skill', 'type']); // tana:<kind>: ids listed read-only: kind icon + kind tag
 
 // persisted view filters (db settings table)
 const taskFilter = () => db.setting('taskFilter') || DEFAULT_TASK_FILTER;
@@ -58,7 +59,7 @@ function rememberNodeHue(n) {
 const nodeTag = (tag, n) => { const hue = hueOf(n); return hue === undefined ? tag : { ...tag, hue }; };
 const cachedNodeHue = (r) => {
   const tag = r.tags && r.tags[0];
-  return (r.icon || ['space', 'chat', 'canvas', 'agent', 'skill'].includes(idKind(r.id))) && tag && typeof tag.hue === 'number' ? tag.hue : undefined;
+  return (r.icon || isSpace(r.id) || PLAIN_KINDS.has(idKind(r.id))) && tag && typeof tag.hue === 'number' ? tag.hue : undefined;
 };
 
 // Where a document lives in Tana: owner chain root-first as [{ id, title, icon }]; unowned documents are in the Library.
@@ -148,6 +149,29 @@ async function spaceChildren(id) {
 //   outcomes           documents owned by the event that carry a task state
 //   notes              documents owned by the event without a state (the meeting write-up)
 // Generic on purpose: any node with pins or owned documents answers the same way.
+// Fields are graph-node attributes keyed "<type uri>?attribute=<key>"; the label lives in that type's
+// typeDef.attributes. Values carry text, listItems and references (verified on a real typed node).
+// Field names come from the type document's template.attributes; the graph's typeDef is not always readable.
+const typeAttrTitles = new Map(); // type uri -> { key: title }
+async function attributeTitles(typeUri) {
+  if (typeAttrTitles.has(typeUri)) return typeAttrTitles.get(typeUri);
+  let titles = {};
+  try { titles = fields.templateTitles(await client.sync.subscribe(typeUri)); } catch { titles = {}; }
+  typeAttrTitles.set(typeUri, titles);
+  return titles;
+}
+// A document's own fields, values included, from its data map (the same place an edit writes to).
+async function fieldsOf(id) {
+  let document;
+  try { document = await client.sync.subscribe(id); } catch { return []; }
+  const rows = fields.readFields(document);
+  const out = [];
+  for (const row of rows) {
+    const titles = row.attribute ? await attributeTitles(row.typeUri) : {};
+    out.push({ key: row.key, label: (row.attribute && titles[row.attribute]) || undefined, text: row.text });
+  }
+  return out;
+}
 async function related(id) {
   if (!client) throw new Error(NOT_CONNECTED);
   // The meeting event is the hub: opening its notes document should still show the meeting's pins and outcomes.
@@ -178,6 +202,7 @@ async function related(id) {
     summary: ev.summary || undefined,
     tagline: ev.tagline || undefined,
     summaryUri: writeUp ? writeUp.id : undefined,
+    fields: await fieldsOf(id), // the zoomed node's own fields, not the meeting hub's
     pinned: pinned.map(row),
     outcomes: owns.filter(stated).map(row),
     notes: owns.filter((n) => !stated(n) && (!writeUp || n.id !== writeUp.id)).map(row),
@@ -670,6 +695,7 @@ ipcMain.handle('pins:pin', (_e, id, target) => setPin(id, target, true));
 ipcMain.handle('pins:unpin', (_e, id, target) => setPin(id, target, false));
 ipcMain.handle('doc:setIcon', (_e, id, svg) => setIcon(id, svg));
 ipcMain.handle('doc:related', (_e, id) => related(id)); // { summary, tagline, pinned[], outcomes[], notes[] }
+ipcMain.handle('doc:setField', (_e, id, key, text) => mut(id, (doc) => fields.setFieldText(doc, key, text)));
 // macOS appearance, for the renderer's "follow the system" theme: current value on demand, plus live changes
 const systemTheme = () => (nativeTheme && nativeTheme.shouldUseDarkColors ? 'dark' : 'light');
 ipcMain.handle('theme:system', () => systemTheme());

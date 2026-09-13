@@ -23,6 +23,16 @@ button { font: inherit; }
 .crumbs .sep { margin: 0 6px; color: #bbb; }
 .crumbs .current { color: #555; }
 .error { font-size: 13px; color: #c0392b; margin-top: 6px; -webkit-app-region: no-drag; }
+/* a zoomed node's fields (type attributes), under the title */
+.fields { -webkit-app-region: no-drag; margin-top: 8px; display: flex; flex-direction: column; gap: 2px; }
+.fields .field { display: flex; align-items: baseline; gap: 6px; font-size: 14px; color: #1a1a1a; }
+.fields .ricon { flex: none; width: 14px; height: 14px; color: #8a8a8a; align-self: center; }
+.fields .ricon svg { display: block; width: 14px; height: 14px; }
+.fields .flabel { color: #888; }
+.fields .fvalue { outline: none; min-width: 40px; border-bottom: 1px solid transparent; }
+.fields .fvalue:focus { border-bottom-color: #d6e3f2; }
+.fields .fvalue:empty::before { content: 'Empty'; color: #bbb; }
+.fields a { color: #508fbb; text-decoration: underline; cursor: pointer; }
 .error[hidden] { display: none; }
 
 .filter { position: relative; margin: 4px 32px 14px; width: 260px; }
@@ -326,6 +336,9 @@ button { font: inherit; }
 [data-theme="dark"] .rail .rrow .ricon { color: #aeb4b6; }
 [data-theme="dark"] .rail .rrow .rtitle { color: #7fb8dd; }
 [data-theme="dark"] .rail .rrow.done .rtitle { color: #858b8e; }
+[data-theme="dark"] .fields .field { color: #e6e8e9; }
+[data-theme="dark"] .fields .flabel, [data-theme="dark"] .fields .ricon { color: #858b8e; }
+[data-theme="dark"] .fields a { color: #7fb8dd; }
 [data-theme="dark"] .palette .hint { color: #858b8e; }
 [data-theme="dark"] .palette kbd { color: #b7bcbe; background: #303436; }
 [data-theme="dark"] .palette .row.active kbd { background: #42484a; }

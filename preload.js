@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('api', {
   node: (docId) => ipcRenderer.invoke('doc:info', docId),
   path: (docId) => ipcRenderer.invoke('doc:path', docId),
   related: (docId) => ipcRenderer.invoke('doc:related', docId), // meeting context: {summary,tagline,pinned[],outcomes[],notes[]}
+  setField: (docId, key, text) => ipcRenderer.invoke('doc:setField', docId, key, text), // typed field value (plain text)
   chats: (opts) => ipcRenderer.invoke('chats:list', opts), // { includeMcp }
   deleteDocument: (id) => ipcRenderer.invoke('doc:delete', id), // native soft delete; undo restores
   restoreDocument: (id) => ipcRenderer.invoke('doc:restore', id), // native restore; undo deletes again
