@@ -66,6 +66,22 @@ const meetingRow = (n) => {
 
 const toNode = (r) => ({ id: r.id, title: r.title, text: r.title, kind: 'document', done: r.icon === 'task' ? r.done : undefined, hasChildren: true, icon: r.icon || undefined, tags: r.tags, meta: r.meta || undefined });
 
+// Node shape from any graph Node JSON (search results): events, tasks, typed and plain documents.
+function graphRow(n) {
+  if (n.calendarEvent || n.id.startsWith('tana:event:')) return meetingRow(n);
+  if (n.state && n.state.type) return taskRow(n);
+  return { id: n.id, title: n.title || '', done: 0, icon: null, tags: typeTag(n.entityType), sortKey: n.updateTime || now(), updatedAt: n.updateTime || now() };
+}
+
+// Live search over all top-level items (graph full-text search, relevance order).
+async function search(query) {
+  const q = String(query || '').trim();
+  if (!q || !client) return [];
+  const { nodes } = await client.graph.listNodes({ nodeTypes: ['text', 'event'], textQuery: q, limit: 20, sortOptions: [{ field: 'SORT_FIELD_TEXT_RANK', direction: 'SORT_DIRECTION_DESCENDING' }] });
+  await resolveTypes(nodes.map((n) => n.entityType));
+  return nodes.map((n) => toNode(graphRow(n)));
+}
+
 // Node shape for any subscribed document: cached row when listed, else derived from the Loro data map.
 async function info(doc) {
   const n = readNode(doc), row = db.get(doc.id);
@@ -177,6 +193,24 @@ async function op(id, fn) {
   }
 }
 
+// Mutations: same as op, plus global undo ordering across documents (each Document keeps its own Loro UndoManager).
+const undoStack = [], redoStack = [];
+async function mut(id, fn) {
+  const result = await op(id, fn);
+  undoStack.push(id); redoStack.length = 0;
+  return result;
+}
+// ponytail: one undo step per mutation call across docs; Loro merges steps within 500 ms inside a document.
+function history(from, to, action, can) {
+  while (from.length) {
+    const id = from.pop();
+    const doc = client && client.sync.getDocument(id);
+    if (!doc || !doc[can]()) continue;
+    if (doc[action]()) { to.push(id); return id; }
+  }
+  return null;
+}
+
 ipcMain.handle('outline:roots', () => {
   const rows = db.list();
   return SECTIONS.map((s) => ({ ...s, nodes: (rows[s.id] || []).map(toNode) }));
@@ -184,18 +218,21 @@ ipcMain.handle('outline:roots', () => {
 // events start with an empty content map (no doc node yet); readOutline needs the children list
 ipcMain.handle('outline:children', (_e, id) => op(id, (doc) => (doc.content.get('children') ? content.readOutline(doc) : [])));
 ipcMain.handle('doc:info', (_e, id) => op(id, info));
-ipcMain.handle('doc:setTitle', (_e, id, title) => op(id, (doc) => { setTitle(doc, title); }));
-ipcMain.handle('doc:setDone', (_e, id, done) => op(id, (doc) => {
+ipcMain.handle('search', (_e, query) => search(query));
+ipcMain.handle('history:undo', () => history(undoStack, redoStack, 'undo', 'canUndo'));
+ipcMain.handle('history:redo', () => history(redoStack, undoStack, 'redo', 'canRedo'));
+ipcMain.handle('doc:setTitle', (_e, id, title) => mut(id, (doc) => { setTitle(doc, title); }));
+ipcMain.handle('doc:setDone', (_e, id, done) => mut(id, (doc) => {
   setState(doc, done ? 'closed' : 'open', me.userUri);
   scheduleRefresh(2000); // a closed task drops off the open list
 }));
-ipcMain.handle('block:setText', (_e, id, nodeId, value) => op(id, (doc) => { content.setText(doc, nodeId, value); })); // value: string or segments
-ipcMain.handle('block:insertAfter', (_e, id, nodeId, text) => op(id, (doc) => content.insertAfter(doc, nodeId, text)));
-ipcMain.handle('block:insertChild', (_e, id, nodeId, text) => op(id, (doc) => content.insertChild(doc, nodeId, text)));
-ipcMain.handle('block:remove', (_e, id, nodeId) => op(id, (doc) => { content.remove(doc, nodeId); }));
-ipcMain.handle('block:indent', (_e, id, nodeId) => op(id, (doc) => { content.indent(doc, nodeId); }));
-ipcMain.handle('block:outdent', (_e, id, nodeId) => op(id, (doc) => { content.outdent(doc, nodeId); }));
-ipcMain.handle('block:move', (_e, id, nodeId, direction) => op(id, (doc) => { content.move(doc, nodeId, direction); }));
+ipcMain.handle('block:setText', (_e, id, nodeId, value) => mut(id, (doc) => { content.setText(doc, nodeId, value); })); // value: string or segments
+ipcMain.handle('block:insertAfter', (_e, id, nodeId, text) => mut(id, (doc) => content.insertAfter(doc, nodeId, text)));
+ipcMain.handle('block:insertChild', (_e, id, nodeId, text) => mut(id, (doc) => content.insertChild(doc, nodeId, text)));
+ipcMain.handle('block:remove', (_e, id, nodeId) => mut(id, (doc) => { content.remove(doc, nodeId); }));
+ipcMain.handle('block:indent', (_e, id, nodeId) => mut(id, (doc) => { content.indent(doc, nodeId); }));
+ipcMain.handle('block:outdent', (_e, id, nodeId) => mut(id, (doc) => { content.outdent(doc, nodeId); }));
+ipcMain.handle('block:move', (_e, id, nodeId, direction) => mut(id, (doc) => { content.move(doc, nodeId, direction); }));
 ipcMain.handle('sync:refresh', () => refresh());
 ipcMain.handle('sync:status', () => status);
 ipcMain.handle('sync:login', async () => {
@@ -207,7 +244,11 @@ ipcMain.handle('sync:login', async () => {
   }
 });
 
+app.setName('Tana');
+app.setPath('userData', path.join(app.getPath('appData'), 'tana-tasks')); // before 'ready': same session/cache for dev runs, the CLI and the packaged app
+
 app.whenReady().then(async () => {
+  if (!app.isPackaged && app.dock) app.dock.setIcon(path.join(__dirname, 'build', 'icon.png')); // packaged builds carry the icon in the bundle
   db.open(path.join(app.getPath('userData'), 'tasks.sqlite'));
   session = createTanaSession();
   createMenu();

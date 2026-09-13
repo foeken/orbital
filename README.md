@@ -13,6 +13,8 @@ Layout: `sdk/` is a generic Tana platform client (graph queries, sync stream, Lo
 
 Icons come from the Tana line icon set (Nucleo export in ~/Documents/Tana icons (line)); `node scripts/build-icons.js` regenerates icons.js as greyscale inline SVG.
 
-Checks: `npm run check`. CLI for poking the platform without the UI: `npm run tana -- login | whoami | list | get <id> | outline <id> | watch <id...> | set-title <id> <title>`.
+Package a real `Tana.app` (name + icon) with `npm run package` (dist/Tana-darwin-arm64/Tana.app); `npm run icon` re-renders build/icon.icns from the Tana symbol.
+
+Checks: `npm run check`. CLI for poking the platform without the UI: `npm run tana -- login | whoami | list | search <query> | meetings | get <id> | outline <id> | watch <id...> | set-title <id> <title> | set-state <id> <state>`.
 
 This uses Tana's undocumented v1alpha1 protocol as reverse-engineered from their web client; expect it to break when they change it.

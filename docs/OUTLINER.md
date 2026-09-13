@@ -86,3 +86,22 @@ Copy: window title "Tana"; page title "Tasks". Nothing in the UI should hard-cod
 - Local cache (db.js): one generic table `nodes(id TEXT PRIMARY KEY, section TEXT, title TEXT, done INTEGER, icon TEXT, meta TEXT, tags TEXT /* JSON */, sortKey TEXT, updatedAt TEXT)`; `replaceSection(section, rows)` replaces one section's rows; `list()` returns rows grouped by section in sortKey order (tasks: updatedAt desc; meetings: start time asc). Old tables are dropped/migrated on open.
 - Menu: the "Tasks" menu becomes "Tana" with "Sync" (Cmd+R) which refreshes every section (IPC sync:refresh unchanged). Refresh runs on start, every 60 s, and 2 s after a state change. Every listed document (tasks and meetings) is subscribed for live updates; documents no longer listed are unsubscribed.
 - `api.onChanged(null)` still means "roots changed"; `api.node(docId)` returns the same Node shape (with tags/icon/meta) for documents reached through references, including events.
+
+
+## Addendum 3 (command palette, top-level views)
+
+- Tasks and Meetings are **views**, not sections on one page: the outline shows one view at a time (page title = view name, its documents as top-level nodes, no section heading line). `api.roots()` keeps returning both sections; the renderer picks the active one. Default view: Tasks; the last used view is remembered in localStorage. Zoom breadcrumbs start at the view name.
+- **Cmd+K command palette** (renderer only), styled like the attached ChatGPT palette: a centered modal card (max-width ~620px, 12px radius, subtle shadow, backdrop dimmed slightly), a borderless search input at the top with placeholder "Search or run a command", a thin divider, then grouped rows with small grey group headings: "Views" (Tasks, Meetings; each with its grey icon from icons.js: task glyph / calendar), "Actions" (Sync, right-aligned shortcut chip "⌘R"; Log in to Tana when unauthenticated), and, when the query is non-empty, "Documents": up to 8 documents from all loaded sections whose title matches (row shows the document's icon and title, right side shows its view name in grey). Rows: 15px text, 8px vertical padding, 8px radius, the active row has a light grey background; Up/Down move, Enter runs, Esc closes, typing filters every group (case-insensitive substring; empty query shows Views and Actions). Selecting a view switches the view; Sync calls api.refresh(); a document zooms into it (switching view first if needed). Cmd+K toggles the palette; the outline keeps its state behind it.
+- Sync moves out of the outline UI entirely (it is in the palette and in the native Tana menu). Cmd+F filter stays as is, scoped to the active view.
+
+
+## Addendum 4 (Cmd+S search palette)
+
+- `api.search(query)` -> `Promise<Node[]>`: live full-text search over every top-level item in Tana (tasks, meetings, typed and plain documents; graph search, relevance order, up to 20). Nodes come in the usual shape (id, title, kind 'document', icon, tags, meta, done).
+- **Cmd+S** opens a search palette with the same look as the Cmd+K palette but a single result list: placeholder "Search Tana", results fetched via api.search debounced 150 ms after typing (ignore stale responses), each row showing the item's icon (task glyph / gold calendar / plain dot), title, its tag chips, and meta in grey on the right; "No results" when empty and the query is non-empty; Up/Down/Enter/Esc as in Cmd+K. Enter zooms into the item (it is not necessarily in the current view: use api.node semantics, i.e. the renderer's existing goTo path with the returned Node so the breadcrumb reads "Search › <title>"). Cmd+S toggles it; opening one palette closes the other.
+
+
+## Addendum 5 (undo/redo, delete node)
+
+- `api.undo()` / `api.redo()` -> Promise<docId | null>: global undo across documents (main keeps the order; each document has a Loro UndoManager, local changes only, one step per mutation call). Renderer: Cmd+Z / Cmd+Shift+Z (and Cmd+Y) first flush any pending debounced text edit, then call undo/redo, then reload that document's children (or roots when the change touched a document's title/state) and re-render, placing the caret in the affected node when it still exists. Do not let the browser's native contenteditable undo run (preventDefault), so undo never diverges from what was sent to Tana.
+- **Cmd+Shift+Backspace** removes the current block node entirely (with its children) regardless of caret position or content, via api.remove; caret moves to the previous visible node (or the next when there is none). On a document node it is ignored.

@@ -212,7 +212,32 @@ async function main() {
   assert.equal(flat(outline.readOutline(c1)), 'Research con,The personal');
   assert.deepEqual(c2.content.toJSON(), c1.content.toJSON(), 'raw structure converges');
   console.log('ok  outline read/segments/setText/insertAfter/insertChild/indent/outdent/move/remove');
-
+  // ---- undo/redo: local-only, ops flow out like any local change, the other document converges ----
+  {
+    const a = new Document('tana:text:undo', { peerId: '1' }), b = new Document('tana:text:undo', { peerId: '2' });
+    a.on('local-update', (u) => b.applyRemote([u]));
+    b.on('local-update', (u) => a.applyRemote([u]));
+    a.transact((l) => { l.getMap('data').set('title', 'one'); });
+    assert.equal(a.canUndo(), true);
+    setTitle(a, 'two');
+    outline.insertAfter(a, null, 'para');
+    assert.equal(outline.readOutline(a).length, 1);
+    assert.equal(a.undo(), true);
+    assert.equal(outline.readOutline(a).length, 0);
+    assert.equal(outline.readOutline(b).length, 0);
+    assert.equal(a.undo(), true);
+    assert.equal(a.data.get('title'), 'one');
+    assert.equal(b.data.get('title'), 'one');
+    b.transact((l) => { l.getMap('data').set('other', 'remote'); });
+    assert.equal(a.redo(), true);
+    assert.equal(a.data.get('title'), 'two');
+    assert.equal(a.data.get('other'), 'remote');
+    assert.equal(b.undo(), true);
+    assert.equal(a.data.get('other'), undefined);
+    assert.equal(a.redo(), true);
+    assert.equal(outline.readOutline(b).length, 1);
+    console.log('ok  undo/redo (local only, converges, survives concurrent edits)');
+  }
   // 4. Transport: headers and the 401 -> refresh -> retry-once rule, with a fake fetch
   const calls = [];
   let tokens = 0;

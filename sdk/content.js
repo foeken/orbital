@@ -9,6 +9,12 @@ const { contentText } = require('./node');
 const LISTS = ['bulletList', 'orderedList'];
 const name = (m) => m.get('nodeName');
 const kids = (m) => m.get('children');
+// The root content map of a fresh document (events, new docs) is empty; create the doc skeleton on first write.
+function rootKids(document) {
+  const c = document.content;
+  if (!c.get('children')) { c.set('nodeName', 'doc'); c.setContainer('attributes', new LoroMap()); c.setContainer('children', new LoroList()); }
+  return c.get('children');
+}
 const isList = (m) => LISTS.includes(name(m));
 const isItem = (m) => name(m) === 'listItem';
 const isMention = (x) => x.kind() === 'Map' && name(x) === 'mention';
@@ -23,7 +29,8 @@ function indexOf(list, m) {
 // ---- read
 
 function readOutline(document) {
-  return nodes(kids(document.content));
+  const list = kids(document.content);
+  return list ? nodes(list) : [];
 }
 
 function nodes(list, from = 0) {
@@ -168,7 +175,7 @@ function setText(document, id, value) {
 function insertAfter(document, id, text) {
   let out = null;
   document.transact(() => {
-    const list = kids(document.content);
+    const list = rootKids(document);
     if (id == null) { out = blockId(paragraph(list, list.length, text)); return; }
     const { block, item: li } = must(document, id);
     const unit = li || block, l = unit.parent(), i = indexOf(l, unit) + 1;

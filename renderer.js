@@ -40,38 +40,48 @@ function mockApi() {
   let status = { authenticated: false, connected: false, syncing: false, lastSync: null, error: null };
   const emit = (docId) => setTimeout(() => changed.forEach((cb) => cb(docId)), 0);
   const fix = (n) => { n.hasChildren = n.children.length > 0; };
+  const info = (d) => ({ id: d.id, title: d.text, kind: 'document', done: d.done, icon: d.icon, tags: d.tags, meta: d.meta });
+  // undo/redo: whole-state snapshots, one step per mutation (main keeps a global order over per-document Loro UndoManagers)
+  const undoStack = [], redoStack = [];
+  const snapshot = () => structuredClone({ docs: all.map((d) => ({ text: d.text, done: d.done })), content });
+  const restore = (s) => { all.forEach((d, i) => Object.assign(d, s.docs[i])); Object.assign(content, s.content); };
+  const mut = (docId, fn) => { undoStack.push({ docId, snap: snapshot() }); redoStack.length = 0; return fn(); };
+  const history = async (from, to) => { const e = from.pop(); if (!e) return null; to.push({ docId: e.docId, snap: snapshot() }); restore(e.snap); emit(e.docId); return e.docId; };
   return {
     roots: async () => structuredClone(sections),
     children: async (docId) => structuredClone(content[docId] || []),
     node: async (docId) => {
       const d = all.find((x) => x.id === docId);
-      if (d) return { id: d.id, title: d.text, kind: 'document', done: d.done, icon: d.icon, tags: d.tags, meta: d.meta };
+      if (d) return info(d);
       if (people[docId]) return { id: docId, title: people[docId], kind: 'document', tags: [] };
       throw new Error('unknown document ' + docId);
     },
-    setTitle: async (docId, title) => { all.find((d) => d.id === docId).text = title; emit(docId); },
-    setDone: async (docId, done) => { all.find((d) => d.id === docId).done = done ? 1 : 0; emit(docId); },
-    setText: async (docId, id, text) => { const n = locate(content[docId], id).node; n.text = plainOf(text); n.segments = segsOf(text); emit(docId); },
-    insertAfter: async (docId, id, text) => {
+    search: async (q) => { await new Promise((r) => setTimeout(r, 30)); return all.filter((d) => d.text.toLowerCase().includes(q.toLowerCase())).slice(0, 20).map(info); },
+    setTitle: async (docId, title) => mut(docId, () => { all.find((d) => d.id === docId).text = title; emit(docId); }),
+    setDone: async (docId, done) => mut(docId, () => { all.find((d) => d.id === docId).done = done ? 1 : 0; emit(docId); }),
+    setText: async (docId, id, text) => mut(docId, () => { const n = locate(content[docId], id).node; n.text = plainOf(text); n.segments = segsOf(text); emit(docId); }),
+    insertAfter: async (docId, id, text) => mut(docId, () => {
       const n = block(text);
       if (id == null) content[docId].push(n); else { const f = locate(content[docId], id); f.list.splice(f.index + 1, 0, n); }
       emit(docId); return n.id;
-    },
-    insertChild: async (docId, id, text) => { const n = block(text), f = locate(content[docId], id); f.node.children.unshift(n); fix(f.node); emit(docId); return n.id; },
-    remove: async (docId, id) => { const f = locate(content[docId], id); f.list.splice(f.index, 1); const p = f.trail.at(-1); if (p) fix(p.node); emit(docId); },
-    indent: async (docId, id) => {
+    }),
+    insertChild: async (docId, id, text) => mut(docId, () => { const n = block(text), f = locate(content[docId], id); f.node.children.unshift(n); fix(f.node); emit(docId); return n.id; }),
+    remove: async (docId, id) => mut(docId, () => { const f = locate(content[docId], id); f.list.splice(f.index, 1); const p = f.trail.at(-1); if (p) fix(p.node); emit(docId); }),
+    indent: async (docId, id) => mut(docId, () => {
       const f = locate(content[docId], id); if (f.index === 0) return;
       const prev = f.list[f.index - 1]; f.list.splice(f.index, 1); prev.children.push(f.node); fix(prev); emit(docId);
-    },
-    outdent: async (docId, id) => {
+    }),
+    outdent: async (docId, id) => mut(docId, () => {
       const f = locate(content[docId], id), p = f.trail.at(-1); if (!p) return;
       f.list.splice(f.index, 1); fix(p.node); p.list.splice(p.index + 1, 0, f.node); emit(docId);
-    },
-    move: async (docId, id, dir) => {
+    }),
+    move: async (docId, id, dir) => mut(docId, () => {
       const f = locate(content[docId], id), j = f.index + (dir === 'up' ? -1 : 1);
       if (j < 0 || j >= f.list.length) return;
       [f.list[f.index], f.list[j]] = [f.list[j], f.list[f.index]]; emit(docId);
-    },
+    }),
+    undo: () => history(undoStack, redoStack),
+    redo: () => history(redoStack, undoStack),
     refresh: async () => emit(null),
     login: async () => { status = { ...status, authenticated: true, connected: true, lastSync: new Date().toISOString() }; statusCbs.forEach((cb) => cb(status)); },
     status: async () => status,
@@ -122,10 +132,12 @@ const tana = window.api || mockApi();
 
 // ---- state ----
 let sections = [];           // [{ id, title, icon, nodes: document Node[] }]
+let view = localStorage.getItem('view') || 'tasks'; // active section id; the outline shows one view at a time
+let authed = false;
 const extra = new Map();     // docId -> document Node reached through a mention (not in roots)
 const kids = new Map();      // docId -> Node[] | null (loading)
 const open = new Map();      // key -> bool; default: blocks open, documents closed
-let zoom = null;             // { docId, nodeId | null }
+let zoom = null;             // { docId, nodeId | null, from?: string } from = breadcrumb root label when not the view (e.g. 'Search')
 const items = new Map();     // key -> { key, node, docId, parent }, rebuilt on render
 const pending = new Map();   // key -> { item, segs, timer } debounced edits
 let filterShown = false;
@@ -135,6 +147,7 @@ const $ = (id) => document.getElementById(id);
 const outline = $('outline'), filterEl = $('filter'), filterRow = $('filterRow');
 const allDocs = () => sections.flatMap((s) => s.nodes);
 const sectionOf = (docId) => sections.find((s) => s.nodes.some((n) => n.id === docId));
+const viewOf = () => sections.find((s) => s.id === view) || sections[0];
 const keyFor = (docId, node) => (node.kind === 'document' ? docId : docId + '/' + node.id);
 const mkItem = (docId, node, parent) => { const item = { key: keyFor(docId, node), node, docId, parent }; items.set(item.key, item); return item; };
 const childrenOf = (item) => (item.node.kind === 'document' ? kids.get(item.docId) : item.node.children || []);
@@ -189,6 +202,10 @@ function placeCaret(key, offset) {
   const el = textEl(key);
   if (el) setCaret(el, offset == null ? el.textContent.length : offset);
 }
+// caret into keys[i] (at offset) when it still exists, else the nearest surviving node: previous ones first, then following
+function caretNear(keys, i, offset) {
+  for (const k of [keys[i], ...keys.slice(0, i).reverse(), ...keys.slice(i + 1)]) if (k && textEl(k)) return placeCaret(k, k === keys[i] ? offset : null);
+}
 // true when the caret sits on the first (up) / last (down) visual line of el
 function atEdge(el, dir) {
   const sel = getSelection();
@@ -212,17 +229,18 @@ function render() {
     list = childrenOf(parent) || [];
     outline.replaceChildren(...list.map((n) => nodeEl(n, parent.docId, parent)));
   } else {
+    const v = viewOf(), docs = v ? v.nodes : [];
     const q = filterEl.value.trim().toLowerCase();
-    list = q ? sections.map((s) => ({ ...s, nodes: s.nodes.filter((n) => n.text.toLowerCase().includes(q)) })).filter((s) => s.nodes.length) : sections;
-    hidden = allDocs().length - list.reduce((n, s) => n + s.nodes.length, 0);
-    outline.replaceChildren(...list.map(sectionEl));
+    list = q ? docs.filter((n) => n.text.toLowerCase().includes(q)) : docs;
+    hidden = docs.length - list.length;
+    outline.replaceChildren(...list.map((n) => nodeEl(n, n.id, null)));
   }
   if (parent && !list.length) {
     const note = document.createElement('div');
     note.className = 'empty-note'; note.textContent = kids.get(parent.docId) === null ? 'Loading…' : 'No content';
     outline.append(note);
   }
-  $('title').textContent = parent ? parent.node.text : 'Tana';
+  $('title').textContent = parent ? parent.node.text : viewOf() ? viewOf().title : 'Tana';
   renderCrumbs(trail);
   filterRow.hidden = !!parent || !(filterShown || filterEl.value);
   filterRow.classList.toggle('empty', !filterEl.value);
@@ -248,8 +266,7 @@ function renderCrumbs(trail) {
   const nav = $('crumbs');
   nav.hidden = !trail;
   if (!trail) return;
-  const section = sectionOf(trail[0].docId);
-  const home = document.createElement('a'); home.textContent = section ? section.title : 'Tana'; home.onclick = () => { zoom = null; render(); };
+  const home = document.createElement('a'); home.textContent = zoom.from || (viewOf() ? viewOf().title : 'Tana'); home.onclick = () => { zoom = null; render(); };
   nav.replaceChildren(home);
   trail.forEach((item, i) => {
     const sep = document.createElement('span'); sep.className = 'sep'; sep.textContent = '›';
@@ -258,20 +275,6 @@ function renderCrumbs(trail) {
     if (i < trail.length - 1) a.onclick = () => zoomTo(item);
     nav.append(sep, a);
   });
-}
-
-// section: non-editable heading line, always expanded; its documents are the children
-function sectionEl(section) {
-  const el = document.createElement('div'); el.className = 'node section'; el.dataset.key = 'section:' + section.id;
-  const line = document.createElement('div'); line.className = 'line';
-  const gap = document.createElement('span'); gap.className = 'chev';
-  const bullet = document.createElement('span'); bullet.className = 'bullet icon'; bullet.innerHTML = iconSvg(section.icon);
-  const title = document.createElement('span'); title.className = 'heading'; title.textContent = section.title;
-  line.append(gap, bullet, title);
-  const wrap = document.createElement('div'); wrap.className = 'children';
-  wrap.append(...section.nodes.map((n) => nodeEl(n, n.id, null)));
-  el.append(line, wrap);
-  return el;
 }
 
 function nodeEl(node, docId, parent) {
@@ -374,11 +377,25 @@ async function shiftNode(item, el, op, arg) {
 }
 
 async function removeNode(item, el) {
-  const all = texts(), prev = all[all.indexOf(el) - 1], prevKey = prev && keyOfEl(prev);
+  const keys = texts().map(keyOfEl), i = keys.indexOf(item.key);
   dropPending(item.key);
   await run(async () => { await tana.remove(item.docId, item.node.id); await reload(item.docId); });
   render();
-  if (prevKey) placeCaret(prevKey, null);
+  caretNear(keys, i, null);
+}
+
+// Cmd+Z / Cmd+Shift+Z: undo/redo through the API (never the browser's contenteditable history), then re-read what changed
+// ponytail: the API returns only the docId; the caret stays in the focused node or moves to the nearest surviving one
+async function history(op) {
+  flushAll();
+  const saved = focused(), keys = texts().map(keyOfEl);
+  await run(async () => {
+    const docId = await tana[op]();
+    await loadRoots();
+    if (docId && kids.has(docId)) await reload(docId);
+  });
+  render();
+  if (saved && !focused()) caretNear(keys, keys.indexOf(saved.key), saved.offset);
 }
 
 function setOpen(item, value) { open.set(item.key, value); render(); }
@@ -390,17 +407,24 @@ function toggleDone(item) {
 }
 function zoomTo(item) {
   flushAll();
-  zoom = { docId: item.docId, nodeId: item.node.kind === 'document' ? null : item.node.id };
+  zoom = { docId: item.docId, nodeId: item.node.kind === 'document' ? null : item.node.id, from: zoom && zoom.docId === item.docId ? zoom.from : undefined };
+  render();
+}
+function setView(id) { view = id; localStorage.setItem('view', id); zoom = null; render(); }
+// zoom into a document, switching to its view first when it belongs to another one; from = breadcrumb root instead of the view
+function openDoc(docId, from) {
+  flushAll();
+  const s = from ? null : sectionOf(docId);
+  if (s && s.id !== view) { view = s.id; localStorage.setItem('view', view); }
+  zoom = { docId, nodeId: null, from };
   render();
 }
 async function goTo(uri) {
-  flushAll();
   if (!allDocs().some((d) => d.id === uri) && !extra.has(uri)) {
     try { const n = await tana.node(uri); extra.set(uri, { ...n, text: n.title || '', hasChildren: true }); }
     catch (e) { return showError(e); }
   }
-  zoom = { docId: uri, nodeId: null };
-  render();
+  openDoc(uri);
 }
 function flushAll() { for (const key of [...pending.keys()]) flush(key); }
 
@@ -424,6 +448,7 @@ outline.addEventListener('keydown', (e) => {
   else if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); insertAtCaret(el, '\n'); }
   else if (e.key === 'Enter') { e.preventDefault(); splitNode(item, el, off ?? len); }
   else if (e.key === 'Tab') { e.preventDefault(); if (!isDoc) shiftNode(item, el, e.shiftKey ? 'outdent' : 'indent'); }
+  else if (e.key === 'Backspace' && mod && e.shiftKey) { e.preventDefault(); if (!isDoc) removeNode(item, el); }
   else if (e.key === 'Backspace' && off === 0 && collapsed) { e.preventDefault(); if (!isDoc && len === 0) removeNode(item, el); }
   else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && mod && e.shiftKey) { e.preventDefault(); if (!isDoc) shiftNode(item, el, 'move', e.key === 'ArrowUp' ? 'up' : 'down'); }
   else if (e.key === 'ArrowUp' && mod && !e.shiftKey) { e.preventDefault(); if (hasKids(item)) setOpen(item, false); }
@@ -450,12 +475,92 @@ filterEl.addEventListener('keydown', (e) => {
 filterEl.addEventListener('blur', () => { if (!filterEl.value) { filterShown = false; render(); } });
 $('clear').onclick = () => { filterEl.value = ''; render(); filterEl.focus(); };
 document.addEventListener('keydown', (e) => {
-  if ((e.metaKey || e.ctrlKey) && e.key === 'f') { e.preventDefault(); if (zoom) return; filterShown = true; render(); filterEl.focus(); }
+  if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); togglePalette('cmd'); }
+  else if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); togglePalette('search'); }
+  else if (!palette.hidden) return;
+  else if ((e.metaKey || e.ctrlKey) && (e.key.toLowerCase() === 'z' || e.key.toLowerCase() === 'y') && document.activeElement !== filterEl) { e.preventDefault(); history(e.key.toLowerCase() === 'y' || e.shiftKey ? 'redo' : 'undo'); }
+  else if ((e.metaKey || e.ctrlKey) && e.key === 'f') { e.preventDefault(); if (zoom) return; filterShown = true; render(); filterEl.focus(); }
   else if (e.key === 'Escape' && document.activeElement === document.body && filterEl.value) { filterEl.value = ''; filterShown = false; render(); }
 });
 
+// ---- palette: Cmd+K commands (Views, Actions, matching Documents while typing) or Cmd+S live search (api.search) ----
+const palette = $('palette'), palInput = $('paletteInput'), palList = $('paletteList');
+let palMode = 'cmd', palRows = [], palIndex = 0, palBusy = false, palSeq = 0, palTimer;
+const docRow = (n, hint, run) => ({ node: n, icon: n.icon, label: n.text ?? n.title, tags: n.tags, hint, run });
+function paletteRows(q) {
+  const rows = sections.map((s) => ({ group: 'Views', icon: s.icon, label: s.title, run: () => setView(s.id) }));
+  rows.push({ group: 'Actions', label: 'Sync', kbd: '⌘R', run: () => run(() => tana.refresh()) });
+  if (!authed) rows.push({ group: 'Actions', label: 'Log in to Tana', run: () => tana.login().catch(showError) });
+  if (q) for (const s of sections) for (const n of s.nodes) rows.push({ ...docRow(n, s.title, () => openDoc(n.id)), group: 'Documents' });
+  let docsLeft = 8;
+  return rows.filter((r) => (!q || r.label.toLowerCase().includes(q)) && (r.group !== 'Documents' || docsLeft-- > 0));
+}
+// search result: zoom into it wherever it lives (api.node shape -> extra), breadcrumb "Search › title"
+function openResult(n) {
+  if (!allDocs().some((d) => d.id === n.id)) extra.set(n.id, { ...n, text: n.title || '', hasChildren: true });
+  openDoc(n.id, 'Search');
+}
+function searchNow() {
+  const q = palInput.value.trim(), seq = ++palSeq;
+  palTimer = null;
+  if (!q) { palRows = []; palBusy = false; return renderPalette(); }
+  tana.search(q).then((nodes) => {
+    if (seq !== palSeq || palMode !== 'search') return; // stale response
+    palRows = nodes.map((n) => docRow(n, n.meta, () => openResult(n))); palIndex = 0; palBusy = false;
+    renderPalette();
+  }, showError);
+}
+function renderPalette() {
+  const q = palInput.value.trim();
+  if (palMode === 'cmd') palRows = paletteRows(q.toLowerCase());
+  palIndex = Math.max(0, Math.min(palIndex, palRows.length - 1));
+  const els = [];
+  palRows.forEach((r, i) => {
+    if (r.group && (!i || palRows[i - 1].group !== r.group)) { const h = document.createElement('div'); h.className = 'group'; h.textContent = r.group; els.push(h); }
+    const row = document.createElement('div'); row.className = 'row' + (i === palIndex ? ' active' : ''); row.dataset.index = i;
+    const icon = document.createElement('span'); icon.className = 'ricon' + (r.node ? ' ' + (r.icon || 'dot') : ''); icon.innerHTML = r.icon ? iconSvg(r.icon) : '';
+    const label = document.createElement('span'); label.className = 'label'; label.textContent = r.label;
+    for (const t of r.tags || []) { const c = document.createElement('span'); c.className = 'chip ' + t.color; c.textContent = '# ' + t.label; label.append(c); }
+    row.append(icon, label);
+    if (r.kbd) { const k = document.createElement('kbd'); k.textContent = r.kbd; row.append(k); }
+    if (r.hint) { const h = document.createElement('span'); h.className = 'hint'; h.textContent = r.hint; row.append(h); }
+    row.onmousedown = (e) => e.preventDefault();
+    row.onclick = () => runRow(r);
+    els.push(row);
+  });
+  if (!palRows.length && (palMode === 'cmd' || (q && !palBusy))) { const n = document.createElement('div'); n.className = 'group'; n.textContent = 'No results'; els.push(n); }
+  palList.replaceChildren(...els);
+  const active = palList.querySelector('.row.active');
+  if (active) active.scrollIntoView({ block: 'nearest' });
+}
+// opens the palette in mode, closes it when already open in that mode; opening one mode closes the other
+function togglePalette(mode) {
+  const show = palette.hidden || palMode !== mode;
+  palette.hidden = !show;
+  if (!show) return;
+  palMode = mode; palRows = []; palIndex = 0; palBusy = false; clearTimeout(palTimer); palTimer = null;
+  palInput.placeholder = mode === 'search' ? 'Search Tana' : 'Search or run a command';
+  palInput.value = '';
+  renderPalette();
+  palInput.focus();
+}
+function closePalette() { palette.hidden = true; clearTimeout(palTimer); palTimer = null; }
+function runRow(r) { closePalette(); r.run(); }
+palInput.addEventListener('input', () => {
+  palIndex = 0;
+  if (palMode === 'cmd') return renderPalette();
+  palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchNow, 150);
+});
+palInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { e.preventDefault(); closePalette(); }
+  else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && palRows.length) { e.preventDefault(); palIndex = (palIndex + (e.key === 'ArrowDown' ? 1 : palRows.length - 1)) % palRows.length; renderPalette(); }
+  else if (e.key === 'Enter') { e.preventDefault(); if (palRows[palIndex]) runRow(palRows[palIndex]); }
+});
+palette.addEventListener('mousedown', (e) => { if (e.target === palette) closePalette(); });
+
 // ---- status ----
 function showStatus(s) {
+  authed = !!s.authenticated;
   $('loginBox').hidden = !!s.authenticated;
   outline.hidden = $('filtered').hidden = !s.authenticated;
   showError(s.error);

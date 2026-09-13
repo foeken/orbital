@@ -4,7 +4,7 @@
 const { app } = require('electron');
 const path = require('node:path');
 const { createTanaSession, peerIdentity } = require('../tana-session');
-let createTanaClient, readNode, setTitle, contentText, readOutline; // loaded lazily: login/whoami work without the SDK
+let createTanaClient, readNode, setTitle, setState, contentText, readOutline; // loaded lazily: login/whoami work without the SDK
 
 // Share the cookie partition and peer.json with the real app.
 app.setPath('userData', path.join(app.getPath('appData'), 'tana-tasks'));
@@ -19,7 +19,7 @@ let session, client;
 
 async function connect() {
   ({ createTanaClient } = require('../sdk'));
-  ({ readNode, setTitle, contentText } = require('../sdk/node'));
+  ({ readNode, setTitle, setState, contentText } = require('../sdk/node'));
   ({ readOutline } = require('../sdk/content'));
   const me = await session.info();
   const peer = peerIdentity({ file: path.join(app.getPath('userData'), 'peer.json'), userExternalId: me.userExternalId });
@@ -46,6 +46,11 @@ const commands = {
     });
     for (const n of nodes) out(n.id + '\t' + ((n.state && n.state.type) || '-') + '\t' + (n.title || ''));
     out(nodes.length + ' nodes (totalCount ' + totalCount + ')');
+  },
+  async search() {
+    await connect();
+    const { nodes } = await client.graph.listNodes({ nodeTypes: ['text', 'event'], textQuery: positional[0], limit: 20, sortOptions: [{ field: 'SORT_FIELD_TEXT_RANK', direction: 'SORT_DIRECTION_DESCENDING' }] });
+    for (const n of nodes) out(n.id + '  ' + (n.calendarEvent ? '[meeting] ' : n.state ? '[task:' + n.state.type + '] ' : n.entityType ? '[typed] ' : '') + (n.title || ''));
   },
   async meetings() {
     const me = await connect();
@@ -96,7 +101,7 @@ const commands = {
   },
   async 'set-title'() {
     const [id, title] = positional;
-    if (!id || title == null) throw new Error('usage: set-title <id> <title>');
+    if (!id || title == null) throw new Error('usage: set-title <id> <title> | set-state <id> <state>');
     await connect();
     await client.sync.connect();
     const doc = await client.sync.subscribe(id);
@@ -104,10 +109,20 @@ const commands = {
     await new Promise((r) => setTimeout(r, 1500)); // let the live update go out
     out(summary(doc));
   },
+  async 'set-state'() {
+    const [id, stateType] = positional;
+    if (!id || !stateType) throw new Error('usage: set-state <id> <proposed|open|closed|not_now>');
+    const me = await connect();
+    await client.sync.connect();
+    const doc = await client.sync.subscribe(id);
+    setState(doc, stateType, me.userUri);
+    await new Promise((r) => setTimeout(r, 1500));
+    out(summary(doc));
+  },
 };
 
 app.whenReady().then(async () => {
-  if (!commands[cmd]) { console.error('usage: platform-cli login | whoami | list [--state open] | meetings [--days 7] | get <id> | outline <id> | watch <id...> | set-title <id> <title>'); app.exit(2); return; }
+  if (!commands[cmd]) { console.error('usage: platform-cli login | whoami | list [--state open] | search <query> | meetings [--days 7] | get <id> | outline <id> | watch <id...> | set-title <id> <title> | set-state <id> <state>'); app.exit(2); return; }
   session = createTanaSession();
   let code = 0;
   try { await commands[cmd](); } catch (e) { console.error(e && e.stack || e); code = 1; }

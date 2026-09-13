@@ -1,7 +1,7 @@
 'use strict';
 // A subscribed Loro document (generic over Tana document types), configured like the web client (protocol doc §3, §4).
 const { EventEmitter } = require('node:events');
-const { LoroDoc } = require('loro-crdt');
+const { LoroDoc, UndoManager } = require('loro-crdt');
 
 class Document extends EventEmitter {
   constructor(id, { peerId } = {}) {
@@ -19,6 +19,8 @@ class Document extends EventEmitter {
     this.data = loro.getMap('data');
     this.content = loro.getMap('content');
     this._exported = loro.oplogVersion();
+    // Local-only, CRDT-aware undo: remote changes are never undone, concurrent edits are transformed against.
+    this.undoManager = new UndoManager(loro, { mergeInterval: 0, maxUndoSteps: 200 }) // one step per transact; typing is already grouped by the caller;
   }
 
   toJSON() { return this.loro.toJSON(); }
@@ -30,6 +32,16 @@ class Document extends EventEmitter {
   transact(fn) {
     fn(this.loro);
     this.loro.commit();
+    this._flushLocal();
+  }
+
+  undo() { const did = this.undoManager.undo(); if (did) this._flushLocal(); return did; }
+  redo() { const did = this.undoManager.redo(); if (did) this._flushLocal(); return did; }
+  canUndo() { return this.undoManager.canUndo(); }
+  canRedo() { return this.undoManager.canRedo(); }
+
+  // Export whatever local ops were committed since the last export and announce them.
+  _flushLocal() {
     const now = this.loro.oplogVersion();
     if (now.compare(this._exported) === 0) return;
     const bytes = this.exportSince(this._exported);

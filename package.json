@@ -2,12 +2,14 @@
   "name": "tana-tasks",
   "version": "0.2.0",
   "private": true,
-  "description": "Local task list kept live with Tana over its platform sync protocol",
+  "description": "Tana companion: an outliner over your Tana documents, kept live over Tana's platform sync",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "tana": "electron scripts/platform-cli.js",
-    "check": "node scripts/db-check.js && node scripts/sdk-check.js"
+    "check": "node scripts/db-check.js && node scripts/sdk-check.js",
+    "icon": "electron scripts/build-icon.js",
+    "package": "electron-packager . Tana --platform=darwin --arch=arm64 --icon=build/icon.icns --out=dist --overwrite --ignore='^/(dist|docs|build/icon\\.png|\\.git)' --app-bundle-id=inc.tana.companion"
   },
   "dependencies": {
     "@bufbuild/protobuf": "^2.15.0",
@@ -16,6 +18,8 @@
     "loro-crdt": "^1.16.1"
   },
   "devDependencies": {
+    "@electron/packager": "^20.3.0",
     "electron": "^44.3.0"
-  }
+  },
+  "productName": "Tana"
 }
