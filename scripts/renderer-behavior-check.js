@@ -312,7 +312,7 @@ async function runTaskChildCheckboxScopeCheck() {
   `, { structuredClone, setTimeout, clearTimeout, Date, Promise });
 
   const taskId = 'mockdoc0';
-  const initial = await api.children(taskId);
+  const initial = (await api.children(taskId)).filter((node) => node.type == null); // the fixture also carries image and reference blocks
   assert.ok(initial.length > 0, 'task fixture has ordinary paragraph children');
   assert.ok(initial.every((node) => node.done == null), 'ordinary paragraphs under a task render as plain blocks');
 
@@ -392,6 +392,7 @@ async function runStalePaletteInvalidationCheck() {
     const reload = async () => {};
     const loadPins = async () => { pinTree = await tana.pinTree(); };
     const loadChats = () => {};
+    const loadView = () => {};
     const render = () => {};
     const showError = (error) => { throw error; };
     const view = 'tasks';
@@ -469,20 +470,27 @@ function runReferenceEmbedRenderCheck() {
     ${presentation}
     ${canExpand}
     ${functionSource('nodeEl')}
-    const embedded = {
-      id: 'block-identity', kind: 'block', type: 'reference', editable: false,
-      text: 'native embed text', segments: [{ text: 'native embed text' }],
-      reference: { uri: 'tana:text:01j0target000000000000000', label: 'Fallback label', node: { id: 'tana:text:01j0target000000000000000', text: 'Resolved target', kind: 'document' } },
+    (targetEditable) => {
+      const embedded = {
+        id: 'block-identity', kind: 'block', type: 'reference', editable: false,
+        text: 'native embed text', segments: [{ text: 'native embed text' }],
+        reference: { uri: 'tana:text:01j0target000000000000000', label: 'Fallback label', node: { id: 'tana:text:01j0target000000000000000', text: 'Resolved target', kind: 'document', editable: targetEditable } },
+      };
+      const el = nodeEl(embedded, 'tana:doc:01j0container000000000000', { node: { kind: 'document', editable: true } });
+      const text = el.children[0].children.at(-1).children[0];
+      return { key: el.dataset.key, editable: text.contentEditable === 'plaintext-only', rendered: rendered.get(text) };
     };
-    const el = nodeEl(embedded, 'tana:doc:01j0container000000000000', { node: { kind: 'document', editable: true } });
-    const text = el.children[0].children.at(-1).children[0];
-    ({ key: el.dataset.key, editable: text.contentEditable === 'plaintext-only', rendered: rendered.get(text) });
   `);
-  assert.deepEqual(plain(api), {
+  assert.deepEqual(plain(api(true)), {
+    key: 'tana:doc:01j0container000000000000/block-identity',
+    editable: true,
+    rendered: [{ text: 'Resolved target' }],
+  }, 'a resolved reference embed displays its target and edits that target, keeping the original block identity');
+  assert.deepEqual(plain(api(false)), {
     key: 'tana:doc:01j0container000000000000/block-identity',
     editable: false,
     rendered: [{ text: 'Resolved target' }],
-  }, 'a resolved reference embed displays its target while retaining the original read-only block identity');
+  }, 'a reference to a read-only target stays read-only');
 }
 
 async function runVisibilityPickerCheck() {
@@ -786,7 +794,89 @@ async function runPendingSplitDraftCheck() {
   }, 'typing into the pending draft survives reload and saves to the inserted block');
 }
 
-const checks = [runPinGrouping, runSelectionChecks, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck];
+// A row's bullet must sit at the same x in every state, so the chevron gutter can never leave the layout:
+// nodeEl must not hide the chevron with the hidden attribute, and no stylesheet rule may take a .chev out of flow.
+function runRowAlignmentCheck() {
+  const presentation = sourceBetween('const isTask =', 'const chatIcon =');
+  const referenceDisplay = sourceBetween('const isReference =', 'const showError =');
+  const canExpand = sourceBetween('const canExpand =', 'function draftNode');
+  const rowChevron = vm.runInNewContext(`
+    const items = new Map(), open = new Map(), pending = new Map();
+    const docOf = () => ({ editable: true });
+    const keyFor = (docId, node) => node.kind === 'document' ? docId : docId + '/' + node.id;
+    const mkItem = (docId, node, parent) => { const item = { key: keyFor(docId, node), docId, node, parent }; items.set(item.key, item); return item; };
+    let kids = [];
+    const hasKids = (item) => (item.node.hasChildren === true) || kids.length > 0;
+    const isOpen = () => true, setOpen = () => {}, zoomTo = () => {}, ensureLoaded = () => {}, childrenOf = () => kids, isSpace = () => false, draftNode = () => ({ id: 'draft', kind: 'block', text: '', draft: true });
+    const renderSegs = () => {}, segsOf = () => [], asDoc = (node) => ({ ...node, kind: 'document', text: node.text ?? node.title ?? '' });
+    const isImage = () => false, taskSummary = () => null, chipEl = () => ({}), iconSvg = () => '';
+    const childEl = () => document.createElement('div');
+    const tana = {};
+    const document = { createElement: (tagName) => {
+      const classes = new Set();
+      return { tagName, children: [], dataset: {}, classes, style: { setProperty() {} }, classList: {
+        add: (...names) => names.forEach((name) => classes.add(name)),
+        toggle: (name, enabled) => enabled ? classes.add(name) : classes.delete(name),
+        contains: (name) => classes.has(name),
+      }, append(...children) { this.children.push(...children); } };
+    } };
+    ${referenceDisplay}
+    ${presentation}
+    ${canExpand}
+    ${functionSource('nodeEl')}
+    (node, children) => { kids = children || []; const el = nodeEl(node, 'doc', { node: { kind: 'document', editable: true } }); const chev = el.children[0].children[0]; return { first: chev.tagName, hidden: chev.hidden === true, off: chev.classList.contains('off') }; };
+  `, { structuredClone });
+  const states = {
+    'collapsed with children': [{ id: 'a', kind: 'document', text: 'a', hasChildren: true, editable: true }, []],
+    'expanded with children': [{ id: 'b', kind: 'document', text: 'b', hasChildren: true, editable: true }, [{ id: 'k', kind: 'block', text: 'k', children: [] }]],
+    'writable, no children': [{ id: 'c', kind: 'document', text: 'c', hasChildren: false, editable: true }, []],
+    'read-only, children resolved empty': [{ id: 'd', kind: 'document', text: 'd', hasChildren: false, editable: false }, []],
+    'draft row': [{ id: 'e', kind: 'document', text: '', draft: 'task', editable: true }, []],
+    'inline reference': [{ id: 'f', kind: 'block', type: 'reference', editable: false, reference: { uri: 'x', node: { id: 'x', text: 'Target', kind: 'document' } }, children: [] }, []],
+  };
+  for (const [state, [node, children]] of Object.entries(states)) {
+    const row = rowChevron(node, children);
+    assert.equal(row.first, 'button', state + ': the row still starts with the chevron button');
+    assert.equal(row.hidden, false, state + ': the chevron keeps its gutter instead of being removed from the layout');
+  }
+  const styles = fs.readFileSync(require.resolve('../styles.css'), 'utf8');
+  const chevRules = styles.split('\n').filter((line) => /(^|[\s,>])\.chev\b/.test(line) && !line.trim().startsWith('/*'));
+  assert.ok(chevRules.length, 'styles.css styles the chevron');
+  for (const rule of chevRules) assert.doesNotMatch(rule, /display:\s*none/, 'no stylesheet rule takes the chevron out of the layout: ' + rule.trim());
+  assert.match(styles, /\.chev \{[^}]*width: 24px/, 'the chevron reserves a fixed gutter');
+}
+
+// A metadata read that fails while a brand-new document is still settling must be retried, not blacklisted for the session.
+async function runTaskMetaRetryCheck() {
+  const context = vm.createContext({ setTimeout, clearTimeout, Date, Promise });
+  vm.runInContext(`
+    const taskMetaById = new Map(), taskMetaLoading = new Set(), taskMetaFailed = new Map();
+    ${source.match(/const META_RETRY_MS = \d+, META_RETRY_MAX = \d+;/)[0]}
+    const palette = { hidden: true };
+    let palDoc = null, connected = true, attempts = 0, renders = 0;
+    const renderPalette = () => {};
+    const isRealId = (id) => typeof id === 'string' && id.startsWith('tana:');
+    const render = () => { renders++; loadTaskMeta('tana:text:01j0newtask00000000000000'); }; // a render asks again, the way taskSummary does
+    const tana = { taskMeta: async () => { attempts++; if (attempts === 1) throw new Error('document is still settling'); return { assignees: [], audience: 'only-me' }; } };
+    ${functionSource('loadTaskMeta')}
+    Object.assign(globalThis, {
+      start: () => loadTaskMeta('tana:text:01j0newtask00000000000000'),
+      state: () => ({ attempts, renders, audience: (taskMetaById.get('tana:text:01j0newtask00000000000000') || {}).audience || null, blocked: taskMetaFailed.has('tana:text:01j0newtask00000000000000') }),
+    });
+  `, context);
+  context.start();
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.deepEqual(plain(context.state()), { attempts: 1, renders: 0, audience: null, blocked: true }, 'the first metadata failure backs off instead of giving up');
+  context.start();
+  assert.equal(context.state().attempts, 1, 'the id is not hammered while the backoff runs');
+  await new Promise((resolve) => setTimeout(resolve, 900));
+  const settled = plain(context.state());
+  assert.equal(settled.attempts, 2, 'the backoff expires and the metadata is requested again');
+  assert.equal(settled.audience, 'only-me', 'the retry resolves the real visibility without a reload');
+  assert.equal(settled.blocked, false, 'a successful retry clears the recorded failure');
+}
+
+const checks = [runPinGrouping, runSelectionChecks, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck];
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);
   if (failures.length) throw new AggregateError(failures, failures.map((failure) => failure.message).join('\n'));

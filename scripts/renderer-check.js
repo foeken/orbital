@@ -29,8 +29,10 @@ assert.match(source, /if \(hotkeys\.sync\) \{ delete hotkeys\.sync;/);
 assert.doesNotMatch(source, /id: 'sync', group: 'Actions', icon: 'sync', label: 'Sync', kbd:/);
 assert.doesNotMatch(source, /mod && e\.key === 'r'/);
 assert.match(source, /t\.hue != null \? t\.hue : nodeHue/);
-assert.match(source, /node\.hue != null/);
-assert.match(source, /r\.node && !r\.svg && r\.node\.hue != null/);
+assert.match(source, /display\.hue != null/);
+assert.match(source, /const rowHue = r\.node \? r\.node\.hue : r\.hue;/);
+assert.match(source, /if \(!r\.svg && rowHue != null\) \{ icon\.classList\.add\('hue'\)/);
+assert.match(source, /if \(!display\.iconSvg && display\.hue != null\) \{ bullet\.classList\.add\('hue'\)/);
 assert.match(source, /scrollIntoView\(\{ block: 'nearest', inline: 'nearest', container: 'nearest' \}\)/);
 assert.match(source, /id: 'members', title: 'Members', icon: 'member'/);
 assert.match(source, /s\.id === 'members' \? 'People' : s\.title/);
@@ -61,10 +63,13 @@ assert.match(source, /const canEditNode = \(node\) => !!node && node\.editable !
 assert.match(source, /check\.disabled = reference \? !canEditNode\(display\) : !canEditItem\(item\);/);
 assert.match(source, /if \(!canEditItem\(item\)\) \{/);
 assert.match(source, /tana\.taskMeta\(docId\)/);
-assert.match(source, /const taskMetaById = new Map\(\), taskMetaLoading = new Set\(\), taskMetaFailed = new Set\(\);/);
-assert.match(source, /if \(!connected \|\| !tana\.taskMeta \|\| taskMetaById\.has\(docId\) \|\| taskMetaLoading\.has\(docId\) \|\| taskMetaFailed\.has\(docId\)\) return;/);
-assert.match(source, /taskMetaLoading\.delete\(docId\); taskMetaFailed\.add\(docId\);/);
-assert.match(source, /const wasConnected = connected;[\s\S]*?if \(connected && !wasConnected && typeof taskMetaFailed !== 'undefined'\) taskMetaFailed\.clear\(\);/);
+assert.match(source, /const taskMetaById = new Map\(\), taskMetaLoading = new Set\(\), taskMetaFailed = new Map\(\);/);
+assert.match(source, /if \(!connected \|\| !tana\.taskMeta \|\| !isRealId\(docId\) \|\| taskMetaById\.has\(docId\) \|\| taskMetaLoading\.has\(docId\) \|\| \(backoff && Date\.now\(\) < backoff\.until\)\) return;/);
+assert.match(source, /const isRealId = \(id\) => typeof id === 'string' && id\.startsWith\('tana:'\);/);
+assert.match(source, /taskMetaFailed\.set\(docId, \{ until: Date\.now\(\) \+ wait, wait \}\);/);
+// a new connection clears the metadata backoff and refetches the active view, which fetched its rows before the client existed
+assert.match(source, /const wasConnected = connected;[\s\S]*?if \(connected && !wasConnected\) \{ taskMetaFailed\.clear\(\); loadView\(\); \}/);
+assert.match(source, /if \(!docId\) loadView\(\);/);
 assert.match(source, /const loading = !parent && !outline\.children\.length/);
 assert.match(source, /tana\.setAssignees\(doc\.id, assignees\)/);
 assert.match(source, /const AUDIENCES = \{/);
@@ -110,7 +115,7 @@ assert.match(source, /e\.key === '0' \|\| \(e\.shiftKey/);
 assert.match(source, /pendingSplit: true/);
 assert.match(source, /readSplitDraft\(\);/);
 assert.match(source, /const canExpand = \(item\) => hasKids\(item\) \|\| \(!item\.node\.draft && canEditItem\(item\)\);/);
-assert.match(source, /chev\.hidden = !expandable/);
+assert.match(source, /chev\.classList\.toggle\('off', !expandable\)/); // the gutter stays in the layout; see runRowAlignmentCheck
 assert.match(source, /if \(value && !canExpand\(item\)\) return/);
 assert.match(source, /rules\.has\('inherit'\).*token: access\.sharingToken/s);
 assert.match(source, /tana\.previewMove\(doc\.id, space\.id\)/);
@@ -209,34 +214,36 @@ async function splitTypingCheck() {
 }
 
 async function cachedBootMetadataCheck() {
-  const context = {};
+  const context = { setTimeout, clearTimeout, Date };
   vm.runInNewContext(`
     let authed = false, authChecking = true, signedOut = false, connected = false, calls = 0, renders = 0, outcome = 'fail';
-    const taskMetaById = new Map(), taskMetaLoading = new Set(), taskMetaFailed = new Set();
+    const taskMetaById = new Map(), taskMetaLoading = new Set(), taskMetaFailed = new Map();
+    ${source.match(/const META_RETRY_MS = \d+, META_RETRY_MAX = \d+;/)[0]}
     const tana = { taskMeta: () => {
       calls++;
       return outcome === 'fail' ? Promise.reject(new Error('not connected')) : Promise.resolve({ assignees: [] });
     } };
     const palette = { hidden: true }, palDoc = null, outline = {};
-    const $ = () => ({}), showError = () => {};
+    const $ = () => ({}), showError = () => {}, loadView = () => {};
+    const isRealId = (id) => typeof id === 'string' && id.startsWith('tana:');
     const render = () => { renders++; };
     ${functionSource('authView')}
     ${functionSource('showStatus')}
     ${functionSource('loadTaskMeta')}
     Object.assign(globalThis, {
-      load: () => loadTaskMeta('cached-task'),
+      load: () => loadTaskMeta('tana:text:01j0cached000000000000000'),
       status: (isConnected) => showStatus({ authenticated: true, authChecking: false, connected: isConnected }),
       succeed: () => { outcome = 'success'; },
-      state: () => ({ calls, renders, loading: taskMetaLoading.size, failed: taskMetaFailed.has('cached-task'), cached: taskMetaById.has('cached-task') }),
+      state: () => ({ calls, renders, loading: taskMetaLoading.size, failed: taskMetaFailed.has('tana:text:01j0cached000000000000000'), cached: taskMetaById.has('tana:text:01j0cached000000000000000') }),
     });
   `, context);
   context.load();
   assert.deepEqual(JSON.parse(JSON.stringify(context.state())), { calls: 0, renders: 0, loading: 0, failed: false, cached: false }, 'cached boot does not request metadata before sync connects');
   context.status(true); context.load();
   await Promise.resolve(); await Promise.resolve();
-  assert.deepEqual(JSON.parse(JSON.stringify(context.state())), { calls: 1, renders: 1, loading: 0, failed: true, cached: false }, 'a failed metadata request is remembered instead of retrying each render');
+  assert.deepEqual(JSON.parse(JSON.stringify(context.state())), { calls: 1, renders: 1, loading: 0, failed: true, cached: false }, 'a failed metadata request backs off instead of retrying on every render');
   context.load();
-  assert.equal(context.state().calls, 1, 'the failed metadata request stays quiet until a connection recovery');
+  assert.equal(context.state().calls, 1, 'the failed metadata request stays quiet for the length of its backoff');
   context.status(false); context.status(true); context.succeed(); context.load();
   await Promise.resolve(); await Promise.resolve();
   assert.deepEqual(JSON.parse(JSON.stringify(context.state())), { calls: 2, renders: 4, loading: 0, failed: false, cached: true }, 'connection recovery retries metadata once and preserves cached boot content');

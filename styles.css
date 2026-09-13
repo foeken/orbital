@@ -17,6 +17,8 @@ button { font: inherit; }
 .pagehead h1.done { color: #999; text-decoration: line-through; }
 .crumbs { -webkit-app-region: no-drag; font-size: 13px; color: #888; margin-bottom: 6px; }
 .crumbs a { color: #888; text-decoration: none; cursor: pointer; }
+.crumbs a .ricon { display: inline-flex; vertical-align: -2px; margin-right: 4px; }
+.crumbs a .ricon svg { width: 14px; height: 14px; }
 .crumbs a:hover { color: #1a1a1a; text-decoration: underline; }
 .crumbs .sep { margin: 0 6px; color: #bbb; }
 .crumbs .current { color: #555; }
@@ -91,7 +93,8 @@ button { font: inherit; }
 .chev:hover::before { border-color: #bbb; }
 .chev.closed::after { transform: rotate(-45deg); left: 4.75px; top: 9.5px; }
 .node > .line:hover > .chev { visibility: visible; } /* every node can expand: an empty one opens onto a draft child */
-.draft > .line > .chev { display: none; }
+/* the chevron gutter is never removed from the layout: a row's bullet keeps its x in every state (collapsed, expanded, empty, read-only, draft) */
+.chev.off, .node > .line:hover > .chev.off, .draft > .line > .chev, .draft > .line:hover > .chev { visibility: hidden; cursor: default; pointer-events: none; }
 .draft > .line > .bullet { cursor: default; }
 .draft > .line > .bullet::before, .draft > .line > .bullet:hover::before { background: #c4c4c4; } /* placeholder: not in Tana until typed into */
 .bullet::before {
@@ -99,6 +102,8 @@ button { font: inherit; }
   border-radius: 50%; background: #555;
 }
 .bullet:hover::before { background: #000; }
+/* typed node without its own icon: the plain bullet takes the type hue (same colour as .bullet.icon.hue) */
+.bullet.hue::before, .bullet.hue:hover::before { background: hsl(var(--hue) 45% 30%); }
 .collapsed > .line > .bullet::before { box-shadow: 0 0 0 6px #e6e6e6; } /* collapsed with children: dot on an 18px halo */
 .bullet.icon::before { display: none; }
 .bullet.icon svg { position: absolute; left: 0; top: 4px; width: 16px; height: 16px; color: #8a8a8a; }
@@ -184,6 +189,7 @@ button { font: inherit; }
 .palette .ricon.meeting { color: #c99b1b; }
 .palette .ricon.dot::before { content: ""; display: block; width: 6px; height: 6px; margin: 5px; border-radius: 50%; background: #555; }
 .palette .ricon.right { color: #aaa; }
+.palette .ricon.hue { color: hsl(var(--hue) 45% 30%); } /* hued nodes: same icon colour as .bullet.icon.hue */
 .palette .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .palette .hint { color: #999; font-size: 14px; white-space: nowrap; }
 .palette kbd { font: inherit; font-size: 13px; color: #666; background: #f1f1f1; border-radius: 6px; padding: 1px 8px; }
@@ -257,6 +263,7 @@ button { font: inherit; }
 [data-theme="dark"] .chev:hover::before { border-color: #747b7e; }
 [data-theme="dark"] .bullet::before { background: #aeb4b6; }
 [data-theme="dark"] .bullet:hover::before { background: #e0e1e1; }
+[data-theme="dark"] .bullet.hue::before, [data-theme="dark"] .bullet.hue:hover::before { background: hsl(var(--hue) 70% 72%); }
 [data-theme="dark"] .collapsed > .line > .bullet::before { box-shadow: 0 0 0 6px #353a3c; }
 [data-theme="dark"] .bullet.icon svg { color: #aeb4b6; }
 [data-theme="dark"] .bullet.icon:hover svg, [data-theme="dark"] .collapsed > .line > .bullet.icon svg { color: #d0d2d2; }
@@ -295,6 +302,7 @@ button { font: inherit; }
 [data-theme="dark"] .palette .ricon { color: #aeb4b6; }
 [data-theme="dark"] .palette .ricon.meeting { color: #d7b54d; }
 [data-theme="dark"] .palette .ricon.right { color: #858b8e; }
+[data-theme="dark"] .palette .ricon.hue { color: hsl(var(--hue) 70% 72%); }
 [data-theme="dark"] .palette .hint { color: #858b8e; }
 [data-theme="dark"] .palette kbd { color: #b7bcbe; background: #303436; }
 [data-theme="dark"] .palette .row.active kbd { background: #42484a; }

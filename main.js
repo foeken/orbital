@@ -69,9 +69,13 @@ async function pathOf(id) {
   if (!client) throw new Error(NOT_CONNECTED);
   const { entries = [] } = await client.graph.getOwnerChain(id);
   const owners = entries.map((e) => e.uri).filter((u) => u !== id).reverse();
-  if (!owners.length) return [{ id: 'library', title: 'Library', icon: 'library' }];
+  const library = { id: 'library', title: 'Library', icon: 'library' }; // every location starts at the Library view
+  if (!owners.length) return [library];
   await resolveTypes(owners); // same title cache: any node id -> title
-  return owners.map((u) => ({ id: u, title: typeTitles.get(u) || u, icon: crumbIcon(u) }));
+  // A space inside a space adds no location information, so only the innermost space is shown, with whatever it contains.
+  const innermost = owners.map(isSpace).lastIndexOf(true);
+  const shown = innermost === -1 ? owners : owners.slice(innermost);
+  return [library, ...shown.map((u) => ({ id: u, title: typeTitles.get(u) || u, icon: crumbIcon(u) }))];
 }
 ipcMain.handle('doc:path', async (_e, id) => { try { const p = await pathOf(id); pathCache.set(id, p); return p; } catch (e) { report(e); return pathCache.get(id) || []; } });
 
@@ -84,15 +88,17 @@ const report = (e) => { if (!notReady(e)) setStatus({ error: errText(e) }); };
 const now = () => new Date().toISOString();
 
 const WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTH = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const hm = (d) => d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
 // "Mon 9:00–9:30" in local time; all-day events come as UTC (or local) midnight with a whole-day span: "Mon, all day".
-// withDate (search results, any week): "Fri 9 9:00–10:00" / "Fri 9".
+// withDate (search results, any week or year): "Fri 11 Sep 9:00–10:00", with the year added outside the current one.
 function eventMeta(start, end, withDate) {
   if (!start) return undefined;
   const s = new Date(start), e = end ? new Date(end) : null;
   const midnight = s.getUTCHours() + s.getUTCMinutes() === 0 || s.getHours() + s.getMinutes() === 0;
   const allDay = e && midnight && (e - s) % 864e5 === 0;
-  const day = WEEKDAY[s.getDay()] + (withDate ? ' ' + s.getDate() : '');
+  const year = s.getFullYear() === new Date().getFullYear() ? '' : ' ' + s.getFullYear();
+  const day = WEEKDAY[s.getDay()] + (withDate ? ' ' + s.getDate() + ' ' + MONTH[s.getMonth()] + year : '');
   return allDay ? day + (withDate ? '' : ', all day') : day + ' ' + hm(s) + (e ? '–' + hm(e) : '');
 }
 
@@ -123,7 +129,8 @@ const plainRow = (id, title, updatedAt, typeUri, hue) => (isSpace(id)
   ? { id, title, done: 0, icon: 'space', hue, tags: [hue === undefined ? TAG.space : { ...TAG.space, hue }], sortKey: updatedAt, updatedAt }
   : { id, title, done: 0, icon: typeUri ? null : 'doc', hue: hueWithType(hue, typeUri), tags: typeUri ? typeTag(typeUri) : [hue === undefined ? TAG.doc : { ...TAG.doc, hue }], sortKey: updatedAt, updatedAt });
 const memberRow = (id, title, updatedAt, hue) => ({ id, title, done: 0, icon: 'member', hue, tags: [hue === undefined ? TAG.member : { ...TAG.member, hue }], sortKey: updatedAt, updatedAt });
-const kindRow = (id, kind, title, updatedAt, hue) => ({ id, title, done: 0, icon: ['chat', 'agent'].includes(kind) ? kind : null, hue, tags: [hue === undefined ? { label: kind, color: 'grey' } : { label: kind, hue }], sortKey: updatedAt, updatedAt });
+// chat, canvas, agent and skill each have their own glyph in the renderer's icon set, so the kind is the icon
+const kindRow = (id, kind, title, updatedAt, hue) => ({ id, title, done: 0, icon: PLAIN_KINDS.has(kind) ? kind : null, hue, tags: [hue === undefined ? { label: kind, color: 'grey' } : { label: kind, hue }], sortKey: updatedAt, updatedAt });
 const idKind = (id) => id.split(':')[1];
 const memberTitle = (n) => n.title || (n.userProfile && n.userProfile.name) || '';
 
@@ -135,6 +142,37 @@ async function spaceChildren(id) {
   return nodes.map((n) => toNode(graphRow(n)));
 }
 // lowercase type title -> uri for #Type search filters; the type list is loaded once per session (and seeds typeTitles)
+// What a meeting carries besides its notes (verified read-only on a real meeting, docs/MEETINGS.md):
+//   summary / tagline  the event's own AI summary, on the graph node
+//   pinned             EDGE_TYPE_HAS_PIN edges from the event to documents and chats
+//   outcomes           documents owned by the event that carry a task state
+//   notes              documents owned by the event without a state (the meeting write-up)
+// Generic on purpose: any node with pins or owned documents answers the same way.
+async function related(id) {
+  if (!client) throw new Error(NOT_CONNECTED);
+  const [edges, owned, self] = await Promise.all([
+    client.graph.listEdges({ fromNodeIds: [id], edgeTypes: ['EDGE_TYPE_HAS_PIN'] }).catch(() => ({ edges: [] })),
+    client.graph.listNodes({ ownerIds: [id], limit: 200, sortOptions: [{ field: 'SORT_FIELD_CREATE_TIME', direction: 'SORT_DIRECTION_ASCENDING' }] }).catch(() => ({ nodes: [] })),
+    client.graph.listNodes({ nodeIds: [id], limit: 1 }).catch(() => ({ nodes: [] })),
+  ]);
+  const pinIds = (edges.edges || []).map((e) => e.toNodeId).filter(Boolean);
+  const pinned = pinIds.length ? (await client.graph.listNodes({ nodeIds: pinIds, limit: pinIds.length })).nodes : [];
+  const all = [...pinned, ...(owned.nodes || [])];
+  all.forEach(rememberNodeHue);
+  await resolveTypes(all.map((n) => n.entityType));
+  const row = (n) => toNode(graphRow(n, true));
+  const event = (self.nodes || [])[0] || {};
+  const ev = event.calendarEvent || {};
+  const stated = (n) => !!(n.state && n.state.type);
+  const owns = (owned.nodes || []).filter((n) => !PLAIN_KINDS.has(idKind(n.id)));
+  return {
+    summary: ev.summary || undefined,
+    tagline: ev.tagline || undefined,
+    pinned: pinned.map(row),
+    outcomes: owns.filter(stated).map(row),
+    notes: owns.filter((n) => !stated(n)).map(row),
+  };
+}
 let typesLoaded;
 async function typesByTitle() {
   typesLoaded ||= client.graph.listNodes({ nodeTypes: ['type'], limit: 200 }).then(({ nodes }) => { nodes.forEach(rememberType); }, () => { typesLoaded = null; });
@@ -157,7 +195,7 @@ const meetingRow = (n, withDate) => {
 
 // a document's own icon wins; otherwise the icon set on its type applies to every node carrying that type
 const iconSvgOf = (r) => { const type = typeUriOf(r); return db.icon(r.id) || (type ? db.icon(type) : null) || undefined; };
-const toNode = (r) => ({ id: r.id, title: r.title, text: r.title, kind: 'document', editable: editability.has(r.id) ? editability.get(r.id) : editable(r, me && me.userUri), done: r.icon === 'task' ? r.done : undefined, hasChildren: true, icon: ['chat', 'agent'].includes(idKind(r.id)) ? idKind(r.id) : r.icon || undefined, hue: r.hue === undefined ? (nodeHues.has(r.id) ? nodeHues.get(r.id) : cachedNodeHue(r)) : r.hue, tags: r.tags, meta: r.meta || undefined, iconSvg: iconSvgOf(r) });
+const toNode = (r) => ({ id: r.id, title: r.title, text: r.title, kind: 'document', editable: editability.has(r.id) ? editability.get(r.id) : editable(r, me && me.userUri), done: r.icon === 'task' ? r.done : undefined, hasChildren: true, icon: PLAIN_KINDS.has(idKind(r.id)) ? idKind(r.id) : r.icon || undefined, hue: r.hue === undefined ? (nodeHues.has(r.id) ? nodeHues.get(r.id) : cachedNodeHue(r)) : r.hue, tags: r.tags, meta: r.meta || undefined, iconSvg: iconSvgOf(r) });
 
 // Node shape from any graph Node JSON (search results): events, tasks, typed and plain documents.
 function graphRow(n, withDate) {
@@ -290,7 +328,7 @@ async function info(doc) {
   if (!isEvent && !n.stateType) return toNode(plainRow(doc.id, n.title || '', now(), n.entityTypeUri, hueOf(n)));
   return toNode({
     id: doc.id, title: n.title || '', done: n.stateType === 'closed' ? 1 : 0, icon: isEvent ? 'meeting' : 'task',
-    hue: hueWithType(hueOf(n), n.entityTypeUri), meta: isEvent ? eventMeta(n.startTime, n.endTime) : null, tags: [nodeTag(isEvent ? TAG.meeting : TAG.task, n), ...typeTag(n.entityTypeUri)],
+    hue: hueWithType(hueOf(n), n.entityTypeUri), meta: isEvent ? eventMeta(n.startTime, n.endTime, true) : null, tags: [nodeTag(isEvent ? TAG.meeting : TAG.task, n), ...typeTag(n.entityTypeUri)],
   });
 }
 
@@ -463,6 +501,9 @@ function onChange(docId) {
 
 async function document(id) {
   if (!client || !me) throw new Error(NOT_CONNECTED);
+  // A renderer draft carries a local id until it is materialised; subscribing one would create a phantom document
+  // whose pending bootstrap then rejects as "unsubscribed <id>" on the next refresh.
+  if (!/^tana:[a-z-]+:[0-9a-z]{26}$/.test(id)) throw new Error(NOT_CONNECTED);
   const doc = await subscribe(id); // getDocument can expose an empty handle before bootstrap completes
   if (!doc) throw new Error(status.error || 'could not subscribe to ' + id);
   return doc;
@@ -618,6 +659,7 @@ ipcMain.handle('pins:state', (_e, id) => pinState(id));
 ipcMain.handle('pins:pin', (_e, id, target) => setPin(id, target, true));
 ipcMain.handle('pins:unpin', (_e, id, target) => setPin(id, target, false));
 ipcMain.handle('doc:setIcon', (_e, id, svg) => setIcon(id, svg));
+ipcMain.handle('doc:related', (_e, id) => related(id)); // { summary, tagline, pinned[], outcomes[], notes[] }
 // macOS appearance, for the renderer's "follow the system" theme: current value on demand, plus live changes
 const systemTheme = () => (nativeTheme && nativeTheme.shouldUseDarkColors ? 'dark' : 'light');
 ipcMain.handle('theme:system', () => systemTheme());

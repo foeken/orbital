@@ -51,6 +51,17 @@ const commands = {
   async whoami() {
     out(await session.info());
   },
+  // edges <id>: raw ListEdges both ways, for learning how Tana links things (pinned items, outcomes, sources)
+  async edges() {
+    await connect();
+    const id = positional[0];
+    if (!id) throw new Error('usage: edges <id>');
+    for (const dir of ['from', 'to']) {
+      const params = dir === 'from' ? { fromNodeIds: [id] } : { toNodeIds: [id] };
+      try { out(dir + ': ' + JSON.stringify(await client.graph.listEdges(params), null, 1)); }
+      catch (e) { out(dir + ' failed: ' + (e && e.message)); }
+    }
+  },
   async list() {
     const me = await connect();
     const state = flag('state', 'open');

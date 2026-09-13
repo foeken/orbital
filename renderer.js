@@ -1,13 +1,22 @@
 'use strict';
 
-let theme = localStorage.getItem('theme') === 'dark' ? 'dark' : 'light';
-if (theme === 'dark') document.documentElement.dataset.theme = 'dark';
-function setTheme(next) {
+// theme preference (localStorage "theme"): 'light' | 'dark' | 'system'; 'system' follows the macOS appearance (api.systemTheme / api.onSystemTheme)
+let themePref = ['dark', 'system'].includes(localStorage.getItem('theme')) ? localStorage.getItem('theme') : 'light';
+let theme = themePref === 'system' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : themePref; // no flash before api.systemTheme answers
+function applyTheme(next) {
   theme = next === 'dark' ? 'dark' : 'light';
   if (theme === 'dark') document.documentElement.dataset.theme = 'dark';
   else delete document.documentElement.dataset.theme;
-  localStorage.setItem('theme', theme);
-  if (typeof palette !== 'undefined' && !palette.hidden) renderPalette();
+  const pal = document.getElementById('palette'); // by id: this also runs before the palette const exists
+  if (pal && !pal.hidden) renderPalette();
+}
+applyTheme(theme);
+function setTheme(next) { themePref = next === 'dark' ? 'dark' : 'light'; localStorage.setItem('theme', themePref); applyTheme(themePref); } // an explicit theme stops following the system
+function followSystem(on) {
+  themePref = on ? 'system' : theme;
+  localStorage.setItem('theme', themePref);
+  if (on && tana.systemTheme) tana.systemTheme().then((t) => applyTheme(themePref === 'system' ? t : theme), showError);
+  else applyTheme(theme);
 }
 
 // ---- shared helper: find a node in a nested Node[] with its ancestry ----
@@ -39,7 +48,7 @@ function mockApi() {
   docs[2].tags = [task, project];
   docs[0].state = 'proposed'; // Inbox; the rest are In Progress (open) unless done
   for (const text of ['Renew the Tana DPA', 'Send the Q3 board deck']) docs.push({ id: 'mockdoc' + docs.length, text, kind: 'document', done: 1, state: 'closed', hasChildren: true, icon: 'task', tags: [task] }); // Completed: hidden by the default filter
-  docs.push({ id: 'mockdoc' + titles.length, text: 'Foundry programme', kind: 'document', hasChildren: true, tags: [project] }); // typed, not a task: plain bullet
+  docs.push({ id: 'mockdoc' + titles.length, text: 'Foundry programme', kind: 'document', hasChildren: true, hue: 268, tags: [project] }); // typed, not a task: plain bullet tinted with the type hue
   // a space: pinned, its "content" is the documents it owns (document Nodes, not blocks)
   const spaceDocs = [
     { id: 'mockspacedoc0', text: 'Foundry LT charter', kind: 'document', hasChildren: true, icon: 'doc', tags: [{ label: 'doc', color: 'grey' }] },
@@ -80,6 +89,7 @@ function mockApi() {
   let libFilter = { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me', text: '' };
   const kindOf = (d) => (d.icon === 'task' ? 'tasks' : d.icon === 'meeting' ? 'meetings' : d.tags && ['chat', 'canvas', 'agent', 'skill'].includes(d.tags[0].label) ? d.tags[0].label + 's' : 'docs');
   const created = {};   // documents made with createDocument
+  const settling = new Set(); // a brand-new document: the first taskMeta read fails while main is still subscribing it
   const unlisted = [];  // created tasks/meetings the roots "query" has not caught up with yet: listed after the next refresh()
   const sidebar = ['mockdoc2', 'mockmeeting2', space.id], datePins = { mockdoc2: [localDate()] }; // pins: sidebar order, personal date pins per doc
   const content = Object.fromEntries(all.map((d, i) => [d.id, [
@@ -93,21 +103,44 @@ function mockApi() {
   content[space.id] = spaceDocs;
   // an image block (not editable; api.image resolves its uri to a data URL): a 2x2 PNG scaled by width/height
   content.mockdoc0.splice(2, 0, { id: 'img' + (++seq), kind: 'block', type: 'image', image: { uri: 'tana:image:mock', alt: 'Mock image', width: 160, height: 100 }, hasChildren: false, children: [] });
+  // inline references (embeds): read-only nodes rendering the target's title/state, like sdk/content.js (editable: false) with main resolving reference.node
+  content.mockdoc0.unshift({ id: 'ref' + (++seq), kind: 'block', type: 'reference', editable: false, reference: { uri: 'mockdoc9' }, hasChildren: false, children: [] });
+  content.mockdoc0.splice(1, 0, { id: 'ref' + (++seq), kind: 'block', type: 'reference', editable: false, reference: { uri: 'tana:user-profile:lex' }, hasChildren: false, children: [] });
   const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGPoyroWu7WKIX9dU1fWNQAuWQbA8sXmUwAAAABJRU5ErkJggg==';
   const changed = [], removed = [], statusCbs = [], deleted = new Map();
   let status = { authenticated: false, authChecking: false, connected: false, syncing: false, lastSync: null, error: null };
   const emit = (docId) => setTimeout(() => changed.forEach((cb) => cb(docId)), 0);
   const fix = (n) => { n.hasChildren = n.children.length > 0; };
   const info = (d) => ({ id: d.id, title: d.text, kind: 'document', done: d.done, icon: d.icon, iconSvg: d.iconSvg, hue: d.hue, editable: d.editable, tags: d.tags, meta: d.meta, me: d.me });
-  // undo/redo: whole-state snapshots, one step per mutation (main keeps a global order over per-document Loro UndoManagers)
+  // undo/redo: whole-state snapshots, one step per mutation (main keeps a global order over per-document Loro UndoManagers).
+  // Document delete/restore records an op step instead, like the native bridge where undo restores a soft-deleted document.
   const undoStack = [], redoStack = [];
-  const snapshot = () => structuredClone({ docs: all.map((d) => ({ text: d.text, done: d.done })), content });
-  const restore = (s) => { all.forEach((d, i) => Object.assign(d, s.docs[i])); Object.assign(content, s.content); };
+  const snapshot = () => structuredClone({ docs: Object.fromEntries(all.map((d) => [d.id, { text: d.text, done: d.done }])), content });
+  const restore = (s) => { for (const d of all) if (s.docs[d.id]) Object.assign(d, s.docs[d.id]); Object.assign(content, s.content); };
   const mut = (docId, fn) => { undoStack.push({ docId, snap: snapshot() }); redoStack.length = 0; return fn(); };
-  const history = async (from, to) => { const e = from.pop(); if (!e) return null; to.push({ docId: e.docId, snap: snapshot() }); restore(e.snap); emit(e.docId); return e.docId; };
+  const step = (docId, op) => { undoStack.push({ docId, op }); redoStack.length = 0; };
+  const history = async (from, to) => {
+    const e = from.pop(); if (!e) return null;
+    if (e.op) { (e.op === 'delete' ? softDelete : undelete)(e.docId); to.push({ docId: e.docId, op: e.op === 'delete' ? 'restore' : 'delete' }); return e.docId; }
+    to.push({ docId: e.docId, snap: snapshot() }); restore(e.snap); emit(e.docId); return e.docId;
+  };
+  function softDelete(docId) {
+    const i = all.findIndex((doc) => doc.id === docId); if (i < 0) throw new Error('unknown document');
+    deleted.set(docId, { doc: all[i], content: content[docId], sections: sections.map((section) => ({ section, index: section.nodes.findIndex((node) => node.id === docId) })).filter((entry) => entry.index >= 0) });
+    all.splice(i, 1); for (const section of sections) section.nodes = section.nodes.filter((node) => node.id !== docId);
+    sidebar.splice(0, sidebar.length, ...sidebar.filter((id) => id !== docId)); delete datePins[docId]; delete content[docId];
+    setTimeout(() => removed.forEach((cb) => cb(docId)), 0);
+  }
+  function undelete(docId) {
+    const saved = deleted.get(docId); if (!saved) throw new Error('unknown deleted document');
+    all.push(saved.doc); content[docId] = saved.content;
+    for (const { section, index } of saved.sections) section.nodes.splice(index, 0, saved.doc);
+    deleted.delete(docId); emit(null);
+  }
   return {
     roots: async () => structuredClone(sections.map((s) => (s.id === 'tasks' ? { ...s, nodes: s.nodes.filter((d) => listed(d)) } : s))),
-    children: async (docId) => structuredClone(content[docId] || []),
+    // references resolve on read, as main does: the row always shows the target's current title and state
+    children: async (docId) => structuredClone(content[docId] || []).map((n) => (n.type === 'reference' ? { ...n, reference: { ...n.reference, node: info([...all, ...members].find((d) => d.id === n.reference.uri)) } } : n)),
     node: async (docId) => {
       const d = [...all, ...members].find((x) => x.id === docId);
       if (d) return info(d);
@@ -126,9 +159,14 @@ function mockApi() {
       return { allowed: true, target: { id: space.id, title: space.text }, before, after, audienceChanged: JSON.stringify(before) !== JSON.stringify(after), requiresConfirmation: JSON.stringify(before) !== JSON.stringify(after), token: 'mock-move' };
     },
     moveToSpace: async (docId, spaceId, token) => { const doc = all.find((node) => node.id === docId); if (!doc || spaceId !== space.id || token !== 'mock-move') throw new Error('space unavailable'); doc.ownerUri = spaceId; emit(null); },
-    taskMeta: async (docId) => structuredClone(taskDetails.get(docId) || { assignees: [], restricted: undefined, participants: [], audience: 'unknown' }),
+    taskMeta: async (docId) => {
+      if (settling.delete(docId)) throw new Error('document is still settling');
+      return structuredClone(taskDetails.get(docId) || { assignees: [], restricted: undefined, participants: [], audience: 'unknown' });
+    },
     setAssignees: async (docId, uris) => { const meta = taskDetails.get(docId); if (!meta) throw new Error('not a task'); meta.assignees = [...new Set(uris)]; emit(docId); },
     image: async (uri) => { await new Promise((r) => setTimeout(r, 30)); if (uri !== 'tana:image:mock') throw new Error('unknown image ' + uri); return PNG; },
+    systemTheme: async () => (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
+    onSystemTheme: (cb) => matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => cb(e.matches ? 'dark' : 'light')),
     taskFilter: async () => structuredClone(filter),
     setTaskFilter: async (f) => { filter = structuredClone(f); emit(null); },
     libraryFilter: async () => structuredClone(libFilter),
@@ -155,7 +193,7 @@ function mockApi() {
     createDocument: async (title, { kind = 'doc', typeUri } = {}) => {
       const nativeKind = kind === 'custom' ? 'doc' : kind;
       const n = { id: 'mocknew' + (++seq), text: title, kind: 'document', hasChildren: true, editable: true, icon: nativeKind, tags: kind === 'custom' ? [{ label: 'Project', hue: 268 }] : [{ label: nativeKind, color: nativeKind === 'meeting' ? 'gold' : 'grey' }] };
-      if (nativeKind === 'task') n.done = 0;
+      if (nativeKind === 'task') { n.done = 0; taskDetails.set(n.id, { assignees: [], restricted: true, participants: [{ uri: members[0].id, type: 'user', role: 'admin' }], audience: 'only-me' }); settling.add(n.id); }
       if (nativeKind === 'meeting') n.meta = WD[new Date().getDay()] + ' 10:00–10:30';
       if (typeUri) n.typeUri = typeUri;
       created[n.id] = n; content[n.id] = []; all.push(n);
@@ -173,19 +211,8 @@ function mockApi() {
     pinState: async (docId) => ({ sidebar: sidebar.includes(docId), dates: datePins[docId] || [] }),
     pin: async (docId, target) => { if (target === 'sidebar') { if (!sidebar.includes(docId)) sidebar.push(docId); } else (datePins[docId] ||= []).push(localDate()); emit(null); },
     unpin: async (docId, target) => { if (target === 'sidebar') sidebar.splice(sidebar.indexOf(docId) >>> 0, 1); else datePins[docId] = (datePins[docId] || []).filter((d) => d !== localDate()); emit(null); },
-    deleteDocument: async (docId) => {
-      const i = all.findIndex((doc) => doc.id === docId); if (i < 0) throw new Error('unknown document');
-      deleted.set(docId, { doc: all[i], content: content[docId], sections: sections.map((section) => ({ section, index: section.nodes.findIndex((node) => node.id === docId) })).filter((entry) => entry.index >= 0) });
-      all.splice(i, 1); for (const section of sections) section.nodes = section.nodes.filter((node) => node.id !== docId);
-      sidebar.splice(0, sidebar.length, ...sidebar.filter((id) => id !== docId)); delete datePins[docId]; delete content[docId];
-      setTimeout(() => removed.forEach((cb) => cb(docId)), 0);
-    },
-    restoreDocument: async (docId) => {
-      const saved = deleted.get(docId); if (!saved) throw new Error('unknown deleted document');
-      all.push(saved.doc); content[docId] = saved.content;
-      for (const { section, index } of saved.sections) section.nodes.splice(index, 0, saved.doc);
-      deleted.delete(docId); emit(null);
-    },
+    deleteDocument: async (docId) => { softDelete(docId); step(docId, 'restore'); },
+    restoreDocument: async (docId) => { undelete(docId); step(docId, 'delete'); },
     setIcon: async (docId, svg) => { (all.find((d) => d.id === docId) || created[docId]).iconSvg = svg || undefined; emit(null); },
     setTitle: async (docId, title) => mut(docId, () => { all.find((d) => d.id === docId).text = title; emit(docId); }),
     setDone: async (docId, done) => mut(docId, () => { const d = all.find((x) => x.id === docId); d.done = done ? 1 : 0; d.state = done ? 'closed' : 'open'; emit(docId); }),
@@ -294,7 +321,8 @@ let sel = null;              // multi-select: { anchor: key, focus: key } over v
 // view filters (api.taskFilter / api.libraryFilter, persisted by main); members = api.members() for the Assigned menu ("You" = the one flagged me)
 let taskF = { states: ['proposed', 'open'], assignee: 'me' }, libF = { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me', text: '' };
 let members = null, libRows = null, libSeq = 0;
-const taskMetaById = new Map(), taskMetaLoading = new Set(), taskMetaFailed = new Set();
+const taskMetaById = new Map(), taskMetaLoading = new Set(), taskMetaFailed = new Map(); // docId -> { until, wait }: a failed metadata read backs off, it is never given up on
+const META_RETRY_MS = 500, META_RETRY_MAX = 30000;
 const accessById = new Map(), accessLoading = new Set();
 let visibilityPeople = new Set();
 let visibilityRoles = new Map();
@@ -380,9 +408,13 @@ function canEditItem(item) {
   return canEditNode(docOf(item.docId) || item.node);
 }
 const canEditStructure = (item) => canEditItem(item) || (item.node.type === 'reference' && canEditNode(docOf(item.docId)));
+// an inline reference renders the referenced document's title: editing the row edits that document, and a read-only target stays read-only
+const canEditText = (item) => (isReference(item.node) ? canEditNode(referenceTarget(item.node)) : canEditItem(item));
 const chatIcon = (n) => n.icon || ((n.tags || []).some((t) => t.label === 'chat') ? 'chat' : undefined);
 const nodeIcon = (n) => chatIcon(n) || ((n.tags || []).some((t) => t.label === 'agent') ? 'agent' : undefined);
 const asDoc = (n) => ({ ...n, kind: 'document', text: n.text ?? n.title ?? '', hasChildren: true, icon: nodeIcon(n) }); // api.node / search / library result -> document Node
+// a draft row keeps a local "draftdoc:N" id until it is created, and the main process knows nothing about it
+const isRealId = (id) => typeof id === 'string' && id.startsWith('tana:');
 // recently viewed documents (localStorage "recent"), most recent first, max 20
 const recent = () => { try { return (JSON.parse(localStorage.getItem('recent')) || []).map((n) => asDoc(!n.icon && !n.tags?.length && n.id?.startsWith('tana:text:') ? { ...n, icon: 'doc', tags: [{ label: 'doc', color: 'grey' }] } : n)); } catch { return []; } };
 function recordRecent(n) {
@@ -410,6 +442,7 @@ function todayIndex(nodes) {
 }
 
 async function loadRoots() {
+  const drafts = sections.flatMap((s) => s.nodes.map((node, i) => ({ section: s.id, i, node })).filter((d) => d.node.draft)); // a refresh must not drop a draft being typed
   sections = (await tana.roots()).map((s) => ({ ...s, icon: s.id === 'library' ? 'library' : s.icon, nodes: s.nodes.map(asDoc) }));
   rootsLoaded = true;
   const lib = sections.find((s) => s.id === 'library');
@@ -421,6 +454,7 @@ async function loadRoots() {
     if (!s || s.nodes.some((n) => n.id === id)) fresh.delete(id);
     else s.nodes.splice(s.nodes.findIndex((n) => n.id === f.after) + 1, 0, f.node);
   }
+  for (const d of drafts) { const s = sections.find((x) => x.id === d.section); if (s) s.nodes.splice(d.i, 0, d.node); }
 }
 async function reload(docId) { kids.set(docId, await tana.children(docId)); }
 // Library rows for the current filter (stale responses dropped), then roots so the section carries them
@@ -435,11 +469,13 @@ function loadChats() {
   tana.chats({ includeMcp: showMcp }).then(async (rows) => { if (seq !== chatSeq) return; chatRows = rows.map(asDoc); await loadRoots(); render(); }, showError);
 }
 function setMcp(on) { showMcp = on; localStorage.setItem('mcp', on ? '1' : '0'); render(); loadChats(); }
+// rows a view fetches for itself: the roots query does not carry them
+function loadView(id = view) { if (id === 'members') loadMembers(); else if (id === 'library') loadLibrary(); else if (id === 'chats') loadChats(); }
 function loadFilters() {
   Promise.all([tana.taskFilter && tana.taskFilter(), tana.libraryFilter && tana.libraryFilter()]).then(([t, l]) => {
     if (t) taskF = t;
     if (l) libF = l;
-    if (view === 'library') loadLibrary(); else render();
+    loadView(); render();
   }, showError);
 }
 function setTaskF(patch) { taskF = { ...taskF, ...patch }; render(); run(() => tana.setTaskFilter(taskF)); } // main refreshes roots and emits onChanged(null)
@@ -509,7 +545,9 @@ function atEdge(el, dir) {
 }
 
 // ---- render ----
-function render() {
+let rendering = false; // a focusout caused by swapping elements out during a render is not the user leaving a node
+function render() { rendering = true; try { renderOutline(); } finally { rendering = false; } }
+function renderOutline() {
   const saved = focused();
   items.clear();
   let trail = null;
@@ -590,10 +628,15 @@ function renderCrumbs(trail) {
   // A document reached through a space (zoom.via) starts at the space's location; the spaces follow as crumbs.
   const root = zoom.via ? zoom.via[0] : zoom, rootId = root.docId;
   const path = paths.get(rootId);
-  if (!path && tana.path) { paths.set(rootId, []); tana.path(rootId).then((p) => { paths.set(rootId, p); if (zoom && (zoom.via ? zoom.via[0] : zoom).docId === rootId) render(); }).catch(() => {}); }
+  if (!path && tana.path && isRealId(rootId)) { paths.set(rootId, []); tana.path(rootId).then((p) => { paths.set(rootId, p); if (zoom && (zoom.via ? zoom.via[0] : zoom).docId === rootId) render(); }).catch(() => {}); }
   for (const [i, p] of (path && path.length ? path : [{ id: '', title: root.from || (viewOf() ? viewOf().title : 'Tana') }]).entries()) {
     if (i) { const sep = document.createElement('span'); sep.className = 'sep'; sep.textContent = '›'; nav.append(sep); }
-    const a = document.createElement('a'); a.textContent = p.title; a.onclick = back; nav.append(a);
+    const a = document.createElement('a');
+    // ancestors can share a title (a meeting named after its space), so each crumb shows its kind icon
+    if (p.icon) { const ricon = document.createElement('span'); ricon.className = 'ricon ' + p.icon; ricon.innerHTML = iconSvg(p.icon); a.append(ricon); }
+    a.append(p.title);
+    a.onclick = p.id === 'library' ? () => setView('library') : p.id ? () => goTo(p.id) : back;
+    nav.append(a);
   }
   for (const v of zoom.via || []) {
     const sep = document.createElement('span'); sep.className = 'sep'; sep.textContent = '›';
@@ -620,11 +663,12 @@ function nodeEl(node, docId, parent) {
   const line = document.createElement('div'); line.className = 'line';
   const chev = document.createElement('button'); chev.className = 'chev'; chev.tabIndex = -1; chev.title = opened ? 'Collapse' : 'Expand';
   chev.onmousedown = (e) => e.preventDefault();
-  chev.hidden = !expandable;
+  chev.classList.toggle('off', !expandable); // hidden glyph, kept in the layout so the row never shifts
   chev.onclick = () => setOpen(item, !opened);
   const bullet = document.createElement('span'); bullet.className = 'bullet'; bullet.title = 'Zoom in';
   if (display.iconSvg) { bullet.classList.add('icon', 'custom'); bullet.innerHTML = display.iconSvg; }
-  else if (display.icon) { bullet.classList.add('icon', display.icon); bullet.innerHTML = iconSvg(display.icon); if (display.hue != null) { bullet.classList.add('hue'); bullet.style.setProperty('--hue', String(display.hue)); } }
+  else if (display.icon) { bullet.classList.add('icon', display.icon); bullet.innerHTML = iconSvg(display.icon); }
+  if (!display.iconSvg && display.hue != null) { bullet.classList.add('hue'); bullet.style.setProperty('--hue', String(display.hue)); } // type hue tints the icon and the plain bullet alike
   bullet.onmousedown = (e) => e.preventDefault();
   if (!node.draft) bullet.onclick = () => reference ? openReference(node) : zoomTo(item);
   line.append(chev, bullet);
@@ -650,9 +694,9 @@ function nodeEl(node, docId, parent) {
     else { text.classList.add('loading'); (cached || images.set(uri, tana.image(uri)).get(uri)).then(show, (e) => { images.delete(uri); showError(e); }); }
     text.append(img);
   } else {
-    if (canEditItem(item)) text.contentEditable = 'plaintext-only'; else text.tabIndex = -1;
+    if (canEditText(item)) text.contentEditable = 'plaintext-only'; else text.tabIndex = -1;
     text.spellcheck = false;
-    renderSegs(text, reference ? [{ text: referenceLabel(node) }] : pending.has(item.key) ? pending.get(item.key).segs : segsOf(node));
+    renderSegs(text, pending.has(item.key) ? pending.get(item.key).segs : reference ? [{ text: referenceLabel(node) }] : segsOf(node));
   }
   body.append(text);
   if (display.meta) { const m = document.createElement('span'); m.className = 'meta'; m.textContent = display.meta; body.append(m); }
@@ -660,7 +704,13 @@ function nodeEl(node, docId, parent) {
   if (taskInfo) body.append(taskMetaEl(taskInfo));
   appendTags(body, display);
   line.append(body);
-  line.onclick = (e) => { if (reference && !e.target.closest('.check')) openReference(node); else if (!reference && (e.target === line || e.target === body || e.target.parentElement === text)) setCaret(text, text.textContent.length); };
+  line.onclick = (e) => { if (!reference && (e.target === line || e.target === body || e.target.parentElement === text)) setCaret(text, text.textContent.length); };
+  // a reference row: the bullet zooms into the target, a click selects the row, a click on the selected row puts the caret where you clicked
+  if (reference) line.onmousedown = (e) => {
+    if (e.shiftKey || e.target.closest('.check') || e.target.closest('.bullet') || e.target.closest('.chev')) return;
+    if (selKeys().includes(item.key) && canEditText(item)) return;
+    e.preventDefault(); sel = { anchor: item.key, focus: item.key }; leaveText(); render();
+  };
   el.append(line);
   // expanded = real children shown, or an explicitly opened empty node (which shows one draft child)
   const expanded = expandable && (has ? opened : !node.draft && open.get(item.key) === true);
@@ -721,7 +771,7 @@ function draftDoc(after) {
 
 // ---- edits (debounced) ----
 function scheduleSave(item, segs) {
-  if (!canEditItem(item)) return;
+  if (!canEditText(item)) return;
   const p = pending.get(item.key);
   if (p) clearTimeout(p.timer);
   pending.set(item.key, { item, segs, timer: setTimeout(() => flush(item.key), 400) });
@@ -732,7 +782,12 @@ function flush(key) {
   if (!p) return;
   dropPending(key);
   const { item, segs } = p, text = plainOf(segs);
-  if (!canEditItem(item)) return;
+  if (!canEditText(item)) return;
+  if (isReference(item.node)) { // the row edits the referenced document's title
+    if (text === referenceLabel(item.node)) return;
+    item.node.reference.node.title = text;
+    return run(() => tana.setTitle(item.node.reference.uri, text));
+  }
   if (text === item.node.text && JSON.stringify(segs) === JSON.stringify(segsOf(item.node))) return;
   item.node.text = text; item.node.segments = segs;
   run(() => (item.node.kind === 'document' ? tana.setTitle(item.docId, text) : tana.setText(item.docId, item.node.id, saveValue(segs))));
@@ -886,12 +941,13 @@ function openReference(node) {
 function toggleReference(node) {
   const target = referenceTarget(node);
   if (!target || !isTask(target) || !canEditNode(target)) return;
-  target.done = target.done ? 0 : 1;
-  extra.set(target.id, target);
+  const done = target.done ? 0 : 1; // referenceTarget() hands back a copy: write the new state where the row reads it
+  node.reference.node = { ...node.reference.node, done };
+  extra.set(target.id, { ...target, done });
   render();
-  run(() => tana.setDone(target.id, target.done));
+  run(() => tana.setDone(target.id, done));
 }
-function setView(id) { dropDrafts(); view = id; localStorage.setItem('view', id); zoom = null; sel = null; menu = null; if (id === 'members') loadMembers(); if (id === 'library') loadLibrary(); if (id === 'chats') loadChats(); render(); }
+function setView(id) { dropDrafts(); view = id; localStorage.setItem('view', id); zoom = null; sel = null; menu = null; loadView(id); render(); }
 // zoom into a document, switching to its view first when it belongs to another one; from = breadcrumb root instead of the view
 function openDoc(docId, from) {
   flushAll(); dropDrafts();
@@ -986,13 +1042,19 @@ function audienceInfo(audience, audienceSpace) {
 }
 function loadTaskMeta(docId) {
   // Metadata is supplemental. Calling it before the sync client connects retries on every render.
-  if (!connected || !tana.taskMeta || taskMetaById.has(docId) || taskMetaLoading.has(docId) || taskMetaFailed.has(docId)) return;
+  const backoff = taskMetaFailed.get(docId);
+  if (!connected || !tana.taskMeta || !isRealId(docId) || taskMetaById.has(docId) || taskMetaLoading.has(docId) || (backoff && Date.now() < backoff.until)) return;
   taskMetaLoading.add(docId);
   tana.taskMeta(docId).then((meta) => {
     taskMetaLoading.delete(docId); taskMetaFailed.delete(docId); taskMetaById.set(docId, meta);
     if (!palette.hidden && palDoc && palDoc.id === docId) renderPalette();
     render();
-  }, () => { taskMetaLoading.delete(docId); taskMetaFailed.add(docId); });
+  }, () => { // a brand-new document can still be settling in main: wait, then let the next render ask again
+    taskMetaLoading.delete(docId);
+    const wait = Math.min(META_RETRY_MAX, backoff ? backoff.wait * 2 : META_RETRY_MS);
+    taskMetaFailed.set(docId, { until: Date.now() + wait, wait });
+    setTimeout(() => { if (!taskMetaById.has(docId)) render(); }, wait);
+  });
 }
 function taskSummary(node) {
   if (!isTask(node) || !tana.taskMeta) return null;
@@ -1352,12 +1414,14 @@ outline.addEventListener('keydown', (e) => {
   if (!canEditItem(item)) {
     if (isReference(item.node) && canEditStructure(item)) {
       const vert = e.key === 'ArrowUp' || e.key === 'ArrowDown', dir = e.key === 'ArrowUp' ? 'up' : 'down';
-      if (e.key === 'Backspace') removeNode(item, el);
+      const editing = canEditText(item);
+      if (e.key === 'Backspace' && (!editing || (off === 0 && collapsed))) removeNode(item, el);
       else if (vert && e.shiftKey && mod) shiftNode(item, el, 'move', dir);
       else if (vert && e.shiftKey) extendSel(item, dir === 'up' ? -1 : 1);
-      else if (vert && !mod) moveTo(el, dir === 'up' ? -1 : 1, 0);
-      else if (e.key === 'Escape') el.blur();
+      else if (vert && !mod) moveTo(el, dir === 'up' ? -1 : 1, editing ? off : 0);
+      else if (e.key === 'Escape') { if (editing) flush(item.key); el.blur(); }
       else if (mod) return;
+      else if (editing && e.key !== 'Enter' && e.key !== 'Tab') return; // typing edits the referenced document's title
       return e.preventDefault();
     }
     if (e.key === 'Escape') { e.preventDefault(); el.blur(); }
@@ -1395,7 +1459,8 @@ outline.addEventListener('keydown', (e) => {
   else if (e.key === 'Enter' && isDoc && !zoom && !isOpen(item)) { e.preventDefault(); draftDoc(item); } // collapsed document in a view: draft sibling document
   else if (e.key === 'Enter') { e.preventDefault(); splitNode(item, el, off ?? len); }
   else if (e.key === 'Tab') { e.preventDefault(); if (!isDoc) shiftNode(item, el, e.shiftKey ? 'outdent' : 'indent'); }
-  else if (e.key === 'Backspace' && mod && e.shiftKey) { e.preventDefault(); if (!isDoc) removeNode(item, el); }
+  // a document row is the document: the same shortcut deletes it (reversibly, like the zoomed title), not just blocks
+  else if (e.key === 'Backspace' && mod && e.shiftKey) { e.preventDefault(); if (isDoc) removeDocument(item); else removeNode(item, el); }
   else if (e.key === 'Backspace' && off === 0 && collapsed) { e.preventDefault(); if (!isDoc && len === 0) removeNode(item, el); }
   else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && mod && e.shiftKey) { e.preventDefault(); if (!isDoc) shiftNode(item, el, 'move', e.key === 'ArrowUp' ? 'up' : 'down'); }
   else if (e.key === 'ArrowUp' && mod && !e.shiftKey) { e.preventDefault(); setOpen(item, false); }
@@ -1409,7 +1474,7 @@ outline.addEventListener('input', (e) => {
   const el = e.target.closest && e.target.closest('.text');
   if (!el) return;
   const item = items.get(keyOfEl(el));
-  if (!canEditItem(item)) return;
+  if (!canEditText(item)) return;
   if (!item.node.draft) scheduleSave(item, readSegs(el));
   else if (!item.busy && !item.node.pendingSplit) { item.busy = true; materialise(item, el); }
 });
@@ -1417,7 +1482,7 @@ outline.addEventListener('focusout', (e) => {
   const el = e.target, item = el.classList && el.classList.contains('text') && items.get(keyOfEl(el));
   if (!item) return;
   if (!item.node.draft) flush(item.key);
-  else if (!el.textContent && !item.busy && el.isConnected) dropDraft(item); // left empty: no node is created
+  else if (!rendering && !el.textContent && !item.busy && el.isConnected) dropDraft(item); // left empty by the user: no node is created
 });
 outline.addEventListener('mousedown', (e) => {
   if (!e.target.closest) return;
@@ -1493,6 +1558,7 @@ function paletteRows(q) {
   rows.push({ id: 'sync', group: 'Actions', icon: 'sync', label: 'Sync', run: () => run(() => tana.refresh()) });
   const dark = typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark';
   rows.push({ id: 'theme', group: 'Actions', icon: 'darkLight', label: 'Toggle ' + (dark ? 'light' : 'dark') + ' mode', run: () => setTheme(dark ? 'light' : 'dark') });
+  if (tana.systemTheme) rows.push({ id: 'systemTheme', group: 'Actions', icon: 'darkLight', label: 'Toggle system dark/light mode', hint: themePref === 'system' ? 'Following macOS' : '', run: () => followSystem(themePref !== 'system') });
   if (signedOut) rows.push({ id: 'login', group: 'Actions', label: 'Log in to Tana', run: () => tana.login().catch(showError) });
   if (pinInfo && palDoc && pinInfo.docId === palDoc.id) { // context actions for the current document (no ids: their labels depend on state, so no hotkeys)
     const sb = pinInfo.sidebar, td = pinInfo.dates.includes(localDate());
@@ -1525,7 +1591,7 @@ function runAction(id) {
 }
 function creationRows(q) {
   if (palBusy) return [{ group: 'Create new', label: 'Loading choices…', disabled: true }];
-  return creationChoices.filter((choice) => choice.title.toLowerCase().includes(q)).map((choice) => ({ group: choice.kind === 'custom' ? 'Workspace types' : 'Create new', icon: choice.icon, label: choice.title, hint: choice.selectable ? '' : choice.reason || 'Unavailable', disabled: !choice.selectable, keepOpen: true, run: () => startCreation(choice) }));
+  return creationChoices.filter((choice) => choice.title.toLowerCase().includes(q)).map((choice) => ({ group: choice.kind === 'custom' ? 'Workspace types' : 'Create new', icon: choice.icon, svg: choice.iconSvg, hue: choice.hue, label: choice.title, hint: choice.selectable ? '' : choice.reason || 'Unavailable', disabled: !choice.selectable, keepOpen: true, run: () => startCreation(choice) }));
 }
 function openCreationPalette() {
   palMode = 'create'; palRows = []; palIndex = 0; palette.hidden = false;
@@ -1544,6 +1610,7 @@ function startCreation(choice) {
   const node = draftDocNode(choice.kind, { typeUri: choice.typeUri, icon: choice.icon, tags });
   section.nodes.unshift(node); view = section.id; localStorage.setItem('view', view);
   closePalette(); zoom = { docId: node.id, nodeId: null }; render(); setCaret(titleEl, 0);
+  loadView(view); // the target view may not have fetched its rows yet
 }
 // search result / pin: zoom into it wherever it lives (api.node shape -> extra); from = breadcrumb root when not opened in its view
 function openResult(n, from) {
@@ -1580,8 +1647,9 @@ function renderPalette() {
   palRows.forEach((r, i) => {
     if (r.group && (!i || palRows[i - 1].group !== r.group)) { const h = document.createElement('div'); h.className = 'group'; h.textContent = r.group; els.push(h); }
     const row = document.createElement('div'); row.className = 'row' + (i === palIndex ? ' active' : '') + (r.disabled ? ' disabled' : ''); row.dataset.index = i;
-    const icon = document.createElement('span'); icon.className = 'ricon' + (r.node ? ' ' + (r.svg ? 'custom' : r.icon || 'dot') : ''); icon.innerHTML = r.svg || (r.icon ? iconSvg(r.icon) : '');
-    if (r.node && !r.svg && r.node.hue != null) { icon.classList.add('hue'); icon.style.setProperty('--hue', String(r.node.hue)); }
+    const icon = document.createElement('span'); icon.className = 'ricon' + (r.node ? ' ' + (r.svg ? 'custom' : r.icon || 'dot') : r.svg ? ' custom' : ''); icon.innerHTML = r.svg || (r.icon ? iconSvg(r.icon) : '');
+    const rowHue = r.node ? r.node.hue : r.hue; // documents and "Create new…" type choices both carry the type hue
+    if (!r.svg && rowHue != null) { icon.classList.add('hue'); icon.style.setProperty('--hue', String(rowHue)); }
     const label = document.createElement('span'); label.className = 'label'; label.textContent = r.label;
     for (const t of r.tags || []) label.append(chipEl(t, r.node && r.node.hue));
     row.append(icon, label);
@@ -1675,7 +1743,9 @@ function showStatus(s) {
   const state = authView(s);
   const wasConnected = connected;
   authed = state.authenticated; authChecking = state.checking; signedOut = state.signedOut; connected = !!s.connected;
-  if (connected && !wasConnected && typeof taskMetaFailed !== 'undefined') taskMetaFailed.clear();
+  // The first fetch of a view can run before the sync client exists and fail quietly, so the view refetches the
+  // moment the connection comes up; otherwise the Library or Chats stay empty until a filter is touched.
+  if (connected && !wasConnected) { taskMetaFailed.clear(); loadView(); }
   $('loginBox').hidden = !state.showLogin;
   outline.hidden = $('filtered').hidden = !state.showOutline;
   showError(state.error);
@@ -1689,7 +1759,7 @@ tana.onChanged((docId) => {
   const work = [loadRoots()];
   if (docId && kids.has(docId)) work.push(reload(docId));
   if (!docId) loadPins();
-  if (!docId && view === 'chats') loadChats();
+  if (!docId) loadView(); // the active view fetches its own rows; roots do not carry them
   Promise.all(work).then(render, showError);
 });
 function removeStale(id) {
@@ -1702,5 +1772,7 @@ function unpinStale(id) {
 if (tana.onRemoved) tana.onRemoved(removeStale);
 if (tana.onUnpinned) tana.onUnpinned(unpinStale);
 tana.onStatus(showStatus);
+if (tana.onSystemTheme) tana.onSystemTheme((t) => { if (themePref === 'system') applyTheme(t); }); // macOS appearance changes re-theme a running window
+if (themePref === 'system') followSystem(true);
 loadRoots().then(render, showError).then(loadFilters);
 tana.status().then(showStatus, showError);
