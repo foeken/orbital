@@ -47,6 +47,22 @@ const commands = {
     for (const n of nodes) out(n.id + '\t' + ((n.state && n.state.type) || '-') + '\t' + (n.title || ''));
     out(nodes.length + ' nodes (totalCount ' + totalCount + ')');
   },
+  async meetings() {
+    const me = await connect();
+    const start = new Date(); start.setHours(0, 0, 0, 0);
+    const { nodes } = await client.graph.listNodes({
+      nodeTypes: ['event'], hasParticipantUris: [me.userUri], limit: 200,
+      eventStartTimeMin: start.toISOString(), eventStartTimeMax: new Date(start.getTime() + Number(flag('days', 7)) * 864e5).toISOString(),
+      sortOptions: [{ field: 'SORT_FIELD_EVENT_START_TIME', direction: 'SORT_DIRECTION_ASCENDING' }],
+    });
+    const local = (t) => new Date(t).toLocaleString('sv-SE'); // YYYY-MM-DD HH:MM:SS in local time
+    const span = (s, e) => ((new Date(e) - new Date(s)) % 864e5 === 0 && new Date(s).getUTCHours() === 0 ? 'all day' : local(s).slice(11, 16) + '–' + local(e).slice(11, 16));
+    for (const n of nodes) {
+      const ev = n.calendarEvent || {};
+      out(n.id + '\t' + local(ev.startTime).slice(0, 10) + ' ' + span(ev.startTime, ev.endTime) + '\t' + (n.title || ''));
+    }
+    out(nodes.length + ' events');
+  },
   async get() {
     if (!positional[0]) throw new Error('usage: get <id>');
     await connect();
@@ -91,7 +107,7 @@ const commands = {
 };
 
 app.whenReady().then(async () => {
-  if (!commands[cmd]) { console.error('usage: platform-cli login | whoami | list [--state open] | get <id> | outline <id> | watch <id...> | set-title <id> <title>'); app.exit(2); return; }
+  if (!commands[cmd]) { console.error('usage: platform-cli login | whoami | list [--state open] | meetings [--days 7] | get <id> | outline <id> | watch <id...> | set-title <id> <title>'); app.exit(2); return; }
   session = createTanaSession();
   let code = 0;
   try { await commands[cmd](); } catch (e) { console.error(e && e.stack || e); code = 1; }

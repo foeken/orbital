@@ -19,9 +19,16 @@ function mockApi() {
     'Ask Foundry teams for risks (with deadline Sun, Nov 1)', 'Organise session with Arjan Pragt around the role definition', "Create RvC presentation on Nedap's one-year AI vision"];
   let seq = 0;
   const block = (text, children = [], heading) => ({ id: 'b' + (++seq), text: plainOf(text), segments: segsOf(text), kind: 'block', heading, hasChildren: children.length > 0, children });
-  const docs = titles.map((text, i) => ({ id: 'mockdoc' + i, text, kind: 'document', done: 0, hasChildren: true, icon: 'task' }));
+  const task = { label: 'task', color: 'grey' }, meeting = { label: 'meeting', color: 'gold' };
+  const docs = titles.map((text, i) => ({ id: 'mockdoc' + i, text, kind: 'document', done: 0, hasChildren: true, icon: 'task', tags: [task] }));
+  docs[2].tags = [task, { label: 'project', color: 'grey' }];
+  docs.push({ id: 'mockdoc' + titles.length, text: 'Foundry programme', kind: 'document', hasChildren: true, tags: [{ label: 'project', color: 'grey' }] }); // typed, not a task: plain bullet
+  const meetings = [['NLT', 'Mon 9:00–9:30'], ['Heads of Technology', 'Tue 13:00–14:00'], ['Offsite', 'Thu, all day']]
+    .map(([text, meta], i) => ({ id: 'mockmeeting' + i, text, meta, kind: 'document', hasChildren: true, icon: 'meeting', tags: [meeting] }));
+  const sections = [{ id: 'tasks', title: 'Tasks', icon: 'task', nodes: docs }, { id: 'meetings', title: 'Meetings', icon: 'meeting', nodes: meetings }];
+  const all = [...docs, ...meetings];
   const people = { 'tana:user-profile:lex': 'Lex van Velsen' }; // referenced document that is not in roots
-  const content = Object.fromEntries(docs.map((d, i) => [d.id, [
+  const content = Object.fromEntries(all.map((d, i) => [d.id, [
     block('Context', [], 2),
     block('First point about task ' + i, [block('Detail A'), block('Detail B', [block('Deeper detail')])]),
     block([{ text: 'Discuss with ' }, { mention: { label: 'Lex van Velsen', uri: 'tana:user-profile:lex' } }, { text: ' and see ' }, { mention: { label: titles[2], uri: 'mockdoc2' } }]),
@@ -34,16 +41,16 @@ function mockApi() {
   const emit = (docId) => setTimeout(() => changed.forEach((cb) => cb(docId)), 0);
   const fix = (n) => { n.hasChildren = n.children.length > 0; };
   return {
-    roots: async () => docs.map((d) => ({ ...d })),
+    roots: async () => structuredClone(sections),
     children: async (docId) => structuredClone(content[docId] || []),
     node: async (docId) => {
-      const d = docs.find((x) => x.id === docId);
-      if (d) return { id: d.id, title: d.text, kind: 'document', done: d.done, icon: d.icon };
-      if (people[docId]) return { id: docId, title: people[docId], kind: 'document', done: 0 };
+      const d = all.find((x) => x.id === docId);
+      if (d) return { id: d.id, title: d.text, kind: 'document', done: d.done, icon: d.icon, tags: d.tags, meta: d.meta };
+      if (people[docId]) return { id: docId, title: people[docId], kind: 'document', tags: [] };
       throw new Error('unknown document ' + docId);
     },
-    setTitle: async (docId, title) => { docs.find((d) => d.id === docId).text = title; emit(docId); },
-    setDone: async (docId, done) => { docs.find((d) => d.id === docId).done = done ? 1 : 0; emit(docId); },
+    setTitle: async (docId, title) => { all.find((d) => d.id === docId).text = title; emit(docId); },
+    setDone: async (docId, done) => { all.find((d) => d.id === docId).done = done ? 1 : 0; emit(docId); },
     setText: async (docId, id, text) => { const n = locate(content[docId], id).node; n.text = plainOf(text); n.segments = segsOf(text); emit(docId); },
     insertAfter: async (docId, id, text) => {
       const n = block(text);
@@ -114,7 +121,7 @@ const saveValue = (segs) => (segs.some((s) => 'mention' in s) ? segs : plainOf(s
 const tana = window.api || mockApi();
 
 // ---- state ----
-let roots = [];              // document nodes
+let sections = [];           // [{ id, title, icon, nodes: document Node[] }]
 const extra = new Map();     // docId -> document Node reached through a mention (not in roots)
 const kids = new Map();      // docId -> Node[] | null (loading)
 const open = new Map();      // key -> bool; default: blocks open, documents closed
@@ -126,6 +133,8 @@ let queue = Promise.resolve();
 
 const $ = (id) => document.getElementById(id);
 const outline = $('outline'), filterEl = $('filter'), filterRow = $('filterRow');
+const allDocs = () => sections.flatMap((s) => s.nodes);
+const sectionOf = (docId) => sections.find((s) => s.nodes.some((n) => n.id === docId));
 const keyFor = (docId, node) => (node.kind === 'document' ? docId : docId + '/' + node.id);
 const mkItem = (docId, node, parent) => { const item = { key: keyFor(docId, node), node, docId, parent }; items.set(item.key, item); return item; };
 const childrenOf = (item) => (item.node.kind === 'document' ? kids.get(item.docId) : item.node.children || []);
@@ -135,11 +144,12 @@ const showError = (e) => { const el = $('error'); el.textContent = e ? String(e.
 const run = (fn) => (queue = queue.then(fn).catch(showError));
 const texts = () => [...outline.querySelectorAll('.text')];
 const keyOfEl = (el) => el.closest('.node').dataset.key;
-const textEl = (key) => outline.querySelector('.node[data-key="' + CSS.escape(key) + '"] > .line > .text');
+const textEl = (key) => outline.querySelector('.node[data-key="' + CSS.escape(key) + '"] > .line .text');
 const ICONS = window.ICONS || {}; // icons.js: Tana line icon set (Nucleo export), greyscale via currentColor
-const TASK_ICON = ICONS.task || '';
+const iconSvg = (icon) => ICONS[icon === 'meeting' ? 'calendar' : 'task'] || '';
+const isTask = (node) => node.kind === 'document' && node.icon === 'task';
 
-async function loadRoots() { roots = await tana.roots(); }
+async function loadRoots() { sections = await tana.roots(); }
 async function reload(docId) { kids.set(docId, await tana.children(docId)); }
 function ensureLoaded(item) {
   if (item.node.kind !== 'document' || kids.has(item.docId)) return;
@@ -200,18 +210,19 @@ function render() {
   if (parent) {
     ensureLoaded(parent);
     list = childrenOf(parent) || [];
+    outline.replaceChildren(...list.map((n) => nodeEl(n, parent.docId, parent)));
   } else {
     const q = filterEl.value.trim().toLowerCase();
-    list = q ? roots.filter((r) => r.text.toLowerCase().includes(q)) : roots;
-    hidden = roots.length - list.length;
+    list = q ? sections.map((s) => ({ ...s, nodes: s.nodes.filter((n) => n.text.toLowerCase().includes(q)) })).filter((s) => s.nodes.length) : sections;
+    hidden = allDocs().length - list.reduce((n, s) => n + s.nodes.length, 0);
+    outline.replaceChildren(...list.map(sectionEl));
   }
-  outline.replaceChildren(...list.map((n) => nodeEl(n, parent ? parent.docId : n.id, parent)));
   if (parent && !list.length) {
     const note = document.createElement('div');
     note.className = 'empty-note'; note.textContent = kids.get(parent.docId) === null ? 'Loading…' : 'No content';
     outline.append(note);
   }
-  $('title').textContent = parent ? parent.node.text : 'Tasks';
+  $('title').textContent = parent ? parent.node.text : 'Tana';
   renderCrumbs(trail);
   filterRow.hidden = !!parent || !(filterShown || filterEl.value);
   filterRow.classList.toggle('empty', !filterEl.value);
@@ -220,7 +231,7 @@ function render() {
 }
 
 function resolveZoom() {
-  const doc = roots.find((d) => d.id === zoom.docId) || extra.get(zoom.docId);
+  const doc = allDocs().find((d) => d.id === zoom.docId) || extra.get(zoom.docId);
   if (!doc) return null;
   let item = mkItem(zoom.docId, doc, null);
   const trail = [item];
@@ -237,7 +248,8 @@ function renderCrumbs(trail) {
   const nav = $('crumbs');
   nav.hidden = !trail;
   if (!trail) return;
-  const home = document.createElement('a'); home.textContent = 'Tasks'; home.onclick = () => { zoom = null; render(); };
+  const section = sectionOf(trail[0].docId);
+  const home = document.createElement('a'); home.textContent = section ? section.title : 'Tana'; home.onclick = () => { zoom = null; render(); };
   nav.replaceChildren(home);
   trail.forEach((item, i) => {
     const sep = document.createElement('span'); sep.className = 'sep'; sep.textContent = '›';
@@ -246,6 +258,20 @@ function renderCrumbs(trail) {
     if (i < trail.length - 1) a.onclick = () => zoomTo(item);
     nav.append(sep, a);
   });
+}
+
+// section: non-editable heading line, always expanded; its documents are the children
+function sectionEl(section) {
+  const el = document.createElement('div'); el.className = 'node section'; el.dataset.key = 'section:' + section.id;
+  const line = document.createElement('div'); line.className = 'line';
+  const gap = document.createElement('span'); gap.className = 'chev';
+  const bullet = document.createElement('span'); bullet.className = 'bullet icon'; bullet.innerHTML = iconSvg(section.icon);
+  const title = document.createElement('span'); title.className = 'heading'; title.textContent = section.title;
+  line.append(gap, bullet, title);
+  const wrap = document.createElement('div'); wrap.className = 'children';
+  wrap.append(...section.nodes.map((n) => nodeEl(n, n.id, null)));
+  el.append(line, wrap);
+  return el;
 }
 
 function nodeEl(node, docId, parent) {
@@ -259,22 +285,26 @@ function nodeEl(node, docId, parent) {
   chev.onmousedown = (e) => e.preventDefault();
   chev.onclick = () => setOpen(item, !opened);
   const bullet = document.createElement('span'); bullet.className = 'bullet'; bullet.title = 'Zoom in';
-  if (node.icon === 'task') { bullet.classList.add('task'); bullet.innerHTML = TASK_ICON; }
+  if (node.icon) { bullet.classList.add('icon', node.icon); bullet.innerHTML = iconSvg(node.icon); }
   bullet.onmousedown = (e) => e.preventDefault();
   bullet.onclick = () => zoomTo(item);
   line.append(chev, bullet);
-  if (node.kind === 'document') {
+  if (isTask(node)) {
     const check = document.createElement('input');
     check.type = 'checkbox'; check.className = 'check'; check.checked = !!node.done; check.tabIndex = -1;
     check.onmousedown = (e) => e.preventDefault();
     check.onclick = () => toggleDone(item);
     line.append(check);
   }
+  const body = document.createElement('div'); body.className = 'body'; // text + meta + chips; only .text is editable
   const text = document.createElement('span');
   text.className = 'text'; text.contentEditable = 'plaintext-only'; text.spellcheck = false;
   renderSegs(text, pending.has(item.key) ? pending.get(item.key).segs : segsOf(node));
-  line.append(text);
-  line.onclick = (e) => { if (e.target === line) setCaret(text, text.textContent.length); };
+  body.append(text);
+  if (node.meta) { const m = document.createElement('span'); m.className = 'meta'; m.textContent = node.meta; body.append(m); }
+  for (const t of node.tags || []) { const c = document.createElement('span'); c.className = 'chip ' + t.color; c.textContent = '# ' + t.label; body.append(c); }
+  line.append(body);
+  line.onclick = (e) => { if (e.target === line || e.target === body) setCaret(text, text.textContent.length); };
   el.append(line);
   if (has && opened) {
     const wrap = document.createElement('div'); wrap.className = 'children';
@@ -353,6 +383,7 @@ async function removeNode(item, el) {
 
 function setOpen(item, value) { open.set(item.key, value); render(); }
 function toggleDone(item) {
+  if (!isTask(item.node)) return;
   item.node.done = item.node.done ? 0 : 1;
   render();
   run(() => tana.setDone(item.docId, item.node.done));
@@ -364,7 +395,7 @@ function zoomTo(item) {
 }
 async function goTo(uri) {
   flushAll();
-  if (!roots.some((d) => d.id === uri) && !extra.has(uri)) {
+  if (!allDocs().some((d) => d.id === uri) && !extra.has(uri)) {
     try { const n = await tana.node(uri); extra.set(uri, { ...n, text: n.title || '', hasChildren: true }); }
     catch (e) { return showError(e); }
   }

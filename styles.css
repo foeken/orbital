@@ -36,45 +36,66 @@ button { font: inherit; }
 /* outline */
 .line { display: flex; align-items: flex-start; line-height: 24px; padding: 3px 0; }
 .chev, .bullet { flex: none; width: 18px; height: 24px; border: 0; background: none; padding: 0; cursor: pointer; position: relative; }
-.chev { visibility: hidden; color: #999; }
+/* chevron: Outliner-style circle, shown only while hovering the line; down = expanded, right = collapsed */
+.chev { visibility: hidden; }
 .chev::before {
-  content: ""; position: absolute; left: 6px; top: 8px; width: 6px; height: 6px;
-  border: solid #999; border-width: 0 1.5px 1.5px 0; transform: rotate(45deg);
+  content: ""; position: absolute; left: -5px; top: 3px; width: 18px; height: 18px;
+  border-radius: 50%; border: 1px solid #d0d0d0; background: #fff;
 }
-.collapsed > .line > .chev::before { transform: rotate(-45deg); left: 5px; }
+.chev::after {
+  content: ""; position: absolute; left: 1.5px; top: 8.5px; width: 5px; height: 5px;
+  border: solid #888; border-width: 0 1.2px 1.2px 0; transform: rotate(45deg);
+}
+.chev:hover::before { border-color: #bbb; }
+.collapsed > .line > .chev::after { transform: rotate(-45deg); left: 0; top: 9.5px; }
 .node.has > .line:hover > .chev { visibility: visible; }
 .bullet::before {
   content: ""; position: absolute; left: 6px; top: 9px; width: 6px; height: 6px;
   border-radius: 50%; background: #555;
 }
 .bullet:hover::before { background: #000; }
-.collapsed > .line > .bullet::before { box-shadow: 0 0 0 4px #e3e3e3; }
-.bullet.task::before { display: none; }
-.bullet.task svg { position: absolute; left: 0; top: 4px; width: 16px; height: 16px; color: #8a8a8a; }
-.bullet.task:hover svg { color: #333; }
-.collapsed > .line > .bullet.task svg { color: #333; }
+.collapsed > .line > .bullet::before { box-shadow: 0 0 0 6px #e6e6e6; } /* collapsed with children: dot on an 18px halo */
+.bullet.icon::before { display: none; }
+.bullet.icon svg { position: absolute; left: 0; top: 4px; width: 16px; height: 16px; color: #8a8a8a; }
+.bullet.icon:hover svg, .collapsed > .line > .bullet.icon svg { color: #333; }
+.bullet.meeting svg, .collapsed > .line > .bullet.meeting svg { color: #c99b1b; }
+.bullet.meeting:hover svg { color: #8a6a17; }
 .check {
   flex: none; width: 18px; height: 18px; margin: 3px 8px 0 2px; border-radius: 5px; background: #e4e4e4;
   border: 0; padding: 0; cursor: pointer; -webkit-appearance: none; appearance: none; position: relative;
 }
 .check:hover { background: #d6d6d6; }
-.check:checked { background: #8a8a8a; }
+.check:checked { background: #6fae82; }
 .check:checked::after {
   content: ""; position: absolute; left: 6px; top: 2px; width: 4px; height: 9px;
   border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg);
 }
-.text { flex: 1; min-width: 0; outline: none; white-space: pre-wrap; overflow-wrap: anywhere; padding-left: 4px; }
+.body { flex: 1; min-width: 0; padding-left: 5px; }
+.text { display: inline; outline: none; white-space: pre-wrap; overflow-wrap: anywhere; }
 .text:empty::before { content: "\200b"; }
-.document > .line > .text { padding-left: 0; }
-.document.done > .line > .text { color: #999; text-decoration: line-through; }
+.check + .body { padding-left: 0; }
+.document.done > .line .text { color: #999; text-decoration: line-through; }
+.meta { margin-left: 8px; color: #999; font-size: 14px; white-space: nowrap; user-select: none; }
+.chip {
+  display: inline-block; margin-left: 6px; border-radius: 4px; padding: 1px 6px;
+  font-size: 12px; line-height: 16px; vertical-align: 2px; white-space: nowrap; user-select: none;
+}
+.chip.grey { background: #f1f1f1; color: #6b6b6b; }
+.chip.gold { background: #fbf3d9; color: #8a6a17; }
 .text .mention { color: #508fbb; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .text .mention:hover { color: #3a75a3; }
-.h1 > .line > .text { font-size: 24px; font-weight: 700; line-height: 30px; }
-.h2 > .line > .text { font-size: 20px; font-weight: 700; line-height: 28px; }
-.h3 > .line > .text { font-weight: 700; }
+.h1 > .line .text { font-size: 24px; font-weight: 700; line-height: 30px; }
+.h2 > .line .text { font-size: 20px; font-weight: 700; line-height: 28px; }
+.h3 > .line .text { font-weight: 700; }
 .children { margin-left: 27px; padding-left: 0; border-left: 1px solid #ececec; }
 .children.loading { color: #aaa; font-style: italic; padding: 3px 0 3px 22px; }
 .empty-note { color: #aaa; padding: 8px 40px; }
+/* sections: non-editable heading lines, always expanded */
+.section + .section { margin-top: 12px; }
+.section > .line .heading { padding-left: 4px; font-size: 15px; font-weight: 500; color: #333; user-select: none; }
+.section > .line > .bullet { cursor: default; }
+.section > .line > .bullet.icon:hover svg { color: #8a8a8a; }
+.section > .children { border-left: 0; }
 
 .filtered { padding: 18px 10px 8px; color: #999; font-weight: 600; }
 .filtered:empty { display: none; }
