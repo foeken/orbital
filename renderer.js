@@ -227,6 +227,7 @@ function mockApi() {
     deleteDocument: async (docId) => { softDelete(docId); step(docId, 'restore'); },
     restoreDocument: async (docId) => { undelete(docId); step(docId, 'delete'); },
     setIcon: async (docId, svg) => { (all.find((d) => d.id === docId) || created[docId]).iconSvg = svg || undefined; emit(null); },
+    openExternal: async (url) => { if (!/^https?:\/\//i.test(url)) throw new Error('Only http(s) links can be opened'); return url; },
     todayNode: async () => { const date = new Date().toLocaleDateString('sv-SE'); const found = all.find((d) => d.text === date); if (found) return found.id; const n = { id: 'mocktoday', text: date, kind: 'document', hasChildren: true, editable: true, icon: 'doc', tags: [{ label: 'doc', color: 'grey' }] }; all.push(n); sections[0].nodes.unshift(n); datePins[n.id] = [date]; emit(null); return n.id; },
     setTitle: async (docId, title) => mut(docId, () => { all.find((d) => d.id === docId).text = title; emit(docId); }),
     setDone: async (docId, done) => mut(docId, () => { const d = all.find((x) => x.id === docId); d.done = done ? 1 : 0; d.state = done ? 'closed' : 'open'; emit(docId); }),
@@ -272,12 +273,28 @@ const localDate = () => { const d = new Date(); return d.getFullYear() + '-' + S
 const segsOf = (v) => (Array.isArray(v) ? v : typeof v === 'string' ? (v ? [{ text: v }] : []) : v.segments || (v.text ? [{ text: v.text }] : []));
 const plainOf = (v) => segsOf(v).map((s) => ('text' in s ? s.text : s.mention.label)).join('');
 function renderSegs(el, segs) {
-  el.replaceChildren(...segs.map((s, i) => {
+  el.replaceChildren(...segs.flatMap((s, i) => {
     // Chromium needs a placeholder newline after a trailing soft break to put the caret on the empty line; readSegs strips it
-    if ('text' in s) return document.createTextNode(s.text + (i === segs.length - 1 && s.text.endsWith('\n') ? '\n' : ''));
+    if ('text' in s) return linkify(s.text + (i === segs.length - 1 && s.text.endsWith('\n') ? '\n' : ''));
     const a = document.createElement('a'); a.className = 'mention'; a.dataset.uri = s.mention.uri; a.contentEditable = 'false'; a.textContent = s.mention.label;
-    return a;
+    return [a];
   }));
+}
+// Plain http(s) URLs inside a text run become clickable without leaving the text editable: readSegs reads the
+// anchor back as its own characters, so the stored text is unchanged.
+const URL_RE = /https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"]/g;
+function linkify(text) {
+  const out = [];
+  let last = 0;
+  for (const m of text.matchAll(URL_RE)) {
+    if (m.index > last) out.push(document.createTextNode(text.slice(last, m.index)));
+    const a = document.createElement('a');
+    a.className = 'url'; a.dataset.href = m[0]; a.textContent = m[0];
+    out.push(a);
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) out.push(document.createTextNode(text.slice(last)));
+  return out.length ? out : [document.createTextNode(text)];
 }
 function readSegs(el) {
   const segs = [];
@@ -1660,7 +1677,13 @@ outline.addEventListener('mousedown', (e) => {
   }
 });
 outline.addEventListener('focusin', () => { if (sel) { sel = null; for (const n of outline.querySelectorAll('.selected')) n.classList.remove('selected'); } }); // the caret is back in a node
-outline.addEventListener('click', (e) => { const a = e.target.closest && e.target.closest('.mention'); if (a) { e.preventDefault(); goTo(a.dataset.uri); } });
+outline.addEventListener('click', (e) => {
+  if (!e.target.closest) return;
+  const mention = e.target.closest('.mention');
+  if (mention) { e.preventDefault(); return goTo(mention.dataset.uri); }
+  const url = e.target.closest('a.url'); // a plain link in the text opens in the browser, like Tana
+  if (url && tana.openExternal) { e.preventDefault(); run(() => tana.openExternal(url.dataset.href)); }
+});
 
 filterEl.addEventListener('input', render);
 filterEl.addEventListener('keydown', (e) => {

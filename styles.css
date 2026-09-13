@@ -20,6 +20,8 @@ button { font: inherit; }
 .crumbs a { color: #888; text-decoration: none; cursor: pointer; }
 .crumbs a .ricon { display: inline-flex; vertical-align: -2px; margin-right: 4px; }
 .crumbs a .ricon svg { width: 14px; height: 14px; }
+.text a.url { color: #508fbb; text-decoration: underline; cursor: pointer; }
+[data-theme="dark"] .text a.url { color: #7fb8dd; }
 .crumbs a:hover { color: #1a1a1a; text-decoration: underline; }
 .crumbs .sep { margin: 0 6px; color: #bbb; }
 .crumbs .current { color: #555; }

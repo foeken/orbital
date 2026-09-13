@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, ipcMain, nativeTheme } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, nativeTheme, shell } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const { createHash } = require('node:crypto');
@@ -728,6 +728,11 @@ ipcMain.handle('doc:setIcon', (_e, id, svg) => setIcon(id, svg));
 ipcMain.handle('doc:related', (_e, id) => related(id)); // { summary, tagline, pinned[], outcomes[], notes[] }
 ipcMain.handle('doc:summaryUri', (_e, id) => summaryUri(id)); // where a meeting should actually open, or null
 ipcMain.handle('doc:setField', (_e, id, key, text) => mut(id, (doc) => fields.setFieldText(doc, key, text)));
+// A link in node text opens in the user's browser; only http(s), never a file or custom scheme.
+ipcMain.handle('shell:open', (_e, url) => {
+  if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) throw new Error('Only http(s) links can be opened');
+  return shell.openExternal(url);
+});
 // The node for today: a document titled with today's date, pinned to today. Created and pinned when missing,
 // so "Show today node" always lands somewhere. Matching is by exact title, the same string the pin uses.
 ipcMain.handle('doc:todayNode', async () => {
