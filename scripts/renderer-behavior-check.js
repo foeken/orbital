@@ -656,7 +656,7 @@ function runZoomShortcutCheck() {
   context.press(event('0', false));
   context.press(event('+', true));
   context.press(event('-', true));
-  assert.deepEqual(plain(context.state()), { zoomFactor: 0.91, calls: [0.91, 1.001, 0.91] }, 'Cmd+0 resets zoom to the default without Shift while Cmd+Shift+/- keep adjusting it');
+  assert.deepEqual(plain(context.state()), { zoomFactor: 0.91, calls: [0.91, 0.91 * 1.1, 0.91] }, 'Cmd+0 resets zoom to the default without Shift while Cmd+Shift+/- keep adjusting it');
 }
 
 function runZoomDeleteCheck() {
