@@ -150,10 +150,13 @@ async function spaceChildren(id) {
 // Generic on purpose: any node with pins or owned documents answers the same way.
 async function related(id) {
   if (!client) throw new Error(NOT_CONNECTED);
+  // The meeting event is the hub: opening its notes document should still show the meeting's pins and outcomes.
+  const [self0] = (await client.graph.listNodes({ nodeIds: [id], limit: 1 }).catch(() => ({ nodes: [] }))).nodes || [];
+  const hub = idKind(id) === 'event' ? id : (self0 && typeof self0.ownerUri === 'string' && idKind(self0.ownerUri) === 'event' ? self0.ownerUri : id);
   const [edges, owned, self] = await Promise.all([
-    client.graph.listEdges({ fromNodeIds: [id], edgeTypes: ['EDGE_TYPE_HAS_PIN'] }).catch(() => ({ edges: [] })),
-    client.graph.listNodes({ ownerIds: [id], limit: 200, sortOptions: [{ field: 'SORT_FIELD_CREATE_TIME', direction: 'SORT_DIRECTION_ASCENDING' }] }).catch(() => ({ nodes: [] })),
-    client.graph.listNodes({ nodeIds: [id], limit: 1 }).catch(() => ({ nodes: [] })),
+    client.graph.listEdges({ fromNodeIds: [hub], edgeTypes: ['EDGE_TYPE_HAS_PIN'] }).catch(() => ({ edges: [] })),
+    client.graph.listNodes({ ownerIds: [hub], limit: 200, sortOptions: [{ field: 'SORT_FIELD_CREATE_TIME', direction: 'SORT_DIRECTION_ASCENDING' }] }).catch(() => ({ nodes: [] })),
+    hub === id ? Promise.resolve({ nodes: self0 ? [self0] : [] }) : client.graph.listNodes({ nodeIds: [hub], limit: 1 }).catch(() => ({ nodes: [] })),
   ]);
   const pinIds = (edges.edges || []).map((e) => e.toNodeId).filter(Boolean);
   const pinned = pinIds.length ? (await client.graph.listNodes({ nodeIds: pinIds, limit: pinIds.length })).nodes : [];
@@ -164,7 +167,9 @@ async function related(id) {
   const event = (self.nodes || [])[0] || {};
   const ev = event.calendarEvent || {};
   const stated = (n) => !!(n.state && n.state.type);
-  const owns = (owned.nodes || []).filter((n) => !PLAIN_KINDS.has(idKind(n.id)));
+  // never list the open document itself, an untitled draft, or something already shown as a pin
+  const pinnedIds = new Set(pinIds);
+  const owns = (owned.nodes || []).filter((n) => !PLAIN_KINDS.has(idKind(n.id)) && n.id !== id && !pinnedIds.has(n.id) && (n.title || '').trim());
   return {
     summary: ev.summary || undefined,
     tagline: ev.tagline || undefined,

@@ -148,6 +148,18 @@ function mockApi() {
       throw new Error('unknown document ' + docId);
     },
     members: async () => members.map(info),
+    // relationships of a node (main.js related): pinned edges, task outcomes and note documents
+    related: async (docId) => {
+      const doc = all.find((d) => d.id === docId);
+      if (!doc || doc.icon !== 'meeting') return { pinned: [], outcomes: [], notes: [] };
+      const pick = (n) => n && info(n);
+      return {
+        summary: 'Mock meeting summary for ' + doc.text,
+        pinned: [pick(all.find((d) => d.icon === 'doc')), pick(all.find((d) => d.icon === 'task'))].filter(Boolean),
+        outcomes: all.filter((d) => d.icon === 'task').slice(1, 3).map(info),
+        notes: [pick(all.find((d) => d.icon === 'doc' && d.text))].filter(Boolean),
+      };
+    },
     accessOptions: async (docId) => { const writable = !!all.find((doc) => doc.id === docId)?.editable; return { sharing: writable, move: writable, deletable: writable, rules: writable ? ['me', 'people', 'inherit'] : [], roles: ['editor', 'admin'], sharingToken: 'mock-sharing', inheritAudience: { scope: 'space', title: space.text } }; },
     setSharing: async (docId, selection) => { const meta = taskDetails.get(docId); if (!meta) throw new Error('sharing unavailable'); if (selection.rule === 'inherit' && selection.token !== 'mock-sharing') throw new Error('Reload the audience disclosure and explicitly select inherit'); meta.restricted = selection.rule !== 'inherit'; meta.participants = selection.rule === 'people' ? selection.participants : []; meta.audience = selection.rule === 'me' ? 'only-me' : selection.rule === 'people' ? 'people' : 'unknown'; emit(docId); },
     searchSpaces: async (query) => [info(space)].filter((node) => node.title.toLowerCase().includes(String(query).toLowerCase())).map((node) => ({ ...node, selectable: true })),
@@ -341,6 +353,12 @@ if (zoomFactor !== 1 && tana.zoom) tana.zoom(zoomFactor);
 
 const $ = (id) => document.getElementById(id);
 const outline = $('outline'), filterEl = $('filter'), filterRow = $('filterRow');
+// ---- right rail: what a zoomed node is linked to (api.related). These rows are edges, not nodes:
+// they open, and a task row toggles, but nothing here ever takes a caret (docs/OUTLINER.md addendum 15).
+const railEl = $('rail');
+const relatedBy = new Map(); // docId -> related payload, or null while loading
+const railClosed = new Set(JSON.parse(localStorage.getItem('railClosed') || '[]'));
+const CHEV = '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4.5L6 8l3.5-3.5"/></svg>';
 const allDocs = () => sections.flatMap((s) => s.nodes);
 const sectionOf = (docId) => sections.find((s) => s.nodes.some((n) => n.id === docId));
 const viewOf = () => sections.find((s) => s.id === view) || sections[0];
@@ -592,6 +610,7 @@ function renderOutline() {
   taskInfoEl.hidden = !taskInfo; taskInfoEl.replaceChildren();
   if (taskInfo) { taskInfoEl.append(taskMetaEl(taskInfo)); if (visibleTags(parent.node).some((tag) => tag.label !== 'task')) appendTags(taskInfoEl, parent.node); }
   renderCrumbs(trail);
+  renderRail(parent);
   const showPills = !parent && authed && (view === 'tasks' || view === 'library' || view === 'chats');
   renderPills(showPills);
   filterRow.hidden = !!parent || !(filterShown || filterEl.value);
@@ -618,6 +637,86 @@ function resolveZoom() {
   return trail;
 }
 
+// api.related for the zoomed document, fetched once per id; a failure simply leaves the rail empty
+function loadRelated(docId) {
+  if (!tana.related || !isRealId(docId) || relatedBy.has(docId)) return;
+  relatedBy.set(docId, null);
+  tana.related(docId).then((data) => { relatedBy.set(docId, data); render(); }, () => { relatedBy.delete(docId); });
+}
+function railRow(node) {
+  const row = document.createElement('div');
+  row.className = 'rrow' + (node.done ? ' done' : '');
+  row.tabIndex = -1; row.dataset.id = node.id;
+  if (isTask(node)) {
+    const check = document.createElement('input');
+    check.type = 'checkbox'; check.className = 'check'; check.checked = !!node.done; check.tabIndex = -1;
+    check.disabled = !canEditNode(node);
+    check.onmousedown = (e) => e.preventDefault();
+    check.onclick = (e) => { e.stopPropagation(); toggleRelated(node); };
+    row.append(check);
+  } else {
+    const icon = document.createElement('span');
+    icon.className = 'ricon ' + (node.icon || 'doc') + (node.hue != null ? ' hue' : '');
+    if (node.hue != null) icon.style.setProperty('--hue', String(node.hue));
+    icon.innerHTML = node.iconSvg || iconSvg(node.icon || 'doc');
+    row.append(icon);
+  }
+  const title = document.createElement('span');
+  title.className = 'rtitle'; title.textContent = node.text || node.title || 'Untitled';
+  row.append(title);
+  appendTags(row, node);
+  row.onclick = () => goTo(node.id);
+  row.onkeydown = (e) => railKey(e, node, row);
+  return row;
+}
+function toggleRelated(node) {
+  if (!canEditNode(node) || !tana.setDone) return;
+  const done = node.done ? 0 : 1;
+  node.done = done;
+  run(async () => { await tana.setDone(node.id, !!done); });
+  render();
+}
+const railRowEls = () => [...railEl.querySelectorAll('.rrow')];
+function focusRail(index = 0) {
+  const rows = railRowEls();
+  if (!rows.length) return false;
+  rows[Math.max(0, Math.min(rows.length - 1, index))].focus();
+  return true;
+}
+function railKey(e, node, row) {
+  const rows = railRowEls(), i = rows.indexOf(row);
+  if (e.key === 'ArrowDown') { e.preventDefault(); rows[Math.min(rows.length - 1, i + 1)].focus(); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); if (i > 0) rows[i - 1].focus(); }
+  else if (e.key === 'Enter') { e.preventDefault(); goTo(node.id); }
+  else if (e.key === ' ') { e.preventDefault(); toggleRelated(node); }
+  else if (e.key === 'Escape' || (e.key === 'ArrowLeft' && (e.metaKey || e.ctrlKey))) { e.preventDefault(); const first = texts()[0]; if (first) setCaret(first, 0); else titleEl.focus(); }
+}
+function toggleRailSection(label) {
+  if (railClosed.has(label)) railClosed.delete(label); else railClosed.add(label);
+  localStorage.setItem('railClosed', JSON.stringify([...railClosed]));
+  render();
+}
+// Pinned / Outcomes / Notes for the zoomed document; hidden when the node has no relations at all.
+function renderRail(parent) {
+  const active = document.activeElement, keep = active && active.classList && active.classList.contains('rrow') ? active.dataset.id : null;
+  railEl.replaceChildren();
+  const docId = parent && parent.node.kind === 'document' && !parent.node.draft ? parent.docId : null;
+  if (!docId) { railEl.hidden = true; return; }
+  loadRelated(docId);
+  const data = relatedBy.get(docId);
+  const groups = data ? [['Pinned', data.pinned], ['Outcomes', data.outcomes], ['Notes', data.notes]].filter(([, rows]) => rows && rows.length) : [];
+  railEl.hidden = !groups.length;
+  for (const [label, rows] of groups) {
+    const head = document.createElement('button');
+    head.className = 'rhead' + (railClosed.has(label) ? ' closed' : '');
+    head.tabIndex = -1; head.innerHTML = CHEV; head.append(label);
+    head.onclick = () => toggleRailSection(label);
+    railEl.append(head);
+    if (railClosed.has(label)) continue;
+    for (const node of rows) railEl.append(railRow(asDoc(node)));
+  }
+  if (keep) { const again = railEl.querySelector('.rrow[data-id="' + keep + '"]'); if (again) again.focus(); }
+}
 function renderCrumbs(trail) {
   const nav = $('crumbs');
   nav.hidden = !trail;
@@ -1515,6 +1614,7 @@ document.addEventListener('keydown', (e) => {
   else if (!palette.hidden) return;
   else if (sel && document.activeElement === document.body && (e.defaultPrevented || selKey(e))) e.preventDefault(); // selection keys; a Shift+Arrow already handled in the node stops here (focus is on body by now)
   else if (mod && e.shiftKey && e.key === 'Backspace' && document.activeElement === document.body && zoom) { e.preventDefault(); removeZoomedBlock(); }
+  else if (mod && e.key === 'ArrowRight' && !railEl.hidden) { e.preventDefault(); focusRail(); } // into the relationships rail; Escape or Cmd+Left comes back
   else if (mod && (e.key.toLowerCase() === 'z' || e.key.toLowerCase() === 'y') && !inFilter) { e.preventDefault(); history(e.key.toLowerCase() === 'y' || e.shiftKey ? 'redo' : 'undo'); }
   else if (mod && e.key === 'f') { e.preventDefault(); if (zoom) return; filterShown = true; render(); filterEl.focus(); }
   else if (hotkey) { e.preventDefault(); runAction(hotkey); }

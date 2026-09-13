@@ -76,6 +76,23 @@ button { font: inherit; }
 .menu .mdiv { height: 1px; margin: 6px 4px; background: #e6e6e6; }
 
 .scroll { flex: 1; overflow-y: auto; padding: 0 32px 40px 16px; }
+/* zoomed node: the document on the left, its relationships (edges, never editable) on the right */
+.page { display: flex; align-items: flex-start; gap: 28px; }
+.doc { flex: 1; min-width: 0; }
+.rail { flex: none; width: 260px; padding-top: 2px; user-select: none; }
+.rail .rhead { display: flex; align-items: center; gap: 6px; width: 100%; border: 0; background: none; padding: 10px 6px 4px; cursor: pointer;
+  font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #999; }
+.rail .rhead svg { width: 12px; height: 12px; transition: transform 0.12s; }
+.rail .rhead.closed svg { transform: rotate(-90deg); }
+.rail .rrow { display: flex; align-items: baseline; gap: 6px; padding: 4px 6px; border-radius: 4px; cursor: pointer; outline: none; }
+.rail .rrow:hover { background: #f4f6f8; }
+.rail .rrow:focus { background: #e8f1fb; }
+.rail .rrow .ricon { flex: none; width: 15px; height: 15px; color: #8a8a8a; align-self: center; }
+.rail .rrow .ricon svg { display: block; width: 15px; height: 15px; }
+.rail .rrow .check { align-self: center; }
+.rail .rrow .rtitle { flex: 1; min-width: 0; font-size: 14px; line-height: 19px; color: #508fbb; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.rail .rrow.done .rtitle { color: #999; text-decoration: line-through; }
+.rail .rempty { padding: 2px 6px 6px; font-size: 13px; color: #bbb; }
 
 /* outline */
 .line { display: flex; align-items: flex-start; line-height: 24px; padding: 3px 0; }
@@ -303,6 +320,12 @@ button { font: inherit; }
 [data-theme="dark"] .palette .ricon.meeting { color: #d7b54d; }
 [data-theme="dark"] .palette .ricon.right { color: #858b8e; }
 [data-theme="dark"] .palette .ricon.hue { color: hsl(var(--hue) 70% 72%); }
+[data-theme="dark"] .rail .rhead { color: #858b8e; }
+[data-theme="dark"] .rail .rrow:hover { background: #24282a; }
+[data-theme="dark"] .rail .rrow:focus { background: #2b3237; }
+[data-theme="dark"] .rail .rrow .ricon { color: #aeb4b6; }
+[data-theme="dark"] .rail .rrow .rtitle { color: #7fb8dd; }
+[data-theme="dark"] .rail .rrow.done .rtitle { color: #858b8e; }
 [data-theme="dark"] .palette .hint { color: #858b8e; }
 [data-theme="dark"] .palette kbd { color: #b7bcbe; background: #303436; }
 [data-theme="dark"] .palette .row.active kbd { background: #42484a; }

@@ -195,3 +195,18 @@ These are acceptance requirements; TASKS.md records verification status.
 - **Sharing and move confirmation.** `access.capabilities` is the gate for the palette. `setSharing` accepts only the advertised `me`, `people`, and verified `inherit` rules; inherit requires the current `sharingToken`, and the backend rechecks observed documents for changes. `previewMove` returns before/after audience data and a token after checking permissions, scope, counts, and stability. `moveToSpace` previews again and requires the exact returned token whenever audience confirmation is required, so stale or missing confirmation is rejected.
 - **Renderer access behavior.** The renderer disables unknown or unavailable visibility/move/delete actions, passes the current sharing token for inherit, shows move audience before/after data, and submits the move preview token. ACL-change errors clear the cached options and reload them. Title editing follows the node's explicit read-only capability; it does not authorize a server mutation.
 - **Deletion and undo.** Delete is native soft-delete and restore. The main process validates the document URI, `access.canDelete` (supported kind, write access, and event organizer rule), and the server's `documentActionResponse` before updating visibility. Delete/restore actions are recorded in global history; undo/redo repeats the native action and relies on the server live update to restore document content and access state. Block and metadata edits use each document's local CRDT UndoManager, while renderer Cmd+Z/Cmd+Shift+Z/Cmd+Y go through the main-process history API. `onRemoved` means explicit deletion; an ordinary `onChanged` is a refresh.
+
+## Addendum 15 (relationships rail)
+
+A zoomed document shows its relationships in a right rail (#rail), fed by api.related(docId). The rail is not
+part of the outline: its rows are edges, so they open on Enter or click, a task row toggles on Space, and
+nothing there ever takes a caret. Rows keep the plain look of the rest of the UI (icon, link title, tag chip),
+not cards.
+
+- Three collapsible sections: Pinned (EDGE_TYPE_HAS_PIN from the node), Outcomes (documents it owns that carry
+  a task state) and Notes (documents it owns without one). Collapsed sections persist in localStorage.railClosed;
+  an empty section is omitted and an empty rail is hidden.
+- Opening a meeting's notes document shows the meeting's relations: related resolves an event owner as the hub.
+  The open document, untitled drafts and anything already listed under Pinned never repeat.
+- Keyboard: Cmd+Right enters the rail, Up/Down move, Enter opens, Space toggles a task, Escape or Cmd+Left
+  returns the caret to the document.
