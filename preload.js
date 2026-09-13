@@ -5,6 +5,8 @@ contextBridge.exposeInMainWorld('api', {
   roots: () => ipcRenderer.invoke('outline:roots'),
   children: (docId) => ipcRenderer.invoke('outline:children', docId),
   node: (docId) => ipcRenderer.invoke('doc:info', docId),
+  path: (docId) => ipcRenderer.invoke('doc:path', docId),
+  chats: (opts) => ipcRenderer.invoke('chats:list', opts), // { includeMcp }
   createDocument: (title, opts) => ipcRenderer.invoke('doc:create', title, opts), // opts: { kind: 'doc' | 'task' | 'meeting' }
   search: (query) => ipcRenderer.invoke('search', query),
   setTitle: (docId, title) => ipcRenderer.invoke('doc:setTitle', docId, title),
@@ -21,6 +23,13 @@ contextBridge.exposeInMainWorld('api', {
   pin: (docId, target) => ipcRenderer.invoke('pins:pin', docId, target),
   unpin: (docId, target) => ipcRenderer.invoke('pins:unpin', docId, target),
   setIcon: (docId, svg) => ipcRenderer.invoke('doc:setIcon', docId, svg),
+  image: (uri) => ipcRenderer.invoke('image', uri), // tana:image: uri -> data URL (main fetches with the session token and caches)
+  members: () => ipcRenderer.invoke('members'),
+  taskFilter: () => ipcRenderer.invoke('tasks:filter'),
+  setTaskFilter: (filter) => ipcRenderer.invoke('tasks:setFilter', filter), // { states: string[] | null, assignee: 'me' | 'anyone' | 'unassigned' | uri }; resolves after the Tasks refresh
+  library: (filter) => ipcRenderer.invoke('library:list', filter), // { types, states, assignee, text }; missing keys fall back to libraryFilter()
+  libraryFilter: () => ipcRenderer.invoke('library:filter'),
+  setLibraryFilter: (filter) => ipcRenderer.invoke('library:setFilter', filter),
   refresh: () => ipcRenderer.invoke('sync:refresh'),
   undo: () => ipcRenderer.invoke('history:undo'),
   redo: () => ipcRenderer.invoke('history:redo'),

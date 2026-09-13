@@ -61,5 +61,14 @@ assert.strictEqual(db.icon('tana:text:a'), '<svg viewBox="0 0 16 16"><circle r="
 db.setIcon('tana:text:a', null);
 assert.strictEqual(db.icon('tana:text:a'), null);
 
+// settings: JSON per key
+assert.strictEqual(db.setting('taskFilter'), undefined);
+db.setSetting('taskFilter', { states: null, assignee: 'anyone' });
+assert.deepStrictEqual(db.setting('taskFilter'), { states: null, assignee: 'anyone' });
+db.setSetting('taskFilter', { states: ['open'], assignee: 'me' }); // upsert
+assert.deepStrictEqual(db.setting('taskFilter').states, ['open']);
+db.setSetting('taskFilter', undefined);
+assert.strictEqual(db.setting('taskFilter'), undefined);
+
 fs.rmSync(path.dirname(file), { recursive: true });
 console.log('db-check ok');

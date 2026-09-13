@@ -8,7 +8,9 @@ const { createRouterTransport, ConnectError, Code } = require('@connectrpc/conne
 const { message, SyncService } = require('../sdk/proto/descriptors');
 const { createTransport, GraphClient, SyncConnection, Document, derivePeerId, readNode, setTitle, setState, contentText, ulid, initDocument, STATE_TYPES } = require('../sdk');
 const outline = require('../sdk/content');
-const { parseQuery, searchParams, needsTypes } = require('../sdk/query');
+const { fetchImage } = require('../sdk/assets');
+const { LoroMap, LoroList } = require('loro-crdt');
+const { parseQuery, searchParams, needsTypes, taskParams, libraryQueries, DEFAULT_TASK_FILTER, DEFAULT_LIBRARY_FILTER } = require('../sdk/query');
 const pins = require('../sdk/pins');
 
 const ORG = 'org_01KS7RQSWW68H489ZZZ1NNC40T', DOC = 'tana:text:01m23c1z45gceayt2zjk09k63c', ME = 'tana:user-profile:01m0f1aqd8p23qhwntbewmpfz2';
@@ -109,7 +111,7 @@ async function main() {
     assert.deepEqual(parseQuery('a#b'), { text: 'a#b', tags: [] }, 'only word-initial #');
     const types = new Map([['project', 'tana:type:p']]);
     assert.equal(searchParams(parseQuery(''), types), null);
-    assert.deepEqual(searchParams(parseQuery('lex'), types), { nodeTypes: ['text', 'event'], textQuery: 'lex', limit: 20, sortOptions: [{ field: 'SORT_FIELD_TEXT_RANK', direction: 'SORT_DIRECTION_DESCENDING' }] });
+    assert.deepEqual(searchParams(parseQuery('lex'), types), { nodeTypes: ['text', 'event', 'user-profile'], textQuery: 'lex', limit: 20, sortOptions: [{ field: 'SORT_FIELD_TEXT_RANK', direction: 'SORT_DIRECTION_DESCENDING' }] });
     const task = searchParams(parseQuery('lex #task'), types);
     assert.deepEqual([task.nodeTypes, task.stateTypes, task.textQuery], [['text'], STATE_TYPES, 'lex']);
     assert.deepEqual(searchParams(parseQuery('#meeting'), types).nodeTypes, ['event']);
@@ -117,6 +119,19 @@ async function main() {
     assert.deepEqual(searchParams(parseQuery('#PROJECT'), types).entityTypes, ['tana:type:p'], 'type title matched case-insensitively');
     assert.equal(searchParams(parseQuery('x #Nope'), types), null, 'unknown type = no results');
     assert.deepEqual([needsTypes(parseQuery('#task #meeting')), needsTypes(parseQuery('#Project'))], [false, true]);
+    assert.deepEqual(searchParams(parseQuery('#member'), types).nodeTypes, ['user-profile']);
+    // Tasks/Library filters -> listNodes params (Addendum 10/11)
+    const UPD = [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }];
+    assert.deepEqual(taskParams(DEFAULT_TASK_FILTER, ME), { nodeTypes: ['text'], stateTypes: ['proposed', 'open'], assignedTo: [ME], limit: 500, sortOptions: UPD });
+    assert.deepEqual(taskParams({ states: null, assignee: 'anyone' }, ME), { nodeTypes: ['text'], stateTypes: STATE_TYPES, limit: 500, sortOptions: UPD });
+    assert.equal(taskParams({ states: ['closed'], assignee: 'unassigned' }, ME).unassigned, true);
+    assert.deepEqual(taskParams({ states: ['closed'], assignee: 'tana:user-profile:x' }, ME).assignedTo, ['tana:user-profile:x']);
+    assert.deepEqual(libraryQueries(DEFAULT_LIBRARY_FILTER, ME), [{ kind: 'tasks', params: taskParams(DEFAULT_LIBRARY_FILTER, ME, 100) }]);
+    const lq = libraryQueries({ types: ['meetings', 'docs', 'chats'], text: ' dpa ' }, ME);
+    assert.deepEqual(lq.map((q) => [q.kind, q.params.nodeTypes[0], q.params.textQuery]), [['meetings', 'event', 'dpa'], ['docs', 'text', 'dpa'], ['chats', 'chat', 'dpa']]);
+    assert.equal(lq[1].params.stateTypes, undefined, 'docs are filtered client-side');
+    assert.equal(libraryQueries({ types: null }, ME).length, 7, 'null types = every kind');
+    assert.throws(() => libraryQueries({ types: ['nope'] }, ME), /unknown library type/);
     const id = ulid();
     assert.match(id, /^[0-9a-hjkmnp-tv-z]{26}$/);
     assert.equal(ulid(0).slice(0, 10), '0000000000');
@@ -259,6 +274,50 @@ async function main() {
   assert.equal(flat(outline.readOutline(c1)), 'Research con,The personal');
   assert.deepEqual(c2.content.toJSON(), c1.content.toJSON(), 'raw structure converges');
   console.log('ok  outline read/segments/setText/insertAfter/insertChild/indent/outdent/move/remove');
+  // 3c. Image blocks (addendum 12): { nodeName 'image', attributes { blockId, tanaUri, displayWidth?, displayHeight? }, children [] }
+  //     as seen in tana:text:01m2839s1xa7mejzavmaqv2ck9; read as { type 'image', image }, removable and movable like any block.
+  {
+    const IMG = 'tana:image:01m2839s0wws9j9zt18vmqqwp7';
+    const first = outline.insertAfter(c1, null, 'Before image');
+    c1.transact(() => {
+      const list = c1.content.get('children');
+      const m = list.insertContainer(list.length, new LoroMap());
+      m.set('nodeName', 'image');
+      const a = m.setContainer('attributes', new LoroMap());
+      a.set('blockId', 'img00001'); a.set('tanaUri', IMG); a.set('displayWidth', 640);
+      m.setContainer('children', new LoroList());
+    });
+    const o = outline.readOutline(c1), img = o[o.length - 1];
+    assert.deepEqual(img, { id: 'img00001', text: '', kind: 'block', hasChildren: false, children: [], segments: [], type: 'image', image: { uri: IMG, alt: null, width: 640, height: null } });
+    assert.equal(o[o.length - 2].type, undefined, 'paragraphs carry no type');
+    step(() => outline.move(c1, 'img00001', 'up'));
+    assert.deepEqual(outline.readOutline(c1).slice(-2).map((n) => n.id), ['img00001', first]);
+    step(() => outline.remove(c1, 'img00001'));
+    step(() => outline.remove(c1, first));
+    assert.equal(outline.readOutline(c1).some((n) => n.type === 'image'), false);
+    console.log('ok  image blocks (readOutline/move/remove)');
+  }
+  // 3d. Asset fetch: bearer GET /images/by-uri -> 302 + Cloud-CDN-Cookie -> signed URL with that cookie (sdk/assets.js)
+  {
+    const calls = [];
+    const fakeFetch = async (url, init) => {
+      calls.push([url, init.headers]);
+      if (url.startsWith('https://api.test/images/by-uri/')) {
+        if (init.headers.authorization === 'Bearer stale') return new Response(null, { status: 401 });
+        return new Response(null, { status: 302, headers: { location: 'https://cdn.test/signed', 'set-cookie': 'Cloud-CDN-Cookie=abc:Expires=1; Path=/; Secure' } });
+      }
+      if (init.headers.cookie !== 'Cloud-CDN-Cookie=abc:Expires=1') return new Response('403', { status: 403 });
+      return new Response(Buffer.from([0x89, 0x50, 0x4e, 0x47]), { status: 200, headers: { 'content-type': 'image/png' } });
+    };
+    let tokens = ['stale', 'fresh'];
+    const { mime, bytes } = await fetchImage('tana:image:01m2839s0wws9j9zt18vmqqwp7', { baseUrl: 'https://api.test', fetch: fakeFetch, getAccessToken: async ({ refresh }) => (refresh ? 'fresh' : tokens[0]) });
+    assert.equal(mime, 'image/png');
+    assert.equal(bytes.toString('hex'), '89504e47');
+    assert.equal(calls.length, 3, '401 retried with a refreshed token, then the CDN');
+    assert.equal(calls[0][0], 'https://api.test/images/by-uri/tana%3Aimage%3A01m2839s0wws9j9zt18vmqqwp7');
+    await assert.rejects(fetchImage('tana:text:01m2839s0wws9j9zt18vmqqwp7', { fetch: fakeFetch, getAccessToken: async () => 'x' }), /not a tana:image uri/);
+    console.log('ok  image asset fetch (redirect + CDN cookie)');
+  }
   // ---- undo/redo: local-only, ops flow out like any local change, the other document converges ----
   {
     const a = new Document('tana:text:undo', { peerId: '1' }), b = new Document('tana:text:undo', { peerId: '2' });

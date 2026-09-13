@@ -10,6 +10,7 @@ function open(path) {
     id TEXT PRIMARY KEY, section TEXT NOT NULL, title TEXT NOT NULL, done INTEGER NOT NULL DEFAULT 0,
     icon TEXT, meta TEXT, tags TEXT NOT NULL DEFAULT '[]', sortKey TEXT NOT NULL, updatedAt TEXT NOT NULL)`);
   db.exec('CREATE TABLE IF NOT EXISTS icons (id TEXT PRIMARY KEY, svg TEXT NOT NULL)'); // app-local custom document icons
+  db.exec('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)'); // JSON values (task filter, ...)
 }
 
 const parse = (r) => r && { ...r, tags: JSON.parse(r.tags) };
@@ -60,4 +61,15 @@ function setIcon(id, svg) {
   else db.prepare('INSERT INTO icons (id, svg) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET svg = excluded.svg').run(id, svg);
 }
 
-module.exports = { open, list, get, upsert, replaceSection, icon, setIcon };
+// app settings as JSON per key; undefined when unset
+function setting(key) {
+  const r = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
+  return r ? JSON.parse(r.value) : undefined;
+}
+
+function setSetting(key, value) {
+  if (value === undefined) db.prepare('DELETE FROM settings WHERE key = ?').run(key);
+  else db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, JSON.stringify(value));
+}
+
+module.exports = { open, list, get, upsert, replaceSection, icon, setIcon, setting, setSetting };

@@ -1,21 +1,24 @@
 const { app, BrowserWindow, Menu, ipcMain } = require('electron');
 const path = require('node:path');
+const fs = require('node:fs/promises');
+const { createHash } = require('node:crypto');
 const db = require('./db');
 const { createTanaSession, peerIdentity } = require('./tana-session');
 const { createTanaClient } = require('./sdk');
+const { fetchImage } = require('./sdk/assets');
 const { readNode, setTitle, setState, ulid, initDocument } = require('./sdk/node');
-const { parseQuery, searchParams, needsTypes } = require('./sdk/query');
+const { parseQuery, searchParams, needsTypes, taskParams, libraryQueries, DEFAULT_TASK_FILTER, DEFAULT_LIBRARY_FILTER } = require('./sdk/query');
 const content = require('./sdk/content');
 const pins = require('./sdk/pins');
 
-const SECTIONS = [{ id: 'tasks', title: 'Tasks', icon: 'task' }, { id: 'meetings', title: 'Meetings', icon: 'meeting' }];
-const TAG = { task: { label: 'task', color: 'grey' }, meeting: { label: 'meeting', color: 'gold' }, doc: { label: 'doc', color: 'grey' } };
+const SECTIONS = [{ id: 'tasks', title: 'Tasks', icon: 'task' }, { id: 'meetings', title: 'Meetings', icon: 'meeting' }, { id: 'library', title: 'Library', icon: 'doc' }, { id: 'chats', title: 'Chats', icon: 'chat' }];
+const TAG = { task: { label: 'task', color: 'grey' }, meeting: { label: 'meeting', color: 'gold' }, space: { label: 'space', color: 'grey' }, doc: { label: 'doc', color: 'grey' }, member: { label: 'member', color: 'grey' } };
 const KINDS = { doc: 'tana:text:', task: 'tana:text:', meeting: 'tana:event:' };
+const PLAIN_KINDS = new Set(['chat', 'canvas', 'agent', 'skill']); // tana:<kind>: ids listed read-only: plain bullet + kind tag
 
-const OPEN_TASKS_QUERY = (userUri) => ({
-  nodeTypes: ['text'], assignedTo: [userUri], stateTypes: ['open'], limit: 500,
-  sortOptions: [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }],
-});
+// persisted view filters (db settings table)
+const taskFilter = () => db.setting('taskFilter') || DEFAULT_TASK_FILTER;
+const libraryFilter = () => db.setting('libraryFilter') || DEFAULT_LIBRARY_FILTER;
 // events I take part in, from the start of local today to 7 days ahead
 // past week through next week, oldest first
 const MEETINGS_QUERY = (userUri) => {
@@ -32,6 +35,19 @@ let win, session, client, me;
 let refreshTimer;
 const subscribed = new Set();
 const typeTitles = new Map(); // entityType uri -> title, resolved once per session
+const typeHues = new Map(); // type uri -> appearance.hue (0-360), for coloured type tags
+const rememberType = (n) => { typeTitles.set(n.id, n.title || ''); if (n.appearance && typeof n.appearance.hue === 'number') typeHues.set(n.id, n.appearance.hue); };
+
+// Where a document lives in Tana: owner chain root-first as [{ id, title }]; unowned documents are in the Library.
+const pathCache = new Map(); // docId -> path (refreshed on every info() call; cheap enough per open)
+async function pathOf(id) {
+  const { entries = [] } = await client.graph.getOwnerChain(id);
+  const owners = entries.map((e) => e.uri).filter((u) => u !== id).reverse();
+  if (!owners.length) return [{ id: 'library', title: 'Library' }];
+  await resolveTypes(owners); // same title cache: any node id -> title
+  return owners.map((u) => ({ id: u, title: typeTitles.get(u) || u }));
+}
+ipcMain.handle('doc:path', async (_e, id) => { try { const p = await pathOf(id); pathCache.set(id, p); return p; } catch (e) { setStatus({ error: errText(e) }); return pathCache.get(id) || []; } });
 
 const errText = (e) => String((e && e.message) || e);
 const now = () => new Date().toISOString();
@@ -53,15 +69,30 @@ async function resolveTypes(uris) {
   const missing = [...new Set(uris.filter((u) => u && !typeTitles.has(u)))];
   if (!missing.length) return;
   const { nodes } = await client.graph.listNodes({ nodeIds: missing, limit: missing.length });
-  for (const n of nodes) typeTitles.set(n.id, n.title || '');
+  nodes.forEach(rememberType);
 }
-const typeTag = (uri) => (uri && typeTitles.get(uri) ? [{ label: typeTitles.get(uri), color: 'grey' }] : []);
+// { label, hue } when the type node has appearance.hue, else grey (docs/OUTLINER.md addendum 12)
+const typeTag = (uri) => (uri && typeTitles.get(uri) ? [typeHues.has(uri) ? { label: typeTitles.get(uri), hue: typeHues.get(uri) } : { label: typeTitles.get(uri), color: 'grey' }] : []);
 // plain untyped document (no state, no type): 'doc' icon + chip; typed documents keep their type tag and the plain bullet
-const plainRow = (id, title, updatedAt, typeUri) => ({ id, title, done: 0, icon: typeUri ? null : 'doc', tags: typeUri ? typeTag(typeUri) : [TAG.doc], sortKey: updatedAt, updatedAt });
+const isSpace = (id) => id.startsWith('tana:space:');
+const plainRow = (id, title, updatedAt, typeUri) => (isSpace(id)
+  ? { id, title, done: 0, icon: 'space', tags: [TAG.space], sortKey: updatedAt, updatedAt }
+  : { id, title, done: 0, icon: typeUri ? null : 'doc', tags: typeUri ? typeTag(typeUri) : [TAG.doc], sortKey: updatedAt, updatedAt });
+const memberRow = (id, title, updatedAt) => ({ id, title, done: 0, icon: 'member', tags: [TAG.member], sortKey: updatedAt, updatedAt });
+const kindRow = (id, kind, title, updatedAt) => ({ id, title, done: 0, icon: null, tags: [{ label: kind, color: 'grey' }], sortKey: updatedAt, updatedAt });
+const idKind = (id) => id.split(':')[1];
+const memberTitle = (n) => n.title || (n.userProfile && n.userProfile.name) || '';
+
+// A space's "content" is the documents it owns (graph query), returned as document Nodes.
+async function spaceChildren(id) {
+  const { nodes } = await client.graph.listNodes({ ownerIds: [id], limit: 200, sortOptions: [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }] });
+  await resolveTypes(nodes.map((n) => n.entityType));
+  return nodes.map((n) => toNode(graphRow(n)));
+}
 // lowercase type title -> uri for #Type search filters; the type list is loaded once per session (and seeds typeTitles)
 let typesLoaded;
 async function typesByTitle() {
-  typesLoaded ||= client.graph.listNodes({ nodeTypes: ['type'], limit: 200 }).then(({ nodes }) => { for (const n of nodes) typeTitles.set(n.id, n.title || ''); }, () => { typesLoaded = null; });
+  typesLoaded ||= client.graph.listNodes({ nodeTypes: ['type'], limit: 200 }).then(({ nodes }) => { nodes.forEach(rememberType); }, () => { typesLoaded = null; });
   await typesLoaded;
   return new Map([...typeTitles].map(([uri, title]) => [title.toLowerCase(), uri]));
 }
@@ -84,8 +115,42 @@ const toNode = (r) => ({ id: r.id, title: r.title, text: r.title, kind: 'documen
 // Node shape from any graph Node JSON (search results): events, tasks, typed and plain documents.
 function graphRow(n, withDate) {
   if (n.calendarEvent || n.id.startsWith('tana:event:')) return meetingRow(n, withDate);
+  if (n.userProfile || idKind(n.id) === 'user-profile') return memberRow(n.id, memberTitle(n), n.updateTime || now());
+  if (PLAIN_KINDS.has(idKind(n.id))) return kindRow(n.id, idKind(n.id), n.title || '', n.updateTime || now());
   if (n.state && n.state.type) return taskRow(n);
   return plainRow(n.id, n.title || '', n.updateTime || now(), n.entityType);
+}
+
+// all org members, cached per session, by display name
+let membersLoaded;
+function members() {
+  if (!client) return Promise.resolve([]);
+  membersLoaded ||= client.graph.listNodes({ nodeTypes: ['user-profile'], limit: 500 })
+    .then(({ nodes }) => nodes.map((n) => ({ ...toNode(graphRow(n)), me: n.id === me.userUri || undefined })).sort((a, b) => a.title.localeCompare(b.title)), (e) => { membersLoaded = null; throw e; });
+  return membersLoaded;
+}
+
+// Library: one query per selected kind in parallel, merged newest first, capped at 100. Partial filters fall back to the stored one.
+// Chats view: all chat nodes newest first; MCP chats (invocation intent 'mcp', titles "MCP: …") hidden unless asked.
+async function chats({ includeMcp = false } = {}) {
+  if (!client) return [];
+  const { nodes } = await client.graph.listNodes({ nodeTypes: ['chat'], limit: 200, sortOptions: [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }] });
+  const isMcp = (n) => (n.invocationContext && n.invocationContext.intent === 'mcp') || /^MCP:/i.test(n.title || '');
+  return nodes.filter((n) => includeMcp || !isMcp(n)).map((n) => toNode({ ...graphRow(n), meta: isMcp(n) ? 'MCP' : undefined }));
+}
+
+async function library(filter) {
+  if (!client) return [];
+  const f = { ...libraryFilter(), ...(filter || {}) };
+  const results = await Promise.all(libraryQueries(f, me.userUri).map(async ({ kind, params }) => {
+    const { nodes } = await client.graph.listNodes(params);
+    return kind === 'docs' ? nodes.filter((n) => !(n.state && n.state.type)) : nodes;
+  }));
+  const seen = new Set();
+  const nodes = results.flat().filter((n) => !seen.has(n.id) && seen.add(n.id))
+    .sort((a, b) => String(b.updateTime || '').localeCompare(String(a.updateTime || ''))).slice(0, 100);
+  await resolveTypes(nodes.map((n) => n.entityType));
+  return nodes.map((n) => toNode(graphRow(n, true)));
 }
 
 // Live search over all top-level items (graph full-text search, relevance order) with #task/#meeting/#Type filters.
@@ -94,9 +159,12 @@ async function search(query) {
   const parsed = parseQuery(query);
   const params = searchParams(parsed, needsTypes(parsed) ? await typesByTitle() : new Map());
   if (!params) return [];
-  const { nodes } = await client.graph.listNodes(params);
+  const { nodes } = await client.graph.listNodes({ ...params, limit: 40 }); // wider net so title matches are not pushed out by full-text hits
   await resolveTypes(nodes.map((n) => n.entityType));
-  return nodes.map((n) => toNode(graphRow(n, true)));
+  // title matches first (exact, then prefix, then contains), full-text hits keep the server's relevance order
+  const q = parsed.text.trim().toLowerCase();
+  const rank = (n) => { const t = (n.title || '').toLowerCase(); return t === q ? 0 : t.startsWith(q) ? 1 : t.includes(q) ? 2 : 3; };
+  return nodes.map((n, i) => [rank(n), i, n]).sort((a, b) => a[0] - b[0] || a[1] - b[1]).map(([, , n]) => toNode(graphRow(n, true)));
 }
 
 // New document ('doc' | 'task' | 'meeting'): seeded locally, created on the server by the bootstrap (sdk/sync.js subscribe with init).
@@ -113,6 +181,8 @@ async function createDocument(title, { kind = 'doc' } = {}) {
 async function info(doc) {
   const n = readNode(doc), row = db.get(doc.id);
   if (row) return toNode({ ...row, title: n.title ?? row.title, done: n.stateType === 'closed' ? 1 : 0 });
+  if (idKind(doc.id) === 'user-profile') return toNode(memberRow(doc.id, n.title || doc.data.get('name') || doc.data.get('displayName') || '', now()));
+  if (PLAIN_KINDS.has(idKind(doc.id))) return toNode(kindRow(doc.id, idKind(doc.id), n.title || '', now()));
   const isEvent = n.type === 'event' || doc.id.startsWith('tana:event:');
   await resolveTypes([n.entityTypeUri]);
   if (!isEvent && !n.stateType) return toNode(plainRow(doc.id, n.title || '', now(), n.entityTypeUri));
@@ -162,6 +232,24 @@ function setStatus(patch) {
   send('sync:status', status);
 }
 
+// ---- images: tana:image: uri -> data URL, cached in memory and under userData/images/<sha1(uri)> (the data URL as text)
+const imageCache = new Map(); // uri -> Promise<data URL>
+function image(uri) {
+  if (!session) return Promise.reject(new Error('not logged in to Tana'));
+  if (!imageCache.has(uri)) imageCache.set(uri, loadImage(uri).catch((e) => { imageCache.delete(uri); throw e; }));
+  return imageCache.get(uri);
+}
+async function loadImage(uri) {
+  const dir = path.join(app.getPath('userData'), 'images'), file = path.join(dir, createHash('sha1').update(uri).digest('hex'));
+  const cached = await fs.readFile(file, 'utf8').catch(() => null);
+  if (cached) return cached;
+  const { mime, bytes } = await fetchImage(uri, { getAccessToken: (o) => session.getAccessToken(o) });
+  const url = 'data:' + mime + ';base64,' + bytes.toString('base64');
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(file, url);
+  return url;
+}
+
 async function start() {
   me = await session.info();
   const peer = peerIdentity({ file: path.join(app.getPath('userData'), 'peer.json'), userExternalId: me.userExternalId });
@@ -175,11 +263,16 @@ async function start() {
   await refresh();
 }
 
-async function refresh() {
-  if (!client || status.syncing) return;
+// one refresh at a time; callers that changed the filter await the in-flight run and start a new one
+let refreshing = null;
+function refresh() {
+  if (!client) return Promise.resolve();
+  return refreshing ||= doRefresh().finally(() => { refreshing = null; });
+}
+async function doRefresh() {
   setStatus({ syncing: true, error: null });
   try {
-    const [tasks, meetings] = await Promise.all([client.graph.listNodes(OPEN_TASKS_QUERY(me.userUri)), client.graph.listNodes(MEETINGS_QUERY(me.userUri))]);
+    const [tasks, meetings] = await Promise.all([client.graph.listNodes(taskParams(taskFilter(), me.userUri)), client.graph.listNodes(MEETINGS_QUERY(me.userUri))]);
     await resolveTypes([...tasks.nodes, ...meetings.nodes].map((n) => n.entityType));
     db.replaceSection('tasks', tasks.nodes.map(taskRow));
     db.replaceSection('meetings', meetings.nodes.map(meetingRow));
@@ -191,6 +284,12 @@ async function refresh() {
   } catch (e) {
     setStatus({ syncing: false, error: errText(e) });
   }
+}
+async function setTaskFilter(f) {
+  db.setSetting('taskFilter', { states: f && f.states ? f.states : null, assignee: (f && f.assignee) || 'me' });
+  await refreshing; // a run with the old filter
+  await refresh();
+  return taskFilter();
 }
 
 function subscribe(id, init) {
@@ -274,7 +373,7 @@ ipcMain.handle('outline:roots', () => {
   return SECTIONS.map((s) => ({ ...s, nodes: (rows[s.id] || []).map(toNode) }));
 });
 // events start with an empty content map (no doc node yet); readOutline needs the children list
-ipcMain.handle('outline:children', (_e, id) => op(id, (doc) => (doc.content.get('children') ? content.readOutline(doc) : [])));
+ipcMain.handle('outline:children', (_e, id) => (isSpace(id) ? spaceChildren(id) : op(id, (doc) => (doc.content.get('children') ? content.readOutline(doc) : []))));
 ipcMain.handle('doc:info', (_e, id) => op(id, info));
 ipcMain.handle('doc:create', (_e, title, opts) => createDocument(title, opts || {}));
 ipcMain.handle('search', (_e, query) => search(query));
@@ -297,6 +396,14 @@ ipcMain.handle('pins:state', (_e, id) => pinState(id));
 ipcMain.handle('pins:pin', (_e, id, target) => setPin(id, target, true));
 ipcMain.handle('pins:unpin', (_e, id, target) => setPin(id, target, false));
 ipcMain.handle('doc:setIcon', (_e, id, svg) => setIcon(id, svg));
+ipcMain.handle('image', (_e, uri) => image(uri));
+ipcMain.handle('members', () => members());
+ipcMain.handle('tasks:filter', () => taskFilter());
+ipcMain.handle('tasks:setFilter', (_e, f) => setTaskFilter(f));
+ipcMain.handle('library:list', (_e, f) => library(f));
+ipcMain.handle('chats:list', (_e, o) => chats(o || {}));
+ipcMain.handle('library:filter', () => libraryFilter());
+ipcMain.handle('library:setFilter', (_e, f) => { db.setSetting('libraryFilter', { ...DEFAULT_LIBRARY_FILTER, ...(f || {}) }); return libraryFilter(); });
 ipcMain.handle('sync:refresh', () => refresh());
 ipcMain.handle('sync:status', () => status);
 ipcMain.handle('sync:login', async () => {

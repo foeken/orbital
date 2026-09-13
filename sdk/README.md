@@ -1,25 +1,27 @@
-# sdk/ — Tana platform SDK (Connect-RPC + Loro)
+# sdk/ — Tana platform SDK
 
-Generic client for Tana's platform services; nothing here knows about "tasks". See docs/SDK.md for the contract and
-docs/PLATFORM-PROTOCOL.md for the wire protocol.
+Self-contained Node client for the new Tana (home.tana.inc): graph queries, live Loro document sync, outline editing, pins, assets. No Electron, no app knowledge; auth is injected as `getAccessToken({ refresh })`.
 
-    const { createTanaClient, readNode, setTitle, setState, contentText, derivePeerId } = require('./sdk');
-    const client = createTanaClient({ getAccessToken, orgId, peerId, storageId, logger });
-    const { nodes } = await client.graph.listNodes({ nodeTypes: ['text'], assignedTo: [me], stateTypes: ['open'], limit: 500 });
-    await client.sync.connect();                       // resolves after the server 'peer' frame; reconnects in the background
-    const doc = await client.sync.subscribe(id);       // Document, live after bootstrap
-    readNode(doc).title; contentText(doc);
-    setTitle(doc, 'New title');                        // sent as live_document_update within 5 ms
-    client.sync.on('change', (id, { origin }) => ...); // origin: 'remote' | 'local'
-    await client.close();
+Docs, in reading order:
 
-Modules: transport.js (auth headers, one retry after a 401), graph.js (GraphService in protobuf-JSON form),
-sync.js (ServerSync stream, watchdog, backoff, per-document bootstrap/live/resync, batching), document.js (LoroDoc wrapper),
-node.js (data-map accessors and content rendering), content.js (outline read/edit ops over the ProseMirror content per docs/OUTLINER.md; require('./sdk/content') directly).
+1. [docs/sdk/01-overview.md](../docs/sdk/01-overview.md) — what each module does, layering rules, entry point
+2. [docs/sdk/02-data-model.md](../docs/sdk/02-data-model.md) — Tana's data model: ids, data/content maps per kind, graph Node JSON, filters, pins, assets, session
+3. [docs/sdk/03-api-reference.md](../docs/sdk/03-api-reference.md) — every exported function, class and event
+4. [docs/sdk/04-recipes.md](../docs/sdk/04-recipes.md) — copy-paste tasks with their CLI equivalents
+5. [docs/sdk/05-gotchas.md](../docs/sdk/05-gotchas.md) — protocol, Loro and tooling pitfalls
 
-Notes
-- peerId: derivePeerId(userExternalId) gives a fresh nonce per process; pass storageId (persisted UUID) for a non-ephemeral peer, omit it for ephemeral.
-- sync events: connected, disconnected, heartbeat, change, error, ephemeral. Errors inside handlers are logged and re-emitted as 'error', never thrown.
-- subscribe() before connect() waits until the stream is up. Documents are re-bootstrapped after every reconnect; the same Document object is kept.
-- listNodes only returns totalCount when the request uses mode LIST_NODES_MODE_WITH_COUNT.
-- Offline self-check: node scripts/sdk-check.js (uses scripts/fixtures/task-snapshot.b64).
+Wire protocol: [docs/PLATFORM-PROTOCOL.md](../docs/PLATFORM-PROTOCOL.md). Pins: [docs/PINNING.md](../docs/PINNING.md).
+
+```js
+const { createTanaClient, readNode, setTitle } = require('./sdk');
+const content = require('./sdk/content');
+const client = createTanaClient({ getAccessToken, orgId, peerId, storageId });
+await client.sync.connect();
+const doc = await client.sync.subscribe('tana:text:…');
+readNode(doc).title; content.readOutline(doc);
+setTitle(doc, 'New title');                                   // sent as a live update within 5 ms
+client.sync.on('change', (id, { origin }) => { /* remote or local */ });
+await client.close();
+```
+
+Checks: `npm run check` (offline, fake SyncService). Live: `./node_modules/.bin/electron scripts/platform-cli.js <cmd>`.

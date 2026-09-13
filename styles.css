@@ -9,6 +9,12 @@ button { font: inherit; }
 
 .titlebar { -webkit-app-region: drag; padding: 40px 32px 10px; user-select: none; }
 .titlebar h1 { margin: 0; font-size: 34px; font-weight: 700; letter-spacing: -0.5px; }
+.titlebar h1[contenteditable] { -webkit-app-region: no-drag; outline: none; user-select: text; min-height: 1lh; }
+.titlebar h1[contenteditable]:empty { display: inline-block; min-width: 1px; }
+.pagehead { display: flex; align-items: flex-start; }
+.pagehead .check { -webkit-app-region: no-drag; width: 22px; height: 22px; margin: 11px 12px 0 0; border-radius: 6px; }
+.pagehead .check:checked::after { left: 8px; top: 3px; width: 5px; height: 11px; }
+.pagehead h1.done { color: #999; text-decoration: line-through; }
 .crumbs { -webkit-app-region: no-drag; font-size: 13px; color: #888; margin-bottom: 6px; }
 .crumbs a { color: #888; text-decoration: none; cursor: pointer; }
 .crumbs a:hover { color: #1a1a1a; text-decoration: underline; }
@@ -31,13 +37,39 @@ button { font: inherit; }
 .filter .clear:hover { background: #ddd; }
 .filter.empty .clear { display: none; }
 
-.scroll { flex: 1; overflow-y: auto; padding: 0 32px 40px 22px; }
+/* Library: server-side search box under the title */
+.libsearch { position: relative; margin: 4px 32px 10px; max-width: 560px; }
+.libsearch[hidden] { display: none; }
+.libsearch svg { position: absolute; left: 14px; top: 11px; width: 18px; height: 18px; color: #666; pointer-events: none; }
+.libsearch input { width: 100%; height: 40px; padding: 0 14px 0 42px; border: 1px solid #ddd; border-radius: 999px; background: #fff; font: inherit; font-size: 17px; color: #1a1a1a; outline: none; }
+.libsearch input:focus { border-color: #9cc0f0; }
+.libsearch input::placeholder { color: #999; }
+
+/* filter pills (Tasks / Library): "Status <Inbox, In Progress>", "Assigned to <You>", "<Type>"; each opens a menu below it */
+.pills { position: relative; display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 32px 12px; }
+.pills[hidden] { display: none; }
+.pill { position: relative; border: 0; border-radius: 999px; padding: 6px 14px; background: #e8f1fb; color: #4f8ad9; font-weight: 600; font-size: 15px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+.pill b { color: #2b6fcf; font-weight: 700; }
+.pill svg { width: 16px; height: 16px; }
+.pill:hover, .pill.open { background: #d9e8fa; }
+.pill:focus { outline: none; box-shadow: 0 0 0 2px #b7d2f5; }
+.menu { position: absolute; left: 0; top: calc(100% + 6px); z-index: 5; min-width: 260px; padding: 8px; background: #fff; border-radius: 10px; box-shadow: 0 8px 30px rgba(0, 0, 0, .16), 0 0 0 1px rgba(0, 0, 0, .06); font-weight: 400; color: #1a1a1a; text-align: left; }
+.menu .mrow { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 8px; font-size: 16px; cursor: pointer; user-select: none; }
+.menu .mrow.active { background: #d6e6fa; }
+.menu .mrow .micon { flex: none; width: 18px; height: 18px; color: #555; }
+.menu .mrow .micon svg { display: block; width: 18px; height: 18px; }
+.menu .mrow .mlabel { flex: 1; }
+.menu .mrow .tick { color: #1a1a1a; font-size: 15px; }
+.menu .mhead { padding: 10px 12px 4px; font-size: 13px; font-weight: 600; color: #999; user-select: none; }
+.menu .mdiv { height: 1px; margin: 6px 4px; background: #e6e6e6; }
+
+.scroll { flex: 1; overflow-y: auto; padding: 0 32px 40px 16px; }
 
 /* outline */
 .line { display: flex; align-items: flex-start; line-height: 24px; padding: 3px 0; }
 .chev, .bullet { flex: none; width: 18px; height: 24px; border: 0; background: none; padding: 0; cursor: pointer; position: relative; }
-/* chevron: 14px Outliner-style circle centred in the gutter, shown only while hovering the line; down = expanded, right = collapsed */
-.chev { visibility: hidden; }
+/* chevron: 14px Outliner-style circle in a 24px gutter left of the icon slot (8px clear of the icon), shown only while hovering the line; down = expanded, right = collapsed */
+.chev { visibility: hidden; width: 24px; }
 .chev::before {
   content: ""; position: absolute; left: 2px; top: 5px; width: 14px; height: 14px;
   border-radius: 50%; border: 1px solid #d0d0d0; background: #fff;
@@ -76,7 +108,7 @@ button { font: inherit; }
 }
 .body { flex: 1; min-width: 0; padding-left: 5px; }
 .text { display: inline; outline: none; white-space: pre-wrap; overflow-wrap: anywhere; }
-.text:empty::before { content: "\200b"; }
+.text:empty { display: inline-block; min-width: 1px; min-height: 1lh; vertical-align: top; } /* an empty node still has a box, so the caret shows */
 .check + .body { padding-left: 0; }
 .document.done > .line .text { color: #999; text-decoration: line-through; }
 .meta { margin-left: 8px; color: #999; font-size: 14px; white-space: nowrap; user-select: none; }
@@ -86,14 +118,34 @@ button { font: inherit; }
 }
 .chip.grey { background: #f1f1f1; color: #6b6b6b; }
 .chip.gold { background: #fbf3d9; color: #8a6a17; }
+.chip.hue { background: hsl(var(--hue) 80% 92%); color: hsl(var(--hue) 45% 30%); } /* type colour: --hue 0-360 set per chip */
+/* image block: not editable, focus = selected frame; .loading = placeholder box until api.image resolves */
+.text.image { display: block; cursor: default; }
+.text.image img { display: block; max-width: 100%; max-height: 360px; height: auto; border-radius: 6px; }
+.text.image.loading img { visibility: hidden; }
+.text.image.loading { min-height: 120px; max-height: 360px; background: #f1f1f1; border-radius: 6px; width: min(100%, 360px); }
+.text.image:focus img, .selected > .line .text.image img { outline: 2px solid #b5d0ee; outline-offset: 2px; }
 .text .mention { color: #508fbb; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .text .mention:hover { color: #3a75a3; }
 .h1 > .line .text { font-size: 24px; font-weight: 700; line-height: 30px; }
 .h2 > .line .text { font-size: 20px; font-weight: 700; line-height: 28px; }
 .h3 > .line .text { font-weight: 700; }
-.children { margin-left: 27px; padding-left: 0; border-left: 1px solid #ececec; }
+.selected > .line { background: #e8f1fb; border-radius: 4px; }
+.selected > .line .text { caret-color: transparent; }
+.children { margin-left: 33px; padding-left: 0; border-left: 1px solid #ececec; }
 .children.loading { color: #aaa; font-style: italic; padding: 3px 0 3px 22px; }
 .empty-note { color: #aaa; padding: 8px 40px; }
+/* loading skeleton: 6 shimmering bars while a view has no rows yet; .gone fades it out, then collapses it */
+.skeleton { padding-left: 24px; transition: opacity .35s; }
+.skeleton.gone { opacity: 0; height: 0; overflow: hidden; pointer-events: none; transition: opacity .35s, height 0s .35s; }
+.skeleton div { position: relative; height: 14px; margin: 8px 0 8px 27px; border-radius: 7px; background: #e4e4e4; background-image: linear-gradient(90deg, #e4e4e4 0%, #f7f7f7 50%, #e4e4e4 100%); background-size: 200% 100%; animation: shimmer 1.4s ease-in-out infinite, breathe 1.4s ease-in-out infinite; }
+.skeleton div:nth-child(2) { animation-delay: .12s; } .skeleton div:nth-child(3) { animation-delay: .24s; } .skeleton div:nth-child(4) { animation-delay: .36s; } .skeleton div:nth-child(5) { animation-delay: .48s; } .skeleton div:nth-child(6) { animation-delay: .6s; }
+.skeleton div::before { content: ""; position: absolute; left: -21px; top: 4px; width: 6px; height: 6px; border-radius: 50%; background: #ddd; }
+.skeleton div:nth-child(1) { width: 62%; } .skeleton div:nth-child(2) { width: 48%; } .skeleton div:nth-child(3) { width: 71%; }
+.skeleton div:nth-child(4) { width: 39%; } .skeleton div:nth-child(5) { width: 56%; } .skeleton div:nth-child(6) { width: 44%; }
+@keyframes shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@keyframes breathe { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .skeleton div { animation: none; } .skeleton, .skeleton.gone { transition: none; } }
 
 .filtered { padding: 18px 10px 8px; color: #999; font-weight: 600; }
 .filtered:empty { display: none; }
@@ -119,6 +171,7 @@ button { font: inherit; }
 .palette .ricon svg { display: block; width: 16px; height: 16px; }
 .palette .ricon.meeting { color: #c99b1b; }
 .palette .ricon.dot::before { content: ""; display: block; width: 6px; height: 6px; margin: 5px; border-radius: 50%; background: #555; }
+.palette .ricon.right { color: #aaa; }
 .palette .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .palette .hint { color: #999; font-size: 14px; white-space: nowrap; }
 .palette kbd { font: inherit; font-size: 13px; color: #666; background: #f1f1f1; border-radius: 6px; padding: 1px 8px; }

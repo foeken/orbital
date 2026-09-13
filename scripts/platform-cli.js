@@ -75,7 +75,13 @@ const commands = {
   },
   async types() {
     await connect();
-    for (const n of (await client.graph.listNodes({ nodeTypes: ['type'], limit: 200 })).nodes) out(n.id + '\t' + (n.title || ''));
+    for (const n of (await client.graph.listNodes({ nodeTypes: ['type'], limit: 200 })).nodes) out(n.id + '\t' + (n.title || '') + '\thue=' + (n.appearance && n.appearance.hue != null ? n.appearance.hue : '-'));
+  },
+  async image() {
+    if (!positional[0]) throw new Error('usage: image <tana:image:...>');
+    const { fetchImage } = require('../sdk/assets');
+    const { mime, bytes } = await fetchImage(positional[0], { getAccessToken: (o) => session.getAccessToken(o) });
+    out(mime + '\t' + bytes.length + ' bytes');
   },
   async create() {
     const kind = flag('kind', 'doc');
@@ -123,7 +129,7 @@ const commands = {
     const doc = await client.sync.subscribe(positional[0]);
     out(readNode(doc).title + '  [' + doc.id + ']');
     const tree = (nodes, depth) => nodes.forEach((n) => {
-      const pad = '  '.repeat(depth), text = n.segments.map((s) => (s.mention ? '[' + s.mention.label + ']' : s.text)).join('');
+      const pad = '  '.repeat(depth), text = n.type === 'image' ? '[image ' + n.image.uri + ']' : n.segments.map((s) => (s.mention ? '[' + s.mention.label + ']' : s.text)).join('');
       out(pad + '• ' + (n.heading ? '#'.repeat(n.heading) + ' ' : '') + text.replace(/\n/g, '\n' + pad + '  ') + '  [' + n.id + ']');
       tree(n.children || [], depth + 1);
     });
@@ -173,7 +179,7 @@ const commands = {
 };
 
 app.whenReady().then(async () => {
-  if (!commands[cmd]) { console.error('usage: platform-cli login | whoami | list [--state open] | search <query> [#task|#meeting|#Type] | types | meetings [--days 7] | get <id> | outline <id> | watch <id...> | set-title <id> <title> | set-state <id> <state> | create <title> [--kind task|meeting|doc] | delete <id> | pins | pin <id> <sidebar|today> | unpin <id> <sidebar|today>'); app.exit(2); return; }
+  if (!commands[cmd]) { console.error('usage: platform-cli login | whoami | list [--state open] | search <query> [#task|#meeting|#Type] | types | image <tana:image:id> | meetings [--days 7] | get <id> | outline <id> | watch <id...> | set-title <id> <title> | set-state <id> <state> | create <title> [--kind task|meeting|doc] | delete <id> | pins | pin <id> <sidebar|today> | unpin <id> <sidebar|today>'); app.exit(2); return; }
   session = createTanaSession();
   let code = 0;
   try { await commands[cmd](); } catch (e) { console.error(e && e.stack || e); code = 1; }

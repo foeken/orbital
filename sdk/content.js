@@ -51,6 +51,11 @@ function node(block, children) {
   const n = { id: blockId(block), text: contentText({ content: block }), kind: 'block', hasChildren: children.length > 0, children };
   n.segments = inline(block) || (n.text ? [{ text: n.text }] : []);
   if (name(block) === 'heading') n.heading = block.get('attributes').get('level');
+  if (name(block) === 'image') { // { nodeName 'image', attributes { blockId, tanaUri, displayWidth?, displayHeight? }, children [] }; no alt stored
+    const a = block.get('attributes');
+    n.type = 'image';
+    n.image = { uri: a.get('tanaUri'), alt: null, width: a.get('displayWidth') ?? null, height: a.get('displayHeight') ?? null };
+  }
   return n;
 }
 
