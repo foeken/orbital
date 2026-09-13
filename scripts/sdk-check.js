@@ -121,6 +121,32 @@ async function main() {
   assert.deepEqual(o0.map((n) => [n.id, n.kind, n.heading, n.hasChildren]), [['6s8vb70s', 'block', undefined, false], ['dv8c4sp7', 'block', 2, false], ['r4hz3a0b', 'block', undefined, false]]);
   assert.equal(o0[1].text, 'Research context — 10 September 2026');
   assert.match(o0[2].text, /^The personal note-taking compliance task names Nina Boerman/, 'mention rendered as its label');
+  // segments: text runs and mentions, in order; a run is the inline container at that index
+  const run = (block, i) => c1.content.get('children').get(block).get('children').get(i);
+  const MENTION = { mention: { label: 'personal note-taking compliance task', uri: 'tana:text:01m23c1zd6d4arqzr36a7s54nb' } };
+  assert.equal(o0[2].segments.length, 3);
+  assert.deepEqual(o0[2].segments.slice(0, 2), [{ text: 'The ' }, MENTION]);
+  assert.equal(o0[2].segments.map((s) => s.text ?? s.mention.label).join(''), o0[2].text, 'segments join to text');
+  assert.deepEqual(o0[1].segments, [{ text: o0[1].text }]);
+  // setText with segments: same mention container kept, text runs updated in place, other segments replaced
+  const mentionId = run(2, 1).id, tailId = run(2, 2).id;
+  step(() => outline.setText(c1, 'r4hz3a0b', [{ text: 'The ' }, MENTION, { text: ' is edited.' }]));
+  assert.deepEqual(outline.readOutline(c1)[2].segments, [{ text: 'The ' }, MENTION, { text: ' is edited.' }]);
+  assert.equal(outline.readOutline(c1)[2].text, 'The personal note-taking compliance task is edited.');
+  assert.ok(run(2, 1).id === mentionId && run(2, 2).id === tailId, 'mention and text run containers kept');
+  step(() => outline.setText(c1, 'r4hz3a0b', [{ text: 'See ' }, { mention: { label: 'Other', uri: 'tana:text:other' } }, { text: '' }]));
+  assert.deepEqual(outline.readOutline(c1)[2].segments, [{ text: 'See ' }, { mention: { label: 'Other', uri: 'tana:text:other' } }], 'empty text dropped');
+  assert.notEqual(run(2, 1).id, mentionId, 'different uri = new mention');
+  assert.equal(raw()[2].children[1].attributes.tanaUri, 'tana:text:other');
+  step(() => outline.setText(c1, 'r4hz3a0b', 'plain'));
+  assert.deepEqual(raw()[2].children, ['plain'], 'a string drops the mention');
+  step(() => outline.setText(c1, 'r4hz3a0b', o0[2].segments)); // restore
+  assert.deepEqual(outline.readOutline(c1)[2].segments, o0[2].segments);
+  // marks survive an in-place text update (the first paragraph carries a link mark)
+  assert.ok(run(0, 0).toDelta().some((d) => d.attributes && d.attributes.link), 'fixture has a link mark');
+  step(() => outline.setText(c1, '6s8vb70s', o0[0].text + '!'));
+  assert.ok(run(0, 0).toDelta().some((d) => d.attributes && d.attributes.link), 'link mark kept');
+  assert.equal(outline.readOutline(c1)[0].text, o0[0].text + '!');
   step(() => outline.setText(c1, '6s8vb70s', 'Hello'));
   assert.equal(outline.readOutline(c1)[0].text, 'Hello');
   assert.deepEqual(raw()[0].children, ['Hello'], 'single text run');
@@ -155,6 +181,24 @@ async function main() {
   const end2 = step(() => outline.insertAfter(c1, end, 'End2'));
   step(() => outline.outdent(c1, grand));
   assert.equal(flat(outline.readOutline(c1)), 'Hello(Child,Grand),Second,Research con,The personal(End,End2)');
+  // move: no-op at the edges, swaps in the middle (listItems within their list, top-level blocks with their neighbour block)
+  const beforeMoves = outline.readOutline(c1);
+  step(() => outline.move(c1, end, 'up')); // first in its nested list
+  step(() => outline.move(c1, '6s8vb70s', 'up')); // first in the top list
+  step(() => outline.move(c1, end2, 'down')); // last in its nested list
+  step(() => outline.move(c1, 'r4hz3a0b', 'down')); // last block of the doc
+  assert.deepEqual(outline.readOutline(c1), beforeMoves, 'edges are no-ops');
+  step(() => outline.move(c1, end, 'down'));
+  assert.equal(flat(outline.readOutline(c1)), 'Hello(Child,Grand),Second,Research con,The personal(End2,End)');
+  step(() => outline.move(c1, end, 'up'));
+  step(() => outline.move(c1, second, 'up'));
+  assert.equal(flat(outline.readOutline(c1)), 'Second,Hello(Child,Grand),Research con,The personal(End,End2)');
+  step(() => outline.move(c1, second, 'down'));
+  step(() => outline.move(c1, 'dv8c4sp7', 'up')); // heading swaps with the whole preceding list
+  assert.equal(flat(outline.readOutline(c1)), 'Research con,Hello(Child,Grand),Second,The personal(End,End2)');
+  step(() => outline.move(c1, 'dv8c4sp7', 'down'));
+  assert.deepEqual(outline.readOutline(c1), beforeMoves, 'moves round-trip (ids and children kept)');
+  assert.deepEqual(c2.content.toJSON(), c1.content.toJSON(), 'raw structure converges after moves');
   step(() => outline.remove(c1, grand));
   step(() => outline.remove(c1, end));
   step(() => outline.remove(c1, end2));
@@ -167,7 +211,7 @@ async function main() {
   assert.equal(raw()[0].nodeName, 'heading', 'emptied top-level list removed');
   assert.equal(flat(outline.readOutline(c1)), 'Research con,The personal');
   assert.deepEqual(c2.content.toJSON(), c1.content.toJSON(), 'raw structure converges');
-  console.log('ok  outline read/setText/insertAfter/insertChild/indent/outdent/remove');
+  console.log('ok  outline read/segments/setText/insertAfter/insertChild/indent/outdent/move/remove');
 
   // 4. Transport: headers and the 401 -> refresh -> retry-once rule, with a fake fetch
   const calls = [];

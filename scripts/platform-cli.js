@@ -61,8 +61,8 @@ const commands = {
     const doc = await client.sync.subscribe(positional[0]);
     out(readNode(doc).title + '  [' + doc.id + ']');
     const tree = (nodes, depth) => nodes.forEach((n) => {
-      const pad = '  '.repeat(depth);
-      out(pad + '• ' + (n.heading ? '#'.repeat(n.heading) + ' ' : '') + n.text.replace(/\n/g, '\n' + pad + '  ') + '  [' + n.id + ']');
+      const pad = '  '.repeat(depth), text = n.segments.map((s) => (s.mention ? '[' + s.mention.label + ']' : s.text)).join('');
+      out(pad + '• ' + (n.heading ? '#'.repeat(n.heading) + ' ' : '') + text.replace(/\n/g, '\n' + pad + '  ') + '  [' + n.id + ']');
       tree(n.children || [], depth + 1);
     });
     tree(readOutline(doc), 1);

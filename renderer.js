@@ -18,14 +18,17 @@ function mockApi() {
     'Organise working sessions on guardrails for teams with Foundry', 'Contact Mark W for dinner', 'Ask and tell about Tana DPA', 'The blue laptop discussion',
     'Ask Foundry teams for risks (with deadline Sun, Nov 1)', 'Organise session with Arjan Pragt around the role definition', "Create RvC presentation on Nedap's one-year AI vision"];
   let seq = 0;
-  const block = (text, children = [], heading) => ({ id: 'b' + (++seq), text, kind: 'block', heading, hasChildren: children.length > 0, children });
-  const docs = titles.map((text, i) => ({ id: 'mockdoc' + i, text, kind: 'document', done: 0, hasChildren: true }));
+  const block = (text, children = [], heading) => ({ id: 'b' + (++seq), text: plainOf(text), segments: segsOf(text), kind: 'block', heading, hasChildren: children.length > 0, children });
+  const docs = titles.map((text, i) => ({ id: 'mockdoc' + i, text, kind: 'document', done: 0, hasChildren: true, icon: 'task' }));
+  const people = { 'tana:user-profile:lex': 'Lex van Velsen' }; // referenced document that is not in roots
   const content = Object.fromEntries(docs.map((d, i) => [d.id, [
     block('Context', [], 2),
     block('First point about task ' + i, [block('Detail A'), block('Detail B', [block('Deeper detail')])]),
+    block([{ text: 'Discuss with ' }, { mention: { label: 'Lex van Velsen', uri: 'tana:user-profile:lex' } }, { text: ' and see ' }, { mention: { label: titles[2], uri: 'mockdoc2' } }]),
     block('Second point, a paragraph long enough to wrap onto a second line when the window is narrow so arrow keys can be tested inside a node.'),
     block('Next steps', [block('Call someone'), block('Write the memo')]),
   ]]));
+  content['tana:user-profile:lex'] = [block('Lex is a colleague')];
   const changed = [], statusCbs = [];
   let status = { authenticated: false, connected: false, syncing: false, lastSync: null, error: null };
   const emit = (docId) => setTimeout(() => changed.forEach((cb) => cb(docId)), 0);
@@ -33,9 +36,15 @@ function mockApi() {
   return {
     roots: async () => docs.map((d) => ({ ...d })),
     children: async (docId) => structuredClone(content[docId] || []),
+    node: async (docId) => {
+      const d = docs.find((x) => x.id === docId);
+      if (d) return { id: d.id, title: d.text, kind: 'document', done: d.done, icon: d.icon };
+      if (people[docId]) return { id: docId, title: people[docId], kind: 'document', done: 0 };
+      throw new Error('unknown document ' + docId);
+    },
     setTitle: async (docId, title) => { docs.find((d) => d.id === docId).text = title; emit(docId); },
     setDone: async (docId, done) => { docs.find((d) => d.id === docId).done = done ? 1 : 0; emit(docId); },
-    setText: async (docId, id, text) => { locate(content[docId], id).node.text = text; emit(docId); },
+    setText: async (docId, id, text) => { const n = locate(content[docId], id).node; n.text = plainOf(text); n.segments = segsOf(text); emit(docId); },
     insertAfter: async (docId, id, text) => {
       const n = block(text);
       if (id == null) content[docId].push(n); else { const f = locate(content[docId], id); f.list.splice(f.index + 1, 0, n); }
@@ -51,6 +60,11 @@ function mockApi() {
       const f = locate(content[docId], id), p = f.trail.at(-1); if (!p) return;
       f.list.splice(f.index, 1); fix(p.node); p.list.splice(p.index + 1, 0, f.node); emit(docId);
     },
+    move: async (docId, id, dir) => {
+      const f = locate(content[docId], id), j = f.index + (dir === 'up' ? -1 : 1);
+      if (j < 0 || j >= f.list.length) return;
+      [f.list[f.index], f.list[j]] = [f.list[j], f.list[f.index]]; emit(docId);
+    },
     refresh: async () => emit(null),
     login: async () => { status = { ...status, authenticated: true, connected: true, lastSync: new Date().toISOString() }; statusCbs.forEach((cb) => cb(status)); },
     status: async () => status,
@@ -58,15 +72,58 @@ function mockApi() {
     onStatus: (cb) => statusCbs.push(cb),
   };
 }
+
+// ---- segments: [{ text } | { mention: { label, uri } }] <-> plain text <-> DOM ----
+// accepts segments, a plain string, or a Node
+const segsOf = (v) => (Array.isArray(v) ? v : typeof v === 'string' ? (v ? [{ text: v }] : []) : v.segments || (v.text ? [{ text: v.text }] : []));
+const plainOf = (v) => segsOf(v).map((s) => ('text' in s ? s.text : s.mention.label)).join('');
+function renderSegs(el, segs) {
+  el.replaceChildren(...segs.map((s, i) => {
+    // Chromium needs a placeholder newline after a trailing soft break to put the caret on the empty line; readSegs strips it
+    if ('text' in s) return document.createTextNode(s.text + (i === segs.length - 1 && s.text.endsWith('\n') ? '\n' : ''));
+    const a = document.createElement('a'); a.className = 'mention'; a.dataset.uri = s.mention.uri; a.contentEditable = 'false';
+    const icon = document.createElement('span'); icon.className = 'icon'; icon.innerHTML = PERSON_ICON;
+    a.append(icon, document.createTextNode(s.mention.label));
+    return a;
+  }));
+}
+function readSegs(el) {
+  const segs = [];
+  for (const n of el.childNodes) {
+    if (n.nodeType === 1 && n.classList.contains('mention')) { segs.push({ mention: { label: n.textContent, uri: n.dataset.uri } }); continue; }
+    const t = n.nodeName === 'BR' ? '\n' : n.textContent;
+    if (!t) continue;
+    const last = segs.at(-1);
+    if (last && 'text' in last) last.text += t; else segs.push({ text: t });
+  }
+  const last = segs.at(-1);
+  if (last && 'text' in last && last.text.endsWith('\n\n')) last.text = last.text.slice(0, -1);
+  return segs;
+}
+// split segments at a plain-text offset; a mention hit by the cut stays whole in the first half
+function splitSegs(segs, off) {
+  const before = [], after = [];
+  for (const s of segs) {
+    const len = 'text' in s ? s.text.length : s.mention.label.length;
+    if (off >= len) { before.push(s); off -= len; }
+    else if (off <= 0) after.push(s);
+    else if ('text' in s) { before.push({ text: s.text.slice(0, off) }); after.push({ text: s.text.slice(off) }); off = 0; }
+    else { before.push(s); off = 0; }
+  }
+  return [before, after];
+}
+const saveValue = (segs) => (segs.some((s) => 'mention' in s) ? segs : plainOf(segs));
 const tana = window.api || mockApi();
 
 // ---- state ----
 let roots = [];              // document nodes
+const extra = new Map();     // docId -> document Node reached through a mention (not in roots)
 const kids = new Map();      // docId -> Node[] | null (loading)
 const open = new Map();      // key -> bool; default: blocks open, documents closed
 let zoom = null;             // { docId, nodeId | null }
 const items = new Map();     // key -> { key, node, docId, parent }, rebuilt on render
-const pending = new Map();   // key -> { item, text, timer } debounced edits
+const pending = new Map();   // key -> { item, segs, timer } debounced edits
+let filterShown = false;
 let queue = Promise.resolve();
 
 const $ = (id) => document.getElementById(id);
@@ -76,20 +133,24 @@ const mkItem = (docId, node, parent) => { const item = { key: keyFor(docId, node
 const childrenOf = (item) => (item.node.kind === 'document' ? kids.get(item.docId) : item.node.children || []);
 const hasKids = (item) => { const c = childrenOf(item); return Array.isArray(c) ? c.length > 0 : !!item.node.hasChildren; };
 const isOpen = (item) => (open.has(item.key) ? open.get(item.key) : item.node.kind === 'block');
-const run = (fn) => (queue = queue.then(fn).catch((e) => setStatusText(String(e && e.message || e), true)));
+const showError = (e) => { const el = $('error'); el.textContent = e ? String(e.message || e) : ''; el.hidden = !e; };
+const run = (fn) => (queue = queue.then(fn).catch(showError));
 const texts = () => [...outline.querySelectorAll('.text')];
 const keyOfEl = (el) => el.closest('.node').dataset.key;
 const textEl = (key) => outline.querySelector('.node[data-key="' + CSS.escape(key) + '"] > .line > .text');
+const ICONS = window.ICONS || {}; // icons.js: Tana line icon set (Nucleo export), greyscale via currentColor
+const TASK_ICON = ICONS.task || '';
+const PERSON_ICON = ICONS.person || '';
 
 async function loadRoots() { roots = await tana.roots(); }
 async function reload(docId) { kids.set(docId, await tana.children(docId)); }
 function ensureLoaded(item) {
   if (item.node.kind !== 'document' || kids.has(item.docId)) return;
   kids.set(item.docId, null);
-  reload(item.docId).then(render, (e) => setStatusText(String(e.message || e), true));
+  reload(item.docId).then(render, showError);
 }
 
-// ---- caret helpers (contenteditable, plain text) ----
+// ---- caret helpers (contenteditable: text nodes + non-editable mention anchors) ----
 function caretOffset(el) {
   const sel = getSelection();
   if (!sel.rangeCount || !el.contains(sel.focusNode)) return null;
@@ -101,7 +162,14 @@ function setCaret(el, offset) {
   let left = Math.max(0, Math.min(offset, el.textContent.length));
   const r = document.createRange(), walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
   let t, placed = false;
-  while ((t = walker.nextNode())) { if (left <= t.data.length) { r.setStart(t, left); placed = true; break; } left -= t.data.length; }
+  while ((t = walker.nextNode())) {
+    if (left <= t.data.length) {
+      const a = t.parentNode !== el && t.parentNode.closest('.mention');
+      if (a) { if (left === 0) r.setStartBefore(a); else r.setStartAfter(a); } else r.setStart(t, left); // never inside a mention
+      placed = true; break;
+    }
+    left -= t.data.length;
+  }
   if (!placed) r.setStart(el, el.childNodes.length);
   r.collapse(true);
   const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
@@ -148,14 +216,14 @@ function render() {
   }
   $('title').textContent = parent ? parent.node.text : 'Tasks';
   renderCrumbs(trail);
-  filterRow.hidden = !!parent;
+  filterRow.hidden = !!parent || !(filterShown || filterEl.value);
   filterRow.classList.toggle('empty', !filterEl.value);
   $('filtered').textContent = hidden ? hidden + ' items filtered out' : '';
   if (saved) placeCaret(saved.key, saved.offset);
 }
 
 function resolveZoom() {
-  const doc = roots.find((d) => d.id === zoom.docId);
+  const doc = roots.find((d) => d.id === zoom.docId) || extra.get(zoom.docId);
   if (!doc) return null;
   let item = mkItem(zoom.docId, doc, null);
   const trail = [item];
@@ -194,6 +262,7 @@ function nodeEl(node, docId, parent) {
   chev.onmousedown = (e) => e.preventDefault();
   chev.onclick = () => setOpen(item, !opened);
   const bullet = document.createElement('span'); bullet.className = 'bullet'; bullet.title = 'Zoom in';
+  if (node.icon === 'task') { bullet.classList.add('task'); bullet.innerHTML = TASK_ICON; }
   bullet.onmousedown = (e) => e.preventDefault();
   bullet.onclick = () => zoomTo(item);
   line.append(chev, bullet);
@@ -206,7 +275,7 @@ function nodeEl(node, docId, parent) {
   }
   const text = document.createElement('span');
   text.className = 'text'; text.contentEditable = 'plaintext-only'; text.spellcheck = false;
-  text.textContent = pending.has(item.key) ? pending.get(item.key).text : node.text;
+  renderSegs(text, pending.has(item.key) ? pending.get(item.key).segs : segsOf(node));
   line.append(text);
   line.onclick = (e) => { if (e.target === line) setCaret(text, text.textContent.length); };
   el.append(line);
@@ -221,32 +290,30 @@ function nodeEl(node, docId, parent) {
 }
 
 // ---- edits (debounced) ----
-function scheduleSave(item, text) {
+function scheduleSave(item, segs) {
   const p = pending.get(item.key);
   if (p) clearTimeout(p.timer);
-  pending.set(item.key, { item, text, timer: setTimeout(() => flush(item.key), 400) });
+  pending.set(item.key, { item, segs, timer: setTimeout(() => flush(item.key), 400) });
 }
 function dropPending(key) { const p = pending.get(key); if (p) { clearTimeout(p.timer); pending.delete(key); } }
 function flush(key) {
   const p = pending.get(key);
   if (!p) return;
   dropPending(key);
-  const { item, text } = p;
-  if (text === item.node.text) return;
-  item.node.text = text;
-  run(() => (item.node.kind === 'document' ? tana.setTitle(item.docId, text) : tana.setText(item.docId, item.node.id, text)));
+  const { item, segs } = p, text = plainOf(segs);
+  if (text === item.node.text && JSON.stringify(segs) === JSON.stringify(segsOf(item.node))) return;
+  item.node.text = text; item.node.segments = segs;
+  run(() => (item.node.kind === 'document' ? tana.setTitle(item.docId, text) : tana.setText(item.docId, item.node.id, saveValue(segs))));
 }
-function insertAtCaret(el, item, str) {
-  const off = caretOffset(el) ?? el.textContent.length, t = el.textContent;
-  el.textContent = t.slice(0, off) + str + t.slice(off);
-  setCaret(el, off + str.length);
-  scheduleSave(item, el.textContent);
+function insertAtCaret(el, str) {
+  if (caretOffset(el) == null) setCaret(el, el.textContent.length);
+  document.execCommand('insertText', false, str); // keeps mention anchors intact and fires 'input'
 }
 
 // ---- structural operations ----
 async function splitNode(item, el, off) {
   const { docId, node } = item;
-  const text = el.textContent, before = text.slice(0, off), after = text.slice(off);
+  const [before, after] = splitSegs(readSegs(el), off);
   let newId;
   if (node.kind === 'document') {
     flush(item.key);
@@ -257,8 +324,9 @@ async function splitNode(item, el, off) {
     dropPending(item.key);
     const asChild = hasKids(item) && isOpen(item);
     await run(async () => {
-      if (before !== node.text) { node.text = before; await tana.setText(docId, node.id, before); }
-      newId = asChild ? await tana.insertChild(docId, node.id, after) : await tana.insertAfter(docId, node.id, after);
+      if (JSON.stringify(before) !== JSON.stringify(segsOf(node))) { node.text = plainOf(before); node.segments = before; await tana.setText(docId, node.id, saveValue(before)); }
+      newId = asChild ? await tana.insertChild(docId, node.id, plainOf(after)) : await tana.insertAfter(docId, node.id, plainOf(after));
+      if (after.some((s) => 'mention' in s)) await tana.setText(docId, newId, after); // insert ops take plain text; restore the mentions
       await reload(docId);
     });
   }
@@ -266,14 +334,14 @@ async function splitNode(item, el, off) {
   if (newId) placeCaret(docId + '/' + newId, 0);
 }
 
-async function shiftNode(item, el, op) {
+async function shiftNode(item, el, op, arg) {
   flush(item.key);
   const off = caretOffset(el);
   if (op === 'indent') {
     const siblings = childrenOf(item.parent) || [], prev = siblings[siblings.indexOf(item.node) - 1];
     if (prev) open.set(keyFor(item.docId, prev), true);
   }
-  await run(async () => { await tana[op](item.docId, item.node.id); await reload(item.docId); });
+  await run(async () => { await tana[op](item.docId, item.node.id, arg); await reload(item.docId); });
   render();
   placeCaret(item.key, off);
 }
@@ -297,6 +365,15 @@ function zoomTo(item) {
   zoom = { docId: item.docId, nodeId: item.node.kind === 'document' ? null : item.node.id };
   render();
 }
+async function goTo(uri) {
+  flushAll();
+  if (!roots.some((d) => d.id === uri) && !extra.has(uri)) {
+    try { const n = await tana.node(uri); extra.set(uri, { ...n, text: n.title || '', hasChildren: true }); }
+    catch (e) { return showError(e); }
+  }
+  zoom = { docId: uri, nodeId: null };
+  render();
+}
 function flushAll() { for (const key of [...pending.keys()]) flush(key); }
 
 // ---- navigation ----
@@ -316,10 +393,11 @@ outline.addEventListener('keydown', (e) => {
   const isDoc = item.node.kind === 'document';
   if (e.key === 'Escape') { e.preventDefault(); flush(item.key); el.blur(); }
   else if (e.key === 'Enter' && mod) { e.preventDefault(); if (isDoc) toggleDone(item); }
-  else if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); insertAtCaret(el, item, '\n'); }
+  else if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); insertAtCaret(el, '\n'); }
   else if (e.key === 'Enter') { e.preventDefault(); splitNode(item, el, off ?? len); }
   else if (e.key === 'Tab') { e.preventDefault(); if (!isDoc) shiftNode(item, el, e.shiftKey ? 'outdent' : 'indent'); }
   else if (e.key === 'Backspace' && off === 0 && collapsed) { e.preventDefault(); if (!isDoc && len === 0) removeNode(item, el); }
+  else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && mod && e.shiftKey) { e.preventDefault(); if (!isDoc) shiftNode(item, el, 'move', e.key === 'ArrowUp' ? 'up' : 'down'); }
   else if (e.key === 'ArrowUp' && mod && !e.shiftKey) { e.preventDefault(); if (hasKids(item)) setOpen(item, false); }
   else if (e.key === 'ArrowDown' && mod && !e.shiftKey) { e.preventDefault(); if (hasKids(item)) setOpen(item, true); }
   else if (e.key === 'ArrowUp' && !mod && atEdge(el, 'up')) { e.preventDefault(); moveTo(el, -1, off); }
@@ -330,36 +408,38 @@ outline.addEventListener('keydown', (e) => {
 outline.addEventListener('input', (e) => {
   const el = e.target.closest && e.target.closest('.text');
   if (!el) return;
-  if (el.childElementCount) { const off = caretOffset(el); el.textContent = el.innerText; setCaret(el, off); } // keep a single text node
-  scheduleSave(items.get(keyOfEl(el)), el.textContent);
+  scheduleSave(items.get(keyOfEl(el)), readSegs(el));
 });
 outline.addEventListener('focusout', (e) => { if (e.target.classList && e.target.classList.contains('text')) flush(keyOfEl(e.target)); });
+outline.addEventListener('mousedown', (e) => { if (e.target.closest && e.target.closest('.mention')) e.preventDefault(); });
+outline.addEventListener('click', (e) => { const a = e.target.closest && e.target.closest('.mention'); if (a) { e.preventDefault(); goTo(a.dataset.uri); } });
 
 filterEl.addEventListener('input', render);
 filterEl.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') { filterEl.value = ''; render(); }
+  if (e.key === 'Escape') { filterEl.value = ''; filterShown = false; render(); filterEl.blur(); }
   else if (e.key === 'ArrowDown' || e.key === 'Enter') { e.preventDefault(); const first = texts()[0]; if (first) setCaret(first, 0); }
 });
+filterEl.addEventListener('blur', () => { if (!filterEl.value) { filterShown = false; render(); } });
 $('clear').onclick = () => { filterEl.value = ''; render(); filterEl.focus(); };
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && document.activeElement === document.body && filterEl.value) { filterEl.value = ''; render(); } });
+document.addEventListener('keydown', (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'f') { e.preventDefault(); if (zoom) return; filterShown = true; render(); filterEl.focus(); }
+  else if (e.key === 'Escape' && document.activeElement === document.body && filterEl.value) { filterEl.value = ''; filterShown = false; render(); }
+});
 
 // ---- status ----
-function setStatusText(msg, isError) { const el = $('statusText'); el.textContent = msg; el.classList.toggle('error', !!isError); }
 function showStatus(s) {
-  $('login').hidden = !!s.authenticated;
-  if (s.error) setStatusText('Error: ' + s.error, true);
-  else if (!s.authenticated) setStatusText('Not logged in');
-  else if (s.syncing) setStatusText('Syncing…');
-  else setStatusText((s.connected ? 'Connected' : 'Disconnected') + (s.lastSync ? ' · refreshed ' + new Date(s.lastSync).toLocaleTimeString() : ''));
+  $('loginBox').hidden = !!s.authenticated;
+  outline.hidden = $('filtered').hidden = !s.authenticated;
+  showError(s.error);
 }
-$('login').onclick = () => tana.login().catch((e) => setStatusText(String(e.message || e), true));
+$('login').onclick = () => tana.login().catch(showError);
 
 // ---- live updates ----
 tana.onChanged((docId) => {
   const work = [loadRoots()];
   if (docId && kids.has(docId)) work.push(reload(docId));
-  Promise.all(work).then(render, (e) => setStatusText(String(e.message || e), true));
+  Promise.all(work).then(render, showError);
 });
 tana.onStatus(showStatus);
-loadRoots().then(render, (e) => setStatusText(String(e.message || e), true));
-tana.status().then(showStatus, (e) => setStatusText(String(e.message || e), true));
+loadRoots().then(render, showError);
+tana.status().then(showStatus, showError);

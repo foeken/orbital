@@ -10,20 +10,18 @@
 <header class="titlebar">
   <nav id="crumbs" class="crumbs" hidden></nav>
   <h1 id="title">Tasks</h1>
+  <div id="error" class="error" hidden></div>
 </header>
-<div id="filterRow" class="filter">
+<div id="filterRow" class="filter" hidden>
   <input id="filter" type="text" placeholder="Filter" autocomplete="off" spellcheck="false">
   <button id="clear" class="clear" title="Clear" tabindex="-1">×</button>
 </div>
 <main class="scroll">
+  <div id="loginBox" class="login" hidden><button id="login">Log in to Tana</button></div>
   <div id="outline" class="outline"></div>
   <div id="filtered" class="filtered"></div>
 </main>
-<footer class="status">
-  <span id="statusText"></span>
-  <span class="spacer"></span>
-  <button id="login" hidden>Log in to Tana</button>
-</footer>
+<script src="icons.js"></script>
 <script src="renderer.js"></script>
 </body>
 </html>

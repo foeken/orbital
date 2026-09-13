@@ -11,6 +11,8 @@ First run: click "Log in to Tana"; a window opens on home.tana.inc and you sign 
 
 Layout: `sdk/` is a generic Tana platform client (graph queries, sync stream, Loro documents, node accessors; see sdk/README.md, docs/SDK.md and docs/PLATFORM-PROTOCOL.md). `tana-session.js` is the Electron login/session layer. `main.js` wires tasks (a query on the SDK) to the local SQLite store and the renderer.
 
+Icons come from the Tana line icon set (Nucleo export in ~/Documents/Tana icons (line)); `node scripts/build-icons.js` regenerates icons.js as greyscale inline SVG.
+
 Checks: `npm run check`. CLI for poking the platform without the UI: `npm run tana -- login | whoami | list | get <id> | outline <id> | watch <id...> | set-title <id> <title>`.
 
 This uses Tana's undocumented v1alpha1 protocol as reverse-engineered from their web client; expect it to break when they change it.

@@ -14,6 +14,8 @@ button { font: inherit; }
 .crumbs a:hover { color: #1a1a1a; text-decoration: underline; }
 .crumbs .sep { margin: 0 6px; color: #bbb; }
 .crumbs .current { color: #555; }
+.error { font-size: 13px; color: #c0392b; margin-top: 6px; -webkit-app-region: no-drag; }
+.error[hidden] { display: none; }
 
 .filter { position: relative; margin: 4px 32px 14px; width: 260px; }
 .filter[hidden] { display: none; }
@@ -47,6 +49,10 @@ button { font: inherit; }
 }
 .bullet:hover::before { background: #000; }
 .collapsed > .line > .bullet::before { box-shadow: 0 0 0 4px #e3e3e3; }
+.bullet.task::before { display: none; }
+.bullet.task svg { position: absolute; left: 0; top: 4px; width: 16px; height: 16px; color: #8a8a8a; }
+.bullet.task:hover svg { color: #333; }
+.collapsed > .line > .bullet.task svg { color: #333; }
 .check {
   flex: none; width: 18px; height: 18px; margin: 3px 8px 0 2px; border-radius: 5px; background: #e4e4e4;
   border: 0; padding: 0; cursor: pointer; -webkit-appearance: none; appearance: none; position: relative;
@@ -61,6 +67,10 @@ button { font: inherit; }
 .text:empty::before { content: "\200b"; }
 .document > .line > .text { padding-left: 0; }
 .document.done > .line > .text { color: #999; text-decoration: line-through; }
+.text .mention { color: #508fbb; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.text .mention:hover { color: #3a75a3; }
+.text .mention .icon { display: inline-block; width: 14px; height: 14px; margin: 0 2px 0 0; vertical-align: -2px; color: #8a8a8a; }
+.text .mention .icon svg { width: 14px; height: 14px; display: block; }
 .h1 > .line > .text { font-size: 24px; font-weight: 700; line-height: 30px; }
 .h2 > .line > .text { font-size: 20px; font-weight: 700; line-height: 28px; }
 .h3 > .line > .text { font-weight: 700; }
@@ -70,12 +80,7 @@ button { font: inherit; }
 
 .filtered { padding: 18px 10px 8px; color: #999; font-weight: 600; }
 .filtered:empty { display: none; }
-
-.status {
-  display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-top: 1px solid #eee;
-  font-size: 12px; color: #777; background: #fafafa;
-}
-.status .spacer { flex: 1; }
-.status .error { color: #c0392b; }
-.status button { border: 1px solid #ddd; background: #fff; border-radius: 6px; padding: 3px 10px; font-size: 12px; cursor: pointer; }
-.status button:hover { background: #f0f0f0; }
+.login { display: flex; justify-content: center; padding: 120px 0; }
+.login[hidden] { display: none; }
+.login button { border: 1px solid #ddd; background: #fff; border-radius: 8px; padding: 8px 18px; font-size: 15px; cursor: pointer; }
+.login button:hover { background: #f0f0f0; }

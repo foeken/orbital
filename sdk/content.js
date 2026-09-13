@@ -11,6 +11,7 @@ const name = (m) => m.get('nodeName');
 const kids = (m) => m.get('children');
 const isList = (m) => LISTS.includes(name(m));
 const isItem = (m) => name(m) === 'listItem';
+const isMention = (x) => x.kind() === 'Map' && name(x) === 'mention';
 const blockId = (m) => { const a = m.get('attributes'); return a ? a.get('blockId') : undefined; };
 const newId = () => { let s = ''; while (s.length < 8) s += Math.random().toString(36).slice(2); return s.slice(0, 8); };
 
@@ -41,8 +42,21 @@ function nodes(list, from = 0) {
 
 function node(block, children) {
   const n = { id: blockId(block), text: contentText({ content: block }), kind: 'block', hasChildren: children.length > 0, children };
+  n.segments = inline(block) || (n.text ? [{ text: n.text }] : []);
   if (name(block) === 'heading') n.heading = block.get('attributes').get('level');
   return n;
+}
+
+// Inline runs of a block as segments; null when the block holds child blocks instead (blockquote).
+function inline(block) {
+  const c = kids(block), out = [];
+  for (let i = 0; i < c.length; i++) {
+    const x = c.get(i);
+    if (x.kind() === 'Text') out.push({ text: x.toString() });
+    else if (isMention(x)) { const a = x.get('attributes'); out.push({ mention: { label: a.get('label'), uri: a.get('tanaUri') } }); }
+    else return null;
+  }
+  return out;
 }
 
 // -> { block, item } where item is the listItem the node represents (null for a bare block).
@@ -128,12 +142,26 @@ function prevSibling(unit) {
 
 // ---- operations
 
-function setText(document, id, text) {
+// value: a string or segments [{ text } | { mention: { label, uri } }]. Runs are matched by position: a text run
+// is updated in place (diffing update keeps marks and concurrent edits), a mention with the same uri is kept,
+// anything else is replaced; trailing runs are dropped.
+function setText(document, id, value) {
+  const segs = (typeof value === 'string' ? [{ text: value }] : value).filter((s) => s.mention || s.text);
   document.transact(() => {
     const c = kids(must(document, id).block);
-    const only = c.length === 1 && c.get(0).kind() === 'Text' ? c.get(0) : null;
-    if (only && text) only.update(text); // ponytail: diffing update keeps concurrent edits mergeable; mentions in mixed content are replaced
-    else { c.clear(); if (text) c.insertContainer(0, new LoroText()).insert(0, text); }
+    segs.forEach((s, i) => {
+      const cur = i < c.length ? c.get(i) : null;
+      if (cur && s.text != null && cur.kind() === 'Text') return cur.update(s.text);
+      if (cur && s.mention && isMention(cur) && cur.get('attributes').get('tanaUri') === s.mention.uri) return;
+      if (cur) c.delete(i, 1);
+      if (s.text != null) return c.insertContainer(i, new LoroText()).insert(0, s.text);
+      const m = c.insertContainer(i, new LoroMap());
+      m.set('nodeName', 'mention');
+      const a = m.setContainer('attributes', new LoroMap());
+      a.set('label', s.mention.label);
+      a.set('tanaUri', s.mention.uri);
+    });
+    if (c.length > segs.length) c.delete(segs.length, c.length - segs.length);
   });
 }
 
@@ -200,4 +228,17 @@ function outdent(document, id) {
   });
 }
 
-module.exports = { readOutline, setText, insertAfter, insertChild, remove, indent, outdent };
+// Swap the node with its previous/next sibling: listItems swap within their list, bare blocks swap with the
+// neighbouring block (a neighbouring list moves as a whole). No-op at the edges.
+function move(document, id, direction) {
+  document.transact(() => {
+    const { block, item: li } = must(document, id);
+    const unit = li || block, l = unit.parent(), i = indexOf(l, unit), up = direction === 'up';
+    const j = up ? i - 1 : i + 1, first = isItem(l.parent()) ? 1 : 0; // index 0 of a listItem is its own paragraph
+    if (j < first || j >= l.length) return;
+    copy(l, up ? j : j + 1, unit);
+    l.delete(up ? i + 1 : i, 1);
+  });
+}
+
+module.exports = { readOutline, setText, insertAfter, insertChild, remove, indent, outdent, move };
