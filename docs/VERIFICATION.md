@@ -39,3 +39,38 @@ Failures found during visual checks:
 
 TASKS.md remains the requirement/status ledger. Passing mock or helper tests does
 not prove live mutation behavior, full native visual coverage, or all requirements.
+
+## 2026-09-13 — backend read-only verification against real Tana data
+
+Evidence came from `scripts/platform-cli.js` against the live account (read-only: `inspect`,
+`audiences`, `refs`, `rows`, `pinrows`, `boot`). Nothing was written to Tana.
+
+- **#93 visibility unknown.** `send` and `Testing` are explicitly `restricted: true` with me as the
+  only participant and already resolved to `only-me`; the remaining wrong labels were elsewhere. A
+  sweep of 80 assigned tasks found 7 unknown, all tasks owned by a meeting shared with several
+  people, plus 2 more in a wider 120-document sweep: a meeting with an external
+  `tana:guest-profile:` attendee, and a document whose only restricted boundary is the organisation
+  root. All three causes were resolution gaps, not missing platform data — the same participant set
+  read as `people` directly and `unknown` when inherited. After the fix a 150-document sweep returns
+  82 `only-me`, 21 `people`, 18 `space`, 13 `everyone` and **zero unknown**. Findings are written up in
+  docs/sdk/05-gotchas.md.
+- **#89 space tooltip name.** A task inherited from the Heads of Technology space returns
+  `audienceSpace: { uri: 'tana:space:01m25twh4tspc3vaxc47szgpz1', title: 'Heads of Technology' }`, so
+  the real space name reaches the renderer. The tooltip string itself is renderer-side.
+- **#85 Foundry Goals embed.** The document's first block is an `embed` of
+  `tana:text:01m2524x1ewvjfvxp68ym77ht1`. Run through the real `outlineWithReferences`, it resolves to
+  the task "Setup session with Foundry Leadership…" with `icon: 'task'` and `done: 0`, so the backend
+  hands the renderer a complete reference node. Rendering it is renderer-side.
+- **#48/#63 type and node colours.** Custom types carry hues (Project 268, Decision Record 143,
+  Co-Worker 27) and a Project-typed document reaches the renderer as `tags: [{ label: 'Project', hue: 268 }]`.
+  Spaces do have hues (Foundry LT 193, NTP LT 77, AI Enablement 327) but **pinned spaces arrived with no
+  colour at all**: `appearance` exists only on graph nodes, and the pin path reads the document from
+  Loro, which also erased hues the graph had already cached. After the fix the pin tree carries each
+  space's real hue on both the node and its tag.
+- **#97 boot noise.** The app's real startup path (session → client → sync → first refresh, ~70
+  document subscriptions) completes in ~9 s with `connected: true`, `error: null` and **no warnings or
+  errors logged**. Calls that arrive before the connection now fail as a benign state instead of
+  publishing an error status. A clean native boot check still belongs to the orchestrator.
+
+Not verified here: anything visual. These checks prove what the main process and SDK hand to the
+renderer, not what the window draws.

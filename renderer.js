@@ -1189,6 +1189,8 @@ function renderPills(show) {
   }));
   const again = focusedId && box.querySelector('.pill[data-id="' + focusedId + '"]');
   if (again) again.focus();
+  const open = box.querySelector('.menu'); // stop before the window edge; the rows scroll inside
+  if (open) open.style.maxHeight = Math.min(360, innerHeight - open.getBoundingClientRect().top - 12) + 'px';
   const active = box.querySelector('.menu .mrow.active');
   if (active) active.scrollIntoView({ block: 'nearest', inline: 'nearest', container: 'nearest' });
 }

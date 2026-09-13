@@ -239,6 +239,22 @@ async function main() {
     assert.deepEqual(await audienceMetadata(doc(false,meOnly),ME,graph,{subscribe:async()=>doc(true,shared)}), {audience:'space',audienceSpace:{uri:'tana:space:boundary'}});
     assert.deepEqual(await audienceMetadata(doc(true,meOnly),ME), {audience:'only-me'});
     assert.deepEqual(await audienceMetadata(doc(false,meOnly),ME,graph,{subscribe:async()=>{throw new Error('unavailable');}}), {audience:'unknown'});
+    // #93: an inherited boundary is as determinate as a direct one. Verified against real data: tasks inside a
+    // private meeting, meetings with an external guest, and documents whose only boundary is the organization.
+    const EVENT = 'tana:event:01m0f1aqd8p23qhwntbewmpfz2', ORGDOC = 'tana:org:01ks7rqsrqjn7vwyjhx75r6jg0';
+    const boundaryOf = (uri) => ({ getOwnerChain: async () => ({ entries: [{ uri, restricted: true, accessible: true }], effectivelyRestricted: true }) });
+    const orgDoc = (members) => ({ id: ORGDOC, data: { toJSON: () => ({ memberUserProfileDocUris: members }) } });
+    assert.deepEqual(await audienceMetadata(doc(undefined, {}), ME, boundaryOf(EVENT), { subscribe: async () => doc(true, shared) }),
+      { audience: 'people' }, 'a task inside a meeting shared with several people is selected people, not unknown');
+    assert.deepEqual(await audienceMetadata(doc(true, { ...meOnly, 'tana:guest-profile:01kmtdaenscxzhnvcfyz3eth8n': { type: 'user', role: 'attendee' } }), ME),
+      { audience: 'people' }, 'an external guest participant is a person, not an unresolved grant');
+    assert.deepEqual(await audienceMetadata(doc(undefined, {}), ME, boundaryOf(ORGDOC), { subscribe: async () => orgDoc({ u: ME }) }),
+      { audience: 'everyone' }, 'the organization root is a members-only boundary: everyone in the organization');
+    assert.deepEqual(await audienceMetadata(doc(undefined, {}), ME, boundaryOf(ORGDOC), { subscribe: async () => orgDoc({}) }), { audience: 'unknown' });
+    assert.deepEqual(await audienceMetadata(doc(undefined, {}), ME, boundaryOf(EVENT), { subscribe: async () => doc(true, {}) }),
+      { audience: 'unknown' }, 'a boundary with no participants stays unknown');
+    assert.deepEqual(await audienceMetadata(doc(undefined, {}), ME, boundaryOf(EVENT), { subscribe: async () => doc(true, { 'tana:group:x': { type: 'group' } }) }),
+      { audience: 'unknown' }, 'an inherited group grant stays unknown');
     console.log('ok  audience: direct/inherited restrictions, everyone and unresolved groups');
   }
 
@@ -325,6 +341,46 @@ async function main() {
     assert.equal(graphRow({ id: 'tana:chat:01m0f1aqd8p23qhwntbewmpfz2', title: 'Chat' }).icon, 'chat');
     assert.ok(SECTIONS.some((s) => s.id === 'members' && s.icon === 'member'));
     console.log('ok  initial auth states and node appearance hue');
+  }
+
+  // #63: appearance.hue exists on graph nodes only (verified read-only: spaces and typed documents never carry it in
+  // their Loro data map), so reading a document must not erase a hue and a pinned space must still get its colour.
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const spaceId = 'tana:space:' + ulid(), spaceDoc = new Document(spaceId);
+    spaceDoc.transact((l) => { initDocument(l, 'Foundry LT', ME); l.getMap('data').set('type', 'space'); });
+    const lookups = [];
+    backend.testRuntime({ me: { userUri: ME }, win: null, client: {
+      sync: { subscribe: async () => spaceDoc, getDocument: () => spaceDoc },
+      graph: { listNodes: async (p) => { lookups.push(p.nodeIds); return { nodes: [{ id: spaceId, title: 'Foundry LT', appearance: { hue: 193 } }] }; } },
+    } });
+    const node = await backend.handlers.get('doc:info')(null, spaceId);
+    assert.equal(node.hue, 193, 'a space opened from a pin keeps the hue only the graph knows');
+    assert.equal(node.tags[0].hue, 193, 'the space tag is coloured too');
+    assert.equal(JSON.stringify(lookups), JSON.stringify([[spaceId]]));
+    assert.equal((await backend.handlers.get('doc:info')(null, spaceId)).hue, 193);
+    assert.equal(lookups.length, 1, 'the appearance lookup is cached per document');
+    assert.equal(backend.rememberNodeHue({ id: spaceId, title: 'Foundry LT' }), false, 'a data-map read carries no appearance and changes nothing');
+    assert.equal((await backend.handlers.get('doc:info')(null, spaceId)).hue, 193, 'reading the document never erases the graph hue');
+    console.log('ok  appearance hue survives Loro reads and reaches documents opened without a cached row');
+  }
+
+  // #97: before the session and sync stream are ready, every view/metadata/permission call fails the same benign
+  // way. Boot must stay quiet: no error status, no work fired against a client that does not exist yet.
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const sent = [];
+    backend.testRuntime({ client: null, me: null, session: null, win: { isDestroyed: () => false, webContents: { send: (channel, payload) => sent.push([channel, payload]) } } });
+    for (const name of ['doc:info', 'doc:taskMeta', 'doc:accessOptions', 'outline:children', 'pins:state', 'doc:setTitle', 'doc:create']) {
+      const failure = await backend.handlers.get(name)(null, DOC, 'title').then(() => null, (e) => String(e.message || e));
+      assert.equal(failure, 'not connected to Tana', name + ' must fail benignly before the connection is ready');
+    }
+    assert.equal((await backend.handlers.get('doc:path')(null, DOC)).length, 0, 'the location falls back to its cache');
+    assert.equal((await backend.handlers.get('search')(null, 'anything')).length, 0);
+    assert.equal((await backend.handlers.get('library:list')(null, {})).length, 0);
+    assert.equal(backend.statusSnapshot().error, null, 'a startup call is a state, not an error to show');
+    assert.deepEqual(sent.filter(([channel, payload]) => channel === 'sync:status' && payload && payload.error), [], 'no error status reaches the renderer during startup');
+    console.log('ok  startup: metadata, permission and view calls before the connection stay quiet');
   }
 
   // 2. Document: transact/export/import between two documents, both directions

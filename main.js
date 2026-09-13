@@ -44,13 +44,18 @@ const nodeHues = new Map(); // document uri -> its own appearance.hue; separate 
 const editability = new Map(); // observed graph/document capabilities, never guessed from ownership
 const rememberType = (n) => { typeTitles.set(n.id, n.title || ''); if (n.appearance && typeof n.appearance.hue === 'number') typeHues.set(n.id, n.appearance.hue); };
 const ownHue = (n) => n && n.appearance && typeof n.appearance.hue === 'number' ? n.appearance.hue : undefined;
+// appearance lives on graph nodes only: a Loro data map never carries it (verified read-only for spaces and typed
+// documents), so a node without an appearance key says nothing about the hue and must not erase what the graph told us.
+// ponytail: a hue removed in Tana therefore stays cached until the next app start; the graph is the only source.
+const hueOf = (n) => { const hue = ownHue(n); return hue === undefined && n ? nodeHues.get(n.id) : hue; };
 function rememberNodeHue(n) {
   editability.set(n.id, editable(n, me && me.userUri));
+  if (!n.appearance) return false;
   const hue = ownHue(n), had = nodeHues.has(n.id), before = nodeHues.get(n.id);
   if (hue === undefined) nodeHues.delete(n.id); else nodeHues.set(n.id, hue);
   return had !== (hue !== undefined) || before !== hue;
 }
-const nodeTag = (tag, n) => ownHue(n) === undefined ? tag : { ...tag, hue: ownHue(n) };
+const nodeTag = (tag, n) => { const hue = hueOf(n); return hue === undefined ? tag : { ...tag, hue }; };
 const cachedNodeHue = (r) => {
   const tag = r.tags && r.tags[0];
   return (r.icon || ['space', 'chat', 'canvas', 'agent', 'skill'].includes(idKind(r.id))) && tag && typeof tag.hue === 'number' ? tag.hue : undefined;
@@ -59,15 +64,21 @@ const cachedNodeHue = (r) => {
 // Where a document lives in Tana: owner chain root-first as [{ id, title }]; unowned documents are in the Library.
 const pathCache = new Map(); // docId -> path (refreshed on every info() call; cheap enough per open)
 async function pathOf(id) {
+  if (!client) throw new Error(NOT_CONNECTED);
   const { entries = [] } = await client.graph.getOwnerChain(id);
   const owners = entries.map((e) => e.uri).filter((u) => u !== id).reverse();
   if (!owners.length) return [{ id: 'library', title: 'Library' }];
   await resolveTypes(owners); // same title cache: any node id -> title
   return owners.map((u) => ({ id: u, title: typeTitles.get(u) || u }));
 }
-ipcMain.handle('doc:path', async (_e, id) => { try { const p = await pathOf(id); pathCache.set(id, p); return p; } catch (e) { setStatus({ error: errText(e) }); return pathCache.get(id) || []; } });
+ipcMain.handle('doc:path', async (_e, id) => { try { const p = await pathOf(id); pathCache.set(id, p); return p; } catch (e) { report(e); return pathCache.get(id) || []; } });
 
 const errText = (e) => String((e && e.message) || e);
+// Before the session and sync stream are ready, every view/metadata call fails the same benign way. That is a
+// startup state, not an error to show or log (#97), so it never reaches setStatus.
+const NOT_CONNECTED = 'not connected to Tana';
+const notReady = (e) => errText(e) === NOT_CONNECTED;
+const report = (e) => { if (!notReady(e)) setStatus({ error: errText(e) }); };
 const now = () => new Date().toISOString();
 
 const WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -91,6 +102,15 @@ async function resolveTypes(uris) {
 }
 // { label, hue } when the type node has appearance.hue, else grey (docs/OUTLINER.md addendum 12)
 const typeTag = (uri) => (uri && typeTitles.get(uri) ? [typeHues.has(uri) ? { label: typeTitles.get(uri), hue: typeHues.get(uri) } : { label: typeTitles.get(uri), color: 'grey' }] : []);
+// A document opened straight from Loro (pins, zoom, spaces) has no appearance in its data map, so its colour needs
+// one graph lookup. Cached per id including "no hue", like resolveTypes caches titles.
+const hueLoaded = new Set();
+async function resolveHue(id) {
+  if (hueLoaded.has(id) || !client) return;
+  hueLoaded.add(id);
+  try { (await client.graph.listNodes({ nodeIds: [id], limit: 1 })).nodes.forEach(rememberNodeHue); }
+  catch { hueLoaded.delete(id); }
+}
 // plain untyped document (no state, no type): 'doc' icon + chip; typed documents keep their type tag and the plain bullet
 const isSpace = (id) => id.startsWith('tana:space:');
 const plainRow = (id, title, updatedAt, typeUri, hue) => (isSpace(id)
@@ -119,13 +139,13 @@ async function typesByTitle() {
 // rows for db.replaceSection from graph Node JSON
 const taskRow = (n) => ({
   id: n.id, title: n.title || '', done: n.state && n.state.type === 'closed' ? 1 : 0, icon: 'task',
-  hue: ownHue(n), tags: [nodeTag(TAG.task, n), ...typeTag(n.entityType)], sortKey: n.updateTime || now(), updatedAt: n.updateTime || now(),
+  hue: hueOf(n), tags: [nodeTag(TAG.task, n), ...typeTag(n.entityType)], sortKey: n.updateTime || now(), updatedAt: n.updateTime || now(),
 });
 const meetingRow = (n, withDate) => {
   const ev = n.calendarEvent || {};
   return {
     id: n.id, title: n.title || '', done: 0, icon: 'meeting', meta: eventMeta(ev.startTime, ev.endTime, withDate),
-    hue: ownHue(n), tags: [nodeTag(TAG.meeting, n), ...typeTag(n.entityType)], sortKey: ev.startTime || now(), updatedAt: n.updateTime || now(),
+    hue: hueOf(n), tags: [nodeTag(TAG.meeting, n), ...typeTag(n.entityType)], sortKey: ev.startTime || now(), updatedAt: n.updateTime || now(),
   };
 };
 
@@ -134,10 +154,10 @@ const toNode = (r) => ({ id: r.id, title: r.title, text: r.title, kind: 'documen
 // Node shape from any graph Node JSON (search results): events, tasks, typed and plain documents.
 function graphRow(n, withDate) {
   if (n.calendarEvent || n.id.startsWith('tana:event:')) return meetingRow(n, withDate);
-  if (n.userProfile || idKind(n.id) === 'user-profile') return memberRow(n.id, memberTitle(n), n.updateTime || now(), ownHue(n));
-  if (PLAIN_KINDS.has(idKind(n.id))) return kindRow(n.id, idKind(n.id), n.title || '', n.updateTime || now(), ownHue(n));
+  if (n.userProfile || idKind(n.id) === 'user-profile') return memberRow(n.id, memberTitle(n), n.updateTime || now(), hueOf(n));
+  if (PLAIN_KINDS.has(idKind(n.id))) return kindRow(n.id, idKind(n.id), n.title || '', n.updateTime || now(), hueOf(n));
   if (n.state && n.state.type) return taskRow(n);
-  return plainRow(n.id, n.title || '', n.updateTime || now(), n.entityType, ownHue(n));
+  return plainRow(n.id, n.title || '', n.updateTime || now(), n.entityType, hueOf(n));
 }
 
 // all org members, cached per session, by display name
@@ -223,19 +243,19 @@ async function customCreation(typeUri) {
   return {kind:appliesTo === 'events' ? 'meeting' : 'doc',entityTypeUri:typeUri,ownerUri:type.ownerUri};
 }
 async function creationOptions() {
-  if (!client) throw new Error('not connected to Tana');
+  if (!client) throw new Error(NOT_CONNECTED);
   const result = await client.graph.listNodes({nodeTypes:['type'],limit:1000,mode:'LIST_NODES_MODE_WITH_COUNT'});
   const options = [{id:'task',kind:'task',title:'Task',icon:'task',selectable:true},{id:'meeting',kind:'meeting',title:'Meeting',icon:'meeting',selectable:true},{id:'chat',kind:'chat',title:'Chat',icon:'chat',selectable:true}];
   const types = await Promise.all(result.nodes.map(async n => {
     rememberType(n);
-    try { const config=await customCreation(n.id); return {id:n.id,kind:'custom',typeUri:n.id,title:n.title || '',hue:ownHue(n),icon:config.kind === 'meeting' ? 'meeting' : 'doc',ownerUri:config.ownerUri,appliesTo:config.kind === 'meeting' ? 'events' : 'docs',selectable:true}; }
+    try { const config=await customCreation(n.id); return {id:n.id,kind:'custom',typeUri:n.id,title:n.title || '',hue:hueOf(n),icon:config.kind === 'meeting' ? 'meeting' : 'doc',ownerUri:config.ownerUri,appliesTo:config.kind === 'meeting' ? 'events' : 'docs',selectable:true}; }
     catch(e) { return {id:n.id,kind:'custom',typeUri:n.id,title:n.title || '',selectable:false,reason:errText(e)}; }
   }));
   return {options:[...options,...types.sort((a,b)=>a.title.localeCompare(b.title))],complete:result.totalCount !== undefined && result.totalCount === result.nodes.length};
 }
 async function createDocument(title, opts = {}) {
   if (typeof title !== 'string' || !title.trim()) throw new Error('Keep an empty draft local until it has a title');
-  if (!client) throw new Error('not connected to Tana');
+  if (!client) throw new Error(NOT_CONNECTED);
   let config = {kind:opts.kind || 'doc'};
   if (config.kind === 'custom') config = await customCreation(opts.typeUri);
   else if (opts.typeUri !== undefined) throw new Error('Custom type requires kind custom');
@@ -252,14 +272,15 @@ async function info(doc) {
   if (isDeleted(n) || deletedNodes.has(doc.id)) throw new Error('Node has been deleted');
   rememberNodeHue(n);
   if (row) return toNode({ ...row, title: n.title ?? row.title, done: n.stateType === 'closed' ? 1 : 0 });
-  if (idKind(doc.id) === 'user-profile') return toNode(memberRow(doc.id, n.title || doc.data.get('name') || doc.data.get('displayName') || '', now(), ownHue(n)));
-  if (PLAIN_KINDS.has(idKind(doc.id))) return toNode(kindRow(doc.id, idKind(doc.id), n.title || '', now(), ownHue(n)));
+  await resolveHue(doc.id); // cached rows already carry the hue the refresh learned from the graph
+  if (idKind(doc.id) === 'user-profile') return toNode(memberRow(doc.id, n.title || doc.data.get('name') || doc.data.get('displayName') || '', now(), hueOf(n)));
+  if (PLAIN_KINDS.has(idKind(doc.id))) return toNode(kindRow(doc.id, idKind(doc.id), n.title || '', now(), hueOf(n)));
   const isEvent = n.type === 'event' || doc.id.startsWith('tana:event:');
   await resolveTypes([n.entityTypeUri]);
-  if (!isEvent && !n.stateType) return toNode(plainRow(doc.id, n.title || '', now(), n.entityTypeUri, ownHue(n)));
+  if (!isEvent && !n.stateType) return toNode(plainRow(doc.id, n.title || '', now(), n.entityTypeUri, hueOf(n)));
   return toNode({
     id: doc.id, title: n.title || '', done: n.stateType === 'closed' ? 1 : 0, icon: isEvent ? 'meeting' : 'task',
-    hue: ownHue(n), meta: isEvent ? eventMeta(n.startTime, n.endTime) : null, tags: [nodeTag(isEvent ? TAG.meeting : TAG.task, n), ...typeTag(n.entityTypeUri)],
+    hue: hueOf(n), meta: isEvent ? eventMeta(n.startTime, n.endTime) : null, tags: [nodeTag(isEvent ? TAG.meeting : TAG.task, n), ...typeTag(n.entityTypeUri)],
   });
 }
 
@@ -294,11 +315,11 @@ async function pinTree() {
   return (await Promise.all((await pins.sidebarTree(client.sync, me.userUri)).map(fill))).filter(Boolean);
 }
 async function pinState(id) {
-  if (!client) throw new Error('not connected to Tana');
+  if (!client) throw new Error(NOT_CONNECTED);
   return { sidebar: (await pins.listSidebar(client.sync, me.userUri)).includes(id), dates: await pins.dates(client.sync, me.userUri, id) };
 }
 async function setPin(id, target, on) {
-  if (!client) throw new Error('not connected to Tana');
+  if (!client) throw new Error(NOT_CONNECTED);
   const sync = client.sync, user = me.userUri;
   if (pinTarget(target) === 'sidebar') await (on ? pins.pinSidebar : pins.unpinSidebar)(sync, user, id);
   else await (on ? pins.pinDate : pins.unpinDate)(sync, user, id, today());
@@ -389,7 +410,7 @@ async function setTaskFilter(f) {
 
 function subscribe(id, init) {
   subscribed.add(id);
-  return client.sync.subscribe(id, init).catch((e) => { subscribed.delete(id); setStatus({ error: errText(e) }); return null; });
+  return client.sync.subscribe(id, init).catch((e) => { subscribed.delete(id); report(e); return null; });
 }
 
 function scheduleRefresh(ms) {
@@ -400,7 +421,7 @@ function scheduleRefresh(ms) {
 function invalidateDeleted(id) {
   deletedNodes.add(id);
   db.remove(id);
-  nodeHues.delete(id); editability.delete(id); pathCache.delete(id);
+  nodeHues.delete(id); hueLoaded.delete(id); editability.delete(id); pathCache.delete(id);
   typeTitles.delete(id); typeHues.delete(id);
   send('outline:removed', id); // renderer must evict children/search/pin/zoom caches by id
   send('outline:changed', null);
@@ -426,12 +447,12 @@ function onChange(docId) {
     if (pinsChanged || rowChanged || restored) send('outline:changed', null);
     if (restored) scheduleRefresh(0);
   } catch (e) {
-    setStatus({ error: errText(e) });
+    report(e);
   }
 }
 
 async function document(id) {
-  if (!client) throw new Error('not connected to Tana');
+  if (!client || !me) throw new Error(NOT_CONNECTED);
   const doc = await subscribe(id); // getDocument can expose an empty handle before bootstrap completes
   if (!doc) throw new Error(status.error || 'could not subscribe to ' + id);
   return doc;
@@ -461,7 +482,7 @@ async function op(id, fn) {
     if (isDeleted(readNode(doc)) || deletedNodes.has(id)) throw new Error('Node has been deleted');
     return await fn(doc);
   } catch (e) {
-    setStatus({ error: errText(e) });
+    report(e);
     throw e;
   }
 }
@@ -549,6 +570,7 @@ ipcMain.handle('doc:setSharing', (_e, id, selection) => mut(id, async doc => {
 }, true));
 ipcMain.handle('spaces:search', async (_e, query = '') => {
   if (typeof query !== 'string' || query.length > 500) throw new Error('Invalid space query');
+  if (!client) throw new Error(NOT_CONNECTED);
   const { nodes } = await client.graph.listNodes({ nodeTypes: ['space'], textQuery: query.trim(), limit: 50 });
   const ctx = await accessContext();
   return Promise.all(nodes.map(async n => ({ ...toNode(graphRow(n)), selectable: await access.canWrite(n, me.userUri, ctx) })));
@@ -597,12 +619,13 @@ ipcMain.handle('sync:login', async () => {
     await session.login();
     await start();
   } catch (e) {
-    setStatus({ error: errText(e) });
+    report(e);
   }
 });
 
 if (process.env.TANA_MAIN_TEST) {
-  module.exports = { resolveInitialAuth, graphRow, cachedNodeHue, SECTIONS, toNode, outlineWithReferences, op, onChange, documentAction, createDocument, creationOptions,
+  module.exports = { resolveInitialAuth, graphRow, cachedNodeHue, SECTIONS, toNode, outlineWithReferences, op, onChange, documentAction, createDocument, creationOptions, search, spaceChildren, start, refresh,
+    statusSnapshot: () => ({ ...status }), rememberNodeHue,
     undo: () => history(undoStack, redoStack, 'undo', 'canUndo'), redo: () => history(redoStack, undoStack, 'redo', 'canRedo'), visibleGraphNodes, pinTree,
     testRuntime: (runtime) => { client = runtime.client; me = runtime.me; win = runtime.win; session = runtime.session; } };
 } else {

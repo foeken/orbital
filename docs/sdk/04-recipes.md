@@ -2,6 +2,17 @@
 
 Every recipe has a CLI twin: `./node_modules/.bin/electron scripts/platform-cli.js <cmd>` (runs under Electron for the cookie session, shares userData with the app). Commands: `login | whoami | list | search <q> | types | image <uri> | create <title> [--kind task|meeting|doc] | delete <id> | meetings [--days n] | get <id> | outline <id> | watch <id…> | set-title <id> <title> | set-state <id> <state> | pins [--dates] | pin <id> <sidebar|today> | unpin <id> <sidebar|today>`.
 
+Read-only diagnostics for questions about what the app shows, all safe against real data:
+
+| Command | Answers |
+|---|---|
+| `inspect <id…>` | The graph node, owner chain, data map and resolved audience for one document: the whole input to a visibility label and a tag colour. |
+| `audiences [--limit n] [--mine 0] [--kind text\|event]` | The visibility label the app would show for a whole set of documents, with a count per label. Use it to find every remaining `unknown`. |
+| `refs <id>` | Embed blocks of a document resolved through `main.js`'s real `outlineWithReferences`. |
+| `rows <query>` | Search results as the Nodes the renderer receives (icon, hue, tags). |
+| `pinrows` | The sidebar pin tree as the renderer receives it: the only path where a space becomes a row. |
+| `boot [--settle ms]` | Runs the app's real startup path (session → client → sync → first refresh) and reports elapsed time, final status and every warning or error logged. Nothing is written: bootstrap and catch-up carry no local ops. |
+
 ## Get a token (outside Electron)
 
 The SDK only needs `getAccessToken({ refresh })`. In the app it comes from `tana-session.js` (cookie partition + `GET /api/auth/session`). Outside Electron you need a logged-in cookie jar for home.tana.inc; there is no API-key path. The token's `org_id` claim is the `orgId` to pass; `userExternalId` from the session JSON feeds `derivePeerId`.

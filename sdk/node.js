@@ -6,6 +6,9 @@ const { LoroMap, LoroList } = require('loro-crdt');
 const STATE_TYPES = ['proposed', 'open', 'closed', 'not_now'];
 const B32 = '0123456789abcdefghjkmnpqrstvwxyz'; // Crockford base32, lowercase as in Tana ids
 const USER_URI = /^tana:user-profile:[0-9a-z]{26}$/;
+// Audience classification only: a guest profile is an external person with an explicit participant grant, never me.
+// Write paths keep USER_URI; guest ACL semantics are not part of the verified sharing subset.
+const PERSON_URI = /^tana:(?:user|guest)-profile:[0-9a-z]{26}$/;
 
 // 26-char ULID: 48-bit ms timestamp + 80 random bits.
 function ulid(now = Date.now()) {
@@ -126,7 +129,7 @@ function taskMeta(document) {
 async function audienceMetadata(document, userUri, graph, sync) {
   const direct = taskMeta(document);
   const people = (participants) => {
-    if (!participants.length || participants.some(p => p.type !== 'user' || !USER_URI.test(p.uri))) return 'unknown';
+    if (!participants.length || participants.some(p => p.type !== 'user' || !PERSON_URI.test(p.uri))) return 'unknown';
     return participants.length === 1 && participants[0].uri === userUri ? 'only-me' : 'people';
   };
   if (direct.restricted === true) return { audience: people(direct.participants) };
@@ -138,11 +141,19 @@ async function audienceMetadata(document, userUri, graph, sync) {
     if (boundary) {
       if (boundary.accessible === false) return { audience: 'unknown' };
       const owner = await sync.subscribe(boundary.uri);
+      // The organization root is restricted to its members, so an org boundary means everyone in the
+      // organization (the same membership map access.js checks).
+      if (boundary.uri.startsWith('tana:org:')) {
+        const members = readNode(owner).memberUserProfileDocUris || {};
+        return { audience: Object.values(members).includes(userUri) ? 'everyone' : 'unknown' };
+      }
       const meta = taskMeta(owner);
       if (meta.restricted !== true) return { audience: 'unknown' };
       const scope = people(meta.participants);
-      if (scope === 'only-me') return { audience: scope };
-      if (scope !== 'people' || !boundary.uri.startsWith('tana:space:')) return { audience: 'unknown' };
+      if (scope !== 'people') return { audience: scope }; // 'only-me' or 'unknown'
+      // An inherited boundary with explicit user participants is as determinate as a direct one: the audience is
+      // that participant set (access.js audienceOf agrees). Only a space boundary additionally names a space.
+      if (!boundary.uri.startsWith('tana:space:')) return { audience: 'people' };
       const title = readNode(owner).title;
       return { audience: 'space', audienceSpace: { uri: boundary.uri, ...(typeof title === 'string' && title.trim() ? { title } : {}) } };
     }

@@ -24,10 +24,21 @@
 - Event documents carry no notes; meeting notes are separate documents whose `ownerUri` is the event.
 - Provider-synced events have fields you must not copy when creating (`externalId`, `calendarSubscriptionUri`, `origin: 'provider'`).
 - `appearance` holds only `imageUri` (avatar/cover) and `hue` (types). No icon field.
+- `appearance` exists **only on graph nodes**. A document's Loro data map never carries it (verified read-only for spaces, typed documents and tasks), so a hue must come from `listNodes` and a read of the CRDT must never be treated as "this node has no hue". Documents reached without a graph query (sidebar pins, zoom) need one `nodeIds` lookup to get their colour; `main.js` caches it per id, including "no hue".
 - Type titles resolve through `nodeTypes: ['type']` nodes; the same `nodeIds` lookup resolves spaces/events for breadcrumbs.
 - Pins: the web client appends on re-pin, so unpin+pin changes order; collection/pin-map are created lazily by Tana on the user's first pin — the SDK does not create them.
 
 ## Access, confirmation and deletion
+
+### Visibility labels (`audienceMetadata`)
+What the platform returns decides the label, and "unknown" must mean Tana gave us nothing. Verified against 134 real
+documents: every one now resolves, and the four boundary shapes that used to read as unknown are all determinate.
+- A **restricted document** is its own boundary: one participant that is me is `only-me`, several are `people`.
+- An **inherited boundary** (`getOwnerChain` nearest-first, first entry with `restricted === true`) is exactly as determinate as a direct one. A task inside a private meeting is `people`, not unknown; only a `tana:space:` boundary additionally names the space (`audienceSpace: { uri, title }`), which is what the space tooltip shows. `access.audienceOf` has always classified it this way.
+- A participant may be a `tana:guest-profile:` (external attendee of a meeting) with `type: 'user'`. That is a person, so the audience is `people`. Guests never match the signed-in user, so they cannot produce `only-me`. This widening is for the read-only label only; write paths keep `tana:user-profile:`.
+- The **organisation root is itself restricted** (to its members), so it always appears as a `restricted: true` chain entry and `effectivelyRestricted` is true even for a fully open document. An org boundary means `everyone`, confirmed through the same `memberUserProfileDocUris` map `access.js` checks. Without that, documents under another user's chat or profile read as unknown.
+- Still unknown, correctly: an inaccessible boundary (`accessible === false`), an empty participant set, and any non-user grant (groups/teams).
+
 - `access.canWrite` follows direct participant grants or unrestricted owner/org membership. Ownership alone grants no write access. `capabilities()` exposes the verified sharing/move/delete state; fail closed when ACLs or scope are unknown.
 - Sharing supports `me`, `people` and verified `inherit`. Inherit uses the current `sharingToken` and rechecks observed documents before changing participants. Move uses a fresh `previewMove()` token over its audience and scope evidence; `moveToSpace()` previews again and rejects a stale or missing token when audience confirmation is required.
 - `softDelete` and `restore` are native document actions. The app checks `canDelete` (including calendar-event organizer rules), requires the server's action response, and records actions in global history. Document undo/redo is local CRDT history; app undo/redo also repeats native delete/restore. Restore must arrive through the server live update, so do not fabricate a local snapshot.
