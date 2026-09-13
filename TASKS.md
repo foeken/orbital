@@ -140,6 +140,8 @@ Every request made during the build and its state. ✓ done and verified · ◐ 
 
 | 126 | Make links in node text clickable | ✓ http(s) URLs inside a text run render as underlined links and open in the default browser through shell.openExternal (http/https only). The text itself is untouched, so the row stays editable and reads back identically. Verified live on NTP-ADR-3: the Slite URL is an anchor with the same characters in the row text. | renderer.js linkify, main.js shell:open |
 
+| 127 | A typed node without a custom icon uses the generic type icon, in its type hue | ✓ Typed documents now render shapes.svg tinted with the type hue instead of a plain bullet, and the sidebar no longer overrides that colour. Verified live: the Decision Record row draws ricon type hue at rgb(42,111,68) for hue 143, matching its chip. | main.js plainRow, styles.css |
+
 Tracking rule: append new requests to the numbered table above using the next integer. Update an existing row for repeated requests; never create a separate unnumbered request list. Preserve status and verification evidence. Orchestrator owns this file.
 
 Latest rounds (three workers, all closed). The live app was inspected over its devtools port against real Tana data, which is how #49, #54, #59, #62, #68, #78, #83, #85, #89, #93, #97 and #98 were confirmed; the interaction-heavy rows (#39, #90, #96, #105 to #108) were driven in the in-file mock, where mutations stay local. `npm run check` passes on the merged tree.

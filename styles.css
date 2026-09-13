@@ -103,6 +103,7 @@ button { font: inherit; }
 .rail .rrow:focus { background: #e8f1fb; }
 .rail .rrow .ricon { flex: none; width: 15px; height: 15px; color: #8a8a8a; align-self: center; }
 .rail .rrow .ricon svg { display: block; width: 15px; height: 15px; }
+.rail .rrow .ricon.hue { color: hsl(var(--hue) 45% 30%); } /* a hued node keeps its colour in the sidebar too */
 .rail .rrow .check { align-self: center; }
 .rail .rrow .rtitle { flex: 1; min-width: 0; font-size: 14px; line-height: 19px; color: #1a1a1a; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .rail .rrow.done .rtitle { color: #999; text-decoration: line-through; }
@@ -338,6 +339,7 @@ button { font: inherit; }
 [data-theme="dark"] .rail .rrow:hover { background: #24282a; }
 [data-theme="dark"] .rail .rrow:focus { background: #2b3237; }
 [data-theme="dark"] .rail .rrow .ricon { color: #aeb4b6; }
+[data-theme="dark"] .rail .rrow .ricon.hue { color: hsl(var(--hue) 70% 72%); }
 [data-theme="dark"] .rail { border-left-color: #2b2f31; background: #191c1d; }
 [data-theme="dark"] .railgrip:hover, [data-theme="dark"] .railgrip.dragging { background: #2f4658; }
 [data-theme="dark"] .rail .rrow .rtitle { color: #e6e8e9; }

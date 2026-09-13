@@ -130,7 +130,8 @@ async function resolveHue(id) {
 const isSpace = (id) => id.startsWith('tana:space:');
 const plainRow = (id, title, updatedAt, typeUri, hue) => (isSpace(id)
   ? { id, title, done: 0, icon: 'space', hue, tags: [hue === undefined ? TAG.space : { ...TAG.space, hue }], sortKey: updatedAt, updatedAt }
-  : { id, title, done: 0, icon: typeUri ? null : 'doc', hue: hueWithType(hue, typeUri), tags: typeUri ? typeTag(typeUri) : [hue === undefined ? TAG.doc : { ...TAG.doc, hue }], sortKey: updatedAt, updatedAt });
+  // a typed document without its own icon shows the generic type glyph, tinted with its type's hue
+  : { id, title, done: 0, icon: typeUri ? 'type' : 'doc', hue: hueWithType(hue, typeUri), tags: typeUri ? typeTag(typeUri) : [hue === undefined ? TAG.doc : { ...TAG.doc, hue }], sortKey: updatedAt, updatedAt });
 const memberRow = (id, title, updatedAt, hue) => ({ id, title, done: 0, icon: 'member', hue, tags: [hue === undefined ? TAG.member : { ...TAG.member, hue }], sortKey: updatedAt, updatedAt });
 // chat, canvas, agent and skill each have their own glyph in the renderer's icon set, so the kind is the icon
 const kindRow = (id, kind, title, updatedAt, hue) => ({ id, title, done: 0, icon: PLAIN_KINDS.has(kind) ? kind : null, hue, tags: [hue === undefined ? { label: kind, color: 'grey' } : { label: kind, hue }], sortKey: updatedAt, updatedAt });
