@@ -105,7 +105,8 @@ outline.addEventListener('mousedown', (e) => {
   if (!e.target.closest) return;
   if (e.target.closest('.mention')) e.preventDefault();
   const line = e.target.closest('.line');
-  if (!line || e.target.closest('.check, .bullet, .chev, a')) return;
+  // a row that is nothing but a chip or a link can only be clicked on that chip, so with a modifier held it still selects
+  if (!line || e.target.closest(e.metaKey || e.shiftKey ? '.check, .bullet, .chev' : '.check, .bullet, .chev, a')) return;
   const key = line.parentElement.dataset.key;
   if (e.metaKey) { // Cmd+click: add or remove this row, and make it the keyboard range anchor
     e.preventDefault(); toggleSel(key);
@@ -124,9 +125,9 @@ outline.addEventListener('focusin', () => { // the caret is back in a node
 outline.addEventListener('click', (e) => {
   if (!e.target.closest) return;
   const mention = e.target.closest('.mention');
-  if (mention) { e.preventDefault(); return goTo(mention.dataset.uri); }
+  if (mention) { e.preventDefault(); if (!e.metaKey && !e.shiftKey) goTo(mention.dataset.uri); return; } // a modifier means "select this row", handled on mousedown
   const url = e.target.closest('a.url, a.link'); // a bare URL and a link mark both open in the browser, like Tana; a link mark to a node is a reference
-  if (url && tana.openExternal) { e.preventDefault(); run(() => (url.dataset.href.startsWith('tana:') ? goToLink(url.dataset.href) : tana.openExternal(url.dataset.href))); }
+  if (url && tana.openExternal) { e.preventDefault(); if (!e.metaKey && !e.shiftKey) run(() => (url.dataset.href.startsWith('tana:') ? goToLink(url.dataset.href) : tana.openExternal(url.dataset.href))); }
 });
 // A link mark whose href is a node: the new id opens directly; an old outliner id ("tana:IAFYBzLWyNMw", written by
 // the importer as a link) is found through the "Outliner ID: …" line the importer leaves in the imported note, and

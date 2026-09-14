@@ -212,6 +212,25 @@ function runSensitiveBlurCheck() {
 }
 
 async function runSelectionChecks() {
+  // A row that is nothing but a mention chip (or a link) can only be clicked on that chip: Cmd/Shift+click on it
+  // selects the row like on any other row, and the click that follows does not open the reference.
+  const mouse = vm.runInNewContext(`
+    const calls = [], handlers = {};
+    const outline = { addEventListener: (name, fn) => { handlers[name] = fn; } };
+    const goTo = (uri) => calls.push(['goTo', uri]), toggleSel = (key) => calls.push(['toggle', key]), rangeSelTo = (key) => calls.push(['range', key]);
+    const run = (fn) => fn(), tana = { openExternal: () => calls.push(['open']), search: async () => [] };
+    const focused = () => null; let sel = null;
+    ${sourceBetween("outline.addEventListener('click'", "filterEl.addEventListener('input'")}
+    ${sourceBetween("outline.addEventListener('mousedown'", "outline.addEventListener('focusin'")}
+    const chip = { className: 'mention', dataset: { uri: 'tana:text:ref' } };
+    const line = { parentElement: { dataset: { key: 'row' } } };
+    chip.closest = (q) => (q.includes('.mention') ? chip : q === '.line' ? line : q.split(', ').includes('a') ? chip : null);
+    ({ click: (mods) => { calls.length = 0; const e = { target: chip, ...mods, preventDefault() {} }; handlers.mousedown(e); handlers.click(e); return calls; } });
+  `);
+  assert.deepEqual(plain(mouse.click({ metaKey: false, shiftKey: false })), [['goTo', 'tana:text:ref']], 'a plain click on a chip opens the reference');
+  assert.deepEqual(plain(mouse.click({ metaKey: true, shiftKey: false })), [['toggle', 'row']], 'Cmd+click on a chip selects its row instead');
+  assert.deepEqual(plain(mouse.click({ metaKey: false, shiftKey: true })), [['range', 'row']], 'and Shift+click extends the selection to it');
+
   const selection = sourceBetween('function rangeKeys(', '// ---- filter pills');
   const canEditStructure = sourceBetween('const canEditStructure =', 'const chatIcon =');
   const rendererHistory = functionSource('history');
