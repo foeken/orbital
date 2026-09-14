@@ -13,6 +13,9 @@ const WANT = { task: 'list-checkbox.svg', calendar: 'calendar.svg', sync: path.j
 // single-stroke glyph on the same 18x18 grid. Appended so the generated key order stays stable.
 WANT.tana = path.join(__dirname, '..', 'build', 'icons', 'tana.svg');
 WANT.trash = path.join(__dirname, '..', 'build', 'icons', 'trash-2.svg');
+WANT.addTo = path.join(__dirname, '..', 'build', 'icons', 'folder-plus.svg');
+WANT.today = path.join(__dirname, '..', 'build', 'icons', 'calendar-event.svg');
+WANT.week = path.join(__dirname, '..', 'build', 'icons', 'calendar-minus-2.svg');
 const out = {};
 for (const [name, file] of Object.entries(WANT)) {
   let svg = fs.readFileSync(path.isAbsolute(file) ? file : path.join(SRC, file), 'utf8');

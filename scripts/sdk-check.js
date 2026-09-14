@@ -572,6 +572,38 @@ async function main() {
     console.log('ok  six view handlers share fetch/cache, roots stays offline, and refresh follows the active view');
   }
 
+  // The week node is a plain "Week <n>" document beside the day nodes: ISO-8601 week numbers, created once and
+  // reused by every other day in the same week.
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const docs = new Map();
+    const sync = {
+      subscribe: async (id, init) => { if (!docs.has(id)) { const d = new Document(id); if (init) d.transact(init); docs.set(id, d); } return docs.get(id); },
+      getDocument: (id) => docs.get(id),
+    };
+    const titleOf = (d) => readNode(d).title || '';
+    const listNodes = async (p) => {
+      if (p.nodeIds) return { nodes: p.nodeIds.map((id) => docs.has(id) ? { id, title: titleOf(docs.get(id)) } : { id }) };
+      const q = String(p.textQuery || '').toLowerCase();
+      return { nodes: [...docs.values()].filter((d) => titleOf(d).toLowerCase().includes(q)).map((d) => ({ id: d.id, title: titleOf(d) })) };
+    };
+    backend.testRuntime({ me: { userUri: ME }, win: { isDestroyed: () => false, webContents: { send: () => {} } }, client: { sync, graph: { listNodes } } });
+
+    assert.equal(backend.isoWeek(new Date(2026, 8, 14)), 38, 'the Monday of week 38');
+    assert.equal(backend.isoWeek(new Date(2026, 11, 31)), 53, 'a December day belongs to the year holding its Thursday');
+    assert.equal(backend.isoWeek(new Date(2027, 0, 1)), 53, 'and so a new year can still open in the old one');
+
+    const first = await backend.weekNode(new Date(2026, 8, 14));
+    assert.equal(titleOf(docs.get(first.id)), 'Week 38', 'the missing week node is created');
+    const again = await backend.weekNode(new Date(2026, 8, 17));
+    assert.equal(again.id, first.id, 'another day in the same week reuses it');
+    assert.equal(docs.size, 1, 'and creates nothing');
+    const next = await backend.weekNode(new Date(2026, 8, 21));
+    assert.equal(titleOf(docs.get(next.id)), 'Week 39', 'the next week gets its own node');
+    assert.equal(docs.size, 2, 'and nothing else is created along the way');
+    console.log('ok  week node: one plain document per ISO week, reused by every day in it');
+  }
+
   // Subscriptions, caches and stored filters around the refresh loop: a document opened on demand (zoom, pin, search
   // result) is not a view row, so the refresh must leave it subscribed; an answer the backend does not have yet must
   // not be cached as an answer; and one failing query must not take a whole view down.

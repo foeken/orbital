@@ -401,7 +401,7 @@ async function runSelectionChecks() {
 }
 
 async function runMultiTaskPaletteCheck() {
-  const contextFns = [functionSource('taskActionContext'), functionSource('taskActionRows'), functionSource('selectionRows'), functionSource('removeSelection')].join('\n');
+  const contextFns = [functionSource('taskActionContext'), functionSource('taskActionRows'), functionSource('selectionRows'), functionSource('removeSelection'), functionSource('addToDateNode')].join('\n');
   const context = vm.runInNewContext(`
     const task = (id, editable = true) => ({ id, kind: 'document', icon: 'task', editable, stateType: 'open' });
     const rows = [
@@ -421,9 +421,12 @@ async function runMultiTaskPaletteCheck() {
     const taskMetaById = new Map(), loadTaskMeta = () => {}, memberName = (id) => id;
     const calls = [];
     const tana = { setState() {}, setStateMany() {}, taskMeta() {}, setAssignees() {}, setAssigneesMany() {}, setSensitive() {},
-      deleteDocument: async (id) => { calls.push(['delete', id]); }, accessOptions: async () => ({ deletable: true }) };
+      deleteDocument: async (id) => { calls.push(['delete', id]); }, accessOptions: async () => ({ deletable: true }),
+      todayNode: async () => { calls.push(['todayNode']); return 'day'; }, weekNode: async () => { calls.push(['weekNode']); return 'week'; },
+      insertAfter: async (docId, nodeId, text) => { calls.push(['insertAfter', docId, nodeId, text]); return 'block'; },
+      setText: async (docId, nodeId, segments) => { calls.push(['setText', docId, nodeId, JSON.stringify(segments)]); } };
     const removeSel = (keys) => { calls.push(['blocks', keys.join(',')]); };
-    const run = (fn) => fn(), loadRoots = async () => {}, render = () => {}, invalidateNode = () => {};
+    const run = (fn) => fn(), loadRoots = async () => {}, render = () => {}, invalidateNode = () => {}, showNote = (note) => { calls.push(['note', note]); };
     const canEditItem = (item) => item.node.editable !== false;
     let sel = null;
     const openStatusPalette = () => {}, openAssigneePalette = () => {}, openManyAssigneePalette = () => {};
@@ -438,6 +441,7 @@ async function runMultiTaskPaletteCheck() {
       selection: (keys) => { selected = keys; return selectionRows().map((row) => [row.group, row.label]); },
       markAll: () => { selected = rows.map((item) => item.key); selectionRows()[0].run(); return marked; },
       remove: async (keys) => { calls.length = 0; selected = keys; try { await removeSelection(keys); } catch (e) { calls.push(['error', e.message]); } return calls; },
+      addTo: async (keys, target) => { calls.length = 0; selected = keys; await selectionRows().find((row) => row.label.endsWith('to ' + target + ' node')).run(); return calls; },
     });
   `);
   assert.deepEqual(plain(context.labels()), [
@@ -449,14 +453,25 @@ async function runMultiTaskPaletteCheck() {
   // What acts on the selection comes first, in its own group, and reaches every selected row, not only the tasks.
   assert.deepEqual(plain(context.selection(['t1', 'meeting', 'locked', 't2'])), [
     ['Selection', 'Mark 4 items as sensitive'],
+    ['Selection', 'Add 4 items to today node'],
+    ['Selection', 'Add 4 items to week node'],
     ['Selection', 'Set status for 2 tasks'],
     ['Selection', 'Assign 2 tasks to'],
     ['Selection', 'Delete 4 items'],
   ], 'a selection offers sensitivity for everything in it and the task actions for the tasks in it');
-  assert.deepEqual(plain(context.selection(['t2'])), [['Selection', 'Unmark 1 item as sensitive'], ['Selection', 'Set status'], ['Selection', 'Edit assignees'], ['Selection', 'Delete 1 item']],
+  assert.deepEqual(plain(context.selection(['t2'])), [['Selection', 'Unmark 1 item as sensitive'], ['Selection', 'Add 1 item to today node'], ['Selection', 'Add 1 item to week node'], ['Selection', 'Set status'], ['Selection', 'Edit assignees'], ['Selection', 'Delete 1 item']],
     'one selected row is still a selection, and a marked one offers to unmark');
   assert.deepEqual(plain(context.selection([])), [], 'with nothing selected the palette is about the app again');
   assert.deepEqual(plain(context.markAll()), [['t1', 'meeting', 'locked', 't2'], true], 'marking applies to every selected document at once');
+  // Adding to the day's or the week's node references the selection there: one appended block per row, its text
+  // replaced by a mention of that node, so nothing is copied and nothing is moved.
+  assert.deepEqual(plain(await context.addTo(['t1', 'meeting'], 'today')), [
+    ['todayNode'],
+    ['insertAfter', 'day', null, ''], ['setText', 'day', 'block', JSON.stringify([{ mention: { uri: 't1', label: '' } }])],
+    ['insertAfter', 'day', null, ''], ['setText', 'day', 'block', JSON.stringify([{ mention: { uri: 'meeting', label: '' } }])],
+    ['note', 'Added 2 items to the today node'],
+  ], 'every selected row becomes a mention at the end of today\'s node');
+  assert.deepEqual(plain(await context.addTo(['t1'], 'week')).map((call) => call[0]), ['weekNode', 'insertAfter', 'setText', 'note'], 'and the week row writes into the week node instead');
   // Deleting a selection: documents go one by one through the permission check, blocks reuse the single-step removal.
   assert.deepEqual(plain(await context.remove(['t1', 'meeting'])), [['delete', 't1'], ['delete', 'meeting']], 'every selected document is deleted, in order');
   assert.deepEqual(plain(await context.remove(['doc/b1', 'doc/b2'])), [['blocks', 'doc/b1,doc/b2']], 'a selection of blocks takes the existing one-step path instead');

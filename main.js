@@ -477,6 +477,22 @@ function send(channel, payload) {
 
 // ---- pins (sdk/pins.js over the user's profile/collection/pin-map docs) and app-local icons ----
 const today = () => new Date().toLocaleDateString('sv-SE'); // local YYYY-MM-DD
+
+// The week a date sits in, ISO-8601: weeks start on Monday and belong to the year holding their Thursday, so the
+// last days of December can already be week 1.
+function isoWeek(d) {
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7)); // this week's Thursday
+  return Math.ceil(((t - Date.UTC(t.getUTCFullYear(), 0, 1)) / 864e5 + 1) / 7);
+}
+// "Week 38": a plain document beside the day nodes, like today's node and with no link between them.
+async function weekNode(date = new Date()) {
+  if (!client) throw new Error(NOT_CONNECTED);
+  const title = 'Week ' + isoWeek(date);
+  const { nodes = [] } = await client.graph.listNodes({ textQuery: title, nodeTypes: ['text'], limit: 20 }).catch(() => ({ nodes: [] }));
+  // An existing node wins over a new one, case-insensitively: "week 38" must not gain a "Week 38" beside it.
+  return nodes.find((n) => (n.title || '').trim().toLowerCase() === title.toLowerCase()) || createDocument(title, { kind: 'doc' });
+}
 const pinTarget = (target) => { if (target !== 'sidebar' && target !== 'today') throw new Error('pin target must be sidebar or today: ' + target); return target; };
 
 // Sidebar pins as Nodes, in sidebar order; pinned items we cannot subscribe (spaces, types, ...) are skipped quietly.
@@ -954,6 +970,7 @@ ipcMain.handle('doc:todayNode', async () => {
   scheduleRefresh(1000);
   return created.id;
 });
+ipcMain.handle('doc:weekNode', async () => (await weekNode()).id);
 // macOS appearance, for the renderer's "follow the system" theme: current value on demand, plus live changes
 const systemTheme = () => (nativeTheme && nativeTheme.shouldUseDarkColors ? 'dark' : 'light');
 ipcMain.handle('theme:system', () => systemTheme());
@@ -977,7 +994,7 @@ ipcMain.handle('sync:login', async () => {
 });
 
 if (process.env.TANA_MAIN_TEST) {
-  module.exports = { resolveInitialAuth, graphRow, cachedNodeHue, VIEWS, toNode, outlineWithReferences, chatOutline, op, onChange, documentAction, createDocument, creationOptions, search, viewRows, spaceChildren, start, refresh, related, callOf,
+  module.exports = { resolveInitialAuth, graphRow, cachedNodeHue, VIEWS, toNode, outlineWithReferences, chatOutline, op, onChange, documentAction, createDocument, creationOptions, search, viewRows, spaceChildren, start, refresh, related, callOf, isoWeek, weekNode,
     statusSnapshot: () => ({ ...status }), rememberNodeHue,
     undo: () => history(undoStack, redoStack, 'undo', 'canUndo'), redo: () => history(redoStack, undoStack, 'redo', 'canRedo'), visibleGraphNodes, pinTree,
     nodePin,

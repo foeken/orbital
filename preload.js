@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('api', {
   related: (docId) => ipcRenderer.invoke('doc:related', docId), // meeting context: {summary,tagline,call?:{url,label},pinned[],outcomes[],notes[]}
   summaryUri: (docId) => ipcRenderer.invoke('doc:summaryUri', docId), // a meeting's write-up document, or null
   todayNode: () => ipcRenderer.invoke('doc:todayNode'), // the date-titled node pinned to today, created if missing
+  weekNode: () => ipcRenderer.invoke('doc:weekNode'), // "Week 38" under its year, created if missing
   openExternal: (url) => ipcRenderer.invoke('shell:open', url), // http(s) link from node text, in the default browser
   nodeLink: (docId) => ipcRenderer.invoke('doc:link', docId), // the home.tana.inc url for a node
   setField: (docId, key, text) => ipcRenderer.invoke('doc:setField', docId, key, text), // typed field value (plain text)
