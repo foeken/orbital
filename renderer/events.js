@@ -15,7 +15,7 @@ outline.addEventListener('keydown', (e) => {
   if (!el) return;
   const item = items.get(keyOfEl(el)), mod = e.metaKey || e.ctrlKey;
   const off = caretOffset(el), len = el.textContent.length, collapsed = getSelection().isCollapsed;
-  const isDoc = item.node.kind === 'document';
+  const isDoc = item.node.kind === 'document', combo = comboOf(e);
   if (isAtomic(item.node)) { // image or divider, not editable: Backspace / ⌘⇧⌫ removes, Up/Down step past, Shift+Up/Down select, ⌘⇧Up/Down moves; everything else is swallowed
     const vert = e.key === 'ArrowUp' || e.key === 'ArrowDown', dir = e.key === 'ArrowUp' ? -1 : 1;
     if (e.key === 'Backspace') removeNode(item, el);
@@ -65,7 +65,7 @@ outline.addEventListener('keydown', (e) => {
   else if (e.key === 'Escape') { e.preventDefault(); flush(item.key); el.blur(); }
   else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && e.shiftKey && !mod) { e.preventDefault(); extendSel(item, e.key === 'ArrowUp' ? -1 : 1); } // multi-select over siblings
   else if (e.key === '@' && !collapsed) { const range = selectionOffsets(el); if (range) { e.preventDefault(); startLink(item, el, range); } } // no selection: "@" is typed
-  else if (e.key === 'Enter' && mod) { e.preventDefault(); if (isDoc) toggleDone(item); else toggleCheckbox(item); }
+  else if (combo === hotkeyFor('toggleDone')) { e.preventDefault(); if (isDoc) toggleDone(item); else toggleCheckbox(item); }
   else if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); insertAtCaret(el, '\n'); }
   else if (e.key === 'Enter' && isDoc && item.parent) e.preventDefault(); // document child (inside a space): nothing to split or draft yet
   else if (e.key === 'Enter' && isDoc && !zoom && !isOpen(item)) { e.preventDefault(); draftDoc(item); } // collapsed document in a view: draft sibling document
@@ -75,8 +75,8 @@ outline.addEventListener('keydown', (e) => {
   else if (e.key === 'Backspace' && mod && e.shiftKey) { e.preventDefault(); if (isDoc) removeDocument(item); else removeNode(item, el); }
   else if (e.key === 'Backspace' && off === 0 && collapsed) { e.preventDefault(); if (!isDoc && len === 0) removeNode(item, el); }
   else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && mod && e.shiftKey) { e.preventDefault(); if (!isDoc) shiftNode(item, el, 'move', e.key === 'ArrowUp' ? 'up' : 'down'); }
-  else if (e.key === 'ArrowUp' && mod && !e.shiftKey) { e.preventDefault(); setOpen(item, false); }
-  else if (e.key === 'ArrowDown' && mod && !e.shiftKey) { e.preventDefault(); setOpen(item, true); } // an empty node opens onto a draft child
+  else if (combo === hotkeyFor('collapse')) { e.preventDefault(); setOpen(item, false); }
+  else if (combo === hotkeyFor('expand')) { e.preventDefault(); setOpen(item, true); } // an empty node opens onto a draft child
   else if (e.key === 'ArrowUp' && !mod && atEdge(el, 'up')) { e.preventDefault(); moveTo(el, -1, off); }
   else if (e.key === 'ArrowDown' && !mod && atEdge(el, 'down')) { e.preventDefault(); moveTo(el, 1, off); }
   else if (e.key === 'ArrowLeft' && off === 0 && collapsed) { e.preventDefault(); moveTo(el, -1, Infinity); }
@@ -138,19 +138,17 @@ filterEl.addEventListener('blur', () => { if (!filterEl.value) { filterShown = f
 $('clear').onclick = () => { filterEl.value = ''; render(); filterEl.focus(); };
 document.addEventListener('keydown', (e) => {
   const mod = e.metaKey || e.ctrlKey, inFilter = document.activeElement === filterEl;
-  const hotkey = mod && !inFilter && Object.keys(hotkeys).find((id) => hotkeys[id] === comboOf(e));
+  // every combo, built-in or recorded, is a palette row id (DEFAULT_HOTKEYS in state.js); ⌘K and the text-size keys stay fixed
+  // (a key the focused node already answered to — ⌘↑, ⌘↩ — arrives defaultPrevented and must not run twice)
+  const combo = comboOf(e), hotkey = mod && !inFilter && !e.defaultPrevented ? hotkeyIds().find((id) => hotkeyFor(id) === combo) : undefined;
   if (dropDoc) { if (e.defaultPrevented) return; if (e.key === 'Escape') { e.preventDefault(); endDrop(); } else if (e.key === 'Enter') { e.preventDefault(); $('dropFile').click(); } } // (the palette's Enter that started drop mode is already handled)
   else if (mod && e.key === 'k') { e.preventDefault(); togglePalette('cmd'); }
   else if (mod && (e.key === '0' || (e.shiftKey && (e.key === '+' || e.key === '=' || e.key === '-' || e.key === '_')))) { e.preventDefault(); setZoom(e.key === '0' ? BASE_ZOOM : zoomFactor * (e.key === '-' || e.key === '_' ? 1 / 1.1 : 1.1)); }
-  else if (mod && e.key === 's') { e.preventDefault(); togglePalette('search'); }
+  else if (hotkey === 'search') { e.preventDefault(); togglePalette('search'); } // also while the palette is open: it switches it to search
   else if (!palette.hidden) return;
   else if (sel && document.activeElement === document.body && (e.defaultPrevented || selKey(e))) e.preventDefault(); // selection keys; a Shift+Arrow already handled in the node stops here (focus is on body by now)
   else if (mod && e.shiftKey && e.key === 'Backspace' && document.activeElement === document.body && zoom) { e.preventDefault(); removeZoomedBlock(); }
-  else if (mod && e.key === 'ArrowRight' && !railEl.hidden) { e.preventDefault(); focusRail(); } // into the relationships rail; Escape or Cmd+Left comes back
-  else if (mod && (e.key.toLowerCase() === 'z' || e.key.toLowerCase() === 'y') && !inFilter) { e.preventDefault(); history(e.key.toLowerCase() === 'y' || e.shiftKey ? 'redo' : 'undo'); }
-  else if (mod && e.key === 'f') { e.preventDefault(); if (zoom) return; filterShown = true; render(); filterEl.focus(); }
-  else if (mod && (e.key === '[' || e.key === ']') && !inFilter) { e.preventDefault(); navigate(e.key === '[' ? -1 : 1); } // back and forward through the places you have been
-  else if (hotkey) { e.preventDefault(); runAction(hotkey); }
+  else if (hotkey) { if (runAction(hotkey)) e.preventDefault(); } // a row that is not there right now (no rail, nothing to go back to) leaves the key to the browser
   else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !mod && document.activeElement === document.body) { // nothing focused: enter the outline
     const all = texts(), el = e.key === 'ArrowDown' ? all[0] : all.at(-1);
     if (el) { e.preventDefault(); setCaret(el, e.key === 'ArrowDown' ? 0 : el.textContent.length); }

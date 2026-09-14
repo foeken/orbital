@@ -35,6 +35,18 @@ function paletteRows(q) {
   rows.push(...pillCommandRows());
   if (tana.creationOptions) rows.push({ id: 'create', group: 'Actions', icon: 'createNew', label: 'Create new…', keepOpen: true, run: openCreationPalette });
   rows.push({ id: 'sync', group: 'Actions', icon: 'sync', label: 'Sync', run: () => run(() => tana.refresh()) });
+  // the keys the outline answers to, as rows: each has a default combo in DEFAULT_HOTKEYS and can be re-recorded
+  rows.push({ id: 'search', group: 'Actions', icon: 'library', label: 'Search Tana', keepOpen: true, run: () => togglePalette('search') });
+  if (!zoom) rows.push({ id: 'filter', group: 'Actions', label: 'Filter rows', run: () => { filterShown = true; render(); filterEl.focus(); } });
+  rows.push({ id: 'back', group: 'Actions', label: 'Go back', disabled: !navBack.length, run: () => navigate(-1) });
+  rows.push({ id: 'forward', group: 'Actions', label: 'Go forward', disabled: !navForward.length, run: () => navigate(1) });
+  rows.push({ id: 'undo', group: 'Actions', label: 'Undo', run: () => history('undo') });
+  rows.push({ id: 'redo', group: 'Actions', label: 'Redo', run: () => history('redo') });
+  if (!railEl.hidden) rows.push({ id: 'rail', group: 'Actions', label: 'Focus the sidebar', run: () => focusRail() });
+  // text size stays on the fixed keys (their characters depend on the keyboard layout), so the chips are literal
+  rows.push({ id: 'textLarger', group: 'Actions', label: 'Larger text', kbd: '⇧⌘+', run: () => setZoom(zoomFactor * 1.1) });
+  rows.push({ id: 'textSmaller', group: 'Actions', label: 'Smaller text', kbd: '⇧⌘-', run: () => setZoom(zoomFactor / 1.1) });
+  rows.push({ id: 'textReset', group: 'Actions', label: 'Reset text size', kbd: '⌘0', run: () => setZoom(BASE_ZOOM) });
   // the list of titles hidden from every view and from search, edited in the palette itself
   if (tana.filters) rows.push({ id: 'hidden', group: 'Actions', icon: 'hidden', label: 'Edit hidden items', keepOpen: true, run: openHiddenPalette });
   if (tana.sensitiveIds) rows.push({ id: 'sensitiveVisibility', group: 'Actions', icon: 'hidden', label: 'Toggle sensitive visibility', hint: sensitiveVisible ? 'Shown' : 'Hidden', run: toggleSensitiveVisibility });
@@ -48,12 +60,16 @@ function paletteRows(q) {
   if (signedOut) rows.push({ id: 'login', group: 'Actions', label: 'Log in to Tana', run: () => tana.login().catch(showError) });
   if (q) for (const s of views) for (const n of s.nodes) rows.push({ ...docRow(n, n.meta || s.title, () => openDoc(n.id)), id: 'doc:' + n.id, group: 'Documents' });
   let docsLeft = 8;
-  return rows.filter((r) => (!q || r.label.toLowerCase().includes(q)) && (r.group !== 'Documents' || docsLeft-- > 0)).map((r) => (hotkeys[r.id] ? { ...r, kbd: hotkeys[r.id] } : r));
+  return rows.filter((r) => (!q || r.label.toLowerCase().includes(q)) && (r.group !== 'Documents' || docsLeft-- > 0)).map((r) => { const k = r.id && hotkeyFor(r.id); return k ? { ...r, kbd: k } : r; });
 }
-// a recorded hotkey runs its palette row's action (views/sync/login by id; documents wherever they live)
+// a hotkey, recorded or default, runs its palette row's action (views/sync/login by id; documents wherever they live);
+// false when no such row exists right now, so the key can fall through to whatever else it means
 function runAction(id) {
+  if (palette.hidden) palDoc = currentDoc(); // a key fires with the palette closed, so the "current node" is whatever is focused now
   const row = paletteRows('').find((r) => r.id === id);
-  if (row) row.run(); else if (id.startsWith('doc:')) goTo(id.slice(4));
+  if (row && !row.disabled) { row.run(); return true; }
+  if (id.startsWith('doc:')) { goTo(id.slice(4)); return true; }
+  return false;
 }
 // Cmd+K renders the exact same rows as the header pill. Multi-select rows stay here; a single choice returns to commands.
 function pillRows(q) {
@@ -253,15 +269,17 @@ function comboOf(e) {
 const validCombo = (c) => /[⌘⌃]/.test(c) && c.replace(/[⌃⌥⇧⌘]/g, '') !== ''; // ⌘ or ⌃ plus a key, so typing is never hijacked
 // Combos the outline keydown handler answers to before it looks at hotkeys, so a shortcut on one of them would
 // never fire. That handler treats ⌃ like ⌘ and ignores ⌥, which the normalisation in comboTaken mirrors.
-const RESERVED = { '⌘K': 'opens the command palette', '⇧⌘K': 'records a shortcut', '⌘S': 'opens search', '⌘F': 'filters the list', '⌘[': 'goes back', '⌘]': 'goes forward', '⌘Z': 'is undo', '⇧⌘Z': 'is redo', '⌘Y': 'is redo', '⇧⌘Y': 'is redo', '⌘0': 'resets the zoom', '⇧⌘+': 'zooms in', '⇧⌘=': 'zooms in', '⇧⌘-': 'zooms out', '⇧⌘_': 'zooms out', '⇧⌘⌫': 'deletes the node', '⌘↑': 'collapses the node', '⌘↓': 'expands the node', '⌘→': 'moves into the rail', '⇧⌘→': 'moves into the rail', '⇧⌘↑': 'moves the selection', '⇧⌘↓': 'moves the selection' };
+// Only what is fixed in the handlers is listed here; everything else the outline answers to is a row with a default
+// combo (DEFAULT_HOTKEYS), which comboTaken reports as taken by that row.
+const RESERVED = { '⌘K': 'opens the command palette', '⇧⌘K': 'records a shortcut', '⌘0': 'resets the text size', '⇧⌘+': 'makes the text larger', '⇧⌘=': 'makes the text larger', '⇧⌘-': 'makes the text smaller', '⇧⌘_': 'makes the text smaller', '⇧⌘⌫': 'deletes the node', '⇧⌘↑': 'moves the node or selection', '⇧⌘↓': 'moves the node or selection' };
 // Why a combo cannot be saved for this row, or '' when it can: the app owns it, or another row already has it.
 function comboTaken(combo, rowId) {
   const built = RESERVED[combo.replace(/[⌃⌥⌘]/g, '').replace(/^(⇧?)/, '$1⌘')];
   if (built) return combo + ' already ' + built;
-  const other = Object.keys(hotkeys).find((id) => hotkeys[id] === combo && id !== rowId);
+  const other = hotkeyIds().find((id) => hotkeyFor(id) === combo && id !== rowId);
   if (!other) return '';
   const row = paletteRows('').find((r) => r.id === other), node = other.startsWith('doc:') && views.flatMap((s) => s.nodes).find((n) => n.id === other.slice(4));
-  return combo + ' is already the shortcut for "' + (row ? row.label : node ? node.text : other) + '"';
+  return combo + ' is already the shortcut for "' + (row ? row.label : node ? node.text : other.replace(/([A-Z])/g, ' $1').toLowerCase()) + '"'; // a row absent right now (Complete without a task) by its id, spelled out
 }
 const recorder = $('recorder');
 let rec = null; // { row, combo }

@@ -24,10 +24,12 @@ let pinCtx = null;           // relationship pin picker: { pinHub, docId }
 let pillCtx = null;          // Cmd+K sublevel for one current view pill
 const hotkeys = JSON.parse(localStorage.getItem('hotkeys') || '{}'); // palette row id -> combo ("⇧⌘M")
 if (hotkeys.sync) { delete hotkeys.sync; localStorage.setItem('hotkeys', JSON.stringify(hotkeys)); }
-// shipped default, recordable and removable like any other: Ctrl+Shift+D opens today's node
-if (hotkeys.today === undefined && !localStorage.getItem('todayHotkeySeeded')) {
-  hotkeys.today = '⌃⇧D'; localStorage.setItem('hotkeys', JSON.stringify(hotkeys)); localStorage.setItem('todayHotkeySeeded', '1');
-}
+// The built-in keys are palette rows with a default combo, in the same map the recorder edits: a recorded combo
+// overrides the default, and Reset in the recorder restores it. What is not here is fixed on purpose (⌘K, ⇧⌘K,
+// the text-size keys, ⇧⌘⌫ and the ⇧⌘↑/↓ moves, which act on blocks the palette does not address).
+const DEFAULT_HOTKEYS = { search: '⌘S', filter: '⌘F', back: '⌘[', forward: '⌘]', undo: '⌘Z', redo: '⇧⌘Z', rail: '⌘→', expand: '⌘↓', collapse: '⌘↑', toggleDone: '⌘↩', today: '⌃⇧D' };
+const hotkeyFor = (id) => (Object.hasOwn(hotkeys, id) ? hotkeys[id] : DEFAULT_HOTKEYS[id]);
+const hotkeyIds = () => [...new Set([...Object.keys(DEFAULT_HOTKEYS), ...Object.keys(hotkeys)])];
 let pinInfo = null;          // { docId, sidebar, dates } of the palette's document (api.pinState)
 let palDoc = null;           // document the Cmd+K context actions apply to (zoomed, else the one whose node is focused)
 let palTaskCtx = null;

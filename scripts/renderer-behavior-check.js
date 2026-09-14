@@ -27,8 +27,11 @@ const FAKE_DOM = `
 
 // The extracted function may call the frame-coalesced render or the row patcher; a harness that stubs render alone
 // gets both routed to its stub, a harness that defines them keeps its own (assignment, so no redeclaration).
-const RENDER_SHIM = 'globalThis.renderSoon ??= (...a) => render(...a); globalThis.patchMeta ??= () => render(); globalThis.iconNode ??= () => null;\n';
-const withShims = (src) => (/\b(renderSoon|patchMeta|iconNode)\b/.test(src) ? RENDER_SHIM + src : src);
+// The hotkey lookups are the real ones (state.js), over whatever `hotkeys` map the harness declares.
+const DEFAULT_HOTKEYS_SRC = source.match(/const DEFAULT_HOTKEYS = (\{[^\n]*\});/)[1];
+const RENDER_SHIM = 'globalThis.renderSoon ??= (...a) => render(...a); globalThis.patchMeta ??= () => render(); globalThis.iconNode ??= () => null;\n'
+  + `globalThis.DEFAULT_HOTKEYS ??= ${DEFAULT_HOTKEYS_SRC}; globalThis.hk ??= () => (typeof hotkeys === 'object' ? hotkeys : {}); globalThis.hotkeyFor ??= (id) => (Object.hasOwn(hk(), id) ? hk()[id] : DEFAULT_HOTKEYS[id]); globalThis.hotkeyIds ??= () => [...new Set([...Object.keys(DEFAULT_HOTKEYS), ...Object.keys(hk())])]; globalThis.comboOf ??= () => '';\n`;
+const withShims = (src) => (/\b(renderSoon|patchMeta|iconNode|hotkeyFor|hotkeyIds|comboOf)\b/.test(src) ? RENDER_SHIM + src : src);
 function functionSource(name) {
   const asyncStart = source.indexOf('async function ' + name + '(');
   const start = asyncStart >= 0 ? asyncStart : source.indexOf('function ' + name + '(');
@@ -439,6 +442,7 @@ async function runMultiTaskPaletteCheck() {
     const open = new Map(), CHEV = '<svg/>';
     const canExpand = (item) => item.node.kind === 'document', hasKids = () => true, isOpen = (item) => open.get(item.key) === true;
     let opened = null; const setOpen = (item, value) => { opened = [item.key, value]; open.set(item.key, value); };
+    let ticked = null; const toggleDone = (item) => { ticked = [item.key]; item.node.done = item.node.done ? 0 : 1; };
     const openStatusPalette = () => {}, openAssigneePalette = () => {}, openManyAssigneePalette = () => {};
     const sensitiveIds = new Set(['t2']), isRealId = () => true;
     let marked = null;
@@ -457,6 +461,7 @@ async function runMultiTaskPaletteCheck() {
      current: (id) => { selected = []; palDoc = items.get(id).node; return selectionRows().map((row) => [row.group, row.label, row.hint || '', !!row.disabled]); },
       kbd: (id, rowId) => { selected = []; palDoc = items.get(id).node; return selectionRows().find((row) => row.id === rowId).kbd; },
       toggleOpen: (id) => { selected = []; palDoc = items.get(id).node; const before = selectionRows().find((row) => row.id === 'expand' || row.id === 'collapse'); before.run(); const after = selectionRows().find((row) => row.id === 'expand' || row.id === 'collapse'); return [before.label, before.kbd, opened, after.label, after.kbd]; },
+      toggleTask: (id) => { selected = []; palDoc = items.get(id).node; const before = selectionRows().find((row) => row.id === 'toggleDone'); before.run(); return [before.label, ticked, selectionRows().find((row) => row.id === 'toggleDone').label]; },
       kbdSelected: (keys, rowId) => { selected = keys; return selectionRows().find((row) => row.id === rowId).kbd; },
       zoomedCurrent: (id) => { selected = []; palDoc = items.get(id).node; zoom = { docId: id }; try { return selectionRows().map((row) => [row.group, row.label]); } finally { zoom = null; } },
     });
@@ -488,6 +493,7 @@ async function runMultiTaskPaletteCheck() {
   assert.deepEqual(plain(context.current('t1')), [
     ['Current node', 'Zoom in', '', false],
     ['Current node', 'Expand', '', false],
+    ['Current node', 'Complete', '', false],
     ['Current node', 'Mark as sensitive', '', false],
     ['Current node', 'Add to today node', '', false],
     ['Current node', 'Add to week node', '', false],
@@ -495,10 +501,12 @@ async function runMultiTaskPaletteCheck() {
     ['Current node', 'Edit assignees', 'Loading…', false],
     ['Current node', 'Delete', '', false],
   ], 'the current node gets every selection action');
-  assert.equal(plain(context.zoomedCurrent('t1'))[0][1], 'Mark as sensitive', 'the zoomed document itself offers no Zoom in');
+  assert.deepEqual(plain(context.zoomedCurrent('t1')).slice(0, 2).map((row) => row[1]), ['Complete', 'Mark as sensitive'], 'the zoomed document itself offers no Zoom in but keeps its checkbox');
   assert.deepEqual(plain(context.current('locked')).filter((row) => row[1] === 'Delete'), [['Current node', 'Delete', 'Read-only', true]], 'and a read-only current node cannot be deleted');
   assert.equal(context.kbd('t1', 'delete'), '⇧⌘⌫', 'the Delete row names the shortcut that does the same thing');
-  assert.deepEqual(plain(context.toggleOpen('t1')), ['Expand', '⌘↓', ['t1', true], 'Collapse', '⌘↑'], 'Expand opens the row and becomes Collapse, each naming its key');
+  assert.deepEqual(plain(context.toggleOpen('t1')), ['Expand', null, ['t1', true], 'Collapse', null], 'Expand opens the row and becomes Collapse (their keys come from DEFAULT_HOTKEYS in paletteRows)');
+  assert.deepEqual(plain(context.toggleTask('t1')), ['Complete', ['t1'], 'Reopen'], 'Complete ticks the task and becomes Reopen');
+  assert.deepEqual(plain(context.current('meeting')).filter((row) => ['Complete', 'Reopen'].includes(row[1])), [], 'a meeting has no checkbox row');
   assert.equal(context.kbdSelected(['t1', 't2'], 'delete'), undefined, 'a selection of documents has no such key, so the row shows none');
   assert.deepEqual(plain(context.selection(['t1', 't2'])).map((row) => row[0]), ['Selection', 'Selection', 'Selection', 'Selection', 'Selection', 'Selection'], 'a real selection keeps its own heading');
   assert.deepEqual(plain(context.markAll()), [['t1', 'meeting', 'locked', 't2'], true], 'marking applies to every selected document at once');
@@ -622,7 +630,7 @@ function runEditabilityCheck() {
       const focusAbove = () => {}, texts = () => [], placeCaret = () => {};
       const isAtomic = () => false, MARK_KEYS = { b: 'bold', i: 'italic', e: 'code' };
       const toolbarEl = { hidden: true }, returnToSelection = () => {}, focusToolbar = () => {}, toggleMarkKey = () => {};
-      ${source.slice(start, end)}
+      ${withShims(source.slice(start, end))}
       Object.assign(globalThis, { mutation: () => mutation, state: () => ({ mutation, zoomed, opened, prevented }) });
     `, context);
     const event = { key, metaKey: false, ctrlKey: false, shiftKey: false, target: { closest: () => ({ textContent: 'Row' }) }, preventDefault: () => { context.prevented = true; } };
@@ -973,7 +981,7 @@ async function runLinkPaletteCheck() {
     const runRow = (row) => row.run();
     ${resultRows}
     ${searchNow}
-    ${source.slice(start, end)}
+    ${withShims(source.slice(start, end))}
     searchNow();
     Object.assign(globalThis, {
       resolveSearch: (rows) => searchResolve(rows),
@@ -1015,6 +1023,7 @@ function runAuthPaletteCheck() {
     const pinInfo = null, palDoc = null, hotkeys = {}, theme = 'light';
     const localDate = () => '2026-09-13';
     const setIcon = () => {};
+    const zoom = null, railEl = { hidden: true }, navBack = [], navForward = [];
     const setTheme = () => {};
     const startDrop = () => {};
     const docRow = () => ({});
@@ -1048,7 +1057,7 @@ function runSyncShortcutCheck() {
     const comboOf = () => '';
     const setZoom = () => {};
     const togglePalette = () => {};
-    ${source.slice(start, end)}
+    ${withShims(source.slice(start, end))}
   `, context);
   let prevented = false;
   context.handler({ key: 'r', metaKey: true, ctrlKey: false, shiftKey: false, defaultPrevented: false, preventDefault: () => { prevented = true; } });
@@ -1063,6 +1072,7 @@ function runSyncShortcutCheck() {
     const authed = true, authChecking = false, signedOut = false, pinInfo = null, palDoc = null, hotkeys = {}, theme = 'light';
     const localDate = () => '2026-09-13', setIcon = () => {}, setTheme = () => {}, startDrop = () => {};
     const docRow = () => ({}), sectionOf = () => null;
+    const zoom = null, railEl = { hidden: true }, navBack = [], navForward = [];
     ${paletteRows}
     paletteRows('');
   `);
@@ -1072,16 +1082,52 @@ function runSyncShortcutCheck() {
 // The recorder warns before saving a combo the outline already answers to, or one another row already has, since
 // the built-in is checked first and the hotkey would never fire.
 function runReservedComboCheck() {
+  // Built-in keys are palette rows with a default combo: the global handler dispatches the default, a recorded
+  // combo replaces it (Reset deletes the entry and the default is back), and a key the focused node already
+  // answered to arrives defaultPrevented and is not run a second time.
+  const anchor = source.indexOf("filterEl.addEventListener('keydown'");
+  const start = source.indexOf("document.addEventListener('keydown', (e) => {", anchor);
+  const end = source.indexOf('// ---- palette:', start);
+  const dispatch = vm.runInNewContext(`
+    let handler;
+    const ran = [];
+    const document = { activeElement: {}, addEventListener: (_name, listener) => { handler = listener; } };
+    const filterEl = {}, dropDoc = null, palette = { hidden: true }, tana = {}, sel = null, zoom = null;
+    const hotkeys = {};
+    const setZoom = () => {}, togglePalette = () => {};
+    const runAction = (id) => { ran.push(id); return id !== 'gone'; };
+    ${sourceBetween('const DEFAULT_HOTKEYS', 'let pinInfo')}
+    ${sourceBetween('const KEYNAMES', 'const validCombo')}
+    ${withShims(source.slice(start, end))}
+    ({ press: (key, mods = {}) => { const e = { key, code: '', metaKey: true, ctrlKey: false, shiftKey: false, altKey: false, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; }, ...mods }; handler(e); return e.defaultPrevented; },
+       record: (id, combo) => { hotkeys[id] = combo; }, reset: (id) => { delete hotkeys[id]; }, ran: () => ran.splice(0), chip: (id) => hotkeyFor(id) });
+  `);
+  assert.equal(dispatch.press('['), true, 'the default combo is handled');
+  assert.deepEqual(plain(dispatch.ran()), ['back'], 'and runs its row');
+  dispatch.record('back', '⇧⌘B');
+  assert.equal(dispatch.chip('back'), '⇧⌘B', 'a recorded combo is what the palette shows');
+  dispatch.press('['); dispatch.press('B', { shiftKey: true });
+  assert.deepEqual(plain(dispatch.ran()), ['back'], 'and is what fires, the default no longer does');
+  dispatch.reset('back');
+  dispatch.press('[');
+  assert.deepEqual([dispatch.chip('back'), plain(dispatch.ran())], ['⌘[', ['back']], 'Reset restores the default');
+  assert.equal(dispatch.press('[', { defaultPrevented: true }), true, 'a key the node handled stays prevented');
+  assert.deepEqual(plain(dispatch.ran()), [], 'but is not run again here');
+  dispatch.record('gone', '⌘G');
+  assert.equal(dispatch.press('G'), false, 'a row that is not there right now leaves the key alone');
+
   const api = vm.runInNewContext(`
     const hotkeys = { 'view:tasks': '⇧⌘T', 'doc:tana:text:abc': '⌃⌥N' };
     const views = [{ nodes: [{ id: 'tana:text:abc', text: 'Principles' }] }];
-    const paletteRows = () => [{ id: 'view:tasks', label: 'Tasks' }, { id: 'addToday', label: 'Add 2 items to today node' }];
+    const paletteRows = () => [{ id: 'view:tasks', label: 'Tasks' }, { id: 'addToday', label: 'Add 2 items to today node' }, { id: 'undo', label: 'Undo' }, { id: 'back', label: 'Go back' }];
     ${sourceBetween('const RESERVED', 'function comboTaken')}
     ${functionSource('comboTaken')}
     ({ taken: (combo, rowId) => comboTaken(combo, rowId) });
   `);
-  assert.match(api.taken('⇧⌘Y', 'addToday'), /redo/, 'redo is reserved');
-  assert.match(api.taken('⌘[', 'addToday'), /back/, 'the history keys are reserved too');
+  assert.match(api.taken('⌘Z', 'addToday'), /already the shortcut for "Undo"/, 'a built-in key is taken by its row through its default combo');
+  assert.match(api.taken('⌘[', 'addToday'), /"Go back"/, 'the history keys the same way');
+  assert.match(api.taken('⇧⌘⌫', 'addToday'), /deletes the node/, 'what the handlers keep fixed is still reserved');
+  assert.equal(api.taken('⇧⌘Y', 'addToday'), '', 'and ⇧⌘Y, no longer a redo alias, is free');
   assert.match(api.taken('⌃⌥K', 'addToday'), /command palette/, '⌃ counts as ⌘ and ⌥ is ignored, as the handler does');
   assert.match(api.taken('⇧⌘T', 'addToday'), /already the shortcut for "Tasks"/, 'a combo another row has names that row');
   assert.match(api.taken('⌃⌥N', 'addToday'), /"Principles"/, 'and a document binding names the document');
@@ -1137,7 +1183,7 @@ function runZoomShortcutCheck() {
     const filterEl = {}, dropDoc = null, palette = { hidden: true }, tana = {}, hotkeys = {}, sel = null, zoom = null;
     const comboOf = () => '', setZoom = (value) => { zoomFactor = value; calls.push(value); };
     const togglePalette = () => {}, runAction = () => {}, history = () => {}, texts = () => [], setCaret = () => {}, viewOf = () => null, draftDoc = () => {}, render = () => {};
-    ${source.slice(start, end)}
+    ${withShims(source.slice(start, end))}
     Object.assign(globalThis, { press: (event) => handler(event), state: () => ({ zoomFactor, calls }) });
   `, context);
   const event = (key, shiftKey) => ({ key, metaKey: true, ctrlKey: false, shiftKey, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } });
@@ -1167,7 +1213,7 @@ function runZoomDeleteCheck() {
     const removeNode = (candidate) => { removed.push(candidate.key); };
     const resolveZoom = () => [item];
     ${removeZoomedBlock}
-    ${source.slice(start, end)}
+    ${withShims(source.slice(start, end))}
     Object.assign(globalThis, { press: (event) => handler(event), state: () => ({ removed }) });
   `, context);
   let prevented = false;

@@ -256,9 +256,14 @@ function selectionRows() {
     const item = items.get(doc.id);
     if (item && canExpand(item)) {
       const expanded = hasKids(item) ? isOpen(item) : open.get(item.key) === true;
-      if (expanded) rows.push({ id: 'collapse', group, svg: CHEV, label: 'Collapse', kbd: '⌘↑', run: () => setOpen(item, false) });
-      else rows.push({ id: 'expand', group, svg: CHEV, label: 'Expand', kbd: '⌘↓', run: () => setOpen(item, true) });
+      if (expanded) rows.push({ id: 'collapse', group, svg: CHEV, label: 'Collapse', run: () => setOpen(item, false) });
+      else rows.push({ id: 'expand', group, svg: CHEV, label: 'Expand', run: () => setOpen(item, true) });
     }
+  }
+  // the task's own checkbox (⌘↩ in the outline), zoomed or on its row
+  if (!selected.length && nodes.length === 1 && isTask(nodes[0]) && canEditNode(nodes[0]) && items.has(nodes[0].id)) {
+    const item = items.get(nodes[0].id);
+    rows.push({ id: 'toggleDone', group, icon: 'task', label: item.node.done ? 'Reopen' : 'Complete', run: () => toggleDone(item) });
   }
   if (ids.length && tana.setSensitive && sensitiveIds) {
     const marked = ids.every((id) => sensitiveIds.has(id));
