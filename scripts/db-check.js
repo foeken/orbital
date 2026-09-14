@@ -36,6 +36,12 @@ assert.strictEqual(edited.section, 'tasks');
 db.upsert({ id: 'tana:text:new', section: 'tasks', title: 'N', done: 0 });
 assert.ok(db.get('tana:text:new').updatedAt && db.get('tana:text:new').sortKey);
 assert.deepStrictEqual(db.get('tana:text:new').tags, []);
+// a live title/done change reaches every view that caches the document, not only the row get() happens to return
+db.upsert({ id: 'tana:text:a', section: 'inbox', title: 'A2', done: 1 });
+assert.strictEqual(db.setRow('tana:text:a', { title: 'A3', done: 0 }), 2, 'both cached rows were rewritten');
+assert.deepStrictEqual([db.list().tasks.find((r) => r.id === 'tana:text:a').title, db.list().inbox[0].title], ['A3', 'A3']);
+assert.strictEqual(db.setRow('tana:text:none', { title: 'x', done: 0 }), 0, 'an uncached document is no row at all');
+db.replaceSection('inbox', []);
 
 // replacing one section replaces title/done and drops its unlisted rows, leaving other sections alone
 db.replaceSection('tasks', [

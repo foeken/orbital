@@ -89,7 +89,7 @@ function createTanaSession({ partition = 'persist:tana', origin = 'https://home.
 }
 
 // Peer identity per PLATFORM-PROTOCOL.md §1.1: storageId is a persisted UUID (peer.json); the peer id
-// gets a fresh 16-bit nonce per process so concurrent processes (app + CLI) never share a Loro peer id.
+// gets a fresh 15-bit nonce per process (sdk/sync.js derivePeerId) so concurrent processes (app + CLI) never share a Loro peer id.
 function peerIdentity({ file, userExternalId }) {
   let stored = {};
   try { stored = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { /* first run */ }

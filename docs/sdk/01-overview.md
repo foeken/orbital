@@ -15,9 +15,9 @@ Read in this order: this file → [02-data-model.md](02-data-model.md) → [03-a
 | Data-map helpers | `node.js` | `readNode`, `setTitle`, `setState`, `contentText`, `ulid`, `initDocument` (new doc/task/meeting layout). |
 | Access checks | `access.js` | Verified write, sharing, move-preview, delete, audience and confirmation-token checks used by the app boundary. |
 | Outline editing | `content.js` | Read/write the loro-prosemirror content tree as an outline: segments, insert/remove/indent/outdent/move, images. |
-| Query building | `query.js` | Search text + `#task/#meeting/#member/#Type` tokens → ListNodes params; Tasks/Library filter builders. |
+| Query building | `query.js` | Search text + `#task/#meeting/#member/#space/#Type` tokens → ListNodes params; the one view query (`viewParams`) with its six presets; hidden-title rules. |
 | Typed fields | `fields.js` | Read/write "attributes": the per-field ProseMirror trees in a document's own data map, named by its type's template. |
-| Pins | `pins.js` | Sidebar (collection tree) and date (pin-map) pins, exactly as the web client writes them. |
+| Pins | `pins.js` | Sidebar (collection tree) and date (pin-map) pins, exactly as the web client writes them; items pinned on an event or a space (`pinnedItems`). |
 | Assets | `assets.js` | Image bytes for a `tana:image:` uri (two-hop CDN fetch). |
 | Schemas | `proto/descriptors.js` | Protobuf descriptors extracted from Tana's bundle, loaded at runtime (no codegen). |
 
@@ -25,7 +25,7 @@ Read in this order: this file → [02-data-model.md](02-data-model.md) → [03-a
 
 - `sdk/*` imports only `node:*`, `@bufbuild/protobuf`, `@connectrpc/connect(-web)`, `loro-crdt` and sibling modules. Never Electron, never app files.
 - Auth is injected: every network-facing function takes `getAccessToken({ refresh })`. Who owns the cookie session (the app's `tana-session.js`) is not the SDK's business.
-- The SDK knows Tana's model (documents, states, events, pins), not the app's views. "Tasks view", "Library" and their default filters leak into `query.js` for sharing with the CLI; treat that as the boundary's soft edge.
+- The SDK knows Tana's model (documents, states, events, pins), not the app's views. The six view presets and their one query builder live in `query.js` so the CLI and the app cannot drift apart; treat that as the boundary's soft edge (docs/VIEWS.md).
 - Everything app-specific (SQLite cache, IPC, custom icons, breadcrumbs) lives in `main.js`.
 
 ## Entry point
@@ -35,7 +35,7 @@ const { createTanaClient } = require('./sdk');
 const client = createTanaClient({
   getAccessToken,   // async ({ refresh }) => bearer token from GET /api/auth/session
   orgId,            // WorkOS org id from the token's org_id claim, e.g. 'org_01EXAMPLE00000000000000000'
-  peerId,           // derivePeerId(userExternalId): stable per user, random 16-bit nonce per process
+  peerId,           // derivePeerId(userExternalId): stable per user (48-bit hash), random 15-bit nonce per process
   storageId,        // persisted UUID for a non-ephemeral peer (omit → ephemeral peer)
   logger: console,  // optional
 });

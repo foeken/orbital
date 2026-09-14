@@ -39,5 +39,3 @@ sandboxed runs produce a clear error and **no** new crash report; 5 unsandboxed 
 
 **Still true elsewhere.** `npm start`, `npm run icon` and the packaged Tana Companion app hit the same
 wall in a sandbox (there is one `Tana Companion-*.ips` with this stack); run them unsandboxed.
-`AGENTS.md` still shows the old `./node_modules/.bin/electron scripts/platform-cli.js` form — that
-invocation crashes in a sandbox and should be updated by whoever owns that file.

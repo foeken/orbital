@@ -47,6 +47,12 @@ function upsert(r) {
   return get(r.id);
 }
 
+// A document's title and done state are the same in every view that lists it, so a live change writes them to
+// every row the id has; returns how many rows that was (0 when no view caches the document).
+function setRow(id, { title, done, updatedAt = new Date().toISOString() }) {
+  return db.prepare('UPDATE nodes SET title = ?, done = ?, updatedAt = ? WHERE id = ?').run(title, done ? 1 : 0, updatedAt, id).changes;
+}
+
 function replaceSection(section, rows) {
   db.exec('BEGIN');
   try {
@@ -92,4 +98,4 @@ function setSetting(key, value) {
   else db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, JSON.stringify(value));
 }
 
-module.exports = { open, list, get, remove, upsert, replaceSection, icon, setIcon, sensitiveIds, setSensitive, setting, setSetting };
+module.exports = { open, list, get, remove, upsert, setRow, replaceSection, icon, setIcon, sensitiveIds, setSensitive, setting, setSetting };

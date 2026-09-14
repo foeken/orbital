@@ -175,7 +175,6 @@ async function spaceChildren(id) {
   await resolveTypes(nodes.map((n) => n.entityType));
   return nodes.map((n) => toNode(graphRow(n)));
 }
-// lowercase type title -> uri for #Type search filters; the type list is loaded once per session (and seeds typeTitles)
 // What a meeting carries besides its notes (verified read-only on a real meeting, docs/MEETINGS.md):
 //   summary / tagline  the event's own AI summary, on the graph node
 //   pinned             EDGE_TYPE_HAS_PIN edges from the event to documents and chats
@@ -286,6 +285,7 @@ async function related(id) {
   };
 }
 let typesLoaded;
+// lowercase type title -> uri for #Type search filters; the type list is loaded once per session (and seeds typeTitles)
 async function typesByTitle() {
   typesLoaded ||= client.graph.listNodes({ nodeTypes: ['type'], limit: 200 }).then(({ nodes }) => { nodes.forEach(rememberType); }, () => { typesLoaded = null; });
   await typesLoaded;
@@ -688,7 +688,7 @@ function onChange(docId) {
     const hueChanged = rememberNodeHue(n);
     const done = n.stateType === 'closed' ? 1 : 0, title = n.title ?? row?.title;
     const rowChanged = row && (title !== row.title || done !== row.done || hueChanged);
-    if (rowChanged) db.upsert({ ...row, title, done, updatedAt: now() });
+    if (rowChanged) db.setRow(docId, { title, done, updatedAt: now() }); // every view's row, not just the one db.get found
     // Collection/profile/date-pin changes do not have cached view rows, but invalidate pins globally.
     const pinsChanged = docId === me?.userUri || ['collection', 'pin-map'].includes(idKind(docId));
     send('outline:changed', docId);

@@ -1,5 +1,9 @@
 # Verification log
 
+> A dated log, kept as written. Items it lists as pending were settled later and are tracked in TASKS.md: multi-node
+> removal, move, indent and outdent are one CRDT transaction each (`removeMany`/`moveMany`/`indentMany`/`outdentMany`),
+> and the native recheck of visibility labels is the 150-document sweep in the second entry below.
+
 ## 2026-09-13
 
 The localhost renderer has no Electron preload and uses `mockApi()`. Its login
