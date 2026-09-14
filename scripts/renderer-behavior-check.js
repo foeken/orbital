@@ -428,6 +428,7 @@ async function runMultiTaskPaletteCheck() {
     const removeSel = (keys) => { calls.push(['blocks', keys.join(',')]); };
     const run = (fn) => fn(), loadRoots = async () => {}, render = () => {}, invalidateNode = () => {}, showNote = (note) => { calls.push(['note', note]); };
     const canEditItem = (item) => item.node.editable !== false;
+    const canEditStructure = (item) => canEditItem(item);
     let sel = null;
     const openStatusPalette = () => {}, openAssigneePalette = () => {}, openManyAssigneePalette = () => {};
     const sensitiveIds = new Set(['t2']), isRealId = () => true;
@@ -443,6 +444,7 @@ async function runMultiTaskPaletteCheck() {
       remove: async (keys) => { calls.length = 0; selected = keys; try { await removeSelection(keys); } catch (e) { calls.push(['error', e.message]); } return calls; },
       addTo: async (keys, target) => { calls.length = 0; selected = keys; await selectionRows().find((row) => row.label.endsWith('to ' + target + ' node')).run(); return calls; },
       ids: (keys) => { selected = keys; return selectionRows().map((row) => row.id); },
+      del: (keys) => { selected = keys; const row = selectionRows().find((r) => r.id === 'delete'); return [row.label, row.hint || '', !!row.disabled]; },
     });
   `);
   assert.deepEqual(plain(context.labels()), [
@@ -458,10 +460,15 @@ async function runMultiTaskPaletteCheck() {
     ['Selection', 'Add 4 items to week node'],
     ['Selection', 'Set status for 2 tasks'],
     ['Selection', 'Assign 2 tasks to'],
-    ['Selection', 'Delete 4 items'],
+    ['Selection', 'Delete 3 items'],
   ], 'a selection offers sensitivity for everything in it and the task actions for the tasks in it');
   assert.deepEqual(plain(context.selection(['t2'])), [['Selection', 'Unmark 1 item as sensitive'], ['Selection', 'Add 1 item to today node'], ['Selection', 'Add 1 item to week node'], ['Selection', 'Set status'], ['Selection', 'Edit assignees'], ['Selection', 'Delete 1 item']],
     'one selected row is still a selection, and a marked one offers to unmark');
+  // Delete reports what it can remove before it is run, the way the task actions do.
+  assert.deepEqual(plain(context.del(['t1', 'meeting', 'locked', 't2'])), ['Delete 3 items', '1 skipped', false], 'a read-only row is counted as skipped, not deleted');
+  assert.deepEqual(plain(context.del(['locked'])), ['Delete 0 items', '1 skipped', true], 'and a selection of nothing deletable disables the row');
+  assert.deepEqual(plain(context.del(['doc/b1', 'doc/b2'])), ['Delete 2 items', '', false], 'a selection of blocks is deletable in one step');
+  assert.deepEqual(plain(context.del(['t1', 'doc/b1'])), ['Delete 1 item', '1 skipped', false], 'and a block beside a document is skipped: the two removals are different operations');
   assert.deepEqual(plain(context.selection([])), [], 'with nothing selected the palette is about the app again');
   assert.deepEqual(plain(context.markAll()), [['t1', 'meeting', 'locked', 't2'], true], 'marking applies to every selected document at once');
   // Adding to the day's or the week's node references the selection there: one appended block per row, its text
