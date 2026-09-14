@@ -51,7 +51,6 @@ contextBridge.exposeInMainWorld('api', {
   outdent: (docId, nodeId) => ipcRenderer.invoke('block:outdent', docId, nodeId),
   move: (docId, nodeId, direction) => ipcRenderer.invoke('block:move', docId, nodeId, direction),
   pins: () => ipcRenderer.invoke('pins:list'),
-  pinTree: () => ipcRenderer.invoke('pins:tree'), // [{ uri?, label?, node?, children }] preserving sidebar folders and root pins
   pinState: (docId) => ipcRenderer.invoke('pins:state', docId),
   pin: (docId, target) => ipcRenderer.invoke('pins:pin', docId, target),
   unpin: (docId, target) => ipcRenderer.invoke('pins:unpin', docId, target),

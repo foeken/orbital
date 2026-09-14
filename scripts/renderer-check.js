@@ -44,9 +44,7 @@ assert.match(source, /function loadView\(id = view\) \{\n  const filter = filter
 assert.doesNotMatch(source, /loadLibrary|loadChats|loadInbox|taskFilter|libraryFilter/);
 assert.match(source, /const chatIcon = \(n\) => n\.icon \|\| \(\(n\.tags \|\| \[\]\)\.some\(\(t\) => t\.label === 'chat'\) \? 'chat' : undefined\);/);
 assert.match(source, /const nodeIcon = \(n\) => chatIcon\(n\) \|\| \(\(n\.tags \|\| \[\]\)\.some\(\(t\) => t\.label === 'agent'\) \? 'agent' : undefined\);/);
-assert.match(source, /tana\.pinTree \? tana\.pinTree\(\)/);
-assert.match(source, /const unsectioned = \[\], sections = \[\];/);
-assert.match(source, /return \[\.\.\.unsectioned, \.\.\.sections\.flatMap/);
+assert.doesNotMatch(source, /pinTree|pinRows/, 'the sidebar pin sections are gone from Cmd+K; only the pin state of the current document is read');
 assert.match(source, /\{ create: true, label: 'Create “' \+ ctx\.text/);
 // linking preselects a result only when its title starts with the typed text; otherwise "Create" stays selected
 assert.match(source, /const starts = nodes\.findIndex\(\(n\) => \(n\.title \?\? n\.text \?\? ''\)\.toLowerCase\(\)\.startsWith\(q\.toLowerCase\(\)\)\);/);
@@ -111,7 +109,7 @@ assert.match(source, /truncated\.has\(view\) \? 'Showing the first 1,000 results
 assert.match(source, /function blockSelection\(keys, contiguous, action\)/);
 assert.match(source, /tana\.setStateMany\(palTaskCtx\.docs\.map\(\(doc\) => doc\.id\), state\)/);
 assert.match(source, /tana\.setAssigneesMany\(palTaskCtx\.docs\.map\(\(doc\) => doc\.id\), uris\)/);
-assert.match(source, /rows\.push\(\.\.\.pinRows\(pinTree\)\)/);
+assert.match(source, /const rows = \[\.\.\.selection, \.\.\.views\.map/, 'what acts on the selection comes before everything else in Cmd+K');
 assert.match(source, /function invalidatePinCaches\(id, includeRecent = true\)/);
 assert.match(source, /function unpinStale\(id\) \{\s*invalidatePinCaches\(id, false\);/);
 assert.match(source, /if \(tana\.onRemoved\) tana\.onRemoved\(removeStale\);/);

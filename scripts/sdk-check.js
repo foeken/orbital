@@ -805,7 +805,7 @@ async function main() {
     assert.deepEqual(parseQuery('a#b'), { text: 'a#b', tags: [] }, 'only word-initial #');
     const types = new Map([['project', 'tana:type:p']]);
     assert.equal(searchParams(parseQuery(''), types), null);
-    assert.deepEqual(searchParams(parseQuery('sam'), types), { nodeTypes: ['text', 'event', 'user-profile'], textQuery: 'sam', limit: 20, sortOptions: [{ field: 'SORT_FIELD_TEXT_RANK', direction: 'SORT_DIRECTION_DESCENDING' }] });
+    assert.deepEqual(searchParams(parseQuery('sam'), types), { nodeTypes: ['text', 'event', 'user-profile', 'space'], textQuery: 'sam', limit: 20, sortOptions: [{ field: 'SORT_FIELD_TEXT_RANK', direction: 'SORT_DIRECTION_DESCENDING' }] });
     const task = searchParams(parseQuery('sam #task'), types);
     assert.deepEqual([task.nodeTypes, task.stateTypes, task.textQuery], [['text'], STATE_TYPES, 'sam']);
     assert.deepEqual(searchParams(parseQuery('#meeting'), types).nodeTypes, ['event']);
@@ -857,6 +857,12 @@ async function main() {
     // Unticking the last kind must not become an unconstrained query: the graph would answer with images, calls and
     // transcripts, which no view can render and which wedged the app when it tried.
     assert.deepEqual(viewParams({ types: [] }, ME).nodeTypes, viewParams({ types: null }, ME).nodeTypes, 'no kinds selected is every kind a view lists, never nodeTypes: []');
+    // Spaces are findable by name: a kind in the Library and a #space filter in search, but not part of "any type",
+    // which is about content rather than the containers it lives in.
+    assert.deepEqual(viewParams({ types: ['spaces'] }, ME).nodeTypes, ['space'], 'the Library can list spaces');
+    assert.equal(viewParams({ types: null }, ME).nodeTypes.includes('space'), false, 'and any type stays content');
+    assert.deepEqual(searchParams(parseQuery('foundry #space'), new Map()).nodeTypes, ['space'], '#space narrows a search to spaces');
+    assert.equal(searchParams(parseQuery('foundry'), new Map()).nodeTypes.includes('space'), true, 'and a plain search finds them among everything else');
     // A kind page is that kind, whatever a stored filter from an older build says.
     assert.deepEqual(viewTypes('people', { types: ['meetings', 'people'], states: null }), { types: ['people'], states: null }, 'People lists people');
     assert.deepEqual(viewTypes('meetings', { types: [] }).types, ['meetings']);

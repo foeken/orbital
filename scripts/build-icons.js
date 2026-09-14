@@ -12,6 +12,7 @@ const WANT = { task: 'list-checkbox.svg', calendar: 'calendar.svg', sync: path.j
 // Ours rather than Nucleo's: the Tana prism from build/tana-symbol.svg (Tana's own symbol), traced as a
 // single-stroke glyph on the same 18x18 grid. Appended so the generated key order stays stable.
 WANT.tana = path.join(__dirname, '..', 'build', 'icons', 'tana.svg');
+WANT.trash = path.join(__dirname, '..', 'build', 'icons', 'trash-2.svg');
 const out = {};
 for (const [name, file] of Object.entries(WANT)) {
   let svg = fs.readFileSync(path.isAbsolute(file) ? file : path.join(SRC, file), 'utf8');

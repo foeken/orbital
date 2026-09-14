@@ -907,7 +907,6 @@ ipcMain.handle('block:outdent', (_e, id, nodeId) => mut(id, (doc) => { content.o
 ipcMain.handle('block:move', (_e, id, nodeId, direction) => mut(id, (doc) => { content.move(doc, nodeId, direction); }));
 ipcMain.handle('block:toggleCheckbox', (_e, id, nodeId) => mut(id, (doc) => { content.toggleCheckbox(doc, nodeId); }));
 ipcMain.handle('pins:list', () => pinned());
-ipcMain.handle('pins:tree', () => pinTree()); // [{ uri?, label?, node?, children }] in LoroTree order
 ipcMain.handle('pins:state', (_e, id) => pinState(id));
 ipcMain.handle('pins:pin', (_e, id, target) => setPin(id, target, true));
 ipcMain.handle('pins:unpin', (_e, id, target) => setPin(id, target, false));

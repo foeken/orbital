@@ -6,7 +6,7 @@ const { STATE_TYPES } = require('./node');
 
 const SORT = [{ field: 'SORT_FIELD_TEXT_RANK', direction: 'SORT_DIRECTION_DESCENDING' }];
 const UPDATE_DESC = [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }];
-const KIND_TAGS = ['task', 'meeting', 'member'];
+const KIND_TAGS = ['task', 'meeting', 'member', 'space'];
 
 // ponytail: a tag is one word, so multi-word type titles ("Decision Record") are not reachable; add quoting if wanted.
 function parseQuery(query) {
@@ -19,13 +19,14 @@ function parseQuery(query) {
 // Returns null for an unknown #type (no results) or an empty query.
 function searchParams({ text, tags }, types, limit = 20) {
   if (!text && !tags.length) return null;
-  const p = { nodeTypes: ['text', 'event', 'user-profile'], limit, sortOptions: SORT };
+  const p = { nodeTypes: ['text', 'event', 'user-profile', 'space'], limit, sortOptions: SORT };
   if (text) p.textQuery = text;
   for (const tag of tags) {
     const t = tag.toLowerCase();
     if (t === 'task') { p.nodeTypes = ['text']; p.stateTypes = STATE_TYPES; }
     else if (t === 'meeting') p.nodeTypes = ['event'];
     else if (t === 'member') p.nodeTypes = ['user-profile'];
+    else if (t === 'space') p.nodeTypes = ['space'];
     else if (types.has(t)) p.entityTypes = [...(p.entityTypes || []), types.get(t)];
     else return null;
   }
@@ -56,8 +57,10 @@ const isHidden = (title, rules) => {
 };
 
 // ---- Views (docs/VIEWS.md) ----
-const VIEW_KINDS = ['meetings', 'tasks', 'docs', 'chats', 'canvases', 'agents', 'skills', 'people'];
-const KIND_NODE_TYPE = { meetings: 'event', tasks: 'text', docs: 'text', chats: 'chat', canvases: 'canvas', agents: 'agent', skills: 'skill', people: 'user-profile' };
+const VIEW_KINDS = ['meetings', 'tasks', 'docs', 'chats', 'canvases', 'agents', 'skills', 'spaces', 'people'];
+const KIND_NODE_TYPE = { meetings: 'event', tasks: 'text', docs: 'text', chats: 'chat', canvases: 'canvas', agents: 'agent', skills: 'skill', spaces: 'space', people: 'user-profile' };
+// Spaces and people are containers and members, not library content: they are listed when asked for by name.
+const ANY_KINDS = VIEW_KINDS.filter((k) => k !== 'people' && k !== 'spaces');
 const VIEW_PRESETS = {
   inbox: { types: null, states: ['proposed'], assignee: 'anyone' },
   tasks: { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me' },
@@ -95,7 +98,7 @@ function viewParams(f, me, limit = 1000) {
   if (!validViewFilter(f)) throw new Error('invalid view filter');
   // No kinds selected is "any kind we list", never an unconstrained query: nodeTypes: [] is no filter at all to the
   // graph, which answers with images, calls and transcripts that no view can render.
-  const kinds = f.types && f.types.length ? f.types : VIEW_KINDS.filter((k) => k !== 'people');
+  const kinds = f.types && f.types.length ? f.types : ANY_KINDS;
   const p = {
     nodeTypes: [...new Set(kinds.map((k) => KIND_NODE_TYPE[k]))], limit,
     sortOptions: f.types && f.types.length === 1 && f.types[0] === 'meetings'

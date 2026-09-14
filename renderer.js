@@ -231,13 +231,6 @@ function mockApi() {
       return info(n);
     },
     pins: async () => sidebar.map((id) => info(all.find((d) => d.id === id))),
-    pinTree: async () => {
-      const [first, ...rest] = sidebar, node = (id) => info(all.find((d) => d.id === id));
-      return [
-        ...(first ? [{ uri: first, node: node(first), children: [] }] : []),
-        ...(rest.length ? [{ label: 'Studio', children: rest.map((id) => ({ uri: id, node: node(id), children: [] })) }] : []),
-      ];
-    },
     pinState: async (docId) => ({ sidebar: sidebar.includes(docId), dates: datePins[docId] || [] }),
     pin: async (docId, target) => { if (target === 'sidebar') { if (!sidebar.includes(docId)) sidebar.push(docId); } else (datePins[docId] ||= []).push(localDate()); emit(null); },
     unpin: async (docId, target) => { if (target === 'sidebar') sidebar.splice(sidebar.indexOf(docId) >>> 0, 1); else datePins[docId] = (datePins[docId] || []).filter((d) => d !== localDate()); emit(null); },
@@ -428,7 +421,7 @@ if (hotkeys.sync) { delete hotkeys.sync; localStorage.setItem('hotkeys', JSON.st
 if (hotkeys.today === undefined && !localStorage.getItem('todayHotkeySeeded')) {
   hotkeys.today = '⌃⇧D'; localStorage.setItem('hotkeys', JSON.stringify(hotkeys)); localStorage.setItem('todayHotkeySeeded', '1');
 }
-let pinTree = [], pinInfo = null; // Cmd+K: sidebar pin tree and { docId, sidebar, dates } of the palette's document (api.pinState)
+let pinInfo = null;          // { docId, sidebar, dates } of the palette's document (api.pinState)
 let palDoc = null;           // document the Cmd+K context actions apply to (zoomed, else the one whose node is focused)
 let palTaskCtx = null;
 let dropDoc = null;          // document waiting for an SVG drop ("Set icon…" overlay)
@@ -1629,7 +1622,7 @@ function selKey(e) { // keys while a selection is active (nothing focused); docu
 
 // ---- filter pills shared by every view ----
 const STATES = [['proposed', 'Inbox'], ['open', 'In Progress'], ['closed', 'Completed'], ['not_now', 'Later']];
-const TYPES = [['meetings', 'Meetings', 'meeting'], ['tasks', 'Tasks', 'task'], ['docs', 'Docs', 'doc'], null, ['chats', 'Chats', 'chat'], ['canvases', 'Canvases', 'canvas'], ['agents', 'Agents', 'agent'], ['skills', 'Skills', 'skill'], ['people', 'People', 'member']];
+const TYPES = [['meetings', 'Meetings', 'meeting'], ['tasks', 'Tasks', 'task'], ['docs', 'Docs', 'doc'], null, ['chats', 'Chats', 'chat'], ['canvases', 'Canvases', 'canvas'], ['agents', 'Agents', 'agent'], ['skills', 'Skills', 'skill'], ['spaces', 'Spaces', 'space'], ['people', 'People', 'member']];
 const toggleIn = (all, list, v) => { if (!list) return [v]; const next = all.filter((x) => list.includes(x) !== (x === v)); return next.length ? next : null; }; // null = any
 const names = (pairs, list) => (list ? pairs.filter((p) => p && list.includes(p[0])).map((p) => p[1]).join(', ') : null);
 // ---- group by: plain headings over the rows the view already loaded, no extra query ----
@@ -1880,25 +1873,63 @@ function openManyAssigneePalette(ctx) {
   palette.hidden = false; palInput.placeholder = 'Assign tasks to…'; palInput.value = '';
   loadMembers(); renderPalette(); palInput.focus();
 }
-function taskActionRows() {
+function taskActionRows(group = 'Actions') {
   const ctx = taskActionContext();
   if (!ctx) return [];
   if (ctx.multi) {
     const count = ctx.docs.length, noun = count === 1 ? 'task' : 'tasks', hint = ctx.skipped ? `${ctx.skipped} skipped` : '';
     return [
-      { group: 'Actions', icon: 'status', label: `Set status for ${count} ${noun}`, hint, disabled: !count || !tana.setStateMany, keepOpen: true, run: () => openStatusPalette(ctx) },
-      { group: 'Actions', icon: 'member', label: `Assign ${count} ${noun} to`, hint, disabled: !count || !tana.setAssigneesMany, keepOpen: true, run: () => openManyAssigneePalette(ctx) },
+      { group, icon: 'status', label: `Set status for ${count} ${noun}`, hint, disabled: !count || !tana.setStateMany, keepOpen: true, run: () => openStatusPalette(ctx) },
+      { group, icon: 'member', label: `Assign ${count} ${noun} to`, hint, disabled: !count || !tana.setAssigneesMany, keepOpen: true, run: () => openManyAssigneePalette(ctx) },
     ];
   }
   if (!ctx.docs.length) return [];
   const doc = ctx.docs[0], rows = [];
-  if (tana.setState) rows.push({ group: 'Actions', icon: 'status', label: 'Set status', hint: Object.fromEntries(STATES)[stateOf(doc)] || '', keepOpen: true, run: () => openStatusPalette(ctx) });
+  if (tana.setState) rows.push({ group, icon: 'status', label: 'Set status', hint: Object.fromEntries(STATES)[stateOf(doc)] || '', keepOpen: true, run: () => openStatusPalette(ctx) });
   if (tana.taskMeta && tana.setAssignees) {
     loadTaskMeta(doc.id);
     const meta = taskMetaById.get(doc.id), hint = meta && meta.assignees.length ? meta.assignees.map(memberName).join(', ') : meta ? 'Unassigned' : 'Loading…';
-    rows.push({ group: 'Actions', icon: 'member', label: 'Edit assignees', hint, keepOpen: true, run: () => openAssigneePalette(doc, ctx) });
+    rows.push({ group, icon: 'member', label: 'Edit assignees', hint, keepOpen: true, run: () => openAssigneePalette(doc, ctx) });
   }
   return rows;
+}
+// With rows selected, what acts on them comes first: at that moment the palette is about the selection, not the app.
+function selectionRows() {
+  const keys = selKeys();
+  if (!keys.length) return [];
+  const ids = [...new Set(keys.map((key) => items.get(key)?.node).filter((node) => node && !node.draft && isRealId(node.id)).map((node) => node.id))];
+  const rows = [];
+  if (ids.length && tana.setSensitive && sensitiveIds) {
+    const marked = ids.every((id) => sensitiveIds.has(id)), noun = ids.length === 1 ? 'item' : 'items';
+    rows.push({ group: 'Selection', icon: 'lock', label: `${marked ? 'Unmark' : 'Mark'} ${ids.length} ${noun} as sensitive`, run: () => setSensitiveMark(ids, !marked) });
+  }
+  rows.push(...taskActionRows('Selection'));
+  // Destructive, so it sits at the end of the group. Documents are soft-deleted (Cmd+Z restores them), blocks go
+  // through the same one-step removal as Cmd+Shift+Backspace.
+  const its = keys.map((key) => items.get(key)).filter(Boolean);
+  if (its.length && tana.deleteDocument) {
+    const noun = its.length === 1 ? 'item' : 'items';
+    rows.push({ group: 'Selection', icon: 'trash', label: `Delete ${its.length} ${noun}`, run: () => removeSelection(keys) });
+  }
+  return rows;
+}
+// One selection, two kinds of removal: rows that are documents are deleted one by one (each undoable on its own),
+// blocks reuse the existing single-step block removal.
+async function removeSelection(keys) {
+  const its = keys.map((key) => items.get(key)).filter(Boolean);
+  if (!its.length) return;
+  if (its.every((it) => it.node.kind === 'block')) return removeSel(keys);
+  sel = null;
+  await run(async () => {
+    for (const it of its) {
+      if (it.node.kind !== 'document' || !canEditItem(it)) throw new Error('Only writable documents and blocks can be deleted');
+      const access = await tana.accessOptions(it.docId);
+      if (!access?.deletable) throw new Error(access?.reason || 'This document cannot be deleted');
+      await tana.deleteDocument(it.docId); invalidateNode(it.docId);
+    }
+    await loadRoots();
+  });
+  render(true);
 }
 function loadAccess(docId) {
   if (!tana.accessOptions || accessById.has(docId) || accessLoading.has(docId)) return;
@@ -2128,29 +2159,18 @@ function currentDoc() {
   const d = docId && (allDocs().find((x) => x.id === docId) || extra.get(docId));
   return d && !d.draft ? d : null;
 }
-// ---- pins (api.pinTree / pinState / pin / unpin) ----
+// ---- pins (api.pinState / pin / unpin): what the palette needs is whether this document is pinned, not the tree ----
 function loadPins() {
-  if (!tana.pinTree && !tana.pins) return;
   const doc = palDoc;
-  const tree = tana.pinTree ? tana.pinTree() : tana.pins().then((nodes) => nodes.map((node) => ({ node, children: [] })));
-  Promise.all([tree, doc && tana.pinState(doc.id)]).then(([p, s]) => {
-    pinTree = p; pinInfo = s ? { docId: doc.id, ...s } : null;
+  if (!doc || !tana.pinState) { pinInfo = null; return; }
+  tana.pinState(doc.id).then((s) => {
+    pinInfo = s ? { docId: doc.id, ...s } : null;
     if (!palette.hidden && palMode === 'cmd') renderPalette();
   }, showError);
 }
 function pinAction(op, target) { run(async () => { await tana[op](pinInfo.docId, target); loadPins(); }); }
-function prunedPins(tree, id) {
-  const rows = [];
-  for (const entry of tree || []) {
-    const removed = entry.uri === id || entry.node?.id === id;
-    const children = prunedPins(entry.children, id);
-    if (!removed) rows.push({ ...entry, children });
-    else if (entry.label || children.length) rows.push({ ...entry, uri: undefined, node: undefined, children });
-  }
-  return rows;
-}
 function invalidatePinCaches(id, includeRecent = true) {
-  pinTree = prunedPins(pinTree, id);
+  if (pinInfo && pinInfo.docId === id) pinInfo = null;
   if (includeRecent) forgetRecent(id);
   palRows = palRows.filter((row) => row.id !== 'pinned:' + id);
 }
@@ -2170,10 +2190,12 @@ function setIcon(docId, svg) {
   render();
   run(() => tana.setIcon(docId, svg));
 }
-function setSensitiveMark(doc, on) {
+function setSensitiveMark(ids, on) {
   run(async () => {
-    await tana.setSensitive(doc.id, on);
-    if (on) sensitiveIds.add(doc.id); else sensitiveIds.delete(doc.id);
+    for (const id of [ids].flat()) {
+      await tana.setSensitive(id, on);
+      if (on) sensitiveIds.add(id); else sensitiveIds.delete(id);
+    }
     refreshSensitive();
   });
 }
@@ -2576,30 +2598,9 @@ const palette = $('palette'), palInput = $('paletteInput'), palList = $('palette
 let palMode = 'cmd', palRows = [], palIndex = 0, palBusy = false, palSeq = 0, palTimer, creationChoices = [];
 // hint defaults to the node's own meta, so a meeting keeps its date and time in every palette list
 const docRow = (n, hint, run) => ({ node: n, icon: n.icon, svg: n.iconSvg, label: n.text ?? n.title, tags: visibleTags(n), hint: hint === undefined ? n.meta : hint, run });
-function pinRows(tree) {
-  const unsectioned = [], sections = [];
-  const addNode = (entry, rows, group) => {
-    if (!entry.node) return;
-    const node = asDoc(entry.node);
-    rows.push({ ...docRow(node, undefined, () => openResult(node, sectionOf(node.id) ? undefined : 'Pinned')), id: 'pinned:' + node.id, group, right: 'pin' });
-  };
-  const collect = (entries, rows, label) => {
-    for (const entry of entries || []) {
-      let target = rows, nextLabel = label;
-      if (typeof entry.label === 'string' && entry.label !== label) {
-        const section = { label: entry.label, rows: [] };
-        sections.push(section); target = section.rows; nextLabel = section.label;
-      }
-      addNode(entry, target, nextLabel || 'Pinned');
-      collect(entry.children, target, nextLabel);
-    }
-  };
-  collect(tree, unsectioned, null);
-  return [...unsectioned, ...sections.flatMap((section) => section.rows)];
-}
 function paletteRows(q) {
-  const rows = views.map((s) => ({ id: 'view:' + s.id, group: 'Views', icon: s.icon, label: s.title, run: () => setView(s.id) }));
-  rows.push(...pinRows(pinTree));
+  const selection = selectionRows();
+  const rows = [...selection, ...views.map((s) => ({ id: 'view:' + s.id, group: 'Views', icon: s.icon, label: s.title, run: () => setView(s.id) }))];
   rows.push(...pillCommandRows());
   if (tana.creationOptions) rows.push({ id: 'create', group: 'Actions', icon: 'createNew', label: 'Create new…', keepOpen: true, run: openCreationPalette });
   rows.push({ id: 'sync', group: 'Actions', icon: 'sync', label: 'Sync', run: () => run(() => tana.refresh()) });
@@ -2607,7 +2608,7 @@ function paletteRows(q) {
   if (tana.filters) rows.push({ id: 'hidden', group: 'Actions', icon: 'hidden', label: 'Edit hidden items', keepOpen: true, run: openHiddenPalette });
   if (palDoc && tana.setSensitive && sensitiveIds) {
     const marked = sensitiveIds.has(palDoc.id);
-    rows.push({ group: 'Actions', icon: 'lock', label: marked ? 'Unmark as sensitive' : 'Mark as sensitive', run: () => setSensitiveMark(palDoc, !marked) });
+    rows.push({ group: 'Actions', icon: 'lock', label: marked ? 'Unmark as sensitive' : 'Mark as sensitive', run: () => setSensitiveMark(palDoc.id, !marked) });
   }
   if (tana.sensitiveIds) rows.push({ id: 'sensitiveVisibility', group: 'Actions', icon: 'hidden', label: 'Toggle sensitive visibility', hint: sensitiveVisible ? 'Shown' : 'Blurred', run: toggleSensitiveVisibility });
   // today's node: a document titled with the date, pinned to today; created and pinned when it does not exist yet
@@ -2629,7 +2630,7 @@ function paletteRows(q) {
     rows.push({ group: 'Actions', icon: 'setIcon', label: 'Set Image', run: () => startDrop(palDoc) });
     if (palDoc.iconSvg) rows.push({ group: 'Actions', label: 'Remove icon', run: () => setIcon(palDoc.id, null) });
   }
-  rows.push(...taskActionRows());
+  if (!selection.length) rows.push(...taskActionRows());
   if (palDoc && tana.accessOptions) {
     loadAccess(palDoc.id);
     const access = accessById.get(palDoc.id);

@@ -44,31 +44,6 @@ function sourceBetween(start, end) {
   return source.slice(from, to);
 }
 
-function runPinGrouping() {
-  const pinRows = vm.runInNewContext(`
-    const asDoc = (node) => ({ ...node, kind: 'document', text: node.title || node.text });
-    const docRow = (node, hint, run) => ({ label: node.text, run });
-    const openResult = () => {};
-    const sectionOf = () => null;
-    ${functionSource('pinRows')}
-    pinRows;
-  `);
-  const rows = pinRows([
-    { node: { id: 'scratch', title: 'Scratchpad' }, children: [] },
-    { label: 'Studio', children: [
-      { node: { id: 'charter', title: 'Charter' }, children: [] },
-      { node: { id: 'roadmap', title: 'Roadmap' }, children: [] },
-    ] },
-    { node: { id: 'test', title: 'Test Pin' }, children: [] },
-  ]);
-  assert.deepEqual(plain(rows.map((row) => [row.group, row.label])), [
-    ['Pinned', 'Scratchpad'],
-    ['Pinned', 'Test Pin'],
-    ['Studio', 'Charter'],
-    ['Studio', 'Roadmap'],
-  ], 'unsectioned pins share one Pinned group before named folders');
-}
-
 function runTypingRenderStabilityCheck() {
   const api = vm.runInNewContext(`
     const row = { isConnected: true }, editor = { isContentEditable: true, closest: () => row };
@@ -426,7 +401,7 @@ async function runSelectionChecks() {
 }
 
 async function runMultiTaskPaletteCheck() {
-  const contextFns = [functionSource('taskActionContext'), functionSource('taskActionRows')].join('\n');
+  const contextFns = [functionSource('taskActionContext'), functionSource('taskActionRows'), functionSource('selectionRows'), functionSource('removeSelection')].join('\n');
   const context = vm.runInNewContext(`
     const task = (id, editable = true) => ({ id, kind: 'document', icon: 'task', editable, stateType: 'open' });
     const rows = [
@@ -435,7 +410,8 @@ async function runMultiTaskPaletteCheck() {
       { key: 'locked', docId: 'locked', node: task('locked', false) },
       { key: 't2', docId: 't2', node: task('t2') },
     ];
-    const items = new Map(rows.map((item) => [item.key, item]));
+    const blocks = [{ key: 'doc/b1', docId: 'doc', node: { id: 'b1', kind: 'block' } }, { key: 'doc/b2', docId: 'doc', node: { id: 'b2', kind: 'block' } }];
+    const items = new Map([...rows, ...blocks].map((item) => [item.key, item]));
     let selected = rows.map((item) => item.key), palDoc = task('palette-task');
     const selKeys = () => selected;
     const isTask = (node) => node.kind === 'document' && node.icon === 'task';
@@ -443,13 +419,25 @@ async function runMultiTaskPaletteCheck() {
     const stateOf = (node) => node.stateType;
     const STATES = [['proposed', 'Inbox'], ['open', 'In Progress'], ['closed', 'Completed'], ['not_now', 'Later']];
     const taskMetaById = new Map(), loadTaskMeta = () => {}, memberName = (id) => id;
-    const tana = { setState() {}, setStateMany() {}, taskMeta() {}, setAssignees() {}, setAssigneesMany() {} };
+    const calls = [];
+    const tana = { setState() {}, setStateMany() {}, taskMeta() {}, setAssignees() {}, setAssigneesMany() {}, setSensitive() {},
+      deleteDocument: async (id) => { calls.push(['delete', id]); }, accessOptions: async () => ({ deletable: true }) };
+    const removeSel = (keys) => { calls.push(['blocks', keys.join(',')]); };
+    const run = (fn) => fn(), loadRoots = async () => {}, render = () => {}, invalidateNode = () => {};
+    const canEditItem = (item) => item.node.editable !== false;
+    let sel = null;
     const openStatusPalette = () => {}, openAssigneePalette = () => {}, openManyAssigneePalette = () => {};
+    const sensitiveIds = new Set(['t2']), isRealId = () => true;
+    let marked = null;
+    const setSensitiveMark = (ids, on) => { marked = [ids, on]; };
     ${contextFns}
     Object.assign(globalThis, {
       labels: () => taskActionRows().map((row) => [row.label, row.hint, !!row.disabled]),
       one: () => { selected = ['t1']; return taskActionRows().map((row) => row.label); },
       locked: () => { selected = ['locked']; return taskActionRows().map((row) => row.label); },
+      selection: (keys) => { selected = keys; return selectionRows().map((row) => [row.group, row.label]); },
+      markAll: () => { selected = rows.map((item) => item.key); selectionRows()[0].run(); return marked; },
+      remove: async (keys) => { calls.length = 0; selected = keys; try { await removeSelection(keys); } catch (e) { calls.push(['error', e.message]); } return calls; },
     });
   `);
   assert.deepEqual(plain(context.labels()), [
@@ -458,6 +446,22 @@ async function runMultiTaskPaletteCheck() {
   ], 'palette labels report the eligible and skipped counts from the selected rows');
   assert.deepEqual(plain(context.one()), ['Set status', 'Edit assignees'], 'one selected task keeps the single-task actions');
   assert.deepEqual(plain(context.locked()), [], 'one read-only selected task offers no mutation');
+  // What acts on the selection comes first, in its own group, and reaches every selected row, not only the tasks.
+  assert.deepEqual(plain(context.selection(['t1', 'meeting', 'locked', 't2'])), [
+    ['Selection', 'Mark 4 items as sensitive'],
+    ['Selection', 'Set status for 2 tasks'],
+    ['Selection', 'Assign 2 tasks to'],
+    ['Selection', 'Delete 4 items'],
+  ], 'a selection offers sensitivity for everything in it and the task actions for the tasks in it');
+  assert.deepEqual(plain(context.selection(['t2'])), [['Selection', 'Unmark 1 item as sensitive'], ['Selection', 'Set status'], ['Selection', 'Edit assignees'], ['Selection', 'Delete 1 item']],
+    'one selected row is still a selection, and a marked one offers to unmark');
+  assert.deepEqual(plain(context.selection([])), [], 'with nothing selected the palette is about the app again');
+  assert.deepEqual(plain(context.markAll()), [['t1', 'meeting', 'locked', 't2'], true], 'marking applies to every selected document at once');
+  // Deleting a selection: documents go one by one through the permission check, blocks reuse the single-step removal.
+  assert.deepEqual(plain(await context.remove(['t1', 'meeting'])), [['delete', 't1'], ['delete', 'meeting']], 'every selected document is deleted, in order');
+  assert.deepEqual(plain(await context.remove(['doc/b1', 'doc/b2'])), [['blocks', 'doc/b1,doc/b2']], 'a selection of blocks takes the existing one-step path instead');
+  assert.deepEqual(plain(await context.remove(['locked', 't1'])), [['error', 'Only writable documents and blocks can be deleted']],
+    'a read-only row stops the delete and says so, instead of deleting what it can');
 
   const applyFns = [functionSource('taskResult'), functionSource('applyTaskChange'), functionSource('statusRows'), functionSource('manyAssigneeRows')].join('\n');
   const apply = vm.runInNewContext(`
@@ -700,7 +704,7 @@ async function runTaskChildCheckboxScopeCheck() {
 async function runStalePaletteInvalidationCheck() {
   const liveUpdates = sourceBetween('tana.onChanged((docId) => {', 'tana.onStatus(showStatus);');
   const recent = sourceBetween('const recent =', 'function recordRecent');
-  const helpers = [functionSource('forgetRecent'), functionSource('prunedPins'), functionSource('invalidatePinCaches'), functionSource('invalidateNode')].join('\n');
+  const helpers = [functionSource('forgetRecent'), functionSource('invalidatePinCaches'), functionSource('invalidateNode')].join('\n');
   const context = {};
   vm.runInNewContext(`
     const goneId = 'tana:text:01j0stale0000000000000000';
@@ -721,20 +725,18 @@ async function runStalePaletteInvalidationCheck() {
     const asDoc = (node) => ({ ...node, id: node.id, text: node.text ?? node.title, kind: 'document' });
     const docRow = (node) => ({ node, label: node.text });
     const openResult = () => {}, sectionOf = () => null;
-    ${functionSource('pinRows')}
     ${recent}
     let views = [], palRows = [], palDoc = null, pinInfo = null, dropDoc = null;
     let zoom = { docId: keptId };
     const taskMetaById = new Map(), kids = new Map(), extra = new Map(), paths = new Map(), fresh = new Map();
     const loadRoots = async () => {};
     const reload = async () => {};
-    const loadPins = async () => { pinTree = await tana.pinTree(); };
+    const loadPins = async () => { pinInfo = null; };
     const loadView = () => {};
     const render = () => {};
     const showError = (error) => { throw error; };
     const view = 'tasks';
     const tana = {
-      pinTree: async () => remoteTree,
       onChanged: (callback) => { listener = callback; },
       onRemoved: (callback) => { removeListener = callback; },
       onUnpinned: (callback) => { unpinListener = callback; },
@@ -743,15 +745,14 @@ async function runStalePaletteInvalidationCheck() {
     ${liveUpdates}
     Object.assign(globalThis, {
       update: (id) => listener(id),
-      removed: (id) => { remoteTree = [{ node: { id: keptId, title: 'beta' }, children: [] }]; removeListener(id); },
-      unpinned: (id) => { remoteTree = [{ node: { id: keptId, title: 'beta' }, children: [] }]; unpinListener(id); },
-      state: () => ({ pins: pinRows(pinTree).map((row) => row.node.id), recent: recent().map((node) => node.id), zoom: zoom && zoom.docId }),
+      removed: (id) => removeListener(id),
+      unpinned: (id) => unpinListener(id),
+      state: () => ({ recent: recent().map((node) => node.id), zoom: zoom && zoom.docId }),
     });
   `, context);
   context.update('tana:text:01j0keep00000000000000000');
   await new Promise(setImmediate);
   assert.deepEqual(plain(context.state()), {
-    pins: ['tana:text:01j0stale0000000000000000', 'tana:text:01j0keep00000000000000000'],
     recent: ['tana:text:01j0stale0000000000000000', 'tana:text:01j0keep00000000000000000'],
     zoom: 'tana:text:01j0keep00000000000000000',
   }, 'an ordinary string update retains Cmd+K pins, recently viewed rows, and zoom state');
@@ -759,7 +760,6 @@ async function runStalePaletteInvalidationCheck() {
   context.update(null);
   await new Promise(setImmediate);
   assert.deepEqual(plain(context.state()), {
-    pins: ['tana:text:01j0stale0000000000000000', 'tana:text:01j0keep00000000000000000'],
     recent: ['tana:text:01j0stale0000000000000000', 'tana:text:01j0keep00000000000000000'],
     zoom: 'tana:text:01j0keep00000000000000000',
   }, 'a general null update refreshes data without evicting Cmd+K state');
@@ -767,18 +767,16 @@ async function runStalePaletteInvalidationCheck() {
   context.unpinned('tana:text:01j0stale0000000000000000');
   await new Promise(setImmediate);
   assert.deepEqual(plain(context.state()), {
-    pins: ['tana:text:01j0keep00000000000000000'],
     recent: ['tana:text:01j0stale0000000000000000', 'tana:text:01j0keep00000000000000000'],
     zoom: 'tana:text:01j0keep00000000000000000',
-  }, 'an explicit unpin event removes only the pinned Cmd+K row');
+  }, 'an unpin is not a deletion: it evicts nothing');
 
   context.removed('tana:text:01j0stale0000000000000000');
   await new Promise(setImmediate);
   assert.deepEqual(plain(context.state()), {
-    pins: ['tana:text:01j0keep00000000000000000'],
     recent: ['tana:text:01j0keep00000000000000000'],
     zoom: 'tana:text:01j0keep00000000000000000',
-  }, 'an explicit removal event evicts only its exact ID from Cmd+K pins and recently viewed rows');
+  }, 'an explicit removal event evicts only its exact ID from the recently viewed rows');
 }
 
 function runReferenceEmbedRenderCheck() {
@@ -940,7 +938,7 @@ function runAuthPaletteCheck() {
     const render = () => {};
     const views = [];
     const pinTree = [];
-    const pinRows = () => [];
+    const pinRows = () => [], selectionRows = () => [];
     const pillCommandRows = () => [];
     const taskActionRows = () => [];
     const tana = { refresh: async () => {}, login: async () => {} };
@@ -989,7 +987,7 @@ function runSyncShortcutCheck() {
 
   const paletteRows = functionSource('paletteRows');
   const rows = vm.runInNewContext(`
-    const views = [], pinTree = [], pinRows = () => [];
+    const views = [], pinTree = [], pinRows = () => [], selectionRows = () => [];
     const pillCommandRows = () => [];
     const taskActionRows = () => [];
     const tana = { refresh: async () => {} }, run = () => {};
@@ -2091,7 +2089,7 @@ async function runMemberLoadCheck() {
   assert.equal(throttled.attempts, 3, 'a slow start cannot turn renders into a request loop: a fresh ask is throttled');
 }
 
-const checks = [runDraftTailCheck, runPinGrouping, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck];
+const checks = [runDraftTailCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck];
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);
   if (failures.length) throw new AggregateError(failures, failures.map((failure) => failure.message).join('\n'));
