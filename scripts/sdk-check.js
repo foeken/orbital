@@ -222,7 +222,12 @@ async function main() {
     assert.deepEqual(outline.readOutline(d).map(n=>n.text),['C','A','B']);
     await backend.undo();assert.deepEqual(outline.readOutline(d).map(n=>n.text),['A','B','C']);
     assert.equal(await backend.undo(),null,'one main history entry for batch move');
-    console.log('ok  removeMany/moveMany IPC bridge each records exactly one undo step');
+    await backend.handlers.get('block:indentMany')(null,DOC,ids.slice(1));
+    assert.deepEqual(outline.readOutline(d).map(n=>n.text),['A']);
+    assert.deepEqual(outline.readOutline(d)[0].children.map(n=>n.text),['B','C'],'B and C became children of A');
+    await backend.undo();assert.deepEqual(outline.readOutline(d).map(n=>n.text),['A','B','C']);
+    assert.equal(await backend.undo(),null,'one main history entry for batch indent');
+    console.log('ok  removeMany/moveMany/indentMany IPC bridges each record exactly one undo step');
   }
   // 1. Request messages: binary round-trip and protobuf-JSON shape from PLATFORM-PROTOCOL.md §1.1/§2
   const Req = message('sync', 'ServerSyncRequest'), Cmd = message('sync', 'ServerSyncCommandRequest');
@@ -975,6 +980,27 @@ async function main() {
     assert.equal(m.redo(), true);
     assert.deepEqual(outline.readOutline(m).map((n) => n.text), ['A', 'D', 'B', 'C']);
     console.log('ok  atomic multi-remove/move undo and redo');
+  }
+  // The same for a whole indented range: one transaction, so Tab on a selection is one undo step, not one per row.
+  {
+    const d = new Document(DOC, { peerId: '743' });
+    const a = outline.insertAfter(d, null, 'A');
+    const b = outline.insertAfter(d, a, 'B');
+    const c = outline.insertAfter(d, b, 'C');
+    const depth = (rows, want, level = 0) => rows.flatMap((n) => [[n.text, level], ...depth(n.children || [], want, level + 1)]);
+    outline.indentMany(d, [b, c]);
+    assert.deepEqual(depth(outline.readOutline(d)), [['A', 0], ['B', 1], ['C', 1]], 'each row follows the one above it');
+    assert.equal(d.undo(), true);
+    assert.deepEqual(depth(outline.readOutline(d)), [['A', 0], ['B', 0], ['C', 0]], 'one undo step for the whole range');
+    assert.equal(d.redo(), true);
+    assert.deepEqual(depth(outline.readOutline(d)), [['A', 0], ['B', 1], ['C', 1]]);
+    outline.outdentMany(d, [b, c]);
+    assert.deepEqual(depth(outline.readOutline(d)), [['A', 0], ['B', 0], ['C', 0]]);
+    assert.equal(d.undo(), true);
+    assert.deepEqual(depth(outline.readOutline(d)), [['A', 0], ['B', 1], ['C', 1]], 'one undo step for the whole outdent');
+    assert.throws(() => outline.indentMany(d, [b, b]), /duplicate or invalid/);
+    assert.throws(() => outline.outdentMany(d, []), /at least one node/);
+    console.log('ok  atomic multi-indent/outdent undo and redo');
   }
   // 3c. Image blocks (addendum 12): { nodeName 'image', attributes { blockId, tanaUri, displayWidth?, displayHeight? }, children [] }
   //     as seen in tana:text:01m2839s1xa7mejzavmaqv2ck9; read as { type 'image', image }, removable and movable like any block.

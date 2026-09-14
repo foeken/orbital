@@ -69,6 +69,26 @@ function runPinGrouping() {
   ], 'unsectioned pins share one Pinned group before named folders');
 }
 
+function runTypingRenderStabilityCheck() {
+  const api = vm.runInNewContext(`
+    const row = { isConnected: true }, editor = { isContentEditable: true, closest: () => row };
+    const titleEl = {}, outline = { contains: (el) => el === editor };
+    const document = { activeElement: editor };
+    let rendering = false, renderDeferred = false, renders = 0, caret = 17, scroll = 240;
+    const renderOutline = () => { renders++; row.isConnected = false; document.activeElement = {}; caret = 0; scroll = 0; };
+    ${functionSource('editingRow')}
+    ${functionSource('render')}
+    ({ trigger: (result) => render(result), blur: () => { document.activeElement = {}; render(); },
+       state: () => ({ renders, deferred: renderDeferred, sameEditor: document.activeElement === editor, rowConnected: row.isConnected, caret, scroll }) });
+  `);
+  for (const trigger of ['audience metadata', 'sync refresh', 'members loaded', 'active sort/group']) api.trigger(trigger);
+  assert.deepEqual(plain(api.state()), { renders: 0, deferred: true, sameEditor: true, rowConnected: true, caret: 17, scroll: 240 },
+    'background renders leave the edited DOM row, caret and scroll untouched');
+  api.blur();
+  assert.deepEqual(plain(api.state()), { renders: 1, deferred: false, sameEditor: false, rowConnected: false, caret: 0, scroll: 0 },
+    'the latest deferred state renders once editing ends');
+}
+
 async function runSelectionChecks() {
   const selection = sourceBetween('function selKeys()', '// ---- filter pills');
   const canEditStructure = sourceBetween('const canEditStructure =', 'const chatIcon =');
@@ -616,7 +636,7 @@ async function runLinkPaletteCheck() {
   assert.notEqual(start, -1, '@ palette keyboard handler is present');
   const context = { resolveSearch: undefined, press: undefined };
   vm.runInNewContext(`
-    let linkCtx = { text: 'Roni', item: {}, segs: [], start: 0, end: 4 };
+    let linkCtx = { text: 'Roni', item: {}, segs: [], start: 0, end: 4 }, pinCtx = null;
     let palRows = [], palIndex = 0, palBusy = false, palSeq = 0, palTimer = null, palMode = 'search';
     let searchResolve, actions = [];
     const palInput = { value: 'Roni', addEventListener: (_name, fn) => { press = fn; } };
@@ -666,6 +686,7 @@ function runAuthPaletteCheck() {
     const sections = [];
     const pinTree = [];
     const pinRows = () => [];
+    const pillCommandRows = () => [];
     const tana = { refresh: async () => {}, login: async () => {} };
     const run = () => {};
     const pinInfo = null, palDoc = null, hotkeys = {}, theme = 'light';
@@ -713,6 +734,7 @@ function runSyncShortcutCheck() {
   const paletteRows = functionSource('paletteRows');
   const rows = vm.runInNewContext(`
     const sections = [], pinTree = [], pinRows = () => [];
+    const pillCommandRows = () => [];
     const tana = { refresh: async () => {} }, run = () => {};
     const authed = true, authChecking = false, signedOut = false, pinInfo = null, palDoc = null, hotkeys = {}, theme = 'light';
     const localDate = () => '2026-09-13', setIcon = () => {}, setTheme = () => {}, startDrop = () => {};
@@ -1116,45 +1138,60 @@ function runFilterMenuCloseCheck() {
 }
 
 // The sidebar's own rows: a meeting's call link and the zoomed task's metadata, both above the groups.
-function runSidebarRowsCheck() {
+async function runSidebarRowsCheck() {
   const api = vm.runInNewContext(`
     const calls = [];
     let summary = null;
     const taskSummary = () => summary;
     const documentSummary = () => null; // covered by its own path; here the task summary is the input
+    const isRealId = () => true;
     const canEditNode = (node) => node.editable !== false;
     const openAssigneePalette = (doc) => calls.push(['assignees', doc.id]);
-    const openVisibilityPalette = (doc) => calls.push(['visibility', doc.id]);
+    const openVisibilityPalette = (doc) => { calls.push(['visibility', doc.id]); palDoc = doc; palette.hidden = false; };
     const openVisibilityPeople = (doc) => calls.push(['people', doc.id]);
-    const accessById = new Map(), taskMetaById = new Map();
+    const accessById = new Map(), accessLoading = new Set(), taskMetaById = new Map();
     let palDoc = null, palette = { hidden: true };
-    const loadAccess = () => {};
+    const loadAccess = () => {}, loadTaskMeta = () => {};
     const run = (fn) => fn();
-    const tana = { taskMeta: async () => ({}), setAssignees: async () => {}, accessOptions: async () => ({}), openExternal: async (url) => calls.push(['open', url]) };
+    const tana = { taskMeta: async () => ({}), setAssignees: async () => {}, accessOptions: async () => ({}), nodeLink: async (id) => 'https://home.tana.inc/l/' + id, openExternal: async (url) => calls.push(['open', url]) };
     ${functionSource('railCallRow')}
     ${functionSource('railMetaRows')}
     ${functionSource('openVisibility')}
-    ({ rows: (node, value) => { summary = value; return railMetaRows(node); }, call: (data) => railCallRow(data), calls: () => calls,
+    ${functionSource('banSvg')}
+    ${functionSource('visibilityRows')}
+    ({ rows: (node, value, accessNode) => { summary = value; return railMetaRows(node, accessNode); }, call: (data) => railCallRow(data), calls: () => calls,
        known: (id, meta, access) => { if (meta) taskMetaById.set(id, meta); else taskMetaById.delete(id); if (access) accessById.set(id, access); else accessById.delete(id); },
+       permission: (access, loading) => { palDoc = { id: 'doc' }; accessById.delete('doc'); accessLoading.delete('doc'); if (access) accessById.set('doc', access); if (loading) accessLoading.add('doc'); return visibilityRows(''); },
        opened: () => ({ doc: palDoc && palDoc.id, hidden: palette.hidden }) });
   `);
-  assert.deepEqual(plain(api.rows({ id: 'doc' }, null)), [], 'a node with no task metadata gets no sidebar rows at all');
+  assert.deepEqual(plain(api.rows({ id: 'doc' }, null).map((row) => [row.id, row.icon, row.label])),
+    [['showInTana', 'tana', 'Show in Tana']], 'the Tana link keeps Details present without task metadata');
   const rows = api.rows({ id: 'doc' }, { assignees: 'Lex van Velsen', audience: { icon: 'lock', label: 'Visible only to you' } });
   assert.deepEqual(plain(rows.map((row) => [row.id, row.icon, row.label, typeof row.run])), [
     ['assignees', 'member', 'Assigned to Lex van Velsen', 'function'],
     ['visibility', 'lock', 'Visible only to you', 'function'],
+    ['showInTana', 'tana', 'Show in Tana', 'function'],
   ], 'assignees and visibility read as plain rows and both can be opened');
   rows[0].run(); rows[1].run();
   assert.deepEqual(plain(api.calls()), [['assignees', 'doc'], ['visibility', 'doc']], 'the rows open the pickers the palette already uses');
+  api.rows({ id: 'writeup' }, { audience: { icon: 'userLock', label: 'Visible to selected people' }, scope: 'people' }, { id: 'event' })[0].run();
+  assert.deepEqual(plain(api.calls().at(-1)), ['visibility', 'event'], 'a followed meeting write-up checks visibility on its event hub');
   assert.deepEqual(plain(api.rows({ id: 'doc' }, { assignees: 'Unassigned', audience: null, unknownAudience: true }).map((row) => row.label)),
-    ['Unassigned'], 'an audience that cannot be verified is left out instead of rendering an empty row');
+    ['Unassigned', 'Show in Tana'], 'an audience that cannot be verified is left out instead of rendering an empty row');
   assert.deepEqual(plain(api.rows({ id: 'doc', editable: false }, { assignees: 'Lex', audience: { icon: 'lock', label: 'Visible only to you' } }).map((row) => row.run === null)),
-    [true, true], 'a read-only node shows its metadata without offering a picker');
+    [true, false, false], 'read-only body editing does not disable sharing or the Tana link');
   // link sharing is its own fact: a public document says so, even when it is not a task and has no assignee
   assert.deepEqual(plain(api.rows({ id: 'doc' }, { assignees: 'Lex', audience: { icon: 'lock', label: 'Visible only to you' }, linkShared: true }).map((row) => [row.id, row.icon])),
-    [['assignees', 'member'], ['visibility', 'lock'], ['linkShared', 'globe']], 'a link-shared node adds a globe row');
+    [['assignees', 'member'], ['visibility', 'lock'], ['linkShared', 'globe'], ['showInTana', 'tana']], 'a link-shared node adds a globe row');
   assert.deepEqual(plain(api.rows({ id: 'doc' }, { assignees: '', audience: null, linkShared: true }).map((row) => [row.id, row.label])),
-    [['linkShared', 'Anyone with the link']], 'a public document with no assignee still reports that anyone with the link can read it');
+    [['linkShared', 'Anyone with the link'], ['showInTana', 'Show in Tana']], 'a public document with no assignee still reports that anyone with the link can read it');
+  await api.rows({ id: 'doc' }, null)[0].run();
+  assert.deepEqual(plain(api.calls().at(-1)), ['open', 'https://home.tana.inc/l/doc'], 'Show in Tana reuses nodeLink and openExternal');
+  assert.deepEqual(plain(api.permission(null, true)), [{ group: 'Visibility', label: 'Checking permission…', disabled: true }], 'visibility explains while permission loads');
+  const denied = plain(api.permission({ sharing: false, reason: 'Only the event organizer can change access' }));
+  assert.match(denied[0].svg, /<line[^>]+><\/line><circle/, 'the attendee reason uses the supplied ban icon');
+  delete denied[0].svg;
+  assert.deepEqual(denied, [{ group: 'Visibility', label: 'Only the event organizer can change access', disabled: true }], 'an attendee sees the backend reason');
 
   assert.equal(api.call(null), null, 'no relations, no call row');
   assert.equal(api.call({ pinned: [] }), null, 'a meeting without a call link renders nothing');
@@ -1163,13 +1200,14 @@ function runSidebarRowsCheck() {
   call.run();
   assert.deepEqual(plain(api.calls().at(-1)), ['open', 'https://meet.google.com/ipt-utoj-srr'], 'it joins through api.openExternal');
   assert.ok(/video/.test(fs.readFileSync(require.resolve('../icons.js'), 'utf8')), 'icons.js carries the video icon the call row asks for');
+  assert.ok(/tana/.test(fs.readFileSync(require.resolve('../icons.js'), 'utf8')), 'icons.js carries the Tana icon the link row asks for');
 
-  // "Visible to selected people" is already past the mode question: the sidebar row opens the people list itself.
+  // "Visible to selected people" opens the people list only after permission is known; attendees must see the reason.
   const people = { assignees: 'Lex', scope: 'people', audience: { icon: 'userLock', label: 'Visible to selected people' } };
   const visibility = (node, value) => api.rows(node, value).find((row) => row.id === 'visibility');
   api.known('doc', { participants: [] });
   visibility({ id: 'doc' }, people).run();
-  assert.deepEqual(plain(api.calls().at(-1)), ['people', 'doc'], 'a document shared with selected people opens at the people list');
+  assert.deepEqual(plain(api.calls().at(-1)), ['visibility', 'doc'], 'permission still loading starts at the explanatory visibility level');
   assert.deepEqual(plain(api.opened()), { doc: 'doc', hidden: false }, 'and the palette it opens is the existing visibility flow, on that document');
   api.known('doc', { participants: [] }, { rules: ['me', 'people', 'inherit'] });
   visibility({ id: 'doc' }, people).run();
@@ -1183,6 +1221,46 @@ function runSidebarRowsCheck() {
   api.known('doc', { participants: [] });
   visibility({ id: 'doc' }, { assignees: 'Lex', scope: 'only-me', audience: { icon: 'lock', label: 'Visible only to you' } }).run();
   assert.deepEqual(plain(api.calls().at(-1)), ['visibility', 'doc'], 'every other visibility mode still opens the flow at its first step');
+}
+
+async function runRailPinCheck() {
+  const groups = vm.runInNewContext(functionSource('railGroups') + '; railGroups;');
+  assert.deepEqual(plain(groups({ pinHub: 'event', pinned: [], outcomes: [], notes: [] })),
+    [['Pinned', [], 'event']], 'a writable empty pin hub keeps the Pinned section');
+
+  const action = vm.runInNewContext(`
+    ${FAKE_DOM}
+    const iconSvg = () => '<svg></svg>', railMove = () => false;
+    const calls = [], togglePalette = (...args) => calls.push(args);
+    ${functionSource('railMetaEl')}
+    ${functionSource('railPinAction')}
+    const row = railPinAction('event', 'doc'); row.onclick();
+    ({ className: row.className, calls });
+  `);
+  assert.equal(action.className, 'rrow', 'the pin action uses the ordinary sidebar row');
+  assert.deepEqual(plain(action.calls), [['search', null, { pinHub: 'event', docId: 'doc' }]], 'the pin action opens the shared search palette with pin context');
+
+  const picker = vm.runInNewContext(`
+    const calls = [], asDoc = (node) => node, docRow = (node, hint, run) => ({ node, run });
+    let linkCtx = null, pinCtx = { pinHub: 'event', docId: 'doc' };
+    const linkTo = () => {}, openResult = () => {}, createAndLink = () => {};
+    const pinResult = (ctx, node) => calls.push([ctx.pinHub, ctx.docId, node.id]);
+    ${functionSource('resultRows')}
+    const row = resultRows([{ id: 'chosen', title: 'Chosen' }], 'Results')[0]; row.run();
+    ({ calls });
+  `);
+  assert.deepEqual(plain(picker.calls), [['event', 'doc', 'chosen']], 'a search result uses the pin context instead of navigating');
+
+  const refresh = vm.runInNewContext(`
+    const relatedBy = new Map([['event', {}], ['doc', {}]]), calls = [];
+    const tana = { pinTo: async (...args) => calls.push(args) }, run = (fn) => fn();
+    let renders = 0; const render = () => { renders++; };
+    ${functionSource('pinResult')}
+    ({ pin: () => pinResult({ pinHub: 'event', docId: 'doc' }, { id: 'chosen' }), state: () => ({ calls, keys: [...relatedBy.keys()], renders }) });
+  `);
+  await refresh.pin();
+  assert.deepEqual(plain(refresh.state()), { calls: [['event', 'chosen']], keys: [], renders: 1 }, 'pinning invalidates the hub and open-document relation caches before rendering');
+  assert.match(functionSource('closePalette'), /pinCtx = null/, 'closing the shared palette clears pin context');
 }
 
 // Every sidebar title starts at the same x: an icon takes the same horizontal box as a task row's checkbox.
@@ -1317,6 +1395,48 @@ function runSortGroupCheck() {
   assert.match(source, /const groups = groupsOf\(list\);/, 'the view renders its groups');
   assert.match(source, /groups\.flatMap\(\(g\) => \[groupHeadEl\(g\.title\)/, 'each group is introduced by a heading');
   assert.match(source, /list = sortRows\(list\);/, 'the rows are sorted before they are grouped');
+}
+
+function runCmdPillsCheck() {
+  const definitions = sourceBetween('const STATES =', 'function renderPills');
+  const api = vm.runInNewContext(`
+    let view = 'tasks', taskF = { states: ['open'], assignee: 'anyone' }, libF = { types: ['tasks'], states: ['open'], assignee: 'anyone', text: '' };
+    let members = [{ id: 'me', title: 'André', me: true }], showMcp = false, groupPref = {}, sortPref = {};
+    let pillCtx = null, palMode = 'cmd', palRows = [], palIndex = 0, renders = 0;
+    const taskMetaById = new Map(), tana = {}, palette = { hidden: false };
+    const $ = () => ({ hidden: false }), showError = () => {}, renderPills = () => {};
+    const localStorage = { setItem() {} }, render = () => { renders++; };
+    const setTaskF = (patch) => { taskF = { ...taskF, ...patch }; render(); };
+    const setLibF = (patch) => { libF = { ...libF, ...patch }; render(); };
+    const setMcp = (on) => { showMcp = on; render(); };
+    const palInput = { value: '', placeholder: '', focus() {} };
+    const renderPalette = () => { renders++; };
+    ${definitions}
+    ${functionSource('pillRows')}
+    ${functionSource('openPillPalette')}
+    ${functionSource('openCommandPalette')}
+    ({
+      commands: (next) => { view = next; return pillCommandRows().map((row) => [row.id, row.label]); },
+      open: (id) => { openPillPalette(id); return { mode: palMode, rows: pillRows('').map((row) => [row.label, row.hint]) }; },
+      pick: (label) => { pillRows('').find((row) => row.label === label).run(); return { mode: palMode, taskF, group: groupPref[view], sort: sortPref[view] }; },
+    });
+  `);
+  assert.deepEqual(plain(api.commands('tasks')), [
+    ['pill:status', 'Status In Progress'], ['pill:assigned', 'Assigned to Anyone'],
+    ['pill:sort', 'Sort Default'], ['pill:group', 'Group None'],
+  ], 'Cmd+K derives the current Tasks pill commands and values from pillDefs');
+  assert.deepEqual(plain(api.open('status')), { mode: 'pill', rows: [['Any status', ''], ['Inbox', ''], ['In Progress', '✓'], ['Completed', ''], ['Later', '']] },
+    'a command opens the same Status rows and active tick as the pill');
+  assert.equal(api.pick('Inbox').mode, 'pill', 'a multi-select filter stays in its pill sublevel');
+  api.open('sort');
+  assert.deepEqual(plain(api.pick('Title')), { mode: 'cmd', taskF: { states: ['proposed', 'open'], assignee: 'anyone' }, sort: 'title' },
+    'a single Sort choice applies the shared row action and returns to commands');
+  api.open('group');
+  assert.equal(api.pick('Assignee').group, 'assignee', 'Group uses the same shared action too');
+  assert.deepEqual(plain(api.commands('library').map(([id]) => id)), ['pill:type', 'pill:status', 'pill:assigned', 'pill:sort', 'pill:group'],
+    'Library includes its Type filter plus the other applicable pills');
+  assert.deepEqual(plain(api.commands('meetings')), [], 'views without header pills offer no pill commands');
+  assert.match(source, /if \(palMode === 'pill'\) openCommandPalette\(\); else closePalette\(\);/, 'Escape from a pill returns one palette level');
 }
 // Opening a node has to leave a row to type in, without creating anything in Tana until it is typed into.
 function runDraftTailCheck() {
@@ -1553,7 +1673,7 @@ async function runMemberLoadCheck() {
   assert.equal(throttled.attempts, 3, 'a slow start cannot turn renders into a request loop: a fresh ask is throttled');
 }
 
-const checks = [runDraftTailCheck, runPinGrouping, runSelectionChecks, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runSortGroupCheck];
+const checks = [runDraftTailCheck, runPinGrouping, runTypingRenderStabilityCheck, runSelectionChecks, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runSortGroupCheck, runCmdPillsCheck];
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);
   if (failures.length) throw new AggregateError(failures, failures.map((failure) => failure.message).join('\n'));

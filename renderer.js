@@ -411,6 +411,8 @@ let filterShown = false;
 let queue = Promise.resolve();
 let scrolledView = null;     // view already scrolled to today's first meeting when it opened
 let linkCtx = null;          // @ linking in progress: { item, segs, start, end, text }
+let pinCtx = null;           // relationship pin picker: { pinHub, docId }
+let pillCtx = null;          // Cmd+K sublevel for one current view pill
 const hotkeys = JSON.parse(localStorage.getItem('hotkeys') || '{}'); // palette row id -> combo ("⇧⌘M")
 if (hotkeys.sync) { delete hotkeys.sync; localStorage.setItem('hotkeys', JSON.stringify(hotkeys)); }
 // shipped default, recordable and removable like any other: Ctrl+Shift+D opens today's node
@@ -740,6 +742,7 @@ function atEdge(el, dir) {
 
 // ---- render ----
 let rendering = false; // a focusout caused by swapping elements out during a render is not the user leaving a node
+let renderDeferred = false;
 let caretOnOpen = false; // set when a node is opened: the first render with its children puts the caret where typing works
 // An empty ordinary row is already somewhere to type; an image, divider or reference row is not.
 const typableRow = (n) => !!n && n.kind === 'block' && !isAtomic(n) && !isReference(n) && !plainOf(n).length;
@@ -752,7 +755,17 @@ function withDraftTail(list, parent) {
   if (typableRow(list.at(-1)) || (parent.node.kind !== 'document' && list.length)) return list;
   return [...list, draftNode(parent)];
 }
-function render() { rendering = true; try { renderOutline(); } finally { rendering = false; } }
+function editingRow() {
+  const el = document.activeElement;
+  return !!(el && el.isContentEditable && (el === titleEl || outline.contains(el)));
+}
+function render(force = false) {
+  if (force !== true && editingRow()) { renderDeferred = true; return; }
+  renderDeferred = false; rendering = true;
+  try { renderOutline(); } finally { rendering = false; }
+}
+// Metadata and sync may finish between keystrokes. Apply their deferred render only after the caret leaves editable rows.
+document.addEventListener('focusout', () => queueMicrotask(() => { if (renderDeferred && !editingRow()) render(); }));
 function renderOutline() {
   const saved = focused();
   // a live update must not eat a selection: the formatting toolbar acts on it, and a re-render lands mid-toggle
@@ -808,7 +821,7 @@ function renderOutline() {
   renderFields(parent);
   renderCrumbs(trail);
   renderRail(parent);
-  const showPills = !parent && authed && (view === 'tasks' || view === 'library' || view === 'chats');
+  const showPills = !parent && authed && pillsApply();
   renderPills(showPills);
   filterRow.hidden = !!parent || !(filterShown || filterEl.value);
   filterRow.classList.toggle('empty', !filterEl.value);
@@ -921,7 +934,7 @@ function toggleRelated(node) {
   const done = node.done ? 0 : 1;
   node.done = done;
   run(async () => { await tana.setDone(node.id, !!done); });
-  render();
+  render(true);
 }
 const railRowEls = () => [...railEl.querySelectorAll('.rrow')];
 function focusRail(index = 0) {
@@ -953,23 +966,26 @@ function railCallRow(data) {
 }
 // The zoomed task's own metadata, at the top of the sidebar: who it is assigned to and who can see it. Both open the
 // pickers the palette already uses (api.setAssignees / api.setSharing). Nothing known, nothing shown.
-function railMetaRows(node) {
+function railMetaRows(node, accessNode = node) {
   // The sidebar describes any document, not only tasks: a doc can be link-shared or live in a space too.
   const summary = taskSummary(node) || documentSummary(node);
-  if (!summary) return [];
   const writable = canEditNode(node);
-  const rows = summary.assignees ? [{
+  const rows = summary?.assignees ? [{
     id: 'assignees',
     icon: summary.assignees === 'Unassigned' ? 'unassigned' : 'member',
     label: summary.assignees === 'Unassigned' ? 'Unassigned' : 'Assigned to ' + summary.assignees,
     run: writable && tana.taskMeta && tana.setAssignees ? () => openAssigneePalette(node) : null,
   }] : [];
-  if (summary.audience) rows.push({ // an unverifiable audience is not a row: there is nothing to show or change
+  if (summary?.audience) rows.push({ // an unverifiable audience is not a row: there is nothing to show or change
     id: 'visibility', icon: summary.audience.icon, label: summary.audience.label,
-    run: writable && tana.accessOptions ? () => openVisibility(node, summary.scope) : null,
+    run: tana.accessOptions ? () => openVisibility(accessNode, summary.scope) : null,
   });
   // link sharing is a separate fact from the Tana audience, and read-only here: Tana owns that switch
-  if (summary.linkShared) rows.push({ id: 'linkShared', icon: 'globe', label: 'Anyone with the link', run: null });
+  if (summary?.linkShared) rows.push({ id: 'linkShared', icon: 'globe', label: 'Anyone with the link', run: null });
+  if (tana.nodeLink && tana.openExternal && isRealId(node.id)) rows.push({
+    id: 'showInTana', icon: 'tana', label: 'Show in Tana',
+    run: () => run(async () => tana.openExternal(await tana.nodeLink(node.id))),
+  });
   return rows;
 }
 function railMetaEl(row) {
@@ -986,9 +1002,21 @@ function railMetaEl(row) {
 function toggleRailSection(label) {
   if (railClosed.has(label)) railClosed.delete(label); else railClosed.add(label);
   localStorage.setItem('railClosed', JSON.stringify([...railClosed]));
-  render();
+  render(true);
 }
-// Pinned / Outcomes / Notes for the zoomed document; hidden when the node has no relations at all.
+function railGroups(data) {
+  return data ? [
+    ['Pinned', data.pinned || [], data.pinHub],
+    ['Outcomes', data.outcomes],
+    ['References', data.notes],
+  ].filter(([, rows, action]) => (rows && rows.length) || action) : [];
+}
+function railPinAction(pinHub, docId) {
+  const row = railMetaEl({ id: 'pinNew', icon: 'pin', label: 'Pin something…', run: () => togglePalette('search', null, { pinHub, docId }) });
+  row.className = 'rrow'; row.dataset.id = 'action:pinNew';
+  return row;
+}
+// Pinned / Outcomes / References for the zoomed document; a writable pin hub keeps Pinned available when empty.
 function renderRail(parent) {
   const active = document.activeElement, keep = active && active.classList && active.classList.contains('rrow') ? active.dataset.id : null;
   railEl.replaceChildren();
@@ -996,11 +1024,13 @@ function renderRail(parent) {
   if (!docId) { railEl.hidden = railGrip.hidden = true; return; }
   loadRelated(docId);
   const data = relatedBy.get(docId);
-  const meta = railMetaRows(parent.node);
+  // Event views immediately follow their write-up document. Sharing still belongs to the event itself.
+  const accessNode = data?.pinHub?.startsWith('tana:event:') ? { id: data.pinHub } : parent.node;
+  const meta = railMetaRows(parent.node, accessNode);
   const call = railCallRow(data);
   if (call) meta.unshift(call);
   // "Notes" is what api.related calls them; in the sidebar they read as References
-  const groups = data ? [['Pinned', data.pinned], ['Outcomes', data.outcomes], ['References', data.notes]].filter(([, rows]) => rows && rows.length) : [];
+  const groups = railGroups(data);
   railEl.hidden = railGrip.hidden = !groups.length && !meta.length;
   const sectionHead = (label) => { // every sidebar section collapses the same way, Details included
     const head = document.createElement('button');
@@ -1011,9 +1041,10 @@ function renderRail(parent) {
     return !railClosed.has(label);
   };
   if (meta.length && sectionHead('Details')) for (const row of meta) { const el = railMetaEl(row); el.dataset.section = 'Details'; railEl.append(el); }
-  for (const [label, rows] of groups) {
+  for (const [label, rows, pinHub] of groups) {
     if (!sectionHead(label)) continue;
     for (const node of rows) { const row = railRow(asDoc(node)); row.dataset.section = label; railEl.append(row); }
+    if (pinHub) { const row = railPinAction(pinHub, docId); row.dataset.section = label; railEl.append(row); }
   }
   if (keep) { const again = railEl.querySelector('.rrow[data-id="' + keep + '"]'); if (again) again.focus(); }
 }
@@ -1173,7 +1204,7 @@ async function materialise(item, el) {
   });
   const latest = el.textContent, latestOff = caretOffset(el) ?? off; // typed on while the create was in flight
   if (key && slashCtx && slashCtx.key === item.key) slashCtx = { key }; // the "/" menu opened on the draft: follow it to the real node
-  render();
+  render(true);
   const real = items.get(key);
   if (!real) return;
   if (latest !== text) { renderSegs(textEl(key), [{ text: latest }]); scheduleSave(real, [{ text: latest }]); }
@@ -1182,7 +1213,7 @@ async function materialise(item, el) {
 function dropDraft(item) {
   if (item.node.kind === 'document') { const s = sectionOf(item.docId); if (s) s.nodes.splice(s.nodes.indexOf(item.node), 1); }
   else open.delete(item.parent.key);
-  render();
+  render(true);
 }
 function dropDrafts() { for (const s of sections) s.nodes = s.nodes.filter((n) => !n.draft); } // navigating away drops empty draft documents
 // Enter on a collapsed top-level document (or with nothing focused in an empty view): a draft sibling document below it
@@ -1192,7 +1223,7 @@ function draftDoc(after) {
   if (after) flush(after.key);
   const node = draftDocNode(DRAFT_KIND[s.id] || 'doc');
   s.nodes.splice(after ? s.nodes.indexOf(after.node) + 1 : 0, 0, node);
-  render();
+  render(true);
   placeCaret(node.id, 0);
 }
 
@@ -1239,7 +1270,7 @@ async function splitNode(item, el, off) {
     splitDraft = { id: 'draft:split:' + node.id + ':' + Date.now(), text: plainOf(after), segments: after, kind: 'block', done: node.kind === 'block' && node.done != null ? 0 : undefined, draft: true, pendingSplit: true };
     list.splice(index, 0, splitDraft);
     splitKey = docId + '/' + splitDraft.id;
-    render(); placeCaret(splitKey, 0);
+    render(true); placeCaret(splitKey, 0);
   };
   if (node.kind === 'document') {
     flush(item.key);
@@ -1269,7 +1300,7 @@ async function splitNode(item, el, off) {
       if (asChild) await inheritCheckbox(item, newId);
     });
   }
-  render();
+  render(true);
   if (newId) {
     const key = docId + '/' + newId, real = typeof items !== 'undefined' && items.get(key);
     if (real && JSON.stringify(typed) !== JSON.stringify(after)) { renderSegs(textEl(key), typed); scheduleSave(real, typed); }
@@ -1286,7 +1317,7 @@ async function shiftNode(item, el, op, arg) {
     if (prev) open.set(keyFor(item.docId, prev), true);
   }
   await run(async () => { await tana[op](item.docId, item.node.id, arg); await reload(item.docId); });
-  render();
+  render(true);
   placeCaret(item.key, off);
 }
 
@@ -1295,7 +1326,7 @@ async function removeNode(item, el) {
   const keys = texts().map(keyOfEl), i = keys.indexOf(item.key);
   dropPending(item.key);
   await run(async () => { await tana.remove(item.docId, item.node.id); await reload(item.docId); });
-  render();
+  render(true);
   caretNear(keys, i, null);
 }
 async function removeDocument(item) {
@@ -1306,7 +1337,7 @@ async function removeDocument(item) {
     if (!access?.deletable) throw new Error(access?.reason || 'This document cannot be deleted');
     await tana.deleteDocument(item.docId); invalidateNode(item.docId); await loadRoots();
   });
-  render();
+  render(true);
 }
 function removeZoomedBlock() {
   const item = resolveZoom()?.at(-1);
@@ -1323,19 +1354,19 @@ async function history(op) {
     await loadRoots();
     if (docId && kids.has(docId)) await reload(docId);
   });
-  render();
+  render(true);
   if (saved && !focused()) caretNear(keys, keys.indexOf(saved.key), saved.offset);
 }
 
 function setOpen(item, value) {
   if (value && !canExpand(item)) return;
-  open.set(item.key, value); render();
+  open.set(item.key, value); render(true);
 }
 function toggleDone(item) {
   if (!canEditItem(item) || !isTask(item.node) || item.node.draft) return;
   item.node.done = item.node.done ? 0 : 1;
   if (zoom && zoom.docId === item.docId) extra.set(item.docId, item.node); // the page stays open when the task leaves the filtered view
-  render();
+  render(true);
   run(() => tana.setDone(item.docId, item.node.done));
 }
 function toggleCheckbox(item) {
@@ -1357,7 +1388,7 @@ function zoomTo(item) {
   const via = same ? zoom.via : top.parent && zoom ? [...(zoom.via || []), zoom] : undefined; // a document inside a zoomed space: the space stays in the crumb
   if (via && !docOf(item.docId)) extra.set(item.docId, top.node);
   zoom = { docId: item.docId, nodeId: item.node.kind === 'document' ? null : item.node.id, from: same ? zoom.from : undefined, via };
-  render();
+  render(true);
   followSummary(item.docId);
 }
 function openReference(node) {
@@ -1372,10 +1403,10 @@ function toggleReference(node) {
   const done = target.done ? 0 : 1; // referenceTarget() hands back a copy: write the new state where the row reads it
   node.reference.node = { ...node.reference.node, done };
   extra.set(target.id, { ...target, done });
-  render();
+  render(true);
   run(() => tana.setDone(target.id, done));
 }
-function setView(id) { dropDrafts(); view = id; localStorage.setItem('view', id); zoom = null; sel = null; menu = null; loadView(id); render(); }
+function setView(id) { dropDrafts(); view = id; localStorage.setItem('view', id); zoom = null; sel = null; menu = null; loadView(id); render(true); }
 // zoom into a document, switching to its view first when it belongs to another one; from = breadcrumb root instead of the view
 function openDoc(docId, from) {
   flushAll(); dropDrafts(); caretOnOpen = true;
@@ -1384,7 +1415,7 @@ function openDoc(docId, from) {
   const doc = allDocs().find((d) => d.id === docId) || extra.get(docId);
   if (doc) recordRecent(doc);
   zoom = { docId, nodeId: null, from };
-  render();
+  render(true);
   followSummary(docId);
 }
 // An event has no content of its own, so a meeting opens at its write-up. Every zoom passes through here, so the
@@ -1432,7 +1463,7 @@ async function removeSel(keys) { // Cmd+Shift+Backspace: every selected block, l
   sel = null;
   for (const it of its) dropPending(it.key);
   await run(async () => { await tana.removeMany(its[0].docId, its.map((it) => it.node.id)); await reload(its[0].docId); });
-  render();
+  render(true);
   const k = before || texts().map(keyOfEl)[0];
   if (k) placeCaret(k); else focusAbove();
 }
@@ -1440,11 +1471,10 @@ async function moveSel(keys, dir) { // Cmd+Shift+Up/Down: the whole range, one a
   const its = keys.map((k) => items.get(k)), sibs = childrenOf(its[0].parent) || [];
   if (dir === 'up' ? sibs.indexOf(its[0].node) === 0 : sibs.indexOf(its.at(-1).node) === sibs.length - 1) return;
   await run(async () => { await tana.moveMany(its[0].docId, its.map((it) => it.node.id), dir); await reload(its[0].docId); });
-  render();
+  render(true);
 }
 // Tab / Shift+Tab on a selection: the whole range shifts together and stays selected (keys are node ids, which the shift keeps).
-// ponytail: the bridge has removeMany/moveMany but no indentMany, so this falls back to one call per row and one undo
-// step per row; add block:indentMany/outdentMany (one content.js transact over the range) to make it a single step.
+// Older preload bridges fall back to per-row calls; the current plural bridge keeps this one undo step.
 async function indentSel(keys, op) {
   const its = keys.map((k) => items.get(k)), docId = its[0].docId, ids = its.map((it) => it.node.id);
   if (op === 'indent') {
@@ -1687,10 +1717,11 @@ function applySharing(doc, selection) {
     }
   });
 }
+function banSvg() { return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18"><g stroke-linecap="round" stroke-width="1" fill="none" stroke="currentColor" stroke-linejoin="round"><line x1="3.873" y1="14.127" x2="14.118" y2="3.882"></line><circle cx="9" cy="9" r="7.25"></circle></g></svg>'; }
 function visibilityRows(q) {
   if (!palDoc) return [];
   const access = accessById.get(palDoc.id);
-  if (!access?.sharing) return [{ group: 'Visibility', label: accessLoading.has(palDoc.id) ? 'Checking permission…' : 'Visibility cannot be changed', disabled: true }];
+  if (!access?.sharing) return [{ group: 'Visibility', ...(access?.reason ? { svg: banSvg() } : {}), label: access?.reason || 'Checking permission…', disabled: true }];
   loadTaskMeta(palDoc.id);
   const hasParticipants = taskMetaById.has(palDoc.id);
   const rules = new Set(access.rules || []), inherit = audienceInfo(access.inheritAudience);
@@ -1709,7 +1740,7 @@ function openVisibilityPalette(doc) {
 // mode picker as before. The full picker stays one Cmd+K "Edit visibility" away.
 function openVisibility(doc, scope) {
   const access = accessById.get(doc.id);
-  if (scope !== 'people' || !taskMetaById.has(doc.id) || (access && !(access.rules || []).includes('people'))) return openVisibilityPalette(doc);
+  if (scope !== 'people' || !taskMetaById.has(doc.id) || !(access?.rules || []).includes('people')) return openVisibilityPalette(doc);
   palDoc = doc; palette.hidden = false;
   loadAccess(doc.id); // Apply still goes through the same sharing rules
   openVisibilityPeople(doc);
@@ -1799,6 +1830,15 @@ function pillDefs() {
   defs.push({ id: 'sort', label: 'Sort', value: SORTS.find(([id]) => id === sortBy())[1], rows: () => SORTS.map(([id, label]) => ({ label, checked: sortBy() === id, run: () => setSortBy(id) })) });
   defs.push({ id: 'group', label: 'Group', value: GROUPS.find(([id]) => id === groupBy())[1], rows: () => GROUPS.map(([id, label]) => ({ label, checked: groupBy() === id, run: () => setGroupBy(id) })) });
   return defs;
+}
+const pillsApply = () => view === 'tasks' || view === 'library' || view === 'chats';
+const pillName = (def) => def.label || def.id[0].toUpperCase() + def.id.slice(1);
+function pillCommandRows() {
+  return (pillsApply() ? pillDefs() : []).map((def) => ({
+    id: 'pill:' + def.id, group: 'View options', icon: def.icon,
+    label: pillName(def) + (def.value ? ' ' + def.value : ''),
+    keepOpen: !!def.rows, run: def.rows ? () => openPillPalette(def.id) : def.toggle,
+  }));
 }
 function renderPills(show) {
   const box = $('pills'), defs = show ? pillDefs() : [];
@@ -2088,7 +2128,7 @@ async function applyMark(mark, value) {
   item.node.text = plainOf(next); item.node.segments = next;
   renderSegs(el, next); // the mark shows before the round trip finishes
   await run(() => tana.setText(item.docId, item.node.id, saveValue(next)));
-  render();
+  render(true);
   selectRange(ctx.key, ctx.start, ctx.end);
 }
 function toggleMarkKey(item, el, mark) {
@@ -2103,7 +2143,7 @@ async function applyBlockType(type) {
   if (!item || item.node.kind !== 'block' || !tana.setBlockType) return renderToolbar();
   flush(item.key);
   await run(async () => { await tana.setBlockType(item.docId, item.node.id, type); await reload(item.docId); });
-  render();
+  render(true);
   if (ctx) selectRange(ctx.key, ctx.start, ctx.end);
 }
 function linkSelection() { // the @ button runs the same linking flow as typing "@" over a selection
@@ -2333,10 +2373,11 @@ function pinRows(tree) {
 function paletteRows(q) {
   const rows = sections.map((s) => ({ id: 'view:' + s.id, group: 'Views', icon: s.icon, label: s.id === 'members' ? 'People' : s.title, run: () => setView(s.id) }));
   rows.push(...pinRows(pinTree));
+  rows.push(...pillCommandRows());
   if (tana.creationOptions) rows.push({ id: 'create', group: 'Actions', icon: 'createNew', label: 'Create new…', keepOpen: true, run: openCreationPalette });
   rows.push({ id: 'sync', group: 'Actions', icon: 'sync', label: 'Sync', run: () => run(() => tana.refresh()) });
   // the list of titles hidden from every view and from search, edited in the palette itself
-  if (tana.filters) rows.push({ id: 'hidden', group: 'Actions', icon: 'any', label: 'Edit hidden items', keepOpen: true, run: openHiddenPalette });
+  if (tana.filters) rows.push({ id: 'hidden', group: 'Actions', icon: 'hidden', label: 'Edit hidden items', keepOpen: true, run: openHiddenPalette });
   // today's node: a document titled with the date, pinned to today; created and pinned when it does not exist yet
   if (tana.todayNode) rows.push({ id: 'today', group: 'Actions', icon: 'pinDate', label: 'Show today node', run: () => run(async () => goTo(await tana.todayNode())) });
   const dark = typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark';
@@ -2361,7 +2402,7 @@ function paletteRows(q) {
     const meta = taskMetaById.get(palDoc.id), hint = meta && meta.assignees.length ? meta.assignees.map(memberName).join(', ') : meta ? 'Unassigned' : 'Loading…';
     rows.push({ group: 'Actions', icon: 'member', label: 'Edit assignees', hint, keepOpen: true, run: () => openAssigneePalette(palDoc) });
   }
-  if (palDoc && canEditNode(palDoc) && tana.accessOptions) {
+  if (palDoc && tana.accessOptions) {
     loadAccess(palDoc.id);
     const access = accessById.get(palDoc.id);
     if (access?.sharing) rows.push({ group: 'Actions', icon: 'lock', label: 'Edit visibility', run: () => openVisibilityPalette(palDoc) });
@@ -2375,6 +2416,28 @@ function paletteRows(q) {
 function runAction(id) {
   const row = paletteRows('').find((r) => r.id === id);
   if (row) row.run(); else if (id.startsWith('doc:')) goTo(id.slice(4));
+}
+// Cmd+K renders the exact same rows as the header pill. Multi-select rows stay here; a single choice returns to commands.
+function pillRows(q) {
+  const def = (pillsApply() ? pillDefs() : []).find((item) => item.id === pillCtx);
+  if (!def?.rows) return [];
+  let group = pillName(def);
+  return def.rows().flatMap((row) => {
+    if (row.head) { group = row.head; return []; }
+    if (!row.label || !row.label.toLowerCase().includes(q)) return [];
+    return [{ group, icon: row.icon, label: row.label, hint: row.checked ? '✓' : '', keepOpen: true, run: () => {
+      row.run();
+      if (row.keepOpen) renderPalette(); else openCommandPalette();
+    } }];
+  });
+}
+function openPillPalette(id) {
+  pillCtx = id; palMode = 'pill'; palRows = []; palIndex = 0;
+  palInput.placeholder = 'Choose ' + id; palInput.value = ''; renderPalette(); palInput.focus();
+}
+function openCommandPalette() {
+  pillCtx = null; palMode = 'cmd'; palRows = []; palIndex = 0;
+  palInput.placeholder = 'Search or run a command'; palInput.value = ''; renderPalette(); palInput.focus();
 }
 // ---- hidden items (api.filters): titles every view and search skips, edited from Cmd+K ----
 // The rule lives in the group header because that is the one line in the palette that wraps.
@@ -2431,10 +2494,16 @@ function openResult(n, from) {
 // result rows pick a document: open it, or link it when the palette was opened with "@" on a selection (Create row first)
 function resultRows(nodes, group) {
   nodes = nodes.map(asDoc);
-  const ctx = linkCtx;
-  const rows = nodes.map((n) => ({ ...docRow(n, n.meta, () => (ctx ? linkTo(ctx, { label: n.title ?? n.text, uri: n.id }) : openResult(n, 'Search'))), group }));
+  const ctx = linkCtx, pin = pinCtx;
+  const rows = nodes.map((n) => ({ ...docRow(n, n.meta, () => (ctx ? linkTo(ctx, { label: n.title ?? n.text, uri: n.id }) : pin ? pinResult(pin, n) : openResult(n, 'Search'))), group }));
   if (!ctx) return rows;
   return [{ create: true, label: 'Create “' + ctx.text + '”', hint: '⌘↩', run: () => createAndLink(ctx) }, ...rows];
+}
+function pinResult(ctx, node) {
+  return run(async () => {
+    await tana.pinTo(ctx.pinHub, node.id);
+    relatedBy.delete(ctx.pinHub); relatedBy.delete(ctx.docId); render();
+  });
 }
 function searchNow() {
   const q = palInput.value.trim(), seq = ++palSeq;
@@ -2460,6 +2529,7 @@ function renderPalette() {
   else if (palMode === 'visibility') palRows = visibilityRows(q.toLowerCase());
   else if (palMode === 'visibilityPeople') palRows = visibilityPeopleRows(q.toLowerCase());
   else if (palMode === 'hidden') palRows = hiddenRows(q);
+  else if (palMode === 'pill') palRows = pillRows(q.toLowerCase());
   palIndex = Math.max(0, Math.min(palIndex, palRows.length - 1));
   const els = [];
   palRows.forEach((r, i) => {
@@ -2484,14 +2554,15 @@ function renderPalette() {
   if (active) active.scrollIntoView({ block: 'nearest' });
 }
 // opens the palette in mode, closes it when already open in that mode; opening one mode closes the other.
-// link = @ linking context: search mode prefilled with the selected text
-function togglePalette(mode, link) {
-  const show = palette.hidden || palMode !== mode || !!link;
-  cancelLink();
+// link = @ linking context; pin = relationship pin context. Both reuse search results.
+function togglePalette(mode, link, pin) {
+  const show = palette.hidden || palMode !== mode || !!link || !!pin;
+  cancelLink(); pinCtx = null; pillCtx = null;
   palette.hidden = !show;
   if (!show) { clearTimeout(palTimer); palTimer = null; return returnFocus(); }
   if (!palReturn) palReturn = focused(); // switching modes keeps the original return target
   linkCtx = link || null;
+  pinCtx = pin || null;
   if (mode !== 'slash') slashCtx = null;
   palMode = mode; palRows = []; palIndex = 0; palBusy = false; clearTimeout(palTimer); palTimer = null;
   if (mode === 'cmd') { palDoc = currentDoc(); loadPins(); }
@@ -2500,7 +2571,7 @@ function togglePalette(mode, link) {
   if (mode === 'search') searchNow(); else renderPalette();
   palInput.focus();
 }
-function closePalette() { palette.hidden = true; clearTimeout(palTimer); palTimer = null; cancelLink(); returnFocus(); }
+function closePalette() { palette.hidden = true; clearTimeout(palTimer); palTimer = null; cancelLink(); pinCtx = null; pillCtx = null; returnFocus(); }
 // back to the node that had the caret when the palette opened (the @ link path places its own caret)
 function returnFocus() { const r = palReturn; palReturn = null; if (r && !focused()) placeCaret(r.key, r.offset); }
 function runRow(r) { if (!r || r.disabled) return; if (!r.keepOpen) closePalette(); r.run(); }
@@ -2512,13 +2583,13 @@ function nextPalIndex(rows, index, step) {
 }
 palInput.addEventListener('input', () => {
   palIndex = 0;
-  if (palMode === 'cmd' || palMode === 'create' || palMode === 'slash' || palMode === 'assignees' || palMode === 'visibility' || palMode === 'visibilityPeople' || palMode === 'hidden') return renderPalette();
+  if (palMode === 'cmd' || palMode === 'create' || palMode === 'slash' || palMode === 'assignees' || palMode === 'visibility' || palMode === 'visibilityPeople' || palMode === 'hidden' || palMode === 'pill') return renderPalette();
   if (palMode === 'spaces') { palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchSpacesNow, 150); return; }
   palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchNow, 150);
 });
 palInput.addEventListener('keydown', (e) => {
   const mod = e.metaKey || e.ctrlKey;
-  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closePalette(); }
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (palMode === 'pill') openCommandPalette(); else closePalette(); }
   else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && palRows.length) { e.preventDefault(); e.stopPropagation(); palIndex = nextPalIndex(palRows, palIndex, e.key === 'ArrowDown' ? 1 : -1); renderPalette(); }
   else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); if (palBusy && (palMode === 'spaces' || palMode === 'search')) return; const r = mod && linkCtx ? palRows.find((row) => row.create) : palRows[palIndex]; if (r) runRow(r); } // ⌘↩ always creates for an @ selection
   else if (mod && e.shiftKey && e.key.toLowerCase() === 'k') { e.preventDefault(); e.stopPropagation(); const r = palRows[palIndex]; if (palMode === 'cmd' && r && r.id) openRecorder(r); }

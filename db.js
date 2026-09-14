@@ -10,6 +10,7 @@ function open(path) {
     id TEXT PRIMARY KEY, section TEXT NOT NULL, title TEXT NOT NULL, done INTEGER NOT NULL DEFAULT 0,
     icon TEXT, meta TEXT, tags TEXT NOT NULL DEFAULT '[]', sortKey TEXT NOT NULL, updatedAt TEXT NOT NULL)`);
   db.exec('CREATE TABLE IF NOT EXISTS icons (id TEXT PRIMARY KEY, svg TEXT NOT NULL)'); // app-local custom document icons
+  db.exec('CREATE TABLE IF NOT EXISTS sensitive_nodes (id TEXT PRIMARY KEY)'); // app-local sensitive documents
   db.exec('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)'); // JSON values (task filter, ...)
 }
 
@@ -65,6 +66,15 @@ function setIcon(id, svg) {
   else db.prepare('INSERT INTO icons (id, svg) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET svg = excluded.svg').run(id, svg);
 }
 
+function sensitiveIds() {
+  return db.prepare('SELECT id FROM sensitive_nodes ORDER BY id').all().map((r) => r.id);
+}
+
+function setSensitive(id, on) {
+  if (on) db.prepare('INSERT OR IGNORE INTO sensitive_nodes (id) VALUES (?)').run(id);
+  else db.prepare('DELETE FROM sensitive_nodes WHERE id = ?').run(id);
+}
+
 // app settings as JSON per key; undefined when unset
 function setting(key) {
   const r = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
@@ -76,4 +86,4 @@ function setSetting(key, value) {
   else db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, JSON.stringify(value));
 }
 
-module.exports = { open, list, get, remove, upsert, replaceSection, icon, setIcon, setting, setSetting };
+module.exports = { open, list, get, remove, upsert, replaceSection, icon, setIcon, sensitiveIds, setSensitive, setting, setSetting };

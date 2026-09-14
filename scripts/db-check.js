@@ -61,6 +61,17 @@ assert.strictEqual(db.icon('tana:text:a'), '<svg viewBox="0 0 16 16"><circle r="
 db.setIcon('tana:text:a', null);
 assert.strictEqual(db.icon('tana:text:a'), null);
 
+// sensitive documents: app-local ids, independent of the nodes cache
+assert.deepStrictEqual(db.sensitiveIds(), []);
+db.setSensitive('tana:text:b', true);
+db.setSensitive('tana:text:a', true);
+db.setSensitive('tana:text:a', true); // idempotent
+assert.deepStrictEqual(db.sensitiveIds(), ['tana:text:a', 'tana:text:b']);
+db.replaceSection('tasks', []);
+assert.deepStrictEqual(db.sensitiveIds(), ['tana:text:a', 'tana:text:b'], 'sensitive marks survive the row cache');
+db.setSensitive('tana:text:a', false);
+assert.deepStrictEqual(db.sensitiveIds(), ['tana:text:b']);
+
 // a row whose tags column is not a JSON array (older build, interrupted write) still reads as a row
 db.upsert({ id: 'tana:text:bad', section: 'tasks', title: 'Bad', done: 0 });
 new DatabaseSync(file).prepare("UPDATE nodes SET tags = 'not json' WHERE id = ?").run('tana:text:bad');
