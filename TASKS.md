@@ -161,6 +161,8 @@ Every request made during the build and its state. ✓ done and verified · ◐ 
 | 138 | Name the sidebar metadata block and make it collapsible like the rest | ✓ It is now a Details section with the same chevron heading and collapse state as Pinned, Outcomes and References. Live: heads read Details, Pinned, References with the call link, assignee and visibility inside Details. | renderer.js renderRail |
 | 139 | More padding between the breadcrumbs and the title, and align the breadcrumbs with the sidebar Details heading | ✓ Crumb-to-title gap 6px to 14px, and the sidebar padding-top set so the first heading text starts at the same y as the crumbs. Live: both at y 40, gap 14. | styles.css |
 
+| 140 | The @ picker opens in a title, where Tana cannot store a link | ✓ Titles are plain text (#53), so the title keydown no longer opens the picker and @ types an ordinary character; a renderer check fails if it comes back. The selection toolbar never attached to the title, so nothing else offered links there. Live: selecting a task title and pressing @ leaves the palette closed. | renderer.js |
+
 Tracking rule: append new requests to the numbered table above using the next integer. Update an existing row for repeated requests; never create a separate unnumbered request list. Preserve status and verification evidence. Orchestrator owns this file.
 
 Latest rounds (three workers, all closed). The live app was inspected over its devtools port against real Tana data, which is how #49, #54, #59, #62, #68, #78, #83, #85, #89, #93, #97 and #98 were confirmed; the interaction-heavy rows (#39, #90, #96, #105 to #108) were driven in the in-file mock, where mutations stay local. `npm run check` passes on the merged tree.

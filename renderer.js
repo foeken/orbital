@@ -1683,7 +1683,6 @@ titleEl.addEventListener('keydown', (e) => {
   else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); toggleDone(item); }
   else if (e.key === 'Enter') { e.preventDefault(); flush(item.key); const first = texts()[0]; if (first) setCaret(first, 0); else titleEl.blur(); }
   else if (e.key === 'Escape') { e.preventDefault(); dropPending(item.key); titleEl.textContent = item.node.text; titleEl.blur(); }
-  else if (e.key === '@' && !getSelection().isCollapsed) { const range = selectionOffsets(titleEl); if (range) { e.preventDefault(); startLink(item, titleEl, range); } }
   else if (e.key === 'ArrowDown' && atEdge(titleEl, 'down')) { const first = texts()[0]; if (first) { e.preventDefault(); flush(item.key); setCaret(first, 0); } }
 });
 // the document Cmd+K context actions apply to: the zoomed one, else the document whose node is focused
