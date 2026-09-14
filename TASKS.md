@@ -168,6 +168,8 @@ Every request made during the build and its state. ✓ done and verified · ◐ 
 | 142 | Show a globe for nodes shared publicly to the internet | ✓ Public sharing is linkSharing.mode on the graph node, never in the document, so it needs its own lookup; doc:taskMeta now reports linkShared and the sidebar adds an Anyone with the link row with the supplied earth icon, alongside the Tana audience rather than replacing it. The sidebar now describes any document, not only tasks, so a public doc reports it too. Live: the example node returns linkShared true with audience only-me. | main.js, renderer.js, build/icons/earth.svg |
 | 143 | Link icon for Copy link | ✓ Supplied 18-link.svg replaces the placeholder icon on the Cmd+K row. | build/icons/link.svg, renderer.js |
 
+| 144 | The @ picker should preselect Create unless a result title actually starts with the typed text | ✓ A full-text hit that merely mentions the words no longer steals the default. Live: selecting "Heads of" preselects Heads of Technology - prep 10 September, while selecting "Technology" preselects Create “Technology” even though hits exist. | renderer.js searchNow |
+
 Tracking rule: append new requests to the numbered table above using the next integer. Update an existing row for repeated requests; never create a separate unnumbered request list. Preserve status and verification evidence. Orchestrator owns this file.
 
 Latest rounds (three workers, all closed). The live app was inspected over its devtools port against real Tana data, which is how #49, #54, #59, #62, #68, #78, #83, #85, #89, #93, #97 and #98 were confirmed; the interaction-heavy rows (#39, #90, #96, #105 to #108) were driven in the in-file mock, where mutations stay local. `npm run check` passes on the merged tree.

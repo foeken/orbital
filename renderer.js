@@ -2255,7 +2255,12 @@ function searchNow() {
   if (!q) { palRows = resultRows(recent(), 'RECENTLY VIEWED'); return renderPalette(); }
   tana.search(q).then((nodes) => {
     if (seq !== palSeq || palMode !== 'search') return; // stale response
-    palRows = resultRows(nodes); palIndex = linkCtx && nodes.length ? 1 : 0; palBusy = false;
+    palRows = resultRows(nodes);
+    // Linking: a result is only the obvious choice when its title starts with what was typed. A full-text hit
+    // that merely mentions the words is not, so "Create" stays selected and Enter creates.
+    const starts = nodes.findIndex((n) => (n.title ?? n.text ?? '').toLowerCase().startsWith(q.toLowerCase()));
+    palIndex = linkCtx ? (starts < 0 ? 0 : starts + 1) : 0;
+    palBusy = false;
     renderPalette();
   }, showError);
 }
