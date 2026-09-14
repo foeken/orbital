@@ -70,7 +70,7 @@ function mockApi() {
     dateMeta['mockmeeting' + i] = WD[d.getDay()] + ' ' + d.getDate() + time;
     return { id: 'mockmeeting' + i, text, meta: WD[d.getDay()] + time, kind: 'document', hasChildren: true, icon: 'meeting', tags: [meeting] };
   });
-  const views = [{ id: 'inbox', title: 'Inbox', icon: 'inbox', nodes: [] }, { id: 'tasks', title: 'Tasks', icon: 'task', nodes: docs }, { id: 'meetings', title: 'Meetings', icon: 'meeting', nodes: meetings }, { id: 'library', title: 'Library', icon: 'library', nodes: [] }, { id: 'chats', title: 'Chats', icon: 'chat', nodes: [] }];
+  const views = [{ id: 'inbox', title: 'Inbox', icon: 'inbox', nodes: [] }, { id: 'tasks', title: 'Tasks', icon: 'task', kind: true, nodes: docs }, { id: 'meetings', title: 'Meetings', icon: 'meeting', kind: true, nodes: meetings }, { id: 'library', title: 'Library', icon: 'library', nodes: [] }, { id: 'chats', title: 'Chats', icon: 'chat', kind: true, nodes: [] }];
   const all = [...docs, ...meetings, ...spaceDocs, space, ...kinds, ...chats];
   for (const node of all) node.editable = true;
   // org members (user profiles): searchable, linkable, and the "Assigned to" menu; me = the signed-in user
@@ -82,7 +82,7 @@ function mockApi() {
     participants: i % 2 === 0 ? [{ uri: members[0].id, type: 'user', role: 'admin' }] : [{ uri: members[0].id, type: 'user', role: 'admin' }, { uri: members[1].id, type: 'user', role: 'editor' }],
     audience: i % 2 === 0 ? 'only-me' : 'everyone',
   }]));
-  views.push({ id: 'people', title: 'People', icon: 'member', nodes: members });
+  views.push({ id: 'people', title: 'People', icon: 'member', kind: true, nodes: members });
   const filters = {
     inbox: { types: null, states: ['proposed'], assignee: 'anyone', text: '' },
     tasks: { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me', text: '' },
@@ -2008,7 +2008,8 @@ function pillDefs() {
   const f = filters.get(view);
   if (!f) return [];
   const defs = [], save = setViewF, one = f.types && f.types.length === 1 && TYPES.find((t) => t && t[0] === f.types[0]);
-  defs.push({ id: 'type', value: names(TYPES, f.types) || 'Any type', icon: one ? one[2] : 'any', rows: () => [
+  // A kind page (Tasks, Meetings, Chats, People) is that kind: only the Library and the Inbox pick their kinds.
+  if (!(views.find((v) => v.id === view) || {}).kind) defs.push({ id: 'type', value: names(TYPES, f.types) || 'Any type', icon: one ? one[2] : 'any', rows: () => [
     { label: 'Any type', icon: 'any', checked: !f.types, run: () => save({ types: null }) },
     ...TYPES.map((t) => (t ? { label: t[1], icon: t[2], keepOpen: true, checked: !!f.types && f.types.includes(t[0]), run: () => save({ types: toggleIn(TYPES.filter(Boolean).map((x) => x[0]), f.types, t[0]) }) } : { div: true })), // multi-select: the menu stays open to tick more
   ] });

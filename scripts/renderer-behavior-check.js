@@ -497,6 +497,7 @@ function runAssignedDropdown() {
   const api = vm.runInNewContext(`
     let view = 'tasks';
     const filters = new Map([['tasks', { types: ['tasks'], states: ['open'], assignee: 'me' }]]);
+    const views = [{ id: 'tasks', kind: true }];
     let members = [
       { id: 'me', title: 'Robin', me: true },
       { id: 'sam', title: 'Sam' },
@@ -1358,6 +1359,7 @@ function runFilterMenuCloseCheck() {
   const api = vm.runInNewContext(`
     let view = 'library';
     const filters = new Map([['library', { types: ['tasks'], states: ['open'], assignee: 'me' }]]);
+    const views = [{ id: 'library' }];
     let members = [{ id: 'me', title: 'Robin', me: true }, { id: 'sam', title: 'Sam' }];
     let menu = null;
     const tana = {};
@@ -1631,6 +1633,7 @@ function runSortGroupCheck() {
   const api = vm.runInNewContext(`
     let view = 'tasks', groupPref = {}, sortPref = {};
     const filters = new Map([['tasks', { types: ['tasks'], states: ['open'], assignee: 'me' }]]);
+    const views = [{ id: 'tasks', kind: true }, { id: 'library' }];
     let members = [{ id: 'me', title: 'Robin', me: true }, { id: 'sam', title: 'Sam' }];
     const taskMetaById = new Map([['t1', { assignees: ['sam'] }], ['t2', { assignees: ['me'] }], ['t4', { assignees: ['tana:user-profile:ghost'] }]]);
     const tana = {}, palette = { hidden: true };
@@ -1706,11 +1709,14 @@ function runCmdPillsCheck() {
     let view = 'tasks';
     const filters = new Map([
       ['tasks', { types: ['tasks'], states: ['open'], assignee: 'anyone', text: '' }],
+      ['inbox', { types: null, states: ['proposed'], assignee: 'anyone', text: '' }],
       ['meetings', { types: ['meetings'], states: null, assignee: 'anyone', text: '', participant: 'me', window: 'recent' }],
       ['library', { types: ['tasks'], states: ['open'], assignee: 'anyone', text: '' }],
       ['chats', { types: ['chats'], states: null, assignee: 'anyone', text: '', mcp: false }],
       ['people', { types: ['people'], states: null, assignee: 'anyone', text: '' }],
     ]);
+    // Tasks, Meetings, Chats and People are kind pages: the type is their identity, not a filter (main sends the flag)
+    const views = [{ id: 'inbox' }, { id: 'tasks', kind: true }, { id: 'meetings', kind: true }, { id: 'library' }, { id: 'chats', kind: true }, { id: 'people', kind: true }];
     let members = [{ id: 'me', title: 'Robin', me: true }], groupPref = {}, sortPref = {};
     let pillCtx = null, palMode = 'cmd', palRows = [], palIndex = 0, renders = 0;
     const taskMetaById = new Map(), tana = {}, palette = { hidden: false };
@@ -1730,10 +1736,9 @@ function runCmdPillsCheck() {
     });
   `);
   assert.deepEqual(plain(api.commands('tasks')), [
-    ['pill:type', 'Set view option: Type Tasks', 'task'],
     ['pill:status', 'Set view option: Status In Progress', 'status'], ['pill:assigned', 'Set view option: Assigned to Anyone', 'assigned'],
     ['pill:sort', 'Set view option: Sort Default', 'sort'], ['pill:group', 'Set view option: Group None', 'group'],
-  ], 'Cmd+K prefixes the current Tasks view options and gives each its supplied icon');
+  ], 'Cmd+K prefixes the current Tasks view options and gives each its supplied icon, and Tasks is a kind page with no type to pick');
   assert.deepEqual(plain(api.open('status')), { mode: 'pill', rows: [['Any status', ''], ['Inbox', ''], ['In Progress', '✓'], ['Completed', ''], ['Later', '']] },
     'a command opens the same Status rows and active tick as the pill');
   assert.equal(api.pick('Inbox').mode, 'pill', 'a multi-select filter stays in its pill sublevel');
@@ -1742,11 +1747,15 @@ function runCmdPillsCheck() {
     'a single Sort choice applies the shared row action and returns to commands');
   api.open('group');
   assert.equal(api.pick('Assignee').group, 'assignee', 'Group uses the same shared action too');
+  // A kind page is that kind: Tasks, Meetings, Chats and People do not offer a type to pick, so the page cannot be
+  // turned into a different one; the Library picks its kinds, and so does the Inbox, which is a state, not a kind.
   assert.deepEqual(plain(api.commands('library').map(([id]) => id)), ['pill:type', 'pill:status', 'pill:assigned', 'pill:sort', 'pill:group'],
     'Library includes its Type filter plus the other applicable pills');
-  assert.deepEqual(plain(api.commands('meetings').map(([id]) => id)), ['pill:type', 'pill:sort', 'pill:group'], 'Meetings exposes its applicable filter and layout pills');
-  assert.deepEqual(plain(api.commands('chats').map(([id]) => id)), ['pill:type', 'pill:mcp', 'pill:sort', 'pill:group'], 'Chats exposes the MCP toggle from its filter');
-  assert.deepEqual(plain(api.commands('people').map(([id]) => id)), ['pill:type', 'pill:sort', 'pill:group'], 'People uses the same pill path');
+  assert.deepEqual(plain(api.commands('inbox').map(([id]) => id)), ['pill:type', 'pill:status', 'pill:assigned', 'pill:mcp', 'pill:sort', 'pill:group'],
+    'the Inbox is a state rather than a kind, so it still picks types — and chats are among them, hence the MCP toggle');
+  assert.deepEqual(plain(api.commands('meetings').map(([id]) => id)), ['pill:sort', 'pill:group'], 'Meetings is meetings: layout pills only');
+  assert.deepEqual(plain(api.commands('chats').map(([id]) => id)), ['pill:mcp', 'pill:sort', 'pill:group'], 'Chats keeps the MCP toggle from its filter, but not a type');
+  assert.deepEqual(plain(api.commands('people').map(([id]) => id)), ['pill:sort', 'pill:group'], 'People is people: nothing to filter by type, status or assignee');
   assert.match(functionSource('backPalette'), /palMode === 'pill'[\s\S]*openCommandPalette\(\)/, 'Escape from a pill returns one palette level');
 }
 // Opening a node has to leave a row to type in, without creating anything in Tana until it is typed into.

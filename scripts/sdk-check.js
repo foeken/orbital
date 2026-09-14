@@ -12,7 +12,7 @@ const { createTransport, GraphClient, SyncConnection, Document, derivePeerId, re
 const outline = require('../sdk/content');
 const { fetchImage } = require('../sdk/assets');
 const { LoroMap, LoroList } = require('loro-crdt');
-const { parseQuery, searchParams, needsTypes, viewParams, validViewFilter, VIEW_PRESETS, hideRules, isHidden } = require('../sdk/query');
+const { parseQuery, searchParams, needsTypes, viewParams, validViewFilter, viewTypes, VIEW_PRESETS, hideRules, isHidden } = require('../sdk/query');
 const pins = require('../sdk/pins');
 
 const ORG = 'org_01EXAMPLE00000000000000000', DOC = 'tana:text:01exampleh0000000000000000', ME = 'tana:user-profile:01examplei0000000000000000';
@@ -554,6 +554,13 @@ async function main() {
     const reset = await backend.handlers.get('view:setFilter')(null, 'chats', { types: ['unknown'] });
     assert.equal(reset.types.join(','), 'chats', 'invalid writes store the preset');
     assert.equal(reset.mcp, false);
+    // A kind page cannot be turned into a different page: People lists people even if something stored otherwise,
+    // and the renderer is told which pages those are so it does not offer a type to pick.
+    assert.deepEqual((await backend.handlers.get('view:setFilter')(null, 'people', { types: ['meetings', 'people'] })).types, ['people'], 'People keeps listing people');
+    cache.setSetting('viewFilter:people', { types: ['skills'] });
+    assert.deepEqual((await backend.handlers.get('view:filter')(null, 'people')).types, ['people'], 'and heals a stored filter that says otherwise');
+    assert.deepEqual((await backend.handlers.get('view:setFilter')(null, 'library', { types: ['meetings'] })).types, ['meetings'], 'the Library still picks its kinds');
+    assert.equal(roots.filter((view) => view.kind).map((view) => view.id).join(','), 'tasks,meetings,chats,people', 'and the four kind pages are marked as such');
     console.log('ok  six view handlers share fetch/cache, roots stays offline, and refresh follows the active view');
   }
 
@@ -843,6 +850,14 @@ async function main() {
     assert.equal(validViewFilter({ types: ['nope'] }), false);
     assert.equal(validViewFilter({ types: ['tasks'], extra: true }), false);
     assert.throws(() => viewParams({ types: ['nope'] }, ME), /invalid view filter/);
+    // Unticking the last kind must not become an unconstrained query: the graph would answer with images, calls and
+    // transcripts, which no view can render and which wedged the app when it tried.
+    assert.deepEqual(viewParams({ types: [] }, ME).nodeTypes, viewParams({ types: null }, ME).nodeTypes, 'no kinds selected is every kind a view lists, never nodeTypes: []');
+    // A kind page is that kind, whatever a stored filter from an older build says.
+    assert.deepEqual(viewTypes('people', { types: ['meetings', 'people'], states: null }), { types: ['people'], states: null }, 'People lists people');
+    assert.deepEqual(viewTypes('meetings', { types: [] }).types, ['meetings']);
+    assert.deepEqual(viewTypes('library', { types: ['meetings'] }).types, ['meetings'], 'the Library keeps the kinds it was given');
+    assert.deepEqual(viewTypes('inbox', { types: null }).types, null);
     const id = ulid();
     assert.match(id, /^[0-9a-hjkmnp-tv-z]{26}$/);
     assert.equal(ulid(0).slice(0, 10), '0000000000');

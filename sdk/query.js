@@ -66,6 +66,10 @@ const VIEW_PRESETS = {
   chats: { types: ['chats'], mcp: false },
   people: { types: ['people'] },
 };
+// A page that is a kind: Tasks lists tasks, People lists people. Its type is its identity, so it is not offered as a
+// filter and a stored one cannot override it — only the Library and the Inbox choose their kinds.
+const KIND_VIEWS = new Set(['tasks', 'meetings', 'chats', 'people']);
+const viewTypes = (id, f) => (KIND_VIEWS.has(id) ? { ...f, types: VIEW_PRESETS[id].types } : f);
 
 // assignee: 'me' | 'anyone' | 'unassigned' | <user-profile uri>
 function assigneeParams(assignee, me) {
@@ -89,7 +93,9 @@ function validViewFilter(f) {
 
 function viewParams(f, me, limit = 1000) {
   if (!validViewFilter(f)) throw new Error('invalid view filter');
-  const kinds = f.types === undefined || f.types === null ? VIEW_KINDS.filter((k) => k !== 'people') : f.types;
+  // No kinds selected is "any kind we list", never an unconstrained query: nodeTypes: [] is no filter at all to the
+  // graph, which answers with images, calls and transcripts that no view can render.
+  const kinds = f.types && f.types.length ? f.types : VIEW_KINDS.filter((k) => k !== 'people');
   const p = {
     nodeTypes: [...new Set(kinds.map((k) => KIND_NODE_TYPE[k]))], limit,
     sortOptions: f.types && f.types.length === 1 && f.types[0] === 'meetings'
@@ -108,4 +114,4 @@ function viewParams(f, me, limit = 1000) {
   return p;
 }
 
-module.exports = { parseQuery, searchParams, needsTypes, viewParams, validViewFilter, VIEW_PRESETS, VIEW_KINDS, hideRules, isHidden };
+module.exports = { parseQuery, searchParams, needsTypes, viewParams, validViewFilter, viewTypes, VIEW_PRESETS, VIEW_KINDS, KIND_VIEWS, hideRules, isHidden };

@@ -9,7 +9,7 @@ const { createTanaClient } = require('./sdk');
 const { fetchImage } = require('./sdk/assets');
 const access = require('./sdk/access');
 const { readNode, editable, setTitle, setState, taskMeta, audienceMetadata, setAssignees, ulid, initDocument, STATE_TYPES } = require('./sdk/node');
-const { parseQuery, searchParams, needsTypes, viewParams, validViewFilter, VIEW_PRESETS, hideRules, isHidden } = require('./sdk/query');
+const { parseQuery, searchParams, needsTypes, viewParams, validViewFilter, viewTypes, VIEW_PRESETS, KIND_VIEWS, hideRules, isHidden } = require('./sdk/query');
 const content = require('./sdk/content');
 const chat = require('./sdk/chat');
 const fields = require('./sdk/fields');
@@ -17,7 +17,8 @@ const pins = require('./sdk/pins');
 
 // Order is the Cmd+K Views order: what is waiting on you, then your work, then the calendar, then knowledge,
 // then conversations, then people.
-const VIEWS = [{ id: 'inbox', title: 'Inbox', icon: 'inbox' }, { id: 'tasks', title: 'Tasks', icon: 'task' }, { id: 'meetings', title: 'Meetings', icon: 'meeting' }, { id: 'library', title: 'Library', icon: 'library' }, { id: 'chats', title: 'Chats', icon: 'chat' }, { id: 'people', title: 'People', icon: 'member' }];
+const VIEWS = [{ id: 'inbox', title: 'Inbox', icon: 'inbox' }, { id: 'tasks', title: 'Tasks', icon: 'task' }, { id: 'meetings', title: 'Meetings', icon: 'meeting' }, { id: 'library', title: 'Library', icon: 'library' }, { id: 'chats', title: 'Chats', icon: 'chat' }, { id: 'people', title: 'People', icon: 'member' }]
+  .map((view) => ({ ...view, kind: KIND_VIEWS.has(view.id) })); // a kind page lists one kind and does not offer the type picker
 const TAG = { task: { label: 'task', color: 'grey' }, meeting: { label: 'meeting', color: 'gold' }, space: { label: 'space', color: 'grey' }, doc: { label: 'doc', color: 'grey' }, member: { label: 'member', color: 'grey' } };
 const KINDS = { doc: 'tana:text:', task: 'tana:text:', meeting: 'tana:event:', chat: 'tana:chat:' };
 const PLAIN_KINDS = new Set(['chat', 'canvas', 'agent', 'skill', 'type']); // tana:<kind>: ids listed read-only: kind icon + kind tag
@@ -31,10 +32,10 @@ const preset = (id) => {
 };
 const viewFilter = (id) => {
   const saved = db.setting('viewFilter:' + id);
-  return validViewFilter(saved) ? { ...preset(id), ...saved } : preset(id);
+  return viewTypes(id, validViewFilter(saved) ? { ...preset(id), ...saved } : preset(id));
 };
 const setViewFilter = (id, filter) => {
-  const next = validViewFilter(filter) ? { ...preset(id), ...filter } : preset(id);
+  const next = viewTypes(id, validViewFilter(filter) ? { ...preset(id), ...filter } : preset(id));
   db.setSetting('viewFilter:' + id, next);
   return next;
 };
@@ -329,7 +330,7 @@ const isMcp = (n) => (n.invocationContext && n.invocationContext.intent === 'mcp
 async function viewRows(id, filter) {
   if (!client) return { nodes: [], truncated: false };
   const base = viewFilter(id);
-  const f = filter === undefined ? base : validViewFilter(filter) ? { ...base, ...filter } : preset(id);
+  const f = viewTypes(id, filter === undefined ? base : validViewFilter(filter) ? { ...base, ...filter } : preset(id));
   if (!validViewFilter(f)) throw new Error('invalid view filter');
   const result = await client.graph.listNodes(viewParams(f, me.userUri));
   const docsWithoutTasks = Array.isArray(f.types) && f.types.includes('docs') && !f.types.includes('tasks');
