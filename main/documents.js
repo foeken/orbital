@@ -55,7 +55,7 @@ async function customCreation(typeUri) {
 async function creationOptions() {
   if (!S.client) throw new Error(NOT_CONNECTED);
   const result = await S.client.graph.listNodes({nodeTypes:['type'],limit:1000,mode:'LIST_NODES_MODE_WITH_COUNT'});
-  const options = [{id:'task',kind:'task',title:'Task',icon:'task',selectable:true},{id:'meeting',kind:'meeting',title:'Meeting',icon:'meeting',selectable:true},{id:'chat',kind:'chat',title:'Chat',icon:'chat',selectable:true}];
+  const options = [{id:'doc',kind:'doc',title:'Doc',icon:'doc',selectable:true},{id:'task',kind:'task',title:'Task',icon:'task',selectable:true},{id:'meeting',kind:'meeting',title:'Meeting',icon:'meeting',selectable:true},{id:'chat',kind:'chat',title:'Chat',icon:'chat',selectable:true}];
   const types = await Promise.all(result.nodes.map(async n => {
     rememberType(n);
     // the chooser shows a type the way its documents render: the type's own hue and its app-local icon

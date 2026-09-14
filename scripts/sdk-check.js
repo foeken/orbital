@@ -199,7 +199,9 @@ async function main() {
     await assert.rejects(backend.createDocument('   ',{kind:'chat'}),/empty draft/);
     assert.equal(created.length,0,'empty chooser draft does not start a create');
     const choices=await backend.creationOptions();assert.equal(choices.complete,true);
-    assert.deepEqual(Array.from(choices.options.slice(0,3),o=>o.kind),['task','meeting','chat']);
+    assert.deepEqual(Array.from(choices.options.slice(0,4),o=>o.kind),['doc','task','meeting','chat']);
+    const plainDoc=await backend.createDocument('Plain note',{kind:'doc'});
+    assert.equal(plainDoc.icon,'doc');assert.ok(plainDoc.id.startsWith('tana:text:'));
     assert.equal(choices.options.find(o=>o.typeUri===unknownType.id).selectable,false);
     const chat=await backend.createDocument('New conversation',{kind:'chat'});
     assert.equal(chat.icon,'chat');assert.ok(chat.id.startsWith('tana:chat:'));
@@ -210,11 +212,11 @@ async function main() {
     assert.equal(readNode(docs.get(typed.id)).ownerUri,space.id);assert.equal(readNode(docs.get(typed.id)).restricted,true);
     const event=await backend.createDocument('Working session',{kind:'custom',typeUri:eventType.id});
     assert.ok(event.id.startsWith('tana:event:'));assert.equal(readNode(docs.get(event.id)).entityTypeUri,eventType.id);
-    assert.equal(readNode(docs.get(event.id)).origin,'tana');assert.equal(created.length,3);
+    assert.equal(readNode(docs.get(event.id)).origin,'tana');assert.equal(created.length,4);
     space.transact(l=>l.getMap('data').get('participants').get(ME).set('role','viewer'));
     await assert.rejects(backend.createDocument('Blocked',{kind:'custom',typeUri:textType.id}),/permission/);
     await assert.rejects(backend.createDocument('Invalid',{kind:'custom',typeUri:unknownType.id}),/Unsupported type target/);
-    assert.equal(created.length,3,'invalid scope/types do not create partial documents');
+    assert.equal(created.length,4,'invalid scope/types do not create partial documents');
     console.log('ok  creation chooser: native chats, actual typed docs/events, home-space validation and unsaved blank drafts');
   }
   {
