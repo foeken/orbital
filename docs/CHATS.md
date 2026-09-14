@@ -8,7 +8,7 @@ Verified by bootstrapping 9 real chats (28 messages) through `begin_document_syn
 web client's own declared schema in `https://home.tana.inc/assets/shared-CEMPyt0c.js` (the `Nc.schema({...})` for
 chat documents, which lists every field below, including the optional ones no sampled chat used).
 
-Worked example: **"Foundry Offsite Goals Extraction"**, `tana:chat:01m2518ymst5g02erq4d59xvj1`.
+Worked example: **"Studio Offsite Goals Extraction"**, `tana:chat:01example10000000000000000`.
 
 ## 1. Root containers
 
@@ -55,7 +55,7 @@ message and the first user message share the same millisecond (`1788262342702` i
 | `toolCalls` | LoroList | see §4 |
 | `proposals` | LoroList | see §5 |
 | `usage` | LoroMap | `model` ("gpt-5.6-luna/medium"), `cost`, `promptTokens`, `completionTokens`, `totalTokens`, `cachedInputTokens`, `cacheCreationInputTokens`, `iterationCount`, `providerRequestId`, `triggerSource` ("chat-route"), `durationMs`, `usageByModel` |
-| `hiddenFromChat` | bool | the synthetic "André Foeken — it is now Thursday, September 10, 2026 at 8:50 AM (Europe/Amsterdam)." preamble. Do not render |
+| `hiddenFromChat` | bool | the synthetic "Robin Vega — it is now Thursday, September 10, 2026 at 8:50 AM (Europe/Amsterdam)." preamble. Do not render |
 | `isStatusUpdate` | bool | the preamble and the "accepted N changes" records |
 | `excludeFromAIContext` | bool | set on "accepted N changes" |
 | `status` | `'cancelled'` \| `'error'` \| `'limit_exceeded'` | declared, not seen live; with `errorMessage` |
@@ -77,9 +77,9 @@ attributes at all** — the text is plain markdown source: `##` headings, `-` bu
 breaks, and, crucially, **inline mentions as markdown links**:
 
 ```
-From [Foundry Offsite](tana:event:5zavn16pmef38qmm4z8xyyjwez), cross-checked against
-[Notes](tana:text:01m13ktr1zrpcryja5y3rp74se) and
-[Turning Foundry from an entity into a way of working](tana:text:01m1ec6vwzyz0xyzwn2zxw9tzk):
+From [Studio Offsite](tana:event:01example20000000000000000), cross-checked against
+[Notes](tana:text:01example30000000000000000) and
+[Turning Studio from an entity into a way of working](tana:text:01example40000000000000000):
 ```
 
 So a mention chip needs no lookup: the label and the node id are both in the link. The uri kind (`text`, `event`,
@@ -116,7 +116,7 @@ web client renders it as a nested chat link.
 `proposals` is a list of `{ operation: 'create' | 'update' | 'delete', proposedUri, baseUri?, proposedAt,
 approvedAt?, rejectedAt?, iterationChatUri?, metadata: { type?, ownerUri?, payload?, intents? } }`.
 
-- `create`: `proposedUri` is the new document (e.g. `tana:text:01m251k0t04h9ydbdvamgzjxcg`, "Nedap Foundry Goals —
+- `create`: `proposedUri` is the new document (e.g. `tana:text:01example50000000000000000`, "Sample Project Goals —
   Short- and Long-Term"), no `baseUri`.
 - `update`: `proposedUri` is a *draft copy*, `baseUri` the real document being changed.
 - `iterationChatUri` points at a `proposal-iteration` chat (`data.agentId`, `invocationContext.contextUris:
@@ -192,9 +192,9 @@ Main process work needed:
 
 ```bash
 ./node_modules/.bin/electron scripts/platform-cli.js chatlist
-./node_modules/.bin/electron scripts/platform-cli.js rawdoc tana:chat:01m2518ymst5g02erq4d59xvj1
-./node_modules/.bin/electron scripts/platform-cli.js rawdoc tana:chat:01m2518ymst5g02erq4d59xvj1 --containers 1
-./node_modules/.bin/electron scripts/platform-cli.js edges tana:chat:01m2518ymst5g02erq4d59xvj1
+./node_modules/.bin/electron scripts/platform-cli.js rawdoc tana:chat:01example10000000000000000
+./node_modules/.bin/electron scripts/platform-cli.js rawdoc tana:chat:01example10000000000000000 --containers 1
+./node_modules/.bin/electron scripts/platform-cli.js edges tana:chat:01example10000000000000000
 ```
 
 `rawdoc` prints every root container (`--containers 1` names each container by kind and keeps text marks, which

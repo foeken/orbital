@@ -25,8 +25,8 @@ Schema `due`:
 
 Live (this account):
 
-    pinnedCollectionUri: "tana:collection:01m0f2fbgb76ddejdb12mbnpm1"
-    pinMapUri:           "tana:pin-map:01m0f2fbrw4sm7vhrkchex3pdq"
+    pinnedCollectionUri: "tana:collection:01example80000000000000000"
+    pinMapUri:           "tana:pin-map:01example90000000000000000"
 
 The sidebar is that `collection` document. Schema `Ade`:
 
@@ -61,9 +61,9 @@ If the profile has no `pinnedCollectionUri` yet, the client creates one and stor
 
 Live tree of this account's sidebar collection (after the user pinned "Test Pin"):
 
-    tree[0]  meta {uri:"tana:text:01m2det7rch45r79zh4d0cmhdc"}   <- "Test Pin"   (id 0@10444520223086040176, fractional_index "80")
-    tree[1]  meta {uri:"tana:text:01m2dexnv9rgzzxyww9hnx24b6"}                    (fractional_index "817C80")
-    tree[2]  meta {label:"Foundry"}  children: five {uri:"tana:space:..."} nodes  (section folder)
+    tree[0]  meta {uri:"tana:text:01examplea0000000000000000"}   <- "Test Pin"   (id 0@10444520223086040176, fractional_index "80")
+    tree[1]  meta {uri:"tana:text:01exampleb0000000000000000"}                    (fractional_index "817C80")
+    tree[2]  meta {label:"Studio"}  children: five {uri:"tana:space:..."} nodes  (section folder)
 
 Ordering is Loro's fractional index (loro-crdt 1.16 has it on by default; the bundle never calls `enableFractionalIndex`). Deleted nodes remain
 in `tree.nodes()` under the Loro deleted root `2147483647@18446744073709551615`; use `tree.toJSON()` / `roots()` which skip them. Spaces, agents,
@@ -96,9 +96,9 @@ Only `type:'plain'` is ever written by the UI; the other types exist in the sche
 
 Live pin-map of this account:
 
-    entries["tana:text:01m2det7rch45r79zh4d0cmhdc"] = { pins:[{type:"plain",datetime:"2026-09-13",pinnedAt:1789305626389}], mutedPins:[] }
-    entries["tana:text:01m2dexnv9rgzzxyww9hnx24b6"] = { pins:[{type:"plain",datetime:"2026-09-13",pinnedAt:1789305739115}], mutedPins:[] }
-    entries["tana:text:01m239qxx9es4b8zn8zypba195"] = { pins:[{type:"plain",datetime:"2026-09-09",pinnedAt:1788964763565}], mutedPins:[] }
+    entries["tana:text:01examplea0000000000000000"] = { pins:[{type:"plain",datetime:"2026-09-13",pinnedAt:1789305626389}], mutedPins:[] }
+    entries["tana:text:01exampleb0000000000000000"] = { pins:[{type:"plain",datetime:"2026-09-13",pinnedAt:1789305739115}], mutedPins:[] }
+    entries["tana:text:01examplec0000000000000000"] = { pins:[{type:"plain",datetime:"2026-09-09",pinnedAt:1788964763565}], mutedPins:[] }
 
 "Test Pin" has `createdAt:1789305626382` and its date pin `pinnedAt:1789305626389` (7 ms later): creating a document from the Today view pins it to that day automatically.
 `pinnedAt` is epoch ms; `datetime` is the calendar day in the user's local zone, no timezone field.
@@ -133,10 +133,10 @@ Different container, same document-sync mechanism. Event (`ode`) and space (`Lle
     pinItem(e,t,n){this.mutate(r=>wm(r,e,t,n))}  unpinItem(e){this.mutate(t=>Tm(t,e))}  reorderPinnedItem(e,t){...Em...}
 
 `eK` (the MCP path for target event/space) calls `e.pinItem(uri)` / `e.unpinItem(uri)` and dedups on `pinnedItems.map(e=>e.uri)`. Live example
-(`tana:event:1n1tjh3mpp434pd5ydj12x4ahe`): `pinnedItems:[{mode:"embed",uri:"tana:chat:01m238jztfhbw8sdxqsbzctqvc"}]`, and `ListEdges({fromNodeIds:[event],edgeTypes:['EDGE_TYPE_HAS_PIN']})`
+(`tana:event:01exampled0000000000000000`): `pinnedItems:[{mode:"embed",uri:"tana:chat:01examplee0000000000000000"}]`, and `ListEdges({fromNodeIds:[event],edgeTypes:['EDGE_TYPE_HAS_PIN']})`
 returns `{fromNodeId:event, toNodeId:that chat, type:'EDGE_TYPE_HAS_PIN'}`. The UI reads those edges (`ny({predicate:{edgeTypes:[ag.HAS_PIN]},subject:{uris:events}})`) to show
 meeting outputs; `HAS_PIN` is derived from `pinnedItems` by the server. No HAS_PIN edge exists for "Test Pin" (sidebar + date pinned), for the user profile, or from the collection.
-A space without pins has no `pinnedItems` container at all (`tana:space:01m0vw5gynesmrb01knfwr99rv` root keys: `data, appearance`).
+A space without pins has no `pinnedItems` container at all (`tana:space:01examplef0000000000000000` root keys: `data, appearance`).
 
 ## 5. SDK recipe (matches the web client byte-for-byte in shape)
 
@@ -189,7 +189,7 @@ The event branch of section 4 is no longer only an expectation. On a throwaway m
 (`sdk/pins.js pinItem` -> `main nodePin` -> an ordinary `live_document_update`, no new RPC) produced, read back in a fresh process that bootstrapped the
 document from the server:
 
-    pinnedItems: @MovableList [ @Map { uri: "tana:text:01m2fesr24agc5973wxxgbgkts" } ]
+    pinnedItems: @MovableList [ @Map { uri: "tana:text:01exampleg0000000000000000" } ]
     ListEdges(fromNodeIds:[event], edgeTypes:['EDGE_TYPE_HAS_PIN']) -> { fromNodeId: event, toNodeId: that text doc, type: 'EDGE_TYPE_HAS_PIN' }
 
 So the element is a map container (as the schema says, and as the pin-map entries above are written), the server keeps it, and it derives `HAS_PIN` within

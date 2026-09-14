@@ -15,7 +15,7 @@ const { LoroMap, LoroList } = require('loro-crdt');
 const { parseQuery, searchParams, needsTypes, taskParams, libraryQueries, hideRules, isHidden, DEFAULT_TASK_FILTER, DEFAULT_LIBRARY_FILTER } = require('../sdk/query');
 const pins = require('../sdk/pins');
 
-const ORG = 'org_01KS7RQSWW68H489ZZZ1NNC40T', DOC = 'tana:text:01m23c1z45gceayt2zjk09k63c', ME = 'tana:user-profile:01m0f1aqd8p23qhwntbewmpfz2';
+const ORG = 'org_01EXAMPLE00000000000000000', DOC = 'tana:text:01exampleh0000000000000000', ME = 'tana:user-profile:01examplei0000000000000000';
 const snapshot = Buffer.from(fs.readFileSync(require('node:path').join(__dirname, 'fixtures', 'task-snapshot.b64'), 'utf8').trim(), 'base64');
 const b64 = (u8) => Buffer.from(u8).toString('base64');
 
@@ -100,9 +100,9 @@ async function main() {
       typed.transact((l) => {
         const runs = l.getMap('data').get('attributes').get(key).get('children').get(0).get('children');
         runs.insertContainer(1, new LoroMap()).set('nodeName', 'mention');
-        runs.get(1).setContainer('attributes', new LoroMap()).set('label', ' / Nedap');
+        runs.get(1).setContainer('attributes', new LoroMap()).set('label', ' / Example Corp');
       });
-      assert.deepEqual(fields.readFields(typed).map((f) => f.text), ['Onderhandeling / Nedap'], 'a mention reads as its label');
+      assert.deepEqual(fields.readFields(typed).map((f) => f.text), ['Onderhandeling / Example Corp'], 'a mention reads as its label');
     }
     { // Library = no owner: the key goes away, the audience follows the participants, and a type still needs a space
       const loose=make('text'); loose.transact(l=>l.getMap('data').set('ownerUri',target.id));
@@ -249,8 +249,8 @@ async function main() {
   }
   // 1. Request messages: binary round-trip and protobuf-JSON shape from PLATFORM-PROTOCOL.md §1.1/§2
   const Req = message('sync', 'ServerSyncRequest'), Cmd = message('sync', 'ServerSyncCommandRequest');
-  const peerId = derivePeerId('01m0f1aqd8p23qhwntbewmpfz2');
-  assert.equal(BigInt(peerId) >> 16n, 159370730943085n, 'peerId user hash');
+  const peerId = derivePeerId('01examplei0000000000000000');
+  assert.equal(BigInt(peerId) >> 16n, 265604616632439n, 'peerId user hash');
   const req = create(Req, { orgId: ORG, peer: { peerId, ephemeral: true, storageId: '' } });
   assert.deepEqual(toJson(Req, fromBinary(Req, toBinary(Req, req))), { orgId: ORG, peer: { peerId, ephemeral: true, storageId: '' } });
   const vvBytes = new Uint8Array([1, 2, 3]);
@@ -281,7 +281,7 @@ async function main() {
     const { audience, audienceMetadata } = require('../sdk/node');
     const doc = (restricted, participants) => ({ id: DOC, data: { toJSON: () => ({ restricted, participants }) } });
     const meOnly = { [ME]: { type: 'user', role: 'admin' } };
-    const shared = { ...meOnly, ['tana:user-profile:01m0f1aqd8p23qhwntbewmpfz3']: { type: 'user', role: 'viewer' } };
+    const shared = { ...meOnly, ['tana:user-profile:01examplem0000000000000000']: { type: 'user', role: 'viewer' } };
     assert.equal(await audience(doc(true, meOnly), ME), 'only-me');
     assert.equal(await audience(doc(true, shared), ME), 'people');
     assert.equal(await audience(doc(true, { space: { type: 'group' } }), ME), 'unknown');
@@ -292,19 +292,19 @@ async function main() {
     assert.equal(await audience(doc(false, meOnly), ME, graph, { subscribe: async () => doc(true, shared) }), 'space');
     assert.equal(await audience(doc(undefined, meOnly), ME, graph, { subscribe: async () => doc(true, shared) }), 'space');
     assert.equal(await audience(doc(false, meOnly), ME, graph, { subscribe: async () => doc(true, meOnly) }), 'only-me');
-    const namedSpace = {id:'tana:space:boundary',data:{toJSON:()=>({title:'Foundry LT',restricted:true,participants:shared})}};
-    assert.deepEqual(await audienceMetadata(doc(false,meOnly),ME,graph,{subscribe:async()=>namedSpace}), {audience:'space',audienceSpace:{uri:'tana:space:boundary',title:'Foundry LT'}});
+    const namedSpace = {id:'tana:space:boundary',data:{toJSON:()=>({title:'Studio LT',restricted:true,participants:shared})}};
+    assert.deepEqual(await audienceMetadata(doc(false,meOnly),ME,graph,{subscribe:async()=>namedSpace}), {audience:'space',audienceSpace:{uri:'tana:space:boundary',title:'Studio LT'}});
     assert.deepEqual(await audienceMetadata(doc(false,meOnly),ME,graph,{subscribe:async()=>doc(true,shared)}), {audience:'space',audienceSpace:{uri:'tana:space:boundary'}});
     assert.deepEqual(await audienceMetadata(doc(true,meOnly),ME), {audience:'only-me'});
     assert.deepEqual(await audienceMetadata(doc(false,meOnly),ME,graph,{subscribe:async()=>{throw new Error('unavailable');}}), {audience:'unknown'});
     // #93: an inherited boundary is as determinate as a direct one. Verified against real data: tasks inside a
     // private meeting, meetings with an external guest, and documents whose only boundary is the organization.
-    const EVENT = 'tana:event:01m0f1aqd8p23qhwntbewmpfz2', ORGDOC = 'tana:org:01ks7rqsrqjn7vwyjhx75r6jg0';
+    const EVENT = 'tana:event:01examplen0000000000000000', ORGDOC = 'tana:org:01examplel0000000000000000';
     const boundaryOf = (uri) => ({ getOwnerChain: async () => ({ entries: [{ uri, restricted: true, accessible: true }], effectivelyRestricted: true }) });
     const orgDoc = (members) => ({ id: ORGDOC, data: { toJSON: () => ({ memberUserProfileDocUris: members }) } });
     assert.deepEqual(await audienceMetadata(doc(undefined, {}), ME, boundaryOf(EVENT), { subscribe: async () => doc(true, shared) }),
       { audience: 'people' }, 'a task inside a meeting shared with several people is selected people, not unknown');
-    assert.deepEqual(await audienceMetadata(doc(true, { ...meOnly, 'tana:guest-profile:01kmtdaenscxzhnvcfyz3eth8n': { type: 'user', role: 'attendee' } }), ME),
+    assert.deepEqual(await audienceMetadata(doc(true, { ...meOnly, 'tana:guest-profile:01exampleo0000000000000000': { type: 'user', role: 'attendee' } }), ME),
       { audience: 'people' }, 'an external guest participant is a person, not an unresolved grant');
     assert.deepEqual(await audienceMetadata(doc(undefined, {}), ME, boundaryOf(ORGDOC), { subscribe: async () => orgDoc({ u: ME }) }),
       { audience: 'everyone' }, 'the organization root is a members-only boundary: everyone in the organization');
@@ -403,15 +403,15 @@ async function main() {
     const failed = await resolveInitialAuth({ isAuthenticated: async () => { throw error; } });
     assert.equal(failed.authenticated, null);
     assert.equal(failed.error, error);
-    const space = graphRow({ id: 'tana:space:01m0f1aqd8p23qhwntbewmpfz2', title: 'Space', appearance: { hue: 0 } });
+    const space = graphRow({ id: 'tana:space:01examplep0000000000000000', title: 'Space', appearance: { hue: 0 } });
     assert.equal(space.hue, 0);
     assert.equal(space.tags[0].hue, 0);
-    const plain = graphRow({ id: 'tana:text:01m0f1aqd8p23qhwntbewmpfz2', title: 'Plain' });
+    const plain = graphRow({ id: 'tana:text:01exampleq0000000000000000', title: 'Plain' });
     assert.equal(plain.hue, undefined);
     assert.equal(plain.tags[0].hue, undefined);
     assert.equal(cachedNodeHue(space), 0, 'own hue survives the cached kind tag');
     assert.equal(cachedNodeHue({ id: plain.id, icon: null, tags: [{ label: 'Type', hue: 0 }] }), undefined, 'type hue is not a node hue');
-    assert.equal(graphRow({ id: 'tana:chat:01m0f1aqd8p23qhwntbewmpfz2', title: 'Chat' }).icon, 'chat');
+    assert.equal(graphRow({ id: 'tana:chat:01exampler0000000000000000', title: 'Chat' }).icon, 'chat');
     assert.ok(SECTIONS.some((s) => s.id === 'members' && s.icon === 'member'));
     console.log('ok  initial auth states and node appearance hue');
   }
@@ -421,11 +421,11 @@ async function main() {
   {
     const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
     const spaceId = 'tana:space:' + ulid(), spaceDoc = new Document(spaceId);
-    spaceDoc.transact((l) => { initDocument(l, 'Foundry LT', ME); l.getMap('data').set('type', 'space'); });
+    spaceDoc.transact((l) => { initDocument(l, 'Studio LT', ME); l.getMap('data').set('type', 'space'); });
     const lookups = [];
     backend.testRuntime({ me: { userUri: ME }, win: null, client: {
       sync: { subscribe: async () => spaceDoc, getDocument: () => spaceDoc },
-      graph: { listNodes: async (p) => { lookups.push(p.nodeIds); return { nodes: [{ id: spaceId, title: 'Foundry LT', appearance: { hue: 193 } }] }; } },
+      graph: { listNodes: async (p) => { lookups.push(p.nodeIds); return { nodes: [{ id: spaceId, title: 'Studio LT', appearance: { hue: 193 } }] }; } },
     } });
     const node = await backend.handlers.get('doc:info')(null, spaceId);
     assert.equal(node.hue, 193, 'a space opened from a pin keeps the hue only the graph knows');
@@ -433,7 +433,7 @@ async function main() {
     assert.equal(JSON.stringify(lookups), JSON.stringify([[spaceId]]));
     assert.equal((await backend.handlers.get('doc:info')(null, spaceId)).hue, 193);
     assert.equal(lookups.length, 1, 'the appearance lookup is cached per document');
-    assert.equal(backend.rememberNodeHue({ id: spaceId, title: 'Foundry LT' }), false, 'a data-map read carries no appearance and changes nothing');
+    assert.equal(backend.rememberNodeHue({ id: spaceId, title: 'Studio LT' }), false, 'a data-map read carries no appearance and changes nothing');
     assert.equal((await backend.handlers.get('doc:info')(null, spaceId)).hue, 193, 'reading the document never erases the graph hue');
     console.log('ok  appearance hue survives Loro reads and reaches documents opened without a cached row');
   }
@@ -444,9 +444,9 @@ async function main() {
     const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
     backend.testRuntime({ me: { userUri: ME }, win: null, client: {} });
     const taskId = 'tana:text:' + ulid(), docId = 'tana:text:' + ulid(), eventId = 'tana:event:' + ulid();
-    const task = { id: taskId, title: 'Ask and tell about Tana DPA', createTime: '2026-09-09T15:19:49.638Z', updateTime: '2026-09-13T15:12:43Z', state: { type: 'open' } };
+    const task = { id: taskId, title: 'Review the sample agreement', createTime: '2026-09-09T15:19:49.638Z', updateTime: '2026-09-13T15:12:43Z', state: { type: 'open' } };
     const plain = { id: docId, title: 'Notes', createTime: '2026-09-01T09:00:00.000Z', updateTime: '2026-09-02T09:00:00.000Z' };
-    const event = { id: eventId, title: 'Foundry Offsite', createTime: '2026-09-03T09:00:00.000Z', updateTime: '2026-09-04T09:00:00.000Z', calendarEvent: { startTime: '2026-09-10T07:00:00.000Z' } };
+    const event = { id: eventId, title: 'Studio Offsite', createTime: '2026-09-03T09:00:00.000Z', updateTime: '2026-09-04T09:00:00.000Z', calendarEvent: { startTime: '2026-09-10T07:00:00.000Z' } };
     [task, plain, event].forEach(backend.rememberNodeHue);
     const rows = [task, plain, event].map((n) => backend.toNode(backend.graphRow(n)));
     assert.deepEqual(rows.map((r) => r.createdAt), [task.createTime, plain.createTime, event.createTime]);
@@ -460,7 +460,7 @@ async function main() {
     assert.equal(cached.stateType, 'open');
     // a Loro data map instead of a graph node: createdAt is milliseconds there, and the state can have moved on
     const doc = new Document(taskId);
-    doc.transact((l) => initDocument(l, 'Ask and tell about Tana DPA', ME, { kind: 'task', now: 1788262342702 }));
+    doc.transact((l) => initDocument(l, 'Review the sample agreement', ME, { kind: 'task', now: 1788262342702 }));
     setState(doc, 'closed', ME);
     backend.rememberNodeHue(readNode(doc));
     assert.equal(backend.toNode({ id: taskId, title: 'x', icon: 'task', done: 1, tags: [] }).createdAt, new Date(1788262342702).toISOString());
@@ -589,6 +589,43 @@ async function main() {
     console.log('ok  refresh keeps on-demand subscriptions, survives a failing query, and caches only real answers');
   }
 
+  // Checking a task is what takes it off the Tasks list, and the refresh that follows used to unsubscribe it: the
+  // Document went with it, and its Loro undo history with that, so Cmd+Z could not uncheck the task and silently
+  // undid an older step in another document instead.
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const taskId = 'tana:text:' + ulid(), otherId = 'tana:text:' + ulid();
+    const task = new Document(taskId); task.transact((l) => { initDocument(l, 'Task', ME); l.getMap('data').set('stateType', 'open'); });
+    const other = new Document(otherId); other.transact((l) => initDocument(l, 'Other', ME));
+    const documents = new Map([[taskId, task], [otherId, other]]);
+    const unsubscribed = [];
+    let tasks = [{ id: taskId, title: 'Task', state: { type: 'open' }, updateTime: '2026-09-14T10:00:00Z' }];
+    const listNodes = async (p) => {
+      const [kind] = p.nodeTypes || [];
+      return { nodes: kind && kind !== 'text' ? [] : tasks };
+    };
+    backend.testRuntime({ me: { userUri: ME }, win: { isDestroyed: () => false, webContents: { send: () => {} } }, client: {
+      sync: { subscribe: async (id) => documents.get(id), getDocument: (id) => documents.get(id), unsubscribe: async (id) => { unsubscribed.push(id); } },
+      graph: { listNodes, getOwnerChain: async () => ({ entries: [] }) },
+    } });
+    await backend.refresh();
+    await backend.handlers.get('doc:setTitle')(null, otherId, 'Edited elsewhere'); // the older step, on another document
+    await backend.handlers.get('doc:setDone')(null, taskId, true);
+    assert.equal(readNode(task).stateType, 'closed', 'checking the task closes it');
+    tasks = [];
+    await backend.refresh(); // the closed task is no longer one of the rows the view lists
+    assert.deepEqual(unsubscribed, [], 'a document the undo history still needs keeps its subscription when it leaves the view');
+    assert.equal(await backend.undo(), taskId, 'so undo reaches the checkbox step');
+    assert.equal(readNode(task).stateType, 'open', 'and unchecks the task');
+    assert.equal(readNode(other).title, 'Edited elsewhere', 'rather than silently undoing an older step somewhere else');
+    assert.equal(await backend.redo(), taskId, 'redo checks it again');
+    assert.equal(readNode(task).stateType, 'closed');
+    assert.equal(await backend.undo(), taskId, 'and undo takes it back off');
+    assert.equal(await backend.undo(), otherId, 'only then does the history move on to the older step');
+    assert.equal(readNode(other).title, 'Other');
+    console.log('ok  a checked task keeps its undo history when it leaves the list');
+  }
+
   // Hidden titles: one user-maintained list of patterns keeps matching nodes out of every list and every search,
   // including the rows already cached in SQLite, while the node itself still opens.
   {
@@ -675,13 +712,13 @@ async function main() {
   doc.applyRemote([snapshot]);
   const n = readNode(doc);
   assert.equal(n.id, DOC);
-  assert.equal(n.title, 'Ask and tell about Tana DPA');
+  assert.equal(n.title, 'Review the sample agreement');
   assert.equal(n.stateType, 'open');
   assert.equal(n.type, 'text');
   assert.deepEqual(n.assignedToUris, [ME]);
   assert.equal(typeof n.createdAt, 'number');
   const text = contentText(doc);
-  assert.match(text, /^Imported from Tana Outliner on 2026-09-09\.\nOutliner ID: 1n74S7NZRMAS\nResearch context — 10 September 2026\nThe personal note-taking compliance task names Nina Boerman/);
+  assert.match(text, /^Imported from Tana Outliner on 2026-09-09\.\nOutliner ID: EXAMPLE12345\nResearch context — 10 September 2026\nThe sample agreement review names a reviewer/);
   const before = doc.loro.oplogVersion();
   const sent = [];
   doc.on('local-update', (u) => sent.push(u));
@@ -700,7 +737,7 @@ async function main() {
   assert.notEqual(before.compare(doc.loro.oplogVersion()), 0);
   const assigned = new Document(DOC, { peerId: '8' });
   assigned.applyRemote([snapshot]);
-  const otherAssignee = 'tana:user-profile:01m0f1aqd8p23qhwntbewmpfz3';
+  const otherAssignee = 'tana:user-profile:01examplem0000000000000000';
   const assignmentUpdates = [];
   assigned.on('local-update', (u) => assignmentUpdates.push(u));
   assert.deepEqual(taskMeta(assigned), { assignees: [ME], restricted: true, participants: [{ uri: ME, type: 'user', role: 'admin' }] });
@@ -716,15 +753,15 @@ async function main() {
 
   // 3a. Search query parsing (#task / #meeting / #Type) and the new-document seed
   {
-    assert.deepEqual(parseQuery('lex #task'), { text: 'lex', tags: ['task'] });
-    assert.deepEqual(parseQuery('#Project  lex #meeting'), { text: 'lex', tags: ['Project', 'meeting'] });
+    assert.deepEqual(parseQuery('sam #task'), { text: 'sam', tags: ['task'] });
+    assert.deepEqual(parseQuery('#Project  sam #meeting'), { text: 'sam', tags: ['Project', 'meeting'] });
     assert.deepEqual(parseQuery('  #  '), { text: '#', tags: [] }, 'a bare # is text');
     assert.deepEqual(parseQuery('a#b'), { text: 'a#b', tags: [] }, 'only word-initial #');
     const types = new Map([['project', 'tana:type:p']]);
     assert.equal(searchParams(parseQuery(''), types), null);
-    assert.deepEqual(searchParams(parseQuery('lex'), types), { nodeTypes: ['text', 'event', 'user-profile'], textQuery: 'lex', limit: 20, sortOptions: [{ field: 'SORT_FIELD_TEXT_RANK', direction: 'SORT_DIRECTION_DESCENDING' }] });
-    const task = searchParams(parseQuery('lex #task'), types);
-    assert.deepEqual([task.nodeTypes, task.stateTypes, task.textQuery], [['text'], STATE_TYPES, 'lex']);
+    assert.deepEqual(searchParams(parseQuery('sam'), types), { nodeTypes: ['text', 'event', 'user-profile'], textQuery: 'sam', limit: 20, sortOptions: [{ field: 'SORT_FIELD_TEXT_RANK', direction: 'SORT_DIRECTION_DESCENDING' }] });
+    const task = searchParams(parseQuery('sam #task'), types);
+    assert.deepEqual([task.nodeTypes, task.stateTypes, task.textQuery], [['text'], STATE_TYPES, 'sam']);
     assert.deepEqual(searchParams(parseQuery('#meeting'), types).nodeTypes, ['event']);
     assert.equal(searchParams(parseQuery('#meeting'), types).textQuery, undefined);
     assert.deepEqual(searchParams(parseQuery('#PROJECT'), types).entityTypes, ['tana:type:p'], 'type title matched case-insensitively');
@@ -755,7 +792,7 @@ async function main() {
     assert.throws(() => libraryQueries({ types: ['nope'] }, ME), /unknown library type/);
     // An assignee filter must never leave a kind unfiltered: the graph filters every node type by assignedTo, and
     // kinds that carry no assignee then return nothing rather than their whole contents.
-    const OTHER = 'tana:user-profile:01m1bg7kfhsxfejsxs0j1ydgnb';
+    const OTHER = 'tana:user-profile:01examples0000000000000000';
     const mixed = libraryQueries({ types: ['tasks', 'meetings', 'docs', 'chats'], states: ['open'], assignee: OTHER }, ME);
     assert.deepEqual(mixed.map((q) => q.params.assignedTo), Array(4).fill([OTHER]), 'every selected kind asks for that person');
     assert.deepEqual(mixed.map((q) => q.params.stateTypes), [['open'], undefined, undefined, undefined], 'states stay a task filter');
@@ -820,10 +857,10 @@ async function main() {
   assert.equal(o0.length, 3);
   assert.deepEqual(o0.map((n) => [n.id, n.kind, n.heading, n.hasChildren]), [['6s8vb70s', 'block', undefined, false], ['dv8c4sp7', 'block', 2, false], ['r4hz3a0b', 'block', undefined, false]]);
   assert.equal(o0[1].text, 'Research context — 10 September 2026');
-  assert.match(o0[2].text, /^The personal note-taking compliance task names Nina Boerman/, 'mention rendered as its label');
+  assert.match(o0[2].text, /^The sample agreement review names a reviewer/, 'mention rendered as its label');
   // segments: text runs and mentions, in order; a run is the inline container at that index
   const run = (block, i) => c1.content.get('children').get(block).get('children').get(i);
-  const MENTION = { mention: { label: 'personal note-taking compliance task', uri: 'tana:text:01m23c1zd6d4arqzr36a7s54nb' } };
+  const MENTION = { mention: { label: 'sample agreement review', uri: 'tana:text:01examplet0000000000000000' } };
   assert.equal(o0[2].segments.length, 3);
   assert.deepEqual(o0[2].segments.slice(0, 2), [{ text: 'The ' }, MENTION]);
   assert.equal(o0[2].segments.map((s) => s.text ?? s.mention.label).join(''), o0[2].text, 'segments join to text');
@@ -832,7 +869,7 @@ async function main() {
   const mentionId = run(2, 1).id, tailId = run(2, 2).id;
   step(() => outline.setText(c1, 'r4hz3a0b', [{ text: 'The ' }, MENTION, { text: ' is edited.' }]));
   assert.deepEqual(outline.readOutline(c1)[2].segments, [{ text: 'The ' }, MENTION, { text: ' is edited.' }]);
-  assert.equal(outline.readOutline(c1)[2].text, 'The personal note-taking compliance task is edited.');
+  assert.equal(outline.readOutline(c1)[2].text, 'The sample agreement review is edited.');
   assert.ok(run(2, 1).id === mentionId && run(2, 2).id === tailId, 'mention and text run containers kept');
   step(() => outline.setText(c1, 'r4hz3a0b', [{ text: 'See ' }, { mention: { label: 'Other', uri: 'tana:text:other' } }, { text: '' }]));
   assert.deepEqual(outline.readOutline(c1)[2].segments, [{ text: 'See ' }, { mention: { label: 'Other', uri: 'tana:text:other' } }], 'empty text dropped');
@@ -857,31 +894,31 @@ async function main() {
   const end = step(() => outline.insertAfter(c1, null, 'End'));
   const second = step(() => outline.insertAfter(c1, '6s8vb70s', 'Second'));
   assert.match(end + second, /^[a-z0-9]{16}$/);
-  assert.equal(flat(outline.readOutline(c1)), 'Hello,Second,Research con,The personal,End');
+  assert.equal(flat(outline.readOutline(c1)), 'Hello,Second,Research con,The sample a,End');
   const child = step(() => outline.insertChild(c1, '6s8vb70s', 'Child'));
-  assert.equal(flat(outline.readOutline(c1)), 'Hello(Child),Second,Research con,The personal,End');
+  assert.equal(flat(outline.readOutline(c1)), 'Hello(Child),Second,Research con,The sample a,End');
   assert.equal(raw()[0].nodeName, 'bulletList');
   assert.deepEqual(raw()[0].children[0].children.map((b) => b.nodeName), ['paragraph', 'bulletList'], 'paragraph wrapped into listItem with a nested list');
   assert.equal(raw()[0].children[0].children[0].attributes.blockId, '6s8vb70s', 'node id survives wrapping');
   assert.throws(() => outline.insertChild(c1, 'dv8c4sp7', 'x'), /cannot contain child nodes/, 'bare headings cannot own children');
   assert.throws(() => outline.setText(c1, null, 'x'), /node id must be a string/);
   step(() => outline.indent(c1, second));
-  assert.equal(flat(outline.readOutline(c1)), 'Hello(Child,Second),Research con,The personal,End');
+  assert.equal(flat(outline.readOutline(c1)), 'Hello(Child,Second),Research con,The sample a,End');
   assert.equal(raw()[0].children.length, 1, 'one listItem in the top list');
   step(() => outline.outdent(c1, second));
-  assert.equal(flat(outline.readOutline(c1)), 'Hello(Child),Second,Research con,The personal,End');
+  assert.equal(flat(outline.readOutline(c1)), 'Hello(Child),Second,Research con,The sample a,End');
   assert.equal(raw()[0].children.length, 2, 'outdented node is a sibling listItem');
   step(() => outline.indent(c1, '6s8vb70s')); // first node: no previous sibling
   step(() => outline.outdent(c1, 'r4hz3a0b')); // top level: no-op
   step(() => outline.indent(c1, 'r4hz3a0b')); // previous sibling is a heading: no-op
-  assert.equal(flat(outline.readOutline(c1)), 'Hello(Child),Second,Research con,The personal,End');
+  assert.equal(flat(outline.readOutline(c1)), 'Hello(Child),Second,Research con,The sample a,End');
   const grand = step(() => outline.insertChild(c1, child, 'Grand'));
   step(() => outline.indent(c1, end)); // becomes last child of the mention paragraph (wrapped)
-  assert.equal(flat(outline.readOutline(c1)), 'Hello(Child(Grand)),Second,Research con,The personal(End)');
+  assert.equal(flat(outline.readOutline(c1)), 'Hello(Child(Grand)),Second,Research con,The sample a(End)');
   assert.equal(raw()[2].children[0].children[0].children[1].nodeName, 'mention', 'mention kept through wrapping');
   const end2 = step(() => outline.insertAfter(c1, end, 'End2'));
   step(() => outline.outdent(c1, grand));
-  assert.equal(flat(outline.readOutline(c1)), 'Hello(Child,Grand),Second,Research con,The personal(End,End2)');
+  assert.equal(flat(outline.readOutline(c1)), 'Hello(Child,Grand),Second,Research con,The sample a(End,End2)');
   // move: no-op at the edges, swaps in the middle (listItems within their list, top-level blocks with their neighbour block)
   const beforeMoves = outline.readOutline(c1);
   step(() => outline.move(c1, end, 'up')); // first in its nested list
@@ -890,27 +927,27 @@ async function main() {
   step(() => outline.move(c1, 'r4hz3a0b', 'down')); // last block of the doc
   assert.deepEqual(outline.readOutline(c1), beforeMoves, 'edges are no-ops');
   step(() => outline.move(c1, end, 'down'));
-  assert.equal(flat(outline.readOutline(c1)), 'Hello(Child,Grand),Second,Research con,The personal(End2,End)');
+  assert.equal(flat(outline.readOutline(c1)), 'Hello(Child,Grand),Second,Research con,The sample a(End2,End)');
   step(() => outline.move(c1, end, 'up'));
   step(() => outline.move(c1, second, 'up'));
-  assert.equal(flat(outline.readOutline(c1)), 'Second,Hello(Child,Grand),Research con,The personal(End,End2)');
+  assert.equal(flat(outline.readOutline(c1)), 'Second,Hello(Child,Grand),Research con,The sample a(End,End2)');
   step(() => outline.move(c1, second, 'down'));
   step(() => outline.move(c1, 'dv8c4sp7', 'up')); // heading swaps with the whole preceding list
-  assert.equal(flat(outline.readOutline(c1)), 'Research con,Hello(Child,Grand),Second,The personal(End,End2)');
+  assert.equal(flat(outline.readOutline(c1)), 'Research con,Hello(Child,Grand),Second,The sample a(End,End2)');
   step(() => outline.move(c1, 'dv8c4sp7', 'down'));
   assert.deepEqual(outline.readOutline(c1), beforeMoves, 'moves round-trip (ids and children kept)');
   assert.deepEqual(c2.content.toJSON(), c1.content.toJSON(), 'raw structure converges after moves');
   step(() => outline.remove(c1, grand));
   step(() => outline.remove(c1, end));
   step(() => outline.remove(c1, end2));
-  assert.equal(flat(outline.readOutline(c1)), 'Hello(Child),Second,Research con,The personal');
+  assert.equal(flat(outline.readOutline(c1)), 'Hello(Child),Second,Research con,The sample a');
   assert.equal(raw()[2].nodeName, 'bulletList');
   assert.equal(raw()[2].children[0].children.length, 1, 'emptied nested list removed from the listItem');
   step(() => outline.remove(c1, child));
   step(() => outline.remove(c1, second));
   step(() => outline.remove(c1, '6s8vb70s'));
   assert.equal(raw()[0].nodeName, 'heading', 'emptied top-level list removed');
-  assert.equal(flat(outline.readOutline(c1)), 'Research con,The personal');
+  assert.equal(flat(outline.readOutline(c1)), 'Research con,The sample a');
   assert.deepEqual(c2.content.toJSON(), c1.content.toJSON(), 'raw structure converges');
   console.log('ok  outline read/segments/setText/insertAfter/insertChild/indent/outdent/move/remove');
   // Marks and block types (Tana's own ProseMirror schema: bold/italic/strike/code/link, paragraph/heading/
@@ -927,8 +964,8 @@ async function main() {
     // read: a LoroText delta splits into one segment per mark run; a link segment carries its href
     assert.deepEqual(read('6s8vb70s').segments, [
       { text: 'Imported from ' },
-      { text: 'Tana Outliner', marks: { link: 'tana:1n74S7NZRMAS' } },
-      { text: ' on 2026-09-09.\nOutliner ID: 1n74S7NZRMAS' },
+      { text: 'Tana Outliner', marks: { link: 'tana:EXAMPLE12345' } },
+      { text: ' on 2026-09-09.\nOutliner ID: EXAMPLE12345' },
     ], 'marks are read from the text delta');
     assert.equal(read('6s8vb70s').block, 'paragraph');
     assert.equal(read('dv8c4sp7').block, 'heading2');
@@ -936,7 +973,7 @@ async function main() {
     // write: marks are applied without touching the text, so the run containers and a mention survive
     const container = a.content.get('children').get(2).get('children').get(0).id;
     const mentionId = a.content.get('children').get(2).get('children').get(1).id;
-    const withMarks = [{ text: 'The ', marks: { bold: true } }, { mention: { label: 'personal note-taking compliance task', uri: 'tana:text:01m23c1zd6d4arqzr36a7s54nb' } }, { text: ' tail', marks: { italic: true, link: 'https://example.test' } }];
+    const withMarks = [{ text: 'The ', marks: { bold: true } }, { mention: { label: 'sample agreement review', uri: 'tana:text:01examplet0000000000000000' } }, { text: ' tail', marks: { italic: true, link: 'https://example.test' } }];
     step(() => outline.setText(a, 'r4hz3a0b', withMarks));
     assert.deepEqual(read('r4hz3a0b').segments, withMarks, 'marks round-trip through setText');
     assert.equal(a.content.get('children').get(2).get('children').get(0).id, container, 'text container updated in place');
@@ -970,8 +1007,8 @@ async function main() {
     assert.deepEqual(read('r4hz3a0b').segments[1], withMarks[1], 'the mention survives the conversions');
     step(() => outline.setBlockType(a, 'r4hz3a0b', 'code'));
     assert.equal(raw()[2].nodeName, 'codeBlock', 'a code block leaves the quote behind');
-    assert.deepEqual(raw()[2].children, ['The personal note-taking compliance task tail'], 'code holds plain text only');
-    assert.deepEqual(read('r4hz3a0b').segments, [{ text: 'The personal note-taking compliance task tail' }], 'no marks inside code');
+    assert.deepEqual(raw()[2].children, ['The sample agreement review tail'], 'code holds plain text only');
+    assert.deepEqual(read('r4hz3a0b').segments, [{ text: 'The sample agreement review tail' }], 'no marks inside code');
     step(() => outline.setBlockType(a, 'r4hz3a0b', 'paragraph'));
     assert.equal(read('r4hz3a0b').block, 'paragraph');
     assert.throws(() => outline.setBlockType(a, 'r4hz3a0b', 'heading4'), /Unknown block type/);
@@ -1009,12 +1046,12 @@ async function main() {
   {
     const { callOf } = mainHelpers();
     // spread: the helper runs in its own vm realm, so compare plain values rather than cross-realm objects
-    assert.deepEqual({ ...callOf({ location: 'https://meet.tana.inc/rkx-bpmx-ksf' }) }, { url: 'https://meet.tana.inc/rkx-bpmx-ksf', label: 'meet.tana.inc/rkx-bpmx-ksf' });
-    assert.equal(callOf({ location: 'https://meet.google.com/ipt-utoj-srr/' }).label, 'meet.google.com/ipt-utoj-srr');
-    const zoom = callOf({ location: '+Groenlo Building 6.1a-R1 Presentationroom; https://nedap.zoom.us/j/653?pwd=AR8&from=addon' });
-    assert.equal(zoom.url, 'https://nedap.zoom.us/j/653?pwd=AR8&from=addon', 'the passcode stays in the url');
-    assert.equal(zoom.label, 'nedap.zoom.us/j/653', 'the room note and the query stay out of the label');
-    assert.equal(callOf({ location: 'Groenlo, Healthcare, The Crooks' }), undefined, 'a room is not a call');
+    assert.deepEqual({ ...callOf({ location: 'https://meet.tana.inc/abc-defg-hij' }) }, { url: 'https://meet.tana.inc/abc-defg-hij', label: 'meet.tana.inc/abc-defg-hij' });
+    assert.equal(callOf({ location: 'https://meet.google.com/klm-nopq-rst/' }).label, 'meet.google.com/klm-nopq-rst');
+    const zoom = callOf({ location: '+Main Building 6.1a-R1 Presentationroom; https://example.zoom.us/j/653?pwd=AR8&from=addon' });
+    assert.equal(zoom.url, 'https://example.zoom.us/j/653?pwd=AR8&from=addon', 'the passcode stays in the url');
+    assert.equal(zoom.label, 'example.zoom.us/j/653', 'the room note and the query stay out of the label');
+    assert.equal(callOf({ location: 'Main Campus, Building B, Room 12' }), undefined, 'a room is not a call');
     assert.equal(callOf({}), undefined, 'no location, no call');
     const teams = callOf({ location: 'Teams meeting', actionUrl: 'https://teams.microsoft.com/l/meetup-join/19%3ameeting_' + 'z'.repeat(140) + '%40thread.v2/0' });
     assert.equal(teams.label, 'teams.microsoft.com', 'a join path of ids is not a label');
@@ -1068,9 +1105,9 @@ async function main() {
     console.log('ok  atomic multi-indent/outdent undo and redo');
   }
   // 3c. Image blocks (addendum 12): { nodeName 'image', attributes { blockId, tanaUri, displayWidth?, displayHeight? }, children [] }
-  //     as seen in tana:text:01m2839s1xa7mejzavmaqv2ck9; read as { type 'image', image }, removable and movable like any block.
+  //     as seen in tana:text:01exampleu0000000000000000; read as { type 'image', image }, removable and movable like any block.
   {
-    const IMG = 'tana:image:01m2839s0wws9j9zt18vmqqwp7';
+    const IMG = 'tana:image:01examplev0000000000000000';
     const first = outline.insertAfter(c1, null, 'Before image');
     c1.transact(() => {
       const list = c1.content.get('children');
@@ -1103,12 +1140,12 @@ async function main() {
       return new Response(Buffer.from([0x89, 0x50, 0x4e, 0x47]), { status: 200, headers: { 'content-type': 'image/png' } });
     };
     let tokens = ['stale', 'fresh'];
-    const { mime, bytes } = await fetchImage('tana:image:01m2839s0wws9j9zt18vmqqwp7', { baseUrl: 'https://api.test', fetch: fakeFetch, getAccessToken: async ({ refresh }) => (refresh ? 'fresh' : tokens[0]) });
+    const { mime, bytes } = await fetchImage('tana:image:01examplev0000000000000000', { baseUrl: 'https://api.test', fetch: fakeFetch, getAccessToken: async ({ refresh }) => (refresh ? 'fresh' : tokens[0]) });
     assert.equal(mime, 'image/png');
     assert.equal(bytes.toString('hex'), '89504e47');
     assert.equal(calls.length, 3, '401 retried with a refreshed token, then the CDN');
-    assert.equal(calls[0][0], 'https://api.test/images/by-uri/tana%3Aimage%3A01m2839s0wws9j9zt18vmqqwp7');
-    await assert.rejects(fetchImage('tana:text:01m2839s0wws9j9zt18vmqqwp7', { fetch: fakeFetch, getAccessToken: async () => 'x' }), /not a tana:image uri/);
+    assert.equal(calls[0][0], 'https://api.test/images/by-uri/tana%3Aimage%3A01examplev0000000000000000');
+    await assert.rejects(fetchImage('tana:text:01examplew0000000000000000', { fetch: fakeFetch, getAccessToken: async () => 'x' }), /not a tana:image uri/);
     console.log('ok  image asset fetch (redirect + CDN cookie)');
   }
   // ---- undo/redo: local-only, ops flow out like any local change, the other document converges ----
@@ -1279,7 +1316,7 @@ async function main() {
   }
   {
     const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
-    const host = new Document(DOC), targetUri = 'tana:text:01m2524x1ewvjfvxp68ym77ht1';
+    const host = new Document(DOC), targetUri = 'tana:text:01examplek0000000000000000';
     host.transact(l => initDocument(l, 'reference host', ME));
     const blockId = outline.readOutline(host)[0].id;
     host.transact(l => {
@@ -1314,11 +1351,11 @@ async function main() {
   // A chat has no outline: its conversation is data.messages, rendered as read-only rows (docs/CHATS.md).
   {
     const backend = mainHelpers();
-    const chatUri = 'tana:chat:01m2518ymst5g02erq4d59xvj1', doc = new Document(chatUri);
-    const noteUri = 'tana:text:01m13ktr1zrpcryja5y3rp74se', fileUri = 'tana:text:01m1ec6vwzyz0xyzwn2zxw9tzk';
-    const proposedUri = 'tana:text:01m251k0t04h9ydbdvamgzjxcg', subUri = 'tana:chat:01m251k0t04h9ydbdvamgzjxcx';
+    const chatUri = 'tana:chat:01example10000000000000000', doc = new Document(chatUri);
+    const noteUri = 'tana:text:01example30000000000000000', fileUri = 'tana:text:01example40000000000000000';
+    const proposedUri = 'tana:text:01example50000000000000000', subUri = 'tana:chat:01examplex0000000000000000';
     doc.transact((l) => {
-      initDocument(l, 'Foundry Offsite Goals Extraction', ME, { kind: 'chat' });
+      initDocument(l, 'Studio Offsite Goals Extraction', ME, { kind: 'chat' });
       const messages = l.getMap('data').get('messages');
       messages.push({ id: 'pre0', type: 'message', fromUserType: 'human', hiddenFromChat: true, isStatusUpdate: true, content: { text: 'it is now Thursday' }, sentAt: 1788262342702 });
       messages.push({ id: 'ctx0', type: 'context', fromUserType: 'human', content: { text: 'injected context' }, sentAt: 1788262342702 });
@@ -1331,11 +1368,11 @@ async function main() {
     const graphed = [];
     backend.testRuntime({ me: { userUri: ME }, client: { graph: { listNodes: async (q) => {
       graphed.push(q);
-      if (q.nodeTypes && q.nodeTypes[0] === 'user-profile') return { nodes: [{ id: ME, title: 'André Foeken' }] };
+      if (q.nodeTypes && q.nodeTypes[0] === 'user-profile') return { nodes: [{ id: ME, title: 'Robin Vega' }] };
       return { nodes: Array.from(q.nodeIds || []).map((id) => ({ id, title: 'Target ' + id.split(':')[1] })) };
     } } } });
     const rows = await backend.chatOutline(doc);
-    assert.deepEqual(rows.map((r) => r.text), ['André Foeken', 'Tana AI'], 'hidden and context messages are skipped, list order kept');
+    assert.deepEqual(rows.map((r) => r.text), ['Robin Vega', 'Tana AI'], 'hidden and context messages are skipped, list order kept');
     assert.deepEqual(rows.map((r) => r.id), ['m2', 'm3'], 'row ids follow the message list, not the visible order');
     const readOnly = (ns) => ns.every((n) => n.editable === false && readOnly(n.children || []));
     assert.ok(readOnly(rows), 'no chat row is editable');
@@ -1434,11 +1471,11 @@ async function main() {
   assert.equal(connected, 1);
   const d = await sync.subscribe(DOC);
   assert.equal(d, sync.getDocument(DOC));
-  assert.equal(readNode(d).title, 'Ask and tell about Tana DPA');
+  assert.equal(readNode(d).title, 'Review the sample agreement');
   assert.deepEqual(server.commands, ['beginDocumentSync', 'applyBootstrapUpdates']);
   assert.equal(await sync.subscribe(DOC), d, 'subscribe is idempotent');
   // local -> server, batched into one liveDocumentUpdate
-  setTitle(d, 'Ask and tell about Tana DPA');
+  setTitle(d, 'Review the sample agreement');
   setState(d, 'closed', ME);
   await new Promise((r) => setTimeout(r, 30));
   assert.deepEqual(server.commands.slice(2), ['liveDocumentUpdate']);

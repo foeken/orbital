@@ -34,7 +34,7 @@ Read in this order: this file → [02-data-model.md](02-data-model.md) → [03-a
 const { createTanaClient } = require('./sdk');
 const client = createTanaClient({
   getAccessToken,   // async ({ refresh }) => bearer token from GET /api/auth/session
-  orgId,            // WorkOS org id from the token's org_id claim, e.g. 'org_01KS7RQSWW68H489ZZZ1NNC40T'
+  orgId,            // WorkOS org id from the token's org_id claim, e.g. 'org_01EXAMPLE00000000000000000'
   peerId,           // derivePeerId(userExternalId): stable per user, random 16-bit nonce per process
   storageId,        // persisted UUID for a non-ephemeral peer (omit → ephemeral peer)
   logger: console,  // optional

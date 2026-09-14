@@ -89,7 +89,7 @@ async function unpinDate(sync, userUri, docUri, date) {
 }
 
 // ---- items pinned on an event or a space (root MovableList 'pinnedItems' of { uri, mode? }) ----
-// Verified live: tana:event:1n1tjh3mpp434pd5ydj12x4ahe holds [{ mode: 'embed', uri: 'tana:chat:...' }] and the graph
+// Verified live: tana:event:01exampled0000000000000000 holds [{ mode: 'embed', uri: 'tana:chat:...' }] and the graph
 // answers ListEdges(HAS_PIN) from it. The element is a map container, like every other schema'd element the web
 // client writes (the pin-map entries above); toJSON reads the same either way.
 const items = (doc) => doc.loro.getMovableList('pinnedItems').toJSON().filter((p) => p && typeof p.uri === 'string');

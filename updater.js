@@ -1,16 +1,19 @@
-// Updates, without Squirrel. Squirrel.Mac refuses a bundle whose code signature does not match the running one,
-// and our builds are ad-hoc signed (a new cdhash every time), so the supported path is closed; swapping the bundle
-// after we quit is a dozen lines. Releases live in a private repo, so instead of shipping a token the check borrows
-// the gh CLI's existing login. scripts/release.sh publishes exactly what this downloads.
+// Updates, without Squirrel. Squirrel.Mac verifies that the incoming bundle's signature matches the running one and
+// re-launches through its own helper; swapping the bundle after we quit is a dozen lines and `ditto` keeps both the
+// Developer ID signature and the stapled ticket intact. Releases live in their own public repo (the source repo is
+// private), so the check is an unauthenticated GitHub API call: no token, no gh CLI, and anyone can update.
+// scripts/release.sh publishes exactly what this downloads.
 const { app, dialog } = require('electron');
 const { execFile, spawn } = require('node:child_process');
 const { promisify } = require('node:util');
+const { createWriteStream } = require('node:fs');
 const fs = require('node:fs/promises');
+const { pipeline } = require('node:stream/promises');
+const { Readable } = require('node:stream');
 const os = require('node:os');
 const path = require('node:path');
 
-const REPO = 'foeken/tana-companion';
-const GH = ['/opt/homebrew/bin/gh', '/usr/local/bin/gh', '/usr/bin/gh']; // a GUI app inherits none of the shell's PATH
+const REPO = 'foeken/tana-companion-releases';
 const run = promisify(execFile);
 
 // Release tags are npm versions ("v0.2.10"), which is all release.sh ever writes, so three integers decide it.
@@ -21,12 +24,10 @@ function isNewer(latest, current) {
   return false;
 }
 
-async function gh(args) {
-  for (const bin of GH) {
-    try { return (await run(bin, args)).stdout; }
-    catch (e) { if (e.code !== 'ENOENT') throw e; }
-  }
-  throw new Error('GitHub CLI not found. Install it with: brew install gh');
+async function latestRelease() {
+  const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: { accept: 'application/vnd.github+json' } });
+  if (!res.ok) throw new Error(`GitHub returned ${res.status} for the latest release`);
+  return res.json();
 }
 
 // manual = the menu item, which reports "up to date" and failures; the launch and daily checks stay silent.
@@ -36,29 +37,32 @@ async function check({ manual = false } = {}) {
       if (manual) await dialog.showMessageBox({ message: 'This is a development run.', detail: 'Updates only apply to the packaged app.' });
       return;
     }
-    const release = JSON.parse(await gh(['release', 'view', '--repo', REPO, '--json', 'tagName']));
-    if (!isNewer(release.tagName, app.getVersion())) {
+    const release = await latestRelease();
+    if (!isNewer(release.tag_name, app.getVersion())) {
       if (manual) await dialog.showMessageBox({ message: `Tana Companion ${app.getVersion()} is up to date.` });
       return;
     }
     const { response } = await dialog.showMessageBox({
       type: 'question',
-      message: `Tana Companion ${release.tagName.replace(/^v/, '')} is available.`,
+      message: `Tana Companion ${release.tag_name.replace(/^v/, '')} is available.`,
       detail: `You have ${app.getVersion()}. The app restarts to finish updating.`,
       buttons: ['Update and Restart', 'Later'], defaultId: 0, cancelId: 1,
     });
-    if (response === 0) await install(release.tagName);
+    if (response === 0) await install(release);
   } catch (e) {
     if (manual) dialog.showErrorBox('Could not check for updates', String((e && e.message) || e));
   }
 }
 
-async function install(tag) {
+async function install(release) {
+  const asset = (release.assets || []).find((a) => a.name.endsWith('.zip'));
+  if (!asset) throw new Error(`Release ${release.tag_name} has no .zip asset`);
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'tana-update-'));
-  await gh(['release', 'download', tag, '--repo', REPO, '--pattern', '*.zip', '--dir', dir]);
-  const zip = (await fs.readdir(dir)).find((f) => f.endsWith('.zip'));
-  if (!zip) throw new Error(`Release ${tag} has no .zip asset`);
-  await run('/usr/bin/ditto', ['-xk', path.join(dir, zip), dir]);
+  const zip = path.join(dir, asset.name);
+  const res = await fetch(asset.browser_download_url); // redirects to the asset CDN; fetch follows them
+  if (!res.ok) throw new Error(`Download failed with ${res.status}`);
+  await pipeline(Readable.fromWeb(res.body), createWriteStream(zip)); // streamed: the bundle is well over 100 MB
+  await run('/usr/bin/ditto', ['-xk', zip, dir]);
   const fresh = path.join(dir, 'Tana Companion.app');
   await fs.access(path.join(fresh, 'Contents', 'Info.plist')); // a half-downloaded zip must not reach the rm below
   const target = path.resolve(app.getPath('exe'), '../../..'); // …/Tana Companion.app/Contents/MacOS/<exe>

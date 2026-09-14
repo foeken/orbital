@@ -32,10 +32,10 @@ function locate(list, id, trail = []) {
 
 // ---- mock api, used ONLY when preload did not run (no window.api) ----
 function mockApi() {
-  const titles = ['Schedule something with Lex van Velsen and Roni Wiener', 'Metrics project needs more support and information. Timeline on hold.',
-    'Check out OpenUp', 'Should we kickstart a FTE/Employee cost tracking system with Finance/HR', 'Discuss two cross-boarders with Jeroen Oostewechel',
-    'Organise working sessions on guardrails for teams with Foundry', 'Contact Mark W for dinner', 'Ask and tell about Tana DPA', 'The blue laptop discussion',
-    'Ask Foundry teams for risks (with deadline Sun, Nov 1)', 'Organise session with Arjan Pragt around the role definition', "Create RvC presentation on Nedap's one-year AI vision"];
+  const titles = ['Schedule something with Sam Okafor and Dana Brooks', 'Reporting project needs more support and a clearer timeline.',
+    'Check out the new editor', 'Should we start a shared cost tracking system with Finance?', 'Discuss the two open transfers with Chris Lund',
+    'Organise working sessions on guardrails for teams with Studio', 'Contact Dana B about the workshop', 'Ask and tell about the data agreement', 'The laptop refresh discussion',
+    'Ask Studio teams for risks (with deadline Sun, Nov 1)', 'Organise session with Kim Halvorsen around the role definition', 'Create a board presentation on the one-year roadmap'];
   let seq = 0;
   const block = (text, children = [], heading, done) => {
     const node = { id: 'b' + (++seq), text: plainOf(text), segments: segsOf(text), kind: 'block', heading, hasChildren: children.length > 0, children };
@@ -49,22 +49,22 @@ function mockApi() {
   const docs = titles.map((text, i) => ({ id: 'mockdoc' + i, text, kind: 'document', done: 0, hasChildren: true, icon: 'task', tags: [task] }));
   docs[2].tags = [task, project];
   docs[0].state = 'proposed'; // Inbox; the rest are In Progress (open) unless done
-  for (const text of ['Renew the Tana DPA', 'Send the Q3 board deck']) docs.push({ id: 'mockdoc' + docs.length, text, kind: 'document', done: 1, state: 'closed', hasChildren: true, icon: 'task', tags: [task] }); // Completed: hidden by the default filter
-  docs.push({ id: 'mockdoc' + titles.length, text: 'Foundry programme', kind: 'document', hasChildren: true, hue: 268, tags: [project] }); // typed, not a task: plain bullet tinted with the type hue
+  for (const text of ['Renew the data agreement', 'Send the Q3 board deck']) docs.push({ id: 'mockdoc' + docs.length, text, kind: 'document', done: 1, state: 'closed', hasChildren: true, icon: 'task', tags: [task] }); // Completed: hidden by the default filter
+  docs.push({ id: 'mockdoc' + titles.length, text: 'Studio programme', kind: 'document', hasChildren: true, hue: 268, tags: [project] }); // typed, not a task: plain bullet tinted with the type hue
   // a space: pinned, its "content" is the documents it owns (document Nodes, not blocks)
   const spaceDocs = [
-    { id: 'mockspacedoc0', text: 'Foundry LT charter', kind: 'document', hasChildren: true, icon: 'doc', tags: [{ label: 'doc', color: 'grey' }] },
+    { id: 'mockspacedoc0', text: 'Studio LT charter', kind: 'document', hasChildren: true, icon: 'doc', tags: [{ label: 'doc', color: 'grey' }] },
     { id: 'mockspacedoc1', text: 'Draft the LT agenda', kind: 'document', done: 0, hasChildren: true, icon: 'task', tags: [task] },
   ];
-  const space = { id: 'tana:space:mock', text: 'Foundry LT', kind: 'document', hasChildren: true, icon: 'space', hue: 150, tags: [{ label: 'space', color: 'grey' }] };
+  const space = { id: 'tana:space:mock', text: 'Studio LT', kind: 'document', hasChildren: true, icon: 'space', hue: 150, tags: [{ label: 'space', color: 'grey' }] };
   // other library kinds (chats, canvases, agents, skills): read-only rows, plain bullet + kind chip
   const kinds = ['chat', 'canvas', 'agent', 'skill'].map((k, i) => ({ id: 'tana:' + k + ':mock' + i, text: 'Sample ' + k, kind: 'document', hasChildren: true, tags: [{ label: k, color: 'grey' }] }));
   // chats (api.chats): newest first; "MCP: …" ones carry meta 'MCP' and are hidden unless includeMcp
-  const chats = ['Draft the Foundry memo', 'MCP: list open tasks', 'Summarise the NLT notes', 'MCP: create meeting note', 'Rewrite the DPA clause']
+  const chats = ['Draft the Studio memo', 'MCP: list open tasks', 'Summarise the leadership notes', 'MCP: create meeting note', 'Rewrite the agreement clause']
     .map((text, i) => ({ id: 'tana:chat:mockchat' + i, text, kind: 'document', hasChildren: true, tags: [{ label: 'chat', color: 'grey' }], meta: /^MCP:/.test(text) ? 'MCP' : undefined }));
   // meetings over the past and next 7 days (day offset from today, start hour or null = all day); roots meta = weekday + time, search meta = weekday + day of month + time
   const dateMeta = {};
-  const meetings = [['Last week retro', -6, 10], ['Board prep', -2, 14], ['NLT', 0, 9], ['Heads of Technology', 0, 13], ['1-1 with Lex', 1, 11], ['Offsite', 3, null]].map(([text, off, h], i) => {
+  const meetings = [['Last week retro', -6, 10], ['Board prep', -2, 14], ['Leadership sync', 0, 9], ['Platform Guild', 0, 13], ['1-1 with Sam', 1, 11], ['Offsite', 3, null]].map(([text, off, h], i) => {
     const d = new Date(); d.setDate(d.getDate() + off);
     const time = h == null ? ', all day' : ' ' + h + ':00–' + (h + 1) + ':00';
     dateMeta['mockmeeting' + i] = WD[d.getDay()] + ' ' + d.getDate() + time;
@@ -74,7 +74,7 @@ function mockApi() {
   const all = [...docs, ...meetings, ...spaceDocs, space, ...kinds, ...chats];
   for (const node of all) node.editable = true;
   // org members (user profiles): searchable, linkable, and the "Assigned to" menu; me = the signed-in user
-  const members = [['andre', 'André Foeken', true], ['lex', 'Lex van Velsen'], ['brage', 'Brage Bang'], ['rogier', 'Rogier (Nedap)']]
+  const members = [['robin', 'Robin Vega', true], ['sam', 'Sam Okafor'], ['priya', 'Priya Raman'], ['tomas', 'Tomas Ilves']]
     .map(([k, text, me]) => ({ id: 'tana:user-profile:' + k, text, kind: 'document', hasChildren: true, icon: 'member', editable: false, tags: [{ label: 'member', color: 'grey' }], me }));
   const taskDetails = new Map(docs.map((doc, i) => [doc.id, {
     assignees: i % 3 ? [members[i % members.length].id] : [],
@@ -97,7 +97,7 @@ function mockApi() {
   const content = Object.fromEntries(all.map((d, i) => [d.id, [
     block('Context', [], 2),
     block('First point about task ' + i, [block('Detail A'), block('Detail B', [block('Deeper detail')])]),
-    block([{ text: 'Discuss with ' }, { mention: { label: 'Lex van Velsen', uri: 'tana:user-profile:lex' } }, { text: ' and see ' }, { mention: { label: titles[2], uri: 'mockdoc2' } }]),
+    block([{ text: 'Discuss with ' }, { mention: { label: 'Sam Okafor', uri: 'tana:user-profile:sam' } }, { text: ' and see ' }, { mention: { label: titles[2], uri: 'mockdoc2' } }]),
     // every mark and block type the outline can receive, so formatting is visible without the main process
     block([{ text: 'Marks: ' }, { text: 'bold', marks: { bold: true } }, { text: ', ' }, { text: 'italic', marks: { italic: true } }, { text: ', ' },
       { text: 'strike', marks: { strike: true } }, { text: ', ' }, { text: 'code', marks: { code: true } }, { text: ', ' },
@@ -110,13 +110,13 @@ function mockApi() {
     block('Second point, a paragraph long enough to wrap onto a second line when the window is narrow so arrow keys can be tested inside a node.'),
     block('Next steps', [block('Call someone'), block('Write the memo')]),
   ]]));
-  content['tana:user-profile:lex'] = [block('Lex is a colleague')];
+  content['tana:user-profile:sam'] = [block('Sam is a colleague')];
   content[space.id] = spaceDocs;
   // an image block (not editable; api.image resolves its uri to a data URL): a 2x2 PNG scaled by width/height
   content.mockdoc0.splice(2, 0, { id: 'img' + (++seq), kind: 'block', type: 'image', image: { uri: 'tana:image:mock', alt: 'Mock image', width: 160, height: 100 }, hasChildren: false, children: [] });
   // inline references (embeds): read-only nodes rendering the target's title/state, like sdk/content.js (editable: false) with main resolving reference.node
   content.mockdoc0.unshift({ id: 'ref' + (++seq), kind: 'block', type: 'reference', editable: false, reference: { uri: 'mockdoc9' }, hasChildren: false, children: [] });
-  content.mockdoc0.splice(1, 0, { id: 'ref' + (++seq), kind: 'block', type: 'reference', editable: false, reference: { uri: 'tana:user-profile:lex' }, hasChildren: false, children: [] });
+  content.mockdoc0.splice(1, 0, { id: 'ref' + (++seq), kind: 'block', type: 'reference', editable: false, reference: { uri: 'tana:user-profile:sam' }, hasChildren: false, children: [] });
   const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGPoyroWu7WKIX9dU1fWNQAuWQbA8sXmUwAAAABJRU5ErkJggg==';
   const changed = [], removed = [], statusCbs = [], deleted = new Map(), sensitive = new Set();
   let status = { authenticated: false, authChecking: false, connected: false, syncing: false, lastSync: null, error: null };
@@ -166,7 +166,7 @@ function mockApi() {
       const pick = (n) => n && info(n);
       return {
         summary: 'Mock meeting summary for ' + doc.text,
-        call: { url: 'https://meet.google.com/ipt-utoj-srr', label: 'meet.google.com/ipt-utoj-srr' },
+        call: { url: 'https://meet.google.com/klm-nopq-rst', label: 'meet.google.com/klm-nopq-rst' },
         pinned: [pick(all.find((d) => d.icon === 'doc')), pick(all.find((d) => d.icon === 'task'))].filter(Boolean),
         outcomes: all.filter((d) => d.icon === 'task').slice(1, 3).map(info),
         notes: [pick(all.find((d) => d.icon === 'doc' && d.text))].filter(Boolean),
@@ -233,7 +233,7 @@ function mockApi() {
       const [first, ...rest] = sidebar, node = (id) => info(all.find((d) => d.id === id));
       return [
         ...(first ? [{ uri: first, node: node(first), children: [] }] : []),
-        ...(rest.length ? [{ label: 'Foundry', children: rest.map((id) => ({ uri: id, node: node(id), children: [] })) }] : []),
+        ...(rest.length ? [{ label: 'Studio', children: rest.map((id) => ({ uri: id, node: node(id), children: [] })) }] : []),
       ];
     },
     pinState: async (docId) => ({ sidebar: sidebar.includes(docId), dates: datePins[docId] || [] }),
@@ -1144,7 +1144,7 @@ function renderCrumbs(trail) {
   if (!trail) return;
   const back = () => { zoom = null; render(); };
   nav.replaceChildren();
-  // location in Tana (owner chain from api.path, e.g. "Library" or "AI Enablement › Meeting"), loaded once per document.
+  // location in Tana (owner chain from api.path, e.g. "Library" or "Automation Guild › Meeting"), loaded once per document.
   // A document reached through a space (zoom.via) starts at the space's location; the spaces follow as crumbs.
   const root = zoom.via ? zoom.via[0] : zoom, rootId = root.docId;
   const path = paths.get(rootId);
@@ -1724,7 +1724,7 @@ function audienceInfo(audience, audienceSpace) {
   const info = AUDIENCES[scope];
   if (!info) return null;
   const title = audience?.title || audienceSpace?.title;
-  // a space audience names the space, so a row can read "André Foeken · Heads of Technology"
+  // a space audience names the space, so a row can read "Robin Vega · Platform Guild"
   return scope === 'space' && title ? { ...info, label: 'Visible to members of ' + title, space: title } : info;
 }
 function loadTaskMeta(docId) {

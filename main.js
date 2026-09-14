@@ -227,7 +227,7 @@ async function summaryUri(id) {
 // The meeting's call link. A calendar location holds the join url for an online meeting (Tana Meet, Google Meet,
 // Zoom), a room or address for a physical one, and often both in one semicolon-separated string, so take the first
 // http(s) url out of it rather than the whole field. When the location names the room only ('Teams meeting',
-// '+Groenlo Building 5-R1 Stairs - Zoom') the provider still carries the join url in calendarEvent.actionUrl, which
+// '+Main Building 5-R1 Stairs - Zoom') the provider still carries the join url in calendarEvent.actionUrl, which
 // held nothing but Zoom and Teams join links across the calendar (read-only survey, 2026-09-14).
 // The label is the human part of the url; a Teams join path is a couple of hundred characters of ids, so a path that
 // long is dropped and the host speaks for itself.
@@ -375,7 +375,7 @@ async function search(query) {
   nodes.forEach(rememberNodeHue);
   await resolveTypes(nodes.map((n) => n.entityType));
   // Title matches first (exact, then prefix, then contains), and within a class the title the query covers most:
-  // "Tana" beats "The one where Tana meets NTP". Full-text hits keep the server's relevance order.
+  // "Tana" beats "The one where Tana meets the team". Full-text hits keep the server's relevance order.
   const q = parsed.text.trim().toLowerCase();
   const rank = (n) => { const t = (n.title || '').toLowerCase(); return t === q ? 0 : t.startsWith(q) ? 1 : t.includes(q) ? 2 : 3; };
   const cover = (n) => { const t = (n.title || '').toLowerCase(); return t.includes(q) && t.length ? q.length / t.length : 0; };
@@ -580,7 +580,8 @@ async function loadImage(uri) {
 async function start() {
   // A second login must not leave the previous stream, its listeners and its subscriptions running: the stale client
   // would keep emitting changes, and the new one would skip every id the old subscription set still claims.
-  if (client) { const previous = client; client = null; subscribed.clear(); previous.sync.removeAllListeners(); previous.close().catch(() => {}); }
+  // The new client's documents start with empty Loro undo managers, so the steps recorded against the old ones are dead.
+  if (client) { const previous = client; client = null; subscribed.clear(); undoStack.length = 0; redoStack.length = 0; previous.sync.removeAllListeners(); previous.close().catch(() => {}); }
   me = await session.info();
   const peer = peerIdentity({ file: path.join(app.getPath('userData'), 'peer.json'), userExternalId: me.userExternalId });
   client = createTanaClient({ getAccessToken: (o) => session.getAccessToken(o), orgId: me.orgId, ...peer, logger: console });
@@ -611,7 +612,9 @@ async function doRefresh() {
     send('outline:changed', null);
     const ids = new Set([...tasks.nodes, ...meetings.nodes].map((n) => n.id));
     for (const id of ids) if (!subscribed.has(id)) { subscribed.add(id); subscribe(id); }
-    for (const id of subscribed) if (!ids.has(id) && !deletedNodes.has(id)) { subscribed.delete(id); client.sync.unsubscribe(id).catch(() => {}); }
+    // Unsubscribing drops the Document and with it the Loro undo history, and checking a task is what takes it off
+    // this very list: dropping it here left Cmd+Z unable to uncheck it, silently undoing an older step instead.
+    for (const id of subscribed) if (!ids.has(id) && !deletedNodes.has(id) && !inHistory(id)) { subscribed.delete(id); client.sync.unsubscribe(id).catch(() => {}); }
     setStatus({ syncing: false, lastSync: now() });
   } catch (e) {
     setStatus({ syncing: false, error: errText(e) });
@@ -746,6 +749,8 @@ async function op(id, fn) {
 
 // Mutations: same as op, plus global undo ordering across documents (each Document keeps its own Loro UndoManager).
 const undoStack = [], redoStack = [];
+// ponytail: a linear scan of an unbounded stack, run once per refresh; index it if either ever grows into the thousands.
+const inHistory = (id) => [...undoStack, ...redoStack].some((step) => step === id || step?.id === id || (Array.isArray(step) && step.includes(id)));
 async function mut(id, fn, accessMutation = false) {
   if (historyBusy) throw new Error('History operation is still running');
   const result = await op(id, (doc) => {
@@ -812,7 +817,7 @@ async function history(from, to, action, can) {
           if (doc[action]()) changedId ||= id;
         }
         from.pop();
-        if (changedId) { to.push(step); return changedId; }
+        if (changedId) { to.push(step); scheduleRefresh(2000); return changedId; }
         continue;
       }
       if (typeof step === 'object') {
@@ -822,7 +827,8 @@ async function history(from, to, action, can) {
       }
       const id = step, doc = client && client.sync.getDocument(id);
       if (!doc || !doc[can]() || isDeleted(readNode(doc)) || editable(readNode(doc), me && me.userUri) === false) { from.pop(); continue; }
-      if (doc[action]()) { from.pop(); to.push(id); return id; }
+      // An undone state change belongs back on its list (unchecking a task returns it to Tasks), which only a refresh knows.
+      if (doc[action]()) { from.pop(); to.push(id); scheduleRefresh(2000); return id; }
       from.pop();
     }
     return null;

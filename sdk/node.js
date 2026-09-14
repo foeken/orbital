@@ -21,7 +21,7 @@ function ulid(now = Date.now()) {
 // The data map of a new document as the web client creates it plus an empty content skeleton. Run inside
 // Document.transact. kind 'doc' (default): a plain text document (scripts/fixtures/task-snapshot.b64 minus the
 // task fields); 'task': plus the open state assigned to byUri; 'meeting': a 'tana:event:' document laid out like a
-// Tana-created event (tana:event:01m1xcnjbykczkxj8x03ttkcad, without the calendar-provider fields), starting at
+// Tana-created event (tana:event:01exampley0000000000000000, without the calendar-provider fields), starting at
 // the next half hour for 30 minutes.
 function initDocument(loro, title, byUri, { kind = 'doc', now = Date.now(), entityTypeUri, ownerUri } = {}) {
   if (!['doc', 'task', 'meeting', 'chat'].includes(kind)) throw new Error('unknown kind ' + kind);

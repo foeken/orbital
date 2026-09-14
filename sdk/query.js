@@ -1,5 +1,5 @@
 'use strict';
-// Search queries with #filters (docs/OUTLINER.md Addendum 6/10): "lex #task" -> text 'lex', tags ['task'].
+// Search queries with #filters (docs/OUTLINER.md Addendum 6/10): "sam #task" -> text 'sam', tags ['task'].
 // #task = documents with a task state, #meeting = events, #member = user profiles, #<Type> = documents of that type
 // (title match, case-insensitive).
 const { STATE_TYPES } = require('./node');

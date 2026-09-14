@@ -71,7 +71,7 @@ The low-level sync commands require an open stream and do not perform the app's 
 
 ```js
 const { parseQuery, searchParams, needsTypes } = require('./sdk/query');
-const parsed = parseQuery('lex #task');
+const parsed = parseQuery('sam #task');
 const params = searchParams(parsed, needsTypes(parsed) ? typesByLowerTitle : new Map());
 const { nodes } = await client.graph.listNodes({ ...params, limit: 40 });
 ```

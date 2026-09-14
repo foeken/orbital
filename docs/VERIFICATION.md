@@ -24,7 +24,7 @@ Verified in the rebuilt native app:
 
 - Existing session loads real tasks without an interactive login.
 - App menu is Tana Companion, Edit, Window; no old Tana Sync menu.
-- Risk task “Ask Foundry teams for risks…” shows Visible only to you.
+- Risk task “Ask Studio teams for risks…” shows Visible only to you.
 
 Failures found during visual checks:
 
@@ -54,16 +54,16 @@ Evidence came from `scripts/platform-cli.js` against the live account (read-only
   read as `people` directly and `unknown` when inherited. After the fix a 150-document sweep returns
   82 `only-me`, 21 `people`, 18 `space`, 13 `everyone` and **zero unknown**. Findings are written up in
   docs/sdk/05-gotchas.md.
-- **#89 space tooltip name.** A task inherited from the Heads of Technology space returns
-  `audienceSpace: { uri: 'tana:space:01m25twh4tspc3vaxc47szgpz1', title: 'Heads of Technology' }`, so
+- **#89 space tooltip name.** A task inherited from the Platform Guild space returns
+  `audienceSpace: { uri: 'tana:space:01examplej0000000000000000', title: 'Platform Guild' }`, so
   the real space name reaches the renderer. The tooltip string itself is renderer-side.
-- **#85 Foundry Goals embed.** The document's first block is an `embed` of
-  `tana:text:01m2524x1ewvjfvxp68ym77ht1`. Run through the real `outlineWithReferences`, it resolves to
-  the task "Setup session with Foundry Leadership…" with `icon: 'task'` and `done: 0`, so the backend
+- **#85 Studio Goals embed.** The document's first block is an `embed` of
+  `tana:text:01examplek0000000000000000`. Run through the real `outlineWithReferences`, it resolves to
+  the task "Setup session with Studio Leadership…" with `icon: 'task'` and `done: 0`, so the backend
   hands the renderer a complete reference node. Rendering it is renderer-side.
 - **#48/#63 type and node colours.** Custom types carry hues (Project 268, Decision Record 143,
   Co-Worker 27) and a Project-typed document reaches the renderer as `tags: [{ label: 'Project', hue: 268 }]`.
-  Spaces do have hues (Foundry LT 193, NTP LT 77, AI Enablement 327) but **pinned spaces arrived with no
+  Spaces do have hues (Studio LT 193, Platform LT 77, Automation Guild 327) but **pinned spaces arrived with no
   colour at all**: `appearance` exists only on graph nodes, and the pin path reads the document from
   Loro, which also erased hues the graph had already cached. After the fix the pin tree carries each
   space's real hue on both the node and its tag.

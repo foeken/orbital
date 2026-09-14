@@ -1,6 +1,7 @@
 #!/bin/sh
 # Cut a release: bump the version, build the arm64 bundle, zip it, publish it to GitHub.
-# The app's updater (updater.js) reads the newest release of the same repo through the gh CLI.
+# The source repo is private, so the zip is published to the public releases repo below; the app's updater
+# (updater.js) reads that repo's latest release over the plain GitHub API, with no token and no gh CLI.
 # Signing and notarization reuse the setup Meeting Notes uses (see ~/Code/meeting-notes/RELEASING.md):
 # the Developer ID certificate and the notarytool credentials stay in the Keychain and never enter the repo.
 # Usage: npm run release [patch|minor|major|<version>]
@@ -11,6 +12,7 @@ cd "$(dirname "$0")/.."
 # Both credentials are checked before the version is bumped: a failure afterwards leaves a local commit and tag
 # to undo. `store-credentials` created the profile; `history` is the cheapest proof that it still authenticates.
 profile="${TANA_NOTARY_PROFILE:-notarytool}"
+releases=${TANA_RELEASES_REPO:-foeken/tana-companion-releases}
 security find-identity -v -p codesigning | grep -q 'Developer ID Application' \
   || { echo "no Developer ID Application identity in the keychain"; exit 1; }
 xcrun notarytool history --keychain-profile "$profile" >/dev/null \
@@ -28,5 +30,5 @@ zip="dist/Tana-Companion-$version-arm64.zip"
 rm -f "$zip"
 ditto -c -k --sequesterRsrc --keepParent "$app" "$zip"
 git push --follow-tags
-gh release create "v$version" "$zip" --title "v$version" --generate-notes
-echo "released v$version"
+gh release create "v$version" "$zip" --repo "$releases" --title "v$version" --notes "Tana Companion $version for Apple Silicon. Signed and notarized; unzip and move it to Applications."
+echo "released v$version to $releases"

@@ -1,7 +1,7 @@
 # What a meeting carries (verified read-only, 2026-09-13)
 
-Example: NTP Sync, `tana:event:29jk9nms816j26cmwcq5f9522z`, whose notes document is
-`tana:text:01m27y4s6neammpp7ep5c25rta`.
+Example: Platform Sync, `tana:event:01example60000000000000000`, whose notes document is
+`tana:text:01example70000000000000000`.
 
 The **event node** is the hub. Its graph node carries `calendarEvent.summary` (the AI summary),
 `calendarEvent.tagline` (the "The one where …" title), attendees, organizer, location and the time
@@ -11,9 +11,9 @@ Everything else hangs off the event:
 
 | What | How it is linked | Example |
 |------|------------------|---------|
-| Notes | a `tana:text:` document whose `ownerUri` is the event, with no task state | "The one where Tana meets NTP" |
+| Notes | a `tana:text:` document whose `ownerUri` is the event, with no task state | "The one where Tana meets the team" |
 | Outcomes | documents owned by the event that do carry a task state | "Create working agreement document with service level expectations" (`proposed`) |
-| Pinned | `EDGE_TYPE_HAS_PIN` edges from the event to documents and chats | "Principles", "NTP-ADR-3 …", a chat |
+| Pinned | `EDGE_TYPE_HAS_PIN` edges from the event to documents and chats | "Principles", "ADR-3 …", a chat |
 | Recording artefacts | `EDGE_TYPE_BELONGS_TO` edges into the event | `tana:call:`, `tana:transcript:`, `tana:screen-share:`, chats |
 
 `ListEdgesRequest` takes `fromNodeIds` / `toNodeIds` (not source/target) and an `edgeTypes` filter.

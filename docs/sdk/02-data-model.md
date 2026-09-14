@@ -25,7 +25,7 @@ User profile: `name`, `displayName`, `role`, `profileImageUri`, `pinnedCollectio
 
 Type (`tana:type:…`): `name`, `description`, `instructions`, `workflowUri`, `appliesTo`, `language`; colour in `appearance.hue`.
 
-Org (`tana:org:…`): only `name`, `language`, `workosOrgId`, `voicePresetId` and `memberUserProfileDocUris` (WorkOS user id → `tana:user-profile:` uri) live in `data`. The rest of the workspace settings are **root containers beside `data`**: `featurePolicy`, `approvedMcpServers`, `integrations`, `brand` (verified read-only 2026-09-13 on `tana:org:01ks7rqsrqjn7vwyjhx75r6jg0`). `access.canWrite` reads membership from `data`, `access.orgWideAllowed` reads `featurePolicy.memberOrgWideCreation` from the root; a key absent from `featurePolicy` means the feature is enabled. Not a document index.
+Org (`tana:org:…`): only `name`, `language`, `workosOrgId`, `voicePresetId` and `memberUserProfileDocUris` (WorkOS user id → `tana:user-profile:` uri) live in `data`. The rest of the workspace settings are **root containers beside `data`**: `featurePolicy`, `approvedMcpServers`, `integrations`, `brand` (verified read-only 2026-09-13 on `tana:org:01examplel0000000000000000`). `access.canWrite` reads membership from `data`, `access.orgWideAllowed` reads `featurePolicy.memberOrgWideCreation` from the root; a key absent from `featurePolicy` means the feature is enabled. Not a document index.
 
 ### `appearance` (LoroMap, optional root)
 

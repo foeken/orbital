@@ -55,7 +55,7 @@ function runPinGrouping() {
   `);
   const rows = pinRows([
     { node: { id: 'scratch', title: 'Scratchpad' }, children: [] },
-    { label: 'Foundry', children: [
+    { label: 'Studio', children: [
       { node: { id: 'charter', title: 'Charter' }, children: [] },
       { node: { id: 'roadmap', title: 'Roadmap' }, children: [] },
     ] },
@@ -64,8 +64,8 @@ function runPinGrouping() {
   assert.deepEqual(plain(rows.map((row) => [row.group, row.label])), [
     ['Pinned', 'Scratchpad'],
     ['Pinned', 'Test Pin'],
-    ['Foundry', 'Charter'],
-    ['Foundry', 'Roadmap'],
+    ['Studio', 'Charter'],
+    ['Studio', 'Roadmap'],
   ], 'unsectioned pins share one Pinned group before named folders');
 }
 
@@ -498,9 +498,9 @@ function runAssignedDropdown() {
     let view = 'tasks';
     let taskF = { states: ['open'], assignee: 'me' }, libF = {};
     let members = [
-      { id: 'me', title: 'André', me: true },
-      { id: 'lex', title: 'Lex' },
-      { id: 'brage', title: 'Brage' },
+      { id: 'me', title: 'Robin', me: true },
+      { id: 'sam', title: 'Sam' },
+      { id: 'brage', title: 'Priya' },
     ];
     let saved;
     const tana = {};
@@ -516,11 +516,11 @@ function runAssignedDropdown() {
     ({ pillDefs, saved: () => saved });
   `);
   const assigned = api.pillDefs().find((definition) => definition.id === 'assigned');
-  assert.equal(assigned.value, 'You (André)');
+  assert.equal(assigned.value, 'You (Robin)');
   const rows = assigned.rows();
-  assert.deepEqual(plain(rows.filter((row) => row.label).map((row) => row.label)), ['Anyone', 'You (André)', 'Unassigned', 'Lex', 'Brage']);
-  rows.find((row) => row.label === 'Lex').run();
-  assert.deepEqual(plain(api.saved()), { assignee: 'lex' }, 'member choice updates the task assignee filter');
+  assert.deepEqual(plain(rows.filter((row) => row.label).map((row) => row.label)), ['Anyone', 'You (Robin)', 'Unassigned', 'Sam', 'Priya']);
+  rows.find((row) => row.label === 'Sam').run();
+  assert.deepEqual(plain(api.saved()), { assignee: 'sam' }, 'member choice updates the task assignee filter');
 }
 
 function runEditabilityCheck() {
@@ -894,10 +894,10 @@ async function runLinkPaletteCheck() {
   assert.notEqual(start, -1, '@ palette keyboard handler is present');
   const context = { resolveSearch: undefined, press: undefined };
   vm.runInNewContext(`
-    let linkCtx = { text: 'Roni', item: {}, segs: [], start: 0, end: 4 }, pinCtx = null;
+    let linkCtx = { text: 'Dana', item: {}, segs: [], start: 0, end: 4 }, pinCtx = null;
     let palRows = [], palIndex = 0, palBusy = false, palSeq = 0, palTimer = null, palMode = 'search';
     let searchResolve, actions = [];
-    const palInput = { value: 'Roni', addEventListener: (_name, fn) => { press = fn; } };
+    const palInput = { value: 'Dana', addEventListener: (_name, fn) => { press = fn; } };
     const tana = { search: () => new Promise((resolve) => { searchResolve = resolve; }) };
     const asDoc = (node) => ({ ...node, text: node.text || node.title, kind: 'document' });
     const docRow = (node, hint, run) => ({ label: node.text, node, hint, run });
@@ -916,13 +916,13 @@ async function runLinkPaletteCheck() {
       state: () => ({ palIndex, rows: palRows.map((row) => ({ label: row.label, create: !!row.create })), actions }),
     });
   `, context);
-  context.resolveSearch([{ id: 'tana:user-profile:roni', title: 'Roni Wiener' }]);
+  context.resolveSearch([{ id: 'tana:user-profile:roni', title: 'Dana Brooks' }]);
   await Promise.resolve();
   await Promise.resolve();
   assert.deepEqual(plain(context.state().rows), [
-    { label: 'Create “Roni”', create: true },
-    { label: 'Roni Wiener', create: false },
-  ], 'link search keeps Create available but returns the existing Roni result');
+    { label: 'Create “Dana”', create: true },
+    { label: 'Dana Brooks', create: false },
+  ], 'link search keeps Create available but returns the existing Dana result');
   assert.equal(context.state().palIndex, 1, 'async link search selects the first existing result');
   const event = (metaKey) => ({ key: 'Enter', metaKey, ctrlKey: false, shiftKey: false, preventDefault: () => {}, stopPropagation: () => {} });
   context.press(event(false));
@@ -1269,7 +1269,7 @@ function runFormattingChecks() {
     { text: 'bold', marks: { bold: true } },
     { text: ' ' },
     { text: 'both', marks: { bold: true, italic: true } },
-    { mention: { label: 'Lex', uri: 'tana:user-profile:lex' } },
+    { mention: { label: 'Sam', uri: 'tana:user-profile:sam' } },
     { text: ' struck', marks: { strike: true } },
     { text: ' code', marks: { code: true } },
     { text: ' linked', marks: { link: 'https://example.com' } },
@@ -1289,9 +1289,9 @@ function runFormattingChecks() {
   assert.deepEqual(plain(api.markRange(bolded, 0, 5, 'bold', null)), base, 'toggling the mark off merges the runs back into one');
   assert.deepEqual(plain(api.markRange(bolded, 0, 5, 'link', 'https://tana.inc')),
     [{ text: 'hello', marks: { bold: true, link: 'https://tana.inc' } }, { text: ' world' }], 'marks stack on the same run');
-  const withMention = [{ text: 'see ' }, { mention: { label: 'Lex', uri: 'u' } }, { text: ' now' }];
+  const withMention = [{ text: 'see ' }, { mention: { label: 'Sam', uri: 'u' } }, { text: ' now' }];
   assert.deepEqual(plain(api.markRange(withMention, 0, 11, 'bold', true)),
-    [{ text: 'see ', marks: { bold: true } }, { mention: { label: 'Lex', uri: 'u' } }, { text: ' now', marks: { bold: true } }],
+    [{ text: 'see ', marks: { bold: true } }, { mention: { label: 'Sam', uri: 'u' } }, { text: ' now', marks: { bold: true } }],
     'a mention inside the selection is left whole');
   assert.deepEqual(plain(api.saveValue([{ text: 'x', marks: { bold: true } }])), [{ text: 'x', marks: { bold: true } }], 'a marked run is saved as segments, not flattened to a string');
   assert.equal(api.saveValue([{ text: 'plain' }]), 'plain', 'unmarked text still saves as a plain string');
@@ -1362,7 +1362,7 @@ function runFilterMenuCloseCheck() {
   const api = vm.runInNewContext(`
     let view = 'library';
     let taskF = { states: ['open'], assignee: 'me' }, libF = { types: ['tasks'], states: ['open'], assignee: 'me' };
-    let members = [{ id: 'me', title: 'André', me: true }, { id: 'lex', title: 'Lex' }];
+    let members = [{ id: 'me', title: 'Robin', me: true }, { id: 'sam', title: 'Sam' }];
     let menu = null, showMcp = false;
     const tana = {};
     const $ = () => ({ hidden: false });
@@ -1391,9 +1391,9 @@ function runFilterMenuCloseCheck() {
   api.reset();
   assert.equal(api.pick('status', 'Any status').open, false, '"Any status" ends the selection and closes');
   api.reset();
-  const assigned = api.pick('assigned', 'Lex');
+  const assigned = api.pick('assigned', 'Sam');
   assert.equal(assigned.open, false, 'choosing an assignee closes the menu');
-  assert.equal(assigned.libF.assignee, 'lex', 'and still applies the choice');
+  assert.equal(assigned.libF.assignee, 'sam', 'and still applies the choice');
   api.reset();
   assert.equal(api.pick('assigned', 'Anyone').open, false, '"Anyone" closes like every other single choice');
 }
@@ -1427,9 +1427,9 @@ async function runSidebarRowsCheck() {
   `);
   assert.deepEqual(plain(api.rows({ id: 'doc' }, null).map((row) => [row.id, row.icon, row.label])),
     [['showInTana', 'tana', 'Show in Tana']], 'the Tana link keeps Details present without task metadata');
-  const rows = api.rows({ id: 'doc' }, { assignees: 'Lex van Velsen', audience: { icon: 'lock', label: 'Visible only to you' } });
+  const rows = api.rows({ id: 'doc' }, { assignees: 'Sam Okafor', audience: { icon: 'lock', label: 'Visible only to you' } });
   assert.deepEqual(plain(rows.map((row) => [row.id, row.icon, row.label, typeof row.run])), [
-    ['assignees', 'member', 'Assigned to Lex van Velsen', 'function'],
+    ['assignees', 'member', 'Assigned to Sam Okafor', 'function'],
     ['visibility', 'lock', 'Visible only to you', 'function'],
     ['showInTana', 'tana', 'Show in Tana', 'function'],
   ], 'assignees and visibility read as plain rows and both can be opened');
@@ -1439,10 +1439,10 @@ async function runSidebarRowsCheck() {
   assert.deepEqual(plain(api.calls().at(-1)), ['visibility', 'event'], 'a followed meeting write-up checks visibility on its event hub');
   assert.deepEqual(plain(api.rows({ id: 'doc' }, { assignees: 'Unassigned', audience: null, unknownAudience: true }).map((row) => row.label)),
     ['Unassigned', 'Show in Tana'], 'an audience that cannot be verified is left out instead of rendering an empty row');
-  assert.deepEqual(plain(api.rows({ id: 'doc', editable: false }, { assignees: 'Lex', audience: { icon: 'lock', label: 'Visible only to you' } }).map((row) => row.run === null)),
+  assert.deepEqual(plain(api.rows({ id: 'doc', editable: false }, { assignees: 'Sam', audience: { icon: 'lock', label: 'Visible only to you' } }).map((row) => row.run === null)),
     [true, false, false], 'read-only body editing does not disable sharing or the Tana link');
   // link sharing is its own fact: a public document says so, even when it is not a task and has no assignee
-  assert.deepEqual(plain(api.rows({ id: 'doc' }, { assignees: 'Lex', audience: { icon: 'lock', label: 'Visible only to you' }, linkShared: true }).map((row) => [row.id, row.icon])),
+  assert.deepEqual(plain(api.rows({ id: 'doc' }, { assignees: 'Sam', audience: { icon: 'lock', label: 'Visible only to you' }, linkShared: true }).map((row) => [row.id, row.icon])),
     [['assignees', 'member'], ['visibility', 'lock'], ['linkShared', 'globe'], ['showInTana', 'tana']], 'a link-shared node adds a globe row');
   assert.deepEqual(plain(api.rows({ id: 'doc' }, { assignees: '', audience: null, linkShared: true }).map((row) => [row.id, row.label])),
     [['linkShared', 'Anyone with the link'], ['showInTana', 'Show in Tana']], 'a public document with no assignee still reports that anyone with the link can read it');
@@ -1456,15 +1456,15 @@ async function runSidebarRowsCheck() {
 
   assert.equal(api.call(null), null, 'no relations, no call row');
   assert.equal(api.call({ pinned: [] }), null, 'a meeting without a call link renders nothing');
-  const call = api.call({ call: { url: 'https://meet.google.com/ipt-utoj-srr', label: 'meet.google.com/ipt-utoj-srr' } });
-  assert.deepEqual(plain([call.id, call.icon, call.label]), ['call', 'video', 'meet.google.com/ipt-utoj-srr'], 'the call row shows the readable link with the video icon');
+  const call = api.call({ call: { url: 'https://meet.google.com/klm-nopq-rst', label: 'meet.google.com/klm-nopq-rst' } });
+  assert.deepEqual(plain([call.id, call.icon, call.label]), ['call', 'video', 'meet.google.com/klm-nopq-rst'], 'the call row shows the readable link with the video icon');
   call.run();
-  assert.deepEqual(plain(api.calls().at(-1)), ['open', 'https://meet.google.com/ipt-utoj-srr'], 'it joins through api.openExternal');
+  assert.deepEqual(plain(api.calls().at(-1)), ['open', 'https://meet.google.com/klm-nopq-rst'], 'it joins through api.openExternal');
   assert.ok(/video/.test(fs.readFileSync(require.resolve('../icons.js'), 'utf8')), 'icons.js carries the video icon the call row asks for');
   assert.ok(/tana/.test(fs.readFileSync(require.resolve('../icons.js'), 'utf8')), 'icons.js carries the Tana icon the link row asks for');
 
   // "Visible to selected people" opens the people list only after permission is known; attendees must see the reason.
-  const people = { assignees: 'Lex', scope: 'people', audience: { icon: 'userLock', label: 'Visible to selected people' } };
+  const people = { assignees: 'Sam', scope: 'people', audience: { icon: 'userLock', label: 'Visible to selected people' } };
   const visibility = (node, value) => api.rows(node, value).find((row) => row.id === 'visibility');
   api.known('doc', { participants: [] });
   visibility({ id: 'doc' }, people).run();
@@ -1480,7 +1480,7 @@ async function runSidebarRowsCheck() {
   visibility({ id: 'doc' }, people).run();
   assert.deepEqual(plain(api.calls().at(-1)), ['visibility', 'doc'], 'without the participants the list cannot be shown, so the flow starts where it did');
   api.known('doc', { participants: [] });
-  visibility({ id: 'doc' }, { assignees: 'Lex', scope: 'only-me', audience: { icon: 'lock', label: 'Visible only to you' } }).run();
+  visibility({ id: 'doc' }, { assignees: 'Sam', scope: 'only-me', audience: { icon: 'lock', label: 'Visible only to you' } }).run();
   assert.deepEqual(plain(api.calls().at(-1)), ['visibility', 'doc'], 'every other visibility mode still opens the flow at its first step');
 }
 
@@ -1590,8 +1590,8 @@ function runSortGroupCheck() {
   const api = vm.runInNewContext(`
     let view = 'tasks', groupPref = {}, sortPref = {};
     let taskF = { states: ['open'], assignee: 'me' }, libF = {};
-    let members = [{ id: 'me', title: 'André', me: true }, { id: 'lex', title: 'Lex' }];
-    const taskMetaById = new Map([['t1', { assignees: ['lex'] }], ['t2', { assignees: ['me'] }], ['t4', { assignees: ['tana:user-profile:ghost'] }]]);
+    let members = [{ id: 'me', title: 'Robin', me: true }, { id: 'sam', title: 'Sam' }];
+    const taskMetaById = new Map([['t1', { assignees: ['sam'] }], ['t2', { assignees: ['me'] }], ['t4', { assignees: ['tana:user-profile:ghost'] }]]);
     const tana = {}, palette = { hidden: true };
     const $ = () => ({ hidden: true });
     const renderPills = () => {}, render = () => {}, showError = () => {}, setMcp = () => {}, showMcp = false;
@@ -1616,7 +1616,7 @@ function runSortGroupCheck() {
     'status groups follow the Status menu order; a row without a task state sits in No status');
   assert.deepEqual(titles(rows.filter((r) => r.stateType !== 'proposed'), 'status').map(([title]) => title), ['In Progress', 'Completed', 'Later', 'No status'],
     'a group with no rows is left out');
-  assert.deepEqual(titles(rows, 'assignee'), [['André', ['t2']], ['Lex', ['t1']], ['tana:user-profile:ghost', ['t4']], ['Unassigned', ['t3', 'd1']]],
+  assert.deepEqual(titles(rows, 'assignee'), [['Robin', ['t2']], ['Sam', ['t1']], ['tana:user-profile:ghost', ['t4']], ['Unassigned', ['t3', 'd1']]],
     'assignees sort by name, a member without a loaded name keeps its uri, the rest is Unassigned');
   assert.deepEqual(titles(rows, 'type'), [['doc', ['d1']], ['Project', ['t1']], ['task', ['t2', 't3', 't4']]],
     'type groups on the tag the row already shows as its chip');
@@ -1664,7 +1664,7 @@ function runCmdPillsCheck() {
   const definitions = sourceBetween('const STATES =', 'function renderPills');
   const api = vm.runInNewContext(`
     let view = 'tasks', taskF = { states: ['open'], assignee: 'anyone' }, libF = { types: ['tasks'], states: ['open'], assignee: 'anyone', text: '' };
-    let members = [{ id: 'me', title: 'André', me: true }], showMcp = false, groupPref = {}, sortPref = {};
+    let members = [{ id: 'me', title: 'Robin', me: true }], showMcp = false, groupPref = {}, sortPref = {};
     let pillCtx = null, palMode = 'cmd', palRows = [], palIndex = 0, renders = 0;
     const taskMetaById = new Map(), tana = {}, palette = { hidden: false };
     const $ = () => ({ hidden: false }), showError = () => {}, renderPills = () => {};
@@ -1798,18 +1798,18 @@ function runRowAudienceCheck() {
     });
   `, { structuredClone });
   const doc = { id: 'tana:text:doc1', kind: 'document', text: 'Charter', icon: 'doc', hasChildren: true, editable: true };
-  const meeting = { id: 'tana:event:m1', kind: 'document', text: 'Heads of Technology', icon: 'meeting', hasChildren: true, editable: true };
-  const task = { id: 'tana:text:t1', kind: 'document', text: 'Renew the DPA', icon: 'task', hasChildren: true, editable: true };
-  const spaceMeta = { assignees: [], audience: { scope: 'space' }, audienceSpace: { title: 'Foundry LT' } };
+  const meeting = { id: 'tana:event:m1', kind: 'document', text: 'Platform Guild', icon: 'meeting', hasChildren: true, editable: true };
+  const task = { id: 'tana:text:t1', kind: 'document', text: 'Renew the agreement', icon: 'task', hasChildren: true, editable: true };
+  const spaceMeta = { assignees: [], audience: { scope: 'space' }, audienceSpace: { title: 'Studio LT' } };
   const row = (node, meta) => plain(api.row(node, meta));
-  assert.deepEqual(row(doc, spaceMeta).icons, ['Visible to members of Foundry LT'], 'a doc row carries the audience icon, the way a task row does');
+  assert.deepEqual(row(doc, spaceMeta).icons, ['Visible to members of Studio LT'], 'a doc row carries the audience icon, the way a task row does');
   assert.deepEqual(row(meeting, { assignees: [], audience: 'only-me' }).icons, ['Visible only to you'], 'a meeting row carries it too');
   assert.deepEqual(row(doc, { assignees: [], audience: 'everyone', linkShared: true }).icons, ['Visible to everyone', 'Anyone with the link'], 'link sharing stays a separate icon on a doc row');
-  assert.deepEqual(row(task, { assignees: ['tana:user-profile:lex'], audience: 'only-me' }).icons, ['Visible only to you'], 'a task row is unchanged');
-  assert.deepEqual(row(task, { assignees: ['tana:user-profile:lex'], audience: 'only-me' }).gaps, ['6px'], 'an icon after an assignee name keeps its 6px');
+  assert.deepEqual(row(task, { assignees: ['tana:user-profile:sam'], audience: 'only-me' }).icons, ['Visible only to you'], 'a task row is unchanged');
+  assert.deepEqual(row(task, { assignees: ['tana:user-profile:sam'], audience: 'only-me' }).gaps, ['6px'], 'an icon after an assignee name keeps its 6px');
   assert.deepEqual(row(doc, spaceMeta).gaps, ['0'], 'a row with no name in front of the icon does not add a second gap on top of the one the meta span carries');
   assert.deepEqual(row(doc, { assignees: [], audience: 'everyone', linkShared: true }).gaps, ['0', '6px'], 'the icons still stand apart from each other');
-  assert.equal(row(doc, spaceMeta).sub, 'Foundry LT', 'a space audience still names the space under the title');
+  assert.equal(row(doc, spaceMeta).sub, 'Studio LT', 'a space audience still names the space under the title');
   assert.equal(row(doc, { assignees: [], audience: 'unknown' }).icons, null, 'a document with nothing shareable shows nothing at all');
   const settledGaps = row(doc, spaceMeta).gaps;
   const pending = row(doc, null);
@@ -1842,7 +1842,7 @@ function runSidebarHoverCheck() {
     const isTask = () => false, canEditNode = () => true, iconSvg = () => '', appendTags = () => {}, goTo = () => {}, railKey = () => {}, blurSensitive = () => {};
     ${functionSource('railRow')}
     (lines) => {
-      const row = railRow({ id: 'tana:event:m1', text: 'Heads of Technology', icon: 'meeting' });
+      const row = railRow({ id: 'tana:event:m1', text: 'Platform Guild', icon: 'meeting' });
       const title = row.children[1];
       title.offsetHeight = 19 * lines;
       row.onmouseenter();
@@ -2020,9 +2020,9 @@ async function runMemberLoadCheck() {
   const again = plain(await api.load(null));
   assert.equal(again.attempts, 2, 'an empty answer means "not yet", so it is asked again instead of kept');
   api.reset(0);
-  const filled = plain(await api.load([{ id: 'tana:user-profile:andre', title: 'André Foeken' }]));
+  const filled = plain(await api.load([{ id: 'tana:user-profile:andre', title: 'Robin Vega' }]));
   assert.equal(filled.attempts, 3, 'it keeps asking until someone is in the list');
-  assert.equal(api.name('tana:user-profile:andre'), 'André Foeken', 'and once it answers, names resolve');
+  assert.equal(api.name('tana:user-profile:andre'), 'Robin Vega', 'and once it answers, names resolve');
   const settled = plain(await api.load(null));
   assert.equal(settled.attempts, 3, 'a list with people in it is loaded for good: no further calls');
   api.reset(Date.now());

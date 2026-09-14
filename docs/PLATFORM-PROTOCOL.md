@@ -54,14 +54,14 @@ never sends the first two and ignores the last two on the stream (see 1.3).
 ### 1.1 Request
 
 ```json
-{ "orgId": "org_01KS7RQSWW68H489ZZZ1NNC40T",
+{ "orgId": "org_01EXAMPLE00000000000000000",
   "peer": { "peerId": "10444520223086053979", "ephemeral": false, "storageId": "3f0c1d6e-0000-4000-8000-000000000000" } }
 ```
 
 Evidence: `this.#t.serverSync({orgId:this.#e.orgId,peer:{peerId:this.#e.peerId,ephemeral:this.#e.ephemeral??!1,storageId:this.#e.storageId??''}},{signal})`.
 
-**orgId** is the WorkOS organisation id, i.e. the `org_id` claim of the access token (`org_01KS7RQSWW68H489ZZZ1NNC40T` for this
-account). It is neither the Tana ULID `01ks7rqsrqjn7vwyjhx75r6jg0` nor the `tana:org:` URI; those come from the separate
+**orgId** is the WorkOS organisation id, i.e. the `org_id` claim of the access token (`org_01EXAMPLE00000000000000000` for this
+account). It is neither the Tana ULID `01exampleorg00000000000000` nor the `tana:org:` URI; those come from the separate
 `urn:tana:org:id` claim and become `orgDocUri`. Evidence: session built as `organizationId:e.activeWorkosOrgId??n('org_id')`,
 `orgDocUri` from `n('urn:tana:org:id')`; the sync fetch wrapper aborts when the provider org differs from the token claim:
 `let s=Ve(o);if(s&&s!==r)throw … new St(r,s)` with `Ve` = `Jae` = `To(e).org_id` (decoded JWT payload). Use `session.organizationId`
@@ -75,7 +75,7 @@ nonce    = random in [0, 32768) for clients (server peers use [32768, 65536))   
 peerId   = (userHash << 16n) | BigInt(nonce)
 ```
 
-`userExternalId` is the `urn:tana:user:id` claim / `session.userExternalId` (`01m0f1aqd8p23qhwntbewmpfz2` here). Verified against
+`userExternalId` is the `urn:tana:user:id` claim / `session.userExternalId` (`01examplei0000000000000000` here). Verified against
 real data: every peer in the decoded task snapshot (`10444520223086053979`, `10444520223086068000`, ...) has `>> 16n ==
 159370730943085`, which is exactly the SHA-256 prefix of that id. Evidence: `gTe(new Uint8Array(n).subarray(0,8))>>yv`, `yv=16n`,
 `JTe={client:{min:0,size:32768},server:{min:32768,size:32768}}`, `return n<<yv|BigInt(r)`. The nonce is not persisted: the
@@ -140,8 +140,8 @@ Cold start (no local doc): empty `clientVv` (`beginDocumentSync(new Uint8Array)`
 (`rg -c 'wantLive|want_live' *.js` -> 0), so live updates are evidently on by default.
 
 ```json
-{ "orgId": "org_01KS7RQSWW68H489ZZZ1NNC40T", "peerId": "10444520223086053979",
-  "beginDocumentSync": { "documentId": "tana:text:01m23c1z45gceayt2zjk09k63c", "clientVv": "", "ephemeral": false } }
+{ "orgId": "org_01EXAMPLE00000000000000000", "peerId": "10444520223086053979",
+  "beginDocumentSync": { "documentId": "tana:text:01exampleh0000000000000000", "clientVv": "", "ephemeral": false } }
 ```
 
 Evidence: `commandUnion:{case:'beginDocumentSync',value:Fr(mxe,{documentId:e,clientVv:t,ephemeral:n})}` and
@@ -175,8 +175,8 @@ Status handling (`NTe`, `rTe` warm, `aTe` cold):
 3. Send it, always, even when empty (the server waits for it before completing the bootstrap):
 
 ```json
-{ "orgId": "org_01KS7RQSWW68H489ZZZ1NNC40T", "peerId": "10444520223086053979",
-  "applyBootstrapUpdates": { "documentId": "tana:text:01m23c1z45gceayt2zjk09k63c", "sessionId": "<from bootstrapResponse>",
+{ "orgId": "org_01EXAMPLE00000000000000000", "peerId": "10444520223086053979",
+  "applyBootstrapUpdates": { "documentId": "tana:text:01exampleh0000000000000000", "sessionId": "<from bootstrapResponse>",
                              "baseServerVv": "", "updates": "<b64 export or empty>" } }
 ```
 
@@ -203,8 +203,8 @@ Outbound: the client subscribes with `doc.subscribeLocalUpdates(bytes => …)` (
 mode blobs are coalesced with a 5 ms trailing timer (`sTe={type:'timer',ms:5}`) and sent as one command:
 
 ```json
-{ "orgId": "org_01KS7RQSWW68H489ZZZ1NNC40T", "peerId": "10444520223086053979",
-  "liveDocumentUpdate": { "documentId": "tana:text:01m23c1z45gceayt2zjk09k63c", "sessionId": "<sessionId>",
+{ "orgId": "org_01EXAMPLE00000000000000000", "peerId": "10444520223086053979",
+  "liveDocumentUpdate": { "documentId": "tana:text:01exampleh0000000000000000", "sessionId": "<sessionId>",
                           "updates": ["<b64 update>", "<b64 update>"] } }
 ```
 
@@ -276,7 +276,7 @@ with `r=Date.now()`:
 ```js
 data.set('stateType', 'closed');                 // 'proposed' | 'open' | 'closed' | 'not_now'
 data.set('stateEnteredAt', Date.now());          // ms
-data.set('stateChangedBy', 'tana:user-profile:01m0f1aqd8p23qhwntbewmpfz2'); // acting user's profile doc URI
+data.set('stateChangedBy', 'tana:user-profile:01examplei0000000000000000'); // acting user's profile doc URI
 data.delete('stateWorkflowUri');                 // plain states drop workflow fields
 data.delete('stateWorkflowStateId');
 doc.commit();

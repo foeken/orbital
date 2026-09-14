@@ -1,11 +1,13 @@
 'use strict';
-// Builds icons.js from the user's Tana line icon set (Nucleo export). Run: node scripts/build-icons.js
+// Builds icons.js from a local Tana line icon set (Nucleo export), which is not in this repo.
+// Run: node scripts/build-icons.js <path-to-icon-set>
 // build/icons/tana.svg is ours: the Tana prism (build/tana-symbol.svg, Tana's own symbol) traced as a single-stroke
 // 18x18 glyph on the same grid as the Nucleo set.
 // Colours are stripped to currentColor so CSS controls the grey.
 const fs = require('node:fs');
 const path = require('node:path');
-const SRC = process.argv[2] || '/Users/andre.foeken/Documents/Tana icons (line)';
+const SRC = process.argv[2] || process.env.TANA_ICON_SET;
+if (!SRC) throw new Error('pass the icon set directory: node scripts/build-icons.js <dir>');
 const WANT = { task: 'list-checkbox.svg', calendar: 'calendar.svg', sync: path.join(__dirname, '..', 'build', 'icons', 'cloud-refresh.svg'), doc: path.join(__dirname, '..', 'build', 'icons', 'report-file.svg'), space: path.join(__dirname, '..', 'build', 'icons', 'box-archive-3.svg'), member: path.join(__dirname, '..', 'build', 'icons', 'circle-user.svg'), lock: path.join(__dirname, '..', 'build', 'icons', 'lock.svg'), userLock: path.join(__dirname, '..', 'build', 'icons', 'user-lock.svg'), houseLock: path.join(__dirname, '..', 'build', 'icons', 'house-lock.svg'), users: path.join(__dirname, '..', 'build', 'icons', 'users-3.svg'), library: path.join(__dirname, '..', 'build', 'icons', 'bookmarked-book.svg'), pin: path.join(__dirname, '..', 'build', 'icons', 'pin.svg'), pinDate: path.join(__dirname, '..', 'build', 'icons', 'calendar-pin.svg'), any: path.join(__dirname, '..', 'build', 'icons', 'pop.svg'), setIcon: path.join(__dirname, '..', 'build', 'icons', 'images-3.svg'), darkLight: path.join(__dirname, '..', 'build', 'icons', 'dark-light.svg'), unassigned: path.join(__dirname, '..', 'build', 'icons', 'circle-dotted-user.svg'), createNew: path.join(__dirname, '..', 'build', 'icons', 'square-dashed-plus.svg'), apply: path.join(__dirname, '..', 'build', 'icons', 'check-2.svg'), field: path.join(__dirname, '..', 'build', 'icons', 'text-input.svg'), type: path.join(__dirname, '..', 'build', 'icons', 'shapes.svg'), inbox: path.join(__dirname, '..', 'build', 'icons', 'inbox.svg'), video: path.join(__dirname, '..', 'build', 'icons', 'video.svg'), code: path.join(__dirname, '..', 'build', 'icons', 'code.svg'), globe: path.join(__dirname, '..', 'build', 'icons', 'earth.svg'), link: path.join(__dirname, '..', 'build', 'icons', 'link.svg'), status: path.join(__dirname, '..', 'build', 'icons', 'status.svg'), assigned: path.join(__dirname, '..', 'build', 'icons', 'assigned.svg'), sort: path.join(__dirname, '..', 'build', 'icons', 'sort.svg'), group: path.join(__dirname, '..', 'build', 'icons', 'group.svg'), hidden: path.join(__dirname, '..', 'build', 'icons', 'eye-slash.svg') };
 // Ours rather than Nucleo's: the Tana prism from build/tana-symbol.svg (Tana's own symbol), traced as a
 // single-stroke glyph on the same 18x18 grid. Appended so the generated key order stays stable.
