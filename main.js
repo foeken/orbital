@@ -206,6 +206,23 @@ async function summaryUri(id) {
   if (found) summaryCache.set(id, found.id);
   return found ? found.id : null;
 }
+// The meeting's call link. A calendar location holds the join url for an online meeting (Tana Meet, Google Meet,
+// Zoom), a room or address for a physical one, and often both in one semicolon-separated string, so take the first
+// http(s) url out of it rather than the whole field. When the location names the room only ('Teams meeting',
+// '+Groenlo Building 5-R1 Stairs - Zoom') the provider still carries the join url in calendarEvent.actionUrl, which
+// held nothing but Zoom and Teams join links across the calendar (read-only survey, 2026-09-14).
+// The label is the human part of the url; a Teams join path is a couple of hundred characters of ids, so a path that
+// long is dropped and the host speaks for itself.
+function callOf(ev) {
+  const found = typeof ev.location === 'string' ? ev.location.match(/https?:\/\/[^\s;,]+/i) : null;
+  const url = found ? found[0].replace(/[).,;]+$/, '') : typeof ev.actionUrl === 'string' ? ev.actionUrl : '';
+  if (!/^https?:\/\//i.test(url)) return undefined;
+  try {
+    const u = new URL(url), label = (u.host + u.pathname).replace(/\/+$/, '');
+    return { url, label: label.length > 60 ? u.host : label };
+  } catch { return undefined; }
+}
+
 async function related(id) {
   if (!client) throw new Error(NOT_CONNECTED);
   // The meeting event is the hub: opening its notes document should still show the meeting's pins and outcomes.
@@ -232,6 +249,7 @@ async function related(id) {
   return {
     summary: ev.summary || undefined,
     tagline: ev.tagline || undefined,
+    call: callOf(ev),
     summaryUri: writeUp ? writeUp.id : undefined,
     fields: await fieldsOf(id), // the zoomed node's own fields, not the meeting hub's
     pinned: pinned.map(row),
@@ -735,6 +753,8 @@ ipcMain.handle('doc:setAssignees', (_e, id, uris) => mut(id, (doc) => {
   scheduleRefresh(2000); // reassignment may add or remove this task from the active filter
 }));
 ipcMain.handle('block:setText', (_e, id, nodeId, value) => mut(id, (doc) => { content.setText(doc, nodeId, value); })); // value: string or segments
+ipcMain.handle('block:setBlockType', (_e, id, nodeId, type) => mut(id, (doc) => { content.setBlockType(doc, nodeId, type); })); // type: one of content.BLOCK_TYPES
+ipcMain.handle('block:insertDivider', (_e, id, nodeId) => mut(id, (doc) => content.insertDivider(doc, nodeId))); // nodeId null appends at the end
 ipcMain.handle('block:insertAfter', (_e, id, nodeId, text) => mut(id, (doc) => content.insertAfter(doc, nodeId, text)));
 ipcMain.handle('block:insertChild', (_e, id, nodeId, text) => mut(id, (doc) => content.insertChild(doc, nodeId, text)));
 ipcMain.handle('block:removeMany', (_e, id, nodeIds) => mut(id, doc => content.removeMany(doc, nodeIds)));
@@ -800,7 +820,7 @@ ipcMain.handle('sync:login', async () => {
 });
 
 if (process.env.TANA_MAIN_TEST) {
-  module.exports = { resolveInitialAuth, graphRow, cachedNodeHue, SECTIONS, toNode, outlineWithReferences, op, onChange, documentAction, createDocument, creationOptions, search, spaceChildren, start, refresh,
+  module.exports = { resolveInitialAuth, graphRow, cachedNodeHue, SECTIONS, toNode, outlineWithReferences, op, onChange, documentAction, createDocument, creationOptions, search, spaceChildren, start, refresh, related, callOf,
     statusSnapshot: () => ({ ...status }), rememberNodeHue,
     undo: () => history(undoStack, redoStack, 'undo', 'canUndo'), redo: () => history(redoStack, undoStack, 'redo', 'canRedo'), visibleGraphNodes, pinTree,
     testRuntime: (runtime) => { client = runtime.client; me = runtime.me; win = runtime.win; session = runtime.session; } };

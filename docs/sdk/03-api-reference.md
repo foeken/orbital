@@ -97,12 +97,18 @@ The native title contract is a plain metadata string. `setTitle` cannot store me
 
 ## `sdk/content.js` — outline over the content tree
 
-Outline node: `{ id: blockId, text, kind: 'block', heading?: level, type?: 'image', image?: { uri, alt, width, height }, segments: [{ text } | { mention: { label, uri } }], hasChildren, children: OutlineNode[] }`.
+Outline node: `{ id: blockId, text, kind: 'block', block?: type, heading?: level, editable?: false, type?: 'image', image?: { uri, alt, width, height }, segments: [{ text, marks? } | { mention: { label, uri } }], hasChildren, children: OutlineNode[] }`.
+
+`block` is the node's block type: `paragraph | heading1 | heading2 | heading3 | bullet | numbered | code | quote | divider` (absent on image and embed nodes, which carry `type` instead). `heading` still carries the level for headings. A divider is a childless `horizontalRule`, so it reads as `editable: false` with empty text.
+
+`marks` on a text segment is `{ bold?: true, italic?: true, strike?: true, code?: true, link?: href }`. Marks live in the LoroText delta and never appear in `toJSON()`, so one text container holds several segments when its delta is split by marks. Tana stores a plain mark as `{}` and a link as its ProseMirror attrs (`{ href, title, target }`); a segment carries the href alone, and an unchanged href leaves `title`/`target` untouched. Loro needs mark styles configured before writing (`configTextStyle`): Tana derives them from its schema, where no mark declares `inclusive`, so every mark is `expand: 'none'`.
 
 | Function | Behaviour |
 |---|---|
 | `readOutline(document)` | Outline nodes (`[]` for an empty content map). |
-| `setText(document, id, value)` | `value`: string or segments. Runs matched by position: text runs updated in place (keeps marks/concurrent edits), same-uri mentions kept, others replaced, trailing runs dropped. |
+| `setText(document, id, value)` | `value`: a string or segments. A **string** replaces the words and leaves the existing annotations alone; **segments** state the marks exactly. Consecutive text segments share one LoroText, the way Tana stores them, and every mention is its own map. Containers are matched by position: a text container is updated in place (a diffing update keeps concurrent edits and the marks of untouched characters, then only the spans whose annotation differs are marked or unmarked), a same-uri mention is kept, anything else is replaced, trailing containers are dropped. Inside a `codeBlock` marks and mentions flatten to text, because its schema content is `text*` with `marks: ''`. |
+| `setBlockType(document, id, type)` | `paragraph`, `heading1-3`, `bullet`, `numbered`, `code`, `quote`. A type is a container plus a leaf node name, and the types stay mutually exclusive the way Tana's style menu presents them: bullet/numbered live in a `listItem`, quote in a `blockquote`, the rest are bare blocks. The blockId and the inline content survive. Between the two list kinds the whole `listItem` moves, so its children and its checkbox stay with it; a conversion to heading, quote or code outdents the node's children instead of losing them, because those blocks cannot own children. Splitting a list or quote around the node keeps outline order. Rejects an unknown type and the atoms (divider, image, embed). |
+| `insertDivider(document, id \| null)` → newId | Inserts Tana's `horizontalRule` after `id` (`null` appends at the end). A list holds `listItem`s only, so a rule between two items splits the list rather than landing inside it. |
 | `insertAfter(document, id | null, text)` → newId | Sibling after `id` (inside a listItem: a new listItem); `null` appends at the end of the doc; creates the doc skeleton if missing. |
 | `insertChild(document, id, text)` → newId or null | First child (creates the nested bulletList/listItem; wraps a bare paragraph into a listItem). Null for headings/quotes/code. |
 | `remove(document, id)` | Removes the node and its children; prunes emptied lists. |
@@ -136,7 +142,7 @@ The SDK's `Document.undo()`/`redo()` only undo local CRDT transactions for that 
 | `searchParams(parsed, typesByLowerTitle, limit = 20)` → ListNodes params or null | Default nodeTypes `['text', 'event', 'user-profile']`, `textQuery`, TEXT_RANK sort; `#task` → text + all four states, `#meeting` → event, `#member` → user-profile, `#<Type>` → `entityTypes`; unknown type or empty query → null. |
 | `needsTypes(parsed)` | True when a non-kind tag needs the type map. |
 | `taskParams(filter, me, limit = 500)` | `{ states: string[] | null, assignee: 'me' | 'anyone' | 'unassigned' | uri }` → ListNodes params, UPDATE_TIME desc. |
-| `libraryQueries(filter, me, limit = 100)` | One `{ kind, params }` per kind in `meetings | tasks | docs | chats | canvases | agents | skills` (+ optional `textQuery`); the caller filters `docs` to nodes without state. |
+| `libraryQueries(filter, me, limit = 100)` | One `{ kind, params }` per kind in `meetings | tasks | docs | chats | canvases | agents | skills` (+ optional `textQuery`); the caller filters `docs` to nodes without state. The assignee goes on **every** kind's query, not only on tasks: the graph filters any node type by `assignedTo`, so a kind that carries no assignee returns nothing instead of returning its whole contents unfiltered. It is in effect only while `tasks` is among the selected kinds, which is when the Assigned pill is shown. |
 | `DEFAULT_TASK_FILTER`, `DEFAULT_LIBRARY_FILTER`, `LIBRARY_KINDS` | Constants. |
 
 ## `sdk/pins.js` (all `async (sync, userUri, …)`)

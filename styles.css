@@ -87,17 +87,23 @@ button { font: inherit; }
   border-left: 1px solid #ececec; background: #fafbfc; padding: 44px 12px 32px; }
 .railgrip { -webkit-app-region: no-drag; flex: none; width: 5px; margin-right: -1px; cursor: col-resize; z-index: 2; }
 .railgrip:hover, .railgrip.dragging { background: #d8e4f0; }
-.rail .rhead { display: flex; align-items: center; gap: 6px; width: 100%; border: 0; background: none; padding: 10px 6px 4px; cursor: pointer;
+.rail .rhead { display: flex; align-items: center; gap: 6px; width: 100%; border: 0; background: none; margin-top: 18px; padding: 10px 6px 4px; cursor: pointer;
   font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #999; }
+.rail .rhead:first-child { margin-top: 0; } /* the three groups read as separate blocks, the first one starts at the top */
 .rail .rhead svg { width: 12px; height: 12px; transition: transform 0.12s; }
 .rail .rhead.closed svg { transform: rotate(-90deg); }
 .rail .rrow { display: flex; align-items: baseline; gap: 6px; padding: 4px 6px; border-radius: 4px; cursor: pointer; outline: none; }
 .rail .rrow:hover { background: #f4f6f8; }
 .rail .rrow:focus { background: #e8f1fb; }
-.rail .rrow .ricon { flex: none; width: 15px; height: 15px; color: #8a8a8a; align-self: center; }
+/* the icon sits in the same box as a task row's checkbox (18px + its 2px/8px margins), so every title starts at one x */
+.rail .rrow .ricon { flex: none; display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin: 0 8px 0 2px; color: #8a8a8a; align-self: center; }
 .rail .rrow .ricon svg { display: block; width: 15px; height: 15px; }
 .rail .rrow .ricon.hue { color: hsl(var(--hue) 45% 30%); } /* a hued node keeps its colour in the sidebar too */
 .rail .rrow .check { align-self: center; }
+/* task metadata rows (assignees, visibility) above the first group; plain like every other row */
+.rail .rrow.rmeta .rtitle { color: #555; }
+.rail .rrow.rmeta.fixed { cursor: default; }
+.rail .rrow.rmeta.fixed:hover { background: none; }
 .rail .rrow .rtitle { flex: 1; min-width: 0; font-size: 14px; line-height: 19px; color: #1a1a1a; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .rail .rrow.done .rtitle { color: #999; text-decoration: line-through; }
 
@@ -170,6 +176,27 @@ button { font: inherit; }
 .text.image:focus img, .selected > .line .text.image img { outline: 2px solid #b5d0ee; outline-offset: 2px; }
 .text .mention { color: #508fbb; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .text .mention:hover { color: #3a75a3; }
+/* inline marks on a text run (readOutline segments): bold, italic, strike, code, and link marks */
+.text strong { font-weight: 700; }
+.text em { font-style: italic; }
+.text s { text-decoration: line-through; }
+.text code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .92em; background: #f1f1f1; border-radius: 4px; padding: 0 4px; }
+.text a.link { color: #508fbb; text-decoration: underline; cursor: pointer; }
+.text a.link:hover { color: #3a75a3; }
+/* block types (api.setBlockType). A bullet row keeps the plain bullet; a numbered row counts in the same gutter. */
+#outline, .children { counter-reset: ol; }
+.node.t-numbered { counter-increment: ol; }
+.node.t-numbered > .line > .bullet::before {
+  content: counter(ol) "."; left: 0; top: 0; width: 18px; height: 24px; border-radius: 0;
+  background: none; color: #777; font-size: 12px; line-height: 24px; text-align: center;
+}
+.node.t-numbered > .line > .bullet:hover::before { background: none; color: #1a1a1a; }
+.node.t-code > .line .text { display: block; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px; background: #f5f5f5; border-radius: 6px; padding: 6px 10px; }
+.node.t-quote > .line .text { display: block; border-left: 3px solid #d8d8d8; padding-left: 12px; color: #555; }
+/* divider: an atomic block, focusable like an image so the keyboard can still reach and delete it */
+.text.divider { display: block; cursor: default; }
+.text.divider hr { border: 0; border-top: 1px solid #dcdcdc; margin: 10px 0; }
+.text.divider:focus hr, .selected > .line .text.divider hr { border-top-color: #b5d0ee; }
 .h1 > .line .text { font-size: 24px; font-weight: 700; line-height: 30px; }
 .h2 > .line .text { font-size: 20px; font-weight: 700; line-height: 28px; }
 .h3 > .line .text { font-weight: 700; }
@@ -178,6 +205,10 @@ button { font: inherit; }
 .children { margin-left: 33px; padding-left: 0; border-left: 1px solid #ececec; }
 .children.loading { color: #aaa; font-style: italic; padding: 3px 0 3px 22px; }
 .empty-note { color: #aaa; padding: 8px 40px; }
+/* offered beside "Nothing here yet" only while a filter is narrowing the view; a real button, so Tab and Enter reach it */
+.clearfilters { border: 0; border-radius: 6px; background: #f1f1f1; color: #4f8ad9; font: inherit; font-size: 14px; padding: 2px 10px; margin-left: 6px; cursor: pointer; }
+.clearfilters:hover { background: #e4e4e4; }
+.clearfilters:focus { outline: none; box-shadow: 0 0 0 2px #b7d2f5; }
 /* loading skeleton: 6 shimmering bars while a view has no rows yet; .gone fades it out, then collapses it */
 .skeleton { padding-left: 24px; transition: opacity .35s; }
 .skeleton.gone { opacity: 0; height: 0; overflow: hidden; pointer-events: none; transition: opacity .35s, height 0s .35s; }
@@ -191,6 +222,26 @@ button { font: inherit; }
 @media (prefers-reduced-motion: reduce) { .skeleton div { animation: none; } .skeleton, .skeleton.gone { transition: none; } }
 
 .filtered { padding: 18px 10px 8px 16px; color: #999; font-weight: 600; } /* lines up with the title, filter and pills */
+
+/* selection toolbar: floats over a non-empty selection inside an editable node (style dropdown, B I S code, @) */
+.toolbar { position: fixed; z-index: 9; display: flex; align-items: center; gap: 2px; padding: 4px; background: #fff; border-radius: 8px; box-shadow: 0 6px 24px rgba(0, 0, 0, .18), 0 0 0 1px rgba(0, 0, 0, .06); }
+.toolbar[hidden] { display: none; }
+.tbtn { position: relative; display: flex; align-items: center; gap: 4px; min-width: 30px; height: 28px; padding: 0 8px; border: 0; border-radius: 6px; background: none; color: #444; font-size: 15px; cursor: pointer; }
+.tbtn:hover { background: #f0f0f0; }
+.tbtn:focus { outline: none; box-shadow: 0 0 0 2px #b7d2f5; }
+.tbtn.on { background: #e8f1fb; color: #2b6fcf; }
+.tbtn.b { font-weight: 700; }
+.tbtn.i { font-style: italic; }
+.tbtn.s { text-decoration: line-through; }
+.tbtn.c { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+.tbtn.style { font-size: 14px; }
+.tbtn.style.open { background: #f0f0f0; }
+.tbtn .tcaret { display: flex; color: #888; }
+.tbtn .tcaret svg { width: 10px; height: 10px; }
+.toolbar .menu { top: calc(100% + 6px); min-width: 190px; font-size: 15px; }
+/* a text glyph standing in for an icon (block types have no icon in the set): H1, •, 1., </>, ❝, — */
+.glyph { display: block; width: 100%; text-align: center; font-size: 10px; font-weight: 700; line-height: 16px; color: #8a8a8a; }
+.palette .row.active .glyph, .menu .mrow.active .glyph { color: #555; }
 .filtered:empty { display: none; }
 .login { display: flex; justify-content: center; padding: 120px 0; }
 .login[hidden] { display: none; }
@@ -302,6 +353,9 @@ button { font: inherit; }
 [data-theme="dark"] .check:checked::after { border-color: #f4f5f5; }
 [data-theme="dark"] .document.done > .line .text { color: #777d80; }
 [data-theme="dark"] .meta, [data-theme="dark"] .filtered, [data-theme="dark"] .empty-note { color: #858b8e; }
+[data-theme="dark"] .clearfilters { background: #303436; color: #9cc9e8; }
+[data-theme="dark"] .clearfilters:hover { background: #3b4144; }
+[data-theme="dark"] .clearfilters:focus { box-shadow: 0 0 0 2px #58768a; }
 [data-theme="dark"] .chip.grey { background: #303436; color: #b7bcbe; }
 [data-theme="dark"] .chip.gold { background: #4b4024; color: #e4c968; }
 [data-theme="dark"] .chip.hue { background: hsl(var(--hue) 35% 25%); color: hsl(var(--hue) 75% 78%); }
@@ -309,6 +363,23 @@ button { font: inherit; }
 [data-theme="dark"] .text.image:focus img, [data-theme="dark"] .selected > .line .text.image img { outline-color: #58768a; }
 [data-theme="dark"] .text .mention { color: #8fc1e1; }
 [data-theme="dark"] .text .mention:hover { color: #b5ddf4; }
+[data-theme="dark"] .text code { background: #303436; }
+[data-theme="dark"] .text a.link { color: #7fb8dd; }
+[data-theme="dark"] .text a.link:hover { color: #b5ddf4; }
+[data-theme="dark"] .node.t-numbered > .line > .bullet::before { background: none; color: #9a9fa1; }
+[data-theme="dark"] .node.t-numbered > .line > .bullet:hover::before { background: none; color: #e0e1e1; }
+[data-theme="dark"] .node.t-code > .line .text { background: #282b2d; }
+[data-theme="dark"] .node.t-quote > .line .text { border-left-color: #454b4e; color: #a8adaf; }
+[data-theme="dark"] .text.divider hr { border-top-color: #3a3f41; }
+[data-theme="dark"] .text.divider:focus hr, [data-theme="dark"] .selected > .line .text.divider hr { border-top-color: #58768a; }
+[data-theme="dark"] .toolbar { background: #242729; box-shadow: 0 6px 24px rgba(0, 0, 0, .5), 0 0 0 1px rgba(255, 255, 255, .08); }
+[data-theme="dark"] .tbtn { color: #c9c9c9; }
+[data-theme="dark"] .tbtn:hover, [data-theme="dark"] .tbtn.style.open { background: #2f3436; }
+[data-theme="dark"] .tbtn:focus { box-shadow: 0 0 0 2px #58768a; }
+[data-theme="dark"] .tbtn.on { background: #263842; color: #9cc9e8; }
+[data-theme="dark"] .tbtn .tcaret { color: #9a9fa1; }
+[data-theme="dark"] .glyph { color: #aeb4b6; }
+[data-theme="dark"] .palette .row.active .glyph, [data-theme="dark"] .menu .mrow.active .glyph { color: #d0d2d2; }
 [data-theme="dark"] .text[tabindex]:not(.image):focus { outline-color: #58768a; }
 [data-theme="dark"] .selected > .line { background: #2d4149; }
 [data-theme="dark"] .children { border-left-color: #34393b; }
@@ -342,6 +413,7 @@ button { font: inherit; }
 [data-theme="dark"] .railgrip:hover, [data-theme="dark"] .railgrip.dragging { background: #2f4658; }
 [data-theme="dark"] .rail .rrow .rtitle { color: #e6e8e9; }
 [data-theme="dark"] .rail .rrow.done .rtitle { color: #858b8e; }
+[data-theme="dark"] .rail .rrow.rmeta .rtitle { color: #a8adaf; }
 [data-theme="dark"] .fields .field { color: #e6e8e9; }
 [data-theme="dark"] .fields .flabel, [data-theme="dark"] .fields .ricon { color: #858b8e; }
 [data-theme="dark"] .fields a { color: #7fb8dd; }

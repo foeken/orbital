@@ -264,4 +264,32 @@ async function mockCreationPermissionCheck() {
   assert.equal((await api.accessOptions(created.id)).deletable, true, 'a materialized mock document can be deleted like a native editable document');
 }
 
+// ---- formatting: marks, block types, the selection toolbar and the "/" menu ----
+assert.match(source, /const MARK_TAGS = \{ code: 'code', strike: 's', italic: 'em', bold: 'strong' \}/);
+assert.match(source, /function markRange\(segs, start, end, mark, value\)/);
+assert.match(source, /const saveValue = \(segs\) => \(segs\.some\(\(s\) => 'mention' in s \|\| hasMarks\(s\.marks\)\)/); // a marked run is never flattened to a string
+assert.match(source, /const blockTypeOf = \(node\) => \(BLOCK_LABEL\.has\(node\.block\)/); // readOutline carries the type as node.block
+assert.match(source, /document\.addEventListener\('selectionchange', updateToolbar\)/);
+assert.match(source, /const MARK_KEYS = \{ b: 'bold', i: 'italic', e: 'code' \}/);
+assert.match(source, /e\.key === 'Escape' && !toolbarEl\.hidden\) \{ e\.preventDefault\(\); returnToSelection\(\); \}/); // Escape dismisses without losing the selection
+assert.match(source, /await tana\.setBlockType\(item\.docId, item\.node\.id, type\)/);
+assert.match(source, /await tana\.insertDivider\(docId, node\.id\)/);
+assert.match(source, /el\.textContent === '\/' && palette\.hidden\) openSlash\(item\)/);
+assert.match(source, /e\.target\.closest\('a\.url, a\.link'\)/); // a link mark opens like a bare URL
+assert.match(source, /if \(saved && savedSel\) selectRange\(saved\.key, savedSel\[0\], savedSel\[1\]\)/); // a live update must not eat the selection
+// ---- filter menus, sidebar rows, empty state ----
+assert.match(source, /function pickMenuRow\(r, pick\) \{/);
+assert.match(source, /if \(!r\.keepOpen\) menu = null;/);
+assert.match(source, /\['References', data\.notes\]/);
+assert.doesNotMatch(source, /\['Notes', data\.notes\]/);
+assert.match(source, /function railCallRow\(data\) \{/);
+assert.match(source, /taskInfoEl\.hidden = !titleTags/); // assignees/visibility moved into the sidebar
+assert.match(source, /if \(viewFiltered\(\)\) \{/);
+const html = fs.readFileSync(require.resolve('../index.html'), 'utf8');
+assert.match(html, /<div id="toolbar" class="toolbar" role="toolbar"/);
+const styleSheet = fs.readFileSync(require.resolve('../styles.css'), 'utf8');
+for (const rule of [/\.toolbar \{/, /\.tbtn \{/, /\.text code \{/, /\.text a\.link \{/, /\.node\.t-numbered \{/, /\.node\.t-code > \.line \.text \{/, /\.node\.t-quote > \.line \.text \{/, /\.text\.divider hr \{/, /\.clearfilters \{/]) {
+  assert.match(styleSheet, rule, 'styles.css carries ' + rule.source);
+}
+
 Promise.all([splitTypingCheck(), cachedBootMetadataCheck(), mockCreationPermissionCheck()]).then(() => console.log('renderer auth check passed'));

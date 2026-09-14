@@ -42,6 +42,8 @@ function mockApi() {
     if (done != null) node.done = done;
     return node;
   };
+  const typed = (type, text) => ({ ...block(text), block: type }); // a block carrying one of the api.setBlockType types
+  const divider = () => ({ id: 'b' + (++seq), kind: 'block', block: 'divider', editable: false, hasChildren: false, children: [] }); // nothing to edit, like sdk/content.js
   const task = { label: 'task', color: 'grey' }, meeting = { label: 'meeting', color: 'gold' };
   const project = { label: 'Project', hue: 268 }; // a typed tag with the type's colour (Addendum 12)
   const docs = titles.map((text, i) => ({ id: 'mockdoc' + i, text, kind: 'document', done: 0, hasChildren: true, icon: 'task', tags: [task] }));
@@ -96,6 +98,15 @@ function mockApi() {
     block('Context', [], 2),
     block('First point about task ' + i, [block('Detail A'), block('Detail B', [block('Deeper detail')])]),
     block([{ text: 'Discuss with ' }, { mention: { label: 'Lex van Velsen', uri: 'tana:user-profile:lex' } }, { text: ' and see ' }, { mention: { label: titles[2], uri: 'mockdoc2' } }]),
+    // every mark and block type the outline can receive, so formatting is visible without the main process
+    block([{ text: 'Marks: ' }, { text: 'bold', marks: { bold: true } }, { text: ', ' }, { text: 'italic', marks: { italic: true } }, { text: ', ' },
+      { text: 'strike', marks: { strike: true } }, { text: ', ' }, { text: 'code', marks: { code: true } }, { text: ', ' },
+      { text: 'a link mark', marks: { link: 'https://tana.inc' } }, { text: ' and a bare https://tana.inc URL' }]),
+    typed('quote', 'A quote block, set with api.setBlockType.'),
+    typed('code', 'const answer = 42;'),
+    typed('numbered', 'First numbered item'),
+    typed('numbered', 'Second numbered item'),
+    divider(),
     block('Second point, a paragraph long enough to wrap onto a second line when the window is narrow so arrow keys can be tested inside a node.'),
     block('Next steps', [block('Call someone'), block('Write the memo')]),
   ]]));
@@ -155,6 +166,7 @@ function mockApi() {
       const pick = (n) => n && info(n);
       return {
         summary: 'Mock meeting summary for ' + doc.text,
+        call: { url: 'https://meet.google.com/ipt-utoj-srr', label: 'meet.google.com/ipt-utoj-srr' },
         pinned: [pick(all.find((d) => d.icon === 'doc')), pick(all.find((d) => d.icon === 'task'))].filter(Boolean),
         outcomes: all.filter((d) => d.icon === 'task').slice(1, 3).map(info),
         notes: [pick(all.find((d) => d.icon === 'doc' && d.text))].filter(Boolean),
@@ -233,6 +245,13 @@ function mockApi() {
     setDone: async (docId, done) => mut(docId, () => { const d = all.find((x) => x.id === docId); d.done = done ? 1 : 0; d.state = done ? 'closed' : 'open'; emit(docId); }),
     toggleCheckbox: async (docId, id) => mut(docId, () => { const n = locate(content[docId], id).node; n.done = n.done == null ? 0 : n.done ? 0 : 1; emit(docId); }),
     setText: async (docId, id, text) => mut(docId, () => { const n = locate(content[docId], id).node; n.text = plainOf(text); n.segments = segsOf(text); emit(docId); }),
+    // block types and dividers (the contract the renderer codes against): type in paragraph | heading1-3 | bullet | numbered | code | quote
+    setBlockType: async (docId, id, type) => mut(docId, () => {
+      const n = locate(content[docId], id).node;
+      n.block = type; n.heading = Number((String(type).match(/^heading(\d)$/) || [])[1]) || undefined;
+      emit(docId);
+    }),
+    insertDivider: async (docId, id) => mut(docId, () => { const f = locate(content[docId], id); f.list.splice(f.index + 1, 0, divider()); emit(docId); }),
     insertAfter: async (docId, id, text) => mut(docId, () => {
       const f = id == null ? null : locate(content[docId], id), n = block(text, [], undefined, f && f.node.kind === 'block' && f.node.done != null ? 0 : undefined);
       if (!f) content[docId].push(n); else f.list.splice(f.index + 1, 0, n);
@@ -266,16 +285,30 @@ function mockApi() {
   };
 }
 
-// ---- segments: [{ text } | { mention: { label, uri } }] <-> plain text <-> DOM ----
+// ---- segments: [{ text, marks? } | { mention: { label, uri } }] <-> plain text <-> DOM ----
+// marks = { bold, italic, strike, code, link: href } on one text run: exactly the shape api.setText takes back.
 const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const localDate = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }; // today, YYYY-MM-DD
 // accepts segments, a plain string, or a Node
 const segsOf = (v) => (Array.isArray(v) ? v : typeof v === 'string' ? (v ? [{ text: v }] : []) : v.segments || (v.text ? [{ text: v.text }] : []));
 const plainOf = (v) => segsOf(v).map((s) => ('text' in s ? s.text : s.mention.label)).join('');
+const MARK_TAGS = { code: 'code', strike: 's', italic: 'em', bold: 'strong' }; // innermost first: the order a run is wrapped in
+const hasMarks = (marks) => !!marks && Object.keys(marks).length > 0;
+const markKey = (marks) => JSON.stringify(Object.entries(marks || {}).sort()); // two runs merge only when their marks match
+function markWrap(nodes, marks) {
+  let out = nodes;
+  for (const [name, tag] of Object.entries(MARK_TAGS)) if (marks[name]) { const el = document.createElement(tag); el.append(...out); out = [el]; }
+  if (marks.link) { const a = document.createElement('a'); a.className = 'link'; a.dataset.href = marks.link; a.append(...out); out = [a]; } // outermost: the whole run is one link
+  return out;
+}
 function renderSegs(el, segs) {
   el.replaceChildren(...segs.flatMap((s, i) => {
     // Chromium needs a placeholder newline after a trailing soft break to put the caret on the empty line; readSegs strips it
-    if ('text' in s) return linkify(s.text + (i === segs.length - 1 && s.text.endsWith('\n') ? '\n' : ''));
+    if ('text' in s) {
+      const text = s.text + (i === segs.length - 1 && s.text.endsWith('\n') ? '\n' : '');
+      const nodes = s.marks && s.marks.link ? [document.createTextNode(text)] : linkify(text); // a link mark is already the link
+      return hasMarks(s.marks) ? markWrap(nodes, s.marks) : nodes;
+    }
     const a = document.createElement('a'); a.className = 'mention'; a.dataset.uri = s.mention.uri; a.contentEditable = 'false'; a.textContent = s.mention.label;
     return [a];
   }));
@@ -296,15 +329,31 @@ function linkify(text) {
   if (last < text.length) out.push(document.createTextNode(text.slice(last)));
   return out.length ? out : [document.createTextNode(text)];
 }
+// a run's marks are the elements it sits in, so bold inside a link reads back as one run carrying both
+function marksOf(el, marks) {
+  const name = el.nodeName;
+  if (name === 'A') return el.classList.contains('link') ? { ...marks, link: el.dataset.href } : marks; // a.url is the bare-URL linkify, not a mark
+  const found = Object.entries(MARK_TAGS).find(([, tag]) => tag === name.toLowerCase())
+    || (name === 'B' ? ['bold'] : name === 'I' ? ['italic'] : name === 'STRIKE' || name === 'DEL' ? ['strike'] : null);
+  return found ? { ...marks, [found[0]]: true } : marks;
+}
 function readSegs(el) {
   const segs = [];
-  for (const n of el.childNodes) {
-    if (n.nodeType === 1 && n.classList.contains('mention')) { segs.push({ mention: { label: n.textContent, uri: n.dataset.uri } }); continue; }
-    const t = n.nodeName === 'BR' ? '\n' : n.textContent;
-    if (!t) continue;
+  const add = (t, marks) => {
+    if (!t) return;
     const last = segs.at(-1);
-    if (last && 'text' in last) last.text += t; else segs.push({ text: t });
-  }
+    if (last && 'text' in last && markKey(last.marks) === markKey(marks)) last.text += t;
+    else segs.push(hasMarks(marks) ? { text: t, marks } : { text: t });
+  };
+  const walk = (parent, marks) => {
+    for (const n of parent.childNodes) {
+      if (n.nodeType === 1 && n.classList.contains('mention')) { segs.push({ mention: { label: n.textContent, uri: n.dataset.uri } }); continue; }
+      if (n.nodeName === 'BR') { add('\n', marks); continue; }
+      if (n.nodeType === 1) { walk(n, marksOf(n, marks)); continue; }
+      add(n.textContent, marks);
+    }
+  };
+  walk(el, {});
   const last = segs.at(-1);
   if (last && 'text' in last && last.text.endsWith('\n\n')) last.text = last.text.slice(0, -1);
   return segs;
@@ -316,12 +365,34 @@ function splitSegs(segs, off) {
     const len = 'text' in s ? s.text.length : s.mention.label.length;
     if (off >= len) { before.push(s); off -= len; }
     else if (off <= 0) after.push(s);
-    else if ('text' in s) { before.push({ text: s.text.slice(0, off) }); after.push({ text: s.text.slice(off) }); off = 0; }
+    else if ('text' in s) { before.push({ ...s, text: s.text.slice(0, off) }); after.push({ ...s, text: s.text.slice(off) }); off = 0; } // marks survive the cut
     else { before.push(s); off = 0; }
   }
   return [before, after];
 }
-const saveValue = (segs) => (segs.some((s) => 'mention' in s) ? segs : plainOf(segs));
+// empty runs go, neighbours with the same marks join: a toggled-off mark leaves one run again, not three
+const mergeSegs = (segs) => segs.filter((s) => !('text' in s) || s.text).reduce((out, s) => {
+  const last = out.at(-1);
+  if (last && 'text' in last && 'text' in s && markKey(last.marks) === markKey(s.marks)) last.text += s.text;
+  else out.push({ ...s });
+  return out;
+}, []);
+// one mark set (value) or cleared (null) over [start, end) — the whole block's segments come back, which is what api.setText takes
+function markRange(segs, start, end, mark, value) {
+  const [before, rest] = splitSegs(segs, start), [middle, after] = splitSegs(rest, end - start);
+  return mergeSegs([...before, ...middle.map((s) => {
+    if (!('text' in s)) return s;
+    const marks = { ...s.marks };
+    if (value) marks[mark] = value; else delete marks[mark];
+    return hasMarks(marks) ? { text: s.text, marks } : { text: s.text };
+  }), ...after]);
+}
+// the whole selection already carries the mark: that is what makes a toolbar button a toggle
+function hasMark(segs, start, end, mark) {
+  const runs = splitSegs(splitSegs(segs, start)[1], end - start)[0].filter((s) => 'text' in s && s.text);
+  return runs.length > 0 && runs.every((s) => s.marks && s.marks[mark]);
+}
+const saveValue = (segs) => (segs.some((s) => 'mention' in s || hasMarks(s.marks)) ? segs : plainOf(segs));
 const tana = window.api || mockApi();
 
 // ---- state ----
@@ -427,8 +498,20 @@ function chipEl(t, nodeHue) {
   if (hue != null) c.style.setProperty('--hue', String(hue));
   return c;
 }
+// Block types (api.setBlockType): readOutline carries one as node.block ('paragraph' | 'heading1-3' | 'bullet' |
+// 'numbered' | 'code' | 'quote' | 'divider'), with node.heading still set for the headings. A divider is an atomic
+// block like an image: it shows, focuses and deletes, never edits.
+const BLOCK_TYPES = [['paragraph', 'Text'], ['heading1', 'Heading 1'], ['heading2', 'Heading 2'], ['heading3', 'Heading 3'],
+  ['bullet', 'Bullet List'], ['numbered', 'Numbered List'], ['code', 'Code Block'], ['quote', 'Quote']];
+const BLOCK_LABEL = new Map(BLOCK_TYPES);
+const BLOCK_GLYPH = { paragraph: 'T', heading1: 'H1', heading2: 'H2', heading3: 'H3', bullet: '•', numbered: '1.', code: '</>', quote: '❝', divider: '—' };
+const blockTypeOf = (node) => (BLOCK_LABEL.has(node.block) ? node.block : node.heading ? 'heading' + node.heading : 'paragraph');
+const headingOf = (node) => node.heading || Number((blockTypeOf(node).match(/^heading(\d)$/) || [])[1]) || 0;
+function glyphSvg(type) { return '<span class="glyph">' + (BLOCK_GLYPH[type] || '') + '</span>'; } // the icon slot of a palette/menu row
 const images = new Map(); // image uri -> data URL (or the pending api.image promise)
 const isImage = (node) => node.type === 'image';
+const isDivider = (node) => node.block === 'divider' || node.type === 'divider';
+const isAtomic = (node) => isImage(node) || isDivider(node); // shown, focusable, never editable
 const isReference = (node) => node.type === 'reference';
 const referenceTarget = (node) => node.reference?.node ? asDoc(node.reference.node) : null;
 const referenceLabel = (node) => referenceTarget(node)?.text || node.reference?.label || node.text || node.reference?.uri || 'Unavailable reference';
@@ -468,7 +551,8 @@ function canEditItem(item) {
   for (let parent = item.parent; parent; parent = parent.parent) if (parent.node.kind === 'document') return canEditNode(parent.node);
   return canEditNode(docOf(item.docId) || item.node);
 }
-const canEditStructure = (item) => canEditItem(item) || (item.node.type === 'reference' && canEditNode(docOf(item.docId)));
+// A reference and a divider are read-only rows, but they are still blocks of a writable document: they can be moved and removed.
+const canEditStructure = (item) => canEditItem(item) || ((item.node.type === 'reference' || isDivider(item.node)) && canEditNode(docOf(item.docId)));
 // an inline reference renders the referenced document's title: editing the row edits that document, and a read-only target stays read-only
 const canEditText = (item) => (isReference(item.node) ? canEditNode(referenceTarget(item.node)) : canEditItem(item));
 const chatIcon = (n) => n.icon || ((n.tags || []).some((t) => t.label === 'chat') ? 'chat' : undefined);
@@ -548,6 +632,20 @@ function loadFilters() {
 }
 function setTaskF(patch) { taskF = { ...taskF, ...patch }; render(); run(() => tana.setTaskFilter(taskF)); } // main refreshes roots and emits onChanged(null)
 function setLibF(patch) { libF = { ...libF, ...patch }; render(); if (tana.setLibraryFilter) run(() => tana.setLibraryFilter(libF)); loadLibrary(); }
+// The filter defaults main persists; an empty view offers to come back to them only when it is actually narrowed.
+const TASK_DEFAULT = { states: ['proposed', 'open'], assignee: 'me' };
+const LIB_DEFAULT = { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me', text: '' };
+const sameList = (a, b) => JSON.stringify(a ? [...a].sort() : a) === JSON.stringify(b ? [...b].sort() : b);
+function viewFiltered() {
+  if (view === 'tasks') return !sameList(taskF.states, TASK_DEFAULT.states) || (taskF.assignee || 'me') !== TASK_DEFAULT.assignee;
+  if (view === 'library') return !sameList(libF.types, LIB_DEFAULT.types) || !sameList(libF.states, LIB_DEFAULT.states)
+    || (libF.assignee || 'me') !== LIB_DEFAULT.assignee || !!String(libF.text || '').trim();
+  return false;
+}
+function clearFilters() {
+  if (view === 'tasks') setTaskF({ ...TASK_DEFAULT });
+  else if (view === 'library') setLibF({ ...LIB_DEFAULT });
+}
 function ensureLoaded(item) {
   if (item.node.kind !== 'document' || kids.has(item.docId)) return;
   kids.set(item.docId, null);
@@ -583,6 +681,23 @@ function focused() {
   if (el === titleEl && titleEl.isContentEditable) return { key: titleEl.dataset.key, offset: caretOffset(titleEl) };
   return el && el.classList.contains('text') && outline.contains(el) ? { key: keyOfEl(el), offset: caretOffset(el) } : null;
 }
+// [node, offset] for a plain-text offset inside el (the DOM point the same character sits at)
+function textPoint(el, offset) {
+  let left = Math.max(0, Math.min(offset, el.textContent.length));
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  let t;
+  while ((t = walker.nextNode())) { if (left <= t.data.length) return [t, left]; left -= t.data.length; }
+  return [el, el.childNodes.length];
+}
+// put the selection back after a formatting round trip re-rendered the node
+function selectRange(key, start, end) {
+  const el = textEl(key);
+  if (!el) return;
+  el.focus();
+  const r = document.createRange(), [sn, so] = textPoint(el, start), [en, eo] = textPoint(el, end);
+  r.setStart(sn, so); r.setEnd(en, eo);
+  const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+}
 // [start, end] plain-text offsets of a non-empty selection inside el, else null
 function selectionOffsets(el) {
   const sel = getSelection();
@@ -617,6 +732,8 @@ let rendering = false; // a focusout caused by swapping elements out during a re
 function render() { rendering = true; try { renderOutline(); } finally { rendering = false; } }
 function renderOutline() {
   const saved = focused();
+  // a live update must not eat a selection: the formatting toolbar acts on it, and a re-render lands mid-toggle
+  const savedSel = saved && document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('text') ? selectionOffsets(document.activeElement) : null;
   items.clear();
   let trail = null;
   if (zoom) { trail = resolveZoom(); if (!trail) zoom = null; }
@@ -656,9 +773,10 @@ function renderOutline() {
   titleCheck.disabled = zoomedTask && !canEditItem(parent);
   titleCheck.onclick = zoomedTask && canEditItem(parent) ? () => toggleDone(parent) : null;
   titleEl.classList.toggle('done', zoomedTask && !!parent.node.done);
-  const taskInfo = zoomedTask ? taskSummary(parent.node) : null;
-  taskInfoEl.hidden = !taskInfo; taskInfoEl.replaceChildren();
-  if (taskInfo) { taskInfoEl.append(taskMetaEl(taskInfo)); if (visibleTags(parent.node).some((tag) => tag.label !== 'task')) appendTags(taskInfoEl, parent.node); }
+  // assignees and visibility now live at the top of the sidebar (railMetaRows); under the title only the chips remain
+  const titleTags = zoomedTask && visibleTags(parent.node).some((tag) => tag.label !== 'task');
+  taskInfoEl.hidden = !titleTags; taskInfoEl.replaceChildren();
+  if (titleTags) appendTags(taskInfoEl, parent.node);
   renderFields(parent);
   renderCrumbs(trail);
   renderRail(parent);
@@ -673,10 +791,16 @@ function renderOutline() {
   if (!parent && !list.length && !loading && !filterEl.value) { // an empty view says so; a filtered-out list is explained by the count below it
     const note = document.createElement('div');
     note.className = 'empty-note'; note.textContent = 'Nothing here yet';
+    if (viewFiltered()) { // the view is empty because of its filters, not because there is nothing there
+      const clear = document.createElement('button');
+      clear.className = 'clearfilters'; clear.textContent = 'Clear filters'; clear.onclick = clearFilters;
+      note.append(' ', clear);
+    }
     outline.append(note);
   }
   applySel();
-  if (saved) placeCaret(saved.key, saved.offset);
+  if (saved && savedSel) selectRange(saved.key, savedSel[0], savedSel[1]);
+  else if (saved) placeCaret(saved.key, saved.offset);
 }
 
 function resolveZoom() {
@@ -763,15 +887,55 @@ function focusRail(index = 0) {
   rows[Math.max(0, Math.min(rows.length - 1, index))].focus();
   return true;
 }
-function railKey(e, node, row) {
+// Up/Down/Escape work the same on every sidebar row, including the task metadata rows above Pinned
+function railMove(e, row) {
   const rows = railRowEls(), i = rows.indexOf(row);
-  if (e.key === 'ArrowDown') { e.preventDefault(); rows[Math.min(rows.length - 1, i + 1)].focus(); }
-  else if (e.key === 'ArrowUp') { e.preventDefault(); if (i > 0) rows[i - 1].focus(); }
-  else if (e.key === 'Enter') { e.preventDefault(); goTo(node.id); }
+  if (e.key === 'ArrowDown') { e.preventDefault(); rows[Math.min(rows.length - 1, i + 1)].focus(); return true; }
+  if (e.key === 'ArrowUp') { e.preventDefault(); if (i > 0) rows[i - 1].focus(); return true; }
+  if (e.key === 'Escape' || (e.key === 'ArrowLeft' && (e.metaKey || e.ctrlKey))) { e.preventDefault(); const first = texts()[0]; if (first) setCaret(first, 0); else titleEl.focus(); return true; }
+  return false;
+}
+function railKey(e, node, row) {
+  if (railMove(e, row)) return;
+  if (e.key === 'Enter') { e.preventDefault(); goTo(node.id); }
   else if (e.key === ' ') { e.preventDefault(); toggleRelated(node); }
   else if (e.key === 'ArrowLeft' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); toggleRailSection(row.dataset.section); } // collapse the section the focused row is in
   else if (e.key === 'ArrowRight' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); if (railClosed.has(row.dataset.section)) toggleRailSection(row.dataset.section); }
-  else if (e.key === 'Escape' || (e.key === 'ArrowLeft' && (e.metaKey || e.ctrlKey))) { e.preventDefault(); const first = texts()[0]; if (first) setCaret(first, 0); else titleEl.focus(); }
+}
+// A meeting's call link (api.related().call), at the very top of the sidebar so it can be joined from there.
+function railCallRow(data) {
+  const call = data && data.call;
+  if (!call || !call.url || !tana.openExternal) return null; // no call, no row
+  return { id: 'call', icon: 'video', label: call.label || call.url, run: () => run(() => tana.openExternal(call.url)) };
+}
+// The zoomed task's own metadata, at the top of the sidebar: who it is assigned to and who can see it. Both open the
+// pickers the palette already uses (api.setAssignees / api.setSharing). Nothing known, nothing shown.
+function railMetaRows(node) {
+  const summary = taskSummary(node);
+  if (!summary) return [];
+  const writable = canEditNode(node);
+  const rows = [{
+    id: 'assignees',
+    icon: summary.assignees === 'Unassigned' ? 'unassigned' : 'member',
+    label: summary.assignees === 'Unassigned' ? 'Unassigned' : 'Assigned to ' + summary.assignees,
+    run: writable && tana.taskMeta && tana.setAssignees ? () => openAssigneePalette(node) : null,
+  }];
+  if (summary.audience) rows.push({ // an unverifiable audience is not a row: there is nothing to show or change
+    id: 'visibility', icon: summary.audience.icon, label: summary.audience.label,
+    run: writable && tana.accessOptions ? () => openVisibilityPalette(node) : null,
+  });
+  return rows;
+}
+function railMetaEl(row) {
+  const el = document.createElement('div');
+  el.className = 'rrow rmeta' + (row.run ? '' : ' fixed'); // not .meta: that is the grey inline meta text of an outline row
+  el.tabIndex = -1; el.dataset.id = 'meta:' + row.id;
+  const icon = document.createElement('span'); icon.className = 'ricon'; icon.innerHTML = iconSvg(row.icon);
+  const title = document.createElement('span'); title.className = 'rtitle'; title.textContent = row.label;
+  el.append(icon, title);
+  el.onclick = row.run || null;
+  el.onkeydown = (e) => { if (railMove(e, el)) return; if (row.run && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); row.run(); } };
+  return el;
 }
 function toggleRailSection(label) {
   if (railClosed.has(label)) railClosed.delete(label); else railClosed.add(label);
@@ -786,8 +950,13 @@ function renderRail(parent) {
   if (!docId) { railEl.hidden = railGrip.hidden = true; return; }
   loadRelated(docId);
   const data = relatedBy.get(docId);
-  const groups = data ? [['Pinned', data.pinned], ['Outcomes', data.outcomes], ['Notes', data.notes]].filter(([, rows]) => rows && rows.length) : [];
-  railEl.hidden = railGrip.hidden = !groups.length;
+  const meta = railMetaRows(parent.node);
+  const call = railCallRow(data);
+  if (call) meta.unshift(call);
+  // "Notes" is what api.related calls them; in the sidebar they read as References
+  const groups = data ? [['Pinned', data.pinned], ['Outcomes', data.outcomes], ['References', data.notes]].filter(([, rows]) => rows && rows.length) : [];
+  railEl.hidden = railGrip.hidden = !groups.length && !meta.length;
+  for (const row of meta) railEl.append(railMetaEl(row));
   for (const [label, rows] of groups) {
     const head = document.createElement('button');
     head.className = 'rhead' + (railClosed.has(label) ? ' closed' : '');
@@ -839,7 +1008,9 @@ function nodeEl(node, docId, parent) {
   const has = hasKids(item), opened = isOpen(item);
   const expandable = has || (!node.draft && canEditItem(item));
   const el = document.createElement('div');
-  el.className = 'node ' + node.kind + (reference ? ' reference' : '') + (node.heading ? ' h' + node.heading : '') + (display.done ? ' done' : '') + (has ? ' has' : '') + (has && !opened ? ' collapsed' : '') + (node.draft ? ' draft' : '');
+  const heading = headingOf(node); // a heading arrives as node.heading or as the heading1-3 block type
+  const blockClass = node.kind === 'block' ? ' t-' + (isDivider(node) ? 'divider' : blockTypeOf(node)) : '';
+  el.className = 'node ' + node.kind + (reference ? ' reference' : '') + blockClass + (heading ? ' h' + heading : '') + (display.done ? ' done' : '') + (has ? ' has' : '') + (has && !opened ? ' collapsed' : '') + (node.draft ? ' draft' : '');
   el.dataset.key = item.key;
   const line = document.createElement('div'); line.className = 'line';
   const chev = document.createElement('button'); chev.className = 'chev'; chev.tabIndex = -1;
@@ -873,6 +1044,9 @@ function nodeEl(node, docId, parent) {
     if (typeof cached === 'string') img.src = cached;
     else { text.classList.add('loading'); (cached || images.set(uri, tana.image(uri)).get(uri)).then(show, (e) => { images.delete(uri); showError(e); }); }
     text.append(img);
+  } else if (isDivider(node)) { // atomic like an image: focusable so Up/Down and Backspace still reach it
+    text.classList.add('divider'); text.tabIndex = -1;
+    text.append(document.createElement('hr'));
   } else {
     if (canEditText(item)) text.contentEditable = 'plaintext-only'; else text.tabIndex = -1;
     text.spellcheck = false;
@@ -926,11 +1100,12 @@ async function materialise(item, el) {
     }
   });
   const latest = el.textContent, latestOff = caretOffset(el) ?? off; // typed on while the create was in flight
+  if (key && slashCtx && slashCtx.key === item.key) slashCtx = { key }; // the "/" menu opened on the draft: follow it to the real node
   render();
   const real = items.get(key);
   if (!real) return;
   if (latest !== text) { renderSegs(textEl(key), [{ text: latest }]); scheduleSave(real, [{ text: latest }]); }
-  placeCaret(key, latestOff);
+  if (palette.hidden) placeCaret(key, latestOff); // a palette opened while the node was being created keeps the keyboard
 }
 function dropDraft(item) {
   if (item.node.kind === 'document') { const s = sectionOf(item.docId); if (s) s.nodes.splice(s.nodes.indexOf(item.node), 1); }
@@ -1401,12 +1576,12 @@ function pillDefs() {
   const lib = view === 'library', f = lib ? libF : taskF, save = lib ? setLibF : setTaskF, defs = [];
   if (lib) defs.push({ id: 'type', value: names(TYPES, f.types) || 'Any type', icon: f.types && f.types.length === 1 ? TYPES.find((t) => t && t[0] === f.types[0])[2] : 'any', rows: () => [
     { label: 'Any type', icon: 'any', checked: !f.types, run: () => save({ types: null }) },
-    ...TYPES.map((t) => (t ? { label: t[1], icon: t[2], checked: !!f.types && f.types.includes(t[0]), run: () => save({ types: toggleIn(TYPES.filter(Boolean).map((x) => x[0]), f.types, t[0]) }) } : { div: true })),
+    ...TYPES.map((t) => (t ? { label: t[1], icon: t[2], keepOpen: true, checked: !!f.types && f.types.includes(t[0]), run: () => save({ types: toggleIn(TYPES.filter(Boolean).map((x) => x[0]), f.types, t[0]) }) } : { div: true })), // multi-select: the menu stays open to tick more
   ] });
   if (!lib || !f.types || f.types.includes('tasks')) {
     defs.push({ id: 'status', label: 'Status', value: names(STATES, f.states) || 'Any', rows: () => [
       { label: 'Any status', checked: !f.states, run: () => save({ states: null }) },
-      ...STATES.map(([v, l]) => ({ label: l, checked: !!f.states && f.states.includes(v), run: () => save({ states: toggleIn(STATES.map((s) => s[0]), f.states, v) }) })),
+      ...STATES.map(([v, l]) => ({ label: l, keepOpen: true, checked: !!f.states && f.states.includes(v), run: () => save({ states: toggleIn(STATES.map((s) => s[0]), f.states, v) }) })), // multi-select, like the type list
     ] });
     loadMembers();
     const you = 'You' + (me() ? ' (' + me().title + ')' : '');
@@ -1457,15 +1632,25 @@ function menuEl(d) {
     if (rows.some((x) => x.icon)) { const i = document.createElement('span'); i.className = 'micon'; i.innerHTML = r.icon ? iconSvg(r.icon) : ''; row.append(i); }
     const l = document.createElement('span'); l.className = 'mlabel'; l.textContent = r.label; row.append(l);
     if (r.checked && r.label !== 'Any status' && r.label !== 'Any type' && r.label !== 'Anyone') { const t = document.createElement('span'); t.className = 'tick'; t.textContent = '✓'; row.append(t); }
-    row.onclick = () => { menu.index = pick.indexOf(r); r.run(); };
+    row.onclick = () => pickMenuRow(r, pick);
     el.append(row);
   }
   return el;
 }
+// Choosing an option closes the menu, so it stops covering the list it just filtered. Multi-select rows (the type
+// and status ticks) keep it open; the single-choice row that ends the selection ("Any type", "Any status", an
+// assignee) closes it like every other choice.
+function pickMenuRow(r, pick) {
+  if (!r || !menu) return;
+  menu.index = pick.indexOf(r);
+  if (!r.keepOpen) menu = null;
+  r.run();
+  renderPills(true);
+}
 function pillKeys(e, d, pill) {
   const open = menu && menu.id === d.id, pick = open ? d.rows().filter((r) => r.label) : [];
   if (open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) { e.preventDefault(); menu.index = (menu.index + (e.key === 'ArrowDown' ? 1 : pick.length - 1)) % pick.length; renderPills(true); }
-  else if (open && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); pick[menu.index].run(); }
+  else if (open && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); pickMenuRow(pick[menu.index], pick); }
   else if (open && e.key === 'Escape') { e.preventDefault(); menu = null; renderPills(true); }
   else if (open && e.key === 'Tab') { menu = null; renderPills(true); }
   else if (d.toggle && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); d.toggle(); }
@@ -1585,6 +1770,186 @@ function createAndLink(ctx) {
 }
 function cancelLink() { const c = linkCtx; linkCtx = null; if (c) placeCaret(c.item.key, c.end); }
 
+// ---- selection toolbar: marks and block styles for the current selection, like Tana's floating toolbar ----
+// Keyboard first: ⌘B / ⌘I / ⇧⌘S / ⌘E toggle the marks, "@" links, Tab moves into the toolbar (Left/Right between
+// buttons, Down opens the style menu, Enter runs, Escape hands the caret back with the selection still there).
+const toolbarEl = $('toolbar');
+const MARK_KEYS = { b: 'bold', i: 'italic', e: 'code' };
+const TOOL_MARKS = [['bold', 'B', 'b', 'Bold ⌘B'], ['italic', 'I', 'i', 'Italic ⌘I'], ['strike', 'S', 's', 'Strikethrough ⇧⌘S'], ['code', '</>', 'c', 'Code ⌘E']];
+let toolCtx = null;       // { key, start, end }: the selection every toolbar action applies to
+let toolMenu = null;      // open style dropdown: { index }
+let toolDismissed = null; // the selection Escape dismissed; it comes back when the selection changes
+const toolItem = () => (toolCtx ? items.get(toolCtx.key) : null);
+const toolSegs = () => { const el = toolCtx && textEl(toolCtx.key); return el ? readSegs(el) : []; };
+const sameRange = (a, b) => !!a && !!b && a.key === b.key && a.start === b.start && a.end === b.end;
+function hideToolbar(dismiss) { toolbarEl.hidden = true; toolMenu = null; toolDismissed = dismiss ? toolCtx : null; }
+function updateToolbar() {
+  if (!toolbarEl.hidden && toolbarEl.contains(document.activeElement)) return; // the toolbar has the keyboard: leave it alone
+  const el = document.activeElement;
+  const item = el && el.classList && el.classList.contains('text') && outline.contains(el) ? items.get(keyOfEl(el)) : null;
+  const range = item && canEditText(item) && item.node.kind === 'block' && !isAtomic(item.node) ? selectionOffsets(el) : null;
+  if (!range) return hideToolbar();
+  const next = { key: item.key, start: range[0], end: range[1] };
+  if (sameRange(toolDismissed, next)) return;
+  toolDismissed = null; toolCtx = next;
+  renderToolbar();
+}
+document.addEventListener('selectionchange', updateToolbar);
+function renderToolbar() {
+  const item = toolItem();
+  if (!item) return hideToolbar();
+  const segs = toolSegs();
+  toolbarEl.replaceChildren();
+  const style = document.createElement('button');
+  style.type = 'button'; style.className = 'tbtn style' + (toolMenu ? ' open' : ''); style.dataset.id = 'style';
+  style.title = 'Text style'; style.append(BLOCK_LABEL.get(blockTypeOf(item.node)) || 'Text');
+  const caret = document.createElement('span'); caret.className = 'tcaret'; caret.innerHTML = CHEV; style.append(caret);
+  style.onclick = toggleStyleMenu;
+  toolbarEl.append(style);
+  if (toolMenu) style.append(styleMenuEl(item));
+  for (const [mark, label, cls, title] of TOOL_MARKS) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.dataset.id = mark; b.title = title; b.textContent = label;
+    b.className = 'tbtn ' + cls + (hasMark(segs, toolCtx.start, toolCtx.end, mark) ? ' on' : '');
+    b.setAttribute('aria-pressed', String(b.className.includes(' on')));
+    b.onclick = () => applyMark(mark);
+    toolbarEl.append(b);
+  }
+  const at = document.createElement('button');
+  at.type = 'button'; at.className = 'tbtn at'; at.dataset.id = 'link'; at.title = 'Link to a document (@)'; at.textContent = '@';
+  at.onclick = linkSelection;
+  toolbarEl.append(at);
+  toolbarEl.hidden = false;
+  placeToolbar();
+}
+function placeToolbar() {
+  const sel = getSelection();
+  if (!sel.rangeCount || !toolbarEl.getBoundingClientRect) return;
+  const rects = sel.getRangeAt(0).getClientRects(), r = rects[0] || sel.getRangeAt(0).getBoundingClientRect();
+  if (!r) return;
+  const width = toolbarEl.getBoundingClientRect().width || 280;
+  toolbarEl.style.left = Math.max(8, Math.min(innerWidth - width - 8, r.left)) + 'px';
+  toolbarEl.style.top = Math.max(8, r.top - 44) + 'px';
+}
+function styleMenuEl(item) {
+  const el = document.createElement('div'); el.className = 'menu';
+  BLOCK_TYPES.forEach(([type, label], i) => {
+    const row = document.createElement('div'); row.className = 'mrow' + (i === toolMenu.index ? ' active' : '');
+    const icon = document.createElement('span'); icon.className = 'micon'; icon.innerHTML = glyphSvg(type);
+    const text = document.createElement('span'); text.className = 'mlabel'; text.textContent = label;
+    row.append(icon, text);
+    if (blockTypeOf(item.node) === type) { const tick = document.createElement('span'); tick.className = 'tick'; tick.textContent = '✓'; row.append(tick); }
+    row.onclick = () => applyBlockType(type);
+    el.append(row);
+  });
+  return el;
+}
+function focusToolbar() { const b = toolbarEl.querySelector('.tbtn'); if (b) b.focus(); }
+function toggleStyleMenu() {
+  const item = toolItem();
+  const at = item ? BLOCK_TYPES.findIndex(([type]) => type === blockTypeOf(item.node)) : 0;
+  toolMenu = toolMenu ? null : { index: Math.max(0, at) };
+  renderToolbar(); focusToolbar();
+}
+// the caret goes back where it was, selection intact, so Escape never costs the user their selection
+function returnToSelection() { const ctx = toolCtx; hideToolbar(true); if (ctx) selectRange(ctx.key, ctx.start, ctx.end); }
+toolbarEl.addEventListener('mousedown', (e) => e.preventDefault()); // clicking a button must not drop the selection it acts on
+toolbarEl.addEventListener('keydown', (e) => {
+  const buttons = [...toolbarEl.querySelectorAll('.tbtn')], i = Math.max(0, buttons.indexOf(document.activeElement));
+  if (toolMenu) {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); toolMenu.index = (toolMenu.index + (e.key === 'ArrowDown' ? 1 : BLOCK_TYPES.length - 1)) % BLOCK_TYPES.length; renderToolbar(); focusToolbar(); }
+    else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); applyBlockType(BLOCK_TYPES[toolMenu.index][0]); }
+    else if (e.key === 'Escape') { e.preventDefault(); toolMenu = null; renderToolbar(); focusToolbar(); }
+    return;
+  }
+  if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); const next = buttons[(i + (e.key === 'ArrowRight' ? 1 : buttons.length - 1)) % buttons.length]; if (next) next.focus(); }
+  else if (e.key === 'ArrowDown' && buttons[i] && buttons[i].dataset.id === 'style') { e.preventDefault(); toggleStyleMenu(); }
+  else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (buttons[i]) buttons[i].click(); }
+  else if (e.key === 'Escape' || e.key === 'Tab') { e.preventDefault(); returnToSelection(); }
+});
+// a mark toggle re-sends the whole block with the marks split at the selection (the renderer never computes Loro offsets)
+async function applyMark(mark, value) {
+  const ctx = toolCtx, item = toolItem(), el = ctx && textEl(ctx.key);
+  if (!ctx || !item || !el || item.node.kind !== 'block' || !canEditText(item)) return;
+  dropPending(ctx.key);
+  const segs = readSegs(el);
+  const next = markRange(segs, ctx.start, ctx.end, mark, value === undefined ? (hasMark(segs, ctx.start, ctx.end, mark) ? null : true) : value);
+  item.node.text = plainOf(next); item.node.segments = next;
+  renderSegs(el, next); // the mark shows before the round trip finishes
+  await run(() => tana.setText(item.docId, item.node.id, saveValue(next)));
+  render();
+  selectRange(ctx.key, ctx.start, ctx.end);
+}
+function toggleMarkKey(item, el, mark) {
+  const range = selectionOffsets(el);
+  if (!range) return; // no selection: nothing to mark (and the browser's own bold never runs)
+  toolCtx = { key: item.key, start: range[0], end: range[1] };
+  applyMark(mark);
+}
+async function applyBlockType(type) {
+  const ctx = toolCtx, item = toolItem();
+  toolMenu = null;
+  if (!item || item.node.kind !== 'block' || !tana.setBlockType) return renderToolbar();
+  flush(item.key);
+  await run(async () => { await tana.setBlockType(item.docId, item.node.id, type); await reload(item.docId); });
+  render();
+  if (ctx) selectRange(ctx.key, ctx.start, ctx.end);
+}
+function linkSelection() { // the @ button runs the same linking flow as typing "@" over a selection
+  const ctx = toolCtx, item = toolItem(), el = ctx && textEl(ctx.key);
+  hideToolbar();
+  if (item && el) startLink(item, el, [ctx.start, ctx.end]);
+}
+
+// ---- "/" at the start of an empty node: block types, a divider, then what api.creationOptions offers ----
+let slashCtx = null; // { key } the node holding the "/"; kept until another palette mode opens
+function slashTarget() { return slashCtx ? items.get(slashCtx.key) : null; }
+function openSlash(item) {
+  slashCtx = { key: item.key };
+  togglePalette('slash');
+  loadCreationChoices();
+}
+function slashRows(q) {
+  const rows = [...BLOCK_TYPES.filter(([type]) => type !== 'paragraph'), ['divider', 'Divider']].map(([type, label]) => ({
+    group: 'Blocks', svg: glyphSvg(type), label,
+    disabled: type === 'divider' ? !tana.insertDivider : !tana.setBlockType,
+    run: () => runSlashBlock(type),
+  }));
+  // Doc and Task are always offered; the workspace types come from the same source as the Cmd+K "Create new…" list
+  const choices = creationChoices.some((c) => c.kind === 'doc') ? creationChoices : [{ kind: 'doc', title: 'Doc', icon: 'doc', selectable: true }, ...creationChoices];
+  for (const choice of choices) rows.push({
+    group: choice.kind === 'custom' ? 'Workspace types' : 'Create', icon: choice.icon, svg: choice.iconSvg, hue: choice.hue,
+    label: 'Create ' + choice.title, hint: choice.selectable ? '' : choice.reason || 'Unavailable', disabled: !choice.selectable,
+    run: () => createFromSlash(choice),
+  });
+  if (palBusy) rows.push({ group: 'Create', label: 'Loading choices…', disabled: true });
+  return rows.filter((r) => r.label.toLowerCase().includes(q));
+}
+async function runSlashBlock(type) {
+  const item = slashTarget();
+  if (!item || item.node.kind !== 'block') return;
+  dropPending(item.key);
+  const { docId, node } = item;
+  await run(async () => {
+    await tana.setText(docId, node.id, []); // the "/" was the command, not text
+    if (type === 'divider') await tana.insertDivider(docId, node.id);
+    else await tana.setBlockType(docId, node.id, type);
+    await reload(docId);
+  });
+  node.text = ''; node.segments = [];
+  render();
+  placeCaret(item.key, 0);
+}
+function createFromSlash(choice) {
+  const item = slashTarget();
+  if (item && item.node.kind === 'block') {
+    dropPending(item.key);
+    item.node.text = ''; item.node.segments = [];
+    run(() => tana.setText(item.docId, item.node.id, []));
+  }
+  startCreation(choice);
+}
+
 // ---- navigation ----
 function moveTo(el, dir, offset) {
   const all = texts(), target = all[all.indexOf(el) + dir];
@@ -1600,6 +1965,18 @@ outline.addEventListener('keydown', (e) => {
   const item = items.get(keyOfEl(el)), mod = e.metaKey || e.ctrlKey;
   const off = caretOffset(el), len = el.textContent.length, collapsed = getSelection().isCollapsed;
   const isDoc = item.node.kind === 'document';
+  if (isAtomic(item.node)) { // image or divider, not editable: Backspace / ⌘⇧⌫ removes, Up/Down step past, Shift+Up/Down select, ⌘⇧Up/Down moves; everything else is swallowed
+    const vert = e.key === 'ArrowUp' || e.key === 'ArrowDown', dir = e.key === 'ArrowUp' ? -1 : 1;
+    if (e.key === 'Backspace') removeNode(item, el);
+    else if (vert && e.shiftKey && mod) shiftNode(item, el, 'move', dir < 0 ? 'up' : 'down');
+    else if (vert && e.shiftKey) extendSel(item, dir);
+    else if (vert && !mod) moveTo(el, dir, 0);
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') moveTo(el, e.key === 'ArrowLeft' ? -1 : 1, e.key === 'ArrowLeft' ? Infinity : 0);
+    else if (e.key === 'Tab') shiftNode(item, el, e.shiftKey ? 'outdent' : 'indent');
+    else if (e.key === 'Escape') el.blur();
+    else if (mod) return; // ⌘K / ⌘S / ⌘Z … reach the document handler
+    return e.preventDefault();
+  }
   if (!canEditItem(item)) {
     if (isReference(item.node) && canEditStructure(item)) {
       const vert = e.key === 'ArrowUp' || e.key === 'ArrowDown', dir = e.key === 'ArrowUp' ? 'up' : 'down';
@@ -1627,19 +2004,12 @@ outline.addEventListener('keydown', (e) => {
     if (e.key === 'Backspace' && len === 0) { e.preventDefault(); const all = texts(), prev = all[all.indexOf(el) - 1], k = prev && keyOfEl(prev); dropDraft(item); return k ? placeCaret(k) : focusAbove(); }
     if (e.key !== 'Escape' && !(e.key.startsWith('Arrow') && !mod)) return;
   }
-  if (isImage(item.node)) { // not editable: Backspace / ⌘⇧⌫ removes, Up/Down step past, Shift+Up/Down select, ⌘⇧Up/Down moves; everything else is swallowed
-    const vert = e.key === 'ArrowUp' || e.key === 'ArrowDown', dir = e.key === 'ArrowUp' ? -1 : 1;
-    if (e.key === 'Backspace') removeNode(item, el);
-    else if (vert && e.shiftKey && mod) shiftNode(item, el, 'move', dir < 0 ? 'up' : 'down');
-    else if (vert && e.shiftKey) extendSel(item, dir);
-    else if (vert && !mod) moveTo(el, dir, 0);
-    else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') moveTo(el, e.key === 'ArrowLeft' ? -1 : 1, e.key === 'ArrowLeft' ? Infinity : 0);
-    else if (e.key === 'Tab') shiftNode(item, el, e.shiftKey ? 'outdent' : 'indent');
-    else if (e.key === 'Escape') el.blur();
-    else if (mod) return; // ⌘K / ⌘S / ⌘Z … reach the document handler
-    return e.preventDefault();
-  }
-  if (e.key === 'Escape') { e.preventDefault(); flush(item.key); el.blur(); }
+  // formatting: the toolbar's toggles from the keyboard, and Tab/Escape into and out of the toolbar itself
+  if (e.key === 'Escape' && !toolbarEl.hidden) { e.preventDefault(); returnToSelection(); }
+  else if (e.key === 'Tab' && !e.shiftKey && !toolbarEl.hidden) { e.preventDefault(); focusToolbar(); }
+  else if (mod && !e.shiftKey && MARK_KEYS[e.key.toLowerCase()]) { e.preventDefault(); toggleMarkKey(item, el, MARK_KEYS[e.key.toLowerCase()]); }
+  else if (mod && e.shiftKey && e.key.toLowerCase() === 's') { e.preventDefault(); toggleMarkKey(item, el, 'strike'); }
+  else if (e.key === 'Escape') { e.preventDefault(); flush(item.key); el.blur(); }
   else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && e.shiftKey && !mod) { e.preventDefault(); extendSel(item, e.key === 'ArrowUp' ? -1 : 1); } // multi-select over siblings
   else if (e.key === '@' && !collapsed) { const range = selectionOffsets(el); if (range) { e.preventDefault(); startLink(item, el, range); } } // no selection: "@" is typed
   else if (e.key === 'Enter' && mod) { e.preventDefault(); if (isDoc) toggleDone(item); else toggleCheckbox(item); }
@@ -1666,6 +2036,7 @@ outline.addEventListener('input', (e) => {
   if (!canEditText(item)) return;
   if (!item.node.draft) scheduleSave(item, readSegs(el));
   else if (!item.busy && !item.node.pendingSplit) { item.busy = true; materialise(item, el); }
+  if (item.node.kind === 'block' && el.textContent === '/' && palette.hidden) openSlash(item); // "/" alone in a node is the command menu
 });
 outline.addEventListener('focusout', (e) => {
   const el = e.target, item = el.classList && el.classList.contains('text') && items.get(keyOfEl(el));
@@ -1689,7 +2060,7 @@ outline.addEventListener('click', (e) => {
   if (!e.target.closest) return;
   const mention = e.target.closest('.mention');
   if (mention) { e.preventDefault(); return goTo(mention.dataset.uri); }
-  const url = e.target.closest('a.url'); // a plain link in the text opens in the browser, like Tana
+  const url = e.target.closest('a.url, a.link'); // a bare URL and a link mark both open in the browser, like Tana
   if (url && tana.openExternal) { e.preventDefault(); run(() => tana.openExternal(url.dataset.href)); }
 });
 
@@ -1795,10 +2166,16 @@ function creationRows(q) {
 function openCreationPalette() {
   palMode = 'create'; palRows = []; palIndex = 0; palette.hidden = false;
   palInput.placeholder = 'Choose what to create'; palInput.value = ''; renderPalette(); palInput.focus();
-  const seq = ++palSeq; palBusy = true; tana.creationOptions().then((result) => {
-    if (seq !== palSeq || palMode !== 'create') return;
+  loadCreationChoices();
+}
+// the create choices feed both the Cmd+K "Create new…" list and the "/" menu
+function loadCreationChoices() {
+  if (!tana.creationOptions) return;
+  const seq = ++palSeq, mode = palMode; palBusy = true;
+  tana.creationOptions().then((result) => {
+    if (seq !== palSeq || palMode !== mode) return;
     creationChoices = result.options || []; palBusy = false; renderPalette();
-  }, (e) => { if (seq === palSeq && palMode === 'create') { palBusy = false; showError(e); renderPalette(); } });
+  }, (e) => { if (seq === palSeq && palMode === mode) { palBusy = false; showError(e); renderPalette(); } });
 }
 function creationSection(choice) {
   const id = choice.kind === 'task' ? 'tasks' : choice.kind === 'meeting' || choice.appliesTo === 'events' ? 'meetings' : choice.kind === 'chat' ? 'chats' : 'library';
@@ -1838,6 +2215,7 @@ function renderPalette() {
   const q = palInput.value.trim();
   if (palMode === 'cmd') palRows = paletteRows(q.toLowerCase());
   else if (palMode === 'create') palRows = creationRows(q.toLowerCase());
+  else if (palMode === 'slash') palRows = slashRows(q.toLowerCase());
   else if (palMode === 'assignees') palRows = assigneeRows(q.toLowerCase());
   else if (palMode === 'visibility') palRows = visibilityRows(q.toLowerCase());
   else if (palMode === 'visibilityPeople') palRows = visibilityPeopleRows(q.toLowerCase());
@@ -1859,7 +2237,7 @@ function renderPalette() {
     row.onclick = () => runRow(r);
     els.push(row);
   });
-  if (!palRows.some((r) => palMode === 'cmd' || r.node) && (palMode === 'cmd' || (q && !palBusy))) { const n = document.createElement('div'); n.className = 'group'; n.textContent = 'No results'; els.push(n); }
+  if (!palRows.some((r) => palMode === 'cmd' || palMode === 'slash' || r.node) && (palMode === 'cmd' || palMode === 'slash' || (q && !palBusy))) { const n = document.createElement('div'); n.className = 'group'; n.textContent = 'No results'; els.push(n); }
   palList.replaceChildren(...els);
   const active = palList.querySelector('.row.active');
   if (active) active.scrollIntoView({ block: 'nearest' });
@@ -1873,9 +2251,10 @@ function togglePalette(mode, link) {
   if (!show) { clearTimeout(palTimer); palTimer = null; return returnFocus(); }
   if (!palReturn) palReturn = focused(); // switching modes keeps the original return target
   linkCtx = link || null;
+  if (mode !== 'slash') slashCtx = null;
   palMode = mode; palRows = []; palIndex = 0; palBusy = false; clearTimeout(palTimer); palTimer = null;
   if (mode === 'cmd') { palDoc = currentDoc(); loadPins(); }
-  palInput.placeholder = mode === 'search' ? 'Search Tana' : 'Search or run a command';
+  palInput.placeholder = mode === 'search' ? 'Search Tana' : mode === 'slash' ? 'Choose a block type or create' : 'Search or run a command';
   palInput.value = link ? link.text : '';
   if (mode === 'search') searchNow(); else renderPalette();
   palInput.focus();
@@ -1892,7 +2271,7 @@ function nextPalIndex(rows, index, step) {
 }
 palInput.addEventListener('input', () => {
   palIndex = 0;
-  if (palMode === 'cmd' || palMode === 'create' || palMode === 'assignees' || palMode === 'visibility' || palMode === 'visibilityPeople') return renderPalette();
+  if (palMode === 'cmd' || palMode === 'create' || palMode === 'slash' || palMode === 'assignees' || palMode === 'visibility' || palMode === 'visibilityPeople') return renderPalette();
   if (palMode === 'spaces') { palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchSpacesNow, 150); return; }
   palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchNow, 150);
 });

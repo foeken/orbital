@@ -54,11 +54,18 @@ function taskParams(f, me, limit = 500) {
 }
 
 // One listNodes per selected kind: [{ kind, params }]. 'docs' returns all text nodes; the caller drops those with a state.
+// The assignee goes on every kind's query, not only on tasks: the graph filters any node type by assignedTo, so a kind
+// that cannot carry an assignee (events, chats, agents, skills) comes back empty instead of coming back unfiltered and
+// looking like a match. It is in effect only while tasks are in the selection, which is when the Assigned pill is shown
+// (docs/OUTLINER.md Library view).
 function libraryQueries(f, me, limit = 100) {
   const text = String(f.text || '').trim();
-  return (f.types || LIBRARY_KINDS).map((kind) => {
+  const kinds = f.types || LIBRARY_KINDS;
+  const assignee = kinds.includes('tasks') ? f.assignee : 'anyone';
+  return kinds.map((kind) => {
     if (!LIBRARY_KINDS.includes(kind)) throw new Error('unknown library type: ' + kind);
-    const params = kind === 'tasks' ? taskParams(f, me, limit) : { nodeTypes: [KIND_NODE_TYPE[kind]], limit, sortOptions: UPDATE_DESC };
+    const params = kind === 'tasks' ? taskParams({ ...f, assignee }, me, limit)
+      : { nodeTypes: [KIND_NODE_TYPE[kind]], ...assigneeParams(assignee, me), limit, sortOptions: UPDATE_DESC };
     if (text) params.textQuery = text;
     return { kind, params };
   });

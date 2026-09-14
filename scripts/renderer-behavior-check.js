@@ -6,6 +6,24 @@ const vm = require('node:vm');
 
 const source = fs.readFileSync(require.resolve('../renderer.js'), 'utf8');
 const plain = (value) => JSON.parse(JSON.stringify(value));
+// Enough DOM for the inline renderer: elements with children, classes, dataset and textContent, plus text nodes.
+const FAKE_DOM = `
+  const textNode = (data) => ({ nodeType: 3, nodeName: '#text', data, get textContent() { return this.data; } });
+  const makeEl = (tagName) => {
+    const classes = new Set();
+    return {
+      nodeType: 1, tagName, nodeName: tagName.toUpperCase(), childNodes: [], dataset: {},
+      classList: { add: (...names) => names.forEach((name) => classes.add(name)), contains: (name) => classes.has(name), toggle() {} },
+      get className() { return [...classes].join(' '); },
+      set className(value) { classes.clear(); for (const name of String(value).split(' ')) if (name) classes.add(name); },
+      append(...kids) { this.childNodes.push(...kids); },
+      replaceChildren(...kids) { this.childNodes = kids; },
+      get textContent() { return this.childNodes.map((kid) => kid.textContent).join(''); },
+      set textContent(value) { this.childNodes = [textNode(value)]; },
+    };
+  };
+  const document = { createElement: makeEl, createTextNode: textNode };
+`;
 
 function functionSource(name) {
   const asyncStart = source.indexOf('async function ' + name + '(');
@@ -83,7 +101,7 @@ async function runSelectionChecks() {
       const focusAbove = () => { caret = 'above'; };
       const dropPending = () => {};
       const canEditItem = (item) => item.node.editable !== false;
-      const isReference = () => false, canEditNode = (node) => node && node.editable !== false;
+      const isReference = () => false, isDivider = () => false, canEditNode = (node) => node && node.editable !== false;
       ${canEditStructure}
       const render = () => { rendered++; };
       const reload = async () => {};
@@ -221,6 +239,8 @@ function runEditabilityCheck() {
       const shiftNode = () => { mutation++; }, removeNode = () => { mutation++; }, setOpen = () => { mutation++; };
       const atEdge = () => false, moveTo = () => {}, selectionOffsets = () => null;
       const focusAbove = () => {}, texts = () => [], placeCaret = () => {};
+      const isAtomic = () => false, MARK_KEYS = { b: 'bold', i: 'italic', e: 'code' };
+      const toolbarEl = { hidden: true }, returnToSelection = () => {}, focusToolbar = () => {}, toggleMarkKey = () => {};
       ${source.slice(start, end)}
       Object.assign(globalThis, { mutation: () => mutation });
     `, context);
@@ -324,6 +344,8 @@ async function runTaskChildCheckboxScopeCheck() {
     const hasKids = () => false, isOpen = () => false, setOpen = () => {}, zoomTo = () => {};
     const renderSegs = () => {}, segsOf = () => [], asDoc = (node) => ({ ...node, kind: 'document', text: node.text ?? node.title ?? '' });
     const isImage = () => false, taskSummary = () => null, chipEl = () => ({});
+    const isDivider = () => false;
+    ${sourceBetween('// Block types (api.setBlockType)', 'const images = new Map()')}
     const tana = {};
     const document = { createElement: (tagName) => {
       const classes = new Set();
@@ -456,6 +478,8 @@ function runReferenceEmbedRenderCheck() {
     const hasKids = () => false, isOpen = () => false, setOpen = () => {}, zoomTo = () => {};
     const rendered = new Map();
     const renderSegs = (el, segs) => { rendered.set(el, segs); }, segsOf = (node) => node.segments || (node.text ? [{ text: node.text }] : []);
+    const isDivider = () => false;
+    ${sourceBetween('// Block types (api.setBlockType)', 'const images = new Map()')}
     const asDoc = (node) => ({ ...node, kind: 'document', text: node.text ?? node.title ?? '' });
     const isImage = () => false, taskSummary = () => null, chipEl = () => ({}), iconSvg = () => '';
     const tana = {};
@@ -811,6 +835,8 @@ function runRowAlignmentCheck() {
     const renderSegs = () => {}, segsOf = () => [], asDoc = (node) => ({ ...node, kind: 'document', text: node.text ?? node.title ?? '' });
     const isImage = () => false, taskSummary = () => null, chipEl = () => ({}), iconSvg = () => '';
     const childEl = () => document.createElement('div');
+    const isDivider = () => false;
+    ${sourceBetween('// Block types (api.setBlockType)', 'const images = new Map()')}
     const tana = {};
     const document = { createElement: (tagName) => {
       const classes = new Set();
@@ -888,7 +914,241 @@ function runPaletteSkipCheck() {
   assert.match(styles, /\.palette \.row\.disabled \{/, 'a palette row that cannot run looks different from a runnable one');
 }
 
-const checks = [runPinGrouping, runSelectionChecks, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck];
+// Formatting: marks survive the DOM round trip, and toggling one over a selection rewrites only that range.
+// Every edit re-sends the whole block through api.setText, so a lossy read here would silently drop a user's marks.
+function runFormattingChecks() {
+  const segments = sourceBetween('// accepts segments, a plain string, or a Node', 'const tana = window.api');
+  const api = vm.runInNewContext(`
+    ${FAKE_DOM}
+    ${segments}
+    ({ renderSegs, readSegs, markRange, hasMark, saveValue, blank: () => document.createElement('span'),
+       tags: (el) => { const out = []; (function walk(n) { for (const kid of n.childNodes) if (kid.nodeType === 1) { out.push(kid.nodeName + (kid.className ? '.' + kid.className : '')); walk(kid); } })(el); return out; } });
+  `);
+  const segs = [
+    { text: 'plain ' },
+    { text: 'bold', marks: { bold: true } },
+    { text: ' ' },
+    { text: 'both', marks: { bold: true, italic: true } },
+    { mention: { label: 'Lex', uri: 'tana:user-profile:lex' } },
+    { text: ' struck', marks: { strike: true } },
+    { text: ' code', marks: { code: true } },
+    { text: ' linked', marks: { link: 'https://example.com' } },
+    { text: ' and a bare https://tana.inc URL' },
+  ];
+  const el = api.blank();
+  api.renderSegs(el, segs);
+  assert.deepEqual(plain(api.tags(el)), ['STRONG', 'STRONG', 'EM', 'A.mention', 'S', 'CODE', 'A.link', 'A.url'],
+    'every mark renders as its own element, a link mark as an anchor beside the bare-URL one');
+  assert.deepEqual(plain(api.readSegs(el)), segs, 'rendered marks read back as the same segments api.setText takes');
+
+  const base = [{ text: 'hello world' }];
+  const bolded = api.markRange(base, 0, 5, 'bold', true);
+  assert.deepEqual(plain(bolded), [{ text: 'hello', marks: { bold: true } }, { text: ' world' }], 'a mark splits the run at the selection');
+  assert.equal(api.hasMark(bolded, 0, 5, 'bold'), true, 'the marked range reads as marked, so the button is a toggle');
+  assert.equal(api.hasMark(bolded, 0, 11, 'bold'), false, 'a partly marked range is not marked');
+  assert.deepEqual(plain(api.markRange(bolded, 0, 5, 'bold', null)), base, 'toggling the mark off merges the runs back into one');
+  assert.deepEqual(plain(api.markRange(bolded, 0, 5, 'link', 'https://tana.inc')),
+    [{ text: 'hello', marks: { bold: true, link: 'https://tana.inc' } }, { text: ' world' }], 'marks stack on the same run');
+  const withMention = [{ text: 'see ' }, { mention: { label: 'Lex', uri: 'u' } }, { text: ' now' }];
+  assert.deepEqual(plain(api.markRange(withMention, 0, 11, 'bold', true)),
+    [{ text: 'see ', marks: { bold: true } }, { mention: { label: 'Lex', uri: 'u' } }, { text: ' now', marks: { bold: true } }],
+    'a mention inside the selection is left whole');
+  assert.deepEqual(plain(api.saveValue([{ text: 'x', marks: { bold: true } }])), [{ text: 'x', marks: { bold: true } }], 'a marked run is saved as segments, not flattened to a string');
+  assert.equal(api.saveValue([{ text: 'plain' }]), 'plain', 'unmarked text still saves as a plain string');
+}
+
+// The "/" menu: the block types, a divider, then the create choices; running a row drops the "/" and calls the contract.
+function makeSlashHarness() {
+  const blockTypes = sourceBetween('// Block types (api.setBlockType)', 'const images = new Map()');
+  const context = vm.createContext({});
+  vm.runInContext(`
+    const calls = [];
+    const node = { id: 'block', kind: 'block', text: '/', segments: [{ text: '/' }] };
+    const item = { key: 'doc/block', docId: 'doc', node };
+    const items = new Map([['doc/block', item]]);
+    let slashCtx = { key: 'doc/block' };
+    let creationChoices = [
+      { id: 'task', kind: 'task', title: 'Task', icon: 'task', selectable: true },
+      { id: 'tana:type:project', kind: 'custom', title: 'Project', hue: 268, selectable: true },
+    ];
+    let palBusy = false;
+    ${blockTypes}
+    const dropPending = () => {}, render = () => {};
+    const placeCaret = (key, offset) => calls.push(['caret', key, offset]);
+    const reload = async () => { calls.push(['reload']); };
+    const run = async (fn) => fn();
+    const startCreation = (choice) => calls.push(['startCreation', choice.kind, choice.title]);
+    const tana = {
+      setText: async (docId, id, value) => calls.push(['setText', docId, id, value]),
+      setBlockType: async (docId, id, type) => calls.push(['setBlockType', docId, id, type]),
+      insertDivider: async (docId, id) => calls.push(['insertDivider', docId, id]),
+    };
+    ${functionSource('slashTarget')}
+    ${functionSource('slashRows')}
+    ${functionSource('runSlashBlock')}
+    ${functionSource('createFromSlash')}
+    Object.assign(globalThis, { rows: (q) => slashRows(q), calls: () => calls, text: () => node.text });
+  `, context);
+  return context;
+}
+async function runSlashMenuCheck() {
+  const listing = makeSlashHarness();
+  assert.deepEqual(plain(listing.rows('').map((row) => row.label)),
+    ['Heading 1', 'Heading 2', 'Heading 3', 'Bullet List', 'Numbered List', 'Code Block', 'Quote', 'Divider', 'Create Doc', 'Create Task', 'Create Project'],
+    'the "/" menu offers every block type, a divider, and the create choices');
+  assert.deepEqual(plain(listing.rows('head').map((row) => row.label)), ['Heading 1', 'Heading 2', 'Heading 3'], 'typing filters the menu');
+
+  const quote = makeSlashHarness();
+  await quote.rows('').find((row) => row.label === 'Quote').run();
+  assert.deepEqual(plain(quote.calls()), [['setText', 'doc', 'block', []], ['setBlockType', 'doc', 'block', 'quote'], ['reload'], ['caret', 'doc/block', 0]],
+    'a block choice clears the "/" and sets the block type, leaving the caret in the node');
+  assert.equal(quote.text(), '', 'the "/" is the command, not text left behind');
+
+  const divider = makeSlashHarness();
+  await divider.rows('').find((row) => row.label === 'Divider').run();
+  assert.deepEqual(plain(divider.calls()), [['setText', 'doc', 'block', []], ['insertDivider', 'doc', 'block'], ['reload'], ['caret', 'doc/block', 0]],
+    'Divider inserts a divider after the node instead of retyping it');
+
+  const create = makeSlashHarness();
+  create.rows('').find((row) => row.label === 'Create Project').run();
+  assert.deepEqual(plain(create.calls()), [['setText', 'doc', 'block', []], ['startCreation', 'custom', 'Project']],
+    'a create choice clears the "/" and starts the ordinary creation flow');
+}
+
+// A filter choice must stop covering the list it just filtered: single-choice rows close the menu, multi-select ticks stay.
+function runFilterMenuCloseCheck() {
+  const definitions = sourceBetween('const STATES =', 'function renderPills');
+  const api = vm.runInNewContext(`
+    let view = 'library';
+    let taskF = { states: ['open'], assignee: 'me' }, libF = { types: ['tasks'], states: ['open'], assignee: 'me' };
+    let members = [{ id: 'me', title: 'André', me: true }, { id: 'lex', title: 'Lex' }];
+    let menu = null, showMcp = false;
+    const tana = {};
+    const $ = () => ({ hidden: false });
+    const renderPills = () => {};
+    const showError = () => {}, setMcp = () => {};
+    const setTaskF = (patch) => { taskF = { ...taskF, ...patch }; };
+    const setLibF = (patch) => { libF = { ...libF, ...patch }; };
+    ${definitions}
+    ${functionSource('pickMenuRow')}
+    ({ pick: (id, label) => {
+        menu = { id, index: 0 };
+        const rows = pillDefs().find((d) => d.id === id).rows().filter((r) => r.label);
+        pickMenuRow(rows.find((r) => r.label === label), rows);
+        return { open: !!menu, taskF, libF };
+      },
+      reset: () => { libF = { types: ['tasks'], states: ['open'], assignee: 'me' }; taskF = { states: ['open'], assignee: 'me' }; } });
+  `);
+  const anyType = api.pick('type', 'Any type');
+  assert.deepEqual(plain(anyType), { open: false, taskF: { states: ['open'], assignee: 'me' }, libF: { types: null, states: ['open'], assignee: 'me' } },
+    '"Any type" is a single choice: it applies and closes');
+  api.reset();
+  assert.equal(api.pick('type', 'Meetings').open, true, 'a tickable type keeps the multi-select menu open');
+  api.reset();
+  assert.equal(api.pick('status', 'Completed').open, true, 'a tickable status keeps the multi-select menu open');
+  api.reset();
+  assert.equal(api.pick('status', 'Any status').open, false, '"Any status" ends the selection and closes');
+  api.reset();
+  const assigned = api.pick('assigned', 'Lex');
+  assert.equal(assigned.open, false, 'choosing an assignee closes the menu');
+  assert.equal(assigned.libF.assignee, 'lex', 'and still applies the choice');
+  api.reset();
+  assert.equal(api.pick('assigned', 'Anyone').open, false, '"Anyone" closes like every other single choice');
+}
+
+// The sidebar's own rows: a meeting's call link and the zoomed task's metadata, both above the groups.
+function runSidebarRowsCheck() {
+  const api = vm.runInNewContext(`
+    const calls = [];
+    let summary = null;
+    const taskSummary = () => summary;
+    const canEditNode = (node) => node.editable !== false;
+    const openAssigneePalette = (doc) => calls.push(['assignees', doc.id]);
+    const openVisibilityPalette = (doc) => calls.push(['visibility', doc.id]);
+    const run = (fn) => fn();
+    const tana = { taskMeta: async () => ({}), setAssignees: async () => {}, accessOptions: async () => ({}), openExternal: async (url) => calls.push(['open', url]) };
+    ${functionSource('railCallRow')}
+    ${functionSource('railMetaRows')}
+    ({ rows: (node, value) => { summary = value; return railMetaRows(node); }, call: (data) => railCallRow(data), calls: () => calls });
+  `);
+  assert.deepEqual(plain(api.rows({ id: 'doc' }, null)), [], 'a node with no task metadata gets no sidebar rows at all');
+  const rows = api.rows({ id: 'doc' }, { assignees: 'Lex van Velsen', audience: { icon: 'lock', label: 'Visible only to you' } });
+  assert.deepEqual(plain(rows.map((row) => [row.id, row.icon, row.label, typeof row.run])), [
+    ['assignees', 'member', 'Assigned to Lex van Velsen', 'function'],
+    ['visibility', 'lock', 'Visible only to you', 'function'],
+  ], 'assignees and visibility read as plain rows and both can be opened');
+  rows[0].run(); rows[1].run();
+  assert.deepEqual(plain(api.calls()), [['assignees', 'doc'], ['visibility', 'doc']], 'the rows open the pickers the palette already uses');
+  assert.deepEqual(plain(api.rows({ id: 'doc' }, { assignees: 'Unassigned', audience: null, unknownAudience: true }).map((row) => row.label)),
+    ['Unassigned'], 'an audience that cannot be verified is left out instead of rendering an empty row');
+  assert.deepEqual(plain(api.rows({ id: 'doc', editable: false }, { assignees: 'Lex', audience: { icon: 'lock', label: 'Visible only to you' } }).map((row) => row.run === null)),
+    [true, true], 'a read-only node shows its metadata without offering a picker');
+
+  assert.equal(api.call(null), null, 'no relations, no call row');
+  assert.equal(api.call({ pinned: [] }), null, 'a meeting without a call link renders nothing');
+  const call = api.call({ call: { url: 'https://meet.google.com/ipt-utoj-srr', label: 'meet.google.com/ipt-utoj-srr' } });
+  assert.deepEqual(plain([call.id, call.icon, call.label]), ['call', 'video', 'meet.google.com/ipt-utoj-srr'], 'the call row shows the readable link with the video icon');
+  call.run();
+  assert.deepEqual(plain(api.calls().at(-1)), ['open', 'https://meet.google.com/ipt-utoj-srr'], 'it joins through api.openExternal');
+  assert.ok(/video/.test(fs.readFileSync(require.resolve('../icons.js'), 'utf8')), 'icons.js carries the video icon the call row asks for');
+}
+
+// Every sidebar title starts at the same x: an icon takes the same horizontal box as a task row's checkbox.
+function runSidebarAlignmentCheck() {
+  const styles = fs.readFileSync(require.resolve('../styles.css'), 'utf8');
+  const rule = (selector) => {
+    const at = styles.indexOf('\n' + selector + ' {');
+    assert.notEqual(at, -1, selector + ' is styled');
+    return styles.slice(at, styles.indexOf('}', at));
+  };
+  const box = (css) => {
+    const width = Number((css.match(/width:\s*(\d+)px/) || [])[1]);
+    const parts = ((css.match(/margin:\s*([^;]+);/) || [])[1] || '0').trim().split(/\s+/).map((value) => parseInt(value, 10) || 0);
+    const [, right, , left] = parts.length === 4 ? parts : parts.length === 3 ? [parts[0], parts[1], parts[2], parts[1]]
+      : parts.length === 2 ? [parts[0], parts[1], parts[0], parts[1]] : [parts[0], parts[0], parts[0], parts[0]];
+    return { width, inset: left + width + right };
+  };
+  const icon = box(rule('.rail .rrow .ricon')), check = box(rule('.check'));
+  assert.equal(icon.width, check.width, 'a sidebar icon box is as wide as a checkbox');
+  assert.equal(icon.inset, check.inset, 'icon rows and checkbox rows take the same horizontal space, so their titles line up');
+  assert.match(styles, /\.rail \.rhead \{[^}]*margin-top: 18px/, 'the sidebar groups are separated from each other');
+  assert.match(styles, /\.rail \.rhead:first-child \{[^}]*margin-top: 0/, 'the first group still starts at the top');
+}
+
+// "Clear filters" belongs on an empty view only when a filter is the reason it is empty.
+function runClearFiltersCheck() {
+  const api = vm.runInNewContext(`
+    let view = 'tasks';
+    let taskF = { states: ['proposed', 'open'], assignee: 'me' };
+    let libF = { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me', text: '' };
+    const render = () => {}, loadLibrary = () => {}, run = (fn) => fn();
+    const tana = { setTaskFilter: async () => {}, setLibraryFilter: async () => {} };
+    ${functionSource('setTaskF')}
+    ${functionSource('setLibF')}
+    ${sourceBetween('// The filter defaults main persists', 'function ensureLoaded')}
+    ({ set: (next, patch) => { view = next; if (patch) Object.assign(view === 'tasks' ? taskF : libF, patch); },
+       filtered: () => viewFiltered(), clear: () => clearFilters(), state: () => ({ taskF, libF }) });
+  `);
+  api.set('tasks');
+  assert.equal(api.filtered(), false, 'the default task filter is not "narrowed": an empty view is genuinely empty');
+  api.set('tasks', { states: ['open', 'proposed'] });
+  assert.equal(api.filtered(), false, 'the same states in another order are still the default');
+  api.set('tasks', { states: ['closed'], assignee: 'anyone' });
+  assert.equal(api.filtered(), true, 'a changed status or assignee offers the action');
+  api.clear();
+  assert.deepEqual(plain(api.state().taskF), { states: ['proposed', 'open'], assignee: 'me' }, 'clearing restores the task defaults');
+  assert.equal(api.filtered(), false, 'and the action goes away again');
+  api.set('library');
+  assert.equal(api.filtered(), false, 'the default library filter counts as unfiltered');
+  api.set('library', { text: 'memo' });
+  assert.equal(api.filtered(), true, 'a search text narrows the Library view');
+  api.clear();
+  assert.deepEqual(plain(api.state().libF), { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me', text: '' }, 'clearing restores the library defaults');
+  api.set('inbox');
+  assert.equal(api.filtered(), false, 'a view without filter pills never offers the action');
+}
+
+const checks = [runPinGrouping, runSelectionChecks, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runSidebarAlignmentCheck, runClearFiltersCheck];
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);
   if (failures.length) throw new AggregateError(failures, failures.map((failure) => failure.message).join('\n'));

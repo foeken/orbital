@@ -200,6 +200,59 @@ const commands = {
     out({ ...readNode(doc), content: contentText(doc) });
   },
   async outline() {
+    if (flag('vocab')) { // every block nodeName and text mark across a sample, so the renderer knows what to support
+      await connect();
+      await client.sync.connect();
+      const { nodes } = await client.graph.listNodes({ nodeTypes: ['text'], limit: Number(flag('limit') || 60), sortOptions: [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }] });
+      const names = new Map(), marks = new Map();
+      const walk = (map) => {
+        const name = map.get('nodeName');
+        names.set(name, (names.get(name) || 0) + 1);
+        const kids = map.get('children');
+        for (let i = 0; kids && i < kids.length; i++) {
+          const child = kids.get(i);
+          if (child && child.kind && child.kind() === 'Text') {
+            for (const run of child.toDelta()) for (const key of Object.keys(run.attributes || {})) marks.set(key, (marks.get(key) || 0) + 1);
+          } else if (child && typeof child.get === 'function') walk(child);
+        }
+      };
+      for (const n of nodes) { try { walk((await client.sync.subscribe(n.id)).content); } catch { /* skip unreadable */ } }
+      out('blocks: ' + [...names].map(([k, v]) => k + ' ' + v).join(', '));
+      out('marks: ' + ([...marks].map(([k, v]) => k + ' ' + v).join(', ') || 'none'));
+      // and what readOutline makes of the same documents: every block type it reports, the marks it carries out
+      // on segments, and any document it cannot read at all
+      const types = new Map(), segMarks = new Map(), failed = [];
+      for (const n of nodes) {
+        try {
+          const count = (map, key) => map.set(key, (map.get(key) || 0) + 1);
+          const visit = (rows) => rows.forEach((r) => {
+            count(types, r.block || r.type || 'untyped');
+            for (const s of r.segments || []) for (const key of Object.keys(s.marks || {})) count(segMarks, key);
+            visit(r.children || []);
+          });
+          visit(readOutline(await client.sync.subscribe(n.id)));
+        } catch (e) { failed.push(n.id + ' ' + ((e && e.message) || e)); }
+      }
+      out('readOutline blocks: ' + [...types].map(([k, v]) => k + ' ' + v).join(', '));
+      out('readOutline marks: ' + ([...segMarks].map(([k, v]) => k + ' ' + v).join(', ') || 'none'));
+      return out(failed.length ? 'FAILED: ' + failed.join('; ') : 'readOutline read every document');
+    }
+    if (flag('raw')) { // raw content tree with text deltas, for learning how marks and block types are stored
+      await connect();
+      await client.sync.connect();
+      const doc = await client.sync.subscribe(positional[0]);
+      const walk = (map) => {
+        const kids = map.get('children');
+        const children = kids && kids.length ? [...Array(kids.length).keys()].map((i) => {
+          const child = kids.get(i);
+          if (child && typeof child.toDelta === 'function' && child.kind && child.kind() === 'Text') return child.toDelta();
+          if (child && typeof child.get === 'function') return walk(child);
+          return child;
+        }) : [];
+        return { nodeName: map.get('nodeName'), attributes: map.get('attributes') && map.get('attributes').toJSON(), children };
+      };
+      return out(JSON.stringify(walk(doc.content), null, 1));
+    }
     if (!positional[0]) throw new Error('usage: outline <id>');
     await connect();
     await client.sync.connect();
@@ -266,6 +319,63 @@ function backend(me) {
   main.testRuntime({ client, me, win: null, session });
   return main;
 }
+// assignee [<user-profile uri>]: read-only audit of the Library's per-kind queries. Prints what each kind asks the
+// graph for and how many of the rows it returns are actually assigned to that person, which is how an unfiltered
+// kind shows up (nodes 40, assigned 0).
+commands.assignee = async () => {
+  const me = await connect();
+  const who = positional[0] || me.userUri;
+  const { nodes: profiles } = await client.graph.listNodes({ nodeTypes: ['user-profile'], limit: 200 });
+  const named = profiles.find((p) => p.id === who || (p.title || '').toLowerCase().includes(String(who).toLowerCase()));
+  const uri = named ? named.id : who;
+  out('assignee ' + uri + ' ' + ((named && named.title) || ''));
+  const filter = { ...query.DEFAULT_LIBRARY_FILTER, types: query.LIBRARY_KINDS, assignee: uri };
+  for (const { kind, params } of query.libraryQueries(filter, me.userUri)) {
+    const { nodes } = await client.graph.listNodes(params);
+    const rows = kind === 'docs' ? nodes.filter((n) => !(n.state && n.state.type)) : nodes;
+    const mine = rows.filter((n) => (n.assignedTo || []).includes(uri));
+    out(kind.padEnd(10) + ' sends=' + JSON.stringify({ ...params, sortOptions: undefined, limit: undefined }) + ' nodes=' + rows.length + ' assigned=' + mine.length);
+  }
+  const { nodes: tasks } = await client.graph.listNodes(query.taskParams({ states: null, assignee: uri }, me.userUri));
+  out('Tasks view (all states) = ' + tasks.length + ', of those assigned = ' + tasks.filter((n) => (n.assignedTo || []).includes(uri)).length);
+  out('-- direct per-node-type probes: which node types the graph filters by assignedTo / unassigned --');
+  for (const kind of query.LIBRARY_KINDS) {
+    const params = { nodeTypes: [{ meetings: 'event', tasks: 'text', docs: 'text', chats: 'chat', canvases: 'canvas', agents: 'agent', skills: 'skill' }[kind]], assignedTo: [uri], limit: 100 };
+    try {
+      const { nodes } = await client.graph.listNodes(params);
+      const { assignedTo, ...rest } = params; // the proto encoder rejects an undefined repeated field, so drop the key
+      const un = await client.graph.listNodes({ ...rest, unassigned: true });
+      out(kind.padEnd(10) + ' assignedTo -> nodes=' + nodes.length + ' really assigned=' + nodes.filter((n) => (n.assignedTo || []).includes(uri)).length + ' | unassigned -> nodes=' + un.nodes.length);
+    } catch (e) { out(kind.padEnd(10) + ' rejected: ' + ((e && e.message) || e)); }
+  }
+};
+
+// calls [--days 14] [--limit 6]: read-only check of the call link the meeting hub hands the sidebar. Prints the raw
+// calendar location beside related().call, so a Tana Meet, a Google Meet and a room-only meeting can be compared.
+commands.calls = async () => {
+  const main = backend(await connect());
+  await client.sync.connect(); // related() reads the zoomed node's fields, which needs a subscription
+  if (positional[0]) { const { call } = await main.related(positional[0]); return out('related(' + positional[0] + ').call = ' + JSON.stringify(call)); }
+  const days = Number(flag('days', 14)), now = Date.now();
+  const { nodes } = await client.graph.listNodes({ nodeTypes: ['event'], eventStartTimeMin: new Date(now - days * 864e5).toISOString(), eventStartTimeMax: new Date(now + days * 864e5).toISOString(), limit: 300 });
+  const withLocation = nodes.filter((n) => (n.calendarEvent || {}).location);
+  out(withLocation.length + ' of ' + nodes.length + ' events carry a location');
+  const hosts = new Map();
+  for (const n of withLocation) { const c = main.callOf(n.calendarEvent); const key = c ? c.label.split('/')[0] : 'no link (room or address)'; hosts.set(key, (hosts.get(key) || 0) + 1); }
+  out([...hosts].sort((a, b) => b[1] - a[1]).map(([k, v]) => k + ' ' + v).join(', '));
+  // events an online meeting only through the provider action: the location names a room, the join url is elsewhere
+  const hidden = nodes.filter((n) => (n.calendarEvent || {}).actionUrl && !/https?:\/\//i.test(n.calendarEvent.location || ''));
+  out('events with a join link only in calendarEvent.actionUrl: ' + hidden.length);
+  const actionHosts = new Map();
+  for (const n of hidden) { let h = 'unparsable'; try { h = new URL(n.calendarEvent.actionUrl).host; } catch { /* keep */ } actionHosts.set(h, (actionHosts.get(h) || 0) + 1); }
+  out('  actionUrl hosts: ' + [...actionHosts].map(([k, v]) => k + ' ' + v).join(', '));
+  for (const n of nodes.filter((n) => /meet\.google\.com|meet\.tana\.inc/i.test((n.calendarEvent || {}).location || '')).slice(0, 3)) out('  link     ' + n.id + ' ' + (n.title || '').slice(0, 22).padEnd(24) + JSON.stringify((await main.related(n.id)).call));
+  for (const n of withLocation.slice(0, Number(flag('limit', 6)))) {
+    const { call } = await main.related(n.id);
+    out((n.title || '').slice(0, 34).padEnd(36) + 'location=' + JSON.stringify(n.calendarEvent.location) + ' call=' + JSON.stringify(call));
+  }
+};
+
 commands.refs = async () => {
   if (!positional[0]) throw new Error('usage: refs <id>');
   const main = backend(await connect());

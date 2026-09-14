@@ -27,7 +27,7 @@ function mainHelpers() {
   const electron = { app: {}, BrowserWindow: function () {}, Menu: {}, ipcMain: { handle: (name, fn) => handlers.set(name, fn) } };
   vm.runInNewContext(fs.readFileSync(file, 'utf8'), {
     require: (id) => id === 'electron' ? electron : createRequire(file)(id), module: mod, exports: mod.exports,
-    __dirname: require('node:path').dirname(file), __filename: file, Buffer, console,
+    __dirname: require('node:path').dirname(file), __filename: file, Buffer, console, URL, // URL is a global in Electron's main process
     setTimeout: () => 0, clearTimeout: () => {}, // no refresh/network timers in offline main helpers
     process: { env: { ...process.env, TANA_MAIN_TEST: '1' } },
   }, { filename: file });
@@ -300,7 +300,7 @@ async function main() {
     outline.setText(d, id, [{ text: 'Keep ' }, { mention: { label: 'Member', uri: ME } }]);
     const original = outline.readOutline(d)[0];
     outline.toggleCheckbox(d, id);
-    assert.deepEqual(outline.readOutline(d)[0], { ...original, done: 0 });
+    assert.deepEqual(outline.readOutline(d)[0], { ...original, done: 0, block: 'bullet' }, 'a checkbox node is a listItem, so it reads as a bullet');
     outline.insertChild(d, id, 'Child');
     const nested = outline.readOutline(d)[0];
     outline.toggleCheckbox(d, id);
@@ -587,6 +587,16 @@ async function main() {
     assert.equal(lq[1].params.stateTypes, undefined, 'docs are filtered client-side');
     assert.equal(libraryQueries({ types: null }, ME).length, 7, 'null types = every kind');
     assert.throws(() => libraryQueries({ types: ['nope'] }, ME), /unknown library type/);
+    // An assignee filter must never leave a kind unfiltered: the graph filters every node type by assignedTo, and
+    // kinds that carry no assignee then return nothing rather than their whole contents.
+    const OTHER = 'tana:user-profile:01m1bg7kfhsxfejsxs0j1ydgnb';
+    const mixed = libraryQueries({ types: ['tasks', 'meetings', 'docs', 'chats'], states: ['open'], assignee: OTHER }, ME);
+    assert.deepEqual(mixed.map((q) => q.params.assignedTo), Array(4).fill([OTHER]), 'every selected kind asks for that person');
+    assert.deepEqual(mixed.map((q) => q.params.stateTypes), [['open'], undefined, undefined, undefined], 'states stay a task filter');
+    assert.deepEqual(libraryQueries({ types: null, assignee: OTHER }, ME).map((q) => q.params.assignedTo), Array(7).fill([OTHER]), 'any type = every kind');
+    assert.deepEqual(libraryQueries({ types: ['tasks', 'meetings'], assignee: 'unassigned' }, ME).map((q) => q.params.unassigned), [true, true]);
+    assert.ok(libraryQueries({ types: ['tasks', 'meetings'], assignee: 'anyone' }, ME).every((q) => !q.params.assignedTo && !q.params.unassigned), 'anyone filters nothing');
+    assert.ok(libraryQueries({ types: ['meetings', 'chats'], assignee: OTHER }, ME).every((q) => !q.params.assignedTo), 'without tasks the Assigned pill is hidden, so it does not filter');
     const id = ulid();
     assert.match(id, /^[0-9a-hjkmnp-tv-z]{26}$/);
     assert.equal(ulid(0).slice(0, 10), '0000000000');
@@ -736,6 +746,114 @@ async function main() {
   assert.equal(flat(outline.readOutline(c1)), 'Research con,The personal');
   assert.deepEqual(c2.content.toJSON(), c1.content.toJSON(), 'raw structure converges');
   console.log('ok  outline read/segments/setText/insertAfter/insertChild/indent/outdent/move/remove');
+  // Marks and block types (Tana's own ProseMirror schema: bold/italic/strike/code/link, paragraph/heading/
+  // bulletList/orderedList/codeBlock/blockquote/horizontalRule). Two peers so every conversion has to converge.
+  {
+    const a = new Document(DOC, { peerId: '851' }), b = new Document(DOC, { peerId: '852' });
+    a.applyRemote([snapshot]); b.applyRemote([a.exportSince()]);
+    a.on('local-update', (u) => b.applyRemote([u]));
+    const raw = () => a.content.toJSON().children;
+    const read = (id) => outline.readOutline(a).flatMap(function walk(n) { return [n, ...n.children.flatMap(walk)]; }).find((n) => n.id === id);
+    const step = (fn) => { const r = fn(); assert.deepEqual(outline.readOutline(b), outline.readOutline(a), 'peer converges'); return r; };
+    const runs = (block, i = 0) => a.content.get('children').get(block).get('children').get(i).toDelta();
+
+    // read: a LoroText delta splits into one segment per mark run; a link segment carries its href
+    assert.deepEqual(read('6s8vb70s').segments, [
+      { text: 'Imported from ' },
+      { text: 'Tana Outliner', marks: { link: 'tana:1n74S7NZRMAS' } },
+      { text: ' on 2026-09-09.\nOutliner ID: 1n74S7NZRMAS' },
+    ], 'marks are read from the text delta');
+    assert.equal(read('6s8vb70s').block, 'paragraph');
+    assert.equal(read('dv8c4sp7').block, 'heading2');
+
+    // write: marks are applied without touching the text, so the run containers and a mention survive
+    const container = a.content.get('children').get(2).get('children').get(0).id;
+    const mentionId = a.content.get('children').get(2).get('children').get(1).id;
+    const withMarks = [{ text: 'The ', marks: { bold: true } }, { mention: { label: 'personal note-taking compliance task', uri: 'tana:text:01m23c1zd6d4arqzr36a7s54nb' } }, { text: ' tail', marks: { italic: true, link: 'https://example.test' } }];
+    step(() => outline.setText(a, 'r4hz3a0b', withMarks));
+    assert.deepEqual(read('r4hz3a0b').segments, withMarks, 'marks round-trip through setText');
+    assert.equal(a.content.get('children').get(2).get('children').get(0).id, container, 'text container updated in place');
+    assert.equal(a.content.get('children').get(2).get('children').get(1).id, mentionId, 'mention kept');
+    assert.deepEqual(runs(2)[0].attributes, { bold: {} }, 'Tana stores a plain mark as an empty object');
+    assert.deepEqual(runs(2, 2)[0].attributes.link, { href: 'https://example.test' }, 'a link stores its ProseMirror attrs');
+    step(() => outline.setText(a, 'r4hz3a0b', [{ text: 'The ' }, withMarks[1], { text: ' tail', marks: { italic: true, link: 'https://example.test' } }]));
+    assert.deepEqual(read('r4hz3a0b').segments[0], { text: 'The ' }, 'dropping a mark unmarks that run only');
+    assert.deepEqual(read('r4hz3a0b').segments[2].marks, { italic: true, link: 'https://example.test' }, 'other marks untouched');
+    // an edit that only changes text keeps the marks of the characters it did not touch
+    step(() => outline.setText(a, '6s8vb70s', read('6s8vb70s').text + '!'));
+    assert.ok(runs(0).some((d) => d.attributes && d.attributes.link), 'link survives a plain-string edit');
+
+    // block types: each one is a container plus a leaf, and the blockId and inline content survive every hop
+    const child = outline.insertChild(a, 'r4hz3a0b', 'Child');
+    assert.equal(read('r4hz3a0b').block, 'bullet', 'a listItem paragraph reads as a bullet');
+    step(() => outline.setBlockType(a, 'r4hz3a0b', 'numbered'));
+    assert.equal(raw()[2].nodeName, 'orderedList');
+    assert.equal(read('r4hz3a0b').block, 'numbered');
+    assert.deepEqual(read('r4hz3a0b').children.map((n) => n.id), [child], 'a numbered item keeps its children');
+    step(() => outline.setBlockType(a, 'r4hz3a0b', 'heading1'));
+    assert.equal(read('r4hz3a0b').block, 'heading1');
+    assert.equal(read('r4hz3a0b').heading, 1);
+    assert.equal(raw()[2].nodeName, 'heading', 'a heading is a bare block');
+    assert.equal(read(child).block, 'bullet', 'children a heading cannot own are outdented, not lost');
+    step(() => outline.setBlockType(a, 'r4hz3a0b', 'quote'));
+    assert.equal(raw()[2].nodeName, 'blockquote');
+    assert.equal(raw()[2].children[0].attributes.blockId, 'r4hz3a0b', 'the node keeps its id inside the quote');
+    assert.equal(read('r4hz3a0b').block, 'quote');
+    assert.equal(read('r4hz3a0b').heading, undefined, 'the heading level is cleared');
+    assert.deepEqual(read('r4hz3a0b').segments[1], withMarks[1], 'the mention survives the conversions');
+    step(() => outline.setBlockType(a, 'r4hz3a0b', 'code'));
+    assert.equal(raw()[2].nodeName, 'codeBlock', 'a code block leaves the quote behind');
+    assert.deepEqual(raw()[2].children, ['The personal note-taking compliance task tail'], 'code holds plain text only');
+    assert.deepEqual(read('r4hz3a0b').segments, [{ text: 'The personal note-taking compliance task tail' }], 'no marks inside code');
+    step(() => outline.setBlockType(a, 'r4hz3a0b', 'paragraph'));
+    assert.equal(read('r4hz3a0b').block, 'paragraph');
+    assert.throws(() => outline.setBlockType(a, 'r4hz3a0b', 'heading4'), /Unknown block type/);
+    assert.throws(() => outline.setBlockType(a, 'nope0000', 'quote'), /no outline node/);
+
+    // divider: Tana's childless horizontalRule; a list holds listItems only, so it splits the list
+    const second = outline.insertAfter(a, child, 'Second');
+    const rule = step(() => outline.insertDivider(a, child));
+    const rules = raw().filter((x) => x.nodeName === 'horizontalRule');
+    assert.equal(rules.length, 1);
+    assert.equal(rules[0].attributes.blockId, rule);
+    assert.equal(rules[0].children, undefined, 'an atom has no children list');
+    assert.deepEqual(outline.readOutline(a).map((n) => n.id).slice(-3), [child, rule, second], 'the rule sits between the two items');
+    const divider = read(rule);
+    assert.equal(divider.block, 'divider');
+    assert.equal(divider.editable, false);
+    assert.equal(divider.text, '');
+    // a hardBreak is an inline line break: it must not cost the block its marks and mentions
+    {
+      const para = a.content.get('children').get(0).get('children');
+      a.transact(() => { const br = para.insertContainer(1, new LoroMap()); br.set('nodeName', 'hardBreak'); br.setContainer('attributes', new LoroMap()); });
+      const segs = read('6s8vb70s').segments;
+      assert.ok(segs.some((s) => s.text === '\n'), 'the break reads as a newline segment');
+      assert.ok(segs.some((s) => s.marks && s.marks.link), 'marks survive a hardBreak in the block');
+    }
+    assert.deepEqual(b.content.toJSON(), a.content.toJSON(), 'both peers hold the same content');
+    console.log('ok  outline marks/setBlockType/insertDivider');
+  }
+  // main: the formatting mutations are reachable over IPC and validated there
+  {
+    const { handlers } = mainHelpers();
+    for (const channel of ['block:setBlockType', 'block:insertDivider']) assert.ok(handlers.has(channel), channel + ' is registered');
+  }
+  // A meeting's call link for the sidebar: the join url out of a calendar location that may also name a room.
+  {
+    const { callOf } = mainHelpers();
+    // spread: the helper runs in its own vm realm, so compare plain values rather than cross-realm objects
+    assert.deepEqual({ ...callOf({ location: 'https://meet.tana.inc/rkx-bpmx-ksf' }) }, { url: 'https://meet.tana.inc/rkx-bpmx-ksf', label: 'meet.tana.inc/rkx-bpmx-ksf' });
+    assert.equal(callOf({ location: 'https://meet.google.com/ipt-utoj-srr/' }).label, 'meet.google.com/ipt-utoj-srr');
+    const zoom = callOf({ location: '+Groenlo Building 6.1a-R1 Presentationroom; https://nedap.zoom.us/j/653?pwd=AR8&from=addon' });
+    assert.equal(zoom.url, 'https://nedap.zoom.us/j/653?pwd=AR8&from=addon', 'the passcode stays in the url');
+    assert.equal(zoom.label, 'nedap.zoom.us/j/653', 'the room note and the query stay out of the label');
+    assert.equal(callOf({ location: 'Groenlo, Healthcare, The Crooks' }), undefined, 'a room is not a call');
+    assert.equal(callOf({}), undefined, 'no location, no call');
+    const teams = callOf({ location: 'Teams meeting', actionUrl: 'https://teams.microsoft.com/l/meetup-join/19%3ameeting_' + 'z'.repeat(140) + '%40thread.v2/0' });
+    assert.equal(teams.label, 'teams.microsoft.com', 'a join path of ids is not a label');
+    assert.match(teams.url, /^https:\/\/teams\.microsoft\.com\/l\/meetup-join\//, 'the provider link is kept whole');
+    assert.equal(callOf({ location: 'https://meet.tana.inc/a-b-c', actionUrl: 'https://zoom.us/j/1' }).label, 'meet.tana.inc/a-b-c', 'the location wins over the action');
+  }
   // A multi-select is one user action: one undo/redo step restores/reapplies its complete range.
   {
     const d = new Document(DOC, { peerId: '741' });
