@@ -156,7 +156,9 @@ function resultRows(nodes, group) {
   const ctx = linkCtx, pin = pinCtx;
   const rows = nodes.map((n) => ({ ...docRow(n, n.meta, () => (ctx ? linkTo(ctx, { label: n.title ?? n.text, uri: n.id }) : pin ? pinResult(pin, n) : openResult(n, 'Search'))), group }));
   if (!ctx) return rows;
-  return [{ create: true, label: 'Create “' + ctx.text + '”', hint: '⌘↩', run: () => createAndLink(ctx) }, ...rows];
+  const title = ctx.text || palInput.value.trim(); // "@" at a caret has no selection: what is typed becomes the new document's title
+  if (!title) return rows;
+  return [{ create: true, label: 'Create “' + title + '”', hint: '⌘↩', run: () => createAndLink(ctx, title) }, ...rows];
 }
 function pinResult(ctx, node) {
   return run(async () => {
@@ -174,7 +176,7 @@ function searchNow() {
     // Linking: a result is only the obvious choice when its title starts with what was typed. A full-text hit
     // that merely mentions the words is not, so "Create" stays selected and Enter creates.
     const starts = nodes.findIndex((n) => (n.title ?? n.text ?? '').toLowerCase().startsWith(q.toLowerCase()));
-    palIndex = linkCtx ? (starts < 0 ? 0 : starts + 1) : 0;
+    palIndex = linkCtx ? (starts < 0 ? 0 : starts + (palRows[0] && palRows[0].create ? 1 : 0)) : 0;
     palBusy = false;
     renderPalette();
   }, showError);

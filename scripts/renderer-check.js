@@ -67,10 +67,10 @@ assert.doesNotMatch(source, /loadLibrary|loadChats|loadInbox|taskFilter|libraryF
 assert.match(source, /const chatIcon = \(n\) => n\.icon \|\| \(\(n\.tags \|\| \[\]\)\.some\(\(t\) => t\.label === 'chat'\) \? 'chat' : undefined\);/);
 assert.match(source, /const nodeIcon = \(n\) => chatIcon\(n\) \|\| \(\(n\.tags \|\| \[\]\)\.some\(\(t\) => t\.label === 'agent'\) \? 'agent' : undefined\);/);
 assert.doesNotMatch(source, /pinTree|pinRows/, 'the sidebar pin sections are gone from Cmd+K; only the pin state of the current document is read');
-assert.match(source, /\{ create: true, label: 'Create “' \+ ctx\.text/);
+assert.match(source, /\{ create: true, label: 'Create “' \+ title/);
 // linking preselects a result only when its title starts with the typed text; otherwise "Create" stays selected
 assert.match(source, /const starts = nodes\.findIndex\(\(n\) => \(n\.title \?\? n\.text \?\? ''\)\.toLowerCase\(\)\.startsWith\(q\.toLowerCase\(\)\)\);/);
-assert.match(source, /palIndex = linkCtx \? \(starts < 0 \? 0 : starts \+ 1\) : 0;/);
+assert.match(source, /palIndex = linkCtx \? \(starts < 0 \? 0 : starts \+ \(palRows\[0\] && palRows\[0\]\.create \? 1 : 0\)\) : 0;/);
 assert.match(source, /palRows\.find\(\(row\) => row\.create\)/);
 assert.match(source, /tana\.toggleCheckbox\(item\.docId, item\.node\.id\)/);
 assert.match(source, /else toggleCheckbox\(item\)/);
@@ -334,3 +334,5 @@ for (const rule of [/\.toolbar \{/, /\.tbtn \{/, /\.text code \{/, /\.text a\.li
 }
 
 Promise.all([splitTypingCheck(), cachedBootMetadataCheck(), mockCreationPermissionCheck()]).then(() => console.log('renderer auth check passed'));
+// a mention lands in the row the caret is in (an @ at the caret, or over a selection): the render must not defer
+assert.match(functionSource('linkTo'), /render\(true\);[^\n]*\n\s*placeCaret\(/, 'linkTo forces the render before placing the caret after the mention');

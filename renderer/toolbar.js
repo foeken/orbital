@@ -21,11 +21,11 @@ async function linkTo(ctx, mention) {
   const next = [...splitSegs(segs, start)[0], isDoc ? { text: mention.label } : { mention }, ...splitSegs(segs, end)[1]];
   item.node.text = plainOf(next); item.node.segments = isDoc ? undefined : next;
   await run(async () => { if (isDoc) await tana.setTitle(item.docId, item.node.text); else { await tana.setText(item.docId, item.node.id, next); await reload(item.docId); } });
-  render();
+  render(true); // the caret is back in the row by now, and a plain render would wait for it to leave
   placeCaret(item.key, start + mention.label.length);
 }
-function createAndLink(ctx) {
-  tana.createDocument(ctx.text).then((n) => { extra.set(n.id, { ...n, text: n.title || '', hasChildren: true }); return linkTo(ctx, { label: n.title, uri: n.id }); }, showError);
+function createAndLink(ctx, title = ctx.text) {
+  tana.createDocument(title).then((n) => { extra.set(n.id, { ...n, text: n.title || '', hasChildren: true }); return linkTo(ctx, { label: n.title, uri: n.id }); }, showError);
 }
 function cancelLink() { const c = linkCtx; linkCtx = null; if (c) placeCaret(c.item.key, c.end); }
 

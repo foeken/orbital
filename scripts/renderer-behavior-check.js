@@ -999,6 +999,26 @@ async function runLinkPaletteCheck() {
   const event = (metaKey) => ({ key: 'Enter', metaKey, ctrlKey: false, shiftKey: false, preventDefault: () => {}, stopPropagation: () => {} });
   context.press(event(false));
   context.press(event(true));
+  // "@" at a caret: no selection, so nothing to create until something is typed, and the first result is selected
+  const caret = vm.runInNewContext(`
+    let linkCtx = { text: '', item: {}, segs: [], start: 3, end: 3 }, pinCtx = null;
+    let palRows = [], palIndex = 0, palBusy = false, palSeq = 0, palTimer = null, palMode = 'search';
+    let searchResolve, created = null;
+    const palInput = { value: '' };
+    const tana = { search: () => new Promise((resolve) => { searchResolve = resolve; }) };
+    const asDoc = (node) => ({ ...node, text: node.text || node.title, kind: 'document' });
+    const docRow = (node, hint, run) => ({ label: node.text, node, hint, run });
+    const createAndLink = (ctx, title) => { created = title; }, linkTo = () => {}, openResult = () => {};
+    const renderPalette = () => {}, showError = (error) => { throw error; }, recentRows = () => [{ id: 'r', title: 'Recent' }];
+    ${resultRows}
+    ${searchNow}
+    ({ type: (q) => { palInput.value = q; searchNow(); }, resolve: (rows) => searchResolve(rows), state: () => ({ palIndex, rows: palRows.map((row) => row.label) }), create: () => { palRows[0].run(); return created; } });
+  `);
+  caret.type('');
+  assert.deepEqual(plain(caret.state()), { palIndex: 0, rows: ['Recent'] }, 'an empty caret palette lists recent nodes with no Create row');
+  caret.type('Dan'); caret.resolve([{ id: 'x', title: 'Dana Brooks' }]); await Promise.resolve(); await Promise.resolve();
+  assert.deepEqual(plain(caret.state()), { palIndex: 1, rows: ['Create “Dan”', 'Dana Brooks'] }, 'typing offers to create what was typed and still selects the matching result');
+  assert.equal(caret.create(), 'Dan', 'and Create uses the typed title');
   assert.deepEqual(plain(context.state().actions), ['link', 'create'], 'Enter links the selected result and Cmd+Enter explicitly creates');
 }
 

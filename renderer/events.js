@@ -64,7 +64,7 @@ outline.addEventListener('keydown', (e) => {
   else if (mod && e.shiftKey && e.key.toLowerCase() === 's') { e.preventDefault(); toggleMarkKey(item, el, 'strike'); }
   else if (e.key === 'Escape') { e.preventDefault(); flush(item.key); el.blur(); }
   else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && e.shiftKey && !mod) { e.preventDefault(); extendSel(item, e.key === 'ArrowUp' ? -1 : 1); } // multi-select over siblings
-  else if (e.key === '@' && !collapsed) { const range = selectionOffsets(el); if (range) { e.preventDefault(); startLink(item, el, range); } } // no selection: "@" is typed
+  else if (e.key === '@' && (!collapsed || !isDoc)) { const range = collapsed ? [off, off] : selectionOffsets(el); if (range) { e.preventDefault(); startLink(item, el, range); } } // a selection links it; a caret in a block inserts a reference there (a title cannot hold one, so "@" is typed)
   else if (combo === hotkeyFor('toggleDone')) { e.preventDefault(); if (isDoc) toggleDone(item); else toggleCheckbox(item); }
   else if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); insertAtCaret(el, '\n'); }
   else if (e.key === 'Enter' && isDoc && item.parent) e.preventDefault(); // document child (inside a space): nothing to split or draft yet
