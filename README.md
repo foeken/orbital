@@ -27,8 +27,8 @@ rolls back someone else's edit. The full keyboard contract is [docs/OUTLINER.md]
 **Cmd+K for everything else.** Switch views, run an action on the current node (copy link, show
 in Tana, pin, set an icon, change visibility, move to a space), or act on a multi-selection: Cmd+click
 rows, then mark them sensitive, add them to today's or the week's node, set a status, assign them or
-delete them; with nothing selected the same actions apply to the node you are on. "Show today node"
-and "Go to week node" open (and create) the date-titled and the "Week 38 (2026)" documents.
+delete them; with nothing selected the same actions apply to the node you are on. "Today"
+and "This week" (both under Views) open (and create) the date-titled and the "Week 38 (2026)" documents.
 Cmd+Shift+K on any palette row records a hotkey for it, and refuses one the app already uses. Cmd+S
 searches Tana itself, with `#task`, `#meeting`, `#space`, `#member` and `#<Type>` filters; Cmd+F
 filters the rows already on screen.

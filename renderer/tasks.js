@@ -270,8 +270,8 @@ function selectionRows() {
     rows.push({ id: 'sensitive', group, icon: 'lock', label: `${marked ? 'Unmark' : 'Mark'}${count(ids.length, 'item')} as sensitive`, run: () => setSensitiveMark(ids, !marked) });
   }
   if (nodes.length && tana.insertAfter && tana.setText) {
-    if (tana.todayNode) rows.push({ id: 'addToday', group, icon: 'addTo', label: `Add${count(nodes.length, 'item')} to today node`, run: () => addToDateNode(nodes, 'today') });
-    if (tana.weekNode) rows.push({ id: 'addWeek', group, icon: 'addTo', label: `Add${count(nodes.length, 'item')} to week node`, run: () => addToDateNode(nodes, 'week') });
+    if (tana.todayNode) rows.push({ id: 'addToday', group, icon: 'addTo', label: `Add${count(nodes.length, 'item')} to Today`, run: () => addToDateNode(nodes, 'today') });
+    if (tana.weekNode) rows.push({ id: 'addWeek', group, icon: 'addTo', label: `Add${count(nodes.length, 'item')} to This Week`, run: () => addToDateNode(nodes, 'week') });
   }
   rows.push(...taskActionRows(group));
   // Destructive, so it sits at the end of the group. Documents are soft-deleted (Cmd+Z restores them), blocks go
@@ -298,7 +298,7 @@ function addToDateNode(nodes, target) {
       const block = await tana.insertAfter(docId, null, node.text || '');
       await tana.setText(docId, block, [{ mention: { uri: node.id, label: node.text || '' } }]);
     }
-    showNote(`Added ${nodes.length} ${nodes.length === 1 ? 'item' : 'items'} to the ${target === 'week' ? 'week' : 'today'} node`);
+    showNote(`Added ${nodes.length} ${nodes.length === 1 ? 'item' : 'items'} to ${target === 'week' ? 'This Week' : 'Today'}`);
   });
 }
 // One selection, two kinds of removal: rows that are documents are deleted one by one (each undoable on its own),

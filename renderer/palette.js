@@ -41,6 +41,10 @@ function paletteRows(q) {
     if (access?.move) rows.push({ group: docGroup, icon: 'space', label: 'Move to space', keepOpen: true, run: () => openMovePalette(palDoc) });
   }
   rows.push(...views.map((s) => ({ id: 'view:' + s.id, group: 'Views', icon: s.icon, label: s.title, run: () => setView(s.id) })));
+  // today's node: a document titled with the date, pinned to today; and the week this day sits in, as its own
+  // "Week 38 (2026)" document — both created when they do not exist yet, and both places to go, so they sit with the views
+  if (tana.todayNode) rows.push({ id: 'today', group: 'Views', icon: 'today', label: 'Today', run: () => run(async () => goTo(await tana.todayNode())) });
+  if (tana.weekNode) rows.push({ id: 'week', group: 'Views', icon: 'week', label: 'This week', run: () => run(async () => goTo(await tana.weekNode())) });
   rows.push(...pillCommandRows());
   if (tana.creationOptions) rows.push({ id: 'create', group: 'Actions', icon: 'createNew', label: 'Create new…', keepOpen: true, run: openCreationPalette });
   rows.push({ id: 'sync', group: 'Actions', icon: 'sync', label: 'Sync', run: () => run(() => tana.refresh()) });
@@ -59,10 +63,6 @@ function paletteRows(q) {
   // the list of titles hidden from every view and from search, edited in the palette itself
   if (tana.filters) rows.push({ id: 'hidden', group: 'Actions', icon: 'hidden', label: 'Edit hidden items', keepOpen: true, run: openHiddenPalette });
   if (tana.sensitiveIds) rows.push({ id: 'sensitiveVisibility', group: 'Actions', icon: 'hidden', label: 'Toggle sensitive visibility', hint: sensitiveVisible ? 'Shown' : 'Hidden', run: toggleSensitiveVisibility });
-  // today's node: a document titled with the date, pinned to today; created and pinned when it does not exist yet
-  if (tana.todayNode) rows.push({ id: 'today', group: 'Actions', icon: 'today', label: 'Show today node', run: () => run(async () => goTo(await tana.todayNode())) });
-  // the week this day sits in, as its own "Week 38 (2026)" document, created when it does not exist yet
-  if (tana.weekNode) rows.push({ id: 'week', group: 'Actions', icon: 'week', label: 'Go to week node', run: () => run(async () => goTo(await tana.weekNode())) });
   const dark = typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark';
   rows.push({ id: 'theme', group: 'Actions', icon: 'darkLight', label: 'Toggle ' + (dark ? 'light' : 'dark') + ' mode', run: () => setTheme(dark ? 'light' : 'dark') });
   if (tana.systemTheme) rows.push({ id: 'systemTheme', group: 'Actions', icon: 'darkLight', label: 'Toggle system dark/light mode', hint: themePref === 'system' ? 'Following macOS' : '', run: () => followSystem(themePref !== 'system') });

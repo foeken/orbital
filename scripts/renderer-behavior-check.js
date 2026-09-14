@@ -474,7 +474,7 @@ async function runMultiTaskPaletteCheck() {
       selection: (keys) => { selected = keys; return selectionRows().map((row) => [row.group, row.label]); },
       markAll: () => { selected = rows.map((item) => item.key); selectionRows()[0].run(); return marked; },
       remove: async (keys) => { calls.length = 0; selected = keys; try { await removeSelection(keys); } catch (e) { calls.push(['error', e.message]); } return calls; },
-      addTo: async (keys, target) => { calls.length = 0; selected = keys; await selectionRows().find((row) => row.label.endsWith('to ' + target + ' node')).run(); return calls; },
+      addTo: async (keys, target) => { calls.length = 0; selected = keys; await selectionRows().find((row) => row.label.endsWith(target === 'week' ? 'to This Week' : 'to Today')).run(); return calls; },
       ids: (keys) => { selected = keys; return selectionRows().map((row) => row.id); },
       del: (keys) => { selected = keys; const row = selectionRows().find((r) => r.id === 'delete'); return [row.label, row.hint || '', !!row.disabled]; },
      current: (id) => { selected = []; palDoc = items.get(id).node; return selectionRows().map((row) => [row.group, row.label, row.hint || '', !!row.disabled]); },
@@ -494,13 +494,13 @@ async function runMultiTaskPaletteCheck() {
   // What acts on the selection comes first, in its own group, and reaches every selected row, not only the tasks.
   assert.deepEqual(plain(context.selection(['t1', 'meeting', 'locked', 't2'])), [
     ['Selection', 'Mark 4 items as sensitive'],
-    ['Selection', 'Add 4 items to today node'],
-    ['Selection', 'Add 4 items to week node'],
+    ['Selection', 'Add 4 items to Today'],
+    ['Selection', 'Add 4 items to This Week'],
     ['Selection', 'Set status for 2 tasks'],
     ['Selection', 'Assign 2 tasks to'],
     ['Selection', 'Delete 3 items'],
   ], 'a selection offers sensitivity for everything in it and the task actions for the tasks in it');
-  assert.deepEqual(plain(context.selection(['t2'])), [['Selection', 'Unmark 1 item as sensitive'], ['Selection', 'Add 1 item to today node'], ['Selection', 'Add 1 item to week node'], ['Selection', 'Set status'], ['Selection', 'Edit assignees'], ['Selection', 'Delete 1 item']],
+  assert.deepEqual(plain(context.selection(['t2'])), [['Selection', 'Unmark 1 item as sensitive'], ['Selection', 'Add 1 item to Today'], ['Selection', 'Add 1 item to This Week'], ['Selection', 'Set status'], ['Selection', 'Edit assignees'], ['Selection', 'Delete 1 item']],
     'one selected row is still a selection, and a marked one offers to unmark');
   // Delete reports what it can remove before it is run, the way the task actions do.
   assert.deepEqual(plain(context.del(['t1', 'meeting', 'locked', 't2'])), ['Delete 3 items', '1 skipped', false], 'a read-only row is counted as skipped, not deleted');
@@ -514,8 +514,8 @@ async function runMultiTaskPaletteCheck() {
     ['Current node', 'Expand', '', false],
     ['Current node', 'Complete', '', false],
     ['Current node', 'Mark as sensitive', '', false],
-    ['Current node', 'Add to today node', '', false],
-    ['Current node', 'Add to week node', '', false],
+    ['Current node', 'Add to Today', '', false],
+    ['Current node', 'Add to This Week', '', false],
     ['Current node', 'Set status', 'In Progress', false],
     ['Current node', 'Edit assignees', 'Loading…', false],
     ['Current node', 'Delete', '', false],
@@ -535,7 +535,7 @@ async function runMultiTaskPaletteCheck() {
     ['todayNode'],
     ['insertAfter', 'day', null, ''], ['setText', 'day', 'block', JSON.stringify([{ mention: { uri: 't1', label: '' } }])],
     ['insertAfter', 'day', null, ''], ['setText', 'day', 'block', JSON.stringify([{ mention: { uri: 'meeting', label: '' } }])],
-    ['note', 'Added 2 items to the today node'],
+    ['note', 'Added 2 items to Today'],
   ], 'every selected row becomes a mention at the end of today\'s node');
   assert.deepEqual(plain(await context.addTo(['t1'], 'week')).map((call) => call[0]), ['weekNode', 'insertAfter', 'setText', 'note'], 'and the week row writes into the week node instead');
   // Cmd+Shift+K records a hotkey per row id and refuses a row without one, so every selection action carries a
@@ -1186,7 +1186,7 @@ async function runReservedComboCheck() {
   const api = vm.runInNewContext(`
     const hotkeys = { 'view:tasks': '⇧⌘T', 'doc:tana:text:abc': '⌃⌥N' };
     const views = [{ nodes: [{ id: 'tana:text:abc', text: 'Principles' }] }];
-    const paletteRows = () => [{ id: 'view:tasks', label: 'Tasks' }, { id: 'addToday', label: 'Add 2 items to today node' }, { id: 'undo', label: 'Undo' }, { id: 'back', label: 'Go back' }];
+    const paletteRows = () => [{ id: 'view:tasks', label: 'Tasks' }, { id: 'addToday', label: 'Add 2 items to Today' }, { id: 'undo', label: 'Undo' }, { id: 'back', label: 'Go back' }];
     ${sourceBetween('const RESERVED', 'function comboTaken')}
     ${functionSource('comboTaken')}
     ({ taken: (combo, rowId) => comboTaken(combo, rowId) });
