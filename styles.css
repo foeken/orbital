@@ -36,7 +36,7 @@ button { font: inherit; }
 .fields .fvalue { outline: none; min-width: 40px; border-bottom: 1px solid transparent; }
 .fields .fvalue:focus { border-bottom-color: #d6e3f2; }
 .fields .fvalue:empty::before { content: 'Empty'; color: #bbb; }
-.tbtn.c svg { width: 15px; height: 15px; display: block; }
+.tbtn.c svg { width: 13px; height: 13px; display: block; }
 .fields a { color: #508fbb; text-decoration: underline; cursor: pointer; }
 .error[hidden] { display: none; }
 
@@ -246,6 +246,8 @@ button { font: inherit; }
 .toolbar .menu { top: calc(100% + 6px); min-width: 190px; font-size: 15px; }
 /* a text glyph standing in for an icon (block types have no icon in the set): H1, •, 1., </>, ❝, — */
 .glyph { display: block; width: 100%; text-align: center; font-size: 10px; font-weight: 700; line-height: 16px; color: #8a8a8a; }
+.glyph.icon { display: flex; align-items: center; justify-content: center; }
+.glyph.icon svg { width: 13px; height: 13px; display: block; }
 .palette .row.active .glyph, .menu .mrow.active .glyph { color: #555; }
 .filtered:empty { display: none; }
 .login { display: flex; justify-content: center; padding: 120px 0; }
