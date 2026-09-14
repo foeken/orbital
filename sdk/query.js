@@ -102,8 +102,13 @@ function viewParams(f, me, limit = 1000) {
       ? [{ field: 'SORT_FIELD_EVENT_START_TIME', direction: 'SORT_DIRECTION_ASCENDING' }] : UPDATE_DESC,
     mode: 'LIST_NODES_MODE_WITH_COUNT',
   };
-  if (f.states !== undefined && f.states !== null) p.stateTypes = f.states;
-  if (kinds.includes('tasks')) Object.assign(p, assigneeParams(f.assignee, me));
+  // A state and an assignee only mean something while tasks are in the selection, which is exactly when those two
+  // pills are shown. Applying a hidden filter is how picking People in the Library returned nothing: no person has
+  // a task state, so the saved "Inbox, In Progress" quietly emptied the list.
+  if (kinds.includes('tasks')) {
+    if (f.states !== undefined && f.states !== null) p.stateTypes = f.states;
+    Object.assign(p, assigneeParams(f.assignee, me));
+  }
   if (f.text) p.textQuery = f.text.trim();
   if (f.participant === 'me') p.hasParticipantUris = [me];
   if (f.window === 'recent') {

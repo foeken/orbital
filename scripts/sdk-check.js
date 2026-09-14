@@ -843,6 +843,10 @@ async function main() {
     assert.deepEqual(viewParams({ types: ['tasks', 'meetings'], assignee: 'unassigned' }, ME).unassigned, true);
     assert.equal(viewParams({ types: ['tasks'], assignee: 'anyone' }, ME).assignedTo, undefined);
     assert.equal(viewParams({ types: ['meetings', 'docs'], assignee: OTHER }, ME).assignedTo, undefined, 'assignee is ignored without tasks');
+    // The Library keeps a status and an assignee saved while their pills are hidden; applying them to a kind that
+    // cannot carry a state emptied the list (picking People returned nothing at all).
+    assert.equal(viewParams({ types: ['people'], states: ['proposed', 'open'], assignee: 'me' }, ME).stateTypes, undefined, 'a state means nothing without tasks, so it is not asked for');
+    assert.deepEqual(viewParams({ types: ['tasks', 'meetings'], states: ['closed'] }, ME).stateTypes, ['closed'], 'and still applies as soon as tasks are in the selection');
     assert.deepEqual(viewParams({ types: ['tasks', 'docs'] }, ME).nodeTypes, ['text'], 'duplicate graph kinds collapse into one query');
     assert.equal(viewParams({ types: ['docs'], text: ' dpa ' }, ME, 25).textQuery, 'dpa');
     assert.equal(viewParams({ types: ['docs'], text: ' dpa ' }, ME, 25).limit, 25);
