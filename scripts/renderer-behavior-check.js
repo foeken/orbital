@@ -974,6 +974,7 @@ function makeSlashHarness() {
     let palBusy = false;
     ${blockTypes}
     const dropPending = () => {}, render = () => {};
+    const iconSvg = () => '<svg></svg>'; // the real icon set is generated; the menu only needs a slot here
     const placeCaret = (key, offset) => calls.push(['caret', key, offset]);
     const reload = async () => { calls.push(['reload']); };
     const run = async (fn) => fn();

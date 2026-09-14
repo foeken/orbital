@@ -507,7 +507,8 @@ const BLOCK_LABEL = new Map(BLOCK_TYPES);
 const BLOCK_GLYPH = { paragraph: 'T', heading1: 'H1', heading2: 'H2', heading3: 'H3', bullet: '•', numbered: '1.', code: '</>', quote: '❝', divider: '—' };
 const blockTypeOf = (node) => (BLOCK_LABEL.has(node.block) ? node.block : node.heading ? 'heading' + node.heading : 'paragraph');
 const headingOf = (node) => node.heading || Number((blockTypeOf(node).match(/^heading(\d)$/) || [])[1]) || 0;
-function glyphSvg(type) { return '<span class="glyph">' + (BLOCK_GLYPH[type] || '') + '</span>'; } // the icon slot of a palette/menu row
+// the icon slot of a palette/menu row: a real icon where we have one, else the text glyph
+function glyphSvg(type) { return type === 'code' ? iconSvg('code') : '<span class="glyph">' + (BLOCK_GLYPH[type] || '') + '</span>'; }
 const images = new Map(); // image uri -> data URL (or the pending api.image promise)
 const isImage = (node) => node.type === 'image';
 const isDivider = (node) => node.block === 'divider' || node.type === 'divider';
@@ -1775,7 +1776,7 @@ function cancelLink() { const c = linkCtx; linkCtx = null; if (c) placeCaret(c.i
 // buttons, Down opens the style menu, Enter runs, Escape hands the caret back with the selection still there).
 const toolbarEl = $('toolbar');
 const MARK_KEYS = { b: 'bold', i: 'italic', e: 'code' };
-const TOOL_MARKS = [['bold', 'B', 'b', 'Bold ⌘B'], ['italic', 'I', 'i', 'Italic ⌘I'], ['strike', 'S', 's', 'Strikethrough ⇧⌘S'], ['code', '</>', 'c', 'Code ⌘E']];
+const TOOL_MARKS = [['bold', 'B', 'b', 'Bold ⌘B'], ['italic', 'I', 'i', 'Italic ⌘I'], ['strike', 'S', 's', 'Strikethrough ⇧⌘S'], ['code', '', 'c', 'Code ⌘E']];
 let toolCtx = null;       // { key, start, end }: the selection every toolbar action applies to
 let toolMenu = null;      // open style dropdown: { index }
 let toolDismissed = null; // the selection Escape dismissed; it comes back when the selection changes
@@ -1809,7 +1810,8 @@ function renderToolbar() {
   if (toolMenu) style.append(styleMenuEl(item));
   for (const [mark, label, cls, title] of TOOL_MARKS) {
     const b = document.createElement('button');
-    b.type = 'button'; b.dataset.id = mark; b.title = title; b.textContent = label;
+    b.type = 'button'; b.dataset.id = mark; b.title = title;
+    if (label) b.textContent = label; else b.innerHTML = iconSvg('code'); // code uses the icon, the rest are letters
     b.className = 'tbtn ' + cls + (hasMark(segs, toolCtx.start, toolCtx.end, mark) ? ' on' : '');
     b.setAttribute('aria-pressed', String(b.className.includes(' on')));
     b.onclick = () => applyMark(mark);

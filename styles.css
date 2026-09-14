@@ -36,6 +36,7 @@ button { font: inherit; }
 .fields .fvalue { outline: none; min-width: 40px; border-bottom: 1px solid transparent; }
 .fields .fvalue:focus { border-bottom-color: #d6e3f2; }
 .fields .fvalue:empty::before { content: 'Empty'; color: #bbb; }
+.tbtn.c svg { width: 15px; height: 15px; display: block; }
 .fields a { color: #508fbb; text-decoration: underline; cursor: pointer; }
 .error[hidden] { display: none; }
 
