@@ -108,8 +108,9 @@ node scripts/build-icons.js <dir>   # regenerate icons.js from the line icon set
 
 ## How it is put together
 
-`main.js` is the Electron main process: windows, IPC, the view queries, the refresh loop, search,
-creation, pins, icons and filters. `renderer/` with `index.html` and `styles.css` is the whole UI:
+`main.js` is the Electron process boundary (window, menu, the IPC table, boot) and `main/` is what
+it delegates to: shared state, rows, documents and their undo stack, the meeting hub, the six views
+and their refresh loop, pins, images. `renderer/` with `index.html` and `styles.css` is the whole UI:
 eighteen plain scripts sharing one global scope, loaded in the order `index.html` lists them, no
 framework and no bundler. `sdk/` is a generic, Electron-independent Tana client (graph
 queries, the sync stream, Loro documents, outline operations, access rules); `tana-session.js` is the

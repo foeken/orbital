@@ -19,19 +19,28 @@ const ORG = 'org_01EXAMPLE00000000000000000', DOC = 'tana:text:01exampleh0000000
 const snapshot = Buffer.from(fs.readFileSync(require('node:path').join(__dirname, 'fixtures', 'task-snapshot.b64'), 'utf8').trim(), 'base64');
 const b64 = (u8) => Buffer.from(u8).toString('base64');
 
-// Load the real main-process helpers without Electron startup or a Tana connection.
+// Load the real main-process helpers without Electron startup or a Tana connection: main.js and everything under
+// main/ run in one sandboxed context (one realm, stubbed timers, a fake electron), the rest through the real require.
 function mainHelpers() {
-  const file = require('node:path').join(__dirname, '..', 'main.js');
-  const mod = { exports: {} };
+  const nodePath = require('node:path'), root = nodePath.join(__dirname, '..');
   const handlers = new Map();
   const electron = { app: {}, BrowserWindow: function () {}, Menu: {}, ipcMain: { handle: (name, fn) => handlers.set(name, fn) } };
-  vm.runInNewContext(fs.readFileSync(file, 'utf8'), {
-    require: (id) => id === 'electron' ? electron : createRequire(file)(id), module: mod, exports: mod.exports,
-    __dirname: require('node:path').dirname(file), __filename: file, Buffer, console, URL, // URL is a global in Electron's main process
+  const context = vm.createContext({
+    Buffer, console, URL, // URL is a global in Electron's main process
     setTimeout: () => 0, clearTimeout: () => {}, // no refresh/network timers in offline main helpers
     process: { env: { ...process.env, TANA_MAIN_TEST: '1' } },
-  }, { filename: file });
-  return {...mod.exports, handlers};
+  });
+  const cache = new Map(), ours = (file) => file === nodePath.join(root, 'main.js') || file.startsWith(nodePath.join(root, 'main') + nodePath.sep);
+  const load = (file) => {
+    if (cache.has(file)) return cache.get(file).exports;
+    const mod = { exports: {} }; cache.set(file, mod);
+    const req = createRequire(file);
+    const localRequire = (id) => { if (id === 'electron') return electron; const resolved = id.startsWith('.') ? req.resolve(id) : id; return ours(resolved) ? load(resolved) : req(id); };
+    const wrapped = vm.runInContext('(function (require, module, exports, __dirname, __filename) {' + fs.readFileSync(file, 'utf8') + '\n})', context, { filename: file });
+    wrapped(localRequire, mod, mod.exports, nodePath.dirname(file), file);
+    return mod.exports;
+  };
+  return { ...load(nodePath.join(root, 'main.js')), handlers };
 }
 
 async function main() {
