@@ -211,9 +211,9 @@ button { font: inherit; }
 .children.loading { color: #aaa; font-style: italic; padding: 3px 0 3px 22px; }
 .empty-note { color: #aaa; padding: 8px 40px; }
 /* offered beside "Nothing here yet" only while a filter is narrowing the view; a real button, so Tab and Enter reach it */
-.clearfilters { border: 0; border-radius: 6px; background: #f1f1f1; color: #4f8ad9; font: inherit; font-size: 14px; padding: 2px 10px; margin-left: 6px; cursor: pointer; }
-.clearfilters:hover { background: #e4e4e4; }
-.clearfilters:focus { outline: none; box-shadow: 0 0 0 2px #b7d2f5; }
+.clearfilters { border: 0; background: none; color: #888; font: inherit; font-size: 14px; padding: 0; margin-left: 8px; text-decoration: underline; cursor: pointer; }
+.clearfilters:hover { color: #1a1a1a; }
+.clearfilters:focus { outline: none; box-shadow: 0 0 0 2px #b7d2f5; border-radius: 3px; }
 /* loading skeleton: 6 shimmering bars while a view has no rows yet; .gone fades it out, then collapses it */
 .skeleton { padding-left: 24px; transition: opacity .35s; }
 .skeleton.gone { opacity: 0; height: 0; overflow: hidden; pointer-events: none; transition: opacity .35s, height 0s .35s; }
@@ -360,8 +360,8 @@ button { font: inherit; }
 [data-theme="dark"] .check:checked::after { border-color: #f4f5f5; }
 [data-theme="dark"] .document.done > .line .text { color: #777d80; }
 [data-theme="dark"] .meta, [data-theme="dark"] .filtered, [data-theme="dark"] .empty-note { color: #858b8e; }
-[data-theme="dark"] .clearfilters { background: #303436; color: #9cc9e8; }
-[data-theme="dark"] .clearfilters:hover { background: #3b4144; }
+[data-theme="dark"] .clearfilters { color: #858b8e; }
+[data-theme="dark"] .clearfilters:hover { color: #e6e8e9; }
 [data-theme="dark"] .clearfilters:focus { box-shadow: 0 0 0 2px #58768a; }
 [data-theme="dark"] .chip.grey { background: #303436; color: #b7bcbe; }
 [data-theme="dark"] .chip.gold { background: #4b4024; color: #e4c968; }
