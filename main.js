@@ -716,7 +716,16 @@ ipcMain.handle('doc:setDone', (_e, id, done) => mut(id, (doc) => {
   setState(doc, done ? 'closed' : 'open', me.userUri);
   scheduleRefresh(2000); // a closed task drops off the open list
 }));
-ipcMain.handle('doc:taskMeta', (_e, id) => op(id, async doc => ({ ...taskMeta(doc), ...await audienceMetadata(doc, me.userUri, client.graph, client.sync) })));
+// linkSharing lives on the graph node, never in the document, so public-to-the-internet needs its own lookup
+const linkShared = async (id) => {
+  try { const { nodes = [] } = await client.graph.listNodes({ nodeIds: [id], limit: 1 }); return !!(nodes[0] && nodes[0].linkSharing && nodes[0].linkSharing.mode); }
+  catch { return false; }
+};
+ipcMain.handle('doc:taskMeta', (_e, id) => op(id, async doc => ({
+  ...taskMeta(doc),
+  ...await audienceMetadata(doc, me.userUri, client.graph, client.sync),
+  linkShared: await linkShared(id),
+})));
 // Access has native capability checks independent of the outliner's editable-body support.
 async function accessContext() {
   const token = await session.getAccessToken();

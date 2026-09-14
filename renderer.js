@@ -916,19 +916,22 @@ function railCallRow(data) {
 // The zoomed task's own metadata, at the top of the sidebar: who it is assigned to and who can see it. Both open the
 // pickers the palette already uses (api.setAssignees / api.setSharing). Nothing known, nothing shown.
 function railMetaRows(node) {
-  const summary = taskSummary(node);
+  // The sidebar describes any document, not only tasks: a doc can be link-shared or live in a space too.
+  const summary = taskSummary(node) || documentSummary(node);
   if (!summary) return [];
   const writable = canEditNode(node);
-  const rows = [{
+  const rows = summary.assignees ? [{
     id: 'assignees',
     icon: summary.assignees === 'Unassigned' ? 'unassigned' : 'member',
     label: summary.assignees === 'Unassigned' ? 'Unassigned' : 'Assigned to ' + summary.assignees,
     run: writable && tana.taskMeta && tana.setAssignees ? () => openAssigneePalette(node) : null,
-  }];
+  }] : [];
   if (summary.audience) rows.push({ // an unverifiable audience is not a row: there is nothing to show or change
     id: 'visibility', icon: summary.audience.icon, label: summary.audience.label,
     run: writable && tana.accessOptions ? () => openVisibilityPalette(node) : null,
   });
+  // link sharing is a separate fact from the Tana audience, and read-only here: Tana owns that switch
+  if (summary.linkShared) rows.push({ id: 'linkShared', icon: 'globe', label: 'Anyone with the link', run: null });
   return rows;
 }
 function railMetaEl(row) {
@@ -1440,7 +1443,16 @@ function taskSummary(node) {
   if (!meta) { loadTaskMeta(node.id); return null; }
   if (meta.assignees.length) loadMembers(); // names need the member list; loading it re-renders when it arrives
   const scope = typeof meta.audience === 'string' ? meta.audience : meta.audience?.scope;
-  return { assignees: meta.assignees.length ? meta.assignees.map(memberName).join(', ') : 'Unassigned', audience: audienceInfo(meta.audience, meta.audienceSpace), unknownAudience: scope === 'unknown' };
+  return { assignees: meta.assignees.length ? meta.assignees.map(memberName).join(', ') : 'Unassigned', audience: audienceInfo(meta.audience, meta.audienceSpace), unknownAudience: scope === 'unknown', linkShared: !!meta.linkShared };
+}
+// the same facts for a document that is not a task: no assignee, but it can be shared or public
+function documentSummary(node) {
+  if (node.kind !== 'document' || !tana.taskMeta || !isRealId(node.id)) return null;
+  const meta = taskMetaById.get(node.id);
+  if (!meta) { loadTaskMeta(node.id); return null; }
+  const audience = audienceInfo(meta.audience, meta.audienceSpace);
+  if (!audience && !meta.linkShared) return null;
+  return { assignees: '', audience, unknownAudience: false, linkShared: !!meta.linkShared };
 }
 function taskMetaEl(summary) {
   const el = document.createElement('span');
@@ -1461,6 +1473,15 @@ function taskMetaEl(summary) {
     const svg = icon.firstElementChild; if (svg) { svg.setAttribute('width', '14'); svg.setAttribute('height', '14'); }
     el.append(icon);
   } else if (summary.unknownAudience) el.append(' · Visibility unknown');
+  // link sharing is separate from the Tana audience: anyone with the url can read it
+  if (summary.linkShared) {
+    const icon = document.createElement('span');
+    icon.setAttribute('role', 'img'); icon.setAttribute('aria-label', 'Anyone with the link'); icon.title = 'Anyone with the link';
+    icon.style.cssText = 'display:inline-block;width:14px;height:14px;margin-left:6px;vertical-align:-2px';
+    icon.innerHTML = iconSvg('globe');
+    const svg = icon.firstElementChild; if (svg) { svg.setAttribute('width', '14'); svg.setAttribute('height', '14'); }
+    el.append(icon);
+  }
   return el;
 }
 function setTaskAssignees(doc, assignees) {
@@ -2159,7 +2180,7 @@ function paletteRows(q) {
   }
   // the node's web link, for pasting into Slack or a doc
   if (palDoc && tana.nodeLink && isRealId(palDoc.id)) {
-    rows.push({ id: 'copyLink', group: 'Actions', icon: 'library', label: 'Copy link', run: () => run(async () => copyText(await tana.nodeLink(palDoc.id), 'Link copied')) });
+    rows.push({ id: 'copyLink', group: 'Actions', icon: 'link', label: 'Copy link', run: () => run(async () => copyText(await tana.nodeLink(palDoc.id), 'Link copied')) });
   }
   if (palDoc && tana.setIcon) {
     rows.push({ group: 'Actions', icon: 'setIcon', label: 'Set Image', run: () => startDrop(palDoc) });

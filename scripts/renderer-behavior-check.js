@@ -1063,6 +1063,7 @@ function runSidebarRowsCheck() {
     const calls = [];
     let summary = null;
     const taskSummary = () => summary;
+    const documentSummary = () => null; // covered by its own path; here the task summary is the input
     const canEditNode = (node) => node.editable !== false;
     const openAssigneePalette = (doc) => calls.push(['assignees', doc.id]);
     const openVisibilityPalette = (doc) => calls.push(['visibility', doc.id]);
@@ -1084,6 +1085,11 @@ function runSidebarRowsCheck() {
     ['Unassigned'], 'an audience that cannot be verified is left out instead of rendering an empty row');
   assert.deepEqual(plain(api.rows({ id: 'doc', editable: false }, { assignees: 'Lex', audience: { icon: 'lock', label: 'Visible only to you' } }).map((row) => row.run === null)),
     [true, true], 'a read-only node shows its metadata without offering a picker');
+  // link sharing is its own fact: a public document says so, even when it is not a task and has no assignee
+  assert.deepEqual(plain(api.rows({ id: 'doc' }, { assignees: 'Lex', audience: { icon: 'lock', label: 'Visible only to you' }, linkShared: true }).map((row) => [row.id, row.icon])),
+    [['assignees', 'member'], ['visibility', 'lock'], ['linkShared', 'globe']], 'a link-shared node adds a globe row');
+  assert.deepEqual(plain(api.rows({ id: 'doc' }, { assignees: '', audience: null, linkShared: true }).map((row) => [row.id, row.label])),
+    [['linkShared', 'Anyone with the link']], 'a public document with no assignee still reports that anyone with the link can read it');
 
   assert.equal(api.call(null), null, 'no relations, no call row');
   assert.equal(api.call({ pinned: [] }), null, 'a meeting without a call link renders nothing');
