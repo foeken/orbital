@@ -95,7 +95,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .pill[data-id="sort"], .pill[data-id="group"] { background: #f1f1f1; color: #777; }
 .pill[data-id="sort"] b, .pill[data-id="group"] b { color: #444; }
 .pill[data-id="sort"]:hover, .pill[data-id="sort"].open, .pill[data-id="group"]:hover, .pill[data-id="group"].open { background: #e6e6e6; }
-.menu { position: absolute; left: 0; top: calc(100% + 6px); z-index: 5; min-width: 260px; max-height: min(360px, calc(100dvh - 96px)); overflow-y: auto; overscroll-behavior-y: contain; padding: 8px; background: #fff; border-radius: 10px; box-shadow: 0 8px 30px rgba(0, 0, 0, .16), 0 0 0 1px rgba(0, 0, 0, .06); font-weight: 400; color: #1a1a1a; text-align: left; }
+.menu { position: absolute; left: 0; top: calc(100% + 6px); z-index: 5; min-width: 260px; max-height: min(400px, calc(100dvh - 96px)); overflow-y: auto; overscroll-behavior-y: contain; padding: 8px; background: #fff; border-radius: 10px; box-shadow: 0 8px 30px rgba(0, 0, 0, .16), 0 0 0 1px rgba(0, 0, 0, .06); font-weight: 400; color: #1a1a1a; text-align: left; }
 .menu .mrow { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 8px; font-size: 16px; cursor: pointer; user-select: none; }
 .menu .mrow.active { background: #d6e6fa; }
 .menu .mrow:hover { background: #edf5ff; }
