@@ -122,7 +122,7 @@ function mockApi() {
   let status = { authenticated: false, authChecking: false, connected: false, syncing: false, lastSync: null, error: null };
   const emit = (docId) => setTimeout(() => changed.forEach((cb) => cb(docId)), 0);
   const fix = (n) => { n.hasChildren = n.children.length > 0; };
-  const info = (d) => ({ id: d.id, title: d.text, kind: 'document', done: d.done, icon: d.icon, iconSvg: d.iconSvg, hue: d.hue, editable: d.editable, tags: d.tags, meta: d.meta, me: d.me });
+  const info = (d) => ({ id: d.id, title: d.text, kind: 'document', done: d.done, stateType: stateOf(d), icon: d.icon, iconSvg: d.iconSvg, hue: d.hue, editable: d.editable, tags: d.tags, meta: d.meta, me: d.me });
   // undo/redo: whole-state snapshots, one step per mutation (main keeps a global order over per-document Loro UndoManagers).
   // Document delete/restore records an op step instead, like the native bridge where undo restores a soft-deleted document.
   const undoStack = [], redoStack = [];
@@ -187,7 +187,10 @@ function mockApi() {
       if (settling.delete(docId)) throw new Error('document is still settling');
       return structuredClone(taskDetails.get(docId) || { assignees: [], restricted: undefined, participants: [], audience: 'unknown' });
     },
+    setState: async (docId, state) => { const doc = all.find((d) => d.id === docId && d.icon === 'task'); if (!doc) throw new Error('not a task'); mut(docId, () => { doc.state = state; doc.done = state === 'closed'; }); emit(docId); return 1; },
+    setStateMany: async (docIds, state) => { const docs = docIds.map((id) => all.find((d) => d.id === id && d.icon === 'task')); if (docs.some((doc) => !doc)) throw new Error('not a task'); mut(docIds[0], () => { for (const doc of docs) { doc.state = state; doc.done = state === 'closed'; } }); emit(null); return docs.length; },
     setAssignees: async (docId, uris) => { const meta = taskDetails.get(docId); if (!meta) throw new Error('not a task'); meta.assignees = [...new Set(uris)]; emit(docId); },
+    setAssigneesMany: async (docIds, uris) => { const metas = docIds.map((id) => taskDetails.get(id)); if (metas.some((meta) => !meta)) throw new Error('not a task'); mut(docIds[0], () => { for (const meta of metas) meta.assignees = [...new Set(uris)]; }); emit(null); return metas.length; },
     image: async (uri) => { await new Promise((r) => setTimeout(r, 30)); if (uri !== 'tana:image:mock') throw new Error('unknown image ' + uri); return PNG; },
     systemTheme: async () => (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
     onSystemTheme: (cb) => matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => cb(e.matches ? 'dark' : 'light')),
@@ -423,15 +426,17 @@ if (hotkeys.today === undefined && !localStorage.getItem('todayHotkeySeeded')) {
 }
 let pinTree = [], pinInfo = null; // Cmd+K: sidebar pin tree and { docId, sidebar, dates } of the palette's document (api.pinState)
 let palDoc = null;           // document the Cmd+K context actions apply to (zoomed, else the one whose node is focused)
+let palTaskCtx = null;
 let dropDoc = null;          // document waiting for an SVG drop ("Set icon…" overlay)
 let palReturn = null, dropReturn = null; // { key, offset } of the node focused when a palette / the drop overlay opened; focus goes back there on close
 const fresh = new Map();     // docId -> { section, after, node }: documents created here that roots does not list yet, kept in place until it does
 let draftSeq = 0;
 const DRAFT_KIND = { tasks: 'task', meetings: 'meeting' }; // what Enter drafts in a view (any other view: a plain doc)
-let sel = null;              // multi-select: { anchor: key, focus: key } over visible siblings, rendered as .selected; the caret leaves the text
+let sel = null;              // multi-select: { keys: Set, anchor: key, focus: key }; the caret leaves the text
+let selectionFrozen = false;
 // view filters (api.taskFilter / api.libraryFilter, persisted by main); members = api.members() for the Assigned menu ("You" = the one flagged me)
 let taskF = { states: ['proposed', 'open'], assignee: 'me' }, libF = { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me', text: '' };
-let members = null, libRows = null, libSeq = 0;
+let members = null, libRows = null, libTruncated = false, libSeq = 0;
 let sensitiveIds = null, sensitiveVisible = false, sensitiveLoading = null; // marks persist; every launch starts blurred
 const sensitiveEls = new Map(); // rendered surface -> document ids; lets a toggle update live DOM without rebuilding it
 const taskMetaById = new Map(), taskMetaLoading = new Set(), taskMetaFailed = new Map(); // docId -> { until, wait }: a failed metadata read backs off, it is never given up on
@@ -645,7 +650,12 @@ async function reload(docId) { kids.set(docId, await tana.children(docId)); }
 function loadLibrary() {
   if (!tana.library) return;
   const seq = ++libSeq;
-  tana.library(libF).then(async (rows) => { if (seq !== libSeq) return; libRows = rows.map(asDoc); await loadRoots(); render(); }, showError);
+  tana.library(libF).then(async (result) => {
+    if (seq !== libSeq) return;
+    const { nodes, truncated } = Array.isArray(result) ? { nodes: result, truncated: false } : result;
+    libRows = (nodes || []).map(asDoc); libTruncated = !!truncated;
+    await loadRoots(); render();
+  }, showError);
 }
 function loadChats() {
   if (!tana.chats) return;
@@ -786,12 +796,12 @@ function editingRow() {
   return !!(el && el.isContentEditable && (el === titleEl || outline.contains(el)));
 }
 function render(force = false) {
-  if (force !== true && editingRow()) { renderDeferred = true; return; }
+  if (force !== true && (editingRow() || selectionFrozen)) { renderDeferred = true; return; }
   renderDeferred = false; rendering = true;
   try { renderOutline(); } finally { rendering = false; }
 }
 // Metadata and sync may finish between keystrokes. Apply their deferred render only after the caret leaves editable rows.
-document.addEventListener('focusout', () => queueMicrotask(() => { if (renderDeferred && !editingRow()) render(); }));
+document.addEventListener('focusout', () => queueMicrotask(() => { if (renderDeferred && !editingRow() && !selectionFrozen) render(); }));
 function renderOutline() {
   const saved = focused();
   // a live update must not eat a selection: the formatting toolbar acts on it, and a re-render lands mid-toggle
@@ -853,7 +863,7 @@ function renderOutline() {
   renderPills(showPills);
   filterRow.hidden = !!parent || !(filterShown || filterEl.value);
   filterRow.classList.toggle('empty', !filterEl.value);
-  $('filtered').textContent = hidden ? hidden + ' items filtered out' : '';
+  $('filtered').textContent = [hidden ? hidden + ' items filtered out' : '', view === 'library' && libTruncated ? 'Showing the first 1,000 for at least one selected kind' : ''].filter(Boolean).join(' · ');
   // Cached rows remain usable while auth and sync reconnect; reserve the skeleton for an empty outline.
   const loading = !parent && !outline.children.length && (authChecking || !rootsLoaded || (view === 'library' && libRows === null) || (view === 'chats' && chatRows === null) || (view === 'inbox' && inboxRows === null) || (authed && !connected));
   $('skeleton').classList.toggle('gone', !loading);
@@ -1194,12 +1204,12 @@ function nodeEl(node, docId, parent) {
   }
   blurSensitive(body, docId, target && target.id);
   line.append(body);
-  line.onclick = (e) => { if (!reference && (e.target === line || e.target === body || e.target.parentElement === text)) setCaret(text, text.textContent.length); };
+  line.onclick = (e) => { if (!e.metaKey && !e.shiftKey && !reference && (e.target === line || e.target === body || e.target.parentElement === text)) setCaret(text, text.textContent.length); };
   // a reference row: the bullet zooms into the target, a click selects the row, a click on the selected row puts the caret where you clicked
   if (reference) line.onmousedown = (e) => {
-    if (e.shiftKey || e.target.closest('.check') || e.target.closest('.bullet') || e.target.closest('.chev')) return;
+    if (e.metaKey || e.shiftKey || e.target.closest('.check') || e.target.closest('.bullet') || e.target.closest('.chev')) return;
     if (selKeys().includes(item.key) && canEditText(item)) return;
-    e.preventDefault(); sel = { anchor: item.key, focus: item.key }; leaveText(); render();
+    e.preventDefault(); sel = { keys: new Set([item.key]), anchor: item.key, focus: item.key }; leaveText(); applySel();
   };
   el.append(line);
   // expanded = real children shown, or an explicitly opened empty node (which shows one draft child)
@@ -1477,24 +1487,63 @@ function focusAbove(el) {
   else if (p && !$('pills').hidden) { if (el) el.blur(); p.focus(); }
 }
 
-// ---- multi-select: a contiguous range of visible siblings (Shift+Up/Down, Shift+click); blocks can be deleted/moved as one ----
-function selKeys() { // keys from anchor to focus in sibling order; a stale or cross-parent selection collapses
+// ---- multi-select: an arbitrary set (Cmd+click), with one anchored sibling range for Shift+Up/Down and Shift+click ----
+function rangeKeys(anchor, focus) {
+  const a = nodeElOf(anchor), f = nodeElOf(focus);
+  if (!a || !f || a.parentElement !== f.parentElement) return f ? [focus] : [];
+  const sibs = nodeEls(a).map((n) => n.dataset.key), i = sibs.indexOf(anchor), j = sibs.indexOf(focus);
+  return i < 0 || j < 0 ? [] : sibs.slice(Math.min(i, j), Math.max(i, j) + 1);
+}
+function selKeys() { // visible selected keys in outline order; stale rows simply fall out of the set
   if (!sel) return [];
-  const a = nodeElOf(sel.anchor), f = nodeElOf(sel.focus);
-  if (!a || !f) { sel = null; return []; }
-  if (a.parentElement !== f.parentElement) { sel.anchor = sel.focus; return [sel.focus]; }
-  const sibs = nodeEls(a).map((n) => n.dataset.key), i = sibs.indexOf(sel.anchor), j = sibs.indexOf(sel.focus);
-  return sibs.slice(Math.min(i, j), Math.max(i, j) + 1);
+  const keys = [...items.keys()].filter((key) => sel.keys.has(key) && nodeElOf(key));
+  if (!keys.length) return [];
+  if (!nodeElOf(sel.anchor)) sel.anchor = keys.at(-1);
+  if (!nodeElOf(sel.focus)) sel.focus = keys.at(-1);
+  return keys;
 }
-function applySel() { for (const k of selKeys()) nodeElOf(k).classList.add('selected'); }
+function applySel() {
+  for (const n of outline.querySelectorAll('.node.selected')) n.classList.remove('selected');
+  for (const k of selKeys()) nodeElOf(k).classList.add('selected');
+}
 function leaveText() { const el = document.activeElement; if (el && (outline.contains(el) || el === titleEl) && (el.isContentEditable || el.classList.contains('text'))) { flush(keyOfEl(el)); el.blur(); } }
-function extendSel(item, dir) { // grow (or shrink) the range from the focus end; the caret leaves the text
-  if (!sel) sel = { anchor: item.key, focus: item.key };
-  const f = nodeElOf(sel.focus), next = f && nodeEls(f)[nodeEls(f).indexOf(f) + dir];
-  if (next) sel.focus = next.dataset.key;
-  leaveText(); render();
+function toggleSel(key) {
+  const keys = new Set(sel ? sel.keys : []);
+  if (keys.has(key)) keys.delete(key); else keys.add(key);
+  sel = { keys, anchor: key, focus: key };
+  leaveText(); applySel();
+  if (!keys.size && selectionFrozen) { selectionFrozen = false; if (renderDeferred) render(); }
 }
-function clearSel(key) { sel = null; render(); if (key) placeCaret(key); }
+function rangeSelTo(key, anchor) {
+  if (!sel) sel = { keys: new Set([anchor]), anchor, focus: anchor };
+  const extras = new Set(sel.keys);
+  for (const old of rangeKeys(sel.anchor, sel.focus)) extras.delete(old);
+  sel.anchor = anchor; sel.focus = key;
+  sel.keys = new Set([...extras, ...rangeKeys(anchor, key)]);
+  leaveText(); applySel();
+}
+function extendSel(item, dir) { // grow (or shrink) the range from the focus end; the caret leaves the text
+  if (!sel) sel = { keys: new Set([item.key]), anchor: item.key, focus: item.key };
+  const f = nodeElOf(sel.focus), next = f && nodeEls(f)[nodeEls(f).indexOf(f) + dir];
+  if (next) rangeSelTo(next.dataset.key, sel.anchor);
+}
+function clearSel(key) { sel = null; selectionFrozen = false; render(); if (key) placeCaret(key); }
+function blockSelection(keys, contiguous, action) {
+  const its = keys.map((key) => items.get(key));
+  const first = its[0];
+  if (!first || its.some((it) => !it || it.node.kind !== 'block' || !canEditStructure(it) || it.docId !== first.docId || it.parent !== first.parent)) {
+    showError(new Error(action + ' requires writable sibling blocks'));
+    return null;
+  }
+  if (contiguous) {
+    const sibs = childrenOf(first.parent) || [], indexes = its.map((it) => sibs.indexOf(it.node)).sort((a, b) => a - b);
+    if (indexes.some((index, i) => index < 0 || (i && index !== indexes[i - 1] + 1))) {
+      showError(new Error(action + ' requires a contiguous selection of writable sibling blocks'));
+      return null;
+    }
+  }
+  return its;
+}
 async function removeSel(keys) { // Cmd+Shift+Backspace: every selected block, last first; caret to the node before the range
   const all = texts().map(keyOfEl), before = all[all.indexOf(keys[0]) - 1], its = keys.map((k) => items.get(k));
   sel = null;
@@ -1527,17 +1576,17 @@ async function indentSel(keys, op) {
   });
   // a live update landing between two per-row calls sees the range half moved, and selKeys() collapses a range whose
   // rows no longer share a parent; the rows themselves moved together, so put the selection back on them
-  sel = { anchor: keys[0], focus: keys[keys.length - 1] };
+  sel = { keys: new Set(keys), anchor: keys[0], focus: keys[keys.length - 1] };
   render();
 }
 function selKey(e) { // keys while a selection is active (nothing focused); document nodes: delete/move ignored
   const mod = e.metaKey || e.ctrlKey, keys = selKeys();
   if (!keys.length) return false;
-  const blocks = items.get(keys[0]).node.kind === 'block', writable = blocks && keys.every((key) => canEditStructure(items.get(key))), vert = e.key === 'ArrowUp' || e.key === 'ArrowDown';
+  const vert = e.key === 'ArrowUp' || e.key === 'ArrowDown';
   if (e.shiftKey && !mod && vert) extendSel(items.get(sel.focus), e.key === 'ArrowUp' ? -1 : 1);
-  else if (e.key === 'Backspace' && (!mod || e.shiftKey)) { if (writable) removeSel(keys); }
-  else if (mod && e.shiftKey && vert) { if (writable) moveSel(keys, e.key === 'ArrowUp' ? 'up' : 'down'); }
-  else if (e.key === 'Tab' && !mod) { if (writable) indentSel(keys, e.shiftKey ? 'outdent' : 'indent'); }
+  else if (e.key === 'Backspace' && (!mod || e.shiftKey)) { if (blockSelection(keys, false, 'Remove')) removeSel(keys); }
+  else if (mod && e.shiftKey && vert) { if (blockSelection(keys, true, 'Move')) moveSel(keys, e.key === 'ArrowUp' ? 'up' : 'down'); }
+  else if (e.key === 'Tab' && !mod) { if (blockSelection(keys, true, e.shiftKey ? 'Outdent' : 'Indent')) indentSel(keys, e.shiftKey ? 'outdent' : 'indent'); }
   else if (e.key === 'Escape' || (e.key.startsWith('Arrow') && !mod)) clearSel(sel.focus);
   else return false;
   return true;
@@ -1709,6 +1758,8 @@ function taskMetaEl(summary) {
 function setTaskAssignees(doc, assignees) {
   const meta = taskMetaById.get(doc.id);
   if (!meta || !tana.setAssignees) return;
+  const frozen = !!(palTaskCtx?.fromSelection && sel);
+  if (frozen) selectionFrozen = true;
   run(async () => {
     try {
       await tana.setAssignees(doc.id, assignees);
@@ -1716,6 +1767,7 @@ function setTaskAssignees(doc, assignees) {
       if (!palette.hidden && palMode === 'assignees' && palDoc?.id === doc.id) closePalette();
       render();
     } catch (e) {
+      if (frozen) { selectionFrozen = false; if (renderDeferred) render(); }
       showError(e);
       if (!palette.hidden && palMode === 'assignees' && palDoc?.id === doc.id) renderPalette();
     }
@@ -1730,10 +1782,87 @@ function assigneeRows(q) {
   for (const member of members || []) if (!q || memberName(member.id).toLowerCase().includes(q)) rows.push({ group: 'Assignees', icon: 'member', label: memberName(member.id), hint: ids.includes(member.id) ? '✓' : '', keepOpen: true, run: () => setTaskAssignees(palDoc, toggle(member.id)) });
   return rows;
 }
-function openAssigneePalette(doc) {
+function openAssigneePalette(doc, ctx) {
+  palTaskCtx = ctx || null;
   palDoc = doc; palMode = 'assignees'; palRows = []; palIndex = 0; palBusy = false;
   palette.hidden = false; palInput.placeholder = 'Assign task to…'; palInput.value = '';
   loadMembers(); loadTaskMeta(doc.id); renderPalette(); palInput.focus();
+}
+function taskActionContext() {
+  const keys = selKeys(), fromSelection = keys.length > 0;
+  const selected = fromSelection ? keys.map((key) => items.get(key)).filter(Boolean) : palDoc ? [{ node: palDoc, docId: palDoc.id }] : [];
+  const docs = [], seen = new Set();
+  for (const item of selected) {
+    const doc = item.node;
+    if (!doc || doc.draft || !isTask(doc) || !canEditNode(doc) || seen.has(item.docId)) continue;
+    seen.add(item.docId); docs.push(doc);
+  }
+  if (!fromSelection && !docs.length) return null;
+  return { docs, selected: selected.length, skipped: selected.length - docs.length, fromSelection, multi: keys.length > 1 };
+}
+function taskResult(ctx, changed) {
+  if (!ctx.skipped) return;
+  const tasks = changed === 1 ? 'task' : 'tasks', rows = ctx.skipped === 1 ? 'row' : 'rows';
+  setTimeout(() => showNote(`Updated ${changed} ${tasks}; skipped ${ctx.skipped} non-task or read-only ${rows}`), 0);
+}
+function applyTaskChange(ctx, call) {
+  const frozen = !!(ctx.fromSelection && sel);
+  if (frozen) selectionFrozen = true;
+  run(async () => {
+    try {
+      const changed = await call();
+      closePalette(); taskResult(ctx, changed);
+    } catch (e) {
+      if (frozen) { selectionFrozen = false; if (renderDeferred) render(); }
+      throw e;
+    }
+  });
+}
+function statusRows(q) {
+  if (!palTaskCtx?.docs.length) return [];
+  const current = palTaskCtx.docs.length === 1 ? stateOf(palTaskCtx.docs[0]) : null;
+  return STATES.filter(([, label]) => !q || label.toLowerCase().includes(q)).map(([state, label]) => ({
+    group: 'Status', icon: 'status', label, hint: state === current ? '✓' : '', keepOpen: true,
+    run: () => applyTaskChange(palTaskCtx, () => palTaskCtx.multi ? tana.setStateMany(palTaskCtx.docs.map((doc) => doc.id), state) : tana.setState(palTaskCtx.docs[0].id, state)),
+  }));
+}
+function openStatusPalette(ctx) {
+  palTaskCtx = ctx; palMode = 'status'; palRows = []; palIndex = 0; palBusy = false;
+  palette.hidden = false; palInput.placeholder = 'Set status to…'; palInput.value = '';
+  renderPalette(); palInput.focus();
+}
+function manyAssigneeRows(q) {
+  if (!palTaskCtx?.docs.length) return [];
+  loadMembers();
+  const apply = (uris) => applyTaskChange(palTaskCtx, () => tana.setAssigneesMany(palTaskCtx.docs.map((doc) => doc.id), uris));
+  const rows = [{ group: 'Assignees', icon: 'unassigned', label: 'Unassigned', keepOpen: true, run: () => apply([]) }];
+  for (const member of members || []) if (!q || memberName(member.id).toLowerCase().includes(q)) rows.push({ group: 'Assignees', icon: 'member', label: memberName(member.id), keepOpen: true, run: () => apply([member.id]) });
+  return rows;
+}
+function openManyAssigneePalette(ctx) {
+  palTaskCtx = ctx; palMode = 'assigneesMany'; palRows = []; palIndex = 0; palBusy = false;
+  palette.hidden = false; palInput.placeholder = 'Assign tasks to…'; palInput.value = '';
+  loadMembers(); renderPalette(); palInput.focus();
+}
+function taskActionRows() {
+  const ctx = taskActionContext();
+  if (!ctx) return [];
+  if (ctx.multi) {
+    const count = ctx.docs.length, noun = count === 1 ? 'task' : 'tasks', hint = ctx.skipped ? `${ctx.skipped} skipped` : '';
+    return [
+      { group: 'Actions', icon: 'status', label: `Set status for ${count} ${noun}`, hint, disabled: !count || !tana.setStateMany, keepOpen: true, run: () => openStatusPalette(ctx) },
+      { group: 'Actions', icon: 'member', label: `Assign ${count} ${noun} to`, hint, disabled: !count || !tana.setAssigneesMany, keepOpen: true, run: () => openManyAssigneePalette(ctx) },
+    ];
+  }
+  if (!ctx.docs.length) return [];
+  const doc = ctx.docs[0], rows = [];
+  if (tana.setState) rows.push({ group: 'Actions', icon: 'status', label: 'Set status', hint: Object.fromEntries(STATES)[stateOf(doc)] || '', keepOpen: true, run: () => openStatusPalette(ctx) });
+  if (tana.taskMeta && tana.setAssignees) {
+    loadTaskMeta(doc.id);
+    const meta = taskMetaById.get(doc.id), hint = meta && meta.assignees.length ? meta.assignees.map(memberName).join(', ') : meta ? 'Unassigned' : 'Loading…';
+    rows.push({ group: 'Actions', icon: 'member', label: 'Edit assignees', hint, keepOpen: true, run: () => openAssigneePalette(doc, ctx) });
+  }
+  return rows;
 }
 function loadAccess(docId) {
   if (!tana.accessOptions || accessById.has(docId) || accessLoading.has(docId)) return;
@@ -2044,12 +2173,12 @@ $('dropFile').onchange = () => { const doc = dropDoc; readSvg($('dropFile').file
 // ---- @ linking: replace the selection with a mention chosen (or created) in the search palette ----
 // document titles are plain strings in Tana: there the picked item's title goes in as text (setTitle), no mention segment
 // copy to the clipboard and say so where errors already appear, since a copy has no other visible result
-async function copyText(text, note) {
-  await navigator.clipboard.writeText(text);
+function showNote(note) {
   const el = $('error');
   el.textContent = note; el.hidden = false;
   setTimeout(() => { if (el.textContent === note) showError(null); }, 2000);
 }
+async function copyText(text, note) { await navigator.clipboard.writeText(text); showNote(note); }
 function startLink(item, el, [start, end]) {
   flush(item.key);
   const segs = readSegs(el);
@@ -2347,15 +2476,23 @@ outline.addEventListener('focusout', (e) => {
 outline.addEventListener('mousedown', (e) => {
   if (!e.target.closest) return;
   if (e.target.closest('.mention')) e.preventDefault();
-  const line = e.shiftKey && e.target.closest('.line');
-  if (line) { // Shift+click: range from the focused (or anchored) node to this one
+  const line = e.target.closest('.line');
+  if (!line || e.target.closest('.check, .bullet, .chev, a')) return;
+  const key = line.parentElement.dataset.key;
+  if (e.metaKey) { // Cmd+click: add or remove this row, and make it the keyboard range anchor
+    e.preventDefault(); toggleSel(key);
+  } else if (e.shiftKey) { // Shift+click: replace the anchored range while retaining other Cmd-selected rows
     e.preventDefault();
-    const key = line.parentElement.dataset.key, f = focused();
-    sel = { anchor: sel ? sel.anchor : f ? f.key : key, focus: key };
-    leaveText(); render();
+    const f = focused(), anchor = sel ? sel.anchor : f ? f.key : key;
+    rangeSelTo(key, anchor);
   }
 });
-outline.addEventListener('focusin', () => { if (sel) { sel = null; for (const n of outline.querySelectorAll('.selected')) n.classList.remove('selected'); } }); // the caret is back in a node
+outline.addEventListener('focusin', () => { // the caret is back in a node
+  if (!sel) return;
+  sel = null; selectionFrozen = false;
+  for (const n of outline.querySelectorAll('.selected')) n.classList.remove('selected');
+  if (renderDeferred) queueMicrotask(() => { if (!editingRow()) render(); });
+});
 outline.addEventListener('click', (e) => {
   if (!e.target.closest) return;
   const mention = e.target.closest('.mention');
@@ -2451,11 +2588,7 @@ function paletteRows(q) {
     rows.push({ group: 'Actions', icon: 'setIcon', label: 'Set Image', run: () => startDrop(palDoc) });
     if (palDoc.iconSvg) rows.push({ group: 'Actions', label: 'Remove icon', run: () => setIcon(palDoc.id, null) });
   }
-  if (palDoc && isTask(palDoc) && canEditNode(palDoc) && tana.taskMeta && tana.setAssignees) {
-    loadTaskMeta(palDoc.id);
-    const meta = taskMetaById.get(palDoc.id), hint = meta && meta.assignees.length ? meta.assignees.map(memberName).join(', ') : meta ? 'Unassigned' : 'Loading…';
-    rows.push({ group: 'Actions', icon: 'member', label: 'Edit assignees', hint, keepOpen: true, run: () => openAssigneePalette(palDoc) });
-  }
+  rows.push(...taskActionRows());
   if (palDoc && tana.accessOptions) {
     loadAccess(palDoc.id);
     const access = accessById.get(palDoc.id);
@@ -2585,6 +2718,8 @@ function renderPalette() {
   else if (palMode === 'create') palRows = creationRows(q.toLowerCase());
   else if (palMode === 'slash') palRows = slashRows(q.toLowerCase());
   else if (palMode === 'assignees') palRows = assigneeRows(q.toLowerCase());
+  else if (palMode === 'assigneesMany') palRows = manyAssigneeRows(q.toLowerCase());
+  else if (palMode === 'status') palRows = statusRows(q.toLowerCase());
   else if (palMode === 'visibility') palRows = visibilityRows(q.toLowerCase());
   else if (palMode === 'visibilityPeople') palRows = visibilityPeopleRows(q.toLowerCase());
   else if (palMode === 'hidden') palRows = hiddenRows(q);
@@ -2625,7 +2760,7 @@ function togglePalette(mode, link, pin) {
   pinCtx = pin || null;
   if (mode !== 'slash') slashCtx = null;
   palMode = mode; palRows = []; palIndex = 0; palBusy = false; clearTimeout(palTimer); palTimer = null;
-  if (mode === 'cmd') { palDoc = currentDoc(); loadPins(); }
+  if (mode === 'cmd') { palDoc = currentDoc(); palTaskCtx = null; loadPins(); }
   palInput.placeholder = mode === 'search' ? 'Search Tana' : mode === 'slash' ? 'Choose a block type or create' : 'Search or run a command';
   palInput.value = link ? link.text : '';
   if (mode === 'search') searchNow(); else renderPalette();
@@ -2643,7 +2778,7 @@ function nextPalIndex(rows, index, step) {
 }
 palInput.addEventListener('input', () => {
   palIndex = 0;
-  if (palMode === 'cmd' || palMode === 'create' || palMode === 'slash' || palMode === 'assignees' || palMode === 'visibility' || palMode === 'visibilityPeople' || palMode === 'hidden' || palMode === 'pill') return renderPalette();
+  if (palMode === 'cmd' || palMode === 'create' || palMode === 'slash' || palMode === 'assignees' || palMode === 'assigneesMany' || palMode === 'status' || palMode === 'visibility' || palMode === 'visibilityPeople' || palMode === 'hidden' || palMode === 'pill') return renderPalette();
   if (palMode === 'spaces') { palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchSpacesNow, 150); return; }
   palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchNow, 150);
 });

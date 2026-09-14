@@ -74,7 +74,7 @@ function runTypingRenderStabilityCheck() {
     const row = { isConnected: true }, editor = { isContentEditable: true, closest: () => row };
     const titleEl = {}, outline = { contains: (el) => el === editor };
     const document = { activeElement: editor };
-    let rendering = false, renderDeferred = false, renders = 0, caret = 17, scroll = 240;
+    let rendering = false, renderDeferred = false, selectionFrozen = false, renders = 0, caret = 17, scroll = 240;
     const renderOutline = () => { renders++; row.isConnected = false; document.activeElement = {}; caret = 0; scroll = 0; };
     ${functionSource('editingRow')}
     ${functionSource('render')}
@@ -198,7 +198,7 @@ function runSensitiveBlurCheck() {
 }
 
 async function runSelectionChecks() {
-  const selection = sourceBetween('function selKeys()', '// ---- filter pills');
+  const selection = sourceBetween('function rangeKeys(', '// ---- filter pills');
   const canEditStructure = sourceBetween('const canEditStructure =', 'const chatIcon =');
   const rendererHistory = functionSource('history');
   const makeHarness = (readOnly = false) => {
@@ -206,32 +206,37 @@ async function runSelectionChecks() {
       const calls = [];
       const nodes = ['a', 'b', 'c', 'd'].map((id) => ({ id, kind: 'block', editable: ${readOnly ? "id === 'b' ? false : true" : 'true'} }));
       const parentEl = { children: [] };
-      const classes = () => ({ add() {}, contains: (name) => name === 'node' });
+      const classes = () => { const values = new Set(['node']); return { add: (...names) => names.forEach((name) => values.add(name)), remove: (...names) => names.forEach((name) => values.delete(name)), contains: (name) => values.has(name) }; };
       const elFor = (node) => ({ dataset: { key: node.id }, parentElement: parentEl, classList: classes() });
       parentEl.children.push(...nodes.map(elFor));
-      const items = new Map(nodes.map((node) => [node.id, { key: node.id, docId: 'doc', node, parent: {} }]));
+      const parent = { id: 'parent' };
+      const items = new Map(nodes.map((node) => [node.id, { key: node.id, docId: 'doc', node, parent }]));
       const undoStack = [], redoStack = [];
-      let sel = null, caret, rendered = 0;
+      let sel = null, caret, rendered = 0, selectionFrozen = false, renderDeferred = false, error = null;
       const snapshot = () => nodes.map((node) => ({ ...node }));
       const restore = (saved) => {
         nodes.splice(0, nodes.length, ...saved.map((node) => ({ ...node })));
         parentEl.children.splice(0, parentEl.children.length, ...nodes.map(elFor));
-        items.clear(); nodes.forEach((node) => items.set(node.id, { key: node.id, docId: 'doc', node, parent: {} }));
+        items.clear(); nodes.forEach((node) => items.set(node.id, { key: node.id, docId: 'doc', node, parent }));
       };
       const mut = (fn) => { undoStack.push(snapshot()); redoStack.length = 0; return fn(); };
       const applyHistory = (from, to) => { const saved = from.pop(); if (!saved) return null; to.push(snapshot()); restore(saved); return 'doc'; };
       const nodeElOf = (key) => parentEl.children.find((el) => el.dataset.key === key);
       const nodeEls = () => parentEl.children;
+      const outline = { contains: () => false, querySelectorAll: () => parentEl.children.filter((el) => el.classList.contains('selected')) };
+      const document = { activeElement: null }, titleEl = {};
       const childrenOf = () => nodes;
       const texts = () => parentEl.children;
       const keyOfEl = (el) => el.dataset.key;
       const placeCaret = (key) => { caret = key; };
       const focusAbove = () => { caret = 'above'; };
       const dropPending = () => {};
+      const flush = () => {};
       const canEditItem = (item) => item.node.editable !== false;
       const isReference = () => false, isDivider = () => false, canEditNode = (node) => node && node.editable !== false;
       ${canEditStructure}
       const render = () => { rendered++; };
+      const showError = (value) => { error = value && value.message; };
       const reload = async () => {};
       const run = async (fn) => fn();
       const flushAll = () => {}, focused = () => null, loadRoots = async () => {}, kids = new Map([['doc', nodes]]), caretNear = () => {};
@@ -263,12 +268,13 @@ async function runSelectionChecks() {
       };
       ${selection}
       ${rendererHistory}
-      ({ set: (value) => { sel = value; }, keys: () => selKeys(), moveSel, removeSel, selKey,
+      ({ set: (value) => { const i = nodes.findIndex((node) => node.id === value.anchor), j = nodes.findIndex((node) => node.id === value.focus); sel = { keys: new Set(value.keys || nodes.slice(Math.min(i, j), Math.max(i, j) + 1).map((node) => node.id)), anchor: value.anchor, focus: value.focus }; }, keys: () => selKeys(), moveSel, removeSel, selKey, toggleSel, extendSel,
         undo: () => history('undo'), redo: () => history('redo'),
         depths: () => nodes.map((node) => node.depth || 0), opened: () => [...open.keys()],
         noBatch: () => { delete tana.indentMany; delete tana.outdentMany; },
         collapseMidway: () => { collapseMidway = true; },
-        state: () => ({ order: nodes.map((node) => node.id), sel, caret, calls, rendered }) });
+        error: () => error,
+        state: () => ({ order: nodes.map((node) => node.id), sel: sel && { anchor: sel.anchor, focus: sel.focus }, caret, calls, rendered }) });
     `);
     return value;
   };
@@ -276,6 +282,19 @@ async function runSelectionChecks() {
   const move = makeHarness();
   move.set({ anchor: 'b', focus: 'c' });
   assert.deepEqual(plain(move.keys()), ['b', 'c'], 'selection spans visible sibling blocks');
+
+  const arbitrary = makeHarness();
+  arbitrary.toggleSel('b'); arbitrary.toggleSel('d');
+  assert.deepEqual(plain(arbitrary.keys()), ['b', 'd'], 'Cmd+click can add a non-contiguous row and keeps visual order');
+  assert.deepEqual(plain(arbitrary.state().sel), { anchor: 'd', focus: 'd' }, 'the latest Cmd+click becomes the keyboard range anchor');
+  arbitrary.toggleSel('b');
+  assert.deepEqual(plain(arbitrary.keys()), ['d'], 'Cmd+click removes one selected row without disturbing the rest');
+  arbitrary.set({ keys: ['a', 'c'], anchor: 'c', focus: 'c' });
+  arbitrary.extendSel({ key: 'c' }, 1);
+  assert.deepEqual(plain(arbitrary.keys()), ['a', 'c', 'd'], 'Shift+Down extends the anchored range and retains an unrelated Cmd-selected row');
+  arbitrary.extendSel({ key: 'd' }, -1);
+  assert.deepEqual(plain(arbitrary.keys()), ['a', 'c'], 'Shift+Up shrinks only that anchored range');
+
   await move.moveSel(move.keys(), 'down');
   assert.deepEqual(plain(move.state()), {
     order: ['a', 'd', 'b', 'c'], sel: { anchor: 'b', focus: 'c' },
@@ -302,6 +321,24 @@ async function runSelectionChecks() {
     await remove.redo();
     assert.deepEqual(plain(remove.state().order), ['a', 'd'], label + ' redo removes the complete selected range');
   }
+
+  const sparseRemove = makeHarness();
+  sparseRemove.set({ keys: ['b', 'd'], anchor: 'd', focus: 'd' });
+  sparseRemove.selKey(event()); await settle();
+  assert.deepEqual(plain(sparseRemove.state().order), ['a', 'c'], 'removing scattered sibling rows is complete and unambiguous');
+  assert.deepEqual(plain(sparseRemove.state().calls), [['removeMany', ['b', 'd']]], 'scattered removal is still one batch');
+
+  const sparseMove = makeHarness();
+  sparseMove.set({ keys: ['b', 'd'], anchor: 'd', focus: 'd' });
+  sparseMove.selKey({ key: 'ArrowDown', metaKey: true, ctrlKey: false, shiftKey: true }); await settle();
+  assert.deepEqual(plain(sparseMove.state().calls), [], 'scattered rows are not partially moved');
+  assert.equal(sparseMove.error(), 'Move requires a contiguous selection of writable sibling blocks', 'a scattered move gives an explicit reason');
+
+  const sparseIndent = makeHarness();
+  sparseIndent.set({ keys: ['b', 'd'], anchor: 'd', focus: 'd' });
+  sparseIndent.selKey({ key: 'Tab', metaKey: false, ctrlKey: false, shiftKey: false }); await settle();
+  assert.deepEqual(plain(sparseIndent.state().calls), [], 'scattered rows are not partially indented');
+  assert.equal(sparseIndent.error(), 'Indent requires a contiguous selection of writable sibling blocks', 'a scattered indent gives an explicit reason');
 
   const readOnly = makeHarness(true);
   readOnly.set({ anchor: 'b', focus: 'c' });
@@ -355,6 +392,73 @@ async function runSelectionChecks() {
   assert.equal(lockedTab.selKey(tab()), true, 'a read-only selection consumes Tab');
   await settle();
   assert.deepEqual(plain(lockedTab.state().calls), [], 'but a read-only document is never indented');
+}
+
+async function runMultiTaskPaletteCheck() {
+  const contextFns = [functionSource('taskActionContext'), functionSource('taskActionRows')].join('\n');
+  const context = vm.runInNewContext(`
+    const task = (id, editable = true) => ({ id, kind: 'document', icon: 'task', editable, stateType: 'open' });
+    const rows = [
+      { key: 't1', docId: 't1', node: task('t1') },
+      { key: 'meeting', docId: 'meeting', node: { id: 'meeting', kind: 'document', icon: 'meeting', editable: true } },
+      { key: 'locked', docId: 'locked', node: task('locked', false) },
+      { key: 't2', docId: 't2', node: task('t2') },
+    ];
+    const items = new Map(rows.map((item) => [item.key, item]));
+    let selected = rows.map((item) => item.key), palDoc = task('palette-task');
+    const selKeys = () => selected;
+    const isTask = (node) => node.kind === 'document' && node.icon === 'task';
+    const canEditNode = (node) => node.editable !== false;
+    const stateOf = (node) => node.stateType;
+    const STATES = [['proposed', 'Inbox'], ['open', 'In Progress'], ['closed', 'Completed'], ['not_now', 'Later']];
+    const taskMetaById = new Map(), loadTaskMeta = () => {}, memberName = (id) => id;
+    const tana = { setState() {}, setStateMany() {}, taskMeta() {}, setAssignees() {}, setAssigneesMany() {} };
+    const openStatusPalette = () => {}, openAssigneePalette = () => {}, openManyAssigneePalette = () => {};
+    ${contextFns}
+    Object.assign(globalThis, {
+      labels: () => taskActionRows().map((row) => [row.label, row.hint, !!row.disabled]),
+      one: () => { selected = ['t1']; return taskActionRows().map((row) => row.label); },
+      locked: () => { selected = ['locked']; return taskActionRows().map((row) => row.label); },
+    });
+  `);
+  assert.deepEqual(plain(context.labels()), [
+    ['Set status for 2 tasks', '2 skipped', false],
+    ['Assign 2 tasks to', '2 skipped', false],
+  ], 'palette labels report the eligible and skipped counts from the selected rows');
+  assert.deepEqual(plain(context.one()), ['Set status', 'Edit assignees'], 'one selected task keeps the single-task actions');
+  assert.deepEqual(plain(context.locked()), [], 'one read-only selected task offers no mutation');
+
+  const applyFns = [functionSource('taskResult'), functionSource('applyTaskChange'), functionSource('statusRows'), functionSource('manyAssigneeRows')].join('\n');
+  const apply = vm.runInNewContext(`
+    const docs = [{ id: 't1', stateType: 'open' }, { id: 't2', stateType: 'open' }];
+    let sel = { keys: new Set(['t1', 'meeting', 't2']), anchor: 't2', focus: 't2' };
+    let selectionFrozen = false, renderDeferred = false, closed = 0, note = null;
+    const calls = [], members = [{ id: 'person', title: 'Person' }];
+    let palTaskCtx = { docs, selected: 3, skipped: 1, fromSelection: true, multi: true };
+    const STATES = [['proposed', 'Inbox'], ['open', 'In Progress'], ['closed', 'Completed'], ['not_now', 'Later']];
+    const stateOf = (node) => node.stateType, memberName = (id) => members.find((member) => member.id === id).title;
+    const loadMembers = () => {}, render = () => {}, closePalette = () => { closed++; };
+    const showNote = (value) => { note = value; };
+    const run = (fn) => Promise.resolve().then(fn).catch((error) => { throw error; });
+    const tana = {
+      setStateMany: async (ids, state) => { calls.push(['state', [...ids], state]); return ids.length; },
+      setAssigneesMany: async (ids, uris) => { calls.push(['assignees', [...ids], [...uris]]); return ids.length; },
+    };
+    ${applyFns}
+    Object.assign(globalThis, {
+      status: () => statusRows('').find((row) => row.label === 'Completed').run(),
+      assign: () => manyAssigneeRows('').find((row) => row.label === 'Person').run(),
+      state: () => ({ calls, selected: [...sel.keys], frozen: selectionFrozen, closed, note }),
+    });
+  `, { setTimeout, Promise });
+  apply.status(); await new Promise(setImmediate); await new Promise(setImmediate);
+  assert.deepEqual(plain(apply.state()), {
+    calls: [['state', ['t1', 't2'], 'closed']], selected: ['t1', 'meeting', 't2'], frozen: true, closed: 1,
+    note: 'Updated 2 tasks; skipped 1 non-task or read-only row',
+  }, 'bulk status uses one batch, reports skips, and leaves the complete selection frozen in place');
+  apply.assign(); await new Promise(setImmediate); await new Promise(setImmediate);
+  assert.deepEqual(plain(apply.state().calls.at(-1)), ['assignees', ['t1', 't2'], ['person']], 'bulk assignment uses one batch for the same eligible selection');
+  assert.deepEqual(plain(apply.state().selected), ['t1', 'meeting', 't2'], 'bulk assignment also preserves selected rows');
 }
 
 function runAssignedDropdown() {
@@ -810,6 +914,7 @@ function runAuthPaletteCheck() {
     const pinTree = [];
     const pinRows = () => [];
     const pillCommandRows = () => [];
+    const taskActionRows = () => [];
     const tana = { refresh: async () => {}, login: async () => {} };
     const run = () => {};
     const pinInfo = null, palDoc = null, hotkeys = {}, theme = 'light';
@@ -858,6 +963,7 @@ function runSyncShortcutCheck() {
   const rows = vm.runInNewContext(`
     const sections = [], pinTree = [], pinRows = () => [];
     const pillCommandRows = () => [];
+    const taskActionRows = () => [];
     const tana = { refresh: async () => {} }, run = () => {};
     const authed = true, authChecking = false, signedOut = false, pinInfo = null, palDoc = null, hotkeys = {}, theme = 'light';
     const localDate = () => '2026-09-13', setIcon = () => {}, setTheme = () => {}, startDrop = () => {};
@@ -929,7 +1035,7 @@ async function runAssigneeCloseCheck() {
       let closed = 0, error = null, queue = Promise.resolve();
       const calls = [];
       const doc = { id: 'tana:text:01j0task0000000000000000' };
-      let palMode = 'assignees', palDoc = doc;
+      let palMode = 'assignees', palDoc = doc, palTaskCtx = null, sel = null, selectionFrozen = false, renderDeferred = false;
       const palette = { hidden: false };
       const taskMetaById = new Map([[doc.id, { assignees: [] }]]);
       const tana = { setAssignees: async (id, assignees) => { calls.push([id, assignees]); if (${JSON.stringify(fails)}) throw new Error('assignment denied'); } };
@@ -1800,7 +1906,7 @@ async function runMemberLoadCheck() {
   assert.equal(throttled.attempts, 3, 'a slow start cannot turn renders into a request loop: a fresh ask is throttled');
 }
 
-const checks = [runDraftTailCheck, runPinGrouping, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runSensitiveBlurCheck, runSelectionChecks, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runSortGroupCheck, runCmdPillsCheck];
+const checks = [runDraftTailCheck, runPinGrouping, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runSortGroupCheck, runCmdPillsCheck];
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);
   if (failures.length) throw new AggregateError(failures, failures.map((failure) => failure.message).join('\n'));

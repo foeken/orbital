@@ -78,7 +78,7 @@ function taskParams(f, me, limit = 500) {
 // that cannot carry an assignee (events, chats, agents, skills) comes back empty instead of coming back unfiltered and
 // looking like a match. It is in effect only while tasks are in the selection, which is when the Assigned pill is shown
 // (docs/OUTLINER.md Library view).
-function libraryQueries(f, me, limit = 100) {
+function libraryQueries(f, me, limit = 1000) {
   const text = String(f.text || '').trim();
   const kinds = f.types || LIBRARY_KINDS;
   const assignee = kinds.includes('tasks') ? f.assignee : 'anyone';
@@ -86,6 +86,7 @@ function libraryQueries(f, me, limit = 100) {
     if (!LIBRARY_KINDS.includes(kind)) throw new Error('unknown library type: ' + kind);
     const params = kind === 'tasks' ? taskParams({ ...f, assignee }, me, limit)
       : { nodeTypes: [KIND_NODE_TYPE[kind]], ...assigneeParams(assignee, me), limit, sortOptions: UPDATE_DESC };
+    params.mode = 'LIST_NODES_MODE_WITH_COUNT';
     if (text) params.textQuery = text;
     return { kind, params };
   });

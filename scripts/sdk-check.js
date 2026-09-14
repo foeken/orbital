@@ -465,12 +465,41 @@ async function main() {
     }
     assert.equal((await backend.handlers.get('doc:path')(null, DOC)).length, 0, 'the location falls back to its cache');
     assert.equal((await backend.handlers.get('search')(null, 'anything')).length, 0);
-    assert.equal((await backend.handlers.get('library:list')(null, {})).length, 0);
+    const emptyLibrary = await backend.handlers.get('library:list')(null, {});
+    assert.equal(emptyLibrary.nodes.length, 0);
+    assert.equal(emptyLibrary.truncated, false);
     const space = await backend.handlers.get('outline:children')(null, 'tana:space:' + ulid()).then(() => null, (e) => String(e.message || e));
     assert.equal(space, 'not connected to Tana', 'listing a space before the connection is a startup state too');
     assert.equal(backend.statusSnapshot().error, null, 'a startup call is a state, not an error to show');
     assert.deepEqual(sent.filter(([channel, payload]) => channel === 'sync:status' && payload && payload.error), [], 'no error status reaches the renderer during startup');
     console.log('ok  startup: metadata, permission and view calls before the connection stay quiet');
+  }
+
+  // The Library asks for a count per kind, returns everything it received across kinds, and reports server truncation
+  // before local hidden-title filtering. Row conversion still reads app-local icons from SQLite.
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const events = Array.from({ length: 60 }, (_, i) => ({ id: 'tana:event:' + ulid(), title: i ? 'Meeting ' + i : 'Hidden meeting', updateTime: '2026-09-14T10:' + String(i).padStart(2, '0') + ':00Z' }));
+    const docs = Array.from({ length: 60 }, (_, i) => ({ id: 'tana:text:' + ulid(), title: 'Doc ' + i, updateTime: '2026-09-13T10:' + String(i).padStart(2, '0') + ':00Z' }));
+    const requests = [];
+    let eventTotal = 61;
+    cache.setSetting('hiddenTitles', ['Hidden meeting']);
+    cache.setIcon(docs[0].id, '<svg>cached</svg>');
+    backend.testRuntime({ me: { userUri: ME }, win: null, client: { graph: { listNodes: async (p) => {
+      requests.push(p);
+      if (p.nodeIds) return { nodes: [] };
+      if (p.nodeTypes[0] === 'event') return { nodes: events, totalCount: eventTotal };
+      return { nodes: docs, totalCount: docs.length };
+    } } } });
+    const payload = await backend.handlers.get('library:list')(null, { types: ['meetings', 'docs'], states: null, assignee: 'anyone' });
+    assert.equal(payload.nodes.length, 119, 'the merged Library is no longer sliced to 100 and hidden titles still apply');
+    assert.equal(payload.truncated, true, 'one kind with more matches than returned marks the payload truncated');
+    assert.equal(payload.nodes.find((n) => n.id === docs[0].id).iconSvg, '<svg>cached</svg>', 'Library rows still read the SQLite icon cache');
+    assert.ok(requests.slice(0, 2).every((p) => p.limit === 1000 && p.mode === 'LIST_NODES_MODE_WITH_COUNT'));
+    eventTotal = events.length;
+    assert.equal((await backend.handlers.get('library:list')(null, { types: ['meetings', 'docs'], states: null, assignee: 'anyone' })).truncated, false,
+      'a locally hidden row does not create a false truncation warning');
+    console.log('ok  Library returns its full merged fetch, keeps local filters/cache, and reports per-kind truncation');
   }
 
   // Subscriptions, caches and stored filters around the refresh loop: a document opened on demand (zoom, pin, search
@@ -703,7 +732,7 @@ async function main() {
     assert.deepEqual(taskParams({ states: null, assignee: 'anyone' }, ME), { nodeTypes: ['text'], stateTypes: STATE_TYPES, limit: 500, sortOptions: UPD });
     assert.equal(taskParams({ states: ['closed'], assignee: 'unassigned' }, ME).unassigned, true);
     assert.deepEqual(taskParams({ states: ['closed'], assignee: 'tana:user-profile:x' }, ME).assignedTo, ['tana:user-profile:x']);
-    assert.deepEqual(libraryQueries(DEFAULT_LIBRARY_FILTER, ME), [{ kind: 'tasks', params: taskParams(DEFAULT_LIBRARY_FILTER, ME, 100) }]);
+    assert.deepEqual(libraryQueries(DEFAULT_LIBRARY_FILTER, ME), [{ kind: 'tasks', params: { ...taskParams(DEFAULT_LIBRARY_FILTER, ME, 1000), mode: 'LIST_NODES_MODE_WITH_COUNT' } }]);
     const lq = libraryQueries({ types: ['meetings', 'docs', 'chats'], text: ' dpa ' }, ME);
     assert.deepEqual(lq.map((q) => [q.kind, q.params.nodeTypes[0], q.params.textQuery]), [['meetings', 'event', 'dpa'], ['docs', 'text', 'dpa'], ['chats', 'chat', 'dpa']]);
     assert.equal(lq[1].params.stateTypes, undefined, 'docs are filtered client-side');

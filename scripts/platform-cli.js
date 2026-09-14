@@ -410,6 +410,25 @@ commands.rows = async () => {
   const main = backend(await connect());
   out(await main.search(positional.join(' ')));
 };
+// libraryprobe: one cold Library load through main.js, including conversion to the exact IPC payload.
+commands.libraryprobe = async () => {
+  const me = await connect();
+  const calls = [], listNodes = client.graph.listNodes.bind(client.graph);
+  client.graph.listNodes = async (params) => {
+    const result = await listNodes(params);
+    if (params.mode === 'LIST_NODES_MODE_WITH_COUNT' && params.nodeTypes?.length === 1) {
+      calls.push({ nodeType: params.nodeTypes[0], limit: params.limit, returned: result.nodes.length, totalCount: result.totalCount });
+    }
+    return result;
+  };
+  const main = backend(me);
+  const filter = { ...query.DEFAULT_LIBRARY_FILTER, types: query.LIBRARY_KINDS, states: null, assignee: 'anyone' };
+  const started = Date.now();
+  const payload = await main.library(filter);
+  const nodes = Array.isArray(payload) ? payload : payload.nodes;
+  out({ ms: Date.now() - started, bytes: Buffer.byteLength(JSON.stringify(payload)), nodes: nodes.length,
+    truncated: Array.isArray(payload) ? undefined : payload.truncated, calls });
+};
 // chatlist [--limit 200]: every chat newest first with its invocationContext. search() has no chat kind (query.js
 // searchParams lists text/event/user-profile only), so this is how a chat is found by title.
 commands.chatlist = async () => {
@@ -488,6 +507,85 @@ async function setNodePin(on) {
 }
 commands.pinto = () => setNodePin(true);
 commands.unpinfrom = () => setNodePin(false);
+// pageprobe: read-only GraphService pagination/limit experiment against real data.
+commands.pageprobe = async () => {
+  const me = await connect();
+  const sortOptions = [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }];
+  const probe = async (nodeTypes, limits = [100, 200, 500, 1000]) => {
+    const rows = [];
+    for (const limit of limits) {
+      const started = Date.now();
+      const result = await client.graph.listNodes({ ...(nodeTypes ? { nodeTypes } : {}), limit, mode: 'LIST_NODES_MODE_WITH_COUNT', sortOptions });
+      const ids = result.nodes.map((n) => n.id);
+      rows.push({ limit, returned: ids.length, totalCount: result.totalCount, unique: new Set(ids).size,
+        first: ids[0], last: ids.at(-1), ms: Date.now() - started, ids });
+    }
+    const baseline = rows[0].ids;
+    return rows.map(({ ids, ...s }) => ({ ...s, prefixMatches100: baseline.every((id, i) => ids[i] === id) }));
+  };
+  const [textNodes, eventNodes, allNodes, defaultLimit] = await Promise.all([
+    probe(['text']), probe(['event']), probe(null, [100, 200, 500, 1000, 2000, 10000, 2147483647]),
+    client.graph.listNodes({ mode: 'LIST_NODES_MODE_WITH_COUNT', sortOptions }),
+  ]);
+  out({ listNodes: { default: { returned: defaultLimit.nodes.length, totalCount: defaultLimit.totalCount }, text: textNodes, event: eventNodes, all: allNodes } });
+
+  const allFull = await client.graph.listNodes({ limit: 10000, sortOptions });
+  const biggest = { ids: allFull.nodes.map((n) => n.id) };
+  const owners = new Map();
+  for (const n of allFull.nodes) {
+    if (n.ownerUri) owners.set(n.ownerUri, (owners.get(n.ownerUri) || 0) + 1);
+  }
+  const ownerId = [...owners].sort((a, b) => b[1] - a[1])[0]?.[0];
+  if (ownerId) {
+    const ownerResults = [];
+    for (const limit of [100, 200, 500, 1000]) {
+      const result = await client.graph.listNodes({ ownerIds: [ownerId], limit, mode: 'LIST_NODES_MODE_WITH_COUNT', sortOptions });
+      ownerResults.push({ limit, returned: result.nodes.length, totalCount: result.totalCount, unique: new Set(result.nodes.map((n) => n.id)).size });
+    }
+    out({ ownerChildren: { ownerId, sampleOccurrences: owners.get(ownerId), results: ownerResults } });
+  }
+
+  const eventBase = { nodeTypes: ['event'], mode: 'LIST_NODES_MODE_WITH_COUNT',
+    sortOptions: [{ field: 'SORT_FIELD_EVENT_START_TIME', direction: 'SORT_DIRECTION_DESCENDING' }] };
+  const first = await client.graph.listNodes({ ...eventBase, limit: 100 });
+  const boundary = first.nodes.at(-1)?.calendarEvent?.startTime;
+  if (boundary) {
+    const before = new Date(new Date(boundary).getTime() - 1).toISOString();
+    const [newer, exact, older, second] = await Promise.all([
+      client.graph.listNodes({ ...eventBase, eventStartTimeMin: boundary, limit: 1, mode: 'LIST_NODES_MODE_COUNT_ONLY' }),
+      client.graph.listNodes({ ...eventBase, eventStartTimeMin: boundary, eventStartTimeMax: boundary, limit: 1, mode: 'LIST_NODES_MODE_COUNT_ONLY' }),
+      client.graph.listNodes({ ...eventBase, eventStartTimeMax: before, limit: 1, mode: 'LIST_NODES_MODE_COUNT_ONLY' }),
+      client.graph.listNodes({ ...eventBase, eventStartTimeMax: before, limit: 100 }),
+    ]);
+    const firstIds = new Set(first.nodes.map((n) => n.id));
+    out({ eventKeyset: { totalCount: first.totalCount, firstReturned: first.nodes.length, boundary,
+      boundaryRowsInFirst: first.nodes.filter((n) => n.calendarEvent?.startTime === boundary).length,
+      exactBoundaryCount: exact.totalCount, newerOrEqualCount: newer.totalCount, olderCount: older.totalCount,
+      partitionsTotal: (newer.totalCount || 0) + (older.totalCount || 0), secondReturned: second.nodes.length,
+      secondFirst: second.nodes[0]?.calendarEvent?.startTime, secondLast: second.nodes.at(-1)?.calendarEvent?.startTime,
+      overlap: second.nodes.filter((n) => firstIds.has(n.id)).length } });
+  }
+
+  const hub = first.nodes[0]?.id || biggest.ids[0];
+  if (hub) {
+    const edgeTypes = require('../sdk/proto/descriptors').files.graph.enums.find((e) => e.name === 'EdgeType').values.slice(1).map((v) => v.name);
+    const [from, to, chain, profileFrom, profileTo] = await Promise.all([
+      client.graph.listEdges({ fromNodeIds: [hub] }), client.graph.listEdges({ toNodeIds: [hub] }), client.graph.getOwnerChain(hub),
+      client.graph.listEdges({ fromNodeIds: [me.userUri] }), client.graph.listEdges({ toNodeIds: [me.userUri] }),
+    ]);
+    const traversed = [], profileUp = [], profileDown = [];
+    for await (const row of client.graph.traverse({ startNodeId: hub, maxDepth: 2, direction: 'DIRECTION_DOWN', edgeTypes })) traversed.push(row);
+    for await (const row of client.graph.traverse({ startNodeId: me.userUri, maxDepth: 1, direction: 'DIRECTION_UP', edgeTypes })) profileUp.push(row);
+    for await (const row of client.graph.traverse({ startNodeId: me.userUri, maxDepth: 1, direction: 'DIRECTION_DOWN', edgeTypes })) profileDown.push(row);
+    out({ otherGraphCalls: { hub, listEdgesFrom: from.edges?.length || 0, listEdgesTo: to.edges?.length || 0,
+      ownerChainEntries: chain.entries?.length || 0, traverseRows: traversed.length,
+      traverseUniqueNodes: new Set(traversed.map((r) => r.node?.id).filter(Boolean)).size,
+      traverseMaxDepth: Math.max(0, ...traversed.map((r) => r.depth || 0)), profile: {
+        listEdgesFrom: profileFrom.edges?.length || 0, listEdgesTo: profileTo.edges?.length || 0,
+        traverseUp: profileUp.length, traverseDown: profileDown.length,
+      } } });
+  }
+};
 // The real startup path (session -> client -> sync -> first refresh), read-only, with every warning and error
 // the app would log on boot (#97). Nothing is written to Tana: bootstrap and catch-up carry no local ops.
 commands.boot = async () => {
@@ -513,7 +611,7 @@ const USAGE = [
   '             meetings [--days 7] | chatlist [--limit 200] | get <id> | outline <id> | rawdoc <id> [--containers 1] |',
   '             graphnode <id> | edges <id> | image <tana:image:uri> | pins [--dates]',
   '  diagnose   inspect <id...> | audiences [--limit 80] [--mine 0] [--kind text] | refs <id> | rows <query> | pinrows |',
-  '             caps <id...> | related <id> | boot [--settle ms]',
+  '             caps <id...> | related <id> | pageprobe | libraryprobe | boot [--settle ms]',
   '  live       watch <id...>',
   '  WRITES     create <title> [--kind doc|task|meeting] | delete <id> | set-title <id> <title> |',
   '             set-state <id> <proposed|open|closed|not_now> | pin <id> <sidebar|today> | unpin <id> <sidebar|today> |',

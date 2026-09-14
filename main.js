@@ -4,6 +4,7 @@ const fs = require('node:fs/promises');
 const { createHash } = require('node:crypto');
 const db = require('./db');
 const { createTanaSession, peerIdentity } = require('./tana-session');
+const updater = require('./updater');
 const { createTanaClient } = require('./sdk');
 const { fetchImage } = require('./sdk/assets');
 const access = require('./sdk/access');
@@ -347,18 +348,19 @@ async function inbox() {
 }
 
 async function library(filter) {
-  if (!client) return [];
+  if (!client) return { nodes: [], truncated: false };
   const f = { ...libraryFilter(), ...(filter || {}) };
   const results = await Promise.all(libraryQueries(f, me.userUri).map(async ({ kind, params }) => {
-    const { nodes } = await client.graph.listNodes(params);
-    return kind === 'docs' ? nodes.filter((n) => !(n.state && n.state.type)) : nodes;
+    const result = await client.graph.listNodes(params);
+    const nodes = kind === 'docs' ? result.nodes.filter((n) => !(n.state && n.state.type)) : result.nodes;
+    return { nodes, truncated: result.truncated };
   }));
   const seen = new Set();
-  const nodes = results.flat().filter((n) => !seen.has(n.id) && seen.add(n.id))
-    .sort((a, b) => String(b.updateTime || '').localeCompare(String(a.updateTime || ''))).slice(0, 100);
+  const nodes = results.flatMap((r) => r.nodes).filter((n) => !seen.has(n.id) && seen.add(n.id))
+    .sort((a, b) => String(b.updateTime || '').localeCompare(String(a.updateTime || '')));
   nodes.forEach(rememberNodeHue);
   await resolveTypes(nodes.map((n) => n.entityType));
-  return nodes.map((n) => toNode(graphRow(n, true)));
+  return { nodes: nodes.map((n) => toNode(graphRow(n, true))), truncated: results.some((r) => r.truncated) };
 }
 
 // Live search over all top-level items (graph full-text search, relevance order) with #task/#meeting/#Type filters.
@@ -630,10 +632,12 @@ function listFilter(client) {
   const listNodes = client.graph.listNodes.bind(client.graph);
   client.graph.listNodes = async params => {
     const result = await listNodes(params);
+    // Compare the count with the raw response: local delete/title filters must not masquerade as server truncation.
+    const truncated = result.totalCount != null && result.totalCount > result.nodes.length;
     const nodes = visibleGraphNodes(result.nodes);
-    if (params && params.nodeIds) return { ...result, nodes };
+    if (params && params.nodeIds) return { ...result, nodes, truncated };
     const rules = hiddenRules();
-    return { ...result, nodes: rules.length ? nodes.filter(n => !isHidden(memberTitle(n), rules)) : nodes };
+    return { ...result, nodes: rules.length ? nodes.filter(n => !isHidden(memberTitle(n), rules)) : nodes, truncated };
   };
 }
 // Changing the list refreshes like any other filter change: replaceSection drops the rows that are now hidden, so
@@ -716,7 +720,13 @@ function createWindow() {
 
 function createMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate([
-    { role: 'appMenu' },
+    { label: app.name, submenu: [
+      { role: 'about' },
+      { label: 'Check for Updates…', click: () => updater.check({ manual: true }) },
+      { type: 'separator' }, { role: 'services' }, { type: 'separator' },
+      { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' },
+      { type: 'separator' }, { role: 'quit' },
+    ] },
     { role: 'editMenu' },
     { role: 'windowMenu' },
   ]));
@@ -980,7 +990,7 @@ ipcMain.handle('sync:login', async () => {
 });
 
 if (process.env.TANA_MAIN_TEST) {
-  module.exports = { resolveInitialAuth, graphRow, cachedNodeHue, SECTIONS, toNode, outlineWithReferences, chatOutline, op, onChange, documentAction, createDocument, creationOptions, search, spaceChildren, start, refresh, related, callOf,
+  module.exports = { resolveInitialAuth, graphRow, cachedNodeHue, SECTIONS, toNode, outlineWithReferences, chatOutline, op, onChange, documentAction, createDocument, creationOptions, search, library, spaceChildren, start, refresh, related, callOf,
     statusSnapshot: () => ({ ...status }), rememberNodeHue,
     undo: () => history(undoStack, redoStack, 'undo', 'canUndo'), redo: () => history(redoStack, undoStack, 'redo', 'canRedo'), visibleGraphNodes, pinTree,
     nodePin,
@@ -1005,6 +1015,9 @@ if (process.env.TANA_MAIN_TEST) {
     // Discovery has no query subscription. Every 30 s = 4 ListNodes/min for Tasks+Meetings; the active
     // Inbox/Chats/default Library adds 2/min, or all seven Library kinds add 14/min (18 total). Focus/writes add one burst.
     setInterval(refresh, 30000);
+    // Updates: at launch and once a day, silent unless there is one (updater.js swaps the bundle and relaunches).
+    updater.check();
+    setInterval(() => updater.check(), 24 * 60 * 60 * 1000);
   });
 
   app.on('window-all-closed', () => app.quit());
