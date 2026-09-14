@@ -572,8 +572,8 @@ async function main() {
     console.log('ok  six view handlers share fetch/cache, roots stays offline, and refresh follows the active view');
   }
 
-  // The week node is a plain "Week <n>" document beside the day nodes: ISO-8601 week numbers, created once and
-  // reused by every other day in the same week.
+  // The week node is a plain "Week <n> (<year>)" document beside the day nodes: ISO-8601 week numbers, created once
+  // and reused by every other day in the same week.
   {
     const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
     const docs = new Map();
@@ -589,18 +589,21 @@ async function main() {
     };
     backend.testRuntime({ me: { userUri: ME }, win: { isDestroyed: () => false, webContents: { send: () => {} } }, client: { sync, graph: { listNodes } } });
 
-    assert.equal(backend.isoWeek(new Date(2026, 8, 14)), 38, 'the Monday of week 38');
-    assert.equal(backend.isoWeek(new Date(2026, 11, 31)), 53, 'a December day belongs to the year holding its Thursday');
-    assert.equal(backend.isoWeek(new Date(2027, 0, 1)), 53, 'and so a new year can still open in the old one');
+    assert.equal(backend.weekTitle(new Date(2026, 8, 14)), 'Week 38 (2026)', 'the Monday of week 38');
+    assert.equal(backend.weekTitle(new Date(2026, 11, 31)), 'Week 53 (2026)', 'a December day belongs to the year holding its Thursday');
+    assert.equal(backend.weekTitle(new Date(2027, 0, 1)), 'Week 53 (2026)', 'and so a new year can still open in the old one');
+    assert.equal(backend.weekTitle(new Date(2027, 8, 14)), 'Week 37 (2027)', 'and the year in the title keeps next year apart from this one');
 
     const first = await backend.weekNode(new Date(2026, 8, 14));
-    assert.equal(titleOf(docs.get(first.id)), 'Week 38', 'the missing week node is created');
+    assert.equal(titleOf(docs.get(first.id)), 'Week 38 (2026)', 'the missing week node is created');
     const again = await backend.weekNode(new Date(2026, 8, 17));
     assert.equal(again.id, first.id, 'another day in the same week reuses it');
     assert.equal(docs.size, 1, 'and creates nothing');
     const next = await backend.weekNode(new Date(2026, 8, 21));
-    assert.equal(titleOf(docs.get(next.id)), 'Week 39', 'the next week gets its own node');
+    assert.equal(titleOf(docs.get(next.id)), 'Week 39 (2026)', 'the next week gets its own node');
     assert.equal(docs.size, 2, 'and nothing else is created along the way');
+    const nextYear = await backend.weekNode(new Date(2027, 8, 20)); // week 38 again, a year later
+    assert.equal(titleOf(docs.get(nextYear.id)), 'Week 38 (2027)', 'and next year\'s week 38 is a node of its own');
     console.log('ok  week node: one plain document per ISO week, reused by every day in it');
   }
 

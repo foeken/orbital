@@ -478,19 +478,22 @@ function send(channel, payload) {
 // ---- pins (sdk/pins.js over the user's profile/collection/pin-map docs) and app-local icons ----
 const today = () => new Date().toLocaleDateString('sv-SE'); // local YYYY-MM-DD
 
-// The week a date sits in, ISO-8601: weeks start on Monday and belong to the year holding their Thursday, so the
-// last days of December can already be week 1.
-function isoWeek(d) {
+// "Week 38 (2026)", the title of the week a date sits in. ISO-8601: weeks start on Monday and belong to the year
+// holding their Thursday, so 31 December 2026 and 1 January 2027 are both "Week 53 (2026)". The year is in the title
+// because the week number alone comes round again every year.
+function weekTitle(d) {
   const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
   t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7)); // this week's Thursday
-  return Math.ceil(((t - Date.UTC(t.getUTCFullYear(), 0, 1)) / 864e5 + 1) / 7);
+  const year = t.getUTCFullYear();
+  return 'Week ' + Math.ceil(((t - Date.UTC(year, 0, 1)) / 864e5 + 1) / 7) + ' (' + year + ')';
 }
-// "Week 38": a plain document beside the day nodes, like today's node and with no link between them.
+// A plain document beside the day nodes, like today's node and with no link between them.
 async function weekNode(date = new Date()) {
   if (!client) throw new Error(NOT_CONNECTED);
-  const title = 'Week ' + isoWeek(date);
-  const { nodes = [] } = await client.graph.listNodes({ textQuery: title, nodeTypes: ['text'], limit: 20 }).catch(() => ({ nodes: [] }));
-  // An existing node wins over a new one, case-insensitively: "week 38" must not gain a "Week 38" beside it.
+  const title = weekTitle(date);
+  // Searched without the bracketed year, which is punctuation to a text index; the match below is the exact title.
+  const { nodes = [] } = await client.graph.listNodes({ textQuery: title.split(' (')[0], nodeTypes: ['text'], limit: 20 }).catch(() => ({ nodes: [] }));
+  // An existing node wins over a new one, case-insensitively: "week 38 (2026)" must not gain a second one beside it.
   return nodes.find((n) => (n.title || '').trim().toLowerCase() === title.toLowerCase()) || createDocument(title, { kind: 'doc' });
 }
 const pinTarget = (target) => { if (target !== 'sidebar' && target !== 'today') throw new Error('pin target must be sidebar or today: ' + target); return target; };
@@ -994,7 +997,7 @@ ipcMain.handle('sync:login', async () => {
 });
 
 if (process.env.TANA_MAIN_TEST) {
-  module.exports = { resolveInitialAuth, graphRow, cachedNodeHue, VIEWS, toNode, outlineWithReferences, chatOutline, op, onChange, documentAction, createDocument, creationOptions, search, viewRows, spaceChildren, start, refresh, related, callOf, isoWeek, weekNode,
+  module.exports = { resolveInitialAuth, graphRow, cachedNodeHue, VIEWS, toNode, outlineWithReferences, chatOutline, op, onChange, documentAction, createDocument, creationOptions, search, viewRows, spaceChildren, start, refresh, related, callOf, weekTitle, weekNode,
     statusSnapshot: () => ({ ...status }), rememberNodeHue,
     undo: () => history(undoStack, redoStack, 'undo', 'canUndo'), redo: () => history(redoStack, undoStack, 'redo', 'canRedo'), visibleGraphNodes, pinTree,
     nodePin,
