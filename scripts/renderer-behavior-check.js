@@ -1081,7 +1081,21 @@ function runSyncShortcutCheck() {
 
 // The recorder warns before saving a combo the outline already answers to, or one another row already has, since
 // the built-in is checked first and the hotkey would never fire.
-function runReservedComboCheck() {
+async function runReservedComboCheck() {
+  // A link mark to a node is a reference: a new id opens directly, an old outliner id is found through the
+  // "Outliner ID" line the importer leaves behind, and an unknown one goes to the old Tana in the browser.
+  const link = vm.runInNewContext(`
+    const calls = [];
+    const goTo = (id) => calls.push(['goTo', id]), showNote = (n) => calls.push(['note', n]);
+    const tana = { search: async (q) => (q === 'old12chars00' ? [{ id: 'tana:text:01j0found0000000000000000' }] : q === 'two12chars00' ? [{}, {}] : []), openExternal: async (u) => calls.push(['open', u]) };
+    ${functionSource('goToLink')}
+    ({ go: async (href) => { calls.length = 0; await goToLink(href); return calls; } });
+  `);
+  assert.deepEqual(plain(await link.go('tana:text:01j0abcdefghijklmnopqrstuv')), [['goTo', 'tana:text:01j0abcdefghijklmnopqrstuv']], 'a new node id opens directly');
+  assert.deepEqual(plain(await link.go('tana:old12chars00')), [['goTo', 'tana:text:01j0found0000000000000000']], 'an old id opens the imported node that carries it');
+  assert.deepEqual(plain(await link.go('tana:gone12chars0')), [['open', 'https://app.tana.inc?nodeid=gone12chars0']], 'and one nothing carries goes to the old Tana');
+  assert.deepEqual(plain(await link.go('tana:two12chars00'))[0][0], 'note', 'an ambiguous one says so instead of guessing');
+
   // Built-in keys are palette rows with a default combo: the global handler dispatches the default, a recorded
   // combo replaces it (Reset deletes the entry and the default is back), and a key the focused node already
   // answered to arrives defaultPrevented and is not run a second time.

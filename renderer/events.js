@@ -125,9 +125,19 @@ outline.addEventListener('click', (e) => {
   if (!e.target.closest) return;
   const mention = e.target.closest('.mention');
   if (mention) { e.preventDefault(); return goTo(mention.dataset.uri); }
-  const url = e.target.closest('a.url, a.link'); // a bare URL and a link mark both open in the browser, like Tana
-  if (url && tana.openExternal) { e.preventDefault(); run(() => tana.openExternal(url.dataset.href)); }
+  const url = e.target.closest('a.url, a.link'); // a bare URL and a link mark both open in the browser, like Tana; a link mark to a node is a reference
+  if (url && tana.openExternal) { e.preventDefault(); run(() => (url.dataset.href.startsWith('tana:') ? goToLink(url.dataset.href) : tana.openExternal(url.dataset.href))); }
 });
+// A link mark whose href is a node: the new id opens directly; an old outliner id ("tana:IAFYBzLWyNMw", written by
+// the importer as a link) is found through the "Outliner ID: …" line the importer leaves in the imported note, and
+// falls back to the old Tana when nothing here carries it.
+async function goToLink(href) {
+  if (/^tana:[a-z-]+:[0-9a-z]{26}$/.test(href)) return goTo(href);
+  const old = href.slice(5), hits = tana.search ? await tana.search(old) : [];
+  if (hits.length === 1) return goTo(hits[0].id);
+  if (hits.length) showNote(`${hits.length} imported nodes mention ${old}`);
+  else return tana.openExternal('https://app.tana.inc?nodeid=' + encodeURIComponent(old));
+}
 
 filterEl.addEventListener('input', render);
 filterEl.addEventListener('keydown', (e) => {
