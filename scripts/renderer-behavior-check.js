@@ -195,6 +195,7 @@ function runAssignedDropdown() {
     const setLibF = () => {};
     let showMcp = false;
     const setMcp = () => {};
+    const groupPref = {}, sortPref = {}, render = () => {};
     ${definitions}
     ({ pillDefs, saved: () => saved });
   `);
@@ -1030,6 +1031,7 @@ function runFilterMenuCloseCheck() {
     const showError = () => {}, setMcp = () => {};
     const setTaskF = (patch) => { taskF = { ...taskF, ...patch }; };
     const setLibF = (patch) => { libF = { ...libF, ...patch }; };
+    const groupPref = {}, sortPref = {}, render = () => {}, localStorage = { setItem() {} };
     ${definitions}
     ${functionSource('pickMenuRow')}
     ({ pick: (id, label) => {
@@ -1067,11 +1069,18 @@ function runSidebarRowsCheck() {
     const canEditNode = (node) => node.editable !== false;
     const openAssigneePalette = (doc) => calls.push(['assignees', doc.id]);
     const openVisibilityPalette = (doc) => calls.push(['visibility', doc.id]);
+    const openVisibilityPeople = (doc) => calls.push(['people', doc.id]);
+    const accessById = new Map(), taskMetaById = new Map();
+    let palDoc = null, palette = { hidden: true };
+    const loadAccess = () => {};
     const run = (fn) => fn();
     const tana = { taskMeta: async () => ({}), setAssignees: async () => {}, accessOptions: async () => ({}), openExternal: async (url) => calls.push(['open', url]) };
     ${functionSource('railCallRow')}
     ${functionSource('railMetaRows')}
-    ({ rows: (node, value) => { summary = value; return railMetaRows(node); }, call: (data) => railCallRow(data), calls: () => calls });
+    ${functionSource('openVisibility')}
+    ({ rows: (node, value) => { summary = value; return railMetaRows(node); }, call: (data) => railCallRow(data), calls: () => calls,
+       known: (id, meta, access) => { if (meta) taskMetaById.set(id, meta); else taskMetaById.delete(id); if (access) accessById.set(id, access); else accessById.delete(id); },
+       opened: () => ({ doc: palDoc && palDoc.id, hidden: palette.hidden }) });
   `);
   assert.deepEqual(plain(api.rows({ id: 'doc' }, null)), [], 'a node with no task metadata gets no sidebar rows at all');
   const rows = api.rows({ id: 'doc' }, { assignees: 'Lex van Velsen', audience: { icon: 'lock', label: 'Visible only to you' } });
@@ -1098,6 +1107,26 @@ function runSidebarRowsCheck() {
   call.run();
   assert.deepEqual(plain(api.calls().at(-1)), ['open', 'https://meet.google.com/ipt-utoj-srr'], 'it joins through api.openExternal');
   assert.ok(/video/.test(fs.readFileSync(require.resolve('../icons.js'), 'utf8')), 'icons.js carries the video icon the call row asks for');
+
+  // "Visible to selected people" is already past the mode question: the sidebar row opens the people list itself.
+  const people = { assignees: 'Lex', scope: 'people', audience: { icon: 'userLock', label: 'Visible to selected people' } };
+  const visibility = (node, value) => api.rows(node, value).find((row) => row.id === 'visibility');
+  api.known('doc', { participants: [] });
+  visibility({ id: 'doc' }, people).run();
+  assert.deepEqual(plain(api.calls().at(-1)), ['people', 'doc'], 'a document shared with selected people opens at the people list');
+  assert.deepEqual(plain(api.opened()), { doc: 'doc', hidden: false }, 'and the palette it opens is the existing visibility flow, on that document');
+  api.known('doc', { participants: [] }, { rules: ['me', 'people', 'inherit'] });
+  visibility({ id: 'doc' }, people).run();
+  assert.deepEqual(plain(api.calls().at(-1)), ['people', 'doc'], 'known sharing rules that allow selected people keep the shortcut');
+  api.known('doc', { participants: [] }, { rules: ['me'] });
+  visibility({ id: 'doc' }, people).run();
+  assert.deepEqual(plain(api.calls().at(-1)), ['visibility', 'doc'], 'sharing rules without selected people start at the mode picker instead');
+  api.known('doc', null);
+  visibility({ id: 'doc' }, people).run();
+  assert.deepEqual(plain(api.calls().at(-1)), ['visibility', 'doc'], 'without the participants the list cannot be shown, so the flow starts where it did');
+  api.known('doc', { participants: [] });
+  visibility({ id: 'doc' }, { assignees: 'Lex', scope: 'only-me', audience: { icon: 'lock', label: 'Visible only to you' } }).run();
+  assert.deepEqual(plain(api.calls().at(-1)), ['visibility', 'doc'], 'every other visibility mode still opens the flow at its first step');
 }
 
 // Every sidebar title starts at the same x: an icon takes the same horizontal box as a task row's checkbox.
@@ -1157,7 +1186,77 @@ function runClearFiltersCheck() {
   assert.equal(api.filtered(), false, 'a view without filter pills never offers the action');
 }
 
-const checks = [runPinGrouping, runSelectionChecks, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runSidebarAlignmentCheck, runClearFiltersCheck];
+// Sorting and grouping are view preferences over rows already loaded: the order and the headings come from fields the
+// rows carry (title, done/stateType, assignees, tags), never from a new query.
+function runSortGroupCheck() {
+  const definitions = sourceBetween('const STATES =', 'function renderPills');
+  const api = vm.runInNewContext(`
+    let view = 'tasks', groupPref = {}, sortPref = {};
+    let taskF = { states: ['open'], assignee: 'me' }, libF = {};
+    let members = [{ id: 'me', title: 'André', me: true }, { id: 'lex', title: 'Lex' }];
+    const taskMetaById = new Map([['t1', { assignees: ['lex'] }], ['t2', { assignees: ['me'] }], ['t4', { assignees: ['tana:user-profile:ghost'] }]]);
+    const tana = {}, palette = { hidden: true };
+    const $ = () => ({ hidden: true });
+    const renderPills = () => {}, render = () => {}, showError = () => {}, setMcp = () => {}, showMcp = false;
+    const setTaskF = () => {}, setLibF = () => {};
+    const localStorage = { setItem() {} };
+    const isTask = (n) => n.icon === 'task';
+    const visibleTags = (n) => { const tags = n.tags || []; return isTask(n) && tags.some((t) => t.label !== 'task') ? tags.filter((t) => t.label !== 'task') : tags; };
+    ${definitions}
+    ({ pillDefs, groupRows, groupsOf, sortRows, SORTS, SORT_KEY,
+       set: (next, by, order) => { view = next; groupPref[next] = by; sortPref[next] = order; },
+       prefs: () => ({ group: groupBy(), sort: sortBy() }) });
+  `);
+  const rows = [
+    { id: 't1', text: 'beta', icon: 'task', done: 0, tags: [{ label: 'task' }, { label: 'Project' }] },
+    { id: 't2', text: 'Alpha', icon: 'task', done: 1, tags: [{ label: 'task' }] },
+    { id: 't3', text: 'delta', icon: 'task', done: 0, stateType: 'proposed', tags: [{ label: 'task' }] },
+    { id: 't4', text: 'Charlie', icon: 'task', done: 0, stateType: 'not_now', tags: [{ label: 'task' }] },
+    { id: 'd1', text: 'echo', icon: 'doc', tags: [{ label: 'doc' }] },
+  ];
+  const titles = (list, by) => plain(api.groupRows(list, by)).map((g) => [g.title, g.nodes.map((n) => n.id)]);
+  assert.deepEqual(titles(rows, 'status'), [['Inbox', ['t3']], ['In Progress', ['t1']], ['Completed', ['t2']], ['Later', ['t4']], ['No status', ['d1']]],
+    'status groups follow the Status menu order; a row without a task state sits in No status');
+  assert.deepEqual(titles(rows.filter((r) => r.stateType !== 'proposed'), 'status').map(([title]) => title), ['In Progress', 'Completed', 'Later', 'No status'],
+    'a group with no rows is left out');
+  assert.deepEqual(titles(rows, 'assignee'), [['André', ['t2']], ['Lex', ['t1']], ['tana:user-profile:ghost', ['t4']], ['Unassigned', ['t3', 'd1']]],
+    'assignees sort by name, a member without a loaded name keeps its uri, the rest is Unassigned');
+  assert.deepEqual(titles(rows, 'type'), [['doc', ['d1']], ['Project', ['t1']], ['task', ['t2', 't3', 't4']]],
+    'type groups on the tag the row already shows as its chip');
+  assert.deepEqual(titles([{ id: 'x', tags: [] }], 'type'), [['No type', ['x']]], 'a row without tags groups under No type');
+  const order = (list) => plain(api.sortRows(list)).map((n) => n.id);
+  api.set('tasks', 'none', 'title');
+  assert.deepEqual(order(rows), ['t2', 't1', 't4', 't3', 'd1'], 'Title sorts the loaded rows by their own title, case-insensitively');
+  api.set('tasks', 'none', 'default');
+  assert.deepEqual(order(rows), ['t1', 't2', 't3', 't4', 'd1'], 'Default leaves the order the view produced alone');
+  api.set('meetings', 'status', 'title');
+  assert.deepEqual(order(rows), ['t1', 't2', 't3', 't4', 'd1'], 'sorting and grouping apply to Tasks and Library only');
+  assert.equal(api.groupsOf(rows), null, 'an ungrouped or unsupported view renders the flat list it always did');
+  api.set('library', 'type', 'title');
+  assert.equal(api.groupsOf(rows).length, 3, 'a grouped view sections its rows');
+  assert.deepEqual(plain(api.prefs()), { group: 'type', sort: 'title' }, 'each view remembers its own choice');
+  api.set('tasks', undefined, undefined);
+  assert.deepEqual(plain(api.prefs()), { group: 'none', sort: 'default' }, 'and an unset view falls back to None / Default');
+  // the guard that matters: an option may only sort on a field the row objects really carry
+  for (const [id] of plain(api.SORTS).filter(([id]) => id !== 'default')) {
+    const key = api.SORT_KEY[id];
+    assert.ok(key, id + ' has a sort key');
+    assert.notEqual(key(rows[0]), undefined, id + ' reads a field the rows carry');
+  }
+  api.set('tasks', 'status', 'title');
+  const defs = api.pillDefs(), ids = defs.map((d) => d.id);
+  assert.deepEqual(plain(ids.slice(-2)), ['sort', 'group'], 'Sort and Group sit at the end of the filter pills, in that order');
+  const sort = defs.find((d) => d.id === 'sort'), group = defs.find((d) => d.id === 'group');
+  assert.deepEqual(plain([sort.label, sort.value, group.label, group.value]), ['Sort', 'Title', 'Group', 'Status'], 'both pills read their active option');
+  assert.deepEqual(plain(sort.rows().map((r) => r.label)), ['Default', 'Title'], 'the Sort menu offers only orders backed by row data');
+  assert.deepEqual(plain(group.rows().map((r) => r.label)), ['None', 'Status', 'Assignee', 'Type'], 'the Group menu offers the four groupings');
+  assert.ok(sort.rows().find((r) => r.label === 'Title').checked && group.rows().find((r) => r.label === 'Status').checked, 'the active option is ticked');
+  assert.ok([...sort.rows(), ...group.rows()].every((r) => !r.keepOpen), 'choosing an option closes the popup, like every other single choice');
+  assert.match(source, /const groups = groupsOf\(list\);/, 'the view renders its groups');
+  assert.match(source, /groups\.flatMap\(\(g\) => \[groupHeadEl\(g\.title\)/, 'each group is introduced by a heading');
+  assert.match(source, /list = sortRows\(list\);/, 'the rows are sorted before they are grouped');
+}
+const checks = [runPinGrouping, runSelectionChecks, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runSortGroupCheck];
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);
   if (failures.length) throw new AggregateError(failures, failures.map((failure) => failure.message).join('\n'));

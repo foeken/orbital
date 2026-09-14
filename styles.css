@@ -70,6 +70,10 @@ button { font: inherit; }
 .pill[data-id="mcp"].active b, .pill[data-id="mcp"][aria-pressed="true"] b { color: #2b6fcf; }
 .pill[data-id="mcp"].active:hover, .pill[data-id="mcp"].active.open,
 .pill[data-id="mcp"][aria-pressed="true"]:hover, .pill[data-id="mcp"][aria-pressed="true"].open { background: #d9e8fa; }
+/* Sort and Group arrange the rows the view already has, so they sit beside the filters in grey rather than filter blue */
+.pill[data-id="sort"], .pill[data-id="group"] { background: #f1f1f1; color: #777; }
+.pill[data-id="sort"] b, .pill[data-id="group"] b { color: #444; }
+.pill[data-id="sort"]:hover, .pill[data-id="sort"].open, .pill[data-id="group"]:hover, .pill[data-id="group"].open { background: #e6e6e6; }
 .menu { position: absolute; left: 0; top: calc(100% + 6px); z-index: 5; min-width: 260px; max-height: min(360px, calc(100dvh - 96px)); overflow-y: auto; overscroll-behavior-y: contain; padding: 8px; background: #fff; border-radius: 10px; box-shadow: 0 8px 30px rgba(0, 0, 0, .16), 0 0 0 1px rgba(0, 0, 0, .06); font-weight: 400; color: #1a1a1a; text-align: left; }
 .menu .mrow { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 8px; font-size: 16px; cursor: pointer; user-select: none; }
 .menu .mrow.active { background: #d6e6fa; }
@@ -210,6 +214,9 @@ button { font: inherit; }
 .children { margin-left: 33px; padding-left: 0; border-left: 1px solid #ececec; }
 .children.loading { color: #aaa; font-style: italic; padding: 3px 0 3px 22px; }
 .empty-note { color: #aaa; font-size: 16px; padding: 8px 40px; }
+/* group headings (Group pill): the quiet uppercase the sidebar sections use, over the rows of one group */
+.ghead { margin-top: 18px; padding: 10px 6px 4px 24px; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #999; user-select: none; }
+.ghead:first-child { margin-top: 0; }
 /* offered beside "Nothing here yet" only while a filter is narrowing the view; a real button, so Tab and Enter reach it */
 .clearfilters { border: 0; background: none; color: #aaa; font: inherit; font-size: 16px; padding: 0; margin-left: 10px; text-decoration: underline; cursor: pointer; }
 .clearfilters:hover { color: #1a1a1a; }
@@ -331,6 +338,10 @@ button { font: inherit; }
 [data-theme="dark"] .pill:focus { box-shadow: 0 0 0 2px #58768a; }
 [data-theme="dark"] .pill[data-id="mcp"] { background: #2a2d2f; color: #9a9fa1; }
 [data-theme="dark"] .pill[data-id="mcp"]:hover, [data-theme="dark"] .pill[data-id="mcp"].open { background: #363a3c; }
+[data-theme="dark"] .pill[data-id="sort"], [data-theme="dark"] .pill[data-id="group"] { background: #2a2d2f; color: #9a9fa1; }
+[data-theme="dark"] .pill[data-id="sort"] b, [data-theme="dark"] .pill[data-id="group"] b { color: #c9c9c9; }
+[data-theme="dark"] .pill[data-id="sort"]:hover, [data-theme="dark"] .pill[data-id="sort"].open,
+[data-theme="dark"] .pill[data-id="group"]:hover, [data-theme="dark"] .pill[data-id="group"].open { background: #363a3c; }
 [data-theme="dark"] .pill[data-id="mcp"].active, [data-theme="dark"] .pill[data-id="mcp"][aria-pressed="true"] { background: #263842; color: #9cc9e8; }
 [data-theme="dark"] .pill[data-id="mcp"].active b, [data-theme="dark"] .pill[data-id="mcp"][aria-pressed="true"] b { color: #b9dcf2; }
 [data-theme="dark"] .menu { background: #242729; color: #c9c9c9; box-shadow: 0 8px 30px rgba(0, 0, 0, .45), 0 0 0 1px rgba(255, 255, 255, .08); }
@@ -412,6 +423,7 @@ button { font: inherit; }
 [data-theme="dark"] .palette .row.disabled { color: #7e8487; }
 [data-theme="dark"] .palette .row.disabled .ricon { color: #5d6467; }
 [data-theme="dark"] .rail .rhead { color: #858b8e; }
+[data-theme="dark"] .ghead { color: #858b8e; }
 [data-theme="dark"] .rail .rrow:hover { background: #24282a; }
 [data-theme="dark"] .rail .rrow:focus { background: #2b3237; }
 [data-theme="dark"] .rail .rrow .ricon { color: #aeb4b6; }

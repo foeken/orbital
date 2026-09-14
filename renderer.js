@@ -436,6 +436,8 @@ let visibilityRoles = new Map();
 let chatRows = null, chatSeq = 0, showMcp = localStorage.getItem('mcp') === '1'; // Chats view: api.chats({ includeMcp }) rows; the MCP toggle persists
 let inboxRows = null, inboxSeq = 0; // Inbox view: api.inbox() rows (everything still in the inbox state)
 let menu = null;             // open pill menu: { id, index }
+const groupPref = JSON.parse(localStorage.getItem('groupBy') || '{}'); // view id -> 'none' | 'status' | 'assignee' | 'type'
+const sortPref = JSON.parse(localStorage.getItem('sortBy') || '{}');   // view id -> 'default' | 'title'
 let rootsLoaded = false, connected = false; // for the loading skeleton: shown while the view has no rows and roots/library/connection are still pending
 // font size: native page zoom (⇧⌘+ / ⇧⌘− / ⌘0), persisted. Default is one step below native.
 const BASE_ZOOM = 0.91;
@@ -754,8 +756,13 @@ function renderOutline() {
     const q = filterEl.value.trim().toLowerCase();
     list = q ? docs.filter((n) => n.text.toLowerCase().includes(q)) : docs;
     hidden = docs.length - list.length;
-    outline.replaceChildren(...list.map((n) => nodeEl(n, n.id, null)));
-    const today = outline.children[todayIndex(list)];
+    list = sortRows(list); // Default leaves the view's own order alone
+    const groups = groupsOf(list); // null when the view is not grouped: one flat list, as before
+    if (groups) list = groups.flatMap((g) => g.nodes); // keyboard order follows what is on screen
+    outline.replaceChildren(...(groups
+      ? groups.flatMap((g) => [groupHeadEl(g.title), ...g.nodes.map((n) => nodeEl(n, n.id, null))])
+      : list.map((n) => nodeEl(n, n.id, null))));
+    const today = groups ? null : outline.children[todayIndex(list)]; // only the ungrouped Meetings list marks today
     if (today) today.dataset.today = '';
     if (list.length && !outline.hidden && scrolledView !== view) { // a view opens scrolled to today's first meeting (else the top)
       scrolledView = view;
@@ -931,7 +938,7 @@ function railMetaRows(node) {
   }] : [];
   if (summary.audience) rows.push({ // an unverifiable audience is not a row: there is nothing to show or change
     id: 'visibility', icon: summary.audience.icon, label: summary.audience.label,
-    run: writable && tana.accessOptions ? () => openVisibilityPalette(node) : null,
+    run: writable && tana.accessOptions ? () => openVisibility(node, summary.scope) : null,
   });
   // link sharing is a separate fact from the Tana audience, and read-only here: Tana owns that switch
   if (summary.linkShared) rows.push({ id: 'linkShared', icon: 'globe', label: 'Anyone with the link', run: null });
@@ -1407,6 +1414,53 @@ const STATES = [['proposed', 'Inbox'], ['open', 'In Progress'], ['closed', 'Comp
 const TYPES = [['meetings', 'Meetings', 'meeting'], ['tasks', 'Tasks', 'task'], ['docs', 'Docs', 'doc'], null, ['chats', 'Chats', 'chat'], ['canvases', 'Canvases', 'canvas'], ['agents', 'Agents', 'agent'], ['skills', 'Skills', 'skill']];
 const toggleIn = (all, list, v) => { if (!list) return [v]; const next = all.filter((x) => list.includes(x) !== (x === v)); return next.length ? next : null; }; // null = any
 const names = (pairs, list) => (list ? pairs.filter((p) => p && list.includes(p[0])).map((p) => p[1]).join(', ') : null);
+// ---- group by (Tasks, Library): plain headings over the rows the view already loaded, no extra query ----
+const GROUPS = [['none', 'None'], ['status', 'Status'], ['assignee', 'Assignee'], ['type', 'Type']];
+const GROUPABLE = new Set(['tasks', 'library']);
+const FALLBACK = { status: 'No status', assignee: 'Unassigned', type: 'No type' };
+const groupBy = () => (GROUPS.some(([id]) => id === groupPref[view]) ? groupPref[view] : 'none');
+function setGroupBy(id) { groupPref[view] = id; localStorage.setItem('groupBy', JSON.stringify(groupPref)); render(); }
+// A row carries done (0/1 for tasks, undefined otherwise), not the state it came from, so Inbox and Later cannot be
+// told apart here. ponytail: a stateType on the row (main.js toNode) would separate all four without touching this.
+const stateOf = (n) => n.stateType || (n.done == null ? null : n.done ? 'closed' : 'open');
+function groupKey(n, by) {
+  if (by === 'status') return Object.fromEntries(STATES)[stateOf(n)] || FALLBACK.status;
+  // ponytail: a task with several assignees is filed under the first one, like the row's own summary reads
+  if (by === 'assignee') { const meta = taskMetaById.get(n.id), uri = meta && meta.assignees[0]; return uri ? memberName(uri) : FALLBACK.assignee; }
+  return (visibleTags(n)[0] || {}).label || FALLBACK.type;
+}
+// [{ title, nodes }] in a fixed order: the status sequence as the Status menu lists it, names alphabetically,
+// the "nothing here" group last. Only groups with rows are returned.
+function groupRows(list, by) {
+  const buckets = new Map();
+  for (const n of list) { const k = groupKey(n, by); if (!buckets.has(k)) buckets.set(k, []); buckets.get(k).push(n); }
+  const fixed = by === 'status' ? STATES.map((s) => s[1]) : [], last = FALLBACK[by];
+  const rank = (t) => (t === last ? 2 : fixed.includes(t) ? 0 : 1);
+  return [...buckets.keys()]
+    .sort((a, b) => rank(a) - rank(b) || (rank(a) === 0 ? fixed.indexOf(a) - fixed.indexOf(b) : a.localeCompare(b)))
+    .map((title) => ({ title, nodes: buckets.get(title) }));
+}
+function groupsOf(list) {
+  const by = groupBy();
+  if (by === 'none' || !GROUPABLE.has(view)) return null;
+  if (by === 'assignee') loadMembers(); // the names for the headings; without them a heading falls back to the member uri
+  return groupRows(list, by);
+}
+// ---- sort (Tasks, Library): the same rows in another order, again without asking the backend for anything ----
+// Only what a row actually carries can be sorted on. main.js toNode passes id/title/text/done/icon/hue/tags/meta and
+// nothing else: the updatedAt and sortKey its rows have one layer down are dropped, and no create time exists anywhere.
+// ponytail: when toNode passes updatedAt (and a createdAt is captured at all), add the entries and their keys here —
+// ['updated', 'Updated'] with updated: (n) => n.updatedAt, ['created', 'Created'] with created: (n) => n.createdAt.
+const SORTS = [['default', 'Default'], ['title', 'Title']];
+const SORT_KEY = { title: (n) => (n.text || n.title || '').toLowerCase() };
+const sortBy = () => (SORTS.some(([id]) => id === sortPref[view]) ? sortPref[view] : 'default');
+function setSortBy(id) { sortPref[view] = id; localStorage.setItem('sortBy', JSON.stringify(sortPref)); render(); }
+function sortRows(list) {
+  const key = GROUPABLE.has(view) ? SORT_KEY[sortBy()] : null;
+  return key ? [...list].sort((a, b) => String(key(a)).localeCompare(String(key(b)))) : list; // Default: the order the view produced
+}
+// a heading is not a node: no key, no caret, no bullet, and nodeEls() already skips anything without .node
+function groupHeadEl(title) { const el = document.createElement('div'); el.className = 'ghead'; el.textContent = title; return el; }
 function loadMembers() { if (!members && tana.members) { members = []; tana.members().then((m) => { members = m; if (!$('pills').hidden) renderPills(true); if (!palette.hidden) renderPalette(); render(); }, showError); } } // re-render so the Assigned pill reads "You (<name>)"
 const me = () => (members || []).find((m) => m.me);
 const memberName = (uri) => { const member = (members || []).find((m) => m.id === uri); return member ? member.title || member.text : uri; };
@@ -1446,7 +1500,7 @@ function taskSummary(node) {
   if (!meta) { loadTaskMeta(node.id); return null; }
   if (meta.assignees.length) loadMembers(); // names need the member list; loading it re-renders when it arrives
   const scope = typeof meta.audience === 'string' ? meta.audience : meta.audience?.scope;
-  return { assignees: meta.assignees.length ? meta.assignees.map(memberName).join(', ') : 'Unassigned', audience: audienceInfo(meta.audience, meta.audienceSpace), unknownAudience: scope === 'unknown', linkShared: !!meta.linkShared };
+  return { assignees: meta.assignees.length ? meta.assignees.map(memberName).join(', ') : 'Unassigned', audience: audienceInfo(meta.audience, meta.audienceSpace), scope, unknownAudience: scope === 'unknown', linkShared: !!meta.linkShared };
 }
 // the same facts for a document that is not a task: no assignee, but it can be shared or public
 function documentSummary(node) {
@@ -1455,7 +1509,7 @@ function documentSummary(node) {
   if (!meta) { loadTaskMeta(node.id); return null; }
   const audience = audienceInfo(meta.audience, meta.audienceSpace);
   if (!audience && !meta.linkShared) return null;
-  return { assignees: '', audience, unknownAudience: false, linkShared: !!meta.linkShared };
+  return { assignees: '', audience, scope: typeof meta.audience === 'string' ? meta.audience : meta.audience?.scope, unknownAudience: false, linkShared: !!meta.linkShared };
 }
 function taskMetaEl(summary) {
   const el = document.createElement('span');
@@ -1552,6 +1606,16 @@ function openVisibilityPalette(doc) {
   palDoc = doc; palMode = 'visibility'; palRows = []; palIndex = 0; palette.hidden = false;
   palInput.placeholder = 'Choose visibility'; palInput.value = ''; loadAccess(doc.id); loadTaskMeta(doc.id); renderPalette(); palInput.focus();
 }
+// A document that is already shared with selected people opens at that list: the mode is settled, the people are what
+// changes. Anything else (and a doc whose participants or sharing rules say the list cannot be edited) starts at the
+// mode picker as before. The full picker stays one Cmd+K "Edit visibility" away.
+function openVisibility(doc, scope) {
+  const access = accessById.get(doc.id);
+  if (scope !== 'people' || !taskMetaById.has(doc.id) || (access && !(access.rules || []).includes('people'))) return openVisibilityPalette(doc);
+  palDoc = doc; palette.hidden = false;
+  loadAccess(doc.id); // Apply still goes through the same sharing rules
+  openVisibilityPeople(doc);
+}
 function openVisibilityPeople(doc) {
   const meta = taskMetaById.get(doc.id);
   if (!meta) return;
@@ -1633,6 +1697,9 @@ function pillDefs() {
       ...(members || []).filter((x) => !x.me).map((x) => ({ label: x.title, checked: a === x.id, run: () => save({ assignee: x.id }) })),
     ] });
   }
+  // sorting and grouping are view preferences, not queries: they re-order and re-section the rows the view already has
+  defs.push({ id: 'sort', label: 'Sort', value: SORTS.find(([id]) => id === sortBy())[1], rows: () => SORTS.map(([id, label]) => ({ label, checked: sortBy() === id, run: () => setSortBy(id) })) });
+  defs.push({ id: 'group', label: 'Group', value: GROUPS.find(([id]) => id === groupBy())[1], rows: () => GROUPS.map(([id, label]) => ({ label, checked: groupBy() === id, run: () => setGroupBy(id) })) });
   return defs;
 }
 function renderPills(show) {
