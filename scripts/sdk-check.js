@@ -495,10 +495,12 @@ async function main() {
     tasks = [];
     await backend.refresh();
     assert.deepEqual(unsubscribed, [taskId], 'a row that left the view is still unsubscribed');
+    tasks = [{ id: taskId, title: 'Task', state: { type: 'open' }, updateTime: '2026-09-13T10:00:00Z' }];
+    await backend.refresh();
+    assert.ok(cache.get(taskId), 'a later refresh replaces the stale cache with a newly discovered task');
 
     // typeTitles is one id -> title cache: the space in this document's location must not become a searchable type.
     assert.equal((await backend.handlers.get('doc:path')(null, openId)).map((c) => c.title).join(' > '), 'Library > Deal');
-    tasks = [{ id: taskId, title: 'Task', state: { type: 'open' }, updateTime: '2026-09-13T10:00:00Z' }];
     queries.length = 0;
     assert.equal((await backend.handlers.get('search')(null, '#deal')).length, 0, 'a space sharing a type title is not a type filter');
     assert.deepEqual(queries, [], 'an unknown #type runs no query at all');

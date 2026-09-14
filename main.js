@@ -451,7 +451,7 @@ async function createDocument(title, opts = {}) {
   const id = KINDS[config.kind] + ulid();
   const doc = await subscribe(id, loro => initDocument(loro, title, me.userUri, config));
   if (!doc) throw new Error(status.error || 'could not create ' + id);
-  const node = await info(doc); scheduleRefresh(0); return node;
+  const node = await info(doc); scheduleRefresh(2000); return node; // give GraphService's index time to include the new node
 }
 
 // Node shape for any subscribed document: cached row when listed, else derived from the Loro data map.
@@ -537,6 +537,13 @@ function setIcon(id, svg) {
   }
   db.setIcon(id, svg);
   send('outline:changed', null);
+}
+
+function setSensitive(id, on) {
+  if (typeof id !== 'string' || !DOC_URI.test(id)) throw new Error('Not a Tana document id');
+  if (typeof on !== 'boolean') throw new Error('Sensitive state must be true or false');
+  db.setSensitive(id, on);
+  return on;
 }
 
 function setStatus(patch) {
@@ -703,6 +710,7 @@ function createWindow() {
     webPreferences: { preload: path.join(__dirname, 'preload.js') },
   });
   win.on('page-title-updated', (e) => e.preventDefault());
+  win.on('focus', () => refresh());
   win.loadFile(path.join(__dirname, 'index.html'));
 }
 
@@ -870,6 +878,8 @@ ipcMain.handle('pins:unpin', (_e, id, target) => setPin(id, target, false));
 ipcMain.handle('pins:pinTo', (_e, hubId, uri) => nodePin(hubId, uri, true)); // pin a document on a meeting/space
 ipcMain.handle('pins:unpinFrom', (_e, hubId, uri) => nodePin(hubId, uri, false));
 ipcMain.handle('doc:setIcon', (_e, id, svg) => setIcon(id, svg));
+ipcMain.handle('sensitive:list', () => db.sensitiveIds());
+ipcMain.handle('sensitive:set', (_e, id, on) => setSensitive(id, on));
 ipcMain.handle('doc:related', (_e, id) => related(id)); // { summary, tagline, pinned[], outcomes[], notes[] }
 ipcMain.handle('doc:summaryUri', (_e, id) => summaryUri(id)); // where a meeting should actually open, or null
 ipcMain.handle('doc:setField', (_e, id, key, text) => mut(id, (doc) => fields.setFieldText(doc, key, text)));
@@ -955,7 +965,9 @@ if (process.env.TANA_MAIN_TEST) {
       try { await start(); }
       catch (e) { setStatus({ error: errText(e) }); }
     }
-    setInterval(refresh, 60000);
+    // Discovery has no query subscription. Every 30 s = 4 ListNodes/min for Tasks+Meetings; the active
+    // Inbox/Chats/default Library adds 2/min, or all seven Library kinds add 14/min (18 total). Focus/writes add one burst.
+    setInterval(refresh, 30000);
   });
 
   app.on('window-all-closed', () => app.quit());
