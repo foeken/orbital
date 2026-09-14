@@ -157,7 +157,7 @@ const audienceInfo = vm.runInNewContext(`
   ${functionSource('audienceInfo')}
   audienceInfo;
 `);
-assert.deepEqual(JSON.parse(JSON.stringify(audienceInfo('space', { uri: 'tana:space:foundry', title: 'Foundry LT' }))), { icon: 'houseLock', label: 'Visible to members of Foundry LT' }, 'a resolved space audience names the space in its tooltip');
+assert.deepEqual(JSON.parse(JSON.stringify(audienceInfo('space', { uri: 'tana:space:foundry', title: 'Foundry LT' }))), { icon: 'houseLock', label: 'Visible to members of Foundry LT', space: 'Foundry LT' }, 'a resolved space audience names the space in its tooltip and beside the assignee');
 assert.deepEqual(JSON.parse(JSON.stringify(audienceInfo('space'))), { icon: 'houseLock', label: 'Visible to space members' }, 'a missing space title keeps the generic fallback');
 assert.equal(audienceInfo('unknown'), null, 'unknown visibility keeps the existing fallback path');
 

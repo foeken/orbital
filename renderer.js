@@ -1405,7 +1405,8 @@ function audienceInfo(audience, audienceSpace) {
   const info = AUDIENCES[scope];
   if (!info) return null;
   const title = audience?.title || audienceSpace?.title;
-  return scope === 'space' && title ? { ...info, label: 'Visible to members of ' + title } : info;
+  // a space audience names the space, so a row can read "André Foeken · Heads of Technology"
+  return scope === 'space' && title ? { ...info, label: 'Visible to members of ' + title, space: title } : info;
 }
 function loadTaskMeta(docId) {
   // Metadata is supplemental. Calling it before the sync client connects retries on every render.
@@ -1449,6 +1450,7 @@ function taskMetaEl(summary) {
     icon.innerHTML = iconSvg(summary.audience.icon);
     const svg = icon.firstElementChild; if (svg) { svg.setAttribute('width', '14'); svg.setAttribute('height', '14'); }
     el.append(icon);
+    if (summary.audience.space) el.append(' · ' + summary.audience.space); // a whole space is worth naming in the row
   } else if (summary.unknownAudience) el.append(' · Visibility unknown');
   return el;
 }

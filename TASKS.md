@@ -156,6 +156,8 @@ Every request made during the build and its state. ✓ done and verified · ◐ 
 
 | 136 | Abbreviate sidebar tags to # with their hue, full tag on hover | ✓ A sidebar chip collapses to its # in the type colour (measured 16px against a 115px full label) and expands on hover or keyboard focus, with the full tag also on the title attribute. The collapsed state is measured; the expansion is a plain :hover/:focus rule that a background window cannot exercise. | renderer.js, styles.css |
 
+| 137 | A task visible to a whole space shows Assignee · Space | ✓ The space audience already carried its title for the tooltip; the row now prints it beside the assignee. Live: André Foeken · Heads of Technology and Sebastiaan van Parijs · NTP LT. | renderer.js audienceInfo, taskMetaEl |
+
 Tracking rule: append new requests to the numbered table above using the next integer. Update an existing row for repeated requests; never create a separate unnumbered request list. Preserve status and verification evidence. Orchestrator owns this file.
 
 Latest rounds (three workers, all closed). The live app was inspected over its devtools port against real Tana data, which is how #49, #54, #59, #62, #68, #78, #83, #85, #89, #93, #97 and #98 were confirmed; the interaction-heavy rows (#39, #90, #96, #105 to #108) were driven in the in-file mock, where mutations stay local. `npm run check` passes on the merged tree.
