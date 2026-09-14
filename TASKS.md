@@ -170,6 +170,8 @@ Every request made during the build and its state. ✓ done and verified · ◐ 
 
 | 144 | The @ picker should preselect Create unless a result title actually starts with the typed text | ✓ A full-text hit that merely mentions the words no longer steals the default. Live: selecting "Heads of" preselects Heads of Technology - prep 10 September, while selecting "Technology" preselects Create “Technology” even though hits exist. | renderer.js searchNow |
 
+| 145 | Searching tana did not find the doc titled Tana; rank by how much of the title the query covers | ✓ The server ranks by full-text relevance, so that node sat past the first page: the query now fetches 200 and ranks here by exact, prefix, contains and then title coverage, returning a page of 40. Live: tana now returns Tana first, and heads of technology returns the Heads of Technology nodes first. | main.js search |
+
 Tracking rule: append new requests to the numbered table above using the next integer. Update an existing row for repeated requests; never create a separate unnumbered request list. Preserve status and verification evidence. Orchestrator owns this file.
 
 Latest rounds (three workers, all closed). The live app was inspected over its devtools port against real Tana data, which is how #49, #54, #59, #62, #68, #78, #83, #85, #89, #93, #97 and #98 were confirmed; the interaction-heavy rows (#39, #90, #96, #105 to #108) were driven in the in-file mock, where mutations stay local. `npm run check` passes on the merged tree.

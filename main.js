@@ -341,13 +341,20 @@ async function search(query) {
   const parsed = parseQuery(query);
   const params = searchParams(parsed, needsTypes(parsed) ? await typesByTitle() : new Map());
   if (!params) return [];
-  const { nodes } = await client.graph.listNodes({ ...params, limit: 40 }); // wider net so title matches are not pushed out by full-text hits
+  // The server ranks by full-text relevance, so a document titled exactly like the query can sit past the first
+  // page: fetch wide, rank here, and hand back a page's worth.
+  const { nodes } = await client.graph.listNodes({ ...params, limit: 200 });
   nodes.forEach(rememberNodeHue);
   await resolveTypes(nodes.map((n) => n.entityType));
-  // title matches first (exact, then prefix, then contains), full-text hits keep the server's relevance order
+  // Title matches first (exact, then prefix, then contains), and within a class the title the query covers most:
+  // "Tana" beats "The one where Tana meets NTP". Full-text hits keep the server's relevance order.
   const q = parsed.text.trim().toLowerCase();
   const rank = (n) => { const t = (n.title || '').toLowerCase(); return t === q ? 0 : t.startsWith(q) ? 1 : t.includes(q) ? 2 : 3; };
-  return nodes.map((n, i) => [rank(n), i, n]).sort((a, b) => a[0] - b[0] || a[1] - b[1]).map(([, , n]) => toNode(graphRow(n, true)));
+  const cover = (n) => { const t = (n.title || '').toLowerCase(); return t.includes(q) && t.length ? q.length / t.length : 0; };
+  return nodes.map((n, i) => [rank(n), cover(n), i, n])
+    .sort((a, b) => a[0] - b[0] || b[1] - a[1] || a[2] - b[2])
+    .slice(0, 40)
+    .map(([, , , n]) => toNode(graphRow(n, true)));
 }
 
 // Resolve native embeds without replacing the containing block identity or loading target content recursively.

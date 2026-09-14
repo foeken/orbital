@@ -100,7 +100,7 @@ const commands = {
     if (query.needsTypes(parsed)) types = new Map((await client.graph.listNodes({ nodeTypes: ['type'], limit: 200 })).nodes.map((n) => [(n.title || '').toLowerCase(), n.id]));
     const params = query.searchParams(parsed, types);
     if (!params) return out('no results (empty query or unknown #type)');
-    const { nodes } = await client.graph.listNodes(params);
+    const { nodes } = await client.graph.listNodes({ ...params, limit: Number(flag('limit') || params.limit || 40) });
     const when = (ev) => (ev ? new Date(ev.startTime).toLocaleString('sv-SE').slice(0, 16) + ' ' : '');
     for (const n of nodes) out(n.id + '  ' + (n.calendarEvent ? '[meeting] ' + when(n.calendarEvent) : n.state ? '[task:' + n.state.type + '] ' : n.entityType ? '[typed] ' : '') + (n.title || ''));
     out(nodes.length + ' results');
