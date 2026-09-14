@@ -1089,6 +1089,59 @@ async function main() {
     assert.deepEqual([...new Set(sync.subscribed)], [ME, COL, PM], 'only the profile and the two pointed documents are subscribed');
     console.log('ok  pins (sidebar tree, personal date pins, converge)');
   }
+  // 3d. Items pinned *on* a meeting or a space: the hub's own pinnedItems MovableList (docs/PINNING.md section 4),
+  // and main's nodePin gate around it. This is not the sidebar/date pins above.
+  {
+    const access = require('../sdk/access');
+    const hubId = 'tana:event:' + ulid(), otherId = 'tana:space:' + ulid(), docId = 'tana:text:' + ulid();
+    const hub = new Document(hubId, { peerId: '31' }), mirror = new Document(hubId, { peerId: '32' });
+    hub.on('local-update', (u) => mirror.applyRemote([u]));
+    hub.transact((l) => {
+      initDocument(l, 'Rehearsal meeting', ME);
+      const data = l.getMap('data');
+      data.set('type', 'event'); data.set('restricted', true);
+      const p = data.get('participants').setContainer(ME, new LoroMap()); p.set('type', 'user'); p.set('role', 'attendee');
+    });
+    assert.deepEqual(pins.items(hub), []);
+    pins.pinItem(hub, docId);
+    pins.pinItem(hub, docId); // dedup on uri, like the web client's wm()
+    pins.pinItem(hub, otherId, 'embed');
+    assert.deepEqual(pins.items(hub), [{ uri: docId }, { uri: otherId, mode: 'embed' }]);
+    assert.ok(mirror.loro.getMovableList('pinnedItems').get(0) instanceof LoroMap, 'elements are map containers, like every schema element the web client writes');
+    assert.deepEqual(mirror.loro.getMovableList('pinnedItems').toJSON(), pins.items(hub), 'converges');
+    pins.unpinItem(hub, docId);
+    pins.unpinItem(hub, 'tana:text:nope'); // no-op
+    assert.deepEqual(pins.items(hub), [{ uri: otherId, mode: 'embed' }]);
+    // An attendee may write the event even though its title is read-only: editable() answers for the body, access
+    // answers for the document. That gap is exactly what made the sidebar visibility row inert on a meeting.
+    const ctx = { orgDocUri: 'tana:org:' + ulid(), sync: { subscribe: async () => { throw new Error('unavailable'); } }, graph: {} };
+    assert.equal(await access.canWrite(readNode(hub), ME, ctx), true);
+    assert.equal(require('../sdk/node').editable(readNode(hub), ME), false, 'an event body stays read-only');
+
+    const backend = mainHelpers(), events = [];
+    const stranger = 'tana:user-profile:' + ulid();
+    const closed = new Document('tana:event:' + ulid());
+    closed.transact((l) => { initDocument(l, 'someone else’s meeting', stranger); l.getMap('data').set('type', 'event'); l.getMap('data').set('restricted', true); });
+    const plain = new Document(docId);
+    plain.transact((l) => initDocument(l, 'a document, not a hub', ME));
+    const documents = new Map([[hubId, hub], [closed.id, closed], [docId, plain]]);
+    const claims = Buffer.from(JSON.stringify({ org_id: ORG, role: 'member' })).toString('base64url');
+    backend.testRuntime({
+      me: { userUri: ME, orgId: ORG, orgDocUri: ctx.orgDocUri },
+      client: { sync: { getDocument: (id) => documents.get(id), subscribe: async (id) => { if (!documents.has(id)) throw new Error('not found'); return documents.get(id); } } },
+      session: { getAccessToken: async () => 'head.' + claims + '.sig' },
+      win: { isDestroyed: () => false, webContents: { send: (channel, id) => events.push([channel, id]) } },
+    });
+    await assert.rejects(backend.nodePin(docId, hubId, true), /meeting or a space/, 'only an event or a space has pinnedItems');
+    await assert.rejects(backend.nodePin(hubId, 'not-a-uri', true), /Tana document id/);
+    await assert.rejects(backend.nodePin(hubId, hubId, true), /cannot pin itself/);
+    await assert.rejects(backend.nodePin(closed.id, docId, true), /Write permission/, 'no participant grant, no pin');
+    assert.deepEqual(await backend.nodePin(hubId, docId, true), [otherId, docId]);
+    assert.ok(events.some(([channel, id]) => channel === 'outline:changed' && id === hubId), 'the hub refreshes so the sidebar reloads its pins');
+    assert.deepEqual(await backend.nodePin(hubId, docId, false), [otherId]);
+    assert.deepEqual(pins.items(hub), [{ uri: otherId, mode: 'embed' }]);
+    console.log('ok  pinned items on an event/space (dedup, converge, write-capability gate, not body editability)');
+  }
   {
     const backend = mainHelpers(), cache = require('../db');
     cache.open(':memory:');

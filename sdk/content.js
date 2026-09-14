@@ -360,33 +360,49 @@ function removeMany(document, ids) {
   document.transact(() => { for (const unit of [...units].reverse()) removeUnit(unit); });
 }
 
+function indentUnit(document, id) {
+  const { block, item: li } = must(document, id);
+  if (!li && name(block) !== 'paragraph') return;
+  const unit = li || block, target = prevSibling(unit);
+  if (!target) return;
+  const c = kids(target), last = c.get(c.length - 1);
+  const items = isList(last) ? kids(last) : kids(create(c, c.length, 'bulletList'));
+  if (li) copy(items, items.length, li); else copy(kids(create(items, items.length, 'listItem')), 0, block);
+  const l = unit.parent();
+  l.delete(indexOf(l, unit), 1);
+  prune(l);
+}
+
+function outdentUnit(document, id) {
+  const { block, item: li } = must(document, id);
+  if (!li && name(block) !== 'paragraph') return;
+  const unit = li || block, l = unit.parent();
+  const parent = li ? l.parent().parent().parent() : l.parent(); // listItem owning this node, or the doc map
+  if (!isItem(parent)) return;
+  const pl = parent.parent(), at = indexOf(pl, parent) + 1;
+  if (li) copy(pl, at, li); else copy(kids(create(pl, at, 'listItem')), 0, block);
+  l.delete(indexOf(l, unit), 1);
+  prune(l);
+}
+
 function indent(document, id) {
-  document.transact(() => {
-    const { block, item: li } = must(document, id);
-    if (!li && name(block) !== 'paragraph') return;
-    const unit = li || block, target = prevSibling(unit);
-    if (!target) return;
-    const c = kids(target), last = c.get(c.length - 1);
-    const items = isList(last) ? kids(last) : kids(create(c, c.length, 'bulletList'));
-    if (li) copy(items, items.length, li); else copy(kids(create(items, items.length, 'listItem')), 0, block);
-    const l = unit.parent();
-    l.delete(indexOf(l, unit), 1);
-    prune(l);
-  });
+  document.transact(() => indentUnit(document, id));
 }
 
 function outdent(document, id) {
-  document.transact(() => {
-    const { block, item: li } = must(document, id);
-    if (!li && name(block) !== 'paragraph') return;
-    const unit = li || block, l = unit.parent();
-    const parent = li ? l.parent().parent().parent() : l.parent(); // listItem owning this node, or the doc map
-    if (!isItem(parent)) return;
-    const pl = parent.parent(), at = indexOf(pl, parent) + 1;
-    if (li) copy(pl, at, li); else copy(kids(create(pl, at, 'listItem')), 0, block);
-    l.delete(indexOf(l, unit), 1);
-    prune(l);
-  });
+  document.transact(() => outdentUnit(document, id));
+}
+
+// Multi-select is one user action, so a whole range indents in one CRDT transaction and undoes in one step.
+// Each id is resolved inside the transaction: the previous row's move has already changed the tree, so units
+// cannot be collected up front the way removeMany/moveMany do. selectedUnits still runs first, for its checks.
+// ids are in visual order; indent works first-last (each row follows the one above it), outdent last-first.
+function indentMany(document, ids) {
+  document.transact(() => { selectedUnits(document, ids); for (const id of ids) indentUnit(document, id); });
+}
+
+function outdentMany(document, ids) {
+  document.transact(() => { selectedUnits(document, ids); for (const id of [...ids].reverse()) outdentUnit(document, id); });
 }
 
 // Swap the node with its previous/next sibling: listItems swap within their list, bare blocks swap with the
@@ -528,4 +544,4 @@ function divider(list, index) {
   return id;
 }
 
-module.exports = { readOutline, setText, setBlockType, insertDivider, insertAfter, insertChild, remove, removeMany, indent, outdent, move, moveMany, toggleCheckbox, BLOCK_TYPES };
+module.exports = { readOutline, setText, setBlockType, insertDivider, insertAfter, insertChild, remove, removeMany, indent, indentMany, outdent, outdentMany, move, moveMany, toggleCheckbox, BLOCK_TYPES };

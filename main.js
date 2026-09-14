@@ -20,6 +20,7 @@ const SECTIONS = [{ id: 'inbox', title: 'Inbox', icon: 'inbox' }, { id: 'tasks',
 const TAG = { task: { label: 'task', color: 'grey' }, meeting: { label: 'meeting', color: 'gold' }, space: { label: 'space', color: 'grey' }, doc: { label: 'doc', color: 'grey' }, member: { label: 'member', color: 'grey' } };
 const KINDS = { doc: 'tana:text:', task: 'tana:text:', meeting: 'tana:event:', chat: 'tana:chat:' };
 const PLAIN_KINDS = new Set(['chat', 'canvas', 'agent', 'skill', 'type']); // tana:<kind>: ids listed read-only: kind icon + kind tag
+const PIN_HUBS = new Set(['event', 'space']); // the only schemas with a pinnedItems container (docs/PINNING.md section 4)
 const DOC_URI = /^tana:[a-z-]+:[0-9a-z]{26}$/; // a real document id; a renderer draft keeps a local id until it materialises (#112)
 
 // Persisted view filters (db settings table), checked on read: a filter written by an older build or by a bad
@@ -249,7 +250,11 @@ async function related(id) {
     client.graph.listNodes({ ownerIds: [hub], limit: 200, sortOptions: [{ field: 'SORT_FIELD_CREATE_TIME', direction: 'SORT_DIRECTION_ASCENDING' }] }).catch(() => ({ nodes: [] })),
     hub === id ? Promise.resolve({ nodes: self0 ? [self0] : [] }) : client.graph.listNodes({ nodeIds: [hub], limit: 1 }).catch(() => ({ nodes: [] })),
   ]);
-  const pinIds = (edges.edges || []).map((e) => e.toNodeId).filter(Boolean);
+  // HAS_PIN is derived server-side from the hub's own pinnedItems, so read that list too: a pin this app just wrote
+  // is in the document before the edge exists, and the hub says whether a new one may be added at all.
+  const hubDoc = PIN_HUBS.has(idKind(hub)) ? await client.sync.subscribe(hub).catch(() => null) : null;
+  const canPin = hubDoc ? await canWriteDoc(hubDoc).catch(() => false) : false;
+  const pinIds = [...new Set([...(hubDoc ? pins.items(hubDoc).map((p) => p.uri) : []), ...(edges.edges || []).map((e) => e.toNodeId).filter(Boolean)])];
   const pinned = pinIds.length ? (await client.graph.listNodes({ nodeIds: pinIds, limit: pinIds.length })).nodes : [];
   const all = [...pinned, ...(owned.nodes || [])];
   all.forEach(rememberNodeHue);
@@ -270,6 +275,7 @@ async function related(id) {
     call: callOf((self0 && self0.calendarEvent) || {}),
     summaryUri: writeUp ? writeUp.id : undefined,
     fields: await fieldsOf(id), // the zoomed node's own fields, not the meeting hub's
+    pinHub: canPin ? hub : undefined, // where a new pin would go, when this user may write it
     pinned: pinned.map(row),
     outcomes: owns.filter(stated).map(row),
     notes: owns.filter((n) => !stated(n) && (!writeUp || n.id !== writeUp.id)).map(row),
@@ -508,6 +514,20 @@ async function setPin(id, target, on) {
   const sync = client.sync, user = me.userUri;
   if (pinTarget(target) === 'sidebar') await (on ? pins.pinSidebar : pins.unpinSidebar)(sync, user, id);
   else await (on ? pins.pinDate : pins.unpinDate)(sync, user, id, today());
+}
+// Items pinned *on* a meeting or a space: the hub document's own pinnedItems list (docs/PINNING.md section 4), which
+// is what the graph reports as EDGE_TYPE_HAS_PIN. Not the sidebar/date pins above, which are private per-user state.
+// mut() is deliberately not used: it refuses every event because editable() answers for the title, not for write
+// access, and the other pin writes stay out of the undo stack too. The gate is the native write capability.
+async function nodePin(hubId, uri, on) {
+  if (!DOC_URI.test(hubId || '') || !PIN_HUBS.has(idKind(hubId))) throw new Error('Only a meeting or a space can pin items');
+  if (!DOC_URI.test(uri || '')) throw new Error('Not a Tana document id');
+  if (uri === hubId) throw new Error('A node cannot pin itself');
+  const doc = await document(hubId);
+  if (!await canWriteDoc(doc)) throw new Error('Write permission is unknown or unavailable');
+  (on ? pins.pinItem : pins.unpinItem)(doc, uri);
+  send('outline:changed', hubId);
+  return pins.items(doc).map((p) => p.uri);
 }
 function setIcon(id, svg) {
   if (svg != null) {
@@ -797,6 +817,9 @@ async function accessContext() {
   return {sync:client.sync, graph:client.graph, orgDocUri:me.orgDocUri,
     orgAdmin:claims.org_id === me.orgId && ['admin','owner'].includes(claims.role)};
 }
+// Native write access to a document: a participant grant or an inherited owner boundary (sdk/access.js), never the
+// outliner's editable-body answer, which is about editing a title or content.
+const canWriteDoc = async (doc) => access.canWrite(readNode(doc), me.userUri, await accessContext());
 ipcMain.handle('doc:accessOptions', (_e, id) => op(id, async doc => access.capabilities(doc, me.userUri, await accessContext())));
 ipcMain.handle('doc:setSharing', (_e, id, selection) => mut(id, async doc => {
   await access.setSharing(doc, me.userUri, selection, await accessContext()); scheduleRefresh(2000);
@@ -832,6 +855,8 @@ ipcMain.handle('block:insertAfter', (_e, id, nodeId, text) => mut(id, (doc) => c
 ipcMain.handle('block:insertChild', (_e, id, nodeId, text) => mut(id, (doc) => content.insertChild(doc, nodeId, text)));
 ipcMain.handle('block:removeMany', (_e, id, nodeIds) => mut(id, doc => content.removeMany(doc, nodeIds)));
 ipcMain.handle('block:moveMany', (_e, id, nodeIds, direction) => mut(id, doc => content.moveMany(doc, nodeIds, direction)));
+ipcMain.handle('block:indentMany', (_e, id, nodeIds) => mut(id, doc => content.indentMany(doc, nodeIds)));
+ipcMain.handle('block:outdentMany', (_e, id, nodeIds) => mut(id, doc => content.outdentMany(doc, nodeIds)));
 ipcMain.handle('block:remove', (_e, id, nodeId) => mut(id, (doc) => { content.remove(doc, nodeId); }));
 ipcMain.handle('block:indent', (_e, id, nodeId) => mut(id, (doc) => { content.indent(doc, nodeId); }));
 ipcMain.handle('block:outdent', (_e, id, nodeId) => mut(id, (doc) => { content.outdent(doc, nodeId); }));
@@ -842,6 +867,8 @@ ipcMain.handle('pins:tree', () => pinTree()); // [{ uri?, label?, node?, childre
 ipcMain.handle('pins:state', (_e, id) => pinState(id));
 ipcMain.handle('pins:pin', (_e, id, target) => setPin(id, target, true));
 ipcMain.handle('pins:unpin', (_e, id, target) => setPin(id, target, false));
+ipcMain.handle('pins:pinTo', (_e, hubId, uri) => nodePin(hubId, uri, true)); // pin a document on a meeting/space
+ipcMain.handle('pins:unpinFrom', (_e, hubId, uri) => nodePin(hubId, uri, false));
 ipcMain.handle('doc:setIcon', (_e, id, svg) => setIcon(id, svg));
 ipcMain.handle('doc:related', (_e, id) => related(id)); // { summary, tagline, pinned[], outcomes[], notes[] }
 ipcMain.handle('doc:summaryUri', (_e, id) => summaryUri(id)); // where a meeting should actually open, or null
@@ -909,6 +936,8 @@ if (process.env.TANA_MAIN_TEST) {
   module.exports = { resolveInitialAuth, graphRow, cachedNodeHue, SECTIONS, toNode, outlineWithReferences, chatOutline, op, onChange, documentAction, createDocument, creationOptions, search, spaceChildren, start, refresh, related, callOf,
     statusSnapshot: () => ({ ...status }), rememberNodeHue,
     undo: () => history(undoStack, redoStack, 'undo', 'canUndo'), redo: () => history(redoStack, undoStack, 'redo', 'canRedo'), visibleGraphNodes, pinTree,
+    nodePin,
+    accessContext,
     testRuntime: (runtime) => { client = runtime.client; me = runtime.me; win = runtime.win; session = runtime.session; if (client) listFilter(client); } };
 } else {
   app.setName('Tana Companion');

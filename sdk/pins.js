@@ -1,6 +1,8 @@
 'use strict';
 // Sidebar and personal date pins (docs/PINNING.md): plain Loro mutations on the user's profile, collection and
 // pin-map documents, in the same shape as the web client (tree node meta {uri}; pin-map entries[doc].pins of LoroMaps).
+// Items pinned *on an event or a space* are a different thing entirely: they live in that document's own
+// pinnedItems list (docs/PINNING.md section 4) and are what the graph reports as EDGE_TYPE_HAS_PIN.
 const { LoroMap, LoroList } = require('loro-crdt');
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -86,4 +88,28 @@ async function unpinDate(sync, userUri, docUri, date) {
   });
 }
 
-module.exports = { listSidebar, sidebarTree, pinSidebar, unpinSidebar, dates, pinDate, unpinDate };
+// ---- items pinned on an event or a space (root MovableList 'pinnedItems' of { uri, mode? }) ----
+// Verified live: tana:event:1n1tjh3mpp434pd5ydj12x4ahe holds [{ mode: 'embed', uri: 'tana:chat:...' }] and the graph
+// answers ListEdges(HAS_PIN) from it. The element is a map container, like every other schema'd element the web
+// client writes (the pin-map entries above); toJSON reads the same either way.
+const items = (doc) => doc.loro.getMovableList('pinnedItems').toJSON().filter((p) => p && typeof p.uri === 'string');
+
+function pinItem(doc, uri, mode) {
+  doc.transact((loro) => {
+    const list = loro.getMovableList('pinnedItems');
+    if (list.toJSON().some((p) => p && p.uri === uri)) return; // native wm() dedups on uri and leaves the order alone
+    const item = list.pushContainer(new LoroMap());
+    item.set('uri', uri);
+    if (mode) item.set('mode', mode);
+  });
+}
+
+function unpinItem(doc, uri) {
+  doc.transact((loro) => {
+    const list = loro.getMovableList('pinnedItems');
+    const i = list.toJSON().findIndex((p) => p && p.uri === uri);
+    if (i >= 0) list.delete(i, 1);
+  });
+}
+
+module.exports = { listSidebar, sidebarTree, pinSidebar, unpinSidebar, dates, pinDate, unpinDate, items, pinItem, unpinItem };

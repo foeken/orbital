@@ -40,6 +40,8 @@ contextBridge.exposeInMainWorld('api', {
   insertChild: (docId, nodeId, text) => ipcRenderer.invoke('block:insertChild', docId, nodeId, text),
   removeMany: (docId, nodeIds) => ipcRenderer.invoke('block:removeMany', docId, nodeIds),
   moveMany: (docId, nodeIds, direction) => ipcRenderer.invoke('block:moveMany', docId, nodeIds, direction),
+  indentMany: (docId, nodeIds) => ipcRenderer.invoke('block:indentMany', docId, nodeIds), // one undo step for a whole selection
+  outdentMany: (docId, nodeIds) => ipcRenderer.invoke('block:outdentMany', docId, nodeIds),
   remove: (docId, nodeId) => ipcRenderer.invoke('block:remove', docId, nodeId),
   indent: (docId, nodeId) => ipcRenderer.invoke('block:indent', docId, nodeId),
   outdent: (docId, nodeId) => ipcRenderer.invoke('block:outdent', docId, nodeId),
@@ -49,6 +51,10 @@ contextBridge.exposeInMainWorld('api', {
   pinState: (docId) => ipcRenderer.invoke('pins:state', docId),
   pin: (docId, target) => ipcRenderer.invoke('pins:pin', docId, target),
   unpin: (docId, target) => ipcRenderer.invoke('pins:unpin', docId, target),
+  // items pinned on a meeting or a space (that node's own pinnedItems, docs/PINNING.md section 4); hubId comes from
+  // api.related(id).pinHub, which is set only when this user may write that hub. Resolves to the hub's pinned uris.
+  pinTo: (hubId, docId) => ipcRenderer.invoke('pins:pinTo', hubId, docId),
+  unpinFrom: (hubId, docId) => ipcRenderer.invoke('pins:unpinFrom', hubId, docId),
   setIcon: (docId, svg) => ipcRenderer.invoke('doc:setIcon', docId, svg),
   image: (uri) => ipcRenderer.invoke('image', uri), // tana:image: uri -> data URL (main fetches with the session token and caches)
   members: () => ipcRenderer.invoke('members'),

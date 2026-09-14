@@ -541,6 +541,8 @@ const LIB_ICONS = {
   canvas: STROKE + '<path d="M2.75 12.25c1.5-3.5 3-5.25 4.25-5.25 1.75 0 1.75 5.25 3.5 5.25 1.25 0 2.75-2.25 4.75-6.5"/></svg>',
   agent: STROKE + '<rect x="2.75" y="2.75" width="12.5" height="12.5" rx="2"/><path d="M6 9.75a3 3 0 0 0 6 0"/><path d="M6.5 6.5h.01M11.5 6.5h.01" stroke-width="1.5"/></svg>',
   skill: STROKE + '<rect x="2.75" y="2.75" width="12.5" height="12.5" rx="2"/><path d="M10.75 5.5l-3.5 7"/></svg>',
+  // placeholder while a row's visibility is still being read: the audience icons in the same 18px grid, drawn open
+  pending: STROKE + '<path d="M9 11.75C10.5188 11.75 11.75 10.5188 11.75 9C11.75 7.48122 10.5188 6.25 9 6.25C7.48122 6.25 6.25 7.48122 6.25 9C6.25 10.5188 7.48122 11.75 9 11.75Z"/><path d="M10.4277 3.3967C9.97907 3.3022 9.50347 3.25 8.99997 3.25C8.49647 3.25 8.02087 3.3022 7.57227 3.3967"/><path d="M3.59241 5.7576C4.03861 5.2786 4.56019 4.81329 5.16119 4.41629"/><path d="M2.0443 10.1133C1.6519 9.42061 1.6519 8.57951 2.0443 7.88681"/><path d="M14.4077 5.7576C13.9615 5.2786 13.4399 4.81329 12.8389 4.41629"/><path d="M10.4277 14.6033C9.97907 14.6978 9.50347 14.75 8.99997 14.75C8.49647 14.75 8.02087 14.6978 7.57227 14.6033"/><path d="M3.59241 12.2424C4.03861 12.7214 4.56019 13.1867 5.16119 13.5837"/><path d="M14.4077 12.2424C13.9615 12.7214 13.4399 13.1867 12.8389 13.5837"/><path d="M15.9557 10.1133C16.3481 9.42061 16.3481 8.57951 15.9557 7.88681"/></svg>',
 };
 const iconSvg = (icon) => ICONS[icon === 'meeting' ? 'calendar' : icon] || LIB_ICONS[icon] || '';
 const isTask = (node) => node.kind === 'document' && node.icon === 'task';
@@ -558,8 +560,10 @@ function canEditItem(item) {
 }
 // A reference and a divider are read-only rows, but they are still blocks of a writable document: they can be moved and removed.
 const canEditStructure = (item) => canEditItem(item) || ((item.node.type === 'reference' || isDivider(item.node)) && canEditNode(docOf(item.docId)));
-// an inline reference renders the referenced document's title: editing the row edits that document, and a read-only target stays read-only
-const canEditText = (item) => (isReference(item.node) ? canEditNode(referenceTarget(item.node)) : canEditItem(item));
+// an inline reference renders the referenced document's title: editing the row edits that document, and a read-only
+// target stays read-only. The containing document counts too: a chat's attachment row would otherwise offer to
+// rename the attached document (only a positively read-only container blocks, so ordinary embeds are unchanged).
+const canEditText = (item) => (isReference(item.node) ? canEditNode(referenceTarget(item.node)) && docOf(item.docId)?.editable !== false : canEditItem(item));
 const chatIcon = (n) => n.icon || ((n.tags || []).some((t) => t.label === 'chat') ? 'chat' : undefined);
 const nodeIcon = (n) => chatIcon(n) || ((n.tags || []).some((t) => t.label === 'agent') ? 'agent' : undefined);
 const asDoc = (n) => ({ ...n, kind: 'document', text: n.text ?? n.title ?? '', hasChildren: true, icon: nodeIcon(n) }); // api.node / search / library result -> document Node
@@ -736,6 +740,18 @@ function atEdge(el, dir) {
 
 // ---- render ----
 let rendering = false; // a focusout caused by swapping elements out during a render is not the user leaving a node
+let caretOnOpen = false; // set when a node is opened: the first render with its children puts the caret where typing works
+// An empty ordinary row is already somewhere to type; an image, divider or reference row is not.
+const typableRow = (n) => !!n && n.kind === 'block' && !isAtomic(n) && !isReference(n) && !plainOf(n).length;
+// Opening a node leaves a row to type in: the local draft row the empty document case has always shown, which stays
+// out of Tana until its first typed character (materialise) and is discarded by anything else.
+// ponytail: a block only gets one while it is empty — materialise prepends there (insertChild), so a trailing draft
+// under a block with children would come back as its first child.
+function withDraftTail(list, parent) {
+  if (!Array.isArray(childrenOf(parent)) || isSpace(parent.node) || !canEditItem(parent)) return list;
+  if (typableRow(list.at(-1)) || (parent.node.kind !== 'document' && list.length)) return list;
+  return [...list, draftNode(parent)];
+}
 function render() { rendering = true; try { renderOutline(); } finally { rendering = false; } }
 function renderOutline() {
   const saved = focused();
@@ -749,7 +765,7 @@ function renderOutline() {
   if (parent) {
     if (!parent.node.draft) ensureLoaded(parent);
     list = parent.node.draft ? [] : childrenOf(parent) || [];
-    if (!list.length && childrenOf(parent) && parent.node.kind === 'document' && !isSpace(parent.node) && canEditItem(parent)) list = [draftNode(parent)]; // empty writable document: Down from the title has somewhere to go
+    list = withDraftTail(list, parent); // an open node always has a row to type in; a read-only one (every chat) never does
     outline.replaceChildren(...list.map((n) => childEl(n, parent)));
   } else {
     const v = viewOf(), docs = v ? v.nodes : [];
@@ -813,6 +829,12 @@ function renderOutline() {
   applySel();
   if (saved && savedSel) selectRange(saved.key, savedSel[0], savedSel[1]);
   else if (saved) placeCaret(saved.key, saved.offset);
+  // the caret lands in that typable row once per open: a later render (a live update, a refresh) must not pull it back
+  if (caretOnOpen && parent && Array.isArray(childrenOf(parent))) {
+    caretOnOpen = false;
+    const last = list.at(-1), el = last && palette.hidden && !focused() ? textEl(keyFor(parent.docId, last)) : null;
+    if (el && el.isContentEditable && !el.textContent) setCaret(el, 0);
+  }
 }
 
 function resolveZoom() {
@@ -884,6 +906,12 @@ function railRow(node) {
   // the sidebar is narrow: a tag shows as its "#" in the type's colour and expands on hover (CSS), with the full
   // label available to the pointer and to assistive tech
   for (const chip of row.querySelectorAll('.chip')) chip.title = chip.textContent.trim();
+  // that expansion narrows the title, which could re-wrap it and jump the row under the pointer: hold the title to
+  // the line count it already has, so the label truncates instead and the row keeps its height
+  const holdLines = () => { const lh = parseFloat(getComputedStyle(title).lineHeight) || 19; title.style.webkitLineClamp = String(Math.max(1, Math.round(title.offsetHeight / lh))); };
+  const freeLines = () => { title.style.webkitLineClamp = ''; };
+  row.onmouseenter = holdLines; row.onmouseleave = freeLines;
+  row.onfocus = holdLines; row.onblur = freeLines;
   row.onclick = () => goTo(node.id);
   row.onkeydown = (e) => railKey(e, node, row);
   return row;
@@ -989,6 +1017,19 @@ function renderRail(parent) {
   }
   if (keep) { const again = railEl.querySelector('.rrow[data-id="' + keep + '"]'); if (again) again.focus(); }
 }
+// The date of a meeting crumb, in the form the Meetings list and search already show (main.js eventMeta): read off
+// the event row when the app has it, else fetched once through api.node, which carries the same formatted string.
+const eventWhen = new Map(); // event id -> its meta string ('' when it has none), null while the fetch is in flight
+function crumbWhen(id) {
+  if (typeof id !== 'string' || !id.startsWith('tana:event:')) return null;
+  const known = docOf(id);
+  if (known && known.meta) return known.meta;
+  if (!eventWhen.has(id) && tana.node) {
+    eventWhen.set(id, null);
+    tana.node(id).then((n) => { eventWhen.set(id, n.meta || ''); if (n.meta) render(); }, () => eventWhen.delete(id));
+  }
+  return eventWhen.get(id) || null;
+}
 function renderCrumbs(trail) {
   const nav = $('crumbs');
   nav.hidden = !trail;
@@ -1006,6 +1047,8 @@ function renderCrumbs(trail) {
     // ancestors can share a title (a meeting named after its space), so each crumb shows its kind icon
     if (p.icon) { const ricon = document.createElement('span'); ricon.className = 'ricon ' + p.icon; ricon.innerHTML = iconSvg(p.icon); a.append(ricon); }
     a.append(p.title);
+    const when = crumbWhen(p.id); // a meeting crumb also says when it was: two meetings often share a title
+    if (when) { const date = document.createElement('span'); date.className = 'cdate'; date.textContent = when; a.append(date); }
     a.onclick = p.id === 'library' ? () => setView('library') : p.id ? () => goTo(p.id) : back;
     nav.append(a);
   }
@@ -1075,8 +1118,10 @@ function nodeEl(node, docId, parent) {
   }
   body.append(text);
   if (display.meta) { const m = document.createElement('span'); m.className = 'meta'; m.textContent = display.meta; body.append(m); }
-  const taskInfo = taskSummary(display);
+  // every row describes who can see it, not only task rows; the fetch waits until the row is on screen
+  const taskInfo = taskSummary(display, true) || documentSummary(display, true);
   if (taskInfo) body.append(taskMetaEl(taskInfo));
+  else if (observeMeta(el, display)) body.append(taskMetaEl({ assignees: '', pending: true })); // hold the slot: the real icon lands in the same place, so the row never shifts
   appendTags(body, display);
   // a node shared with a whole space names it as a sub-line under the title, the way Tana describes its location
   if (taskInfo && taskInfo.audience && taskInfo.audience.space) {
@@ -1305,7 +1350,7 @@ async function inheritCheckbox(parent, nodeId) {
   await reload(parent.docId);
 }
 function zoomTo(item) {
-  flushAll(); dropDrafts();
+  flushAll(); dropDrafts(); caretOnOpen = true;
   if (item.node.kind === 'document') recordRecent(item.node);
   let top = item; while (top.parent && top.parent.docId === item.docId) top = top.parent; // the item's document row (itself, or an ancestor in the same document)
   const same = zoom && zoom.docId === item.docId;
@@ -1333,7 +1378,7 @@ function toggleReference(node) {
 function setView(id) { dropDrafts(); view = id; localStorage.setItem('view', id); zoom = null; sel = null; menu = null; loadView(id); render(); }
 // zoom into a document, switching to its view first when it belongs to another one; from = breadcrumb root instead of the view
 function openDoc(docId, from) {
-  flushAll(); dropDrafts();
+  flushAll(); dropDrafts(); caretOnOpen = true;
   const s = from ? null : sectionOf(docId);
   if (s && s.id !== view) { view = s.id; localStorage.setItem('view', view); }
   const doc = allDocs().find((d) => d.id === docId) || extra.get(docId);
@@ -1397,6 +1442,27 @@ async function moveSel(keys, dir) { // Cmd+Shift+Up/Down: the whole range, one a
   await run(async () => { await tana.moveMany(its[0].docId, its.map((it) => it.node.id), dir); await reload(its[0].docId); });
   render();
 }
+// Tab / Shift+Tab on a selection: the whole range shifts together and stays selected (keys are node ids, which the shift keeps).
+// ponytail: the bridge has removeMany/moveMany but no indentMany, so this falls back to one call per row and one undo
+// step per row; add block:indentMany/outdentMany (one content.js transact over the range) to make it a single step.
+async function indentSel(keys, op) {
+  const its = keys.map((k) => items.get(k)), docId = its[0].docId, ids = its.map((it) => it.node.id);
+  if (op === 'indent') {
+    const sibs = childrenOf(its[0].parent) || [], prev = sibs[sibs.indexOf(its[0].node) - 1];
+    if (!prev) return; // the range starts at the top: there is nothing to indent under
+    open.set(keyFor(docId, prev), true);
+  }
+  const many = tana[op + 'Many'];
+  await run(async () => {
+    if (many) await many(docId, ids);
+    else for (const id of op === 'indent' ? ids : [...ids].reverse()) await tana[op](docId, id); // outdent runs last-first, the way moveMany does, so the range keeps its order
+    await reload(docId);
+  });
+  // a live update landing between two per-row calls sees the range half moved, and selKeys() collapses a range whose
+  // rows no longer share a parent; the rows themselves moved together, so put the selection back on them
+  sel = { anchor: keys[0], focus: keys[keys.length - 1] };
+  render();
+}
 function selKey(e) { // keys while a selection is active (nothing focused); document nodes: delete/move ignored
   const mod = e.metaKey || e.ctrlKey, keys = selKeys();
   if (!keys.length) return false;
@@ -1404,6 +1470,7 @@ function selKey(e) { // keys while a selection is active (nothing focused); docu
   if (e.shiftKey && !mod && vert) extendSel(items.get(sel.focus), e.key === 'ArrowUp' ? -1 : 1);
   else if (e.key === 'Backspace' && (!mod || e.shiftKey)) { if (writable) removeSel(keys); }
   else if (mod && e.shiftKey && vert) { if (writable) moveSel(keys, e.key === 'ArrowUp' ? 'up' : 'down'); }
+  else if (e.key === 'Tab' && !mod) { if (writable) indentSel(keys, e.shiftKey ? 'outdent' : 'indent'); }
   else if (e.key === 'Escape' || (e.key.startsWith('Arrow') && !mod)) clearSel(sel.focus);
   else return false;
   return true;
@@ -1420,8 +1487,9 @@ const GROUPABLE = new Set(['tasks', 'library']);
 const FALLBACK = { status: 'No status', assignee: 'Unassigned', type: 'No type' };
 const groupBy = () => (GROUPS.some(([id]) => id === groupPref[view]) ? groupPref[view] : 'none');
 function setGroupBy(id) { groupPref[view] = id; localStorage.setItem('groupBy', JSON.stringify(groupPref)); render(); }
-// A row carries done (0/1 for tasks, undefined otherwise), not the state it came from, so Inbox and Later cannot be
-// told apart here. ponytail: a stateType on the row (main.js toNode) would separate all four without touching this.
+// main.js toNode now passes stateType, so all four states (Inbox, In Progress, Completed, Later) separate here.
+// done (0/1 for tasks, undefined otherwise) stays the fallback for rows that carry no state, which can only tell
+// Completed from In Progress.
 const stateOf = (n) => n.stateType || (n.done == null ? null : n.done ? 'closed' : 'open');
 function groupKey(n, by) {
   if (by === 'status') return Object.fromEntries(STATES)[stateOf(n)] || FALLBACK.status;
@@ -1447,21 +1515,38 @@ function groupsOf(list) {
   return groupRows(list, by);
 }
 // ---- sort (Tasks, Library): the same rows in another order, again without asking the backend for anything ----
-// Only what a row actually carries can be sorted on. main.js toNode passes id/title/text/done/icon/hue/tags/meta and
-// nothing else: the updatedAt and sortKey its rows have one layer down are dropped, and no create time exists anywhere.
-// ponytail: when toNode passes updatedAt (and a createdAt is captured at all), add the entries and their keys here —
-// ['updated', 'Updated'] with updated: (n) => n.updatedAt, ['created', 'Created'] with created: (n) => n.createdAt.
-const SORTS = [['default', 'Default'], ['title', 'Title']];
-const SORT_KEY = { title: (n) => (n.text || n.title || '').toLowerCase() };
+// Only what a row actually carries can be sorted on. main.js toNode passes updatedAt and createdAt as ISO 8601
+// strings, so they compare as strings; a row that carries neither (an older cached row) keeps its place at the end.
+const SORTS = [['default', 'Default'], ['updated', 'Updated'], ['created', 'Created'], ['title', 'Title']];
+const SORT_KEY = { updated: (n) => n.updatedAt, created: (n) => n.createdAt, title: (n) => (n.text || n.title || '').toLowerCase() };
+const NEWEST_FIRST = new Set(['updated', 'created']); // times read newest first; Title stays A→Z
 const sortBy = () => (SORTS.some(([id]) => id === sortPref[view]) ? sortPref[view] : 'default');
 function setSortBy(id) { sortPref[view] = id; localStorage.setItem('sortBy', JSON.stringify(sortPref)); render(); }
 function sortRows(list) {
-  const key = GROUPABLE.has(view) ? SORT_KEY[sortBy()] : null;
-  return key ? [...list].sort((a, b) => String(key(a)).localeCompare(String(key(b)))) : list; // Default: the order the view produced
+  const id = sortBy(), key = GROUPABLE.has(view) ? SORT_KEY[id] : null;
+  if (!key) return list; // Default: the order the view produced
+  const desc = NEWEST_FIRST.has(id);
+  return [...list].sort((a, b) => {
+    const x = key(a), y = key(b);
+    if (!x || !y) return x ? -1 : y ? 1 : 0; // a row without the field sorts last, in the order it came in
+    return desc ? String(y).localeCompare(String(x)) : String(x).localeCompare(String(y));
+  });
 }
 // a heading is not a node: no key, no caret, no bullet, and nodeEls() already skips anything without .node
 function groupHeadEl(title) { const el = document.createElement('div'); el.className = 'ghead'; el.textContent = title; return el; }
-function loadMembers() { if (!members && tana.members) { members = []; tana.members().then((m) => { members = m; if (!$('pills').hidden) renderPills(true); if (!palette.hidden) renderPalette(); render(); }, showError); } } // re-render so the Assigned pill reads "You (<name>)"
+// main answers [] until its sync client is up, so an empty list means "not yet", never "nobody": keeping it would
+// leave every assignee, group heading and Assigned menu showing a raw tana:user-profile: uri for the rest of the
+// session. Only a list with someone in it counts as loaded; anything else is asked again.
+let membersAsked = 0;
+function loadMembers() {
+  if ((members && members.length) || !tana.members || Date.now() - membersAsked < META_RETRY_MS) return;
+  membersAsked = Date.now();
+  tana.members().then((m) => {
+    members = m;
+    if (!m.length) setTimeout(render, META_RETRY_MS); // a render asks again, the way loadTaskMeta retries
+    if (!$('pills').hidden) renderPills(true); if (!palette.hidden) renderPalette(); render(); // so the Assigned pill reads "You (<name>)"
+  }, showError);
+}
 const me = () => (members || []).find((m) => m.me);
 const memberName = (uri) => { const member = (members || []).find((m) => m.id === uri); return member ? member.title || member.text : uri; };
 const AUDIENCES = {
@@ -1494,26 +1579,52 @@ function loadTaskMeta(docId) {
     setTimeout(() => { if (!taskMetaById.has(docId)) render(); }, wait);
   });
 }
-function taskSummary(node) {
+// One metadata read is a document bootstrap plus a graph lookup, so with every row wanting an audience icon the
+// request only goes out once the row is on screen. Rows further down stay quiet until they scroll into view.
+let metaSeen = null;
+function observeMeta(el, node) {
+  if (!node || node.kind !== 'document' || !isRealId(node.id) || taskMetaById.has(node.id)) return false;
+  metaSeen ||= new IntersectionObserver((entries) => {
+    for (const entry of entries) if (entry.isIntersecting) { metaSeen.unobserve(entry.target); loadTaskMeta(entry.target.dataset.metaFor); }
+  }, { rootMargin: '150px' });
+  el.dataset.metaFor = node.id;
+  metaSeen.observe(el);
+  return true; // the row is waiting on an answer, so it can hold the icon's place
+}
+// lazy: read the cache but leave the fetching to observeMeta (list rows); the sidebar asks for its one document itself
+function taskSummary(node, lazy) {
   if (!isTask(node) || !tana.taskMeta) return null;
   const meta = taskMetaById.get(node.id);
-  if (!meta) { loadTaskMeta(node.id); return null; }
+  if (!meta) { if (!lazy) loadTaskMeta(node.id); return null; }
   if (meta.assignees.length) loadMembers(); // names need the member list; loading it re-renders when it arrives
   const scope = typeof meta.audience === 'string' ? meta.audience : meta.audience?.scope;
   return { assignees: meta.assignees.length ? meta.assignees.map(memberName).join(', ') : 'Unassigned', audience: audienceInfo(meta.audience, meta.audienceSpace), scope, unknownAudience: scope === 'unknown', linkShared: !!meta.linkShared };
 }
 // the same facts for a document that is not a task: no assignee, but it can be shared or public
-function documentSummary(node) {
+function documentSummary(node, lazy) {
   if (node.kind !== 'document' || !tana.taskMeta || !isRealId(node.id)) return null;
   const meta = taskMetaById.get(node.id);
-  if (!meta) { loadTaskMeta(node.id); return null; }
+  if (!meta) { if (!lazy) loadTaskMeta(node.id); return null; }
   const audience = audienceInfo(meta.audience, meta.audienceSpace);
   if (!audience && !meta.linkShared) return null;
   return { assignees: '', audience, scope: typeof meta.audience === 'string' ? meta.audience : meta.audience?.scope, unknownAudience: false, linkShared: !!meta.linkShared };
 }
 function taskMetaEl(summary) {
   const el = document.createElement('span');
-  el.className = 'meta'; el.textContent = summary.assignees;
+  el.className = 'meta' + (summary.pending ? ' pending' : ''); el.textContent = summary.assignees;
+  // the icons stand 6px apart, but the first one needs no gap of its own: a row with no assignee name in front of it
+  // (every doc and meeting row) already has the 8px the .meta span carries, and 14px reads as a hole
+  const gap = () => (el.textContent || el.children.length ? '6px' : '0');
+  // an icon in the 14px slot; no label means it carries no information of its own (the placeholder)
+  const iconEl = (name, label) => {
+    const icon = document.createElement('span');
+    if (label) { icon.setAttribute('role', 'img'); icon.setAttribute('aria-label', label); icon.title = label; } else icon.setAttribute('aria-hidden', 'true');
+    icon.style.cssText = 'display:inline-block;width:14px;height:14px;margin-left:' + gap() + ';vertical-align:-2px';
+    icon.innerHTML = iconSvg(name);
+    const svg = icon.firstElementChild; if (svg) { svg.setAttribute('width', '14'); svg.setAttribute('height', '14'); }
+    return icon;
+  };
+  if (summary.pending) el.append(iconEl('pending', null)); // the answer is still on its way: same slot, same size
   if (summary.assignees === 'Unassigned') {
     const icon = document.createElement('span');
     icon.setAttribute('aria-hidden', 'true'); icon.title = 'Unassigned';
@@ -1522,23 +1633,10 @@ function taskMetaEl(summary) {
     const svg = icon.firstElementChild; if (svg) { svg.setAttribute('width', '14'); svg.setAttribute('height', '14'); }
     el.prepend(icon);
   }
-  if (summary.audience) {
-    const icon = document.createElement('span');
-    icon.setAttribute('role', 'img'); icon.setAttribute('aria-label', summary.audience.label); icon.title = summary.audience.label;
-    icon.style.cssText = 'display:inline-block;width:14px;height:14px;margin-left:6px;vertical-align:-2px';
-    icon.innerHTML = iconSvg(summary.audience.icon);
-    const svg = icon.firstElementChild; if (svg) { svg.setAttribute('width', '14'); svg.setAttribute('height', '14'); }
-    el.append(icon);
-  } else if (summary.unknownAudience) el.append(' · Visibility unknown');
+  if (summary.audience) el.append(iconEl(summary.audience.icon, summary.audience.label));
+  else if (summary.unknownAudience) el.append(' · Visibility unknown');
   // link sharing is separate from the Tana audience: anyone with the url can read it
-  if (summary.linkShared) {
-    const icon = document.createElement('span');
-    icon.setAttribute('role', 'img'); icon.setAttribute('aria-label', 'Anyone with the link'); icon.title = 'Anyone with the link';
-    icon.style.cssText = 'display:inline-block;width:14px;height:14px;margin-left:6px;vertical-align:-2px';
-    icon.innerHTML = iconSvg('globe');
-    const svg = icon.firstElementChild; if (svg) { svg.setAttribute('width', '14'); svg.setAttribute('height', '14'); }
-    el.append(icon);
-  }
+  if (summary.linkShared) el.append(iconEl('globe', 'Anyone with the link'));
   return el;
 }
 function setTaskAssignees(doc, assignees) {
@@ -2237,6 +2335,8 @@ function paletteRows(q) {
   rows.push(...pinRows(pinTree));
   if (tana.creationOptions) rows.push({ id: 'create', group: 'Actions', icon: 'createNew', label: 'Create new…', keepOpen: true, run: openCreationPalette });
   rows.push({ id: 'sync', group: 'Actions', icon: 'sync', label: 'Sync', run: () => run(() => tana.refresh()) });
+  // the list of titles hidden from every view and from search, edited in the palette itself
+  if (tana.filters) rows.push({ id: 'hidden', group: 'Actions', icon: 'any', label: 'Edit hidden items', keepOpen: true, run: openHiddenPalette });
   // today's node: a document titled with the date, pinned to today; created and pinned when it does not exist yet
   if (tana.todayNode) rows.push({ id: 'today', group: 'Actions', icon: 'pinDate', label: 'Show today node', run: () => run(async () => goTo(await tana.todayNode())) });
   const dark = typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark';
@@ -2275,6 +2375,24 @@ function paletteRows(q) {
 function runAction(id) {
   const row = paletteRows('').find((r) => r.id === id);
   if (row) row.run(); else if (id.startsWith('doc:')) goTo(id.slice(4));
+}
+// ---- hidden items (api.filters): titles every view and search skips, edited from Cmd+K ----
+// The rule lives in the group header because that is the one line in the palette that wraps.
+const HIDDEN_GROUP = 'Hidden items · whole title, case-insensitive; end with * to match a prefix';
+let hiddenList = null; // null while api.filters() is in flight
+const hiddenApply = (call) => run(async () => { hiddenList = await call(); renderPalette(); }); // resolves once the views have refreshed
+function hiddenRows(q) {
+  const rows = (hiddenList || []).filter((pattern) => pattern.toLowerCase().includes(q.toLowerCase()))
+    .map((pattern) => ({ group: HIDDEN_GROUP, icon: 'any', label: pattern, hint: (pattern.endsWith('*') ? 'Prefix' : 'Exact') + ' · ↩ unhides', keepOpen: true, run: () => hiddenApply(() => tana.removeFilter(pattern)) }));
+  if (q) rows.unshift({ group: HIDDEN_GROUP, icon: 'createNew', label: 'Hide "' + q + '"', hint: q.endsWith('*') ? 'Prefix' : 'Exact', keepOpen: true, run: () => { palInput.value = ''; hiddenApply(() => tana.addFilter(q)); } });
+  if (!rows.length) rows.push({ group: HIDDEN_GROUP, label: hiddenList ? 'Nothing is hidden yet' : 'Loading…', disabled: true });
+  return rows;
+}
+function openHiddenPalette() {
+  palMode = 'hidden'; palRows = []; palIndex = 0; palette.hidden = false;
+  palInput.placeholder = 'Type a title to hide'; palInput.value = '';
+  hiddenList = null; renderPalette(); palInput.focus();
+  hiddenApply(() => tana.filters());
 }
 function creationRows(q) {
   if (palBusy) return [{ group: 'Create new', label: 'Loading choices…', disabled: true }];
@@ -2341,6 +2459,7 @@ function renderPalette() {
   else if (palMode === 'assignees') palRows = assigneeRows(q.toLowerCase());
   else if (palMode === 'visibility') palRows = visibilityRows(q.toLowerCase());
   else if (palMode === 'visibilityPeople') palRows = visibilityPeopleRows(q.toLowerCase());
+  else if (palMode === 'hidden') palRows = hiddenRows(q);
   palIndex = Math.max(0, Math.min(palIndex, palRows.length - 1));
   const els = [];
   palRows.forEach((r, i) => {
@@ -2359,7 +2478,7 @@ function renderPalette() {
     row.onclick = () => runRow(r);
     els.push(row);
   });
-  if (!palRows.some((r) => palMode === 'cmd' || palMode === 'slash' || r.node) && (palMode === 'cmd' || palMode === 'slash' || (q && !palBusy))) { const n = document.createElement('div'); n.className = 'group'; n.textContent = 'No results'; els.push(n); }
+  if (!palRows.some((r) => palMode === 'cmd' || palMode === 'slash' || palMode === 'hidden' || r.node) && (palMode === 'cmd' || palMode === 'slash' || (q && !palBusy))) { const n = document.createElement('div'); n.className = 'group'; n.textContent = 'No results'; els.push(n); }
   palList.replaceChildren(...els);
   const active = palList.querySelector('.row.active');
   if (active) active.scrollIntoView({ block: 'nearest' });
@@ -2393,7 +2512,7 @@ function nextPalIndex(rows, index, step) {
 }
 palInput.addEventListener('input', () => {
   palIndex = 0;
-  if (palMode === 'cmd' || palMode === 'create' || palMode === 'slash' || palMode === 'assignees' || palMode === 'visibility' || palMode === 'visibilityPeople') return renderPalette();
+  if (palMode === 'cmd' || palMode === 'create' || palMode === 'slash' || palMode === 'assignees' || palMode === 'visibility' || palMode === 'visibilityPeople' || palMode === 'hidden') return renderPalette();
   if (palMode === 'spaces') { palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchSpacesNow, 150); return; }
   palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchNow, 150);
 });

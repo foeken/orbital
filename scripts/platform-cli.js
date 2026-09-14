@@ -437,8 +437,11 @@ commands.rawdoc = async () => {
     };
     const json = doc.loro.toJSON(); // the only public listing of root containers
     const roots = {};
-    for (const key of Object.keys(json)) {
-      try { roots[key] = dump(doc.loro.getMap(key)); } catch { roots[key] = json[key]; } // non-map root (e.g. pinnedItems)
+    // getShallowValue names every root with its real container type ("cid:root-pinnedItems:MovableList"); getMap(key)
+    // silently hands back a fresh empty map for a non-map root, which used to print pinnedItems as {"@Map":{}}.
+    for (const [key, cid] of Object.entries(doc.loro.getShallowValue())) {
+      const container = doc.loro.getContainerById(cid);
+      roots[key] = container ? dump(container) : json[key];
     }
     return out(JSON.stringify(roots, null, 1));
   }
@@ -450,6 +453,41 @@ commands.pinrows = async () => {
   await client.sync.connect();
   out(await main.pinTree());
 };
+// related <id>: exactly what the sidebar receives for a zoomed node (pinHub, pinned, outcomes, notes, fields).
+commands.related = async () => {
+  if (!positional[0]) throw new Error('usage: related <id>');
+  const main = backend(await connect());
+  await client.sync.connect();
+  out(await main.related(positional[0]));
+};
+// caps <id...>: the access capabilities the app computes for a node — what the sidebar visibility row and the
+// Cmd+K "Edit visibility" / "Move to space" rows are gated on. Read-only; it uses main's own accessContext so the
+// CLI cannot drift from the app.
+commands.caps = async () => {
+  if (!positional.length) throw new Error('usage: caps <id...>');
+  const me = await connect();
+  const main = backend(me);
+  await client.sync.connect();
+  const access = require('../sdk/access');
+  const ctx = await main.accessContext();
+  for (const id of positional) {
+    const doc = await client.sync.subscribe(id);
+    out({ id, title: readNode(doc).title, ...await access.capabilities(doc, me.userUri, ctx) });
+  }
+};
+// WRITES. pinto <hub> <uri> / unpinfrom <hub> <uri>: pin a document on a meeting or a space, through the app's own
+// path (main nodePin), so the native write-capability gate is exercised too. Prints the hub's pinned uris after.
+async function setNodePin(on) {
+  const [hub, uri] = positional;
+  if (!hub || !uri) throw new Error('usage: ' + (on ? 'pinto' : 'unpinfrom') + ' <event|space id> <document id>');
+  const main = backend(await connect());
+  await client.sync.connect();
+  const pinnedUris = await main.nodePin(hub, uri, on);
+  await new Promise((r) => setTimeout(r, 1500)); // let the live update reach the server before we exit
+  out({ hub, pinnedItems: pinnedUris });
+}
+commands.pinto = () => setNodePin(true);
+commands.unpinfrom = () => setNodePin(false);
 // The real startup path (session -> client -> sync -> first refresh), read-only, with every warning and error
 // the app would log on boot (#97). Nothing is written to Tana: bootstrap and catch-up carry no local ops.
 commands.boot = async () => {
@@ -474,10 +512,12 @@ const USAGE = [
   '  read       list [--state open|all] | search <query> [#task|#meeting|#member|#Type] | types | fields [<type uri>] |',
   '             meetings [--days 7] | chatlist [--limit 200] | get <id> | outline <id> | rawdoc <id> [--containers 1] |',
   '             graphnode <id> | edges <id> | image <tana:image:uri> | pins [--dates]',
-  '  diagnose   inspect <id...> | audiences [--limit 80] [--mine 0] [--kind text] | refs <id> | rows <query> | pinrows | boot [--settle ms]',
+  '  diagnose   inspect <id...> | audiences [--limit 80] [--mine 0] [--kind text] | refs <id> | rows <query> | pinrows |',
+  '             caps <id...> | related <id> | boot [--settle ms]',
   '  live       watch <id...>',
   '  WRITES     create <title> [--kind doc|task|meeting] | delete <id> | set-title <id> <title> |',
-  '             set-state <id> <proposed|open|closed|not_now> | pin <id> <sidebar|today> | unpin <id> <sidebar|today>',
+  '             set-state <id> <proposed|open|closed|not_now> | pin <id> <sidebar|today> | unpin <id> <sidebar|today> |',
+  '             pinto <event|space id> <id> | unpinfrom <event|space id> <id>',
 ].join('\n');
 
 app.whenReady().then(async () => {

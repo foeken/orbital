@@ -183,5 +183,21 @@ server-derived `HAS_PIN` edge. First-time users: if `pinnedCollectionUri`/`pinMa
 `data.type`, `data.createdAt`, `data.ownerUri=me`, `data.restricted=true`, `data.participants[me]={type:'user',role:'admin'}` (pin-map: `entries` map, no `ownerUri`; collection: also
 `sharedPinDates=[]`), subscribe them (cold-start create as in `platform-cli create`), then set the pointer on the profile doc. Untested here (this account already has both).
 
+## 6. Event pins, written and read back (verified 2026-09-14)
+
+The event branch of section 4 is no longer only an expectation. On a throwaway meeting (`create --kind meeting`, deleted afterwards) the app's own path
+(`sdk/pins.js pinItem` -> `main nodePin` -> an ordinary `live_document_update`, no new RPC) produced, read back in a fresh process that bootstrapped the
+document from the server:
+
+    pinnedItems: @MovableList [ @Map { uri: "tana:text:01m2fesr24agc5973wxxgbgkts" } ]
+    ListEdges(fromNodeIds:[event], edgeTypes:['EDGE_TYPE_HAS_PIN']) -> { fromNodeId: event, toNodeId: that text doc, type: 'EDGE_TYPE_HAS_PIN' }
+
+So the element is a map container (as the schema says, and as the pin-map entries above are written), the server keeps it, and it derives `HAS_PIN` within
+seconds. `main related()` therefore reads `pinnedItems` off the hub as well as the edges: a pin this app just wrote is in the document before the edge exists.
+The gate on writing one is `access.canWrite` on the hub, never `sdk/node.js editable()`, which answers about the title and is `false` for every event.
+Unverified in the other direction: `unpinItem` was only exercised offline (mirror convergence in `scripts/sdk-check.js`), because the scratch event was gone
+before it could be undone live. Note that `create --kind meeting` puts a real entry in the connected calendar; that scratch event acquired an `externalId`
+and then a `deletedAt` about 30 seconds later, from outside this app.
+
 Not verified: whether the server enforces that only the profile owner may edit the collection/pin-map (ACLs say `restricted:true`, owner admin), and
 what the UI does with `pinnedAt` beyond dedup (it is written but never read in the bundle paths above).

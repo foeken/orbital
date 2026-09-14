@@ -107,7 +107,14 @@ async function runSelectionChecks() {
       const reload = async () => {};
       const run = async (fn) => fn();
       const flushAll = () => {}, focused = () => null, loadRoots = async () => {}, kids = new Map([['doc', nodes]]), caretNear = () => {};
+      const open = new Map(), keyFor = (docId, node) => docId + '/' + node.id;
+      let collapseMidway = false;
+      const shift = (id, by) => { const node = nodes.find((item) => item.id === id); node.depth = (node.depth || 0) + by; };
       const tana = {
+        indentMany: async (_docId, ids) => mut(() => { calls.push(['indentMany', [...ids]]); ids.forEach((id) => shift(id, 1)); }),
+        outdentMany: async (_docId, ids) => mut(() => { calls.push(['outdentMany', [...ids]]); ids.forEach((id) => shift(id, -1)); }),
+        indent: async (_docId, id) => mut(() => { calls.push(['indent', id]); shift(id, 1); if (collapseMidway) sel = { anchor: sel.focus, focus: sel.focus }; }),
+        outdent: async (_docId, id) => mut(() => { calls.push(['outdent', id]); shift(id, -1); }),
         moveMany: async (_docId, ids, direction) => mut(() => {
           calls.push(['moveMany', [...ids], direction]);
           for (const id of direction === 'up' ? ids : [...ids].reverse()) {
@@ -130,6 +137,9 @@ async function runSelectionChecks() {
       ${rendererHistory}
       ({ set: (value) => { sel = value; }, keys: () => selKeys(), moveSel, removeSel, selKey,
         undo: () => history('undo'), redo: () => history('redo'),
+        depths: () => nodes.map((node) => node.depth || 0), opened: () => [...open.keys()],
+        noBatch: () => { delete tana.indentMany; delete tana.outdentMany; },
+        collapseMidway: () => { collapseMidway = true; },
         state: () => ({ order: nodes.map((node) => node.id), sel, caret, calls, rendered }) });
     `);
     return value;
@@ -174,6 +184,49 @@ async function runSelectionChecks() {
     calls: [], rendered: 0,
   }, 'read-only selection is not mutated');
   assert.equal(makeHarness().selKey(event()), false, 'Backspace without a node selection remains ordinary text editing');
+
+  // Tab / Shift+Tab move the whole selection, as one call where the bridge has one, and the rows stay selected.
+  const tab = (shiftKey = false) => ({ key: 'Tab', metaKey: false, ctrlKey: false, shiftKey });
+  const indent = makeHarness();
+  indent.set({ anchor: 'b', focus: 'c' });
+  assert.equal(indent.selKey(tab()), true, 'Tab is handled by the active selection');
+  await settle();
+  assert.deepEqual(plain(indent.state().calls), [['indentMany', ['b', 'c']]], 'the whole range indents in one call, so it is one undo step');
+  assert.deepEqual(plain(indent.depths()), [0, 1, 1, 0], 'every selected row moved, and only those');
+  assert.deepEqual(plain(indent.state().sel), { anchor: 'b', focus: 'c' }, 'the same rows stay selected afterwards');
+  assert.deepEqual(plain(indent.opened()), ['doc/a'], 'the row they indent under is opened so they stay visible');
+  indent.selKey(tab(true));
+  await settle();
+  assert.deepEqual(plain(indent.depths()), [0, 0, 0, 0], 'Shift+Tab outdents the whole range again');
+
+  const perRow = makeHarness();
+  perRow.noBatch();
+  perRow.set({ anchor: 'b', focus: 'c' });
+  perRow.selKey(tab());
+  await settle();
+  assert.deepEqual(plain(perRow.state().calls), [['indent', 'b'], ['indent', 'c']], 'without a batched call the range still indents, in visual order');
+  perRow.selKey(tab(true));
+  await settle();
+  assert.deepEqual(plain(perRow.state().calls.slice(2)), [['outdent', 'c'], ['outdent', 'b']], 'and outdents last-first, which is what keeps the order');
+  const interrupted = makeHarness();
+  interrupted.noBatch();
+  interrupted.collapseMidway();
+  interrupted.set({ anchor: 'b', focus: 'c' });
+  interrupted.selKey(tab());
+  await settle();
+  assert.deepEqual(plain(interrupted.state().sel), { anchor: 'b', focus: 'c' }, 'a refresh landing halfway through does not leave the selection collapsed on one row');
+
+  const top = makeHarness();
+  top.set({ anchor: 'a', focus: 'b' });
+  top.selKey(tab());
+  await settle();
+  assert.deepEqual(plain(top.state().calls), [], 'a range at the top has nothing to indent under, so nothing happens');
+
+  const lockedTab = makeHarness(true);
+  lockedTab.set({ anchor: 'b', focus: 'c' });
+  assert.equal(lockedTab.selKey(tab()), true, 'a read-only selection consumes Tab');
+  await settle();
+  assert.deepEqual(plain(lockedTab.state().calls), [], 'but a read-only document is never indented');
 }
 
 function runAssignedDropdown() {
@@ -346,6 +399,7 @@ async function runTaskChildCheckboxScopeCheck() {
     const renderSegs = () => {}, segsOf = () => [], asDoc = (node) => ({ ...node, kind: 'document', text: node.text ?? node.title ?? '' });
     const isImage = () => false, taskSummary = () => null, chipEl = () => ({});
     const isDivider = () => false;
+    const documentSummary = () => null, observeMeta = () => {};
     ${sourceBetween('// Block types (api.setBlockType)', 'const images = new Map()')}
     const tana = {};
     const document = { createElement: (tagName) => {
@@ -483,6 +537,7 @@ function runReferenceEmbedRenderCheck() {
     ${sourceBetween('// Block types (api.setBlockType)', 'const images = new Map()')}
     const asDoc = (node) => ({ ...node, kind: 'document', text: node.text ?? node.title ?? '' });
     const isImage = () => false, taskSummary = () => null, chipEl = () => ({}), iconSvg = () => '';
+    const documentSummary = () => null, observeMeta = () => {};
     const tana = {};
     const document = { createElement: (tagName) => {
       const classes = new Set();
@@ -837,6 +892,7 @@ function runRowAlignmentCheck() {
     const isImage = () => false, taskSummary = () => null, chipEl = () => ({}), iconSvg = () => '';
     const childEl = () => document.createElement('div');
     const isDivider = () => false;
+    const documentSummary = () => null, observeMeta = () => {};
     ${sourceBetween('// Block types (api.setBlockType)', 'const images = new Map()')}
     const tana = {};
     const document = { createElement: (tagName) => {
@@ -1207,11 +1263,11 @@ function runSortGroupCheck() {
        set: (next, by, order) => { view = next; groupPref[next] = by; sortPref[next] = order; },
        prefs: () => ({ group: groupBy(), sort: sortBy() }) });
   `);
-  const rows = [
-    { id: 't1', text: 'beta', icon: 'task', done: 0, tags: [{ label: 'task' }, { label: 'Project' }] },
-    { id: 't2', text: 'Alpha', icon: 'task', done: 1, tags: [{ label: 'task' }] },
-    { id: 't3', text: 'delta', icon: 'task', done: 0, stateType: 'proposed', tags: [{ label: 'task' }] },
-    { id: 't4', text: 'Charlie', icon: 'task', done: 0, stateType: 'not_now', tags: [{ label: 'task' }] },
+  const rows = [ // updatedAt/createdAt are the ISO strings main.js toNode passes; d1 is an older row that has neither
+    { id: 't1', text: 'beta', icon: 'task', done: 0, updatedAt: '2026-09-10T09:00:00Z', createdAt: '2026-01-05T09:00:00Z', tags: [{ label: 'task' }, { label: 'Project' }] },
+    { id: 't2', text: 'Alpha', icon: 'task', done: 1, updatedAt: '2026-09-01T09:00:00Z', createdAt: '2026-03-02T09:00:00Z', tags: [{ label: 'task' }] },
+    { id: 't3', text: 'delta', icon: 'task', done: 0, stateType: 'proposed', updatedAt: '2026-09-12T09:00:00Z', createdAt: '2026-02-01T09:00:00Z', tags: [{ label: 'task' }] },
+    { id: 't4', text: 'Charlie', icon: 'task', done: 0, stateType: 'not_now', updatedAt: '2026-09-05T09:00:00Z', createdAt: '2026-04-09T09:00:00Z', tags: [{ label: 'task' }] },
     { id: 'd1', text: 'echo', icon: 'doc', tags: [{ label: 'doc' }] },
   ];
   const titles = (list, by) => plain(api.groupRows(list, by)).map((g) => [g.title, g.nodes.map((n) => n.id)]);
@@ -1224,9 +1280,15 @@ function runSortGroupCheck() {
   assert.deepEqual(titles(rows, 'type'), [['doc', ['d1']], ['Project', ['t1']], ['task', ['t2', 't3', 't4']]],
     'type groups on the tag the row already shows as its chip');
   assert.deepEqual(titles([{ id: 'x', tags: [] }], 'type'), [['No type', ['x']]], 'a row without tags groups under No type');
+  assert.deepEqual(titles([{ id: 'x', icon: 'task', done: 1, stateType: 'proposed', tags: [] }], 'status'), [['Inbox', ['x']]],
+    'the row state wins over the done flag, so an Inbox task never reads as Completed');
   const order = (list) => plain(api.sortRows(list)).map((n) => n.id);
   api.set('tasks', 'none', 'title');
   assert.deepEqual(order(rows), ['t2', 't1', 't4', 't3', 'd1'], 'Title sorts the loaded rows by their own title, case-insensitively');
+  api.set('tasks', 'none', 'updated');
+  assert.deepEqual(order(rows), ['t3', 't1', 't4', 't2', 'd1'], 'Updated reads newest first, and a row without a time sorts last');
+  api.set('tasks', 'none', 'created');
+  assert.deepEqual(order(rows), ['t4', 't2', 't3', 't1', 'd1'], 'Created reads newest first too');
   api.set('tasks', 'none', 'default');
   assert.deepEqual(order(rows), ['t1', 't2', 't3', 't4', 'd1'], 'Default leaves the order the view produced alone');
   api.set('meetings', 'status', 'title');
@@ -1248,7 +1310,7 @@ function runSortGroupCheck() {
   assert.deepEqual(plain(ids.slice(-2)), ['sort', 'group'], 'Sort and Group sit at the end of the filter pills, in that order');
   const sort = defs.find((d) => d.id === 'sort'), group = defs.find((d) => d.id === 'group');
   assert.deepEqual(plain([sort.label, sort.value, group.label, group.value]), ['Sort', 'Title', 'Group', 'Status'], 'both pills read their active option');
-  assert.deepEqual(plain(sort.rows().map((r) => r.label)), ['Default', 'Title'], 'the Sort menu offers only orders backed by row data');
+  assert.deepEqual(plain(sort.rows().map((r) => r.label)), ['Default', 'Updated', 'Created', 'Title'], 'the Sort menu offers only orders backed by row data');
   assert.deepEqual(plain(group.rows().map((r) => r.label)), ['None', 'Status', 'Assignee', 'Type'], 'the Group menu offers the four groupings');
   assert.ok(sort.rows().find((r) => r.label === 'Title').checked && group.rows().find((r) => r.label === 'Status').checked, 'the active option is ticked');
   assert.ok([...sort.rows(), ...group.rows()].every((r) => !r.keepOpen), 'choosing an option closes the popup, like every other single choice');
@@ -1256,7 +1318,242 @@ function runSortGroupCheck() {
   assert.match(source, /groups\.flatMap\(\(g\) => \[groupHeadEl\(g\.title\)/, 'each group is introduced by a heading');
   assert.match(source, /list = sortRows\(list\);/, 'the rows are sorted before they are grouped');
 }
-const checks = [runPinGrouping, runSelectionChecks, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runSortGroupCheck];
+// Opening a node has to leave a row to type in, without creating anything in Tana until it is typed into.
+function runDraftTailCheck() {
+  const api = vm.runInNewContext(`
+    const isImage = (n) => n.type === 'image', isDivider = (n) => n.type === 'divider', isReference = (n) => n.type === 'reference';
+    ${functionSource('draftNode')}
+    const segsOf = (v) => Array.isArray(v) ? v : typeof v === 'string' ? (v ? [{ text: v }] : []) : v.segments || (v.text ? [{ text: v.text }] : []);
+    const plainOf = (v) => segsOf(v).map((s) => 'text' in s ? s.text : s.mention.label).join('');
+    const isAtomic = (n) => isImage(n) || isDivider(n);
+    let editable = true, loaded = true;
+    const childrenOf = () => (loaded ? [] : null); // only its "are the children loaded" answer matters here
+    const canEditItem = () => editable;
+    const isSpace = (n) => n.id.startsWith('tana:space:');
+    ${sourceBetween('const typableRow =', '// Opening a node leaves a row')}
+    ${functionSource('withDraftTail')}
+    ({ tail: (list, parent) => withDraftTail(list, parent), set: (e, l) => { editable = e; loaded = l; } });
+  `);
+  const doc = { key: 'doc', docId: 'doc', node: { id: 'tana:text:doc', kind: 'document' } };
+  const ids = (list) => plain(list).map((n) => n.id);
+  const row = (id, text) => ({ id, kind: 'block', text });
+  assert.deepEqual(ids(api.tail([], doc)), ['draft:doc'], 'an empty document opens on a draft row, as it always did');
+  assert.deepEqual(ids(api.tail([row('a', 'written')], doc)), ['a', 'draft:doc'], 'a document with content gets the draft row after it');
+  assert.deepEqual(ids(api.tail([row('a', 'written'), row('b', '')], doc)), ['a', 'b'], 'an empty last row is already somewhere to type, so no draft is added');
+  assert.deepEqual(ids(api.tail([{ id: 'img', kind: 'block', type: 'image' }], doc)), ['img', 'draft:doc'], 'an image, divider or reference row is not somewhere to type');
+  assert.deepEqual(ids(api.tail([], { key: 's', docId: 's', node: { id: 'tana:space:1', kind: 'document' } })), [], 'a space lists documents, so it has no draft child');
+  const block = { key: 'doc/b', docId: 'doc', node: { id: 'b', kind: 'block' } };
+  assert.deepEqual(ids(api.tail([], block)), ['draft:doc/b'], 'an empty block opens on a draft child');
+  assert.deepEqual(ids(api.tail([row('c', 'child')], block)), ['c'], 'a block with children gets none: a draft there would materialise as its first child');
+  api.set(false, true);
+  assert.deepEqual(ids(api.tail([], doc)), [], 'a read-only document (every chat) never offers a row to type in');
+  api.set(true, false);
+  assert.deepEqual(ids(api.tail([], doc)), [], 'children that are still loading are not an empty document');
+  assert.match(source, /caretOnOpen = false;\n\s+const last = list\.at\(-1\)/, 'the caret lands in that row once per open, not on every render');
+  assert.match(source, /flushAll\(\); dropDrafts\(\); caretOnOpen = true;/, 'both routes into a node (zoomTo, openDoc) ask for it');
+}
+
+// Every list row says who can see it, not only task rows, and the metadata request waits for the row to be on screen.
+function runRowAudienceCheck() {
+  const api = vm.runInNewContext(`
+    const items = new Map(), open = new Map(), pending = new Map();
+    const docOf = () => ({ editable: true });
+    const keyFor = (docId, node) => node.kind === 'document' ? docId : docId + '/' + node.id;
+    const mkItem = (docId, node, parent) => { const item = { key: keyFor(docId, node), docId, node, parent }; items.set(item.key, item); return item; };
+    const hasKids = () => false, isOpen = () => false, setOpen = () => {}, zoomTo = () => {}, ensureLoaded = () => {}, childrenOf = () => [], isSpace = () => false, draftNode = () => ({ id: 'draft', kind: 'block', text: '', draft: true });
+    const renderSegs = () => {}, segsOf = () => [], asDoc = (node) => ({ ...node, kind: 'document', text: node.text ?? node.title ?? '' });
+    const isImage = () => false, chipEl = () => ({}), iconSvg = (icon) => '<svg data-icon="' + icon + '"></svg>';
+    const childEl = () => document.createElement('div');
+    const isDivider = () => false;
+    const fetched = [], observed = [];
+    let watching = null;
+    let metaSeen = null;
+    class IntersectionObserver { constructor(fn) { watching = fn; } observe(el) { observed.push(el); } unobserve() {} }
+    const taskMetaById = new Map(), taskMetaLoading = new Set(), taskMetaFailed = new Map();
+    const loadTaskMeta = (id) => { fetched.push(id); };
+    const loadMembers = () => {}, memberName = (uri) => uri;
+    const isRealId = (id) => typeof id === 'string' && id.startsWith('tana:');
+    const tana = { taskMeta: () => {} };
+    const document = { createElement: (tagName) => {
+      const classes = new Set();
+      return { tagName, children: [], dataset: {}, attrs: {}, html: '', style: { setProperty() {}, cssText: '' },
+        classList: { add: (...names) => names.forEach((name) => classes.add(name)), toggle: (name, on) => on ? classes.add(name) : classes.delete(name), contains: (name) => classes.has(name) },
+        get className() { return [...classes].join(' '); },
+        set className(value) { classes.clear(); for (const name of String(value).split(' ')) if (name) classes.add(name); },
+        setAttribute(key, value) { this.attrs[key] = value; },
+        set innerHTML(value) { this.html = value; }, get innerHTML() { return this.html; },
+        get firstElementChild() { return null; },
+        append(...kids) { this.children.push(...kids); }, prepend(...kids) { this.children.unshift(...kids); },
+        set textContent(value) { this.value = value; }, get textContent() { return this.value || ''; } };
+    } };
+    ${sourceBetween('const isReference =', 'const showError =')}
+    ${sourceBetween('const isTask =', 'const chatIcon =')}
+    ${sourceBetween('// Block types (api.setBlockType)', 'const images = new Map()')}
+    ${sourceBetween('const AUDIENCES = {', 'function loadTaskMeta(')}
+    ${functionSource('observeMeta')}
+    ${functionSource('taskSummary')}
+    ${functionSource('documentSummary')}
+    ${functionSource('taskMetaEl')}
+    ${sourceBetween('const canExpand =', 'function draftNode')}
+    ${functionSource('nodeEl')}
+    ({
+      row: (node, meta) => {
+        fetched.length = 0; observed.length = 0; taskMetaById.clear();
+        if (meta) taskMetaById.set(node.id, meta);
+        const el = nodeEl(node, node.id, null);
+        const body = el.children[0].children.find((child) => child.className === 'body');
+        const info = body.children.find((child) => child.className.split(' ')[0] === 'meta');
+        return { icons: info ? info.children.map((icon) => icon.attrs['aria-label'] || icon.html.match(/data-icon="([^"]+)"/)[1]) : null, gaps: info ? info.children.map((icon) => (icon.style.cssText.match(/margin-left:([^;]+)/) || [])[1] || null) : null, pending: info ? info.className.includes('pending') : null, sub: (body.children.find((child) => child.className === 'subtext') || {}).value || null, fetched: [...fetched], observed: observed.map((watched) => watched.dataset.metaFor) };
+      },
+      onScreen: () => { watching(observed.map((target) => ({ isIntersecting: true, target }))); return [...fetched]; },
+    });
+  `, { structuredClone });
+  const doc = { id: 'tana:text:doc1', kind: 'document', text: 'Charter', icon: 'doc', hasChildren: true, editable: true };
+  const meeting = { id: 'tana:event:m1', kind: 'document', text: 'Heads of Technology', icon: 'meeting', hasChildren: true, editable: true };
+  const task = { id: 'tana:text:t1', kind: 'document', text: 'Renew the DPA', icon: 'task', hasChildren: true, editable: true };
+  const spaceMeta = { assignees: [], audience: { scope: 'space' }, audienceSpace: { title: 'Foundry LT' } };
+  const row = (node, meta) => plain(api.row(node, meta));
+  assert.deepEqual(row(doc, spaceMeta).icons, ['Visible to members of Foundry LT'], 'a doc row carries the audience icon, the way a task row does');
+  assert.deepEqual(row(meeting, { assignees: [], audience: 'only-me' }).icons, ['Visible only to you'], 'a meeting row carries it too');
+  assert.deepEqual(row(doc, { assignees: [], audience: 'everyone', linkShared: true }).icons, ['Visible to everyone', 'Anyone with the link'], 'link sharing stays a separate icon on a doc row');
+  assert.deepEqual(row(task, { assignees: ['tana:user-profile:lex'], audience: 'only-me' }).icons, ['Visible only to you'], 'a task row is unchanged');
+  assert.deepEqual(row(task, { assignees: ['tana:user-profile:lex'], audience: 'only-me' }).gaps, ['6px'], 'an icon after an assignee name keeps its 6px');
+  assert.deepEqual(row(doc, spaceMeta).gaps, ['0'], 'a row with no name in front of the icon does not add a second gap on top of the one the meta span carries');
+  assert.deepEqual(row(doc, { assignees: [], audience: 'everyone', linkShared: true }).gaps, ['0', '6px'], 'the icons still stand apart from each other');
+  assert.equal(row(doc, spaceMeta).sub, 'Foundry LT', 'a space audience still names the space under the title');
+  assert.equal(row(doc, { assignees: [], audience: 'unknown' }).icons, null, 'a document with nothing shareable shows nothing at all');
+  const settledGaps = row(doc, spaceMeta).gaps;
+  const pending = row(doc, null);
+  assert.deepEqual(pending.icons, ['pending'], 'a row still waiting on its metadata holds the slot with the dashed placeholder');
+  assert.equal(pending.pending, true, 'which is marked so it can stay quieter than a real answer');
+  assert.deepEqual(pending.gaps, settledGaps, 'in exactly the place the real icon lands, so nothing shifts when it arrives');
+  assert.deepEqual(pending.fetched, [], 'and asks for nothing while it renders: one request per visible row, never per listed row');
+  assert.deepEqual(pending.observed, ['tana:text:doc1'], 'the row is watched instead, so the request goes out when it scrolls into view');
+  assert.deepEqual(plain(api.onScreen()), ['tana:text:doc1'], 'and it does go out once the row is on screen');
+  assert.equal(row({ ...doc, id: 'draftdoc:1' }, null).icons, null, 'a draft document has nothing to ask about, so it holds no slot either');
+  assert.deepEqual(row({ ...doc, id: 'draftdoc:1' }, null).observed, [], 'and is not watched');
+  assert.deepEqual(row(doc, spaceMeta).observed, [], 'metadata already in hand is not asked for again');
+}
+
+// Hovering a sidebar row expands its tag, which must not re-wrap the title and jump the row under the pointer.
+function runSidebarHoverCheck() {
+  const api = vm.runInNewContext(`
+    let lineHeight = '19px';
+    const getComputedStyle = () => ({ lineHeight });
+    const makeEl = () => {
+      const classes = new Set();
+      return { classes, dataset: {}, children: [], style: { setProperty() {} }, offsetHeight: 19,
+        classList: { add: (...names) => names.forEach((name) => classes.add(name)) },
+        set className(value) { classes.clear(); for (const name of String(value).split(' ')) if (name) classes.add(name); },
+        get className() { return [...classes].join(' '); },
+        append(...kids) { this.children.push(...kids); }, querySelectorAll: () => [],
+        set textContent(value) { this.value = value; }, get textContent() { return this.value || ''; } };
+    };
+    const document = { createElement: makeEl };
+    const isTask = () => false, canEditNode = () => true, iconSvg = () => '', appendTags = () => {}, goTo = () => {}, railKey = () => {};
+    ${functionSource('railRow')}
+    (lines) => {
+      const row = railRow({ id: 'tana:event:m1', text: 'Heads of Technology', icon: 'meeting' });
+      const title = row.children[1];
+      title.offsetHeight = 19 * lines;
+      row.onmouseenter();
+      const held = title.style.webkitLineClamp;
+      row.onmouseleave();
+      return { held, released: title.style.webkitLineClamp, focus: row.onfocus === row.onmouseenter, blur: row.onblur === row.onmouseleave };
+    };
+  `);
+  assert.equal(plain(api(1)).held, '1', 'a one-line row stays one line while its tag expands: the label truncates instead');
+  assert.equal(plain(api(2)).held, '2', 'a row that already wraps keeps both of its lines');
+  assert.equal(plain(api(1)).released, '', 'the row goes back to the ordinary two-line clamp when the pointer leaves');
+  assert.deepEqual(plain(api(1)), { held: '1', released: '', focus: true, blur: true }, 'keyboard focus expands the tag too, so it holds the row the same way');
+}
+
+// The Cmd+K editor for the hidden-items list: the palette's own rows, and every change goes through api.
+async function runHiddenItemsCheck() {
+  const api = vm.runInNewContext(`
+    const calls = [];
+    let stored = ['Lunch', 'Block*'];
+    const palInput = { value: '', placeholder: '', focus() {} };
+    const palette = { hidden: true };
+    let palMode = 'cmd', palRows = [], palIndex = 5, rendered = 0;
+    const renderPalette = () => { rendered++; };
+    const run = (fn) => fn();
+    const tana = {
+      filters: async () => { calls.push(['filters']); return [...stored]; },
+      addFilter: async (pattern) => { calls.push(['addFilter', pattern]); stored = [...stored, pattern]; return [...stored]; },
+      removeFilter: async (pattern) => { calls.push(['removeFilter', pattern]); stored = stored.filter((p) => p.toLowerCase() !== pattern.toLowerCase()); return [...stored]; },
+    };
+    ${sourceBetween('const HIDDEN_GROUP =', 'function openHiddenPalette')}
+    ${functionSource('openHiddenPalette')}
+    ({
+      rows: (list, q) => { hiddenList = list; palInput.value = q; return hiddenRows(q); },
+      runRow: async (list, q, index) => { hiddenList = list; stored = [...list]; palInput.value = q; const row = hiddenRows(q)[index]; calls.length = 0; await row.run(); return { calls: [...calls], list: hiddenList, typed: palInput.value }; },
+      open: async (list) => { stored = [...list]; calls.length = 0; openHiddenPalette(); await new Promise(setImmediate); return { palMode, placeholder: palInput.placeholder, hidden: palette.hidden, calls: [...calls], list: hiddenList }; },
+    });
+  `, { setImmediate });
+
+  assert.deepEqual(plain(api.rows(null, '').map((r) => [r.label, !!r.disabled])), [['Loading…', true]], 'the editor says it is loading until api.filters() answers');
+  assert.deepEqual(plain(api.rows([], '').map((r) => r.label)), ['Nothing is hidden yet'], 'an empty list says so instead of leaving the palette blank');
+  const listed = plain(api.rows(['Lunch', 'Block*'], ''));
+  assert.deepEqual(listed.map((r) => [r.label, r.hint]), [['Lunch', 'Exact · ↩ unhides'], ['Block*', 'Prefix · ↩ unhides']], 'each pattern is a row that says how it matches and that Enter removes it');
+  assert.equal(listed.every((r) => r.keepOpen && r.group === listed[0].group), true, 'they share one group header and none of them closes the editor');
+  assert.match(listed[0].group, /case-insensitive/, 'that header is where the matching rule is explained');
+  const typing = plain(api.rows(['Lunch', 'Block*'], 'Blo'));
+  assert.deepEqual(typing.map((r) => r.label), ['Hide "Blo"', 'Block*'], 'typing offers to add what you typed, and narrows the list to what matches it');
+  assert.deepEqual(plain(api.rows(['Lunch'], 'Block*')).map((r) => r.hint), ['Prefix'], 'a trailing * is offered as a prefix match');
+
+  const added = plain(await api.runRow(['Lunch'], 'Block*', 0));
+  assert.deepEqual(added, { calls: [['addFilter', 'Block*']], list: ['Lunch', 'Block*'], typed: '' }, 'adding sends the raw line and clears the input, so the new list is what shows');
+  const removed = plain(await api.runRow(['Lunch', 'Block*'], '', 0));
+  assert.deepEqual(removed.calls, [['removeFilter', 'Lunch']], 'running a pattern row removes that pattern');
+  assert.deepEqual(removed.list, ['Block*'], 'and the editor lists what the call returned, not a guess');
+
+  const opened = plain(await api.open(['Lunch', 'Block*']));
+  assert.equal(opened.palMode, 'hidden', 'the command opens the palette in its own mode');
+  assert.equal(opened.hidden, false, 'and shows the palette');
+  assert.deepEqual(opened.calls, [['filters']], 'it reads the current list once');
+  assert.deepEqual(opened.list, ['Lunch', 'Block*'], 'and renders what came back');
+  assert.match(source, /id: 'hidden'[^}]*Edit hidden items/, 'Cmd+K carries the command that opens it');
+  assert.match(source, /palMode === 'hidden'/, 'and the palette renders, filters and types in that mode like any other');
+}
+
+// main answers [] until its sync client is up: keeping that would leave every name as a raw uri all session.
+async function runMemberLoadCheck() {
+  const api = vm.runInNewContext(`
+    const META_RETRY_MS = 500;
+    let members = null, renders = 0, attempts = 0, answer = [];
+    const render = () => { renders++; };
+    const renderPills = () => {}, renderPalette = () => {}, showError = () => {};
+    const $ = () => ({ hidden: true });
+    const palette = { hidden: true };
+    const tana = { members: async () => { attempts++; return answer; } };
+    ${sourceBetween('// main answers [] until its sync client is up', 'const me = ()')}
+    ${sourceBetween('const me = ()', 'const AUDIENCES')}
+    ({
+      load: async (next) => { if (next) answer = next; loadMembers(); await new Promise(setImmediate); return { attempts, people: members && members.length }; },
+      reset: (asked) => { members = null; membersAsked = asked; },
+      name: (uri) => memberName(uri),
+    });
+  `, { setImmediate, setTimeout });
+
+  const empty = plain(await api.load([]));
+  assert.equal(empty.attempts, 1, 'the member list is asked for once');
+  assert.equal(api.name('tana:user-profile:andre'), 'tana:user-profile:andre', 'until it answers, a name is still its uri');
+  api.reset(0);
+  const again = plain(await api.load(null));
+  assert.equal(again.attempts, 2, 'an empty answer means "not yet", so it is asked again instead of kept');
+  api.reset(0);
+  const filled = plain(await api.load([{ id: 'tana:user-profile:andre', title: 'André Foeken' }]));
+  assert.equal(filled.attempts, 3, 'it keeps asking until someone is in the list');
+  assert.equal(api.name('tana:user-profile:andre'), 'André Foeken', 'and once it answers, names resolve');
+  const settled = plain(await api.load(null));
+  assert.equal(settled.attempts, 3, 'a list with people in it is loaded for good: no further calls');
+  api.reset(Date.now());
+  const throttled = plain(await api.load([]));
+  assert.equal(throttled.attempts, 3, 'a slow start cannot turn renders into a request loop: a fresh ask is throttled');
+}
+
+const checks = [runDraftTailCheck, runPinGrouping, runSelectionChecks, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runSortGroupCheck];
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);
   if (failures.length) throw new AggregateError(failures, failures.map((failure) => failure.message).join('\n'));
