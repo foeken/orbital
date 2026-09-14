@@ -272,6 +272,8 @@ What changed after addendum 16, stated once here; the details and evidence are i
 
 ## Addendum 18 (rendering budget)
 
+Keyboard addition: **Space** on a focused read-only row (a meeting, a member, anything without an editor) zooms into it, and on a focused reference row opens what it points at; with exactly one row selected and nothing focused it does the same. Editable rows keep Space for typing.
+
 Measured on a 53-row Library before this addendum: 6–7 ms per full render, but 78 renders in the six seconds after opening a 56-row view (one per metadata answer), four renders and two identical graph queries per 30-second refresh tick, and every text edit throwing away the document's cached metadata and reloading all six views' rows. Now:
 
 - `renderSoon()` coalesces everything that arrives on its own (metadata, members, pins, the rail, crumb dates, live updates) into one render per animation frame; `render()` stays synchronous for user actions that need the DOM immediately after. A metadata answer patches its own rows (`patchMeta`) and renders only when the zoomed document is the one answered.

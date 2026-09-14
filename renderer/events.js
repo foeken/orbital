@@ -37,11 +37,13 @@ outline.addEventListener('keydown', (e) => {
       else if (vert && e.shiftKey) extendSel(item, dir === 'up' ? -1 : 1);
       else if (vert && !mod) moveTo(el, dir === 'up' ? -1 : 1, editing ? off : 0);
       else if (e.key === 'Escape') { if (editing) flush(item.key); el.blur(); }
+      else if (e.key === ' ' && !editing) openReference(item.node); // Space on a focused reference opens what it points at
       else if (mod) return;
       else if (editing && e.key !== 'Enter' && e.key !== 'Tab') return; // typing edits the referenced document's title
       return e.preventDefault();
     }
     if (e.key === 'Escape') { e.preventDefault(); el.blur(); }
+    else if (e.key === ' ') { e.preventDefault(); if (isReference(item.node)) openReference(item.node); else zoomTo(item); } // Space zooms into a read-only row, since typing into it is not an option
     else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && e.shiftKey && !mod) { e.preventDefault(); extendSel(item, e.key === 'ArrowUp' ? -1 : 1); }
     else if (e.key === 'ArrowUp' && !mod && atEdge(el, 'up')) { e.preventDefault(); moveTo(el, -1, off); }
     else if (e.key === 'ArrowDown' && !mod && atEdge(el, 'down')) { e.preventDefault(); moveTo(el, 1, off); }

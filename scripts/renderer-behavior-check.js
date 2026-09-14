@@ -587,10 +587,10 @@ function runEditabilityCheck() {
   const start = source.indexOf("outline.addEventListener('keydown', (e) => {");
   const end = source.indexOf("outline.addEventListener('input'", start);
   assert.notEqual(start, -1, 'outline editing keyboard handler is present');
-  const runKey = (editable) => {
+  const runKey = (editable, key = 'Enter', reference = false) => {
     const context = { listener: undefined };
     vm.runInNewContext(`
-      let mutation = 0;
+      let mutation = 0, zoomed = 0, opened = 0, prevented = 0;
       const editable = ${JSON.stringify(editable)};
       const outline = { addEventListener: (_name, fn) => { listener = fn; } };
       const item = { key: 'row', docId: 'row', node: { kind: 'document', editable, text: 'Row' } };
@@ -599,7 +599,8 @@ function runEditabilityCheck() {
       const caretOffset = () => 0, getSelection = () => ({ isCollapsed: true });
       const isImage = () => false, isOpen = () => false, zoom = null;
       const canEditItem = (item) => item.node.editable !== false;
-      const isReference = () => false, canEditStructure = (item) => canEditItem(item);
+      const isReference = () => ${JSON.stringify(reference)}, canEditStructure = () => ${JSON.stringify(reference)}, canEditText = () => false;
+      const zoomTo = () => { zoomed++; }, openReference = () => { opened++; };
       const flush = () => {}, extendSel = () => {}, startLink = () => {}, toggleDone = () => { mutation++; };
       const insertAtCaret = () => { mutation++; }, draftDoc = () => { mutation++; }, splitNode = () => { mutation++; };
       const shiftNode = () => { mutation++; }, removeNode = () => { mutation++; }, setOpen = () => { mutation++; };
@@ -608,14 +609,18 @@ function runEditabilityCheck() {
       const isAtomic = () => false, MARK_KEYS = { b: 'bold', i: 'italic', e: 'code' };
       const toolbarEl = { hidden: true }, returnToSelection = () => {}, focusToolbar = () => {}, toggleMarkKey = () => {};
       ${source.slice(start, end)}
-      Object.assign(globalThis, { mutation: () => mutation });
+      Object.assign(globalThis, { mutation: () => mutation, state: () => ({ mutation, zoomed, opened, prevented }) });
     `, context);
-    const event = { key: 'Enter', metaKey: false, ctrlKey: false, shiftKey: false, target: { closest: () => ({ textContent: 'Row' }) }, preventDefault: () => {} };
+    const event = { key, metaKey: false, ctrlKey: false, shiftKey: false, target: { closest: () => ({ textContent: 'Row' }) }, preventDefault: () => { context.prevented = true; } };
     context.listener(event);
-    return context.mutation();
+    return { ...context.state(), prevented: !!context.prevented };
   };
-  assert.equal(runKey(false), 0, 'read-only member keyboard input cannot create or mutate a node');
-  assert.equal(runKey(true), 1, 'editable document keyboard input still uses the editor');
+  assert.equal(runKey(false).mutation, 0, 'read-only member keyboard input cannot create or mutate a node');
+  assert.equal(runKey(true).mutation, 1, 'editable document keyboard input still uses the editor');
+  // A focused read-only row cannot be typed into, so Space is free to zoom into it; a reference opens its target.
+  assert.deepEqual(plain(runKey(false, ' ')), { mutation: 0, zoomed: 1, opened: 0, prevented: true }, 'Space on a focused read-only row zooms into it');
+  assert.deepEqual(plain(runKey(false, ' ', true)), { mutation: 0, zoomed: 0, opened: 1, prevented: true }, 'Space on a focused reference opens what it points at');
+  assert.deepEqual(plain(runKey(true, ' ')).zoomed, 0, 'and an editable row keeps Space for typing');
 }
 
 async function runCheckboxCheck() {
