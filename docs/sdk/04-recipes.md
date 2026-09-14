@@ -40,7 +40,7 @@ const { nodes: events } = await client.graph.listNodes({ nodeTypes: ['event'], h
   eventStartTimeMin: startISO, eventStartTimeMax: endISO, limit: 300,
   sortOptions: [{ field: 'SORT_FIELD_EVENT_START_TIME', direction: 'SORT_DIRECTION_ASCENDING' }] });
 ```
-Or via the builders: `taskParams(filter, me)`, `libraryQueries(filter, me)`.
+Or via the view builder: `viewParams({ types: ['tasks'], states: ['proposed', 'open'], assignee: 'me' }, me)` is the Tasks view, `viewParams({ types: ['meetings'], participant: 'me', window: 'recent' }, me)` the Meetings view (docs/VIEWS.md).
 
 ## Read and edit a document live
 

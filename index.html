@@ -55,6 +55,24 @@
 </div>
 <input id="dropFile" type="file" accept=".svg,image/svg+xml" hidden>
 <script src="icons.js"></script>
-<script src="renderer.js"></script>
+<!-- one classic script per concern, in dependency order: every file shares the same global scope -->
+<script src="renderer/theme.js"></script>
+<script src="renderer/mock.js"></script>
+<script src="renderer/segments.js"></script>
+<script src="renderer/state.js"></script>
+<script src="renderer/nodes.js"></script>
+<script src="renderer/rail.js"></script>
+<script src="renderer/render.js"></script>
+<script src="renderer/edit.js"></script>
+<script src="renderer/select.js"></script>
+<script src="renderer/views.js"></script>
+<script src="renderer/tasks.js"></script>
+<script src="renderer/access.js"></script>
+<script src="renderer/pills.js"></script>
+<script src="renderer/document.js"></script>
+<script src="renderer/toolbar.js"></script>
+<script src="renderer/events.js"></script>
+<script src="renderer/palette.js"></script>
+<script src="renderer/app.js"></script>
 </body>
 </html>

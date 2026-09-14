@@ -4,7 +4,27 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-const source = fs.readFileSync(require.resolve('../renderer.js'), 'utf8');
+const { source, files } = require('./renderer-source');
+// The renderer is classic scripts sharing one global scope, loaded in the order index.html lists them. Two things
+// break that silently at load time: a name declared twice (a SyntaxError that stops the second file), and a
+// top-level statement that runs immediately and reaches for something a later file declares (a ReferenceError).
+// Statements that only register callbacks are fine: those run after every file has loaded.
+{
+  const declared = (text) => [...text.matchAll(/^(?:const|let|async function|function) ([A-Za-z_$][\w$]*)/gm)].map((m) => m[1]);
+  const perFile = files.map((f) => ({ f, text: fs.readFileSync(require.resolve('../' + f), 'utf8') }));
+  const seen = new Map();
+  for (const { f, text } of perFile) for (const name of declared(text)) {
+    assert.ok(!seen.has(name), name + ' is declared in both ' + seen.get(name) + ' and ' + f);
+    seen.set(name, f);
+  }
+  perFile.forEach(({ f, text }, i) => {
+    const later = new Set(perFile.slice(i + 1).flatMap(({ text }) => declared(text)));
+    for (const line of text.split('\n')) {
+      if (!/^[A-Za-z_$\[(]/.test(line) || /^(?:const|let|async function|function|class) /.test(line) || /=>|function/.test(line)) continue;
+      for (const [, name] of line.matchAll(/\b([A-Za-z_$][\w$]*)\b/g)) assert.ok(!later.has(name), f + ' runs "' + line.slice(0, 60) + '" before ' + seen.get(name) + ' has loaded');
+    }
+  });
+}
 const match = source.match(/function authView\(s\) \{[\s\S]*?\n\}/);
 assert.ok(match, 'renderer auth view helper is present');
 const authView = vm.runInNewContext(match[0] + '; authView');

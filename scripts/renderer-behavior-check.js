@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-const source = fs.readFileSync(require.resolve('../renderer.js'), 'utf8');
+const { source } = require('./renderer-source');
 const plain = (value) => JSON.parse(JSON.stringify(value));
 // Enough DOM for the inline renderer: elements with children, classes, dataset and textContent, plus text nodes.
 const FAKE_DOM = `

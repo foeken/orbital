@@ -105,7 +105,7 @@ const commands = {
     const me = await connect();
     const state = flag('state', 'open');
     // the same builder the Tasks view uses (sdk/query.js), so the CLI cannot drift from the app
-    const { nodes } = await client.graph.listNodes(query.taskParams({ states: state === 'all' ? null : [state], assignee: 'me' }, me.userUri));
+    const { nodes } = await client.graph.listNodes(query.viewParams({ types: ['tasks'], states: state === 'all' ? null : [state], assignee: 'me' }, me.userUri));
     for (const n of nodes) out(n.id + '\t' + ((n.state && n.state.type) || '-') + '\t' + (n.title || ''));
     out(nodes.length + ' nodes'); // totalCount needs mode LIST_NODES_MODE_WITH_COUNT
   },
@@ -345,17 +345,17 @@ commands.assignee = async () => {
   const named = profiles.find((p) => p.id === who || (p.title || '').toLowerCase().includes(String(who).toLowerCase()));
   const uri = named ? named.id : who;
   out('assignee ' + uri + ' ' + ((named && named.title) || ''));
-  const filter = { ...query.DEFAULT_LIBRARY_FILTER, types: query.LIBRARY_KINDS, assignee: uri };
-  for (const { kind, params } of query.libraryQueries(filter, me.userUri)) {
+  const kinds = query.VIEW_KINDS.filter((k) => k !== 'people' && k !== 'spaces');
+  for (const kind of kinds) { // one kind at a time, through the view builder: the assignee applies only when tasks are among the kinds
+    const params = query.viewParams({ types: [kind], states: null, assignee: uri }, me.userUri);
     const { nodes } = await client.graph.listNodes(params);
-    const rows = kind === 'docs' ? nodes.filter((n) => !(n.state && n.state.type)) : nodes;
-    const mine = rows.filter((n) => (n.assignedTo || []).includes(uri));
-    out(kind.padEnd(10) + ' sends=' + JSON.stringify({ ...params, sortOptions: undefined, limit: undefined }) + ' nodes=' + rows.length + ' assigned=' + mine.length);
+    const mine = nodes.filter((n) => (n.assignedTo || []).includes(uri));
+    out(kind.padEnd(10) + ' sends=' + JSON.stringify({ ...params, sortOptions: undefined, limit: undefined, mode: undefined }) + ' nodes=' + nodes.length + ' assigned=' + mine.length);
   }
-  const { nodes: tasks } = await client.graph.listNodes(query.taskParams({ states: null, assignee: uri }, me.userUri));
+  const { nodes: tasks } = await client.graph.listNodes(query.viewParams({ types: ['tasks'], states: null, assignee: uri }, me.userUri));
   out('Tasks view (all states) = ' + tasks.length + ', of those assigned = ' + tasks.filter((n) => (n.assignedTo || []).includes(uri)).length);
   out('-- direct per-node-type probes: which node types the graph filters by assignedTo / unassigned --');
-  for (const kind of query.LIBRARY_KINDS) {
+  for (const kind of kinds) {
     const params = { nodeTypes: [{ meetings: 'event', tasks: 'text', docs: 'text', chats: 'chat', canvases: 'canvas', agents: 'agent', skills: 'skill' }[kind]], assignedTo: [uri], limit: 100 };
     try {
       const { nodes } = await client.graph.listNodes(params);
@@ -422,9 +422,9 @@ commands.libraryprobe = async () => {
     return result;
   };
   const main = backend(me);
-  const filter = { ...query.DEFAULT_LIBRARY_FILTER, types: query.LIBRARY_KINDS, states: null, assignee: 'anyone' };
+  const filter = { types: null, states: null, assignee: 'anyone', text: '' }; // every listable kind, nothing narrowed
   const started = Date.now();
-  const payload = await main.library(filter);
+  const payload = await main.viewRows('library', filter);
   const nodes = Array.isArray(payload) ? payload : payload.nodes;
   out({ ms: Date.now() - started, bytes: Buffer.byteLength(JSON.stringify(payload)), nodes: nodes.length,
     truncated: Array.isArray(payload) ? undefined : payload.truncated, calls });

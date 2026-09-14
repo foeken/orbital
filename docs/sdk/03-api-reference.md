@@ -115,6 +115,7 @@ Outline node: `{ id: blockId, text, kind: 'block', block?: type, heading?: level
 | `indent(document, id)` / `outdent(document, id)` | Under the previous sibling / after the parent. No-ops at the edges; only paragraphs and listItems can be moved. |
 | `move(document, id, 'up' | 'down')` | Swap with the neighbouring sibling (lists move as a whole). |
 | `moveMany(document, ids, 'up' | 'down')` / `removeMany(document, ids)` | The same for a sibling range in visual order, in **one** transaction, so a multi-select is one undo step. Both reject duplicates, unknown ids and non-siblings before mutating. |
+| `indentMany(document, ids)` / `outdentMany(document, ids)` | The same for indent/outdent: one transaction, ids in visual order (indent runs first to last so each row follows the one above it, outdent last to first). The sibling checks run first; each id is then resolved inside the transaction because the previous row's move already changed the tree. |
 | `toggleCheckbox(document, id)` | Paragraph or heading only. `checked` lives on the `listItem`, so a bare paragraph is wrapped first (keeping its blockId, marks and mentions); it never touches the document's own task state. |
 
 All operations run inside `document.transact`, so each is one undo step and one live update. Containers are copied and deleted (Loro cannot move containers); text runs keep their marks via `toDelta/applyDelta`. A direction other than `'up'`/`'down'` throws rather than defaulting to down.
@@ -139,15 +140,23 @@ The SDK's `Document.undo()`/`redo()` only undo local CRDT transactions for that 
 | Function | Behaviour |
 |---|---|
 | `parseQuery(query)` → `{ text, tags }` | Extracts `#word` tokens. |
-| `searchParams(parsed, typesByLowerTitle, limit = 20)` → ListNodes params or null | Default nodeTypes `['text', 'event', 'user-profile']`, `textQuery`, TEXT_RANK sort; `#task` → text + all four states, `#meeting` → event, `#member` → user-profile, `#<Type>` → `entityTypes`; unknown type or empty query → null. |
+| `searchParams(parsed, typesByLowerTitle, limit = 20)` → ListNodes params or null | Default nodeTypes `['text', 'event', 'user-profile']`, `textQuery`, TEXT_RANK sort; `#task` → text + all four states, `#meeting` → event, `#member` → user-profile, `#space` → space, `#<Type>` → `entityTypes`; unknown type or empty query → null. |
 | `needsTypes(parsed)` | True when a non-kind tag needs the type map. |
-| `taskParams(filter, me, limit = 500)` | `{ states: string[] | null, assignee: 'me' | 'anyone' | 'unassigned' | uri }` → ListNodes params, UPDATE_TIME desc. |
-| `libraryQueries(filter, me, limit = 100)` | One `{ kind, params }` per kind in `meetings | tasks | docs | chats | canvases | agents | skills` (+ optional `textQuery`); the caller filters `docs` to nodes without state. The assignee goes on **every** kind's query, not only on tasks: the graph filters any node type by `assignedTo`, so a kind that carries no assignee returns nothing instead of returning its whole contents unfiltered. It is in effect only while `tasks` is among the selected kinds, which is when the Assigned pill is shown. |
-| `DEFAULT_TASK_FILTER`, `DEFAULT_LIBRARY_FILTER`, `LIBRARY_KINDS` | Constants. |
+| `viewParams(filter, me, limit = 1000)` → ListNodes params | The one query behind every view (docs/VIEWS.md). A filter is `{ types, states, assignee, text, participant, window, mcp }`, all optional; `types` null or empty means every listable kind (never an unconstrained query: `nodeTypes: []` is no filter to the graph). `states` and `assignee` are applied only while `tasks` is among the kinds, which is exactly when those pills are shown. Meetings alone sort by event start, everything else by update time; `participant: 'me'` and `window: 'recent'` (last 7 days, next 7) are what the Meetings preset uses. Throws on an invalid filter. |
+| `validViewFilter(f)` | Shape check for a stored filter: known keys only, kinds from `VIEW_KINDS`, states from `STATE_TYPES`, assignee one of `me | anyone | unassigned | <user-profile uri>`. |
+| `viewTypes(id, f)` | A kind page (`KIND_VIEWS`: tasks, meetings, chats, people) keeps its own `types` whatever the stored filter says; Library and Inbox choose theirs. |
+| `VIEW_PRESETS`, `VIEW_KINDS`, `KIND_VIEWS` | The six presets, the nine kinds (`meetings tasks docs chats canvases agents skills spaces people`), and the kind pages. |
+| `hideRules(patterns)` / `isHidden(rules, title)` | Hidden titles: case-insensitive whole-title match, or a prefix when the pattern ends in `*`; a bare `*` is dropped; at most 200 patterns of 200 characters. Applied to every list and search in main.js. |
 
 ## `sdk/pins.js` (all `async (sync, userUri, …)`)
 
-`listSidebar` → uris in tree order · `pinSidebar(docUri)` (dedup) · `unpinSidebar(docUri)` · `dates(docUri)` → `['YYYY-MM-DD']` · `pinDate(docUri, date)` (dedup, unmutes) · `unpinDate(docUri, date)`. They subscribe the profile, then the collection / pin-map it points to; throw if the profile has no `pinnedCollectionUri` / `pinMapUri` yet (the web client creates those lazily on first pin; we don't).
+`listSidebar` → uris in tree order · `sidebarTree` → the collection's tree with its section labels · `pinSidebar(docUri)` (dedup) · `unpinSidebar(docUri)` · `dates(docUri)` → `['YYYY-MM-DD']` · `pinDate(docUri, date)` (dedup, unmutes) · `unpinDate(docUri, date)`. They subscribe the profile, then the collection / pin-map it points to; throw if the profile has no `pinnedCollectionUri` / `pinMapUri` yet (the web client creates those lazily on first pin; we don't).
+
+Items pinned *on* an event or a space are a different thing (docs/PINNING.md section 4) and take the document itself, synchronously: `items(doc)` → `[{ uri, mode? }]` · `pinItem(doc, uri, mode?)` (dedup on uri) · `unpinItem(doc, uri)`.
+
+## `sdk/chat.js`
+
+`chatRows(messages, { authorName, aiName = 'Tana AI' })` → read-only outline rows for a chat's `data.messages` (docs/CHATS.md): one author row per message with its markdown blocks as children, `[label](tana:…)` links as mention segments, attachments and proposals as reference rows, and "Thought for N seconds" from `completedAt - sentAt`. `blocks(text)`, `segments(text)` and `plain(segments)` are the markdown helpers behind it. Pure and Electron-free.
 
 ## `sdk/assets.js`
 

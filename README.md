@@ -106,8 +106,9 @@ node scripts/build-icons.js <dir>   # regenerate icons.js from the line icon set
 ## How it is put together
 
 `main.js` is the Electron main process: windows, IPC, the view queries, the refresh loop, search,
-creation, pins, icons and filters. `renderer.js` with `index.html` and `styles.css` is the whole UI,
-one file, no framework and no bundler. `sdk/` is a generic, Electron-independent Tana client (graph
+creation, pins, icons and filters. `renderer/` with `index.html` and `styles.css` is the whole UI:
+eighteen plain scripts sharing one global scope, loaded in the order `index.html` lists them, no
+framework and no bundler. `sdk/` is a generic, Electron-independent Tana client (graph
 queries, the sync stream, Loro documents, outline operations, access rules); `tana-session.js` is the
 login and token layer; `db.js` is the local SQLite cache.
 
@@ -124,4 +125,3 @@ This speaks Tana's undocumented `v1alpha1` protocol, reverse-engineered from the
 break with any deploy of theirs. When it does, the protobuf descriptors are re-extracted from the
 current bundle and diffed against `sdk/proto/descriptors.js`; the how is in
 [docs/PLATFORM-PROTOCOL.md](docs/PLATFORM-PROTOCOL.md).
-
