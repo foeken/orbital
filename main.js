@@ -8,7 +8,7 @@ const { createTanaClient } = require('./sdk');
 const { fetchImage } = require('./sdk/assets');
 const access = require('./sdk/access');
 const { readNode, editable, setTitle, setState, taskMeta, audienceMetadata, setAssignees, ulid, initDocument, STATE_TYPES } = require('./sdk/node');
-const { parseQuery, searchParams, needsTypes, taskParams, libraryQueries, LIBRARY_KINDS, DEFAULT_TASK_FILTER, DEFAULT_LIBRARY_FILTER } = require('./sdk/query');
+const { parseQuery, searchParams, needsTypes, taskParams, libraryQueries, hideRules, isHidden, LIBRARY_KINDS, DEFAULT_TASK_FILTER, DEFAULT_LIBRARY_FILTER } = require('./sdk/query');
 const content = require('./sdk/content');
 const chat = require('./sdk/chat');
 const fields = require('./sdk/fields');
@@ -27,6 +27,9 @@ const DOC_URI = /^tana:[a-z-]+:[0-9a-z]{26}$/; // a real document id; a renderer
 const okStates = (s) => (Array.isArray(s) && s.length && s.every((x) => STATE_TYPES.includes(x)) ? s : null);
 const okAssignee = (a) => (a === 'anyone' || a === 'unassigned' || /^tana:user-profile:[0-9a-z]{26}$/.test(a || '') ? a : 'me');
 const taskFilter = () => { const f = db.setting('taskFilter') || DEFAULT_TASK_FILTER; return { states: okStates(f.states), assignee: okAssignee(f.assignee) }; };
+// The user's hidden-title patterns ("Block*", "Lunch", …): normalised on every read, so a list written by an older
+// build or by a bad renderer call cannot empty a view (sdk/query.js has the matching rule).
+const hiddenRules = () => hideRules(db.setting('hiddenTitles'));
 const libraryFilter = () => {
   const f = { ...DEFAULT_LIBRARY_FILTER, ...(db.setting('libraryFilter') || {}) };
   // types null = any kind, [] = nothing selected; both are meaningful, an unknown kind is not (libraryQueries throws).
@@ -552,8 +555,7 @@ async function start() {
   me = await session.info();
   const peer = peerIdentity({ file: path.join(app.getPath('userData'), 'peer.json'), userExternalId: me.userExternalId });
   client = createTanaClient({ getAccessToken: (o) => session.getAccessToken(o), orgId: me.orgId, ...peer, logger: console });
-  const listNodes = client.graph.listNodes.bind(client.graph);
-  client.graph.listNodes = async params => { const result = await listNodes(params); return { ...result, nodes: visibleGraphNodes(result.nodes) }; };
+  listFilter(client);
   client.sync.on('connected', () => setStatus({ connected: true, error: null }));
   client.sync.on('disconnected', () => setStatus({ connected: false }));
   client.sync.on('error', (e) => setStatus({ error: errText(e) }));
@@ -591,6 +593,31 @@ async function setTaskFilter(f) {
   await refreshing; // a run with the old filter
   await refresh();
   return taskFilter();
+}
+
+// Every list and every search asks the graph, so client.graph.listNodes is the one place deleted and hidden nodes
+// are dropped. A by-id lookup (nodeIds) resolves a named node — a mention, an owner chain, a pin, a zoomed
+// document — and keeps answering: hiding is about lists, not about access.
+function listFilter(client) {
+  if (!client || !client.graph) return;
+  const listNodes = client.graph.listNodes.bind(client.graph);
+  client.graph.listNodes = async params => {
+    const result = await listNodes(params);
+    const nodes = visibleGraphNodes(result.nodes);
+    if (params && params.nodeIds) return { ...result, nodes };
+    const rules = hiddenRules();
+    return { ...result, nodes: rules.length ? nodes.filter(n => !isHidden(memberTitle(n), rules)) : nodes };
+  };
+}
+// Changing the list refreshes like any other filter change: replaceSection drops the rows that are now hidden, so
+// nothing comes back from the SQLite cache.
+async function setHidden(list) {
+  const rules = hideRules(list);
+  db.setSetting('hiddenTitles', rules);
+  await refreshing; // a run with the old list
+  await refresh();
+  send('outline:changed', null); // also when there is no connection to refresh with
+  return rules;
 }
 
 // Subscribing on demand (zoom, create, metadata) does not put a document in a view, and only the refresh unsubscribes:
@@ -735,7 +762,8 @@ ipcMain.handle('outline:roots', async () => {
   // The member list is one query among many: when it fails the cached views must still render (the Members view has
   // its own handler, which still reports the failure).
   const memberNodes = await members().catch(() => []);
-  return SECTIONS.map((s) => ({ ...s, nodes: s.id === 'members' ? memberNodes : (rows[s.id] || []).map(toNode) }));
+  const rules = hiddenRules(); // a row cached before the rule was added is hidden here too, refresh or no refresh
+  return SECTIONS.map((s) => ({ ...s, nodes: s.id === 'members' ? memberNodes : (rows[s.id] || []).filter((r) => !isHidden(r.title, rules)).map(toNode) }));
 });
 // events start with an empty content map (no doc node yet); readOutline needs the children list
 ipcMain.handle('outline:children', (_e, id) => (isSpace(id) ? spaceChildren(id) : op(id, (doc) => (idKind(id) === 'chat' ? chatOutline(doc) : doc.content.get('children') ? outlineWithReferences(doc) : []))));
@@ -860,6 +888,11 @@ ipcMain.handle('library:list', (_e, f) => library(f));
 ipcMain.handle('chats:list', (_e, o) => chats(o || {}));
 ipcMain.handle('inbox:list', () => inbox());
 ipcMain.handle('library:filter', () => libraryFilter());
+// Hidden titles: the user's list of patterns, applied to every list and search (see listFilter/sdk-query isHidden).
+ipcMain.handle('filters:list', () => hiddenRules());
+ipcMain.handle('filters:set', (_e, patterns) => setHidden(patterns));
+ipcMain.handle('filters:add', (_e, pattern) => setHidden([...hiddenRules(), pattern]));
+ipcMain.handle('filters:remove', (_e, pattern) => setHidden(hiddenRules().filter((p) => p.toLowerCase() !== String(pattern ?? '').trim().toLowerCase())));
 ipcMain.handle('library:setFilter', (_e, f) => { db.setSetting('libraryFilter', { ...DEFAULT_LIBRARY_FILTER, ...(f || {}) }); return libraryFilter(); });
 ipcMain.handle('sync:refresh', () => refresh());
 ipcMain.handle('sync:status', () => status);
@@ -876,7 +909,7 @@ if (process.env.TANA_MAIN_TEST) {
   module.exports = { resolveInitialAuth, graphRow, cachedNodeHue, SECTIONS, toNode, outlineWithReferences, chatOutline, op, onChange, documentAction, createDocument, creationOptions, search, spaceChildren, start, refresh, related, callOf,
     statusSnapshot: () => ({ ...status }), rememberNodeHue,
     undo: () => history(undoStack, redoStack, 'undo', 'canUndo'), redo: () => history(redoStack, undoStack, 'redo', 'canRedo'), visibleGraphNodes, pinTree,
-    testRuntime: (runtime) => { client = runtime.client; me = runtime.me; win = runtime.win; session = runtime.session; } };
+    testRuntime: (runtime) => { client = runtime.client; me = runtime.me; win = runtime.win; session = runtime.session; if (client) listFilter(client); } };
 } else {
   app.setName('Tana Companion');
   app.setPath('userData', path.join(app.getPath('appData'), 'tana-tasks')); // before 'ready': same session/cache for dev runs, the CLI and the packaged app

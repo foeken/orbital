@@ -57,6 +57,13 @@ contextBridge.exposeInMainWorld('api', {
   library: (filter) => ipcRenderer.invoke('library:list', filter), // { types, states, assignee, text }; missing keys fall back to libraryFilter()
   libraryFilter: () => ipcRenderer.invoke('library:filter'),
   setLibraryFilter: (filter) => ipcRenderer.invoke('library:setFilter', filter),
+  // Hidden titles: patterns that keep matching nodes out of every list and search (a node opened directly still opens).
+  // Case-insensitive; a pattern matches the whole title, or its start when it ends with '*' ("Block*", "Lunch").
+  // All four resolve to the stored list (string[]) after the views have refreshed.
+  filters: () => ipcRenderer.invoke('filters:list'),
+  setFilters: (patterns) => ipcRenderer.invoke('filters:set', patterns), // string[]; replaces the list
+  addFilter: (pattern) => ipcRenderer.invoke('filters:add', pattern),
+  removeFilter: (pattern) => ipcRenderer.invoke('filters:remove', pattern), // matched case-insensitively
   refresh: () => ipcRenderer.invoke('sync:refresh'),
   undo: () => ipcRenderer.invoke('history:undo'),
   redo: () => ipcRenderer.invoke('history:redo'),

@@ -188,7 +188,7 @@ Every request made during the build and its state. ✓ done and verified · ◐ 
 
 | 155 | Show the visible-for icon on docs and other types too, not only tasks (sidebar, Cmd+S and Cmd+K can skip it) | ○ In progress. | renderer.js |
 
-| 156 | Electron crash dialogs keep popping up | ○ In progress: the crashes are the read-only CLI (node_modules Electron) aborting inside AppKit's NSApplication init, not the packaged app. | scripts/platform-cli.js |
+| 156 | Electron crash dialogs keep popping up | ✓ Not the app: the read-only CLI was aborting on every sandboxed invocation and never running at all. +[NSApplication sharedApplication] registers the process with LaunchServices, which is unreachable inside the agent sandbox, so AppKit calls abort() about 400 ms in, before platform-cli.js is even loaded — which is why no JS-level mitigation could have helped. Ten sandboxed runs produced nine crash reports; the same binary unsandboxed exits 0. Ad-hoc re-signing and the exited-parent correlation were both tested and ruled out. The CLI is now started by node and re-execs Electron itself, refusing with exit 3 and an explanation when CODEX_SANDBOX is set: 25 sandboxed runs added no crash reports, five unsandboxed runs returned real data. Written up in docs/ELECTRON-SANDBOX.md and AGENTS.md now documents the node invocation. | scripts/platform-cli.js, docs/ELECTRON-SANDBOX.md, AGENTS.md |
 
 | 157 | The collapsed sidebar tag needs more padding on its right | ○ In progress. | styles.css |
 
@@ -197,6 +197,12 @@ Every request made during the build and its state. ✓ done and verified · ◐ 
 | 159 | Replace the breadcrumb hover underline with plain darkening | ○ In progress. | styles.css |
 
 | 160 | Tab and Shift+Tab should indent and outdent a multi-node selection | ○ In progress: route the selection through the existing atomic multi-row structure path so it is one undo step. | renderer.js |
+
+| 161 | A configurable way to hide specific nodes such as Block and Lunch from every list and search, edited from Cmd+K | ◐ Backend done: a list of title patterns in the existing settings table, matched case-insensitively on the whole title or as a prefix when the pattern ends with * (so Block* catches "Block (really!)" while Lunch does not eat "Lunchafspraak"), applied in the single listNodes wrapper every view and search already passes through, with by-id lookups exempt so a hidden node still opens and still renders as a mention. The row cache is cleared on change and filtered on read, so nothing flashes back offline. api.filters/setFilters/addFilter/removeFilter resolve after the refresh. Live read-only against the calendar: 29 of 86 events hidden, exactly the four intended titles. The Cmd+K editor is the remaining half. | sdk/query.js, main.js, preload.js, scripts/sdk-check.js |
+
+| 162 | A meeting's "Visible to selected people" row is not clickable, and the sidebar should always offer Pinned plus a way to pin something new | ○ In progress: root cause being traced end to end before any edit. | renderer.js, main.js |
+
+| 163 | A "Show in Tana" row in every node's Details, opening the same link Copy link produces, with an outline Tana icon | ○ In progress. | renderer.js, build/icons |
 
 | 149 | The meeting call link appears where it should not, e.g. on outcomes created in that meeting | ✓ related() resolves a meeting hub for any document owned by an event so the sidebar can show that meeting's pins, outcomes and notes, and the call link was being read off that hub too, so every document created in a meeting inherited its join url. It now reads the zoomed node's own calendarEvent, one line in the single place every consumer goes through. Read-only before/after on real data: the Heads of Technology and NTP Sync events keep their Zoom and Tana Meet links, their outcomes ("Decide allocation of ~EUR 220,000", "Principles") and the write-up now return none, and the 14-day calls sweep is unchanged including the actionUrl fallback. railCallRow already hides a missing call, so no renderer change. | main.js related |
 

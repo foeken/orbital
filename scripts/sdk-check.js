@@ -12,7 +12,7 @@ const { createTransport, GraphClient, SyncConnection, Document, derivePeerId, re
 const outline = require('../sdk/content');
 const { fetchImage } = require('../sdk/assets');
 const { LoroMap, LoroList } = require('loro-crdt');
-const { parseQuery, searchParams, needsTypes, taskParams, libraryQueries, DEFAULT_TASK_FILTER, DEFAULT_LIBRARY_FILTER } = require('../sdk/query');
+const { parseQuery, searchParams, needsTypes, taskParams, libraryQueries, hideRules, isHidden, DEFAULT_TASK_FILTER, DEFAULT_LIBRARY_FILTER } = require('../sdk/query');
 const pins = require('../sdk/pins');
 
 const ORG = 'org_01KS7RQSWW68H489ZZZ1NNC40T', DOC = 'tana:text:01m23c1z45gceayt2zjk09k63c', ME = 'tana:user-profile:01m0f1aqd8p23qhwntbewmpfz2';
@@ -520,6 +520,63 @@ async function main() {
     console.log('ok  refresh keeps on-demand subscriptions, survives a failing query, and caches only real answers');
   }
 
+  // Hidden titles: one user-maintained list of patterns keeps matching nodes out of every list and every search,
+  // including the rows already cached in SQLite, while the node itself still opens.
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const block = 'tana:event:' + ulid(), lunch = 'tana:event:' + ulid(), wfh = 'tana:event:' + ulid(), roster = 'tana:text:' + ulid();
+    const all = [
+      { id: block, title: 'Block (Really)', calendarEvent: { startTime: '2026-09-14T08:00:00Z' } },
+      { id: lunch, title: 'Lunch', calendarEvent: { startTime: '2026-09-14T11:00:00Z' } },
+      { id: wfh, title: 'Remote / WFH (non-blocking)', calendarEvent: { startTime: '2026-09-14T06:00:00Z' } },
+      { id: roster, title: 'Lunch roster', state: { type: 'open' }, updateTime: '2026-09-13T10:00:00Z' },
+    ];
+    const byId = [];
+    const listNodes = async (p) => {
+      if (p.nodeIds) { byId.push(...p.nodeIds); return { nodes: all.filter((n) => p.nodeIds.includes(n.id)) }; }
+      if (p.textQuery) return { nodes: all }; // the search query, whatever its text
+      const [kind] = p.nodeTypes || [];
+      if (kind === 'event') return { nodes: all.filter((n) => n.calendarEvent) };
+      if (kind === 'text') return { nodes: all.filter((n) => !n.calendarEvent) };
+      return { nodes: [] };
+    };
+    const open = new Document(lunch); open.transact((l) => initDocument(l, 'Lunch', ME));
+    backend.testRuntime({ me: { userUri: ME }, win: { isDestroyed: () => false, webContents: { send: () => {} } }, client: {
+      sync: { subscribe: async (id) => (id === lunch ? open : null), getDocument: (id) => (id === lunch ? open : null), unsubscribe: async () => {} },
+      graph: { listNodes },
+    } });
+    // strings, not arrays: an array built inside the main.js vm realm is never reference-equal to one built here
+    const listed = async () => [...(await backend.handlers.get('outline:roots')())].flatMap((s) => s.nodes.map((n) => n.title)).sort().join(' | ');
+    const found = async (q) => [...(await backend.handlers.get('search')(null, q))].map((n) => n.title).sort().join(' | ');
+    const rules = async (name, arg) => [...(await backend.handlers.get(name)(null, arg))].join(' | ');
+    await backend.refresh();
+    const ALL = 'Block (Really) | Lunch | Lunch roster | Remote / WFH (non-blocking)';
+    assert.equal(await listed(), ALL);
+
+    assert.equal(await rules('filters:set', [' Block* ', 'lunch', 'BLOCK*']), 'Block* | lunch');
+    assert.equal(cache.setting('hiddenTitles').join(' | '), 'Block* | lunch', 'the list is persisted, so it survives a restart');
+    assert.equal(await listed(), 'Lunch roster | Remote / WFH (non-blocking)', 'exact stays exact: "Lunch roster" is not "Lunch"');
+    assert.equal(cache.get(block), undefined, 'a hidden row cannot come back from the SQLite cache');
+    assert.equal(await found('lunch'), 'Lunch roster | Remote / WFH (non-blocking)', 'and it is out of the search results too');
+
+    assert.equal(await rules('filters:add', 'Remote / WFH (non-blocking)'), 'Block* | lunch | Remote / WFH (non-blocking)');
+    assert.equal(await listed(), 'Lunch roster', 'a full title needs no pattern syntax');
+    assert.equal(await found('wfh'), 'Lunch roster');
+
+    // Hiding is about lists: the node keeps its identity, so opening it (a link, a pin, a mention) still works.
+    byId.length = 0;
+    assert.equal((await backend.handlers.get('doc:info')(null, lunch)).title, 'Lunch', 'a hidden node still opens');
+    assert.ok(byId.includes(lunch), 'the by-id lookup behind it is not filtered');
+
+    assert.equal(await rules('filters:remove', ' LUNCH '), 'Block* | Remote / WFH (non-blocking)', 'removal matches case-insensitively');
+    assert.equal(await listed(), 'Lunch | Lunch roster', 'unhiding brings the row back on the next refresh');
+    cache.setSetting('hiddenTitles', 'Block'); // an older build or a bad renderer call
+    assert.equal(await rules('filters:list'), '', 'a stored list that is not a list hides nothing');
+    await backend.refresh();
+    assert.equal(await listed(), ALL);
+    console.log('ok  hidden titles stay out of lists, searches and the row cache, and still open');
+  }
+
   // 2. Document: transact/export/import between two documents, both directions
   const a = new Document(DOC, { peerId: '1' }), b = new Document(DOC, { peerId: '2' });
   const aUpdates = [], events = [];
@@ -605,6 +662,16 @@ async function main() {
     assert.equal(searchParams(parseQuery('x #Nope'), types), null, 'unknown type = no results');
     assert.deepEqual([needsTypes(parseQuery('#task #meeting')), needsTypes(parseQuery('#Project'))], [false, true]);
     assert.deepEqual(searchParams(parseQuery('#member'), types).nodeTypes, ['user-profile']);
+
+    // Hidden titles: exact by default, prefix when the pattern ends with '*', case-insensitive.
+    const rules = hideRules([' Block* ', 'lunch', 'BLOCK*', '', 5, '*', 'Remote / WFH (non-blocking)']);
+    assert.deepEqual(rules, ['Block*', 'lunch', 'Remote / WFH (non-blocking)'], 'trimmed, deduped case-insensitively, non-strings and a bare * dropped');
+    assert.deepEqual(['Block', 'Block (Really)', 'Lunch', ' remote / wfh (non-blocking) '].map((t) => isHidden(t, rules)), [true, true, true, true]);
+    assert.deepEqual(['Lunch roster', 'Deep work', '', null].map((t) => isHidden(t, rules)), [false, false, false, false], 'exact stays exact');
+    assert.equal(isHidden('Blocked out', rules), true, 'a prefix pattern hides everything under it');
+    assert.deepEqual(['Block (Really)', 'Blockchain'].map((t) => isHidden(t, ['Block *'])), [true, false], 'the space is part of the prefix');
+    assert.equal(isHidden('anything', hideRules(['*'])), false, 'a bare * cannot empty every view');
+    assert.equal(isHidden('anything', undefined), false);
     // Tasks/Library filters -> listNodes params (Addendum 10/11)
     const UPD = [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }];
     assert.deepEqual(taskParams(DEFAULT_TASK_FILTER, ME), { nodeTypes: ['text'], stateTypes: ['proposed', 'open'], assignedTo: [ME], limit: 500, sortOptions: UPD });

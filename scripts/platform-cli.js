@@ -1,8 +1,24 @@
-#!/usr/bin/env ./node_modules/.bin/electron
+#!/usr/bin/env node
 'use strict';
-// Electron-run CLI for the platform SDK: ./node_modules/.bin/electron scripts/platform-cli.js <cmd>
-const { app } = require('electron');
+// CLI for the platform SDK: node scripts/platform-cli.js <cmd>
+// Run it with node, not with ./node_modules/.bin/electron: inside an agent sandbox LaunchServices is
+// unreachable, so Electron's GUI process aborts in AppKit before this file loads (docs/ELECTRON-SANDBOX.md).
+// Under node this file is only a launcher: it refuses inside a sandbox and re-execs the Electron binary outside one.
 const path = require('node:path');
+if (!process.versions.electron || process.env.ELECTRON_RUN_AS_NODE) {
+  if (process.env.CODEX_SANDBOX) {
+    console.error('platform-cli needs GUI Electron, which cannot start inside the sandbox (CODEX_SANDBOX=' +
+      process.env.CODEX_SANDBOX + '): macOS aborts it in _RegisterApplication. Re-run with escalated/unsandboxed ' +
+      'permissions. See docs/ELECTRON-SANDBOX.md.');
+    process.exit(3);
+  }
+  const env = { ...process.env };
+  delete env.ELECTRON_RUN_AS_NODE;
+  const electronBin = path.join(__dirname, '..', 'node_modules/electron/dist/Electron.app/Contents/MacOS/Electron');
+  const { status } = require('node:child_process').spawnSync(electronBin, [__filename, ...process.argv.slice(2)], { stdio: 'inherit', env });
+  process.exit(status == null ? 1 : status);
+}
+const { app } = require('electron');
 const { createTanaSession, peerIdentity } = require('../tana-session');
 let createTanaClient, readNode, setTitle, setState, contentText, readOutline, ulid, initDocument, query, pins, audienceMetadata; // loaded lazily: login/whoami work without the SDK
 
@@ -453,7 +469,7 @@ commands.boot = async () => {
 
 // Grouped so a future agent can see at a glance which commands touch the user's real data.
 const USAGE = [
-  'usage: ./node_modules/.bin/electron scripts/platform-cli.js <command>',
+  'usage: node scripts/platform-cli.js <command>   (not ./node_modules/.bin/electron: docs/ELECTRON-SANDBOX.md)',
   '  session    login | whoami',
   '  read       list [--state open|all] | search <query> [#task|#meeting|#member|#Type] | types | fields [<type uri>] |',
   '             meetings [--days 7] | chatlist [--limit 200] | get <id> | outline <id> | rawdoc <id> [--containers 1] |',

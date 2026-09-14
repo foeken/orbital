@@ -35,6 +35,26 @@ function searchParams({ text, tags }, types, limit = 20) {
 // Does a query need the type list? (only #tags other than task/meeting/member)
 const needsTypes = ({ tags }) => tags.some((t) => !KIND_TAGS.includes(t.toLowerCase()));
 
+// ---- Hidden titles: one user-maintained list that keeps matching nodes out of every list and search ----
+// Case-insensitive on the node title: a pattern matches the whole title, or its start when it ends with '*'.
+// "Block*" hides "Block" and "Block (Really)"; "Block *" only the latter; "Lunch" only "Lunch"; a full title
+// ("Remote / WFH (non-blocking)") needs no syntax at all. One glob character, no regex, no query language.
+// A bare '*' is dropped: it would empty every view, which is never what the user meant to configure.
+const HIDE_MAX = 200; // patterns kept, and characters per pattern
+const hideRules = (list) => {
+  const seen = new Set();
+  return (Array.isArray(list) ? list : []).filter((p) => typeof p === 'string').map((p) => p.trim().slice(0, HIDE_MAX))
+    .filter((p) => p && p !== '*' && !seen.has(p.toLowerCase()) && seen.add(p.toLowerCase())).slice(0, HIDE_MAX);
+};
+const isHidden = (title, rules) => {
+  const t = String(title ?? '').trim().toLowerCase();
+  if (!t || !Array.isArray(rules)) return false;
+  return rules.some((rule) => {
+    const p = String(rule ?? '').trim().toLowerCase();
+    return p.endsWith('*') ? p.length > 1 && t.startsWith(p.slice(0, -1)) : p === t;
+  });
+};
+
 // ---- Tasks view / Library filters (Addendum 10/11) ----
 const DEFAULT_TASK_FILTER = { states: ['proposed', 'open'], assignee: 'me' };
 const DEFAULT_LIBRARY_FILTER = { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me', text: '' };
@@ -71,4 +91,4 @@ function libraryQueries(f, me, limit = 100) {
   });
 }
 
-module.exports = { parseQuery, searchParams, needsTypes, taskParams, libraryQueries, DEFAULT_TASK_FILTER, DEFAULT_LIBRARY_FILTER, LIBRARY_KINDS };
+module.exports = { parseQuery, searchParams, needsTypes, taskParams, libraryQueries, hideRules, isHidden, DEFAULT_TASK_FILTER, DEFAULT_LIBRARY_FILTER, LIBRARY_KINDS };
