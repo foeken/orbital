@@ -1883,21 +1883,23 @@ function taskActionRows(group = 'Actions') {
   if (ctx.multi) {
     const count = ctx.docs.length, noun = count === 1 ? 'task' : 'tasks', hint = ctx.skipped ? `${ctx.skipped} skipped` : '';
     return [
-      { group, icon: 'status', label: `Set status for ${count} ${noun}`, hint, disabled: !count || !tana.setStateMany, keepOpen: true, run: () => openStatusPalette(ctx) },
-      { group, icon: 'member', label: `Assign ${count} ${noun} to`, hint, disabled: !count || !tana.setAssigneesMany, keepOpen: true, run: () => openManyAssigneePalette(ctx) },
+      { id: 'status', group, icon: 'status', label: `Set status for ${count} ${noun}`, hint, disabled: !count || !tana.setStateMany, keepOpen: true, run: () => openStatusPalette(ctx) },
+      { id: 'assign', group, icon: 'member', label: `Assign ${count} ${noun} to`, hint, disabled: !count || !tana.setAssigneesMany, keepOpen: true, run: () => openManyAssigneePalette(ctx) },
     ];
   }
   if (!ctx.docs.length) return [];
   const doc = ctx.docs[0], rows = [];
-  if (tana.setState) rows.push({ group, icon: 'status', label: 'Set status', hint: Object.fromEntries(STATES)[stateOf(doc)] || '', keepOpen: true, run: () => openStatusPalette(ctx) });
+  if (tana.setState) rows.push({ id: 'status', group, icon: 'status', label: 'Set status', hint: Object.fromEntries(STATES)[stateOf(doc)] || '', keepOpen: true, run: () => openStatusPalette(ctx) });
   if (tana.taskMeta && tana.setAssignees) {
     loadTaskMeta(doc.id);
     const meta = taskMetaById.get(doc.id), hint = meta && meta.assignees.length ? meta.assignees.map(memberName).join(', ') : meta ? 'Unassigned' : 'Loading…';
-    rows.push({ group, icon: 'member', label: 'Edit assignees', hint, keepOpen: true, run: () => openAssigneePalette(doc, ctx) });
+    rows.push({ id: 'assign', group, icon: 'member', label: 'Edit assignees', hint, keepOpen: true, run: () => openAssigneePalette(doc, ctx) });
   }
   return rows;
 }
 // With rows selected, what acts on them comes first: at that moment the palette is about the selection, not the app.
+// Every row carries a stable id even though its label counts the selection, because Cmd+Shift+K records a hotkey per
+// id and a hotkey only fires with the palette closed — which is exactly when a selection is live.
 function selectionRows() {
   const keys = selKeys();
   if (!keys.length) return [];
@@ -1909,12 +1911,12 @@ function selectionRows() {
   const ids = nodes.map((node) => node.id), rows = [];
   if (ids.length && tana.setSensitive && sensitiveIds) {
     const marked = ids.every((id) => sensitiveIds.has(id)), noun = ids.length === 1 ? 'item' : 'items';
-    rows.push({ group: 'Selection', icon: 'lock', label: `${marked ? 'Unmark' : 'Mark'} ${ids.length} ${noun} as sensitive`, run: () => setSensitiveMark(ids, !marked) });
+    rows.push({ id: 'sensitive', group: 'Selection', icon: 'lock', label: `${marked ? 'Unmark' : 'Mark'} ${ids.length} ${noun} as sensitive`, run: () => setSensitiveMark(ids, !marked) });
   }
   if (nodes.length && tana.insertAfter && tana.setText) {
     const noun = nodes.length === 1 ? 'item' : 'items';
-    if (tana.todayNode) rows.push({ group: 'Selection', icon: 'addTo', label: `Add ${nodes.length} ${noun} to today node`, run: () => addToDateNode(nodes, 'today') });
-    if (tana.weekNode) rows.push({ group: 'Selection', icon: 'addTo', label: `Add ${nodes.length} ${noun} to week node`, run: () => addToDateNode(nodes, 'week') });
+    if (tana.todayNode) rows.push({ id: 'addToday', group: 'Selection', icon: 'addTo', label: `Add ${nodes.length} ${noun} to today node`, run: () => addToDateNode(nodes, 'today') });
+    if (tana.weekNode) rows.push({ id: 'addWeek', group: 'Selection', icon: 'addTo', label: `Add ${nodes.length} ${noun} to week node`, run: () => addToDateNode(nodes, 'week') });
   }
   rows.push(...taskActionRows('Selection'));
   // Destructive, so it sits at the end of the group. Documents are soft-deleted (Cmd+Z restores them), blocks go
@@ -1922,7 +1924,7 @@ function selectionRows() {
   const its = keys.map((key) => items.get(key)).filter(Boolean);
   if (its.length && tana.deleteDocument) {
     const noun = its.length === 1 ? 'item' : 'items';
-    rows.push({ group: 'Selection', icon: 'trash', label: `Delete ${its.length} ${noun}`, run: () => removeSelection(keys) });
+    rows.push({ id: 'delete', group: 'Selection', icon: 'trash', label: `Delete ${its.length} ${noun}`, run: () => removeSelection(keys) });
   }
   return rows;
 }

@@ -442,6 +442,7 @@ async function runMultiTaskPaletteCheck() {
       markAll: () => { selected = rows.map((item) => item.key); selectionRows()[0].run(); return marked; },
       remove: async (keys) => { calls.length = 0; selected = keys; try { await removeSelection(keys); } catch (e) { calls.push(['error', e.message]); } return calls; },
       addTo: async (keys, target) => { calls.length = 0; selected = keys; await selectionRows().find((row) => row.label.endsWith('to ' + target + ' node')).run(); return calls; },
+      ids: (keys) => { selected = keys; return selectionRows().map((row) => row.id); },
     });
   `);
   assert.deepEqual(plain(context.labels()), [
@@ -472,6 +473,11 @@ async function runMultiTaskPaletteCheck() {
     ['note', 'Added 2 items to the today node'],
   ], 'every selected row becomes a mention at the end of today\'s node');
   assert.deepEqual(plain(await context.addTo(['t1'], 'week')).map((call) => call[0]), ['weekNode', 'insertAfter', 'setText', 'note'], 'and the week row writes into the week node instead');
+  // Cmd+Shift+K records a hotkey per row id and refuses a row without one, so every selection action carries a
+  // stable id even though its label counts the selection.
+  const selIds = plain(context.ids(['t1', 'meeting', 'locked', 't2']));
+  assert.deepEqual(selIds, ['sensitive', 'addToday', 'addWeek', 'status', 'assign', 'delete'], 'every selection action can be given a keyboard shortcut');
+  assert.equal(new Set(selIds).size, selIds.length, 'and no two of them share an id, which would share a shortcut');
   // Deleting a selection: documents go one by one through the permission check, blocks reuse the single-step removal.
   assert.deepEqual(plain(await context.remove(['t1', 'meeting'])), [['delete', 't1'], ['delete', 'meeting']], 'every selected document is deleted, in order');
   assert.deepEqual(plain(await context.remove(['doc/b1', 'doc/b2'])), [['blocks', 'doc/b1,doc/b2']], 'a selection of blocks takes the existing one-step path instead');
