@@ -154,6 +154,8 @@ Every request made during the build and its state. ✓ done and verified · ◐ 
 | 134 | Show the meeting call link in the sidebar and allow joining from there, with the supplied video icon | ✓ related() returns call { url, label } from calendarEvent.location, falling back to actionUrl for the 14 meetings that name only a room; the sidebar shows it at the top with the supplied video icon and opens it externally. Live: meet.tana.inc/rkx-bpmx- srr and meet.google.com links resolve. | main.js, renderer.js, build/icons |
 | 135 | Add a Clear filters action next to Nothing here yet | ✓ Clear filters appears beside Nothing here yet only when a filter is actually narrowing the view, and resets that view filter to its default. | renderer.js |
 
+| 136 | Abbreviate sidebar tags to # with their hue, full tag on hover | ✓ A sidebar chip collapses to its # in the type colour (measured 16px against a 115px full label) and expands on hover or keyboard focus, with the full tag also on the title attribute. The collapsed state is measured; the expansion is a plain :hover/:focus rule that a background window cannot exercise. | renderer.js, styles.css |
+
 Tracking rule: append new requests to the numbered table above using the next integer. Update an existing row for repeated requests; never create a separate unnumbered request list. Preserve status and verification evidence. Orchestrator owns this file.
 
 Latest rounds (three workers, all closed). The live app was inspected over its devtools port against real Tana data, which is how #49, #54, #59, #62, #68, #78, #83, #85, #89, #93, #97 and #98 were confirmed; the interaction-heavy rows (#39, #90, #96, #105 to #108) were driven in the in-file mock, where mutations stay local. `npm run check` passes on the merged tree.

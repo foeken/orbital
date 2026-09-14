@@ -870,6 +870,9 @@ function railRow(node) {
   title.className = 'rtitle'; title.textContent = node.text || node.title || 'Untitled';
   row.append(title);
   appendTags(row, node);
+  // the sidebar is narrow: a tag shows as its "#" in the type's colour and expands on hover (CSS), with the full
+  // label available to the pointer and to assistive tech
+  for (const chip of row.querySelectorAll('.chip')) chip.title = chip.textContent.trim();
   row.onclick = () => goTo(node.id);
   row.onkeydown = (e) => railKey(e, node, row);
   return row;

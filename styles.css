@@ -100,6 +100,8 @@ button { font: inherit; }
 .rail .rrow .ricon { flex: none; display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin: 0 8px 0 2px; color: #8a8a8a; align-self: center; }
 .rail .rrow .ricon svg { display: block; width: 15px; height: 15px; }
 .rail .rrow .ricon.hue { color: hsl(var(--hue) 45% 30%); } /* a hued node keeps its colour in the sidebar too */
+.rail .rrow .chip { flex: none; max-width: 1.35em; overflow: hidden; white-space: nowrap; transition: max-width 0.12s ease; }
+.rail .rrow:hover .chip, .rail .rrow:focus .chip { max-width: 12em; }
 .rail .rrow .check { align-self: center; }
 /* task metadata rows (assignees, visibility) above the first group; plain like every other row */
 .rail .rrow.rmeta .rtitle { color: #555; }
