@@ -236,6 +236,16 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .h2 > .line .text { font-size: 20px; font-weight: 700; line-height: 28px; }
 .h3 > .line .text { font-weight: 700; }
 .selected > .line { background: #e8f1fb; border-radius: 0; }
+/* a row arriving in or dropping out of a view: green tint fading in, red tint fading out; a row you are still
+   editing only dims, and leaves for real once the caret does */
+.node.entering { animation: rowEnter .8s ease-out; }
+.node.leaving { animation: rowLeave .45s ease-in forwards; pointer-events: none; }
+.node.falling { opacity: .45; }
+.node.falling.leaving { animation: rowLeaveDim .45s ease-in forwards; }
+@keyframes rowEnter { from { background: rgba(52, 168, 83, .16); opacity: 0; } 35% { opacity: 1; } to { background: rgba(52, 168, 83, 0); opacity: 1; } }
+@keyframes rowLeave { from { background: rgba(217, 48, 37, .16); opacity: 1; } to { background: rgba(217, 48, 37, 0); opacity: 0; } }
+@keyframes rowLeaveDim { from { background: rgba(217, 48, 37, .16); opacity: .45; } to { background: rgba(217, 48, 37, 0); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .node.entering, .node.leaving, .node.falling.leaving { animation: none; } }
 .selected > .line .text { caret-color: transparent; }
 .children { margin-left: 33px; padding-left: 0; border-left: 1px solid #ececec; }
 .children.loading { color: #aaa; font-style: italic; padding: 3px 0 3px 22px; }

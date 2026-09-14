@@ -415,6 +415,7 @@ const pending = new Map();   // key -> { item, segs, timer } debounced edits
 let filterShown = false;
 let queue = Promise.resolve();
 let scrolledView = null;     // view already scrolled to today's first meeting when it opened
+let animView = null;         // view whose rows are already on screen: only then is an arrival/departure worth animating
 let linkCtx = null;          // @ linking in progress: { item, segs, start, end, text }
 let pinCtx = null;           // relationship pin picker: { pinHub, docId }
 let pillCtx = null;          // Cmd+K sublevel for one current view pill
@@ -537,7 +538,7 @@ const referenceLabel = (node) => referenceTarget(node)?.text || node.reference?.
 // outlives the problem it described.
 const showError = (e) => { const el = $('error'); el.textContent = e ? String(e.message || e) : ''; el.hidden = !e; };
 const run = (fn) => (queue = queue.then(fn).then((value) => { showError(null); return value; }, showError));
-const texts = () => [...outline.querySelectorAll('.text')];
+const texts = () => [...outline.querySelectorAll('.node:not(.leaving) .text')]; // a row on its way out is not a keyboard stop
 const titleEl = $('title');  // zoomed into a document: contenteditable with data-key = that document's key
 const keyOfEl = (el) => (el.closest('.node') || el).dataset.key;
 const textEl = (key) => outline.querySelector('.node[data-key="' + CSS.escape(key) + '"] > .line .text') || (titleEl.isContentEditable && titleEl.dataset.key === key ? titleEl : null);
@@ -545,7 +546,7 @@ const nodeElOf = (key) => outline.querySelector('.node[data-key="' + CSS.escape(
 const titleCheck = $('titleCheck'); // zoomed into a task: its checkbox before the title
 const taskInfoEl = $('taskInfo');
 titleCheck.onmousedown = (e) => e.preventDefault();
-const nodeEls = (el) => [...el.parentElement.children].filter((c) => c.classList.contains('node')); // visible siblings of a .node element
+const nodeEls = (el) => [...el.parentElement.children].filter((c) => c.classList.contains('node') && !c.classList.contains('leaving')); // visible siblings of a .node element
 const ICONS = window.ICONS || {}; // icons.js: Tana line icon set (Nucleo export), greyscale via currentColor
 // glyphs for the Library kinds the icon set lacks (chat, canvas, agent, skill): single-stroke line icons in the same 18px grid
 const STROKE = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">';
@@ -795,8 +796,41 @@ function editingRow() {
   const el = document.activeElement;
   return !!(el && el.isContentEditable && (el === titleEl || outline.contains(el)));
 }
+// A row arriving in or dropping out of a view is shown, not swapped in silently: an arrival fades in over a green
+// tint, and a row that left is put back where it was over a red tint and fades away. Within one view only, since
+// switching views, zooming and the first paint replace every row and must not flash.
+function animateRows(before) {
+  if (animView !== view) { animView = view; return; }
+  const rows = [...outline.children].filter((el) => el.classList.contains('node'));
+  const keys = new Set(rows.map((el) => el.dataset.key));
+  const old = [...before.keys()];
+  const arrived = rows.filter((el) => !before.has(el.dataset.key) && !el.classList.contains('draft'));
+  const gone = old.filter((key) => !keys.has(key) && !key.startsWith('draft'));
+  // ponytail: above a handful, the list changed rather than an item moving in or out (filtering, a reload, a new
+  // set of rows), and it neither reads as an arrival nor is worth a few hundred ghost rows. Raise if it feels shy.
+  const BULK = 25;
+  if (arrived.length > BULK || gone.length > BULK) return;
+  for (const el of arrived) el.classList.add('entering');
+  for (const key of gone) {
+    const el = before.get(key);
+    const next = old.slice(old.indexOf(key) + 1).find((k) => keys.has(k)); // back where it was: before the first row that outlived it
+    if (!el.classList.contains('leaving')) { // one that is already on its way out: the renders that keep coming must not cut it short
+      el.classList.add('leaving'); el.classList.remove('selected', 'entering'); // a row that just arrived and left again only leaves
+      for (const t of el.querySelectorAll('[contenteditable]')) t.removeAttribute('contenteditable');
+      setTimeout(() => el.remove(), 500); // not animationend: reduced motion runs no animation and the row must still go
+    }
+    outline.insertBefore(el, (next && nodeElOf(next)) || null);
+  }
+}
+// The render that would drop the row you are typing in is deferred until the caret leaves (complete a task and the
+// Tasks filter no longer wants it). Dim it meanwhile: it stays where it is, and the deferred render fades it out
+// like any other row that left.
+function markFalling() {
+  const f = zoom ? null : focused(), el = f && nodeElOf(f.key), v = viewOf();
+  if (el && v) el.classList.toggle('falling', !v.nodes.some((n) => keyFor(n.id, n) === f.key));
+}
 function render(force = false) {
-  if (force !== true && (editingRow() || selectionFrozen)) { renderDeferred = true; return; }
+  if (force !== true && (editingRow() || selectionFrozen)) { renderDeferred = true; markFalling(); return; }
   renderDeferred = false; rendering = true;
   try { renderOutline(); } finally { rendering = false; }
 }
@@ -824,9 +858,11 @@ function renderOutline() {
     list = sortRows(list); // Default leaves the view's own order alone
     const groups = groupsOf(list); // null when the view is not grouped: one flat list, as before
     if (groups) list = groups.flatMap((g) => g.nodes); // keyboard order follows what is on screen
+    const before = new Map([...outline.children].filter((el) => el.classList.contains('node')).map((el) => [el.dataset.key, el]));
     outline.replaceChildren(...(groups
       ? groups.flatMap((g) => [groupHeadEl(g.title), ...g.nodes.map((n) => nodeEl(n, n.id, null))])
       : list.map((n) => nodeEl(n, n.id, null))));
+    animateRows(before);
     const today = groups ? null : outline.children[todayIndex(list)]; // only the ungrouped Meetings list marks today
     if (today) today.dataset.today = '';
     if (list.length && !outline.hidden && scrolledView !== view) { // a view opens scrolled to today's first meeting (else the top)

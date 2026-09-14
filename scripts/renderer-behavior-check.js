@@ -76,6 +76,7 @@ function runTypingRenderStabilityCheck() {
     const document = { activeElement: editor };
     let rendering = false, renderDeferred = false, selectionFrozen = false, renders = 0, caret = 17, scroll = 240;
     const renderOutline = () => { renders++; row.isConnected = false; document.activeElement = {}; caret = 0; scroll = 0; };
+    const markFalling = () => {};
     ${functionSource('editingRow')}
     ${functionSource('render')}
     ({ trigger: (result) => render(result), blur: () => { document.activeElement = {}; render(); },
@@ -1905,6 +1906,62 @@ async function runHiddenItemsCheck() {
   assert.match(source, /palMode === 'hidden'/, 'and the palette renders, filters and types in that mode like any other');
 }
 
+// A view that gains and loses rows between two renders: arrivals flash, departures go back where they were.
+function runRowChangeAnimationCheck() {
+  const api = vm.runInNewContext(`
+    const mk = (key, draft) => { const c = new Set(draft ? ['node', 'draft'] : ['node']);
+      return { dataset: { key }, querySelectorAll: () => [],
+        classList: { add: (n) => c.add(n), remove: (...n) => n.forEach((x) => c.delete(x)), contains: (n) => c.has(n) },
+        remove() { outline.children = outline.children.filter((el) => el !== this); } }; };
+    let view = 'tasks', animView = null;
+    const timers = [], setTimeout = (fn) => timers.push(fn);
+    const outline = { children: [], insertBefore(el, ref) { outline.children.splice(ref ? outline.children.indexOf(ref) : outline.children.length, 0, el); } };
+    const nodeElOf = (key) => outline.children.find((el) => el.dataset.key === key) || null;
+    ${functionSource('animateRows')}
+    ({
+      render: (keys) => {
+        const before = new Map(outline.children.filter((el) => el.classList.contains('node')).map((el) => [el.dataset.key, el]));
+        outline.children = keys.map((k) => mk(k.replace('*', ''), k.endsWith('*')));
+        animateRows(before);
+        return outline.children.map((el) => el.dataset.key + (el.classList.contains('entering') ? '+' : '') + (el.classList.contains('leaving') ? '-' : ''));
+      },
+      switchView: (next) => { view = next; },
+      expire: () => { timers.splice(0).forEach((fn) => fn()); return outline.children.map((el) => el.dataset.key); },
+    });
+  `);
+  assert.deepEqual(plain(api.render(['a', 'b', 'c'])), ['a', 'b', 'c'], 'the first paint of a view flashes nothing');
+  assert.deepEqual(plain(api.render(['a', 'x', 'b', 'c'])), ['a', 'x+', 'b', 'c'], 'only the row that arrived is marked as arriving');
+  assert.deepEqual(plain(api.render(['a', 'c'])), ['a', 'x-', 'b-', 'c'], 'rows that left are put back in their old places, on their way out');
+  assert.deepEqual(plain(api.render(['a', 'c'])), ['a', 'x-', 'b-', 'c'], 'and the renders that keep coming leave them there, still on their way out');
+  assert.deepEqual(plain(api.expire()), ['a', 'c'], 'and are gone once the animation has had its time');
+  assert.deepEqual(plain(api.render(['a', 'c', 'n*'])), ['a', 'c', 'n'], 'a draft row is no arrival: it is local until it is typed into');
+  api.switchView('library');
+  assert.deepEqual(plain(api.render(['p', 'q'])), ['p', 'q'], 'switching views replaces every row and must not flash');
+  assert.match(source, /animateRows\(before\)/, 'and the view render hands it the rows that were on screen before it');
+  const many = Array.from({ length: 40 }, (_, i) => 'r' + i);
+  api.switchView('bulk'); api.render(many); // settle a big list, then replace it wholesale
+  assert.deepEqual(plain(api.render(['one'])), ['one'], 'a wholesale change is the list changing, not forty rows falling away one by one');
+}
+
+// The row you are typing in can stop belonging to the view (complete the task you are editing). It stays, dimmed.
+function runFallingRowCheck() {
+  const api = vm.runInNewContext(`
+    let zoom = null, focusedKey = 'a', nodes = [];
+    const classes = new Set();
+    const el = { classList: { toggle: (name, on) => { if (on) classes.add(name); else classes.delete(name); } } };
+    const focused = () => (focusedKey ? { key: focusedKey } : null);
+    const nodeElOf = (key) => (key === focusedKey ? el : null);
+    const viewOf = () => ({ nodes });
+    ${sourceBetween('const keyFor =', 'const mkItem')}
+    ${functionSource('markFalling')}
+    ({ run: (key, list) => { focusedKey = key; nodes = list.map((id) => ({ id, kind: 'document' })); markFalling(); return [...classes]; } });
+  `);
+  assert.deepEqual(plain(api.run('a', ['a', 'b'])), [], 'a row the view still lists is not dimmed');
+  assert.deepEqual(plain(api.run('a', ['b'])), ['falling'], 'the row you are typing in dims once the view no longer lists it');
+  assert.deepEqual(plain(api.run('a', ['a', 'b'])), [], 'and undims if it comes back before the caret leaves');
+  assert.match(source, /renderDeferred = true; markFalling\(\)/, 'the deferred render is where the dimming is decided');
+}
+
 // Arrowing off an empty draft drops it, and the drop must wait for the caret's new home to take focus:
 // a re-render while nothing is focused throws the caret away, which is what "I cannot arrow up from the draft" was.
 async function runDraftBlurOrderCheck() {
@@ -1973,7 +2030,7 @@ async function runMemberLoadCheck() {
   assert.equal(throttled.attempts, 3, 'a slow start cannot turn renders into a request loop: a fresh ask is throttled');
 }
 
-const checks = [runDraftTailCheck, runPinGrouping, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runSortGroupCheck, runCmdPillsCheck];
+const checks = [runDraftTailCheck, runPinGrouping, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runSortGroupCheck, runCmdPillsCheck];
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);
   if (failures.length) throw new AggregateError(failures, failures.map((failure) => failure.message).join('\n'));
