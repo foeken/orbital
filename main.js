@@ -9,7 +9,7 @@ const { createTanaClient } = require('./sdk');
 const { fetchImage } = require('./sdk/assets');
 const access = require('./sdk/access');
 const { readNode, editable, setTitle, setState, taskMeta, audienceMetadata, setAssignees, ulid, initDocument, STATE_TYPES } = require('./sdk/node');
-const { parseQuery, searchParams, needsTypes, taskParams, libraryQueries, hideRules, isHidden, LIBRARY_KINDS, DEFAULT_TASK_FILTER, DEFAULT_LIBRARY_FILTER } = require('./sdk/query');
+const { parseQuery, searchParams, needsTypes, viewParams, validViewFilter, VIEW_PRESETS, hideRules, isHidden } = require('./sdk/query');
 const content = require('./sdk/content');
 const chat = require('./sdk/chat');
 const fields = require('./sdk/fields');
@@ -17,40 +17,36 @@ const pins = require('./sdk/pins');
 
 // Order is the Cmd+K Views order: what is waiting on you, then your work, then the calendar, then knowledge,
 // then conversations, then people.
-const SECTIONS = [{ id: 'inbox', title: 'Inbox', icon: 'inbox' }, { id: 'tasks', title: 'Tasks', icon: 'task' }, { id: 'meetings', title: 'Meetings', icon: 'meeting' }, { id: 'library', title: 'Library', icon: 'library' }, { id: 'chats', title: 'Chats', icon: 'chat' }, { id: 'members', title: 'Members', icon: 'member' }];
+const VIEWS = [{ id: 'inbox', title: 'Inbox', icon: 'inbox' }, { id: 'tasks', title: 'Tasks', icon: 'task' }, { id: 'meetings', title: 'Meetings', icon: 'meeting' }, { id: 'library', title: 'Library', icon: 'library' }, { id: 'chats', title: 'Chats', icon: 'chat' }, { id: 'people', title: 'People', icon: 'member' }];
 const TAG = { task: { label: 'task', color: 'grey' }, meeting: { label: 'meeting', color: 'gold' }, space: { label: 'space', color: 'grey' }, doc: { label: 'doc', color: 'grey' }, member: { label: 'member', color: 'grey' } };
 const KINDS = { doc: 'tana:text:', task: 'tana:text:', meeting: 'tana:event:', chat: 'tana:chat:' };
 const PLAIN_KINDS = new Set(['chat', 'canvas', 'agent', 'skill', 'type']); // tana:<kind>: ids listed read-only: kind icon + kind tag
 const PIN_HUBS = new Set(['event', 'space']); // the only schemas with a pinnedItems container (docs/PINNING.md section 4)
 const DOC_URI = /^tana:[a-z-]+:[0-9a-z]{26}$/; // a real document id; a renderer draft keeps a local id until it materialises (#112)
 
-// Persisted view filters (db settings table), checked on read: a filter written by an older build or by a bad
-// renderer call would otherwise keep its view empty or failing across restarts.
-const okStates = (s) => (Array.isArray(s) && s.length && s.every((x) => STATE_TYPES.includes(x)) ? s : null);
-const okAssignee = (a) => (a === 'anyone' || a === 'unassigned' || /^tana:user-profile:[0-9a-z]{26}$/.test(a || '') ? a : 'me');
-const taskFilter = () => { const f = db.setting('taskFilter') || DEFAULT_TASK_FILTER; return { states: okStates(f.states), assignee: okAssignee(f.assignee) }; };
+// Persisted view filters are merged over their preset; an invalid saved value cannot strand a view across restarts.
+const preset = (id) => {
+  if (!Object.hasOwn(VIEW_PRESETS, id)) throw new Error('unknown view: ' + id);
+  return { ...VIEW_PRESETS[id] };
+};
+const viewFilter = (id) => {
+  const saved = db.setting('viewFilter:' + id);
+  return validViewFilter(saved) ? { ...preset(id), ...saved } : preset(id);
+};
+const setViewFilter = (id, filter) => {
+  const next = validViewFilter(filter) ? { ...preset(id), ...filter } : preset(id);
+  db.setSetting('viewFilter:' + id, next);
+  return next;
+};
 // The user's hidden-title patterns ("Block*", "Lunch", …): normalised on every read, so a list written by an older
 // build or by a bad renderer call cannot empty a view (sdk/query.js has the matching rule).
 const hiddenRules = () => hideRules(db.setting('hiddenTitles'));
-const libraryFilter = () => {
-  const f = { ...DEFAULT_LIBRARY_FILTER, ...(db.setting('libraryFilter') || {}) };
-  // types null = any kind, [] = nothing selected; both are meaningful, an unknown kind is not (libraryQueries throws).
-  return { ...f, types: Array.isArray(f.types) ? f.types.filter((t) => LIBRARY_KINDS.includes(t)) : null, states: okStates(f.states), assignee: okAssignee(f.assignee), text: typeof f.text === 'string' ? f.text : '' };
-};
-// events I take part in, from the start of local today to 7 days ahead
-// past week through next week, oldest first
-const MEETINGS_QUERY = (userUri) => {
-  const start = new Date(); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() - 7);
-  return {
-    nodeTypes: ['event'], hasParticipantUris: [userUri], limit: 300,
-    eventStartTimeMin: start.toISOString(), eventStartTimeMax: new Date(start.getTime() + 14 * 864e5).toISOString(),
-    sortOptions: [{ field: 'SORT_FIELD_EVENT_START_TIME', direction: 'SORT_DIRECTION_ASCENDING' }],
-  };
-};
 
 const status = { authenticated: null, authChecking: true, connected: false, syncing: false, lastSync: null, error: null };
 let win, session, client, me;
 let refreshTimer;
+let activeView = 'tasks';
+let activeFilter;
 const subscribed = new Set(); // ids the view refresh subscribed: the only ones it unsubscribes again
 const deletedNodes = new Set();
 const isDeleted = n => typeof n.deletedAt === 'number' && n.deletedAt > 0;
@@ -328,39 +324,30 @@ function members() {
   return membersLoaded;
 }
 
-// Library: one query per selected kind in parallel, merged newest first, capped at 100. Partial filters fall back to the stored one.
-// Chats view: all chat nodes newest first; MCP chats (invocation intent 'mcp', titles "MCP: …") hidden unless asked.
-async function chats({ includeMcp = false } = {}) {
-  if (!client) return [];
-  const { nodes } = await client.graph.listNodes({ nodeTypes: ['chat'], limit: 200, sortOptions: [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }] });
-  nodes.forEach(rememberNodeHue);
-  const isMcp = (n) => (n.invocationContext && n.invocationContext.intent === 'mcp') || /^MCP:/i.test(n.title || '');
-  return nodes.filter((n) => includeMcp || !isMcp(n)).map((n) => toNode({ ...graphRow(n), meta: isMcp(n) ? 'MCP' : undefined }));
-}
+const isMcp = (n) => (n.invocationContext && n.invocationContext.intent === 'mcp') || /^MCP:/i.test(n.title || '');
 
-// Inbox: everything still in Tana's inbox state (proposed), whatever kind it is, newest first.
-async function inbox() {
-  if (!client) return [];
-  const { nodes } = await client.graph.listNodes({ stateTypes: ['proposed'], limit: 200, sortOptions: [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }] });
-  nodes.forEach(rememberNodeHue);
-  await resolveTypes(nodes.map((n) => n.entityType));
-  return nodes.map((n) => toNode(graphRow(n, true)));
-}
-
-async function library(filter) {
+async function viewRows(id, filter) {
   if (!client) return { nodes: [], truncated: false };
-  const f = { ...libraryFilter(), ...(filter || {}) };
-  const results = await Promise.all(libraryQueries(f, me.userUri).map(async ({ kind, params }) => {
-    const result = await client.graph.listNodes(params);
-    const nodes = kind === 'docs' ? result.nodes.filter((n) => !(n.state && n.state.type)) : result.nodes;
-    return { nodes, truncated: result.truncated };
-  }));
-  const seen = new Set();
-  const nodes = results.flatMap((r) => r.nodes).filter((n) => !seen.has(n.id) && seen.add(n.id))
-    .sort((a, b) => String(b.updateTime || '').localeCompare(String(a.updateTime || '')));
+  const base = viewFilter(id);
+  const f = filter === undefined ? base : validViewFilter(filter) ? { ...base, ...filter } : preset(id);
+  if (!validViewFilter(f)) throw new Error('invalid view filter');
+  const result = await client.graph.listNodes(viewParams(f, me.userUri));
+  const docsWithoutTasks = Array.isArray(f.types) && f.types.includes('docs') && !f.types.includes('tasks');
+  const rules = hiddenRules();
+  const nodes = result.nodes.filter((n) => !(docsWithoutTasks && idKind(n.id) === 'text' && n.state && n.state.type))
+    .filter((n) => f.mcp === true || !isMcp(n)).filter((n) => !isHidden(memberTitle(n), rules));
   nodes.forEach(rememberNodeHue);
   await resolveTypes(nodes.map((n) => n.entityType));
-  return { nodes: nodes.map((n) => toNode(graphRow(n, true))), truncated: results.some((r) => r.truncated) };
+  const withDate = !(f.types && f.types.length === 1 && f.types[0] === 'meetings');
+  const rows = nodes.map((n) => { const row = graphRow(n, withDate); return isMcp(n) ? { ...row, meta: 'MCP' } : row; });
+  db.replaceSection(id, rows);
+  if (id === activeView && filter === activeFilter) {
+    const ids = new Set(nodes.map((n) => n.id));
+    for (const nodeId of ids) if (!subscribed.has(nodeId)) { subscribed.add(nodeId); subscribe(nodeId); }
+    // Leaving a filtered view must not discard a document whose local undo step still points at its Loro handle.
+    for (const nodeId of subscribed) if (!ids.has(nodeId) && !deletedNodes.has(nodeId) && !inHistory(nodeId)) { subscribed.delete(nodeId); client.sync.unsubscribe(nodeId).catch(() => {}); }
+  }
+  return { nodes: rows.map(toNode), truncated: !!result.truncated };
 }
 
 // Live search over all top-level items (graph full-text search, relevance order) with #task/#meeting/#Type filters.
@@ -604,27 +591,12 @@ function refresh() {
 async function doRefresh() {
   setStatus({ syncing: true, error: null });
   try {
-    const [tasks, meetings] = await Promise.all([client.graph.listNodes(taskParams(taskFilter(), me.userUri)), client.graph.listNodes(MEETINGS_QUERY(me.userUri))]);
-    [...tasks.nodes, ...meetings.nodes].forEach(rememberNodeHue);
-    await resolveTypes([...tasks.nodes, ...meetings.nodes].map((n) => n.entityType));
-    db.replaceSection('tasks', tasks.nodes.map(taskRow));
-    db.replaceSection('meetings', meetings.nodes.map(meetingRow));
+    await viewRows(activeView, activeFilter);
     send('outline:changed', null);
-    const ids = new Set([...tasks.nodes, ...meetings.nodes].map((n) => n.id));
-    for (const id of ids) if (!subscribed.has(id)) { subscribed.add(id); subscribe(id); }
-    // Unsubscribing drops the Document and with it the Loro undo history, and checking a task is what takes it off
-    // this very list: dropping it here left Cmd+Z unable to uncheck it, silently undoing an older step instead.
-    for (const id of subscribed) if (!ids.has(id) && !deletedNodes.has(id) && !inHistory(id)) { subscribed.delete(id); client.sync.unsubscribe(id).catch(() => {}); }
     setStatus({ syncing: false, lastSync: now() });
   } catch (e) {
     setStatus({ syncing: false, error: errText(e) });
   }
-}
-async function setTaskFilter(f) {
-  db.setSetting('taskFilter', { states: f && f.states ? f.states : null, assignee: (f && f.assignee) || 'me' });
-  await refreshing; // a run with the old filter
-  await refresh();
-  return taskFilter();
 }
 
 // Every list and every search asks the graph, so client.graph.listNodes is the one place deleted and hidden nodes
@@ -636,7 +608,7 @@ function listFilter(client) {
   client.graph.listNodes = async params => {
     const result = await listNodes(params);
     // Compare the count with the raw response: local delete/title filters must not masquerade as server truncation.
-    const truncated = result.totalCount != null && result.totalCount > result.nodes.length;
+    const truncated = result.totalCount != null ? result.totalCount > result.nodes.length : !!result.truncated;
     const nodes = visibleGraphNodes(result.nodes);
     if (params && params.nodeIds) return { ...result, nodes, truncated };
     const rules = hiddenRules();
@@ -837,11 +809,21 @@ async function history(from, to, action, can) {
 
 ipcMain.handle('outline:roots', async () => {
   const rows = db.list();
-  // The member list is one query among many: when it fails the cached views must still render (the Members view has
-  // its own handler, which still reports the failure).
-  const memberNodes = await members().catch(() => []);
   const rules = hiddenRules(); // a row cached before the rule was added is hidden here too, refresh or no refresh
-  return SECTIONS.map((s) => ({ ...s, nodes: s.id === 'members' ? memberNodes : (rows[s.id] || []).filter((r) => !isHidden(r.title, rules)).map(toNode) }));
+  return VIEWS.map((view) => ({ ...view, nodes: (rows[view.id] || []).filter((r) => !isHidden(r.title, rules)).map(toNode) }));
+});
+ipcMain.handle('view:list', async (_e, id, filter) => {
+  preset(id); // validate before changing which view the refresh loop owns
+  activeView = id;
+  activeFilter = filter;
+  await refreshing;
+  return viewRows(id, filter);
+});
+ipcMain.handle('view:filter', (_e, id) => viewFilter(id));
+ipcMain.handle('view:setFilter', (_e, id, filter) => {
+  const stored = setViewFilter(id, filter);
+  if (id === activeView) activeFilter = stored;
+  return stored;
 });
 // events start with an empty content map (no doc node yet); readOutline needs the children list
 ipcMain.handle('outline:children', (_e, id) => (isSpace(id) ? spaceChildren(id) : op(id, (doc) => (idKind(id) === 'chat' ? chatOutline(doc) : doc.content.get('children') ? outlineWithReferences(doc) : []))));
@@ -972,18 +954,11 @@ ipcMain.handle('theme:system', () => systemTheme());
 if (nativeTheme) nativeTheme.on('updated', () => send('theme:system', systemTheme()));
 ipcMain.handle('image', (_e, uri) => image(uri));
 ipcMain.handle('members', () => members());
-ipcMain.handle('tasks:filter', () => taskFilter());
-ipcMain.handle('tasks:setFilter', (_e, f) => setTaskFilter(f));
-ipcMain.handle('library:list', (_e, f) => library(f));
-ipcMain.handle('chats:list', (_e, o) => chats(o || {}));
-ipcMain.handle('inbox:list', () => inbox());
-ipcMain.handle('library:filter', () => libraryFilter());
 // Hidden titles: the user's list of patterns, applied to every list and search (see listFilter/sdk-query isHidden).
 ipcMain.handle('filters:list', () => hiddenRules());
 ipcMain.handle('filters:set', (_e, patterns) => setHidden(patterns));
 ipcMain.handle('filters:add', (_e, pattern) => setHidden([...hiddenRules(), pattern]));
 ipcMain.handle('filters:remove', (_e, pattern) => setHidden(hiddenRules().filter((p) => p.toLowerCase() !== String(pattern ?? '').trim().toLowerCase())));
-ipcMain.handle('library:setFilter', (_e, f) => { db.setSetting('libraryFilter', { ...DEFAULT_LIBRARY_FILTER, ...(f || {}) }); return libraryFilter(); });
 ipcMain.handle('sync:refresh', () => refresh());
 ipcMain.handle('sync:status', () => status);
 ipcMain.handle('sync:login', async () => {
@@ -996,12 +971,12 @@ ipcMain.handle('sync:login', async () => {
 });
 
 if (process.env.TANA_MAIN_TEST) {
-  module.exports = { resolveInitialAuth, graphRow, cachedNodeHue, SECTIONS, toNode, outlineWithReferences, chatOutline, op, onChange, documentAction, createDocument, creationOptions, search, library, spaceChildren, start, refresh, related, callOf,
+  module.exports = { resolveInitialAuth, graphRow, cachedNodeHue, VIEWS, toNode, outlineWithReferences, chatOutline, op, onChange, documentAction, createDocument, creationOptions, search, viewRows, spaceChildren, start, refresh, related, callOf,
     statusSnapshot: () => ({ ...status }), rememberNodeHue,
     undo: () => history(undoStack, redoStack, 'undo', 'canUndo'), redo: () => history(redoStack, undoStack, 'redo', 'canRedo'), visibleGraphNodes, pinTree,
     nodePin,
     accessContext,
-    testRuntime: (runtime) => { client = runtime.client; me = runtime.me; win = runtime.win; session = runtime.session; if (client) listFilter(client); } };
+    testRuntime: (runtime) => { client = runtime.client; me = runtime.me; win = runtime.win; session = runtime.session; activeView = runtime.activeView || 'tasks'; activeFilter = undefined; if (client) listFilter(client); } };
 } else {
   app.setName('Tana Companion');
   app.setPath('userData', path.join(app.getPath('appData'), 'tana-tasks')); // before 'ready': same session/cache for dev runs, the CLI and the packaged app
@@ -1018,8 +993,7 @@ if (process.env.TANA_MAIN_TEST) {
       try { await start(); }
       catch (e) { setStatus({ error: errText(e) }); }
     }
-    // Discovery has no query subscription. Every 30 s = 4 ListNodes/min for Tasks+Meetings; the active
-    // Inbox/Chats/default Library adds 2/min, or all seven Library kinds add 14/min (18 total). Focus/writes add one burst.
+    // Discovery has no query subscription. Refreshing the active view is one ListNodes call every 30 seconds.
     setInterval(refresh, 30000);
     // Updates: at launch and once a day, silent unless there is one (updater.js swaps the bundle and relaunches).
     updater.check();

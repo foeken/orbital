@@ -6,9 +6,14 @@ const DESC = new Set(['tasks']); // tasks newest first; every other section asce
 function open(path) {
   db = new DatabaseSync(path);
   db.exec('DROP TABLE IF EXISTS tasks'); // pre-sections schema; the cache is rebuilt on the next refresh
+  // One row per (view, document): the views overlap heavily — a task is in Inbox, Tasks and Library at once — and
+  // keying on the id alone let whichever view fetched last steal the row out of the others' caches.
+  // A cache from the one-row-per-document schema is simply rebuilt on the next fetch.
+  if (db.prepare("SELECT count(*) n FROM pragma_table_info('nodes') WHERE pk > 0").get().n !== 2) db.exec('DROP TABLE IF EXISTS nodes');
   db.exec(`CREATE TABLE IF NOT EXISTS nodes (
-    id TEXT PRIMARY KEY, section TEXT NOT NULL, title TEXT NOT NULL, done INTEGER NOT NULL DEFAULT 0,
-    icon TEXT, meta TEXT, tags TEXT NOT NULL DEFAULT '[]', sortKey TEXT NOT NULL, updatedAt TEXT NOT NULL)`);
+    id TEXT NOT NULL, section TEXT NOT NULL, title TEXT NOT NULL, done INTEGER NOT NULL DEFAULT 0,
+    icon TEXT, meta TEXT, tags TEXT NOT NULL DEFAULT '[]', sortKey TEXT NOT NULL, updatedAt TEXT NOT NULL,
+    PRIMARY KEY (section, id))`);
   db.exec('CREATE TABLE IF NOT EXISTS icons (id TEXT PRIMARY KEY, svg TEXT NOT NULL)'); // app-local custom document icons
   db.exec('CREATE TABLE IF NOT EXISTS sensitive_nodes (id TEXT PRIMARY KEY)'); // app-local sensitive documents
   db.exec('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)'); // JSON values (task filter, ...)
@@ -33,7 +38,7 @@ function get(id) {
 }
 
 const UPSERT = `INSERT INTO nodes (id, section, title, done, icon, meta, tags, sortKey, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  ON CONFLICT(id) DO UPDATE SET section = excluded.section, title = excluded.title, done = excluded.done, icon = excluded.icon,
+  ON CONFLICT(section, id) DO UPDATE SET title = excluded.title, done = excluded.done, icon = excluded.icon,
   meta = excluded.meta, tags = excluded.tags, sortKey = excluded.sortKey, updatedAt = excluded.updatedAt`;
 
 function upsert(r) {

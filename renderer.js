@@ -70,7 +70,7 @@ function mockApi() {
     dateMeta['mockmeeting' + i] = WD[d.getDay()] + ' ' + d.getDate() + time;
     return { id: 'mockmeeting' + i, text, meta: WD[d.getDay()] + time, kind: 'document', hasChildren: true, icon: 'meeting', tags: [meeting] };
   });
-  const sections = [{ id: 'inbox', title: 'Inbox', icon: 'inbox', nodes: [] }, { id: 'tasks', title: 'Tasks', icon: 'task', nodes: docs }, { id: 'meetings', title: 'Meetings', icon: 'meeting', nodes: meetings }, { id: 'library', title: 'Library', icon: 'library', nodes: [] }, { id: 'chats', title: 'Chats', icon: 'chat', nodes: [] }];
+  const views = [{ id: 'inbox', title: 'Inbox', icon: 'inbox', nodes: [] }, { id: 'tasks', title: 'Tasks', icon: 'task', nodes: docs }, { id: 'meetings', title: 'Meetings', icon: 'meeting', nodes: meetings }, { id: 'library', title: 'Library', icon: 'library', nodes: [] }, { id: 'chats', title: 'Chats', icon: 'chat', nodes: [] }];
   const all = [...docs, ...meetings, ...spaceDocs, space, ...kinds, ...chats];
   for (const node of all) node.editable = true;
   // org members (user profiles): searchable, linkable, and the "Assigned to" menu; me = the signed-in user
@@ -82,14 +82,18 @@ function mockApi() {
     participants: i % 2 === 0 ? [{ uri: members[0].id, type: 'user', role: 'admin' }] : [{ uri: members[0].id, type: 'user', role: 'admin' }, { uri: members[1].id, type: 'user', role: 'editor' }],
     audience: i % 2 === 0 ? 'only-me' : 'everyone',
   }]));
-  sections.splice(2, 0, { id: 'members', title: 'Members', icon: 'member', nodes: members });
-  // Tasks view filter (api.taskFilter / setTaskFilter): states null = any; assignee 'me' | 'anyone' | 'unassigned' | member uri (mock tasks are all mine)
-  let filter = { states: ['proposed', 'open'], assignee: 'me' };
-  const stateOf = (d) => d.state || (d.done ? 'closed' : 'open');
-  const listed = (d, f = filter) => (!f.states || f.states.includes(stateOf(d))) && (f.assignee === 'me' || f.assignee === 'anyone');
-  // Library filter (api.libraryFilter / setLibraryFilter / library): types null = any
-  let libFilter = { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me', text: '' };
-  const kindOf = (d) => (d.icon === 'task' ? 'tasks' : d.icon === 'meeting' ? 'meetings' : d.tags && ['chat', 'canvas', 'agent', 'skill'].includes(d.tags[0].label) ? d.tags[0].label + 's' : 'docs');
+  views.push({ id: 'people', title: 'People', icon: 'member', nodes: members });
+  const filters = {
+    inbox: { types: null, states: ['proposed'], assignee: 'anyone', text: '' },
+    tasks: { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me', text: '' },
+    meetings: { types: ['meetings'], states: null, assignee: 'anyone', text: '', participant: 'me', window: 'recent' },
+    library: { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me', text: '' },
+    chats: { types: ['chats'], states: null, assignee: 'anyone', text: '', mcp: false },
+    people: { types: ['people'], states: null, assignee: 'anyone', text: '' },
+  };
+  const stateOf = (d) => d.state || (d.done == null ? null : d.done ? 'closed' : 'open');
+  const listed = (d, f) => (!f.states || f.states.includes(stateOf(d))) && (!f.assignee || f.assignee === 'me' || f.assignee === 'anyone');
+  const kindOf = (d) => (d.icon === 'member' ? 'people' : d.icon === 'task' ? 'tasks' : d.icon === 'meeting' ? 'meetings' : d.tags && ['chat', 'canvas', 'agent', 'skill'].includes(d.tags[0].label) ? d.tags[0].label + 's' : 'docs');
   const created = {};   // documents made with createDocument
   const settling = new Set(); // a brand-new document: the first taskMeta read fails while main is still subscribing it
   const unlisted = [];  // created tasks/meetings the roots "query" has not caught up with yet: listed after the next refresh()
@@ -137,19 +141,28 @@ function mockApi() {
   };
   function softDelete(docId) {
     const i = all.findIndex((doc) => doc.id === docId); if (i < 0) throw new Error('unknown document');
-    deleted.set(docId, { doc: all[i], content: content[docId], sections: sections.map((section) => ({ section, index: section.nodes.findIndex((node) => node.id === docId) })).filter((entry) => entry.index >= 0) });
-    all.splice(i, 1); for (const section of sections) section.nodes = section.nodes.filter((node) => node.id !== docId);
+    deleted.set(docId, { doc: all[i], content: content[docId], views: views.map((view) => ({ view, index: view.nodes.findIndex((node) => node.id === docId) })).filter((entry) => entry.index >= 0) });
+    all.splice(i, 1); for (const view of views) view.nodes = view.nodes.filter((node) => node.id !== docId);
     sidebar.splice(0, sidebar.length, ...sidebar.filter((id) => id !== docId)); delete datePins[docId]; delete content[docId];
     setTimeout(() => removed.forEach((cb) => cb(docId)), 0);
   }
   function undelete(docId) {
     const saved = deleted.get(docId); if (!saved) throw new Error('unknown deleted document');
     all.push(saved.doc); content[docId] = saved.content;
-    for (const { section, index } of saved.sections) section.nodes.splice(index, 0, saved.doc);
+    for (const { view, index } of saved.views) view.nodes.splice(index, 0, saved.doc);
     deleted.delete(docId); emit(null);
   }
   return {
-    roots: async () => structuredClone(sections.map((s) => (s.id === 'tasks' ? { ...s, nodes: s.nodes.filter((d) => listed(d)) } : s))),
+    roots: async () => structuredClone(views),
+    viewFilter: async (id) => structuredClone(filters[id]),
+    setViewFilter: async (id, filter) => structuredClone(filters[id] = filter),
+    viewList: async (_id, filter) => {
+      await new Promise((r) => setTimeout(r, 30));
+      const text = String(filter.text || '').trim().toLowerCase();
+      return { nodes: [...all, ...members].filter((d) => (!filter.types ? kindOf(d) !== 'people' : filter.types.includes(kindOf(d)))
+        && (!filter.states || listed(d, filter)) && (filter.mcp !== false || d.meta !== 'MCP')
+        && d.text.toLowerCase().includes(text)).map(info), truncated: false };
+    },
     // references resolve on read, as main does: the row always shows the target's current title and state
     children: async (docId) => structuredClone(content[docId] || []).map((n) => (n.type === 'reference' ? { ...n, reference: { ...n.reference, node: info([...all, ...members].find((d) => d.id === n.reference.uri)) } } : n)),
     node: async (docId) => {
@@ -194,17 +207,6 @@ function mockApi() {
     image: async (uri) => { await new Promise((r) => setTimeout(r, 30)); if (uri !== 'tana:image:mock') throw new Error('unknown image ' + uri); return PNG; },
     systemTheme: async () => (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
     onSystemTheme: (cb) => matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => cb(e.matches ? 'dark' : 'light')),
-    taskFilter: async () => structuredClone(filter),
-    setTaskFilter: async (f) => { filter = structuredClone(f); emit(null); },
-    libraryFilter: async () => structuredClone(libFilter),
-    setLibraryFilter: async (f) => { libFilter = { ...libFilter, ...structuredClone(f) }; },
-    library: async (f) => {
-      await new Promise((r) => setTimeout(r, 30));
-      const ff = { ...libFilter, ...(f || {}) }, text = String(ff.text || '').trim().toLowerCase();
-      return all.filter((d) => (!ff.types || ff.types.includes(kindOf(d))) && (kindOf(d) !== 'tasks' || listed(d, ff)) && d.text.toLowerCase().includes(text)).slice(0, 100).map(info);
-    },
-    chats: async ({ includeMcp = false } = {}) => { await new Promise((r) => setTimeout(r, 30)); return chats.filter((d) => includeMcp || d.meta !== 'MCP').map(info); },
-    inbox: async () => docs.slice(0, 3).map(info), // mock: the first few tasks stand in for inbox-state items
     // "#task", "#meeting", "#member", "#<type>" tokens filter; the rest is a substring query; events get date-style meta
     search: async (q) => {
       await new Promise((r) => setTimeout(r, 30));
@@ -246,7 +248,7 @@ function mockApi() {
     setSensitive: async (docId, on) => { if (on) sensitive.add(docId); else sensitive.delete(docId); return on; },
     nodeLink: async (docId) => 'https://home.tana.inc/o/mockorg/l/' + encodeURIComponent(docId),
     openExternal: async (url) => { if (!/^https?:\/\//i.test(url)) throw new Error('Only http(s) links can be opened'); return url; },
-    todayNode: async () => { const date = new Date().toLocaleDateString('sv-SE'); const found = all.find((d) => d.text === date); if (found) return found.id; const n = { id: 'mocktoday', text: date, kind: 'document', hasChildren: true, editable: true, icon: 'doc', tags: [{ label: 'doc', color: 'grey' }] }; content[n.id] = []; all.push(n); sections[0].nodes.unshift(n); datePins[n.id] = [date]; emit(null); return n.id; },
+    todayNode: async () => { const date = new Date().toLocaleDateString('sv-SE'); const found = all.find((d) => d.text === date); if (found) return found.id; const n = { id: 'mocktoday', text: date, kind: 'document', hasChildren: true, editable: true, icon: 'doc', tags: [{ label: 'doc', color: 'grey' }] }; content[n.id] = []; all.push(n); views[0].nodes.unshift(n); datePins[n.id] = [date]; emit(null); return n.id; },
     setTitle: async (docId, title) => mut(docId, () => { all.find((d) => d.id === docId).text = title; emit(docId); }),
     setDone: async (docId, done) => mut(docId, () => { const d = all.find((x) => x.id === docId); d.done = done ? 1 : 0; d.state = done ? 'closed' : 'open'; emit(docId); }),
     toggleCheckbox: async (docId, id) => mut(docId, () => { const n = locate(content[docId], id).node; n.done = n.done == null ? 0 : n.done ? 0 : 1; emit(docId); }),
@@ -402,8 +404,9 @@ const saveValue = (segs) => (segs.some((s) => 'mention' in s || hasMarks(s.marks
 const tana = window.api || mockApi();
 
 // ---- state ----
-let sections = [];           // [{ id, title, icon, nodes: document Node[] }]
-let view = localStorage.getItem('view') || 'tasks'; // active section id; the outline shows one view at a time
+let views = [];              // [{ id, title, icon, nodes: document Node[] }]
+let view = localStorage.getItem('view') || 'tasks'; // active view id; the outline shows one view at a time
+if (view === 'members') view = 'people';
 let authed = false, authChecking = true, signedOut = false;
 const extra = new Map();     // docId -> document Node reached through a mention (not in roots)
 const paths = new Map();     // docId -> [{ id, title }] location in Tana for the breadcrumb (api.path)
@@ -435,9 +438,10 @@ let draftSeq = 0;
 const DRAFT_KIND = { tasks: 'task', meetings: 'meeting' }; // what Enter drafts in a view (any other view: a plain doc)
 let sel = null;              // multi-select: { keys: Set, anchor: key, focus: key }; the caret leaves the text
 let selectionFrozen = false;
-// view filters (api.taskFilter / api.libraryFilter, persisted by main); members = api.members() for the Assigned menu ("You" = the one flagged me)
-let taskF = { states: ['proposed', 'open'], assignee: 'me' }, libF = { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me', text: '' };
-let members = null, libRows = null, libTruncated = false, libSeq = 0;
+const filters = new Map();   // view id -> the persisted query filter
+const viewSeq = new Map();   // stale viewList responses never replace a newer filter result
+const truncated = new Set();
+let members = null;
 let sensitiveIds = null, sensitiveVisible = false, sensitiveLoading = null; // marks persist; every launch starts blurred
 const sensitiveEls = new Map(); // rendered surface -> document ids; lets a toggle update live DOM without rebuilding it
 const taskMetaById = new Map(), taskMetaLoading = new Set(), taskMetaFailed = new Map(); // docId -> { until, wait }: a failed metadata read backs off, it is never given up on
@@ -445,8 +449,6 @@ const META_RETRY_MS = 500, META_RETRY_MAX = 30000;
 const accessById = new Map(), accessLoading = new Set();
 let visibilityPeople = new Set();
 let visibilityRoles = new Map();
-let chatRows = null, chatSeq = 0, showMcp = localStorage.getItem('mcp') === '1'; // Chats view: api.chats({ includeMcp }) rows; the MCP toggle persists
-let inboxRows = null, inboxSeq = 0; // Inbox view: api.inbox() rows (everything still in the inbox state)
 let menu = null;             // open pill menu: { id, index }
 const groupPref = JSON.parse(localStorage.getItem('groupBy') || '{}'); // view id -> 'none' | 'status' | 'assignee' | 'type'
 const sortPref = JSON.parse(localStorage.getItem('sortBy') || '{}');   // view id -> 'default' | 'title'
@@ -486,9 +488,9 @@ railGrip.addEventListener('pointerdown', (e) => {
 const relatedBy = new Map(); // docId -> related payload, or null while loading
 const railClosed = new Set(JSON.parse(localStorage.getItem('railClosed') || '[]'));
 const CHEV = '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4.5L6 8l3.5-3.5"/></svg>';
-const allDocs = () => sections.flatMap((s) => s.nodes);
-const sectionOf = (docId) => sections.find((s) => s.nodes.some((n) => n.id === docId));
-const viewOf = () => sections.find((s) => s.id === view) || sections[0];
+const allDocs = () => views.flatMap((s) => s.nodes);
+const sectionOf = (docId) => views.find((s) => s.nodes.some((n) => n.id === docId));
+const viewOf = () => views.find((s) => s.id === view) || views[0];
 const keyFor = (docId, node) => (node.kind === 'document' ? docId : docId + '/' + node.id);
 const mkItem = (docId, node, parent) => { const item = { key: keyFor(docId, node), node, docId, parent }; items.set(item.key, item); return item; };
 const docOf = (id) => allDocs().find((d) => d.id === id) || extra.get(id);
@@ -631,72 +633,57 @@ function todayIndex(nodes) {
 
 async function loadRoots() {
   await loadSensitive(); // privacy gate: no document reaches the first render before the local marks do
-  const drafts = sections.flatMap((s) => s.nodes.map((node, i) => ({ section: s.id, i, node })).filter((d) => d.node.draft)); // a refresh must not drop a draft being typed
-  sections = (await tana.roots()).map((s) => ({ ...s, icon: s.id === 'library' ? 'library' : s.icon, nodes: s.nodes.map(asDoc) }));
+  const drafts = views.flatMap((s) => s.nodes.map((node, i) => ({ view: s.id, i, node })).filter((d) => d.node.draft)); // a refresh must not drop a draft being typed
+  views = (await tana.roots()).map((s) => ({ ...s, title: s.id === 'people' ? 'People' : s.title, icon: s.id === 'library' ? 'library' : s.icon, nodes: s.nodes.map(asDoc) }));
   rootsLoaded = true;
-  const lib = sections.find((s) => s.id === 'library');
-  if (lib) lib.nodes = libRows || []; // the Library view lists api.library(libF) rows, fetched by loadLibrary
-  const ch = sections.find((s) => s.id === 'chats');
-  if (ch) ch.nodes = chatRows || []; // the Chats view lists api.chats rows, fetched by loadChats
-  const ib = sections.find((s) => s.id === 'inbox');
-  if (ib) ib.nodes = inboxRows || []; // the Inbox view lists api.inbox rows, fetched by loadInbox
   for (const [id, f] of fresh) { // a created document stays where it was drafted until the roots query lists it
-    const s = sections.find((x) => x.id === f.section);
+    const s = views.find((x) => x.id === f.section);
     if (!s || s.nodes.some((n) => n.id === id)) fresh.delete(id);
     else s.nodes.splice(s.nodes.findIndex((n) => n.id === f.after) + 1, 0, f.node);
   }
-  for (const d of drafts) { const s = sections.find((x) => x.id === d.section); if (s) s.nodes.splice(d.i, 0, d.node); }
+  for (const d of drafts) { const s = views.find((x) => x.id === d.view); if (s) s.nodes.splice(d.i, 0, d.node); }
 }
 async function reload(docId) { kids.set(docId, await tana.children(docId)); }
-// Library rows for the current filter (stale responses dropped), then roots so the section carries them
-function loadLibrary() {
-  if (!tana.library) return;
-  const seq = ++libSeq;
-  tana.library(libF).then(async (result) => {
-    if (seq !== libSeq) return;
-    const { nodes, truncated } = Array.isArray(result) ? { nodes: result, truncated: false } : result;
-    libRows = (nodes || []).map(asDoc); libTruncated = !!truncated;
-    await loadRoots(); render();
+function loadView(id = view) {
+  const filter = filters.get(id);
+  if (!filter || !tana.viewList) return Promise.resolve();
+  const seq = (viewSeq.get(id) || 0) + 1;
+  viewSeq.set(id, seq);
+  return tana.viewList(id, filter).then((result) => {
+    if (viewSeq.get(id) !== seq) return;
+    const target = views.find((item) => item.id === id);
+    if (!target) return;
+    const drafts = target.nodes.map((node, i) => ({ node, i })).filter((item) => item.node.draft);
+    target.nodes = (result.nodes || []).map(asDoc);
+    if (result.truncated) truncated.add(id); else truncated.delete(id);
+    for (const [docId, f] of fresh) if (f.section === id) {
+      if (target.nodes.some((node) => node.id === docId)) fresh.delete(docId);
+      else target.nodes.splice(target.nodes.findIndex((node) => node.id === f.after) + 1, 0, f.node);
+    }
+    for (const draft of drafts) target.nodes.splice(draft.i, 0, draft.node);
+    render();
   }, showError);
 }
-function loadChats() {
-  if (!tana.chats) return;
-  const seq = ++chatSeq;
-  tana.chats({ includeMcp: showMcp }).then(async (rows) => { if (seq !== chatSeq) return; chatRows = rows.map(asDoc); await loadRoots(); render(); }, showError);
-}
-function loadInbox() {
-  if (!tana.inbox) return;
-  const seq = ++inboxSeq;
-  tana.inbox().then(async (rows) => { if (seq !== inboxSeq) return; inboxRows = rows.map(asDoc); await loadRoots(); render(); }, showError);
-}
-function setMcp(on) { showMcp = on; localStorage.setItem('mcp', on ? '1' : '0'); render(); loadChats(); }
-// rows a view fetches for itself: the roots query does not carry them
-function loadView(id = view) { if (id === 'members') loadMembers(); else if (id === 'library') loadLibrary(); else if (id === 'chats') loadChats(); else if (id === 'inbox') loadInbox(); }
 function loadFilters() {
-  Promise.all([tana.taskFilter && tana.taskFilter(), tana.libraryFilter && tana.libraryFilter()]).then(([t, l]) => {
-    if (t) taskF = t;
-    if (l) libF = l;
-    loadView(); render();
-  }, showError);
+  Promise.all(views.map(async (item) => filters.set(item.id, await tana.viewFilter(item.id)))).then(() => { loadView(); render(); }, showError);
 }
-function setTaskF(patch) { taskF = { ...taskF, ...patch }; render(); run(() => tana.setTaskFilter(taskF)); } // main refreshes roots and emits onChanged(null)
-function setLibF(patch) { libF = { ...libF, ...patch }; render(); if (tana.setLibraryFilter) run(() => tana.setLibraryFilter(libF)); loadLibrary(); }
-// The filter defaults main persists, and what "no filter at all" means. An empty view offers to clear only when it
-// is actually narrowed; clearing the Library means anything, not back to the shipped default.
-const TASK_DEFAULT = { states: ['proposed', 'open'], assignee: 'me' };
-const LIB_DEFAULT = { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me', text: '' };
-const LIB_ANY = { types: null, states: null, assignee: 'anyone', text: '' };
+function setViewF(patch) {
+  const id = view, next = { ...filters.get(id), ...patch };
+  filters.set(id, next); render();
+  run(async () => { filters.set(id, await tana.setViewFilter(id, next)); await loadView(id); });
+}
+const clearFilter = (f = {}) => ({ types: null, states: null, assignee: 'anyone', text: '', participant: f.participant || null, window: f.window || null });
 const sameList = (a, b) => JSON.stringify(a ? [...a].sort() : a) === JSON.stringify(b ? [...b].sort() : b);
+function sameFilter(a = {}, b = {}) {
+  return sameList(a.types || null, b.types || null) && sameList(a.states || null, b.states || null)
+    && (a.assignee || 'anyone') === (b.assignee || 'anyone') && String(a.text || '') === String(b.text || '')
+    && (a.participant || null) === (b.participant || null) && (a.window || null) === (b.window || null) && !!a.mcp === !!b.mcp;
+}
 function viewFiltered() {
-  if (view === 'tasks') return !sameList(taskF.states, TASK_DEFAULT.states) || (taskF.assignee || 'me') !== TASK_DEFAULT.assignee;
-  // the Library is narrowed whenever any pill is set to something other than "any"
-  if (view === 'library') return !!libF.types || !!libF.states || (libF.assignee || 'me') !== 'anyone' || !!String(libF.text || '').trim();
-  return false;
+  const filter = filters.get(view);
+  return !!filter && !sameFilter(filter, clearFilter(filter));
 }
-function clearFilters() {
-  if (view === 'tasks') setTaskF({ ...TASK_DEFAULT });
-  else if (view === 'library') setLibF({ ...LIB_ANY });
-}
+function clearFilters() { setViewF(clearFilter(filters.get(view))); }
 function ensureLoaded(item) {
   if (item.node.kind !== 'document' || kids.has(item.docId)) return;
   kids.set(item.docId, null);
@@ -863,7 +850,7 @@ function renderOutline() {
       ? groups.flatMap((g) => [groupHeadEl(g.title), ...g.nodes.map((n) => nodeEl(n, n.id, null))])
       : list.map((n) => nodeEl(n, n.id, null))));
     animateRows(before);
-    const today = groups ? null : outline.children[todayIndex(list)]; // only the ungrouped Meetings list marks today
+    const today = view === 'meetings' && !groups ? outline.children[todayIndex(list)] : null;
     if (today) today.dataset.today = '';
     if (list.length && !outline.hidden && scrolledView !== view) { // a view opens scrolled to today's first meeting (else the top)
       scrolledView = view;
@@ -899,9 +886,9 @@ function renderOutline() {
   renderPills(showPills);
   filterRow.hidden = !!parent || !(filterShown || filterEl.value);
   filterRow.classList.toggle('empty', !filterEl.value);
-  $('filtered').textContent = [hidden ? hidden + ' items filtered out' : '', view === 'library' && libTruncated ? 'Showing the first 1,000 for at least one selected kind' : ''].filter(Boolean).join(' · ');
+  $('filtered').textContent = [hidden ? hidden + ' items filtered out' : '', truncated.has(view) ? 'Showing the first 1,000 results' : ''].filter(Boolean).join(' · ');
   // Cached rows remain usable while auth and sync reconnect; reserve the skeleton for an empty outline.
-  const loading = !parent && !outline.children.length && (authChecking || !rootsLoaded || (view === 'library' && libRows === null) || (view === 'chats' && chatRows === null) || (view === 'inbox' && inboxRows === null) || (authed && !connected));
+  const loading = !parent && !outline.children.length && (authChecking || !rootsLoaded || !filters.has(view) || (authed && !connected));
   $('skeleton').classList.toggle('gone', !loading);
   if (!parent && !list.length && !loading && !filterEl.value) { // an empty view says so; a filtered-out list is explained by the count below it
     const note = document.createElement('div');
@@ -1303,7 +1290,7 @@ function dropDraft(item) {
   else open.delete(item.parent.key);
   render(true);
 }
-function dropDrafts() { for (const s of sections) s.nodes = s.nodes.filter((n) => !n.draft); } // navigating away drops empty draft documents
+function dropDrafts() { for (const s of views) s.nodes = s.nodes.filter((n) => !n.draft); } // navigating away drops empty draft documents
 // Enter on a collapsed top-level document (or with nothing focused in an empty view): a draft sibling document below it
 function draftDoc(after) {
   const s = viewOf();
@@ -1640,14 +1627,13 @@ function selKey(e) { // keys while a selection is active (nothing focused); docu
   return true;
 }
 
-// ---- filter pills (Tasks: Status, Assigned to; Library: Type + those two when tasks are listed) with dropdown menus ----
+// ---- filter pills shared by every view ----
 const STATES = [['proposed', 'Inbox'], ['open', 'In Progress'], ['closed', 'Completed'], ['not_now', 'Later']];
-const TYPES = [['meetings', 'Meetings', 'meeting'], ['tasks', 'Tasks', 'task'], ['docs', 'Docs', 'doc'], null, ['chats', 'Chats', 'chat'], ['canvases', 'Canvases', 'canvas'], ['agents', 'Agents', 'agent'], ['skills', 'Skills', 'skill']];
+const TYPES = [['meetings', 'Meetings', 'meeting'], ['tasks', 'Tasks', 'task'], ['docs', 'Docs', 'doc'], null, ['chats', 'Chats', 'chat'], ['canvases', 'Canvases', 'canvas'], ['agents', 'Agents', 'agent'], ['skills', 'Skills', 'skill'], ['people', 'People', 'member']];
 const toggleIn = (all, list, v) => { if (!list) return [v]; const next = all.filter((x) => list.includes(x) !== (x === v)); return next.length ? next : null; }; // null = any
 const names = (pairs, list) => (list ? pairs.filter((p) => p && list.includes(p[0])).map((p) => p[1]).join(', ') : null);
-// ---- group by (Tasks, Library): plain headings over the rows the view already loaded, no extra query ----
+// ---- group by: plain headings over the rows the view already loaded, no extra query ----
 const GROUPS = [['none', 'None'], ['status', 'Status'], ['assignee', 'Assignee'], ['type', 'Type']];
-const GROUPABLE = new Set(['tasks', 'library']);
 const FALLBACK = { status: 'No status', assignee: 'Unassigned', type: 'No type' };
 const groupBy = () => (GROUPS.some(([id]) => id === groupPref[view]) ? groupPref[view] : 'none');
 function setGroupBy(id) { groupPref[view] = id; localStorage.setItem('groupBy', JSON.stringify(groupPref)); render(); }
@@ -1674,11 +1660,11 @@ function groupRows(list, by) {
 }
 function groupsOf(list) {
   const by = groupBy();
-  if (by === 'none' || !GROUPABLE.has(view)) return null;
+  if (by === 'none') return null;
   if (by === 'assignee') loadMembers(); // the names for the headings; without them a heading falls back to the member uri
   return groupRows(list, by);
 }
-// ---- sort (Tasks, Library): the same rows in another order, again without asking the backend for anything ----
+// ---- sort: the same rows in another order, again without asking the backend for anything ----
 // Only what a row actually carries can be sorted on. main.js toNode passes updatedAt and createdAt as ISO 8601
 // strings, so they compare as strings; a row that carries neither (an older cached row) keeps its place at the end.
 const SORTS = [['default', 'Default'], ['updated', 'Updated'], ['created', 'Created'], ['title', 'Title']];
@@ -1687,7 +1673,7 @@ const NEWEST_FIRST = new Set(['updated', 'created']); // times read newest first
 const sortBy = () => (SORTS.some(([id]) => id === sortPref[view]) ? sortPref[view] : 'default');
 function setSortBy(id) { sortPref[view] = id; localStorage.setItem('sortBy', JSON.stringify(sortPref)); render(); }
 function sortRows(list) {
-  const id = sortBy(), key = GROUPABLE.has(view) ? SORT_KEY[id] : null;
+  const id = sortBy(), key = SORT_KEY[id];
   if (!key) return list; // Default: the order the view produced
   const desc = NEWEST_FIRST.has(id);
   return [...list].sort((a, b) => {
@@ -2019,13 +2005,14 @@ function moveToSpace(doc, space, token) {
   });
 }
 function pillDefs() {
-  if (view === 'chats') return [{ id: 'mcp', label: 'MCP chats', active: showMcp, toggle: () => setMcp(!showMcp) }];
-  const lib = view === 'library', f = lib ? libF : taskF, save = lib ? setLibF : setTaskF, defs = [];
-  if (lib) defs.push({ id: 'type', value: names(TYPES, f.types) || 'Any type', icon: f.types && f.types.length === 1 ? TYPES.find((t) => t && t[0] === f.types[0])[2] : 'any', rows: () => [
+  const f = filters.get(view);
+  if (!f) return [];
+  const defs = [], save = setViewF, one = f.types && f.types.length === 1 && TYPES.find((t) => t && t[0] === f.types[0]);
+  defs.push({ id: 'type', value: names(TYPES, f.types) || 'Any type', icon: one ? one[2] : 'any', rows: () => [
     { label: 'Any type', icon: 'any', checked: !f.types, run: () => save({ types: null }) },
     ...TYPES.map((t) => (t ? { label: t[1], icon: t[2], keepOpen: true, checked: !!f.types && f.types.includes(t[0]), run: () => save({ types: toggleIn(TYPES.filter(Boolean).map((x) => x[0]), f.types, t[0]) }) } : { div: true })), // multi-select: the menu stays open to tick more
   ] });
-  if (!lib || !f.types || f.types.includes('tasks')) {
+  if (!f.types || f.types.includes('tasks')) {
     defs.push({ id: 'status', label: 'Status', icon: 'status', value: names(STATES, f.states) || 'Any', rows: () => [
       { label: 'Any status', checked: !f.states, run: () => save({ states: null }) },
       ...STATES.map(([v, l]) => ({ label: l, keepOpen: true, checked: !!f.states && f.states.includes(v), run: () => save({ states: toggleIn(STATES.map((s) => s[0]), f.states, v) }) })), // multi-select, like the type list
@@ -2041,12 +2028,13 @@ function pillDefs() {
       ...(members || []).filter((x) => !x.me).map((x) => ({ label: x.title, checked: a === x.id, run: () => save({ assignee: x.id }) })),
     ] });
   }
+  if (!f.types || f.types.includes('chats')) defs.push({ id: 'mcp', label: 'MCP chats', active: !!f.mcp, toggle: () => save({ mcp: !f.mcp }) });
   // sorting and grouping are view preferences, not queries: they re-order and re-section the rows the view already has
   defs.push({ id: 'sort', label: 'Sort', icon: 'sort', value: SORTS.find(([id]) => id === sortBy())[1], rows: () => SORTS.map(([id, label]) => ({ label, checked: sortBy() === id, run: () => setSortBy(id) })) });
   defs.push({ id: 'group', label: 'Group', icon: 'group', value: GROUPS.find(([id]) => id === groupBy())[1], rows: () => GROUPS.map(([id, label]) => ({ label, checked: groupBy() === id, run: () => setGroupBy(id) })) });
   return defs;
 }
-const pillsApply = () => view === 'tasks' || view === 'library' || view === 'chats';
+const pillsApply = () => filters.has(view);
 const pillName = (def) => def.label || def.id[0].toUpperCase() + def.id.slice(1);
 function pillCommandRows() {
   return (pillsApply() ? pillDefs() : []).map((def) => ({
@@ -2166,9 +2154,7 @@ function invalidatePinCaches(id, includeRecent = true) {
 function invalidateNode(id) {
   invalidatePinCaches(id);
   extra.delete(id); paths.delete(id); kids.delete(id); fresh.delete(id); taskMetaById.delete(id);
-  for (const section of sections) section.nodes = section.nodes.filter((node) => node.id !== id);
-  if (libRows) libRows = libRows.filter((node) => node.id !== id);
-  if (chatRows) chatRows = chatRows.filter((node) => node.id !== id);
+  for (const section of views) section.nodes = section.nodes.filter((node) => node.id !== id);
   palRows = palRows.filter((row) => row.node?.id !== id);
   if (palDoc?.id === id) { palDoc = null; pinInfo = null; }
   if (dropDoc?.id === id) dropDoc = null;
@@ -2609,7 +2595,7 @@ function pinRows(tree) {
   return [...unsectioned, ...sections.flatMap((section) => section.rows)];
 }
 function paletteRows(q) {
-  const rows = sections.map((s) => ({ id: 'view:' + s.id, group: 'Views', icon: s.icon, label: s.id === 'members' ? 'People' : s.title, run: () => setView(s.id) }));
+  const rows = views.map((s) => ({ id: 'view:' + s.id, group: 'Views', icon: s.icon, label: s.title, run: () => setView(s.id) }));
   rows.push(...pinRows(pinTree));
   rows.push(...pillCommandRows());
   if (tana.creationOptions) rows.push({ id: 'create', group: 'Actions', icon: 'createNew', label: 'Create new…', keepOpen: true, run: openCreationPalette });
@@ -2647,7 +2633,7 @@ function paletteRows(q) {
     if (access?.sharing) rows.push({ group: 'Actions', icon: 'lock', label: 'Edit visibility', run: () => openVisibilityPalette(palDoc) });
     if (access?.move) rows.push({ group: 'Actions', icon: 'space', label: 'Move to space', keepOpen: true, run: () => openMovePalette(palDoc) });
   }
-  if (q) for (const s of sections) for (const n of s.nodes) rows.push({ ...docRow(n, n.meta || s.title, () => openDoc(n.id)), id: 'doc:' + n.id, group: 'Documents' });
+  if (q) for (const s of views) for (const n of s.nodes) rows.push({ ...docRow(n, n.meta || s.title, () => openDoc(n.id)), id: 'doc:' + n.id, group: 'Documents' });
   let docsLeft = 8;
   return rows.filter((r) => (!q || r.label.toLowerCase().includes(q)) && (r.group !== 'Documents' || docsLeft-- > 0)).map((r) => (hotkeys[r.id] ? { ...r, kbd: hotkeys[r.id] } : r));
 }
@@ -2721,7 +2707,7 @@ function loadCreationChoices() {
 }
 function creationSection(choice) {
   const id = choice.kind === 'task' ? 'tasks' : choice.kind === 'meeting' || choice.appliesTo === 'events' ? 'meetings' : choice.kind === 'chat' ? 'chats' : 'library';
-  return sections.find((section) => section.id === id) || viewOf();
+  return views.find((section) => section.id === id) || viewOf();
 }
 function startCreation(choice) {
   const section = creationSection(choice), tags = choice.kind === 'custom' ? [{ label: choice.title, hue: choice.hue }] : undefined;
@@ -2902,8 +2888,7 @@ tana.onChanged((docId) => {
   const work = [loadRoots()];
   if (docId && kids.has(docId)) work.push(reload(docId));
   if (!docId) loadPins();
-  if (!docId) loadView(); // the active view fetches its own rows; roots do not carry them
-  Promise.all(work).then(render, showError);
+  Promise.all(work).then(() => docId ? undefined : loadView()).then(render, showError); // cached roots first, then the active query wins
 });
 function removeStale(id) {
   invalidateNode(id); loadPins();

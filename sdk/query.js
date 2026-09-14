@@ -55,11 +55,17 @@ const isHidden = (title, rules) => {
   });
 };
 
-// ---- Tasks view / Library filters (Addendum 10/11) ----
-const DEFAULT_TASK_FILTER = { states: ['proposed', 'open'], assignee: 'me' };
-const DEFAULT_LIBRARY_FILTER = { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me', text: '' };
-const LIBRARY_KINDS = ['meetings', 'tasks', 'docs', 'chats', 'canvases', 'agents', 'skills'];
-const KIND_NODE_TYPE = { meetings: 'event', docs: 'text', chats: 'chat', canvases: 'canvas', agents: 'agent', skills: 'skill' };
+// ---- Views (docs/VIEWS.md) ----
+const VIEW_KINDS = ['meetings', 'tasks', 'docs', 'chats', 'canvases', 'agents', 'skills', 'people'];
+const KIND_NODE_TYPE = { meetings: 'event', tasks: 'text', docs: 'text', chats: 'chat', canvases: 'canvas', agents: 'agent', skills: 'skill', people: 'user-profile' };
+const VIEW_PRESETS = {
+  inbox: { types: null, states: ['proposed'], assignee: 'anyone' },
+  tasks: { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me' },
+  meetings: { types: ['meetings'], participant: 'me', window: 'recent' },
+  library: { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me', text: '' },
+  chats: { types: ['chats'], mcp: false },
+  people: { types: ['people'] },
+};
 
 // assignee: 'me' | 'anyone' | 'unassigned' | <user-profile uri>
 function assigneeParams(assignee, me) {
@@ -68,28 +74,38 @@ function assigneeParams(assignee, me) {
   return { assignedTo: [assignee === 'me' || !assignee ? me : assignee] };
 }
 
-// listNodes params for the Tasks view: states null = all four
-function taskParams(f, me, limit = 500) {
-  return { nodeTypes: ['text'], stateTypes: f.states || STATE_TYPES, ...assigneeParams(f.assignee, me), limit, sortOptions: UPDATE_DESC };
+const FILTER_KEYS = new Set(['types', 'states', 'assignee', 'text', 'participant', 'window', 'mcp']);
+const USER = /^tana:user-profile:[0-9a-z]{26}$/;
+function validViewFilter(f) {
+  return !!f && !Array.isArray(f) && typeof f === 'object' && Object.keys(f).every((k) => FILTER_KEYS.has(k))
+    && (f.types === undefined || f.types === null || Array.isArray(f.types) && f.types.every((x) => VIEW_KINDS.includes(x)))
+    && (f.states === undefined || f.states === null || Array.isArray(f.states) && f.states.every((x) => STATE_TYPES.includes(x)))
+    && (f.assignee === undefined || ['me', 'anyone', 'unassigned'].includes(f.assignee) || USER.test(f.assignee))
+    && (f.text === undefined || typeof f.text === 'string')
+    && (f.participant === undefined || f.participant === null || f.participant === 'me')
+    && (f.window === undefined || f.window === null || f.window === 'recent')
+    && (f.mcp === undefined || typeof f.mcp === 'boolean');
 }
 
-// One listNodes per selected kind: [{ kind, params }]. 'docs' returns all text nodes; the caller drops those with a state.
-// The assignee goes on every kind's query, not only on tasks: the graph filters any node type by assignedTo, so a kind
-// that cannot carry an assignee (events, chats, agents, skills) comes back empty instead of coming back unfiltered and
-// looking like a match. It is in effect only while tasks are in the selection, which is when the Assigned pill is shown
-// (docs/OUTLINER.md Library view).
-function libraryQueries(f, me, limit = 1000) {
-  const text = String(f.text || '').trim();
-  const kinds = f.types || LIBRARY_KINDS;
-  const assignee = kinds.includes('tasks') ? f.assignee : 'anyone';
-  return kinds.map((kind) => {
-    if (!LIBRARY_KINDS.includes(kind)) throw new Error('unknown library type: ' + kind);
-    const params = kind === 'tasks' ? taskParams({ ...f, assignee }, me, limit)
-      : { nodeTypes: [KIND_NODE_TYPE[kind]], ...assigneeParams(assignee, me), limit, sortOptions: UPDATE_DESC };
-    params.mode = 'LIST_NODES_MODE_WITH_COUNT';
-    if (text) params.textQuery = text;
-    return { kind, params };
-  });
+function viewParams(f, me, limit = 1000) {
+  if (!validViewFilter(f)) throw new Error('invalid view filter');
+  const kinds = f.types === undefined || f.types === null ? VIEW_KINDS.filter((k) => k !== 'people') : f.types;
+  const p = {
+    nodeTypes: [...new Set(kinds.map((k) => KIND_NODE_TYPE[k]))], limit,
+    sortOptions: f.types && f.types.length === 1 && f.types[0] === 'meetings'
+      ? [{ field: 'SORT_FIELD_EVENT_START_TIME', direction: 'SORT_DIRECTION_ASCENDING' }] : UPDATE_DESC,
+    mode: 'LIST_NODES_MODE_WITH_COUNT',
+  };
+  if (f.states !== undefined && f.states !== null) p.stateTypes = f.states;
+  if (kinds.includes('tasks')) Object.assign(p, assigneeParams(f.assignee, me));
+  if (f.text) p.textQuery = f.text.trim();
+  if (f.participant === 'me') p.hasParticipantUris = [me];
+  if (f.window === 'recent') {
+    const start = new Date(); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() - 7);
+    p.eventStartTimeMin = start.toISOString();
+    p.eventStartTimeMax = new Date(start.getTime() + 14 * 864e5).toISOString();
+  }
+  return p;
 }
 
-module.exports = { parseQuery, searchParams, needsTypes, taskParams, libraryQueries, hideRules, isHidden, DEFAULT_TASK_FILTER, DEFAULT_LIBRARY_FILTER, LIBRARY_KINDS };
+module.exports = { parseQuery, searchParams, needsTypes, viewParams, validViewFilter, VIEW_PRESETS, VIEW_KINDS, hideRules, isHidden };

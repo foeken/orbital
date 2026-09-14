@@ -34,12 +34,14 @@ assert.match(source, /const rowHue = r\.node \? r\.node\.hue : r\.hue;/);
 assert.match(source, /if \(!r\.svg && rowHue != null\) \{ icon\.classList\.add\('hue'\)/);
 assert.match(source, /if \(!display\.iconSvg && display\.hue != null\) \{ bullet\.classList\.add\('hue'\)/);
 assert.match(source, /scrollIntoView\(\{ block: 'nearest', inline: 'nearest', container: 'nearest' \}\)/);
-assert.match(source, /id: 'members', title: 'Members', icon: 'member'/);
-assert.match(source, /s\.id === 'members' \? 'People' : s\.title/);
+assert.match(source, /id: 'people', title: 'People', icon: 'member'/);
+assert.match(source, /title: s\.id === 'people' \? 'People' : s\.title/);
 assert.match(source, /id: 'library', title: 'Library', icon: 'library'/);
-assert.match(source, /value: names\(TYPES, f\.types\) \|\| 'Any type', icon: f\.types && f\.types\.length === 1 \? TYPES\.find\(\(t\) => t && t\[0\] === f\.types\[0\]\)\[2\] : 'any'/);
+assert.match(source, /value: names\(TYPES, f\.types\) \|\| 'Any type', icon: one \? one\[2\] : 'any'/);
 assert.match(source, /icon: s\.id === 'library' \? 'library' : s\.icon/);
-assert.match(source, /if \(id === 'members'\) loadMembers\(\)/);
+// every view is the same screen: one loader, one filter per view id (docs/VIEWS.md)
+assert.match(source, /function loadView\(id = view\) \{\n  const filter = filters\.get\(id\);/);
+assert.doesNotMatch(source, /loadLibrary|loadChats|loadInbox|taskFilter|libraryFilter/);
 assert.match(source, /const chatIcon = \(n\) => n\.icon \|\| \(\(n\.tags \|\| \[\]\)\.some\(\(t\) => t\.label === 'chat'\) \? 'chat' : undefined\);/);
 assert.match(source, /const nodeIcon = \(n\) => chatIcon\(n\) \|\| \(\(n\.tags \|\| \[\]\)\.some\(\(t\) => t\.label === 'agent'\) \? 'agent' : undefined\);/);
 assert.match(source, /tana\.pinTree \? tana\.pinTree\(\)/);
@@ -73,7 +75,8 @@ assert.doesNotMatch(source.slice(source.indexOf("titleEl.addEventListener('keydo
 assert.match(source, /taskMetaFailed\.set\(docId, \{ until: Date\.now\(\) \+ wait, wait \}\);/);
 // a new connection clears the metadata backoff and refetches the active view, which fetched its rows before the client existed
 assert.match(source, /const wasConnected = connected;[\s\S]*?if \(connected && !wasConnected\) \{ taskMetaFailed\.clear\(\); loadView\(\); \}/);
-assert.match(source, /if \(!docId\) loadView\(\);/);
+// a global change (a refresh, a pin, a filter) re-runs the active view's query after the cached rows land
+assert.match(source, /Promise\.all\(work\)\.then\(\(\) => docId \? undefined : loadView\(\)\)/);
 assert.match(source, /const loading = !parent && !outline\.children\.length/);
 assert.match(source, /tana\.setAssignees\(doc\.id, assignees\)/);
 assert.match(source, /const AUDIENCES = \{/);
@@ -102,8 +105,9 @@ assert.match(source, /tana\.creationOptions\(\)/);
 assert.match(source, /function startCreation\(choice\)/);
 assert.match(source, /draftDocNode\(choice\.kind, \{ typeUri: choice\.typeUri, icon: choice\.icon, tags \}\)/);
 assert.match(source, /tana\.createDocument\(text, node\.createOptions \|\| \{ kind: node\.draft \}\)/);
-assert.match(source, /const \{ nodes, truncated \} = Array\.isArray\(result\) \? \{ nodes: result, truncated: false \} : result;/);
-assert.match(source, /Showing the first 1,000 for at least one selected kind/);
+// one fetch path for every view: its rows replace that view's list, and its truncation is remembered per view
+assert.match(source, /if \(result\.truncated\) truncated\.add\(id\); else truncated\.delete\(id\);/);
+assert.match(source, /truncated\.has\(view\) \? 'Showing the first 1,000 results' : ''/);
 assert.match(source, /function blockSelection\(keys, contiguous, action\)/);
 assert.match(source, /tana\.setStateMany\(palTaskCtx\.docs\.map\(\(doc\) => doc\.id\), state\)/);
 assert.match(source, /tana\.setAssigneesMany\(palTaskCtx\.docs\.map\(\(doc\) => doc\.id\), uris\)/);

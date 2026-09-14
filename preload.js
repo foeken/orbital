@@ -15,8 +15,9 @@ contextBridge.exposeInMainWorld('api', {
   openExternal: (url) => ipcRenderer.invoke('shell:open', url), // http(s) link from node text, in the default browser
   nodeLink: (docId) => ipcRenderer.invoke('doc:link', docId), // the home.tana.inc url for a node
   setField: (docId, key, text) => ipcRenderer.invoke('doc:setField', docId, key, text), // typed field value (plain text)
-  chats: (opts) => ipcRenderer.invoke('chats:list', opts), // { includeMcp }
-  inbox: () => ipcRenderer.invoke('inbox:list'), // everything in Tana's inbox state (proposed)
+  viewList: (id, filter) => ipcRenderer.invoke('view:list', id, filter), // { nodes, truncated }
+  viewFilter: (id) => ipcRenderer.invoke('view:filter', id),
+  setViewFilter: (id, filter) => ipcRenderer.invoke('view:setFilter', id, filter),
   deleteDocument: (id) => ipcRenderer.invoke('doc:delete', id), // native soft delete; undo restores
   restoreDocument: (id) => ipcRenderer.invoke('doc:restore', id), // native restore; undo deletes again
   creationOptions: () => ipcRenderer.invoke('doc:creationOptions'), // {options:[{id,kind,title,icon?,typeUri?,appliesTo?,ownerUri?,selectable,reason?}],complete}
@@ -63,11 +64,6 @@ contextBridge.exposeInMainWorld('api', {
   setSensitive: (docId, on) => ipcRenderer.invoke('sensitive:set', docId, on),
   image: (uri) => ipcRenderer.invoke('image', uri), // tana:image: uri -> data URL (main fetches with the session token and caches)
   members: () => ipcRenderer.invoke('members'),
-  taskFilter: () => ipcRenderer.invoke('tasks:filter'),
-  setTaskFilter: (filter) => ipcRenderer.invoke('tasks:setFilter', filter), // { states: string[] | null, assignee: 'me' | 'anyone' | 'unassigned' | uri }; resolves after the Tasks refresh
-  library: (filter) => ipcRenderer.invoke('library:list', filter), // { types, states, assignee, text }; missing keys fall back to libraryFilter()
-  libraryFilter: () => ipcRenderer.invoke('library:filter'),
-  setLibraryFilter: (filter) => ipcRenderer.invoke('library:setFilter', filter),
   // Hidden titles: patterns that keep matching nodes out of every list and search (a node opened directly still opens).
   // Case-insensitive; a pattern matches the whole title, or its start when it ends with '*' ("Block*", "Lunch").
   // All four resolve to the stored list (string[]) after the views have refreshed.

@@ -12,7 +12,7 @@ const { createTransport, GraphClient, SyncConnection, Document, derivePeerId, re
 const outline = require('../sdk/content');
 const { fetchImage } = require('../sdk/assets');
 const { LoroMap, LoroList } = require('loro-crdt');
-const { parseQuery, searchParams, needsTypes, taskParams, libraryQueries, hideRules, isHidden, DEFAULT_TASK_FILTER, DEFAULT_LIBRARY_FILTER } = require('../sdk/query');
+const { parseQuery, searchParams, needsTypes, viewParams, validViewFilter, VIEW_PRESETS, hideRules, isHidden } = require('../sdk/query');
 const pins = require('../sdk/pins');
 
 const ORG = 'org_01EXAMPLE00000000000000000', DOC = 'tana:text:01exampleh0000000000000000', ME = 'tana:user-profile:01examplei0000000000000000';
@@ -396,7 +396,7 @@ async function main() {
 
   // Main startup status and node appearance are pure helpers: no Electron app, network, or Tana data.
   {
-    const { resolveInitialAuth, graphRow, cachedNodeHue, SECTIONS } = mainHelpers();
+    const { resolveInitialAuth, graphRow, cachedNodeHue, VIEWS } = mainHelpers();
     assert.equal((await resolveInitialAuth({ isAuthenticated: async () => true })).authenticated, true);
     assert.equal((await resolveInitialAuth({ isAuthenticated: async () => false })).authenticated, false);
     const error = new Error('offline');
@@ -412,7 +412,7 @@ async function main() {
     assert.equal(cachedNodeHue(space), 0, 'own hue survives the cached kind tag');
     assert.equal(cachedNodeHue({ id: plain.id, icon: null, tags: [{ label: 'Type', hue: 0 }] }), undefined, 'type hue is not a node hue');
     assert.equal(graphRow({ id: 'tana:chat:01exampler0000000000000000', title: 'Chat' }).icon, 'chat');
-    assert.ok(SECTIONS.some((s) => s.id === 'members' && s.icon === 'member'));
+    assert.ok(VIEWS.some((s) => s.id === 'people' && s.title === 'People' && s.icon === 'member'));
     console.log('ok  initial auth states and node appearance hue');
   }
 
@@ -480,7 +480,7 @@ async function main() {
     }
     assert.equal((await backend.handlers.get('doc:path')(null, DOC)).length, 0, 'the location falls back to its cache');
     assert.equal((await backend.handlers.get('search')(null, 'anything')).length, 0);
-    const emptyLibrary = await backend.handlers.get('library:list')(null, {});
+    const emptyLibrary = await backend.handlers.get('view:list')(null, 'library');
     assert.equal(emptyLibrary.nodes.length, 0);
     assert.equal(emptyLibrary.truncated, false);
     const space = await backend.handlers.get('outline:children')(null, 'tana:space:' + ulid()).then(() => null, (e) => String(e.message || e));
@@ -490,31 +490,71 @@ async function main() {
     console.log('ok  startup: metadata, permission and view calls before the connection stay quiet');
   }
 
-  // The Library asks for a count per kind, returns everything it received across kinds, and reports server truncation
-  // before local hidden-title filtering. Row conversion still reads app-local icons from SQLite.
+  // A view is one graph query, then docs-without-tasks/MCP/hidden post-filters, row mapping and its own cache.
   {
     const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
-    const events = Array.from({ length: 60 }, (_, i) => ({ id: 'tana:event:' + ulid(), title: i ? 'Meeting ' + i : 'Hidden meeting', updateTime: '2026-09-14T10:' + String(i).padStart(2, '0') + ':00Z' }));
-    const docs = Array.from({ length: 60 }, (_, i) => ({ id: 'tana:text:' + ulid(), title: 'Doc ' + i, updateTime: '2026-09-13T10:' + String(i).padStart(2, '0') + ':00Z' }));
+    const event = { id: 'tana:event:' + ulid(), title: 'Meeting', calendarEvent: { startTime: '2026-09-14T10:00:00Z' } };
+    const hidden = { id: 'tana:text:' + ulid(), title: 'Hidden doc', updateTime: '2026-09-13T10:00:00Z' };
+    const doc = { id: 'tana:text:' + ulid(), title: 'Doc', updateTime: '2026-09-13T11:00:00Z' };
+    const task = { id: 'tana:text:' + ulid(), title: 'Task disguised as doc', state: { type: 'open' }, updateTime: '2026-09-13T12:00:00Z' };
+    const mcp = { id: 'tana:chat:' + ulid(), title: 'MCP: helper', invocationContext: { intent: 'mcp' } };
     const requests = [];
-    let eventTotal = 61;
-    cache.setSetting('hiddenTitles', ['Hidden meeting']);
-    cache.setIcon(docs[0].id, '<svg>cached</svg>');
+    let totalCount = 6;
+    cache.setSetting('hiddenTitles', ['Hidden doc']);
+    cache.setIcon(doc.id, '<svg>cached</svg>');
     backend.testRuntime({ me: { userUri: ME }, win: null, client: { graph: { listNodes: async (p) => {
       requests.push(p);
       if (p.nodeIds) return { nodes: [] };
-      if (p.nodeTypes[0] === 'event') return { nodes: events, totalCount: eventTotal };
-      return { nodes: docs, totalCount: docs.length };
-    } } } });
-    const payload = await backend.handlers.get('library:list')(null, { types: ['meetings', 'docs'], states: null, assignee: 'anyone' });
-    assert.equal(payload.nodes.length, 119, 'the merged Library is no longer sliced to 100 and hidden titles still apply');
-    assert.equal(payload.truncated, true, 'one kind with more matches than returned marks the payload truncated');
-    assert.equal(payload.nodes.find((n) => n.id === docs[0].id).iconSvg, '<svg>cached</svg>', 'Library rows still read the SQLite icon cache');
-    assert.ok(requests.slice(0, 2).every((p) => p.limit === 1000 && p.mode === 'LIST_NODES_MODE_WITH_COUNT'));
-    eventTotal = events.length;
-    assert.equal((await backend.handlers.get('library:list')(null, { types: ['meetings', 'docs'], states: null, assignee: 'anyone' })).truncated, false,
-      'a locally hidden row does not create a false truncation warning');
-    console.log('ok  Library returns its full merged fetch, keeps local filters/cache, and reports per-kind truncation');
+      return totalCount == null ? { nodes: [event, hidden, doc, task, mcp], truncated: true } : { nodes: [event, hidden, doc, task, mcp], totalCount };
+    } }, sync: { subscribe: async () => null, unsubscribe: async () => {} } } });
+    const payload = await backend.handlers.get('view:list')(null, 'library', { types: ['meetings', 'docs', 'chats'], states: null, assignee: 'anyone', mcp: false });
+    assert.equal(requests.length, 1, 'one view fetch makes one graph query');
+    assert.deepEqual(payload.nodes.map((n) => n.title).sort(), ['Doc', 'Meeting'], 'docs without tasks, MCP chats and hidden titles are post-filtered');
+    assert.equal(payload.truncated, true);
+    assert.equal(payload.nodes.find((n) => n.id === doc.id).iconSvg, '<svg>cached</svg>');
+    assert.deepEqual(Object.keys(cache.list()), ['library'], 'the fetched rows use the view id as their cache section');
+    totalCount = 5;
+    assert.equal((await backend.handlers.get('view:list')(null, 'library', { types: ['meetings', 'docs', 'chats'], states: null, assignee: 'anyone', mcp: true })).nodes.some((n) => n.id === mcp.id), true);
+    totalCount = null;
+    assert.equal((await backend.handlers.get('view:list')(null, 'library', { types: ['meetings', 'docs'], states: null, assignee: 'anyone' })).truncated, true, 'the response truncation flag survives without a count');
+    totalCount = 5;
+    assert.equal((await backend.handlers.get('view:list')(null, 'library', { types: ['meetings', 'docs'], states: null, assignee: 'anyone' })).truncated, false,
+      'local post-filters do not create a false truncation warning');
+    console.log('ok  one view fetch queries, post-filters, maps and caches rows');
+  }
+
+  // The real IPC handlers put every preset through that path; roots is cache-only and refresh repeats only the
+  // last listed view.
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const requests = [];
+    const ids = { event: 'tana:event:', text: 'tana:text:', chat: 'tana:chat:', 'user-profile': 'tana:user-profile:' };
+    backend.testRuntime({ me: { userUri: ME }, win: { isDestroyed: () => false, webContents: { send: () => {} } }, client: {
+      graph: { listNodes: async (p) => {
+        requests.push(p);
+        const kind = p.nodeTypes[0], id = (ids[kind] || 'tana:' + kind + ':') + ulid();
+        return { nodes: [{ id, title: 'row ' + requests.length, state: kind === 'text' ? { type: 'open' } : undefined, calendarEvent: kind === 'event' ? { startTime: '2026-09-14T10:00:00Z' } : undefined }], truncated: false };
+      } },
+      sync: { subscribe: async () => null, unsubscribe: async () => {} },
+    } });
+    for (const view of backend.VIEWS) {
+      const result = await backend.handlers.get('view:list')(null, view.id);
+      assert.equal(result.nodes.length, 1, view.id + ' fetched through view:list');
+    }
+    assert.equal(requests.length, 6, 'six views make six single queries');
+    const roots = await backend.handlers.get('outline:roots')();
+    assert.equal(requests.length, 6, 'roots reads SQLite without fetching');
+    assert.ok(roots.every((view) => view.nodes.length === 1), 'all six views load from their own cache section');
+    await backend.refresh();
+    assert.equal(requests.length, 7);
+    assert.deepEqual(requests.at(-1).nodeTypes, ['user-profile'], 'refresh repeats only the last listed view');
+    const custom = await backend.handlers.get('view:setFilter')(null, 'chats', { types: ['chats'], mcp: true });
+    assert.equal(custom.mcp, true);
+    assert.equal(cache.setting('viewFilter:chats').mcp, true);
+    const reset = await backend.handlers.get('view:setFilter')(null, 'chats', { types: ['unknown'] });
+    assert.equal(reset.types.join(','), 'chats', 'invalid writes store the preset');
+    assert.equal(reset.mcp, false);
+    console.log('ok  six view handlers share fetch/cache, roots stays offline, and refresh follows the active view');
   }
 
   // Subscriptions, caches and stored filters around the refresh loop: a document opened on demand (zoom, pin, search
@@ -528,12 +568,12 @@ async function main() {
     const documents = new Map([[openId, opened]]);
     const unsubscribed = [], queries = [];
     let tasks = [{ id: taskId, title: 'Task', state: { type: 'open' }, updateTime: '2026-09-13T10:00:00Z' }];
-    let writeUp = [], membersFail = false, ownerQueries = 0;
+    let writeUp = [], ownerQueries = 0;
     const listNodes = async (p) => {
       if (p.ownerIds) { ownerQueries++; return { nodes: p.ownerIds[0] === eventId ? writeUp : [] }; }
       if (p.nodeIds) return { nodes: p.nodeIds.map((id) => (id === eventId ? { id, calendarEvent: { tagline: 'Notes' } } : { id, title: id === spaceId ? 'Deal' : 'Node' })) };
       const [kind] = p.nodeTypes || [];
-      if (kind === 'user-profile') { if (membersFail) throw new Error('graph unavailable'); return { nodes: [] }; }
+      if (kind === 'user-profile') return { nodes: [] };
       if (kind === 'event' || kind === 'type') return { nodes: [] };
       queries.push(p);
       return { nodes: tasks };
@@ -548,14 +588,12 @@ async function main() {
     await backend.refresh();
     assert.ok(cache.get(taskId), 'the refresh caches the listed task');
     assert.deepEqual(unsubscribed, [], 'the refresh leaves a document it never listed subscribed, with its live updates and undo history');
-    membersFail = true;
     const sections = await backend.handlers.get('outline:roots')();
-    assert.equal(sections.map((s) => s.id).join(','), backend.SECTIONS.map((s) => s.id).join(','));
-    assert.equal(sections.find((s) => s.id === 'tasks').nodes.length, 1, 'a failing member query cannot empty the cached views');
-    assert.equal(sections.find((s) => s.id === 'members').nodes.length, 0);
-    membersFail = false;
+    assert.equal(sections.map((s) => s.id).join(','), backend.VIEWS.map((s) => s.id).join(','));
+    assert.equal(sections.find((s) => s.id === 'tasks').nodes.length, 1, 'roots reads the view cache without another graph query');
+    assert.equal(sections.find((s) => s.id === 'people').nodes.length, 0);
     tasks = [];
-    await backend.refresh();
+    await backend.handlers.get('view:list')(null, 'library', { types: ['meetings', 'tasks', 'docs'], states: null, assignee: 'anyone' });
     assert.deepEqual(unsubscribed, [taskId], 'a row that left the view is still unsubscribed');
     tasks = [{ id: taskId, title: 'Task', state: { type: 'open' }, updateTime: '2026-09-13T10:00:00Z' }];
     await backend.refresh();
@@ -575,15 +613,15 @@ async function main() {
     assert.equal(await backend.handlers.get('doc:summaryUri')(null, eventId), writeUpId);
     assert.equal(ownerQueries, settled, 'the write-up it did find is cached');
 
-    cache.setSetting('taskFilter', { states: ['open', 'nonsense'], assignee: 'sam' });
-    const stored = await backend.handlers.get('tasks:filter')();
-    assert.equal(stored.states, null, 'a stored filter that is not a query falls back to the default');
+    cache.setSetting('viewFilter:tasks', { states: ['open', 'nonsense'], assignee: 'sam' });
+    const stored = await backend.handlers.get('view:filter')(null, 'tasks');
+    assert.equal(stored.states.join(','), 'proposed,open', 'a stored filter that is not a query falls back to the preset');
     assert.equal(stored.assignee, 'me');
-    cache.setSetting('libraryFilter', { types: ['tasks', 'wat'], states: [], assignee: 'anyone', text: 7 });
-    const library = await backend.handlers.get('library:filter')();
-    assert.equal(library.types.join(','), 'tasks', 'an unknown library kind cannot keep the view throwing');
-    assert.equal(library.states, null);
-    assert.equal(library.assignee, 'anyone');
+    cache.setSetting('viewFilter:library', { types: ['tasks', 'wat'], states: [], assignee: 'anyone', text: 7 });
+    const library = await backend.handlers.get('view:filter')(null, 'library');
+    assert.equal(library.types.join(','), 'tasks', 'an unknown kind cannot keep the view throwing');
+    assert.equal(library.states.join(','), 'proposed,open');
+    assert.equal(library.assignee, 'me');
     assert.equal(library.text, '');
     assert.equal(backend.statusSnapshot().error, null, 'none of this is an error to show');
     console.log('ok  refresh keeps on-demand subscriptions, survives a failing query, and caches only real answers');
@@ -641,6 +679,7 @@ async function main() {
     const listNodes = async (p) => {
       if (p.nodeIds) { byId.push(...p.nodeIds); return { nodes: all.filter((n) => p.nodeIds.includes(n.id)) }; }
       if (p.textQuery) return { nodes: all }; // the search query, whatever its text
+      if (p.nodeTypes.includes('event') && p.nodeTypes.includes('text')) return { nodes: all };
       const [kind] = p.nodeTypes || [];
       if (kind === 'event') return { nodes: all.filter((n) => n.calendarEvent) };
       if (kind === 'text') return { nodes: all.filter((n) => !n.calendarEvent) };
@@ -655,7 +694,7 @@ async function main() {
     const listed = async () => [...(await backend.handlers.get('outline:roots')())].flatMap((s) => s.nodes.map((n) => n.title)).sort().join(' | ');
     const found = async (q) => [...(await backend.handlers.get('search')(null, q))].map((n) => n.title).sort().join(' | ');
     const rules = async (name, arg) => [...(await backend.handlers.get(name)(null, arg))].join(' | ');
-    await backend.refresh();
+    await backend.handlers.get('view:list')(null, 'library', { types: ['meetings', 'tasks', 'docs'], states: null, assignee: 'anyone' });
     const ALL = 'Block (Really) | Lunch | Lunch roster | Remote / WFH (non-blocking)';
     assert.equal(await listed(), ALL);
 
@@ -778,28 +817,32 @@ async function main() {
     assert.deepEqual(['Block (Really)', 'Blockchain'].map((t) => isHidden(t, ['Block *'])), [true, false], 'the space is part of the prefix');
     assert.equal(isHidden('anything', hideRules(['*'])), false, 'a bare * cannot empty every view');
     assert.equal(isHidden('anything', undefined), false);
-    // Tasks/Library filters -> listNodes params (Addendum 10/11)
+    // Every preset uses the same view query (docs/VIEWS.md section 3).
     const UPD = [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }];
-    assert.deepEqual(taskParams(DEFAULT_TASK_FILTER, ME), { nodeTypes: ['text'], stateTypes: ['proposed', 'open'], assignedTo: [ME], limit: 500, sortOptions: UPD });
-    assert.deepEqual(taskParams({ states: null, assignee: 'anyone' }, ME), { nodeTypes: ['text'], stateTypes: STATE_TYPES, limit: 500, sortOptions: UPD });
-    assert.equal(taskParams({ states: ['closed'], assignee: 'unassigned' }, ME).unassigned, true);
-    assert.deepEqual(taskParams({ states: ['closed'], assignee: 'tana:user-profile:x' }, ME).assignedTo, ['tana:user-profile:x']);
-    assert.deepEqual(libraryQueries(DEFAULT_LIBRARY_FILTER, ME), [{ kind: 'tasks', params: { ...taskParams(DEFAULT_LIBRARY_FILTER, ME, 1000), mode: 'LIST_NODES_MODE_WITH_COUNT' } }]);
-    const lq = libraryQueries({ types: ['meetings', 'docs', 'chats'], text: ' dpa ' }, ME);
-    assert.deepEqual(lq.map((q) => [q.kind, q.params.nodeTypes[0], q.params.textQuery]), [['meetings', 'event', 'dpa'], ['docs', 'text', 'dpa'], ['chats', 'chat', 'dpa']]);
-    assert.equal(lq[1].params.stateTypes, undefined, 'docs are filtered client-side');
-    assert.equal(libraryQueries({ types: null }, ME).length, 7, 'null types = every kind');
-    assert.throws(() => libraryQueries({ types: ['nope'] }, ME), /unknown library type/);
-    // An assignee filter must never leave a kind unfiltered: the graph filters every node type by assignedTo, and
-    // kinds that carry no assignee then return nothing rather than their whole contents.
+    const COUNT = 'LIST_NODES_MODE_WITH_COUNT';
+    assert.deepEqual(viewParams(VIEW_PRESETS.inbox, ME), { nodeTypes: ['event', 'text', 'chat', 'canvas', 'agent', 'skill'], stateTypes: ['proposed'], limit: 1000, sortOptions: UPD, mode: COUNT });
+    assert.deepEqual(viewParams(VIEW_PRESETS.tasks, ME), { nodeTypes: ['text'], stateTypes: ['proposed', 'open'], assignedTo: [ME], limit: 1000, sortOptions: UPD, mode: COUNT });
+    assert.deepEqual(viewParams(VIEW_PRESETS.library, ME), { nodeTypes: ['text'], stateTypes: ['proposed', 'open'], assignedTo: [ME], limit: 1000, sortOptions: UPD, mode: COUNT });
+    assert.deepEqual(viewParams(VIEW_PRESETS.chats, ME), { nodeTypes: ['chat'], limit: 1000, sortOptions: UPD, mode: COUNT });
+    assert.deepEqual(viewParams(VIEW_PRESETS.people, ME), { nodeTypes: ['user-profile'], limit: 1000, sortOptions: UPD, mode: COUNT });
+    const meetingStart = new Date(); meetingStart.setHours(0, 0, 0, 0); meetingStart.setDate(meetingStart.getDate() - 7);
+    assert.deepEqual(viewParams(VIEW_PRESETS.meetings, ME), {
+      nodeTypes: ['event'], limit: 1000, hasParticipantUris: [ME], eventStartTimeMin: meetingStart.toISOString(),
+      eventStartTimeMax: new Date(meetingStart.getTime() + 14 * 864e5).toISOString(),
+      sortOptions: [{ field: 'SORT_FIELD_EVENT_START_TIME', direction: 'SORT_DIRECTION_ASCENDING' }], mode: COUNT,
+    });
     const OTHER = 'tana:user-profile:01examples0000000000000000';
-    const mixed = libraryQueries({ types: ['tasks', 'meetings', 'docs', 'chats'], states: ['open'], assignee: OTHER }, ME);
-    assert.deepEqual(mixed.map((q) => q.params.assignedTo), Array(4).fill([OTHER]), 'every selected kind asks for that person');
-    assert.deepEqual(mixed.map((q) => q.params.stateTypes), [['open'], undefined, undefined, undefined], 'states stay a task filter');
-    assert.deepEqual(libraryQueries({ types: null, assignee: OTHER }, ME).map((q) => q.params.assignedTo), Array(7).fill([OTHER]), 'any type = every kind');
-    assert.deepEqual(libraryQueries({ types: ['tasks', 'meetings'], assignee: 'unassigned' }, ME).map((q) => q.params.unassigned), [true, true]);
-    assert.ok(libraryQueries({ types: ['tasks', 'meetings'], assignee: 'anyone' }, ME).every((q) => !q.params.assignedTo && !q.params.unassigned), 'anyone filters nothing');
-    assert.ok(libraryQueries({ types: ['meetings', 'chats'], assignee: OTHER }, ME).every((q) => !q.params.assignedTo), 'without tasks the Assigned pill is hidden, so it does not filter');
+    assert.deepEqual(viewParams({ types: null, assignee: OTHER }, ME).assignedTo, [OTHER], 'any type includes tasks');
+    assert.deepEqual(viewParams({ types: ['tasks', 'meetings'], assignee: 'unassigned' }, ME).unassigned, true);
+    assert.equal(viewParams({ types: ['tasks'], assignee: 'anyone' }, ME).assignedTo, undefined);
+    assert.equal(viewParams({ types: ['meetings', 'docs'], assignee: OTHER }, ME).assignedTo, undefined, 'assignee is ignored without tasks');
+    assert.deepEqual(viewParams({ types: ['tasks', 'docs'] }, ME).nodeTypes, ['text'], 'duplicate graph kinds collapse into one query');
+    assert.equal(viewParams({ types: ['docs'], text: ' dpa ' }, ME, 25).textQuery, 'dpa');
+    assert.equal(viewParams({ types: ['docs'], text: ' dpa ' }, ME, 25).limit, 25);
+    assert.equal(validViewFilter({ types: ['docs'], states: null, assignee: 'anyone', text: '', participant: null, window: null, mcp: true }), true);
+    assert.equal(validViewFilter({ types: ['nope'] }), false);
+    assert.equal(validViewFilter({ types: ['tasks'], extra: true }), false);
+    assert.throws(() => viewParams({ types: ['nope'] }, ME), /invalid view filter/);
     const id = ulid();
     assert.match(id, /^[0-9a-hjkmnp-tv-z]{26}$/);
     assert.equal(ulid(0).slice(0, 10), '0000000000');
@@ -1308,7 +1351,7 @@ async function main() {
     assert.equal(backend.visibleGraphNodes([{id:'another',deletedAt:123}]).length, 0);
     remotePin.transact(l => l.getMap('data').delete('deletedAt'));
     assert.equal(backend.visibleGraphNodes([{id:pinId}]).length, 1, 'native restore clears tombstone');
-    assert.equal(backend.SECTIONS.find(s => s.id === 'library').icon, 'library');
+    assert.equal(backend.VIEWS.find(s => s.id === 'library').icon, 'library');
     const agentId = 'tana:agent:' + ulid();
     assert.equal(backend.graphRow({id:agentId,title:'Agent'}).icon, 'agent');
     assert.equal(backend.toNode({id:agentId,title:'cached',icon:'doc'}).icon, 'agent');

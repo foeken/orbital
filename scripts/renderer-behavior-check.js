@@ -496,7 +496,7 @@ function runAssignedDropdown() {
   const definitions = sourceBetween('const STATES =', 'function renderPills');
   const api = vm.runInNewContext(`
     let view = 'tasks';
-    let taskF = { states: ['open'], assignee: 'me' }, libF = {};
+    const filters = new Map([['tasks', { types: ['tasks'], states: ['open'], assignee: 'me' }]]);
     let members = [
       { id: 'me', title: 'Robin', me: true },
       { id: 'sam', title: 'Sam' },
@@ -507,10 +507,7 @@ function runAssignedDropdown() {
     const $ = () => ({ hidden: false });
     const renderPills = () => {};
     const showError = () => {};
-    const setTaskF = (patch) => { saved = patch; taskF = { ...taskF, ...patch }; };
-    const setLibF = () => {};
-    let showMcp = false;
-    const setMcp = () => {};
+    const setViewF = (patch) => { saved = patch; filters.set(view, { ...filters.get(view), ...patch }); };
     const groupPref = {}, sortPref = {}, render = () => {};
     ${definitions}
     ({ pillDefs, saved: () => saved });
@@ -725,13 +722,12 @@ async function runStalePaletteInvalidationCheck() {
     const openResult = () => {}, sectionOf = () => null;
     ${functionSource('pinRows')}
     ${recent}
-    let sections = [], libRows = null, chatRows = null, palRows = [], palDoc = null, pinInfo = null, dropDoc = null;
+    let views = [], palRows = [], palDoc = null, pinInfo = null, dropDoc = null;
     let zoom = { docId: keptId };
     const taskMetaById = new Map(), kids = new Map(), extra = new Map(), paths = new Map(), fresh = new Map();
     const loadRoots = async () => {};
     const reload = async () => {};
     const loadPins = async () => { pinTree = await tana.pinTree(); };
-    const loadChats = () => {};
     const loadView = () => {};
     const render = () => {};
     const showError = (error) => { throw error; };
@@ -941,7 +937,7 @@ function runAuthPaletteCheck() {
     const $ = (id) => id === 'loginBox' ? loginBox : id === 'filtered' ? filtered : {};
     const showError = () => {};
     const render = () => {};
-    const sections = [];
+    const views = [];
     const pinTree = [];
     const pinRows = () => [];
     const pillCommandRows = () => [];
@@ -992,7 +988,7 @@ function runSyncShortcutCheck() {
 
   const paletteRows = functionSource('paletteRows');
   const rows = vm.runInNewContext(`
-    const sections = [], pinTree = [], pinRows = () => [];
+    const views = [], pinTree = [], pinRows = () => [];
     const pillCommandRows = () => [];
     const taskActionRows = () => [];
     const tana = { refresh: async () => {} }, run = () => {};
@@ -1361,15 +1357,14 @@ function runFilterMenuCloseCheck() {
   const definitions = sourceBetween('const STATES =', 'function renderPills');
   const api = vm.runInNewContext(`
     let view = 'library';
-    let taskF = { states: ['open'], assignee: 'me' }, libF = { types: ['tasks'], states: ['open'], assignee: 'me' };
+    const filters = new Map([['library', { types: ['tasks'], states: ['open'], assignee: 'me' }]]);
     let members = [{ id: 'me', title: 'Robin', me: true }, { id: 'sam', title: 'Sam' }];
-    let menu = null, showMcp = false;
+    let menu = null;
     const tana = {};
     const $ = () => ({ hidden: false });
     const renderPills = () => {};
-    const showError = () => {}, setMcp = () => {};
-    const setTaskF = (patch) => { taskF = { ...taskF, ...patch }; };
-    const setLibF = (patch) => { libF = { ...libF, ...patch }; };
+    const showError = () => {};
+    const setViewF = (patch) => filters.set(view, { ...filters.get(view), ...patch });
     const groupPref = {}, sortPref = {}, render = () => {}, localStorage = { setItem() {} };
     ${definitions}
     ${functionSource('pickMenuRow')}
@@ -1377,12 +1372,12 @@ function runFilterMenuCloseCheck() {
         menu = { id, index: 0 };
         const rows = pillDefs().find((d) => d.id === id).rows().filter((r) => r.label);
         pickMenuRow(rows.find((r) => r.label === label), rows);
-        return { open: !!menu, taskF, libF };
+        return { open: !!menu, filter: filters.get(view) };
       },
-      reset: () => { libF = { types: ['tasks'], states: ['open'], assignee: 'me' }; taskF = { states: ['open'], assignee: 'me' }; } });
+      reset: () => filters.set('library', { types: ['tasks'], states: ['open'], assignee: 'me' }) });
   `);
   const anyType = api.pick('type', 'Any type');
-  assert.deepEqual(plain(anyType), { open: false, taskF: { states: ['open'], assignee: 'me' }, libF: { types: null, states: ['open'], assignee: 'me' } },
+  assert.deepEqual(plain(anyType), { open: false, filter: { types: null, states: ['open'], assignee: 'me' } },
     '"Any type" is a single choice: it applies and closes');
   api.reset();
   assert.equal(api.pick('type', 'Meetings').open, true, 'a tickable type keeps the multi-select menu open');
@@ -1393,7 +1388,7 @@ function runFilterMenuCloseCheck() {
   api.reset();
   const assigned = api.pick('assigned', 'Sam');
   assert.equal(assigned.open, false, 'choosing an assignee closes the menu');
-  assert.equal(assigned.libF.assignee, 'sam', 'and still applies the choice');
+  assert.equal(assigned.filter.assignee, 'sam', 'and still applies the choice');
   api.reset();
   assert.equal(api.pick('assigned', 'Anyone').open, false, '"Anyone" closes like every other single choice');
 }
@@ -1552,35 +1547,81 @@ function runSidebarAlignmentCheck() {
 function runClearFiltersCheck() {
   const api = vm.runInNewContext(`
     let view = 'tasks';
-    let taskF = { states: ['proposed', 'open'], assignee: 'me' };
-    let libF = { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me', text: '' };
-    const render = () => {}, loadLibrary = () => {}, run = (fn) => fn();
-    const tana = { setTaskFilter: async () => {}, setLibraryFilter: async () => {} };
-    ${functionSource('setTaskF')}
-    ${functionSource('setLibF')}
-    ${sourceBetween('// The filter defaults main persists', 'function ensureLoaded')}
-    ({ set: (next, patch) => { view = next; if (patch) Object.assign(view === 'tasks' ? taskF : libF, patch); },
-       filtered: () => viewFiltered(), clear: () => clearFilters(), state: () => ({ taskF, libF }) });
+    const filters = new Map([
+      ['tasks', { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me', text: '' }],
+      ['meetings', { types: ['meetings'], states: null, assignee: 'anyone', text: '', participant: 'me', window: 'recent' }],
+      ['library', { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me', text: '' }],
+    ]);
+    const render = () => {}, loadView = async () => {}, run = (fn) => fn();
+    const tana = { setViewFilter: async (_id, filter) => filter };
+    ${functionSource('setViewF')}
+    ${sourceBetween('const clearFilter =', 'function ensureLoaded')}
+    ({ set: (next, patch) => { view = next; if (patch) filters.set(view, { ...filters.get(view), ...patch }); },
+       filtered: () => viewFiltered(), clear: () => clearFilters(), state: () => filters.get(view) });
   `);
   api.set('tasks');
-  assert.equal(api.filtered(), false, 'the default task filter is not "narrowed": an empty view is genuinely empty');
+  assert.equal(api.filtered(), true, 'the task preset differs from the unfiltered view');
   api.set('tasks', { states: ['open', 'proposed'] });
-  assert.equal(api.filtered(), false, 'the same states in another order are still the default');
+  assert.equal(api.filtered(), true, 'array order does not change whether the task preset is filtered');
   api.set('tasks', { states: ['closed'], assignee: 'anyone' });
   assert.equal(api.filtered(), true, 'a changed status or assignee offers the action');
   api.clear();
-  assert.deepEqual(plain(api.state().taskF), { states: ['proposed', 'open'], assignee: 'me' }, 'clearing restores the task defaults');
+  assert.deepEqual(plain(api.state()), { types: null, states: null, assignee: 'anyone', text: '', participant: null, window: null }, 'clearing Tasks means an unrestricted query');
   assert.equal(api.filtered(), false, 'and the action goes away again');
   api.set('library');
-  // the Library ships narrowed to your open tasks, so its shipped default is still a filter
   assert.equal(api.filtered(), true, 'the shipped library filter still narrows the view');
   api.set('library', { text: 'memo' });
   assert.equal(api.filtered(), true, 'a search text narrows the Library view');
   api.clear();
-  assert.deepEqual(plain(api.state().libF), { types: null, states: null, assignee: 'anyone', text: '' }, 'clearing the Library means anything, not the shipped default');
+  assert.deepEqual(plain(api.state()), { types: null, states: null, assignee: 'anyone', text: '', participant: null, window: null }, 'clearing the Library means anything, not the shipped default');
   assert.equal(api.filtered(), false, 'and with everything set to any, the action goes away');
-  api.set('inbox');
-  assert.equal(api.filtered(), false, 'a view without filter pills never offers the action');
+  api.set('meetings');
+  api.clear();
+  assert.deepEqual(plain(api.state()), { types: null, states: null, assignee: 'anyone', text: '', participant: 'me', window: 'recent' }, 'clearing Meetings keeps the user calendar participant and window');
+  assert.equal(api.filtered(), false, 'the preserved calendar scope is the Meetings clear baseline');
+}
+
+async function runUnifiedViewsCheck() {
+  const api = vm.runInNewContext(`
+    const ids = ['inbox', 'tasks', 'meetings', 'library', 'chats', 'people'];
+    const views = ids.map((id) => ({ id, title: id === 'people' ? 'People' : id, nodes: id === 'tasks' ? [{ id: 'draftdoc:1', draft: 'task' }] : [] }));
+    const types = { inbox: null, tasks: ['tasks'], meetings: ['meetings'], library: ['tasks'], chats: ['chats'], people: ['people'] };
+    const filters = new Map(ids.map((id) => [id, { types: types[id], states: null, assignee: 'anyone', text: '' }]));
+    const viewSeq = new Map(), truncated = new Set(), fresh = new Map(), calls = [], pending = [];
+    const tana = { viewList: (id, filter) => { calls.push([id, filter]); return new Promise((resolve) => pending.push(resolve)); } };
+    const asDoc = (node) => ({ ...node, kind: 'document', text: node.text ?? node.title ?? '', hasChildren: true });
+    const render = () => {}, showError = (error) => { throw error; };
+    ${functionSource('loadView')}
+    ({
+      ids,
+      start: (id) => loadView(id),
+      resolve: (index, result) => pending[index](result),
+      calls: () => calls,
+      rows: (id) => views.find((item) => item.id === id).nodes,
+      isTruncated: (id) => truncated.has(id),
+    });
+  `);
+
+  const old = api.start('tasks'), latest = api.start('tasks');
+  api.resolve(1, { nodes: [{ id: 'new', title: 'New', meta: 'Mon 9:00-10:00', editable: false }], truncated: true });
+  await latest;
+  api.resolve(0, { nodes: [{ id: 'old', title: 'Old' }], truncated: false });
+  await old;
+  assert.deepEqual(plain(api.rows('tasks').map((node) => [node.id, node.meta, node.editable])), [
+    ['draftdoc:1', null, null], ['new', 'Mon 9:00-10:00', false],
+  ], 'the newest shared response wins while a local draft, meeting-style meta and read-only capability survive');
+  assert.equal(api.isTruncated('tasks'), true, 'truncation belongs to the accepted response');
+
+  const loads = api.ids.filter((id) => id !== 'tasks').map((id) => api.start(id));
+  loads.forEach((_load, i) => api.resolve(i + 2, { nodes: [{ id: api.ids.filter((id) => id !== 'tasks')[i], title: 'row' }], truncated: false }));
+  await Promise.all(loads);
+  assert.deepEqual(plain(api.calls().slice(2).map(([id, filter]) => [id, filter.types && filter.types[0]])), [
+    ['inbox', null], ['meetings', 'meetings'], ['library', 'tasks'], ['chats', 'chats'], ['people', 'people'],
+  ], 'Inbox, Meetings, Library, Chats and People all use the same viewList call as Tasks');
+  assert.doesNotMatch(source, /\b(taskF|libF|loadLibrary|loadChats|loadInbox)\b/, 'the renderer no longer carries a per-view filter or loader');
+  assert.match(source, /const DRAFT_KIND = \{ tasks: 'task', meetings: 'meeting' \}/, 'Tasks and Meetings retain their native draft kinds');
+  assert.match(source, /view === 'meetings' && !groups \? outline\.children\[todayIndex\(list\)\]/, 'only Meetings retains the today marker');
+  assert.match(source, /views\.push\(\{ id: 'people', title: 'People'[^}]*editable: false|views\.push\(\{ id: 'people', title: 'People'/, 'the mock exposes the People view by its final title');
 }
 
 // Sorting and grouping are view preferences over rows already loaded: the order and the headings come from fields the
@@ -1589,13 +1630,12 @@ function runSortGroupCheck() {
   const definitions = sourceBetween('const STATES =', 'function renderPills');
   const api = vm.runInNewContext(`
     let view = 'tasks', groupPref = {}, sortPref = {};
-    let taskF = { states: ['open'], assignee: 'me' }, libF = {};
+    const filters = new Map([['tasks', { types: ['tasks'], states: ['open'], assignee: 'me' }]]);
     let members = [{ id: 'me', title: 'Robin', me: true }, { id: 'sam', title: 'Sam' }];
     const taskMetaById = new Map([['t1', { assignees: ['sam'] }], ['t2', { assignees: ['me'] }], ['t4', { assignees: ['tana:user-profile:ghost'] }]]);
     const tana = {}, palette = { hidden: true };
     const $ = () => ({ hidden: true });
-    const renderPills = () => {}, render = () => {}, showError = () => {}, setMcp = () => {}, showMcp = false;
-    const setTaskF = () => {}, setLibF = () => {};
+    const renderPills = () => {}, render = () => {}, showError = () => {}, setViewF = () => {};
     const localStorage = { setItem() {} };
     const isTask = (n) => n.icon === 'task';
     const visibleTags = (n) => { const tags = n.tags || []; return isTask(n) && tags.some((t) => t.label !== 'task') ? tags.filter((t) => t.label !== 'task') : tags; };
@@ -1633,8 +1673,8 @@ function runSortGroupCheck() {
   api.set('tasks', 'none', 'default');
   assert.deepEqual(order(rows), ['t1', 't2', 't3', 't4', 'd1'], 'Default leaves the order the view produced alone');
   api.set('meetings', 'status', 'title');
-  assert.deepEqual(order(rows), ['t1', 't2', 't3', 't4', 'd1'], 'sorting and grouping apply to Tasks and Library only');
-  assert.equal(api.groupsOf(rows), null, 'an ungrouped or unsupported view renders the flat list it always did');
+  assert.deepEqual(order(rows), ['t2', 't1', 't4', 't3', 'd1'], 'sorting applies to every view');
+  assert.equal(api.groupsOf(rows).length, 5, 'grouping applies to every view too');
   api.set('library', 'type', 'title');
   assert.equal(api.groupsOf(rows).length, 3, 'a grouped view sections its rows');
   assert.deepEqual(plain(api.prefs()), { group: 'type', sort: 'title' }, 'each view remembers its own choice');
@@ -1663,15 +1703,20 @@ function runSortGroupCheck() {
 function runCmdPillsCheck() {
   const definitions = sourceBetween('const STATES =', 'function renderPills');
   const api = vm.runInNewContext(`
-    let view = 'tasks', taskF = { states: ['open'], assignee: 'anyone' }, libF = { types: ['tasks'], states: ['open'], assignee: 'anyone', text: '' };
-    let members = [{ id: 'me', title: 'Robin', me: true }], showMcp = false, groupPref = {}, sortPref = {};
+    let view = 'tasks';
+    const filters = new Map([
+      ['tasks', { types: ['tasks'], states: ['open'], assignee: 'anyone', text: '' }],
+      ['meetings', { types: ['meetings'], states: null, assignee: 'anyone', text: '', participant: 'me', window: 'recent' }],
+      ['library', { types: ['tasks'], states: ['open'], assignee: 'anyone', text: '' }],
+      ['chats', { types: ['chats'], states: null, assignee: 'anyone', text: '', mcp: false }],
+      ['people', { types: ['people'], states: null, assignee: 'anyone', text: '' }],
+    ]);
+    let members = [{ id: 'me', title: 'Robin', me: true }], groupPref = {}, sortPref = {};
     let pillCtx = null, palMode = 'cmd', palRows = [], palIndex = 0, renders = 0;
     const taskMetaById = new Map(), tana = {}, palette = { hidden: false };
     const $ = () => ({ hidden: false }), showError = () => {}, renderPills = () => {};
     const localStorage = { setItem() {} }, render = () => { renders++; };
-    const setTaskF = (patch) => { taskF = { ...taskF, ...patch }; render(); };
-    const setLibF = (patch) => { libF = { ...libF, ...patch }; render(); };
-    const setMcp = (on) => { showMcp = on; render(); };
+    const setViewF = (patch) => { filters.set(view, { ...filters.get(view), ...patch }); render(); };
     const palInput = { value: '', placeholder: '', focus() {} };
     const renderPalette = () => { renders++; };
     ${definitions}
@@ -1681,10 +1726,11 @@ function runCmdPillsCheck() {
     ({
       commands: (next) => { view = next; return pillCommandRows().map((row) => [row.id, row.label, row.icon]); },
       open: (id) => { openPillPalette(id); return { mode: palMode, rows: pillRows('').map((row) => [row.label, row.hint]) }; },
-      pick: (label) => { pillRows('').find((row) => row.label === label).run(); return { mode: palMode, taskF, group: groupPref[view], sort: sortPref[view] }; },
+      pick: (label) => { pillRows('').find((row) => row.label === label).run(); return { mode: palMode, filter: filters.get(view), group: groupPref[view], sort: sortPref[view] }; },
     });
   `);
   assert.deepEqual(plain(api.commands('tasks')), [
+    ['pill:type', 'Set view option: Type Tasks', 'task'],
     ['pill:status', 'Set view option: Status In Progress', 'status'], ['pill:assigned', 'Set view option: Assigned to Anyone', 'assigned'],
     ['pill:sort', 'Set view option: Sort Default', 'sort'], ['pill:group', 'Set view option: Group None', 'group'],
   ], 'Cmd+K prefixes the current Tasks view options and gives each its supplied icon');
@@ -1692,13 +1738,15 @@ function runCmdPillsCheck() {
     'a command opens the same Status rows and active tick as the pill');
   assert.equal(api.pick('Inbox').mode, 'pill', 'a multi-select filter stays in its pill sublevel');
   api.open('sort');
-  assert.deepEqual(plain(api.pick('Title')), { mode: 'cmd', taskF: { states: ['proposed', 'open'], assignee: 'anyone' }, sort: 'title' },
+  assert.deepEqual(plain(api.pick('Title')), { mode: 'cmd', filter: { types: ['tasks'], states: ['proposed', 'open'], assignee: 'anyone', text: '' }, sort: 'title' },
     'a single Sort choice applies the shared row action and returns to commands');
   api.open('group');
   assert.equal(api.pick('Assignee').group, 'assignee', 'Group uses the same shared action too');
   assert.deepEqual(plain(api.commands('library').map(([id]) => id)), ['pill:type', 'pill:status', 'pill:assigned', 'pill:sort', 'pill:group'],
     'Library includes its Type filter plus the other applicable pills');
-  assert.deepEqual(plain(api.commands('meetings')), [], 'views without header pills offer no pill commands');
+  assert.deepEqual(plain(api.commands('meetings').map(([id]) => id)), ['pill:type', 'pill:sort', 'pill:group'], 'Meetings exposes its applicable filter and layout pills');
+  assert.deepEqual(plain(api.commands('chats').map(([id]) => id)), ['pill:type', 'pill:mcp', 'pill:sort', 'pill:group'], 'Chats exposes the MCP toggle from its filter');
+  assert.deepEqual(plain(api.commands('people').map(([id]) => id)), ['pill:type', 'pill:sort', 'pill:group'], 'People uses the same pill path');
   assert.match(functionSource('backPalette'), /palMode === 'pill'[\s\S]*openCommandPalette\(\)/, 'Escape from a pill returns one palette level');
 }
 // Opening a node has to leave a row to type in, without creating anything in Tana until it is typed into.
@@ -2030,7 +2078,7 @@ async function runMemberLoadCheck() {
   assert.equal(throttled.attempts, 3, 'a slow start cannot turn renders into a request loop: a fresh ask is throttled');
 }
 
-const checks = [runDraftTailCheck, runPinGrouping, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runSortGroupCheck, runCmdPillsCheck];
+const checks = [runDraftTailCheck, runPinGrouping, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck];
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);
   if (failures.length) throw new AggregateError(failures, failures.map((failure) => failure.message).join('\n'));

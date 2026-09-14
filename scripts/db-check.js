@@ -88,5 +88,26 @@ assert.deepStrictEqual(db.setting('taskFilter').states, ['open']);
 db.setSetting('taskFilter', undefined);
 assert.strictEqual(db.setting('taskFilter'), undefined);
 
+// The views overlap: one document is in Inbox, Tasks and Library at once, and each view caches its own list.
+db.replaceSection('tasks', [{ id: 'tana:text:shared', title: 'Shared', done: 0, sortKey: '1', updatedAt: '1' }]);
+db.replaceSection('library', [{ id: 'tana:text:shared', title: 'Shared', done: 0, sortKey: '1', updatedAt: '1' }]);
+assert.strictEqual((db.list().tasks || []).length, 1, 'a second view caching the same document does not steal it from the first');
+assert.strictEqual((db.list().library || []).length, 1);
+db.replaceSection('library', []);
+assert.strictEqual((db.list().tasks || []).length, 1, 'and emptying one view leaves the other view its rows');
+db.replaceSection('tasks', []);
+
+// A cache written by the one-row-per-document schema is rebuilt rather than read back wrong.
+const legacy = path.join(path.dirname(file), 'legacy.sqlite');
+const old = new DatabaseSync(legacy);
+old.exec("CREATE TABLE nodes (id TEXT PRIMARY KEY, section TEXT NOT NULL, title TEXT NOT NULL, done INTEGER NOT NULL DEFAULT 0, icon TEXT, meta TEXT, tags TEXT NOT NULL DEFAULT '[]', sortKey TEXT NOT NULL, updatedAt TEXT NOT NULL)");
+old.exec("INSERT INTO nodes (id, section, title, sortKey, updatedAt) VALUES ('tana:text:old', 'tasks', 'Old', '1', '1')");
+old.close();
+db.open(legacy);
+assert.deepStrictEqual(db.list(), {}, 'the old cache is dropped, not carried over with the wrong key');
+db.replaceSection('tasks', [{ id: 'tana:text:shared', title: 'Shared', done: 0, sortKey: '1', updatedAt: '1' }]);
+db.replaceSection('inbox', [{ id: 'tana:text:shared', title: 'Shared', done: 0, sortKey: '1', updatedAt: '1' }]);
+assert.strictEqual((db.list().tasks || []).length + (db.list().inbox || []).length, 2, 'and the rebuilt cache holds one row per view');
+
 fs.rmSync(path.dirname(file), { recursive: true });
 console.log('db-check ok');
