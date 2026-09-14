@@ -773,6 +773,14 @@ ipcMain.handle('doc:setIcon', (_e, id, svg) => setIcon(id, svg));
 ipcMain.handle('doc:related', (_e, id) => related(id)); // { summary, tagline, pinned[], outcomes[], notes[] }
 ipcMain.handle('doc:summaryUri', (_e, id) => summaryUri(id)); // where a meeting should actually open, or null
 ipcMain.handle('doc:setField', (_e, id, key, text) => mut(id, (doc) => fields.setFieldText(doc, key, text)));
+// The web link for a node, the same url home.tana.inc opens: /o/<org>/l/<encoded node uri>
+ipcMain.handle('doc:link', (_e, id) => {
+  // the path segment is the org *document* ulid (tana:org:01ks7…), not the WorkOS org id in me.orgId
+  const org = (me && me.orgDocUri || '').split(':').pop();
+  if (!org) throw new Error(NOT_CONNECTED);
+  if (!/^tana:[a-z-]+:[0-9a-z]{26}$/.test(id)) throw new Error('Not a Tana document id');
+  return 'https://home.tana.inc/o/' + org + '/l/' + encodeURIComponent(id);
+});
 // A link in node text opens in the user's browser; only http(s), never a file or custom scheme.
 ipcMain.handle('shell:open', (_e, url) => {
   if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) throw new Error('Only http(s) links can be opened');

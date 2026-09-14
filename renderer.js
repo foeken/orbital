@@ -239,6 +239,7 @@ function mockApi() {
     deleteDocument: async (docId) => { softDelete(docId); step(docId, 'restore'); },
     restoreDocument: async (docId) => { undelete(docId); step(docId, 'delete'); },
     setIcon: async (docId, svg) => { (all.find((d) => d.id === docId) || created[docId]).iconSvg = svg || undefined; emit(null); },
+    nodeLink: async (docId) => 'https://home.tana.inc/o/mockorg/l/' + encodeURIComponent(docId),
     openExternal: async (url) => { if (!/^https?:\/\//i.test(url)) throw new Error('Only http(s) links can be opened'); return url; },
     todayNode: async () => { const date = new Date().toLocaleDateString('sv-SE'); const found = all.find((d) => d.text === date); if (found) return found.id; const n = { id: 'mocktoday', text: date, kind: 'document', hasChildren: true, editable: true, icon: 'doc', tags: [{ label: 'doc', color: 'grey' }] }; all.push(n); sections[0].nodes.unshift(n); datePins[n.id] = [date]; emit(null); return n.id; },
     setTitle: async (docId, title) => mut(docId, () => { all.find((d) => d.id === docId).text = title; emit(docId); }),
@@ -1764,6 +1765,13 @@ $('dropFile').onchange = () => { const doc = dropDoc; readSvg($('dropFile').file
 
 // ---- @ linking: replace the selection with a mention chosen (or created) in the search palette ----
 // document titles are plain strings in Tana: there the picked item's title goes in as text (setTitle), no mention segment
+// copy to the clipboard and say so where errors already appear, since a copy has no other visible result
+async function copyText(text, note) {
+  await navigator.clipboard.writeText(text);
+  const el = $('error');
+  el.textContent = note; el.hidden = false;
+  setTimeout(() => { if (el.textContent === note) showError(null); }, 2000);
+}
 function startLink(item, el, [start, end]) {
   flush(item.key);
   const segs = readSegs(el);
@@ -2148,6 +2156,10 @@ function paletteRows(q) {
     const sb = pinInfo.sidebar, td = pinInfo.dates.includes(localDate());
     rows.push({ group: 'Actions', icon: 'pin', label: sb ? 'Unpin from sidebar' : 'Pin to sidebar', run: () => pinAction(sb ? 'unpin' : 'pin', 'sidebar') });
     rows.push({ group: 'Actions', icon: 'pinDate', label: td ? 'Unpin from today' : 'Pin to today', run: () => pinAction(td ? 'unpin' : 'pin', 'today') });
+  }
+  // the node's web link, for pasting into Slack or a doc
+  if (palDoc && tana.nodeLink && isRealId(palDoc.id)) {
+    rows.push({ id: 'copyLink', group: 'Actions', icon: 'library', label: 'Copy link', run: () => run(async () => copyText(await tana.nodeLink(palDoc.id), 'Link copied')) });
   }
   if (palDoc && tana.setIcon) {
     rows.push({ group: 'Actions', icon: 'setIcon', label: 'Set Image', run: () => startDrop(palDoc) });
