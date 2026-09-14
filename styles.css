@@ -343,6 +343,8 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 @keyframes pulse { 50% { opacity: .55; transform: scale(.9); } }
 @media (prefers-reduced-motion: reduce) { .recorder .dot { animation: none; } }
 .recorder .rbuttons { display: flex; gap: 8px; margin-top: 18px; }
+.recorder .rwarn { margin-top: 10px; font-size: 13px; color: #d0433a; } /* a combo the app already owns, or another row has */
+.recorder .rwarn[hidden] { display: none; }
 .recorder .spacer { flex: 1; }
 .recorder button { border: 0; border-radius: 6px; background: #f1f1f1; color: #1a1a1a; font: inherit; font-size: 13px; padding: 4px 10px; cursor: pointer; }
 .recorder button:hover { background: #e6e6e6; }
@@ -481,6 +483,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .recorder h2 { color: #c9c9c9; }
 [data-theme="dark"] .recorder .rbox { border-color: #454b4e; }
 [data-theme="dark"] .recorder .keys { color: #adb1b2; }
+[data-theme="dark"] .recorder .rwarn { color: #f08a7e; }
 [data-theme="dark"] .recorder button { background: #303436; color: #c9c9c9; }
 [data-theme="dark"] .recorder button:hover { background: #3b4144; }
 [data-theme="dark"] .recorder button:disabled { color: #777d80; background: #303436; }

@@ -2876,18 +2876,32 @@ function comboOf(e) {
   return mods + (/^(Key|Digit)/.test(e.code) ? e.code.slice(-1) : KEYNAMES[e.key] || (e.key.length === 1 ? e.key.toUpperCase() : e.key));
 }
 const validCombo = (c) => /[⌘⌃]/.test(c) && c.replace(/[⌃⌥⇧⌘]/g, '') !== ''; // ⌘ or ⌃ plus a key, so typing is never hijacked
+// Combos the outline keydown handler answers to before it looks at hotkeys, so a shortcut on one of them would
+// never fire. That handler treats ⌃ like ⌘ and ignores ⌥, which the normalisation in comboTaken mirrors.
+const RESERVED = { '⌘K': 'opens the command palette', '⇧⌘K': 'records a shortcut', '⌘S': 'opens search', '⌘F': 'filters the list', '⌘Z': 'is undo', '⇧⌘Z': 'is redo', '⌘Y': 'is redo', '⇧⌘Y': 'is redo', '⌘0': 'resets the zoom', '⇧⌘+': 'zooms in', '⇧⌘=': 'zooms in', '⇧⌘-': 'zooms out', '⇧⌘_': 'zooms out', '⇧⌘⌫': 'deletes the zoomed block', '⌘→': 'moves into the rail', '⇧⌘→': 'moves into the rail', '⇧⌘↑': 'moves the selection', '⇧⌘↓': 'moves the selection' };
+// Why a combo cannot be saved for this row, or '' when it can: the app owns it, or another row already has it.
+function comboTaken(combo, rowId) {
+  const built = RESERVED[combo.replace(/[⌃⌥⌘]/g, '').replace(/^(⇧?)/, '$1⌘')];
+  if (built) return combo + ' already ' + built;
+  const other = Object.keys(hotkeys).find((id) => hotkeys[id] === combo && id !== rowId);
+  if (!other) return '';
+  const row = paletteRows('').find((r) => r.id === other), node = other.startsWith('doc:') && views.flatMap((s) => s.nodes).find((n) => n.id === other.slice(4));
+  return combo + ' is already the shortcut for "' + (row ? row.label : node ? node.text : other) + '"';
+}
 const recorder = $('recorder');
 let rec = null; // { row, combo }
 function openRecorder(row) { rec = { row, combo: '' }; $('recTitle').textContent = row.label; recorder.hidden = false; showCombo(); }
 function showCombo() {
   $('recKeys').replaceChildren(...(rec.combo.match(/[⌃⌥⇧⌘]|[^⌃⌥⇧⌘]+/g) || []).map((s) => { const k = document.createElement('span'); k.textContent = s; return k; }));
-  $('recSave').disabled = !validCombo(rec.combo);
+  const warn = validCombo(rec.combo) ? comboTaken(rec.combo, rec.row.id) : '';
+  $('recWarn').textContent = warn; $('recWarn').hidden = !warn;
+  $('recSave').disabled = !validCombo(rec.combo) || !!warn;
 }
 function closeRecorder() { rec = null; recorder.hidden = true; renderPalette(); palInput.focus(); }
 const saveHotkeys = () => localStorage.setItem('hotkeys', JSON.stringify(hotkeys));
 $('recReset').onclick = () => { delete hotkeys[rec.row.id]; saveHotkeys(); closeRecorder(); };
 $('recCancel').onclick = closeRecorder;
-$('recSave').onclick = () => { if (validCombo(rec.combo)) { hotkeys[rec.row.id] = rec.combo; saveHotkeys(); closeRecorder(); } };
+$('recSave').onclick = () => { if (validCombo(rec.combo) && !comboTaken(rec.combo, rec.row.id)) { hotkeys[rec.row.id] = rec.combo; saveHotkeys(); closeRecorder(); } };
 for (const b of recorder.querySelectorAll('button')) b.onmousedown = (e) => e.preventDefault(); // keep the keyboard focus where it is
 document.addEventListener('keydown', (e) => { // capture: the recorder sees every key before the palette input does
   if (!rec) return;
