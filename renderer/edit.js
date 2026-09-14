@@ -203,7 +203,7 @@ function openDoc(docId, from) {
 // redirect behaves the same from a list row, search, the rail, a pin, a breadcrumb or a link.
 function followSummary(docId) {
   if (!tana.summaryUri || typeof docId !== 'string' || !docId.startsWith('tana:event:')) return;
-  tana.summaryUri(docId).then((uri) => { if (uri && zoom && zoom.docId === docId) goTo(uri); }, () => {});
+  tana.summaryUri(docId).then((uri) => { if (uri && zoom && zoom.docId === docId) { navReplace = true; goTo(uri); } }, () => {}); // the event page is a hop, not a place to come back to
 }
 async function goTo(uri) {
   if (!allDocs().some((d) => d.id === uri) && !extra.has(uri)) {
@@ -213,6 +213,33 @@ async function goTo(uri) {
   openDoc(uri);
 }
 function flushAll() { for (const key of [...pending.keys()]) flush(key); }
+// ---- history: Cmd+[ and Cmd+] walk the places you have been, like a browser ----
+// A place is the view plus the zoom. Every render that lands somewhere new records it, however it got there (a
+// view switch, a bullet, a mention, a crumb, search, a pin), so nothing that navigates needs to know about this.
+const navBack = [], navForward = [];
+let navHere = null, navigating = false, navReplace = false; // navReplace: the next place stands in for the current one (a meeting forwarding to its write-up)
+const navPlace = () => ({ view, zoom: zoom && { ...zoom }, key: JSON.stringify([view, zoom && zoom.docId, zoom && zoom.nodeId, zoom && (zoom.via || []).map((v) => v.docId)]) });
+function noteNavigation() {
+  const here = navPlace();
+  if (navHere && navHere.key === here.key) return;
+  if (navHere && !navigating && !navReplace) { navBack.push(navHere); navForward.length = 0; if (navBack.length > 100) navBack.shift(); }
+  navReplace = false;
+  navHere = here;
+}
+function navigate(dir) {
+  const from = dir < 0 ? navBack : navForward, to = dir < 0 ? navForward : navBack;
+  const place = from.pop();
+  if (!place) return;
+  to.push(navHere);
+  navigating = true;
+  try {
+    flushAll(); dropDrafts();
+    if (place.view !== view) { view = place.view; localStorage.setItem('view', view); }
+    zoom = place.zoom && { ...place.zoom };
+    caretOnOpen = !!zoom;
+    render(true);
+  } finally { navigating = false; }
+}
 // Up past the first node: the editable page title (zoomed), else the last filter pill
 function focusAbove(el) {
   if (el) flush(keyOfEl(el));

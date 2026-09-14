@@ -253,7 +253,7 @@ function comboOf(e) {
 const validCombo = (c) => /[⌘⌃]/.test(c) && c.replace(/[⌃⌥⇧⌘]/g, '') !== ''; // ⌘ or ⌃ plus a key, so typing is never hijacked
 // Combos the outline keydown handler answers to before it looks at hotkeys, so a shortcut on one of them would
 // never fire. That handler treats ⌃ like ⌘ and ignores ⌥, which the normalisation in comboTaken mirrors.
-const RESERVED = { '⌘K': 'opens the command palette', '⇧⌘K': 'records a shortcut', '⌘S': 'opens search', '⌘F': 'filters the list', '⌘Z': 'is undo', '⇧⌘Z': 'is redo', '⌘Y': 'is redo', '⇧⌘Y': 'is redo', '⌘0': 'resets the zoom', '⇧⌘+': 'zooms in', '⇧⌘=': 'zooms in', '⇧⌘-': 'zooms out', '⇧⌘_': 'zooms out', '⇧⌘⌫': 'deletes the zoomed block', '⌘→': 'moves into the rail', '⇧⌘→': 'moves into the rail', '⇧⌘↑': 'moves the selection', '⇧⌘↓': 'moves the selection' };
+const RESERVED = { '⌘K': 'opens the command palette', '⇧⌘K': 'records a shortcut', '⌘S': 'opens search', '⌘F': 'filters the list', '⌘[': 'goes back', '⌘]': 'goes forward', '⌘Z': 'is undo', '⇧⌘Z': 'is redo', '⌘Y': 'is redo', '⇧⌘Y': 'is redo', '⌘0': 'resets the zoom', '⇧⌘+': 'zooms in', '⇧⌘=': 'zooms in', '⇧⌘-': 'zooms out', '⇧⌘_': 'zooms out', '⇧⌘⌫': 'deletes the zoomed block', '⌘→': 'moves into the rail', '⇧⌘→': 'moves into the rail', '⇧⌘↑': 'moves the selection', '⇧⌘↓': 'moves the selection' };
 // Why a combo cannot be saved for this row, or '' when it can: the app owns it, or another row already has it.
 function comboTaken(combo, rowId) {
   const built = RESERVED[combo.replace(/[⌃⌥⌘]/g, '').replace(/^(⇧?)/, '$1⌘')];

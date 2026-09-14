@@ -241,6 +241,7 @@ function renderOutline() {
     const last = list.at(-1), el = last && palette.hidden && !focused() ? textEl(keyFor(parent.docId, last)) : null;
     if (el && el.isContentEditable && !el.textContent) setCaret(el, 0);
   }
+  noteNavigation(); // where this render landed, for Cmd+[ and Cmd+]
 }
 
 function resolveZoom() {

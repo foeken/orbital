@@ -1071,11 +1071,47 @@ function runReservedComboCheck() {
     ({ taken: (combo, rowId) => comboTaken(combo, rowId) });
   `);
   assert.match(api.taken('⇧⌘Y', 'addToday'), /redo/, 'redo is reserved');
+  assert.match(api.taken('⌘[', 'addToday'), /back/, 'the history keys are reserved too');
   assert.match(api.taken('⌃⌥K', 'addToday'), /command palette/, '⌃ counts as ⌘ and ⌥ is ignored, as the handler does');
   assert.match(api.taken('⇧⌘T', 'addToday'), /already the shortcut for "Tasks"/, 'a combo another row has names that row');
   assert.match(api.taken('⌃⌥N', 'addToday'), /"Principles"/, 'and a document binding names the document');
   assert.equal(api.taken('⇧⌘T', 'view:tasks'), '', 'a row may keep its own combo');
   assert.equal(api.taken('⇧⌘U', 'addToday'), '', 'and a free combo passes');
+}
+// Cmd+[ and Cmd+] walk the places rendered so far: view switches and zooms, recorded by the render itself, so every
+// way of navigating counts; going back then somewhere new drops the forward places, like a browser.
+function runHistoryCheck() {
+  const api = vm.runInNewContext(`
+    let view = 'tasks', zoom = null, caretOnOpen = false, rendered = 0;
+    const localStorage = { setItem() {} };
+    const flushAll = () => {}, dropDrafts = () => {};
+    const render = () => { rendered++; noteNavigation(); }; // what renderOutline does at its end
+    ${sourceBetween('const navBack = [], navForward = [];', 'function noteNavigation')}
+    ${functionSource('noteNavigation')}
+    ${functionSource('navigate')}
+    ({
+      go: (v, z) => { view = v; zoom = z; render(); },
+      hop: (v, z) => { navReplace = true; view = v; zoom = z; render(); }, // a meeting forwarding to its write-up
+      back: () => navigate(-1), forward: () => navigate(1),
+      where: () => [view, zoom && zoom.docId, navBack.length, navForward.length],
+    });
+  `);
+  api.go('tasks', null); api.go('library', null); api.go('library', { docId: 'tana:text:a' }); api.go('library', { docId: 'tana:text:a' }); // a re-render of the same place is not a step
+  assert.deepEqual(plain(api.where()), ['library', 'tana:text:a', 2, 0], 'three places seen, two behind');
+  api.back();
+  assert.deepEqual(plain(api.where()), ['library', null, 1, 1], 'back leaves the zoom');
+  api.back();
+  assert.deepEqual(plain(api.where()), ['tasks', null, 0, 2], 'back again returns to the first view');
+  api.back();
+  assert.deepEqual(plain(api.where()), ['tasks', null, 0, 2], 'and nothing further back is a no-op');
+  api.forward();
+  assert.deepEqual(plain(api.where()), ['library', null, 1, 1], 'forward retraces');
+  api.go('meetings', null);
+  assert.deepEqual(plain(api.where()), ['meetings', null, 2, 0], 'a new place after going back drops what was ahead');
+  api.go('meetings', { docId: 'tana:event:m' }); api.hop('meetings', { docId: 'tana:text:writeup' });
+  assert.deepEqual(plain(api.where()), ['meetings', 'tana:text:writeup', 3, 0], 'a forwarded meeting is one place, not two');
+  api.back();
+  assert.deepEqual(plain(api.where()), ['meetings', null, 2, 1], 'so back skips the empty event page');
 }
 function runZoomShortcutCheck() {
   const anchor = source.indexOf("filterEl.addEventListener('keydown'");
@@ -2189,7 +2225,7 @@ async function runMemberLoadCheck() {
   assert.equal(throttled.attempts, 3, 'a slow start cannot turn renders into a request loop: a fresh ask is throttled');
 }
 
-const checks = [runDraftTailCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck];
+const checks = [runDraftTailCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck];
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);
   if (failures.length) throw new AggregateError(failures, failures.map((failure) => failure.message).join('\n'));

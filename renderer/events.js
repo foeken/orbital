@@ -149,6 +149,7 @@ document.addEventListener('keydown', (e) => {
   else if (mod && e.key === 'ArrowRight' && !railEl.hidden) { e.preventDefault(); focusRail(); } // into the relationships rail; Escape or Cmd+Left comes back
   else if (mod && (e.key.toLowerCase() === 'z' || e.key.toLowerCase() === 'y') && !inFilter) { e.preventDefault(); history(e.key.toLowerCase() === 'y' || e.shiftKey ? 'redo' : 'undo'); }
   else if (mod && e.key === 'f') { e.preventDefault(); if (zoom) return; filterShown = true; render(); filterEl.focus(); }
+  else if (mod && (e.key === '[' || e.key === ']') && !inFilter) { e.preventDefault(); navigate(e.key === '[' ? -1 : 1); } // back and forward through the places you have been
   else if (hotkey) { e.preventDefault(); runAction(hotkey); }
   else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !mod && document.activeElement === document.body) { // nothing focused: enter the outline
     const all = texts(), el = e.key === 'ArrowDown' ? all[0] : all.at(-1);
