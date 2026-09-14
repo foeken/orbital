@@ -80,10 +80,11 @@ function setSensitive(id, on) {
   else db.prepare('DELETE FROM sensitive_nodes WHERE id = ?').run(id);
 }
 
-// app settings as JSON per key; undefined when unset
+// app settings as JSON per key; undefined when unset — or unreadable, which every caller already treats as unset
 function setting(key) {
   const r = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
-  return r ? JSON.parse(r.value) : undefined;
+  if (!r) return undefined;
+  try { return JSON.parse(r.value); } catch { return undefined; }
 }
 
 function setSetting(key, value) {

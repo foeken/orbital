@@ -87,6 +87,10 @@ db.setSetting('taskFilter', { states: ['open'], assignee: 'me' }); // upsert
 assert.deepStrictEqual(db.setting('taskFilter').states, ['open']);
 db.setSetting('taskFilter', undefined);
 assert.strictEqual(db.setting('taskFilter'), undefined);
+// a value an older build or an interrupted write left unparseable reads as unset, like the tags column above
+new DatabaseSync(file).prepare("INSERT INTO settings (key, value) VALUES ('viewFilter:tasks', '{not json')").run();
+assert.strictEqual(db.setting('viewFilter:tasks'), undefined, 'a corrupt setting is unset, not a crash');
+db.setSetting('viewFilter:tasks', undefined);
 
 // The views overlap: one document is in Inbox, Tasks and Library at once, and each view caches its own list.
 db.replaceSection('tasks', [{ id: 'tana:text:shared', title: 'Shared', done: 0, sortKey: '1', updatedAt: '1' }]);

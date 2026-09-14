@@ -67,6 +67,13 @@ async function install(release) {
   await fs.access(path.join(fresh, 'Contents', 'Info.plist')); // a half-downloaded zip must not reach the rm below
   const target = path.resolve(app.getPath('exe'), '../../..'); // …/Tana Companion.app/Contents/MacOS/<exe>
   if (!target.endsWith('.app')) throw new Error('Cannot locate the running app bundle');
+  // The zip came over https from GitHub; before anything is replaced, codesign confirms the bundle inside it is
+  // intact and signed by the team that signed the running copy. A tampered, truncated or ad-hoc build fails here,
+  // while the running app is still in place.
+  await run('/usr/bin/codesign', ['--verify', '--deep', '--strict', fresh]);
+  const team = async (bundle) => teamOf((await run('/usr/bin/codesign', ['-dv', '--verbose=2', bundle])).stderr);
+  const [mine, theirs] = await Promise.all([team(target), team(fresh)]);
+  if (!theirs || theirs !== mine) throw new Error(`The download is signed by ${theirs || 'nobody'}, this app by ${mine || 'nobody'}`);
   // The running bundle cannot be replaced underneath itself: hand the swap to a detached shell that waits for
   // this process to exit, then reopens the new copy.
   const q = (s) => `'${s.replace(/'/g, "'\\''")}'`;
@@ -75,4 +82,10 @@ async function install(release) {
   app.quit();
 }
 
-module.exports = { check, isNewer };
+// The team behind a Developer ID signature, from codesign -dv output; null for an ad-hoc signature ("not set").
+function teamOf(codesignOutput) {
+  const id = String(codesignOutput).match(/^TeamIdentifier=(.+)$/m)?.[1];
+  return id && id !== 'not set' ? id : null;
+}
+
+module.exports = { check, isNewer, teamOf };

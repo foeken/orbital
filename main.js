@@ -783,7 +783,8 @@ async function mutTasks(ids, fn) {
   }
   return changed.length;
 }
-// ponytail: one undo step per mutation call across docs; Loro merges steps within 500 ms inside a document.
+// ponytail: one undo step per mutation call across docs; inside a document the UndoManager keeps one step per
+// transact (mergeInterval 0), so a multi-document mutation is as many steps as documents.
 let historyBusy = false;
 async function documentAction(id, action, record = true) {
   if (record && historyBusy) throw new Error('History operation is still running');

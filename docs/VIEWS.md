@@ -17,9 +17,9 @@ renderer. It replaces the per-view paths: `taskParams`/`libraryQueries`/`MEETING
 
 | key | values | meaning |
 |-----|--------|---------|
-| `types` | array of kinds, or `null` | kinds: `meetings tasks docs chats canvases agents skills people`. `null` = every kind **except people** (a person is not library content). |
-| `states` | array of `proposed open closed not_now`, or `null` | `null` = any state. Applies to every kind: a kind that cannot carry a state simply does not match, exactly like the assignee rule today. |
-| `assignee` | `me` \| `anyone` \| `unassigned` \| user-profile uri | in effect only when tasks are in scope (`types` is null or contains `tasks`), as today. |
+| `types` | array of kinds, or `null` | kinds: `meetings tasks docs chats canvases agents skills spaces people`. `null` = every kind **except people and spaces** (a person is a member and a space a container, not library content; both are listed when asked for by name). |
+| `states` | array of `proposed open closed not_now`, or `null` | `null` = any state. Like the assignee, in effect only when tasks are in scope: no other kind carries a state, so a stored "Inbox, In Progress" must not empty a People or Docs listing. |
+| `assignee` | `me` \| `anyone` \| `unassigned` \| user-profile uri | in effect only when tasks are in scope (`types` is null or contains `tasks`). |
 | `text` | string | server-side `textQuery`. |
 | `participant` | `me` or null | events the user is a participant of (`hasParticipantUris`). |
 | `window` | `recent` or null | events from 7 days ago to 7 days ahead. |
@@ -45,9 +45,10 @@ is titled "People" (the id is `people`; it was `members`).
 One `graph.listNodes` call per fetch, built by `viewParams(filter, meUri, limit = 1000)`:
 
 - `nodeTypes` = the selected kinds mapped (`tasks`/`docs` → `text`, `meetings` → `event`,
-  `people` → `user-profile`, the rest are their own node type). `types: null` = every node type
-  except `user-profile`, listed explicitly.
-- `stateTypes` when `states` is set; `assignedTo`/`unassigned` per the assignee rule; `textQuery`
+  `people` → `user-profile`, `spaces` → `space`, the rest are their own node type). `types: null` =
+  every listable node type except `user-profile` and `space`, listed explicitly (never `nodeTypes: []`,
+  which is no filter at all to the graph).
+- `stateTypes` and `assignedTo`/`unassigned` only while tasks are among the kinds; `textQuery`
   when `text`; `hasParticipantUris` when `participant`; `eventStartTimeMin/Max` when `window`.
 - `sortOptions`: event start ascending when meetings are the only kind, else update time descending.
 - `mode: 'LIST_NODES_MODE_WITH_COUNT'`; `truncated` comes from the response.
@@ -93,4 +94,3 @@ implements the new surface too.
 - Keep: the today marker and date meta in Meetings, `DRAFT_KIND` (Enter drafts a task in Tasks and a
   meeting in Meetings), read-only member rows, sensitive redaction, the row enter/leave animation,
   drafts surviving a refresh, and every keyboard rule in OUTLINER.md.
-

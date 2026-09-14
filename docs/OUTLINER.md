@@ -1,5 +1,11 @@
 # Outliner contract
 
+> How to read this file: it is the UI contract as it accumulated, one addendum per round, and older addenda are not
+> rewritten when a later one replaces them. Where an addendum describes views or their filters (`api.taskFilter`,
+> `api.library`, `api.inbox`, per-view loaders), [VIEWS.md](VIEWS.md) is what the code does now: one screen, one
+> query, six presets, `api.viewList`/`api.viewFilter`/`api.setViewFilter`. The keyboard rules, the node shape and
+> the palette behaviour here are current.
+
 The app renders a Tana-Outliner-style outline. The app is generic ("Tana" companion); the first view is **Tasks**. Every visible content line is a node: top-level lines are Tana documents (task documents in the Tasks view), and a document's children are its content blocks. Editable text is changed in place where the node capability allows it (no edit mode). Editing follows the Outliner keyboard model.
 
 ## Content model (verified on a real document; loro-prosemirror layout)
