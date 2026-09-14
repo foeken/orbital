@@ -1905,6 +1905,38 @@ async function runHiddenItemsCheck() {
   assert.match(source, /palMode === 'hidden'/, 'and the palette renders, filters and types in that mode like any other');
 }
 
+// Arrowing off an empty draft drops it, and the drop must wait for the caret's new home to take focus:
+// a re-render while nothing is focused throws the caret away, which is what "I cannot arrow up from the draft" was.
+async function runDraftBlurOrderCheck() {
+  const api = vm.runInNewContext(`
+    const queueMicrotask = (fn) => Promise.resolve().then(fn);
+    const item = { key: 'doc/draft:doc', node: { draft: true } };
+    const el = { textContent: '', isConnected: true, classList: { contains: () => true }, closest: () => ({ dataset: { key: item.key } }) };
+    const above = { row: 'above' };
+    const items = new Map([[item.key, item]]);
+    const document = { activeElement: el };
+    const keyOfEl = () => item.key, flush = () => {};
+    let rendering = false, drops = 0, activeAtDrop = 'none';
+    const dropDraft = () => { drops++; activeAtDrop = document.activeElement === above ? 'above' : document.activeElement === el ? 'draft' : 'nothing'; };
+    let handler = null;
+    const outline = { addEventListener: (name, fn) => { if (name === 'focusout') handler = fn; } };
+    ${sourceBetween("outline.addEventListener('focusout'", "outline.addEventListener('mousedown'")}
+    ({
+      blurTo: async (target) => { document.activeElement = null; handler({ target: el }); document.activeElement = target === 'above' ? above : target === 'draft' ? el : null; await Promise.resolve(); await Promise.resolve(); return { drops, activeAtDrop }; },
+      reset: () => { drops = 0; activeAtDrop = 'none'; document.activeElement = el; },
+    });
+  `);
+
+  const moved = plain(await api.blurTo('above'));
+  assert.deepEqual(moved, { drops: 1, activeAtDrop: 'above' }, 'the draft is dropped only once the row the caret moved to holds focus, so the re-render can keep it there');
+  api.reset();
+  const stayed = plain(await api.blurTo('draft'));
+  assert.deepEqual(stayed, { drops: 0, activeAtDrop: 'none' }, 'focus bouncing back to the draft itself leaves it alone');
+  api.reset();
+  const left = plain(await api.blurTo(null));
+  assert.deepEqual(left, { drops: 1, activeAtDrop: 'nothing' }, 'an empty draft the user simply left is still dropped');
+}
+
 // main answers [] until its sync client is up: keeping that would leave every name as a raw uri all session.
 async function runMemberLoadCheck() {
   const api = vm.runInNewContext(`
@@ -1941,7 +1973,7 @@ async function runMemberLoadCheck() {
   assert.equal(throttled.attempts, 3, 'a slow start cannot turn renders into a request loop: a fresh ask is throttled');
 }
 
-const checks = [runDraftTailCheck, runPinGrouping, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runSortGroupCheck, runCmdPillsCheck];
+const checks = [runDraftTailCheck, runPinGrouping, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runSortGroupCheck, runCmdPillsCheck];
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);
   if (failures.length) throw new AggregateError(failures, failures.map((failure) => failure.message).join('\n'));

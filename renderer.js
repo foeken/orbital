@@ -2483,7 +2483,11 @@ outline.addEventListener('focusout', (e) => {
   const el = e.target, item = el.classList && el.classList.contains('text') && items.get(keyOfEl(el));
   if (!item) return;
   if (!item.node.draft) flush(item.key);
-  else if (!rendering && !el.textContent && !item.busy && el.isConnected) dropDraft(item); // left empty by the user: no node is created
+  // left empty by the user: no node is created. Deferred one microtask because during focusout nothing is focused yet,
+  // so the re-render would find no caret to keep; by then the row the caret moved to (Arrow keys, a click) holds it.
+  else if (!rendering && !el.textContent && !item.busy && el.isConnected) queueMicrotask(() => {
+    if (!rendering && !el.textContent && !item.busy && el.isConnected && document.activeElement !== el) dropDraft(item);
+  });
 });
 outline.addEventListener('mousedown', (e) => {
   if (!e.target.closest) return;
