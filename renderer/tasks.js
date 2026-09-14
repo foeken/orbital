@@ -265,15 +265,15 @@ function selectionRows() {
     const item = items.get(nodes[0].id);
     rows.push({ id: 'toggleDone', group, icon: 'task', label: item.node.done ? 'Reopen' : 'Complete', run: () => toggleDone(item) });
   }
-  if (ids.length && tana.setSensitive && sensitiveIds) {
-    const marked = ids.every((id) => sensitiveIds.has(id));
-    rows.push({ id: 'sensitive', group, icon: 'lock', label: `${marked ? 'Unmark' : 'Mark'}${count(ids.length, 'item')} as sensitive`, run: () => setSensitiveMark(ids, !marked) });
-  }
+  rows.push(...taskActionRows(group));
   if (nodes.length && tana.insertAfter && tana.setText) {
     if (tana.todayNode) rows.push({ id: 'addToday', group, icon: 'addTo', label: `Add${count(nodes.length, 'item')} to Today`, run: () => addToDateNode(nodes, 'today') });
     if (tana.weekNode) rows.push({ id: 'addWeek', group, icon: 'addTo', label: `Add${count(nodes.length, 'item')} to This Week`, run: () => addToDateNode(nodes, 'week') });
   }
-  rows.push(...taskActionRows(group));
+  if (ids.length && tana.setSensitive && sensitiveIds) {
+    const marked = ids.every((id) => sensitiveIds.has(id));
+    rows.push({ id: 'sensitive', group, icon: 'lock', label: `${marked ? 'Unmark' : 'Mark'}${count(ids.length, 'item')} as sensitive`, run: () => setSensitiveMark(ids, !marked) });
+  }
   // Destructive, so it sits at the end of the group. Documents are soft-deleted (Cmd+Z restores them), blocks go
   // through the same one-step removal as Cmd+Shift+Backspace. Like the task actions, the row counts what it can
   // actually remove and says how much it is skipping: a read-only row, or a block in a selection that also holds

@@ -472,7 +472,7 @@ async function runMultiTaskPaletteCheck() {
       one: () => { selected = ['t1']; return taskActionRows().map((row) => row.label); },
       locked: () => { selected = ['locked']; return taskActionRows().map((row) => row.label); },
       selection: (keys) => { selected = keys; return selectionRows().map((row) => [row.group, row.label]); },
-      markAll: () => { selected = rows.map((item) => item.key); selectionRows()[0].run(); return marked; },
+      markAll: () => { selected = rows.map((item) => item.key); selectionRows().find((row) => row.id === 'sensitive').run(); return marked; },
       remove: async (keys) => { calls.length = 0; selected = keys; try { await removeSelection(keys); } catch (e) { calls.push(['error', e.message]); } return calls; },
       addTo: async (keys, target) => { calls.length = 0; selected = keys; await selectionRows().find((row) => row.label.endsWith(target === 'week' ? 'to This Week' : 'to Today')).run(); return calls; },
       ids: (keys) => { selected = keys; return selectionRows().map((row) => row.id); },
@@ -493,14 +493,14 @@ async function runMultiTaskPaletteCheck() {
   assert.deepEqual(plain(context.locked()), [], 'one read-only selected task offers no mutation');
   // What acts on the selection comes first, in its own group, and reaches every selected row, not only the tasks.
   assert.deepEqual(plain(context.selection(['t1', 'meeting', 'locked', 't2'])), [
-    ['Selection', 'Mark 4 items as sensitive'],
-    ['Selection', 'Add 4 items to Today'],
-    ['Selection', 'Add 4 items to This Week'],
     ['Selection', 'Set status for 2 tasks'],
     ['Selection', 'Assign 2 tasks to'],
+    ['Selection', 'Add 4 items to Today'],
+    ['Selection', 'Add 4 items to This Week'],
+    ['Selection', 'Mark 4 items as sensitive'],
     ['Selection', 'Delete 3 items'],
   ], 'a selection offers sensitivity for everything in it and the task actions for the tasks in it');
-  assert.deepEqual(plain(context.selection(['t2'])), [['Selection', 'Unmark 1 item as sensitive'], ['Selection', 'Add 1 item to Today'], ['Selection', 'Add 1 item to This Week'], ['Selection', 'Set status'], ['Selection', 'Edit assignees'], ['Selection', 'Delete 1 item']],
+  assert.deepEqual(plain(context.selection(['t2'])), [['Selection', 'Set status'], ['Selection', 'Edit assignees'], ['Selection', 'Add 1 item to Today'], ['Selection', 'Add 1 item to This Week'], ['Selection', 'Unmark 1 item as sensitive'], ['Selection', 'Delete 1 item']],
     'one selected row is still a selection, and a marked one offers to unmark');
   // Delete reports what it can remove before it is run, the way the task actions do.
   assert.deepEqual(plain(context.del(['t1', 'meeting', 'locked', 't2'])), ['Delete 3 items', '1 skipped', false], 'a read-only row is counted as skipped, not deleted');
@@ -513,14 +513,14 @@ async function runMultiTaskPaletteCheck() {
     ['Current node', 'Zoom in', '', false],
     ['Current node', 'Expand', '', false],
     ['Current node', 'Complete', '', false],
-    ['Current node', 'Mark as sensitive', '', false],
-    ['Current node', 'Add to Today', '', false],
-    ['Current node', 'Add to This Week', '', false],
     ['Current node', 'Set status', 'In Progress', false],
     ['Current node', 'Edit assignees', 'Loading…', false],
+    ['Current node', 'Add to Today', '', false],
+    ['Current node', 'Add to This Week', '', false],
+    ['Current node', 'Mark as sensitive', '', false],
     ['Current node', 'Delete', '', false],
   ], 'the current node gets every selection action');
-  assert.deepEqual(plain(context.zoomedCurrent('t1')).slice(0, 2).map((row) => row[1]), ['Complete', 'Mark as sensitive'], 'the zoomed document itself offers no Zoom in but keeps its checkbox');
+  assert.deepEqual(plain(context.zoomedCurrent('t1')).slice(0, 2).map((row) => row[1]), ['Complete', 'Set status'], 'the zoomed document itself offers no Zoom in but keeps its checkbox');
   assert.deepEqual(plain(context.current('locked')).filter((row) => row[1] === 'Delete'), [['Current node', 'Delete', 'Read-only', true]], 'and a read-only current node cannot be deleted');
   assert.equal(context.kbd('t1', 'delete'), '⇧⌘⌫', 'the Delete row names the shortcut that does the same thing');
   assert.deepEqual(plain(context.toggleOpen('t1')), ['Expand', null, ['t1', true], 'Collapse', null], 'Expand opens the row and becomes Collapse (their keys come from DEFAULT_HOTKEYS in paletteRows)');
@@ -541,7 +541,7 @@ async function runMultiTaskPaletteCheck() {
   // Cmd+Shift+K records a hotkey per row id and refuses a row without one, so every selection action carries a
   // stable id even though its label counts the selection.
   const selIds = plain(context.ids(['t1', 'meeting', 'locked', 't2']));
-  assert.deepEqual(selIds, ['sensitive', 'addToday', 'addWeek', 'status', 'assign', 'delete'], 'every selection action can be given a keyboard shortcut');
+  assert.deepEqual(selIds, ['status', 'assign', 'addToday', 'addWeek', 'sensitive', 'delete'], 'every selection action can be given a keyboard shortcut');
   assert.equal(new Set(selIds).size, selIds.length, 'and no two of them share an id, which would share a shortcut');
   // Deleting a selection: documents go one by one through the permission check, blocks reuse the single-step removal.
   assert.deepEqual(plain(await context.remove(['t1', 'meeting'])), [['delete', 't1'], ['delete', 'meeting']], 'every selected document is deleted, in order');
@@ -1092,6 +1092,34 @@ function runAuthPaletteCheck() {
 }
 
 function runSyncShortcutCheck() {
+  // The palette's order is one list: node rows from the selection and from the document itself sorted into one
+  // sequence (open, task state, where it lives, what it looks like, link, delete last), then Views, view options,
+  // and Actions from "get in" to the app's own settings.
+  const order = vm.runInNewContext(`
+    const views = [{ id: 'tasks', title: 'Tasks', icon: 'task' }], pinTree = [], pinRows = () => [];
+    const selectionRows = () => [{ id: 'delete', group: 'Current node', label: 'Delete' }, { id: 'sensitive', group: 'Current node', label: 'Mark as sensitive' }, { id: 'zoomIn', group: 'Current node', label: 'Zoom in' }, { id: 'status', group: 'Current node', label: 'Set status' }];
+    const pillCommandRows = () => [{ id: 'pill:type', group: 'View options', label: 'Set view option: Type' }], taskActionRows = () => [];
+    const tana = { refresh: async () => {}, todayNode: async () => {}, weekNode: async () => {}, nodeLink: async () => {}, setIcon: () => {}, accessOptions: async () => {}, filters: {}, sensitiveIds: () => {}, creationOptions: async () => {} }, run = () => {};
+    const authed = true, authChecking = false, signedOut = true, theme = 'light', hotkeys = {}, themePref = 'light';
+    const palDoc = { id: 'tana:text:01j0doc000000000000000000', iconSvg: '<svg/>' }, pinInfo = { docId: palDoc.id, sidebar: false, dates: [] };
+    const accessById = new Map([[palDoc.id, { sharing: true, move: true }]]), loadAccess = () => {}, isRealId = () => true;
+    const localDate = () => '2026-09-13', setIcon = () => {}, setTheme = () => {}, startDrop = () => {}, docRow = () => ({}), sectionOf = () => null;
+    const zoom = null, railEl = { hidden: false }, navBack = [], navForward = [], sensitiveVisible = false;
+    const openCreationPalette = () => {}, openHiddenPalette = () => {}, toggleSensitiveVisibility = () => {}, followSystem = () => {}, openVisibilityPalette = () => {}, openMovePalette = () => {}, pinAction = () => {}, copyText = () => {}, togglePalette = () => {}, navigate = () => {}, history = () => {}, focusRail = () => {}, setZoom = () => {}, goTo = () => {}, setView = () => {}, openDoc = () => {}, filterEl = {}, render = () => {}, zoomFactor = 1, BASE_ZOOM = 1;
+    ${sourceBetween('const NODE_ROW_ORDER', 'function paletteRows')}
+    ${functionSource('paletteRows')}
+    paletteRows('').map((row) => row.group + ': ' + row.label);
+  `);
+  assert.deepEqual(plain(order), [
+    'Current node: Zoom in', 'Current node: Set status', 'Current node: Pin to sidebar', 'Current node: Pin to today', 'Current node: Move to space',
+    'Current node: Set Image', 'Current node: Remove icon', 'Current node: Edit visibility', 'Current node: Mark as sensitive', 'Current node: Copy link', 'Current node: Delete',
+    'Views: Tasks', 'Views: Today', 'Views: This week',
+    'View options: Set view option: Type',
+    'Actions: Log in to Tana', 'Actions: Create new…', 'Actions: Search Tana', 'Actions: Filter rows', 'Actions: Go back', 'Actions: Go forward', 'Actions: Focus the sidebar',
+    'Actions: Undo', 'Actions: Redo', 'Actions: Sync', 'Actions: Edit hidden items', 'Actions: Toggle sensitive visibility',
+    'Actions: Larger text', 'Actions: Smaller text', 'Actions: Reset text size', 'Actions: Toggle dark mode',
+  ], 'the palette lists its rows in one fixed, meaningful order');
+
   const anchor = source.indexOf("filterEl.addEventListener('keydown'");
   const start = source.indexOf("document.addEventListener('keydown', (e) => {", anchor);
   const end = source.indexOf('// ---- palette:', start);

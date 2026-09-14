@@ -15,6 +15,11 @@ function chooseRow(create) {
 function settleEnter() { if (palEnter) { const create = palEnter === 'create'; palEnter = null; chooseRow(create); } }
 // hint defaults to the node's own meta, so a meeting keeps its date and time in every palette list
 const docRow = (n, hint, run) => ({ node: n, icon: n.icon, svg: n.iconSvg, label: n.text ?? n.title, tags: visibleTags(n), hint: hint === undefined ? n.meta : hint, run });
+// The order of the rows about the node you are on: where it goes (open it, unfold it), what it is (done, status,
+// assignee), where it lives (pins, the date nodes, its space), what it looks like (image, visibility, sensitivity),
+// its link, and last the one destructive row. Rows without an id carry a `rank` from this list instead.
+const NODE_ROW_ORDER = ['zoomIn', 'expand', 'collapse', 'toggleDone', 'status', 'assign', 'pinSidebar', 'pinToday', 'addToday', 'addWeek', 'move', 'setImage', 'removeIcon', 'visibility', 'sensitive', 'copyLink', 'delete'];
+const nodeRank = (r) => { const i = NODE_ROW_ORDER.indexOf(r.rank || r.id); return i < 0 ? NODE_ROW_ORDER.length : i; };
 function paletteRows(q) {
   const selection = selectionRows();
   const rows = [...selection];
@@ -23,50 +28,53 @@ function paletteRows(q) {
   const docGroup = selection.length && selection[0].group === 'Selection' ? 'Actions' : 'Current node';
   if (pinInfo && palDoc && pinInfo.docId === palDoc.id) { // no ids: their labels depend on state, so no hotkeys
     const sb = pinInfo.sidebar, td = pinInfo.dates.includes(localDate());
-    rows.push({ group: docGroup, icon: 'pin', label: sb ? 'Unpin from sidebar' : 'Pin to sidebar', run: () => pinAction(sb ? 'unpin' : 'pin', 'sidebar') });
-    rows.push({ group: docGroup, icon: 'pinDate', label: td ? 'Unpin from today' : 'Pin to today', run: () => pinAction(td ? 'unpin' : 'pin', 'today') });
+    rows.push({ rank: 'pinSidebar', group: docGroup, icon: 'pin', label: sb ? 'Unpin from sidebar' : 'Pin to sidebar', run: () => pinAction(sb ? 'unpin' : 'pin', 'sidebar') });
+    rows.push({ rank: 'pinToday', group: docGroup, icon: 'pinDate', label: td ? 'Unpin from today' : 'Pin to today', run: () => pinAction(td ? 'unpin' : 'pin', 'today') });
   }
   // the node's web link, for pasting into Slack or a doc
   if (palDoc && tana.nodeLink && isRealId(palDoc.id)) {
     rows.push({ id: 'copyLink', group: docGroup, icon: 'link', label: 'Copy link', run: () => run(async () => copyText(await tana.nodeLink(palDoc.id), 'Link copied')) });
   }
   if (palDoc && tana.setIcon) {
-    rows.push({ group: docGroup, icon: 'setIcon', label: 'Set Image', run: () => startDrop(palDoc) });
-    if (palDoc.iconSvg) rows.push({ group: docGroup, label: 'Remove icon', run: () => setIcon(palDoc.id, null) });
+    rows.push({ rank: 'setImage', group: docGroup, icon: 'setIcon', label: 'Set Image', run: () => startDrop(palDoc) });
+    if (palDoc.iconSvg) rows.push({ rank: 'removeIcon', group: docGroup, label: 'Remove icon', run: () => setIcon(palDoc.id, null) });
   }
   if (palDoc && tana.accessOptions) {
     loadAccess(palDoc.id);
     const access = accessById.get(palDoc.id);
-    if (access?.sharing) rows.push({ group: docGroup, icon: 'lock', label: 'Edit visibility', run: () => openVisibilityPalette(palDoc) });
-    if (access?.move) rows.push({ group: docGroup, icon: 'space', label: 'Move to space', keepOpen: true, run: () => openMovePalette(palDoc) });
+    if (access?.sharing) rows.push({ rank: 'visibility', group: docGroup, icon: 'lock', label: 'Edit visibility', run: () => openVisibilityPalette(palDoc) });
+    if (access?.move) rows.push({ rank: 'move', group: docGroup, icon: 'space', label: 'Move to space', keepOpen: true, run: () => openMovePalette(palDoc) });
   }
+  // only node rows so far: the selection's rows first, then (with a multi-selection) the document's own, each in NODE_ROW_ORDER
+  rows.sort((a, b) => (a.group === 'Selection' ? 0 : 1) - (b.group === 'Selection' ? 0 : 1) || nodeRank(a) - nodeRank(b));
   rows.push(...views.map((s) => ({ id: 'view:' + s.id, group: 'Views', icon: s.icon, label: s.title, run: () => setView(s.id) })));
   // today's node: a document titled with the date, pinned to today; and the week this day sits in, as its own
   // "Week 38 (2026)" document — both created when they do not exist yet, and both places to go, so they sit with the views
   if (tana.todayNode) rows.push({ id: 'today', group: 'Views', icon: 'today', label: 'Today', run: () => run(async () => goTo(await tana.todayNode())) });
   if (tana.weekNode) rows.push({ id: 'week', group: 'Views', icon: 'week', label: 'This week', run: () => run(async () => goTo(await tana.weekNode())) });
   rows.push(...pillCommandRows());
+  // Actions: getting in first, then making and finding things, moving around, undoing, and last the app's own settings
+  if (signedOut) rows.push({ id: 'login', group: 'Actions', label: 'Log in to Tana', run: () => tana.login().catch(showError) });
   if (tana.creationOptions) rows.push({ id: 'create', group: 'Actions', icon: 'createNew', label: 'Create new…', keepOpen: true, run: openCreationPalette });
-  rows.push({ id: 'sync', group: 'Actions', icon: 'sync', label: 'Sync', run: () => run(() => tana.refresh()) });
   // the keys the outline answers to, as rows: each has a default combo in DEFAULT_HOTKEYS and can be re-recorded
   rows.push({ id: 'search', group: 'Actions', icon: 'library', label: 'Search Tana', keepOpen: true, run: () => togglePalette('search') });
   if (!zoom) rows.push({ id: 'filter', group: 'Actions', label: 'Filter rows', run: () => { filterShown = true; render(); filterEl.focus(); } });
   rows.push({ id: 'back', group: 'Actions', label: 'Go back', disabled: !navBack.length, run: () => navigate(-1) });
   rows.push({ id: 'forward', group: 'Actions', label: 'Go forward', disabled: !navForward.length, run: () => navigate(1) });
+  if (!railEl.hidden) rows.push({ id: 'rail', group: 'Actions', label: 'Focus the sidebar', run: () => focusRail() });
   rows.push({ id: 'undo', group: 'Actions', label: 'Undo', run: () => history('undo') });
   rows.push({ id: 'redo', group: 'Actions', label: 'Redo', run: () => history('redo') });
-  if (!railEl.hidden) rows.push({ id: 'rail', group: 'Actions', label: 'Focus the sidebar', run: () => focusRail() });
+  rows.push({ id: 'sync', group: 'Actions', icon: 'sync', label: 'Sync', run: () => run(() => tana.refresh()) });
+  // the list of titles hidden from every view and from search, edited in the palette itself
+  if (tana.filters) rows.push({ id: 'hidden', group: 'Actions', icon: 'hidden', label: 'Edit hidden items', keepOpen: true, run: openHiddenPalette });
+  if (tana.sensitiveIds) rows.push({ id: 'sensitiveVisibility', group: 'Actions', icon: 'hidden', label: 'Toggle sensitive visibility', hint: sensitiveVisible ? 'Shown' : 'Hidden', run: toggleSensitiveVisibility });
   // text size stays on the fixed keys (their characters depend on the keyboard layout), so the chips are literal
   rows.push({ id: 'textLarger', group: 'Actions', label: 'Larger text', kbd: '⇧⌘+', run: () => setZoom(zoomFactor * 1.1) });
   rows.push({ id: 'textSmaller', group: 'Actions', label: 'Smaller text', kbd: '⇧⌘-', run: () => setZoom(zoomFactor / 1.1) });
   rows.push({ id: 'textReset', group: 'Actions', label: 'Reset text size', kbd: '⌘0', run: () => setZoom(BASE_ZOOM) });
-  // the list of titles hidden from every view and from search, edited in the palette itself
-  if (tana.filters) rows.push({ id: 'hidden', group: 'Actions', icon: 'hidden', label: 'Edit hidden items', keepOpen: true, run: openHiddenPalette });
-  if (tana.sensitiveIds) rows.push({ id: 'sensitiveVisibility', group: 'Actions', icon: 'hidden', label: 'Toggle sensitive visibility', hint: sensitiveVisible ? 'Shown' : 'Hidden', run: toggleSensitiveVisibility });
   const dark = typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark';
   rows.push({ id: 'theme', group: 'Actions', icon: 'darkLight', label: 'Toggle ' + (dark ? 'light' : 'dark') + ' mode', run: () => setTheme(dark ? 'light' : 'dark') });
   if (tana.systemTheme) rows.push({ id: 'systemTheme', group: 'Actions', icon: 'darkLight', label: 'Toggle system dark/light mode', hint: themePref === 'system' ? 'Following macOS' : '', run: () => followSystem(themePref !== 'system') });
-  if (signedOut) rows.push({ id: 'login', group: 'Actions', label: 'Log in to Tana', run: () => tana.login().catch(showError) });
   if (q) for (const s of views) for (const n of s.nodes) rows.push({ ...docRow(n, n.meta || s.title, () => openDoc(n.id)), id: 'doc:' + n.id, group: 'Documents' });
   let docsLeft = 8;
   return rows.filter((r) => (!q || r.label.toLowerCase().includes(q)) && (r.group !== 'Documents' || docsLeft-- > 0)).map((r) => { const k = r.id && hotkeyFor(r.id); return k ? { ...r, kbd: k } : r; });
