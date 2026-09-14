@@ -31,6 +31,8 @@ assert.doesNotMatch(source, /mod && e\.key === 'r'/);
 assert.match(source, /t\.hue != null \? t\.hue : nodeHue/);
 assert.match(source, /display\.hue != null/);
 assert.match(source, /const rowHue = r\.node \? r\.node\.hue : r\.hue;/);
+// every surface that draws a node icon tints it the same way: rows, the rail, the palette and the crumbs
+assert.match(source, /'ricon ' \+ p\.icon \+ \(p\.hue != null \? ' hue' : ''\)/);
 assert.match(source, /if \(!r\.svg && rowHue != null\) \{ icon\.classList\.add\('hue'\)/);
 assert.match(source, /if \(!display\.iconSvg && display\.hue != null\) \{ bullet\.classList\.add\('hue'\)/);
 assert.match(source, /scrollIntoView\(\{ block: 'nearest', inline: 'nearest', container: 'nearest' \}\)/);

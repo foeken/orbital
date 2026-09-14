@@ -586,7 +586,7 @@ async function main() {
     let writeUp = [], ownerQueries = 0;
     const listNodes = async (p) => {
       if (p.ownerIds) { ownerQueries++; return { nodes: p.ownerIds[0] === eventId ? writeUp : [] }; }
-      if (p.nodeIds) return { nodes: p.nodeIds.map((id) => (id === eventId ? { id, calendarEvent: { tagline: 'Notes' } } : { id, title: id === spaceId ? 'Deal' : 'Node' })) };
+      if (p.nodeIds) return { nodes: p.nodeIds.map((id) => (id === eventId ? { id, calendarEvent: { tagline: 'Notes' } } : { id, title: id === spaceId ? 'Deal' : 'Node', ...(id === spaceId ? { appearance: { hue: 200 } } : {}) })) };
       const [kind] = p.nodeTypes || [];
       if (kind === 'user-profile') return { nodes: [] };
       if (kind === 'event' || kind === 'type') return { nodes: [] };
@@ -616,6 +616,8 @@ async function main() {
 
     // typeTitles is one id -> title cache: the space in this document's location must not become a searchable type.
     assert.equal((await backend.handlers.get('doc:path')(null, openId)).map((c) => c.title).join(' > '), 'Library > Deal');
+    // A crumb carries the node's hue, so a space is the same colour there as in every list that shows it.
+    assert.equal((await backend.handlers.get('doc:path')(null, openId)).find((c) => c.icon === 'space').hue, 200, 'and its hue, so a space is the same colour there as in every list that shows it');
     queries.length = 0;
     assert.equal((await backend.handlers.get('search')(null, '#deal')).length, 0, 'a space sharing a type title is not a type filter');
     assert.deepEqual(queries, [], 'an unknown #type runs no query at all');

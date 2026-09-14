@@ -40,6 +40,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .crumbs { font-size: 13px; color: #888; margin-bottom: 14px; }
 .crumbs a { color: #888; text-decoration: none; cursor: pointer; }
 .crumbs a .ricon { display: inline-flex; vertical-align: -2px; margin-right: 4px; }
+.crumbs a .ricon.hue svg { color: hsl(var(--hue) 45% 30%); } /* a hued node (a space, a typed doc) keeps its colour in the crumb */
 .crumbs a .ricon svg { width: 14px; height: 14px; }
 .text a.url { color: #508fbb; text-decoration: underline; cursor: pointer; }
 [data-theme="dark"] .text a.url { color: #7fb8dd; }
@@ -360,6 +361,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .titlebar h1.done { color: #777d80; }
 [data-theme="dark"] .crumbs, [data-theme="dark"] .crumbs a { color: #858b8e; }
 [data-theme="dark"] .crumbs a:hover { color: #c9c9c9; }
+[data-theme="dark"] .crumbs a .ricon.hue svg { color: hsl(var(--hue) 70% 72%); }
 [data-theme="dark"] .crumbs .sep { color: #555b5e; }
 [data-theme="dark"] .crumbs .cdate { color: #6a7073; }
 [data-theme="dark"] .error { color: #ed8b83; }

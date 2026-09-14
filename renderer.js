@@ -1136,7 +1136,12 @@ function renderCrumbs(trail) {
     if (i) { const sep = document.createElement('span'); sep.className = 'sep'; sep.textContent = '›'; nav.append(sep); }
     const a = document.createElement('a');
     // ancestors can share a title (a meeting named after its space), so each crumb shows its kind icon
-    if (p.icon) { const ricon = document.createElement('span'); ricon.className = 'ricon ' + p.icon; ricon.innerHTML = iconSvg(p.icon); a.append(ricon); }
+    if (p.icon) {
+      const ricon = document.createElement('span');
+      ricon.className = 'ricon ' + p.icon + (p.hue != null ? ' hue' : ''); // a space keeps its colour here too
+      if (p.hue != null) ricon.style.setProperty('--hue', String(p.hue));
+      ricon.innerHTML = iconSvg(p.icon); a.append(ricon);
+    }
     a.append(p.title);
     const when = crumbWhen(p.id); // a meeting crumb also says when it was: two meetings often share a title
     if (when) { const date = document.createElement('span'); date.className = 'cdate'; date.textContent = when; a.append(date); }
