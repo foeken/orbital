@@ -124,8 +124,13 @@ function eventMeta(start, end, withDate) {
   const midnight = s.getUTCHours() + s.getUTCMinutes() === 0 || s.getHours() + s.getMinutes() === 0;
   const allDay = e && midnight && (e - s) % 864e5 === 0;
   const year = s.getFullYear() === new Date().getFullYear() ? '' : ' ' + s.getFullYear();
-  const day = WEEKDAY[s.getDay()] + (withDate ? ' ' + s.getDate() + ' ' + MONTH[s.getMonth()] + year : '');
-  return allDay ? day + (withDate ? '' : ', all day') : day + ' ' + hm(s) + (e ? '–' + hm(e) : '');
+  // A bare weekday reads as "the week ahead", so last Friday must not show as "Fri": anything before today or more
+  // than six days out carries its date, wherever it is listed.
+  const midnightToday = new Date(); midnightToday.setHours(0, 0, 0, 0);
+  const days = Math.round((new Date(s).setHours(0, 0, 0, 0) - midnightToday) / 864e5);
+  const dated = withDate || days < 0 || days > 6;
+  const day = WEEKDAY[s.getDay()] + (dated ? ' ' + s.getDate() + ' ' + MONTH[s.getMonth()] + year : '');
+  return allDay ? day + (dated ? '' : ', all day') : day + ' ' + hm(s) + (e ? '–' + hm(e) : '');
 }
 
 async function resolveTypes(uris) {

@@ -413,6 +413,14 @@ async function main() {
     assert.equal(cachedNodeHue({ id: plain.id, icon: null, tags: [{ label: 'Type', hue: 0 }] }), undefined, 'type hue is not a node hue');
     assert.equal(graphRow({ id: 'tana:chat:01exampler0000000000000000', title: 'Chat' }).icon, 'chat');
     assert.ok(VIEWS.some((s) => s.id === 'people' && s.title === 'People' && s.icon === 'member'));
+    // A weekday on its own reads as the week ahead, so a past meeting has to carry its date: "Fri" for last Friday
+    // in a list that also holds this Friday is the one thing a meeting row must never say.
+    const at = (days, hour) => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + days); d.setHours(hour); return d.toISOString(); };
+    const metaOf = (days) => graphRow({ id: 'tana:event:01examples0000000000000000', title: 'Meeting', calendarEvent: { startTime: at(days, 13), endTime: at(days, 14) } }).meta;
+    assert.match(metaOf(-3), /\d/, 'a meeting in the past carries its day of the month');
+    assert.match(metaOf(9), /\d{1,2} [A-Z]/, 'and so does one further out than the week ahead');
+    assert.doesNotMatch(metaOf(0), /\d{1,2} [A-Z][a-z]{2}/, 'today is just a weekday and a time');
+    assert.doesNotMatch(metaOf(3), /\d{1,2} [A-Z][a-z]{2}/, 'and so is a day later this week');
     console.log('ok  initial auth states and node appearance hue');
   }
 

@@ -610,6 +610,9 @@ function forgetRecent(id) {
     localStorage.setItem('recent', JSON.stringify(rows.filter((row) => row && row.id !== id)));
   } catch { localStorage.removeItem('recent'); }
 }
+// A recorded row keeps the title and meta it had when it was opened, and a meeting's meta ages: when the node is
+// loaded now, the palette shows what it says today rather than what it said then.
+const recentRows = () => recent().map((row) => { const live = docOf(row.id); return live ? { ...row, text: live.text, meta: live.meta } : row; });
 // index of the first meeting dated today or later. The list is oldest first over [today-7, today+7) and the meta
 // only carries a weekday ("Mon 9:00–9:30"), so walk the weekday sequence from the window start (same weekday as today).
 // ponytail: a gap of 7+ days without meetings under-counts a week; then nothing is marked and the view stays at the top
@@ -2742,7 +2745,7 @@ function pinResult(ctx, node) {
 function searchNow() {
   const q = palInput.value.trim(), seq = ++palSeq;
   palTimer = null; palBusy = !!q;
-  if (!q) { palRows = resultRows(recent(), 'RECENTLY VIEWED'); return renderPalette(); }
+  if (!q) { palRows = resultRows(recentRows(), 'RECENTLY VIEWED'); return renderPalette(); }
   tana.search(q).then((nodes) => {
     if (seq !== palSeq || palMode !== 'search') return; // stale response
     palRows = resultRows(nodes);

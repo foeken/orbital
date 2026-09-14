@@ -2022,6 +2022,28 @@ function runFallingRowCheck() {
 }
 
 // Arrowing off an empty draft drops it, and the drop must wait for the caret's new home to take focus:
+// A recorded row keeps what it looked like when it was opened, and a meeting's meta ages: "Fri 13:00" for a meeting
+// that has since passed. When the node is loaded now, the palette shows what it says today.
+function runRecentRowsCheck() {
+  const api = vm.runInNewContext(`
+    const stored = [
+      { id: 'meeting', title: 'AEGIS update', icon: 'meeting', meta: 'Fri 13:00–13:30', tags: [] },
+      { id: 'gone', title: 'Old note', icon: 'doc', meta: 'Mon 9:00', tags: [] },
+    ];
+    const localStorage = { getItem: () => JSON.stringify(stored) };
+    const asDoc = (node) => ({ ...node, kind: 'document', text: node.text ?? node.title ?? '' });
+    const docOf = (id) => (id === 'meeting' ? { id, text: 'AEGIS update', meta: 'Fri 11 Sep 13:00–13:30' } : null);
+    ${sourceBetween('const recent =', 'function recordRecent')}
+    ${sourceBetween('const recentRows =', '// index of the first meeting')}
+    recentRows;
+  `);
+  assert.deepEqual(plain(api().map((row) => [row.text, row.meta])), [
+    ['AEGIS update', 'Fri 11 Sep 13:00–13:30'],
+    ['Old note', 'Mon 9:00'],
+  ], 'a loaded row is shown as it reads now; one the app has not loaded keeps what was recorded');
+}
+
+// Arrowing off an empty draft drops it, and the drop must wait for the caret's new home to take focus:
 // a re-render while nothing is focused throws the caret away, which is what "I cannot arrow up from the draft" was.
 async function runDraftBlurOrderCheck() {
   const api = vm.runInNewContext(`
@@ -2089,7 +2111,7 @@ async function runMemberLoadCheck() {
   assert.equal(throttled.attempts, 3, 'a slow start cannot turn renders into a request loop: a fresh ask is throttled');
 }
 
-const checks = [runDraftTailCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck];
+const checks = [runDraftTailCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck];
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);
   if (failures.length) throw new AggregateError(failures, failures.map((failure) => failure.message).join('\n'));
