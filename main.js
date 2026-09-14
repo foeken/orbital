@@ -747,6 +747,29 @@ async function mut(id, fn, accessMutation = false) {
   if (!accessMutation) { undoStack.push(id); redoStack.length = 0; }
   return result;
 }
+// Task metadata lives in separate CRDT documents. Preflight the whole selection, then group those
+// per-document transactions into one user-visible history step.
+async function mutTasks(ids, fn) {
+  if (historyBusy) throw new Error('History operation is still running');
+  if (!Array.isArray(ids) || !ids.length || new Set(ids).size !== ids.length || ids.some((id) => typeof id !== 'string' || !DOC_URI.test(id))) throw new Error('Select unique task documents');
+  const docs = await Promise.all(ids.map((id) => op(id, (doc) => {
+    const node = readNode(doc);
+    if (!STATE_TYPES.includes(node.stateType)) throw new Error('Task metadata can only be changed on tasks');
+    if (editable(node, me && me.userUri) === false) throw new Error('This node is read-only in the outliner');
+    return doc;
+  })));
+  const changed = [];
+  try {
+    for (const doc of docs) {
+      const before = doc.loro.oplogVersion();
+      fn(doc);
+      if (before.compare(doc.loro.oplogVersion()) !== 0) changed.push(doc.id);
+    }
+  } finally {
+    if (changed.length) { undoStack.push(changed); redoStack.length = 0; }
+  }
+  return changed.length;
+}
 // ponytail: one undo step per mutation call across docs; Loro merges steps within 500 ms inside a document.
 let historyBusy = false;
 async function documentAction(id, action, record = true) {
@@ -771,6 +794,17 @@ async function history(from, to, action, can) {
   try {
     while (from.length) {
       const step = from.at(-1);
+      if (Array.isArray(step)) {
+        let changedId = null;
+        for (const id of action === 'undo' ? [...step].reverse() : step) {
+          const doc = client && client.sync.getDocument(id);
+          if (!doc || !doc[can]() || isDeleted(readNode(doc)) || editable(readNode(doc), me && me.userUri) === false) continue;
+          if (doc[action]()) changedId ||= id;
+        }
+        from.pop();
+        if (changedId) { to.push(step); return changedId; }
+        continue;
+      }
       if (typeof step === 'object') {
         const command = action === 'undo' ? (step.documentAction === 'softDelete' ? 'restore' : 'softDelete') : step.documentAction;
         await documentAction(step.id, command, false);
@@ -808,6 +842,8 @@ ipcMain.handle('doc:setDone', (_e, id, done) => mut(id, (doc) => {
   setState(doc, done ? 'closed' : 'open', me.userUri);
   scheduleRefresh(2000); // a closed task drops off the open list
 }));
+ipcMain.handle('doc:setState', (_e, id, state) => mutTasks([id], (doc) => setState(doc, state, me.userUri)).then((count) => { scheduleRefresh(2000); return count; }));
+ipcMain.handle('doc:setStateMany', (_e, ids, state) => mutTasks(ids, (doc) => setState(doc, state, me.userUri)).then((count) => { scheduleRefresh(2000); return count; }));
 // linkSharing lives on the graph node, never in the document, so public-to-the-internet needs its own lookup
 const linkShared = async (id) => {
   try { const { nodes = [] } = await client.graph.listNodes({ nodeIds: [id], limit: 1 }); return !!(nodes[0] && nodes[0].linkSharing && nodes[0].linkSharing.mode); }
@@ -856,6 +892,7 @@ ipcMain.handle('doc:setAssignees', (_e, id, uris) => mut(id, (doc) => {
   setAssignees(doc, uris, me.userUri);
   scheduleRefresh(2000); // reassignment may add or remove this task from the active filter
 }));
+ipcMain.handle('doc:setAssigneesMany', (_e, ids, uris) => mutTasks(ids, (doc) => setAssignees(doc, uris, me.userUri)).then((count) => { scheduleRefresh(2000); return count; }));
 ipcMain.handle('block:setText', (_e, id, nodeId, value) => mut(id, (doc) => { content.setText(doc, nodeId, value); })); // value: string or segments
 ipcMain.handle('block:setBlockType', (_e, id, nodeId, type) => mut(id, (doc) => { content.setBlockType(doc, nodeId, type); })); // type: one of content.BLOCK_TYPES
 ipcMain.handle('block:insertDivider', (_e, id, nodeId) => mut(id, (doc) => content.insertDivider(doc, nodeId))); // nodeId null appends at the end

@@ -229,6 +229,24 @@ async function main() {
     assert.equal(await backend.undo(),null,'one main history entry for batch indent');
     console.log('ok  removeMany/moveMany/indentMany IPC bridges each record exactly one undo step');
   }
+  {
+    const backend=mainHelpers(), docs=new Map();
+    const task=(id,title)=>{const d=new Document(id);d.transact(l=>initDocument(l,title,ME));setState(d,'open',ME);docs.set(id,d);return d;};
+    const first=task(DOC,'First'), second=task('tana:text:'+ulid(),'Second');
+    const plain=new Document('tana:text:'+ulid());plain.transact(l=>initDocument(l,'Plain',ME));docs.set(plain.id,plain);
+    backend.testRuntime({me:{userUri:ME},client:{sync:{subscribe:async(id)=>docs.get(id),getDocument:(id)=>docs.get(id)}}});
+    await assert.rejects(backend.handlers.get('doc:setStateMany')(null,[first.id,plain.id],'closed'),/only be changed on tasks/);
+    assert.equal(readNode(first).stateType,'open','batch preflight prevents a partial status change');
+    assert.equal(await backend.handlers.get('doc:setStateMany')(null,[first.id,second.id],'closed'),2);
+    assert.deepEqual([readNode(first).stateType,readNode(second).stateType],['closed','closed']);
+    await backend.undo();assert.deepEqual([readNode(first).stateType,readNode(second).stateType],['open','open']);
+    assert.equal(await backend.undo(),null,'one main history entry for batch status');
+    assert.equal(await backend.handlers.get('doc:setAssigneesMany')(null,[first.id,second.id],[ME]),2);
+    assert.deepEqual([taskMeta(first).assignees,taskMeta(second).assignees],[[ME],[ME]]);
+    await backend.undo();assert.deepEqual([taskMeta(first).assignees,taskMeta(second).assignees],[[],[]]);
+    assert.equal(await backend.undo(),null,'one main history entry for batch assignees');
+    console.log('ok  task status/assignee batches preflight all documents and record one undo step');
+  }
   // 1. Request messages: binary round-trip and protobuf-JSON shape from PLATFORM-PROTOCOL.md §1.1/§2
   const Req = message('sync', 'ServerSyncRequest'), Cmd = message('sync', 'ServerSyncCommandRequest');
   const peerId = derivePeerId('01m0f1aqd8p23qhwntbewmpfz2');

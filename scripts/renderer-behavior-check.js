@@ -89,6 +89,114 @@ function runTypingRenderStabilityCheck() {
     'the latest deferred state renders once editing ends');
 }
 
+async function runDraftMaterialiseFocusCheck() {
+  const context = {};
+  vm.runInNewContext(`
+    const node = { id: 'draft:doc', kind: 'block', text: '', draft: true };
+    const parent = { key: 'doc', docId: 'doc', node: { id: 'doc', kind: 'document' } };
+    const item = { key: 'doc/draft:doc', docId: 'doc', node, parent, busy: true };
+    const classes = new Set(['node', 'draft']);
+    const row = { isConnected: true, dataset: { key: item.key }, classList: { remove: (name) => classes.delete(name) } };
+    const el = { isContentEditable: true, textContent: 'H', closest: () => row };
+    const document = { activeElement: el };
+    const titleEl = {}, items = new Map([[item.key, item]]), kids = new Map([['doc', []]]);
+    let release, renders = 0, renderDeferred = false, saved = null, slashCtx = null;
+    const gate = new Promise((resolve) => { release = resolve; });
+    const tana = { insertAfter: async () => { await gate; return 'real'; } };
+    const run = (fn) => fn();
+    const reload = async () => kids.set('doc', [{ id: 'real', kind: 'block', text: 'H' }]);
+    const inheritCheckbox = async () => {};
+    const locate = (rows, id) => { const found = rows.find((candidate) => candidate.id === id); return found && { node: found }; };
+    const sectionOf = () => null, fresh = new Map(); let zoom = null;
+    const scheduleSave = (_item, segs) => { saved = segs; };
+    const render = () => { renders++; row.isConnected = false; document.activeElement = {}; };
+    ${functionSource('materialise')}
+    Object.assign(globalThis, {
+      start: () => materialise(item, el), release,
+      type: (text) => { if (document.activeElement === el) el.textContent += text; },
+      state: () => ({ text: el.textContent, sameEditor: document.activeElement === el, sameRow: row.isConnected,
+        key: row.dataset.key, oldGone: !items.has('doc/draft:doc'), newPresent: items.get('doc/real') === item,
+        draft: classes.has('draft'), renders, deferred: renderDeferred, saved }),
+    });
+  `, context);
+  const creating = context.start();
+  context.type('e');
+  context.release();
+  await creating;
+  context.type('llo');
+  assert.deepEqual(plain(context.state()), {
+    text: 'Hello', sameEditor: true, sameRow: true, key: 'doc/real', oldGone: true, newPresent: true,
+    draft: false, renders: 0, deferred: true, saved: [{ text: 'He' }],
+  }, 'a draft promotes the same contenteditable in place, so every character after the first keeps landing');
+}
+
+function runSensitiveBlurCheck() {
+  const api = vm.runInNewContext(`
+    let sensitiveIds = null, sensitiveVisible = false;
+    const sensitiveEls = new Map();
+    const isRealId = (id) => typeof id === 'string' && id.startsWith('tana:');
+    ${functionSource('sensitiveHidden')}
+    ${functionSource('blurSensitive')}
+    ${functionSource('refreshSensitive')}
+    const makeEl = () => { const classes = new Set(); return { isConnected: true, classes, classList: {
+      toggle: (name, on) => on ? classes.add(name) : classes.delete(name),
+    } }; };
+    const secret = makeEl(), ordinary = makeEl();
+    ({
+      mount: () => { blurSensitive(secret, 'tana:text:secret'); blurSensitive(ordinary, 'library', 'tana:text:public'); },
+      blurred: () => ({ secret: secret.classes.has('sensitive'), ordinary: ordinary.classes.has('sensitive') }),
+      load: (ids) => { sensitiveIds = new Set(ids); },
+      show: (on) => { sensitiveVisible = on; refreshSensitive(); },
+      refresh: refreshSensitive,
+    });
+  `);
+  api.mount();
+  assert.deepEqual(plain(api.blurred()), { secret: true, ordinary: true }, 'startup fails closed until the local sensitive ids arrive');
+  api.load(['tana:text:secret']);
+  api.refresh();
+  assert.deepEqual(plain(api.blurred()), { secret: true, ordinary: false }, 'the live registry updates marked and ordinary document surfaces immediately');
+  api.show(true);
+  assert.deepEqual(plain(api.blurred()), { secret: false, ordinary: false }, 'the session toggle reveals every marked document');
+  api.show(false);
+  assert.deepEqual(plain(api.blurred()), { secret: true, ordinary: false }, 'the session toggle hides them again');
+
+  const styles = fs.readFileSync(require.resolve('../styles.css'), 'utf8');
+  const rule = styles.match(/\.sensitive\s*\{([^}]*)\}/);
+  assert.ok(rule, 'styles.css has one shared sensitive treatment');
+  assert.match(rule[1], /color:\s*transparent\s*!important/, 'the sensitive treatment removes the readable text');
+  assert.match(rule[1], /opacity:\s*\.14/, 'the redaction bars stay subdued');
+  assert.match(rule[1], /text-decoration:\s*line-through\s+#696d73\s*!important/, 'each text line becomes one redaction bar');
+  assert.match(rule[1], /text-decoration-thickness:\s*\.72em\s*!important/, 'the shared redaction bar keeps the thinner treatment');
+  assert.doesNotMatch(rule[1], /filter|blur|-webkit-text-security/, 'the redaction bars remain sharp');
+  assert.match(styles, /\.sensitive \*\s*\{\s*color:\s*transparent\s*!important;\s*text-decoration:\s*none\s*!important;/,
+    'descendants cannot add a second bar or reveal their colour or underline');
+  assert.match(styles, /\.sensitive \.chip,\s*\.chip\.sensitive\s*\{\s*display:\s*none;/, 'tags disappear instead of adding masked clutter');
+  assert.match(styles, /\.outline \.body\.sensitive\s*\{\s*text-decoration-thickness:\s*12px\s*!important;/,
+    'all hidden outline rows use the same thin bar regardless of their text style');
+  assert.match(styles, /\.outline \.body\.sensitive \.meta\s*\{\s*font-size:\s*inherit;/, 'hidden assignees use the same font metrics as their row');
+  assert.match(styles, /\.pagehead h1\s*\{[^}]*flex:\s*1;[^}]*min-width:\s*0;[^}]*overflow-wrap:\s*anywhere;/, 'a masked zoom title wraps before the details rail');
+  assert.match(source, /if \(sensitiveIds\?\.has\(docId\)\) meta\.unshift\(\{ id: 'sensitive', icon: 'lock', label: 'Sensitive', run: null \}\);/,
+    'the zoom Details rail names the local classification Sensitive');
+  assert.doesNotMatch(rule[1], /pointer-events|user-select/, 'blur does not block focus, clicks or selection');
+  assert.ok(source.indexOf("label: marked ? 'Unmark as sensitive' : 'Mark as sensitive'") < source.indexOf("id: 'sensitiveVisibility'"),
+    'the frequently used Mark/Unmark command ranks before the visibility toggle');
+  for (const [surface, pattern] of [
+    ['outline rows', /blurSensitive\(body, docId, target && target\.id\)/],
+    ['zoomed title', /blurSensitive\(titleEl, parent && parent\.docId\)/],
+    ['zoomed chips', /blurSensitive\(taskInfoEl, parent && parent\.docId\)/],
+    ['zoomed fields', /blurSensitive\(el, parent && parent\.docId\)/],
+    ['sidebar titles', /blurSensitive\(title, node\.id\)/],
+    ['sidebar chips', /blurSensitive\(chip, node\.id\)/],
+    ['owner breadcrumbs', /blurSensitive\(a, p\.id\)/],
+    ['zoom breadcrumbs', /blurSensitive\(a, v\.docId\)/],
+    ['outline breadcrumbs', /blurSensitive\(a, item\.docId\)/],
+    ['palette labels', /blurSensitive\(label, r\.node && r\.node\.id\)/],
+    ['palette hints', /blurSensitive\(h, r\.node && r\.node\.id\)/],
+  ]) assert.match(source, pattern, surface + ' uses the shared sensitive treatment');
+  assert.match(source, /async function loadRoots\(\)\s*\{\s*await loadSensitive\(\)/, 'sensitive ids load before any root node can render');
+  assert.doesNotMatch(sourceBetween('function setSensitiveMark', 'function startDrop'), /render\(/, 'marking and visibility changes update existing surfaces without rendering');
+}
+
 async function runSelectionChecks() {
   const selection = sourceBetween('function selKeys()', '// ---- filter pills');
   const canEditStructure = sourceBetween('const canEditStructure =', 'const chatIcon =');
@@ -415,7 +523,7 @@ async function runTaskChildCheckboxScopeCheck() {
     const docOf = () => ({ editable: true });
     const keyFor = (docId, node) => node.kind === 'document' ? docId : docId + '/' + node.id;
     const mkItem = (docId, node, parent) => { const item = { key: keyFor(docId, node), docId, node, parent }; items.set(item.key, item); return item; };
-    const hasKids = () => false, isOpen = () => false, setOpen = () => {}, zoomTo = () => {};
+    const hasKids = () => false, isOpen = () => false, setOpen = () => {}, zoomTo = () => {}, blurSensitive = () => {};
     const renderSegs = () => {}, segsOf = () => [], asDoc = (node) => ({ ...node, kind: 'document', text: node.text ?? node.title ?? '' });
     const isImage = () => false, taskSummary = () => null, chipEl = () => ({});
     const isDivider = () => false;
@@ -550,7 +658,7 @@ function runReferenceEmbedRenderCheck() {
     const docOf = () => ({ editable: true });
     const keyFor = (docId, node) => node.kind === 'document' ? docId : docId + '/' + node.id;
     const mkItem = (docId, node, parent) => { const item = { key: keyFor(docId, node), docId, node, parent }; items.set(item.key, item); return item; };
-    const hasKids = () => false, isOpen = () => false, setOpen = () => {}, zoomTo = () => {};
+    const hasKids = () => false, isOpen = () => false, setOpen = () => {}, zoomTo = () => {}, blurSensitive = () => {};
     const rendered = new Map();
     const renderSegs = (el, segs) => { rendered.set(el, segs); }, segsOf = (node) => node.segments || (node.text ? [{ text: node.text }] : []);
     const isDivider = () => false;
@@ -599,6 +707,7 @@ async function runVisibilityPickerCheck() {
   const api = vm.runInNewContext(`
     const calls = [];
     let palDoc = { id: 'tana:text:01j0doc000000000000000000', kind: 'document' };
+    let palMode = 'visibilityPeople', closed = false;
     let visibilityPeople = new Set(), visibilityRoles = new Map();
     const members = [{ id: 'tana:user-profile:01j0person000000000000000', title: 'Member One', me: false }];
     const memberName = (id) => members.find((member) => member.id === id).title;
@@ -609,23 +718,37 @@ async function runVisibilityPickerCheck() {
     const run = (fn) => fn();
     const loadRoots = async () => {};
     const render = () => {};
+    const openCommandPalette = () => { palMode = 'cmd'; };
+    const openVisibilityPalette = () => { palMode = 'visibility'; };
+    const closePalette = () => { closed = true; };
+    ${functionSource('backPalette')}
     ${applySharing}
     ${visibilityPeopleRows}
     ({
       rows: () => visibilityPeopleRows(''),
-      state: () => ({ calls, selected: [...visibilityPeople] }),
+      back: () => backPalette(),
+      mode: (next) => { palMode = next; closed = false; },
+      state: () => ({ calls, selected: [...visibilityPeople], palMode, closed }),
     });
   `);
   const rows = api.rows();
-  assert.deepEqual(plain(api.state()), { calls: [], selected: [] }, 'opening the visibility picker does not write sharing');
+  assert.equal(rows[0].label, 'Back to visibility', 'the people step exposes its parent level as the first visible row');
+  assert.deepEqual(plain(api.state()), { calls: [], selected: [], palMode: 'visibilityPeople', closed: false }, 'opening the visibility picker does not write sharing');
   rows.find((row) => row.label === 'Member One').run();
-  assert.deepEqual(plain(api.state()), { calls: [], selected: ['tana:user-profile:01j0person000000000000000'] }, 'choosing a picker row stages the selection without mutation');
+  assert.deepEqual(plain(api.state()), { calls: [], selected: ['tana:user-profile:01j0person000000000000000'], palMode: 'visibilityPeople', closed: false }, 'choosing a picker row stages the selection without mutation');
   api.rows().find((row) => row.label === 'Apply selected people').run();
   await Promise.resolve();
   assert.deepEqual(plain(api.state()), {
     calls: [['tana:text:01j0doc000000000000000000', { rule: 'people', participants: [{ uri: 'tana:user-profile:01j0person000000000000000', role: 'editor' }] }]],
     selected: ['tana:user-profile:01j0person000000000000000'],
+    palMode: 'visibilityPeople', closed: true,
   }, 'the visibility picker writes only after explicit Apply');
+  api.mode('visibilityPeople');
+  api.back();
+  assert.equal(api.state().palMode, 'visibility', 'Escape and the visible Back row return the people step to the mode picker');
+  api.mode('visibility'); api.back();
+  assert.equal(api.state().closed, true, 'Escape from the visibility mode picker closes the palette');
+  assert.match(source, /rules\.has\('me'\)[\s\S]*rules\.has\('people'\)[\s\S]*rules\.has\('inherit'\)/, 'the mode picker preserves every sharing rule reported by the backend');
 }
 
 async function runLinkPaletteCheck() {
@@ -909,6 +1032,7 @@ function runRowAlignmentCheck() {
     const mkItem = (docId, node, parent) => { const item = { key: keyFor(docId, node), docId, node, parent }; items.set(item.key, item); return item; };
     let kids = [];
     const hasKids = (item) => (item.node.hasChildren === true) || kids.length > 0;
+    const blurSensitive = () => {};
     const isOpen = () => true, setOpen = () => {}, zoomTo = () => {}, ensureLoaded = () => {}, childrenOf = () => kids, isSpace = () => false, draftNode = () => ({ id: 'draft', kind: 'block', text: '', draft: true });
     const renderSegs = () => {}, segsOf = () => [], asDoc = (node) => ({ ...node, kind: 'document', text: node.text ?? node.title ?? '' });
     const isImage = () => false, taskSummary = () => null, chipEl = () => ({}), iconSvg = () => '';
@@ -1237,7 +1361,7 @@ async function runRailPinCheck() {
     const row = railPinAction('event', 'doc'); row.onclick();
     ({ className: row.className, calls });
   `);
-  assert.equal(action.className, 'rrow', 'the pin action uses the ordinary sidebar row');
+  assert.equal(action.className, 'rrow rmeta', 'the pin action uses the same quiet treatment as Details rows');
   assert.deepEqual(plain(action.calls), [['search', null, { pinHub: 'event', docId: 'doc' }]], 'the pin action opens the shared search palette with pin context');
 
   const picker = vm.runInNewContext(`
@@ -1283,6 +1407,8 @@ function runSidebarAlignmentCheck() {
   assert.equal(icon.inset, check.inset, 'icon rows and checkbox rows take the same horizontal space, so their titles line up');
   assert.match(styles, /\.rail \.rhead \{[^}]*margin-top: 18px/, 'the sidebar groups are separated from each other');
   assert.match(styles, /\.rail \.rhead:first-child \{[^}]*margin-top: 0/, 'the first group still starts at the top');
+  assert.match(styles, /\.rail \.rrow \.chip-label \{ display: none; \}/, 'a collapsed sidebar chip cannot reveal any of its label');
+  assert.match(styles, /\.rail \.rrow:hover \.chip-label, \.rail \.rrow:focus \.chip-label \{ display: inline; \}/, 'hover and keyboard focus reveal the full sidebar tag again');
 }
 
 // "Clear filters" belongs on an empty view only when a filter is the reason it is empty.
@@ -1416,15 +1542,15 @@ function runCmdPillsCheck() {
     ${functionSource('openPillPalette')}
     ${functionSource('openCommandPalette')}
     ({
-      commands: (next) => { view = next; return pillCommandRows().map((row) => [row.id, row.label]); },
+      commands: (next) => { view = next; return pillCommandRows().map((row) => [row.id, row.label, row.icon]); },
       open: (id) => { openPillPalette(id); return { mode: palMode, rows: pillRows('').map((row) => [row.label, row.hint]) }; },
       pick: (label) => { pillRows('').find((row) => row.label === label).run(); return { mode: palMode, taskF, group: groupPref[view], sort: sortPref[view] }; },
     });
   `);
   assert.deepEqual(plain(api.commands('tasks')), [
-    ['pill:status', 'Status In Progress'], ['pill:assigned', 'Assigned to Anyone'],
-    ['pill:sort', 'Sort Default'], ['pill:group', 'Group None'],
-  ], 'Cmd+K derives the current Tasks pill commands and values from pillDefs');
+    ['pill:status', 'Set view option: Status In Progress', 'status'], ['pill:assigned', 'Set view option: Assigned to Anyone', 'assigned'],
+    ['pill:sort', 'Set view option: Sort Default', 'sort'], ['pill:group', 'Set view option: Group None', 'group'],
+  ], 'Cmd+K prefixes the current Tasks view options and gives each its supplied icon');
   assert.deepEqual(plain(api.open('status')), { mode: 'pill', rows: [['Any status', ''], ['Inbox', ''], ['In Progress', '✓'], ['Completed', ''], ['Later', '']] },
     'a command opens the same Status rows and active tick as the pill');
   assert.equal(api.pick('Inbox').mode, 'pill', 'a multi-select filter stays in its pill sublevel');
@@ -1436,7 +1562,7 @@ function runCmdPillsCheck() {
   assert.deepEqual(plain(api.commands('library').map(([id]) => id)), ['pill:type', 'pill:status', 'pill:assigned', 'pill:sort', 'pill:group'],
     'Library includes its Type filter plus the other applicable pills');
   assert.deepEqual(plain(api.commands('meetings')), [], 'views without header pills offer no pill commands');
-  assert.match(source, /if \(palMode === 'pill'\) openCommandPalette\(\); else closePalette\(\);/, 'Escape from a pill returns one palette level');
+  assert.match(functionSource('backPalette'), /palMode === 'pill'[\s\S]*openCommandPalette\(\)/, 'Escape from a pill returns one palette level');
 }
 // Opening a node has to leave a row to type in, without creating anything in Tana until it is typed into.
 function runDraftTailCheck() {
@@ -1478,6 +1604,7 @@ function runRowAudienceCheck() {
   const api = vm.runInNewContext(`
     const items = new Map(), open = new Map(), pending = new Map();
     const docOf = () => ({ editable: true });
+    const blurSensitive = () => {};
     const keyFor = (docId, node) => node.kind === 'document' ? docId : docId + '/' + node.id;
     const mkItem = (docId, node, parent) => { const item = { key: keyFor(docId, node), docId, node, parent }; items.set(item.key, item); return item; };
     const hasKids = () => false, isOpen = () => false, setOpen = () => {}, zoomTo = () => {}, ensureLoaded = () => {}, childrenOf = () => [], isSpace = () => false, draftNode = () => ({ id: 'draft', kind: 'block', text: '', draft: true });
@@ -1570,7 +1697,7 @@ function runSidebarHoverCheck() {
         set textContent(value) { this.value = value; }, get textContent() { return this.value || ''; } };
     };
     const document = { createElement: makeEl };
-    const isTask = () => false, canEditNode = () => true, iconSvg = () => '', appendTags = () => {}, goTo = () => {}, railKey = () => {};
+    const isTask = () => false, canEditNode = () => true, iconSvg = () => '', appendTags = () => {}, goTo = () => {}, railKey = () => {}, blurSensitive = () => {};
     ${functionSource('railRow')}
     (lines) => {
       const row = railRow({ id: 'tana:event:m1', text: 'Heads of Technology', icon: 'meeting' });
@@ -1673,7 +1800,7 @@ async function runMemberLoadCheck() {
   assert.equal(throttled.attempts, 3, 'a slow start cannot turn renders into a request loop: a fresh ask is throttled');
 }
 
-const checks = [runDraftTailCheck, runPinGrouping, runTypingRenderStabilityCheck, runSelectionChecks, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runSortGroupCheck, runCmdPillsCheck];
+const checks = [runDraftTailCheck, runPinGrouping, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runSensitiveBlurCheck, runSelectionChecks, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runSortGroupCheck, runCmdPillsCheck];
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);
   if (failures.length) throw new AggregateError(failures, failures.map((failure) => failure.message).join('\n'));

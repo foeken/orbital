@@ -24,6 +24,8 @@ contextBridge.exposeInMainWorld('api', {
   search: (query) => ipcRenderer.invoke('search', query),
   setTitle: (docId, title) => ipcRenderer.invoke('doc:setTitle', docId, title),
   setDone: (docId, done) => ipcRenderer.invoke('doc:setDone', docId, done),
+  setState: (docId, state) => ipcRenderer.invoke('doc:setState', docId, state),
+  setStateMany: (docIds, state) => ipcRenderer.invoke('doc:setStateMany', docIds, state),
   toggleCheckbox: (docId, nodeId) => ipcRenderer.invoke('block:toggleCheckbox', docId, nodeId), // plain block -> unchecked; checkbox -> toggle; children returns done: 0|1
   accessOptions: (id) => ipcRenderer.invoke('doc:accessOptions', id), // {sharing,move,deletable,ownerUri,rules,roles,audience,inheritAudience,sharingToken,reason}; unknown disabled
   setSharing: (id, selection) => ipcRenderer.invoke('doc:setSharing', id, selection), // explicit {rule,participants?:[{uri,role}],token?}; inherit requires current sharingToken
@@ -32,6 +34,7 @@ contextBridge.exposeInMainWorld('api', {
   moveToSpace: (id, spaceId, token) => ipcRenderer.invoke('doc:moveToSpace', id, spaceId, token),
   taskMeta: (docId) => ipcRenderer.invoke('doc:taskMeta', docId), // { assignees, restricted, participants, audience, audienceSpace?:{uri,title?} }; participants are Tana's actual sharing data
   setAssignees: (docId, uris) => ipcRenderer.invoke('doc:setAssignees', docId, uris), // unique tana:user-profile:<ulid>[]; [] unassigns
+  setAssigneesMany: (docIds, uris) => ipcRenderer.invoke('doc:setAssigneesMany', docIds, uris),
   setText: (docId, nodeId, textOrSegments) => ipcRenderer.invoke('block:setText', docId, nodeId, textOrSegments),
   // segments carry marks: { text, marks?: { bold, italic, strike, code, link: href } } | { mention: { uri, label } }
   setBlockType: (docId, nodeId, type) => ipcRenderer.invoke('block:setBlockType', docId, nodeId, type), // paragraph|heading1..3|bullet|numbered|code|quote
@@ -56,6 +59,8 @@ contextBridge.exposeInMainWorld('api', {
   pinTo: (hubId, docId) => ipcRenderer.invoke('pins:pinTo', hubId, docId),
   unpinFrom: (hubId, docId) => ipcRenderer.invoke('pins:unpinFrom', hubId, docId),
   setIcon: (docId, svg) => ipcRenderer.invoke('doc:setIcon', docId, svg),
+  sensitiveIds: () => ipcRenderer.invoke('sensitive:list'),
+  setSensitive: (docId, on) => ipcRenderer.invoke('sensitive:set', docId, on),
   image: (uri) => ipcRenderer.invoke('image', uri), // tana:image: uri -> data URL (main fetches with the session token and caches)
   members: () => ipcRenderer.invoke('members'),
   taskFilter: () => ipcRenderer.invoke('tasks:filter'),

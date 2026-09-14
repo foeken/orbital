@@ -118,7 +118,7 @@ function mockApi() {
   content.mockdoc0.unshift({ id: 'ref' + (++seq), kind: 'block', type: 'reference', editable: false, reference: { uri: 'mockdoc9' }, hasChildren: false, children: [] });
   content.mockdoc0.splice(1, 0, { id: 'ref' + (++seq), kind: 'block', type: 'reference', editable: false, reference: { uri: 'tana:user-profile:lex' }, hasChildren: false, children: [] });
   const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGPoyroWu7WKIX9dU1fWNQAuWQbA8sXmUwAAAABJRU5ErkJggg==';
-  const changed = [], removed = [], statusCbs = [], deleted = new Map();
+  const changed = [], removed = [], statusCbs = [], deleted = new Map(), sensitive = new Set();
   let status = { authenticated: false, authChecking: false, connected: false, syncing: false, lastSync: null, error: null };
   const emit = (docId) => setTimeout(() => changed.forEach((cb) => cb(docId)), 0);
   const fix = (n) => { n.hasChildren = n.children.length > 0; };
@@ -239,9 +239,11 @@ function mockApi() {
     deleteDocument: async (docId) => { softDelete(docId); step(docId, 'restore'); },
     restoreDocument: async (docId) => { undelete(docId); step(docId, 'delete'); },
     setIcon: async (docId, svg) => { (all.find((d) => d.id === docId) || created[docId]).iconSvg = svg || undefined; emit(null); },
+    sensitiveIds: async () => [...sensitive],
+    setSensitive: async (docId, on) => { if (on) sensitive.add(docId); else sensitive.delete(docId); return on; },
     nodeLink: async (docId) => 'https://home.tana.inc/o/mockorg/l/' + encodeURIComponent(docId),
     openExternal: async (url) => { if (!/^https?:\/\//i.test(url)) throw new Error('Only http(s) links can be opened'); return url; },
-    todayNode: async () => { const date = new Date().toLocaleDateString('sv-SE'); const found = all.find((d) => d.text === date); if (found) return found.id; const n = { id: 'mocktoday', text: date, kind: 'document', hasChildren: true, editable: true, icon: 'doc', tags: [{ label: 'doc', color: 'grey' }] }; all.push(n); sections[0].nodes.unshift(n); datePins[n.id] = [date]; emit(null); return n.id; },
+    todayNode: async () => { const date = new Date().toLocaleDateString('sv-SE'); const found = all.find((d) => d.text === date); if (found) return found.id; const n = { id: 'mocktoday', text: date, kind: 'document', hasChildren: true, editable: true, icon: 'doc', tags: [{ label: 'doc', color: 'grey' }] }; content[n.id] = []; all.push(n); sections[0].nodes.unshift(n); datePins[n.id] = [date]; emit(null); return n.id; },
     setTitle: async (docId, title) => mut(docId, () => { all.find((d) => d.id === docId).text = title; emit(docId); }),
     setDone: async (docId, done) => mut(docId, () => { const d = all.find((x) => x.id === docId); d.done = done ? 1 : 0; d.state = done ? 'closed' : 'open'; emit(docId); }),
     toggleCheckbox: async (docId, id) => mut(docId, () => { const n = locate(content[docId], id).node; n.done = n.done == null ? 0 : n.done ? 0 : 1; emit(docId); }),
@@ -430,6 +432,8 @@ let sel = null;              // multi-select: { anchor: key, focus: key } over v
 // view filters (api.taskFilter / api.libraryFilter, persisted by main); members = api.members() for the Assigned menu ("You" = the one flagged me)
 let taskF = { states: ['proposed', 'open'], assignee: 'me' }, libF = { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me', text: '' };
 let members = null, libRows = null, libSeq = 0;
+let sensitiveIds = null, sensitiveVisible = false, sensitiveLoading = null; // marks persist; every launch starts blurred
+const sensitiveEls = new Map(); // rendered surface -> document ids; lets a toggle update live DOM without rebuilding it
 const taskMetaById = new Map(), taskMetaLoading = new Set(), taskMetaFailed = new Map(); // docId -> { until, wait }: a failed metadata read backs off, it is never given up on
 const META_RETRY_MS = 500, META_RETRY_MAX = 30000;
 const accessById = new Map(), accessLoading = new Set();
@@ -499,7 +503,8 @@ function draftDocNode(kind, option = {}) {
 function chipEl(t, nodeHue) {
   const c = document.createElement('span');
   const hue = t.hue != null ? t.hue : nodeHue;
-  c.className = 'chip ' + (hue != null ? 'hue' : t.color || 'grey'); c.textContent = '# ' + t.label;
+  c.className = 'chip ' + (hue != null ? 'hue' : t.color || 'grey'); c.append('#');
+  const label = document.createElement('span'); label.className = 'chip-label'; label.textContent = ' ' + t.label; c.append(label);
   if (hue != null) c.style.setProperty('--hue', String(hue));
   return c;
 }
@@ -571,6 +576,26 @@ const nodeIcon = (n) => chatIcon(n) || ((n.tags || []).some((t) => t.label === '
 const asDoc = (n) => ({ ...n, kind: 'document', text: n.text ?? n.title ?? '', hasChildren: true, icon: nodeIcon(n) }); // api.node / search / library result -> document Node
 // a draft row keeps a local "draftdoc:N" id until it is created, and the main process knows nothing about it
 const isRealId = (id) => typeof id === 'string' && id.startsWith('tana:');
+function sensitiveHidden(id) {
+  return !sensitiveVisible && typeof id === 'string' && (sensitiveIds === null || sensitiveIds.has(id));
+}
+function blurSensitive(el, ...ids) {
+  const present = ids.filter(isRealId);
+  sensitiveEls.set(el, present);
+  el.classList.toggle('sensitive', present.some(sensitiveHidden));
+  return el;
+}
+function refreshSensitive() {
+  for (const [el, ids] of sensitiveEls) {
+    if (!el.isConnected) sensitiveEls.delete(el);
+    else el.classList.toggle('sensitive', ids.some(sensitiveHidden));
+  }
+}
+function loadSensitive() {
+  if (!sensitiveLoading) sensitiveLoading = Promise.resolve(tana.sensitiveIds ? tana.sensitiveIds() : [])
+    .then((ids) => { sensitiveIds = new Set(ids); }, showError);
+  return sensitiveLoading;
+}
 // recently viewed documents (localStorage "recent"), most recent first, max 20
 const recent = () => { try { return (JSON.parse(localStorage.getItem('recent')) || []).map((n) => asDoc(!n.icon && !n.tags?.length && n.id?.startsWith('tana:text:') ? { ...n, icon: 'doc', tags: [{ label: 'doc', color: 'grey' }] } : n)); } catch { return []; } };
 function recordRecent(n) {
@@ -598,6 +623,7 @@ function todayIndex(nodes) {
 }
 
 async function loadRoots() {
+  await loadSensitive(); // privacy gate: no document reaches the first render before the local marks do
   const drafts = sections.flatMap((s) => s.nodes.map((node, i) => ({ section: s.id, i, node })).filter((d) => d.node.draft)); // a refresh must not drop a draft being typed
   sections = (await tana.roots()).map((s) => ({ ...s, icon: s.id === 'library' ? 'library' : s.icon, nodes: s.nodes.map(asDoc) }));
   rootsLoaded = true;
@@ -808,6 +834,7 @@ function renderOutline() {
   if (editable) titleEl.contentEditable = 'plaintext-only'; else titleEl.removeAttribute('contenteditable');
   titleEl.dataset.key = editable ? parent.key : '';
   titleEl.textContent = editable && pending.has(parent.key) ? plainOf(pending.get(parent.key).segs) : parent ? parent.node.text : viewOf() ? viewOf().title : 'Tana';
+  blurSensitive(titleEl, parent && parent.docId);
   // zoomed task: its checkbox before the title (toggleDone, like row checkboxes; Cmd+Enter in the title too)
   const zoomedTask = parent && isTask(parent.node);
   titleCheck.hidden = !zoomedTask; titleCheck.checked = zoomedTask && !!parent.node.done;
@@ -818,6 +845,7 @@ function renderOutline() {
   const titleTags = zoomedTask && visibleTags(parent.node).some((tag) => tag.label !== 'task');
   taskInfoEl.hidden = !titleTags; taskInfoEl.replaceChildren();
   if (titleTags) appendTags(taskInfoEl, parent.node);
+  blurSensitive(taskInfoEl, parent && parent.docId);
   renderFields(parent);
   renderCrumbs(trail);
   renderRail(parent);
@@ -887,6 +915,7 @@ function renderFields(parent) {
     row.append(value);
     el.append(row);
   }
+  blurSensitive(el, parent && parent.docId);
 }
 // api.related for the zoomed document, fetched once per id; a failure simply leaves the rail empty
 function loadRelated(docId) {
@@ -914,11 +943,12 @@ function railRow(node) {
   }
   const title = document.createElement('span');
   title.className = 'rtitle'; title.textContent = node.text || node.title || 'Untitled';
+  blurSensitive(title, node.id);
   row.append(title);
   appendTags(row, node);
   // the sidebar is narrow: a tag shows as its "#" in the type's colour and expands on hover (CSS), with the full
   // label available to the pointer and to assistive tech
-  for (const chip of row.querySelectorAll('.chip')) chip.title = chip.textContent.trim();
+  for (const chip of row.querySelectorAll('.chip')) { chip.title = chip.textContent.trim(); blurSensitive(chip, node.id); }
   // that expansion narrows the title, which could re-wrap it and jump the row under the pointer: hold the title to
   // the line count it already has, so the label truncates instead and the row keeps its height
   const holdLines = () => { const lh = parseFloat(getComputedStyle(title).lineHeight) || 19; title.style.webkitLineClamp = String(Math.max(1, Math.round(title.offsetHeight / lh))); };
@@ -1013,7 +1043,7 @@ function railGroups(data) {
 }
 function railPinAction(pinHub, docId) {
   const row = railMetaEl({ id: 'pinNew', icon: 'pin', label: 'Pin something…', run: () => togglePalette('search', null, { pinHub, docId }) });
-  row.className = 'rrow'; row.dataset.id = 'action:pinNew';
+  row.dataset.id = 'action:pinNew';
   return row;
 }
 // Pinned / Outcomes / References for the zoomed document; a writable pin hub keeps Pinned available when empty.
@@ -1027,6 +1057,7 @@ function renderRail(parent) {
   // Event views immediately follow their write-up document. Sharing still belongs to the event itself.
   const accessNode = data?.pinHub?.startsWith('tana:event:') ? { id: data.pinHub } : parent.node;
   const meta = railMetaRows(parent.node, accessNode);
+  if (sensitiveIds?.has(docId)) meta.unshift({ id: 'sensitive', icon: 'lock', label: 'Sensitive', run: null });
   const call = railCallRow(data);
   if (call) meta.unshift(call);
   // "Notes" is what api.related calls them; in the sidebar they read as References
@@ -1080,17 +1111,18 @@ function renderCrumbs(trail) {
     a.append(p.title);
     const when = crumbWhen(p.id); // a meeting crumb also says when it was: two meetings often share a title
     if (when) { const date = document.createElement('span'); date.className = 'cdate'; date.textContent = when; a.append(date); }
+    blurSensitive(a, p.id);
     a.onclick = p.id === 'library' ? () => setView('library') : p.id ? () => goTo(p.id) : back;
     nav.append(a);
   }
   for (const v of zoom.via || []) {
     const sep = document.createElement('span'); sep.className = 'sep'; sep.textContent = '›';
-    const a = document.createElement('a'); a.textContent = (docOf(v.docId) || {}).text || 'Untitled'; a.onclick = () => { zoom = v; render(); };
+    const a = document.createElement('a'); a.textContent = (docOf(v.docId) || {}).text || 'Untitled'; blurSensitive(a, v.docId); a.onclick = () => { zoom = v; render(); };
     nav.append(sep, a);
   }
   for (const item of trail.slice(0, -1)) { // ancestors only: the page title already shows the current node
     const sep = document.createElement('span'); sep.className = 'sep'; sep.textContent = '›';
-    const a = document.createElement('a'); a.textContent = item.node.text || 'Untitled'; a.onclick = () => zoomTo(item);
+    const a = document.createElement('a'); a.textContent = item.node.text || 'Untitled'; blurSensitive(a, item.docId); a.onclick = () => zoomTo(item);
     nav.append(sep, a);
   }
 }
@@ -1160,6 +1192,7 @@ function nodeEl(node, docId, parent) {
     sub.className = 'subtext'; sub.textContent = taskInfo.audience.space;
     body.append(sub);
   }
+  blurSensitive(body, docId, target && target.id);
   line.append(body);
   line.onclick = (e) => { if (!reference && (e.target === line || e.target === body || e.target.parentElement === text)) setCaret(text, text.textContent.length); };
   // a reference row: the bullet zooms into the target, a click selects the row, a click on the selected row puts the caret where you clicked
@@ -1186,11 +1219,12 @@ function nodeEl(node, docId, parent) {
 
 // a draft becomes real on its first typed character: created with that text, caret kept
 async function materialise(item, el) {
-  const { parent, node } = item, text = el.textContent, off = caretOffset(el);
-  let key;
+  const { parent, node } = item, oldKey = item.key, text = el.textContent;
+  let key, real;
   await run(async () => {
     if (node.kind === 'document') {
-      const n = await tana.createDocument(text, node.createOptions || { kind: node.draft }), real = { ...n, text: n.title ?? n.text ?? '', hasChildren: true };
+      const n = await tana.createDocument(text, node.createOptions || { kind: node.draft });
+      real = { ...n, text: n.title ?? n.text ?? '', hasChildren: true };
       const s = sectionOf(node.id), i = s ? s.nodes.indexOf(node) : -1;
       if (i >= 0) { s.nodes.splice(i, 1, real); fresh.set(real.id, { section: s.id, after: i ? s.nodes[i - 1].id : null, node: real }); }
       if (zoom?.docId === node.id) zoom = { ...zoom, docId: real.id };
@@ -1200,15 +1234,18 @@ async function materialise(item, el) {
       await reload(parent.docId);
       await inheritCheckbox(parent, id); // old preload bridges lack native insert inheritance; current bridge already returns done: 0
       key = parent.docId + '/' + id;
+      real = locate(kids.get(parent.docId) || [], id)?.node || { ...node, id, text };
     }
   });
-  const latest = el.textContent, latestOff = caretOffset(el) ?? off; // typed on while the create was in flight
+  if (!key || !real) { item.busy = false; return; }
+  const latest = el.textContent; // typed on while the create was in flight
   if (key && slashCtx && slashCtx.key === item.key) slashCtx = { key }; // the "/" menu opened on the draft: follow it to the real node
-  render(true);
-  const real = items.get(key);
-  if (!real) return;
-  if (latest !== text) { renderSegs(textEl(key), [{ text: latest }]); scheduleSave(real, [{ text: latest }]); }
-  if (palette.hidden) placeCaret(key, latestOff); // a palette opened while the node was being created keeps the keyboard
+  item.key = key; item.docId = real.kind === 'document' ? real.id : item.docId; item.node = real; delete item.busy; delete item.node.draft;
+  items.delete(oldKey); items.set(key, item);
+  const host = el === titleEl ? el : el.closest('.node');
+  if (host) { host.dataset.key = key; host.classList.remove('draft'); }
+  renderDeferred = true; // refresh the row chrome after the user leaves; the active contenteditable stays untouched
+  if (latest !== text) scheduleSave(item, [{ text: latest }]);
 }
 function dropDraft(item) {
   if (item.node.kind === 'document') { const s = sectionOf(item.docId); if (s) s.nodes.splice(s.nodes.indexOf(item.node), 1); }
@@ -1757,8 +1794,9 @@ function visibilityPeopleRows(q) {
   if (!palDoc) return [];
   loadMembers();
   const people = (members || []).filter((member) => !member.me && memberName(member.id).toLowerCase().includes(q));
+  const back = { group: 'Visibility', label: 'Back to visibility', keepOpen: true, run: backPalette };
   const apply = { group: 'Visibility', label: 'Apply selected people', disabled: !visibilityPeople.size, keepOpen: true, run: () => applySharing(palDoc, { rule: 'people', participants: [...visibilityPeople].map((uri) => ({ uri, role: visibilityRoles.get(uri) || 'editor' })) }) };
-  return [apply, ...people.map((member) => ({ group: 'People', icon: 'member', label: memberName(member.id), hint: visibilityPeople.has(member.id) ? '✓' : '', keepOpen: true, run: () => { if (visibilityPeople.has(member.id)) visibilityPeople.delete(member.id); else { visibilityPeople.add(member.id); visibilityRoles.set(member.id, 'editor'); } renderPalette(); } }))];
+  return [back, apply, ...people.map((member) => ({ group: 'People', icon: 'member', label: memberName(member.id), hint: visibilityPeople.has(member.id) ? '✓' : '', keepOpen: true, run: () => { if (visibilityPeople.has(member.id)) visibilityPeople.delete(member.id); else { visibilityPeople.add(member.id); visibilityRoles.set(member.id, 'editor'); } renderPalette(); } }))];
 }
 function searchSpacesNow() {
   if (!palDoc || !tana.searchSpaces) return;
@@ -1811,14 +1849,14 @@ function pillDefs() {
     ...TYPES.map((t) => (t ? { label: t[1], icon: t[2], keepOpen: true, checked: !!f.types && f.types.includes(t[0]), run: () => save({ types: toggleIn(TYPES.filter(Boolean).map((x) => x[0]), f.types, t[0]) }) } : { div: true })), // multi-select: the menu stays open to tick more
   ] });
   if (!lib || !f.types || f.types.includes('tasks')) {
-    defs.push({ id: 'status', label: 'Status', value: names(STATES, f.states) || 'Any', rows: () => [
+    defs.push({ id: 'status', label: 'Status', icon: 'status', value: names(STATES, f.states) || 'Any', rows: () => [
       { label: 'Any status', checked: !f.states, run: () => save({ states: null }) },
       ...STATES.map(([v, l]) => ({ label: l, keepOpen: true, checked: !!f.states && f.states.includes(v), run: () => save({ states: toggleIn(STATES.map((s) => s[0]), f.states, v) }) })), // multi-select, like the type list
     ] });
     loadMembers();
     const you = 'You' + (me() ? ' (' + me().title + ')' : '');
     const a = f.assignee, m = (members || []).find((x) => x.id === a), who = a === 'anyone' ? 'Anyone' : a === 'unassigned' ? 'Unassigned' : a === 'me' || !a ? you : m ? m.title : '…';
-    defs.push({ id: 'assigned', label: 'Assigned to', value: who, rows: () => [
+    defs.push({ id: 'assigned', label: 'Assigned to', icon: 'assigned', value: who, rows: () => [
       { label: 'Anyone', checked: a === 'anyone', run: () => save({ assignee: 'anyone' }) },
       { label: you, checked: a === 'me' || !a, run: () => save({ assignee: 'me' }) },
       { label: 'Unassigned', checked: a === 'unassigned', run: () => save({ assignee: 'unassigned' }) },
@@ -1827,8 +1865,8 @@ function pillDefs() {
     ] });
   }
   // sorting and grouping are view preferences, not queries: they re-order and re-section the rows the view already has
-  defs.push({ id: 'sort', label: 'Sort', value: SORTS.find(([id]) => id === sortBy())[1], rows: () => SORTS.map(([id, label]) => ({ label, checked: sortBy() === id, run: () => setSortBy(id) })) });
-  defs.push({ id: 'group', label: 'Group', value: GROUPS.find(([id]) => id === groupBy())[1], rows: () => GROUPS.map(([id, label]) => ({ label, checked: groupBy() === id, run: () => setGroupBy(id) })) });
+  defs.push({ id: 'sort', label: 'Sort', icon: 'sort', value: SORTS.find(([id]) => id === sortBy())[1], rows: () => SORTS.map(([id, label]) => ({ label, checked: sortBy() === id, run: () => setSortBy(id) })) });
+  defs.push({ id: 'group', label: 'Group', icon: 'group', value: GROUPS.find(([id]) => id === groupBy())[1], rows: () => GROUPS.map(([id, label]) => ({ label, checked: groupBy() === id, run: () => setGroupBy(id) })) });
   return defs;
 }
 const pillsApply = () => view === 'tasks' || view === 'library' || view === 'chats';
@@ -1836,7 +1874,7 @@ const pillName = (def) => def.label || def.id[0].toUpperCase() + def.id.slice(1)
 function pillCommandRows() {
   return (pillsApply() ? pillDefs() : []).map((def) => ({
     id: 'pill:' + def.id, group: 'View options', icon: def.icon,
-    label: pillName(def) + (def.value ? ' ' + def.value : ''),
+    label: 'Set view option: ' + pillName(def) + (def.value ? ' ' + def.value : ''),
     keepOpen: !!def.rows, run: def.rows ? () => openPillPalette(def.id) : def.toggle,
   }));
 }
@@ -1965,6 +2003,17 @@ function setIcon(docId, svg) {
   if (d) d.iconSvg = svg || undefined;
   render();
   run(() => tana.setIcon(docId, svg));
+}
+function setSensitiveMark(doc, on) {
+  run(async () => {
+    await tana.setSensitive(doc.id, on);
+    if (on) sensitiveIds.add(doc.id); else sensitiveIds.delete(doc.id);
+    refreshSensitive();
+  });
+}
+function toggleSensitiveVisibility() {
+  sensitiveVisible = !sensitiveVisible;
+  refreshSensitive();
 }
 function startDrop(doc) {
   dropDoc = doc; dropReturn = focused();
@@ -2378,6 +2427,11 @@ function paletteRows(q) {
   rows.push({ id: 'sync', group: 'Actions', icon: 'sync', label: 'Sync', run: () => run(() => tana.refresh()) });
   // the list of titles hidden from every view and from search, edited in the palette itself
   if (tana.filters) rows.push({ id: 'hidden', group: 'Actions', icon: 'hidden', label: 'Edit hidden items', keepOpen: true, run: openHiddenPalette });
+  if (palDoc && tana.setSensitive && sensitiveIds) {
+    const marked = sensitiveIds.has(palDoc.id);
+    rows.push({ group: 'Actions', icon: 'lock', label: marked ? 'Unmark as sensitive' : 'Mark as sensitive', run: () => setSensitiveMark(palDoc, !marked) });
+  }
+  if (tana.sensitiveIds) rows.push({ id: 'sensitiveVisibility', group: 'Actions', icon: 'hidden', label: 'Toggle sensitive visibility', hint: sensitiveVisible ? 'Shown' : 'Blurred', run: toggleSensitiveVisibility });
   // today's node: a document titled with the date, pinned to today; created and pinned when it does not exist yet
   if (tana.todayNode) rows.push({ id: 'today', group: 'Actions', icon: 'pinDate', label: 'Show today node', run: () => run(async () => goTo(await tana.todayNode())) });
   const dark = typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark';
@@ -2438,6 +2492,11 @@ function openPillPalette(id) {
 function openCommandPalette() {
   pillCtx = null; palMode = 'cmd'; palRows = []; palIndex = 0;
   palInput.placeholder = 'Search or run a command'; palInput.value = ''; renderPalette(); palInput.focus();
+}
+function backPalette() {
+  if (palMode === 'pill') openCommandPalette();
+  else if (palMode === 'visibilityPeople') openVisibilityPalette(palDoc);
+  else closePalette();
 }
 // ---- hidden items (api.filters): titles every view and search skips, edited from Cmd+K ----
 // The rule lives in the group header because that is the one line in the palette that wraps.
@@ -2540,10 +2599,11 @@ function renderPalette() {
     if (!r.svg && rowHue != null) { icon.classList.add('hue'); icon.style.setProperty('--hue', String(rowHue)); }
     const label = document.createElement('span'); label.className = 'label'; label.textContent = r.label;
     for (const t of r.tags || []) label.append(chipEl(t, r.node && r.node.hue));
+    blurSensitive(label, r.node && r.node.id);
     row.append(icon, label);
     if (r.right) { const s = document.createElement('span'); s.className = 'ricon right'; s.innerHTML = iconSvg(r.right); row.append(s); }
     if (r.kbd) { const k = document.createElement('kbd'); k.textContent = r.kbd; row.append(k); }
-    if (r.hint) { const h = document.createElement('span'); h.className = 'hint'; h.textContent = r.hint; row.append(h); }
+    if (r.hint) { const h = document.createElement('span'); h.className = 'hint'; h.textContent = r.hint; blurSensitive(h, r.node && r.node.id); row.append(h); }
     row.onmousedown = (e) => e.preventDefault();
     row.onclick = () => runRow(r);
     els.push(row);
@@ -2589,7 +2649,7 @@ palInput.addEventListener('input', () => {
 });
 palInput.addEventListener('keydown', (e) => {
   const mod = e.metaKey || e.ctrlKey;
-  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (palMode === 'pill') openCommandPalette(); else closePalette(); }
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); backPalette(); }
   else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && palRows.length) { e.preventDefault(); e.stopPropagation(); palIndex = nextPalIndex(palRows, palIndex, e.key === 'ArrowDown' ? 1 : -1); renderPalette(); }
   else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); if (palBusy && (palMode === 'spaces' || palMode === 'search')) return; const r = mod && linkCtx ? palRows.find((row) => row.create) : palRows[palIndex]; if (r) runRow(r); } // ⌘↩ always creates for an @ selection
   else if (mod && e.shiftKey && e.key.toLowerCase() === 'k') { e.preventDefault(); e.stopPropagation(); const r = palRows[palIndex]; if (palMode === 'cmd' && r && r.id) openRecorder(r); }

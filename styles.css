@@ -7,6 +7,17 @@ body {
 }
 .app { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; }
 button { font: inherit; }
+.sensitive {
+  color: transparent !important;
+  opacity: .14;
+  text-decoration: line-through #696d73 !important;
+  text-decoration-thickness: .72em !important;
+  text-decoration-skip-ink: none;
+}
+.sensitive * { color: transparent !important; text-decoration: none !important; }
+.sensitive .chip, .chip.sensitive { display: none; }
+.outline .body.sensitive { text-decoration-thickness: 12px !important; }
+.outline .body.sensitive .meta { font-size: inherit; }
 
 /* Frameless window (titleBarStyle: hiddenInset): the chrome -- the title bar and the sidebar's own background,
    header area and padding -- drags the window, and everything interactive opts out once, here, not per element.
@@ -19,6 +30,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .titlebar h1[contenteditable] { outline: none; user-select: text; min-height: 1lh; }
 .titlebar h1[contenteditable]:empty { display: inline-block; min-width: 1px; }
 .pagehead { display: flex; align-items: flex-start; }
+.pagehead h1 { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .pagehead .check { width: 22px; height: 22px; margin: 11px 12px 0 0; border-radius: 6px; }
 .pagehead .check:checked::after { left: 8px; top: 3px; width: 5px; height: 11px; }
 .pagehead h1.done { color: #999; text-decoration: line-through; }
@@ -114,9 +126,11 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .rail .rrow .ricon { flex: none; display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin: 0 8px 0 2px; color: #8a8a8a; align-self: center; }
 .rail .rrow .ricon svg { display: block; width: 15px; height: 15px; }
 .rail .rrow .ricon.hue { color: hsl(var(--hue) 45% 30%); } /* a hued node keeps its colour in the sidebar too */
-/* collapsed, the chip shows its "#" alone: the width holds the glyph plus both 6px paddings, so it sits centred */
+/* collapsed, the chip shows its "#" alone; the label appears only while the row expands it */
 .rail .rrow .chip { flex: none; max-width: 1.63em; overflow: hidden; white-space: nowrap; transition: max-width 0.12s ease; }
+.rail .rrow .chip-label { display: none; }
 .rail .rrow:hover .chip, .rail .rrow:focus .chip { max-width: 12em; }
+.rail .rrow:hover .chip-label, .rail .rrow:focus .chip-label { display: inline; }
 .rail .rrow .check { align-self: center; }
 /* task metadata rows (assignees, visibility) above the first group; plain like every other row */
 .rail .rrow.rmeta .rtitle { color: #555; }
