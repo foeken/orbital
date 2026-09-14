@@ -134,7 +134,9 @@ assert.match(source, /truncated\.has\(view\) \? 'Showing the first 1,000 results
 assert.match(source, /function blockSelection\(keys, contiguous, action\)/);
 assert.match(source, /tana\.setStateMany\(palTaskCtx\.docs\.map\(\(doc\) => doc\.id\), state\)/);
 assert.match(source, /tana\.setAssigneesMany\(palTaskCtx\.docs\.map\(\(doc\) => doc\.id\), uris\)/);
-assert.match(source, /const rows = \[\.\.\.selection, \.\.\.views\.map/, 'what acts on the selection comes before everything else in Cmd+K');
+assert.match(source, /const rows = \[\.\.\.selection\];/, 'what acts on the selection comes before everything else in Cmd+K');
+// the current document's own actions (pins, link, icon, visibility, location) follow under the same heading, before the views
+assert.ok(source.indexOf("const docGroup = selection.length && selection[0].group === 'Selection' ? 'Actions' : 'Current node';") < source.indexOf("rows.push(...views.map((s) => ({ id: 'view:'"), 'the document actions join the Current node group ahead of the views');
 assert.match(source, /function invalidatePinCaches\(id, includeRecent = true\)/);
 assert.match(source, /function unpinStale\(id\) \{\s*invalidatePinCaches\(id, false\);/);
 assert.match(source, /if \(tana\.onRemoved\) tana\.onRemoved\(removeStale\);/);

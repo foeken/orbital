@@ -8,7 +8,30 @@ let palMode = 'cmd', palRows = [], palIndex = 0, palBusy = false, palSeq = 0, pa
 const docRow = (n, hint, run) => ({ node: n, icon: n.icon, svg: n.iconSvg, label: n.text ?? n.title, tags: visibleTags(n), hint: hint === undefined ? n.meta : hint, run });
 function paletteRows(q) {
   const selection = selectionRows();
-  const rows = [...selection, ...views.map((s) => ({ id: 'view:' + s.id, group: 'Views', icon: s.icon, label: s.title, run: () => setView(s.id) }))];
+  const rows = [...selection];
+  // What acts on the current document (pins, link, icon, visibility, location) sits with the rest of its rows under
+  // "Current node"; while a multi-selection owns the top of the palette these fall back among the app actions.
+  const docGroup = selection.length && selection[0].group === 'Selection' ? 'Actions' : 'Current node';
+  if (pinInfo && palDoc && pinInfo.docId === palDoc.id) { // no ids: their labels depend on state, so no hotkeys
+    const sb = pinInfo.sidebar, td = pinInfo.dates.includes(localDate());
+    rows.push({ group: docGroup, icon: 'pin', label: sb ? 'Unpin from sidebar' : 'Pin to sidebar', run: () => pinAction(sb ? 'unpin' : 'pin', 'sidebar') });
+    rows.push({ group: docGroup, icon: 'pinDate', label: td ? 'Unpin from today' : 'Pin to today', run: () => pinAction(td ? 'unpin' : 'pin', 'today') });
+  }
+  // the node's web link, for pasting into Slack or a doc
+  if (palDoc && tana.nodeLink && isRealId(palDoc.id)) {
+    rows.push({ id: 'copyLink', group: docGroup, icon: 'link', label: 'Copy link', run: () => run(async () => copyText(await tana.nodeLink(palDoc.id), 'Link copied')) });
+  }
+  if (palDoc && tana.setIcon) {
+    rows.push({ group: docGroup, icon: 'setIcon', label: 'Set Image', run: () => startDrop(palDoc) });
+    if (palDoc.iconSvg) rows.push({ group: docGroup, label: 'Remove icon', run: () => setIcon(palDoc.id, null) });
+  }
+  if (palDoc && tana.accessOptions) {
+    loadAccess(palDoc.id);
+    const access = accessById.get(palDoc.id);
+    if (access?.sharing) rows.push({ group: docGroup, icon: 'lock', label: 'Edit visibility', run: () => openVisibilityPalette(palDoc) });
+    if (access?.move) rows.push({ group: docGroup, icon: 'space', label: 'Move to space', keepOpen: true, run: () => openMovePalette(palDoc) });
+  }
+  rows.push(...views.map((s) => ({ id: 'view:' + s.id, group: 'Views', icon: s.icon, label: s.title, run: () => setView(s.id) })));
   rows.push(...pillCommandRows());
   if (tana.creationOptions) rows.push({ id: 'create', group: 'Actions', icon: 'createNew', label: 'Create new…', keepOpen: true, run: openCreationPalette });
   rows.push({ id: 'sync', group: 'Actions', icon: 'sync', label: 'Sync', run: () => run(() => tana.refresh()) });
@@ -23,25 +46,6 @@ function paletteRows(q) {
   rows.push({ id: 'theme', group: 'Actions', icon: 'darkLight', label: 'Toggle ' + (dark ? 'light' : 'dark') + ' mode', run: () => setTheme(dark ? 'light' : 'dark') });
   if (tana.systemTheme) rows.push({ id: 'systemTheme', group: 'Actions', icon: 'darkLight', label: 'Toggle system dark/light mode', hint: themePref === 'system' ? 'Following macOS' : '', run: () => followSystem(themePref !== 'system') });
   if (signedOut) rows.push({ id: 'login', group: 'Actions', label: 'Log in to Tana', run: () => tana.login().catch(showError) });
-  if (pinInfo && palDoc && pinInfo.docId === palDoc.id) { // context actions for the current document (no ids: their labels depend on state, so no hotkeys)
-    const sb = pinInfo.sidebar, td = pinInfo.dates.includes(localDate());
-    rows.push({ group: 'Actions', icon: 'pin', label: sb ? 'Unpin from sidebar' : 'Pin to sidebar', run: () => pinAction(sb ? 'unpin' : 'pin', 'sidebar') });
-    rows.push({ group: 'Actions', icon: 'pinDate', label: td ? 'Unpin from today' : 'Pin to today', run: () => pinAction(td ? 'unpin' : 'pin', 'today') });
-  }
-  // the node's web link, for pasting into Slack or a doc
-  if (palDoc && tana.nodeLink && isRealId(palDoc.id)) {
-    rows.push({ id: 'copyLink', group: 'Actions', icon: 'link', label: 'Copy link', run: () => run(async () => copyText(await tana.nodeLink(palDoc.id), 'Link copied')) });
-  }
-  if (palDoc && tana.setIcon) {
-    rows.push({ group: 'Actions', icon: 'setIcon', label: 'Set Image', run: () => startDrop(palDoc) });
-    if (palDoc.iconSvg) rows.push({ group: 'Actions', label: 'Remove icon', run: () => setIcon(palDoc.id, null) });
-  }
-  if (palDoc && tana.accessOptions) {
-    loadAccess(palDoc.id);
-    const access = accessById.get(palDoc.id);
-    if (access?.sharing) rows.push({ group: 'Actions', icon: 'lock', label: 'Edit visibility', run: () => openVisibilityPalette(palDoc) });
-    if (access?.move) rows.push({ group: 'Actions', icon: 'space', label: 'Move to space', keepOpen: true, run: () => openMovePalette(palDoc) });
-  }
   if (q) for (const s of views) for (const n of s.nodes) rows.push({ ...docRow(n, n.meta || s.title, () => openDoc(n.id)), id: 'doc:' + n.id, group: 'Documents' });
   let docsLeft = 8;
   return rows.filter((r) => (!q || r.label.toLowerCase().includes(q)) && (r.group !== 'Documents' || docsLeft-- > 0)).map((r) => (hotkeys[r.id] ? { ...r, kbd: hotkeys[r.id] } : r));
