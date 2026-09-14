@@ -400,6 +400,36 @@ async function main() {
     console.log('ok  appearance hue survives Loro reads and reaches documents opened without a cached row');
   }
 
+  // Sort/group data on a row: updatedAt and createdAt (ISO) and the task's stateType, including for a cached
+  // SQLite row, whose table has no column for either time or state.
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    backend.testRuntime({ me: { userUri: ME }, win: null, client: {} });
+    const taskId = 'tana:text:' + ulid(), docId = 'tana:text:' + ulid(), eventId = 'tana:event:' + ulid();
+    const task = { id: taskId, title: 'Ask and tell about Tana DPA', createTime: '2026-09-09T15:19:49.638Z', updateTime: '2026-09-13T15:12:43Z', state: { type: 'open' } };
+    const plain = { id: docId, title: 'Notes', createTime: '2026-09-01T09:00:00.000Z', updateTime: '2026-09-02T09:00:00.000Z' };
+    const event = { id: eventId, title: 'Foundry Offsite', createTime: '2026-09-03T09:00:00.000Z', updateTime: '2026-09-04T09:00:00.000Z', calendarEvent: { startTime: '2026-09-10T07:00:00.000Z' } };
+    [task, plain, event].forEach(backend.rememberNodeHue);
+    const rows = [task, plain, event].map((n) => backend.toNode(backend.graphRow(n)));
+    assert.deepEqual(rows.map((r) => r.createdAt), [task.createTime, plain.createTime, event.createTime]);
+    assert.deepEqual(rows.map((r) => r.updatedAt), [task.updateTime, plain.updateTime, event.updateTime]);
+    assert.deepEqual(rows.map((r) => r.stateType), ['open', undefined, undefined], 'only a task carries a state');
+    assert.deepEqual(rows.map((r) => r.done), [0, undefined, undefined], 'done keeps its own meaning');
+    // the Tasks/Meetings views render db rows: they keep updatedAt, and the rest comes back from the graph cache
+    const cached = backend.toNode(cache.upsert({ ...backend.graphRow(task), section: 'tasks' }));
+    assert.equal(cached.updatedAt, task.updateTime);
+    assert.equal(cached.createdAt, task.createTime);
+    assert.equal(cached.stateType, 'open');
+    // a Loro data map instead of a graph node: createdAt is milliseconds there, and the state can have moved on
+    const doc = new Document(taskId);
+    doc.transact((l) => initDocument(l, 'Ask and tell about Tana DPA', ME, { kind: 'task', now: 1788262342702 }));
+    setState(doc, 'closed', ME);
+    backend.rememberNodeHue(readNode(doc));
+    assert.equal(backend.toNode({ id: taskId, title: 'x', icon: 'task', done: 1, tags: [] }).createdAt, new Date(1788262342702).toISOString());
+    assert.equal(backend.toNode({ id: taskId, title: 'x', icon: 'task', done: 1, tags: [] }).stateType, 'closed');
+    console.log('ok  rows carry updatedAt/createdAt/stateType, from the graph and from cached view rows');
+  }
+
   // #97: before the session and sync stream are ready, every view/metadata/permission call fails the same benign
   // way. Boot must stay quiet: no error status, no work fired against a client that does not exist yet.
   {
@@ -1069,6 +1099,51 @@ async function main() {
     outline.remove(host, blockId);
     assert.equal(outline.readOutline(host).length, 1);
     console.log('ok  native embed identity, task resolution, unavailable fallback and non-destructive outline operations');
+  }
+  // A chat has no outline: its conversation is data.messages, rendered as read-only rows (docs/CHATS.md).
+  {
+    const backend = mainHelpers();
+    const chatUri = 'tana:chat:01m2518ymst5g02erq4d59xvj1', doc = new Document(chatUri);
+    const noteUri = 'tana:text:01m13ktr1zrpcryja5y3rp74se', fileUri = 'tana:text:01m1ec6vwzyz0xyzwn2zxw9tzk';
+    const proposedUri = 'tana:text:01m251k0t04h9ydbdvamgzjxcg', subUri = 'tana:chat:01m251k0t04h9ydbdvamgzjxcx';
+    doc.transact((l) => {
+      initDocument(l, 'Foundry Offsite Goals Extraction', ME, { kind: 'chat' });
+      const messages = l.getMap('data').get('messages');
+      messages.push({ id: 'pre0', type: 'message', fromUserType: 'human', hiddenFromChat: true, isStatusUpdate: true, content: { text: 'it is now Thursday' }, sentAt: 1788262342702 });
+      messages.push({ id: 'ctx0', type: 'context', fromUserType: 'human', content: { text: 'injected context' }, sentAt: 1788262342702 });
+      messages.push({ id: '0ymc325f', type: 'message', fromUserType: 'human', fromUserUri: ME, sentAt: 1788262342702, content: { text: 'From [Notes](' + noteUri + '), extract the goals.' }, attachmentUris: [fileUri] });
+      messages.push({ id: '1j3cr829', type: 'message', fromUserType: 'ai', sentAt: 1788262342702, completedAt: 1788262392412,
+        content: { text: '## Goals\n\n- **short** term\n- long term\n\n```js\nlet a = **1**\n```' },
+        proposals: [{ operation: 'create', proposedUri, proposedAt: 1788262392412, approvedAt: 1788262400000 }],
+        toolCalls: [{ id: 'call_1', name: 'extractOutcome', subagentChatUri: subUri, status: 'completed' }] });
+    });
+    const graphed = [];
+    backend.testRuntime({ me: { userUri: ME }, client: { graph: { listNodes: async (q) => {
+      graphed.push(q);
+      if (q.nodeTypes && q.nodeTypes[0] === 'user-profile') return { nodes: [{ id: ME, title: 'André Foeken' }] };
+      return { nodes: Array.from(q.nodeIds || []).map((id) => ({ id, title: 'Target ' + id.split(':')[1] })) };
+    } } } });
+    const rows = await backend.chatOutline(doc);
+    assert.deepEqual(rows.map((r) => r.text), ['André Foeken', 'Tana AI'], 'hidden and context messages are skipped, list order kept');
+    assert.deepEqual(rows.map((r) => r.id), ['m2', 'm3'], 'row ids follow the message list, not the visible order');
+    const readOnly = (ns) => ns.every((n) => n.editable === false && readOnly(n.children || []));
+    assert.ok(readOnly(rows), 'no chat row is editable');
+    const [human, ai] = rows;
+    assert.equal(human.icon, 'member'); assert.equal(ai.icon, 'chat');
+    assert.deepEqual(human.children[0].segments, [{ text: 'From ' }, { mention: { label: 'Notes', uri: noteUri } }, { text: ', extract the goals.' }]);
+    const attachment = human.children[1];
+    assert.equal(attachment.type, 'reference'); assert.equal(attachment.reference.uri, fileUri);
+    assert.equal(attachment.reference.node.id, fileUri, 'attachment titles resolve through the shared reference lookup');
+    assert.equal(ai.children[0].text, 'Thought for 50s');
+    assert.deepEqual(ai.children.slice(1, 5).map((n) => [n.block, n.text]), [['heading2', 'Goals'], ['bullet', 'short term'], ['bullet', 'long term'], ['code', 'let a = **1**']]);
+    assert.deepEqual(ai.children[2].segments, [{ text: 'short', marks: { bold: true } }, { text: ' term' }], 'inline markdown becomes marks, and text is the plain rendering');
+    assert.equal(ai.children[5].text, 'create · approved');
+    assert.equal(ai.children[5].children[0].reference.uri, proposedUri);
+    assert.equal(ai.children[6].reference.uri, subUri, 'a subagent tool call links its own chat');
+    // a mention carries its own label, so only reference rows cost a lookup
+    assert.deepEqual(Array.from(graphed.at(-1).nodeIds).sort(), [fileUri, proposedUri, subUri].sort());
+    assert.deepEqual(doc.toJSON().content, {}, 'reading a chat never writes an outline into it');
+    console.log('ok  chat rows: hidden/context skipped, list order, read-only rows, mentions, attachments, proposals and subagent links');
   }
   // 4. Transport: headers and the 401 -> refresh -> retry-once rule, with a fake fetch
   const calls = [];

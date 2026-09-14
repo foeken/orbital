@@ -394,6 +394,40 @@ commands.rows = async () => {
   const main = backend(await connect());
   out(await main.search(positional.join(' ')));
 };
+// chatlist [--limit 200]: every chat newest first with its invocationContext. search() has no chat kind (query.js
+// searchParams lists text/event/user-profile only), so this is how a chat is found by title.
+commands.chatlist = async () => {
+  await connect();
+  const { nodes } = await client.graph.listNodes({ nodeTypes: ['chat'], limit: Number(flag('limit', 200)), sortOptions: [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }] });
+  for (const n of nodes) out(n.id + '\t' + JSON.stringify(n.title || '') + '\t' + JSON.stringify(n.invocationContext || {}) + '\towner=' + (n.ownerUri || '-'));
+  out(nodes.length + ' chats');
+};
+// rawdoc <id>: the complete Loro document JSON — every root container, not just data + content. For learning an
+// undocumented schema (chats). Read-only: bootstrap carries no local ops.
+commands.rawdoc = async () => {
+  if (!positional[0]) throw new Error('usage: rawdoc <id>');
+  await connect();
+  await client.sync.connect();
+  const doc = await client.sync.subscribe(positional[0]);
+  // --containers 1: same tree, but every container is named by its kind and text keeps its marks (toJSON drops them).
+  if (flag('containers')) {
+    const dump = (v) => {
+      if (!v || typeof v.kind !== 'function') return v;
+      const kind = v.kind();
+      if (kind === 'Text') return { '@Text': v.toDelta() };
+      if (kind === 'Map') return { '@Map': Object.fromEntries(v.keys().map((k) => [k, dump(v.get(k))])) };
+      if (kind === 'List' || kind === 'MovableList') return { ['@' + kind]: [...Array(v.length).keys()].map((i) => dump(v.get(i))) };
+      return { ['@' + kind]: v.toJSON() };
+    };
+    const json = doc.loro.toJSON(); // the only public listing of root containers
+    const roots = {};
+    for (const key of Object.keys(json)) {
+      try { roots[key] = dump(doc.loro.getMap(key)); } catch { roots[key] = json[key]; } // non-map root (e.g. pinnedItems)
+    }
+    return out(JSON.stringify(roots, null, 1));
+  }
+  out(JSON.stringify(doc.toJSON(), null, 1));
+};
 // Sidebar pins as the renderer receives them: the only path where spaces reach a row (#63).
 commands.pinrows = async () => {
   const main = backend(await connect());
@@ -422,7 +456,8 @@ const USAGE = [
   'usage: ./node_modules/.bin/electron scripts/platform-cli.js <command>',
   '  session    login | whoami',
   '  read       list [--state open|all] | search <query> [#task|#meeting|#member|#Type] | types | fields [<type uri>] |',
-  '             meetings [--days 7] | get <id> | outline <id> | graphnode <id> | edges <id> | image <tana:image:uri> | pins [--dates]',
+  '             meetings [--days 7] | chatlist [--limit 200] | get <id> | outline <id> | rawdoc <id> [--containers 1] |',
+  '             graphnode <id> | edges <id> | image <tana:image:uri> | pins [--dates]',
   '  diagnose   inspect <id...> | audiences [--limit 80] [--mine 0] [--kind text] | refs <id> | rows <query> | pinrows | boot [--settle ms]',
   '  live       watch <id...>',
   '  WRITES     create <title> [--kind doc|task|meeting] | delete <id> | set-title <id> <title> |',

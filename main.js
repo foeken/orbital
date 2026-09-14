@@ -10,6 +10,7 @@ const access = require('./sdk/access');
 const { readNode, editable, setTitle, setState, taskMeta, audienceMetadata, setAssignees, ulid, initDocument, STATE_TYPES } = require('./sdk/node');
 const { parseQuery, searchParams, needsTypes, taskParams, libraryQueries, LIBRARY_KINDS, DEFAULT_TASK_FILTER, DEFAULT_LIBRARY_FILTER } = require('./sdk/query');
 const content = require('./sdk/content');
+const chat = require('./sdk/chat');
 const fields = require('./sdk/fields');
 const pins = require('./sdk/pins');
 
@@ -53,6 +54,17 @@ const typeTitles = new Map(); // entityType uri -> title, resolved once per sess
 const typeHues = new Map(); // type uri -> appearance.hue (0-360), for coloured type tags
 const nodeHues = new Map(); // document uri -> its own appearance.hue; separate from typeHues
 const editability = new Map(); // observed graph/document capabilities, never guessed from ownership
+// What the renderer sorts and groups rows by. A graph node carries createTime and state; a Loro data map carries
+// createdAt (ms) and stateType; the SQLite view rows (db.js) have a column for neither, so both are cached per id
+// and toNode reads them back for cached rows. Times are ISO strings everywhere, so they compare as strings.
+const nodeMeta = new Map(); // document uri -> { createdAt?, stateType? }
+const iso = (v) => (typeof v === 'number' ? new Date(v).toISOString() : typeof v === 'string' ? v : undefined);
+function rememberMeta(n) {
+  const createdAt = iso(n.createTime ?? n.createdAt) || (nodeMeta.get(n.id) || {}).createdAt;
+  const state = (n.state && n.state.type) || n.stateType;
+  const stateType = STATE_TYPES.includes(state) ? state : undefined;
+  if (createdAt || stateType) nodeMeta.set(n.id, { createdAt, stateType });
+}
 const rememberType = (n) => { typeTitles.set(n.id, n.title || ''); if (n.appearance && typeof n.appearance.hue === 'number') typeHues.set(n.id, n.appearance.hue); };
 const ownHue = (n) => n && n.appearance && typeof n.appearance.hue === 'number' ? n.appearance.hue : undefined;
 // appearance lives on graph nodes only: a Loro data map never carries it (verified read-only for spaces and typed
@@ -61,6 +73,7 @@ const ownHue = (n) => n && n.appearance && typeof n.appearance.hue === 'number' 
 const hueOf = (n) => { const hue = ownHue(n); return hue === undefined && n ? nodeHues.get(n.id) : hue; };
 function rememberNodeHue(n) {
   editability.set(n.id, editable(n, me && me.userUri));
+  rememberMeta(n); // every graph node and every Loro read passes here, so it is the one place both are learned
   if (!n.appearance) return false;
   const hue = ownHue(n), had = nodeHues.has(n.id), before = nodeHues.get(n.id);
   if (hue === undefined) nodeHues.delete(n.id); else nodeHues.set(n.id, hue);
@@ -249,7 +262,9 @@ async function related(id) {
   return {
     summary: ev.summary || undefined,
     tagline: ev.tagline || undefined,
-    call: callOf(ev),
+    // The call link is the event's own: summary, pins and outcomes come from the meeting hub, but a document that
+    // merely lives in or was created in the meeting does not inherit its join url, so read it off the zoomed node.
+    call: callOf((self0 && self0.calendarEvent) || {}),
     summaryUri: writeUp ? writeUp.id : undefined,
     fields: await fieldsOf(id), // the zoomed node's own fields, not the meeting hub's
     pinned: pinned.map(row),
@@ -268,20 +283,22 @@ async function typesByTitle() {
 
 // rows for db.replaceSection from graph Node JSON
 const taskRow = (n) => ({
-  id: n.id, title: n.title || '', done: n.state && n.state.type === 'closed' ? 1 : 0, icon: 'task',
+  id: n.id, title: n.title || '', done: n.state && n.state.type === 'closed' ? 1 : 0, icon: 'task', stateType: n.state && n.state.type, createdAt: n.createTime,
   hue: hueWithType(hueOf(n), n.entityType), tags: [nodeTag(TAG.task, n), ...typeTag(n.entityType)], sortKey: n.updateTime || now(), updatedAt: n.updateTime || now(),
 });
 const meetingRow = (n, withDate) => {
   const ev = n.calendarEvent || {};
   return {
-    id: n.id, title: n.title || '', done: 0, icon: 'meeting', meta: eventMeta(ev.startTime, ev.endTime, withDate),
+    id: n.id, title: n.title || '', done: 0, icon: 'meeting', meta: eventMeta(ev.startTime, ev.endTime, withDate), createdAt: n.createTime,
     hue: hueWithType(hueOf(n), n.entityType), tags: [nodeTag(TAG.meeting, n), ...typeTag(n.entityType)], sortKey: ev.startTime || now(), updatedAt: n.updateTime || now(),
   };
 };
 
 // a document's own icon wins; otherwise the icon set on its type applies to every node carrying that type
 const iconSvgOf = (r) => { const type = typeUriOf(r); return db.icon(r.id) || (type ? db.icon(type) : null) || undefined; };
-const toNode = (r) => ({ id: r.id, title: r.title, text: r.title, kind: 'document', editable: editability.has(r.id) ? editability.get(r.id) : editable(r, me && me.userUri), done: r.icon === 'task' ? r.done : undefined, hasChildren: true, icon: PLAIN_KINDS.has(idKind(r.id)) ? idKind(r.id) : r.icon || undefined, hue: r.hue === undefined ? (nodeHues.has(r.id) ? nodeHues.get(r.id) : cachedNodeHue(r)) : r.hue, tags: r.tags, meta: r.meta || undefined, iconSvg: iconSvgOf(r) });
+// updatedAt/createdAt (ISO) and stateType are optional sort/group data: the row carries what it knows, the rest
+// comes from nodeMeta, so a cached SQLite row sorts like a fresh graph row. done keeps its own meaning.
+const toNode = (r) => ({ id: r.id, title: r.title, text: r.title, kind: 'document', editable: editability.has(r.id) ? editability.get(r.id) : editable(r, me && me.userUri), done: r.icon === 'task' ? r.done : undefined, hasChildren: true, icon: PLAIN_KINDS.has(idKind(r.id)) ? idKind(r.id) : r.icon || undefined, hue: r.hue === undefined ? (nodeHues.has(r.id) ? nodeHues.get(r.id) : cachedNodeHue(r)) : r.hue, tags: r.tags, meta: r.meta || undefined, iconSvg: iconSvgOf(r), updatedAt: r.updatedAt || undefined, createdAt: r.createdAt || (nodeMeta.get(r.id) || {}).createdAt, stateType: r.stateType || (nodeMeta.get(r.id) || {}).stateType });
 
 // Node shape from any graph Node JSON (search results): events, tasks, typed and plain documents.
 function graphRow(n, withDate) {
@@ -359,7 +376,11 @@ async function search(query) {
 
 // Resolve native embeds without replacing the containing block identity or loading target content recursively.
 async function outlineWithReferences(doc) {
-  const nodes = content.readOutline(doc), refs = [];
+  return resolveReferences(content.readOutline(doc));
+}
+// The reference rows of any outline (content embeds, chat attachments and proposals) resolved in one place.
+async function resolveReferences(nodes) {
+  const refs = [];
   const visit = rows => { for (const n of rows) { if (n.type === 'reference') refs.push(n.reference); visit(n.children || []); } };
   visit(nodes);
   const uris = [...new Set(refs.map(r => r.uri).filter(uri => typeof uri === 'string' && DOC_URI.test(uri)))];
@@ -375,6 +396,14 @@ async function outlineWithReferences(doc) {
   }
   for (const ref of refs) if (targets.has(ref.uri)) ref.node = targets.get(ref.uri);
   return nodes;
+}
+
+// A chat has no content outline at all: the conversation is data.messages on the chat document itself
+// (docs/CHATS.md). Read only when the chat is opened — a chat document is megabytes of inline tool output.
+async function chatOutline(doc) {
+  const messages = doc.data.get('messages');
+  const names = new Map((await members().catch(() => [])).map((m) => [m.id, m.title]));
+  return resolveReferences(chat.chatRows(messages ? messages.toJSON() : [], { authorName: (uri) => names.get(uri) }));
 }
 
 // New document ('doc' | 'task' | 'meeting'): seeded locally, created on the server by the bootstrap (sdk/sync.js subscribe with init).
@@ -579,7 +608,7 @@ function scheduleRefresh(ms) {
 function invalidateDeleted(id) {
   deletedNodes.add(id);
   db.remove(id);
-  nodeHues.delete(id); hueLoaded.delete(id); editability.delete(id); pathCache.delete(id);
+  nodeHues.delete(id); hueLoaded.delete(id); editability.delete(id); pathCache.delete(id); nodeMeta.delete(id);
   typeTitles.delete(id); typeHues.delete(id);
   summaryCache.delete(id);
   for (const [event, writeUp] of summaryCache) if (writeUp === id) summaryCache.delete(event); // a deleted write-up is no redirect target
@@ -709,7 +738,7 @@ ipcMain.handle('outline:roots', async () => {
   return SECTIONS.map((s) => ({ ...s, nodes: s.id === 'members' ? memberNodes : (rows[s.id] || []).map(toNode) }));
 });
 // events start with an empty content map (no doc node yet); readOutline needs the children list
-ipcMain.handle('outline:children', (_e, id) => (isSpace(id) ? spaceChildren(id) : op(id, (doc) => (doc.content.get('children') ? outlineWithReferences(doc) : []))));
+ipcMain.handle('outline:children', (_e, id) => (isSpace(id) ? spaceChildren(id) : op(id, (doc) => (idKind(id) === 'chat' ? chatOutline(doc) : doc.content.get('children') ? outlineWithReferences(doc) : []))));
 ipcMain.handle('doc:info', (_e, id) => op(id, info));
 ipcMain.handle('doc:creationOptions', () => creationOptions());
 ipcMain.handle('doc:create', (_e, title, opts) => createDocument(title, opts || {}));
@@ -844,7 +873,7 @@ ipcMain.handle('sync:login', async () => {
 });
 
 if (process.env.TANA_MAIN_TEST) {
-  module.exports = { resolveInitialAuth, graphRow, cachedNodeHue, SECTIONS, toNode, outlineWithReferences, op, onChange, documentAction, createDocument, creationOptions, search, spaceChildren, start, refresh, related, callOf,
+  module.exports = { resolveInitialAuth, graphRow, cachedNodeHue, SECTIONS, toNode, outlineWithReferences, chatOutline, op, onChange, documentAction, createDocument, creationOptions, search, spaceChildren, start, refresh, related, callOf,
     statusSnapshot: () => ({ ...status }), rememberNodeHue,
     undo: () => history(undoStack, redoStack, 'undo', 'canUndo'), redo: () => history(redoStack, undoStack, 'redo', 'canRedo'), visibleGraphNodes, pinTree,
     testRuntime: (runtime) => { client = runtime.client; me = runtime.me; win = runtime.win; session = runtime.session; } };
