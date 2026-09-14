@@ -70,7 +70,7 @@ function searchSpacesNow() {
   tana.searchSpaces(query).then((nodes) => {
     if (seq !== palSeq || palMode !== 'spaces') return;
     palRows = nodes.map(asDoc).map((node) => ({ group: 'Spaces', ...docRow(node, node.selectable ? '' : 'No permission', () => previewMoveToSpace(palDoc, node)), disabled: !node.selectable, keepOpen: true }));
-    palIndex = 0; palBusy = false; renderPalette();
+    palIndex = 0; palBusy = false; renderPalette(); settleEnter();
   }, showError);
 }
 function openMovePalette(doc) {

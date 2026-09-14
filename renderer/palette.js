@@ -4,6 +4,15 @@
 // ---- palette: Cmd+K commands (Views, Actions, matching Documents while typing) or Cmd+S live search (api.search) ----
 const palette = $('palette'), palInput = $('paletteInput'), palList = $('paletteList');
 let palMode = 'cmd', palRows = [], palIndex = 0, palBusy = false, palSeq = 0, palTimer, creationChoices = [];
+let palEnter = null; // an Enter pressed while a search was still running: 'pick' or 'create', applied when the rows land
+// Enter chooses: the highlighted row, or for an @ selection ⌘↩ always creates. While the search is still out, the
+// choice is kept and made the moment the rows arrive, so the first Enter after "@" is never lost.
+function chooseRow(create) {
+  if (palBusy && (palMode === 'spaces' || palMode === 'search')) { palEnter = create ? 'create' : 'pick'; return; }
+  const r = create && linkCtx ? palRows.find((row) => row.create) : palRows[palIndex];
+  if (r) runRow(r);
+}
+function settleEnter() { if (palEnter) { const create = palEnter === 'create'; palEnter = null; chooseRow(create); } }
 // hint defaults to the node's own meta, so a meeting keeps its date and time in every palette list
 const docRow = (n, hint, run) => ({ node: n, icon: n.icon, svg: n.iconSvg, label: n.text ?? n.title, tags: visibleTags(n), hint: hint === undefined ? n.meta : hint, run });
 function paletteRows(q) {
@@ -179,6 +188,7 @@ function searchNow() {
     palIndex = linkCtx ? (starts < 0 ? 0 : starts + (palRows[0] && palRows[0].create ? 1 : 0)) : 0;
     palBusy = false;
     renderPalette();
+    settleEnter();
   }, showError);
 }
 function renderPalette() {
@@ -228,7 +238,7 @@ function togglePalette(mode, link, pin) {
   linkCtx = link || null;
   pinCtx = pin || null;
   if (mode !== 'slash') slashCtx = null;
-  palMode = mode; palRows = []; palIndex = 0; palBusy = false; clearTimeout(palTimer); palTimer = null;
+  palMode = mode; palRows = []; palIndex = 0; palBusy = false; palEnter = null; clearTimeout(palTimer); palTimer = null;
   if (mode === 'cmd') { palDoc = currentDoc(); palTaskCtx = null; loadPins(); }
   palInput.placeholder = mode === 'search' ? 'Search Tana' : mode === 'slash' ? 'Choose a block type or create' : 'Search or run a command';
   palInput.value = link ? link.text : '';
@@ -246,7 +256,7 @@ function nextPalIndex(rows, index, step) {
   return index;
 }
 palInput.addEventListener('input', () => {
-  palIndex = 0;
+  palIndex = 0; palEnter = null; // typing on supersedes an Enter that was waiting for the previous query
   if (palMode === 'cmd' || palMode === 'create' || palMode === 'slash' || palMode === 'assignees' || palMode === 'assigneesMany' || palMode === 'status' || palMode === 'visibility' || palMode === 'visibilityPeople' || palMode === 'hidden' || palMode === 'pill') return renderPalette();
   if (palMode === 'spaces') { palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchSpacesNow, 150); return; }
   palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchNow, 150);
@@ -255,7 +265,7 @@ palInput.addEventListener('keydown', (e) => {
   const mod = e.metaKey || e.ctrlKey;
   if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); backPalette(); }
   else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && palRows.length) { e.preventDefault(); e.stopPropagation(); palIndex = nextPalIndex(palRows, palIndex, e.key === 'ArrowDown' ? 1 : -1); renderPalette(); }
-  else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); if (palBusy && (palMode === 'spaces' || palMode === 'search')) return; const r = mod && linkCtx ? palRows.find((row) => row.create) : palRows[palIndex]; if (r) runRow(r); } // ⌘↩ always creates for an @ selection
+  else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); chooseRow(mod); }
   else if (mod && e.shiftKey && e.key.toLowerCase() === 'k') { e.preventDefault(); e.stopPropagation(); const r = palRows[palIndex]; if (palMode === 'cmd' && r && r.id) openRecorder(r); }
 });
 palette.addEventListener('mousedown', (e) => { if (e.target === palette) closePalette(); });

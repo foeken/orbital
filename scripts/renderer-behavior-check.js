@@ -31,7 +31,7 @@ const FAKE_DOM = `
 const DEFAULT_HOTKEYS_SRC = source.match(/const DEFAULT_HOTKEYS = (\{[^\n]*\});/)[1];
 const RENDER_SHIM = 'globalThis.renderSoon ??= (...a) => render(...a); globalThis.patchMeta ??= () => render(); globalThis.iconNode ??= () => null;\n'
   + `globalThis.DEFAULT_HOTKEYS ??= ${DEFAULT_HOTKEYS_SRC}; globalThis.hk ??= () => (typeof hotkeys === 'object' ? hotkeys : {}); globalThis.hotkeyFor ??= (id) => (Object.hasOwn(hk(), id) ? hk()[id] : DEFAULT_HOTKEYS[id]); globalThis.hotkeyIds ??= () => [...new Set([...Object.keys(DEFAULT_HOTKEYS), ...Object.keys(hk())])]; globalThis.comboOf ??= () => '';\n`;
-const withShims = (src) => (/\b(renderSoon|patchMeta|iconNode|hotkeyFor|hotkeyIds|comboOf)\b/.test(src) ? RENDER_SHIM + src : src);
+const withShims = (src) => (/\b(renderSoon|patchMeta|iconNode|hotkeyFor|hotkeyIds|comboOf|settleEnter)\b/.test(src) ? RENDER_SHIM + 'globalThis.settleEnter ??= () => {};\n' + src : src);
 function functionSource(name) {
   const asyncStart = source.indexOf('async function ' + name + '(');
   const start = asyncStart >= 0 ? asyncStart : source.indexOf('function ' + name + '(');
@@ -967,7 +967,7 @@ async function runLinkPaletteCheck() {
   const context = { resolveSearch: undefined, press: undefined };
   vm.runInNewContext(`
     let linkCtx = { text: 'Dana', item: {}, segs: [], start: 0, end: 4 }, pinCtx = null;
-    let palRows = [], palIndex = 0, palBusy = false, palSeq = 0, palTimer = null, palMode = 'search';
+    let palRows = [], palIndex = 0, palBusy = false, palSeq = 0, palTimer = null, palMode = 'search', palEnter = null;
     let searchResolve, actions = [];
     const palInput = { value: 'Dana', addEventListener: (_name, fn) => { press = fn; } };
     const tana = { search: () => new Promise((resolve) => { searchResolve = resolve; }) };
@@ -979,13 +979,16 @@ async function runLinkPaletteCheck() {
     const renderPalette = () => {};
     const showError = (error) => { throw error; };
     const runRow = (row) => row.run();
+    ${functionSource('chooseRow')}
+    ${functionSource('settleEnter')}
     ${resultRows}
     ${searchNow}
     ${withShims(source.slice(start, end))}
     searchNow();
     Object.assign(globalThis, {
       resolveSearch: (rows) => searchResolve(rows),
-      state: () => ({ palIndex, rows: palRows.map((row) => ({ label: row.label, create: !!row.create })), actions }),
+      state: () => ({ palIndex, rows: palRows.map((row) => ({ label: row.label, create: !!row.create })), actions, busy: palBusy }),
+      again: () => { actions.length = 0; palInput.value = 'Dan'; searchNow(); },
     });
   `, context);
   context.resolveSearch([{ id: 'tana:user-profile:roni', title: 'Dana Brooks' }]);
@@ -1020,6 +1023,17 @@ async function runLinkPaletteCheck() {
   assert.deepEqual(plain(caret.state()), { palIndex: 1, rows: ['Create “Dan”', 'Dana Brooks'] }, 'typing offers to create what was typed and still selects the matching result');
   assert.equal(caret.create(), 'Dan', 'and Create uses the typed title');
   assert.deepEqual(plain(context.state().actions), ['link', 'create'], 'Enter links the selected result and Cmd+Enter explicitly creates');
+  // Enter pressed while the search is still out (the first Enter right after "@") is not dropped: the choice is
+  // made the moment the rows land, with the result that matches, or Create when nothing does
+  context.again();
+  assert.equal(context.state().busy, true, 'a fresh search is busy until it answers');
+  context.press(event(false));
+  assert.deepEqual(plain(context.state().actions), [], 'Enter during the search runs nothing yet');
+  context.resolveSearch([{ id: 'tana:user-profile:roni', title: 'Dana Brooks' }]);
+  await Promise.resolve(); await Promise.resolve();
+  assert.deepEqual(plain(context.state().actions), ['link'], 'and links the matching result when the rows arrive');
+  context.again(); context.press(event(true)); context.resolveSearch([]); await Promise.resolve(); await Promise.resolve();
+  assert.deepEqual(plain(context.state().actions), ['create'], 'Cmd+Enter during the search creates when the rows arrive');
 }
 
 function runAuthPaletteCheck() {
