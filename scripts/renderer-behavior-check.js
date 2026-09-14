@@ -434,7 +434,8 @@ async function runMultiTaskPaletteCheck() {
     const run = (fn) => fn(), loadRoots = async () => {}, render = () => {}, invalidateNode = () => {}, showNote = (note) => { calls.push(['note', note]); };
     const canEditItem = (item) => item.node.editable !== false;
     const canEditStructure = (item) => canEditItem(item);
-    let sel = null;
+    let sel = null, zoom = null;
+    const openDoc = () => {};
     const openStatusPalette = () => {}, openAssigneePalette = () => {}, openManyAssigneePalette = () => {};
     const sensitiveIds = new Set(['t2']), isRealId = () => true;
     let marked = null;
@@ -451,6 +452,7 @@ async function runMultiTaskPaletteCheck() {
       ids: (keys) => { selected = keys; return selectionRows().map((row) => row.id); },
       del: (keys) => { selected = keys; const row = selectionRows().find((r) => r.id === 'delete'); return [row.label, row.hint || '', !!row.disabled]; },
       current: (id) => { selected = []; palDoc = items.get(id).node; return selectionRows().map((row) => [row.group, row.label, row.hint || '', !!row.disabled]); },
+      zoomedCurrent: (id) => { selected = []; palDoc = items.get(id).node; zoom = { docId: id }; try { return selectionRows().map((row) => [row.group, row.label]); } finally { zoom = null; } },
     });
   `);
   assert.deepEqual(plain(context.labels()), [
@@ -478,6 +480,7 @@ async function runMultiTaskPaletteCheck() {
   assert.deepEqual(plain(context.selection([])), [], 'with nothing selected the palette is about the app again');
   // With nothing selected the same rows act on the current node, without counts and under their own heading.
   assert.deepEqual(plain(context.current('t1')), [
+    ['Current node', 'Zoom in', '', false],
     ['Current node', 'Mark as sensitive', '', false],
     ['Current node', 'Add to today node', '', false],
     ['Current node', 'Add to week node', '', false],
@@ -485,6 +488,7 @@ async function runMultiTaskPaletteCheck() {
     ['Current node', 'Edit assignees', 'Loading…', false],
     ['Current node', 'Delete', '', false],
   ], 'the current node gets every selection action');
+  assert.equal(plain(context.zoomedCurrent('t1'))[0][1], 'Mark as sensitive', 'the zoomed document itself offers no Zoom in');
   assert.deepEqual(plain(context.current('locked')).filter((row) => row[1] === 'Delete'), [['Current node', 'Delete', 'Read-only', true]], 'and a read-only current node cannot be deleted');
   assert.deepEqual(plain(context.selection(['t1', 't2'])).map((row) => row[0]), ['Selection', 'Selection', 'Selection', 'Selection', 'Selection', 'Selection'], 'a real selection keeps its own heading');
   assert.deepEqual(plain(context.markAll()), [['t1', 'meeting', 'locked', 't2'], true], 'marking applies to every selected document at once');

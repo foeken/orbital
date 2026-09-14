@@ -247,6 +247,12 @@ function selectionRows() {
     if (node && !node.draft && isRealId(node.id) && !seen.has(node.id)) { seen.add(node.id); nodes.push(node); }
   }
   const ids = nodes.map((node) => node.id), rows = [];
+  // A row you are on but not in: Zoom in opens it, the same as clicking its bullet. The zoomed document itself
+  // has nowhere further to go, so the row is absent there.
+  if (!selected.length && !zoom && nodes.length === 1 && nodes[0].kind === 'document') {
+    const doc = nodes[0];
+    rows.push({ id: 'zoomIn', group, icon: doc.icon || 'doc', label: 'Zoom in', run: () => openDoc(doc.id) });
+  }
   if (ids.length && tana.setSensitive && sensitiveIds) {
     const marked = ids.every((id) => sensitiveIds.has(id));
     rows.push({ id: 'sensitive', group, icon: 'lock', label: `${marked ? 'Unmark' : 'Mark'}${count(ids.length, 'item')} as sensitive`, run: () => setSensitiveMark(ids, !marked) });
