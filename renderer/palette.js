@@ -14,7 +14,7 @@ function paletteRows(q) {
   rows.push({ id: 'sync', group: 'Actions', icon: 'sync', label: 'Sync', run: () => run(() => tana.refresh()) });
   // the list of titles hidden from every view and from search, edited in the palette itself
   if (tana.filters) rows.push({ id: 'hidden', group: 'Actions', icon: 'hidden', label: 'Edit hidden items', keepOpen: true, run: openHiddenPalette });
-  if (tana.sensitiveIds) rows.push({ id: 'sensitiveVisibility', group: 'Actions', icon: 'hidden', label: 'Toggle sensitive visibility', hint: sensitiveVisible ? 'Shown' : 'Blurred', run: toggleSensitiveVisibility });
+  if (tana.sensitiveIds) rows.push({ id: 'sensitiveVisibility', group: 'Actions', icon: 'hidden', label: 'Toggle sensitive visibility', hint: sensitiveVisible ? 'Shown' : 'Hidden', run: toggleSensitiveVisibility });
   // today's node: a document titled with the date, pinned to today; created and pinned when it does not exist yet
   if (tana.todayNode) rows.push({ id: 'today', group: 'Actions', icon: 'today', label: 'Show today node', run: () => run(async () => goTo(await tana.todayNode())) });
   // the week this day sits in, as its own "Week 38 (2026)" document, created when it does not exist yet
