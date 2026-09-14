@@ -252,6 +252,13 @@ function selectionRows() {
   if (!selected.length && !zoom && nodes.length === 1 && nodes[0].kind === 'document') {
     const doc = nodes[0];
     rows.push({ id: 'zoomIn', group, icon: doc.icon || 'doc', label: 'Zoom in', run: () => openDoc(doc.id) });
+    // the row's own chevron, with the keys the outline already answers to (⌘↓ opens, ⌘↑ closes)
+    const item = items.get(doc.id);
+    if (item && canExpand(item)) {
+      const expanded = hasKids(item) ? isOpen(item) : open.get(item.key) === true;
+      if (expanded) rows.push({ id: 'collapse', group, svg: CHEV, label: 'Collapse', kbd: '⌘↑', run: () => setOpen(item, false) });
+      else rows.push({ id: 'expand', group, svg: CHEV, label: 'Expand', kbd: '⌘↓', run: () => setOpen(item, true) });
+    }
   }
   if (ids.length && tana.setSensitive && sensitiveIds) {
     const marked = ids.every((id) => sensitiveIds.has(id));

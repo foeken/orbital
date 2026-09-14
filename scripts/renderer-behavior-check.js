@@ -436,6 +436,9 @@ async function runMultiTaskPaletteCheck() {
     const canEditStructure = (item) => canEditItem(item);
     let sel = null, zoom = null;
     const openDoc = () => {};
+    const open = new Map(), CHEV = '<svg/>';
+    const canExpand = (item) => item.node.kind === 'document', hasKids = () => true, isOpen = (item) => open.get(item.key) === true;
+    let opened = null; const setOpen = (item, value) => { opened = [item.key, value]; open.set(item.key, value); };
     const openStatusPalette = () => {}, openAssigneePalette = () => {}, openManyAssigneePalette = () => {};
     const sensitiveIds = new Set(['t2']), isRealId = () => true;
     let marked = null;
@@ -453,6 +456,7 @@ async function runMultiTaskPaletteCheck() {
       del: (keys) => { selected = keys; const row = selectionRows().find((r) => r.id === 'delete'); return [row.label, row.hint || '', !!row.disabled]; },
      current: (id) => { selected = []; palDoc = items.get(id).node; return selectionRows().map((row) => [row.group, row.label, row.hint || '', !!row.disabled]); },
       kbd: (id, rowId) => { selected = []; palDoc = items.get(id).node; return selectionRows().find((row) => row.id === rowId).kbd; },
+      toggleOpen: (id) => { selected = []; palDoc = items.get(id).node; const before = selectionRows().find((row) => row.id === 'expand' || row.id === 'collapse'); before.run(); const after = selectionRows().find((row) => row.id === 'expand' || row.id === 'collapse'); return [before.label, before.kbd, opened, after.label, after.kbd]; },
       kbdSelected: (keys, rowId) => { selected = keys; return selectionRows().find((row) => row.id === rowId).kbd; },
       zoomedCurrent: (id) => { selected = []; palDoc = items.get(id).node; zoom = { docId: id }; try { return selectionRows().map((row) => [row.group, row.label]); } finally { zoom = null; } },
     });
@@ -483,6 +487,7 @@ async function runMultiTaskPaletteCheck() {
   // With nothing selected the same rows act on the current node, without counts and under their own heading.
   assert.deepEqual(plain(context.current('t1')), [
     ['Current node', 'Zoom in', '', false],
+    ['Current node', 'Expand', '', false],
     ['Current node', 'Mark as sensitive', '', false],
     ['Current node', 'Add to today node', '', false],
     ['Current node', 'Add to week node', '', false],
@@ -493,6 +498,7 @@ async function runMultiTaskPaletteCheck() {
   assert.equal(plain(context.zoomedCurrent('t1'))[0][1], 'Mark as sensitive', 'the zoomed document itself offers no Zoom in');
   assert.deepEqual(plain(context.current('locked')).filter((row) => row[1] === 'Delete'), [['Current node', 'Delete', 'Read-only', true]], 'and a read-only current node cannot be deleted');
   assert.equal(context.kbd('t1', 'delete'), '⇧⌘⌫', 'the Delete row names the shortcut that does the same thing');
+  assert.deepEqual(plain(context.toggleOpen('t1')), ['Expand', '⌘↓', ['t1', true], 'Collapse', '⌘↑'], 'Expand opens the row and becomes Collapse, each naming its key');
   assert.equal(context.kbdSelected(['t1', 't2'], 'delete'), undefined, 'a selection of documents has no such key, so the row shows none');
   assert.deepEqual(plain(context.selection(['t1', 't2'])).map((row) => row[0]), ['Selection', 'Selection', 'Selection', 'Selection', 'Selection', 'Selection'], 'a real selection keeps its own heading');
   assert.deepEqual(plain(context.markAll()), [['t1', 'meeting', 'locked', 't2'], true], 'marking applies to every selected document at once');
