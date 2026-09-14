@@ -174,7 +174,7 @@ async function main() {
       local.applyRemote([serverDoc.exportSince(local.loro.oplogVersion())]);
       return {responseUnion:{case:'documentActionResponse'}};
     };
-    backend.testRuntime({me:{userUri:ME,orgId:ORG},session:{getAccessToken:async()=> 'x.'+Buffer.from(JSON.stringify({org_id:ORG,role:'member'})).toString('base64url')+'.x'},client:{sync:{getDocument:()=>local,subscribe:async()=>local,softDelete:()=>apply('softDelete'),restore:()=>apply('restore')}},win:{isDestroyed:()=>false,webContents:{send:(channel,id)=>events.push([channel,id])}}});
+    backend.testRuntime({me:{userUri:ME,orgId:ORG},session:{getAccessToken:async()=> 'x.'+Buffer.from(JSON.stringify({org_id:ORG,role:'member'})).toString('base64url')+'.x'},client:{sync:{getDocument:()=>local,subscribe:async()=>local,softDelete:()=>apply('softDelete'),restore:()=>apply('restore')}},win:{isDestroyed:()=>false,webContents:{send:(...args)=>events.push(args)}}});
     local.on('change',()=>backend.onChange(DOC));
     cache.upsert({id:DOC,title:'reversible delete',section:'tasks'});
     assert.equal(await backend.documentAction(DOC,'softDelete'),DOC);
@@ -471,7 +471,8 @@ async function main() {
     assert.deepEqual(rows.map((r) => r.stateType), ['open', undefined, undefined], 'only a task carries a state');
     assert.deepEqual(rows.map((r) => r.done), [0, undefined, undefined], 'done keeps its own meaning');
     // the Tasks/Meetings views render db rows: they keep updatedAt, and the rest comes back from the graph cache
-    const cached = backend.toNode(cache.upsert({ ...backend.graphRow(task), section: 'tasks' }));
+    cache.upsert({ ...backend.graphRow(task), section: 'tasks' });
+    const cached = backend.toNode(cache.get(task.id));
     assert.equal(cached.updatedAt, task.updateTime);
     assert.equal(cached.createdAt, task.createTime);
     assert.equal(cached.stateType, 'open');
@@ -1403,7 +1404,7 @@ async function main() {
     pinDoc.transact(l => initDocument(l, 'arbitrary deleted node', ME));
     cache.upsert({id:pinId, section:'tasks', title:'cached node'});
     const documents = new Map([[ME,profile],[colId,collection],[pinId,pinDoc]]), events = [];
-    backend.testRuntime({me:{userUri:ME}, client:{sync:{getDocument:id=>documents.get(id), subscribe:async id=>documents.get(id)}}, win:{isDestroyed:()=>false,webContents:{send:(channel,id)=>events.push([channel,id])}}});
+    backend.testRuntime({me:{userUri:ME}, client:{sync:{getDocument:id=>documents.get(id), subscribe:async id=>documents.get(id)}}, win:{isDestroyed:()=>false,webContents:{send:(...args)=>events.push(args)}}});
     collection.on('change', () => backend.onChange(colId));
     remoteCollection.on('local-update', u => collection.applyRemote([u]));
     assert.equal((await backend.pinTree()).length, 1);
@@ -1417,6 +1418,24 @@ async function main() {
     assert.ok(events.some(([channel,id]) => channel === 'outline:changed' && id === null), 'remote unpin invalidates palette globally despite no cached collection row');
     assert.equal((await backend.pinTree()).length, 0);
     assert.ok(cache.get(pinId), 'unpin does not delete the document');
+    // A change event says whether the document's metadata moved: a title edit keeps the renderer's cached
+    // assignees/audience, an assignee change drops them. Only the fields that feed doc:taskMeta count.
+    {
+      pinDoc.on('change', () => backend.onChange(pinId));
+      const metaEvents = () => events.filter(([channel, id]) => channel === 'outline:changed' && id === pinId).map((e) => e[2] && e[2].meta);
+      events.length = 0;
+      setTitle(pinDoc, 'first title'); // the first change after boot has no signature to compare with: conservative
+      assert.deepEqual(metaEvents(), [true], 'an unseen document invalidates once');
+      events.length = 0;
+      setTitle(pinDoc, 'second title');
+      assert.deepEqual(metaEvents(), [false], 'a title edit leaves the metadata alone');
+      events.length = 0;
+      pinDoc.transact((l) => { l.getMap('data').set('stateType', 'open'); }); // a task now, so assignees can change
+      events.length = 0;
+      setAssignees(pinDoc, [ME], ME);
+      assert.deepEqual(metaEvents(), [true], 'an assignee change invalidates it');
+      pinDoc.removeAllListeners('change');
+    }
     const remotePin = new Document(pinId, {peerId:'889'});
     remotePin.applyRemote([pinDoc.exportSince()]);
     pinDoc.on('change', () => backend.onChange(pinId));

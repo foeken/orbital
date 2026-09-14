@@ -27,7 +27,7 @@ const railClosed = new Set(JSON.parse(localStorage.getItem('railClosed') || '[]'
 function loadRelated(docId) {
   if (!tana.related || !isRealId(docId) || relatedBy.has(docId)) return;
   relatedBy.set(docId, null);
-  tana.related(docId).then((data) => { relatedBy.set(docId, data); render(); }, () => { relatedBy.delete(docId); });
+  tana.related(docId).then((data) => { relatedBy.set(docId, data); renderSoon(); }, () => { relatedBy.delete(docId); });
 }
 function railRow(node) {
   const row = document.createElement('div');

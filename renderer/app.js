@@ -23,13 +23,31 @@ function showStatus(s) {
 $('login').onclick = () => tana.login().catch(showError);
 
 // ---- live updates ----
-tana.onChanged((docId) => {
-  if (docId) { taskMetaById.delete(docId); if (typeof taskMetaFailed !== 'undefined') taskMetaFailed.delete(docId); }
-  const work = [loadRoots()];
-  if (docId && kids.has(docId)) work.push(reload(docId));
-  if (!docId) loadPins();
-  Promise.all(work).then(() => docId ? undefined : loadView()).then(render, showError); // cached roots first, then the active query wins
+// One document changed (info.meta says whether its assignees, audience or sharing moved — main compares them, so a
+// text edit does not throw the row's metadata away); null is a global change: the refresh loop wrote the active
+// view's fresh rows into the cache before saying so, so roots already carry them and no second query is needed.
+tana.onChanged((docId, info) => {
+  if (docId) {
+    if (!info || info.meta !== false) { taskMetaById.delete(docId); if (typeof taskMetaFailed !== 'undefined') taskMetaFailed.delete(docId); }
+    const work = [patchDoc(docId)];
+    if (kids.has(docId)) work.push(reload(docId));
+    Promise.all(work).then(renderSoon, showError);
+  } else {
+    loadPins();
+    loadRoots().then(renderSoon, showError);
+  }
 });
+// The changed document's row, wherever it is listed, from one doc:info call instead of a reload of every view.
+// A document no view knows about may have just become listable, so that case still reloads.
+async function patchDoc(docId) {
+  if (!tana.node) return loadRoots();
+  let fresh;
+  try { fresh = asDoc(await tana.node(docId)); } catch { return loadRoots(); } // deleted or unreadable: the lists decide
+  let hit = extra.has(docId);
+  if (hit) Object.assign(extra.get(docId), fresh);
+  for (const s of views) for (const n of s.nodes) if (n.id === docId) { Object.assign(n, fresh); hit = true; }
+  if (!hit) return loadRoots();
+}
 function removeStale(id) {
   invalidateNode(id); loadPins();
   loadRoots().then(render, showError);

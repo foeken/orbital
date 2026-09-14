@@ -6,8 +6,21 @@ const allDocs = () => views.flatMap((s) => s.nodes);
 const sectionOf = (docId) => views.find((s) => s.nodes.some((n) => n.id === docId));
 const viewOf = () => views.find((s) => s.id === view) || views[0];
 const keyFor = (docId, node) => (node.kind === 'document' ? docId : docId + '/' + node.id);
-const mkItem = (docId, node, parent) => { const item = { key: keyFor(docId, node), node, docId, parent }; items.set(item.key, item); return item; };
-const docOf = (id) => allDocs().find((d) => d.id === id) || extra.get(id);
+// An item keeps its identity across renders: the row's event handlers hold it, so a reused row (render.js) keeps
+// working, and a rebuilt one sees the current node through the same object. rendered is the set of keys this render
+// touched; renderOutline drops the rest when it is done.
+const rendered = new Set();
+const mkItem = (docId, node, parent) => {
+  const key = keyFor(docId, node);
+  let item = items.get(key);
+  if (item) { item.node = node; item.docId = docId; item.parent = parent; } else { item = { key, node, docId, parent }; items.set(key, item); }
+  rendered.add(key);
+  return item;
+};
+// docOf is asked once per block row of a zoomed document, so a linear scan over every view's rows became quadratic;
+// hits are cached until the next render clears them (a miss still scans: extra fills between renders).
+const docCache = new Map();
+const docOf = (id) => { let d = docCache.get(id); if (!d) { d = allDocs().find((x) => x.id === id) || extra.get(id); if (d) docCache.set(id, d); } return d; };
 const isSpace = (node) => node.id.startsWith('tana:space:'); // its children are documents; no draft child
 const childrenOf = (item) => (item.node.kind === 'document' ? kids.get(item.docId) : item.node.children || []);
 const hasKids = (item) => { const c = childrenOf(item); return Array.isArray(c) ? c.length > 0 : !!item.node.hasChildren; };
@@ -75,6 +88,13 @@ const LIB_ICONS = {
   pending: STROKE + '<path d="M9 11.75C10.5188 11.75 11.75 10.5188 11.75 9C11.75 7.48122 10.5188 6.25 9 6.25C7.48122 6.25 6.25 7.48122 6.25 9C6.25 10.5188 7.48122 11.75 9 11.75Z"/><path d="M10.4277 3.3967C9.97907 3.3022 9.50347 3.25 8.99997 3.25C8.49647 3.25 8.02087 3.3022 7.57227 3.3967"/><path d="M3.59241 5.7576C4.03861 5.2786 4.56019 4.81329 5.16119 4.41629"/><path d="M2.0443 10.1133C1.6519 9.42061 1.6519 8.57951 2.0443 7.88681"/><path d="M14.4077 5.7576C13.9615 5.2786 13.4399 4.81329 12.8389 4.41629"/><path d="M10.4277 14.6033C9.97907 14.6978 9.50347 14.75 8.99997 14.75C8.49647 14.75 8.02087 14.6978 7.57227 14.6033"/><path d="M3.59241 12.2424C4.03861 12.7214 4.56019 13.1867 5.16119 13.5837"/><path d="M14.4077 12.2424C13.9615 12.7214 13.4399 13.1867 12.8389 13.5837"/><path d="M15.9557 10.1133C16.3481 9.42061 16.3481 8.57951 15.9557 7.88681"/></svg>',
 };
 const iconSvg = (icon) => ICONS[icon === 'meeting' ? 'calendar' : icon] || LIB_ICONS[icon] || '';
+// The same SVG parsed once, then cloned per row: rows used to re-parse their icon markup on every render.
+const iconTemplates = new Map();
+function iconNode(icon) {
+  let t = iconTemplates.get(icon);
+  if (t === undefined) { const tpl = document.createElement('template'); tpl.innerHTML = iconSvg(icon); t = tpl.content.firstElementChild; iconTemplates.set(icon, t); }
+  return t ? t.cloneNode(true) : null;
+}
 const isTask = (node) => node.kind === 'document' && node.icon === 'task';
 const isCheckboxBlock = (node) => node?.kind === 'block' && node.done != null;
 function visibleTags(node) {
@@ -152,6 +172,7 @@ async function loadRoots() {
   await loadSensitive(); // privacy gate: no document reaches the first render before the local marks do
   const drafts = views.flatMap((s) => s.nodes.map((node, i) => ({ view: s.id, i, node })).filter((d) => d.node.draft)); // a refresh must not drop a draft being typed
   views = (await tana.roots()).map((s) => ({ ...s, title: s.id === 'people' ? 'People' : s.title, icon: s.id === 'library' ? 'library' : s.icon, nodes: s.nodes.map(asDoc) }));
+  for (const s of views) if (s.truncated) truncated.add(s.id); else if (s.truncated === false) truncated.delete(s.id); // roots carry the cap flag, so a refresh needs no second query
   rootsLoaded = true;
   for (const [id, f] of fresh) { // a created document stays where it was drafted until the roots query lists it
     const s = views.find((x) => x.id === f.section);

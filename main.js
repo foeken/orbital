@@ -8,13 +8,13 @@ const db = require('./db');
 const { createTanaSession } = require('./tana-session');
 const updater = require('./updater');
 const access = require('./sdk/access');
-const { setTitle, setState, taskMeta, audienceMetadata, setAssignees } = require('./sdk/node');
+const { readNode, setTitle, setState, taskMeta, audienceMetadata, setAssignees } = require('./sdk/node');
 const { isHidden } = require('./sdk/query');
 const content = require('./sdk/content');
 const fields = require('./sdk/fields');
-const { NOT_CONNECTED, S, VIEWS, errText, idKind, isSpace, pathCache, redoStack, report, scheduleRefresh, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
+const { NOT_CONNECTED, S, VIEWS, errText, idKind, isSpace, metaSigs, pathCache, truncatedViews, redoStack, report, scheduleRefresh, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
 const { cachedNodeHue, graphRow, members, rememberNodeHue, toNode } = require('./main/rows');
-const { accessContext, chatOutline, createDocument, creationOptions, documentAction, history, info, linkShared, moveTarget, mut, mutTasks, onChange, op, outlineWithReferences, setIcon, setSensitive } = require('./main/documents');
+const { accessContext, chatOutline, createDocument, creationOptions, documentAction, history, info, linkShared, metaSig, moveTarget, mut, mutTasks, onChange, op, outlineWithReferences, setIcon, setSensitive } = require('./main/documents');
 const { callOf, pathOf, related, spaceChildren, summaryUri } = require('./main/related');
 const { hiddenRules, listFilter, preset, refresh, search, setHidden, setViewFilter, start, viewFilter, viewRows } = require('./main/views');
 const { nodePin, pinState, pinTree, pinned, setPin, todayNode, weekNode, weekTitle } = require('./main/pins');
@@ -56,7 +56,7 @@ function createMenu() {
 ipcMain.handle('outline:roots', async () => {
   const rows = db.list();
   const rules = hiddenRules(); // a row cached before the rule was added is hidden here too, refresh or no refresh
-  return VIEWS.map((view) => ({ ...view, nodes: (rows[view.id] || []).filter((r) => !isHidden(r.title, rules)).map(toNode) }));
+  return VIEWS.map((view) => ({ ...view, truncated: truncatedViews.has(view.id), nodes: (rows[view.id] || []).filter((r) => !isHidden(r.title, rules)).map(toNode) }));
 });
 ipcMain.handle('view:list', async (_e, id, filter) => {
   preset(id); // validate before changing which view the refresh loop owns
@@ -89,11 +89,10 @@ ipcMain.handle('doc:setDone', (_e, id, done) => mut(id, (doc) => {
 ipcMain.handle('doc:setState', (_e, id, state) => mutTasks([id], (doc) => setState(doc, state, S.me.userUri)).then((count) => { scheduleRefresh(2000); return count; }));
 ipcMain.handle('doc:setStateMany', (_e, ids, state) => mutTasks(ids, (doc) => setState(doc, state, S.me.userUri)).then((count) => { scheduleRefresh(2000); return count; }));
 // linkSharing lives on the graph node, never in the document, so public-to-the-internet needs its own lookup
-ipcMain.handle('doc:taskMeta', (_e, id) => op(id, async doc => ({
-  ...taskMeta(doc),
-  ...await audienceMetadata(doc, S.me.userUri, S.client.graph, S.client.sync),
-  linkShared: await linkShared(id),
-})));
+ipcMain.handle('doc:taskMeta', (_e, id) => op(id, async doc => {
+  metaSigs.set(id, metaSig(readNode(doc))); // from here on, only a change to these fields invalidates the renderer's copy
+  return { ...taskMeta(doc), ...await audienceMetadata(doc, S.me.userUri, S.client.graph, S.client.sync), linkShared: await linkShared(id) };
+}));
 // Access has native capability checks independent of the outliner's editable-body support.
 ipcMain.handle('doc:accessOptions', (_e, id) => op(id, async doc => access.capabilities(doc, S.me.userUri, await accessContext())));
 ipcMain.handle('doc:setSharing', (_e, id, selection) => mut(id, async doc => {
@@ -218,4 +217,3 @@ if (process.env.TANA_MAIN_TEST) {
   app.on('window-all-closed', () => app.quit());
   app.on('before-quit', () => { if (S.client) S.client.close().catch(() => {}); });
 }
-

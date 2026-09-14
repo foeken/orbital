@@ -1,7 +1,9 @@
 const { DatabaseSync } = require('node:sqlite');
 
 let db;
-const DESC = new Set(['tasks']); // tasks newest first; every other section ascending by sortKey
+// Cached rows come back in the order their view's query returns them, so a boot from the cache and a refresh agree:
+// meetings by start time ascending, everything else newest first (sortKey is the update time there).
+const DESC = new Set(['inbox', 'tasks', 'library', 'chats']);
 
 function open(path) {
   db = new DatabaseSync(path);
@@ -39,12 +41,13 @@ function get(id) {
 
 const UPSERT = `INSERT INTO nodes (id, section, title, done, icon, meta, tags, sortKey, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT(section, id) DO UPDATE SET title = excluded.title, done = excluded.done, icon = excluded.icon,
-  meta = excluded.meta, tags = excluded.tags, sortKey = excluded.sortKey, updatedAt = excluded.updatedAt`;
+  meta = excluded.meta, tags = excluded.tags, sortKey = excluded.sortKey, updatedAt = excluded.updatedAt
+  WHERE title IS NOT excluded.title OR done IS NOT excluded.done OR icon IS NOT excluded.icon OR meta IS NOT excluded.meta
+    OR tags IS NOT excluded.tags OR sortKey IS NOT excluded.sortKey OR updatedAt IS NOT excluded.updatedAt`; // an unchanged row is no write
 
 function upsert(r) {
   const updatedAt = r.updatedAt ?? new Date().toISOString();
-  db.prepare(UPSERT).run(r.id, r.section, r.title, r.done ? 1 : 0, r.icon ?? null, r.meta ?? null, JSON.stringify(r.tags || []), r.sortKey ?? updatedAt, updatedAt);
-  return get(r.id);
+  return db.prepare(UPSERT).run(r.id, r.section, r.title, r.done ? 1 : 0, r.icon ?? null, r.meta ?? null, JSON.stringify(r.tags || []), r.sortKey ?? updatedAt, updatedAt).changes;
 }
 
 // A document's title and done state are the same in every view that lists it, so a live change writes them to
@@ -53,13 +56,16 @@ function setRow(id, { title, done, updatedAt = new Date().toISOString() }) {
   return db.prepare('UPDATE nodes SET title = ?, done = ?, updatedAt = ? WHERE id = ?').run(title, done ? 1 : 0, updatedAt, id).changes;
 }
 
+// Returns how many rows were actually written: a refresh that found nothing new writes nothing.
 function replaceSection(section, rows) {
   db.exec('BEGIN');
   try {
-    for (const r of rows) upsert({ ...r, section });
+    let written = 0;
+    for (const r of rows) written += upsert({ ...r, section });
     // ponytail: JSON id list instead of a temp table; fine for a few hundred rows
-    db.prepare('DELETE FROM nodes WHERE section = ? AND id NOT IN (SELECT value FROM json_each(?))').run(section, JSON.stringify(rows.map((r) => r.id)));
+    written += db.prepare('DELETE FROM nodes WHERE section = ? AND id NOT IN (SELECT value FROM json_each(?))').run(section, JSON.stringify(rows.map((r) => r.id))).changes;
     db.exec('COMMIT');
+    return written;
   } catch (e) {
     db.exec('ROLLBACK');
     throw e;

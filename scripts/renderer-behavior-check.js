@@ -25,6 +25,10 @@ const FAKE_DOM = `
   const document = { createElement: makeEl, createTextNode: textNode };
 `;
 
+// The extracted function may call the frame-coalesced render or the row patcher; a harness that stubs render alone
+// gets both routed to its stub, a harness that defines them keeps its own (assignment, so no redeclaration).
+const RENDER_SHIM = 'globalThis.renderSoon ??= (...a) => render(...a); globalThis.patchMeta ??= () => render(); globalThis.iconNode ??= () => null;\n';
+const withShims = (src) => (/\b(renderSoon|patchMeta|iconNode)\b/.test(src) ? RENDER_SHIM + src : src);
 function functionSource(name) {
   const asyncStart = source.indexOf('async function ' + name + '(');
   const start = asyncStart >= 0 ? asyncStart : source.indexOf('function ' + name + '(');
@@ -32,7 +36,7 @@ function functionSource(name) {
   let depth = 0, end = start;
   for (; end < source.length; end++) {
     if (source[end] === '{') depth++;
-    if (source[end] === '}' && --depth === 0) return source.slice(start, end + 1);
+    if (source[end] === '}' && --depth === 0) return withShims(source.slice(start, end + 1));
   }
   assert.fail('renderer function ' + name + ' is complete');
 }
@@ -41,7 +45,7 @@ function sourceBetween(start, end) {
   const from = source.indexOf(start), to = source.indexOf(end, from);
   assert.notEqual(from, -1, start + ' is present');
   assert.notEqual(to, -1, end + ' is present');
-  return source.slice(from, to);
+  return withShims(source.slice(from, to));
 }
 
 function runTypingRenderStabilityCheck() {
@@ -527,12 +531,14 @@ async function runMultiTaskPaletteCheck() {
       state: () => ({ calls, selected: [...sel.keys], frozen: selectionFrozen, closed, note }),
     });
   `, { setTimeout, Promise });
-  apply.status(); await new Promise(setImmediate); await new Promise(setImmediate);
+  // taskResult reports through a 0 ms timer, which two setImmediates outrun on a loaded machine: wait for a timer
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 10));
+  apply.status(); await settle();
   assert.deepEqual(plain(apply.state()), {
     calls: [['state', ['t1', 't2'], 'closed']], selected: ['t1', 'meeting', 't2'], frozen: true, closed: 1,
     note: 'Updated 2 tasks; skipped 1 non-task or read-only row',
   }, 'bulk status uses one batch, reports skips, and leaves the complete selection frozen in place');
-  apply.assign(); await new Promise(setImmediate); await new Promise(setImmediate);
+  apply.assign(); await settle();
   assert.deepEqual(plain(apply.state().calls.at(-1)), ['assignees', ['t1', 't2'], ['person']], 'bulk assignment uses one batch for the same eligible selection');
   assert.deepEqual(plain(apply.state().selected), ['t1', 'meeting', 't2'], 'bulk assignment also preserves selected rows');
 }
@@ -743,7 +749,7 @@ async function runTaskChildCheckboxScopeCheck() {
 }
 
 async function runStalePaletteInvalidationCheck() {
-  const liveUpdates = sourceBetween('tana.onChanged((docId) => {', 'tana.onStatus(showStatus);');
+  const liveUpdates = sourceBetween('tana.onChanged((docId, info) => {', 'tana.onStatus(showStatus);');
   const recent = sourceBetween('const recent =', 'function recordRecent');
   const helpers = [functionSource('forgetRecent'), functionSource('invalidatePinCaches'), functionSource('invalidateNode')].join('\n');
   const context = {};
@@ -775,12 +781,15 @@ async function runStalePaletteInvalidationCheck() {
     const loadPins = async () => { pinInfo = null; };
     const loadView = () => {};
     const render = () => {};
+    const renderSoon = () => {};
+    const tanaNode = { text: 'beta' };
     const showError = (error) => { throw error; };
     const view = 'tasks';
     const tana = {
       onChanged: (callback) => { listener = callback; },
       onRemoved: (callback) => { removeListener = callback; },
       onUnpinned: (callback) => { unpinListener = callback; },
+      node: async () => tanaNode,
     };
     ${helpers}
     ${liveUpdates}
@@ -1870,6 +1879,7 @@ function runRowAudienceCheck() {
     const hasKids = () => false, isOpen = () => false, setOpen = () => {}, zoomTo = () => {}, ensureLoaded = () => {}, childrenOf = () => [], isSpace = () => false, draftNode = () => ({ id: 'draft', kind: 'block', text: '', draft: true });
     const renderSegs = () => {}, segsOf = () => [], asDoc = (node) => ({ ...node, kind: 'document', text: node.text ?? node.title ?? '' });
     const isImage = () => false, chipEl = () => ({}), iconSvg = (icon) => '<svg data-icon="' + icon + '"></svg>';
+    const iconNode = (icon) => { const svg = document.createElement('svg'); svg.attrs['data-icon'] = icon; return svg; }; // a cloned template in the app; here the name is what matters
     const childEl = () => document.createElement('div');
     const isDivider = () => false;
     const fetched = [], observed = [];
@@ -1910,7 +1920,7 @@ function runRowAudienceCheck() {
         const el = nodeEl(node, node.id, null);
         const body = el.children[0].children.find((child) => child.className === 'body');
         const info = body.children.find((child) => child.className.split(' ')[0] === 'meta');
-        return { icons: info ? info.children.map((icon) => icon.attrs['aria-label'] || icon.html.match(/data-icon="([^"]+)"/)[1]) : null, gaps: info ? info.children.map((icon) => (icon.style.cssText.match(/margin-left:([^;]+)/) || [])[1] || null) : null, pending: info ? info.className.includes('pending') : null, sub: (body.children.find((child) => child.className === 'subtext') || {}).value || null, fetched: [...fetched], observed: observed.map((watched) => watched.dataset.metaFor) };
+        return { icons: info ? info.children.map((icon) => icon.attrs['aria-label'] || (icon.children[0] || { attrs: {} }).attrs['data-icon']) : null, gaps: info ? info.children.map((icon) => (icon.style.cssText.match(/margin-left:([^;]+)/) || [])[1] || null) : null, pending: info ? info.className.includes('pending') : null, sub: (body.children.find((child) => child.className === 'subtext') || {}).value || null, fetched: [...fetched], observed: observed.map((watched) => watched.dataset.metaFor) };
       },
       onScreen: () => { watching(observed.map((target) => ({ isIntersecting: true, target }))); return [...fetched]; },
     });

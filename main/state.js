@@ -43,8 +43,8 @@ const isSpace = (id) => id.startsWith('tana:space:');
 const idKind = (id) => id.split(':')[1];
 const memberTitle = (n) => n.title || (n.userProfile && n.userProfile.name) || '';
 const isMcp = (n) => (n.invocationContext && n.invocationContext.intent === 'mcp') || /^MCP:/i.test(n.title || '');
-function send(channel, payload) {
-  if (S.win && !S.win.isDestroyed()) S.win.webContents.send(channel, payload);
+function send(channel, ...payload) {
+  if (S.win && !S.win.isDestroyed()) S.win.webContents.send(channel, ...payload);
 }
 const today = () => new Date().toLocaleDateString('sv-SE'); // local YYYY-MM-DD
 function setStatus(patch) {
@@ -53,6 +53,8 @@ function setStatus(patch) {
 }
 
 const pathCache = new Map(); // docId -> path (refreshed on every info() call; cheap enough per open)
+const metaSigs = new Map(); // docId -> the metadata signature the renderer last read (documents.js onChange)
+const truncatedViews = new Set(); // view ids whose last query hit the row cap, so roots can say so without a second query
 const summaryCache = new Map(); // event uri -> write-up uri or null
 const typeAttrTitles = new Map(); // type uri -> { key: title }
 const hueLoaded = new Set();
@@ -65,4 +67,4 @@ function scheduleRefresh(ms) {
   S.refreshTimer = setTimeout(() => S.refresh && S.refresh(), ms);
 }
 
-module.exports = { VIEWS, TAG, KINDS, PLAIN_KINDS, PIN_HUBS, DOC_URI, S, subscribed, deletedNodes, isDeleted, visibleGraphNodes, typeTitles, typeHues, nodeHues, editability, nodeMeta, iso, errText, NOT_CONNECTED, notReady, report, now, isSpace, idKind, memberTitle, isMcp, send, today, setStatus, pathCache, summaryCache, typeAttrTitles, hueLoaded, imageCache, undoStack, redoStack, scheduleRefresh };
+module.exports = { VIEWS, TAG, KINDS, PLAIN_KINDS, PIN_HUBS, DOC_URI, S, subscribed, deletedNodes, isDeleted, visibleGraphNodes, typeTitles, typeHues, nodeHues, editability, nodeMeta, iso, errText, NOT_CONNECTED, notReady, report, now, isSpace, idKind, memberTitle, isMcp, send, today, setStatus, pathCache, metaSigs, truncatedViews, summaryCache, typeAttrTitles, hueLoaded, imageCache, undoStack, redoStack, scheduleRefresh };

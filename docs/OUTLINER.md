@@ -48,7 +48,7 @@ api.outdent(docId, nodeId)         // Promise<void>
 api.refresh()                      // Promise<void> re-query roots
 api.login()                        // Promise<void>
 api.status()                       // Promise<{authenticated, connected, syncing, lastSync, error}>
-api.onChanged(cb)                  // cb(docId | null): null = roots changed; docId = that document's content/title/state changed (remote or local)
+api.onChanged(cb)                  // cb(docId | null, info?): null = roots changed; docId = that document changed (remote or local), info.meta says whether its assignees/audience/sharing did; the renderer patches the row (and its children when open) and re-renders (addendum 18)
 api.onStatus(cb)
 ```
 IPC channels: outline:roots, outline:children, doc:setTitle, doc:setDone, block:setText, block:insertAfter, block:insertChild, block:remove, block:indent, block:outdent, sync:refresh, sync:login, sync:status; events outline:changed (payload docId|null), sync:status.
@@ -269,3 +269,15 @@ What changed after addendum 16, stated once here; the details and evidence are i
 - **Today and week nodes**: "Show today node" (`api.todayNode`, default ⌃⇧D) opens the document titled `YYYY-MM-DD`, pinned to today; "Go to week node" (`api.weekNode`) opens "Week N (YYYY)" for the ISO week. Both create the document when it is missing; they are separate documents with no link between them.
 - **Hotkeys**: every command row, the selection rows included, has a stable id that Cmd+Shift+K records against. The recorder refuses, with the reason shown, a combo the outline already answers to (⌘K, ⇧⌘K, ⌘S, ⌘F, undo/redo, ⌘0 and zoom, ⇧⌘⌫, ⌘→, ⇧⌘↑/↓; ⌃ counts as ⌘, ⌥ is ignored) or one another row already has.
 - **Links and location**: Cmd+K "Copy link" copies the home.tana.inc url of the current node; the rail's Details section carries "Show in Tana" with the same url, the meeting's call link, the assignee and the visibility (which opens the people picker directly when set to selected people, and offers "only me" and "inherit" as ways back). Meeting crumbs carry the meeting's date; crumbs stay grey, hover raises their opacity. Sidebar tags collapse to their `#` and hue, expanding on hover without changing the row's height.
+
+## Addendum 18 (rendering budget)
+
+Measured on a 53-row Library before this addendum: 6–7 ms per full render, but 78 renders in the six seconds after opening a 56-row view (one per metadata answer), four renders and two identical graph queries per 30-second refresh tick, and every text edit throwing away the document's cached metadata and reloading all six views' rows. Now:
+
+- `renderSoon()` coalesces everything that arrives on its own (metadata, members, pins, the rail, crumb dates, live updates) into one render per animation frame; `render()` stays synchronous for user actions that need the DOM immediately after. A metadata answer patches its own rows (`patchMeta`) and renders only when the zoomed document is the one answered.
+- List rows are keyed and reused: a collapsed row whose `rowSig` (text, done, icon, hue, meta, tags, editability, draft, sensitivity, metadata, member count, open state, pending edit) is unchanged keeps its element; items keep their identity across renders so the reused row's handlers see the current node.
+- `onChanged(docId, { meta })` patches that row from one `doc:info` call (falling back to a roots reload only when no view lists the document) and keeps the cached metadata unless main says assignees, restriction or participants changed. `onChanged(null)` reloads roots, which now carry each view's `truncated` flag, and runs no second query.
+- Main batches the per-row link-sharing lookups into one `nodeIds` query per 25 ms, writes nothing to SQLite for an unchanged row, and returns cached rows in each view's own order so a boot from the cache looks like a refresh.
+- Icons are cloned from a parsed template per icon name; `docOf` caches hits per render; the renderer's image cache holds 200 entries.
+
+After: 13 renders totalling 23 ms on opening the same view, 3 renders totalling 4 ms and one query per refresh tick, and a title edit is one render, no roots reload and no metadata refetch.

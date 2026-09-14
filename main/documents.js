@@ -4,7 +4,7 @@ const access = require('../sdk/access');
 const content = require('../sdk/content');
 const chat = require('../sdk/chat');
 const { readNode, editable, ulid, initDocument, STATE_TYPES } = require('../sdk/node');
-const { DOC_URI, KINDS, NOT_CONNECTED, PLAIN_KINDS, S, TAG, deletedNodes, editability, errText, hueLoaded, idKind, isDeleted, nodeHues, nodeMeta, now, pathCache, redoStack, report, scheduleRefresh, send, subscribed, summaryCache, typeHues, typeTitles, undoStack, visibleGraphNodes } = require('./state');
+const { DOC_URI, KINDS, NOT_CONNECTED, PLAIN_KINDS, S, TAG, deletedNodes, editability, errText, hueLoaded, idKind, isDeleted, metaSigs, nodeHues, nodeMeta, now, pathCache, redoStack, report, scheduleRefresh, send, subscribed, summaryCache, typeHues, typeTitles, undoStack, visibleGraphNodes } = require('./state');
 const { eventMeta, graphRow, hueOf, hueWithType, kindRow, memberRow, members, nodeTag, ownHue, plainRow, rememberNodeHue, rememberType, resolveHue, resolveTypes, toNode, typeTag } = require('./rows');
 
 // Resolve native embeds without replacing the containing block identity or loading target content recursively.
@@ -146,13 +146,20 @@ function onChange(docId) {
     if (rowChanged) db.setRow(docId, { title, done, updatedAt: now() }); // every view's row, not just the one db.get found
     // Collection/profile/date-pin changes do not have cached view rows, but invalidate pins globally.
     const pinsChanged = docId === S.me?.userUri || ['collection', 'pin-map'].includes(idKind(docId));
-    send('outline:changed', docId);
-    if (pinsChanged || rowChanged || restored) send('outline:changed', null);
+    // The renderer keeps a document's metadata (assignees, audience, sharing) until one of them moves; a text
+    // edit must not cost it the owner-chain and link-sharing lookups, so the event says whether they did.
+    const sig = metaSig(n), meta = metaSigs.get(docId) !== sig;
+    metaSigs.set(docId, sig);
+    send('outline:changed', docId, { meta }); // the renderer patches this one row from doc:info
+    if (pinsChanged || restored) send('outline:changed', null);
     if (restored) scheduleRefresh(0);
   } catch (e) {
     report(e);
   }
 }
+// What doc:taskMeta is built from, as one string per document: seeded when the renderer reads the metadata, compared
+// on every change. participants carry roles and restricted the audience rule; assignedToUris the assignees.
+const metaSig = (n) => JSON.stringify([n.assignedToUris, n.restricted, n.participants]);
 
 async function document(id) {
   if (!S.client || !S.me) throw new Error(NOT_CONNECTED);
@@ -261,10 +268,28 @@ async function history(from, to, action, can) {
     return null;
   } finally { S.historyBusy = false; }
 }
-const linkShared = async (id) => {
-  try { const { nodes = [] } = await S.client.graph.listNodes({ nodeIds: [id], limit: 1 }); return !!(nodes[0] && nodes[0].linkSharing && nodes[0].linkSharing.mode); }
-  catch { return false; }
-};
+// linkSharing lives on the graph node only. Every visible row asks for it as it scrolls in, so the lookups that
+// arrive within a few milliseconds of each other go out as one nodeIds query instead of one call per row.
+const linkBatch = new Map(); // id -> [resolve]
+let linkTimer = null;
+function linkShared(id) {
+  return new Promise((resolve) => {
+    if (!linkBatch.has(id)) linkBatch.set(id, []);
+    linkBatch.get(id).push(resolve);
+    linkTimer ||= setTimeout(async () => {
+      const batch = new Map(linkBatch); linkBatch.clear(); linkTimer = null;
+      let shared = new Set();
+      try {
+        const ids = [...batch.keys()];
+        for (let i = 0; i < ids.length; i += 200) {
+          const { nodes = [] } = await S.client.graph.listNodes({ nodeIds: ids.slice(i, i + 200), limit: 200 });
+          for (const n of nodes) if (n.linkSharing && n.linkSharing.mode) shared.add(n.id);
+        }
+      } catch { shared = new Set(); }
+      for (const [nodeId, resolves] of batch) for (const r of resolves) r(shared.has(nodeId));
+    }, 25);
+  });
+}
 async function accessContext() {
   const token = await S.session.getAccessToken();
   const claims = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
@@ -280,4 +305,4 @@ async function moveTarget(spaceId) {
   return document(spaceId);
 }
 
-module.exports = { outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, createDocument, info, setIcon, setSensitive, subscribe, invalidateDeleted, onChange, document, op, inHistory, mut, mutTasks, documentAction, history, linkShared, accessContext, canWriteDoc, moveTarget };
+module.exports = { outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, createDocument, info, setIcon, setSensitive, subscribe, invalidateDeleted, onChange, document, op, inHistory, mut, mutTasks, documentAction, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget };

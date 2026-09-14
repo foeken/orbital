@@ -134,11 +134,26 @@ function render(force = false) {
 }
 // Metadata and sync may finish between keystrokes. Apply their deferred render only after the caret leaves editable rows.
 document.addEventListener('focusout', () => queueMicrotask(() => { if (renderDeferred && !editingRow() && !selectionFrozen) render(); }));
+// Answers that arrive on their own — a row's metadata, pins, the rail, a crumb date, live updates — render once per
+// frame between them rather than once each: a view of N rows used to rebuild itself N times as its metadata came in.
+let renderQueued = false;
+function renderSoon() {
+  if (renderQueued) return;
+  renderQueued = true;
+  requestAnimationFrame(() => { renderQueued = false; render(); });
+}
+// What a list row is built from. A row whose signature has not changed since the last render is kept as it is,
+// which turns a live update or a refresh into a handful of rebuilt rows instead of a whole new outline.
+function rowSig(n) {
+  const meta = taskMetaById.get(n.id);
+  return JSON.stringify([n.text, n.done, n.icon, n.iconSvg, n.hue, n.meta, n.tags, n.editable, n.draft, n.hasChildren, n.kind, n.type,
+    sensitiveHidden(n.id), meta || (taskMetaLoading.has(n.id) ? 'loading' : null), members ? members.length : 0, open.get(n.id), pending.has(n.id)]);
+}
 function renderOutline() {
   const saved = focused();
   // a live update must not eat a selection: the formatting toolbar acts on it, and a re-render lands mid-toggle
   const savedSel = saved && document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('text') ? selectionOffsets(document.activeElement) : null;
-  items.clear();
+  rendered.clear(); docCache.clear();
   let trail = null;
   if (zoom) { trail = resolveZoom(); if (!trail) zoom = null; }
   const parent = trail && trail.at(-1);
@@ -157,9 +172,14 @@ function renderOutline() {
     const groups = groupsOf(list); // null when the view is not grouped: one flat list, as before
     if (groups) list = groups.flatMap((g) => g.nodes); // keyboard order follows what is on screen
     const before = new Map([...outline.children].filter((el) => el.classList.contains('node')).map((el) => [el.dataset.key, el]));
+    const rowEl = (n) => { // an unchanged, collapsed row is reused; anything expanded or different is rebuilt
+      const old = before.get(n.id), sig = rowSig(n);
+      if (old && old.dataset.sig === sig && !old.classList.contains('leaving') && !old.querySelector(':scope > .children')) { mkItem(n.id, n, null); delete old.dataset.today; return old; }
+      const el = nodeEl(n, n.id, null); el.dataset.sig = sig; return el;
+    };
     outline.replaceChildren(...(groups
-      ? groups.flatMap((g) => [groupHeadEl(g.title), ...g.nodes.map((n) => nodeEl(n, n.id, null))])
-      : list.map((n) => nodeEl(n, n.id, null))));
+      ? groups.flatMap((g) => [groupHeadEl(g.title), ...g.nodes.map(rowEl)])
+      : list.map(rowEl)));
     animateRows(before);
     const today = view === 'meetings' && !groups ? outline.children[todayIndex(list)] : null;
     if (today) today.dataset.today = '';
@@ -212,6 +232,7 @@ function renderOutline() {
     outline.append(note);
   }
   applySel();
+  for (const key of items.keys()) if (!rendered.has(key)) items.delete(key);
   if (saved && savedSel) selectRange(saved.key, savedSel[0], savedSel[1]);
   else if (saved) placeCaret(saved.key, saved.offset);
   // the caret lands in that typable row once per open: a later render (a live update, a refresh) must not pull it back
@@ -270,7 +291,7 @@ function crumbWhen(id) {
   if (known && known.meta) return known.meta;
   if (!eventWhen.has(id) && tana.node) {
     eventWhen.set(id, null);
-    tana.node(id).then((n) => { eventWhen.set(id, n.meta || ''); if (n.meta) render(); }, () => eventWhen.delete(id));
+    tana.node(id).then((n) => { eventWhen.set(id, n.meta || ''); if (n.meta) renderSoon(); }, () => eventWhen.delete(id));
   }
   return eventWhen.get(id) || null;
 }
@@ -284,7 +305,7 @@ function renderCrumbs(trail) {
   // A document reached through a space (zoom.via) starts at the space's location; the spaces follow as crumbs.
   const root = zoom.via ? zoom.via[0] : zoom, rootId = root.docId;
   const path = paths.get(rootId);
-  if (!path && tana.path && isRealId(rootId)) { paths.set(rootId, []); tana.path(rootId).then((p) => { paths.set(rootId, p); if (zoom && (zoom.via ? zoom.via[0] : zoom).docId === rootId) render(); }).catch(() => {}); }
+  if (!path && tana.path && isRealId(rootId)) { paths.set(rootId, []); tana.path(rootId).then((p) => { paths.set(rootId, p); if (zoom && (zoom.via ? zoom.via[0] : zoom).docId === rootId) renderSoon(); }).catch(() => {}); }
   for (const [i, p] of (path && path.length ? path : [{ id: '', title: root.from || (viewOf() ? viewOf().title : 'Tana') }]).entries()) {
     if (i) { const sep = document.createElement('span'); sep.className = 'sep'; sep.textContent = '›'; nav.append(sep); }
     const a = document.createElement('a');
@@ -327,7 +348,7 @@ function nodeEl(node, docId, parent) {
   chev.classList.toggle('off', !expandable); // hidden glyph, kept in the layout so the row never shifts
   const bullet = document.createElement('span'); bullet.className = 'bullet'; bullet.title = 'Zoom in';
   if (display.iconSvg) { bullet.classList.add('icon', 'custom'); bullet.innerHTML = display.iconSvg; }
-  else if (display.icon) { bullet.classList.add('icon', display.icon); bullet.innerHTML = iconSvg(display.icon); }
+  else if (display.icon) { bullet.classList.add('icon', display.icon); const svg = iconNode(display.icon); if (svg) bullet.append(svg); }
   if (!display.iconSvg && display.hue != null) { bullet.classList.add('hue'); bullet.style.setProperty('--hue', String(display.hue)); } // type hue tints the icon and the plain bullet alike
   bullet.onmousedown = (e) => e.preventDefault();
   if (!node.draft) bullet.onclick = () => reference ? openReference(node) : zoomTo(item);
@@ -348,7 +369,7 @@ function nodeEl(node, docId, parent) {
     const img = document.createElement('img'), { uri, alt, width, height } = node.image;
     if (alt) img.alt = img.title = alt;
     if (width && height) { img.width = width; img.height = height; }
-    const show = (url) => { images.set(uri, url); img.src = url; text.classList.remove('loading'); };
+    const show = (url) => { images.set(uri, url); img.src = url; text.classList.remove('loading'); if (images.size > 200) images.delete(images.keys().next().value); }; // oldest out: main keeps the file cache
     const cached = images.get(uri);
     if (typeof cached === 'string') img.src = cached;
     else { text.classList.add('loading'); (cached || images.set(uri, tana.image(uri)).get(uri)).then(show, (e) => { images.delete(uri); showError(e); }); }

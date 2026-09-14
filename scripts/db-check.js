@@ -29,10 +29,12 @@ assert.strictEqual(all.meetings[0].meta, 'Mon, all day');
 assert.strictEqual(all.meetings[0].done, 0);
 assert.deepStrictEqual(Object.keys(all.tasks[0]).sort(), ['done', 'icon', 'id', 'meta', 'section', 'sortKey', 'tags', 'title', 'updatedAt']);
 
-const edited = db.upsert({ ...db.get('tana:text:a'), title: 'A2', done: 1, updatedAt: '2026-01-03T00:00:00Z' });
+assert.strictEqual(db.upsert({ ...db.get('tana:text:a'), title: 'A2', done: 1, updatedAt: '2026-01-03T00:00:00Z' }), 1, 'a changed row is one write');
+const edited = db.get('tana:text:a');
 assert.strictEqual(edited.title, 'A2');
 assert.strictEqual(edited.done, 1);
 assert.strictEqual(edited.section, 'tasks');
+assert.strictEqual(db.upsert({ ...db.get('tana:text:a') }), 0, 'and the same row again is no write at all');
 db.upsert({ id: 'tana:text:new', section: 'tasks', title: 'N', done: 0 });
 assert.ok(db.get('tana:text:new').updatedAt && db.get('tana:text:new').sortKey);
 assert.deepStrictEqual(db.get('tana:text:new').tags, []);
@@ -42,6 +44,13 @@ assert.strictEqual(db.setRow('tana:text:a', { title: 'A3', done: 0 }), 2, 'both 
 assert.deepStrictEqual([db.list().tasks.find((r) => r.id === 'tana:text:a').title, db.list().inbox[0].title], ['A3', 'A3']);
 assert.strictEqual(db.setRow('tana:text:none', { title: 'x', done: 0 }), 0, 'an uncached document is no row at all');
 db.replaceSection('inbox', []);
+// a refresh that found nothing new writes nothing: the SQLite file stays untouched thirty seconds at a time
+const same = db.list().tasks.map(({ section, ...r }) => r);
+assert.strictEqual(db.replaceSection('tasks', same), 0, 'an unchanged section is zero writes');
+// inbox, library and chats read back newest first like tasks; only meetings are ascending
+db.replaceSection('library', [{ id: 'tana:text:old', title: 'old', sortKey: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z' }, { id: 'tana:text:newer', title: 'newer', sortKey: '2026-01-02T00:00:00Z', updatedAt: '2026-01-02T00:00:00Z' }]);
+assert.deepStrictEqual(db.list().library.map((r) => r.title), ['newer', 'old'], 'library: newest first, as its query returns it');
+db.replaceSection('library', []);
 
 // replacing one section replaces title/done and drops its unlisted rows, leaving other sections alone
 db.replaceSection('tasks', [

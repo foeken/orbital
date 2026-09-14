@@ -95,8 +95,11 @@ assert.doesNotMatch(source.slice(source.indexOf("titleEl.addEventListener('keydo
 assert.match(source, /taskMetaFailed\.set\(docId, \{ until: Date\.now\(\) \+ wait, wait \}\);/);
 // a new connection clears the metadata backoff and refetches the active view, which fetched its rows before the client existed
 assert.match(source, /const wasConnected = connected;[\s\S]*?if \(connected && !wasConnected\) \{ taskMetaFailed\.clear\(\); loadView\(\); \}/);
-// a global change (a refresh, a pin, a filter) re-runs the active view's query after the cached rows land
-assert.match(source, /Promise\.all\(work\)\.then\(\(\) => docId \? undefined : loadView\(\)\)/);
+// a global change (a refresh, a pin, a filter) reloads the cached rows, which the refresh loop wrote before saying so;
+// it must not run the active view's query a second time, and a single document's change patches its row alone
+assert.match(source, /loadRoots\(\)\.then\(renderSoon, showError\)/);
+assert.doesNotMatch(source.slice(source.indexOf('tana.onChanged((docId, info) => {'), source.indexOf('function removeStale')), /loadView\(\)/, 'no second query per refresh');
+assert.match(source, /const work = \[patchDoc\(docId\)\];/);
 assert.match(source, /const loading = !parent && !outline\.children\.length/);
 assert.match(source, /tana\.setAssignees\(doc\.id, assignees\)/);
 assert.match(source, /const AUDIENCES = \{/);
@@ -109,7 +112,7 @@ assert.match(source, /label: 'Visible to members of ' \+ title/);
 assert.match(source, /everyone: \{ icon: 'users', label: 'Visible to everyone' \}/);
 assert.match(source, /el\.textContent = summary\.assignees/);
 assert.match(source, /summary\.assignees === 'Unassigned'/);
-assert.match(source, /iconSvg\('unassigned'\)/);
+assert.match(source, /iconNode\('unassigned'\)/);
 assert.match(source, /icon: 'unassigned', label: 'Unassigned'/);
 assert.doesNotMatch(source, /return 'Assigned to ' \+ assignees/);
 assert.match(source, /label: 'Edit assignees'/);
@@ -159,6 +162,10 @@ assert.match(source, /onRemoved: \(cb\) => removed\.push\(cb\)/);
 assert.match(source, /e\.key === 'Backspace' && \(e\.metaKey \|\| e\.ctrlKey\) && e\.shiftKey\) \{ e\.preventDefault\(\); removeDocument\(item\); \}/);
 assert.match(source, /e\.key === 'Backspace' && document\.activeElement === document\.body && zoom\) \{ e\.preventDefault\(\); removeZoomedBlock\(\); \}/);
 
+// The extracted function may call the frame-coalesced render or the row patcher; a harness that stubs render alone
+// gets both routed to its stub, a harness that defines them keeps its own (assignment, so no redeclaration).
+const RENDER_SHIM = 'globalThis.renderSoon ??= (...a) => render(...a); globalThis.patchMeta ??= () => render(); globalThis.iconNode ??= () => null;\n';
+const withShims = (src) => (/\b(renderSoon|patchMeta|iconNode)\b/.test(src) ? RENDER_SHIM + src : src);
 function functionSource(name) {
   const asyncStart = source.indexOf('async function ' + name + '(');
   const start = asyncStart >= 0 ? asyncStart : source.indexOf('function ' + name + '(');
@@ -166,7 +173,7 @@ function functionSource(name) {
   let depth = 0;
   for (let end = start; end < source.length; end++) {
     if (source[end] === '{') depth++;
-    if (source[end] === '}' && --depth === 0) return source.slice(start, end + 1);
+    if (source[end] === '}' && --depth === 0) return withShims(source.slice(start, end + 1));
   }
   assert.fail('renderer function ' + name + ' is complete');
 }

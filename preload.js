@@ -77,6 +77,6 @@ contextBridge.exposeInMainWorld('api', {
   status: () => ipcRenderer.invoke('sync:status'),
   login: () => ipcRenderer.invoke('sync:login'),
   onRemoved: (cb) => ipcRenderer.on('outline:removed', (_e, docId) => cb(docId)), // evict all cached references by id
-  onChanged: (cb) => ipcRenderer.on('outline:changed', (_e, docId) => cb(docId)),
+  onChanged: (cb) => ipcRenderer.on('outline:changed', (_e, docId, info) => cb(docId, info)), // info: { meta } for one document; null docId = global
   onStatus: (cb) => ipcRenderer.on('sync:status', (_e, status) => cb(status)),
 });

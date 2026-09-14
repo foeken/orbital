@@ -10,8 +10,8 @@ function loadMembers() {
   membersAsked = Date.now();
   tana.members().then((m) => {
     members = m;
-    if (!m.length) setTimeout(render, META_RETRY_MS); // a render asks again, the way loadTaskMeta retries
-    if (!$('pills').hidden) renderPills(true); if (!palette.hidden) renderPalette(); render(); // so the Assigned pill reads "You (<name>)"
+    if (!m.length) setTimeout(renderSoon, META_RETRY_MS); // a render asks again, the way loadTaskMeta retries
+    if (!$('pills').hidden) renderPills(true); if (!palette.hidden) renderPalette(); renderSoon(); // so the Assigned pill reads "You (<name>)"
   }, showError);
 }
 const me = () => (members || []).find((m) => m.me);
@@ -38,13 +38,31 @@ function loadTaskMeta(docId) {
   tana.taskMeta(docId).then((meta) => {
     taskMetaLoading.delete(docId); taskMetaFailed.delete(docId); taskMetaById.set(docId, meta);
     if (!palette.hidden && palDoc && palDoc.id === docId) renderPalette();
-    render();
+    patchMeta(docId);
   }, () => { // a brand-new document can still be settling in main: wait, then let the next render ask again
     taskMetaLoading.delete(docId);
     const wait = Math.min(META_RETRY_MAX, backoff ? backoff.wait * 2 : META_RETRY_MS);
     taskMetaFailed.set(docId, { until: Date.now() + wait, wait });
-    setTimeout(() => { if (!taskMetaById.has(docId)) render(); }, wait);
+    setTimeout(() => { if (!taskMetaById.has(docId)) renderSoon(); }, wait);
   });
+}
+// A metadata answer lands in the rows that show that document — the placeholder swapped for the real icons, the
+// space sub-line added — without touching the rest of the outline. The zoomed document shows it in the title area
+// and the rail as well, so that one takes the next frame's render.
+function patchMeta(docId) {
+  if (zoom && zoom.docId === docId) return renderSoon();
+  for (const row of outline.querySelectorAll('.node.document')) {
+    if (row.dataset.key !== docId) continue;
+    const item = items.get(row.dataset.key), body = row.querySelector(':scope > .line > .body');
+    if (!item || !body) continue;
+    const summary = taskSummary(item.node, true) || documentSummary(item.node, true);
+    const old = body.querySelector(':scope > .meta.tmeta');
+    if (summary) { const el = taskMetaEl(summary); if (old) old.replaceWith(el); else body.append(el); } else if (old) old.remove();
+    if (summary && summary.audience && summary.audience.space && !body.querySelector(':scope > .subtext')) {
+      const sub = document.createElement('div'); sub.className = 'subtext'; sub.textContent = summary.audience.space; body.append(sub);
+    }
+    row.dataset.sig = rowSig(item.node); // the row now matches what a fresh render would build
+  }
 }
 // One metadata read is a document bootstrap plus a graph lookup, so with every row wanting an audience icon the
 // request only goes out once the row is on screen. Rows further down stay quiet until they scroll into view.
@@ -78,7 +96,7 @@ function documentSummary(node, lazy) {
 }
 function taskMetaEl(summary) {
   const el = document.createElement('span');
-  el.className = 'meta' + (summary.pending ? ' pending' : ''); el.textContent = summary.assignees;
+  el.className = 'meta tmeta' + (summary.pending ? ' pending' : ''); el.textContent = summary.assignees;
   // the icons stand 6px apart, but the first one needs no gap of its own: a row with no assignee name in front of it
   // (every doc and meeting row) already has the 8px the .meta span carries, and 14px reads as a hole
   const gap = () => (el.textContent || el.children.length ? '6px' : '0');
@@ -87,8 +105,7 @@ function taskMetaEl(summary) {
     const icon = document.createElement('span');
     if (label) { icon.setAttribute('role', 'img'); icon.setAttribute('aria-label', label); icon.title = label; } else icon.setAttribute('aria-hidden', 'true');
     icon.style.cssText = 'display:inline-block;width:14px;height:14px;margin-left:' + gap() + ';vertical-align:-2px';
-    icon.innerHTML = iconSvg(name);
-    const svg = icon.firstElementChild; if (svg) { svg.setAttribute('width', '14'); svg.setAttribute('height', '14'); }
+    const svg = iconNode(name); if (svg) { svg.setAttribute('width', '14'); svg.setAttribute('height', '14'); icon.append(svg); }
     return icon;
   };
   if (summary.pending) el.append(iconEl('pending', null)); // the answer is still on its way: same slot, same size
@@ -96,8 +113,7 @@ function taskMetaEl(summary) {
     const icon = document.createElement('span');
     icon.setAttribute('aria-hidden', 'true'); icon.title = 'Unassigned';
     icon.style.cssText = 'display:inline-block;width:14px;height:14px;margin-right:4px;vertical-align:-2px';
-    icon.innerHTML = iconSvg('unassigned');
-    const svg = icon.firstElementChild; if (svg) { svg.setAttribute('width', '14'); svg.setAttribute('height', '14'); }
+    const svg = iconNode('unassigned'); if (svg) { svg.setAttribute('width', '14'); svg.setAttribute('height', '14'); icon.append(svg); }
     el.prepend(icon);
   }
   if (summary.audience) el.append(iconEl(summary.audience.icon, summary.audience.label));
