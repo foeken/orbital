@@ -37,6 +37,8 @@ This repo is **Tana Companion**: a macOS Electron outliner over the *new* Tana (
 - Work is split per file ownership when using sub-agents (renderer vs main/SDK) with the contract in `docs/OUTLINER.md`; keep the "keyboard first" rule.
 - Tana's protocol is undocumented and can change with any deploy; if bootstrap or search suddenly fails, re-extract the descriptors from the current bundle (`https://home.tana.inc/assets/shared-*.js`, `Mr(` base64 blobs) and diff against `sdk/proto/descriptors.js`.
 
+- Releasing (`npm run release`) signs with the Developer ID in the Keychain (team 6DA7MK99T2) and notarizes through the `notarytool` profile, the same pair Meeting Notes uses; `@electron/osx-sign` and `@electron/notarize` come with the packager, so no new dependency and no secret in the repo. Signing every nested file with `--timestamp` takes minutes — let it finish. Never run two packager builds at once: the packager `rm -rf`s the shared `$TMPDIR/electron-packager` root at startup, so a second run deletes the first one's tree and the failure surfaces as `codesign: … locale.pak: No such file or directory` on a random file, which looks like a signing bug and is not one.
+
 ## Integration checks and newer contracts
 
 - `npm run check` includes SDK/database checks plus renderer auth/behavior checks. Also test ordinary edit notifications in a mock Electron window; helper-only tests once incorrectly treated all changed ids as deletions.

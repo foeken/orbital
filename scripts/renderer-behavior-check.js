@@ -105,6 +105,7 @@ async function runDraftMaterialiseFocusCheck() {
     const tana = { insertAfter: async () => { await gate; return 'real'; } };
     const run = (fn) => fn();
     const reload = async () => kids.set('doc', [{ id: 'real', kind: 'block', text: 'H' }]);
+    const childrenOf = (candidate) => candidate.node.kind === 'document' ? kids.get(candidate.docId) : candidate.node.children || [];
     const inheritCheckbox = async () => {};
     const locate = (rows, id) => { const found = rows.find((candidate) => candidate.id === id); return found && { node: found }; };
     const sectionOf = () => null, fresh = new Map(); let zoom = null;
@@ -128,6 +129,35 @@ async function runDraftMaterialiseFocusCheck() {
     text: 'Hello', sameEditor: true, sameRow: true, key: 'doc/real', oldGone: true, newPresent: true,
     draft: false, renders: 0, deferred: true, saved: [{ text: 'He' }],
   }, 'a draft promotes the same contenteditable in place, so every character after the first keeps landing');
+}
+
+async function runZoomedBlockTitleSaveCheck() {
+  const makeHarness = (id, fail = false) => vm.runInNewContext(`
+    const calls = [], pending = new Map(), item = { key: 'doc/' + ${JSON.stringify(id)}, docId: 'doc',
+      node: { id: ${JSON.stringify(id)}, kind: 'block', text: 'component', segments: [{ text: 'component' }] } };
+    pending.set(item.key, { item, segs: [{ text: 'changed' }], timer: null });
+    let reloaded = 0, rendered = 0, error = null, queue = Promise.resolve();
+    const canEditText = () => true, isReference = () => false;
+    const plainOf = (segs) => segs.map((s) => s.text || '').join('');
+    const segsOf = (node) => node.segments || [], saveValue = (segs) => segs;
+    const dropPending = (key) => pending.delete(key);
+    const reload = async () => { reloaded++; };
+    const render = () => { rendered++; };
+    const showError = (e) => { error = e && e.message; };
+    const run = (fn) => (queue = queue.then(fn).then((value) => { showError(null); return value; }, showError));
+    const tana = {
+      setTitle: async () => {},
+      setText: async (docId, nodeId, value) => { calls.push([docId, nodeId, value]); if (${fail}) throw new Error('no outline node ' + nodeId); },
+    };
+    ${functionSource('flush')}
+    ({ save: async () => { flush(item.key); await queue; return { calls, reloaded, rendered, error }; } });
+  `, { setTimeout, clearTimeout, Promise });
+  assert.deepEqual(plain(await makeHarness(null).save()), {
+    calls: [], reloaded: 1, rendered: 1, error: 'This outline row no longer exists',
+  }, 'a zoomed block title never sends a null node id and re-reads the outline');
+  assert.deepEqual(plain(await makeHarness('gone', true).save()), {
+    calls: [['doc', 'gone', [{ text: 'changed' }]]], reloaded: 1, rendered: 1, error: 'no outline node gone',
+  }, 'a rejected title save re-reads the outline instead of leaving optimistic text on screen');
 }
 
 function runSensitiveBlurCheck() {
@@ -1680,8 +1710,10 @@ function runDraftTailCheck() {
     const isAtomic = (n) => isImage(n) || isDivider(n);
     let editable = true, loaded = true;
     const childrenOf = () => (loaded ? [] : null); // only its "are the children loaded" answer matters here
+    const hasKids = (item) => !!item.node.hasChildren || !!item.node.children?.length;
     const canEditItem = () => editable;
     const isSpace = (n) => n.id.startsWith('tana:space:');
+    ${sourceBetween('const canInsertChild =', 'const canExpand =')}
     ${sourceBetween('const typableRow =', '// Opening a node leaves a row')}
     ${functionSource('withDraftTail')}
     ({ tail: (list, parent) => withDraftTail(list, parent), set: (e, l) => { editable = e; loaded = l; } });
@@ -1694,9 +1726,12 @@ function runDraftTailCheck() {
   assert.deepEqual(ids(api.tail([row('a', 'written'), row('b', '')], doc)), ['a', 'b'], 'an empty last row is already somewhere to type, so no draft is added');
   assert.deepEqual(ids(api.tail([{ id: 'img', kind: 'block', type: 'image' }], doc)), ['img', 'draft:doc'], 'an image, divider or reference row is not somewhere to type');
   assert.deepEqual(ids(api.tail([], { key: 's', docId: 's', node: { id: 'tana:space:1', kind: 'document' } })), [], 'a space lists documents, so it has no draft child');
-  const block = { key: 'doc/b', docId: 'doc', node: { id: 'b', kind: 'block' } };
+  const block = { key: 'doc/b', docId: 'doc', node: { id: 'b', kind: 'block', block: 'paragraph' } };
   assert.deepEqual(ids(api.tail([], block)), ['draft:doc/b'], 'an empty block opens on a draft child');
-  assert.deepEqual(ids(api.tail([row('c', 'child')], block)), ['c'], 'a block with children gets none: a draft there would materialise as its first child');
+  const child = row('c', 'child'), parentWithChild = { ...block, node: { ...block.node, hasChildren: true, children: [child] } };
+  assert.deepEqual(ids(api.tail([child], parentWithChild)), ['c', 'draft:doc/b'], 'a block with children gets a draft that appends after its last child');
+  assert.deepEqual(ids(api.tail([], { ...block, node: { ...block.node, block: 'heading2' } })), [], 'a bare heading does not offer a child its Tana schema cannot store');
+  assert.deepEqual(ids(api.tail([], { ...block, node: { ...block.node, block: 'bullet', heading: 2 } })), ['draft:doc/b'], 'a heading inside a list item can still add children');
   api.set(false, true);
   assert.deepEqual(ids(api.tail([], doc)), [], 'a read-only document (every chat) never offers a row to type in');
   api.set(true, false);
@@ -1906,7 +1941,7 @@ async function runMemberLoadCheck() {
   assert.equal(throttled.attempts, 3, 'a slow start cannot turn renders into a request loop: a fresh ask is throttled');
 }
 
-const checks = [runDraftTailCheck, runPinGrouping, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runSortGroupCheck, runCmdPillsCheck];
+const checks = [runDraftTailCheck, runPinGrouping, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runSortGroupCheck, runCmdPillsCheck];
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);
   if (failures.length) throw new AggregateError(failures, failures.map((failure) => failure.message).join('\n'));

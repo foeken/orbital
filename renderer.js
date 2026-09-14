@@ -495,6 +495,7 @@ const isSpace = (node) => node.id.startsWith('tana:space:'); // its children are
 const childrenOf = (item) => (item.node.kind === 'document' ? kids.get(item.docId) : item.node.children || []);
 const hasKids = (item) => { const c = childrenOf(item); return Array.isArray(c) ? c.length > 0 : !!item.node.hasChildren; };
 const isOpen = (item) => (open.has(item.key) ? open.get(item.key) : item.node.kind === 'block');
+const canInsertChild = (item) => item.node.kind === 'document' || hasKids(item) || item.node.done != null || ['paragraph', 'bullet', 'numbered'].includes(item.node.block);
 const canExpand = (item) => hasKids(item) || (!item.node.draft && canEditItem(item));
 function draftNode(parent) { // shown under an expanded empty node; created on the first typed character
   return { id: 'draft:' + parent.key, text: '', kind: 'block', done: parent.node?.kind !== 'document' && parent.node?.done != null ? 0 : undefined, draft: true };
@@ -784,11 +785,10 @@ let caretOnOpen = false; // set when a node is opened: the first render with its
 const typableRow = (n) => !!n && n.kind === 'block' && !isAtomic(n) && !isReference(n) && !plainOf(n).length;
 // Opening a node leaves a row to type in: the local draft row the empty document case has always shown, which stays
 // out of Tana until its first typed character (materialise) and is discarded by anything else.
-// ponytail: a block only gets one while it is empty — materialise prepends there (insertChild), so a trailing draft
-// under a block with children would come back as its first child.
+// A block with children appends through insertAfter(last); an empty block uses insertChild.
 function withDraftTail(list, parent) {
-  if (!Array.isArray(childrenOf(parent)) || isSpace(parent.node) || !canEditItem(parent)) return list;
-  if (typableRow(list.at(-1)) || (parent.node.kind !== 'document' && list.length)) return list;
+  if (!Array.isArray(childrenOf(parent)) || isSpace(parent.node) || !canEditItem(parent) || !canInsertChild(parent)) return list;
+  if (typableRow(list.at(-1))) return list;
   return [...list, draftNode(parent)];
 }
 function editingRow() {
@@ -839,8 +839,8 @@ function renderOutline() {
     note.className = 'empty-note'; note.textContent = kids.get(parent.docId) === null ? 'Loading…' : 'No content';
     outline.append(note);
   }
-  // the page title: editable in place when zoomed into a document (setTitle through the usual debounce)
-  const editable = parent && parent.node.kind === 'document' && canEditItem(parent);
+  // the page title is the zoom target itself: documents use setTitle, blocks use setText through the same debounce
+  const editable = parent && !isAtomic(parent.node) && !isReference(parent.node) && canEditText(parent);
   if (editable) titleEl.contentEditable = 'plaintext-only'; else titleEl.removeAttribute('contenteditable');
   titleEl.dataset.key = editable ? parent.key : '';
   titleEl.textContent = editable && pending.has(parent.key) ? plainOf(pending.get(parent.key).segs) : parent ? parent.node.text : viewOf() ? viewOf().title : 'Tana';
@@ -1143,7 +1143,7 @@ function nodeEl(node, docId, parent) {
   const item = mkItem(docId, node, parent);
   const target = referenceTarget(node), display = target || node, reference = isReference(node);
   const has = hasKids(item), opened = isOpen(item);
-  const expandable = has || (!node.draft && canEditItem(item));
+  const expandable = has || (!node.draft && canEditItem(item) && (node.kind === 'document' || node.done != null || ['paragraph', 'bullet', 'numbered'].includes(node.block)));
   const el = document.createElement('div');
   const heading = headingOf(node); // a heading arrives as node.heading or as the heading1-3 block type
   const blockClass = node.kind === 'block' ? ' t-' + (isDivider(node) ? 'divider' : blockTypeOf(node)) : '';
@@ -1221,7 +1221,7 @@ function nodeEl(node, docId, parent) {
     const c = childrenOf(item);
     if (c == null) { ensureLoaded(item); wrap.classList.add('loading'); wrap.textContent = 'Loading…'; }
     else if (c.length) wrap.append(...c.map((k) => childEl(k, item)));
-    else if (!isSpace(node) && canEditItem(item)) wrap.append(nodeEl(draftNode(item), docId, item));
+    else if (!isSpace(node) && canEditItem(item) && (node.kind === 'document' || node.done != null || ['paragraph', 'bullet', 'numbered'].includes(node.block))) wrap.append(nodeEl(draftNode(item), docId, item));
     el.append(wrap);
   }
   return el;
@@ -1240,14 +1240,19 @@ async function materialise(item, el) {
       if (zoom?.docId === node.id) zoom = { ...zoom, docId: real.id };
       key = real.id;
     } else {
-      const id = parent.node.kind === 'document' ? await tana.insertAfter(parent.docId, null, text) : await tana.insertChild(parent.docId, parent.node.id, text);
+      const last = childrenOf(parent)?.at(-1);
+      const id = parent.node.kind === 'document' || last ? await tana.insertAfter(parent.docId, last?.id || null, text) : await tana.insertChild(parent.docId, parent.node.id, text);
       await reload(parent.docId);
       await inheritCheckbox(parent, id); // old preload bridges lack native insert inheritance; current bridge already returns done: 0
       key = parent.docId + '/' + id;
       real = locate(kids.get(parent.docId) || [], id)?.node || { ...node, id, text };
     }
   });
-  if (!key || !real) { item.busy = false; return; }
+  if (!key || !real) {
+    item.busy = false;
+    if (parent) { await reload(parent.docId); render(true); }
+    return;
+  }
   const latest = el.textContent; // typed on while the create was in flight
   if (key && slashCtx && slashCtx.key === item.key) slashCtx = { key }; // the "/" menu opened on the draft: follow it to the real node
   item.key = key; item.docId = real.kind === 'document' ? real.id : item.docId; item.node = real; delete item.busy; delete item.node.draft;
@@ -1294,8 +1299,14 @@ function flush(key) {
     return run(() => tana.setTitle(item.node.reference.uri, text));
   }
   if (text === item.node.text && JSON.stringify(segs) === JSON.stringify(segsOf(item.node))) return;
+  if (item.node.kind === 'block' && (typeof item.node.id !== 'string' || !item.node.id)) {
+    return run(async () => { await reload(item.docId); render(true); throw new Error('This outline row no longer exists'); });
+  }
   item.node.text = text; item.node.segments = segs;
-  run(() => (item.node.kind === 'document' ? tana.setTitle(item.docId, text) : tana.setText(item.docId, item.node.id, saveValue(segs))));
+  run(async () => {
+    try { await (item.node.kind === 'document' ? tana.setTitle(item.docId, text) : tana.setText(item.docId, item.node.id, saveValue(segs))); }
+    catch (e) { if (item.node.kind === 'block') { await reload(item.docId); render(true); } throw e; }
+  });
 }
 function insertAtCaret(el, str) {
   if (caretOffset(el) == null) setCaret(el, el.textContent.length);
@@ -1407,6 +1418,7 @@ async function history(op) {
 
 function setOpen(item, value) {
   if (value && !canExpand(item)) return;
+  if (value && !hasKids(item) && item.node.kind !== 'document' && item.node.done == null && !['paragraph', 'bullet', 'numbered'].includes(item.node.block)) return;
   open.set(item.key, value); render(true);
 }
 function toggleDone(item) {

@@ -247,6 +247,7 @@ function prevSibling(unit) {
 // edits and the marks of untouched text, then only the annotations that changed are moved), a mention with the same
 // uri is kept, anything else is replaced; trailing containers are dropped.
 function setText(document, id, value) {
+  if (typeof id !== 'string' || !id) throw new Error('outline node id must be a string');
   const target = must(document, id).block;
   if (!kids(target)) throw new Error('Reference blocks cannot contain editable text');
   if (name(target) === 'embed') throw new Error('Reference blocks cannot contain editable text');
@@ -318,7 +319,7 @@ function insertChild(document, id, text) {
   document.transact(() => {
     const { block, item: li } = must(document, id);
     const owner = li || (name(block) === 'paragraph' ? wrap(block) : null);
-    if (!owner) return; // headings/quotes/code cannot own children in this schema
+    if (!owner) throw new Error('This block cannot contain child nodes'); // bare headings/quotes/code cannot own children in this schema
     const c = kids(owner), second = c.length > 1 ? c.get(1) : null;
     const items = second && isList(second) ? kids(second) : kids(create(c, 1, 'bulletList'));
     out = blockId(kids(item(items, 0, text)).get(0)); // only sibling insertion inherits an explicit checkbox

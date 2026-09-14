@@ -367,6 +367,21 @@ async function main() {
   }
 
   {
+    const d = new Document(DOC, { peerId: '74' });
+    const heading = outline.insertAfter(d, null, 'component');
+    outline.setBlockType(d, heading, 'heading2');
+    outline.toggleCheckbox(d, heading); // a listItem can carry a heading and nested blocks
+    const first = outline.insertChild(d, heading, 'First child');
+    outline.setText(d, heading, 'component edited');
+    const second = outline.insertChild(d, heading, 'Second child');
+    const node = outline.readOutline(d)[0];
+    assert.equal(node.heading, 2);
+    assert.equal(node.text, 'component edited');
+    assert.deepEqual(node.children.map((child) => child.id), [second, first]);
+    console.log('ok  heading in a list item edits and accepts children');
+  }
+
+  {
     const { editable } = require('../sdk/node');
     const node = (kind, role) => ({ id: 'tana:' + kind + ':example', participants: { [ME]: { type: 'user', role } } });
     assert.equal(editable(node('user-profile', 'admin'), ME), false);
@@ -848,7 +863,8 @@ async function main() {
   assert.equal(raw()[0].nodeName, 'bulletList');
   assert.deepEqual(raw()[0].children[0].children.map((b) => b.nodeName), ['paragraph', 'bulletList'], 'paragraph wrapped into listItem with a nested list');
   assert.equal(raw()[0].children[0].children[0].attributes.blockId, '6s8vb70s', 'node id survives wrapping');
-  assert.equal(outline.insertChild(c1, 'dv8c4sp7', 'x'), null, 'headings cannot own children');
+  assert.throws(() => outline.insertChild(c1, 'dv8c4sp7', 'x'), /cannot contain child nodes/, 'bare headings cannot own children');
+  assert.throws(() => outline.setText(c1, null, 'x'), /node id must be a string/);
   step(() => outline.indent(c1, second));
   assert.equal(flat(outline.readOutline(c1)), 'Hello(Child,Second),Research con,The personal,End');
   assert.equal(raw()[0].children.length, 1, 'one listItem in the top list');
