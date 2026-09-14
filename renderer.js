@@ -1670,7 +1670,9 @@ function groupsOf(list) {
 const SORTS = [['default', 'Default'], ['updated', 'Updated'], ['created', 'Created'], ['title', 'Title']];
 const SORT_KEY = { updated: (n) => n.updatedAt, created: (n) => n.createdAt, title: (n) => (n.text || n.title || '').toLowerCase() };
 const NEWEST_FIRST = new Set(['updated', 'created']); // times read newest first; Title stays A→Z
-const sortBy = () => (SORTS.some(([id]) => id === sortPref[view]) ? sortPref[view] : 'default');
+// People read as a list of names, so that page sorts A→Z until the user says otherwise; every other view keeps the
+// order its query returned.
+const sortBy = () => (SORTS.some(([id]) => id === sortPref[view]) ? sortPref[view] : view === 'people' ? 'title' : 'default');
 function setSortBy(id) { sortPref[view] = id; localStorage.setItem('sortBy', JSON.stringify(sortPref)); render(); }
 function sortRows(list) {
   const id = sortBy(), key = SORT_KEY[id];

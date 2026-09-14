@@ -1683,6 +1683,10 @@ function runSortGroupCheck() {
   assert.deepEqual(plain(api.prefs()), { group: 'type', sort: 'title' }, 'each view remembers its own choice');
   api.set('tasks', undefined, undefined);
   assert.deepEqual(plain(api.prefs()), { group: 'none', sort: 'default' }, 'and an unset view falls back to None / Default');
+  api.set('people', undefined, undefined);
+  assert.deepEqual(plain(api.prefs()), { group: 'none', sort: 'title' }, 'People is a list of names, so it reads A→Z until the user picks another order');
+  api.set('people', undefined, 'updated');
+  assert.equal(plain(api.prefs()).sort, 'updated', 'and its own choice still wins');
   // the guard that matters: an option may only sort on a field the row objects really carry
   for (const [id] of plain(api.SORTS).filter(([id]) => id !== 'default')) {
     const key = api.SORT_KEY[id];
