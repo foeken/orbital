@@ -180,11 +180,23 @@ Every request made during the build and its state. ✓ done and verified · ◐ 
 
 | 151 | Visible to selected people should open the visibility editor straight at the people | ✓ The people step already existed (openVisibilityPeople); it just assumed the palette was open because only the mode picker ever reached it. openVisibility(doc, scope) now opens it directly when the node really is shared with selected people, while every other mode, an unloaded participant list or sharing rules without people still open the mode picker. The scope rides on taskSummary/documentSummary rather than audienceInfo, whose exact shape a check pins. The full picker stays one Cmd+K Edit visibility away. | renderer.js |
 
-| 152 | The window cannot be dragged from the sidebar | ○ In progress: the frameless macOS window only moves where a drag region exists, and the sidebar chrome has none. | styles.css, index.html |
+| 152 | The window cannot be dragged from the sidebar | ✓ The frameless window only moves where a drag region exists, and the sidebar had none. One rule now covers the chrome: the title bar and the sidebar drag, and everything interactive opts out once (buttons, inputs, links, editable text, anything focusable, the resize grip, the error line and the fields row) rather than per element. Live in the running app: the sidebar and title bar compute to drag, the resize grip to no-drag, and rows still click and resize. | styles.css |
 
-| 153 | Opening a node should leave the caret somewhere to type, with a faint draft bullet when there is no empty child | ○ In progress: reuse the renderer's existing draft row so an untouched draft leaves nothing behind, and never offer it in a read-only document such as a chat. | renderer.js |
+| 153 | Opening a node should leave the caret somewhere to type, with a faint draft bullet when there is no empty child | ✓ withDraftTail generalises the rule that already existed for an empty document: when the open node's last row is not an empty ordinary row it gets the same local draft row, and a one-shot flag set when zooming or opening puts the caret there on the first render that has the children. A document ending in an empty row gets nothing extra and the caret goes to that row; a chat, being read-only, gets no draft at all; and re-reading a document over the API shows no trace of an untouched draft. Known ceiling, commented: a block that has children gets no draft, because the insert would land first rather than last. | renderer.js |
 
-| 154 | Show a meeting's date in the breadcrumbs | ○ In progress: reuse the meetings list date formatting, quiet beside the crumb label, events only. | renderer.js |
+| 154 | Show a meeting's date in the breadcrumbs | ✓ An event crumb now carries the date in a quiet span beside the label, reusing the same eventMeta string the Meetings list and search already show rather than a second formatter: doc:path carries only id/title/icon, so the crumb reads the time off the event row when the app has it and otherwise fetches it once per id. Live: Library › Nedap & Slack  Mon 7 Sep 11:00-13:00, and only event crumbs get a date. | renderer.js, styles.css |
+
+| 155 | Show the visible-for icon on docs and other types too, not only tasks (sidebar, Cmd+S and Cmd+K can skip it) | ○ In progress. | renderer.js |
+
+| 156 | Electron crash dialogs keep popping up | ○ In progress: the crashes are the read-only CLI (node_modules Electron) aborting inside AppKit's NSApplication init, not the packaged app. | scripts/platform-cli.js |
+
+| 157 | The collapsed sidebar tag needs more padding on its right | ○ In progress. | styles.css |
+
+| 158 | A single-line sidebar row must stay single-line when hover expands its tag | ○ In progress: the row currently rewraps, so rows jump under the pointer. | renderer.js, styles.css |
+
+| 159 | Replace the breadcrumb hover underline with plain darkening | ○ In progress. | styles.css |
+
+| 160 | Tab and Shift+Tab should indent and outdent a multi-node selection | ○ In progress: route the selection through the existing atomic multi-row structure path so it is one undo step. | renderer.js |
 
 | 149 | The meeting call link appears where it should not, e.g. on outcomes created in that meeting | ✓ related() resolves a meeting hub for any document owned by an event so the sidebar can show that meeting's pins, outcomes and notes, and the call link was being read off that hub too, so every document created in a meeting inherited its join url. It now reads the zoomed node's own calendarEvent, one line in the single place every consumer goes through. Read-only before/after on real data: the Heads of Technology and NTP Sync events keep their Zoom and Tana Meet links, their outcomes ("Decide allocation of ~EUR 220,000", "Principles") and the write-up now return none, and the 14-day calls sweep is unchanged including the actionUrl fallback. railCallRow already hides a missing call, so no renderer change. | main.js related |
 
