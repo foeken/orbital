@@ -158,6 +158,9 @@ Every request made during the build and its state. ✓ done and verified · ◐ 
 
 | 137 | A task visible to a whole space shows Assignee · Space | ✓ The space audience already carried its title for the tooltip; the row now prints it beside the assignee. Live: André Foeken · Heads of Technology and Sebastiaan van Parijs · NTP LT. | renderer.js audienceInfo, taskMetaEl |
 
+| 138 | Name the sidebar metadata block and make it collapsible like the rest | ✓ It is now a Details section with the same chevron heading and collapse state as Pinned, Outcomes and References. Live: heads read Details, Pinned, References with the call link, assignee and visibility inside Details. | renderer.js renderRail |
+| 139 | More padding between the breadcrumbs and the title, and align the breadcrumbs with the sidebar Details heading | ✓ Crumb-to-title gap 6px to 14px, and the sidebar padding-top set so the first heading text starts at the same y as the crumbs. Live: both at y 40, gap 14. | styles.css |
+
 Tracking rule: append new requests to the numbered table above using the next integer. Update an existing row for repeated requests; never create a separate unnumbered request list. Preserve status and verification evidence. Orchestrator owns this file.
 
 Latest rounds (three workers, all closed). The live app was inspected over its devtools port against real Tana data, which is how #49, #54, #59, #62, #68, #78, #83, #85, #89, #93, #97 and #98 were confirmed; the interaction-heavy rows (#39, #90, #96, #105 to #108) were driven in the in-file mock, where mutations stay local. `npm run check` passes on the merged tree.

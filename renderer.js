@@ -960,14 +960,17 @@ function renderRail(parent) {
   // "Notes" is what api.related calls them; in the sidebar they read as References
   const groups = data ? [['Pinned', data.pinned], ['Outcomes', data.outcomes], ['References', data.notes]].filter(([, rows]) => rows && rows.length) : [];
   railEl.hidden = railGrip.hidden = !groups.length && !meta.length;
-  for (const row of meta) railEl.append(railMetaEl(row));
-  for (const [label, rows] of groups) {
+  const sectionHead = (label) => { // every sidebar section collapses the same way, Details included
     const head = document.createElement('button');
     head.className = 'rhead' + (railClosed.has(label) ? ' closed' : '');
     head.tabIndex = -1; head.innerHTML = CHEV; head.append(label);
     head.onclick = () => toggleRailSection(label);
     railEl.append(head);
-    if (railClosed.has(label)) continue;
+    return !railClosed.has(label);
+  };
+  if (meta.length && sectionHead('Details')) for (const row of meta) { const el = railMetaEl(row); el.dataset.section = 'Details'; railEl.append(el); }
+  for (const [label, rows] of groups) {
+    if (!sectionHead(label)) continue;
     for (const node of rows) { const row = railRow(asDoc(node)); row.dataset.section = label; railEl.append(row); }
   }
   if (keep) { const again = railEl.querySelector('.rrow[data-id="' + keep + '"]'); if (again) again.focus(); }
@@ -1061,6 +1064,12 @@ function nodeEl(node, docId, parent) {
   const taskInfo = taskSummary(display);
   if (taskInfo) body.append(taskMetaEl(taskInfo));
   appendTags(body, display);
+  // a node shared with a whole space names it as a sub-line under the title, the way Tana describes its location
+  if (taskInfo && taskInfo.audience && taskInfo.audience.space) {
+    const sub = document.createElement('div');
+    sub.className = 'subtext'; sub.textContent = taskInfo.audience.space;
+    body.append(sub);
+  }
   line.append(body);
   line.onclick = (e) => { if (!reference && (e.target === line || e.target === body || e.target.parentElement === text)) setCaret(text, text.textContent.length); };
   // a reference row: the bullet zooms into the target, a click selects the row, a click on the selected row puts the caret where you clicked
@@ -1450,7 +1459,6 @@ function taskMetaEl(summary) {
     icon.innerHTML = iconSvg(summary.audience.icon);
     const svg = icon.firstElementChild; if (svg) { svg.setAttribute('width', '14'); svg.setAttribute('height', '14'); }
     el.append(icon);
-    if (summary.audience.space) el.append(' · ' + summary.audience.space); // a whole space is worth naming in the row
   } else if (summary.unknownAudience) el.append(' · Visibility unknown');
   return el;
 }
