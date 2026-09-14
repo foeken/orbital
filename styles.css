@@ -209,9 +209,9 @@ button { font: inherit; }
 .selected > .line .text { caret-color: transparent; }
 .children { margin-left: 33px; padding-left: 0; border-left: 1px solid #ececec; }
 .children.loading { color: #aaa; font-style: italic; padding: 3px 0 3px 22px; }
-.empty-note { color: #aaa; padding: 8px 40px; }
+.empty-note { color: #aaa; font-size: 16px; padding: 8px 40px; }
 /* offered beside "Nothing here yet" only while a filter is narrowing the view; a real button, so Tab and Enter reach it */
-.clearfilters { border: 0; background: none; color: #888; font: inherit; font-size: 14px; padding: 0; margin-left: 8px; text-decoration: underline; cursor: pointer; }
+.clearfilters { border: 0; background: none; color: #aaa; font: inherit; font-size: 16px; padding: 0; margin-left: 10px; text-decoration: underline; cursor: pointer; }
 .clearfilters:hover { color: #1a1a1a; }
 .clearfilters:focus { outline: none; box-shadow: 0 0 0 2px #b7d2f5; border-radius: 3px; }
 /* loading skeleton: 6 shimmering bars while a view has no rows yet; .gone fades it out, then collapses it */

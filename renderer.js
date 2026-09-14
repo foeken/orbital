@@ -635,19 +635,21 @@ function loadFilters() {
 }
 function setTaskF(patch) { taskF = { ...taskF, ...patch }; render(); run(() => tana.setTaskFilter(taskF)); } // main refreshes roots and emits onChanged(null)
 function setLibF(patch) { libF = { ...libF, ...patch }; render(); if (tana.setLibraryFilter) run(() => tana.setLibraryFilter(libF)); loadLibrary(); }
-// The filter defaults main persists; an empty view offers to come back to them only when it is actually narrowed.
+// The filter defaults main persists, and what "no filter at all" means. An empty view offers to clear only when it
+// is actually narrowed; clearing the Library means anything, not back to the shipped default.
 const TASK_DEFAULT = { states: ['proposed', 'open'], assignee: 'me' };
 const LIB_DEFAULT = { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me', text: '' };
+const LIB_ANY = { types: null, states: null, assignee: 'anyone', text: '' };
 const sameList = (a, b) => JSON.stringify(a ? [...a].sort() : a) === JSON.stringify(b ? [...b].sort() : b);
 function viewFiltered() {
   if (view === 'tasks') return !sameList(taskF.states, TASK_DEFAULT.states) || (taskF.assignee || 'me') !== TASK_DEFAULT.assignee;
-  if (view === 'library') return !sameList(libF.types, LIB_DEFAULT.types) || !sameList(libF.states, LIB_DEFAULT.states)
-    || (libF.assignee || 'me') !== LIB_DEFAULT.assignee || !!String(libF.text || '').trim();
+  // the Library is narrowed whenever any pill is set to something other than "any"
+  if (view === 'library') return !!libF.types || !!libF.states || (libF.assignee || 'me') !== 'anyone' || !!String(libF.text || '').trim();
   return false;
 }
 function clearFilters() {
   if (view === 'tasks') setTaskF({ ...TASK_DEFAULT });
-  else if (view === 'library') setLibF({ ...LIB_DEFAULT });
+  else if (view === 'library') setLibF({ ...LIB_ANY });
 }
 function ensureLoaded(item) {
   if (item.node.kind !== 'document' || kids.has(item.docId)) return;

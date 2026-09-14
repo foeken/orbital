@@ -172,6 +172,10 @@ Every request made during the build and its state. ✓ done and verified · ◐ 
 
 | 145 | Searching tana did not find the doc titled Tana; rank by how much of the title the query covers | ✓ The server ranks by full-text relevance, so that node sat past the first page: the query now fetches 200 and ranks here by exact, prefix, contains and then title coverage, returning a page of 40. Live: tana now returns Tana first, and heads of technology returns the Heads of Technology nodes first. | main.js search |
 
+| 146 | Clear filters should be a plain grey underlined link, in the same size and colour as "Nothing here yet" | ✓ Both are now 16px #aaa, the link underlined with a 10px gap and darkening on hover. | styles.css |
+
+| 147 | Clear filters in the Library should set every filter to Anything and empty the text | ✓ Clearing the Library now applies types null, states null, assignee anyone and no text, so the shipped "my open tasks" default counts as narrowed and the action stays offered until everything reads Any. The Tasks view still returns to its own default. | renderer.js LIB_ANY, scripts/renderer-behavior-check.js |
+
 Tracking rule: append new requests to the numbered table above using the next integer. Update an existing row for repeated requests; never create a separate unnumbered request list. Preserve status and verification evidence. Orchestrator owns this file.
 
 Latest rounds (three workers, all closed). The live app was inspected over its devtools port against real Tana data, which is how #49, #54, #59, #62, #68, #78, #83, #85, #89, #93, #97 and #98 were confirmed; the interaction-heavy rows (#39, #90, #96, #105 to #108) were driven in the in-file mock, where mutations stay local. `npm run check` passes on the merged tree.

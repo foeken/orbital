@@ -1146,11 +1146,13 @@ function runClearFiltersCheck() {
   assert.deepEqual(plain(api.state().taskF), { states: ['proposed', 'open'], assignee: 'me' }, 'clearing restores the task defaults');
   assert.equal(api.filtered(), false, 'and the action goes away again');
   api.set('library');
-  assert.equal(api.filtered(), false, 'the default library filter counts as unfiltered');
+  // the Library ships narrowed to your open tasks, so its shipped default is still a filter
+  assert.equal(api.filtered(), true, 'the shipped library filter still narrows the view');
   api.set('library', { text: 'memo' });
   assert.equal(api.filtered(), true, 'a search text narrows the Library view');
   api.clear();
-  assert.deepEqual(plain(api.state().libF), { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me', text: '' }, 'clearing restores the library defaults');
+  assert.deepEqual(plain(api.state().libF), { types: null, states: null, assignee: 'anyone', text: '' }, 'clearing the Library means anything, not the shipped default');
+  assert.equal(api.filtered(), false, 'and with everything set to any, the action goes away');
   api.set('inbox');
   assert.equal(api.filtered(), false, 'a view without filter pills never offers the action');
 }
