@@ -216,11 +216,15 @@ function taskActionRows(group = 'Actions') {
   return rows;
 }
 // With rows selected, what acts on them comes first: at that moment the palette is about the selection, not the app.
+// With nothing selected the same actions apply to the current node — the zoomed document, or the one under the
+// caret — under their own heading and without a count in the label.
 // Every row carries a stable id even though its label counts the selection, because Cmd+Shift+K records a hotkey per
 // id and a hotkey only fires with the palette closed — which is exactly when a selection is live.
 function selectionRows() {
-  const keys = selKeys();
+  const selected = selKeys(), keys = selected.length ? selected : palDoc && items.has(palDoc.id) ? [palDoc.id] : [];
   if (!keys.length) return [];
+  const group = selected.length ? 'Selection' : 'Current node';
+  const count = (n, noun) => (selected.length ? ` ${n} ${n === 1 ? noun : noun + 's'}` : '');
   const seen = new Set(), nodes = [];
   for (const key of keys) {
     const node = items.get(key)?.node;
@@ -228,15 +232,14 @@ function selectionRows() {
   }
   const ids = nodes.map((node) => node.id), rows = [];
   if (ids.length && tana.setSensitive && sensitiveIds) {
-    const marked = ids.every((id) => sensitiveIds.has(id)), noun = ids.length === 1 ? 'item' : 'items';
-    rows.push({ id: 'sensitive', group: 'Selection', icon: 'lock', label: `${marked ? 'Unmark' : 'Mark'} ${ids.length} ${noun} as sensitive`, run: () => setSensitiveMark(ids, !marked) });
+    const marked = ids.every((id) => sensitiveIds.has(id));
+    rows.push({ id: 'sensitive', group, icon: 'lock', label: `${marked ? 'Unmark' : 'Mark'}${count(ids.length, 'item')} as sensitive`, run: () => setSensitiveMark(ids, !marked) });
   }
   if (nodes.length && tana.insertAfter && tana.setText) {
-    const noun = nodes.length === 1 ? 'item' : 'items';
-    if (tana.todayNode) rows.push({ id: 'addToday', group: 'Selection', icon: 'addTo', label: `Add ${nodes.length} ${noun} to today node`, run: () => addToDateNode(nodes, 'today') });
-    if (tana.weekNode) rows.push({ id: 'addWeek', group: 'Selection', icon: 'addTo', label: `Add ${nodes.length} ${noun} to week node`, run: () => addToDateNode(nodes, 'week') });
+    if (tana.todayNode) rows.push({ id: 'addToday', group, icon: 'addTo', label: `Add${count(nodes.length, 'item')} to today node`, run: () => addToDateNode(nodes, 'today') });
+    if (tana.weekNode) rows.push({ id: 'addWeek', group, icon: 'addTo', label: `Add${count(nodes.length, 'item')} to week node`, run: () => addToDateNode(nodes, 'week') });
   }
-  rows.push(...taskActionRows('Selection'));
+  rows.push(...taskActionRows(group));
   // Destructive, so it sits at the end of the group. Documents are soft-deleted (Cmd+Z restores them), blocks go
   // through the same one-step removal as Cmd+Shift+Backspace. Like the task actions, the row counts what it can
   // actually remove and says how much it is skipping: a read-only row, or a block in a selection that also holds
@@ -246,8 +249,8 @@ function selectionRows() {
   if (its.length && tana.deleteDocument) {
     const blocksOnly = its.every((it) => it.node.kind === 'block');
     const able = its.filter((it) => (blocksOnly ? canEditStructure(it) : it.node.kind === 'document' && canEditNode(it.node)));
-    const noun = able.length === 1 ? 'item' : 'items', skipped = its.length - able.length;
-    rows.push({ id: 'delete', group: 'Selection', icon: 'trash', label: `Delete ${able.length} ${noun}`, hint: skipped ? `${skipped} skipped` : '', disabled: !able.length, run: () => removeSelection(able.map((it) => it.key)) });
+    const skipped = its.length - able.length;
+    rows.push({ id: 'delete', group, icon: 'trash', label: `Delete${count(able.length, 'item')}`, hint: !skipped ? '' : selected.length ? `${skipped} skipped` : 'Read-only', disabled: !able.length, run: () => removeSelection(able.map((it) => it.key)) });
   }
   return rows;
 }

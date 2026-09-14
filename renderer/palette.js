@@ -14,10 +14,6 @@ function paletteRows(q) {
   rows.push({ id: 'sync', group: 'Actions', icon: 'sync', label: 'Sync', run: () => run(() => tana.refresh()) });
   // the list of titles hidden from every view and from search, edited in the palette itself
   if (tana.filters) rows.push({ id: 'hidden', group: 'Actions', icon: 'hidden', label: 'Edit hidden items', keepOpen: true, run: openHiddenPalette });
-  if (palDoc && tana.setSensitive && sensitiveIds) {
-    const marked = sensitiveIds.has(palDoc.id);
-    rows.push({ group: 'Actions', icon: 'lock', label: marked ? 'Unmark as sensitive' : 'Mark as sensitive', run: () => setSensitiveMark(palDoc.id, !marked) });
-  }
   if (tana.sensitiveIds) rows.push({ id: 'sensitiveVisibility', group: 'Actions', icon: 'hidden', label: 'Toggle sensitive visibility', hint: sensitiveVisible ? 'Shown' : 'Blurred', run: toggleSensitiveVisibility });
   // today's node: a document titled with the date, pinned to today; created and pinned when it does not exist yet
   if (tana.todayNode) rows.push({ id: 'today', group: 'Actions', icon: 'today', label: 'Show today node', run: () => run(async () => goTo(await tana.todayNode())) });
@@ -40,7 +36,6 @@ function paletteRows(q) {
     rows.push({ group: 'Actions', icon: 'setIcon', label: 'Set Image', run: () => startDrop(palDoc) });
     if (palDoc.iconSvg) rows.push({ group: 'Actions', label: 'Remove icon', run: () => setIcon(palDoc.id, null) });
   }
-  if (!selection.length) rows.push(...taskActionRows());
   if (palDoc && tana.accessOptions) {
     loadAccess(palDoc.id);
     const access = accessById.get(palDoc.id);

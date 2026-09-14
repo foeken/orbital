@@ -184,8 +184,9 @@ function runSensitiveBlurCheck() {
   assert.match(source, /if \(sensitiveIds\?\.has\(docId\)\) meta\.unshift\(\{ id: 'sensitive', icon: 'lock', label: 'Sensitive', run: null \}\);/,
     'the zoom Details rail names the local classification Sensitive');
   assert.doesNotMatch(rule[1], /pointer-events|user-select/, 'blur does not block focus, clicks or selection');
-  assert.ok(source.indexOf("label: marked ? 'Unmark as sensitive' : 'Mark as sensitive'") < source.indexOf("id: 'sensitiveVisibility'"),
-    'the frequently used Mark/Unmark command ranks before the visibility toggle');
+  assert.ok(source.indexOf('const selection = selectionRows();') < source.indexOf("id: 'sensitiveVisibility'"),
+    'the frequently used Mark/Unmark command (a selection row, current node included) ranks before the visibility toggle');
+  assert.doesNotMatch(source, /label: marked \? 'Unmark as sensitive' : 'Mark as sensitive'/, 'the palette has no second, single-document copy of the sensitive row');
   for (const [surface, pattern] of [
     ['outline rows', /blurSensitive\(body, docId, target && target\.id\)/],
     ['zoomed title', /blurSensitive\(titleEl, parent && parent\.docId\)/],
@@ -445,6 +446,7 @@ async function runMultiTaskPaletteCheck() {
       addTo: async (keys, target) => { calls.length = 0; selected = keys; await selectionRows().find((row) => row.label.endsWith('to ' + target + ' node')).run(); return calls; },
       ids: (keys) => { selected = keys; return selectionRows().map((row) => row.id); },
       del: (keys) => { selected = keys; const row = selectionRows().find((r) => r.id === 'delete'); return [row.label, row.hint || '', !!row.disabled]; },
+      current: (id) => { selected = []; palDoc = items.get(id).node; return selectionRows().map((row) => [row.group, row.label, row.hint || '', !!row.disabled]); },
     });
   `);
   assert.deepEqual(plain(context.labels()), [
@@ -470,6 +472,17 @@ async function runMultiTaskPaletteCheck() {
   assert.deepEqual(plain(context.del(['doc/b1', 'doc/b2'])), ['Delete 2 items', '', false], 'a selection of blocks is deletable in one step');
   assert.deepEqual(plain(context.del(['t1', 'doc/b1'])), ['Delete 1 item', '1 skipped', false], 'and a block beside a document is skipped: the two removals are different operations');
   assert.deepEqual(plain(context.selection([])), [], 'with nothing selected the palette is about the app again');
+  // With nothing selected the same rows act on the current node, without counts and under their own heading.
+  assert.deepEqual(plain(context.current('t1')), [
+    ['Current node', 'Mark as sensitive', '', false],
+    ['Current node', 'Add to today node', '', false],
+    ['Current node', 'Add to week node', '', false],
+    ['Current node', 'Set status', 'In Progress', false],
+    ['Current node', 'Edit assignees', 'Loading…', false],
+    ['Current node', 'Delete', '', false],
+  ], 'the current node gets every selection action');
+  assert.deepEqual(plain(context.current('locked')).filter((row) => row[1] === 'Delete'), [['Current node', 'Delete', 'Read-only', true]], 'and a read-only current node cannot be deleted');
+  assert.deepEqual(plain(context.selection(['t1', 't2'])).map((row) => row[0]), ['Selection', 'Selection', 'Selection', 'Selection', 'Selection', 'Selection'], 'a real selection keeps its own heading');
   assert.deepEqual(plain(context.markAll()), [['t1', 'meeting', 'locked', 't2'], true], 'marking applies to every selected document at once');
   // Adding to the day's or the week's node references the selection there: one appended block per row, its text
   // replaced by a mention of that node, so nothing is copied and nothing is moved.
