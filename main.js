@@ -101,8 +101,8 @@ async function pathOf(id) {
   // A space inside a space adds no location information, so only the innermost space is shown, with whatever it contains.
   const innermost = owners.map(isSpace).lastIndexOf(true);
   const shown = innermost === -1 ? owners : owners.slice(innermost);
-  // A crumb carries its node's hue like every other row: resolveTypes above has just learned it for these ids.
-  return [library, ...shown.map((u) => ({ id: u, title: typeTitles.get(u) || u, icon: crumbIcon(u), hue: typeHues.has(u) ? typeHues.get(u) : nodeHues.get(u) }))];
+  // No hue here on purpose: the crumb bar is one quiet grey line, and a coloured icon in it only shouts.
+  return [library, ...shown.map((u) => ({ id: u, title: typeTitles.get(u) || u, icon: crumbIcon(u) }))];
 }
 ipcMain.handle('doc:path', async (_e, id) => { try { const p = await pathOf(id); pathCache.set(id, p); return p; } catch (e) { report(e); return pathCache.get(id) || []; } });
 

@@ -2028,19 +2028,19 @@ function runRecentRowsCheck() {
   const api = vm.runInNewContext(`
     const stored = [
       { id: 'meeting', title: 'AEGIS update', icon: 'meeting', meta: 'Fri 13:00–13:30', tags: [] },
-      { id: 'gone', title: 'Old note', icon: 'doc', meta: 'Mon 9:00', tags: [] },
+      { id: 'gone', title: 'Old note', icon: 'doc', meta: 'Mon 9:00', tags: [], hue: 205 },
     ];
     const localStorage = { getItem: () => JSON.stringify(stored) };
     const asDoc = (node) => ({ ...node, kind: 'document', text: node.text ?? node.title ?? '' });
-    const docOf = (id) => (id === 'meeting' ? { id, text: 'AEGIS update', meta: 'Fri 11 Sep 13:00–13:30' } : null);
+    const docOf = (id) => (id === 'meeting' ? { id, text: 'AEGIS update', meta: 'Fri 11 Sep 13:00–13:30', hue: 77 } : null);
     ${sourceBetween('const recent =', 'function recordRecent')}
     ${sourceBetween('const recentRows =', '// index of the first meeting')}
     recentRows;
   `);
-  assert.deepEqual(plain(api().map((row) => [row.text, row.meta])), [
-    ['AEGIS update', 'Fri 11 Sep 13:00–13:30'],
-    ['Old note', 'Mon 9:00'],
-  ], 'a loaded row is shown as it reads now; one the app has not loaded keeps what was recorded');
+  assert.deepEqual(plain(api().map((row) => [row.text, row.meta, row.hue])), [
+    ['AEGIS update', 'Fri 11 Sep 13:00–13:30', 77],
+    ['Old note', 'Mon 9:00', 205],
+  ], 'a loaded row is shown as it reads now, hue included; one the app has not loaded keeps what was recorded');
 }
 
 // Arrowing off an empty draft drops it, and the drop must wait for the caret's new home to take focus:

@@ -616,8 +616,8 @@ async function main() {
 
     // typeTitles is one id -> title cache: the space in this document's location must not become a searchable type.
     assert.equal((await backend.handlers.get('doc:path')(null, openId)).map((c) => c.title).join(' > '), 'Library > Deal');
-    // A crumb carries the node's hue, so a space is the same colour there as in every list that shows it.
-    assert.equal((await backend.handlers.get('doc:path')(null, openId)).find((c) => c.icon === 'space').hue, 200, 'and its hue, so a space is the same colour there as in every list that shows it');
+    // The crumb bar stays one quiet grey line: a crumb carries no hue, however colourful the node is.
+    assert.equal((await backend.handlers.get('doc:path')(null, openId)).every((c) => c.hue === undefined), true, 'a crumb carries no colour of its own');
     queries.length = 0;
     assert.equal((await backend.handlers.get('search')(null, '#deal')).length, 0, 'a space sharing a type title is not a type filter');
     assert.deepEqual(queries, [], 'an unknown #type runs no query at all');

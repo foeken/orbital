@@ -601,7 +601,7 @@ function loadSensitive() {
 // recently viewed documents (localStorage "recent"), most recent first, max 20
 const recent = () => { try { return (JSON.parse(localStorage.getItem('recent')) || []).map((n) => asDoc(!n.icon && !n.tags?.length && n.id?.startsWith('tana:text:') ? { ...n, icon: 'doc', tags: [{ label: 'doc', color: 'grey' }] } : n)); } catch { return []; } };
 function recordRecent(n) {
-  const entry = { id: n.id, title: n.text ?? n.title ?? '', icon: n.icon, tags: n.tags, meta: n.meta };
+  const entry = { id: n.id, title: n.text ?? n.title ?? '', icon: n.icon, tags: n.tags, meta: n.meta, hue: n.hue };
   localStorage.setItem('recent', JSON.stringify([entry, ...recent().filter((r) => r.id !== n.id)].slice(0, 20)));
 }
 function forgetRecent(id) {
@@ -612,7 +612,7 @@ function forgetRecent(id) {
 }
 // A recorded row keeps the title and meta it had when it was opened, and a meeting's meta ages: when the node is
 // loaded now, the palette shows what it says today rather than what it said then.
-const recentRows = () => recent().map((row) => { const live = docOf(row.id); return live ? { ...row, text: live.text, meta: live.meta } : row; });
+const recentRows = () => recent().map((row) => { const live = docOf(row.id); return live ? { ...row, text: live.text, meta: live.meta, hue: live.hue } : row; });
 // index of the first meeting dated today or later. The list is oldest first over [today-7, today+7) and the meta
 // only carries a weekday ("Mon 9:00–9:30"), so walk the weekday sequence from the window start (same weekday as today).
 // ponytail: a gap of 7+ days without meetings under-counts a week; then nothing is marked and the view stays at the top
@@ -1136,12 +1136,7 @@ function renderCrumbs(trail) {
     if (i) { const sep = document.createElement('span'); sep.className = 'sep'; sep.textContent = '›'; nav.append(sep); }
     const a = document.createElement('a');
     // ancestors can share a title (a meeting named after its space), so each crumb shows its kind icon
-    if (p.icon) {
-      const ricon = document.createElement('span');
-      ricon.className = 'ricon ' + p.icon + (p.hue != null ? ' hue' : ''); // a space keeps its colour here too
-      if (p.hue != null) ricon.style.setProperty('--hue', String(p.hue));
-      ricon.innerHTML = iconSvg(p.icon); a.append(ricon);
-    }
+    if (p.icon) { const ricon = document.createElement('span'); ricon.className = 'ricon ' + p.icon; ricon.innerHTML = iconSvg(p.icon); a.append(ricon); }
     a.append(p.title);
     const when = crumbWhen(p.id); // a meeting crumb also says when it was: two meetings often share a title
     if (when) { const date = document.createElement('span'); date.className = 'cdate'; date.textContent = when; a.append(date); }
