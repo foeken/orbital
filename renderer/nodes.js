@@ -225,5 +225,8 @@ function clearFilters() { setViewF(clearFilter(filters.get(view))); }
 function ensureLoaded(item) {
   if (item.node.kind !== 'document' || kids.has(item.docId)) return;
   kids.set(item.docId, null);
-  reload(item.docId).then(render, showError);
+  // The rows arrive while the caret is still in the row that was just expanded (⌘↓), which a plain render() would
+  // wait out, leaving "Loading…" until the caret moves; this render is the answer to that keypress, so it is forced.
+  // A failed load closes the row again and forgets the attempt, so the next ⌘↓ retries instead of loading forever.
+  reload(item.docId).then(() => render(true), (e) => { kids.delete(item.docId); open.set(item.key, false); showError(e); render(true); });
 }

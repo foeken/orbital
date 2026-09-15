@@ -1091,7 +1091,25 @@ function runAuthPaletteCheck() {
   assert.equal(api.paletteRows('').some((row) => row.id === 'login'), false, 'failed session probe has no Cmd+K login action');
 }
 
-function runSyncShortcutCheck() {
+async function runSyncShortcutCheck() {
+  // Expanding a row loads its children while the caret is still in that row: the render that shows them must be the
+  // forced kind (a plain one waits for the caret to leave, and "Loading…" stays). A failed load closes the row and
+  // forgets the attempt so the next expand retries.
+  const loads = vm.runInNewContext(`
+    const kids = new Map(), open = new Map(), renders = [], errors = [];
+    let fail = false;
+    const render = (force) => renders.push(force === true);
+    const showError = (e) => errors.push(e.message);
+    const reload = (id) => (fail ? Promise.reject(new Error('bootstrap timeout')) : Promise.resolve().then(() => { kids.set(id, [{ id: 'b' }]); }));
+    ${functionSource('ensureLoaded')}
+    const item = { key: 'tana:text:01j0doc000000000000000000', docId: 'tana:text:01j0doc000000000000000000', node: { kind: 'document' } };
+    ({ expand: async (f) => { fail = f; renders.length = 0; errors.length = 0; ensureLoaded(item); const pending = kids.get(item.docId) === null; await Promise.resolve(); await Promise.resolve(); return { pending, renders: [...renders], errors: [...errors], kids: kids.has(item.docId) ? kids.get(item.docId) : 'gone', open: open.get(item.key) }; } });
+  `);
+  const bad = await loads.expand(true);
+  assert.deepEqual(plain(bad), { pending: true, renders: [true], errors: ['bootstrap timeout'], kids: 'gone', open: false }, 'a failed load closes the row, forgets the attempt and says why');
+  const good = await loads.expand(false);
+  assert.deepEqual(plain(good), { pending: true, renders: [true], errors: [], kids: [{ id: 'b' }], open: false }, 'the rows that arrive are rendered at once, caret or no caret');
+
   // The palette's order is one list: node rows from the selection and from the document itself sorted into one
   // sequence (open, task state, where it lives, what it looks like, link, delete last), then Views, view options,
   // and Actions from "get in" to the app's own settings.
