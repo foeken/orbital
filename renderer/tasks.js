@@ -146,7 +146,7 @@ function assigneeRows(q, doc = palDoc) {
   const meta = taskMetaById.get(doc.id), ids = meta ? meta.assignees : [];
   const toggle = (uri) => ids.includes(uri) ? ids.filter((id) => id !== uri) : [...ids, uri];
   const rows = [{ group: 'Assignees', icon: 'unassigned', label: 'Unassigned', hint: ids.length ? '' : '✓', keepOpen: true, run: () => setTaskAssignees(doc, []) }];
-  for (const member of members || []) if (!q || memberName(member.id).toLowerCase().includes(q)) rows.push({ group: 'Assignees', icon: 'member', label: memberName(member.id), hint: ids.includes(member.id) ? '✓' : '', keepOpen: true, run: () => setTaskAssignees(doc, toggle(member.id)) });
+  for (const member of members || []) if (fuzzyMatch(memberName(member.id), q)) rows.push({ group: 'Assignees', icon: 'member', label: memberName(member.id), hint: ids.includes(member.id) ? '✓' : '', keepOpen: true, run: () => setTaskAssignees(doc, toggle(member.id)) });
   return rows;
 }
 function openAssigneePalette(doc, ctx) {
@@ -188,7 +188,7 @@ function applyTaskChange(ctx, call) {
 function statusRows(q, ctx = palTaskCtx) {
   if (!ctx?.docs.length) return [];
   const current = ctx.docs.length === 1 ? stateOf(ctx.docs[0]) : null;
-  return STATES.filter(([, label]) => !q || label.toLowerCase().includes(q)).map(([state, label]) => ({
+  return STATES.filter(([, label]) => fuzzyMatch(label, q)).map(([state, label]) => ({
     group: 'Status', icon: 'status', label, hint: state === current ? '✓' : '', keepOpen: true,
     run: () => applyTaskChange(ctx, () => ctx.multi ? tana.setStateMany(ctx.docs.map((doc) => doc.id), state) : tana.setState(ctx.docs[0].id, state)),
   }));
@@ -203,7 +203,7 @@ function manyAssigneeRows(q, ctx = palTaskCtx) {
   loadMembers();
   const apply = (uris) => applyTaskChange(ctx, () => tana.setAssigneesMany(ctx.docs.map((doc) => doc.id), uris));
   const rows = [{ group: 'Assignees', icon: 'unassigned', label: 'Unassigned', keepOpen: true, run: () => apply([]) }];
-  for (const member of members || []) if (!q || memberName(member.id).toLowerCase().includes(q)) rows.push({ group: 'Assignees', icon: 'member', label: memberName(member.id), keepOpen: true, run: () => apply([member.id]) });
+  for (const member of members || []) if (fuzzyMatch(memberName(member.id), q)) rows.push({ group: 'Assignees', icon: 'member', label: memberName(member.id), keepOpen: true, run: () => apply([member.id]) });
   return rows;
 }
 function openManyAssigneePalette(ctx) {

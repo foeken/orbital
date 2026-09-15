@@ -183,7 +183,7 @@ function slashRows(q) {
     run: () => createFromSlash(choice),
   });
   if (palBusy) rows.push({ group: 'Create', label: 'Loading choices…', disabled: true });
-  return rows.filter((r) => r.label.toLowerCase().includes(q));
+  return rows.filter((r) => fuzzyMatch(r.label, q));
 }
 async function runSlashBlock(type) {
   const item = slashTarget();

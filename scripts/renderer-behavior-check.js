@@ -572,9 +572,11 @@ async function runMultiTaskPaletteCheck() {
     Object.assign(globalThis, {
       status: () => statusRows('').find((row) => row.label === 'Completed').run(),
       assign: () => manyAssigneeRows('').find((row) => row.label === 'Person').run(),
+      typed: () => [statusRows('ipr').map((row) => row.label), statusRows('lat').map((row) => row.label), manyAssigneeRows('pe').map((row) => row.label)],
       state: () => ({ calls, selected: [...sel.keys], frozen: selectionFrozen, closed, note }),
     });
   `, { setTimeout, Promise });
+  assert.deepEqual(plain(apply.typed()), [['In Progress'], ['Later'], ['Unassigned', 'Person']], 'the status and assignee levels match the way the command palette does: word prefixes in order');
   // taskResult reports through a 0 ms timer, which two setImmediates outrun on a loaded machine: wait for a timer
   const settle = () => new Promise((resolve) => setTimeout(resolve, 10));
   apply.status(); await settle();

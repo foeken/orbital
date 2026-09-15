@@ -32,7 +32,7 @@ function visibilityRows(q) {
     rules.has('me') && { group: 'Visibility', icon: 'lock', label: 'Only me', keepOpen: true, run: () => applySharing(palDoc, { rule: 'me' }) },
     rules.has('people') && { group: 'Visibility', icon: 'userLock', label: 'Selected people…', disabled: !hasParticipants, keepOpen: true, run: () => openVisibilityPeople(palDoc) },
     rules.has('inherit') && { group: 'Visibility', icon: 'houseLock', label: inherit ? 'Inherit: ' + inherit.label : 'Inherit location audience', keepOpen: true, run: () => applySharing(palDoc, { rule: 'inherit', token: access.sharingToken }) },
-  ].filter(Boolean).filter((row) => row.label.toLowerCase().includes(q));
+  ].filter(Boolean).filter((row) => fuzzyMatch(row.label, q));
 }
 function openVisibilityPalette(doc) {
   palDoc = doc; palMode = 'visibility'; palRows = []; palIndex = 0; palette.hidden = false;
@@ -59,7 +59,7 @@ function openVisibilityPeople(doc) {
 function visibilityPeopleRows(q) {
   if (!palDoc) return [];
   loadMembers();
-  const people = (members || []).filter((member) => !member.me && memberName(member.id).toLowerCase().includes(q));
+  const people = (members || []).filter((member) => !member.me && fuzzyMatch(memberName(member.id), q));
   const back = { group: 'Visibility', label: 'Back to visibility', keepOpen: true, run: backPalette };
   const apply = { group: 'Visibility', label: 'Apply selected people', disabled: !visibilityPeople.size, keepOpen: true, run: () => applySharing(palDoc, { rule: 'people', participants: [...visibilityPeople].map((uri) => ({ uri, role: visibilityRoles.get(uri) || 'editor' })) }) };
   return [back, apply, ...people.map((member) => ({ group: 'People', icon: 'member', label: memberName(member.id), hint: visibilityPeople.has(member.id) ? '✓' : '', keepOpen: true, run: () => { if (visibilityPeople.has(member.id)) visibilityPeople.delete(member.id); else { visibilityPeople.add(member.id); visibilityRoles.set(member.id, 'editor'); } renderPalette(); } }))];

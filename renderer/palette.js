@@ -140,7 +140,7 @@ function pillRowsFor(def, q) {
   let group = pillName(def);
   return def.rows().flatMap((row) => {
     if (row.head) { group = row.head; return []; }
-    if (!row.label || !row.label.toLowerCase().includes(q)) return [];
+    if (!row.label || !fuzzyMatch(row.label, q)) return [];
     return [{ group, icon: row.icon, label: row.label, hint: row.checked ? '✓' : '', keepOpen: true, run: () => {
       row.run();
       if (row.keepOpen) renderPalette(); else openCommandPalette();
@@ -180,7 +180,7 @@ function openHiddenPalette() {
 }
 function creationRows(q) {
   if (palBusy) return [{ group: 'Create new', label: 'Loading choices…', disabled: true }];
-  return creationChoices.filter((choice) => choice.title.toLowerCase().includes(q)).map((choice) => ({ group: choice.kind === 'custom' ? 'Workspace types' : 'Create new', icon: choice.icon, svg: choice.iconSvg, hue: choice.hue, label: choice.title, hint: choice.selectable ? '' : choice.reason || 'Unavailable', disabled: !choice.selectable, keepOpen: true, run: () => startCreation(choice) }));
+  return creationChoices.filter((choice) => fuzzyMatch(choice.title, q)).map((choice) => ({ group: choice.kind === 'custom' ? 'Workspace types' : 'Create new', icon: choice.icon, svg: choice.iconSvg, hue: choice.hue, label: choice.title, hint: choice.selectable ? '' : choice.reason || 'Unavailable', disabled: !choice.selectable, keepOpen: true, run: () => startCreation(choice) }));
 }
 function openCreationPalette() {
   palMode = 'create'; palRows = []; palIndex = 0; palette.hidden = false;
@@ -265,8 +265,9 @@ function renderPalette() {
     const rowHue = r.node ? r.node.hue : r.hue; // documents and "Create new…" type choices both carry the type hue
     if (!r.svg && rowHue != null) { icon.classList.add('hue'); icon.style.setProperty('--hue', String(rowHue)); }
     const label = document.createElement('span'); label.className = 'label';
-    if (r.match && r.match.length) { // the letters the query matched, in bold
-      const hit = new Set(r.match); let run = '', bold = false;
+    const match = r.match || (q ? fuzzyMatch(r.label, q.toLowerCase()) : null); // every level: the letters the query matched, in bold
+    if (match && match.length) {
+      const hit = new Set(match); let run = '', bold = false;
       const flushRun = () => { if (!run) return; if (bold) { const b = document.createElement('b'); b.textContent = run; label.append(b); } else label.append(run); run = ''; };
       for (let i = 0; i < r.label.length; i++) { if (hit.has(i) !== bold) { flushRun(); bold = hit.has(i); } run += r.label[i]; }
       flushRun();
