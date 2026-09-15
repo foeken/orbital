@@ -254,8 +254,9 @@ function togglePalette(mode, link, pin) {
   palInput.focus();
 }
 function closePalette() { palette.hidden = true; clearTimeout(palTimer); palTimer = null; cancelLink(); pinCtx = null; pillCtx = null; returnFocus(); }
-// back to the node that had the caret when the palette opened (the @ link path places its own caret)
-function returnFocus() { const r = palReturn; palReturn = null; if (r && !focused()) placeCaret(r.key, r.offset); }
+// back to the node that had the caret when the palette opened (the @ link path places its own caret); with nothing to
+// return to (a row selection, the sidebar) the hidden input must not keep the keys, so it lets go of the focus
+function returnFocus() { const r = palReturn; palReturn = null; if (r && !focused()) placeCaret(r.key, r.offset); else if (document.activeElement === palInput) palInput.blur(); }
 function runRow(r) { if (!r || r.disabled) return; if (!r.keepOpen) closePalette(); r.run(); }
 // Up/Down step over rows that cannot run (info lines, unavailable choices) so the keyboard never lands on a dead row
 function nextPalIndex(rows, index, step) {

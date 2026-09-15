@@ -208,7 +208,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .text.image img { display: block; max-width: 100%; max-height: 360px; height: auto; border-radius: 6px; }
 .text.image.loading img { visibility: hidden; }
 .text.image.loading { min-height: 120px; max-height: 360px; background: #f1f1f1; border-radius: 6px; width: min(100%, 360px); }
-.text.image:focus img, .selected > .line .text.image img { outline: 2px solid #b5d0ee; outline-offset: 2px; }
+.text.image:focus img, .selected .text.image img { outline: 2px solid #b5d0ee; outline-offset: 2px; }
 .text .mention { color: #508fbb; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .text .mention:hover { color: #3a75a3; }
 /* inline marks on a text run (readOutline segments): bold, italic, strike, code, and link marks */
@@ -231,11 +231,12 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 /* divider: an atomic block, focusable like an image so the keyboard can still reach and delete it */
 .text.divider { display: block; cursor: default; }
 .text.divider hr { border: 0; border-top: 1px solid #dcdcdc; margin: 10px 0; }
-.text.divider:focus hr, .selected > .line .text.divider hr { border-top-color: #b5d0ee; }
+.text.divider:focus hr, .selected .text.divider hr { border-top-color: #b5d0ee; }
 .h1 > .line .text { font-size: 24px; font-weight: 700; line-height: 30px; }
 .h2 > .line .text { font-size: 20px; font-weight: 700; line-height: 28px; }
 .h3 > .line .text { font-weight: 700; }
-.selected > .line { background: #e8f1fb; border-radius: 0; }
+.selected { background: #e8f1fb; } /* the whole node: a selected parent takes its children with it, so they show as selected too */
+.selected .line { border-radius: 0; }
 /* a row arriving in or dropping out of a view: green tint fading in, red tint fading out; a row you are still
    editing only dims, and leaves for real once the caret does */
 .node.entering { animation: rowEnter .8s ease-out; }
@@ -246,7 +247,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 @keyframes rowLeave { from { background: rgba(217, 48, 37, .16); opacity: 1; } to { background: rgba(217, 48, 37, 0); opacity: 0; } }
 @keyframes rowLeaveDim { from { background: rgba(217, 48, 37, .16); opacity: .45; } to { background: rgba(217, 48, 37, 0); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .node.entering, .node.leaving, .node.falling.leaving { animation: none; } }
-.selected > .line .text { caret-color: transparent; }
+.selected .text { caret-color: transparent; }
 .children { margin-left: 33px; padding-left: 0; border-left: 1px solid #ececec; }
 .children.loading { color: #aaa; font-style: italic; padding: 3px 0 3px 22px; }
 .empty-note { color: #aaa; font-size: 16px; padding: 8px 40px; }
@@ -417,7 +418,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .chip.gold { background: #4b4024; color: #e4c968; }
 [data-theme="dark"] .chip.hue { background: hsl(var(--hue) 35% 25%); color: hsl(var(--hue) 75% 78%); }
 [data-theme="dark"] .text.image.loading { background: #303436; }
-[data-theme="dark"] .text.image:focus img, [data-theme="dark"] .selected > .line .text.image img { outline-color: #58768a; }
+[data-theme="dark"] .text.image:focus img, [data-theme="dark"] .selected .text.image img { outline-color: #58768a; }
 [data-theme="dark"] .text .mention { color: #8fc1e1; }
 [data-theme="dark"] .text .mention:hover { color: #b5ddf4; }
 [data-theme="dark"] .text code { background: #303436; }
@@ -428,7 +429,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .node.t-code > .line .text { background: #282b2d; }
 [data-theme="dark"] .node.t-quote > .line .text { border-left-color: #454b4e; color: #a8adaf; }
 [data-theme="dark"] .text.divider hr { border-top-color: #3a3f41; }
-[data-theme="dark"] .text.divider:focus hr, [data-theme="dark"] .selected > .line .text.divider hr { border-top-color: #58768a; }
+[data-theme="dark"] .text.divider:focus hr, [data-theme="dark"] .selected .text.divider hr { border-top-color: #58768a; }
 [data-theme="dark"] .toolbar { background: #242729; box-shadow: 0 6px 24px rgba(0, 0, 0, .5), 0 0 0 1px rgba(255, 255, 255, .08); }
 [data-theme="dark"] .tbtn { color: #c9c9c9; }
 [data-theme="dark"] .tbtn:hover, [data-theme="dark"] .tbtn.style.open { background: #2f3436; }
@@ -438,7 +439,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .glyph { color: #aeb4b6; }
 [data-theme="dark"] .palette .row.active .glyph, [data-theme="dark"] .menu .mrow.active .glyph { color: #d0d2d2; }
 [data-theme="dark"] .text[tabindex]:not(.image):focus { outline-color: #58768a; }
-[data-theme="dark"] .selected > .line { background: #2d4149; }
+[data-theme="dark"] .selected { background: #2d4149; }
 [data-theme="dark"] .children { border-left-color: #34393b; }
 [data-theme="dark"] .children.loading { color: #858b8e; }
 
