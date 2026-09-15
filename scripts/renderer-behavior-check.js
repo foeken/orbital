@@ -1096,7 +1096,7 @@ function runSyncShortcutCheck() {
   // sequence (open, task state, where it lives, what it looks like, link, delete last), then Views, view options,
   // and Actions from "get in" to the app's own settings.
   const order = vm.runInNewContext(`
-    const views = [{ id: 'tasks', title: 'Tasks', icon: 'task' }], pinTree = [], pinRows = () => [];
+    const views = [{ id: 'library', title: 'Library', icon: 'library' }, { id: 'tasks', title: 'Tasks', icon: 'task' }], pinTree = [], pinRows = () => [];
     const selectionRows = () => [{ id: 'delete', group: 'Current node', label: 'Delete' }, { id: 'sensitive', group: 'Current node', label: 'Mark as sensitive' }, { id: 'zoomIn', group: 'Current node', label: 'Zoom in' }, { id: 'status', group: 'Current node', label: 'Set status' }];
     const pillCommandRows = () => [{ id: 'pill:type', group: 'View options', label: 'Set view option: Type' }], taskActionRows = () => [];
     const tana = { refresh: async () => {}, todayNode: async () => {}, weekNode: async () => {}, nodeLink: async () => {}, setIcon: () => {}, accessOptions: async () => {}, filters: {}, sensitiveIds: () => {}, creationOptions: async () => {} }, run = () => {};
@@ -1113,7 +1113,7 @@ function runSyncShortcutCheck() {
   assert.deepEqual(plain(order), [
     'Current node: Zoom in', 'Current node: Set status', 'Current node: Pin to sidebar', 'Current node: Pin to today', 'Current node: Move to space',
     'Current node: Set Image', 'Current node: Remove icon', 'Current node: Edit visibility', 'Current node: Mark as sensitive', 'Current node: Copy link', 'Current node: Delete',
-    'Views: Tasks', 'Views: Today', 'Views: This week',
+    'Views: Today', 'Views: This week', 'Views: Tasks', 'Views: Library',
     'View options: Set view option: Type',
     'Actions: Log in to Tana', 'Actions: Create new…', 'Actions: Search Tana', 'Actions: Filter rows', 'Actions: Go back', 'Actions: Go forward', 'Actions: Focus the sidebar',
     'Actions: Undo', 'Actions: Redo', 'Actions: Sync', 'Actions: Edit hidden items', 'Actions: Toggle sensitive visibility',

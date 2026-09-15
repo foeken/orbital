@@ -20,6 +20,7 @@ const docRow = (n, hint, run) => ({ node: n, icon: n.icon, svg: n.iconSvg, label
 // its link, and last the one destructive row. Rows without an id carry a `rank` from this list instead.
 const NODE_ROW_ORDER = ['zoomIn', 'expand', 'collapse', 'toggleDone', 'status', 'assign', 'pinSidebar', 'pinToday', 'addToday', 'addWeek', 'move', 'setImage', 'removeIcon', 'visibility', 'sensitive', 'copyLink', 'delete'];
 const nodeRank = (r) => { const i = NODE_ROW_ORDER.indexOf(r.rank || r.id); return i < 0 ? NODE_ROW_ORDER.length : i; };
+const VIEW_ORDER = ['inbox', 'today', 'week', 'tasks', 'meetings', 'people', 'chats', 'library'];
 function paletteRows(q) {
   const selection = selectionRows();
   const rows = [...selection];
@@ -47,11 +48,14 @@ function paletteRows(q) {
   }
   // only node rows so far: the selection's rows first, then (with a multi-selection) the document's own, each in NODE_ROW_ORDER
   rows.sort((a, b) => (a.group === 'Selection' ? 0 : 1) - (b.group === 'Selection' ? 0 : 1) || nodeRank(a) - nodeRank(b));
-  rows.push(...views.map((s) => ({ id: 'view:' + s.id, group: 'Views', icon: s.icon, label: s.title, run: () => setView(s.id) })));
-  // today's node: a document titled with the date, pinned to today; and the week this day sits in, as its own
-  // "Week 38 (2026)" document — both created when they do not exist yet, and both places to go, so they sit with the views
-  if (tana.todayNode) rows.push({ id: 'today', group: 'Views', icon: 'today', label: 'Today', run: () => run(async () => goTo(await tana.todayNode())) });
-  if (tana.weekNode) rows.push({ id: 'week', group: 'Views', icon: 'week', label: 'This week', run: () => run(async () => goTo(await tana.weekNode())) });
+  // Views, in the order of a day: what came in, today, this week, then the kinds, and the whole library last. Today's
+  // node (titled with the date, pinned to today) and the week's ("Week 38 (2026)") are documents created on demand,
+  // but places to go all the same, so they sit here.
+  const viewRows = views.map((s) => ({ id: 'view:' + s.id, group: 'Views', icon: s.icon, label: s.title, run: () => setView(s.id) }));
+  if (tana.todayNode) viewRows.push({ id: 'today', group: 'Views', icon: 'today', label: 'Today', run: () => run(async () => goTo(await tana.todayNode())) });
+  if (tana.weekNode) viewRows.push({ id: 'week', group: 'Views', icon: 'week', label: 'This week', run: () => run(async () => goTo(await tana.weekNode())) });
+  const viewRank = (r) => { const i = VIEW_ORDER.indexOf(r.id.replace(/^view:/, '')); return i < 0 ? VIEW_ORDER.length : i; };
+  rows.push(...viewRows.sort((a, b) => viewRank(a) - viewRank(b)));
   rows.push(...pillCommandRows());
   // Actions: getting in first, then making and finding things, moving around, undoing, and last the app's own settings
   if (signedOut) rows.push({ id: 'login', group: 'Actions', label: 'Log in to Tana', run: () => tana.login().catch(showError) });
