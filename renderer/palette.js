@@ -18,7 +18,7 @@ const docRow = (n, hint, run) => ({ node: n, icon: n.icon, svg: n.iconSvg, label
 // The order of the rows about the node you are on: where it goes (open it, unfold it), what it is (done, status,
 // assignee), where it lives (pins, the date nodes, its space), what it looks like (image, visibility, sensitivity),
 // its link, and last the one destructive row. Rows without an id carry a `rank` from this list instead.
-const NODE_ROW_ORDER = ['zoomIn', 'expand', 'collapse', 'toggleDone', 'status', 'assign', 'pinSidebar', 'pinToday', 'addToday', 'addWeek', 'move', 'setImage', 'removeIcon', 'visibility', 'sensitive', 'copyLink', 'delete'];
+const NODE_ROW_ORDER = ['zoomIn', 'expand', 'collapse', 'toggleDone', 'status', 'assign', 'pinSidebar', 'pinToday', 'addToday', 'addWeek', 'move', 'moveInbox', 'moveLibrary', 'setImage', 'removeIcon', 'visibility', 'sensitive', 'copyLink', 'delete'];
 const nodeRank = (r) => { const i = NODE_ROW_ORDER.indexOf(r.rank || r.id); return i < 0 ? NODE_ROW_ORDER.length : i; };
 const VIEW_ORDER = ['inbox', 'today', 'week', 'tasks', 'meetings', 'people', 'chats', 'library'];
 // Matching a row: the query as a substring, else as word-prefix chunks in order ("moinb" → **M**ove to **inb**ox);
@@ -80,7 +80,12 @@ function paletteRows(q) {
     loadAccess(palDoc.id);
     const access = accessById.get(palDoc.id);
     if (access?.sharing) rows.push({ rank: 'visibility', group: docGroup, icon: 'lock', label: 'Edit visibility', run: () => openVisibilityPalette(palDoc), sub: () => visibilityRows('') });
-    if (access?.move) { const doc = palDoc; rows.push({ rank: 'move', group: docGroup, icon: 'space', label: 'Move to…', keepOpen: true, run: () => openMovePalette(doc), sub: () => moveTargets(doc) }); }
+    if (access?.move) { // the two fixed places are rows of their own; the spaces are the folded level of "Move to…"
+      const doc = palDoc;
+      rows.push({ rank: 'move', group: docGroup, icon: 'space', label: 'Move to…', keepOpen: true, run: () => openMovePalette(doc), sub: () => moveTargets(doc) });
+      for (const t of inboxTarget(doc)) rows.push({ ...t, rank: 'moveInbox', group: docGroup, label: 'Move to Inbox' });
+      if (access.ownerUri) rows.push({ rank: 'moveLibrary', group: docGroup, icon: 'library', label: 'Move to Library', keepOpen: true, run: () => { openMovePalette(doc); previewMoveToSpace(doc, { id: 'library', text: 'Library' }); } });
+    }
   }
   // only node rows so far: the selection's rows first, then (with a multi-selection) the document's own, each in NODE_ROW_ORDER
   rows.sort((a, b) => (a.group === 'Selection' ? 0 : 1) - (b.group === 'Selection' ? 0 : 1) || nodeRank(a) - nodeRank(b));

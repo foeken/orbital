@@ -1119,7 +1119,7 @@ async function runSyncShortcutCheck() {
     const zoom = null, railEl = { hidden: true }, navBack = [], navForward = [], sensitiveVisible = false;
     const showError = () => {}, palette = { hidden: false }, palMode = 'cmd', renderPalette = () => {};
     const setZoom = () => {}, navigate = () => {}, history = () => {}, togglePalette = () => {}, focusRail = () => {}, setView = () => {}, openDoc = () => {}, filterEl = {}, render = () => {}, zoomFactor = 1, BASE_ZOOM = 1;
-    const visibilityRows = () => [], moveTargets = async () => [];
+    const visibilityRows = () => [], moveTargets = async () => [], inboxTarget = () => [{ icon: "inbox", label: "Inbox", run: () => {} }], previewMoveToSpace = () => {};
     ${sourceBetween('const NODE_ROW_ORDER', 'function paletteRows')}
     ${functionSource('paletteRows')}
     ({ rows: async (q) => { paletteRows(q); await Promise.resolve(); await Promise.resolve(); return paletteRows(q).map((r) => r.label); }, loads: () => loads });
@@ -1157,17 +1157,17 @@ async function runSyncShortcutCheck() {
     const tana = { refresh: async () => {}, todayNode: async () => {}, weekNode: async () => {}, nodeLink: async () => {}, setIcon: () => {}, accessOptions: async () => {}, filters: {}, sensitiveIds: () => {}, creationOptions: async () => {} }, run = () => {};
     const authed = true, authChecking = false, signedOut = true, theme = 'light', hotkeys = {}, themePref = 'light';
     const palDoc = { id: 'tana:text:01j0doc000000000000000000', iconSvg: '<svg/>' }, pinInfo = { docId: palDoc.id, sidebar: false, dates: [] };
-    const accessById = new Map([[palDoc.id, { sharing: true, move: true }]]), loadAccess = () => {}, isRealId = () => true;
+    const accessById = new Map([[palDoc.id, { sharing: true, move: true, ownerUri: 'tana:space:01j0space00000000000000000' }]]), loadAccess = () => {}, isRealId = () => true;
     const localDate = () => '2026-09-13', setIcon = () => {}, setTheme = () => {}, startDrop = () => {}, docRow = () => ({}), sectionOf = () => null;
     const zoom = null, railEl = { hidden: false }, navBack = [], navForward = [], sensitiveVisible = false;
     const openCreationPalette = () => {}, openHiddenPalette = () => {}, toggleSensitiveVisibility = () => {}, followSystem = () => {}, openVisibilityPalette = () => {}, openMovePalette = () => {}, pinAction = () => {}, copyText = () => {}, togglePalette = () => {}, navigate = () => {}, history = () => {}, focusRail = () => {}, setZoom = () => {}, goTo = () => {}, setView = () => {}, openDoc = () => {}, filterEl = {}, render = () => {}, zoomFactor = 1, BASE_ZOOM = 1;
     ${sourceBetween('const NODE_ROW_ORDER', 'function paletteRows')}
-    const visibilityRows = () => [], moveTargets = async () => [];
+    const visibilityRows = () => [], moveTargets = async () => [], inboxTarget = () => [{ icon: "inbox", label: "Inbox", run: () => {} }], previewMoveToSpace = () => {};
     ${functionSource('paletteRows')}
     paletteRows('').map((row) => row.group + ': ' + row.label);
   `);
   assert.deepEqual(plain(order), [
-    'Current node: Zoom in', 'Current node: Set status', 'Current node: Pin to sidebar', 'Current node: Pin to today', 'Current node: Move to…',
+    'Current node: Zoom in', 'Current node: Set status', 'Current node: Pin to sidebar', 'Current node: Pin to today', 'Current node: Move to…', 'Current node: Move to Inbox', 'Current node: Move to Library',
     'Current node: Set Image', 'Current node: Remove icon', 'Current node: Edit visibility', 'Current node: Mark as sensitive', 'Current node: Copy link', 'Current node: Delete',
     'Views: Today', 'Views: This week', 'Views: Tasks', 'Views: Library',
     'View options: Set view option: Type',
