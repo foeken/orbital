@@ -140,13 +140,13 @@ function setTaskAssignees(doc, assignees) {
     }
   });
 }
-function assigneeRows(q) {
-  if (!palDoc || !isTask(palDoc)) return [];
-  loadMembers(); loadTaskMeta(palDoc.id);
-  const meta = taskMetaById.get(palDoc.id), ids = meta ? meta.assignees : [];
+function assigneeRows(q, doc = palDoc) {
+  if (!doc || !isTask(doc)) return [];
+  loadMembers(); loadTaskMeta(doc.id);
+  const meta = taskMetaById.get(doc.id), ids = meta ? meta.assignees : [];
   const toggle = (uri) => ids.includes(uri) ? ids.filter((id) => id !== uri) : [...ids, uri];
-  const rows = [{ group: 'Assignees', icon: 'unassigned', label: 'Unassigned', hint: ids.length ? '' : '✓', keepOpen: true, run: () => setTaskAssignees(palDoc, []) }];
-  for (const member of members || []) if (!q || memberName(member.id).toLowerCase().includes(q)) rows.push({ group: 'Assignees', icon: 'member', label: memberName(member.id), hint: ids.includes(member.id) ? '✓' : '', keepOpen: true, run: () => setTaskAssignees(palDoc, toggle(member.id)) });
+  const rows = [{ group: 'Assignees', icon: 'unassigned', label: 'Unassigned', hint: ids.length ? '' : '✓', keepOpen: true, run: () => setTaskAssignees(doc, []) }];
+  for (const member of members || []) if (!q || memberName(member.id).toLowerCase().includes(q)) rows.push({ group: 'Assignees', icon: 'member', label: memberName(member.id), hint: ids.includes(member.id) ? '✓' : '', keepOpen: true, run: () => setTaskAssignees(doc, toggle(member.id)) });
   return rows;
 }
 function openAssigneePalette(doc, ctx) {
@@ -185,12 +185,12 @@ function applyTaskChange(ctx, call) {
     }
   });
 }
-function statusRows(q) {
-  if (!palTaskCtx?.docs.length) return [];
-  const current = palTaskCtx.docs.length === 1 ? stateOf(palTaskCtx.docs[0]) : null;
+function statusRows(q, ctx = palTaskCtx) {
+  if (!ctx?.docs.length) return [];
+  const current = ctx.docs.length === 1 ? stateOf(ctx.docs[0]) : null;
   return STATES.filter(([, label]) => !q || label.toLowerCase().includes(q)).map(([state, label]) => ({
     group: 'Status', icon: 'status', label, hint: state === current ? '✓' : '', keepOpen: true,
-    run: () => applyTaskChange(palTaskCtx, () => palTaskCtx.multi ? tana.setStateMany(palTaskCtx.docs.map((doc) => doc.id), state) : tana.setState(palTaskCtx.docs[0].id, state)),
+    run: () => applyTaskChange(ctx, () => ctx.multi ? tana.setStateMany(ctx.docs.map((doc) => doc.id), state) : tana.setState(ctx.docs[0].id, state)),
   }));
 }
 function openStatusPalette(ctx) {
@@ -198,10 +198,10 @@ function openStatusPalette(ctx) {
   palette.hidden = false; palInput.placeholder = 'Set status to…'; palInput.value = '';
   renderPalette(); palInput.focus();
 }
-function manyAssigneeRows(q) {
-  if (!palTaskCtx?.docs.length) return [];
+function manyAssigneeRows(q, ctx = palTaskCtx) {
+  if (!ctx?.docs.length) return [];
   loadMembers();
-  const apply = (uris) => applyTaskChange(palTaskCtx, () => tana.setAssigneesMany(palTaskCtx.docs.map((doc) => doc.id), uris));
+  const apply = (uris) => applyTaskChange(ctx, () => tana.setAssigneesMany(ctx.docs.map((doc) => doc.id), uris));
   const rows = [{ group: 'Assignees', icon: 'unassigned', label: 'Unassigned', keepOpen: true, run: () => apply([]) }];
   for (const member of members || []) if (!q || memberName(member.id).toLowerCase().includes(q)) rows.push({ group: 'Assignees', icon: 'member', label: memberName(member.id), keepOpen: true, run: () => apply([member.id]) });
   return rows;
@@ -217,20 +217,22 @@ function taskActionRows(group = 'Actions') {
   if (ctx.multi) {
     const count = ctx.docs.length, noun = count === 1 ? 'task' : 'tasks', hint = ctx.skipped ? `${ctx.skipped} skipped` : '';
     return [
-      { id: 'status', group, icon: 'status', label: `Set status for ${count} ${noun}`, hint, disabled: !count || !tana.setStateMany, keepOpen: true, run: () => openStatusPalette(ctx) },
-      { id: 'assign', group, icon: 'member', label: `Assign ${count} ${noun} to`, hint, disabled: !count || !tana.setAssigneesMany, keepOpen: true, run: () => openManyAssigneePalette(ctx) },
+      { id: 'status', group, icon: 'status', label: `Set status for ${count} ${noun}`, hint, disabled: !count || !tana.setStateMany, keepOpen: true, run: () => openStatusPalette(ctx), sub: () => statusRows('', ctx) },
+      { id: 'assign', group, icon: 'member', label: `Assign ${count} ${noun} to`, hint, disabled: !count || !tana.setAssigneesMany, keepOpen: true, run: () => openManyAssigneePalette(ctx), sub: async () => { await membersLoaded(); return manyAssigneeRows('', ctx); } },
     ];
   }
   if (!ctx.docs.length) return [];
   const doc = ctx.docs[0], rows = [];
-  if (tana.setState) rows.push({ id: 'status', group, icon: 'status', label: 'Set status', hint: Object.fromEntries(STATES)[stateOf(doc)] || '', keepOpen: true, run: () => openStatusPalette(ctx) });
+  if (tana.setState) rows.push({ id: 'status', group, icon: 'status', label: 'Set status', hint: Object.fromEntries(STATES)[stateOf(doc)] || '', keepOpen: true, run: () => openStatusPalette(ctx), sub: () => statusRows('', ctx) });
   if (tana.taskMeta && tana.setAssignees) {
     loadTaskMeta(doc.id);
     const meta = taskMetaById.get(doc.id), hint = meta && meta.assignees.length ? meta.assignees.map(memberName).join(', ') : meta ? 'Unassigned' : 'Loading…';
-    rows.push({ id: 'assign', group, icon: 'member', label: 'Edit assignees', hint, keepOpen: true, run: () => openAssigneePalette(doc, ctx) });
+    rows.push({ id: 'assign', group, icon: 'member', label: 'Edit assignees', hint, keepOpen: true, run: () => openAssigneePalette(doc, ctx), sub: async () => { await membersLoaded(); if (!taskMetaById.has(doc.id)) taskMetaById.set(doc.id, await tana.taskMeta(doc.id)); return assigneeRows('', doc); } });
   }
   return rows;
 }
+// the member list as a promise, for a second level offered from the first before anyone opened it
+async function membersLoaded() { if (!(members && members.length) && tana.members) members = await tana.members(); }
 // With rows selected, what acts on them comes first: at that moment the palette is about the selection, not the app.
 // With nothing selected the same actions apply to the current node — the zoomed document, or the one under the
 // caret — under their own heading and without a count in the label.

@@ -21,6 +21,42 @@ const docRow = (n, hint, run) => ({ node: n, icon: n.icon, svg: n.iconSvg, label
 const NODE_ROW_ORDER = ['zoomIn', 'expand', 'collapse', 'toggleDone', 'status', 'assign', 'pinSidebar', 'pinToday', 'addToday', 'addWeek', 'move', 'setImage', 'removeIcon', 'visibility', 'sensitive', 'copyLink', 'delete'];
 const nodeRank = (r) => { const i = NODE_ROW_ORDER.indexOf(r.rank || r.id); return i < 0 ? NODE_ROW_ORDER.length : i; };
 const VIEW_ORDER = ['inbox', 'today', 'week', 'tasks', 'meetings', 'people', 'chats', 'library'];
+// Matching a row: the query as a substring, else as word-prefix chunks in order ("moinb" → **M**ove to **inb**ox);
+// the matched character positions come back so the label can show them in bold. null when the row is out.
+function fuzzyMatch(label, q) {
+  if (!q) return [];
+  const lower = label.toLowerCase(), at = lower.indexOf(q);
+  if (at >= 0) return Array.from({ length: q.length }, (_, i) => at + i);
+  const starts = []; for (let i = 0; i < lower.length; i++) if (/[\p{L}\p{N}]/u.test(lower[i]) && (i === 0 || !/[\p{L}\p{N}]/u.test(lower[i - 1]))) starts.push(i);
+  const rec = (qi, wi) => {
+    if (qi === q.length) return [];
+    for (let w = wi; w < starts.length; w++) {
+      const s = starts[w], end = w + 1 < starts.length ? starts[w + 1] : lower.length;
+      for (let n = Math.min(q.length - qi, end - s); n >= 1; n--) {
+        if (!lower.startsWith(q.slice(qi, qi + n), s)) continue;
+        const rest = rec(qi + n, w + 1);
+        if (rest) return [...Array.from({ length: n }, (_, i) => s + i), ...rest];
+      }
+    }
+    return null;
+  };
+  return rec(0, 0);
+}
+// Rows that open a second level carry `sub`, the rows of that level. Once the query matches the first two letters
+// of such a row, its level is loaded (once per palette opening) and every choice is offered as one row here:
+// "Move to…" + "Inbox" → "Move to Inbox", so "moinb" reaches it without going down a level.
+const subCache = new Map();
+function subRowsFor(row, q) {
+  const key = row.id || row.rank || row.label;
+  if (!subCache.has(key)) {
+    subCache.set(key, null);
+    Promise.resolve().then(row.sub).then((rows) => { subCache.set(key, rows); if (palMode === 'cmd' && !palette.hidden) renderPalette(); }, (e) => { subCache.delete(key); showError(e); });
+  }
+  const kids = subCache.get(key);
+  if (!kids) return [];
+  const base = row.subBase || row.label.replace(/…$/, '');
+  return kids.filter((k) => k.label && !k.disabled).map((k) => ({ ...k, id: undefined, sub: undefined, group: row.group, icon: k.icon || row.icon, label: base + ' ' + k.label }));
+}
 function paletteRows(q) {
   const selection = selectionRows();
   const rows = [...selection];
@@ -43,8 +79,8 @@ function paletteRows(q) {
   if (palDoc && tana.accessOptions) {
     loadAccess(palDoc.id);
     const access = accessById.get(palDoc.id);
-    if (access?.sharing) rows.push({ rank: 'visibility', group: docGroup, icon: 'lock', label: 'Edit visibility', run: () => openVisibilityPalette(palDoc) });
-    if (access?.move) rows.push({ rank: 'move', group: docGroup, icon: 'space', label: 'Move to space', keepOpen: true, run: () => openMovePalette(palDoc) });
+    if (access?.sharing) rows.push({ rank: 'visibility', group: docGroup, icon: 'lock', label: 'Edit visibility', run: () => openVisibilityPalette(palDoc), sub: () => visibilityRows('') });
+    if (access?.move) { const doc = palDoc; rows.push({ rank: 'move', group: docGroup, icon: 'space', label: 'Move to…', keepOpen: true, run: () => openMovePalette(doc), sub: () => moveTargets(doc) }); }
   }
   // only node rows so far: the selection's rows first, then (with a multi-selection) the document's own, each in NODE_ROW_ORDER
   rows.sort((a, b) => (a.group === 'Selection' ? 0 : 1) - (b.group === 'Selection' ? 0 : 1) || nodeRank(a) - nodeRank(b));
@@ -59,7 +95,7 @@ function paletteRows(q) {
   rows.push(...pillCommandRows());
   // Actions: getting in first, then making and finding things, moving around, undoing, and last the app's own settings
   if (signedOut) rows.push({ id: 'login', group: 'Actions', label: 'Log in to Tana', run: () => tana.login().catch(showError) });
-  if (tana.creationOptions) rows.push({ id: 'create', group: 'Actions', icon: 'createNew', label: 'Create new…', keepOpen: true, run: openCreationPalette });
+  if (tana.creationOptions) rows.push({ id: 'create', group: 'Actions', icon: 'createNew', label: 'Create new…', keepOpen: true, run: openCreationPalette, sub: async () => { creationChoices = (await tana.creationOptions()).options || []; return creationRows(''); } });
   // the keys the outline answers to, as rows: each has a default combo in DEFAULT_HOTKEYS and can be re-recorded
   rows.push({ id: 'search', group: 'Actions', icon: 'search', label: 'Search Tana', keepOpen: true, run: () => togglePalette('search') });
   if (!zoom) rows.push({ id: 'filter', group: 'Actions', icon: 'filter', label: 'Filter rows', run: () => { filterShown = true; render(); filterEl.focus(); } });
@@ -80,8 +116,10 @@ function paletteRows(q) {
   rows.push({ id: 'theme', group: 'Actions', icon: 'darkLight', label: 'Toggle ' + (dark ? 'light' : 'dark') + ' mode', run: () => setTheme(dark ? 'light' : 'dark') });
   if (tana.systemTheme) rows.push({ id: 'systemTheme', group: 'Actions', icon: 'darkLight', label: 'Toggle system dark/light mode', hint: themePref === 'system' ? 'Following macOS' : '', run: () => followSystem(themePref !== 'system') });
   if (q) for (const s of views) for (const n of s.nodes) rows.push({ ...docRow(n, n.meta || s.title, () => openDoc(n.id)), id: 'doc:' + n.id, group: 'Documents' });
+  if (q.length >= 2) for (const r of rows.filter((r) => r.sub && r.label.toLowerCase().startsWith(q.slice(0, 2)))) rows.splice(rows.indexOf(r) + 1, 0, ...subRowsFor(r, q));
   let docsLeft = 8;
-  return rows.filter((r) => (!q || r.label.toLowerCase().includes(q)) && (r.group !== 'Documents' || docsLeft-- > 0)).map((r) => { const k = r.id && hotkeyFor(r.id); return k ? { ...r, kbd: k } : r; });
+  const seen = new Set(); // a document listed by several views, or a folded choice that reads like its parent, once
+  return rows.map((r) => ({ ...r, match: fuzzyMatch(r.label, q) })).filter((r) => r.match && !seen.has(r.id || r.group + '\n' + r.label) && seen.add(r.id || r.group + '\n' + r.label) && (r.group !== 'Documents' || docsLeft-- > 0)).map((r) => { const k = r.id && hotkeyFor(r.id); return k ? { ...r, kbd: k } : r; });
 }
 // a hotkey, recorded or default, runs its palette row's action (views/sync/login by id; documents wherever they live);
 // false when no such row exists right now, so the key can fall through to whatever else it means
@@ -95,6 +133,9 @@ function runAction(id) {
 // Cmd+K renders the exact same rows as the header pill. Multi-select rows stay here; a single choice returns to commands.
 function pillRows(q) {
   const def = (pillsApply() ? pillDefs() : []).find((item) => item.id === pillCtx);
+  return def ? pillRowsFor(def, q) : [];
+}
+function pillRowsFor(def, q) {
   if (!def?.rows) return [];
   let group = pillName(def);
   return def.rows().flatMap((row) => {
@@ -223,7 +264,13 @@ function renderPalette() {
     const icon = document.createElement('span'); icon.className = 'ricon' + (r.node ? ' ' + (r.svg ? 'custom' : r.icon || 'dot') : r.svg ? ' custom' : ''); icon.innerHTML = r.svg || (r.icon ? iconSvg(r.icon) : '');
     const rowHue = r.node ? r.node.hue : r.hue; // documents and "Create new…" type choices both carry the type hue
     if (!r.svg && rowHue != null) { icon.classList.add('hue'); icon.style.setProperty('--hue', String(rowHue)); }
-    const label = document.createElement('span'); label.className = 'label'; label.textContent = r.label;
+    const label = document.createElement('span'); label.className = 'label';
+    if (r.match && r.match.length) { // the letters the query matched, in bold
+      const hit = new Set(r.match); let run = '', bold = false;
+      const flushRun = () => { if (!run) return; if (bold) { const b = document.createElement('b'); b.textContent = run; label.append(b); } else label.append(run); run = ''; };
+      for (let i = 0; i < r.label.length; i++) { if (hit.has(i) !== bold) { flushRun(); bold = hit.has(i); } run += r.label[i]; }
+      flushRun();
+    } else label.textContent = r.label;
     for (const t of r.tags || []) label.append(chipEl(t, r.node && r.node.hue));
     blurSensitive(label, r.node && r.node.id);
     row.append(icon, label);
@@ -251,7 +298,7 @@ function togglePalette(mode, link, pin) {
   pinCtx = pin || null;
   if (mode !== 'slash') slashCtx = null;
   palMode = mode; palRows = []; palIndex = 0; palBusy = false; palEnter = null; clearTimeout(palTimer); palTimer = null;
-  if (mode === 'cmd') { palDoc = currentDoc(); palTaskCtx = null; loadPins(); }
+  if (mode === 'cmd') { palDoc = currentDoc(); palTaskCtx = null; loadPins(); subCache.clear(); }
   palInput.placeholder = mode === 'search' ? 'Search Tana' : mode === 'slash' ? 'Choose a block type or create' : 'Search or run a command';
   palInput.value = link ? link.text : '';
   if (mode === 'search') searchNow(); else renderPalette();

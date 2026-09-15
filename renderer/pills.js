@@ -39,6 +39,7 @@ function pillCommandRows() {
     id: 'pill:' + def.id, group: 'View options', icon: def.icon,
     label: 'Set view option: ' + pillName(def) + (def.value ? ' ' + def.value : ''),
     keepOpen: !!def.rows, run: def.rows ? () => openPillPalette(def.id) : def.toggle,
+    sub: def.rows ? () => pillRowsFor(def, '') : undefined, subBase: 'Set view option: ' + pillName(def),
   }));
 }
 function renderPills(show) {

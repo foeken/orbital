@@ -31,7 +31,10 @@ const FAKE_DOM = `
 const DEFAULT_HOTKEYS_SRC = source.match(/const DEFAULT_HOTKEYS = (\{[^\n]*\});/)[1];
 const RENDER_SHIM = 'globalThis.renderSoon ??= (...a) => render(...a); globalThis.patchMeta ??= () => render(); globalThis.iconNode ??= () => null;\n'
   + `globalThis.DEFAULT_HOTKEYS ??= ${DEFAULT_HOTKEYS_SRC}; globalThis.hk ??= () => (typeof hotkeys === 'object' ? hotkeys : {}); globalThis.hotkeyFor ??= (id) => (Object.hasOwn(hk(), id) ? hk()[id] : DEFAULT_HOTKEYS[id]); globalThis.hotkeyIds ??= () => [...new Set([...Object.keys(DEFAULT_HOTKEYS), ...Object.keys(hk())])]; globalThis.comboOf ??= () => '';\n`;
-const withShims = (src) => (/\b(renderSoon|patchMeta|iconNode|hotkeyFor|hotkeyIds|comboOf|settleEnter)\b/.test(src) ? RENDER_SHIM + 'globalThis.settleEnter ??= () => {};\n' + src : src);
+const withShims = (src) => {
+  if (/\bfuzzyMatch\b/.test(src) && !/function fuzzyMatch\(/.test(src)) src = functionSource('fuzzyMatch') + '\n' + src; // the real matcher: a harness that lists palette rows filters through it
+  return /\b(renderSoon|patchMeta|iconNode|hotkeyFor|hotkeyIds|comboOf|settleEnter)\b/.test(src) ? RENDER_SHIM + 'globalThis.settleEnter ??= () => {};\n' + src : src;
+};
 function functionSource(name) {
   const asyncStart = source.indexOf('async function ' + name + '(');
   const start = asyncStart >= 0 ? asyncStart : source.indexOf('function ' + name + '(');
@@ -1092,6 +1095,38 @@ function runAuthPaletteCheck() {
 }
 
 async function runSyncShortcutCheck() {
+  // Matching: a substring first, else word-prefix chunks in order, with the matched positions for the bold letters;
+  // "moinb" reaches "Move to Inbox" and "mt" reaches "Move to", but "xove" reaches nothing.
+  const match = vm.runInNewContext(`${functionSource('fuzzyMatch')}; ({ m: (l, q) => fuzzyMatch(l, q) });`);
+  const marked = (label, q) => { const m = match.m(label, q); return m && [...label].map((c, i) => (m.includes(i) ? c.toUpperCase() : c.toLowerCase())).join(''); };
+  assert.equal(marked('Move to Inbox', 'moinb'), 'MOve to INBox', 'word-prefix chunks in order');
+  assert.equal(marked('Move to Inbox', 'inbox'), 'move to INBOX', 'a substring wins as it is');
+  assert.equal(marked('Set status In Progress', 'sspr'), 'Set Status in PRogress', 'a chunk may skip words');
+  assert.equal(marked('Set status In Progress', 'ssp'), 'Set Status in Progress', 'and the shortest chunk that still leads on is taken');
+  assert.equal(match.m('Move to Inbox', 'xove'), null, 'a letter that starts no word and no substring is out');
+  assert.deepEqual(plain(match.m('Anything', '')), [], 'no query: everything, nothing bold');
+  // The second level of a row is folded into the first once the first two letters match: its rows appear as
+  // "<row> <choice>" right after the row, loaded once, and the same query then filters them.
+  const folded = vm.runInNewContext(`
+    const views = [], pinTree = [], pinRows = () => [], pillCommandRows = () => [], taskActionRows = () => [];
+    let loads = 0;
+    const selectionRows = () => [{ id: 'status', group: 'Current node', label: 'Set status', keepOpen: true, run: () => {}, sub: () => { loads++; return [{ label: 'Inbox', run: () => {} }, { label: 'In Progress', run: () => {} }, { label: 'Later', disabled: true, run: () => {} }]; } }];
+    const tana = { refresh: async () => {} }, run = () => {};
+    const authed = true, authChecking = false, signedOut = false, theme = 'light', hotkeys = {}, themePref = 'light', pinInfo = null, palDoc = null;
+    const localDate = () => '2026-09-13', setIcon = () => {}, setTheme = () => {}, startDrop = () => {}, docRow = () => ({}), sectionOf = () => null;
+    const zoom = null, railEl = { hidden: true }, navBack = [], navForward = [], sensitiveVisible = false;
+    const showError = () => {}, palette = { hidden: false }, palMode = 'cmd', renderPalette = () => {};
+    const setZoom = () => {}, navigate = () => {}, history = () => {}, togglePalette = () => {}, focusRail = () => {}, setView = () => {}, openDoc = () => {}, filterEl = {}, render = () => {}, zoomFactor = 1, BASE_ZOOM = 1;
+    const visibilityRows = () => [], moveTargets = async () => [];
+    ${sourceBetween('const NODE_ROW_ORDER', 'function paletteRows')}
+    ${functionSource('paletteRows')}
+    ({ rows: async (q) => { paletteRows(q); await Promise.resolve(); await Promise.resolve(); return paletteRows(q).map((r) => r.label); }, loads: () => loads });
+  `);
+  assert.deepEqual(plain(await folded.rows('s')), ['Set status', 'Search Tana', 'Filter rows', 'Sync', 'Smaller text', 'Reset text size'], 'one letter: the first level only');
+  assert.deepEqual(plain(await folded.rows('sesp')), ['Set status In Progress'], 'two letters in: the level below is folded in and the query reaches into it');
+  assert.deepEqual(plain(await folded.rows('seinb')), ['Set status Inbox'], 'a disabled choice is left out, the others are single rows');
+  assert.equal(folded.loads(), 1, 'the level is loaded once per palette');
+
   // Expanding a row loads its children while the caret is still in that row: the render that shows them must be the
   // forced kind (a plain one waits for the caret to leave, and "Loading…" stays). A failed load closes the row and
   // forgets the attempt so the next expand retries.
@@ -1125,11 +1160,12 @@ async function runSyncShortcutCheck() {
     const zoom = null, railEl = { hidden: false }, navBack = [], navForward = [], sensitiveVisible = false;
     const openCreationPalette = () => {}, openHiddenPalette = () => {}, toggleSensitiveVisibility = () => {}, followSystem = () => {}, openVisibilityPalette = () => {}, openMovePalette = () => {}, pinAction = () => {}, copyText = () => {}, togglePalette = () => {}, navigate = () => {}, history = () => {}, focusRail = () => {}, setZoom = () => {}, goTo = () => {}, setView = () => {}, openDoc = () => {}, filterEl = {}, render = () => {}, zoomFactor = 1, BASE_ZOOM = 1;
     ${sourceBetween('const NODE_ROW_ORDER', 'function paletteRows')}
+    const visibilityRows = () => [], moveTargets = async () => [];
     ${functionSource('paletteRows')}
     paletteRows('').map((row) => row.group + ': ' + row.label);
   `);
   assert.deepEqual(plain(order), [
-    'Current node: Zoom in', 'Current node: Set status', 'Current node: Pin to sidebar', 'Current node: Pin to today', 'Current node: Move to space',
+    'Current node: Zoom in', 'Current node: Set status', 'Current node: Pin to sidebar', 'Current node: Pin to today', 'Current node: Move to…',
     'Current node: Set Image', 'Current node: Remove icon', 'Current node: Edit visibility', 'Current node: Mark as sensitive', 'Current node: Copy link', 'Current node: Delete',
     'Views: Today', 'Views: This week', 'Views: Tasks', 'Views: Library',
     'View options: Set view option: Type',
@@ -2011,6 +2047,7 @@ function runCmdPillsCheck() {
     const renderPalette = () => { renders++; };
     ${definitions}
     ${functionSource('pillRows')}
+    ${functionSource('pillRowsFor')}
     ${functionSource('openPillPalette')}
     ${functionSource('openCommandPalette')}
     ({

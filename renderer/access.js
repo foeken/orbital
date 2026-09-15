@@ -69,14 +69,24 @@ function searchSpacesNow() {
   const query = palInput.value.trim(), seq = ++palSeq; palBusy = true;
   tana.searchSpaces(query).then((nodes) => {
     if (seq !== palSeq || palMode !== 'spaces') return;
-    palRows = nodes.map(asDoc).map((node) => ({ group: 'Spaces', ...docRow(node, node.selectable ? '' : 'No permission', () => previewMoveToSpace(palDoc, node)), disabled: !node.selectable, keepOpen: true }));
+    palRows = [...inboxTarget(palDoc, query), ...nodes.map(asDoc).map((node) => ({ group: 'Spaces', ...docRow(node, node.selectable ? '' : 'No permission', () => previewMoveToSpace(palDoc, node)), disabled: !node.selectable, keepOpen: true }))];
     palIndex = 0; palBusy = false; renderPalette(); settleEnter();
   }, showError);
+}
+// The Inbox is where a task waits for review (state "proposed"), so as a place to move to it exists for tasks only.
+function inboxTarget(doc, query = '') {
+  if (!isTask(doc) || !tana.setState || !'inbox'.startsWith(query.toLowerCase())) return [];
+  return [{ group: 'Spaces', icon: 'inbox', label: 'Inbox', hint: stateOf(doc) === 'proposed' ? '✓' : '', keepOpen: true, run: () => run(async () => { await tana.setState(doc.id, 'proposed'); closePalette(); await loadRoots(); render(); }) }];
+}
+// The second level of "Move to…", for the command palette to offer as single rows ("Move to Inbox", "Move to Foundry")
+async function moveTargets(doc) {
+  const nodes = tana.searchSpaces ? (await tana.searchSpaces('')).map(asDoc) : [];
+  return [...inboxTarget(doc), ...nodes.map((node) => ({ icon: node.icon, label: node.text, disabled: !node.selectable, keepOpen: true, run: () => { openMovePalette(doc); previewMoveToSpace(doc, node); } }))];
 }
 function openMovePalette(doc) {
   clearTimeout(palTimer); palTimer = null; ++palSeq;
   palDoc = doc; palMode = 'spaces'; palRows = []; palIndex = 0; palBusy = false; palette.hidden = false;
-  palInput.placeholder = 'Search spaces'; palInput.value = ''; searchSpacesNow(); palInput.focus();
+  palInput.placeholder = 'Move to…'; palInput.value = ''; searchSpacesNow(); palInput.focus();
 }
 function audienceLabel(audience) { return audienceInfo(audience)?.label || 'Audience cannot be verified'; }
 function previewMoveToSpace(doc, space) {
