@@ -251,7 +251,7 @@ function selectionRows() {
   // has nowhere further to go, so the row is absent there.
   if (!selected.length && !zoom && nodes.length === 1 && nodes[0].kind === 'document') {
     const doc = nodes[0];
-    rows.push({ id: 'zoomIn', group, icon: doc.icon || 'doc', label: 'Zoom in', run: () => openDoc(doc.id) });
+    rows.push({ id: 'zoomIn', group, icon: 'zoomIn', label: 'Zoom in', run: () => openDoc(doc.id) });
     // the row's own chevron, with the keys the outline already answers to (⌘↓ opens, ⌘↑ closes)
     const item = items.get(doc.id);
     if (item && canExpand(item)) {
