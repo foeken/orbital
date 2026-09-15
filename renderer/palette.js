@@ -61,8 +61,8 @@ function paletteRows(q) {
   if (signedOut) rows.push({ id: 'login', group: 'Actions', label: 'Log in to Tana', run: () => tana.login().catch(showError) });
   if (tana.creationOptions) rows.push({ id: 'create', group: 'Actions', icon: 'createNew', label: 'Create new…', keepOpen: true, run: openCreationPalette });
   // the keys the outline answers to, as rows: each has a default combo in DEFAULT_HOTKEYS and can be re-recorded
-  rows.push({ id: 'search', group: 'Actions', icon: 'library', label: 'Search Tana', keepOpen: true, run: () => togglePalette('search') });
-  if (!zoom) rows.push({ id: 'filter', group: 'Actions', label: 'Filter rows', run: () => { filterShown = true; render(); filterEl.focus(); } });
+  rows.push({ id: 'search', group: 'Actions', icon: 'search', label: 'Search Tana', keepOpen: true, run: () => togglePalette('search') });
+  if (!zoom) rows.push({ id: 'filter', group: 'Actions', icon: 'filter', label: 'Filter rows', run: () => { filterShown = true; render(); filterEl.focus(); } });
   rows.push({ id: 'back', group: 'Actions', icon: 'back', label: 'Go back', disabled: !navBack.length, run: () => navigate(-1) });
   rows.push({ id: 'forward', group: 'Actions', icon: 'forward', label: 'Go forward', disabled: !navForward.length, run: () => navigate(1) });
   if (!railEl.hidden) rows.push({ id: 'rail', group: 'Actions', icon: 'rail', label: 'Focus the sidebar', run: () => focusRail() });
