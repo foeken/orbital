@@ -59,19 +59,19 @@ function paletteRows(q) {
   // the keys the outline answers to, as rows: each has a default combo in DEFAULT_HOTKEYS and can be re-recorded
   rows.push({ id: 'search', group: 'Actions', icon: 'library', label: 'Search Tana', keepOpen: true, run: () => togglePalette('search') });
   if (!zoom) rows.push({ id: 'filter', group: 'Actions', label: 'Filter rows', run: () => { filterShown = true; render(); filterEl.focus(); } });
-  rows.push({ id: 'back', group: 'Actions', label: 'Go back', disabled: !navBack.length, run: () => navigate(-1) });
-  rows.push({ id: 'forward', group: 'Actions', label: 'Go forward', disabled: !navForward.length, run: () => navigate(1) });
-  if (!railEl.hidden) rows.push({ id: 'rail', group: 'Actions', label: 'Focus the sidebar', run: () => focusRail() });
-  rows.push({ id: 'undo', group: 'Actions', label: 'Undo', run: () => history('undo') });
-  rows.push({ id: 'redo', group: 'Actions', label: 'Redo', run: () => history('redo') });
+  rows.push({ id: 'back', group: 'Actions', icon: 'back', label: 'Go back', disabled: !navBack.length, run: () => navigate(-1) });
+  rows.push({ id: 'forward', group: 'Actions', icon: 'forward', label: 'Go forward', disabled: !navForward.length, run: () => navigate(1) });
+  if (!railEl.hidden) rows.push({ id: 'rail', group: 'Actions', icon: 'rail', label: 'Focus the sidebar', run: () => focusRail() });
+  rows.push({ id: 'undo', group: 'Actions', icon: 'undo', label: 'Undo', run: () => history('undo') });
+  rows.push({ id: 'redo', group: 'Actions', icon: 'redo', label: 'Redo', run: () => history('redo') });
   rows.push({ id: 'sync', group: 'Actions', icon: 'sync', label: 'Sync', run: () => run(() => tana.refresh()) });
   // the list of titles hidden from every view and from search, edited in the palette itself
   if (tana.filters) rows.push({ id: 'hidden', group: 'Actions', icon: 'hidden', label: 'Edit hidden items', keepOpen: true, run: openHiddenPalette });
   if (tana.sensitiveIds) rows.push({ id: 'sensitiveVisibility', group: 'Actions', icon: 'hidden', label: 'Toggle sensitive visibility', hint: sensitiveVisible ? 'Shown' : 'Hidden', run: toggleSensitiveVisibility });
   // text size stays on the fixed keys (their characters depend on the keyboard layout), so the chips are literal
-  rows.push({ id: 'textLarger', group: 'Actions', label: 'Larger text', kbd: '⇧⌘+', run: () => setZoom(zoomFactor * 1.1) });
-  rows.push({ id: 'textSmaller', group: 'Actions', label: 'Smaller text', kbd: '⇧⌘-', run: () => setZoom(zoomFactor / 1.1) });
-  rows.push({ id: 'textReset', group: 'Actions', label: 'Reset text size', kbd: '⌘0', run: () => setZoom(BASE_ZOOM) });
+  rows.push({ id: 'textLarger', group: 'Actions', icon: 'textLarger', label: 'Larger text', kbd: '⇧⌘+', run: () => setZoom(zoomFactor * 1.1) });
+  rows.push({ id: 'textSmaller', group: 'Actions', icon: 'textSmaller', label: 'Smaller text', kbd: '⇧⌘-', run: () => setZoom(zoomFactor / 1.1) });
+  rows.push({ id: 'textReset', group: 'Actions', icon: 'textReset', label: 'Reset text size', kbd: '⌘0', run: () => setZoom(BASE_ZOOM) });
   const dark = typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark';
   rows.push({ id: 'theme', group: 'Actions', icon: 'darkLight', label: 'Toggle ' + (dark ? 'light' : 'dark') + ' mode', run: () => setTheme(dark ? 'light' : 'dark') });
   if (tana.systemTheme) rows.push({ id: 'systemTheme', group: 'Actions', icon: 'darkLight', label: 'Toggle system dark/light mode', hint: themePref === 'system' ? 'Following macOS' : '', run: () => followSystem(themePref !== 'system') });

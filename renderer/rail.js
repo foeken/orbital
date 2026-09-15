@@ -163,7 +163,7 @@ function renderRail(parent) {
   // Event views immediately follow their write-up document. Sharing still belongs to the event itself.
   const accessNode = data?.pinHub?.startsWith('tana:event:') ? { id: data.pinHub } : parent.node;
   const meta = railMetaRows(parent.node, accessNode);
-  if (sensitiveIds?.has(docId)) meta.unshift({ id: 'sensitive', icon: 'lock', label: 'Sensitive', run: null });
+  if (sensitiveIds?.has(docId)) meta.unshift({ id: 'sensitive', icon: 'hidden', label: 'Sensitive', run: null });
   const call = railCallRow(data);
   if (call) meta.unshift(call);
   // "Notes" is what api.related calls them; in the sidebar they read as References

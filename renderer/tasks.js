@@ -256,14 +256,14 @@ function selectionRows() {
     const item = items.get(doc.id);
     if (item && canExpand(item)) {
       const expanded = hasKids(item) ? isOpen(item) : open.get(item.key) === true;
-      if (expanded) rows.push({ id: 'collapse', group, svg: CHEV, label: 'Collapse', run: () => setOpen(item, false) });
-      else rows.push({ id: 'expand', group, svg: CHEV, label: 'Expand', run: () => setOpen(item, true) });
+      if (expanded) rows.push({ id: 'collapse', group, icon: 'collapse', label: 'Collapse', run: () => setOpen(item, false) });
+      else rows.push({ id: 'expand', group, icon: 'expand', label: 'Expand', run: () => setOpen(item, true) });
     }
   }
   // the task's own checkbox (⌘↩ in the outline), zoomed or on its row
   if (!selected.length && nodes.length === 1 && isTask(nodes[0]) && canEditNode(nodes[0]) && items.has(nodes[0].id)) {
     const item = items.get(nodes[0].id);
-    rows.push({ id: 'toggleDone', group, icon: 'task', label: item.node.done ? 'Reopen' : 'Complete', run: () => toggleDone(item) });
+    rows.push({ id: 'toggleDone', group, icon: 'apply', label: item.node.done ? 'Reopen' : 'Complete', run: () => toggleDone(item) });
   }
   rows.push(...taskActionRows(group));
   if (nodes.length && tana.insertAfter && tana.setText) {
@@ -272,7 +272,7 @@ function selectionRows() {
   }
   if (ids.length && tana.setSensitive && sensitiveIds) {
     const marked = ids.every((id) => sensitiveIds.has(id));
-    rows.push({ id: 'sensitive', group, icon: 'lock', label: `${marked ? 'Unmark' : 'Mark'}${count(ids.length, 'item')} as sensitive`, run: () => setSensitiveMark(ids, !marked) });
+    rows.push({ id: 'sensitive', group, icon: 'hidden', label: `${marked ? 'Unmark' : 'Mark'}${count(ids.length, 'item')} as sensitive`, run: () => setSensitiveMark(ids, !marked) });
   }
   // Destructive, so it sits at the end of the group. Documents are soft-deleted (Cmd+Z restores them), blocks go
   // through the same one-step removal as Cmd+Shift+Backspace. Like the task actions, the row counts what it can
