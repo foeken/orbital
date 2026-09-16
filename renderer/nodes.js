@@ -217,7 +217,7 @@ const sameList = (a, b) => JSON.stringify(a ? [...a].sort() : a) === JSON.string
 function sameFilter(a = {}, b = {}) {
   return sameList(a.types || null, b.types || null) && sameList(a.states || null, b.states || null)
     && (a.assignee || 'anyone') === (b.assignee || 'anyone') && String(a.text || '') === String(b.text || '')
-    && (a.participant || null) === (b.participant || null) && (a.window || null) === (b.window || null) && !!a.mcp === !!b.mcp;
+    && (a.participant || null) === (b.participant || null) && (a.window || null) === (b.window || null);
 }
 function viewFiltered() {
   const filter = filters.get(view);

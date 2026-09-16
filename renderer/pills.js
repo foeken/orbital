@@ -6,19 +6,19 @@ function pillDefs() {
   if (!f) return [];
   const defs = [], save = setViewF, one = f.types && f.types.length === 1 && TYPES.find((t) => t && t[0] === f.types[0]);
   // A kind page (Tasks, Meetings, Chats, People) is that kind: only the Library and the Inbox pick their kinds.
-  if (!(views.find((v) => v.id === view) || {}).kind) defs.push({ id: 'type', value: names(TYPES, f.types) || 'Any type', icon: one ? one[2] : 'any', rows: () => [
+  if (!(views.find((v) => v.id === view) || {}).kind) defs.push({ id: 'type', command: 'Filter by type', value: names(TYPES, f.types) || 'Any type', icon: one ? one[2] : 'any', rows: () => [
     { label: 'Any type', icon: 'any', checked: !f.types, run: () => save({ types: null }) },
     ...TYPES.map((t) => (t ? { label: t[1], icon: t[2], keepOpen: true, checked: !!f.types && f.types.includes(t[0]), run: () => save({ types: toggleIn(TYPES.filter(Boolean).map((x) => x[0]), f.types, t[0]) }) } : { div: true })), // multi-select: the menu stays open to tick more
   ] });
   if (!f.types || f.types.includes('tasks')) {
-    defs.push({ id: 'status', label: 'Status', icon: 'status', value: names(STATES, f.states) || 'Any', rows: () => [
+    defs.push({ id: 'status', label: 'Status', command: 'Filter by status', icon: 'status', value: names(STATES, f.states) || 'Any', rows: () => [
       { label: 'Any status', checked: !f.states, run: () => save({ states: null }) },
       ...STATES.map(([v, l]) => ({ label: l, keepOpen: true, checked: !!f.states && f.states.includes(v), run: () => save({ states: toggleIn(STATES.map((s) => s[0]), f.states, v) }) })), // multi-select, like the type list
     ] });
     loadMembers();
     const you = 'You' + (me() ? ' (' + me().title + ')' : '');
     const a = f.assignee, m = (members || []).find((x) => x.id === a), who = a === 'anyone' ? 'Anyone' : a === 'unassigned' ? 'Unassigned' : a === 'me' || !a ? you : m ? m.title : '…';
-    defs.push({ id: 'assigned', label: 'Assigned to', icon: 'assigned', value: who, rows: () => [
+    defs.push({ id: 'assigned', label: 'Assigned to', command: 'Filter by assignee', icon: 'assigned', value: who, rows: () => [
       { label: 'Anyone', checked: a === 'anyone', run: () => save({ assignee: 'anyone' }) },
       { label: you, checked: a === 'me' || !a, run: () => save({ assignee: 'me' }) },
       { label: 'Unassigned', checked: a === 'unassigned', run: () => save({ assignee: 'unassigned' }) },
@@ -26,20 +26,20 @@ function pillDefs() {
       ...(members || []).filter((x) => !x.me).map((x) => ({ label: x.title, checked: a === x.id, run: () => save({ assignee: x.id }) })),
     ] });
   }
-  if (!f.types || f.types.includes('chats')) defs.push({ id: 'mcp', label: 'MCP chats', active: !!f.mcp, toggle: () => save({ mcp: !f.mcp }) });
   // sorting and grouping are view preferences, not queries: they re-order and re-section the rows the view already has
-  defs.push({ id: 'sort', label: 'Sort', icon: 'sort', value: SORTS.find(([id]) => id === sortBy())[1], rows: () => SORTS.map(([id, label]) => ({ label, checked: sortBy() === id, run: () => setSortBy(id) })) });
-  defs.push({ id: 'group', label: 'Group', icon: 'group', value: GROUPS.find(([id]) => id === groupBy())[1], rows: () => GROUPS.map(([id, label]) => ({ label, checked: groupBy() === id, run: () => setGroupBy(id) })) });
+  defs.push({ id: 'sort', label: 'Sort', command: 'Sort by', icon: 'sort', value: SORTS.find(([id]) => id === sortBy())[1], rows: () => SORTS.map(([id, label]) => ({ label, checked: sortBy() === id, run: () => setSortBy(id) })) });
+  defs.push({ id: 'group', label: 'Group', command: 'Group by', icon: 'group', value: GROUPS.find(([id]) => id === groupBy())[1], rows: () => GROUPS.map(([id, label]) => ({ label, checked: groupBy() === id, run: () => setGroupBy(id) })) });
   return defs;
 }
 const pillsApply = () => filters.has(view);
 const pillName = (def) => def.label || def.id[0].toUpperCase() + def.id.slice(1);
+// In Cmd+K a pill is a row named for what it does ("Sort by", "Filter by status") with its current value as the hint;
+// its choices fold in as "Sort by Title", "Filter by status In Progress".
 function pillCommandRows() {
   return (pillsApply() ? pillDefs() : []).map((def) => ({
-    id: 'pill:' + def.id, group: 'View options', icon: def.icon,
-    label: 'Set view option: ' + pillName(def) + (def.value ? ' ' + def.value : ''),
+    id: 'pill:' + def.id, group: 'View options', icon: def.icon, label: def.command, hint: def.value || '',
     keepOpen: !!def.rows, run: def.rows ? () => openPillPalette(def.id) : def.toggle,
-    sub: def.rows ? () => pillRowsFor(def, '') : undefined, subBase: 'Set view option: ' + pillName(def),
+    sub: def.rows ? () => pillRowsFor(def, '') : undefined,
   }));
 }
 function renderPills(show) {
@@ -59,12 +59,30 @@ function renderPills(show) {
     if (menu && menu.id === d.id) pill.append(menuEl(d));
     return pill;
   }));
+  // rows kept in place (holdRow) no longer match the view: offer to redraw it as it is now
+  if (defs.length && needsCleanup(shownDocs())) box.append(cleanupPill());
   const again = focusedId && box.querySelector('.pill[data-id="' + focusedId + '"]');
   if (again) again.focus();
   const open = box.querySelector('.menu'); // stop before the window edge; the rows scroll inside
   if (open) open.style.maxHeight = Math.min(360, innerHeight - open.getBoundingClientRect().top - 12) + 'px';
   const active = box.querySelector('.menu .mrow.active');
   if (active) active.scrollIntoView({ block: 'nearest', inline: 'nearest', container: 'nearest' });
+}
+// Clean up: let go of the rows a status change kept in place and draw the view the way it is now. Like the last pill,
+// Right moves on to the first row.
+function cleanupPill() {
+  const pill = document.createElement('div'); pill.className = 'pill cleanup'; pill.tabIndex = 0; pill.dataset.id = 'cleanup'; pill.setAttribute('role', 'button');
+  pill.title = 'Put every row where it belongs now';
+  const s = document.createElement('span'); s.innerHTML = iconSvg('cleanup'); pill.append(s.firstChild, 'Clean up');
+  const go = () => { releaseHeld(); render(true); };
+  pill.onclick = go;
+  pill.onkeydown = (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
+    else if (e.key === 'ArrowLeft' && pill.previousElementSibling) { e.preventDefault(); pill.previousElementSibling.focus(); }
+    else if (e.key === 'ArrowRight' && texts()[0]) { e.preventDefault(); setCaret(texts()[0], 0); }
+    else if (e.key === 'Escape') { e.preventDefault(); pill.blur(); }
+  };
+  return pill;
 }
 function menuEl(d) {
   const rows = d.rows(), el = document.createElement('div'); el.className = 'menu';
@@ -101,7 +119,12 @@ function pillKeys(e, d, pill) {
   else if (open && e.key === 'Tab') { menu = null; renderPills(true); }
   else if (d.toggle && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); d.toggle(); }
   else if (!open && !d.toggle && (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown')) { e.preventDefault(); menu = { id: d.id, index: 0 }; renderPills(true); }
-  else if (!open && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { e.preventDefault(); const s = e.key === 'ArrowLeft' ? pill.previousElementSibling : pill.nextElementSibling; if (s) s.focus(); }
+  else if (!open && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+    e.preventDefault();
+    const s = e.key === 'ArrowLeft' ? pill.previousElementSibling : pill.nextElementSibling;
+    if (s) s.focus();
+    else if (e.key === 'ArrowRight' && texts()[0]) setCaret(texts()[0], 0); // past the last pill (Group): the first node, where Up from that node comes back
+  }
   else if (!open && e.key === 'Escape') { e.preventDefault(); pill.blur(); }
 }
 document.addEventListener('mousedown', (e) => { if (menu && !(e.target.closest && e.target.closest('.pill'))) { menu = null; renderPills(true); } });

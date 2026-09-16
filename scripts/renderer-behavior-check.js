@@ -33,6 +33,7 @@ const RENDER_SHIM = 'globalThis.renderSoon ??= (...a) => render(...a); globalThi
   + `globalThis.DEFAULT_HOTKEYS ??= ${DEFAULT_HOTKEYS_SRC}; globalThis.hk ??= () => (typeof hotkeys === 'object' ? hotkeys : {}); globalThis.hotkeyFor ??= (id) => (Object.hasOwn(hk(), id) ? hk()[id] : DEFAULT_HOTKEYS[id]); globalThis.hotkeyIds ??= () => [...new Set([...Object.keys(DEFAULT_HOTKEYS), ...Object.keys(hk())])]; globalThis.comboOf ??= () => '';\n`;
 const withShims = (src) => {
   if (/\bfuzzyMatch\b/.test(src) && !/function fuzzyMatch\(/.test(src)) src = functionSource('fuzzyMatch') + '\n' + src; // the real matcher: a harness that lists palette rows filters through it
+  if (/\bchipOnly\(/.test(src) && !/const chipOnly =/.test(src)) src = 'globalThis.chipOnly ??= (el) => !!el.childNodes && el.childNodes.length === 1 && el.firstChild?.nodeType === 1 && !!el.firstChild.classList?.contains(\'mention\');\n' + src; // a harness that renders rows marks the chip-only ones too
   return /\b(renderSoon|patchMeta|iconNode|hotkeyFor|hotkeyIds|comboOf|settleEnter)\b/.test(src) ? RENDER_SHIM + 'globalThis.settleEnter ??= () => {};\n' + src : src;
 };
 function functionSource(name) {
@@ -61,7 +62,7 @@ function runTypingRenderStabilityCheck() {
     const document = { activeElement: editor };
     let rendering = false, renderDeferred = false, selectionFrozen = false, renders = 0, caret = 17, scroll = 240;
     const renderOutline = () => { renders++; row.isConnected = false; document.activeElement = {}; caret = 0; scroll = 0; };
-    const markFalling = () => {};
+    const markFalling = () => {}, refreshRowChrome = () => {};
     ${functionSource('editingRow')}
     ${functionSource('render')}
     ({ trigger: (result) => render(result), blur: () => { document.activeElement = {}; render(); },
@@ -211,7 +212,7 @@ function runSensitiveBlurCheck() {
     ['palette hints', /blurSensitive\(h, r\.node && r\.node\.id\)/],
   ]) assert.match(source, pattern, surface + ' uses the shared sensitive treatment');
   assert.match(source, /async function loadRoots\(\)\s*\{\s*await loadSensitive\(\)/, 'sensitive ids load before any root node can render');
-  assert.doesNotMatch(sourceBetween('function setSensitiveMark', 'function startDrop'), /render\(/, 'marking and visibility changes update existing surfaces without rendering');
+  assert.doesNotMatch(functionSource('setSensitiveMark') + functionSource('toggleSensitiveVisibility'), /render\(/, 'marking and visibility changes update existing surfaces without rendering');
 }
 
 async function runSelectionChecks() {
@@ -492,7 +493,7 @@ async function runMultiTaskPaletteCheck() {
     ['Set status for 2 tasks', '2 skipped', false],
     ['Assign 2 tasks to', '2 skipped', false],
   ], 'palette labels report the eligible and skipped counts from the selected rows');
-  assert.deepEqual(plain(context.one()), ['Set status', 'Edit assignees'], 'one selected task keeps the single-task actions');
+  assert.deepEqual(plain(context.one()), ['Set status', 'Edit assignees', 'Assign to …'], 'one selected task keeps the single-task actions');
   assert.deepEqual(plain(context.locked()), [], 'one read-only selected task offers no mutation');
   // What acts on the selection comes first, in its own group, and reaches every selected row, not only the tasks.
   assert.deepEqual(plain(context.selection(['t1', 'meeting', 'locked', 't2'])), [
@@ -503,7 +504,7 @@ async function runMultiTaskPaletteCheck() {
     ['Selection', 'Mark 4 items as sensitive'],
     ['Selection', 'Delete 3 items'],
   ], 'a selection offers sensitivity for everything in it and the task actions for the tasks in it');
-  assert.deepEqual(plain(context.selection(['t2'])), [['Selection', 'Set status'], ['Selection', 'Edit assignees'], ['Selection', 'Add 1 item to Today'], ['Selection', 'Add 1 item to This Week'], ['Selection', 'Unmark 1 item as sensitive'], ['Selection', 'Delete 1 item']],
+  assert.deepEqual(plain(context.selection(['t2'])), [['Selection', 'Set status'], ['Selection', 'Edit assignees'], ['Selection', 'Assign to …'], ['Selection', 'Add 1 item to Today'], ['Selection', 'Add 1 item to This Week'], ['Selection', 'Unmark 1 item as sensitive'], ['Selection', 'Delete 1 item']],
     'one selected row is still a selection, and a marked one offers to unmark');
   // Delete reports what it can remove before it is run, the way the task actions do.
   assert.deepEqual(plain(context.del(['t1', 'meeting', 'locked', 't2'])), ['Delete 3 items', '1 skipped', false], 'a read-only row is counted as skipped, not deleted');
@@ -518,6 +519,7 @@ async function runMultiTaskPaletteCheck() {
     ['Current node', 'Complete', '', false],
     ['Current node', 'Set status', 'In Progress', false],
     ['Current node', 'Edit assignees', 'Loading…', false],
+    ['Current node', 'Assign to …', '', false],
     ['Current node', 'Add to Today', '', false],
     ['Current node', 'Add to This Week', '', false],
     ['Current node', 'Mark as sensitive', '', false],
@@ -561,7 +563,7 @@ async function runMultiTaskPaletteCheck() {
     let palTaskCtx = { docs, selected: 3, skipped: 1, fromSelection: true, multi: true };
     const STATES = [['proposed', 'Inbox'], ['open', 'In Progress'], ['closed', 'Completed'], ['not_now', 'Later']];
     const stateOf = (node) => node.stateType, memberName = (id) => members.find((member) => member.id === id).title;
-    const loadMembers = () => {}, render = () => {}, closePalette = () => { closed++; };
+    const loadMembers = () => {}, render = () => {}, closePalette = () => { closed++; }, holdRow = () => {};
     const showNote = (value) => { note = value; };
     const run = (fn) => Promise.resolve().then(fn).catch((error) => { throw error; });
     const tana = {
@@ -833,6 +835,7 @@ async function runStalePaletteInvalidationCheck() {
     const loadView = () => {};
     const render = () => {};
     const renderSoon = () => {};
+    const isTask = (node) => node.kind === 'document' && node.icon === 'task', relatedBy = new Map(), railGroups = () => [];
     const tanaNode = { text: 'beta' };
     const showError = (error) => { throw error; };
     const view = 'tasks';
@@ -1006,6 +1009,7 @@ async function runLinkPaletteCheck() {
     ${functionSource('chooseRow')}
     ${functionSource('settleEnter')}
     ${resultRows}
+    ${functionSource('titleHits')}
     ${searchNow}
     ${withShims(source.slice(start, end))}
     searchNow();
@@ -1038,9 +1042,17 @@ async function runLinkPaletteCheck() {
     const createAndLink = (ctx, title) => { created = title; }, linkTo = () => {}, openResult = () => {};
     const renderPalette = () => {}, showError = (error) => { throw error; }, recentRows = () => [{ id: 'r', title: 'Recent' }];
     ${resultRows}
+    ${functionSource('titleHits')}
     ${searchNow}
-    ({ type: (q) => { palInput.value = q; searchNow(); }, resolve: (rows) => searchResolve(rows), state: () => ({ palIndex, rows: palRows.map((row) => row.label) }), create: () => { palRows[0].run(); return created; } });
+    ({ type: (q) => { palInput.value = q; searchNow(); }, resolve: (rows) => searchResolve(rows), state: () => ({ palIndex, rows: palRows.map((row) => row.label) }), bold: () => palRows.map((row) => (row.match ? row.match.map((i) => row.label[i]).join('') : null)), create: () => { palRows[0].run(); return created; } });
   `);
+  // Search hits: the titles holding the most typed words lead, whatever order Tana answered in, and only those words are bold
+  caret.type('try 1');
+  caret.resolve([{ id: 'a', title: 'Finding the Balance' }, { id: 'b', title: 'Test OmniCharge and reply on Tue 1 Sep' }, { id: 'c', title: 'Try the 1-day framework' }, { id: 'd', title: 'Entry 12' }]);
+  await Promise.resolve(); await Promise.resolve();
+  assert.deepEqual(plain(caret.state().rows), ['Create “try 1”', 'Try the 1-day framework', 'Entry 12', 'Test OmniCharge and reply on Tue 1 Sep', 'Finding the Balance'],
+    'both words, both starting a word, first; both words inside words next; one word after; the body-only hit last');
+  assert.deepEqual(plain(caret.bold()).slice(1), ['Try1', 'try1', '1', ''], 'the typed words are bold, nothing else');
   caret.type('');
   assert.deepEqual(plain(caret.state()), { palIndex: 0, rows: ['Recent'] }, 'an empty caret palette lists recent nodes with no Create row');
   caret.type('Dan'); caret.resolve([{ id: 'x', title: 'Dana Brooks' }]); await Promise.resolve(); await Promise.resolve();
@@ -1080,7 +1092,6 @@ function runAuthPaletteCheck() {
     const run = () => {};
     const pinInfo = null, palDoc = null, hotkeys = {}, theme = 'light';
     const localDate = () => '2026-09-13';
-    const setIcon = () => {};
     const zoom = null, railEl = { hidden: true }, navBack = [], navForward = [];
     const setTheme = () => {};
     const startDrop = () => {};
@@ -1097,36 +1108,44 @@ function runAuthPaletteCheck() {
 }
 
 async function runSyncShortcutCheck() {
-  // Matching: a substring first, else word-prefix chunks in order, with the matched positions for the bold letters;
-  // "moinb" reaches "Move to Inbox" and "mt" reaches "Move to", but "xove" reaches nothing.
+  // Matching: a tiered match with the matched positions for the bold letters; "moinb" and "mti" reach "Move to Inbox",
+  // "in" reaches Inbox before "Zoom in", but "xove" reaches nothing.
   const match = vm.runInNewContext(`${functionSource('fuzzyMatch')}; ({ m: (l, q) => fuzzyMatch(l, q) });`);
   const marked = (label, q) => { const m = match.m(label, q); return m && [...label].map((c, i) => (m.includes(i) ? c.toUpperCase() : c.toLowerCase())).join(''); };
   assert.equal(marked('Move to Inbox', 'moinb'), 'MOve to INBox', 'word-prefix chunks in order');
-  assert.equal(marked('Move to Inbox', 'inbox'), 'move to INBOX', 'a substring wins as it is');
+  assert.equal(marked('Move to Inbox', 'mti'), 'Move To Inbox', 'the first letters of the words');
+  assert.equal(marked('Move to Inbox', 'inbox'), 'move to INBOX', 'a word the query starts wins as it is');
+  assert.deepEqual([['Inbox', 'in'], ['Move to Inbox', 'mti'], ['Zoom in', 'in'], ['Move to Inbox', 'moinb'], ['Pin to sidebar', 'in']].map(([l, q]) => match.m(l, q).rank), [0, 1, 2, 3, 4],
+    'tiers: a prefix, the first words\' initials, a later word, chunks that skip words, inside a word');
   assert.equal(marked('Set status In Progress', 'sspr'), 'Set Status in PRogress', 'a chunk may skip words');
   assert.equal(marked('Set status In Progress', 'ssp'), 'Set Status in Progress', 'and the shortest chunk that still leads on is taken');
   assert.equal(match.m('Move to Inbox', 'xove'), null, 'a letter that starts no word and no substring is out');
+  assert.equal(marked('Inbox', 'inbx'), 'INBoX', 'letters in order, with one left out, still reach the word');
+  assert.equal(match.m('Inbox', 'inbx').rank, 5, 'and rank below every other kind of match');
+  assert.equal(match.m('Sensitive', 'ntv'), null, 'but the first letter has to start a word');
   assert.deepEqual(plain(match.m('Anything', '')), [], 'no query: everything, nothing bold');
-  // The second level of a row is folded into the first once the first two letters match: its rows appear as
-  // "<row> <choice>" right after the row, loaded once, and the same query then filters them.
+  // The second level of a row is folded into the first once the first two letters reach it (a prefix or the initials):
+  // its rows appear as "<subBase> <choice>" right after the row, loaded once, and the same query then filters them.
   const folded = vm.runInNewContext(`
     const views = [], pinTree = [], pinRows = () => [], pillCommandRows = () => [], taskActionRows = () => [];
     let loads = 0;
-    const selectionRows = () => [{ id: 'status', group: 'Current node', label: 'Set status', keepOpen: true, run: () => {}, sub: () => { loads++; return [{ label: 'Inbox', run: () => {} }, { label: 'In Progress', run: () => {} }, { label: 'Later', disabled: true, run: () => {} }]; } }];
+    const selectionRows = () => [{ id: 'status', group: 'Current node', label: 'Set status', subBase: 'Set status to', keepOpen: true, run: () => {}, sub: () => { loads++; return [{ label: 'Inbox', run: () => {} }, { label: 'In Progress', run: () => {} }, { label: 'Later', disabled: true, run: () => {} }]; } }];
     const tana = { refresh: async () => {} }, run = () => {};
     const authed = true, authChecking = false, signedOut = false, theme = 'light', hotkeys = {}, themePref = 'light', pinInfo = null, palDoc = null;
-    const localDate = () => '2026-09-13', setIcon = () => {}, setTheme = () => {}, startDrop = () => {}, docRow = () => ({}), sectionOf = () => null;
+    const localDate = () => '2026-09-13', setTheme = () => {}, docRow = () => ({}), sectionOf = () => null;
     const zoom = null, railEl = { hidden: true }, navBack = [], navForward = [], sensitiveVisible = false;
     const showError = () => {}, palette = { hidden: false }, palMode = 'cmd', renderPalette = () => {};
     const setZoom = () => {}, navigate = () => {}, history = () => {}, togglePalette = () => {}, focusRail = () => {}, setView = () => {}, openDoc = () => {}, filterEl = {}, render = () => {}, zoomFactor = 1, BASE_ZOOM = 1;
-    const visibilityRows = () => [], moveTargets = async () => [], inboxTarget = () => [{ icon: "inbox", label: "Inbox", run: () => {} }], previewMoveToSpace = () => {};
+    const visibilityRows = () => [], moveTargets = async () => [], previewMoveToSpace = () => {};
     ${sourceBetween('const NODE_ROW_ORDER', 'function paletteRows')}
     ${functionSource('paletteRows')}
     ({ rows: async (q) => { paletteRows(q); await Promise.resolve(); await Promise.resolve(); return paletteRows(q).map((r) => r.label); }, loads: () => loads });
   `);
-  assert.deepEqual(plain(await folded.rows('s')), ['Set status', 'Search Tana', 'Filter rows', 'Sync', 'Smaller text', 'Reset text size'], 'one letter: the first level only');
-  assert.deepEqual(plain(await folded.rows('sesp')), ['Set status In Progress'], 'two letters in: the level below is folded in and the query reaches into it');
-  assert.deepEqual(plain(await folded.rows('seinb')), ['Set status Inbox'], 'a disabled choice is left out, the others are single rows');
+  assert.deepEqual(plain(await folded.rows('s')), ['Set status', 'Search Tana', 'Sync', 'Smaller text', 'Reset text size', 'Filter rows by text'],
+    'one letter: the first level only, the groups whose best row starts with it first, a letter inside a word last');
+  assert.deepEqual(plain(await folded.rows('sesp')), ['Set status to In Progress'], 'two letters in: the level below is folded in and the query reaches into it');
+  assert.deepEqual(plain(await folded.rows('seinb')), ['Set status to Inbox'], 'a disabled choice is left out, the others are single rows');
+  assert.deepEqual(plain(await folded.rows('ssin')), ['Set status to Inbox', 'Set status to In Progress'], 'the initials of the row open its level too');
   assert.equal(folded.loads(), 1, 'the level is loaded once per palette');
 
   // Expanding a row loads its children while the caret is still in that row: the render that shows them must be the
@@ -1151,30 +1170,36 @@ async function runSyncShortcutCheck() {
   // sequence (open, task state, where it lives, what it looks like, link, delete last), then Views, view options,
   // and Actions from "get in" to the app's own settings.
   const order = vm.runInNewContext(`
-    const views = [{ id: 'library', title: 'Library', icon: 'library' }, { id: 'tasks', title: 'Tasks', icon: 'task' }], pinTree = [], pinRows = () => [];
+    const views = [{ id: 'library', title: 'Library', icon: 'library', nodes: [] }, { id: 'tasks', title: 'Tasks', icon: 'task', nodes: [] }, { id: 'inbox', title: 'Inbox', icon: 'inbox', nodes: [] }], pinTree = [], pinRows = () => [];
     const selectionRows = () => [{ id: 'delete', group: 'Current node', label: 'Delete' }, { id: 'sensitive', group: 'Current node', label: 'Mark as sensitive' }, { id: 'zoomIn', group: 'Current node', label: 'Zoom in' }, { id: 'status', group: 'Current node', label: 'Set status' }];
-    const pillCommandRows = () => [{ id: 'pill:type', group: 'View options', label: 'Set view option: Type' }], taskActionRows = () => [];
-    const tana = { refresh: async () => {}, todayNode: async () => {}, weekNode: async () => {}, nodeLink: async () => {}, setIcon: () => {}, accessOptions: async () => {}, filters: {}, sensitiveIds: () => {}, creationOptions: async () => {} }, run = () => {};
+    const pillCommandRows = () => [{ id: 'pill:type', group: 'View options', label: 'Filter by type' }], taskActionRows = () => [];
+    const tana = { refresh: async () => {}, todayNode: async () => {}, weekNode: async () => {}, nodeLink: async () => {}, accessOptions: async () => {}, filters: {}, sensitiveIds: () => {}, creationOptions: async () => {} }, run = () => {};
     const authed = true, authChecking = false, signedOut = true, theme = 'light', hotkeys = {}, themePref = 'light';
-    const palDoc = { id: 'tana:text:01j0doc000000000000000000', iconSvg: '<svg/>' }, pinInfo = { docId: palDoc.id, sidebar: false, dates: [] };
+    const palDoc = { id: 'tana:text:01j0doc000000000000000000' }, pinInfo = { docId: palDoc.id, sidebar: false, dates: [] };
     const accessById = new Map([[palDoc.id, { sharing: true, move: true, ownerUri: 'tana:space:01j0space00000000000000000' }]]), loadAccess = () => {}, isRealId = () => true;
-    const localDate = () => '2026-09-13', setIcon = () => {}, setTheme = () => {}, startDrop = () => {}, docRow = () => ({}), sectionOf = () => null;
+    const localDate = () => '2026-09-13', setTheme = () => {}, docRow = () => ({}), sectionOf = () => null;
+    const palette = { hidden: false }, palMode = 'cmd', renderPalette = () => {}, showError = () => {};
     const zoom = null, railEl = { hidden: false }, navBack = [], navForward = [], sensitiveVisible = false;
     const openCreationPalette = () => {}, openHiddenPalette = () => {}, toggleSensitiveVisibility = () => {}, followSystem = () => {}, openVisibilityPalette = () => {}, openMovePalette = () => {}, pinAction = () => {}, copyText = () => {}, togglePalette = () => {}, navigate = () => {}, history = () => {}, focusRail = () => {}, setZoom = () => {}, goTo = () => {}, setView = () => {}, openDoc = () => {}, filterEl = {}, render = () => {}, zoomFactor = 1, BASE_ZOOM = 1;
     ${sourceBetween('const NODE_ROW_ORDER', 'function paletteRows')}
-    const visibilityRows = () => [], moveTargets = async () => [], inboxTarget = () => [{ icon: "inbox", label: "Inbox", run: () => {} }], previewMoveToSpace = () => {};
+    const visibilityRows = () => [], moveTargets = async () => [], previewMoveToSpace = () => {};
     ${functionSource('paletteRows')}
-    paletteRows('').map((row) => row.group + ': ' + row.label);
+    ({ labels: (q) => paletteRows(q).map((row) => row.group + ': ' + row.label) });
   `);
-  assert.deepEqual(plain(order), [
-    'Current node: Zoom in', 'Current node: Set status', 'Current node: Pin to sidebar', 'Current node: Pin to today', 'Current node: Move to…', 'Current node: Move to Inbox', 'Current node: Move to Library',
-    'Current node: Set Image', 'Current node: Remove icon', 'Current node: Edit visibility', 'Current node: Mark as sensitive', 'Current node: Copy link', 'Current node: Delete',
-    'Views: Today', 'Views: This week', 'Views: Tasks', 'Views: Library',
-    'View options: Set view option: Type',
-    'Actions: Log in to Tana', 'Actions: Create new…', 'Actions: Search Tana', 'Actions: Filter rows', 'Actions: Go back', 'Actions: Go forward', 'Actions: Focus the sidebar',
+  assert.deepEqual(plain(order.labels('')), [
+    'Current node: Zoom in', 'Current node: Set status', 'Current node: Pin to sidebar', 'Current node: Pin to today', 'Current node: Move to …', 'Current node: Move to Library',
+    'Current node: Edit visibility', 'Current node: Mark as sensitive', 'Current node: Copy link', 'Current node: Delete',
+    'Views: Inbox', 'Views: Today', 'Views: This week', 'Views: Tasks', 'Views: Library',
+    'View options: Filter by type', 'View options: Filter rows by text',
+    'Actions: Log in to Tana', 'Actions: Create new…', 'Actions: Search Tana', 'Actions: Go back', 'Actions: Go forward', 'Actions: Focus the sidebar',
     'Actions: Undo', 'Actions: Redo', 'Actions: Sync', 'Actions: Edit hidden items', 'Actions: Toggle sensitive visibility',
     'Actions: Larger text', 'Actions: Smaller text', 'Actions: Reset text size', 'Actions: Toggle dark mode',
   ], 'the palette lists its rows in one fixed, meaningful order');
+  // With a query the best match leads, whichever group it is in: Inbox starts with "in", Zoom in only has it as a word.
+  const inRows = plain(order.labels('in'));
+  assert.equal(inRows[0], 'Views: Inbox', 'a label that starts with the query comes first');
+  assert.ok(inRows.indexOf('Current node: Zoom in') > 0, 'and a later word after it');
+  assert.equal(plain(order.labels('mtl'))[0], 'Current node: Move to Library', 'the first letters of the words reach the row');
 
   const anchor = source.indexOf("filterEl.addEventListener('keydown'");
   const start = source.indexOf("document.addEventListener('keydown', (e) => {", anchor);
@@ -1200,6 +1225,34 @@ async function runSyncShortcutCheck() {
   context.handler({ key: 'r', metaKey: true, ctrlKey: false, shiftKey: false, defaultPrevented: false, preventDefault: () => { prevented = true; } });
   assert.equal(prevented, false, 'Cmd+R remains available to the host instead of invoking Sync');
 
+  // A row that is only a mention chip shows no caret and Chromium will not delete the chip, so the row is marked
+  // .chiponly (its focus is drawn around the chip) and Backspace or Delete removes the row, like an image.
+  const chip = vm.runInNewContext(`${sourceBetween('const chipOnly', 'function focused')}; ({ chipOnly })`);
+  const mention = { nodeType: 1, classList: { contains: (c) => c === 'mention' } }, words = { nodeType: 3 };
+  assert.equal(chip.chipOnly({ childNodes: [mention], firstChild: mention }), true, 'one chip and nothing else is a chip-only row');
+  assert.equal(chip.chipOnly({ childNodes: [mention, words], firstChild: mention }), false, 'text typed beside it makes it an ordinary row again');
+  assert.equal(chip.chipOnly({ childNodes: [words], firstChild: words }), false, 'plain text is not');
+  assert.match(source, /\(e\.key === 'Backspace' \|\| e\.key === 'Delete'\) && chipOnly\(el\)\) \{ e\.preventDefault\(\); return removeNode\(item, el\); \}/, 'Backspace on a chip-only row removes it');
+  assert.match(source, /text\.classList\.toggle\('chiponly', chipOnly\(text\)\)/, 'a rendered row knows it is chip-only');
+  assert.match(source, /el\.classList\.toggle\('chiponly', chipOnly\(el\)\)/, 'and typing beside the chip updates that');
+
+  // Dimming the row a deferred render would drop looks at the top-level row: a caret in a block under an expanded task
+  // is not a row leaving the view (every new block, and the block the caret fell back to after a delete, used to dim).
+  const falling = vm.runInNewContext(`
+    const outline = {};
+    const rowOf = (key, parentRow) => { const classes = new Set(); return { dataset: { key }, classes, parentElement: parentRow ? { closest: () => parentRow } : outline, classList: { toggle: (c, on) => (on ? classes.add(c) : classes.delete(c)) } }; };
+    const task = rowOf('tana:text:task'), block = rowOf('tana:text:task/b1', task), rows = { [task.dataset.key]: task, [block.dataset.key]: block };
+    let zoom = null, caret = null, inView = true;
+    const focused = () => (caret ? { key: caret, offset: 0 } : null), nodeElOf = (key) => rows[key];
+    const viewOf = () => ({ nodes: inView ? [{ id: 'tana:text:task', kind: 'document' }] : [] });
+    const keyFor = (docId, node) => (node.kind === 'document' ? docId : docId + '/' + node.id);
+    ${functionSource('markFalling')}
+    ({ mark: (key, stays) => { caret = key; inView = stays; task.classes.clear(); block.classes.clear(); markFalling(); return { task: task.classes.has('falling'), block: block.classes.has('falling') }; } });
+  `);
+  assert.deepEqual(plain(falling.mark('tana:text:task/b1', true)), { task: false, block: false }, 'typing in a block under a task that stays in the view dims nothing');
+  assert.deepEqual(plain(falling.mark('tana:text:task', false)), { task: true, block: false }, 'a task row that left the view dims while you are still in it');
+  assert.deepEqual(plain(falling.mark('tana:text:task/b1', false)), { task: true, block: false }, 'and a block under a task that left dims that task row, the one that will go');
+
   const paletteRows = functionSource('paletteRows');
   const rows = vm.runInNewContext(`
     const views = [], pinTree = [], pinRows = () => [], selectionRows = () => [];
@@ -1207,7 +1260,7 @@ async function runSyncShortcutCheck() {
     const taskActionRows = () => [];
     const tana = { refresh: async () => {} }, run = () => {};
     const authed = true, authChecking = false, signedOut = false, pinInfo = null, palDoc = null, hotkeys = {}, theme = 'light';
-    const localDate = () => '2026-09-13', setIcon = () => {}, setTheme = () => {}, startDrop = () => {};
+    const localDate = () => '2026-09-13', setTheme = () => {};
     const docRow = () => ({}), sectionOf = () => null;
     const zoom = null, railEl = { hidden: true }, navBack = [], navForward = [];
     ${paletteRows}
@@ -1961,7 +2014,7 @@ function runSortGroupCheck() {
     const isTask = (n) => n.icon === 'task';
     const visibleTags = (n) => { const tags = n.tags || []; return isTask(n) && tags.some((t) => t.label !== 'task') ? tags.filter((t) => t.label !== 'task') : tags; };
     ${definitions}
-    ({ pillDefs, groupRows, groupsOf, sortRows, SORTS, SORT_KEY,
+    ({ pillDefs, groupRows, groupsOf, sortRows, SORTS, SORT_KEY, holdRow, releaseHeld, needsCleanup,
        set: (next, by, order) => { view = next; groupPref[next] = by; sortPref[next] = order; },
        prefs: () => ({ group: groupBy(), sort: sortBy() }) });
   `);
@@ -1982,8 +2035,25 @@ function runSortGroupCheck() {
   assert.deepEqual(titles(rows, 'type'), [['doc', ['d1']], ['Project', ['t1']], ['task', ['t2', 't3', 't4']]],
     'type groups on the tag the row already shows as its chip');
   assert.deepEqual(titles([{ id: 'x', tags: [] }], 'type'), [['No type', ['x']]], 'a row without tags groups under No type');
+  const ago = (ms) => new Date(Date.now() - ms).toISOString();
+  const aged = [['u1', ago(10 * 60e3)], ['u2', ago(5 * 36e5)], ['u3', ago(3 * 864e5)], ['u4', ago(20 * 864e5)], ['u5', ago(90 * 864e5)], ['u6', undefined], ['u7', ago(20 * 60e3)]]
+    .map(([id, updatedAt]) => ({ id, updatedAt, tags: [] }));
+  assert.deepEqual(titles(aged, 'updated'), [['Last hour', ['u1', 'u7']], ['Last day', ['u2']], ['Last week', ['u3']], ['Last month', ['u4']], ['Older', ['u5', 'u6']]],
+    'Updated groups run newest first; past a month, or without a time, a row is Older');
   assert.deepEqual(titles([{ id: 'x', icon: 'task', done: 1, stateType: 'proposed', tags: [] }], 'status'), [['Inbox', ['x']]],
     'the row state wins over the done flag, so an Inbox task never reads as Completed');
+  // Stay put: a clicked Inbox task keeps its group and place (Tasks groups by Status by default) until it is released
+  const inboxTask = { id: 'h1', icon: 'task', done: 0, stateType: 'proposed', tags: [{ label: 'task' }] }, openTask = { id: 'h2', icon: 'task', done: 0, stateType: 'open', tags: [{ label: 'task' }] };
+  const onScreen = (list) => plain(api.groupsOf(api.sortRows(list))).map((g) => [g.title, g.nodes.map((n) => n.id)]);
+  assert.deepEqual(onScreen([inboxTask, openTask]), [['Inbox', ['h1']], ['In Progress', ['h2']]]);
+  api.holdRow(inboxTask);
+  assert.equal(api.needsCleanup([inboxTask, openTask]), false, 'a held row whose state has not moved yet needs no Clean up');
+  inboxTask.stateType = 'open'; // what toggleDone does: hold first, then accept
+  assert.equal(api.needsCleanup([openTask, inboxTask]), true, 'the kept row now sits where the view would not put it, so Clean up is offered');
+  assert.deepEqual(onScreen([openTask, inboxTask]), [['Inbox', ['h1']], ['In Progress', ['h2']]], 'the clicked row keeps its group and every row its place, whatever order a refresh brings');
+  api.releaseHeld();
+  assert.deepEqual(onScreen([openTask, inboxTask]), [['In Progress', ['h2', 'h1']]], 'once the view is left, the row sits in its new group');
+  assert.equal(api.needsCleanup([openTask, inboxTask]), false, 'and nothing is left to clean up');
   const order = (list) => plain(api.sortRows(list)).map((n) => n.id);
   api.set('tasks', 'none', 'title');
   assert.deepEqual(order(rows), ['t2', 't1', 't4', 't3', 'd1'], 'Title sorts the loaded rows by their own title, case-insensitively');
@@ -2000,7 +2070,9 @@ function runSortGroupCheck() {
   assert.equal(api.groupsOf(rows).length, 3, 'a grouped view sections its rows');
   assert.deepEqual(plain(api.prefs()), { group: 'type', sort: 'title' }, 'each view remembers its own choice');
   api.set('tasks', undefined, undefined);
-  assert.deepEqual(plain(api.prefs()), { group: 'none', sort: 'default' }, 'and an unset view falls back to None / Default');
+  assert.deepEqual(plain(api.prefs()), { group: 'status', sort: 'updated' }, 'an unset Tasks view groups by Status, most recently updated first');
+  api.set('library', undefined, undefined);
+  assert.deepEqual(plain(api.prefs()), { group: 'none', sort: 'default' }, 'and any other unset view falls back to None / Default');
   api.set('people', undefined, undefined);
   assert.deepEqual(plain(api.prefs()), { group: 'none', sort: 'title' }, 'People is a list of names, so it reads A→Z until the user picks another order');
   api.set('people', undefined, 'updated');
@@ -2017,12 +2089,39 @@ function runSortGroupCheck() {
   const sort = defs.find((d) => d.id === 'sort'), group = defs.find((d) => d.id === 'group');
   assert.deepEqual(plain([sort.label, sort.value, group.label, group.value]), ['Sort', 'Title', 'Group', 'Status'], 'both pills read their active option');
   assert.deepEqual(plain(sort.rows().map((r) => r.label)), ['Default', 'Updated', 'Created', 'Title'], 'the Sort menu offers only orders backed by row data');
-  assert.deepEqual(plain(group.rows().map((r) => r.label)), ['None', 'Status', 'Assignee', 'Type'], 'the Group menu offers the four groupings');
+  assert.deepEqual(plain(group.rows().map((r) => r.label)), ['None', 'Status', 'Assignee', 'Updated', 'Type'], 'the Group menu offers the five groupings');
   assert.ok(sort.rows().find((r) => r.label === 'Title').checked && group.rows().find((r) => r.label === 'Status').checked, 'the active option is ticked');
   assert.ok([...sort.rows(), ...group.rows()].every((r) => !r.keepOpen), 'choosing an option closes the popup, like every other single choice');
   assert.match(source, /const groups = groupsOf\(list\);/, 'the view renders its groups');
   assert.match(source, /groups\.flatMap\(\(g\) => \[groupHeadEl\(g\.title\)/, 'each group is introduced by a heading');
   assert.match(source, /list = sortRows\(list\);/, 'the rows are sorted before they are grouped');
+  assert.match(source, /label: 'Set status', subBase: 'Set status to'[^\n]*subAlways: true/, 'Set status folds its four statuses in for any query, like Move to …');
+  assert.match(source, /label: `Set status for \$\{count\} \$\{noun\}`[^\n]*subAlways: true/, 'and so does Set status for a selection');
+  // A reused row keeps whatever its checkbox shows: accepting an Inbox task changes only its state, so that must rebuild it
+  const rowSig = vm.runInNewContext(`
+    const taskMetaById = new Map(), taskMetaLoading = new Set(), open = new Map(), pending = new Map(), members = null;
+    const sensitiveHidden = () => false;
+    ${functionSource('rowSig')}
+    rowSig;
+  `);
+  const inboxRow = { id: 'r', text: 'Task', done: 0, icon: 'task', kind: 'document', stateType: 'proposed', tags: [] };
+  assert.notEqual(rowSig(inboxRow), rowSig({ ...inboxRow, stateType: 'open' }), 'accepting an Inbox task rebuilds its row, so the box does not keep the tick the click put in it');
+  assert.match(source, /renderDeferred = true; markFalling\(\); refreshRowChrome\(\); return;/, 'a render that waits for the caret still brings every checkbox up to date');
+  // A task's state also lives in copies (a reference in an open note, nested or not; a sidebar row): a change patches them
+  const copies = vm.runInNewContext(`
+    const ref = (id) => ({ id, type: 'reference', reference: { uri: 'tana:text:t1', node: { id: 'tana:text:t1', text: 'Task', title: 'Task', stateType: 'open', done: 0 } } });
+    const kids = new Map([['note', [{ ...ref('b1'), children: [ref('b2')] }]], ['loading', null]]);
+    const relatedBy = new Map([['hub', { pinned: [{ id: 'tana:text:t1', text: 'Task', stateType: 'open', done: 0 }], outcomes: [{ id: 'tana:text:t2', stateType: 'open', done: 0 }], notes: [] }], ['pending', null]]);
+    ${functionSource('railGroups')}
+    ${functionSource('patchCopies')}
+    patchCopies('tana:text:t1', { stateType: 'proposed', done: 0, title: undefined });
+    ({ note: kids.get('note'), related: relatedBy.get('hub') });
+  `);
+  assert.equal(copies.note[0].reference.node.stateType, 'proposed', 'a reference row in an open note gets the new state');
+  assert.equal(copies.note[0].children[0].reference.node.stateType, 'proposed', 'a nested one too');
+  assert.equal(copies.note[0].reference.node.title, 'Task', 'a value the change does not carry is left alone');
+  assert.equal(copies.related.pinned[0].stateType, 'proposed', 'the sidebar row of the task gets it');
+  assert.equal(copies.related.outcomes[0].stateType, 'open', 'and another task keeps its own');
 }
 
 function runCmdPillsCheck() {
@@ -2034,7 +2133,7 @@ function runCmdPillsCheck() {
       ['inbox', { types: null, states: ['proposed'], assignee: 'anyone', text: '' }],
       ['meetings', { types: ['meetings'], states: null, assignee: 'anyone', text: '', participant: 'me', window: 'recent' }],
       ['library', { types: ['tasks'], states: ['open'], assignee: 'anyone', text: '' }],
-      ['chats', { types: ['chats'], states: null, assignee: 'anyone', text: '', mcp: false }],
+      ['chats', { types: ['chats'], states: null, assignee: 'anyone', text: '' }],
       ['people', { types: ['people'], states: null, assignee: 'anyone', text: '' }],
     ]);
     // Tasks, Meetings, Chats and People are kind pages: the type is their identity, not a filter (main sends the flag)
@@ -2053,15 +2152,15 @@ function runCmdPillsCheck() {
     ${functionSource('openPillPalette')}
     ${functionSource('openCommandPalette')}
     ({
-      commands: (next) => { view = next; return pillCommandRows().map((row) => [row.id, row.label, row.icon]); },
+      commands: (next) => { view = next; return pillCommandRows().map((row) => [row.id, row.label, row.hint, row.icon]); },
       open: (id) => { openPillPalette(id); return { mode: palMode, rows: pillRows('').map((row) => [row.label, row.hint]) }; },
       pick: (label) => { pillRows('').find((row) => row.label === label).run(); return { mode: palMode, filter: filters.get(view), group: groupPref[view], sort: sortPref[view] }; },
     });
   `);
   assert.deepEqual(plain(api.commands('tasks')), [
-    ['pill:status', 'Set view option: Status In Progress', 'status'], ['pill:assigned', 'Set view option: Assigned to Anyone', 'assigned'],
-    ['pill:sort', 'Set view option: Sort Default', 'sort'], ['pill:group', 'Set view option: Group None', 'group'],
-  ], 'Cmd+K prefixes the current Tasks view options and gives each its supplied icon, and Tasks is a kind page with no type to pick');
+    ['pill:status', 'Filter by status', 'In Progress', 'status'], ['pill:assigned', 'Filter by assignee', 'Anyone', 'assigned'],
+    ['pill:sort', 'Sort by', 'Updated', 'sort'], ['pill:group', 'Group by', 'Status', 'group'],
+  ], 'Cmd+K names the current Tasks view options for what they do, with the value as the hint and each its supplied icon (Tasks groups by Status until told otherwise), and Tasks is a kind page with no type to pick');
   assert.deepEqual(plain(api.open('status')), { mode: 'pill', rows: [['Any status', ''], ['Inbox', ''], ['In Progress', '✓'], ['Completed', ''], ['Later', '']] },
     'a command opens the same Status rows and active tick as the pill');
   assert.equal(api.pick('Inbox').mode, 'pill', 'a multi-select filter stays in its pill sublevel');
@@ -2074,10 +2173,21 @@ function runCmdPillsCheck() {
   // turned into a different one; the Library picks its kinds, and so does the Inbox, which is a state, not a kind.
   assert.deepEqual(plain(api.commands('library').map(([id]) => id)), ['pill:type', 'pill:status', 'pill:assigned', 'pill:sort', 'pill:group'],
     'Library includes its Type filter plus the other applicable pills');
-  assert.deepEqual(plain(api.commands('inbox').map(([id]) => id)), ['pill:type', 'pill:status', 'pill:assigned', 'pill:mcp', 'pill:sort', 'pill:group'],
-    'the Inbox is a state rather than a kind, so it still picks types — and chats are among them, hence the MCP toggle');
+  assert.deepEqual(plain(api.commands('inbox').map(([id]) => id)), ['pill:type', 'pill:status', 'pill:assigned', 'pill:sort', 'pill:group'],
+    'the Inbox is a state rather than a kind, so it still picks types');
   assert.deepEqual(plain(api.commands('meetings').map(([id]) => id)), ['pill:sort', 'pill:group'], 'Meetings is meetings: layout pills only');
-  assert.deepEqual(plain(api.commands('chats').map(([id]) => id)), ['pill:mcp', 'pill:sort', 'pill:group'], 'Chats keeps the MCP toggle from its filter, but not a type');
+  // Right on a pill steps to the next one; past the last (Group) it goes down to the first node, the way Up from
+  // that node reaches the last pill (focusAbove).
+  const pillArrows = vm.runInNewContext(`
+    let menu = null, caret = null, focused = null;
+    const renderPills = () => {}, texts = () => ['first node'], setCaret = (el, offset) => { caret = [el, offset]; };
+    ${functionSource('pillKeys')}
+    const pill = (hasNext) => ({ previousElementSibling: null, nextElementSibling: hasNext ? { focus: () => { focused = 'next pill'; } } : null });
+    ({ right: (hasNext) => { caret = focused = null; pillKeys({ key: 'ArrowRight', preventDefault() {} }, { rows: () => [] }, pill(hasNext)); return { caret, focused }; } });
+  `);
+  assert.deepEqual(plain(pillArrows.right(true)), { caret: null, focused: 'next pill' }, 'Right moves along the pills');
+  assert.deepEqual(plain(pillArrows.right(false)), { caret: ['first node', 0], focused: null }, 'and from the last pill to the first node');
+  assert.deepEqual(plain(api.commands('chats').map(([id]) => id)), ['pill:sort', 'pill:group'], 'Chats is chats: layout pills only');
   assert.deepEqual(plain(api.commands('people').map(([id]) => id)), ['pill:sort', 'pill:group'], 'People is people: nothing to filter by type, status or assignee');
   assert.match(functionSource('backPalette'), /palMode === 'pill'[\s\S]*openCommandPalette\(\)/, 'Escape from a pill returns one palette level');
 }
@@ -2119,6 +2229,54 @@ function runDraftTailCheck() {
   assert.deepEqual(ids(api.tail([], doc)), [], 'children that are still loading are not an empty document');
   assert.match(source, /caretOnOpen = false;\n\s+const last = list\.at\(-1\)/, 'the caret lands in that row once per open, not on every render');
   assert.match(source, /flushAll\(\); dropDrafts\(\); caretOnOpen = true;/, 'both routes into a node (zoomTo, openDoc) ask for it');
+  assert.match(source, /el\.focus\(\{ preventScroll: true \}\); setCaret\(el, 0\); scrollOnType = true;/,
+    'the caret is parked in the draft tail without scrolling the open to the bottom of a long node');
+  assert.match(source, /if \(caretOnOpen\) outline\.parentElement\.scrollTop = 0;/,
+    'and the open itself lands at the top, through both the "Loading…" render and the one the children arrive on');
+}
+
+// Opening a node puts the caret in the draft tail at the bottom while the page stays at the top; the first character
+// typed is what scrolls down to it, once.
+function runCaretOnOpenScrollCheck() {
+  const api = vm.runInNewContext(`
+    let scrollOnType = false, scrolls = [];
+    const chipOnly = () => false;
+    const item = { key: 'doc/b', busy: false, node: { kind: 'block', draft: false } };
+    const items = new Map([[item.key, item]]);
+    const keyOfEl = () => item.key;
+    let editable = true;
+    const canEditText = () => editable;
+    const scheduleSave = () => {}, readSegs = () => [], materialise = () => {}, openSlash = () => {};
+    const palette = { hidden: true };
+    const el = {
+      textContent: 'a', classList: { toggle: () => {} },
+      closest: (sel) => (sel === '.text' ? el : null),
+      scrollIntoView: (opts) => { scrolls.push(opts); },
+    };
+    let handler = null;
+    const outline = { addEventListener: (name, fn) => { if (name === 'input') handler = fn; } };
+    ${sourceBetween("outline.addEventListener('input'", "outline.addEventListener('focusout'")}
+    ({
+      open: () => { scrollOnType = true; },
+      type: () => { handler({ target: el }); return { scrolls: scrolls.slice(), armed: scrollOnType }; },
+      setEditable: (value) => { editable = value; },
+      reset: () => { scrolls = []; scrollOnType = false; },
+    });
+  `);
+
+  api.open();
+  assert.deepEqual(plain(api.type()), { scrolls: [{ block: 'nearest' }], armed: false },
+    'the first character typed scrolls the parked row into view, by the smallest move that shows it');
+  assert.deepEqual(plain(api.type()), { scrolls: [{ block: 'nearest' }], armed: false },
+    'and only that one: later keystrokes in the same row never scroll again');
+  api.reset();
+  assert.deepEqual(plain(api.type()), { scrolls: [], armed: false },
+    'typing in a node that was not just opened scrolls nothing');
+  api.reset();
+  api.open();
+  api.setEditable(false);
+  assert.deepEqual(plain(api.type()), { scrolls: [], armed: true },
+    'a read-only row is not typing, so it neither scrolls nor spends the one-shot the real row is still waiting on');
 }
 
 // Every list row says who can see it, not only task rows, and the metadata request waits for the row to be on screen.
@@ -2289,12 +2447,16 @@ async function runHiddenItemsCheck() {
 
 // A view that gains and loses rows between two renders: arrivals flash, departures go back where they were.
 function runRowChangeAnimationCheck() {
+  // The zoomed branch of render() replaces every row without going through animateRows, so the harness models it —
+  // but only clears animView when the real source does, or the round-trip test below would pass whatever the code says.
+  const clearsOnZoom = /animView = null; \/\/ a zoom replaced every row/.test(source);
   const api = vm.runInNewContext(`
     const mk = (key, draft) => { const c = new Set(draft ? ['node', 'draft'] : ['node']);
       return { dataset: { key }, querySelectorAll: () => [],
         classList: { add: (n) => c.add(n), remove: (...n) => n.forEach((x) => c.delete(x)), contains: (n) => c.has(n) },
         remove() { outline.children = outline.children.filter((el) => el !== this); } }; };
     let view = 'tasks', animView = null;
+    const CLEARS_ON_ZOOM = ${clearsOnZoom};
     const timers = [], setTimeout = (fn) => timers.push(fn);
     const outline = { children: [], insertBefore(el, ref) { outline.children.splice(ref ? outline.children.indexOf(ref) : outline.children.length, 0, el); } };
     const nodeElOf = (key) => outline.children.find((el) => el.dataset.key === key) || null;
@@ -2306,6 +2468,7 @@ function runRowChangeAnimationCheck() {
         animateRows(before);
         return outline.children.map((el) => el.dataset.key + (el.classList.contains('entering') ? '+' : '') + (el.classList.contains('leaving') ? '-' : ''));
       },
+      zoom: (keys) => { outline.children = keys.map((k) => mk(k)); if (CLEARS_ON_ZOOM) animView = null; },
       switchView: (next) => { view = next; },
       expire: () => { timers.splice(0).forEach((fn) => fn()); return outline.children.map((el) => el.dataset.key); },
     });
@@ -2322,14 +2485,28 @@ function runRowChangeAnimationCheck() {
   const many = Array.from({ length: 40 }, (_, i) => 'r' + i);
   api.switchView('bulk'); api.render(many); // settle a big list, then replace it wholesale
   assert.deepEqual(plain(api.render(['one'])), ['one'], 'a wholesale change is the list changing, not forty rows falling away one by one');
+  // loadView resolves after the render that asked for it (renderer/nodes.js), so opening a view that has never been
+  // loaded paints zero rows first. That empty paint must not spend the first-paint guard, or the render the rows
+  // actually arrive on sees an empty `before` and flashes the whole view green.
+  api.switchView('slow');
+  assert.deepEqual(plain(api.render([])), [], 'a view whose rows have not arrived yet paints nothing');
+  assert.deepEqual(plain(api.render(['s1', 's2', 's3'])), ['s1', 's2', 's3'],
+    'and the rows that then arrive are that view appearing, not three arrivals');
+  // Zooming replaces every row without going through animateRows, and a zoomed block row is keyed docId/nodeId while
+  // a view row is keyed by its document id, so on the way back nothing in `before` matched and every row looked new.
+  api.switchView('zoomed');
+  assert.deepEqual(plain(api.render(['z1', 'z2'])), ['z1', 'z2'], 'the view settles before the zoom');
+  api.zoom(['z1/b1', 'z1/b2']);
+  assert.deepEqual(plain(api.render(['z1', 'z2'])), ['z1', 'z2'],
+    'and coming back from a zoom flashes nothing: those rows never went anywhere');
 }
 
 // The row you are typing in can stop belonging to the view (complete the task you are editing). It stays, dimmed.
 function runFallingRowCheck() {
   const api = vm.runInNewContext(`
     let zoom = null, focusedKey = 'a', nodes = [];
-    const classes = new Set();
-    const el = { classList: { toggle: (name, on) => { if (on) classes.add(name); else classes.delete(name); } } };
+    const classes = new Set(), outline = {};
+    const el = { parentElement: outline, dataset: { get key() { return focusedKey; } }, classList: { toggle: (name, on) => { if (on) classes.add(name); else classes.delete(name); } } };
     const focused = () => (focusedKey ? { key: focusedKey } : null);
     const nodeElOf = (key) => (key === focusedKey ? el : null);
     const viewOf = () => ({ nodes });
@@ -2433,7 +2610,7 @@ async function runMemberLoadCheck() {
   assert.equal(throttled.attempts, 3, 'a slow start cannot turn renders into a request loop: a fresh ask is throttled');
 }
 
-const checks = [runDraftTailCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck];
+const checks = [runDraftTailCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck];
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);
   if (failures.length) throw new AggregateError(failures, failures.map((failure) => failure.message).join('\n'));

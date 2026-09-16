@@ -39,8 +39,8 @@ function mockApi() {
     { id: 'mockspacedoc1', text: 'Draft the LT agenda', kind: 'document', done: 0, hasChildren: true, icon: 'task', tags: [task] },
   ];
   const space = { id: 'tana:space:mock', text: 'Studio LT', kind: 'document', hasChildren: true, icon: 'space', hue: 150, tags: [{ label: 'space', color: 'grey' }] };
-  // other library kinds (chats, canvases, agents, skills): read-only rows, plain bullet + kind chip
-  const kinds = ['chat', 'canvas', 'agent', 'skill'].map((k, i) => ({ id: 'tana:' + k + ':mock' + i, text: 'Sample ' + k, kind: 'document', hasChildren: true, tags: [{ label: k, color: 'grey' }] }));
+  // other library kinds (chats, canvases, agents, skills, saved searches): read-only rows, plain bullet + kind chip
+  const kinds = ['chat', 'canvas', 'agent', 'skill', 'search'].map((k, i) => ({ id: 'tana:' + k + ':mock' + i, text: 'Sample ' + k, kind: 'document', hasChildren: true, tags: [{ label: k, color: 'grey' }] }));
   // chats (api.chats): newest first; "MCP: …" ones carry meta 'MCP' and are hidden unless includeMcp
   const chats = ['Draft the Studio memo', 'MCP: list open tasks', 'Summarise the leadership notes', 'MCP: create meeting note', 'Rewrite the agreement clause']
     .map((text, i) => ({ id: 'tana:chat:mockchat' + i, text, kind: 'document', hasChildren: true, tags: [{ label: 'chat', color: 'grey' }], meta: /^MCP:/.test(text) ? 'MCP' : undefined }));
@@ -67,15 +67,15 @@ function mockApi() {
   views.push({ id: 'people', title: 'People', icon: 'member', kind: true, nodes: members });
   const filters = {
     inbox: { types: null, states: ['proposed'], assignee: 'anyone', text: '' },
-    tasks: { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me', text: '' },
+    tasks: { types: ['tasks'], states: ['proposed', 'open', 'not_now'], assignee: 'me', text: '' },
     meetings: { types: ['meetings'], states: null, assignee: 'anyone', text: '', participant: 'me', window: 'recent' },
     library: { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me', text: '' },
-    chats: { types: ['chats'], states: null, assignee: 'anyone', text: '', mcp: false },
+    chats: { types: ['chats'], states: null, assignee: 'anyone', text: '' },
     people: { types: ['people'], states: null, assignee: 'anyone', text: '' },
   };
   const stateOf = (d) => d.state || (d.done == null ? null : d.done ? 'closed' : 'open');
   const listed = (d, f) => (!f.states || f.states.includes(stateOf(d))) && (!f.assignee || f.assignee === 'me' || f.assignee === 'anyone');
-  const kindOf = (d) => (d.icon === 'member' ? 'people' : d.icon === 'task' ? 'tasks' : d.icon === 'meeting' ? 'meetings' : d.tags && ['chat', 'canvas', 'agent', 'skill'].includes(d.tags[0].label) ? d.tags[0].label + 's' : 'docs');
+  const kindOf = (d) => (d.icon === 'member' ? 'people' : d.icon === 'task' ? 'tasks' : d.icon === 'meeting' ? 'meetings' : d.tags && ['chat', 'canvas', 'agent', 'skill', 'search'].includes(d.tags[0].label) ? d.tags[0].label + 's' : 'docs');
   const created = {};   // documents made with createDocument
   const settling = new Set(); // a brand-new document: the first taskMeta read fails while main is still subscribing it
   const unlisted = [];  // created tasks/meetings the roots "query" has not caught up with yet: listed after the next refresh()
@@ -108,7 +108,7 @@ function mockApi() {
   let status = { authenticated: false, authChecking: false, connected: false, syncing: false, lastSync: null, error: null };
   const emit = (docId) => setTimeout(() => changed.forEach((cb) => cb(docId)), 0);
   const fix = (n) => { n.hasChildren = n.children.length > 0; };
-  const info = (d) => ({ id: d.id, title: d.text, kind: 'document', done: d.done, stateType: stateOf(d), icon: d.icon, iconSvg: d.iconSvg, hue: d.hue, editable: d.editable, tags: d.tags, meta: d.meta, me: d.me });
+  const info = (d) => ({ id: d.id, title: d.text, kind: 'document', done: d.done, stateType: stateOf(d), icon: d.icon, hue: d.hue, editable: d.editable, tags: d.tags, meta: d.meta, me: d.me });
   // undo/redo: whole-state snapshots, one step per mutation (main keeps a global order over per-document Loro UndoManagers).
   // Document delete/restore records an op step instead, like the native bridge where undo restores a soft-deleted document.
   const undoStack = [], redoStack = [];
@@ -142,7 +142,7 @@ function mockApi() {
       await new Promise((r) => setTimeout(r, 30));
       const text = String(filter.text || '').trim().toLowerCase();
       return { nodes: [...all, ...members].filter((d) => (!filter.types ? kindOf(d) !== 'people' : filter.types.includes(kindOf(d)))
-        && (!filter.states || listed(d, filter)) && (filter.mcp !== false || d.meta !== 'MCP')
+        && (!filter.states || listed(d, filter))
         && d.text.toLowerCase().includes(text)).map(info), truncated: false };
     },
     // references resolve on read, as main does: the row always shows the target's current title and state
@@ -218,7 +218,6 @@ function mockApi() {
     unpin: async (docId, target) => { if (target === 'sidebar') sidebar.splice(sidebar.indexOf(docId) >>> 0, 1); else datePins[docId] = (datePins[docId] || []).filter((d) => d !== localDate()); emit(null); },
     deleteDocument: async (docId) => { softDelete(docId); step(docId, 'restore'); },
     restoreDocument: async (docId) => { undelete(docId); step(docId, 'delete'); },
-    setIcon: async (docId, svg) => { (all.find((d) => d.id === docId) || created[docId]).iconSvg = svg || undefined; emit(null); },
     sensitiveIds: async () => [...sensitive],
     setSensitive: async (docId, on) => { if (on) sensitive.add(docId); else sensitive.delete(docId); return on; },
     nodeLink: async (docId) => 'https://home.tana.inc/o/mockorg/l/' + encodeURIComponent(docId),

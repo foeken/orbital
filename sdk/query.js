@@ -19,7 +19,7 @@ function parseQuery(query) {
 // Returns null for an unknown #type (no results) or an empty query.
 function searchParams({ text, tags }, types, limit = 20) {
   if (!text && !tags.length) return null;
-  const p = { nodeTypes: ['text', 'event', 'user-profile', 'space'], limit, sortOptions: SORT };
+  const p = { nodeTypes: ['text', 'event', 'user-profile', 'space', 'search'], limit, sortOptions: SORT };
   if (text) p.textQuery = text;
   for (const tag of tags) {
     const t = tag.toLowerCase();
@@ -57,16 +57,18 @@ const isHidden = (title, rules) => {
 };
 
 // ---- Views (docs/VIEWS.md) ----
-const VIEW_KINDS = ['meetings', 'tasks', 'docs', 'chats', 'canvases', 'agents', 'skills', 'spaces', 'people'];
-const KIND_NODE_TYPE = { meetings: 'event', tasks: 'text', docs: 'text', chats: 'chat', canvases: 'canvas', agents: 'agent', skills: 'skill', spaces: 'space', people: 'user-profile' };
+// A saved search is a document like any other listed kind: Tana's own client groups `search` with text, event, chat,
+// canvas, agent and skill as a document kind (and keeps `liveQuery`, a materialised result cache, well away from them).
+const VIEW_KINDS = ['meetings', 'tasks', 'docs', 'chats', 'canvases', 'agents', 'skills', 'searches', 'spaces', 'people'];
+const KIND_NODE_TYPE = { meetings: 'event', tasks: 'text', docs: 'text', chats: 'chat', canvases: 'canvas', agents: 'agent', skills: 'skill', searches: 'search', spaces: 'space', people: 'user-profile' };
 // Spaces and people are containers and members, not library content: they are listed when asked for by name.
 const ANY_KINDS = VIEW_KINDS.filter((k) => k !== 'people' && k !== 'spaces');
 const VIEW_PRESETS = {
   inbox: { types: null, states: ['proposed'], assignee: 'anyone' },
-  tasks: { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me' },
+  tasks: { types: ['tasks'], states: ['proposed', 'open', 'not_now'], assignee: 'me' }, // everything not yet done: Inbox, In Progress, Later
   meetings: { types: ['meetings'], participant: 'me', window: 'recent' },
   library: { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me', text: '' },
-  chats: { types: ['chats'], mcp: false },
+  chats: { types: ['chats'] },
   people: { types: ['people'] },
 };
 // A page that is a kind: Tasks lists tasks, People lists people. Its type is its identity, so it is not offered as a
@@ -81,7 +83,7 @@ function assigneeParams(assignee, me) {
   return { assignedTo: [assignee === 'me' || !assignee ? me : assignee] };
 }
 
-const FILTER_KEYS = new Set(['types', 'states', 'assignee', 'text', 'participant', 'window', 'mcp']);
+const FILTER_KEYS = new Set(['types', 'states', 'assignee', 'text', 'participant', 'window']);
 const USER = /^tana:user-profile:[0-9a-z]{26}$/;
 function validViewFilter(f) {
   return !!f && !Array.isArray(f) && typeof f === 'object' && Object.keys(f).every((k) => FILTER_KEYS.has(k))
@@ -90,8 +92,7 @@ function validViewFilter(f) {
     && (f.assignee === undefined || ['me', 'anyone', 'unassigned'].includes(f.assignee) || USER.test(f.assignee))
     && (f.text === undefined || typeof f.text === 'string')
     && (f.participant === undefined || f.participant === null || f.participant === 'me')
-    && (f.window === undefined || f.window === null || f.window === 'recent')
-    && (f.mcp === undefined || typeof f.mcp === 'boolean');
+    && (f.window === undefined || f.window === null || f.window === 'recent');
 }
 
 function viewParams(f, me, limit = 1000) {

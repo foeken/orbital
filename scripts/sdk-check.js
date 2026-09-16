@@ -523,7 +523,7 @@ async function main() {
     console.log('ok  startup: metadata, permission and view calls before the connection stay quiet');
   }
 
-  // A view is one graph query, then docs-without-tasks/MCP/hidden post-filters, row mapping and its own cache.
+  // A view is one graph query, then docs-without-tasks/hidden post-filters, row mapping and its own cache.
   {
     const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
     const event = { id: 'tana:event:' + ulid(), title: 'Meeting', calendarEvent: { startTime: '2026-09-14T10:00:00Z' } };
@@ -539,14 +539,12 @@ async function main() {
       if (p.nodeIds) return { nodes: [] };
       return totalCount == null ? { nodes: [event, hidden, doc, task, mcp], truncated: true } : { nodes: [event, hidden, doc, task, mcp], totalCount };
     } }, sync: { subscribe: async () => null, unsubscribe: async () => {} } } });
-    const payload = await backend.handlers.get('view:list')(null, 'library', { types: ['meetings', 'docs', 'chats'], states: null, assignee: 'anyone', mcp: false });
+    const payload = await backend.handlers.get('view:list')(null, 'library', { types: ['meetings', 'docs', 'chats'], states: null, assignee: 'anyone' });
     assert.equal(requests.length, 1, 'one view fetch makes one graph query');
-    assert.deepEqual(payload.nodes.map((n) => n.title).sort(), ['Doc', 'Meeting'], 'docs without tasks, MCP chats and hidden titles are post-filtered');
+    assert.deepEqual(payload.nodes.map((n) => n.title).sort(), ['Doc', 'MCP: helper', 'Meeting'], 'docs without tasks and hidden titles are post-filtered, MCP chats are not');
     assert.equal(payload.truncated, true);
     assert.equal('iconSvg' in payload.nodes.find((n) => n.id === doc.id), false, 'rows carry no app-local icon');
     assert.deepEqual(Object.keys(cache.list()), ['library'], 'the fetched rows use the view id as their cache section');
-    totalCount = 5;
-    assert.equal((await backend.handlers.get('view:list')(null, 'library', { types: ['meetings', 'docs', 'chats'], states: null, assignee: 'anyone', mcp: true })).nodes.some((n) => n.id === mcp.id), true);
     totalCount = null;
     assert.equal((await backend.handlers.get('view:list')(null, 'library', { types: ['meetings', 'docs'], states: null, assignee: 'anyone' })).truncated, true, 'the response truncation flag survives without a count');
     totalCount = 5;
@@ -599,12 +597,12 @@ async function main() {
     await backend.refresh();
     assert.equal(requests.length, 7);
     assert.deepEqual(requests.at(-1).nodeTypes, ['user-profile'], 'refresh repeats only the last listed view');
-    const custom = await backend.handlers.get('view:setFilter')(null, 'chats', { types: ['chats'], mcp: true });
-    assert.equal(custom.mcp, true);
-    assert.equal(cache.setting('viewFilter:chats').mcp, true);
+    const custom = await backend.handlers.get('view:setFilter')(null, 'chats', { types: ['chats'], text: 'urgent' });
+    assert.equal(custom.text, 'urgent');
+    assert.equal(cache.setting('viewFilter:chats').text, 'urgent');
     const reset = await backend.handlers.get('view:setFilter')(null, 'chats', { types: ['unknown'] });
     assert.equal(reset.types.join(','), 'chats', 'invalid writes store the preset');
-    assert.equal(reset.mcp, false);
+    assert.equal(reset.text, undefined, 'and drops the custom fields a prior valid write stored');
     // A kind page cannot be turned into a different page: People lists people even if something stored otherwise,
     // and the renderer is told which pages those are so it does not offer a type to pick.
     assert.deepEqual((await backend.handlers.get('view:setFilter')(null, 'people', { types: ['meetings', 'people'] })).types, ['people'], 'People keeps listing people');
@@ -938,7 +936,7 @@ async function main() {
     assert.deepEqual(viewParams({ types: ['tasks', 'docs'] }, ME).nodeTypes, ['text'], 'duplicate graph kinds collapse into one query');
     assert.equal(viewParams({ types: ['docs'], text: ' dpa ' }, ME, 25).textQuery, 'dpa');
     assert.equal(viewParams({ types: ['docs'], text: ' dpa ' }, ME, 25).limit, 25);
-    assert.equal(validViewFilter({ types: ['docs'], states: null, assignee: 'anyone', text: '', participant: null, window: null, mcp: true }), true);
+    assert.equal(validViewFilter({ types: ['docs'], states: null, assignee: 'anyone', text: '', participant: null, window: null }), true);
     assert.equal(validViewFilter({ types: ['nope'] }), false);
     assert.equal(validViewFilter({ types: ['tasks'], extra: true }), false);
     assert.throws(() => viewParams({ types: ['nope'] }, ME), /invalid view filter/);

@@ -12,27 +12,26 @@ renderer. It replaces the per-view paths: `taskParams`/`libraryQueries`/`MEETING
 ## 1. Filter
 
 ```js
-{ types, states, assignee, text, participant, window, mcp }
+{ types, states, assignee, text, participant, window }
 ```
 
 | key | values | meaning |
 |-----|--------|---------|
-| `types` | array of kinds, or `null` | kinds: `meetings tasks docs chats canvases agents skills spaces people`. `null` = every kind **except people and spaces** (a person is a member and a space a container, not library content; both are listed when asked for by name). |
+| `types` | array of kinds, or `null` | kinds: `meetings tasks docs chats canvases agents skills searches spaces people`. `null` = every kind **except people and spaces** (a person is a member and a space a container, not library content; both are listed when asked for by name). `searches` are saved searches (`tana:search:`), documents that store a search definition. |
 | `states` | array of `proposed open closed not_now`, or `null` | `null` = any state. Like the assignee, in effect only when tasks are in scope: no other kind carries a state, so a stored "Inbox, In Progress" must not empty a People or Docs listing. |
 | `assignee` | `me` \| `anyone` \| `unassigned` \| user-profile uri | in effect only when tasks are in scope (`types` is null or contains `tasks`). |
 | `text` | string | server-side `textQuery`. |
 | `participant` | `me` or null | events the user is a participant of (`hasParticipantUris`). |
 | `window` | `recent` or null | events from 7 days ago to 7 days ahead. |
-| `mcp` | bool | include MCP chats. Applied after the query, on the node, as today. |
 
 ## 2. Presets
 
 ```js
 inbox:    { types: null,          states: ['proposed'],          assignee: 'anyone' }
-tasks:    { types: ['tasks'],     states: ['proposed', 'open'],  assignee: 'me' }
+tasks:    { types: ['tasks'],     states: ['proposed', 'open', 'not_now'],  assignee: 'me' }   // grouped by Status unless the user picks another grouping
 meetings: { types: ['meetings'],  participant: 'me', window: 'recent' }
 library:  { types: ['tasks'],     states: ['proposed', 'open'],  assignee: 'me', text: '' }
-chats:    { types: ['chats'],     mcp: false }
+chats:    { types: ['chats'] }
 people:   { types: ['people'] }
 ```
 
@@ -87,7 +86,7 @@ implements the new surface too.
 
 - One `views` list (was `sections`), one `filters` map keyed by view id, one `loadView(id)`.
 - Pills are built from the filter for every view: Type, Status and Assigned to (when tasks are in
-  scope), MCP chats (when chats are), Sort and Group. They stay Cmd+K reachable as they are now.
+  scope), Sort and Group. They stay Cmd+K reachable as they are now.
 - "Clear filters" resets to `{ types: null, states: null, assignee: 'anyone', text: '' }` and keeps
   `participant`/`window`, so clearing Meetings still means the user's own calendar. A view offers
   the link only when its filter differs from that.

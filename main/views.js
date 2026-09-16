@@ -35,7 +35,7 @@ async function viewRows(id, filter) {
   const docsWithoutTasks = Array.isArray(f.types) && f.types.includes('docs') && !f.types.includes('tasks');
   const rules = hiddenRules();
   const nodes = result.nodes.filter((n) => !(docsWithoutTasks && idKind(n.id) === 'text' && n.state && n.state.type))
-    .filter((n) => f.mcp === true || !isMcp(n)).filter((n) => !isHidden(memberTitle(n), rules));
+    .filter((n) => !isHidden(memberTitle(n), rules));
   nodes.forEach(rememberNodeHue);
   await resolveTypes(nodes.map((n) => n.entityType));
   const withDate = !(f.types && f.types.length === 1 && f.types[0] === 'meetings');
