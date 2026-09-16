@@ -40,6 +40,7 @@ const notReady = (e) => errText(e) === NOT_CONNECTED;
 const report = (e) => { if (!notReady(e)) setStatus({ error: errText(e) }); };
 const now = () => new Date().toISOString();
 const isSpace = (id) => id.startsWith('tana:space:');
+const isSearch = (id) => id.startsWith('tana:search:'); // a saved search: its "children" are the rows its stored query returns
 const idKind = (id) => id.split(':')[1];
 const memberTitle = (n) => n.title || (n.userProfile && n.userProfile.name) || '';
 const isMcp = (n) => (n.invocationContext && n.invocationContext.intent === 'mcp') || /^MCP:/i.test(n.title || '');
@@ -67,4 +68,4 @@ function scheduleRefresh(ms) {
   S.refreshTimer = setTimeout(() => S.refresh && S.refresh(), ms);
 }
 
-module.exports = { VIEWS, TAG, KINDS, PLAIN_KINDS, PIN_HUBS, DOC_URI, S, subscribed, deletedNodes, isDeleted, visibleGraphNodes, typeTitles, typeHues, nodeHues, editability, nodeMeta, iso, errText, NOT_CONNECTED, notReady, report, now, isSpace, idKind, memberTitle, isMcp, send, today, setStatus, pathCache, metaSigs, truncatedViews, summaryCache, typeAttrTitles, hueLoaded, imageCache, undoStack, redoStack, scheduleRefresh };
+module.exports = { VIEWS, TAG, KINDS, PLAIN_KINDS, PIN_HUBS, DOC_URI, S, subscribed, deletedNodes, isDeleted, visibleGraphNodes, typeTitles, typeHues, nodeHues, editability, nodeMeta, iso, errText, NOT_CONNECTED, notReady, report, now, isSpace, isSearch, idKind, memberTitle, isMcp, send, today, setStatus, pathCache, metaSigs, truncatedViews, summaryCache, typeAttrTitles, hueLoaded, imageCache, undoStack, redoStack, scheduleRefresh };
