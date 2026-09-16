@@ -123,4 +123,30 @@ function viewParams(f, me, limit = 1000) {
   return p;
 }
 
-module.exports = { parseQuery, searchParams, needsTypes, viewParams, validViewFilter, viewTypes, VIEW_PRESETS, VIEW_KINDS, KIND_VIEWS, hideRules, isHidden };
+// A saved search's stored `query` root container as graph.listNodes params (docs/…/2026-09-16-saved-searches-design.md).
+// Every field is guarded: a real search document omits optional keys rather than writing them empty.
+// `visibility`, `workflowStates` and `attributes` are deliberately not translated — see the spec's §4.
+function searchQueryParams(query, me, limit = 1000) {
+  const q = query || {};
+  const list = (v) => (Array.isArray(v) && v.length ? v : undefined);
+  const p = { limit, sortOptions: UPDATE_DESC, mode: 'LIST_NODES_MODE_WITH_COUNT' };
+  // nodeTypes: [] is no filter at all to the graph, which answers with images, calls and transcripts no view can
+  // render, so an unconstrained search falls back to the kinds a view lists — the same rule viewParams follows.
+  p.nodeTypes = list(q.types) || [...new Set(ANY_KINDS.map((k) => KIND_NODE_TYPE[k]))];
+  if (typeof q.textQuery === 'string' && q.textQuery.trim()) p.textQuery = q.textQuery.trim();
+  if (list(q.entityTypeUris)) p.entityTypes = q.entityTypeUris;
+  if (list(q.ownerUris)) p.ownerIds = q.ownerUris;
+  if (list(q.stateTypes)) p.stateTypes = q.stateTypes;
+  if (list(q.participantUris)) p.hasParticipantUris = q.participantUris;
+  const assigned = [...(list(q.assignedTo) || []), ...(q.assignedToViewer === true && me ? [me] : [])];
+  if (assigned.length) p.assignedTo = [...new Set(assigned)];
+  const created = [...(list(q.createdBy) || []), ...(q.createdByViewer === true && me ? [me] : [])];
+  if (created.length) p.createdBy = [...new Set(created)];
+  if (q.unassigned === true) p.unassigned = true;
+  const t = q.eventTime;
+  if (t && t.min != null) p.eventStartTimeMin = new Date(t.min).toISOString();
+  if (t && t.max != null) p.eventStartTimeMax = new Date(t.max).toISOString();
+  return p;
+}
+
+module.exports = { parseQuery, searchParams, needsTypes, viewParams, searchQueryParams, validViewFilter, viewTypes, VIEW_PRESETS, VIEW_KINDS, KIND_VIEWS, hideRules, isHidden };

@@ -12,7 +12,7 @@ const { createTransport, SyncConnection, Document, derivePeerId, readNode, setTi
 const outline = require('../sdk/content');
 const { fetchImage } = require('../sdk/assets');
 const { LoroMap, LoroList } = require('loro-crdt');
-const { parseQuery, searchParams, needsTypes, viewParams, validViewFilter, viewTypes, VIEW_PRESETS, hideRules, isHidden } = require('../sdk/query');
+const { parseQuery, searchParams, needsTypes, viewParams, searchQueryParams, validViewFilter, viewTypes, VIEW_PRESETS, hideRules, isHidden } = require('../sdk/query');
 const pins = require('../sdk/pins');
 
 const ORG = 'org_01EXAMPLE00000000000000000', DOC = 'tana:text:01exampleh0000000000000000', ME = 'tana:user-profile:01examplei0000000000000000';
@@ -954,6 +954,28 @@ async function main() {
     assert.equal(searchParams(parseQuery('quarterly'), new Map()).nodeTypes.includes('search'), true, 'Cmd+S finds them too');
     assert.deepEqual(searchParams(parseQuery('foundry #space'), new Map()).nodeTypes, ['space'], '#space narrows a search to spaces');
     assert.equal(searchParams(parseQuery('foundry'), new Map()).nodeTypes.includes('space'), true, 'and a plain search finds them among everything else');
+    // A saved search's stored query (docs/superpowers/specs/2026-09-16-saved-searches-design.md §2), verified
+    // against the real "My Tasks" document: optional keys are absent rather than empty.
+    const myTasks = { types: ['text'], entityTypeUris: [], ownerUris: [], createdBy: [], assignedTo: [],
+      assignedToViewer: true, participantUris: [], stateTypes: ['proposed', 'open', 'closed', 'not_now'],
+      workflowStates: [], attributes: {} };
+    assert.deepEqual(searchQueryParams(myTasks, ME), {
+      limit: 1000, sortOptions: UPD, mode: COUNT, nodeTypes: ['text'],
+      stateTypes: ['proposed', 'open', 'closed', 'not_now'], assignedTo: [ME],
+    }, 'the real "My Tasks" search becomes a task query assigned to the viewer');
+    const anyKindNodeTypes = searchQueryParams({ types: [] }, ME).nodeTypes;
+    assert.ok(anyKindNodeTypes.length > 0 && !anyKindNodeTypes.includes('space'),
+      'an unconstrained saved search still asks only for kinds a view can render, never nodeTypes: []');
+    assert.deepEqual(searchQueryParams({ types: ['event'], participantUris: ['tana:user-profile:01examples0000000000000000'] }, ME).hasParticipantUris,
+      ['tana:user-profile:01examples0000000000000000'], 'participantUris is the graph\'s hasParticipantUris');
+    assert.deepEqual(searchQueryParams({ ownerUris: ['tana:space:01examples0000000000000000'] }, ME).ownerIds,
+      ['tana:space:01examples0000000000000000'], 'ownerUris scopes by owner');
+    assert.equal(searchQueryParams({ createdByViewer: true }, ME).createdBy[0], ME, 'createdByViewer resolves to the signed-in user');
+    assert.equal(searchQueryParams({ textQuery: '  dpa  ' }, ME).textQuery, 'dpa', 'text is trimmed');
+    assert.equal(searchQueryParams({ textQuery: '   ' }, ME).textQuery, undefined, 'blank text is not a filter');
+    assert.equal(searchQueryParams({ unassigned: true }, ME).unassigned, true);
+    assert.equal(searchQueryParams({ visibility: 'private' }, ME).visibility, undefined,
+      'visibility has no graph equivalent: preserved in the document, ignored on execute');
     // A kind page is that kind, whatever a stored filter from an older build says.
     assert.deepEqual(viewTypes('people', { types: ['meetings', 'people'], states: null }), { types: ['people'], states: null }, 'People lists people');
     assert.deepEqual(viewTypes('meetings', { types: [] }).types, ['meetings']);
