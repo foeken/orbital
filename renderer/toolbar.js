@@ -13,7 +13,10 @@ async function copyText(text, note) { await navigator.clipboard.writeText(text);
 function startLink(item, el, [start, end]) {
   flush(item.key);
   const segs = readSegs(el);
-  togglePalette('search', { item, segs, start, end, text: plainOf(segs).slice(start, end) });
+  // where the dropdown hangs: under the selection (or caret), at its left edge; an empty row has no text box, so the row's own box
+  const range = getSelection().rangeCount ? getSelection().getRangeAt(0) : null, rects = range ? range.getClientRects() : [];
+  const box = el.getBoundingClientRect(), rect = rects.length ? { left: rects[0].left, top: rects[0].top, bottom: rects[rects.length - 1].bottom } : box;
+  togglePalette('search', { item, segs, start, end, text: plainOf(segs).slice(start, end), rect });
 }
 async function linkTo(ctx, mention) {
   const { item, segs, start, end } = ctx;
@@ -178,7 +181,7 @@ function slashRows(q) {
   // Doc and Task are always offered; the workspace types come from the same source as the Cmd+K "Create new…" list
   const choices = creationChoices.some((c) => c.kind === 'doc') ? creationChoices : [{ kind: 'doc', title: 'Doc', icon: 'doc', selectable: true }, ...creationChoices];
   for (const choice of choices) rows.push({
-    group: choice.kind === 'custom' ? 'Workspace types' : 'Create', icon: choice.icon, svg: choice.iconSvg, hue: choice.hue,
+    group: choice.kind === 'custom' ? 'Workspace types' : 'Create', icon: choice.icon, hue: choice.hue,
     label: 'Create ' + choice.title, hint: choice.selectable ? '' : choice.reason || 'Unavailable', disabled: !choice.selectable,
     run: () => createFromSlash(choice),
   });

@@ -96,6 +96,8 @@ function iconNode(icon) {
   return t ? t.cloneNode(true) : null;
 }
 const isTask = (node) => node.kind === 'document' && node.icon === 'task';
+// an unchecked Inbox task: its (dashed) box accepts it, In Progress, before a second click completes it
+const acceptsFirst = (node) => isTask(node) && !node.done && node.stateType === 'proposed';
 const isCheckboxBlock = (node) => node?.kind === 'block' && node.done != null;
 function visibleTags(node) {
   const tags = node.tags || [];

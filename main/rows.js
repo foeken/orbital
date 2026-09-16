@@ -1,9 +1,20 @@
 'use strict';
 const db = require('../db');
-const { editable, STATE_TYPES } = require('../sdk/node');
+const { editable, readNode, STATE_TYPES } = require('../sdk/node');
 const { PLAIN_KINDS, S, TAG, editability, hueLoaded, idKind, isSpace, iso, memberTitle, nodeHues, nodeMeta, now, typeHues, typeTitles } = require('./state');
 
+// The search index can trail a write by seconds, and every index result becomes a row through graphRow and records its
+// state in rememberMeta. A task this app holds live already has the newer state, so that one wins: a list refresh, a
+// search, a reference target or a sidebar row must not put back the state from before (set to Inbox, grey again two
+// seconds later). A document still bootstrapping reads no state and leaves the index's alone.
+function liveState(n) {
+  const sync = n && n.state && S.client && S.client.sync;
+  const doc = sync && typeof sync.getDocument === 'function' ? sync.getDocument(n.id) : null;
+  const live = doc ? readNode(doc).stateType : undefined;
+  return STATE_TYPES.includes(live) && live !== n.state.type ? { ...n, state: { ...n.state, type: live } } : n;
+}
 function rememberMeta(n) {
+  n = liveState(n);
   const createdAt = iso(n.createTime ?? n.createdAt) || (nodeMeta.get(n.id) || {}).createdAt;
   const state = (n.state && n.state.type) || n.stateType;
   const stateType = STATE_TYPES.includes(state) ? state : undefined;
@@ -101,14 +112,13 @@ const meetingRow = (n, withDate) => {
   };
 };
 
-// a document's own icon wins; otherwise the icon set on its type applies to every node carrying that type
-const iconSvgOf = (r) => { const type = typeUriOf(r); return db.icon(r.id) || (type ? db.icon(type) : null) || undefined; };
 // updatedAt/createdAt (ISO) and stateType are optional sort/group data: the row carries what it knows, the rest
 // comes from nodeMeta, so a cached SQLite row sorts like a fresh graph row. done keeps its own meaning.
-const toNode = (r) => ({ id: r.id, title: r.title, text: r.title, kind: 'document', editable: editability.has(r.id) ? editability.get(r.id) : editable(r, S.me && S.me.userUri), done: r.icon === 'task' ? r.done : undefined, hasChildren: true, icon: PLAIN_KINDS.has(idKind(r.id)) ? idKind(r.id) : r.icon || undefined, hue: r.hue === undefined ? (nodeHues.has(r.id) ? nodeHues.get(r.id) : cachedNodeHue(r)) : r.hue, tags: r.tags, meta: r.meta || undefined, iconSvg: iconSvgOf(r), updatedAt: r.updatedAt || undefined, createdAt: r.createdAt || (nodeMeta.get(r.id) || {}).createdAt, stateType: r.stateType || (nodeMeta.get(r.id) || {}).stateType });
+const toNode = (r) => ({ id: r.id, title: r.title, text: r.title, kind: 'document', editable: editability.has(r.id) ? editability.get(r.id) : editable(r, S.me && S.me.userUri), done: r.icon === 'task' ? r.done : undefined, hasChildren: true, icon: PLAIN_KINDS.has(idKind(r.id)) ? idKind(r.id) : r.icon || undefined, hue: r.hue === undefined ? (nodeHues.has(r.id) ? nodeHues.get(r.id) : cachedNodeHue(r)) : r.hue, tags: r.tags, meta: r.meta || undefined, updatedAt: r.updatedAt || undefined, createdAt: r.createdAt || (nodeMeta.get(r.id) || {}).createdAt, stateType: r.stateType || (nodeMeta.get(r.id) || {}).stateType });
 
 // Node shape from any graph Node JSON (search results): events, tasks, typed and plain documents.
 function graphRow(n, withDate) {
+  n = liveState(n);
   if (n.calendarEvent || n.id.startsWith('tana:event:')) return meetingRow(n, withDate);
   if (n.userProfile || idKind(n.id) === 'user-profile') return memberRow(n.id, memberTitle(n), n.updateTime || now(), hueOf(n));
   if (PLAIN_KINDS.has(idKind(n.id))) return kindRow(n.id, idKind(n.id), n.title || '', n.updateTime || now(), hueOf(n));
@@ -124,4 +134,4 @@ function members() {
   return S.membersLoaded;
 }
 
-module.exports = { rememberMeta, rememberType, ownHue, hueOf, rememberNodeHue, nodeTag, cachedNodeHue, WEEKDAY, MONTH, hm, eventMeta, resolveTypes, typeTag, typeUriOf, hueWithType, resolveHue, plainRow, memberRow, kindRow, typesByTitle, taskRow, meetingRow, iconSvgOf, toNode, graphRow, members };
+module.exports = { rememberMeta, rememberType, ownHue, hueOf, rememberNodeHue, nodeTag, cachedNodeHue, WEEKDAY, MONTH, hm, eventMeta, resolveTypes, typeTag, typeUriOf, hueWithType, resolveHue, plainRow, memberRow, kindRow, typesByTitle, taskRow, meetingRow, toNode, graphRow, members };

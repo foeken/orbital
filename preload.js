@@ -59,7 +59,6 @@ contextBridge.exposeInMainWorld('api', {
   // api.related(id).pinHub, which is set only when this user may write that hub. Resolves to the hub's pinned uris.
   pinTo: (hubId, docId) => ipcRenderer.invoke('pins:pinTo', hubId, docId),
   unpinFrom: (hubId, docId) => ipcRenderer.invoke('pins:unpinFrom', hubId, docId),
-  setIcon: (docId, svg) => ipcRenderer.invoke('doc:setIcon', docId, svg),
   sensitiveIds: () => ipcRenderer.invoke('sensitive:list'),
   setSensitive: (docId, on) => ipcRenderer.invoke('sensitive:set', docId, on),
   image: (uri) => ipcRenderer.invoke('image', uri), // tana:image: uri -> data URL (main fetches with the session token and caches)

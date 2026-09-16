@@ -172,7 +172,6 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .bullet.icon:hover svg, .collapsed > .line > .bullet.icon svg { color: #333; }
 .bullet.meeting svg, .collapsed > .line > .bullet.meeting svg { color: #c99b1b; }
 .bullet.meeting:hover svg { color: #8a6a17; }
-.bullet.custom svg, .bullet.custom:hover svg { color: #1a1a1a; } /* custom icons render as-is; currentColor only when the SVG uses it */
 /* Renderer contract: appearance-driven icons add .hue and set --hue, including 0. */
 .bullet.icon.hue svg, .bullet.icon.hue:hover svg, .collapsed > .line > .bullet.icon.hue svg { color: hsl(var(--hue) 45% 30%); }
 .check {
@@ -184,6 +183,12 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .check:checked::after {
   content: ""; position: absolute; left: 6px; top: 2px; width: 4px; height: 9px;
   border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg);
+}
+/* an Inbox task is not accepted yet: the grey box becomes a dashed outline (square-dashed, cropped to its outer edge
+   so the dashes sit where the box's edge is, at every checkbox size) */
+.check.inbox:not(:checked) {
+  background: #c8c8c8; border-radius: 0;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='2.25 2.25 13.5 13.5' fill='none' stroke='black' stroke-width='1' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.75 4.75c0-1.105.895-2 2-2M13.25 2.75c1.105 0 2 .895 2 2M15.25 13.25c0 1.105-.895 2-2 2M4.75 15.25c-1.105 0-2-.895-2-2M7.75 2.75h2.5M7.75 15.25h2.5M15.25 7.75v2.5M2.75 7.75v2.5'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
 }
 .body { flex: 1; min-width: 0; padding-left: 5px; }
 .text { display: inline; outline: none; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -209,6 +214,9 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .text.image.loading img { visibility: hidden; }
 .text.image.loading { min-height: 120px; max-height: 360px; background: #f1f1f1; border-radius: 6px; width: min(100%, 360px); }
 .text.image:focus img, .selected .text.image img { outline: 2px solid #b5d0ee; outline-offset: 2px; }
+/* no caret shows beside a lone mention chip or in a read-only reference row, so the focus is drawn around them instead */
+.text.chiponly { caret-color: transparent; }
+.text.chiponly:focus .mention, .selected .text.chiponly .mention, .reference .text:not([contenteditable]):focus { outline: 2px solid #b5d0ee; outline-offset: 2px; border-radius: 3px; }
 .text .mention { color: #508fbb; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .text .mention:hover { color: #3a75a3; }
 /* inline marks on a text run (readOutline segments): bold, italic, strike, code, and link marks */
@@ -303,7 +311,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .palette { position: fixed; inset: 0; z-index: 10; background: rgba(0, 0, 0, .12); display: flex; justify-content: center; align-items: flex-start; padding: 12vh 24px 0; }
 .palette[hidden] { display: none; }
 .palette .card {
-  width: 100%; max-width: 620px; max-height: 70vh; display: flex; flex-direction: column; overflow: hidden;
+  width: 100%; max-width: 620px; max-height: min(70vh, 440px); display: flex; flex-direction: column; overflow: hidden;
   background: #fff; border-radius: 12px; box-shadow: 0 12px 40px rgba(0, 0, 0, .18), 0 0 0 1px rgba(0, 0, 0, .05);
 }
 .palette input { border: 0; outline: none; font: inherit; font-size: 17px; color: #1a1a1a; padding: 16px 20px; border-bottom: 1px solid #eee; }
@@ -327,6 +335,14 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .palette .hint { color: #999; font-size: 14px; white-space: nowrap; }
 .palette kbd { font: inherit; font-size: 13px; color: #666; background: #f1f1f1; border-radius: 6px; padding: 1px 8px; }
 .palette .row.active kbd { background: #e4e4e4; }
+/* @ linking: the same palette as a dropdown under the caret (anchorPalette places and sizes the card), no scrim */
+.palette.anchored:not([hidden]) { display: block; padding: 0; background: none; } /* :not([hidden]): the same weight as .palette[hidden] would keep a closed dropdown on screen */
+.palette.anchored .card { position: absolute; border-radius: 10px; box-shadow: 0 8px 30px rgba(0, 0, 0, .16), 0 0 0 1px rgba(0, 0, 0, .06); }
+.palette.anchored input { font-size: 15px; padding: 10px 14px; }
+.palette.anchored .list { padding: 6px 6px 8px; }
+.palette.anchored .group { font-size: 12px; padding: 8px 10px 4px; }
+.palette.anchored .row { font-size: 14px; padding: 6px 10px; }
+.palette.anchored .hint { font-size: 13px; }
 
 /* hotkey recorder (Cmd+Shift+K on a Cmd+K row) */
 .recorder { position: fixed; inset: 0; z-index: 11; display: flex; justify-content: center; align-items: flex-start; padding: 12vh 24px 0; background: rgba(0, 0, 0, .12); } /* same scrim as the palette it opens over */
@@ -351,11 +367,6 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .recorder button:hover { background: #e6e6e6; }
 .recorder button:disabled { color: #b5b5b5; cursor: default; background: #f1f1f1; }
 
-/* icon drop mode ("Set icon…"): full-window target; Enter opens a file picker, Esc cancels */
-.drop { position: fixed; inset: 0; z-index: 12; display: flex; align-items: center; justify-content: center; background: rgba(255, 255, 255, .94); }
-.drop[hidden] { display: none; }
-.drop .card { border: 2px dashed #ccc; border-radius: 12px; padding: 40px 60px; text-align: center; font-size: 20px; color: #555; }
-.drop .hint { margin-top: 10px; font-size: 13px; color: #999; }
 
 /* Dark theme contract: renderer sets document.documentElement.dataset.theme = "dark". */
 [data-theme="dark"] { color-scheme: dark; }
@@ -403,12 +414,12 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .bullet.icon svg { color: #aeb4b6; }
 [data-theme="dark"] .bullet.icon:hover svg, [data-theme="dark"] .collapsed > .line > .bullet.icon svg { color: #d0d2d2; }
 [data-theme="dark"] .bullet.meeting svg, [data-theme="dark"] .collapsed > .line > .bullet.meeting svg { color: #d7b54d; }
-[data-theme="dark"] .bullet.custom svg, [data-theme="dark"] .bullet.custom:hover svg { color: #c9c9c9; }
 [data-theme="dark"] .bullet.icon.hue svg, [data-theme="dark"] .bullet.icon.hue:hover svg, [data-theme="dark"] .collapsed > .line > .bullet.icon.hue svg { color: hsl(var(--hue) 70% 72%); }
 [data-theme="dark"] .check { background: #3a3e40; }
 [data-theme="dark"] .check:hover { background: #474c4e; }
 [data-theme="dark"] .check:checked { background: #5b976c; }
 [data-theme="dark"] .check:checked::after { border-color: #f4f5f5; }
+[data-theme="dark"] .check.inbox:not(:checked) { background: #5d6467; }
 [data-theme="dark"] .document.done > .line .text { color: #777d80; }
 [data-theme="dark"] .meta, [data-theme="dark"] .filtered, [data-theme="dark"] .empty-note { color: #858b8e; }
 [data-theme="dark"] .clearfilters { color: #858b8e; }
@@ -419,6 +430,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .chip.hue { background: hsl(var(--hue) 35% 25%); color: hsl(var(--hue) 75% 78%); }
 [data-theme="dark"] .text.image.loading { background: #303436; }
 [data-theme="dark"] .text.image:focus img, [data-theme="dark"] .selected .text.image img { outline-color: #58768a; }
+[data-theme="dark"] .text.chiponly:focus .mention, [data-theme="dark"] .selected .text.chiponly .mention, [data-theme="dark"] .reference .text:not([contenteditable]):focus { outline-color: #58768a; }
 [data-theme="dark"] .text .mention { color: #8fc1e1; }
 [data-theme="dark"] .text .mention:hover { color: #b5ddf4; }
 [data-theme="dark"] .text code { background: #303436; }
@@ -449,6 +461,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .login button:hover { background: #363a3c; }
 
 [data-theme="dark"] .palette { background: rgba(0, 0, 0, .52); }
+[data-theme="dark"] .palette.anchored:not([hidden]) { background: none; }
 [data-theme="dark"] .recorder { background: rgba(0, 0, 0, .52); }
 [data-theme="dark"] .palette .card, [data-theme="dark"] .recorder .card { background: #242729; box-shadow: 0 12px 40px rgba(0, 0, 0, .5), 0 0 0 1px rgba(255, 255, 255, .08); }
 [data-theme="dark"] .palette input { color: #c9c9c9; border-bottom-color: #3a3f41; background: #242729; }
@@ -488,6 +501,3 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .recorder button { background: #303436; color: #c9c9c9; }
 [data-theme="dark"] .recorder button:hover { background: #3b4144; }
 [data-theme="dark"] .recorder button:disabled { color: #777d80; background: #303436; }
-[data-theme="dark"] .drop { background: rgba(27, 29, 30, .94); }
-[data-theme="dark"] .drop .card { border-color: #555b5e; color: #c9c9c9; }
-[data-theme="dark"] .drop .hint { color: #858b8e; }

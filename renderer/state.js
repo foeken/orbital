@@ -33,8 +33,7 @@ const hotkeyIds = () => [...new Set([...Object.keys(DEFAULT_HOTKEYS), ...Object.
 let pinInfo = null;          // { docId, sidebar, dates } of the palette's document (api.pinState)
 let palDoc = null;           // document the Cmd+K context actions apply to (zoomed, else the one whose node is focused)
 let palTaskCtx = null;
-let dropDoc = null;          // document waiting for an SVG drop ("Set icon…" overlay)
-let palReturn = null, dropReturn = null; // { key, offset } of the node focused when a palette / the drop overlay opened; focus goes back there on close
+let palReturn = null; // { key, offset } of the node focused when a palette opened; focus goes back there on close
 const fresh = new Map();     // docId -> { section, after, node }: documents created here that roots does not list yet, kept in place until it does
 let draftSeq = 0;
 const DRAFT_KIND = { tasks: 'task', meetings: 'meeting' }; // what Enter drafts in a view (any other view: a plain doc)
@@ -52,7 +51,7 @@ const accessById = new Map(), accessLoading = new Set();
 let visibilityPeople = new Set();
 let visibilityRoles = new Map();
 let menu = null;             // open pill menu: { id, index }
-const groupPref = JSON.parse(localStorage.getItem('groupBy') || '{}'); // view id -> 'none' | 'status' | 'assignee' | 'type'
+const groupPref = JSON.parse(localStorage.getItem('groupBy') || '{}'); // view id -> 'none' | 'status' | 'assignee' | 'updated' | 'type'
 const sortPref = JSON.parse(localStorage.getItem('sortBy') || '{}');   // view id -> 'default' | 'title'
 let rootsLoaded = false, connected = false; // for the loading skeleton: shown while the view has no rows and roots/library/connection are still pending
 // font size: native page zoom (⇧⌘+ / ⇧⌘− / ⌘0), persisted. Default is one step below native.

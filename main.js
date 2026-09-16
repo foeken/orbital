@@ -2,7 +2,7 @@
 // Electron main: the process boundary. Everything that knows Tana lives in main/ (state, rows, documents, related,
 // views, pins, images); this file owns the window, the menu, the IPC table and the boot sequence, plus the test hook
 // that scripts/sdk-check.js and the CLI use to drive the same modules without a window.
-const { app, BrowserWindow, Menu, ipcMain, nativeTheme, shell } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, nativeTheme, screen, shell } = require('electron');
 const path = require('node:path');
 const db = require('./db');
 const { createTanaSession } = require('./tana-session');
@@ -14,7 +14,7 @@ const content = require('./sdk/content');
 const fields = require('./sdk/fields');
 const { NOT_CONNECTED, S, VIEWS, errText, idKind, isSpace, metaSigs, pathCache, truncatedViews, redoStack, report, scheduleRefresh, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
 const { cachedNodeHue, graphRow, members, rememberNodeHue, toNode } = require('./main/rows');
-const { accessContext, chatOutline, createDocument, creationOptions, documentAction, history, info, linkShared, metaSig, moveTarget, mut, mutTasks, onChange, op, outlineWithReferences, setIcon, setSensitive } = require('./main/documents');
+const { accessContext, chatOutline, createDocument, creationOptions, documentAction, history, info, linkShared, metaSig, moveTarget, mut, mutTasks, onChange, op, outlineWithReferences, setSensitive } = require('./main/documents');
 const { callOf, pathOf, related, spaceChildren, summaryUri } = require('./main/related');
 const { hiddenRules, listFilter, preset, refresh, search, setHidden, setViewFilter, start, viewFilter, viewRows } = require('./main/views');
 const { nodePin, pinState, pinTree, pinned, setPin, todayNode, weekNode, weekTitle } = require('./main/pins');
@@ -28,11 +28,29 @@ async function resolveInitialAuth(s) {
   catch (error) { return { authenticated: null, error }; }
 }
 
+// The window comes back where it was left: its normal frame (not the maximized or full-screen one) and whether it was
+// maximized, kept in the "window" setting. A frame that no longer sits on any display (a monitor unplugged) or that
+// is not a frame at all falls back to the default size, centred; the title bar must be on a display to grab it.
+const DEFAULT_WINDOW = { width: 900, height: 700 };
+function restoredBounds(saved, workAreas) {
+  if (!saved || ![saved.x, saved.y, saved.width, saved.height].every(Number.isFinite) || saved.width <= 0 || saved.height <= 0) return DEFAULT_WINDOW;
+  const { x, y, width, height } = saved;
+  const onScreen = workAreas.some((a) => x < a.x + a.width - 40 && x + width > a.x + 40 && y >= a.y - 10 && y < a.y + a.height - 40);
+  return onScreen ? { x, y, width, height } : DEFAULT_WINDOW;
+}
+
 function createWindow() {
+  const saved = db.setting('window');
   S.win = new BrowserWindow({
-    width: 900, height: 700, title: 'Tana', titleBarStyle: 'hiddenInset',
+    ...restoredBounds(saved, screen.getAllDisplays().map((d) => d.workArea)), title: 'Tana', titleBarStyle: 'hiddenInset',
     webPreferences: { preload: path.join(__dirname, 'preload.js') },
   });
+  if (saved && saved.maximized) S.win.maximize();
+  // saved shortly after a move or resize settles, and once more on close, so a quit or an update relaunch keeps it
+  let boundsTimer = null;
+  const saveBounds = () => { clearTimeout(boundsTimer); boundsTimer = null; if (!S.win.isDestroyed()) db.setSetting('window', { ...S.win.getNormalBounds(), maximized: S.win.isMaximized() }); };
+  for (const name of ['resize', 'move', 'maximize', 'unmaximize']) S.win.on(name, () => { clearTimeout(boundsTimer); boundsTimer = setTimeout(saveBounds, 500); });
+  S.win.on('close', saveBounds);
   S.win.on('page-title-updated', (e) => e.preventDefault());
   S.win.on('focus', () => refresh());
   S.win.loadFile(path.join(__dirname, 'index.html'));
@@ -138,7 +156,6 @@ ipcMain.handle('pins:pin', (_e, id, target) => setPin(id, target, true));
 ipcMain.handle('pins:unpin', (_e, id, target) => setPin(id, target, false));
 ipcMain.handle('pins:pinTo', (_e, hubId, uri) => nodePin(hubId, uri, true)); // pin a document on a meeting/space
 ipcMain.handle('pins:unpinFrom', (_e, hubId, uri) => nodePin(hubId, uri, false));
-ipcMain.handle('doc:setIcon', (_e, id, svg) => setIcon(id, svg));
 ipcMain.handle('sensitive:list', () => db.sensitiveIds());
 ipcMain.handle('sensitive:set', (_e, id, on) => setSensitive(id, on));
 ipcMain.handle('doc:related', (_e, id) => related(id)); // { summary, tagline, pinned[], outcomes[], notes[] }
@@ -185,7 +202,7 @@ ipcMain.handle('sync:login', async () => {
 
 if (process.env.TANA_MAIN_TEST) {
   module.exports = { resolveInitialAuth, graphRow, cachedNodeHue, VIEWS, toNode, outlineWithReferences, chatOutline, op, onChange, documentAction, createDocument, creationOptions, search, viewRows, spaceChildren, start, refresh, related, callOf, weekTitle, weekNode,
-    statusSnapshot: () => ({ ...S.status }), rememberNodeHue,
+    statusSnapshot: () => ({ ...S.status }), rememberNodeHue, restoredBounds,
     undo: () => history(undoStack, redoStack, 'undo', 'canUndo'), redo: () => history(redoStack, undoStack, 'redo', 'canRedo'), visibleGraphNodes, pinTree,
     nodePin,
     accessContext,

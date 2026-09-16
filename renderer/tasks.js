@@ -179,6 +179,7 @@ function applyTaskChange(ctx, call) {
     try {
       const changed = await call();
       closePalette(); taskResult(ctx, changed);
+      if (!frozen) render(true); // the caret is back in the row it changed, so a plain render would wait until it leaves
     } catch (e) {
       if (frozen) { selectionFrozen = false; if (renderDeferred) render(); }
       throw e;
@@ -190,7 +191,13 @@ function statusRows(q, ctx = palTaskCtx) {
   const current = ctx.docs.length === 1 ? stateOf(ctx.docs[0]) : null;
   return STATES.filter(([, label]) => fuzzyMatch(label, q)).map(([state, label]) => ({
     group: 'Status', icon: 'status', label, hint: state === current ? '✓' : '', keepOpen: true,
-    run: () => applyTaskChange(ctx, () => ctx.multi ? tana.setStateMany(ctx.docs.map((doc) => doc.id), state) : tana.setState(ctx.docs[0].id, state)),
+    run: () => applyTaskChange(ctx, async () => {
+      for (const doc of ctx.docs) holdRow(doc); // stays put, like a clicked box (renderer/views.js)
+      const changed = await (ctx.multi ? tana.setStateMany(ctx.docs.map((doc) => doc.id), state) : tana.setState(ctx.docs[0].id, state));
+      // shown now rather than when the live update lands: the caret is back in this row, where a plain render waits
+      for (const doc of ctx.docs) { doc.stateType = state; doc.done = state === 'closed' ? 1 : 0; }
+      return changed;
+    }),
   }));
 }
 function openStatusPalette(ctx) {
@@ -208,7 +215,7 @@ function manyAssigneeRows(q, ctx = palTaskCtx) {
 }
 function openManyAssigneePalette(ctx) {
   palTaskCtx = ctx; palMode = 'assigneesMany'; palRows = []; palIndex = 0; palBusy = false;
-  palette.hidden = false; palInput.placeholder = 'Assign tasks to…'; palInput.value = '';
+  palette.hidden = false; palInput.placeholder = ctx.multi ? 'Assign tasks to…' : 'Assign to…'; palInput.value = '';
   loadMembers(); renderPalette(); palInput.focus();
 }
 function taskActionRows(group = 'Actions') {
@@ -217,18 +224,21 @@ function taskActionRows(group = 'Actions') {
   if (ctx.multi) {
     const count = ctx.docs.length, noun = count === 1 ? 'task' : 'tasks', hint = ctx.skipped ? `${ctx.skipped} skipped` : '';
     return [
-      { id: 'status', group, icon: 'status', label: `Set status for ${count} ${noun}`, hint, disabled: !count || !tana.setStateMany, keepOpen: true, run: () => openStatusPalette(ctx), sub: () => statusRows('', ctx) },
+      { id: 'status', group, icon: 'status', label: `Set status for ${count} ${noun}`, subBase: `Set status for ${count} ${noun} to`, hint, disabled: !count || !tana.setStateMany, keepOpen: true, subAlways: true, run: () => openStatusPalette(ctx), sub: () => statusRows('', ctx) },
       { id: 'assign', group, icon: 'member', label: `Assign ${count} ${noun} to`, hint, disabled: !count || !tana.setAssigneesMany, keepOpen: true, run: () => openManyAssigneePalette(ctx), sub: async () => { await membersLoaded(); return manyAssigneeRows('', ctx); } },
     ];
   }
   if (!ctx.docs.length) return [];
   const doc = ctx.docs[0], rows = [];
-  if (tana.setState) rows.push({ id: 'status', group, icon: 'status', label: 'Set status', hint: Object.fromEntries(STATES)[stateOf(doc)] || '', keepOpen: true, run: () => openStatusPalette(ctx), sub: () => statusRows('', ctx) });
+  if (tana.setState) rows.push({ id: 'status', group, icon: 'status', label: 'Set status', subBase: 'Set status to', hint: Object.fromEntries(STATES)[stateOf(doc)] || '', keepOpen: true, subAlways: true, run: () => openStatusPalette(ctx), sub: () => statusRows('', ctx) });
   if (tana.taskMeta && tana.setAssignees) {
     loadTaskMeta(doc.id);
     const meta = taskMetaById.get(doc.id), hint = meta && meta.assignees.length ? meta.assignees.map(memberName).join(', ') : meta ? 'Unassigned' : 'Loading…';
     rows.push({ id: 'assign', group, icon: 'member', label: 'Edit assignees', hint, keepOpen: true, run: () => openAssigneePalette(doc, ctx), sub: async () => { await membersLoaded(); if (!taskMetaById.has(doc.id)) taskMetaById.set(doc.id, await tana.taskMeta(doc.id)); return assigneeRows('', doc); } });
   }
+  // "Assign to Robin" sets the assignee outright, where Edit assignees toggles one; the members are only fetched once
+  // the query reaches the row
+  if (tana.setAssigneesMany) rows.push({ id: 'assignTo', group, icon: 'assignTo', label: 'Assign to …', keepOpen: true, run: () => openManyAssigneePalette(ctx), sub: async () => { await membersLoaded(); return manyAssigneeRows('', ctx); } });
   return rows;
 }
 // the member list as a promise, for a second level offered from the first before anyone opened it
@@ -265,7 +275,7 @@ function selectionRows() {
   // the task's own checkbox (⌘↩ in the outline), zoomed or on its row
   if (!selected.length && nodes.length === 1 && isTask(nodes[0]) && canEditNode(nodes[0]) && items.has(nodes[0].id)) {
     const item = items.get(nodes[0].id);
-    rows.push({ id: 'toggleDone', group, icon: 'apply', label: item.node.done ? 'Reopen' : 'Complete', run: () => toggleDone(item) });
+    rows.push({ id: 'toggleDone', group, icon: 'apply', label: item.node.done ? 'Reopen' : 'Complete', run: () => toggleDone(item, true) });
   }
   rows.push(...taskActionRows(group));
   if (nodes.length && tana.insertAfter && tana.setText) {

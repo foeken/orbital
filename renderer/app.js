@@ -37,12 +37,22 @@ tana.onChanged((docId, info) => {
     loadRoots().then(renderSoon, showError);
   }
 });
+// A task is also drawn from copies of its own: a reference to it inside an open note (reference.node) and a sidebar row
+// (relatedBy). A change to the task brings their state and title along, or those rows keep the old box until their note
+// or sidebar reloads.
+function patchCopies(docId, state) {
+  const changes = Object.fromEntries(Object.entries(state).filter(([, value]) => value !== undefined));
+  const walk = (rows) => { for (const n of rows || []) { if (n.reference && n.reference.uri === docId && n.reference.node) Object.assign(n.reference.node, changes); walk(n.children); } };
+  for (const rows of kids.values()) walk(rows);
+  for (const data of relatedBy.values()) for (const [, rows] of railGroups(data)) for (const n of rows || []) if (n.id === docId) Object.assign(n, changes);
+}
 // The changed document's row, wherever it is listed, from one doc:info call instead of a reload of every view.
 // A document no view knows about may have just become listable, so that case still reloads.
 async function patchDoc(docId) {
   if (!tana.node) return loadRoots();
   let fresh;
   try { fresh = asDoc(await tana.node(docId)); } catch { return loadRoots(); } // deleted or unreadable: the lists decide
+  if (isTask(fresh)) patchCopies(docId, { text: fresh.text, title: fresh.title, done: fresh.done, stateType: fresh.stateType });
   let hit = extra.has(docId);
   if (hit) Object.assign(extra.get(docId), fresh);
   for (const s of views) for (const n of s.nodes) if (n.id === docId) { Object.assign(n, fresh); hit = true; }

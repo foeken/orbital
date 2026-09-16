@@ -1,5 +1,5 @@
 'use strict';
-// The zoomed document: page title editing, pin state, custom icons and the SVG drop overlay, sensitive marks.
+// The zoomed document: page title editing, pin state, sensitive marks.
 
 // ---- page title (zoomed into a document): edits go through the same debounce as node text; Enter -> first child, Esc restores ----
 titleEl.addEventListener('input', () => { const item = items.get(titleEl.dataset.key); if (!item) return; if (item.node.draft && !item.busy) { item.busy = true; materialise(item, titleEl); } else if (!item.node.draft) scheduleSave(item, [{ text: titleEl.textContent }]); });
@@ -41,15 +41,7 @@ function invalidateNode(id) {
   for (const section of views) section.nodes = section.nodes.filter((node) => node.id !== id);
   palRows = palRows.filter((row) => row.node?.id !== id);
   if (palDoc?.id === id) { palDoc = null; pinInfo = null; }
-  if (dropDoc?.id === id) dropDoc = null;
   if (zoom?.docId === id) zoom = null;
-}
-// ---- custom icons (api.setIcon): "Set icon…" drop overlay, or an .svg dropped straight onto a document line ----
-function setIcon(docId, svg) {
-  const d = allDocs().find((x) => x.id === docId) || extra.get(docId);
-  if (d) d.iconSvg = svg || undefined;
-  render();
-  run(() => tana.setIcon(docId, svg));
 }
 function setSensitiveMark(ids, on) {
   run(async () => {
@@ -64,28 +56,3 @@ function toggleSensitiveVisibility() {
   sensitiveVisible = !sensitiveVisible;
   refreshSensitive();
 }
-function startDrop(doc) {
-  dropDoc = doc; dropReturn = focused();
-  $('dropText').textContent = 'Drop an SVG file to set the icon of ' + (doc.text || doc.title || 'Untitled');
-  $('drop').hidden = false;
-  if (document.activeElement) document.activeElement.blur(); // keys go to the overlay (document listener), not into a node
-}
-function endDrop() {
-  dropDoc = null; $('drop').hidden = true; $('dropFile').value = '';
-  if (dropReturn) placeCaret(dropReturn.key, dropReturn.offset);
-  dropReturn = null;
-}
-function readSvg(file, cb) {
-  if (!file || !(file.type === 'image/svg+xml' || /\.svg$/i.test(file.name))) return showError('Drop an .svg file');
-  const r = new FileReader(); r.onload = () => cb(r.result); r.readAsText(file);
-}
-document.addEventListener('dragover', (e) => e.preventDefault());
-document.addEventListener('drop', (e) => {
-  e.preventDefault();
-  const line = !dropDoc && e.target.closest && e.target.closest('.line'), item = line && items.get(line.parentElement.dataset.key);
-  const doc = dropDoc || (item && item.node.kind === 'document' && item.node);
-  if (!doc) return;
-  readSvg(e.dataTransfer.files[0], (svg) => { endDrop(); setIcon(doc.id, svg); });
-});
-$('drop').onclick = endDrop;
-$('dropFile').onchange = () => { const doc = dropDoc; readSvg($('dropFile').files[0], (svg) => { endDrop(); setIcon(doc.id, svg); }); };

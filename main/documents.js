@@ -59,7 +59,7 @@ async function creationOptions() {
   const types = await Promise.all(result.nodes.map(async n => {
     rememberType(n);
     // the chooser shows a type the way its documents render: the type's own hue and its app-local icon
-    const look = { hue: ownHue(n) === undefined ? typeHues.get(n.id) : ownHue(n), iconSvg: db.icon(n.id) || undefined };
+    const look = { hue: ownHue(n) === undefined ? typeHues.get(n.id) : ownHue(n) };
     try { const config=await customCreation(n.id); return {id:n.id,kind:'custom',typeUri:n.id,title:n.title || '',...look,icon:config.kind === 'meeting' ? 'meeting' : 'doc',ownerUri:config.ownerUri,appliesTo:config.kind === 'meeting' ? 'events' : 'docs',selectable:true}; }
     catch(e) { return {id:n.id,kind:'custom',typeUri:n.id,title:n.title || '',...look,icon:'doc',selectable:false,reason:errText(e)}; }
   }));
@@ -97,15 +97,6 @@ async function info(doc) {
     id: doc.id, title: n.title || '', done: n.stateType === 'closed' ? 1 : 0, icon: isEvent ? 'meeting' : 'task',
     hue: hueWithType(hueOf(n), n.entityTypeUri), meta: isEvent ? eventMeta(n.startTime, n.endTime, true) : null, tags: [nodeTag(isEvent ? TAG.meeting : TAG.task, n), ...typeTag(n.entityTypeUri)],
   });
-}
-function setIcon(id, svg) {
-  if (svg != null) {
-    if (typeof svg !== 'string' || Buffer.byteLength(svg) >= 65536) throw new Error('icon must be an SVG string under 64 KB');
-    svg = svg.trim().replace(/^<\?xml[^>]*\?>\s*/, ''); // FileReader text of a .svg may start with an XML declaration
-    if (!svg.startsWith('<svg')) throw new Error('icon must start with <svg');
-  }
-  db.setIcon(id, svg);
-  send('outline:changed', null);
 }
 
 function setSensitive(id, on) {
@@ -305,4 +296,4 @@ async function moveTarget(spaceId) {
   return document(spaceId);
 }
 
-module.exports = { outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, createDocument, info, setIcon, setSensitive, subscribe, invalidateDeleted, onChange, document, op, inHistory, mut, mutTasks, documentAction, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget };
+module.exports = { outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, createDocument, info, setSensitive, subscribe, invalidateDeleted, onChange, document, op, inHistory, mut, mutTasks, documentAction, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget };

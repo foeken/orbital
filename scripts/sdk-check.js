@@ -488,6 +488,19 @@ async function main() {
     console.log('ok  rows carry updatedAt/createdAt/stateType, from the graph and from cached view rows');
   }
 
+  // The window reopens with its last frame, unless that frame is gone from every display or is not a frame at all.
+  {
+    const { restoredBounds } = mainHelpers(), plainJson = (v) => JSON.parse(JSON.stringify(v));
+    const laptop = { x: 0, y: 25, width: 1512, height: 920 }, external = { x: 1512, y: 0, width: 2560, height: 1415 };
+    assert.deepEqual(plainJson(restoredBounds(null, [laptop])), { width: 900, height: 700 }, 'first start: the default size, centred');
+    assert.deepEqual(plainJson(restoredBounds({ x: 120, y: 60, width: 1100, height: 820, maximized: false }, [laptop])), { x: 120, y: 60, width: 1100, height: 820 }, 'the saved frame comes back');
+    assert.deepEqual(plainJson(restoredBounds({ x: 1800, y: 100, width: 1400, height: 1000 }, [laptop, external])), { x: 1800, y: 100, width: 1400, height: 1000 }, 'also on a second display');
+    assert.deepEqual(plainJson(restoredBounds({ x: 1800, y: 100, width: 1400, height: 1000 }, [laptop])), { width: 900, height: 700 }, 'a frame left on an unplugged display falls back to the default');
+    assert.deepEqual(plainJson(restoredBounds({ x: 100, y: 2000, width: 800, height: 600 }, [laptop])), { width: 900, height: 700 }, 'so does a title bar below every display');
+    assert.deepEqual(plainJson(restoredBounds({ x: 'a', width: 0 }, [laptop])), { width: 900, height: 700 }, 'and a setting that is not a frame');
+    console.log('ok  window frame is restored only where a display still shows it');
+  }
+
   // #97: before the session and sync stream are ready, every view/metadata/permission call fails the same benign
   // way. Boot must stay quiet: no error status, no work fired against a client that does not exist yet.
   {
@@ -521,7 +534,6 @@ async function main() {
     const requests = [];
     let totalCount = 6;
     cache.setSetting('hiddenTitles', ['Hidden doc']);
-    cache.setIcon(doc.id, '<svg>cached</svg>');
     backend.testRuntime({ me: { userUri: ME }, win: null, client: { graph: { listNodes: async (p) => {
       requests.push(p);
       if (p.nodeIds) return { nodes: [] };
@@ -531,7 +543,7 @@ async function main() {
     assert.equal(requests.length, 1, 'one view fetch makes one graph query');
     assert.deepEqual(payload.nodes.map((n) => n.title).sort(), ['Doc', 'Meeting'], 'docs without tasks, MCP chats and hidden titles are post-filtered');
     assert.equal(payload.truncated, true);
-    assert.equal(payload.nodes.find((n) => n.id === doc.id).iconSvg, '<svg>cached</svg>');
+    assert.equal('iconSvg' in payload.nodes.find((n) => n.id === doc.id), false, 'rows carry no app-local icon');
     assert.deepEqual(Object.keys(cache.list()), ['library'], 'the fetched rows use the view id as their cache section');
     totalCount = 5;
     assert.equal((await backend.handlers.get('view:list')(null, 'library', { types: ['meetings', 'docs', 'chats'], states: null, assignee: 'anyone', mcp: true })).nodes.some((n) => n.id === mcp.id), true);
@@ -541,6 +553,25 @@ async function main() {
     assert.equal((await backend.handlers.get('view:list')(null, 'library', { types: ['meetings', 'docs'], states: null, assignee: 'anyone' })).truncated, false,
       'local post-filters do not create a false truncation warning');
     console.log('ok  one view fetch queries, post-filters, maps and caches rows');
+  }
+
+  // The index can trail a write: a task this app holds live keeps its live state on every row built from the index,
+  // or the refresh two seconds after "Set status to Inbox" puts In Progress back.
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const taskId = 'tana:text:' + ulid(), live = new Document(taskId);
+    live.transact((l) => initDocument(l, 'Accepted task', ME, { kind: 'task' }));
+    setState(live, 'proposed', ME); // just set to Inbox here; the index still says In Progress
+    backend.testRuntime({ me: { userUri: ME }, win: null, client: {
+      graph: { listNodes: async (p) => (p.nodeIds ? { nodes: [] } : { nodes: [{ id: taskId, title: 'Accepted task', state: { type: 'open' }, updateTime: '2026-09-15T12:00:00Z' }], totalCount: 1 }) },
+      sync: { subscribe: async () => null, unsubscribe: async () => {}, getDocument: (id) => (id === taskId ? live : undefined) },
+    } });
+    const row = (await backend.handlers.get('view:list')(null, 'tasks')).nodes.find((n) => n.id === taskId);
+    assert.equal(row.stateType, 'proposed', 'the listed row takes the live state over the lagging index');
+    assert.equal(row.done, 0);
+    const cached = (await backend.handlers.get('outline:roots')()).find((v) => v.id === 'tasks').nodes.find((n) => n.id === taskId);
+    assert.equal(cached.stateType, 'proposed', 'and so does the cached row the next roots read hands the renderer');
+    console.log('ok  a list refresh keeps the live state of a task over a lagging index');
   }
 
   // The real IPC handlers put every preset through that path; roots is cache-only and refresh repeats only the
@@ -679,7 +710,7 @@ async function main() {
 
     cache.setSetting('viewFilter:tasks', { states: ['open', 'nonsense'], assignee: 'sam' });
     const stored = await backend.handlers.get('view:filter')(null, 'tasks');
-    assert.equal(stored.states.join(','), 'proposed,open', 'a stored filter that is not a query falls back to the preset');
+    assert.equal(stored.states.join(','), 'proposed,open,not_now', 'a stored filter that is not a query falls back to the preset');
     assert.equal(stored.assignee, 'me');
     cache.setSetting('viewFilter:library', { types: ['tasks', 'wat'], states: [], assignee: 'anyone', text: 7 });
     const library = await backend.handlers.get('view:filter')(null, 'library');
@@ -862,7 +893,7 @@ async function main() {
     assert.deepEqual(parseQuery('a#b'), { text: 'a#b', tags: [] }, 'only word-initial #');
     const types = new Map([['project', 'tana:type:p']]);
     assert.equal(searchParams(parseQuery(''), types), null);
-    assert.deepEqual(searchParams(parseQuery('sam'), types), { nodeTypes: ['text', 'event', 'user-profile', 'space'], textQuery: 'sam', limit: 20, sortOptions: [{ field: 'SORT_FIELD_TEXT_RANK', direction: 'SORT_DIRECTION_DESCENDING' }] });
+    assert.deepEqual(searchParams(parseQuery('sam'), types), { nodeTypes: ['text', 'event', 'user-profile', 'space', 'search'], textQuery: 'sam', limit: 20, sortOptions: [{ field: 'SORT_FIELD_TEXT_RANK', direction: 'SORT_DIRECTION_DESCENDING' }] });
     const task = searchParams(parseQuery('sam #task'), types);
     assert.deepEqual([task.nodeTypes, task.stateTypes, task.textQuery], [['text'], STATE_TYPES, 'sam']);
     assert.deepEqual(searchParams(parseQuery('#meeting'), types).nodeTypes, ['event']);
@@ -884,8 +915,8 @@ async function main() {
     // Every preset uses the same view query (docs/VIEWS.md section 3).
     const UPD = [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }];
     const COUNT = 'LIST_NODES_MODE_WITH_COUNT';
-    assert.deepEqual(viewParams(VIEW_PRESETS.inbox, ME), { nodeTypes: ['event', 'text', 'chat', 'canvas', 'agent', 'skill'], stateTypes: ['proposed'], limit: 1000, sortOptions: UPD, mode: COUNT });
-    assert.deepEqual(viewParams(VIEW_PRESETS.tasks, ME), { nodeTypes: ['text'], stateTypes: ['proposed', 'open'], assignedTo: [ME], limit: 1000, sortOptions: UPD, mode: COUNT });
+    assert.deepEqual(viewParams(VIEW_PRESETS.inbox, ME), { nodeTypes: ['event', 'text', 'chat', 'canvas', 'agent', 'skill', 'search'], stateTypes: ['proposed'], limit: 1000, sortOptions: UPD, mode: COUNT });
+    assert.deepEqual(viewParams(VIEW_PRESETS.tasks, ME), { nodeTypes: ['text'], stateTypes: ['proposed', 'open', 'not_now'], assignedTo: [ME], limit: 1000, sortOptions: UPD, mode: COUNT });
     assert.deepEqual(viewParams(VIEW_PRESETS.library, ME), { nodeTypes: ['text'], stateTypes: ['proposed', 'open'], assignedTo: [ME], limit: 1000, sortOptions: UPD, mode: COUNT });
     assert.deepEqual(viewParams(VIEW_PRESETS.chats, ME), { nodeTypes: ['chat'], limit: 1000, sortOptions: UPD, mode: COUNT });
     assert.deepEqual(viewParams(VIEW_PRESETS.people, ME), { nodeTypes: ['user-profile'], limit: 1000, sortOptions: UPD, mode: COUNT });
@@ -918,6 +949,11 @@ async function main() {
     // which is about content rather than the containers it lives in.
     assert.deepEqual(viewParams({ types: ['spaces'] }, ME).nodeTypes, ['space'], 'the Library can list spaces');
     assert.equal(viewParams({ types: null }, ME).nodeTypes.includes('space'), false, 'and any type stays content');
+    // A saved search is a document, not a container: Tana's own client groups `search` with text, event and chat as a
+    // document kind, so unlike spaces it belongs in "any type" — which is what makes one show up in the Library at all.
+    assert.deepEqual(viewParams({ types: ['searches'] }, ME).nodeTypes, ['search'], 'saved searches are a kind the Library can list');
+    assert.equal(viewParams({ types: null }, ME).nodeTypes.includes('search'), true, 'and they are part of any type, unlike spaces');
+    assert.equal(searchParams(parseQuery('quarterly'), new Map()).nodeTypes.includes('search'), true, 'Cmd+S finds them too');
     assert.deepEqual(searchParams(parseQuery('foundry #space'), new Map()).nodeTypes, ['space'], '#space narrows a search to spaces');
     assert.equal(searchParams(parseQuery('foundry'), new Map()).nodeTypes.includes('space'), true, 'and a plain search finds them among everything else');
     // A kind page is that kind, whatever a stored filter from an older build says.

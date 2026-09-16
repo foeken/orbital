@@ -7,3 +7,6 @@ tana-auth.json
 *.zip
 .env
 .env.*
+
+# SDD workspaces: ledgers, briefs and review packages are scratch, not source
+.superpowers/

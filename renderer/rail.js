@@ -36,6 +36,7 @@ function railRow(node) {
   if (isTask(node)) {
     const check = document.createElement('input');
     check.type = 'checkbox'; check.className = 'check'; check.checked = !!node.done; check.tabIndex = -1;
+    if (node.stateType === 'proposed') check.classList.add('inbox');
     check.disabled = !canEditNode(node);
     check.onmousedown = (e) => e.preventDefault();
     check.onclick = (e) => { e.stopPropagation(); toggleRelated(node); };
@@ -44,7 +45,7 @@ function railRow(node) {
     const icon = document.createElement('span');
     icon.className = 'ricon ' + (node.icon || 'doc') + (node.hue != null ? ' hue' : '');
     if (node.hue != null) icon.style.setProperty('--hue', String(node.hue));
-    icon.innerHTML = node.iconSvg || iconSvg(node.icon || 'doc');
+    icon.innerHTML = iconSvg(node.icon || 'doc');
     row.append(icon);
   }
   const title = document.createElement('span');
@@ -67,8 +68,11 @@ function railRow(node) {
 }
 function toggleRelated(node) {
   if (!canEditNode(node) || !tana.setDone) return;
+  // node is the row's own copy (railRow(asDoc(…))): the sidebar is drawn again from relatedBy, so that changes too
+  if (acceptsFirst(node)) { node.stateType = 'open'; patchCopies(node.id, { stateType: 'open' }); run(async () => { await tana.setState(node.id, 'open'); }); return render(true); } // Inbox: accept first, complete next
   const done = node.done ? 0 : 1;
-  node.done = done;
+  node.done = done; node.stateType = done ? 'closed' : 'open';
+  patchCopies(node.id, { done, stateType: node.stateType });
   run(async () => { await tana.setDone(node.id, !!done); });
   render(true);
 }

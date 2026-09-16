@@ -25,6 +25,9 @@ function setCaret(el, offset) {
   r.collapse(true);
   const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
 }
+// A row that is nothing but one mention chip. Chromium draws no caret beside a non-editable inline and will not delete
+// one from a plaintext field, so the chip shows the focus itself (.chiponly) and Backspace removes the row.
+const chipOnly = (el) => el.childNodes.length === 1 && el.firstChild.nodeType === 1 && el.firstChild.classList.contains('mention');
 function focused() {
   const el = document.activeElement;
   if (el === titleEl && titleEl.isContentEditable) return { key: titleEl.dataset.key, offset: caretOffset(titleEl) };
@@ -80,6 +83,7 @@ function atEdge(el, dir) {
 let rendering = false; // a focusout caused by swapping elements out during a render is not the user leaving a node
 let renderDeferred = false;
 let caretOnOpen = false; // set when a node is opened: the first render with its children puts the caret where typing works
+let scrollOnType = false; // that caret is parked below the fold: the first character typed brings its row into view
 // An empty ordinary row is already somewhere to type; an image, divider or reference row is not.
 const typableRow = (n) => !!n && n.kind === 'block' && !isAtomic(n) && !isReference(n) && !plainOf(n).length;
 // Opening a node leaves a row to type in: the local draft row the empty document case has always shown, which stays
@@ -98,7 +102,10 @@ function editingRow() {
 // tint, and a row that left is put back where it was over a red tint and fades away. Within one view only, since
 // switching views, zooming and the first paint replace every row and must not flash.
 function animateRows(before) {
-  if (animView !== view) { animView = view; return; }
+  // Nothing on screen before this paint is the view appearing, not every row arriving at once: a view whose rows have
+  // not loaded yet paints empty first (loadView resolves after the render that asked for it), and that empty paint
+  // must not be mistaken for "these rows were already here".
+  if (animView !== view || !before.size) { animView = view; return; }
   const rows = [...outline.children].filter((el) => el.classList.contains('node'));
   const keys = new Set(rows.map((el) => el.dataset.key));
   const old = [...before.keys()];
@@ -122,13 +129,39 @@ function animateRows(before) {
 }
 // The render that would drop the row you are typing in is deferred until the caret leaves (complete a task and the
 // Tasks filter no longer wants it). Dim it meanwhile: it stays where it is, and the deferred render fades it out
-// like any other row that left.
+// like any other row that left. The view lists documents only, so the row to test is the top-level one the caret is in:
+// a block under an expanded task is not leaving unless that task is.
 function markFalling() {
-  const f = zoom ? null : focused(), el = f && nodeElOf(f.key), v = viewOf();
-  if (el && v) el.classList.toggle('falling', !v.nodes.some((n) => keyFor(n.id, n) === f.key));
+  const f = zoom ? null : focused(), v = viewOf();
+  let row = f && nodeElOf(f.key);
+  while (row && row.parentElement !== outline) row = row.parentElement?.closest('.node') || null;
+  if (row && v) row.classList.toggle('falling', !v.nodes.some((n) => keyFor(n.id, n) === row.dataset.key));
+}
+// A render that waits for the caret (or a frozen selection) still brings every checkbox up to date: its tick, its dashed
+// Inbox box and the struck-through text are chrome, not the text being typed, so a status set from Cmd+K with rows
+// selected, a live change from another device or a sidebar click shows at once instead of when the caret leaves. The
+// rows are read fresh: docCache can still hold rows a loadRoots has replaced since the last full render.
+function refreshRowChrome() {
+  const fresh = (id) => allDocs().find((d) => d.id === id) || extra.get(id);
+  for (const el of outline.querySelectorAll('.node')) {
+    const item = items.get(el.dataset.key), check = el.querySelector(':scope > .line > .check');
+    if (!item || !check) continue;
+    const node = (item.node.kind === 'document' && fresh(item.node.id)) || item.node, display = referenceTarget(node) || node;
+    check.checked = !!display.done;
+    check.classList.toggle('inbox', isTask(display) && display.stateType === 'proposed');
+    el.classList.toggle('done', !!display.done);
+  }
+  const page = zoom && !zoom.nodeId && !titleCheck.hidden ? fresh(zoom.docId) : null;
+  if (page) { titleCheck.checked = !!page.done; titleCheck.classList.toggle('inbox', acceptsFirst(page)); titleEl.classList.toggle('done', !!page.done); }
+  const related = new Map(railGroups(zoom ? relatedBy.get(zoom.docId) : null).flatMap(([, rows]) => rows || []).map((n) => [n.id, n]));
+  for (const row of railEl.querySelectorAll('.rrow[data-id]')) {
+    const n = related.get(row.dataset.id), check = row.querySelector('.check');
+    if (!n || !check) continue;
+    check.checked = !!n.done; check.classList.toggle('inbox', n.stateType === 'proposed'); row.classList.toggle('done', !!n.done);
+  }
 }
 function render(force = false) {
-  if (force !== true && (editingRow() || selectionFrozen)) { renderDeferred = true; markFalling(); return; }
+  if (force !== true && (editingRow() || selectionFrozen)) { renderDeferred = true; markFalling(); refreshRowChrome(); return; }
   renderDeferred = false; rendering = true;
   try { renderOutline(); } finally { rendering = false; }
 }
@@ -146,7 +179,8 @@ function renderSoon() {
 // which turns a live update or a refresh into a handful of rebuilt rows instead of a whole new outline.
 function rowSig(n) {
   const meta = taskMetaById.get(n.id);
-  return JSON.stringify([n.text, n.done, n.icon, n.iconSvg, n.hue, n.meta, n.tags, n.editable, n.draft, n.hasChildren, n.kind, n.type,
+  // stateType too: accepting an Inbox task changes only the state, and a reused row would keep the tick the click put in its box
+  return JSON.stringify([n.text, n.done, n.stateType, n.icon, n.hue, n.meta, n.tags, n.editable, n.draft, n.hasChildren, n.kind, n.type,
     sensitiveHidden(n.id), meta || (taskMetaLoading.has(n.id) ? 'loading' : null), members ? members.length : 0, open.get(n.id), pending.has(n.id)]);
 }
 function renderOutline() {
@@ -163,6 +197,12 @@ function renderOutline() {
     list = parent.node.draft ? [] : childrenOf(parent) || [];
     list = withDraftTail(list, parent); // an open node always has a row to type in; a read-only one (every chat) never does
     outline.replaceChildren(...list.map((n) => childEl(n, parent)));
+    animView = null; // a zoom replaced every row, and a zoomed row is keyed docId/nodeId while a view row is keyed by
+    // its document id, so on the way back nothing would match and the whole view would flash as if it had just arrived
+    // A node opens at its top, however far down the draft tail the caret goes (the caretOnOpen block below parks it
+    // there without scrolling). caretOnOpen is still set through both renders of an open — the "Loading…" one and the
+    // one the children arrive on, which grows the content — so both land at the top; later renders are left alone.
+    if (caretOnOpen) outline.parentElement.scrollTop = 0;
   } else {
     const v = viewOf(), docs = v ? v.nodes : [];
     const q = filterEl.value.trim().toLowerCase();
@@ -202,6 +242,7 @@ function renderOutline() {
   // zoomed task: its checkbox before the title (toggleDone, like row checkboxes; Cmd+Enter in the title too)
   const zoomedTask = parent && isTask(parent.node);
   titleCheck.hidden = !zoomedTask; titleCheck.checked = zoomedTask && !!parent.node.done;
+  titleCheck.classList.toggle('inbox', !!zoomedTask && acceptsFirst(parent.node)); // dashed while it waits in the Inbox
   titleCheck.disabled = zoomedTask && !canEditItem(parent);
   titleCheck.onclick = zoomedTask && canEditItem(parent) ? () => toggleDone(parent) : null;
   titleEl.classList.toggle('done', zoomedTask && !!parent.node.done);
@@ -239,7 +280,10 @@ function renderOutline() {
   if (caretOnOpen && parent && Array.isArray(childrenOf(parent))) {
     caretOnOpen = false;
     const last = list.at(-1), el = last && palette.hidden && !focused() ? textEl(keyFor(parent.docId, last)) : null;
-    if (el && el.isContentEditable && !el.textContent) setCaret(el, 0);
+    // preventScroll: that row is the last one, so focusing it the ordinary way scrolls a long node to its bottom and
+    // the open never shows its top. setCaret's own focus() is then a no-op (already the active element) and collapsing
+    // a range into it does not scroll either, so the caret waits out of sight until the first keystroke catches up.
+    if (el && el.isContentEditable && !el.textContent) { el.focus({ preventScroll: true }); setCaret(el, 0); scrollOnType = true; }
   }
   noteNavigation(); // where this render landed, for Cmd+[ and Cmd+]
 }
@@ -348,15 +392,15 @@ function nodeEl(node, docId, parent) {
   chev.onmousedown = (e) => e.preventDefault();
   chev.classList.toggle('off', !expandable); // hidden glyph, kept in the layout so the row never shifts
   const bullet = document.createElement('span'); bullet.className = 'bullet'; bullet.title = 'Zoom in';
-  if (display.iconSvg) { bullet.classList.add('icon', 'custom'); bullet.innerHTML = display.iconSvg; }
-  else if (display.icon) { bullet.classList.add('icon', display.icon); const svg = iconNode(display.icon); if (svg) bullet.append(svg); }
-  if (!display.iconSvg && display.hue != null) { bullet.classList.add('hue'); bullet.style.setProperty('--hue', String(display.hue)); } // type hue tints the icon and the plain bullet alike
+  if (display.icon) { bullet.classList.add('icon', display.icon); const svg = iconNode(display.icon); if (svg) bullet.append(svg); }
+  if (display.hue != null) { bullet.classList.add('hue'); bullet.style.setProperty('--hue', String(display.hue)); } // type hue tints the icon and the plain bullet alike
   bullet.onmousedown = (e) => e.preventDefault();
   if (!node.draft) bullet.onclick = () => reference ? openReference(node) : zoomTo(item);
   line.append(chev, bullet);
   if (isTask(display) || isCheckboxBlock(display)) {
     const check = document.createElement('input');
     check.type = 'checkbox'; check.className = 'check'; check.checked = !!display.done; check.tabIndex = -1;
+    if (isTask(display) && display.stateType === 'proposed') check.classList.add('inbox'); // not accepted yet: a dashed box
     check.onmousedown = (e) => e.preventDefault();
     check.disabled = reference ? !canEditNode(display) : !canEditItem(item);
     check.onclick = reference && canEditNode(display) ? () => toggleReference(node) : canEditItem(item) ? () => (isTask(node) ? toggleDone(item) : toggleCheckbox(item)) : null;
@@ -382,6 +426,7 @@ function nodeEl(node, docId, parent) {
     if (canEditText(item)) text.contentEditable = 'plaintext-only'; else text.tabIndex = -1;
     text.spellcheck = false;
     renderSegs(text, pending.has(item.key) ? pending.get(item.key).segs : reference ? [{ text: referenceLabel(node) }] : segsOf(node));
+    text.classList.toggle('chiponly', chipOnly(text));
   }
   body.append(text);
   if (display.meta) { const m = document.createElement('span'); m.className = 'meta'; m.textContent = display.meta; body.append(m); }

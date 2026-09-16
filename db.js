@@ -16,7 +16,7 @@ function open(path) {
     id TEXT NOT NULL, section TEXT NOT NULL, title TEXT NOT NULL, done INTEGER NOT NULL DEFAULT 0,
     icon TEXT, meta TEXT, tags TEXT NOT NULL DEFAULT '[]', sortKey TEXT NOT NULL, updatedAt TEXT NOT NULL,
     PRIMARY KEY (section, id))`);
-  db.exec('CREATE TABLE IF NOT EXISTS icons (id TEXT PRIMARY KEY, svg TEXT NOT NULL)'); // app-local custom document icons
+  db.exec("DROP TABLE IF EXISTS icons"); // app-local custom icons were removed (#224); an old cache still carries the table
   db.exec('CREATE TABLE IF NOT EXISTS sensitive_nodes (id TEXT PRIMARY KEY)'); // app-local sensitive documents
   db.exec('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)'); // JSON values (task filter, ...)
 }
@@ -72,17 +72,6 @@ function replaceSection(section, rows) {
   }
 }
 
-// custom icon (raw SVG) per document id; null removes it
-function icon(id) {
-  const r = db.prepare('SELECT svg FROM icons WHERE id = ?').get(id);
-  return r ? r.svg : null;
-}
-
-function setIcon(id, svg) {
-  if (svg == null) db.prepare('DELETE FROM icons WHERE id = ?').run(id);
-  else db.prepare('INSERT INTO icons (id, svg) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET svg = excluded.svg').run(id, svg);
-}
-
 function sensitiveIds() {
   return db.prepare('SELECT id FROM sensitive_nodes ORDER BY id').all().map((r) => r.id);
 }
@@ -104,4 +93,4 @@ function setSetting(key, value) {
   else db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, JSON.stringify(value));
 }
 
-module.exports = { open, list, get, remove, upsert, setRow, replaceSection, icon, setIcon, sensitiveIds, setSensitive, setting, setSetting };
+module.exports = { open, list, get, remove, upsert, setRow, replaceSection, sensitiveIds, setSensitive, setting, setSetting };

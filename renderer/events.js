@@ -57,6 +57,8 @@ outline.addEventListener('keydown', (e) => {
     if (e.key === 'Backspace' && len === 0) { e.preventDefault(); const all = texts(), prev = all[all.indexOf(el) - 1], k = prev && keyOfEl(prev); dropDraft(item); return k ? placeCaret(k) : focusAbove(); }
     if (e.key !== 'Escape' && !(e.key.startsWith('Arrow') && !mod)) return;
   }
+  // a row that is only a mention chip deletes like an image: the caret beside the chip can remove nothing (chipOnly)
+  if (!isDoc && !mod && (e.key === 'Backspace' || e.key === 'Delete') && chipOnly(el)) { e.preventDefault(); return removeNode(item, el); }
   // formatting: the toolbar's toggles from the keyboard, and Tab/Escape into and out of the toolbar itself
   if (e.key === 'Escape' && !toolbarEl.hidden) { e.preventDefault(); returnToSelection(); }
   else if (e.key === 'Tab' && !e.shiftKey && !toolbarEl.hidden) { e.preventDefault(); focusToolbar(); }
@@ -87,6 +89,10 @@ outline.addEventListener('input', (e) => {
   if (!el) return;
   const item = items.get(keyOfEl(el));
   if (!canEditText(item)) return;
+  // the caret was parked below the fold when the node opened: typing is the moment to scroll to it, once, and
+  // "nearest" is the smallest move that shows it (and nothing at all when the row is already on screen)
+  if (scrollOnType) { scrollOnType = false; el.scrollIntoView({ block: 'nearest' }); }
+  el.classList.toggle('chiponly', chipOnly(el)); // typing beside the chip gives the row a caret again
   if (!item.node.draft) scheduleSave(item, readSegs(el));
   else if (!item.busy && !item.node.pendingSplit) { item.busy = true; materialise(item, el); }
   if (item.node.kind === 'block' && el.textContent === '/' && palette.hidden) openSlash(item); // "/" alone in a node is the command menu
@@ -152,8 +158,7 @@ document.addEventListener('keydown', (e) => {
   // every combo, built-in or recorded, is a palette row id (DEFAULT_HOTKEYS in state.js); ⌘K and the text-size keys stay fixed
   // (a key the focused node already answered to — ⌘↑, ⌘↩ — arrives defaultPrevented and must not run twice)
   const combo = comboOf(e), hotkey = mod && !inFilter && !e.defaultPrevented ? hotkeyIds().find((id) => hotkeyFor(id) === combo) : undefined;
-  if (dropDoc) { if (e.defaultPrevented) return; if (e.key === 'Escape') { e.preventDefault(); endDrop(); } else if (e.key === 'Enter') { e.preventDefault(); $('dropFile').click(); } } // (the palette's Enter that started drop mode is already handled)
-  else if (mod && e.key === 'k') { e.preventDefault(); togglePalette('cmd'); }
+  if (mod && e.key === 'k') { e.preventDefault(); togglePalette('cmd'); }
   else if (mod && (e.key === '0' || (e.shiftKey && (e.key === '+' || e.key === '=' || e.key === '-' || e.key === '_')))) { e.preventDefault(); setZoom(e.key === '0' ? BASE_ZOOM : zoomFactor * (e.key === '-' || e.key === '_' ? 1 / 1.1 : 1.1)); }
   else if (hotkey === 'search') { e.preventDefault(); togglePalette('search'); } // also while the palette is open: it switches it to search
   else if (!palette.hidden) return;

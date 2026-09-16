@@ -14,19 +14,29 @@ function chooseRow(create) {
 }
 function settleEnter() { if (palEnter) { const create = palEnter === 'create'; palEnter = null; chooseRow(create); } }
 // hint defaults to the node's own meta, so a meeting keeps its date and time in every palette list
-const docRow = (n, hint, run) => ({ node: n, icon: n.icon, svg: n.iconSvg, label: n.text ?? n.title, tags: visibleTags(n), hint: hint === undefined ? n.meta : hint, run });
+const docRow = (n, hint, run) => ({ node: n, icon: n.icon, label: n.text ?? n.title, tags: visibleTags(n), hint: hint === undefined ? n.meta : hint, run });
 // The order of the rows about the node you are on: where it goes (open it, unfold it), what it is (done, status,
 // assignee), where it lives (pins, the date nodes, its space), what it looks like (image, visibility, sensitivity),
 // its link, and last the one destructive row. Rows without an id carry a `rank` from this list instead.
-const NODE_ROW_ORDER = ['zoomIn', 'expand', 'collapse', 'toggleDone', 'status', 'assign', 'pinSidebar', 'pinToday', 'addToday', 'addWeek', 'move', 'moveInbox', 'moveLibrary', 'setImage', 'removeIcon', 'visibility', 'sensitive', 'copyLink', 'delete'];
+const NODE_ROW_ORDER = ['zoomIn', 'expand', 'collapse', 'toggleDone', 'status', 'assign', 'assignTo', 'pinSidebar', 'pinToday', 'addToday', 'addWeek', 'move', 'moveLibrary', 'visibility', 'sensitive', 'copyLink', 'delete'];
 const nodeRank = (r) => { const i = NODE_ROW_ORDER.indexOf(r.rank || r.id); return i < 0 ? NODE_ROW_ORDER.length : i; };
 const VIEW_ORDER = ['inbox', 'today', 'week', 'tasks', 'meetings', 'people', 'chats', 'library'];
-// Matching a row: the query as a substring, else as word-prefix chunks in order ("moinb" → **M**ove to **inb**ox);
-// the matched character positions come back so the label can show them in bold. null when the row is out.
+// Matching a row, tiered the way Raycast ranks a title (its manual: aliases first, then the title's fuzzy score, which
+// favours the first letters of words). Best first:
+//   0  the label starts with the query      "in"    → **In**box
+//   1  the first words' initials, in a row   "mti"   → **M**ove **t**o **I**nbox ("mtinb" too)
+//   2  the query starts a later word         "in"    → Zoom **in**
+//   3  word-prefix chunks that skip words    "moinb" → **Mo**ve to **Inb**ox
+//   4  a substring inside a word             "in"    → P**in** to sidebar
+//   5  the letters in order, the first one starting a word ("inbx" → **Inb**o**x**), Raycast's "msg" → Messages;
+//      a first letter in the middle of a word would let nearly every long title in
+// The matched character positions come back so the label can show them in bold, with the tier as `rank` on that
+// array. null when the row is out.
 function fuzzyMatch(label, q) {
-  if (!q) return [];
-  const lower = label.toLowerCase(), at = lower.indexOf(q);
-  if (at >= 0) return Array.from({ length: q.length }, (_, i) => at + i);
+  const ranked = (at, rank) => Object.assign(at, { rank }), span = (from) => Array.from({ length: q.length }, (_, i) => from + i);
+  if (!q) return ranked([], 0);
+  const lower = label.toLowerCase();
+  if (lower.startsWith(q)) return ranked(span(0), 0);
   const starts = []; for (let i = 0; i < lower.length; i++) if (/[\p{L}\p{N}]/u.test(lower[i]) && (i === 0 || !/[\p{L}\p{N}]/u.test(lower[i - 1]))) starts.push(i);
   const rec = (qi, wi) => {
     if (qi === q.length) return [];
@@ -40,13 +50,29 @@ function fuzzyMatch(label, q) {
     }
     return null;
   };
-  return rec(0, 0);
+  const chunks = rec(0, 0);
+  // the words the chunks start in: 0, 1, 2, … is the initials tier
+  const words = chunks && chunks.filter((p, i) => i === 0 || p !== chunks[i - 1] + 1).map((p) => starts.indexOf(p));
+  if (words && words.every((w, i) => w === i)) return ranked(chunks, 1);
+  const wordAt = starts.find((s) => lower.startsWith(q, s));
+  if (wordAt !== undefined) return ranked(span(wordAt), 2);
+  if (chunks) return ranked(chunks, 3);
+  const at = lower.indexOf(q);
+  if (at >= 0) return ranked(span(at), 4);
+  for (const s of starts) {
+    if (lower[s] !== q[0]) continue;
+    const letters = [s];
+    for (let i = s + 1; i < lower.length && letters.length < q.length; i++) if (lower[i] === q[letters.length]) letters.push(i);
+    if (letters.length === q.length) return ranked(letters, 5);
+  }
+  return null;
 }
-// Rows that open a second level carry `sub`, the rows of that level. Once the query matches the first two letters
-// of such a row, its level is loaded (once per palette opening) and every choice is offered as one row here:
-// "Move to…" + "Inbox" → "Move to Inbox", so "moinb" reaches it without going down a level.
+// Rows that open a second level carry `sub`, the rows of that level, and every choice is offered as one row of its
+// own: "Move to …" + "Foundry" → "Move to Foundry", so "mtf" reaches it without going down a level (paletteRows
+// decides when a level is loaded).
 const subCache = new Map();
-function subRowsFor(row, q) {
+const subBase = (row) => row.subBase || row.label.replace(/\s*…$/, '');
+function subRowsFor(row) {
   const key = row.id || row.rank || row.label;
   if (!subCache.has(key)) {
     subCache.set(key, null);
@@ -54,8 +80,19 @@ function subRowsFor(row, q) {
   }
   const kids = subCache.get(key);
   if (!kids) return [];
-  const base = row.subBase || row.label.replace(/…$/, '');
+  const base = subBase(row);
   return kids.filter((k) => k.label && !k.disabled).map((k) => ({ ...k, id: undefined, sub: undefined, group: row.group, icon: k.icon || row.icon, label: base + ' ' + k.label }));
+}
+// With a query the closest matches come first ("in": Inbox before Zoom in): rows sort by match tier, then by where the
+// match starts, else keep their place. A group moves as a whole to where its best row lands, so every heading shows
+// once, and groups that match equally well keep the fixed order.
+function rankRows(rows) {
+  const cmp = (a, b) => a.match.rank - b.match.rank || a.match[0] - b.match[0];
+  const best = new Map(), first = new Map();
+  rows.forEach((r, i) => { if (!first.has(r.group)) first.set(r.group, i); if (!best.has(r.group) || cmp(r, best.get(r.group)) < 0) best.set(r.group, r); });
+  return rows.map((r, i) => ({ r, i }))
+    .sort((a, b) => (a.r.group === b.r.group ? cmp(a.r, b.r) || a.i - b.i : cmp(best.get(a.r.group), best.get(b.r.group)) || first.get(a.r.group) - first.get(b.r.group)))
+    .map(({ r }) => r);
 }
 function paletteRows(q) {
   const selection = selectionRows();
@@ -72,18 +109,13 @@ function paletteRows(q) {
   if (palDoc && tana.nodeLink && isRealId(palDoc.id)) {
     rows.push({ id: 'copyLink', group: docGroup, icon: 'link', label: 'Copy link', run: () => run(async () => copyText(await tana.nodeLink(palDoc.id), 'Link copied')) });
   }
-  if (palDoc && tana.setIcon) {
-    rows.push({ rank: 'setImage', group: docGroup, icon: 'setIcon', label: 'Set Image', run: () => startDrop(palDoc) });
-    if (palDoc.iconSvg) rows.push({ rank: 'removeIcon', group: docGroup, label: 'Remove icon', run: () => setIcon(palDoc.id, null) });
-  }
   if (palDoc && tana.accessOptions) {
     loadAccess(palDoc.id);
     const access = accessById.get(palDoc.id);
     if (access?.sharing) rows.push({ rank: 'visibility', group: docGroup, icon: 'lock', label: 'Edit visibility', run: () => openVisibilityPalette(palDoc), sub: () => visibilityRows('') });
-    if (access?.move) { // the two fixed places are rows of their own; the spaces are the folded level of "Move to…"
+    if (access?.move) { // Library is a row of its own and the spaces are the folded level of "Move to …"; the Inbox is Set status to Inbox
       const doc = palDoc;
-      rows.push({ rank: 'move', group: docGroup, icon: 'space', label: 'Move to…', keepOpen: true, run: () => openMovePalette(doc), sub: () => moveTargets(doc) });
-      for (const t of inboxTarget(doc)) rows.push({ ...t, rank: 'moveInbox', group: docGroup, label: 'Move to Inbox' });
+      rows.push({ rank: 'move', group: docGroup, icon: 'space', label: 'Move to …', keepOpen: true, subAlways: true, run: () => openMovePalette(doc), sub: () => moveTargets(doc) });
       if (access.ownerUri) rows.push({ rank: 'moveLibrary', group: docGroup, icon: 'library', label: 'Move to Library', keepOpen: true, run: () => { openMovePalette(doc); previewMoveToSpace(doc, { id: 'library', text: 'Library' }); } });
     }
   }
@@ -98,12 +130,12 @@ function paletteRows(q) {
   const viewRank = (r) => { const i = VIEW_ORDER.indexOf(r.id.replace(/^view:/, '')); return i < 0 ? VIEW_ORDER.length : i; };
   rows.push(...viewRows.sort((a, b) => viewRank(a) - viewRank(b)));
   rows.push(...pillCommandRows());
+  if (!zoom) rows.push({ id: 'filter', group: 'View options', icon: 'filter', label: 'Filter rows by text', run: () => { filterShown = true; render(); filterEl.focus(); } });
   // Actions: getting in first, then making and finding things, moving around, undoing, and last the app's own settings
   if (signedOut) rows.push({ id: 'login', group: 'Actions', label: 'Log in to Tana', run: () => tana.login().catch(showError) });
   if (tana.creationOptions) rows.push({ id: 'create', group: 'Actions', icon: 'createNew', label: 'Create new…', keepOpen: true, run: openCreationPalette, sub: async () => { creationChoices = (await tana.creationOptions()).options || []; return creationRows(''); } });
   // the keys the outline answers to, as rows: each has a default combo in DEFAULT_HOTKEYS and can be re-recorded
   rows.push({ id: 'search', group: 'Actions', icon: 'search', label: 'Search Tana', keepOpen: true, run: () => togglePalette('search') });
-  if (!zoom) rows.push({ id: 'filter', group: 'Actions', icon: 'filter', label: 'Filter rows', run: () => { filterShown = true; render(); filterEl.focus(); } });
   rows.push({ id: 'back', group: 'Actions', icon: 'back', label: 'Go back', disabled: !navBack.length, run: () => navigate(-1) });
   rows.push({ id: 'forward', group: 'Actions', icon: 'forward', label: 'Go forward', disabled: !navForward.length, run: () => navigate(1) });
   if (!railEl.hidden) rows.push({ id: 'rail', group: 'Actions', icon: 'rail', label: 'Focus the sidebar', run: () => focusRail() });
@@ -111,7 +143,7 @@ function paletteRows(q) {
   rows.push({ id: 'redo', group: 'Actions', icon: 'redo', label: 'Redo', run: () => history('redo') });
   rows.push({ id: 'sync', group: 'Actions', icon: 'sync', label: 'Sync', run: () => run(() => tana.refresh()) });
   // the list of titles hidden from every view and from search, edited in the palette itself
-  if (tana.filters) rows.push({ id: 'hidden', group: 'Actions', icon: 'hidden', label: 'Edit hidden items', keepOpen: true, run: openHiddenPalette });
+  if (tana.filters) rows.push({ id: 'hidden', group: 'Actions', icon: 'hiddenItems', label: 'Edit hidden items', keepOpen: true, run: openHiddenPalette });
   if (tana.sensitiveIds) rows.push({ id: 'sensitiveVisibility', group: 'Actions', icon: 'hidden', label: 'Toggle sensitive visibility', hint: sensitiveVisible ? 'Shown' : 'Hidden', run: toggleSensitiveVisibility });
   // text size stays on the fixed keys (their characters depend on the keyboard layout), so the chips are literal
   rows.push({ id: 'textLarger', group: 'Actions', icon: 'textLarger', label: 'Larger text', kbd: '⇧⌘+', run: () => setZoom(zoomFactor * 1.1) });
@@ -121,10 +153,19 @@ function paletteRows(q) {
   rows.push({ id: 'theme', group: 'Actions', icon: 'darkLight', label: 'Toggle ' + (dark ? 'light' : 'dark') + ' mode', run: () => setTheme(dark ? 'light' : 'dark') });
   if (tana.systemTheme) rows.push({ id: 'systemTheme', group: 'Actions', icon: 'darkLight', label: 'Toggle system dark/light mode', hint: themePref === 'system' ? 'Following macOS' : '', run: () => followSystem(themePref !== 'system') });
   if (q) for (const s of views) for (const n of s.nodes) rows.push({ ...docRow(n, n.meta || s.title, () => openDoc(n.id)), id: 'doc:' + n.id, group: 'Documents' });
-  if (q.length >= 2) for (const r of rows.filter((r) => r.sub && r.label.toLowerCase().startsWith(q.slice(0, 2)))) rows.splice(rows.indexOf(r) + 1, 0, ...subRowsFor(r, q));
-  let docsLeft = 8;
-  const seen = new Set(); // a document listed by several views, or a folded choice that reads like its parent, once
-  return rows.map((r) => ({ ...r, match: fuzzyMatch(r.label, q) })).filter((r) => r.match && !seen.has(r.id || r.group + '\n' + r.label) && seen.add(r.id || r.group + '\n' + r.label) && (r.group !== 'Documents' || docsLeft-- > 0)).map((r) => { const k = r.id && hotkeyFor(r.id); return k ? { ...r, kbd: k } : r; });
+  // A second level is folded in once the query's first two letters reach its row, as a prefix or as the first words'
+  // initials ("mo" or "mt" for Move to …, "as" or "at" for Assign to), and loaded once per palette opening. The spaces
+  // and the four statuses are short fixed lists, so "Move to …" and "Set status" (`subAlways`) load them as the palette
+  // opens and fold them in for any query: "inb" reaches Set status to Inbox, "foun" Move to Foundry.
+  for (const r of rows.filter((r) => r.sub && ((r.subAlways && !palette.hidden) || (q.length >= 2 && fuzzyMatch(subBase(r), q.slice(0, 2))?.rank <= 1)))) {
+    const kids = subRowsFor(r);
+    if (q) rows.splice(rows.indexOf(r) + 1, 0, ...kids);
+  }
+  const seen = new Set(), key = (r) => r.id || r.group + '\n' + r.label; // a document listed by several views, or a folded choice that reads like its parent, once
+  let matched = rows.map((r) => ({ ...r, match: fuzzyMatch(r.label, q) })).filter((r) => r.match && !seen.has(key(r)) && seen.add(key(r)));
+  if (q) matched = rankRows(matched);
+  let docsLeft = 8; // the best eight documents, now that they are ranked
+  return matched.filter((r) => r.group !== 'Documents' || docsLeft-- > 0).map((r) => { const k = r.id && hotkeyFor(r.id); return k ? { ...r, kbd: k } : r; });
 }
 // a hotkey, recorded or default, runs its palette row's action (views/sync/login by id; documents wherever they live);
 // false when no such row exists right now, so the key can fall through to whatever else it means
@@ -185,7 +226,7 @@ function openHiddenPalette() {
 }
 function creationRows(q) {
   if (palBusy) return [{ group: 'Create new', label: 'Loading choices…', disabled: true }];
-  return creationChoices.filter((choice) => fuzzyMatch(choice.title, q)).map((choice) => ({ group: choice.kind === 'custom' ? 'Workspace types' : 'Create new', icon: choice.icon, svg: choice.iconSvg, hue: choice.hue, label: choice.title, hint: choice.selectable ? '' : choice.reason || 'Unavailable', disabled: !choice.selectable, keepOpen: true, run: () => startCreation(choice) }));
+  return creationChoices.filter((choice) => fuzzyMatch(choice.title, q)).map((choice) => ({ group: choice.kind === 'custom' ? 'Workspace types' : 'Create new', icon: choice.icon, hue: choice.hue, label: choice.title, hint: choice.selectable ? '' : choice.reason || 'Unavailable', disabled: !choice.selectable, keepOpen: true, run: () => startCreation(choice) }));
 }
 function openCreationPalette() {
   palMode = 'create'; palRows = []; palIndex = 0; palette.hidden = false;
@@ -233,13 +274,34 @@ function pinResult(ctx, node) {
     relatedBy.delete(ctx.pinHub); relatedBy.delete(ctx.docId); render();
   });
 }
+// The typed words a search result's title holds (#type filters left out): their positions, for the bold letters, with
+// `hits` (words found) and `starts` (how many of those begin a word) on the array.
+function titleHits(title, q) {
+  const lower = title.toLowerCase(), at = [];
+  let hits = 0, starts = 0;
+  for (const term of q.toLowerCase().split(/\s+/)) {
+    if (!term || term.startsWith('#')) continue;
+    const first = lower.indexOf(term);
+    if (first < 0) continue;
+    let i = first;
+    while (i > 0 && /[\p{L}\p{N}]/u.test(lower[i - 1])) i = lower.indexOf(term, i + 1); // the first place it begins a word, if any
+    hits++; if (i >= 0) starts++;
+    for (let k = 0; k < term.length; k++) at.push((i >= 0 ? i : first) + k);
+  }
+  return Object.assign(at, { hits, starts });
+}
 function searchNow() {
   const q = palInput.value.trim(), seq = ++palSeq;
   palTimer = null; palBusy = !!q;
   if (!q) { palRows = resultRows(recentRows(), 'RECENTLY VIEWED'); return renderPalette(); }
-  tana.search(q).then((nodes) => {
+  tana.search(q).then((found) => {
     if (seq !== palSeq || palMode !== 'search') return; // stale response
-    palRows = resultRows(nodes);
+    // Tana's order does not weigh the title: a document that only mentions the words in its body can lead one titled
+    // with them. The titles holding the most typed words come first, then those where more of them begin a word, and
+    // Tana's order among equals. Only those words are bold, not the looser Cmd+K letter match.
+    const score = new Map(found.map((n) => [n, titleHits(n.title ?? n.text ?? '', q)]));
+    const nodes = found.map((n, i) => ({ n, i })).sort((a, b) => score.get(b.n).hits - score.get(a.n).hits || score.get(b.n).starts - score.get(a.n).starts || a.i - b.i).map(({ n }) => n);
+    palRows = resultRows(nodes).map((row) => (row.node ? { ...row, match: titleHits(row.label ?? '', q) } : row));
     // Linking: a result is only the obvious choice when its title starts with what was typed. A full-text hit
     // that merely mentions the words is not, so "Create" stays selected and Enter creates.
     const starts = nodes.findIndex((n) => (n.title ?? n.text ?? '').toLowerCase().startsWith(q.toLowerCase()));
@@ -266,9 +328,9 @@ function renderPalette() {
   palRows.forEach((r, i) => {
     if (r.group && (!i || palRows[i - 1].group !== r.group)) { const h = document.createElement('div'); h.className = 'group'; h.textContent = r.group; els.push(h); }
     const row = document.createElement('div'); row.className = 'row' + (i === palIndex ? ' active' : '') + (r.disabled ? ' disabled' : ''); row.dataset.index = i;
-    const icon = document.createElement('span'); icon.className = 'ricon' + (r.node ? ' ' + (r.svg ? 'custom' : r.icon || 'dot') : r.svg ? ' custom' : ''); icon.innerHTML = r.svg || (r.icon ? iconSvg(r.icon) : '');
+    const icon = document.createElement('span'); icon.className = 'ricon' + (r.node ? ' ' + (r.icon || 'dot') : ''); icon.innerHTML = r.icon ? iconSvg(r.icon) : '';
     const rowHue = r.node ? r.node.hue : r.hue; // documents and "Create new…" type choices both carry the type hue
-    if (!r.svg && rowHue != null) { icon.classList.add('hue'); icon.style.setProperty('--hue', String(rowHue)); }
+    if (rowHue != null) { icon.classList.add('hue'); icon.style.setProperty('--hue', String(rowHue)); }
     const label = document.createElement('span'); label.className = 'label';
     const match = r.match || (q ? fuzzyMatch(r.label, q.toLowerCase()) : null); // every level: the letters the query matched, in bold
     if (match && match.length) {
@@ -301,6 +363,7 @@ function togglePalette(mode, link, pin) {
   if (!show) { clearTimeout(palTimer); palTimer = null; return returnFocus(); }
   if (!palReturn) palReturn = focused(); // switching modes keeps the original return target
   linkCtx = link || null;
+  anchorPalette(link && link.rect);
   pinCtx = pin || null;
   if (mode !== 'slash') slashCtx = null;
   palMode = mode; palRows = []; palIndex = 0; palBusy = false; palEnter = null; clearTimeout(palTimer); palTimer = null;
@@ -309,6 +372,20 @@ function togglePalette(mode, link, pin) {
   palInput.value = link ? link.text : '';
   if (mode === 'search') searchNow(); else renderPalette();
   palInput.focus();
+}
+// @ linking opens the search as a dropdown at the text it links, like Tana's own: no scrim, a smaller card under the
+// caret (above it when the window has more room there). Every other mode keeps the centred card.
+function anchorPalette(rect) {
+  const card = palette.querySelector('.card');
+  palette.classList.toggle('anchored', !!rect);
+  card.style.cssText = '';
+  if (!rect) return;
+  const width = Math.min(440, innerWidth - 16), below = innerHeight - rect.bottom - 14, above = rect.top - 14;
+  const up = below < 240 && above > below;
+  card.style.width = width + 'px';
+  card.style.left = Math.max(8, Math.min(innerWidth - width - 8, rect.left - 8)) + 'px';
+  card.style.maxHeight = Math.min(360, up ? above : below) + 'px';
+  if (up) card.style.bottom = (innerHeight - rect.top + 6) + 'px'; else card.style.top = (rect.bottom + 6) + 'px';
 }
 function closePalette() { palette.hidden = true; clearTimeout(palTimer); palTimer = null; cancelLink(); pinCtx = null; pillCtx = null; returnFocus(); }
 // back to the node that had the caret when the palette opened (the @ link path places its own caret); with nothing to

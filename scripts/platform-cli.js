@@ -431,6 +431,19 @@ commands.libraryprobe = async () => {
 };
 // chatlist [--limit 200]: every chat newest first with its invocationContext. search() has no chat kind (query.js
 // searchParams lists text/event/user-profile only), so this is how a chat is found by title.
+// listkind <nodeType> [--limit 50]: does the graph answer for a kind we have never listed? nodeTypes is a free-form
+// string list on the wire (scalar, not an enum — fromJson accepts any string, including nonsense), so asking the
+// server is the only way to learn what a kind string actually returns. Read-only.
+commands.listkind = async () => {
+  if (!positional[0]) throw new Error('usage: listkind <nodeType> [--limit 50]  (e.g. listkind search)');
+  await connect();
+  const { nodes, totalCount } = await client.graph.listNodes({
+    nodeTypes: [positional[0]], limit: Number(flag('limit', 50)), mode: 'LIST_NODES_MODE_WITH_COUNT',
+    sortOptions: [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }],
+  });
+  for (const n of nodes) out(n.id + '\t' + JSON.stringify(n.title || '') + '\towner=' + (n.ownerUri || '-'));
+  out(nodes.length + ' nodes of kind ' + JSON.stringify(positional[0]) + (totalCount === undefined ? '' : ' (totalCount ' + totalCount + ')'));
+};
 commands.chatlist = async () => {
   await connect();
   const { nodes } = await client.graph.listNodes({ nodeTypes: ['chat'], limit: Number(flag('limit', 200)), sortOptions: [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }] });
@@ -609,7 +622,7 @@ const USAGE = [
   '  session    login | whoami',
   '  read       list [--state open|all] | search <query> [#task|#meeting|#member|#Type] | types | fields [<type uri>] |',
   '             meetings [--days 7] | chatlist [--limit 200] | get <id> | outline <id> | rawdoc <id> [--containers 1] |',
-  '             graphnode <id> | edges <id> | image <tana:image:uri> | pins [--dates]',
+  '             graphnode <id> | edges <id> | listkind <nodeType> [--limit 50] | image <tana:image:uri> | pins [--dates]',
   '  diagnose   inspect <id...> | audiences [--limit 80] [--mine 0] [--kind text] | refs <id> | rows <query> | pinrows |',
   '             caps <id...> | related <id> | pageprobe | libraryprobe | boot [--settle ms]',
   '  live       watch <id...>',

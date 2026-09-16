@@ -143,12 +143,17 @@ function setOpen(item, value) {
   if (value && !hasKids(item) && item.node.kind !== 'document' && item.node.done == null && !['paragraph', 'bullet', 'numbered'].includes(item.node.block)) return;
   open.set(item.key, value); render(true);
 }
-function toggleDone(item) {
+// The box and ⌘↩ accept an Inbox task first (In Progress) and complete it on the next go; direct is the Cmd+K
+// Complete/Reopen row, which does what its label says.
+function toggleDone(item, direct) {
   if (!canEditItem(item) || !isTask(item.node) || item.node.draft) return;
-  item.node.done = item.node.done ? 0 : 1;
+  holdRow(item.node); // the row stays put, new box and all, until the view is left
+  const accept = !direct && acceptsFirst(item.node);
+  if (!accept) item.node.done = item.node.done ? 0 : 1;
+  item.node.stateType = item.node.done ? 'closed' : 'open'; // what setDone makes of it: an unchecked Inbox task comes back In Progress, not dashed
   if (zoom && zoom.docId === item.docId) extra.set(item.docId, item.node); // the page stays open when the task leaves the filtered view
   render(true);
-  run(() => tana.setDone(item.docId, item.node.done));
+  run(() => (accept ? tana.setState(item.docId, 'open') : tana.setDone(item.docId, item.node.done)));
 }
 function toggleCheckbox(item) {
   if (!canEditItem(item) || item.node.kind !== 'block' || !tana.toggleCheckbox) return;
@@ -181,18 +186,24 @@ function openReference(node) {
 function toggleReference(node) {
   const target = referenceTarget(node);
   if (!target || !isTask(target) || !canEditNode(target)) return;
+  if (acceptsFirst(target)) { // an Inbox task is accepted (In Progress) first, completed on the next click
+    node.reference.node = { ...node.reference.node, stateType: 'open' };
+    extra.set(target.id, { ...target, stateType: 'open' });
+    render(true);
+    return run(() => tana.setState(target.id, 'open'));
+  }
   const done = target.done ? 0 : 1; // referenceTarget() hands back a copy: write the new state where the row reads it
   node.reference.node = { ...node.reference.node, done };
   extra.set(target.id, { ...target, done });
   render(true);
   run(() => tana.setDone(target.id, done));
 }
-function setView(id) { dropDrafts(); view = id; localStorage.setItem('view', id); zoom = null; sel = null; menu = null; loadView(id); render(true); }
+function setView(id) { dropDrafts(); releaseHeld(); view = id; localStorage.setItem('view', id); zoom = null; sel = null; menu = null; loadView(id); render(true); }
 // zoom into a document, switching to its view first when it belongs to another one; from = breadcrumb root instead of the view
 function openDoc(docId, from) {
   flushAll(); dropDrafts(); caretOnOpen = true;
   const s = from ? null : sectionOf(docId);
-  if (s && s.id !== view) { view = s.id; localStorage.setItem('view', view); }
+  if (s && s.id !== view) { releaseHeld(); view = s.id; localStorage.setItem('view', view); }
   const doc = allDocs().find((d) => d.id === docId) || extra.get(docId);
   if (doc) recordRecent(doc);
   zoom = { docId, nodeId: null, from };

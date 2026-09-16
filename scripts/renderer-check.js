@@ -53,8 +53,9 @@ assert.match(source, /display\.hue != null/);
 assert.match(source, /const rowHue = r\.node \? r\.node\.hue : r\.hue;/);
 // a recently viewed row keeps the hue it was recorded with, so its icon is the colour it is everywhere else
 assert.match(source, /const entry = \{ id: n\.id,[^}]*hue: n\.hue \}/);
-assert.match(source, /if \(!r\.svg && rowHue != null\) \{ icon\.classList\.add\('hue'\)/);
-assert.match(source, /if \(!display\.iconSvg && display\.hue != null\) \{ bullet\.classList\.add\('hue'\)/);
+assert.match(source, /if \(rowHue != null\) \{ icon\.classList\.add\('hue'\)/);
+assert.match(source, /if \(display\.hue != null\) \{ bullet\.classList\.add\('hue'\)/);
+assert.doesNotMatch(source, /iconSvg:|\.iconSvg\b|setIcon|startDrop/, 'app-local custom icons are gone');
 assert.match(source, /scrollIntoView\(\{ block: 'nearest', inline: 'nearest', container: 'nearest' \}\)/);
 assert.match(source, /id: 'people', title: 'People', icon: 'member'/);
 assert.match(source, /title: s\.id === 'people' \? 'People' : s\.title/);
@@ -77,7 +78,7 @@ assert.match(source, /else toggleCheckbox\(item\)/);
 assert.match(source, /const isCheckboxBlock = \(node\) => node\?\.kind === 'block' && node\.done != null/);
 assert.match(source, /function visibleTags\(node\) \{/);
 assert.match(source, /tags\.some\(\(tag\) => tag\.label !== 'task'\) \? tags\.filter\(\(tag\) => tag\.label !== 'task'\) : tags/);
-assert.match(source, /const docRow = \(n, hint, run\) => \(\{ node: n, icon: n\.icon, svg: n\.iconSvg, label: n\.text \?\? n\.title, tags: visibleTags\(n\)/);
+assert.match(source, /const docRow = \(n, hint, run\) => \(\{ node: n, icon: n\.icon, label: n\.text \?\? n\.title, tags: visibleTags\(n\)/);
 assert.match(source, /parent\.node\?\.kind !== 'document' && parent\.node\?\.done != null \? 0 : undefined/);
 assert.match(source, /f && f\.node\.kind === 'block' && f\.node\.done != null \? 0 : undefined/);
 assert.match(source, /f\.node\.kind === 'block' && f\.node\.done != null \? 0 : undefined/);
@@ -332,6 +333,9 @@ const styleSheet = fs.readFileSync(require.resolve('../styles.css'), 'utf8');
 for (const rule of [/\.toolbar \{/, /\.tbtn \{/, /\.text code \{/, /\.text a\.link \{/, /\.node\.t-numbered \{/, /\.node\.t-code > \.line \.text \{/, /\.node\.t-quote > \.line \.text \{/, /\.text\.divider hr \{/, /\.clearfilters \{/]) {
   assert.match(styleSheet, rule, 'styles.css carries ' + rule.source);
 }
+// a closed palette must hide even while it still carries the @ dropdown class (#240): same weight, later rule wins
+assert.doesNotMatch(styleSheet, /\.palette\.anchored \{/, 'the @ dropdown layout must not outweigh .palette[hidden]');
+assert.match(styleSheet, /\.palette\.anchored:not\(\[hidden\]\) \{/, 'the @ dropdown layout applies only while the palette is shown');
 
 Promise.all([splitTypingCheck(), cachedBootMetadataCheck(), mockCreationPermissionCheck()]).then(() => console.log('renderer auth check passed'));
 // a mention lands in the row the caret is in (an @ at the caret, or over a selection): the render must not defer

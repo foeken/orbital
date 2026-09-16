@@ -37,7 +37,7 @@ filters the rows already on screen.
 call link, its notes and its pins. Tasks carry state, assignee and audience. Sensitive nodes are
 redacted for screen-sharing and toggled back with one command, and titles you never want to see
 ("Lunch", "Block*") can be hidden from every list and search. None of that leaves the machine: the
-sensitive marks, the hidden list, custom icons and the row cache are local.
+sensitive marks, the hidden list and the row cache are local.
 
 ## Running it
 
