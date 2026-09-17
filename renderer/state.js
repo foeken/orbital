@@ -5,6 +5,7 @@ const tana = window.api || mockApi();
 
 // ---- state ----
 let views = [];              // [{ id, title, icon, nodes: document Node[] }]
+let searches = [];           // [{ id, title, icon, … }] saved search documents, for the Cmd+K Searches group
 let view = localStorage.getItem('view') || 'tasks'; // active view id; the outline shows one view at a time
 if (view === 'members') view = 'people';
 let authed = false, authChecking = true, signedOut = false;

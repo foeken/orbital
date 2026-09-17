@@ -71,4 +71,5 @@ tana.onStatus(showStatus);
 if (tana.onSystemTheme) tana.onSystemTheme((t) => { if (themePref === 'system') applyTheme(t); }); // macOS appearance changes re-theme a running window
 if (themePref === 'system') followSystem(true);
 loadRoots().then(render, showError).then(loadFilters);
+if (tana.searches) tana.searches().then((list) => { searches = list || []; renderSoon(); }, () => {}); // Cmd+K only: never blocks the first paint
 tana.status().then(showStatus, showError);

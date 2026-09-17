@@ -1083,7 +1083,7 @@ function runAuthPaletteCheck() {
     const $ = (id) => id === 'loginBox' ? loginBox : id === 'filtered' ? filtered : {};
     const showError = () => {};
     const render = () => {};
-    const views = [];
+    const views = [], searches = [];
     const pinTree = [];
     const pinRows = () => [], selectionRows = () => [];
     const pillCommandRows = () => [];
@@ -1127,7 +1127,7 @@ async function runSyncShortcutCheck() {
   // The second level of a row is folded into the first once the first two letters reach it (a prefix or the initials):
   // its rows appear as "<subBase> <choice>" right after the row, loaded once, and the same query then filters them.
   const folded = vm.runInNewContext(`
-    const views = [], pinTree = [], pinRows = () => [], pillCommandRows = () => [], taskActionRows = () => [];
+    const views = [], searches = [], pinTree = [], pinRows = () => [], pillCommandRows = () => [], taskActionRows = () => [];
     let loads = 0;
     const selectionRows = () => [{ id: 'status', group: 'Current node', label: 'Set status', subBase: 'Set status to', keepOpen: true, run: () => {}, sub: () => { loads++; return [{ label: 'Inbox', run: () => {} }, { label: 'In Progress', run: () => {} }, { label: 'Later', disabled: true, run: () => {} }]; } }];
     const tana = { refresh: async () => {} }, run = () => {};
@@ -1170,7 +1170,7 @@ async function runSyncShortcutCheck() {
   // sequence (open, task state, where it lives, what it looks like, link, delete last), then Views, view options,
   // and Actions from "get in" to the app's own settings.
   const order = vm.runInNewContext(`
-    const views = [{ id: 'library', title: 'Library', icon: 'library', nodes: [] }, { id: 'tasks', title: 'Tasks', icon: 'task', nodes: [] }, { id: 'inbox', title: 'Inbox', icon: 'inbox', nodes: [] }], pinTree = [], pinRows = () => [];
+    const views = [{ id: 'library', title: 'Library', icon: 'library', nodes: [] }, { id: 'tasks', title: 'Tasks', icon: 'task', nodes: [] }, { id: 'inbox', title: 'Inbox', icon: 'inbox', nodes: [] }], searches = [], pinTree = [], pinRows = () => [];
     const selectionRows = () => [{ id: 'delete', group: 'Current node', label: 'Delete' }, { id: 'sensitive', group: 'Current node', label: 'Mark as sensitive' }, { id: 'zoomIn', group: 'Current node', label: 'Zoom in' }, { id: 'status', group: 'Current node', label: 'Set status' }];
     const pillCommandRows = () => [{ id: 'pill:type', group: 'View options', label: 'Filter by type' }], taskActionRows = () => [];
     const tana = { refresh: async () => {}, todayNode: async () => {}, weekNode: async () => {}, nodeLink: async () => {}, accessOptions: async () => {}, filters: {}, sensitiveIds: () => {}, creationOptions: async () => {} }, run = () => {};
@@ -1255,7 +1255,7 @@ async function runSyncShortcutCheck() {
 
   const paletteRows = functionSource('paletteRows');
   const rows = vm.runInNewContext(`
-    const views = [], pinTree = [], pinRows = () => [], selectionRows = () => [];
+    const views = [], searches = [], pinTree = [], pinRows = () => [], selectionRows = () => [];
     const pillCommandRows = () => [];
     const taskActionRows = () => [];
     const tana = { refresh: async () => {} }, run = () => {};
@@ -2610,7 +2610,13 @@ async function runMemberLoadCheck() {
   assert.equal(throttled.attempts, 3, 'a slow start cannot turn renders into a request loop: a fresh ask is throttled');
 }
 
-const checks = [runDraftTailCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck];
+// Saved searches are places to go, so Cmd+K lists them under their own heading.
+function runSearchesGroupCheck() {
+  assert.match(source, /group: 'Searches'/, 'the palette has a Searches group');
+  assert.match(source, /searches = await tana\.searches\(\)|tana\.searches\(\)/, 'and the renderer loads them from the read-only channel');
+}
+
+const checks = [runDraftTailCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck];
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);
   if (failures.length) throw new AggregateError(failures, failures.map((failure) => failure.message).join('\n'));
