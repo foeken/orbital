@@ -177,4 +177,36 @@ function filterToSearchQuery(filter = {}, me) {
   return q;
 }
 
-module.exports = { parseQuery, searchParams, needsTypes, viewParams, searchQueryParams, filterToSearchQuery, validViewFilter, viewTypes, VIEW_PRESETS, VIEW_KINDS, KIND_VIEWS, hideRules, isHidden };
+// The other direction: a saved search's stored query as a view filter, so the pills that edit a view can edit a
+// saved search too. Two things make this lossy, and both guess deliberately rather than refuse:
+//   - Several view kinds share one node type (tasks and docs are both `text`), so a stored `text` reads as tasks
+//     when the query also constrains task state and as docs otherwise — the same reading viewRows applies at its
+//     docsWithoutTasks line when it separates those two.
+//   - A query can say things no pill can (attributes, workflowStates, visibility, several assignees at once).
+//     Those are dropped here rather than approximated, so what comes back is exactly what the pills can show.
+// Saving therefore rewrites the query from the pills alone: anything in the first bullet survives, anything in the
+// second does not, which is why saving is an explicit action on a saved search rather than a write per keystroke.
+const NODE_TYPE_KIND = { event: 'meetings', chat: 'chats', canvas: 'canvases', agent: 'agents', skill: 'skills', search: 'searches', space: 'spaces', 'user-profile': 'people' };
+function searchQueryToFilter(query, me) {
+  const q = query || {};
+  const list = (v) => (Array.isArray(v) && v.length ? v : null);
+  const states = (list(q.stateTypes) || []).filter((s) => STATE_TYPES.includes(s));
+  const types = list(q.types);
+  const kinds = types ? [...new Set(types.map((t) => (t === 'text' ? (states.length ? 'tasks' : 'docs') : NODE_TYPE_KIND[t])).filter((k) => VIEW_KINDS.includes(k)))] : [];
+  const assigned = list(q.assignedTo) || [];
+  const f = {
+    types: kinds.length ? kinds : null,
+    states: states.length ? states : null,
+    text: typeof q.textQuery === 'string' ? q.textQuery : '',
+    participant: me && (list(q.participantUris) || []).includes(me) ? 'me' : null,
+    window: q.eventTime && (q.eventTime.min != null || q.eventTime.max != null) ? 'recent' : null,
+  };
+  // assignedToViewer and an assignedTo that happens to be the signed-in user mean the same thing to a pill ("You"),
+  // so both come back as 'me' — writing it out again as assignedToViewer, which is what the viewer-relative pill means.
+  if (q.assignedToViewer === true || (me && assigned.includes(me))) f.assignee = 'me';
+  else if (q.unassigned === true) f.assignee = 'unassigned';
+  else f.assignee = assigned.find((uri) => USER.test(uri)) || 'anyone';
+  return f;
+}
+
+module.exports = { parseQuery, searchParams, needsTypes, viewParams, searchQueryParams, filterToSearchQuery, searchQueryToFilter, validViewFilter, viewTypes, VIEW_PRESETS, VIEW_KINDS, KIND_VIEWS, hideRules, isHidden };

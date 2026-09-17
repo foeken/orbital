@@ -217,6 +217,26 @@ function setViewF(patch) {
   filters.set(id, next); render();
   run(async () => { filters.set(id, await tana.setViewFilter(id, next)); await loadView(id); });
 }
+// The pills edit whatever page is in front of you: a view's persisted filter, or a saved search's stored query. One
+// key decides which, so pillDefs, pillsApply and every menu stay exactly as they were for both.
+const pillKey = () => (onSearchPage() ? zoom.docId : view);
+const searchFilters = new Map(); // saved search id -> the filter its document stores, as of the last load or save
+// A view persists every pill change as it is made; a saved search is a document other people may be looking at, so
+// its edits stay local until Save. That difference is the only reason these two write paths are not one.
+const searchDirty = () => onSearchPage() && !!searchFilters.get(zoom.docId) && !sameFilter(filters.get(zoom.docId), searchFilters.get(zoom.docId));
+function setSearchF(patch) {
+  const id = pillKey();
+  filters.set(id, { ...filters.get(id), ...patch }); render();
+}
+function loadSearchFilter(docId) {
+  if (!tana.searchFilter || searchFilters.has(docId)) return;
+  searchFilters.set(docId, null); // claimed, so the renders while it is in flight do not ask again
+  tana.searchFilter(docId).then((filter) => {
+    searchFilters.set(docId, filter);
+    if (!filters.has(docId)) filters.set(docId, filter); // a local edit already in progress is not overwritten
+    render();
+  }, (e) => { searchFilters.delete(docId); showError(e); });
+}
 const clearFilter = (f = {}) => ({ types: null, states: null, assignee: 'anyone', text: '', participant: f.participant || null, window: f.window || null });
 const sameList = (a, b) => JSON.stringify(a ? [...a].sort() : a) === JSON.stringify(b ? [...b].sort() : b);
 function sameFilter(a = {}, b = {}) {

@@ -592,7 +592,9 @@ async function runMultiTaskPaletteCheck() {
 }
 
 function runAssignedDropdown() {
-  const definitions = sourceBetween('const STATES =', 'function renderPills');
+  // The pills now serve two kinds of page, so pillDefs asks which one it is on. These harnesses are all about views,
+// so they answer "a view" — the saved search side gets its own check rather than a share of theirs.
+const definitions = 'const onSearchPage = () => false, pillKey = () => view, setSearchF = () => {};\n' + sourceBetween('const STATES =', 'function renderPills');
   const api = vm.runInNewContext(`
     let view = 'tasks';
     const filters = new Map([['tasks', { types: ['tasks'], states: ['open'], assignee: 'me' }]]);
@@ -1730,7 +1732,9 @@ async function runSlashMenuCheck() {
 
 // A filter choice must stop covering the list it just filtered: single-choice rows close the menu, multi-select ticks stay.
 function runFilterMenuCloseCheck() {
-  const definitions = sourceBetween('const STATES =', 'function renderPills');
+  // The pills now serve two kinds of page, so pillDefs asks which one it is on. These harnesses are all about views,
+// so they answer "a view" — the saved search side gets its own check rather than a share of theirs.
+const definitions = 'const onSearchPage = () => false, pillKey = () => view, setSearchF = () => {};\n' + sourceBetween('const STATES =', 'function renderPills');
   const api = vm.runInNewContext(`
     let view = 'library';
     const filters = new Map([['library', { types: ['tasks'], states: ['open'], assignee: 'me' }]]);
@@ -2004,7 +2008,9 @@ async function runUnifiedViewsCheck() {
 // Sorting and grouping are view preferences over rows already loaded: the order and the headings come from fields the
 // rows carry (title, done/stateType, assignees, tags), never from a new query.
 function runSortGroupCheck() {
-  const definitions = sourceBetween('const STATES =', 'function renderPills');
+  // The pills now serve two kinds of page, so pillDefs asks which one it is on. These harnesses are all about views,
+// so they answer "a view" — the saved search side gets its own check rather than a share of theirs.
+const definitions = 'const onSearchPage = () => false, pillKey = () => view, setSearchF = () => {};\n' + sourceBetween('const STATES =', 'function renderPills');
   const api = vm.runInNewContext(`
     let view = 'tasks', groupPref = {}, sortPref = {};
     const filters = new Map([['tasks', { types: ['tasks'], states: ['open'], assignee: 'me' }]]);
@@ -2129,7 +2135,9 @@ function runSortGroupCheck() {
 }
 
 function runCmdPillsCheck() {
-  const definitions = sourceBetween('const STATES =', 'function renderPills');
+  // The pills now serve two kinds of page, so pillDefs asks which one it is on. These harnesses are all about views,
+// so they answer "a view" — the saved search side gets its own check rather than a share of theirs.
+const definitions = 'const onSearchPage = () => false, pillKey = () => view, setSearchF = () => {};\n' + sourceBetween('const STATES =', 'function renderPills');
   const api = vm.runInNewContext(`
     let view = 'tasks';
     const filters = new Map([
@@ -2689,7 +2697,61 @@ function runRailToggleCheck() {
     'renderRail actually asks railOff, so the preference reaches the sidebar rather than sitting in a helper nobody calls');
 }
 
-const checks = [runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck];
+// A saved search is a query you can edit, so the pills serve it too, keyed by the document rather than the view.
+// What makes it different from a view is that its edits are staged and saved deliberately, so that is what this pins:
+// the right filter is read, the right pills are offered, and an edit reaches neither the view behind it nor the
+// document until Save. The other pill harnesses all answer "a view", so without this the search side has no cover.
+function runSearchPillsCheck() {
+  const api = vm.runInNewContext(`
+    let view = 'tasks';
+    let zoom = { docId: 'tana:search:s1', nodeId: null };
+    const filters = new Map([
+      ['tasks', { types: ['tasks'], states: ['open'], assignee: 'anyone', text: '' }],
+      ['tana:search:s1', { types: ['tasks'], states: ['proposed'], assignee: 'me', text: '' }],
+    ]);
+    // 'tasks' is a kind page, so the type pill is withheld on the view; a saved search must still offer it
+    const views = [{ id: 'tasks', kind: true }];
+    let members = [{ id: 'me', title: 'Robin', me: true }], groupPref = {}, sortPref = {};
+    let pillCtx = null, palMode = 'cmd', palRows = [], palIndex = 0, renders = 0;
+    const taskMetaById = new Map(), tana = {}, palette = { hidden: false };
+    const $ = () => ({ hidden: false }), showError = () => {}, renderPills = () => {};
+    const localStorage = { setItem() {} }, render = () => { renders++; };
+    // an edit on a saved search must not write the view waiting behind it: fail loudly rather than quietly
+    const setViewF = () => { throw new Error('a saved search edit reached setViewF'); };
+    const palInput = { value: '', placeholder: '', focus() {} };
+    const renderPalette = () => { renders++; };
+    ${sourceBetween('const SEARCH_ID =', 'const childrenOf =')}
+    ${sourceBetween('const sameList =', 'function viewFiltered')}
+    ${sourceBetween('const pillKey =', 'function loadSearchFilter')}
+    ${sourceBetween('const STATES =', 'function renderPills')}
+    ({
+      key: () => pillKey(),
+      ids: () => pillDefs().map((def) => def.id),
+      applies: () => pillsApply(),
+      dirty: () => searchDirty(),
+      loaded: () => { searchFilters.set(zoom.docId, filters.get(zoom.docId)); },
+      edit: (patch) => { setSearchF(patch); return filters.get(zoom.docId); },
+      behind: () => filters.get('tasks'),
+      leave: () => { zoom = null; },
+    });
+  `);
+  assert.equal(api.key(), 'tana:search:s1', 'the pills on a saved search read that document, not the view waiting behind it');
+  assert.equal(api.applies(), true, 'so they apply there at all');
+  // A saved search is never a kind page: choosing what it lists is the whole point of it. Sort and Group are view
+  // layout, and the page a search draws neither sorts nor groups, so offering them would offer something that does nothing.
+  assert.deepEqual(plain(api.ids()), ['type', 'status', 'assigned'], 'a saved search offers the pills that change what it finds, and not the layout ones');
+  api.loaded();
+  assert.equal(api.dirty(), false, 'freshly loaded from the document, there is nothing to save');
+  assert.deepEqual(plain(api.edit({ states: ['open'] })), { types: ['tasks'], states: ['open'], assignee: 'me', text: '' },
+    'an edit stages onto the search document filter');
+  assert.deepEqual(plain(api.behind()), { types: ['tasks'], states: ['open'], assignee: 'anyone', text: '' },
+    'and leaves the view behind it exactly as it was');
+  assert.equal(api.dirty(), true, 'a staged edit is something to save');
+  api.leave();
+  assert.equal(api.key(), 'tasks', 'and off the search page the pills belong to the view again');
+}
+
+const checks = [runSearchPillsCheck, runDraftTailCheck,runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck];
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);
   if (failures.length) throw new AggregateError(failures, failures.map((failure) => failure.message).join('\n'));

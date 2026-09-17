@@ -370,7 +370,7 @@ assert.match(source, /if \(!zoom \|\| onSearchPage\(\)\) rows\.push\(\{ id: 'fil
 assert.match(source, /filterRow\.hidden = \(!!parent && !isSearchDoc\(parent\.node\)\)/, 'the filter row stays on screen on a saved search page');
 assert.match(source, /if \(isSearchDoc\(parent\.node\)\) \{/, 'the zoomed branch narrows a saved search the way a view narrows its rows');
 // the Library keeps the query it is showing as a saved search; main owns the filter→query translation
-assert.match(source, /if \(defs\.length && tana\.createSearch\) box\.append\(saveSearchPill\(\)\)/, 'a view with pills offers to save its query as a search');
+assert.match(source, /if \(defs\.length && tana\.createSearch && !onSearchPage\(\)\) box\.append\(saveSearchPill\(\)\)/, 'a view with pills offers to save its query as a search, and a saved search does not: it already is one');
 const html = fs.readFileSync(require.resolve('../index.html'), 'utf8');
 assert.match(html, /<div id="toolbar" class="toolbar" role="toolbar"/);
 const styleSheet = fs.readFileSync(require.resolve('../styles.css'), 'utf8');

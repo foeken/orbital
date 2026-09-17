@@ -77,6 +77,7 @@ function mockApi() {
   const listed = (d, f) => (!f.states || f.states.includes(stateOf(d))) && (!f.assignee || f.assignee === 'me' || f.assignee === 'anyone');
   const kindOf = (d) => (d.icon === 'member' ? 'people' : d.icon === 'task' ? 'tasks' : d.icon === 'meeting' ? 'meetings' : d.tags && ['chat', 'canvas', 'agent', 'skill', 'search'].includes(d.tags[0].label) ? d.tags[0].label + 's' : 'docs');
   const created = {};   // documents made with createDocument
+  const searchQueries = {}; // saved search id -> the filter its stored query holds
   const settling = new Set(); // a brand-new document: the first taskMeta read fails while main is still subscribing it
   const unlisted = [];  // created tasks/meetings the roots "query" has not caught up with yet: listed after the next refresh()
   const sidebar = ['mockdoc2', 'mockmeeting2', space.id], datePins = { mockdoc2: [localDate()] }; // pins: sidebar order, personal date pins per doc
@@ -158,8 +159,14 @@ function mockApi() {
       const base = { inbox: 'Inbox', tasks: 'Tasks', meetings: 'Meetings', library: 'Library', chats: 'Chats', people: 'People' }[viewId] || 'Search';
       const n = { id: 'tana:search:mocknew' + (++seq), text: (title && title.trim()) || (bits.length ? base + ' — ' + bits.join(' · ') : base), kind: 'document', hasChildren: true, editable: true, tags: [{ label: 'search', color: 'grey' }] };
       created[n.id] = n; content[n.id] = []; all.push(n);
+      searchQueries[n.id] = structuredClone(f); // the query it was saved with, in the vocabulary the channel deals in
       return info(n);
     },
+    // A saved search's stored query as the filter the pills speak, and back. The real channel translates through
+    // sdk/query; the mock keeps the filter as it was given, since what it has to match is the channel's shape, not
+    // the document's. A sample search that predates any save opens on the Library's filter rather than on nothing.
+    searchFilter: async (id) => structuredClone(searchQueries[id] || filters.library),
+    setSearchFilter: async (id, filter) => structuredClone(searchQueries[id] = filter),
     // references resolve on read, as main does: the row always shows the target's current title and state
     children: async (docId) => structuredClone(content[docId] || []).map((n) => (n.type === 'reference' ? { ...n, reference: { ...n.reference, node: info([...all, ...members].find((d) => d.id === n.reference.uri)) } } : n)),
     node: async (docId) => {

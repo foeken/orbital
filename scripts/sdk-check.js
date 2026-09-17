@@ -12,7 +12,7 @@ const { createTransport, SyncConnection, Document, derivePeerId, readNode, setTi
 const outline = require('../sdk/content');
 const { fetchImage } = require('../sdk/assets');
 const { LoroMap, LoroList } = require('loro-crdt');
-const { parseQuery, searchParams, needsTypes, viewParams, searchQueryParams, filterToSearchQuery, validViewFilter, viewTypes, VIEW_PRESETS, hideRules, isHidden } = require('../sdk/query');
+const { parseQuery, searchParams, needsTypes, viewParams, searchQueryParams, filterToSearchQuery, searchQueryToFilter, validViewFilter, viewTypes, VIEW_PRESETS, hideRules, isHidden } = require('../sdk/query');
 const pins = require('../sdk/pins');
 
 const ORG = 'org_01EXAMPLE00000000000000000', DOC = 'tana:text:01exampleh0000000000000000', ME = 'tana:user-profile:01examplei0000000000000000';
@@ -1130,6 +1130,32 @@ async function main() {
     const windowed = filterToSearchQuery({ types: ['meetings'], window: 'recent' }, ME);
     assert.equal(typeof windowed.eventTime.min, 'number', 'a recent window becomes a concrete range at save time');
     assert.equal(windowed.eventTime.max - windowed.eventTime.min, 14 * 864e5, 'spanning the same fourteen days the view asked for');
+    // The pills edit a saved search through the same filter vocabulary they edit a view with, so the stored query has
+    // to come back the other way too. This is the pair the Save button rests on: read a query, show it as pills, write
+    // it back. A filter that does not round-trip would quietly rewrite the user's search the first time they saved it.
+    assert.deepEqual(searchQueryToFilter(saved, ME), { types: ['tasks'], states: ['proposed', 'open'], text: 'dpa', assignee: 'me', participant: null, window: null },
+      'the stored query reads back as the Library filter it was saved from');
+    assert.deepEqual(searchQueryToFilter(myTasks, ME), { types: ['tasks'], states: ['proposed', 'open', 'closed', 'not_now'], text: '', assignee: 'me', participant: null, window: null },
+      'and so does the real "My Tasks" document, which is what the pills will actually open on');
+    assert.ok(validViewFilter(searchQueryToFilter(myTasks, ME)), 'what comes back is a filter the pills and viewParams already accept');
+    // The documented lossy edge: tasks and docs share the node type `text`, so task state is what tells them apart.
+    assert.deepEqual(searchQueryToFilter({ types: ['text'] }, ME).types, ['docs'], 'a text query with no task state is documents');
+    assert.deepEqual(searchQueryToFilter({ types: ['text'], stateTypes: ['open'] }, ME).types, ['tasks'], 'the same query constrained by task state is tasks');
+    // Reading an assignee: the viewer flag and the viewer's own uri both mean "You" to a pill, which is the one thing
+    // that lets an assignee survive a save — it goes back out as assignedToViewer either way.
+    assert.equal(searchQueryToFilter({ assignedTo: [ME] }, ME).assignee, 'me', 'the signed-in user as a named assignee still reads as "You"');
+    assert.equal(filterToSearchQuery(searchQueryToFilter({ assignedTo: [ME] }, ME), ME).assignedToViewer, true, 'and saves back as the viewer-relative flag');
+    assert.equal(searchQueryToFilter({ assignedTo: [OTHER] }, ME).assignee, OTHER, 'someone else stays that person');
+    assert.equal(searchQueryToFilter({ unassigned: true }, ME).assignee, 'unassigned');
+    assert.equal(searchQueryToFilter({}, ME).assignee, 'anyone', 'a query with no assignee at all is "Anyone", not "You"');
+    assert.equal(searchQueryToFilter({ types: ['event'], participantUris: [ME] }, ME).participant, 'me', 'the viewer among the participants is the Meetings filter');
+    assert.equal(searchQueryToFilter({ types: ['event'], participantUris: [OTHER] }, ME).participant, null, 'someone else among them is not a filter the pills can show');
+    assert.equal(searchQueryToFilter({ types: ['event'], eventTime: { min: 1, max: 2 } }, ME).window, 'recent', 'a stored range reads as the window pill');
+    // The vocabulary no pill can express is dropped rather than guessed at, and must not leak into the filter or
+    // break its validity — saving then rewrites the query from the pills alone, which is why saving is explicit.
+    const rich = searchQueryToFilter({ types: ['text'], stateTypes: ['open'], attributes: { 'tana:type:x?attribute=y': ['z'] }, workflowStates: ['w'], visibility: 'private' }, ME);
+    assert.ok(validViewFilter(rich), 'a query carrying things the pills cannot show still reads back as a valid filter');
+    assert.deepEqual(Object.keys(rich).sort(), ['assignee', 'participant', 'states', 'text', 'types', 'window'], 'and carries none of them into the filter');
     // A kind page is that kind, whatever a stored filter from an older build says.
     assert.deepEqual(viewTypes('people', { types: ['meetings', 'people'], states: null }), { types: ['people'], states: null }, 'People lists people');
     assert.deepEqual(viewTypes('meetings', { types: [] }).types, ['meetings']);

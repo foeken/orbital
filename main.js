@@ -8,8 +8,8 @@ const db = require('./db');
 const { createTanaSession } = require('./tana-session');
 const updater = require('./updater');
 const access = require('./sdk/access');
-const { readNode, setTitle, setState, taskMeta, audienceMetadata, setAssignees } = require('./sdk/node');
-const { isHidden } = require('./sdk/query');
+const { readNode, setTitle, setState, taskMeta, audienceMetadata, setAssignees, setSearchQuery } = require('./sdk/node');
+const { filterToSearchQuery, isHidden, searchQueryToFilter, validViewFilter } = require('./sdk/query');
 const content = require('./sdk/content');
 const fields = require('./sdk/fields');
 const { NOT_CONNECTED, S, VIEWS, errText, idKind, isSearch, isSpace, metaSigs, pathCache, truncatedViews, redoStack, report, scheduleRefresh, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
@@ -99,6 +99,14 @@ ipcMain.handle('search:list', () => searchList());
 // The renderer sends a view id, never a query: the filter→query vocabulary lives in sdk/query, which classic
 // renderer scripts cannot require, and main already holds the canonical filter for every view.
 ipcMain.handle('search:create', (_e, id, title) => searchCreate(id, title));
+// The same filter vocabulary in both directions, so the pills that edit a view can edit a saved search. The query
+// lives in a root container of its own, which readNode never sees, so reading takes it off the document directly.
+// Writing replaces it wholesale rather than patching: what the pills are showing is what the document ends up saying.
+ipcMain.handle('search:filter', (_e, id) => op(id, (doc) => searchQueryToFilter(doc.loro.getMap('query').toJSON(), S.me && S.me.userUri)));
+ipcMain.handle('search:setFilter', (_e, id, filter) => {
+  if (!validViewFilter(filter)) throw new Error('invalid view filter'); // never let a bad filter empty a saved search
+  return mut(id, (doc) => { setSearchQuery(doc, filterToSearchQuery(filter, S.me && S.me.userUri)); });
+});
 ipcMain.handle('history:undo', () => history(undoStack, redoStack, 'undo', 'canUndo'));
 ipcMain.handle('history:redo', () => history(redoStack, undoStack, 'redo', 'canRedo'));
 ipcMain.handle('doc:delete', (_e, id) => documentAction(id, 'softDelete'));

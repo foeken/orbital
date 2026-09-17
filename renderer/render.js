@@ -198,6 +198,7 @@ function renderOutline() {
     // A saved search page is a result list, like a view, so ⌘F narrows it the same way. No other zoomed page
     // filters: an outline's rows are content you are editing, not a result set you are searching through.
     if (isSearchDoc(parent.node)) {
+      loadSearchFilter(parent.docId); // its stored query, as the filter the pills above it show
       const q = filterEl.value.trim().toLowerCase();
       const found = q ? list.filter((n) => String(n.text || '').toLowerCase().includes(q)) : list;
       hidden = list.length - found.length;
@@ -262,7 +263,8 @@ function renderOutline() {
   renderFields(parent);
   renderCrumbs(trail);
   renderRail(parent);
-  const showPills = !parent && authed && pillsApply();
+  // A saved search is a query you can edit, so it gets the pills too — every other zoomed page is content, not a query.
+  const showPills = authed && pillsApply() && (!parent || isSearchDoc(parent.node));
   renderPills(showPills);
   filterRow.hidden = (!!parent && !isSearchDoc(parent.node)) || !(filterShown || filterEl.value);
   filterRow.classList.toggle('empty', !filterEl.value);
