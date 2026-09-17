@@ -74,6 +74,19 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 }
 .filter .clear:hover { background: #ddd; }
 .filter.empty .clear { display: none; }
+/* Hide/show the sidebar: top right of the header band, above the crumbs and the title. Absolute against
+   .titlebar so it never shifts as the crumbs, task meta or fields rows appear and disappear beneath it,
+   and always in the same place whether or not a sidebar exists. Only shown when there is one to toggle. */
+.titlebar { position: relative; }
+.railtoggle {
+  position: absolute; top: 36px; right: 32px; z-index: 1;
+  display: flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; padding: 0; border: 0;
+  background: none; color: #777; cursor: pointer; border-radius: 4px;
+}
+.railtoggle:hover { background: #ddd; }
+.railtoggle[hidden] { display: none; }
+.railtoggle svg { display: block; width: 18px; height: 18px; }
 
 /* filter pills (Tasks / Library): "Status <Inbox, In Progress>", "Assigned to <You>", "<Type>"; each opens a menu below it */
 .pills { position: relative; display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 32px 12px; }

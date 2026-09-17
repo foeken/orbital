@@ -402,7 +402,18 @@ async function main() {
     assert.equal(editable({ id: DOC, ownerUri: ME }, ME), null, 'ownership does not grant editing');
     assert.equal(editable(node('event', 'admin'), ME), false, 'calendar protected fields need separate capability');
     assert.equal(editable(node('chat', 'editor'), ME), false);
-    console.log('ok  outline editability: profiles, ACL roles, unknown ownership, protected events');
+    // A saved search is a document the user owns and renames, so its kind must reach the ACL logic rather than
+    // being refused outright — but only its kind: the roles still decide, exactly as they do for text.
+    assert.equal(editable(node('search', 'editor'), ME), true, 'a saved search you can edit is renamable');
+    assert.equal(editable(node('search', 'admin'), ME), true);
+    assert.equal(editable(node('search', 'viewer'), ME), false, 'a viewer still cannot rename it');
+    assert.equal(editable({ id: 'tana:search:example', ownerUri: ME }, ME), null,
+      'and with no participants entry the answer is unknown, not yes — owning it is not the same as being granted a role');
+    // The kinds that stay refused outright are unchanged by that: canvas, agent, skill and type remain read-only.
+    for (const kind of ['canvas', 'agent', 'skill', 'type']) {
+      assert.equal(editable(node(kind, 'admin'), ME), false, kind + ' stays read-only in the outliner');
+    }
+    console.log('ok  outline editability: profiles, ACL roles, unknown ownership, protected events, renamable searches');
   }
 
   // Main startup status and node appearance are pure helpers: no Electron app, network, or Tana data.

@@ -8,6 +8,30 @@ const railGrip = $('railGrip');
 const RAIL_MIN = 200, RAIL_MAX = 620;
 const railWidth = () => Math.min(RAIL_MAX, Math.max(RAIL_MIN, Number(localStorage.getItem('railWidth')) || 272));
 railEl.style.width = railWidth() + 'px';
+const railToggle = $('railToggle');
+// The sidebar can be put away by hand; the preference persists like the width and the collapsed sections.
+// Hiding wins over content: a sidebar the user closed must not reappear because the next document has pins.
+// Only the "nothing to show" case composes with it — a node with no sidebar at all stays hidden regardless.
+let railHidden = localStorage.getItem('railHidden') === '1';
+function railOff(empty) { return railHidden || empty; }
+function toggleRail() {
+  railHidden = !railHidden;
+  localStorage.setItem('railHidden', railHidden ? '1' : '0');
+  render();
+}
+railToggle.addEventListener('click', toggleRail);
+// The button only appears when there is a sidebar to toggle; its glyph is the direction it will move the panel.
+function renderRailToggle(available) {
+  railToggle.hidden = !available;
+  if (!available) return;
+  const label = railHidden ? 'Show sidebar' : 'Hide sidebar';
+  railToggle.title = label;
+  railToggle.setAttribute('aria-label', label);
+  railToggle.setAttribute('aria-pressed', railHidden ? 'true' : 'false');
+  const svg = iconNode(railHidden ? 'railShow' : 'railHide');
+  railToggle.replaceChildren();
+  if (svg) railToggle.append(svg);
+}
 // drag the grip to resize the sidebar; the width persists like the other view preferences
 railGrip.addEventListener('pointerdown', (e) => {
   e.preventDefault();
@@ -161,7 +185,7 @@ function renderRail(parent) {
   const active = document.activeElement, keep = active && active.classList && active.classList.contains('rrow') ? active.dataset.id : null;
   railEl.replaceChildren();
   const docId = parent && parent.node.kind === 'document' && !parent.node.draft ? parent.docId : null;
-  if (!docId) { railEl.hidden = railGrip.hidden = true; return; }
+  if (!docId) { railEl.hidden = railGrip.hidden = true; renderRailToggle(false); return; }
   loadRelated(docId);
   const data = relatedBy.get(docId);
   // Event views immediately follow their write-up document. Sharing still belongs to the event itself.
@@ -172,7 +196,9 @@ function renderRail(parent) {
   if (call) meta.unshift(call);
   // "Notes" is what api.related calls them; in the sidebar they read as References
   const groups = railGroups(data);
-  railEl.hidden = railGrip.hidden = !groups.length && !meta.length;
+  const empty = !groups.length && !meta.length;
+  railEl.hidden = railGrip.hidden = railOff(empty);
+  renderRailToggle(!empty); // there is a sidebar to toggle even while it is hidden, so the button stays reachable
   const sectionHead = (label) => { // every sidebar section collapses the same way, Details included
     const head = document.createElement('button');
     head.className = 'rhead' + (railClosed.has(label) ? ' closed' : '');

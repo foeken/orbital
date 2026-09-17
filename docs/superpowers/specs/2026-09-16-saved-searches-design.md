@@ -133,7 +133,20 @@ Presentation state keyed by search URI, not written into the document:
 
 ## 10. Risks and open questions
 
-- **OPEN: the `data` map on create.** The real-document dump showed `uri`/`title`/`createdAt` and the `query` and
+- **RESOLVED 2026-09-17: the `data` map on create.** A raw container dump of the user's real "My Tasks"
+  search settled it. Root containers are `data`, `query`, `view`, plus an empty `content` and an empty
+  `linkSharing`; `queryMeta` is **absent**, confirming optional containers are omitted rather than
+  written empty. The `data` map holds exactly: `type: "search"`, `createdAt`, `title`,
+  `restricted: true`, and `participants: { <user-profile uri>: { type: "user", role: "admin" } }`.
+  **There is no `ownerUri`** — consistent with a Library-level search having no owner (AGENTS.md: no
+  owners = "Library"), so `Th.create`'s `ownerUri` write is conditional in practice.
+  Two consequences: (1) **rename needs only the kind gate** — `participants[user].role` is `admin`, so
+  `editable()` returns `true` once `search` joins its kind list, rather than the `null` (unknown) I
+  feared; (2) **create maps almost exactly onto our existing `initDocument`**, which already writes
+  `type`/`title`/`createdAt`/`restricted`/`participants`-as-admin. The deltas are narrow: add the
+  `query` and `view` root containers, and **skip `sharedPinDates`**, which `initDocument` creates for
+  doc/task/meeting but a real search does not carry.
+- *(superseded)* **OPEN: the `data` map on create.** The real-document dump showed `uri`/`title`/`createdAt` and the `query` and
   `view` containers, but not the rest of `data`. `data.type === 'search'`, `ownerUri` and the acl shape are
   therefore **unverified**, and they are exactly what create writes. Must be confirmed (a raw container dump)
   before phase 2 ships.

@@ -1093,6 +1093,7 @@ function runAuthPaletteCheck() {
     const pinInfo = null, palDoc = null, hotkeys = {}, theme = 'light';
     const localDate = () => '2026-09-13';
     const zoom = null, railEl = { hidden: true }, navBack = [], navForward = [];
+    const railToggle = { hidden: false }, railHidden = false; // the sidebar toggle row: available, so paletteRows builds it
     const setTheme = () => {};
     const startDrop = () => {};
     const docRow = () => ({});
@@ -1134,6 +1135,7 @@ async function runSyncShortcutCheck() {
     const authed = true, authChecking = false, signedOut = false, theme = 'light', hotkeys = {}, themePref = 'light', pinInfo = null, palDoc = null;
     const localDate = () => '2026-09-13', setTheme = () => {}, docRow = () => ({}), sectionOf = () => null;
     const zoom = null, railEl = { hidden: true }, navBack = [], navForward = [], sensitiveVisible = false;
+    const railToggle = { hidden: false }, railHidden = false; // the sidebar toggle row: available, so paletteRows builds it
     const showError = () => {}, palette = { hidden: false }, palMode = 'cmd', renderPalette = () => {};
     const setZoom = () => {}, navigate = () => {}, history = () => {}, togglePalette = () => {}, focusRail = () => {}, setView = () => {}, openDoc = () => {}, filterEl = {}, render = () => {}, zoomFactor = 1, BASE_ZOOM = 1;
     const visibilityRows = () => [], moveTargets = async () => [], previewMoveToSpace = () => {};
@@ -1141,7 +1143,7 @@ async function runSyncShortcutCheck() {
     ${functionSource('paletteRows')}
     ({ rows: async (q) => { paletteRows(q); await Promise.resolve(); await Promise.resolve(); return paletteRows(q).map((r) => r.label); }, loads: () => loads });
   `);
-  assert.deepEqual(plain(await folded.rows('s')), ['Set status', 'Search Tana', 'Sync', 'Smaller text', 'Reset text size', 'Filter rows by text'],
+  assert.deepEqual(plain(await folded.rows('s')), ['Set status', 'Search Tana', 'Sync', 'Smaller text', 'Hide sidebar', 'Reset text size', 'Filter rows by text'],
     'one letter: the first level only, the groups whose best row starts with it first, a letter inside a word last');
   assert.deepEqual(plain(await folded.rows('sesp')), ['Set status to In Progress'], 'two letters in: the level below is folded in and the query reaches into it');
   assert.deepEqual(plain(await folded.rows('seinb')), ['Set status to Inbox'], 'a disabled choice is left out, the others are single rows');
@@ -1180,6 +1182,7 @@ async function runSyncShortcutCheck() {
     const localDate = () => '2026-09-13', setTheme = () => {}, docRow = () => ({}), sectionOf = () => null;
     const palette = { hidden: false }, palMode = 'cmd', renderPalette = () => {}, showError = () => {};
     const zoom = null, railEl = { hidden: false }, navBack = [], navForward = [], sensitiveVisible = false;
+    const railToggle = { hidden: false }, railHidden = false; // sidebar visible here, so both the focus row and the toggle row are built
     const openCreationPalette = () => {}, openHiddenPalette = () => {}, toggleSensitiveVisibility = () => {}, followSystem = () => {}, openVisibilityPalette = () => {}, openMovePalette = () => {}, pinAction = () => {}, copyText = () => {}, togglePalette = () => {}, navigate = () => {}, history = () => {}, focusRail = () => {}, setZoom = () => {}, goTo = () => {}, setView = () => {}, openDoc = () => {}, filterEl = {}, render = () => {}, zoomFactor = 1, BASE_ZOOM = 1;
     ${sourceBetween('const NODE_ROW_ORDER', 'function paletteRows')}
     const visibilityRows = () => [], moveTargets = async () => [], previewMoveToSpace = () => {};
@@ -1191,7 +1194,7 @@ async function runSyncShortcutCheck() {
     'Current node: Edit visibility', 'Current node: Mark as sensitive', 'Current node: Copy link', 'Current node: Delete',
     'Views: Inbox', 'Views: Today', 'Views: This week', 'Views: Tasks', 'Views: Library',
     'View options: Filter by type', 'View options: Filter rows by text',
-    'Actions: Log in to Tana', 'Actions: Create new…', 'Actions: Search Tana', 'Actions: Go back', 'Actions: Go forward', 'Actions: Focus the sidebar',
+    'Actions: Log in to Tana', 'Actions: Create new…', 'Actions: Search Tana', 'Actions: Go back', 'Actions: Go forward', 'Actions: Focus the sidebar', 'Actions: Hide sidebar',
     'Actions: Undo', 'Actions: Redo', 'Actions: Sync', 'Actions: Edit hidden items', 'Actions: Toggle sensitive visibility',
     'Actions: Larger text', 'Actions: Smaller text', 'Actions: Reset text size', 'Actions: Toggle dark mode',
   ], 'the palette lists its rows in one fixed, meaningful order');
@@ -1263,6 +1266,7 @@ async function runSyncShortcutCheck() {
     const localDate = () => '2026-09-13', setTheme = () => {};
     const docRow = () => ({}), sectionOf = () => null;
     const zoom = null, railEl = { hidden: true }, navBack = [], navForward = [];
+    const railToggle = { hidden: false }, railHidden = false; // the sidebar toggle row: available, so paletteRows builds it
     ${paletteRows}
     paletteRows('');
   `);
@@ -2630,6 +2634,7 @@ function runSearchesGroupCheck() {
     const localDate = () => '2026-09-13', setTheme = () => {};
     const docRow = () => ({}), sectionOf = () => null;
     const zoom = null, railEl = { hidden: true }, navBack = [], navForward = [];
+    const railToggle = { hidden: false }, railHidden = false; // the sidebar toggle row: available, so paletteRows builds it
     ${paletteRows}
     const rows = paletteRows('').filter((r) => r.group === 'Searches');
     ({ rows: rows.map((r) => ({ id: r.id, label: r.label })), open: (i) => { rows[i].run(); return calls; } });
@@ -2645,7 +2650,42 @@ function runSearchesGroupCheck() {
   assert.deepEqual(plain(empty.rows), [], 'no saved searches means no Searches group at all');
 }
 
-const checks = [runDraftTailCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck];
+// The sidebar can be put away by hand, and that preference outlives any document: hiding wins over
+// content, so a sidebar you closed does not reopen because the next node happens to have pins.
+function runRailToggleCheck() {
+  const api = vm.runInNewContext(`
+    const store = new Map();
+    const localStorage = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)) };
+    let renders = 0;
+    const render = () => { renders++; };
+    let railHidden = localStorage.getItem('railHidden') === '1';
+    ${functionSource('railOff')}
+    ${functionSource('toggleRail')}
+    ({
+      state: () => ({ hidden: railHidden, stored: store.has('railHidden') ? store.get('railHidden') : null, renders }),
+      off: (empty) => railOff(empty),
+      toggle: () => { toggleRail(); },
+    });
+  `);
+  assert.equal(api.off(false), false, 'a sidebar with something in it is shown by default');
+  assert.equal(api.off(true), true, 'an empty sidebar stays hidden whatever the preference says');
+  assert.deepEqual(plain(api.state()), { hidden: false, stored: null, renders: 0 }, 'and nothing is persisted until the user asks for it');
+  api.toggle();
+  assert.deepEqual(plain(api.state()), { hidden: true, stored: '1', renders: 1 }, 'hiding it persists the preference and repaints once');
+  assert.equal(api.off(false), true, 'hiding wins over content: a document with pins does not reopen it');
+  api.toggle();
+  assert.deepEqual(plain(api.state()), { hidden: false, stored: '0', renders: 2 }, 'showing it again persists that too');
+  assert.equal(api.off(false), false, 'and the sidebar is back');
+  // The harness above proves railOff composes correctly, but it never touches renderRail — so nothing in it
+  // would notice the call site being reverted to the bare content test, leaving the preference wired to nothing.
+  // (Verified: reverting that one line left the whole suite green.) Faking the rail DOM for one boolean is a poor
+  // trade, so the wiring gets a source anchor instead, specific enough to fail on deletion rather than movement —
+  // the same instrument runSearchesGroupCheck uses for the boot statement it cannot reach.
+  assert.match(source, /railEl\.hidden = railGrip\.hidden = railOff\(empty\);/,
+    'renderRail actually asks railOff, so the preference reaches the sidebar rather than sitting in a helper nobody calls');
+}
+
+const checks = [runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck];
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);
   if (failures.length) throw new AggregateError(failures, failures.map((failure) => failure.message).join('\n'));

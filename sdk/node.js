@@ -85,7 +85,11 @@ function readNode(document) {
 // Profiles expose name/displayName, not an editable document title. Other unsupported bodies stay read-only.
 function editable(n, userUri) {
   const kind = (n.id || '').split(':')[1];
-  if (!['text', 'space', 'event'].includes(kind)) return false;
+  // 'search' is here because a saved search is a document the user owns and renames: a real one carries
+  // participants[user] = { type: 'user', role: 'admin' }, so it falls through to the role check below and
+  // answers true — the ACL still decides, exactly as it does for text. Unlike 'event' it needs no early
+  // return: a search's title is ordinary document data, not a calendar-protected field.
+  if (!['text', 'space', 'event', 'search'].includes(kind)) return false;
   const role = n.participants && n.participants[userUri] && n.participants[userUri].role;
   if (kind === 'event') return false; // protected title needs organizer + external-calendar write capability, not exposed by our graph contract
   if (role === 'admin' || role === 'editor') return true;
