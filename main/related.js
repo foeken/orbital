@@ -34,6 +34,11 @@ async function spaceChildren(id) {
 async function searchChildren(id) {
   if (!S.client) throw new Error(NOT_CONNECTED);
   const query = await op(id, (doc) => doc.loro.getMap('query').toJSON());
+  // Tana's own client always writes every query key when it creates a search (arrays default to `[]`), so a real
+  // saved search never reads back as an empty map. An empty result here means the container was missing or
+  // unreadable, not that the user saved an unconstrained search — and searchQueryParams({}) would otherwise fall
+  // back to "every listable kind", silently showing the wrong rows as if they were this search's results.
+  if (!query || !Object.keys(query).length) throw new Error('this saved search has no readable query');
   const { nodes } = await S.client.graph.listNodes(searchQueryParams(query, S.me && S.me.userUri, 200));
   nodes.forEach(rememberNodeHue);
   await resolveTypes(nodes.map((n) => n.entityType));

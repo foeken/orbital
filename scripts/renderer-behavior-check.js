@@ -2612,7 +2612,9 @@ async function runMemberLoadCheck() {
 
 // Saved searches are places to go, so Cmd+K lists them under their own heading, each opening its document via goTo.
 function runSearchesGroupCheck() {
-  assert.match(source, /searches = await tana\.searches\(\)|tana\.searches\(\)/, 'the renderer loads saved searches from the read-only channel');
+  // Anchored to the boot statement itself (not just any mention of tana.searches() in the file) so this keeps
+  // failing if the call is ever deleted rather than merely moved, per the final review's Minor #4.
+  assert.match(source, /if \(tana\.searches\) tana\.searches\(\)/, 'the renderer loads saved searches from the read-only channel');
   const paletteRows = functionSource('paletteRows');
   // A minimal paletteRows harness, matching the one above (runSyncShortcutCheck): only `searches` and `goTo` vary,
   // so a row from the new group and the effect of running it are both observed, not merely a string in the source.

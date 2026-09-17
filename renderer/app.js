@@ -14,7 +14,7 @@ function showStatus(s) {
   authed = state.authenticated; authChecking = state.checking; signedOut = state.signedOut; connected = !!s.connected;
   // The first fetch of a view can run before the sync client exists and fail quietly, so the view refetches the
   // moment the connection comes up; otherwise the Library or Chats stay empty until a filter is touched.
-  if (connected && !wasConnected) { taskMetaFailed.clear(); loadView(); }
+  if (connected && !wasConnected) { taskMetaFailed.clear(); loadView(); loadSearches(); }
   $('loginBox').hidden = !state.showLogin;
   outline.hidden = $('filtered').hidden = !state.showOutline;
   showError(state.error);
@@ -71,5 +71,10 @@ tana.onStatus(showStatus);
 if (tana.onSystemTheme) tana.onSystemTheme((t) => { if (themePref === 'system') applyTheme(t); }); // macOS appearance changes re-theme a running window
 if (themePref === 'system') followSystem(true);
 loadRoots().then(render, showError).then(loadFilters);
-if (tana.searches) tana.searches().then((list) => { searches = list || []; renderSoon(); }, () => {}); // Cmd+K only: never blocks the first paint
+// Cmd+K only: never blocks the first paint. Boot almost always races the sync connect (main creates the window
+// before S.client exists, so main/views.js:searchList answers []), so this alone would usually leave the group
+// empty; showStatus's connect edge above re-runs it once a client actually exists. Called here too so a session
+// that is already connected (e.g. a reload) does not wait for a transition that will not happen.
+function loadSearches() { if (tana.searches) tana.searches().then((list) => { searches = list || []; renderSoon(); }, () => {}); }
+loadSearches();
 tana.status().then(showStatus, showError);

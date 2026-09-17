@@ -523,6 +523,40 @@ async function main() {
     console.log('ok  startup: metadata, permission and view calls before the connection stay quiet');
   }
 
+  // searchChildren (main/related.js), through the real outline:children routing (main.js's isSearch branch):
+  // a readable query runs the query, and an unreadable one fails closed rather than falling back to "every kind,
+  // most recently updated" (Important #2 of the final review).
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const searchId = 'tana:search:' + ulid();
+    const goodDoc = new Document(searchId);
+    goodDoc.transact((l) => {
+      initDocument(l, 'My Tasks', ME); l.getMap('data').set('type', 'search');
+      l.getMap('query').set('assignedToViewer', true);
+      l.getMap('query').setContainer('types', new LoroList()).push('text');
+    });
+    const listCalls = [];
+    backend.testRuntime({ me: { userUri: ME }, win: null, client: {
+      sync: { subscribe: async () => goodDoc },
+      graph: { listNodes: async (p) => { listCalls.push(p); return { nodes: [] }; } },
+    } });
+    await backend.handlers.get('outline:children')(null, searchId);
+    assert.equal(listCalls.length, 1);
+    assert.deepEqual(listCalls[0].nodeTypes, ['text'], 'a readable query runs the graph query it describes');
+    assert.deepEqual(listCalls[0].assignedTo, [ME]);
+
+    const brokenDoc = new Document('tana:search:' + ulid());
+    brokenDoc.transact((l) => initDocument(l, 'Broken search', ME)); // no query container at all
+    backend.testRuntime({ me: { userUri: ME }, win: null, client: {
+      sync: { subscribe: async () => brokenDoc },
+      graph: { listNodes: async (p) => { listCalls.push(p); return { nodes: [] }; } }, // must not be reached
+    } });
+    const failure = await backend.handlers.get('outline:children')(null, brokenDoc.id).then(() => null, (e) => String(e.message || e));
+    assert.match(failure || '', /no readable query/, 'an unreadable query fails closed instead of listing everything');
+    assert.equal(listCalls.length, 1, 'the graph is never queried once the read is known to be unusable');
+    console.log('ok  searchChildren: a readable query runs, an unreadable one fails closed instead of listing everything');
+  }
+
   // A view is one graph query, then docs-without-tasks/hidden post-filters, row mapping and its own cache.
   {
     const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
@@ -1015,6 +1049,58 @@ async function main() {
     assert.deepEqual(e.organizer, {});
     assert.throws(() => fresh.transact((l) => initDocument(l, 'x', ME, { kind: 'note' })), /unknown kind/);
     console.log('ok  query parsing, ulid, initDocument (doc/task/meeting)');
+  }
+
+  // Saved search query (T4-a): the one Loro mechanic phase 1 left unverified. A `query` root container, built with
+  // container-typed fields the way Tana's own client would (a LoroList of types, a nested LoroMap of attributes and
+  // of eventTime), exported as a snapshot and applyRemote'd into the app's own Document exactly as sync bootstrap
+  // does, then read back the way main/related.js's searchChildren reads it: doc.loro.getMap('query').toJSON().
+  // Also closes T3-a: entityTypeUris -> entityTypes and the eventTime.min/max guards had no dedicated assertion.
+  {
+    const searchId = 'tana:search:' + ulid();
+    const source = new Document(searchId, { peerId: '21' });
+    source.transact((l) => {
+      initDocument(l, 'My Tasks', ME);
+      l.getMap('data').set('type', 'search');
+      const q = l.getMap('query');
+      q.set('assignedToViewer', true);
+      q.setContainer('types', new LoroList()).push('text');
+      q.setContainer('stateTypes', new LoroList()).push('proposed');
+      q.setContainer('entityTypeUris', new LoroList()).push('tana:type:project');
+      q.setContainer('attributes', new LoroMap()).set('tana:type:project?attribute=priority', 'high');
+      const eventTime = q.setContainer('eventTime', new LoroMap());
+      eventTime.set('min', Date.UTC(2026, 8, 1));
+      eventTime.set('max', Date.UTC(2026, 8, 15));
+    });
+    const searchSnapshot = source.exportSince();
+    const target = new Document(searchId, { peerId: '22' });
+    let localOps = 0;
+    target.on('local-update', () => localOps++);
+    assert.equal(target.applyRemote([searchSnapshot]), false, 'a full snapshot leaves nothing missing');
+    const afterImport = target.loro.oplogVersion();
+    const query = target.loro.getMap('query').toJSON();
+    assert.deepEqual(query, {
+      assignedToViewer: true, types: ['text'], stateTypes: ['proposed'],
+      entityTypeUris: ['tana:type:project'],
+      attributes: { 'tana:type:project?attribute=priority': 'high' },
+      eventTime: { min: Date.UTC(2026, 8, 1), max: Date.UTC(2026, 8, 15) },
+    }, 'container-typed and plain fields both arrive through toJSON() in the shape searchQueryParams expects');
+    assert.equal(localOps, 0, 'reading the query container emits no local ops: the phase is read-only');
+    assert.equal(target.loro.oplogVersion().compare(afterImport), 0, 'reading the query container leaves the version vector unchanged');
+    assert.equal(Object.hasOwn(readNode(target), 'query'), false, 'the query container is invisible to the data map, exactly as searchChildren\'s comment claims');
+    const params = searchQueryParams(query, ME);
+    assert.deepEqual(params.nodeTypes, ['text']);
+    assert.deepEqual(params.stateTypes, ['proposed']);
+    assert.deepEqual(params.entityTypes, ['tana:type:project'], 'entityTypeUris -> entityTypes (T3-a)');
+    assert.deepEqual(params.assignedTo, [ME]);
+    assert.equal(params.eventStartTimeMin, new Date(Date.UTC(2026, 8, 1)).toISOString(), 'eventTime.min -> eventStartTimeMin (T3-a)');
+    assert.equal(params.eventStartTimeMax, new Date(Date.UTC(2026, 8, 15)).toISOString(), 'eventTime.max -> eventStartTimeMax (T3-a)');
+    // Finding 2 (searchChildren, main/related.js): a document with no query container reads back as {}, not an
+    // error, which is why searchChildren must treat an empty read as a failure rather than as an unconstrained search.
+    const broken = new Document('tana:search:' + ulid(), { peerId: '23' });
+    broken.transact((l) => initDocument(l, 'Broken search', ME));
+    assert.deepEqual(broken.loro.getMap('query').toJSON(), {}, 'a document with no query container reads back empty, not an error');
+    console.log('ok  saved search query: Loro read mechanics (container + plain fields, zero local ops), entityTypeUris/eventTime');
   }
 
   // 3b. Outline ops on the content tree (docs/OUTLINER.md): every op is checked on readOutline, on the raw Loro

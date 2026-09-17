@@ -94,8 +94,10 @@ assert.match(source, /const isRealId = \(id\) => typeof id === 'string' && id\.s
 // Tana titles are plain text: the @ picker must not open there, so the key types an ordinary character (#53)
 assert.doesNotMatch(source.slice(source.indexOf("titleEl.addEventListener('keydown'"), source.indexOf('// the document Cmd+K context actions')), /startLink/, 'the title keydown handler never opens the link picker');
 assert.match(source, /taskMetaFailed\.set\(docId, \{ until: Date\.now\(\) \+ wait, wait \}\);/);
-// a new connection clears the metadata backoff and refetches the active view, which fetched its rows before the client existed
-assert.match(source, /const wasConnected = connected;[\s\S]*?if \(connected && !wasConnected\) \{ taskMetaFailed\.clear\(\); loadView\(\); \}/);
+// a new connection clears the metadata backoff and refetches the active view and the saved-search list, both of
+// which can fetch before the client existed and neither of which is retried on its own (searchesReconnectCheck
+// in renderer-check.js exercises the searches half of this behaviorally)
+assert.match(source, /const wasConnected = connected;[\s\S]*?if \(connected && !wasConnected\) \{ taskMetaFailed\.clear\(\); loadView\(\); loadSearches\(\); \}/);
 // a global change (a refresh, a pin, a filter) reloads the cached rows, which the refresh loop wrote before saying so;
 // it must not run the active view's query a second time, and a single document's change patches its row alone
 assert.match(source, /loadRoots\(\)\.then\(renderSoon, showError\)/);
@@ -266,7 +268,7 @@ async function cachedBootMetadataCheck() {
       return outcome === 'fail' ? Promise.reject(new Error('not connected')) : Promise.resolve({ assignees: [] });
     } };
     const palette = { hidden: true }, palDoc = null, outline = {};
-    const $ = () => ({}), showError = () => {}, loadView = () => {};
+    const $ = () => ({}), showError = () => {}, loadView = () => {}, loadSearches = () => {};
     const isRealId = (id) => typeof id === 'string' && id.startsWith('tana:');
     const render = () => { renders++; };
     ${functionSource('authView')}
@@ -289,6 +291,41 @@ async function cachedBootMetadataCheck() {
   context.status(false); context.status(true); context.succeed(); context.load();
   await Promise.resolve(); await Promise.resolve();
   assert.deepEqual(JSON.parse(JSON.stringify(context.state())), { calls: 2, renders: 4, loading: 0, failed: false, cached: true }, 'connection recovery retries metadata once and preserves cached boot content');
+}
+
+// main.js creates the window before S.client is assigned (await start() runs after), so the boot-time
+// tana.searches() call in renderer/app.js almost always races the connection and comes back to an empty
+// searchList — see the final review, Important #1. showStatus's connect edge (connected: false -> true) must
+// re-run it, the same edge that already reloads the active view for the same reason.
+async function searchesReconnectCheck() {
+  const context = { setTimeout, clearTimeout, Date };
+  vm.runInNewContext(`
+    let authed = false, authChecking = true, signedOut = false, connected = false, searches = [], attempts = 0;
+    const taskMetaFailed = new Map();
+    const outline = {}, palette = { hidden: true };
+    const $ = () => ({}), showError = () => {}, loadView = () => {}, render = () => {}, renderSoon = () => {};
+    const tana = { searches: () => { attempts++; return Promise.resolve([{ id: 'tana:search:x' }]); } };
+    ${functionSource('authView')}
+    ${functionSource('showStatus')}
+    ${functionSource('loadSearches')}
+    Object.assign(globalThis, {
+      boot: () => loadSearches(),
+      status: (isConnected) => showStatus({ authenticated: true, authChecking: false, connected: isConnected }),
+      state: () => ({ attempts, searches: searches.length }),
+    });
+  `, context);
+  // Boot alone (no connect-edge transition) still asks once, so a session that is already connected when app.js
+  // loads (e.g. a reload) does not sit waiting for a transition that will not happen.
+  context.boot();
+  await Promise.resolve(); await Promise.resolve();
+  assert.deepEqual(JSON.parse(JSON.stringify(context.state())), { attempts: 1, searches: 1 }, 'boot loads searches once on its own');
+  // The race the review found: boot's call already lost (client not up yet), and nothing retried it until now.
+  context.status(false); context.status(true);
+  await Promise.resolve(); await Promise.resolve();
+  assert.equal(context.state().attempts, 2, 'the connect edge reloads saved searches, same as it does the active view');
+  context.status(true);
+  await Promise.resolve();
+  assert.equal(context.state().attempts, 2, 'staying connected does not reload again');
 }
 
 async function mockCreationPermissionCheck() {
@@ -337,6 +374,6 @@ for (const rule of [/\.toolbar \{/, /\.tbtn \{/, /\.text code \{/, /\.text a\.li
 assert.doesNotMatch(styleSheet, /\.palette\.anchored \{/, 'the @ dropdown layout must not outweigh .palette[hidden]');
 assert.match(styleSheet, /\.palette\.anchored:not\(\[hidden\]\) \{/, 'the @ dropdown layout applies only while the palette is shown');
 
-Promise.all([splitTypingCheck(), cachedBootMetadataCheck(), mockCreationPermissionCheck()]).then(() => console.log('renderer auth check passed'));
+Promise.all([splitTypingCheck(), cachedBootMetadataCheck(), mockCreationPermissionCheck(), searchesReconnectCheck()]).then(() => console.log('renderer auth check passed'));
 // a mention lands in the row the caret is in (an @ at the caret, or over a selection): the render must not defer
 assert.match(functionSource('linkTo'), /render\(true\);[^\n]*\n\s*placeCaret\(/, 'linkTo forces the render before placing the caret after the mention');
