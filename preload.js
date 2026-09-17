@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('api', {
   creationOptions: () => ipcRenderer.invoke('doc:creationOptions'), // {options:[{id,kind,title,icon?,typeUri?,appliesTo?,ownerUri?,selectable,reason?}],complete}
   createDocument: (title, opts) => ipcRenderer.invoke('doc:create', title, opts), // nonblank title; opts:{kind:doc|task|meeting|chat|custom,typeUri?}; returns Node to zoom
   search: (query) => ipcRenderer.invoke('search', query),
+  searches: () => ipcRenderer.invoke('search:list'), // saved search documents, newest first
   setTitle: (docId, title) => ipcRenderer.invoke('doc:setTitle', docId, title),
   setDone: (docId, done) => ipcRenderer.invoke('doc:setDone', docId, done),
   setState: (docId, state) => ipcRenderer.invoke('doc:setState', docId, state),

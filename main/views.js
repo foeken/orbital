@@ -73,6 +73,17 @@ async function search(query) {
     .map(([, , , n]) => toNode(graphRow(n, true)));
 }
 
+// Saved searches, newest first. Read-only and view-independent: this does not touch S.activeView or the row cache.
+async function searchList() {
+  if (!S.client) return [];
+  const { nodes } = await S.client.graph.listNodes({
+    nodeTypes: ['search'], limit: 200,
+    sortOptions: [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }],
+  });
+  const rules = hiddenRules();
+  return nodes.filter((n) => !isHidden(n.title, rules)).map((n) => toNode(graphRow(n)));
+}
+
 async function start() {
   // A second login must not leave the previous stream, its listeners and its subscriptions running: the stale S.client
   // would keep emitting changes, and the new one would skip every id the old subscription set still claims.
@@ -140,4 +151,4 @@ async function setHidden(list) {
 // ponytail: on-demand subscriptions last for the S.session; drop the oldest if a long S.session ever holds too many.
 
 
-module.exports = { preset, viewFilter, setViewFilter, hiddenRules, viewRows, search, start, refresh, doRefresh, listFilter, setHidden };
+module.exports = { preset, viewFilter, setViewFilter, hiddenRules, viewRows, search, searchList, start, refresh, doRefresh, listFilter, setHidden };

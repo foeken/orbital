@@ -16,7 +16,7 @@ const { NOT_CONNECTED, S, VIEWS, errText, idKind, isSearch, isSpace, metaSigs, p
 const { cachedNodeHue, graphRow, members, rememberNodeHue, toNode } = require('./main/rows');
 const { accessContext, chatOutline, createDocument, creationOptions, documentAction, history, info, linkShared, metaSig, moveTarget, mut, mutTasks, onChange, op, outlineWithReferences, setSensitive } = require('./main/documents');
 const { callOf, pathOf, related, searchChildren, spaceChildren, summaryUri } = require('./main/related');
-const { hiddenRules, listFilter, preset, refresh, search, setHidden, setViewFilter, start, viewFilter, viewRows } = require('./main/views');
+const { hiddenRules, listFilter, preset, refresh, search, searchList, setHidden, setViewFilter, start, viewFilter, viewRows } = require('./main/views');
 const { nodePin, pinState, pinTree, pinned, setPin, todayNode, weekNode, weekTitle } = require('./main/pins');
 const { image } = require('./main/images');
 
@@ -95,6 +95,7 @@ ipcMain.handle('doc:info', (_e, id) => op(id, info));
 ipcMain.handle('doc:creationOptions', () => creationOptions());
 ipcMain.handle('doc:create', (_e, title, opts) => createDocument(title, opts || {}));
 ipcMain.handle('search', (_e, query) => search(query));
+ipcMain.handle('search:list', () => searchList());
 ipcMain.handle('history:undo', () => history(undoStack, redoStack, 'undo', 'canUndo'));
 ipcMain.handle('history:redo', () => history(redoStack, undoStack, 'redo', 'canRedo'));
 ipcMain.handle('doc:delete', (_e, id) => documentAction(id, 'softDelete'));
