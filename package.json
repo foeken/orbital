@@ -1,6 +1,6 @@
 {
   "name": "tana-tasks",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "private": true,
   "description": "Tana companion: an outliner over your Tana documents, kept live over Tana's platform sync",
   "main": "main.js",
