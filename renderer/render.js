@@ -8,8 +8,11 @@ function caretOffset(el) {
   const r = document.createRange(); r.selectNodeContents(el); r.setEnd(sel.focusNode, sel.focusOffset);
   return r.toString().length;
 }
-function setCaret(el, offset) {
-  el.focus();
+// preventScroll: for putting a caret back where it already was. Focusing a freshly built element scrolls it into
+// view, which is right when the user moved the caret and wrong when a re-render moved the element under a caret
+// that never went anywhere.
+function setCaret(el, offset, preventScroll) {
+  el.focus({ preventScroll: !!preventScroll });
   let left = Math.max(0, Math.min(offset, el.textContent.length));
   const r = document.createRange(), walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
   let t, placed = false;
@@ -42,10 +45,10 @@ function textPoint(el, offset) {
   return [el, el.childNodes.length];
 }
 // put the selection back after a formatting round trip re-rendered the node
-function selectRange(key, start, end) {
+function selectRange(key, start, end, preventScroll) {
   const el = textEl(key);
   if (!el) return;
-  el.focus();
+  el.focus({ preventScroll: !!preventScroll });
   const r = document.createRange(), [sn, so] = textPoint(el, start), [en, eo] = textPoint(el, end);
   r.setStart(sn, so); r.setEnd(en, eo);
   const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
@@ -61,9 +64,9 @@ function selectionOffsets(el) {
   pre.setEnd(r.endContainer, r.endOffset); const end = pre.toString().length;
   return end > start ? [start, end] : null;
 }
-function placeCaret(key, offset) {
+function placeCaret(key, offset, preventScroll) {
   const el = textEl(key);
-  if (el) setCaret(el, offset == null ? el.textContent.length : offset);
+  if (el) setCaret(el, offset == null ? el.textContent.length : offset, preventScroll);
 }
 // caret into keys[i] (at offset) when it still exists, else the nearest surviving node: previous ones first, then following
 function caretNear(keys, i, offset) {
@@ -283,8 +286,11 @@ function renderOutline() {
   }
   applySel();
   for (const key of items.keys()) if (!rendered.has(key)) items.delete(key);
-  if (saved && savedSel) selectRange(saved.key, savedSel[0], savedSel[1]);
-  else if (saved) placeCaret(saved.key, saved.offset);
+  // Putting the caret back is preserving state, not navigating: a render that only rebuilt the rows must not scroll
+  // the page to wherever the caret happens to be. Clicking a task's box while another row held the caret rebuilt the
+  // outline and then jumped the view to that other row. Typing still scrolls to itself, through scrollOnType.
+  if (saved && savedSel) selectRange(saved.key, savedSel[0], savedSel[1], true);
+  else if (saved) placeCaret(saved.key, saved.offset, true);
   // the caret lands in that typable row once per open: a later render (a live update, a refresh) must not pull it back
   if (caretOnOpen && parent && Array.isArray(childrenOf(parent))) {
     caretOnOpen = false;

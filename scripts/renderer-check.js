@@ -357,7 +357,9 @@ assert.match(source, /await tana\.setBlockType\(item\.docId, item\.node\.id, typ
 assert.match(source, /await tana\.insertDivider\(docId, node\.id\)/);
 assert.match(source, /el\.textContent === '\/' && palette\.hidden\) openSlash\(item\)/);
 assert.match(source, /e\.target\.closest\('a\.url, a\.link'\)/); // a link mark opens like a bare URL
-assert.match(source, /if \(saved && savedSel\) selectRange\(saved\.key, savedSel\[0\], savedSel\[1\]\)/); // a live update must not eat the selection
+// a live update must not eat the selection — and putting it back must not scroll the page to it, or clicking a task's
+// box while another row holds the caret jumps the view to that other row
+assert.match(source, /if \(saved && savedSel\) selectRange\(saved\.key, savedSel\[0\], savedSel\[1\], true\)/);
 // ---- filter menus, sidebar rows, empty state ----
 assert.match(source, /function pickMenuRow\(r, pick\) \{/);
 assert.match(source, /if \(!r\.keepOpen\) menu = null;/);

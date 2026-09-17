@@ -157,7 +157,11 @@ document.addEventListener('keydown', (e) => {
   const mod = e.metaKey || e.ctrlKey, inFilter = document.activeElement === filterEl;
   // every combo, built-in or recorded, is a palette row id (DEFAULT_HOTKEYS in state.js); ⌘K and the text-size keys stay fixed
   // (a key the focused node already answered to — ⌘↑, ⌘↩ — arrives defaultPrevented and must not run twice)
-  const combo = comboOf(e), hotkey = mod && !inFilter && !e.defaultPrevented ? hotkeyIds().find((id) => hotkeyFor(id) === combo) : undefined;
+  const combo = comboOf(e), found = mod && !inFilter && !e.defaultPrevented ? hotkeyIds().find((id) => hotkeyFor(id) === combo) : undefined;
+  // ⌘C copies the current node's link, but only with nothing selected: a text selection is the browser's copy to make,
+  // and taking it would break copying a few words out of a node. With no document to copy, runAction finds no row and
+  // the key falls through on its own.
+  const hotkey = found === 'copyLink' && !getSelection().isCollapsed ? undefined : found;
   if (mod && e.key === 'k') { e.preventDefault(); togglePalette('cmd'); }
   else if (mod && (e.key === '0' || (e.shiftKey && (e.key === '+' || e.key === '=' || e.key === '-' || e.key === '_')))) { e.preventDefault(); setZoom(e.key === '0' ? BASE_ZOOM : zoomFactor * (e.key === '-' || e.key === '_' ? 1 / 1.1 : 1.1)); }
   else if (hotkey === 'search') { e.preventDefault(); togglePalette('search'); } // also while the palette is open: it switches it to search

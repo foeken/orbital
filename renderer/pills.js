@@ -135,8 +135,16 @@ function cleanupPill() {
   };
   return pill;
 }
+// Typing in an open menu narrows it, so a long list (every member, in Assigned to) is reachable without the mouse.
+// Headings and dividers describe a full list, so a narrowed one drops them and shows only what matched.
+function menuRows(d) {
+  const all = d.rows(), q = (menu && menu.q || '').trim().toLowerCase();
+  return q ? all.filter((r) => r.label && fuzzyMatch(r.label, q)) : all;
+}
 function menuEl(d) {
-  const rows = d.rows(), el = document.createElement('div'); el.className = 'menu';
+  const rows = menuRows(d), el = document.createElement('div'); el.className = 'menu';
+  const typed = (menu.q || '').trim();
+  if (typed) { const h = document.createElement('div'); h.className = 'mhead'; h.textContent = typed; el.append(h); }
   const pick = rows.filter((r) => r.label); // navigable rows
   menu.index = Math.max(0, Math.min(menu.index, pick.length - 1));
   for (const r of rows) {
@@ -163,9 +171,16 @@ function pickMenuRow(r, pick) {
   renderPills(true);
 }
 function pillKeys(e, d, pill) {
-  const open = menu && menu.id === d.id, pick = open ? d.rows().filter((r) => r.label) : [];
-  if (open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) { e.preventDefault(); menu.index = (menu.index + (e.key === 'ArrowDown' ? 1 : pick.length - 1)) % pick.length; renderPills(true); }
-  else if (open && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); pickMenuRow(pick[menu.index], pick); }
+  // the same rows the menu is showing: navigating a list the user has narrowed must not highlight a row that is not there
+  const open = menu && menu.id === d.id, pick = open ? menuRows(d).filter((r) => r.label) : [];
+  const typing = open && (menu.q || '') !== '';
+  if (open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) { e.preventDefault(); if (pick.length) menu.index = (menu.index + (e.key === 'ArrowDown' ? 1 : pick.length - 1)) % pick.length; renderPills(true); }
+  // Space selects an unnarrowed list, but types into one being narrowed: member names have spaces in them
+  else if (open && (e.key === 'Enter' || (e.key === ' ' && !typing))) { e.preventDefault(); pickMenuRow(pick[menu.index], pick); }
+  else if (open && e.key === 'Backspace') { e.preventDefault(); menu.q = (menu.q || '').slice(0, -1); menu.index = 0; renderPills(true); }
+  // Escape gives the full list back before it closes the menu, so a mistyped letter costs one key rather than a reopen
+  else if (open && e.key === 'Escape' && typing) { e.preventDefault(); menu.q = ''; menu.index = 0; renderPills(true); }
+  else if (open && e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); menu.q = (menu.q || '') + e.key; menu.index = 0; renderPills(true); }
   else if (open && e.key === 'Escape') { e.preventDefault(); menu = null; renderPills(true); }
   else if (open && e.key === 'Tab') { menu = null; renderPills(true); }
   else if (d.toggle && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); d.toggle(); }
