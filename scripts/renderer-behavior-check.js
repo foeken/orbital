@@ -43,6 +43,9 @@ const withShims = (src) => {
     src = functionSource('agoText') + '\n' + functionSource('subtextOf') + '\n' + src;
     src = "globalThis.displayKeys ??= () => ['status', 'assigned', 'updated']; globalThis.displayOn ??= (id) => globalThis.displayKeys().includes(id);\n" + src;
   }
+  // The watch-state cache lives in state.js, which most slices do not take. A slice that only clears it — a sharing
+  // change can flip whether a node is watched — should not fail for want of the map itself.
+  if (/\bnotify(ById|Loading)\b/.test(src) && !/const notifyById =/.test(src)) src = 'globalThis.notifyById ??= new Map(); globalThis.notifyLoading ??= new Set();\n' + src;
   return /\b(renderSoon|patchMeta|iconNode|hotkeyFor|hotkeyIds|comboOf|settleEnter)\b/.test(src) ? RENDER_SHIM + 'globalThis.settleEnter ??= () => {};\n' + src : src;
 };
 function functionSource(name) {
@@ -1183,7 +1186,7 @@ async function runSyncShortcutCheck() {
   // sequence (open, task state, where it lives, what it looks like, link, delete last), then Views, view options,
   // and Actions from "get in" to the app's own settings.
   const order = vm.runInNewContext(`
-    const views = [{ id: 'library', title: 'Library', icon: 'library', nodes: [] }, { id: 'tasks', title: 'Tasks', icon: 'task', nodes: [] }, { id: 'inbox', title: 'Inbox', icon: 'inbox', nodes: [] }], searches = [], pinTree = [], pinRows = () => [];
+    const views = [{ id: 'library', title: 'Library', icon: 'library', nodes: [] }, { id: 'inbox', title: 'Inbox', icon: 'inbox', nodes: [] }], searches = [], pinTree = [], pinRows = () => [];
     const selectionRows = () => [{ id: 'delete', group: 'Current node', label: 'Delete' }, { id: 'sensitive', group: 'Current node', label: 'Mark as sensitive' }, { id: 'zoomIn', group: 'Current node', label: 'Zoom in' }, { id: 'status', group: 'Current node', label: 'Set status' }];
     const pillCommandRows = () => [{ id: 'pill:type', group: 'View options', label: 'Filter by type' }], taskActionRows = () => [];
     const tana = { refresh: async () => {}, todayNode: async () => {}, weekNode: async () => {}, nodeLink: async () => {}, accessOptions: async () => {}, filters: {}, sensitiveIds: () => {}, creationOptions: async () => {} }, run = () => {};
@@ -1201,9 +1204,9 @@ async function runSyncShortcutCheck() {
     ({ labels: (q) => paletteRows(q).map((row) => row.group + ': ' + row.label) });
   `);
   assert.deepEqual(plain(order.labels('')), [
-    'Current node: Zoom in', 'Current node: Set status', 'Current node: Pin to sidebar', 'Current node: Pin to today', 'Current node: Move to …', 'Current node: Move to Library',
+    'Current node: Zoom in', 'Current node: Set status', 'Current node: Pin to today', 'Current node: Move to …', 'Current node: Move to Library',
     'Current node: Edit visibility', 'Current node: Mark as sensitive', 'Current node: Copy link', 'Current node: Delete',
-    'Views: Inbox', 'Views: Today', 'Views: This week', 'Views: Tasks', 'Views: Library',
+    'Views: Inbox', 'Views: Today', 'Views: This week', 'Views: Library',
     'View options: Filter by type', 'View options: Filter rows by text',
     'Actions: Log in to Tana', 'Actions: Create new…', 'Actions: Search Tana', 'Actions: Go back', 'Actions: Go forward', 'Actions: Focus the sidebar', 'Actions: Hide sidebar',
     'Actions: Undo', 'Actions: Redo', 'Actions: Sync', 'Actions: Edit hidden items', 'Actions: Toggle sensitive visibility',
@@ -1975,9 +1978,9 @@ function runClearFiltersCheck() {
 
 async function runUnifiedViewsCheck() {
   const api = vm.runInNewContext(`
-    const ids = ['inbox', 'tasks', 'library'];
-    const views = ids.map((id) => ({ id, title: id, nodes: id === 'tasks' ? [{ id: 'draftdoc:1', draft: 'task' }] : [] }));
-    const types = { inbox: null, tasks: ['tasks'], library: ['tasks'] };
+    const ids = ['inbox', 'library'];
+    const views = ids.map((id) => ({ id, title: id, nodes: id === 'library' ? [{ id: 'draftdoc:1', draft: 'task' }] : [] }));
+    const types = { inbox: null, library: ['tasks'] };
     const filters = new Map(ids.map((id) => [id, { types: types[id], states: null, assignee: 'anyone', text: '' }]));
     const viewSeq = new Map(), truncated = new Set(), fresh = new Map(), calls = [], pending = [];
     const tana = { viewList: (id, filter) => { calls.push([id, filter]); return new Promise((resolve) => pending.push(resolve)); } };
@@ -1994,25 +1997,26 @@ async function runUnifiedViewsCheck() {
     });
   `);
 
-  const old = api.start('tasks'), latest = api.start('tasks');
+  const old = api.start('library'), latest = api.start('library');
   api.resolve(1, { nodes: [{ id: 'new', title: 'New', meta: 'Mon 9:00-10:00', editable: false }], truncated: true });
   await latest;
   api.resolve(0, { nodes: [{ id: 'old', title: 'Old' }], truncated: false });
   await old;
-  assert.deepEqual(plain(api.rows('tasks').map((node) => [node.id, node.meta, node.editable])), [
+  assert.deepEqual(plain(api.rows('library').map((node) => [node.id, node.meta, node.editable])), [
     ['draftdoc:1', null, null], ['new', 'Mon 9:00-10:00', false],
   ], 'the newest shared response wins while a local draft, meeting-style meta and read-only capability survive');
-  assert.equal(api.isTruncated('tasks'), true, 'truncation belongs to the accepted response');
+  assert.equal(api.isTruncated('library'), true, 'truncation belongs to the accepted response');
 
-  const loads = api.ids.filter((id) => id !== 'tasks').map((id) => api.start(id));
-  loads.forEach((_load, i) => api.resolve(i + 2, { nodes: [{ id: api.ids.filter((id) => id !== 'tasks')[i], title: 'row' }], truncated: false }));
+  const loads = api.ids.filter((id) => id !== 'library').map((id) => api.start(id));
+  loads.forEach((_load, i) => api.resolve(i + 2, { nodes: [{ id: api.ids.filter((id) => id !== 'library')[i], title: 'row' }], truncated: false }));
   await Promise.all(loads);
   assert.deepEqual(plain(api.calls().slice(2).map(([id, filter]) => [id, filter.types && filter.types[0]])), [
-    ['inbox', null], ['library', 'tasks'],
-  ], 'Inbox and Library use the same viewList call as Tasks');
+    ['inbox', null],
+  ], 'every view goes through the same viewList call');
   assert.doesNotMatch(source, /\b(taskF|libF|loadLibrary|loadChats|loadInbox)\b/, 'the renderer no longer carries a per-view filter or loader');
-  // Tasks is the only view left with a native draft kind: with Meetings gone, Enter on any other view drafts a doc.
-  assert.match(source, /const DRAFT_KIND = \{ tasks: 'task' \}/, 'Tasks retains its native draft kind');
+  // Tasks was the last view with a native draft kind. With it gone, Enter drafts a plain doc on every view — asserted
+  // as the empty map rather than as the absence of the old one, so a half-restored version cannot pass.
+  assert.match(source, /const DRAFT_KIND = \{\};/, 'no view drafts a task any more: Enter makes a doc everywhere');
   // The Meetings view is gone, and the today marker went with it: every page now opens at its top.
   // the call form, not the bare word: the note left where it was removed should not read as the thing still existing
   assert.doesNotMatch(source, /todayIndex\(/, 'the today marker was removed with the view that was its only caller');
@@ -2065,7 +2069,10 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     'Updated groups run newest first; past a month, or without a time, a row is Older');
   assert.deepEqual(titles([{ id: 'x', icon: 'task', done: 1, stateType: 'proposed', tags: [] }], 'status'), [['Inbox', ['x']]],
     'the row state wins over the done flag, so an Inbox task never reads as Completed');
-  // Stay put: a clicked Inbox task keeps its group and place (Tasks groups by Status by default) until it is released
+  // Stay put: a clicked Inbox task keeps its group and place until it is released. The grouping is set here rather
+  // than inherited — Tasks used to default to Status, and these cases are about holding rows, not about which page
+  // groups by what, so they say what they need instead of depending on a view's identity.
+  api.set('tasks', 'status', 'default');
   const inboxTask = { id: 'h1', icon: 'task', done: 0, stateType: 'proposed', tags: [{ label: 'task' }] }, openTask = { id: 'h2', icon: 'task', done: 0, stateType: 'open', tags: [{ label: 'task' }] };
   const onScreen = (list) => plain(api.groupsOf(api.sortRows(list))).map((g) => [g.title, g.nodes.map((n) => n.id)]);
   assert.deepEqual(onScreen([inboxTask, openTask]), [['Inbox', ['h1']], ['In Progress', ['h2']]]);
@@ -2093,7 +2100,9 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   assert.equal(api.groupsOf(rows).length, 3, 'a grouped view sections its rows');
   assert.deepEqual(plain(api.prefs()), { group: 'type', sort: 'title' }, 'each view remembers its own choice');
   api.set('tasks', undefined, undefined);
-  assert.deepEqual(plain(api.prefs()), { group: 'status', sort: 'updated' }, 'an unset Tasks view groups by Status, most recently updated first');
+  // Tasks was the one page with defaults of its own (Status / most recently updated). With it gone, every unset page
+  // falls back the same way, saved searches included.
+  assert.deepEqual(plain(api.prefs()), { group: 'none', sort: 'default' }, 'an unset page groups by nothing and keeps the order its query returned');
   api.set('library', undefined, undefined);
   assert.deepEqual(plain(api.prefs()), { group: 'none', sort: 'default' }, 'and any other unset view falls back to None / Default');
   api.set('library', undefined, 'updated');
@@ -2203,7 +2212,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   `);
   assert.deepEqual(plain(api.commands('tasks')), [
     ['pill:status', 'Filter by status', 'In Progress', 'status'], ['pill:assigned', 'Filter by assignee', 'Anyone', 'assigned'],
-    ['pill:sort', 'Sort by', 'Updated', 'sort'], ['pill:group', 'Group by', 'Status', 'group'],
+    ['pill:sort', 'Sort by', 'Default', 'sort'], ['pill:group', 'Group by', 'None', 'group'],
     ['pill:display', 'Display', 'Status, Assigned, Updated', 'field'],
   ], 'Cmd+K names the current Tasks view options for what they do, with the value as the hint and each its supplied icon (Tasks groups by Status until told otherwise), and Tasks is a kind page with no type to pick');
   assert.deepEqual(plain(api.open('status')), { mode: 'pill', rows: [['Any status', ''], ['Inbox', ''], ['In Progress', '✓'], ['Completed', ''], ['Later', '']] },

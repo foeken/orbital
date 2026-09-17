@@ -288,7 +288,7 @@ async function main() {
     assert.equal(libQuery.assignedToViewer,true,'the Library preset is assigned to me, stored viewer-relative');
     // Named from the filter rather than "Untitled", and an explicit title wins.
     assert.equal(backend.searchTitle('library',{states:['open'],assignee:'me'}),'Library — open · mine');
-    assert.equal(backend.searchTitle('tasks',{}),'Tasks','a bare filter still names its view');
+    assert.equal(backend.searchTitle('library',{}),'Library','a bare filter still names its view');
     assert.equal(backend.searchTitle('library',{text:'  dpa  '}),'Library — "dpa"');
     const named=await backend.searchCreate('library','Quarterly review');
     assert.equal(readNode(docs.get(named.id)).title,'Quarterly review','an explicit title beats the derived one');
@@ -514,7 +514,7 @@ async function main() {
     assert.equal(cachedNodeHue(space), 0, 'own hue survives the cached kind tag');
     assert.equal(cachedNodeHue({ id: plain.id, icon: null, tags: [{ label: 'Type', hue: 0 }] }), undefined, 'type hue is not a node hue');
     assert.equal(graphRow({ id: 'tana:chat:01exampler0000000000000000', title: 'Chat' }).icon, 'chat');
-    assert.ok(VIEWS.some((s) => s.id === 'tasks' && s.title === 'Tasks' && s.icon === 'task'));
+    assert.ok(VIEWS.some((s) => s.id === 'inbox' && s.title === 'Inbox' && s.icon === 'inbox'));
     // A weekday on its own reads as the week ahead, so a past meeting has to carry its date: "Fri" for last Friday
     // in a list that also holds this Friday is the one thing a meeting row must never say.
     const at = (days, hour) => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + days); d.setHours(hour); return d.toISOString(); };
@@ -563,8 +563,8 @@ async function main() {
     assert.deepEqual(rows.map((r) => r.updatedAt), [task.updateTime, plain.updateTime, event.updateTime]);
     assert.deepEqual(rows.map((r) => r.stateType), ['open', undefined, undefined], 'only a task carries a state');
     assert.deepEqual(rows.map((r) => r.done), [0, undefined, undefined], 'done keeps its own meaning');
-    // the Tasks/Meetings views render db rows: they keep updatedAt, and the rest comes back from the graph cache
-    cache.upsert({ ...backend.graphRow(task), section: 'tasks' });
+    // a view renders db rows: they keep updatedAt, and the rest comes back from the graph cache
+    cache.upsert({ ...backend.graphRow(task), section: 'library' });
     const cached = backend.toNode(cache.get(task.id));
     assert.equal(cached.updatedAt, task.updateTime);
     assert.equal(cached.createdAt, task.createTime);
@@ -689,10 +689,10 @@ async function main() {
       graph: { listNodes: async (p) => (p.nodeIds ? { nodes: [] } : { nodes: [{ id: taskId, title: 'Accepted task', state: { type: 'open' }, updateTime: '2026-09-15T12:00:00Z' }], totalCount: 1 }) },
       sync: { subscribe: async () => null, unsubscribe: async () => {}, getDocument: (id) => (id === taskId ? live : undefined) },
     } });
-    const row = (await backend.handlers.get('view:list')(null, 'tasks')).nodes.find((n) => n.id === taskId);
+    const row = (await backend.handlers.get('view:list')(null, 'library')).nodes.find((n) => n.id === taskId);
     assert.equal(row.stateType, 'proposed', 'the listed row takes the live state over the lagging index');
     assert.equal(row.done, 0);
-    const cached = (await backend.handlers.get('outline:roots')()).find((v) => v.id === 'tasks').nodes.find((n) => n.id === taskId);
+    const cached = (await backend.handlers.get('outline:roots')()).find((v) => v.id === 'library').nodes.find((n) => n.id === taskId);
     assert.equal(cached.stateType, 'proposed', 'and so does the cached row the next roots read hands the renderer');
     console.log('ok  a list refresh keeps the live state of a task over a lagging index');
   }
@@ -715,12 +715,12 @@ async function main() {
       const result = await backend.handlers.get('view:list')(null, view.id);
       assert.equal(result.nodes.length, 1, view.id + ' fetched through view:list');
     }
-    assert.equal(requests.length, 3, 'three views make three single queries');
+    assert.equal(requests.length, 2, 'two views make two single queries');
     const roots = await backend.handlers.get('outline:roots')();
-    assert.equal(requests.length, 3, 'roots reads SQLite without fetching');
-    assert.ok(roots.every((view) => view.nodes.length === 1), 'all three views load from their own cache section');
+    assert.equal(requests.length, 2, 'roots reads SQLite without fetching');
+    assert.ok(roots.every((view) => view.nodes.length === 1), 'both views load from their own cache section');
     await backend.refresh();
-    assert.equal(requests.length, 4);
+    assert.equal(requests.length, 3);
     // the last view listed above is now the Library, whose preset lists tasks
     assert.deepEqual(requests.at(-1).nodeTypes, ['text'], 'refresh repeats only the last listed view');
     const custom = await backend.handlers.get('view:setFilter')(null, 'library', { types: ['chats'], text: 'urgent' });
@@ -731,14 +731,118 @@ async function main() {
     // the Library preset ships an empty text of its own, where the Chats preset this case used to run against had
     // none at all: either way the stored 'urgent' is gone, which is what the case is about
     assert.equal(reset.text, '', 'and drops the custom fields a prior valid write stored');
-    // A kind page cannot be turned into a different page: Tasks lists tasks even if something stored otherwise,
-    // and the renderer is told which pages those are so it does not offer a type to pick.
-    assert.deepEqual((await backend.handlers.get('view:setFilter')(null, 'tasks', { types: ['meetings', 'tasks'] })).types, ['tasks'], 'Tasks keeps listing tasks');
-    cache.setSetting('viewFilter:tasks', { types: ['skills'] });
-    assert.deepEqual((await backend.handlers.get('view:filter')(null, 'tasks')).types, ['tasks'], 'and heals a stored filter that says otherwise');
+    // No view is a kind page any more — Tasks was the last one — so a view keeps whatever kinds it is given and a
+    // stored filter is no longer overridden on the way back out.
+    assert.deepEqual((await backend.handlers.get('view:setFilter')(null, 'library', { types: ['meetings', 'tasks'] })).types, ['meetings', 'tasks'], 'a view keeps the kinds it is given');
     assert.deepEqual((await backend.handlers.get('view:setFilter')(null, 'library', { types: ['meetings'] })).types, ['meetings'], 'the Library still picks its kinds');
-    assert.equal(roots.filter((view) => view.kind).map((view) => view.id).join(','), 'tasks', 'and the one remaining kind page is marked as such');
-    console.log('ok  three view handlers share fetch/cache, roots stays offline, and refresh follows the active view');
+    assert.equal(roots.filter((view) => view.kind).length, 0, 'and no view is a kind page any more, so none is marked as one');
+    console.log('ok  two view handlers share fetch/cache, roots stays offline, and refresh follows the active view');
+  }
+
+  // The badge on the app icon: how many nodes are waiting in the Inbox. It rides the refresh the views already do.
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const asked = [];
+    let count = 7;
+    backend.testRuntime({ me: { userUri: ME }, win: { isDestroyed: () => false, webContents: { send: () => {} } }, client: {
+      graph: { listNodes: async (p) => { asked.push(p); return { nodes: [], totalCount: count }; } },
+      sync: { subscribe: async () => null, unsubscribe: async () => {} },
+    } });
+    assert.equal(await backend.inboxCount(), 7, 'the badge number is the graph count, not the rows fetched');
+    // The query matters as much as the number: counting the wrong thing would satisfy an assertion on the count alone.
+    const q = asked.at(-1);
+    assert.deepEqual(q.stateTypes, ['proposed'], 'it counts what the Inbox lists: nodes waiting in Inbox');
+    assert.equal(q.limit, 1, 'and asks for a count rather than a page of rows');
+    assert.equal(q.mode, 'LIST_NODES_MODE_WITH_COUNT', 'so totalCount comes back at all');
+    assert.deepEqual(q.assignedTo, [ME], 'and only what is waiting on you: a badge counts your own nodes, not everyone\'s');
+    // A refresh carries the number to whatever owns the icon; main.js gives S.badge the electron end of it.
+    const badged = [];
+    backend.S.badge = (n) => badged.push(n);
+    count = 3;
+    await backend.refresh();
+    assert.deepEqual(badged.at(-1), 3, 'a refresh updates the badge with the count it just read');
+    // A count that fails must not make a refresh that worked look broken — so only the count fails here. Failing
+    // every query would exercise a refresh that broke for its own reasons and prove nothing about the badge.
+    backend.testRuntime({ me: { userUri: ME }, win: { isDestroyed: () => false, webContents: { send: () => {} } }, client: {
+      graph: { listNodes: async (p) => { if (p.limit === 1) throw new Error('unavailable'); return { nodes: [] }; } },
+      sync: { subscribe: async () => null, unsubscribe: async () => {} },
+    } });
+    backend.S.badge = (n) => badged.push(n);
+    const badgedBefore = badged.length;
+    await backend.refresh();
+    assert.equal(backend.statusSnapshot().syncing, false, 'the refresh still finishes');
+    assert.equal(backend.statusSnapshot().error, null, 'and reports nothing wrong, because for the views nothing was');
+    assert.equal(badged.length, badgedBefore, 'the badge simply keeps the number it already had');
+    console.log('ok  the Inbox badge counts through the graph and rides the view refresh');
+  }
+
+  // Watching a node for changes: what is announced, what is deliberately not, and who decides.
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const docs = new Map(), notified = [];
+    const watched = new Document('tana:text:' + ulid());
+    watched.transact((l) => initDocument(l, 'Contract', ME, { kind: 'task' }));
+    setAssignees(watched, [], ME); // stated rather than assumed: the rule turns on whether it is assigned
+    docs.set(watched.id, watched);
+    backend.testRuntime({ me: { userUri: ME }, win: { isDestroyed: () => false, webContents: { send: () => {} } },
+      client: { sync: { getDocument: (id) => docs.get(id), subscribe: async (id) => docs.get(id) } } });
+    backend.S.notify = (id, title, body) => notified.push([id, title, body]);
+
+    // initDocument makes its creator a direct participant of a restricted document: access to this node itself
+    // rather than through the space it lives in, and nobody is assigned — the case Tana already implies you follow.
+    assert.equal((await backend.handlers.get('notify:state')(null, watched.id)).default, true,
+      'access to the document itself and no assignee: watched without being asked');
+    backend.onChange(watched.id, { origin: 'remote' });
+    assert.deepEqual(notified, [], 'the first sight of a node is a baseline, not a change to announce');
+    // ...and it got there by returning, not by throwing. onChange catches everything it raises, so "nothing was
+    // announced" is also exactly what a crash looks like from out here — without this, dropping the baseline guard
+    // passes, because the missing `before` makes it throw on the way to saying nothing.
+    assert.equal(backend.statusSnapshot().error, null, 'and the baseline is taken cleanly rather than by erroring');
+    setTitle(watched, 'Contract v2');
+    backend.onChange(watched.id, { origin: 'remote' });
+    assert.deepEqual(notified.map((n) => [n[0], n[2]]), [[watched.id, 'Edited']], 'a remote edit to a watched node is announced');
+    // The whole feature rests on this: onChange fires for your own typing too, and being told about your own edits
+    // would make it unusable. sdk/document.js marks every change local or remote; this is what reads that mark.
+    setTitle(watched, 'Contract v3');
+    backend.onChange(watched.id, { origin: 'local' });
+    assert.equal(notified.length, 1, 'your own edits are never announced back to you');
+    setState(watched, 'closed', ME);
+    backend.onChange(watched.id, { origin: 'remote' });
+    assert.equal(notified.at(-1)[2], 'Now Completed', 'a status change says what the status became, not just that something moved');
+    // An explicit no beats a default yes, and clearing it returns to the rule rather than to off.
+    await backend.handlers.get('notify:set')(null, watched.id, false);
+    // Field by field: these objects are built inside the main-process vm, so a whole-object compare under
+    // node:assert/strict trips on the realm's prototype rather than on anything about the values.
+    const off = await backend.handlers.get('notify:state')(null, watched.id);
+    assert.equal(off.on, false, 'turning it off takes effect');
+    assert.equal(off.default, true, 'without changing what the rule would say');
+    assert.equal(off.explicit, true, 'and it is remembered as a choice rather than as the default');
+    setTitle(watched, 'Contract v4');
+    backend.onChange(watched.id, { origin: 'remote' });
+    assert.equal(notified.length, 2, 'and nothing is announced while it is off');
+    await backend.handlers.get('notify:set')(null, watched.id, null);
+    const cleared = await backend.handlers.get('notify:state')(null, watched.id);
+    assert.equal(cleared.explicit, false, 'clearing the choice forgets it');
+    assert.equal(cleared.on, true, 'and returns to the rule rather than leaving it off');
+    // Assigned to you: you are already looking at your own work, so it is not watched unless you ask.
+    const mine = new Document('tana:text:' + ulid());
+    mine.transact((l) => initDocument(l, 'My task', ME, { kind: 'task' }));
+    setAssignees(mine, [ME], ME);
+    docs.set(mine.id, mine);
+    assert.equal((await backend.handlers.get('notify:state')(null, mine.id)).default, false,
+      'a node assigned to you is not watched by default: the assignee is already looking at it');
+    // Access through the space it lives in, not through the document: unrestricted, so the participants map is not a
+    // grant of its own. Without a case like this the direct-access half of the rule cannot be falsified at all —
+    // every other document here is restricted, so both readings of it behave identically.
+    const viaSpace = new Document('tana:text:' + ulid());
+    viaSpace.transact((l) => initDocument(l, 'Team doc', ME, { kind: 'task' }));
+    setAssignees(viaSpace, [], ME);
+    viaSpace.transact((l) => l.getMap('data').delete('restricted'));
+    docs.set(viaSpace.id, viaSpace);
+    assert.equal(readNode(viaSpace).restricted, undefined, 'the fixture really is unrestricted');
+    assert.equal((await backend.handlers.get('notify:state')(null, viaSpace.id)).default, false,
+      'access inherited from the space is not a reason to follow a node');
+    console.log('ok  watching a node: the default reads access and assignment, only remote changes announce, an explicit choice wins');
   }
 
   // The week node is a plain "Week <n> (<year>)" document beside the day nodes: ISO-8601 week numbers, created once
@@ -797,7 +901,9 @@ async function main() {
       queries.push(p);
       return { nodes: tasks };
     };
-    backend.testRuntime({ me: { userUri: ME }, win: { isDestroyed: () => false, webContents: { send: () => {} } }, client: {
+    // This block is about subscriptions and caching around the refresh loop, not about one view's semantics, so it
+    // names the view it refreshes: the fixture's task is In Progress, which the Inbox preset would filter out.
+    backend.testRuntime({ me: { userUri: ME }, activeView: 'library', win: { isDestroyed: () => false, webContents: { send: () => {} } }, client: {
       sync: { subscribe: async (id) => documents.get(id), getDocument: (id) => documents.get(id), unsubscribe: async (id) => { unsubscribed.push(id); } },
       graph: { listNodes, getOwnerChain: async () => ({ entries: [{ uri: spaceId }] }) },
     } });
@@ -809,12 +915,17 @@ async function main() {
     assert.deepEqual(unsubscribed, [], 'the refresh leaves a document it never listed subscribed, with its live updates and undo history');
     const sections = await backend.handlers.get('outline:roots')();
     assert.equal(sections.map((s) => s.id).join(','), backend.VIEWS.map((s) => s.id).join(','));
-    assert.equal(sections.find((s) => s.id === 'tasks').nodes.length, 1, 'roots reads the view cache without another graph query');
+    // the refresh above listed the view this block names, so that is the section holding a cached row
+    assert.equal(sections.find((s) => s.id === 'library').nodes.length, 1, 'roots reads the view cache without another graph query');
     assert.equal(sections.find((s) => s.id === 'inbox').nodes.length, 0, 'and a view with nothing cached reads as empty rather than missing');
     tasks = [];
     await backend.handlers.get('view:list')(null, 'library', { types: ['meetings', 'tasks', 'docs'], states: null, assignee: 'anyone' });
     assert.deepEqual(unsubscribed, [taskId], 'a row that left the view is still unsubscribed');
     tasks = [{ id: taskId, title: 'Task', state: { type: 'open' }, updateTime: '2026-09-13T10:00:00Z' }];
+    // Back to the view's own filter first. The explicit one above asks for kinds this fixture answers empty, and it
+    // stays on S.activeFilter, so a refresh would re-ask that same empty query. What this case is about is a refresh
+    // re-caching a task the graph has again — not whether a hand-written filter still matches it.
+    await backend.handlers.get('view:list')(null, 'library');
     await backend.refresh();
     assert.ok(cache.get(taskId), 'a later refresh replaces the stale cache with a newly discovered task');
 
@@ -834,10 +945,10 @@ async function main() {
     assert.equal(await backend.handlers.get('doc:summaryUri')(null, eventId), writeUpId);
     assert.equal(ownerQueries, settled, 'the write-up it did find is cached');
 
-    cache.setSetting('viewFilter:tasks', { states: ['open', 'nonsense'], assignee: 'sam' });
-    const stored = await backend.handlers.get('view:filter')(null, 'tasks');
-    assert.equal(stored.states.join(','), 'proposed,open,not_now', 'a stored filter that is not a query falls back to the preset');
-    assert.equal(stored.assignee, 'me');
+    cache.setSetting('viewFilter:inbox', { states: ['open', 'nonsense'], assignee: 'sam' });
+    const stored = await backend.handlers.get('view:filter')(null, 'inbox');
+    assert.equal(stored.states.join(','), 'proposed', 'a stored filter that is not a query falls back to the preset');
+    assert.equal(stored.assignee, 'anyone');
     cache.setSetting('viewFilter:library', { types: ['tasks', 'wat'], states: [], assignee: 'anyone', text: 7 });
     const library = await backend.handlers.get('view:filter')(null, 'library');
     assert.equal(library.types.join(','), 'tasks', 'an unknown kind cannot keep the view throwing');
@@ -1042,7 +1153,9 @@ async function main() {
     const UPD = [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }];
     const COUNT = 'LIST_NODES_MODE_WITH_COUNT';
     assert.deepEqual(viewParams(VIEW_PRESETS.inbox, ME), { nodeTypes: ['event', 'text', 'chat', 'canvas', 'agent', 'skill', 'search'], stateTypes: ['proposed'], limit: 1000, sortOptions: UPD, mode: COUNT });
-    assert.deepEqual(viewParams(VIEW_PRESETS.tasks, ME), { nodeTypes: ['text'], stateTypes: ['proposed', 'open', 'not_now'], assignedTo: [ME], limit: 1000, sortOptions: UPD, mode: COUNT });
+    // Tasks is no longer a preset, but the query it asked for is still one a filter can name — and the Library's own
+    // preset differs only by a state, so what that shape sends the graph still matters.
+    assert.deepEqual(viewParams({ types: ['tasks'], states: ['proposed', 'open', 'not_now'], assignee: 'me' }, ME), { nodeTypes: ['text'], stateTypes: ['proposed', 'open', 'not_now'], assignedTo: [ME], limit: 1000, sortOptions: UPD, mode: COUNT });
     assert.deepEqual(viewParams(VIEW_PRESETS.library, ME), { nodeTypes: ['text'], stateTypes: ['proposed', 'open'], assignedTo: [ME], limit: 1000, sortOptions: UPD, mode: COUNT });
     // Meetings, Chats and People are no longer presets, but they are still kinds a filter can name, so what they ask
     // the graph for still matters: a saved search aimed at them must reach it the same way those pages used to.
@@ -1162,8 +1275,10 @@ async function main() {
     assert.ok(validViewFilter(rich), 'a query carrying things the pills cannot show still reads back as a valid filter');
     assert.deepEqual(Object.keys(rich).sort(), ['assignee', 'participant', 'states', 'text', 'types', 'window'], 'and carries none of them into the filter');
     // A kind page is that kind, whatever a stored filter from an older build says.
-    assert.deepEqual(viewTypes('tasks', { types: ['meetings', 'tasks'], states: null }), { types: ['tasks'], states: null }, 'Tasks lists tasks');
-    assert.deepEqual(viewTypes('tasks', { types: [] }).types, ['tasks']);
+    // viewTypes forced a kind page's own kinds over anything stored. No view is a kind page now, so it hands every
+    // filter back exactly as it was given — including an empty one, which viewParams reads as "any kind we list".
+    assert.deepEqual(viewTypes('library', { types: ['meetings', 'tasks'], states: null }), { types: ['meetings', 'tasks'], states: null }, 'a view keeps the kinds it is given');
+    assert.deepEqual(viewTypes('inbox', { types: [] }).types, []);
     assert.deepEqual(viewTypes('library', { types: ['meetings'] }).types, ['meetings'], 'the Library keeps the kinds it was given');
     assert.deepEqual(viewTypes('inbox', { types: null }).types, null);
     const id = ulid();

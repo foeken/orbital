@@ -18,9 +18,9 @@ const docRow = (n, hint, run) => ({ node: n, icon: n.icon, label: n.text ?? n.ti
 // The order of the rows about the node you are on: where it goes (open it, unfold it), what it is (done, status,
 // assignee), where it lives (pins, the date nodes, its space), what it looks like (image, visibility, sensitivity),
 // its link, and last the one destructive row. Rows without an id carry a `rank` from this list instead.
-const NODE_ROW_ORDER = ['zoomIn', 'expand', 'collapse', 'toggleDone', 'status', 'assign', 'assignTo', 'pinSidebar', 'pinToday', 'addToday', 'addWeek', 'move', 'moveLibrary', 'visibility', 'sensitive', 'copyLink', 'delete'];
+const NODE_ROW_ORDER = ['zoomIn', 'expand', 'collapse', 'toggleDone', 'status', 'assign', 'assignTo', 'pinToday', 'addToday', 'addWeek', 'move', 'moveLibrary', 'visibility', 'notify', 'sensitive', 'copyLink', 'delete'];
 const nodeRank = (r) => { const i = NODE_ROW_ORDER.indexOf(r.rank || r.id); return i < 0 ? NODE_ROW_ORDER.length : i; };
-const VIEW_ORDER = ['inbox', 'today', 'week', 'tasks', 'library'];
+const VIEW_ORDER = ['inbox', 'today', 'week', 'library'];
 // Matching a row, tiered the way Raycast ranks a title (its manual: aliases first, then the title's fuzzy score, which
 // favours the first letters of words). Best first:
 //   0  the label starts with the query      "in"    → **In**box
@@ -101,13 +101,20 @@ function paletteRows(q) {
   // "Current node"; while a multi-selection owns the top of the palette these fall back among the app actions.
   const docGroup = selection.length && selection[0].group === 'Selection' ? 'Actions' : 'Current node';
   if (pinInfo && palDoc && pinInfo.docId === palDoc.id) { // no ids: their labels depend on state, so no hotkeys
-    const sb = pinInfo.sidebar, td = pinInfo.dates.includes(localDate());
-    rows.push({ rank: 'pinSidebar', group: docGroup, icon: 'pin', label: sb ? 'Unpin from sidebar' : 'Pin to sidebar', run: () => pinAction(sb ? 'unpin' : 'pin', 'sidebar') });
+    const td = pinInfo.dates.includes(localDate());
     rows.push({ rank: 'pinToday', group: docGroup, icon: 'pinDate', label: td ? 'Unpin from today' : 'Pin to today', run: () => pinAction(td ? 'unpin' : 'pin', 'today') });
   }
   // the node's web link, for pasting into Slack or a doc
   if (palDoc && tana.nodeLink && isRealId(palDoc.id)) {
     rows.push({ id: 'copyLink', group: docGroup, icon: 'link', label: 'Copy link', run: () => run(async () => copyText(await tana.nodeLink(palDoc.id), 'Link copied')) });
+  }
+  // Watching this node: the label says what pressing it does, so it carries no id — a hotkey whose meaning flips
+  // between "start" and "stop" would be a key you cannot learn.
+  if (palDoc && tana.notifyState && isRealId(palDoc.id)) {
+    loadNotify(palDoc.id);
+    const watch = notifyById.get(palDoc.id);
+    if (watch) rows.push({ rank: 'notify', group: docGroup, icon: 'notify', label: watch.on ? 'Stop notifying' : 'Notify on changes',
+      run: () => run(async () => { notifyById.set(palDoc.id, await tana.setNotify(palDoc.id, !watch.on)); renderPalette(); }) });
   }
   if (palDoc && tana.accessOptions) {
     loadAccess(palDoc.id);

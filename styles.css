@@ -97,9 +97,10 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .pill:hover, .pill.open { background: #d9e8fa; }
 .pill:focus { outline: none; box-shadow: 0 0 0 2px #b7d2f5; }
 /* Sort and Group arrange the rows the view already has, so they sit beside the filters in grey rather than filter blue */
-.pill[data-id="sort"], .pill[data-id="group"] { background: #f1f1f1; color: #777; }
-.pill[data-id="sort"] b, .pill[data-id="group"] b { color: #444; }
-.pill[data-id="sort"]:hover, .pill[data-id="sort"].open, .pill[data-id="group"]:hover, .pill[data-id="group"].open { background: #e6e6e6; }
+.pill[data-id="sort"], .pill[data-id="group"], .pill[data-id="display"] { background: #f1f1f1; color: #777; }
+.pill[data-id="sort"] b, .pill[data-id="group"] b, .pill[data-id="display"] b { color: #444; }
+.pill[data-id="sort"]:hover, .pill[data-id="sort"].open, .pill[data-id="group"]:hover, .pill[data-id="group"].open,
+.pill[data-id="display"]:hover, .pill[data-id="display"].open { background: #e6e6e6; }
 /* Saving a query — keeping this one, or keeping a view's as a new search — makes something rather than narrowing
    something, so it reads green instead of filter blue, and says what it does in words rather than a glyph. */
 .pill.save, .pill.savesearch { background: #e6f4ea; color: #2e7d4f; }
@@ -397,10 +398,11 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .pill b { color: #b9dcf2; }
 [data-theme="dark"] .pill:hover, [data-theme="dark"] .pill.open { background: #314955; }
 [data-theme="dark"] .pill:focus { box-shadow: 0 0 0 2px #58768a; }
-[data-theme="dark"] .pill[data-id="sort"], [data-theme="dark"] .pill[data-id="group"] { background: #2a2d2f; color: #9a9fa1; }
-[data-theme="dark"] .pill[data-id="sort"] b, [data-theme="dark"] .pill[data-id="group"] b { color: #c9c9c9; }
+[data-theme="dark"] .pill[data-id="sort"], [data-theme="dark"] .pill[data-id="group"], [data-theme="dark"] .pill[data-id="display"] { background: #2a2d2f; color: #9a9fa1; }
+[data-theme="dark"] .pill[data-id="sort"] b, [data-theme="dark"] .pill[data-id="group"] b, [data-theme="dark"] .pill[data-id="display"] b { color: #c9c9c9; }
 [data-theme="dark"] .pill[data-id="sort"]:hover, [data-theme="dark"] .pill[data-id="sort"].open,
-[data-theme="dark"] .pill[data-id="group"]:hover, [data-theme="dark"] .pill[data-id="group"].open { background: #363a3c; }
+[data-theme="dark"] .pill[data-id="group"]:hover, [data-theme="dark"] .pill[data-id="group"].open,
+[data-theme="dark"] .pill[data-id="display"]:hover, [data-theme="dark"] .pill[data-id="display"].open { background: #363a3c; }
 [data-theme="dark"] .pill.save, [data-theme="dark"] .pill.savesearch { background: #233a2c; color: #8fcfa6; }
 [data-theme="dark"] .pill.save:hover, [data-theme="dark"] .pill.savesearch:hover { background: #2c4736; }
 [data-theme="dark"] .pill.save:focus, [data-theme="dark"] .pill.savesearch:focus { box-shadow: 0 0 0 2px #46705a; }

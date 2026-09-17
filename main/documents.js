@@ -130,7 +130,47 @@ function invalidateDeleted(id) {
   send('outline:changed', null);
 }
 
-function onChange(docId) {
+// ---- watching a node for changes ----
+// On by default where Tana already implies you are following it: you were given access to this document itself
+// (restricted, with you among its participants) rather than through the space it lives in, and it is not assigned to
+// you — an assignee is already looking at their own work. Everything else is off until asked for, in Cmd+K.
+const notifyDefault = (n) => {
+  const me = S.me && S.me.userUri;
+  if (!me) return false;
+  // restricted === true is what makes the grant this document's own. Access that comes from the space it lives in
+  // leaves the document unrestricted, and following everything in a shared space is not what was asked for.
+  const direct = n.restricted === true && !!(n.participants && n.participants[me]);
+  return direct && !(Array.isArray(n.assignedToUris) && n.assignedToUris.includes(me));
+};
+// An explicit choice wins; absent, the rule above decides. Stored as a map so "off for a node the rule would watch"
+// is a real answer and not the same as never having chosen.
+const notifyChoices = () => { const stored = db.setting('notify'); return stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {}; };
+const notifyOn = (n) => { const chosen = notifyChoices()[n.id]; return typeof chosen === 'boolean' ? chosen : notifyDefault(n); };
+async function notifyState(id) {
+  const n = await op(id, (doc) => readNode(doc));
+  return { on: notifyOn(n), default: notifyDefault(n), explicit: typeof notifyChoices()[id] === 'boolean' };
+}
+async function setNotify(id, on) {
+  const chosen = notifyChoices();
+  if (on === null || on === undefined) delete chosen[id]; else chosen[id] = !!on;
+  db.setSetting('notify', chosen);
+  return notifyState(id);
+}
+const NOTIFY_STATE = { proposed: 'Inbox', open: 'In Progress', closed: 'Completed', not_now: 'Later' };
+const notifySigs = new Map(); // docId -> [title, stateType] as last seen: what a change has to differ from to be one
+// Only changes from somewhere else. onChange fires for your own typing too, and being notified about your own edits
+// would make this unusable; sdk/document.js already marks every change local or remote, so the origin decides.
+function notifyWatched(id, n, info) {
+  const sig = [n.title ?? '', n.stateType ?? ''];
+  const before = notifySigs.get(id);
+  notifySigs.set(id, sig);
+  if (!info || info.origin !== 'remote') return;
+  if (!before || (before[0] === sig[0] && before[1] === sig[1])) return; // first sight, or nothing worth saying moved
+  if (!notifyOn(n)) return;
+  const body = before[1] !== sig[1] ? (NOTIFY_STATE[sig[1]] ? 'Now ' + NOTIFY_STATE[sig[1]] : 'Status changed') : 'Edited';
+  if (S.notify) S.notify(id, n.title || 'Untitled', body);
+}
+function onChange(docId, info) {
   try {
     const doc = S.client.sync.getDocument(docId);
     if (!doc) return;
@@ -150,6 +190,7 @@ function onChange(docId) {
     // edit must not cost it the owner-chain and link-sharing lookups, so the event says whether they did.
     const sig = metaSig(n), meta = metaSigs.get(docId) !== sig;
     metaSigs.set(docId, sig);
+    notifyWatched(docId, n, info); // before the renderer hears about it: the same read, one decision
     send('outline:changed', docId, { meta }); // the renderer patches this one row from doc:info
     if (pinsChanged || restored) send('outline:changed', null);
     if (restored) scheduleRefresh(0);
@@ -305,4 +346,4 @@ async function moveTarget(spaceId) {
   return document(spaceId);
 }
 
-module.exports = { outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, createDocument, info, setSensitive, subscribe, invalidateDeleted, onChange, document, op, inHistory, mut, mutTasks, documentAction, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget };
+module.exports = { outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, createDocument, info, setSensitive, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, document, op, inHistory, mut, mutTasks, documentAction, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget };

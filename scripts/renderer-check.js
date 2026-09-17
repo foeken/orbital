@@ -59,7 +59,7 @@ assert.doesNotMatch(source, /iconSvg:|\.iconSvg\b|setIcon|startDrop/, 'app-local
 assert.match(source, /scrollIntoView\(\{ block: 'nearest', inline: 'nearest', container: 'nearest' \}\)/);
 // Meetings, Chats and People are no longer views: each was a fixed query over one kind, which is what a saved search
 // is. The kinds stay, so those lists are a search away rather than gone with the pages.
-assert.doesNotMatch(source, /id: 'meetings', title: 'Meetings'|id: 'chats', title: 'Chats'|id: 'people', title: 'People'/,
+assert.doesNotMatch(source, /id: 'meetings', title: 'Meetings'|id: 'chats', title: 'Chats'|id: 'people', title: 'People'|id: 'tasks', title: 'Tasks'/,
   'the removed views are not served as roots any more');
 assert.match(source, /id: 'library', title: 'Library', icon: 'library'/);
 assert.match(source, /value: names\(TYPES, f\.types\) \|\| 'Any type', icon: one \? one\[2\] : 'any'/);

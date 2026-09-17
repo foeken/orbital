@@ -14,15 +14,28 @@ function createTanaSession({ partition = 'persist:tana', origin = 'https://home.
   let last = null; // last session JSON from /api/auth/session
   let expiresAt = 0; // ms epoch of last.accessToken's exp
 
-  async function fetchSession(refresh) {
-    const res = await ses.fetch(origin + '/api/auth/session' + (refresh ? '?refresh=true' : ''), {
-      credentials: 'include', headers: { accept: 'application/json' },
-    });
-    if (!res.ok && res.status !== 401) throw new Error('GET /api/auth/session failed: HTTP ' + res.status);
-    const json = await res.json().catch(() => ({}));
-    last = res.ok && json.authenticated ? json : null;
-    expiresAt = last && last.accessToken ? (jwtClaims(last.accessToken).exp || 0) * 1000 : 0;
-    return last;
+  const inFlight = new Map(); // refresh flag -> the lookup already running
+  // Every request asks for a token, so a cold or expiring cache made each caller fetch its own session. With many
+  // documents bootstrapping at once that became a burst on /api/auth/session, the server answered 429, and because a
+  // failed fetch leaves `last` unset the cache stayed cold — so the next retry wave was just as large. One shared
+  // lookup per kind collapses a wave into a single request; a forced refresh keeps its own slot so it cannot be
+  // served a result that was already stale when it was asked for.
+  function fetchSession(refresh) {
+    const key = !!refresh;
+    const running = inFlight.get(key);
+    if (running) return running;
+    const run = (async () => {
+      const res = await ses.fetch(origin + '/api/auth/session' + (key ? '?refresh=true' : ''), {
+        credentials: 'include', headers: { accept: 'application/json' },
+      });
+      if (!res.ok && res.status !== 401) throw new Error('GET /api/auth/session failed: HTTP ' + res.status);
+      const json = await res.json().catch(() => ({}));
+      last = res.ok && json.authenticated ? json : null;
+      expiresAt = last && last.accessToken ? (jwtClaims(last.accessToken).exp || 0) * 1000 : 0;
+      return last;
+    })();
+    inFlight.set(key, run);
+    return run.finally(() => { if (inFlight.get(key) === run) inFlight.delete(key); });
   }
 
   async function isAuthenticated() {

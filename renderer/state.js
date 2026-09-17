@@ -6,10 +6,12 @@ const tana = window.api || mockApi();
 // ---- state ----
 let views = [];              // [{ id, title, icon, nodes: document Node[] }]
 let searches = [];           // [{ id, title, icon, … }] saved search documents, for the Cmd+K Searches group
-let view = localStorage.getItem('view') || 'tasks'; // active view id; the outline shows one view at a time
+let view = localStorage.getItem('view') || 'inbox'; // active view id; the outline shows one view at a time
 // Views that no longer exist. A stored one would leave the app on a page with no filter, no rows and no way back,
 // so it lands in the Library, which lists every kind those pages used to list one of.
-if (['members', 'people', 'meetings', 'chats'].includes(view)) view = 'library';
+// Tasks lands in the Library rather than the Inbox: the two listed almost the same thing (your tasks, proposed and
+// open), so it is the nearest page to the one that went away.
+if (['members', 'people', 'meetings', 'chats', 'tasks'].includes(view)) view = 'library';
 let authed = false, authChecking = true, signedOut = false;
 const extra = new Map();     // docId -> document Node reached through a mention (not in roots)
 const paths = new Map();     // docId -> [{ id, title }] location in Tana for the breadcrumb (api.path)
@@ -39,7 +41,7 @@ let palTaskCtx = null;
 let palReturn = null; // { key, offset } of the node focused when a palette opened; focus goes back there on close
 const fresh = new Map();     // docId -> { section, after, node }: documents created here that roots does not list yet, kept in place until it does
 let draftSeq = 0;
-const DRAFT_KIND = { tasks: 'task' }; // what Enter drafts in a view (any other view: a plain doc)
+const DRAFT_KIND = {}; // what Enter drafts in a view; Tasks was the only one that drafted a task, so every view drafts a doc
 let sel = null;              // multi-select: { keys: Set, anchor: key, focus: key }; the caret leaves the text
 let selectionFrozen = false;
 const filters = new Map();   // view id -> the persisted query filter
@@ -51,6 +53,7 @@ const sensitiveEls = new Map(); // rendered surface -> document ids; lets a togg
 const taskMetaById = new Map(), taskMetaLoading = new Set(), taskMetaFailed = new Map(); // docId -> { until, wait }: a failed metadata read backs off, it is never given up on
 const META_RETRY_MS = 500, META_RETRY_MAX = 30000;
 const accessById = new Map(), accessLoading = new Set();
+const notifyById = new Map(), notifyLoading = new Set(); // docId -> { on, default, explicit }: whether changes to it are announced
 let visibilityPeople = new Set();
 let visibilityRoles = new Map();
 let menu = null;             // open pill menu: { id, index }

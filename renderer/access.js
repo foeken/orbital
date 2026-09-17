@@ -1,6 +1,17 @@
 'use strict';
 // Sharing and location: visibility palette, selected people, and moving a document to a space.
 
+// Whether this node's changes are announced. Read the same way access is: once per document, and the palette redraws
+// when the answer lands if it is still showing that node. The default depends on participants and assignment, so the
+// answer is main's to give rather than the renderer's to guess.
+function loadNotify(docId) {
+  if (!tana.notifyState || notifyById.has(docId) || notifyLoading.has(docId)) return;
+  notifyLoading.add(docId);
+  tana.notifyState(docId).then((state) => {
+    notifyLoading.delete(docId); notifyById.set(docId, state);
+    if (!palette.hidden && palDoc?.id === docId) renderPalette();
+  }, () => { notifyLoading.delete(docId); });
+}
 function loadAccess(docId) {
   if (!tana.accessOptions || accessById.has(docId) || accessLoading.has(docId)) return;
   accessLoading.add(docId);
@@ -10,12 +21,13 @@ function applySharing(doc, selection) {
   run(async () => {
     try {
       await tana.setSharing(doc.id, selection);
-      accessById.delete(doc.id); taskMetaById.delete(doc.id);
+      // the watch default is read off participants and assignment, so a sharing change can flip it: drop it too
+      accessById.delete(doc.id); taskMetaById.delete(doc.id); notifyById.delete(doc.id);
       if (typeof closePalette === 'function') closePalette(); await loadRoots(); render();
     } catch (e) {
       if (typeof showError === 'function') showError(e);
       if (/reload|access changed/i.test(String(e.message || e))) {
-        accessById.delete(doc.id); taskMetaById.delete(doc.id); palMode = 'visibility'; loadAccess(doc.id); loadTaskMeta(doc.id); renderPalette();
+        accessById.delete(doc.id); taskMetaById.delete(doc.id); notifyById.delete(doc.id); palMode = 'visibility'; loadAccess(doc.id); loadTaskMeta(doc.id); renderPalette();
       }
     }
   });

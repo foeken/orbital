@@ -5,7 +5,7 @@ const { KIND_VIEWS } = require('../sdk/query');
 // Order is the Cmd+K Views order: what is waiting on you, then your work, then knowledge.
 // Meetings, Chats and People were fixed views over one kind each — which is exactly what a saved search is, only
 // without being editable or nameable. They are gone; the kinds remain, so the same lists are a search away.
-const VIEWS = [{ id: 'inbox', title: 'Inbox', icon: 'inbox' }, { id: 'tasks', title: 'Tasks', icon: 'task' }, { id: 'library', title: 'Library', icon: 'library' }]
+const VIEWS = [{ id: 'inbox', title: 'Inbox', icon: 'inbox' }, { id: 'library', title: 'Library', icon: 'library' }]
   .map((view) => ({ ...view, kind: KIND_VIEWS.has(view.id) })); // a kind page lists one kind and does not offer the type picker
 const TAG = { task: { label: 'task', color: 'grey' }, meeting: { label: 'meeting', color: 'gold' }, space: { label: 'space', color: 'grey' }, doc: { label: 'doc', color: 'grey' }, member: { label: 'member', color: 'grey' } };
 const KINDS = { doc: 'tana:text:', task: 'tana:text:', meeting: 'tana:event:', chat: 'tana:chat:', search: 'tana:search:' };
@@ -17,8 +17,9 @@ const DOC_URI = /^tana:[a-z-]+:[0-9a-z]{26}$/; // a real document id; a renderer
 const S = {
   client: null, me: null, win: null, session: null, userData: null, // set by main.js at boot (or testRuntime)
   status: { authenticated: null, authChecking: true, connected: false, syncing: false, lastSync: null, error: null },
-  activeView: 'tasks', activeFilter: undefined, refreshing: null, refreshTimer: null, historyBusy: false, typesLoaded: null, membersLoaded: null,
+  activeView: 'inbox', activeFilter: undefined, refreshing: null, refreshTimer: null, historyBusy: false, typesLoaded: null, membersLoaded: null,
   refresh: null, // views.js sets this: the one place a refresh runs, reached from here so documents.js and pins.js need no cycle
+  badge: null, // main.js sets this: the app icon's badge belongs to electron, the counting to views.js (same split as refresh)
 };
 const subscribed = new Set(); // ids the view refresh subscribed: the only ones it unsubscribes again
 const deletedNodes = new Set();

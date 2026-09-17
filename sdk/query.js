@@ -68,12 +68,12 @@ const ANY_KINDS = VIEW_KINDS.filter((k) => k !== 'people' && k !== 'spaces');
 // those lists remain one search away rather than being lost with the pages.
 const VIEW_PRESETS = {
   inbox: { types: null, states: ['proposed'], assignee: 'anyone' },
-  tasks: { types: ['tasks'], states: ['proposed', 'open', 'not_now'], assignee: 'me' }, // everything not yet done: Inbox, In Progress, Later
   library: { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me', text: '' },
 };
-// A page that is a kind: Tasks lists tasks. Its type is its identity, so it is not offered as a filter and a stored
-// one cannot override it — only the Library and the Inbox choose their kinds.
-const KIND_VIEWS = new Set(['tasks']);
+// A page that is a kind: its type was its identity, so it was not offered as a filter and a stored one could not
+// override it. Tasks was the last of them, so no view is a kind page now — every view chooses what it lists, and
+// viewTypes leaves each filter alone.
+const KIND_VIEWS = new Set();
 const viewTypes = (id, f) => (KIND_VIEWS.has(id) ? { ...f, types: VIEW_PRESETS[id].types } : f);
 
 // assignee: 'me' | 'anyone' | 'unassigned' | <user-profile uri>

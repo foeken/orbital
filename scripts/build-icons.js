@@ -22,6 +22,7 @@ WANT.week = path.join(__dirname, '..', 'build', 'icons', 'calendar-minus-2.svg')
 WANT.hiddenItems = path.join(__dirname, '..', 'build', 'icons', 'eye-closed.svg'); // Edit hidden items (Mark as sensitive keeps the eye-slash)
 WANT.assignTo = path.join(__dirname, '..', 'build', 'icons', 'circle-user-plus.svg');
 WANT.cleanup = path.join(__dirname, '..', 'build', 'icons', 'brush-2.svg'); // the view's Clean up pill: let go of the rows kept in place
+WANT.notify = path.join(__dirname, '..', 'build', 'icons', 'bell-on.svg'); // "Notify on changes": watching a node for edits
 // Cmd+K rows for the keys the outline answers to
 for (const [name, file] of [['expand', 'v-shaped-arrow-down'], ['collapse', 'v-shaped-arrow-up'], ['undo', 'undo'], ['redo', 'redo'], ['textLarger', 'text-size-increase'], ['textSmaller', 'text-size-decrease'], ['textReset', 'text'], ['rail', 'sidebar-right-4'], ['railShow', 'sidebar-right-show'], ['railHide', 'sidebar-right-hide'], ['back', 'arrow-left'], ['forward', 'arrow-right'], ['zoomIn', 'magnifier-3'], ['search', 'file-search'], ['filter', 'filter-2']]) WANT[name] = path.join(__dirname, '..', 'build', 'icons', file + '.svg');
 const out = {};

@@ -88,7 +88,7 @@ async function searchList() {
 // The translation happens here rather than in the renderer because the renderer is classic scripts with no require,
 // so it cannot reach sdk/query — and main already owns the canonical filter anyway (viewFilter merges the preset
 // with whatever the user changed). The renderer therefore sends a view id, never a query it built itself.
-const SEARCH_NAME = { inbox: 'Inbox', tasks: 'Tasks', library: 'Library' };
+const SEARCH_NAME = { inbox: 'Inbox', library: 'Library' };
 // A name from what the filter actually says, so a saved search does not arrive called "Untitled". Tana names its
 // own searches for the intent rather than the mechanism; this is the closest main can get without the pill labels,
 // which live in the renderer.
@@ -127,6 +127,15 @@ async function start() {
   await refresh();
 }
 
+// How many nodes are waiting in the Inbox, for the badge on the app icon. A count query rather than the Inbox view's
+// cached rows: it is exact whether or not that view has ever been opened, and it is not capped at the row limit.
+// Hidden titles are dropped after the query (viewRows filters them client-side), so a hidden node still counts here.
+async function inboxCount() {
+  if (!S.client) return 0;
+  // Yours, not everyone's: a badge is a count of what is waiting on you, so it narrows the Inbox to your own nodes.
+  const { totalCount, nodes } = await S.client.graph.listNodes({ ...viewParams({ ...VIEW_PRESETS.inbox, assignee: 'me' }, S.me.userUri), limit: 1 });
+  return totalCount != null ? totalCount : (nodes || []).length;
+}
 // one refresh at a time; callers that changed the filter await the in-flight run and start a new one
 function refresh() {
   if (!S.client) return Promise.resolve();
@@ -139,6 +148,10 @@ async function doRefresh() {
     await viewRows(S.activeView, S.activeFilter);
     send('outline:changed', null);
     setStatus({ syncing: false, lastSync: now() });
+    // The badge rides the same refresh the views do, in its own try and deliberately silent: a number on the app icon
+    // is not worth an error banner over a refresh that worked, so a failed count leaves the badge as it was until the
+    // next one. Everything else here reports through setStatus, which is why this exception is called out.
+    try { if (S.badge) S.badge(await inboxCount()); } catch { /* the badge keeps its last number */ }
   } catch (e) {
     setStatus({ syncing: false, error: errText(e) });
   }
@@ -176,4 +189,4 @@ async function setHidden(list) {
 // ponytail: on-demand subscriptions last for the S.session; drop the oldest if a long S.session ever holds too many.
 
 
-module.exports = { preset, viewFilter, setViewFilter, hiddenRules, viewRows, search, searchList, searchCreate, searchTitle, start, refresh, doRefresh, listFilter, setHidden };
+module.exports = { preset, viewFilter, setViewFilter, hiddenRules, viewRows, inboxCount, search, searchList, searchCreate, searchTitle, start, refresh, doRefresh, listFilter, setHidden };

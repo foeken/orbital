@@ -54,7 +54,7 @@ function mockApi() {
   });
   // Meetings, Chats and People are no longer views. Their documents remain — the Library lists every kind, and a
   // saved search can name any subset of them — so only the pages are gone, not the content they used to show.
-  const views = [{ id: 'inbox', title: 'Inbox', icon: 'inbox', nodes: [] }, { id: 'tasks', title: 'Tasks', icon: 'task', kind: true, nodes: docs }, { id: 'library', title: 'Library', icon: 'library', nodes: [] }];
+  const views = [{ id: 'inbox', title: 'Inbox', icon: 'inbox', nodes: [] }, { id: 'library', title: 'Library', icon: 'library', nodes: docs }];
   const all = [...docs, ...meetings, ...spaceDocs, space, ...kinds, ...chats];
   for (const node of all) node.editable = true;
   // org members (user profiles): searchable, linkable, and the "Assigned to" menu; me = the signed-in user
@@ -76,6 +76,7 @@ function mockApi() {
   const kindOf = (d) => (d.icon === 'member' ? 'people' : d.icon === 'task' ? 'tasks' : d.icon === 'meeting' ? 'meetings' : d.tags && ['chat', 'canvas', 'agent', 'skill', 'search'].includes(d.tags[0].label) ? d.tags[0].label + 's' : 'docs');
   const created = {};   // documents made with createDocument
   const searchQueries = {}; // saved search id -> the filter its stored query holds
+  const notifyChoices = {}; // doc id -> an explicit watch choice; absent means the default rule decides
   const settling = new Set(); // a brand-new document: the first taskMeta read fails while main is still subscribing it
   const unlisted = [];  // created tasks/meetings the roots "query" has not caught up with yet: listed after the next refresh()
   const sidebar = ['mockdoc2', 'mockmeeting2', space.id], datePins = { mockdoc2: [localDate()] }; // pins: sidebar order, personal date pins per doc
@@ -248,6 +249,12 @@ function mockApi() {
     sensitiveIds: async () => [...sensitive],
     setSensitive: async (docId, on) => { if (on) sensitive.add(docId); else sensitive.delete(docId); return on; },
     nodeLink: async (docId) => 'https://home.tana.inc/o/mockorg/l/' + encodeURIComponent(docId),
+    // the mock has no participants model, so nothing is watched by default here: the choice is all there is
+    notifyState: async (docId) => ({ on: !!notifyChoices[docId], default: false, explicit: docId in notifyChoices }),
+    setNotify: async (docId, on) => {
+      if (on === null || on === undefined) delete notifyChoices[docId]; else notifyChoices[docId] = !!on;
+      return { on: !!notifyChoices[docId], default: false, explicit: docId in notifyChoices };
+    },
     openExternal: async (url) => { if (!/^https?:\/\//i.test(url)) throw new Error('Only http(s) links can be opened'); return url; },
     todayNode: async () => { const date = new Date().toLocaleDateString('sv-SE'); const found = all.find((d) => d.text === date); if (found) return found.id; const n = { id: 'mocktoday', text: date, kind: 'document', hasChildren: true, editable: true, icon: 'doc', tags: [{ label: 'doc', color: 'grey' }] }; content[n.id] = []; all.push(n); views[0].nodes.unshift(n); datePins[n.id] = [date]; emit(null); return n.id; },
     weekNode: async () => { const t = new Date(); t.setDate(t.getDate() + 4 - (t.getDay() || 7)); const title = 'Week ' + Math.ceil(((t - new Date(t.getFullYear(), 0, 1)) / 864e5 + 1) / 7) + ' (' + t.getFullYear() + ')'; const found = all.find((d) => d.text === title); if (found) return found.id; const n = { id: 'mockweek', text: title, kind: 'document', hasChildren: true, editable: true, icon: 'doc', tags: [{ label: 'doc', color: 'grey' }] }; content[n.id] = []; all.push(n); views[0].nodes.unshift(n); emit(null); return n.id; },

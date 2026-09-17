@@ -2,7 +2,7 @@
 // Electron main: the process boundary. Everything that knows Tana lives in main/ (state, rows, documents, related,
 // views, pins, images); this file owns the window, the menu, the IPC table and the boot sequence, plus the test hook
 // that scripts/sdk-check.js and the CLI use to drive the same modules without a window.
-const { app, BrowserWindow, Menu, ipcMain, nativeTheme, screen, shell } = require('electron');
+const { app, BrowserWindow, Menu, Notification, ipcMain, nativeTheme, screen, shell } = require('electron');
 const path = require('node:path');
 const db = require('./db');
 const { createTanaSession } = require('./tana-session');
@@ -14,9 +14,9 @@ const content = require('./sdk/content');
 const fields = require('./sdk/fields');
 const { NOT_CONNECTED, S, VIEWS, errText, idKind, isSearch, isSpace, metaSigs, pathCache, truncatedViews, redoStack, report, scheduleRefresh, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
 const { cachedNodeHue, graphRow, members, rememberNodeHue, toNode } = require('./main/rows');
-const { accessContext, chatOutline, createDocument, creationOptions, documentAction, history, info, linkShared, metaSig, moveTarget, mut, mutTasks, onChange, op, outlineWithReferences, setSensitive } = require('./main/documents');
+const { accessContext, chatOutline, createDocument, creationOptions, documentAction, history, info, linkShared, metaSig, moveTarget, mut, mutTasks, notifyState, setNotify, onChange, op, outlineWithReferences, setSensitive } = require('./main/documents');
 const { callOf, pathOf, related, searchChildren, searchPreview, spaceChildren, summaryUri } = require('./main/related');
-const { hiddenRules, listFilter, preset, refresh, search, searchCreate, searchList, searchTitle, setHidden, setViewFilter, start, viewFilter, viewRows } = require('./main/views');
+const { hiddenRules, inboxCount, listFilter, preset, refresh, search, searchCreate, searchList, searchTitle, setHidden, setViewFilter, start, viewFilter, viewRows } = require('./main/views');
 const { nodePin, pinState, pinTree, pinned, setPin, todayNode, weekNode, weekTitle } = require('./main/pins');
 const { image } = require('./main/images');
 
@@ -138,6 +138,10 @@ ipcMain.handle('doc:taskMeta', (_e, id) => op(id, async doc => {
   return { ...taskMeta(doc), ...await audienceMetadata(doc, S.me.userUri, S.client.graph, S.client.sync), linkShared: await linkShared(id) };
 }));
 // Access has native capability checks independent of the outliner's editable-body support.
+// Watching a node for changes: on by default where you were given access to the document itself and are not its
+// assignee. null clears the choice and falls back to that rule, so "default" stays a live answer rather than a copy.
+ipcMain.handle('notify:state', (_e, id) => notifyState(id));
+ipcMain.handle('notify:set', (_e, id, on) => setNotify(id, on));
 ipcMain.handle('doc:accessOptions', (_e, id) => op(id, async doc => access.capabilities(doc, S.me.userUri, await accessContext())));
 ipcMain.handle('doc:setSharing', (_e, id, selection) => mut(id, async doc => {
   await access.setSharing(doc, S.me.userUri, selection, await accessContext()); scheduleRefresh(2000);
@@ -231,14 +235,23 @@ if (process.env.TANA_MAIN_TEST) {
     statusSnapshot: () => ({ ...S.status }), rememberNodeHue, restoredBounds,
     undo: () => history(undoStack, redoStack, 'undo', 'canUndo'), redo: () => history(redoStack, undoStack, 'redo', 'canRedo'), visibleGraphNodes, pinTree,
     nodePin,
-    accessContext,
-    testRuntime: (runtime) => { S.client = runtime.client; S.me = runtime.me; S.win = runtime.win; S.session = runtime.session; S.userData = runtime.userData || null; S.activeView = runtime.activeView || 'tasks'; S.activeFilter = undefined; if (S.client) listFilter(S.client); } };
+    accessContext, inboxCount, S,
+    testRuntime: (runtime) => { S.client = runtime.client; S.me = runtime.me; S.win = runtime.win; S.session = runtime.session; S.userData = runtime.userData || null; S.activeView = runtime.activeView || 'inbox'; S.activeFilter = undefined; if (S.client) listFilter(S.client); } };
 } else {
   app.setName('Tana Companion');
   app.setPath('userData', path.join(app.getPath('appData'), 'tana-tasks')); // before 'ready': same S.session/cache for dev runs, the CLI and the packaged app
 
   app.whenReady().then(async () => {
     if (!app.isPackaged && app.dock) app.dock.setIcon(path.join(__dirname, 'build', 'icon.png')); // packaged builds carry the icon in the bundle
+    // The dock belongs to main, the counting to main/views: the same split refresh already uses through S.refresh.
+    S.badge = (count) => { try { app.setBadgeCount(Number(count) || 0); } catch { /* no badge on this platform */ } };
+    // Showing a notification is electron's; deciding there should be one is main/documents'. Clicking it opens the node.
+    S.notify = (docId, title, body) => {
+      if (!Notification.isSupported || !Notification.isSupported()) return;
+      const note = new Notification({ title, body });
+      note.on('click', () => { if (S.win && !S.win.isDestroyed()) { S.win.show(); S.win.focus(); send('notify:open', docId); } });
+      note.show();
+    };
     S.userData = app.getPath('userData');
     db.open(path.join(S.userData, 'tasks.sqlite'));
     S.session = createTanaSession();

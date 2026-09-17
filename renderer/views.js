@@ -15,7 +15,7 @@ const UPDATED_BUCKETS = [[36e5, 'Last hour'], [864e5, 'Last day'], [7 * 864e5, '
 // Keyed by the page, not the view: a saved search carries its own sort and grouping, stored in the document beside
 // its query, so opening one shows the arrangement it was saved with rather than whatever the last view was using.
 // A search's key is its document id, so the per-view defaults below simply do not match it.
-const groupBy = () => { const k = pillKey(); return GROUPS.some(([id]) => id === groupPref[k]) ? groupPref[k] : k === 'tasks' ? 'status' : 'none'; };
+const groupBy = () => { const k = pillKey(); return GROUPS.some(([id]) => id === groupPref[k]) ? groupPref[k] : 'none'; };
 // A saved search's arrangement belongs in its document, so its keys are kept out of the browser-local preference
 // blob: without this, changing any view's grouping would flush every search key it had accumulated to disk too.
 const persistPref = (key, pref) => localStorage.setItem(key, JSON.stringify(Object.fromEntries(Object.entries(pref).filter(([k]) => !k.startsWith('tana:')))));
@@ -80,9 +80,9 @@ function groupsOf(list) {
 const SORTS = [['default', 'Default'], ['updated', 'Updated'], ['created', 'Created'], ['title', 'Title']];
 const SORT_KEY = { updated: (n) => n.updatedAt, created: (n) => n.createdAt, title: (n) => (n.text || n.title || '').toLowerCase() };
 const NEWEST_FIRST = new Set(['updated', 'created']); // times read newest first; Title stays A→Z
-// Tasks puts what moved most recently first; every other page, saved searches included, keeps the order its query
-// returned until the user says otherwise.
-const sortBy = () => { const k = pillKey(); return SORTS.some(([id]) => id === sortPref[k]) ? sortPref[k] : k === 'tasks' ? 'updated' : 'default'; };
+// Every page, saved searches included, keeps the order its query returned until the user says otherwise. Tasks was
+// the one exception (most recently moved first) and it is gone.
+const sortBy = () => { const k = pillKey(); return SORTS.some(([id]) => id === sortPref[k]) ? sortPref[k] : 'default'; };
 function setSortBy(id) { sortPref[pillKey()] = id; held = null; persistPref('sortBy', sortPref); render(); }
 function sortRows(list) {
   const id = sortBy(), key = SORT_KEY[id], desc = NEWEST_FIRST.has(id);
@@ -127,9 +127,9 @@ function agoText(iso) {
 // "Lives in" only has an answer for a document shared with a space, which is the only place a row learns a space name.
 function subtextOf(node, taskInfo) {
   const bits = [];
+  if (displayOn('space') && taskInfo && taskInfo.audience && taskInfo.audience.space) bits.push(taskInfo.audience.space);
   if (displayOn('created') && node.createdAt) bits.push('Created ' + agoText(node.createdAt));
   if (displayOn('updated') && node.updatedAt) bits.push('Updated ' + agoText(node.updatedAt));
-  if (displayOn('space') && taskInfo && taskInfo.audience && taskInfo.audience.space) bits.push(taskInfo.audience.space);
   return bits.join(' · ');
 }
 // What a page shows, from the rows it has already loaded: the ⌘F text filter, then the arrangement its page key asks

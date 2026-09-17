@@ -15,6 +15,8 @@ contextBridge.exposeInMainWorld('api', {
   weekNode: () => ipcRenderer.invoke('doc:weekNode'), // the "Week 38 (2026)" document (ISO week), created if missing; not linked to the day nodes
   openExternal: (url) => ipcRenderer.invoke('shell:open', url), // http(s) link from node text, in the default browser
   nodeLink: (docId) => ipcRenderer.invoke('doc:link', docId), // the home.tana.inc url for a node
+  notifyState: (docId) => ipcRenderer.invoke('notify:state', docId), // { on, default, explicit }: is this node watched for changes
+  setNotify: (docId, on) => ipcRenderer.invoke('notify:set', docId, on), // true/false to choose; null forgets the choice
   setField: (docId, key, text) => ipcRenderer.invoke('doc:setField', docId, key, text), // typed field value (plain text)
   viewList: (id, filter) => ipcRenderer.invoke('view:list', id, filter), // { nodes, truncated }
   viewFilter: (id) => ipcRenderer.invoke('view:filter', id),
@@ -83,4 +85,5 @@ contextBridge.exposeInMainWorld('api', {
   onRemoved: (cb) => ipcRenderer.on('outline:removed', (_e, docId) => cb(docId)), // evict all cached references by id
   onChanged: (cb) => ipcRenderer.on('outline:changed', (_e, docId, info) => cb(docId, info)), // info: { meta } for one document; null docId = global
   onStatus: (cb) => ipcRenderer.on('sync:status', (_e, status) => cb(status)),
+  onNotifyOpen: (cb) => ipcRenderer.on('notify:open', (_e, docId) => cb(docId)), // a notification was clicked: open that node
 });
