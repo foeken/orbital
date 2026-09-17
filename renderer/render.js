@@ -201,13 +201,10 @@ function renderOutline() {
     if (isSearchDoc(parent.node)) {
       loadSearchFilter(parent.docId); // its stored query, as the filter the pills above it show
       previewRows(parent.docId);      // and the rows that filter finds, so editing a pill moves the list
-      const q = filterEl.value.trim().toLowerCase();
-      const found = q ? list.filter((n) => String(n.text || '').toLowerCase().includes(q)) : list;
-      hidden = list.length - found.length;
-      // a saved search is a list of results, so it sorts and groups the way a view does, with its own stored choice
-      list = sortRows(found);
-      groups = groupsOf(list);
-      if (groups) list = groups.flatMap((g) => g.nodes); // keyboard order follows what is on screen
+      // a saved search is a list of results, so it narrows, sorts and groups exactly as a view does — same helper,
+      // with the arrangement its own document stores rather than the one this browser remembers for a view
+      const shown = pageRows(list, filterEl.value.trim().toLowerCase());
+      list = shown.list; groups = shown.groups; hidden = shown.hidden;
     }
     list = withDraftTail(list, parent); // an open node always has a row to type in; a read-only one (every chat) never does
     outline.replaceChildren(...(groups
@@ -221,12 +218,9 @@ function renderOutline() {
     if (caretOnOpen) outline.parentElement.scrollTop = 0;
   } else {
     const v = viewOf(), docs = v ? v.nodes : [];
-    const q = filterEl.value.trim().toLowerCase();
-    list = q ? docs.filter((n) => n.text.toLowerCase().includes(q)) : docs;
-    hidden = docs.length - list.length;
-    list = sortRows(list); // Default leaves the view's own order alone
-    const groups = groupsOf(list); // null when the view is not grouped: one flat list, as before
-    if (groups) list = groups.flatMap((g) => g.nodes); // keyboard order follows what is on screen
+    const shown = pageRows(docs, filterEl.value.trim().toLowerCase()); // Default leaves the view's own order alone
+    list = shown.list; hidden = shown.hidden;
+    const groups = shown.groups; // null when the view is not grouped: one flat list, as before
     const before = new Map([...outline.children].filter((el) => el.classList.contains('node')).map((el) => [el.dataset.key, el]));
     const rowEl = (n) => { // an unchanged, collapsed row is reused; anything expanded or different is rebuilt
       const old = before.get(n.id), sig = rowSig(n);

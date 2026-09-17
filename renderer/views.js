@@ -97,5 +97,15 @@ function sortRows(list) {
   lastOrder = { view: pillKey(), ids: out.map((n) => n.id) };
   return out;
 }
+// What a page shows, from the rows it has already loaded: the ⌘F text filter, then the arrangement its page key asks
+// for. A view and a saved search do exactly this and differ only in where that arrangement is stored, so both
+// branches of renderOutline go through here rather than repeating it — and this is the part of drawing a page that
+// can be checked without a DOM, which is why it is a function rather than three lines inlined twice.
+function pageRows(list, q) {
+  const found = q ? list.filter((n) => String(n.text || '').toLowerCase().includes(q)) : list;
+  const sorted = sortRows(found);
+  const groups = groupsOf(sorted); // null when the page is not grouped: one flat list
+  return { list: groups ? groups.flatMap((g) => g.nodes) : sorted, groups, hidden: list.length - found.length };
+}
 // a heading is not a node: no key, no caret, no bullet, and nodeEls() already skips anything without .node
 function groupHeadEl(title) { const el = document.createElement('div'); el.className = 'ghead'; el.textContent = title; return el; }

@@ -2028,7 +2028,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     const isTask = (n) => n.icon === 'task';
     const visibleTags = (n) => { const tags = n.tags || []; return isTask(n) && tags.some((t) => t.label !== 'task') ? tags.filter((t) => t.label !== 'task') : tags; };
     ${definitions}
-    ({ pillDefs, groupRows, groupsOf, sortRows, SORTS, SORT_KEY, holdRow, releaseHeld, needsCleanup,
+    ({ pillDefs, groupRows, groupsOf, sortRows, pageRows, SORTS, SORT_KEY, holdRow, releaseHeld, needsCleanup,
        set: (next, by, order) => { view = next; groupPref[next] = by; sortPref[next] = order; },
        prefs: () => ({ group: groupBy(), sort: sortBy() }) });
   `);
@@ -2095,6 +2095,23 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     assert.ok(key, id + ' has a sort key');
     assert.notEqual(key(rows[0]), undefined, id + ' reads a field the rows carry');
   }
+  // A saved search draws its rows through the same helper a view does, keyed by the search document rather than by a
+  // view id. renderOutline itself needs a DOM to test, so this is the part that can be pinned: deleting the sort or
+  // the grouping from the search branch leaves nothing else in the suite to notice.
+  api.set('tana:search:s1', 'status', 'title');
+  const shown = plain(api.pageRows(rows, ''));
+  assert.deepEqual(shown.groups.map((g) => g.title), ['Inbox', 'In Progress', 'Completed', 'Later', 'No status'],
+    'a saved search sections its results the way a view does, using the arrangement stored against its own id');
+  assert.deepEqual(shown.list.map((n) => n.id), shown.groups.flatMap((g) => g.nodes.map((n) => n.id)),
+    'and the flat list follows the sections on screen, so the keyboard order matches what is drawn');
+  const narrowed = plain(api.pageRows(rows, 'alpha'));
+  assert.deepEqual(narrowed.list.map((n) => n.id), ['t2'], '⌘F narrows the results before they are arranged');
+  assert.equal(narrowed.hidden, rows.length - 1, 'and what it left out is counted for the line under the list');
+  // Ungrouped, so the order coming back is the sort and nothing else. Grouped, it is not observable: groupRows emits
+  // its sections in a fixed order whatever order it was handed, which is how dropping the sort survived a mutation.
+  api.set('tana:search:s1', 'none', 'title');
+  assert.deepEqual(plain(api.pageRows(rows, '')).list.map((n) => n.id), ['t2', 't1', 't4', 't3', 'd1'],
+    'a saved search hands its rows back in the order its own stored sort asks for');
   api.set('tasks', 'status', 'title');
   const defs = api.pillDefs(), ids = defs.map((d) => d.id);
   assert.deepEqual(plain(ids.slice(-2)), ['sort', 'group'], 'Sort and Group sit at the end of the filter pills, in that order');
@@ -2104,9 +2121,9 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   assert.deepEqual(plain(group.rows().map((r) => r.label)), ['None', 'Status', 'Assignee', 'Updated', 'Type'], 'the Group menu offers the five groupings');
   assert.ok(sort.rows().find((r) => r.label === 'Title').checked && group.rows().find((r) => r.label === 'Status').checked, 'the active option is ticked');
   assert.ok([...sort.rows(), ...group.rows()].every((r) => !r.keepOpen), 'choosing an option closes the popup, like every other single choice');
-  assert.match(source, /const groups = groupsOf\(list\);/, 'the view renders its groups');
+  assert.match(source, /const shown = pageRows\(docs, filterEl\.value\.trim\(\)\.toLowerCase\(\)\);/, 'a view draws its rows through pageRows, which sorts then groups them');
   assert.match(source, /groups\.flatMap\(\(g\) => \[groupHeadEl\(g\.title\)/, 'each group is introduced by a heading');
-  assert.match(source, /list = sortRows\(list\);/, 'the rows are sorted before they are grouped');
+  assert.match(source, /const shown = pageRows\(list, filterEl\.value\.trim\(\)\.toLowerCase\(\)\);/, 'and so does a saved search: this is what carries its stored arrangement to the screen');
   assert.match(source, /label: 'Set status', subBase: 'Set status to'[^\n]*subAlways: true/, 'Set status folds its four statuses in for any query, like Move to …');
   assert.match(source, /label: `Set status for \$\{count\} \$\{noun\}`[^\n]*subAlways: true/, 'and so does Set status for a selection');
   // A reused row keeps whatever its checkbox shows: accepting an Inbox task changes only its state, so that must rebuild it
