@@ -3,8 +3,8 @@ const db = require('../db');
 const access = require('../sdk/access');
 const content = require('../sdk/content');
 const chat = require('../sdk/chat');
-const { readNode, audienceMetadata, editable, ulid, initDocument, STATE_TYPES } = require('../sdk/node');
-const { DOC_URI, KINDS, NOT_CONNECTED, PLAIN_KINDS, S, TAG, deletedNodes, editability, errText, hueLoaded, idKind, isDeleted, metaSigs, nodeHues, nodeMeta, now, pathCache, redoStack, report, scheduleRefresh, send, subscribed, summaryCache, typeHues, typeTitles, undoStack, visibleGraphNodes } = require('./state');
+const { readNode, editable, ulid, initDocument, STATE_TYPES } = require('../sdk/node');
+const { DOC_URI, KINDS, NOT_CONNECTED, PLAIN_KINDS, S, TAG, deletedNodes, editability, errText, hueLoaded, idKind, isDeleted, metaSigs, nodeCreators, nodeHues, nodeMeta, now, pathCache, redoStack, report, scheduleRefresh, send, subscribed, summaryCache, typeHues, typeTitles, undoStack, visibleGraphNodes } = require('./state');
 const { eventMeta, graphRow, hueOf, hueWithType, kindRow, memberRow, members, nodeTag, ownHue, plainRow, rememberNodeHue, rememberType, resolveHue, resolveTypes, toNode, typeTag } = require('./rows');
 
 // Resolve native embeds without replacing the containing block identity or loading target content recursively.
@@ -131,33 +131,40 @@ function invalidateDeleted(id) {
 }
 
 // ---- watching a node for changes ----
-// On by default where a named list of people can see the node — the same audience the row shows — and it is not
-// assigned to you, since an assignee is already looking at their own work. Every other audience is off until asked
-// for in Cmd+K: 'space' is visibility through the space it lives in, 'only-me' is your own private work with nobody
-// else to change it, 'everyone' is the whole organisation, and 'unknown' is nothing anyone can follow.
-// The document's own `restricted` flag cannot answer this. A document shared through the meeting it belongs to
-// carries no flag of its own, and that is most of what is actually shared with you: a sweep of sixty recent
-// documents found every 'people' one unrestricted and owned by an event, so the old test matched none of them.
-const notifyDefault = (n, audience) => {
+// On by default for a task you created that is not assigned to you: either nobody has picked it up yet or somebody
+// else has, and both are worth hearing about. A task assigned to you is your own work to look at, and a task
+// somebody else created is theirs to follow. Everything else — documents, meetings, anything you did not create —
+// is off until you ask for it in Cmd+K, and an explicit choice still wins either way.
+// A document with no stateType is not a task (docs/sdk/02-data-model.md), which is what keeps notes out of this.
+const notifyDefault = (n, creator) => {
   const me = S.me && S.me.userUri;
-  if (!me || audience !== 'people') return false;
+  if (!me || !n.stateType || creator !== me) return false;
   return !(Array.isArray(n.assignedToUris) && n.assignedToUris.includes(me));
 };
-// An inherited audience costs an owner-chain lookup and a read of the boundary, so it is asked for only where the
-// answer decides something: never for a document whose choice is already explicit, and never for a local edit.
-const docAudience = (doc) => audienceMetadata(doc, S.me && S.me.userUri, S.client.graph, S.client.sync).then((a) => a.audience, () => 'unknown');
+// Who made a node is the graph's answer, not the document's: a Loro document carries createdAt but no creator.
+// It never changes, so one lookup per node is the whole cost, and every node a view lists has already cached it.
+async function creatorOf(id) {
+  if (nodeCreators.has(id)) return nodeCreators.get(id);
+  try {
+    const { nodes } = await S.client.graph.listNodes({ nodeIds: [id], limit: 1 });
+    const creator = (nodes && nodes[0] && nodes[0].createdBy) || null;
+    nodeCreators.set(id, creator);
+    return creator;
+  } catch { return null; } // unreadable or gone: not yours, so not watched
+}
 // An explicit choice wins; absent, the rule above decides. Stored as a map so "off for a node the rule would watch"
 // is a real answer and not the same as never having chosen.
 const notifyChoices = () => { const stored = db.setting('notify'); return stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {}; };
-const notifyOn = (n, audience) => { const chosen = notifyChoices()[n.id]; return typeof chosen === 'boolean' ? chosen : notifyDefault(n, audience); };
+const notifyOn = (n, creator) => { const chosen = notifyChoices()[n.id]; return typeof chosen === 'boolean' ? chosen : notifyDefault(n, creator); };
 // The nodes you explicitly asked to be told about. A change only reaches onChange while its document is subscribed,
 // and the view refresh unsubscribes everything the active view stops listing, so without this "notify me" quietly
 // meant "while this view happens to list it". The rule-based defaults cannot be enumerated without reading every
 // document, so they stay as they were: watched while something is looking at them.
 const notifyWatchedIds = () => { const chosen = notifyChoices(); return new Set(Object.keys(chosen).filter((id) => chosen[id] === true)); };
 async function notifyState(id) {
-  const { n, audience } = await op(id, async (doc) => ({ n: readNode(doc), audience: await docAudience(doc) }));
-  return { on: notifyOn(n, audience), default: notifyDefault(n, audience), explicit: typeof notifyChoices()[id] === 'boolean' };
+  const n = await op(id, (doc) => readNode(doc));
+  const creator = await creatorOf(id);
+  return { on: notifyOn(n, creator), default: notifyDefault(n, creator), explicit: typeof notifyChoices()[id] === 'boolean' };
 }
 async function setNotify(id, on) {
   const chosen = notifyChoices();
@@ -182,7 +189,7 @@ async function notifyWatched(id, doc, n, info) {
   if (!info || info.origin !== 'remote') return;
   if (!before || JSON.stringify(before) === JSON.stringify(sig)) return; // first sight, or nothing worth saying moved
   const chosen = notifyChoices()[id];
-  if (!(typeof chosen === 'boolean' ? chosen : notifyDefault(n, await docAudience(doc)))) return;
+  if (!(typeof chosen === 'boolean' ? chosen : notifyDefault(n, await creatorOf(id)))) return;
   const moved = before[0] !== sig[0] || before[1] !== sig[1]; // a rename or a status change: rare, and always worth a banner
   if (!moved) { const last = notifyQuiet.get(id) || 0; if (Date.now() - last < EDIT_QUIET_MS) return; notifyQuiet.set(id, Date.now()); }
   const body = before[1] !== sig[1] ? (NOTIFY_STATE[sig[1]] ? 'Now ' + NOTIFY_STATE[sig[1]] : 'Status changed') : 'Edited';
@@ -364,4 +371,4 @@ async function moveTarget(spaceId) {
   return document(spaceId);
 }
 
-module.exports = { outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, createDocument, info, setSensitive, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, document, op, inHistory, mut, mutTasks, documentAction, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget };
+module.exports = { outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, createDocument, info, setSensitive, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, creatorOf, document, op, inHistory, mut, mutTasks, documentAction, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget };

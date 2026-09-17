@@ -827,32 +827,30 @@ async function main() {
   // Watching a node for changes: what is announced, what is deliberately not, and who decides.
   {
     const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
-    const docs = new Map(), chains = new Map(), notified = [];
-    // The decision to announce may need the audience, which is a lookup: onChange takes the signature now and
-    // answers on its own. So each change is given a turn of the loop before what it announced is read.
+    const docs = new Map(), creators = new Map(), notified = [];
+    // The decision to announce may need a creator lookup, so onChange takes the signature now and answers on its
+    // own. Each change is given a turn of the loop before what it announced is read.
     const settle = () => new Promise(setImmediate);
     const watched = new Document('tana:text:' + ulid());
     watched.transact((l) => initDocument(l, 'Contract', ME, { kind: 'task' }));
     setAssignees(watched, [], ME); // stated rather than assumed: the rule turns on whether it is assigned
-    // and shared with somebody: initDocument leaves its creator as the only participant, which is not a list of
-    // people to follow — it is a node nobody else can touch. (OTHER is declared much further down this file, so
-    // this names its own collaborator; it only has to be a user-profile uri that is not ME.)
+    // OTHER is declared much further down this file, so this names its own collaborator; it only has to be a
+    // user-profile uri that is not ME.
     const COLLEAGUE = 'tana:user-profile:01examplew0000000000000000';
-    watched.transact((l) => { const p = l.getMap('data').get('participants').setContainer(COLLEAGUE, new LoroMap()); p.set('type', 'user'); p.set('role', 'editor'); });
     docs.set(watched.id, watched);
+    creators.set(watched.id, ME); // who made it is the graph's answer, not the document's
     backend.testRuntime({ me: { userUri: ME }, win: { isDestroyed: () => false, webContents: { send: () => {} } },
       client: {
         sync: { getDocument: (id) => docs.get(id), subscribe: async (id) => docs.get(id) },
-        // A document with no audience of its own is answered by the thing that owns it, so the rule needs a graph:
-        // without one every inherited case comes back 'unknown' and passes for the wrong reason.
-        graph: { listNodes: async () => ({ nodes: [] }), getOwnerChain: async (id) => chains.get(id) || { entries: [], effectivelyRestricted: true } },
+        // A Loro document carries no creator, so the rule asks the graph. A node nobody made is a node nobody
+        // created: the lookup answers with nothing rather than throwing.
+        graph: { listNodes: async ({ nodeIds }) => ({ nodes: (nodeIds || []).filter((id) => creators.has(id)).map((id) => ({ id, createdBy: creators.get(id) })) }) },
       } });
     backend.S.notify = (id, title, body) => notified.push([id, title, body]);
 
-    // initDocument makes its creator a direct participant of a restricted document: access to this node itself
-    // rather than through the space it lives in, and nobody is assigned — the case Tana already implies you follow.
+    // A task you made that nobody is assigned to: the case the rule is for.
     assert.equal((await backend.handlers.get('notify:state')(null, watched.id)).default, true,
-      'access to the document itself and no assignee: watched without being asked');
+      'a task you created with no assignee is watched without being asked');
     backend.onChange(watched.id, { origin: 'remote' });
     await settle();
     assert.deepEqual(notified, [], 'the first sight of a node is a baseline, not a change to announce');
@@ -909,62 +907,43 @@ async function main() {
     const mine = new Document('tana:text:' + ulid());
     mine.transact((l) => initDocument(l, 'My task', ME, { kind: 'task' }));
     setAssignees(mine, [ME], ME);
-    // shared, so assignment is the only thing keeping this one off: a single-participant fixture would be off for
-    // two reasons at once and could not tell which clause was doing the work
-    mine.transact((l) => { const p = l.getMap('data').get('participants').setContainer(COLLEAGUE, new LoroMap()); p.set('type', 'user'); p.set('role', 'editor'); });
     docs.set(mine.id, mine);
+    creators.set(mine.id, ME); // yours, so assignment is the only thing keeping this one off
     assert.equal((await backend.handlers.get('notify:state')(null, mine.id)).default, false,
       'a node assigned to you is not watched by default: the assignee is already looking at it');
-    // The two inherited cases, which is what most shared work actually looks like: the document carries no audience
-    // of its own and the thing that owns it does. A space owner means "everyone in that space", which is the one
-    // audience this rule deliberately leaves alone; a meeting owner names the people in the meeting, which is the
-    // same kind of list a directly shared document has. Both fixtures are identical apart from the owner's kind.
-    const boundary = (uri, title) => {
-      const doc = new Document(uri);
-      doc.transact((l) => {
-        const data = l.getMap('data');
-        data.set('title', title);
-        data.set('restricted', true);
-        const people = data.setContainer('participants', new LoroMap());
-        for (const person of [ME, COLLEAGUE]) { const entry = people.setContainer(person, new LoroMap()); entry.set('type', 'user'); entry.set('role', 'editor'); }
-      });
-      docs.set(doc.id, doc);
-      return doc;
-    };
-    const space = boundary('tana:space:' + ulid(), 'Studio LT');
-    const meeting = boundary('tana:event:' + ulid(), 'Platform Guild');
-    const viaSpace = new Document('tana:text:' + ulid());
-    viaSpace.transact((l) => initDocument(l, 'Team doc', ME, { kind: 'task' }));
-    setAssignees(viaSpace, [], ME);
-    viaSpace.transact((l) => l.getMap('data').delete('restricted'));
-    docs.set(viaSpace.id, viaSpace);
-    chains.set(viaSpace.id, { entries: [{ uri: viaSpace.id }, { uri: space.id, restricted: true, accessible: true }] });
-    assert.equal(readNode(viaSpace).restricted, undefined, 'the fixture really is unrestricted');
-    assert.equal((await backend.handlers.get('notify:state')(null, viaSpace.id)).default, false,
-      'access inherited from the space is not a reason to follow a node');
-    // The same shape with a meeting in the space's place: this is what a note or a task in a meeting looks like, and
-    // it is the case the rule used to miss entirely — it read the document's own flag, which such a document has not.
-    const viaMeeting = new Document('tana:text:' + ulid());
-    viaMeeting.transact((l) => initDocument(l, 'Meeting task', ME, { kind: 'task' }));
-    setAssignees(viaMeeting, [], ME);
-    viaMeeting.transact((l) => l.getMap('data').delete('restricted'));
-    docs.set(viaMeeting.id, viaMeeting);
-    chains.set(viaMeeting.id, { entries: [{ uri: viaMeeting.id }, { uri: meeting.id, restricted: true, accessible: true }] });
-    assert.equal((await backend.handlers.get('notify:state')(null, viaMeeting.id)).default, true,
-      'a node you can see through the meeting it belongs to is watched: that is a list of people, not a space');
-    setAssignees(viaMeeting, [ME], ME);
-    assert.equal((await backend.handlers.get('notify:state')(null, viaMeeting.id)).default, false,
-      'unless it is assigned to you, the same as a directly shared one');
-    // Your own work: restricted, but you are its only participant. Nobody else can change it, so there is nothing to
-    // be told about — and every task you create looks exactly like this.
-    const onlyMine = new Document('tana:text:' + ulid());
-    onlyMine.transact((l) => initDocument(l, 'A note to myself', ME, { kind: 'task' }));
-    setAssignees(onlyMine, [], ME);
-    docs.set(onlyMine.id, onlyMine);
-    assert.deepEqual(Object.keys(readNode(onlyMine).participants), [ME], 'the fixture really is shared with nobody');
-    assert.equal((await backend.handlers.get('notify:state')(null, onlyMine.id)).default, false,
-      'a node only you can see is not watched: there is nobody else to change it');
-    console.log('ok  watching a node: the default reads access and assignment, only remote changes announce, an explicit choice wins');
+    // Handed to somebody else: still yours to hear about, which is the other half of "not assigned to you" and the
+    // one an unassigned-only reading would get wrong.
+    const delegated = new Document('tana:text:' + ulid());
+    delegated.transact((l) => initDocument(l, 'Their task', ME, { kind: 'task' }));
+    setAssignees(delegated, [COLLEAGUE], ME);
+    docs.set(delegated.id, delegated);
+    creators.set(delegated.id, ME);
+    assert.equal((await backend.handlers.get('notify:state')(null, delegated.id)).default, true,
+      'a task you created and gave to somebody else is watched: that is where its news comes from');
+    // Somebody else's task, shared with you: theirs to follow.
+    const theirs = new Document('tana:text:' + ulid());
+    theirs.transact((l) => initDocument(l, 'Their own task', ME, { kind: 'task' }));
+    setAssignees(theirs, [], ME);
+    docs.set(theirs.id, theirs);
+    creators.set(theirs.id, COLLEAGUE);
+    assert.equal((await backend.handlers.get('notify:state')(null, theirs.id)).default, false,
+      'a task somebody else created is not watched, however visible it is');
+    // A document you made is not a task: no stateType, so the rule leaves it alone. Meeting notes are these.
+    const note = new Document('tana:text:' + ulid());
+    note.transact((l) => initDocument(l, 'A note', ME, { kind: 'doc' }));
+    docs.set(note.id, note);
+    creators.set(note.id, ME);
+    assert.equal(readNode(note).stateType, undefined, 'the fixture really is a document rather than a task');
+    assert.equal((await backend.handlers.get('notify:state')(null, note.id)).default, false,
+      'a document you created is not watched: the rule is about tasks');
+    // A node the graph does not answer for cannot be yours, and asking must not throw.
+    const orphan = new Document('tana:text:' + ulid());
+    orphan.transact((l) => initDocument(l, 'Unknown origin', ME, { kind: 'task' }));
+    setAssignees(orphan, [], ME);
+    docs.set(orphan.id, orphan);
+    assert.equal((await backend.handlers.get('notify:state')(null, orphan.id)).default, false,
+      'a node with no creator in the graph is not watched');
+    console.log('ok  watching a node: the default is a task you made and did not keep, only remote changes announce, an explicit choice wins');
   }
 
   // The week node is a plain "Week <n> (<year>)" document beside the day nodes: ISO-8601 week numbers, created once

@@ -14,7 +14,7 @@ const content = require('./sdk/content');
 const fields = require('./sdk/fields');
 const { NOT_CONNECTED, S, VIEWS, docStates, errText, idKind, isSearch, isSpace, metaSigs, pathCache, truncatedViews, redoStack, report, scheduleRefresh, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
 const { cachedNodeHue, graphRow, members, rememberNodeHue, toNode } = require('./main/rows');
-const { accessContext, chatOutline, createDocument, creationOptions, documentAction, history, info, linkShared, metaSig, moveTarget, mut, mutTasks, notifyOn, notifyState, setNotify, onChange, op, outlineWithReferences, setSensitive } = require('./main/documents');
+const { accessContext, chatOutline, createDocument, creationOptions, creatorOf, documentAction, history, info, linkShared, metaSig, moveTarget, mut, mutTasks, notifyOn, notifyState, setNotify, onChange, op, outlineWithReferences, setSensitive } = require('./main/documents');
 const { callOf, pathOf, related, searchChildren, searchPreview, spaceChildren, summaryUri } = require('./main/related');
 const { hiddenRules, inboxCount, listFilter, preset, refresh, search, searchCreate, searchList, searchTitle, setHidden, setViewFilter, start, viewFilter, viewRows } = require('./main/views');
 const { nodePin, pinState, pinTree, pinned, setPin, todayNode, weekNode, weekTitle } = require('./main/pins');
@@ -139,9 +139,8 @@ ipcMain.handle('doc:setStateMany', (_e, ids, state) => mutTasks(ids, (doc) => se
 ipcMain.handle('doc:taskMeta', (_e, id) => op(id, async doc => {
   const n = readNode(doc);
   metaSigs.set(id, metaSig(n)); // from here on, only a change to these fields invalidates the renderer's copy
-  // watched rides along on the audience this row already asks for: the rule is read off that, not off the document
-  const audience = await audienceMetadata(doc, S.me.userUri, S.client.graph, S.client.sync);
-  return { ...taskMeta(doc), ...audience, linkShared: await linkShared(id), watched: notifyOn(n, audience.audience) };
+  // watched rides along: the creator is a graph fact, already cached for anything a view has listed
+  return { ...taskMeta(doc), ...await audienceMetadata(doc, S.me.userUri, S.client.graph, S.client.sync), linkShared: await linkShared(id), watched: notifyOn(n, await creatorOf(id)) };
 }));
 // Access has native capability checks independent of the outliner's editable-body support.
 // Watching a node for changes: on by default where you were given access to the document itself and are not its

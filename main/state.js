@@ -28,6 +28,7 @@ const visibleGraphNodes = nodes => nodes.filter(n => !deletedNodes.has(n.id) && 
 const typeTitles = new Map(); // entityType uri -> title, resolved once per S.session
 const typeHues = new Map(); // type uri -> appearance.hue (0-360), for coloured type tags
 const nodeHues = new Map(); // document uri -> its own appearance.hue; separate from typeHues
+const nodeCreators = new Map(); // document uri -> the user-profile uri that made it; a graph fact, and it never changes
 const editability = new Map(); // observed graph/document capabilities, never guessed from ownership
 // What the renderer sorts and groups rows by. A graph node carries createTime and state; a Loro data map carries
 // createdAt (ms) and stateType; the SQLite view rows (db.js) have a column for neither, so both are cached per id
@@ -74,4 +75,4 @@ function scheduleRefresh(ms) {
   S.refreshTimer = setTimeout(() => S.refresh && S.refresh(), ms);
 }
 
-module.exports = { VIEWS, TAG, KINDS, PLAIN_KINDS, PIN_HUBS, DOC_URI, S, subscribed, deletedNodes, isDeleted, visibleGraphNodes, typeTitles, typeHues, nodeHues, editability, nodeMeta, docStates, iso, errText, NOT_CONNECTED, notReady, report, now, isSpace, isSearch, idKind, memberTitle, isMcp, send, today, setStatus, pathCache, metaSigs, truncatedViews, summaryCache, typeAttrTitles, hueLoaded, imageCache, undoStack, redoStack, scheduleRefresh };
+module.exports = { VIEWS, TAG, KINDS, PLAIN_KINDS, PIN_HUBS, DOC_URI, S, subscribed, deletedNodes, isDeleted, visibleGraphNodes, typeTitles, typeHues, nodeHues, nodeCreators, editability, nodeMeta, docStates, iso, errText, NOT_CONNECTED, notReady, report, now, isSpace, isSearch, idKind, memberTitle, isMcp, send, today, setStatus, pathCache, metaSigs, truncatedViews, summaryCache, typeAttrTitles, hueLoaded, imageCache, undoStack, redoStack, scheduleRefresh };

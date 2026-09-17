@@ -1,7 +1,7 @@
 'use strict';
 const db = require('../db');
 const { editable, readNode, STATE_TYPES } = require('../sdk/node');
-const { PLAIN_KINDS, S, TAG, docStates, editability, hueLoaded, idKind, isSpace, iso, memberTitle, nodeHues, nodeMeta, now, typeHues, typeTitles } = require('./state');
+const { PLAIN_KINDS, S, TAG, docStates, editability, hueLoaded, idKind, isSpace, iso, memberTitle, nodeCreators, nodeHues, nodeMeta, now, typeHues, typeTitles } = require('./state');
 
 // The search index can trail a write by seconds, and every index result becomes a row through graphRow and records its
 // state in rememberMeta. A task this app holds live already has the newer state, so that one wins: a list refresh, a
@@ -128,6 +128,8 @@ const toNode = (r) => ({ id: r.id, title: r.title, text: r.title, kind: 'documen
 
 // Node shape from any graph Node JSON (search results): events, tasks, typed and plain documents.
 function graphRow(n, withDate) {
+  // every listed node passes through here, so the watch rule's creator lookup is usually already answered
+  if (typeof n.createdBy === 'string') nodeCreators.set(n.id, n.createdBy);
   n = liveState(n);
   if (n.calendarEvent || n.id.startsWith('tana:event:')) return meetingRow(n, withDate);
   if (n.userProfile || idKind(n.id) === 'user-profile') return memberRow(n.id, memberTitle(n), n.updateTime || now(), hueOf(n), n.createTime);
