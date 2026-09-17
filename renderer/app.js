@@ -60,6 +60,9 @@ async function patchDoc(docId) {
   let hit = extra.has(docId);
   if (hit) Object.assign(extra.get(docId), fresh);
   for (const s of views) for (const n of s.nodes) if (n.id === docId) { Object.assign(n, fresh); hit = true; }
+  // A zoomed page that lists documents — a saved search, a space — holds its rows in kids, not in any view, so a
+  // change to one of them reached nothing here and the row kept the title, box and assignee it was drawn with.
+  for (const rows of kids.values()) for (const n of rows || []) if (n.id === docId) { Object.assign(n, fresh); hit = true; }
   if (!hit) return loadRoots();
 }
 function removeStale(id) {

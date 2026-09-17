@@ -155,6 +155,7 @@ function paletteRows(q) {
   rows.push({ id: 'undo', group: 'Actions', icon: 'undo', label: 'Undo', run: () => history('undo') });
   rows.push({ id: 'redo', group: 'Actions', icon: 'redo', label: 'Redo', run: () => history('redo') });
   rows.push({ id: 'sync', group: 'Actions', icon: 'sync', label: 'Sync', run: () => run(() => tana.refresh()) });
+  rows.push({ id: 'reload', group: 'Actions', icon: 'reload', label: 'Reload', run: () => location.reload() });
   // the list of titles hidden from every view and from search, edited in the palette itself
   if (tana.filters) rows.push({ id: 'hidden', group: 'Actions', icon: 'hiddenItems', label: 'Edit hidden items', keepOpen: true, run: openHiddenPalette });
   if (tana.sensitiveIds) rows.push({ id: 'sensitiveVisibility', group: 'Actions', icon: 'hidden', label: 'Toggle sensitive visibility', hint: sensitiveVisible ? 'Shown' : 'Hidden', run: toggleSensitiveVisibility });

@@ -41,8 +41,10 @@ function needsCleanup(list) {
   held = kept; lastOrder = order; // sortRows records the order it returns; leave the one on screen
   return shown !== fresh;
 }
-// the view's rows before sorting and grouping, as renderOutline lists them (the text filter applied)
-const shownDocs = () => { const docs = (viewOf() || {}).nodes || [], q = filterEl.value.trim().toLowerCase(); return q ? docs.filter((n) => n.text.toLowerCase().includes(q)) : docs; };
+// The rows the page in front of you shows before sorting and grouping, as renderOutline lists them (the text filter
+// applied): a view's own rows, or the ones a saved search's query returned. Clean up is about the list on screen, so
+// on a search page this must not answer with the view waiting behind it.
+const shownDocs = () => { const docs = (onSearchPage() ? kids.get(zoom.docId) : (viewOf() || {}).nodes) || [], q = filterEl.value.trim().toLowerCase(); return q ? docs.filter((n) => n.text.toLowerCase().includes(q)) : docs; };
 // Forced, like setDisplay: choosing an arrangement is an explicit action whose whole point is to redraw, so it must
 // not be deferred because a caret happens to sit in an editable title — which on a saved search page it often does,
 // since the title is renameable and there is no draft row to take the focus.

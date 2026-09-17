@@ -147,7 +147,9 @@ function assigneeRows(q, doc = palDoc) {
   loadMembers(); loadTaskMeta(doc.id);
   const meta = taskMetaById.get(doc.id), ids = meta ? meta.assignees : [];
   const toggle = (uri) => ids.includes(uri) ? ids.filter((id) => id !== uri) : [...ids, uri];
-  const rows = [{ group: 'Assignees', icon: 'unassigned', label: 'Unassigned', hint: ids.length ? '' : '✓', keepOpen: true, run: () => setTaskAssignees(doc, []) }];
+  // Unassigned narrows with the rest: it used to stay at the top whatever was typed, so typing a name and pressing
+  // Enter ran the highlighted first row and cleared the assignee instead of setting the one that was typed.
+  const rows = fuzzyMatch('Unassigned', q) ? [{ group: 'Assignees', icon: 'unassigned', label: 'Unassigned', hint: ids.length ? '' : '✓', keepOpen: true, run: () => setTaskAssignees(doc, []) }] : [];
   for (const member of members || []) if (fuzzyMatch(memberName(member.id), q)) rows.push({ group: 'Assignees', icon: 'member', label: memberName(member.id), hint: ids.includes(member.id) ? '✓' : '', keepOpen: true, run: () => setTaskAssignees(doc, toggle(member.id)) });
   return rows;
 }
@@ -211,7 +213,7 @@ function manyAssigneeRows(q, ctx = palTaskCtx) {
   if (!ctx?.docs.length) return [];
   loadMembers();
   const apply = (uris) => applyTaskChange(ctx, () => tana.setAssigneesMany(ctx.docs.map((doc) => doc.id), uris));
-  const rows = [{ group: 'Assignees', icon: 'unassigned', label: 'Unassigned', keepOpen: true, run: () => apply([]) }];
+  const rows = fuzzyMatch('Unassigned', q) ? [{ group: 'Assignees', icon: 'unassigned', label: 'Unassigned', keepOpen: true, run: () => apply([]) }] : [];
   for (const member of members || []) if (fuzzyMatch(memberName(member.id), q)) rows.push({ group: 'Assignees', icon: 'member', label: memberName(member.id), keepOpen: true, run: () => apply([member.id]) });
   return rows;
 }

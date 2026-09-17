@@ -377,6 +377,13 @@ assert.match(source, /filterRow\.hidden = \(!!parent && !isSearchDoc\(parent\.no
 assert.match(source, /if \(isSearchDoc\(parent\.node\)\) \{/, 'the zoomed branch narrows a saved search the way a view narrows its rows');
 // the Library keeps the query it is showing as a saved search; main owns the filter→query translation
 assert.match(source, /if \(defs\.length && tana\.createSearch && !onSearchPage\(\)\) box\.append\(saveSearchPill\(\)\)/, 'a view with pills offers to save its query as a search, and a saved search does not: it already is one');
+// The pill is pressed straight after a status change, so the caret is still in that row and a render is waiting on it.
+// Without this the mousedown focused the pill, ran the deferred render, rebuilt the pills, and the mouseup landed on a
+// new element: the first press did nothing at all.
+assert.match(source, /pill\.onmousedown = \(e\) => e\.preventDefault\(\);\n  pill\.onclick = go;/, 'Clean up keeps the focus where it is, so the press is not lost to the render it would otherwise trigger');
+// A view re-asks its query every half minute; a saved search is asked once, when it is opened, so it needs a button.
+assert.match(source, /if \(onSearchPage\(\) && !searchRows\.has\(zoom\.docId\)\) box\.append\(refreshPill\(\)\)/, 'a saved search offers Refresh, and not while a staged filter preview owns its rows');
+assert.match(source, /pill\.dataset\.id = 'refreshSearch';[\s\S]{0,240}iconSvg\('reload'\)/, 'the Refresh pill carries the reload glyph');
 const html = fs.readFileSync(require.resolve('../index.html'), 'utf8');
 assert.match(html, /<div id="toolbar" class="toolbar" role="toolbar"/);
 const styleSheet = fs.readFileSync(require.resolve('../styles.css'), 'utf8');

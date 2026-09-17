@@ -43,6 +43,8 @@ function invalidateNode(id) {
   invalidatePinCaches(id);
   extra.delete(id); paths.delete(id); kids.delete(id); fresh.delete(id); taskMetaById.delete(id);
   for (const section of views) section.nodes = section.nodes.filter((node) => node.id !== id);
+  // and wherever a zoomed page lists it as one of its rows (a saved search's results, a space's contents)
+  for (const [docId, rows] of kids) if (Array.isArray(rows)) kids.set(docId, rows.filter((node) => node.id !== id));
   palRows = palRows.filter((row) => row.node?.id !== id);
   if (palDoc?.id === id) { palDoc = null; pinInfo = null; }
   if (zoom?.docId === id) zoom = null;

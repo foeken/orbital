@@ -4,7 +4,7 @@ const pins = require('../sdk/pins');
 const { filterToSearchQuery, searchQueryParams, validViewFilter } = require('../sdk/query');
 const { NOT_CONNECTED, PIN_HUBS, PLAIN_KINDS, S, idKind, isSpace, summaryCache, typeAttrTitles, typeTitles } = require('./state');
 const { graphRow, rememberNodeHue, resolveTypes, toNode } = require('./rows');
-const { canWriteDoc, op } = require('./documents');
+const { canWriteDoc, op, subscribe } = require('./documents');
 
 const crumbIcon = (id) => ({ space: 'space', event: 'meeting', 'user-profile': 'member', chat: 'chat', agent: 'agent' })[idKind(id)] || 'doc';
 async function pathOf(id) {
@@ -42,6 +42,12 @@ async function searchChildren(id) {
   const { nodes } = await S.client.graph.listNodes(searchQueryParams(query, S.me && S.me.userUri, 200));
   nodes.forEach(rememberNodeHue);
   await resolveTypes(nodes.map((n) => n.entityType));
+  // A view subscribes every row it lists (views.js), which is what makes a change someone else makes show up in it.
+  // These rows are listed the same way and were not subscribed, so a saved search only ever showed what its query
+  // answered when the page opened. sync.subscribe is idempotent, and these ids stay out of `subscribed` — that set
+  // belongs to the view refresh, which unsubscribes everything in it the active view no longer lists.
+  // ponytail: they stay subscribed for the rest of the session, like every other on-demand subscription.
+  nodes.forEach((n) => subscribe(n.id));
   return nodes.map((n) => toNode(graphRow(n)));
 }
 // The rows a filter would find, without storing it: what a saved search shows while its pills are being edited.

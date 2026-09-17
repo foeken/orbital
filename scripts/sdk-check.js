@@ -631,15 +631,20 @@ async function main() {
       l.getMap('query').set('assignedToViewer', true);
       l.getMap('query').setContainer('types', new LoroList()).push('text');
     });
-    const listCalls = [];
+    const listCalls = [], subscribes = [];
+    const found = [{ id: 'tana:text:' + ulid(), title: 'One' }, { id: 'tana:text:' + ulid(), title: 'Two' }];
     backend.testRuntime({ me: { userUri: ME }, win: null, client: {
-      sync: { subscribe: async () => goodDoc },
-      graph: { listNodes: async (p) => { listCalls.push(p); return { nodes: [] }; } },
+      sync: { subscribe: async (id) => { subscribes.push(id); return goodDoc; } },
+      graph: { listNodes: async (p) => { listCalls.push(p); return { nodes: found }; } },
     } });
-    await backend.handlers.get('outline:children')(null, searchId);
+    const listed = await backend.handlers.get('outline:children')(null, searchId);
     assert.equal(listCalls.length, 1);
     assert.deepEqual(listCalls[0].nodeTypes, ['text'], 'a readable query runs the graph query it describes');
     assert.deepEqual(listCalls[0].assignedTo, [ME]);
+    assert.deepEqual(listed.map((n) => n.id), found.map((n) => n.id), 'and answers with the rows it found');
+    // A view subscribes every row it lists, which is what makes an edit someone else makes appear in it. These rows
+    // are listed the same way and were left unsubscribed, so a saved search showed only what its query said on open.
+    assert.deepEqual(found.map((n) => subscribes.includes(n.id)), [true, true], 'a saved search subscribes the rows it lists, so a change made elsewhere reaches them');
 
     const brokenDoc = new Document('tana:search:' + ulid());
     brokenDoc.transact((l) => initDocument(l, 'Broken search', ME)); // no query container at all

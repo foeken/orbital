@@ -64,9 +64,13 @@ function renderPills(show) {
     if (menu && menu.id === d.id) pill.append(menuEl(d));
     return pill;
   }));
-  // rows kept in place (holdRow) no longer match the view: offer to redraw it as it is now. shownDocs() is the
-  // active view's rows, which on a saved search page is the view waiting behind it — not what is on screen.
-  if (defs.length && !onSearchPage() && needsCleanup(shownDocs())) box.append(cleanupPill());
+  // rows kept in place (holdRow) no longer match the page: offer to redraw it as it is now. A saved search holds
+  // rows the same way a view does, so it gets the same pill — shownDocs() answers with the list on screen.
+  if (defs.length && needsCleanup(shownDocs())) box.append(cleanupPill());
+  // A view re-asks its query every half minute; a saved search is asked once, when it is opened. This is the button
+  // that asks it again. Not while the pills are staging an unsaved filter: those rows are a preview of what Save
+  // would store, and re-asking the stored query would quietly replace them with something else.
+  if (onSearchPage() && !searchRows.has(zoom.docId)) box.append(refreshPill());
   // a saved search's edits are held back until they are saved, so there has to be something to press
   if (searchDirty()) box.append(savePill());
   // a query worth coming back to becomes a place: keep it as a saved search (a saved search already is one)
@@ -123,11 +127,41 @@ function saveSearchPill() {
 }
 // Clean up: let go of the rows a status change kept in place and draw the view the way it is now. Like the last pill,
 // Right moves on to the first row.
+// Refresh: ask this saved search's query again. Its rows are subscribed (main/related.js), so an edit elsewhere
+// reaches the rows it is already showing — but a row that has since started or stopped answering the query is only
+// learned by asking again, which nothing else on this page does.
+function refreshPill() {
+  const pill = document.createElement('div'); pill.className = 'pill refresh'; pill.tabIndex = 0; pill.dataset.id = 'refreshSearch'; pill.setAttribute('role', 'button');
+  pill.title = 'Ask this search again';
+  pill.setAttribute('aria-label', 'Refresh'); // icon only, so the name has to come from here
+  const s = document.createElement('span'); s.innerHTML = iconSvg('reload'); pill.append(s.firstChild);
+  const go = () => { const id = zoom.docId; releaseHeld(); run(async () => { await reload(id); render(true); }); };
+  pill.onmousedown = (e) => e.preventDefault(); // the caret may be in a row with a render waiting on it (cleanupPill)
+  pill.onclick = go;
+  pill.onkeydown = (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
+    else if (e.key === 'ArrowLeft' && pill.previousElementSibling) { e.preventDefault(); pill.previousElementSibling.focus(); }
+    else if (e.key === 'ArrowRight' && pill.nextElementSibling) { e.preventDefault(); pill.nextElementSibling.focus(); }
+    else if (e.key === 'Escape') { e.preventDefault(); pill.blur(); }
+  };
+  return pill;
+}
 function cleanupPill() {
   const pill = document.createElement('div'); pill.className = 'pill cleanup'; pill.tabIndex = 0; pill.dataset.id = 'cleanup'; pill.setAttribute('role', 'button');
   pill.title = 'Put every row where it belongs now';
   const s = document.createElement('span'); s.innerHTML = iconSvg('cleanup'); pill.append(s.firstChild, 'Clean up');
-  const go = () => { releaseHeld(); render(true); };
+  // A view's rows are re-asked by the refresh loop, so letting go is enough there. A saved search is asked only when
+  // it is opened, so a row that no longer answers its query would sit there until the page is left: ask again.
+  const go = () => {
+    releaseHeld();
+    if (onSearchPage() && !searchRows.has(zoom.docId)) { const id = zoom.docId; return run(async () => { await reload(id); render(true); }); }
+    render(true);
+  };
+  // The caret is in the row whose status just changed, so a render is deferred until it loses focus. Taking focus on
+  // mousedown ran that render, which rebuilds the pills, and the mouseup then landed on a new element — no click at
+  // all, and the first press did nothing. Keeping the focus where it is (the bullets and menu rows do the same) lets
+  // the press through.
+  pill.onmousedown = (e) => e.preventDefault();
   pill.onclick = go;
   pill.onkeydown = (e) => {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }

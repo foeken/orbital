@@ -590,12 +590,16 @@ async function runMultiTaskPaletteCheck() {
       status: () => statusRows('').find((row) => row.label === 'Completed').run(),
       assign: () => manyAssigneeRows('').find((row) => row.label === 'Person').run(),
       typed: () => [statusRows('ipr').map((row) => row.label), statusRows('lat').map((row) => row.label), manyAssigneeRows('pe').map((row) => row.label)],
+      typedUnassigned: () => manyAssigneeRows('unas').map((row) => row.label),
       state: () => ({ calls, selected: [...sel.keys], frozen: selectionFrozen, closed, note }),
       rendered: () => [...renders],
       solo: () => { sel = null; palTaskCtx = { docs: [docs[0]], selected: 1, skipped: 0, fromSelection: false, multi: false }; return statusRows('').find((row) => row.label === 'Completed').run(); },
     });
   `, { setTimeout, Promise });
-  assert.deepEqual(plain(apply.typed()), [['In Progress'], ['Later'], ['Unassigned', 'Person']], 'the status and assignee levels match the way the command palette does: word prefixes in order');
+  // Unassigned narrows with every other row: while it ignored the query it stayed first and highlighted, so typing a
+  // name and pressing Enter cleared the assignee instead of setting the one that had just been typed.
+  assert.deepEqual(plain(apply.typed()), [['In Progress'], ['Later'], ['Person']], 'the status and assignee levels match the way the command palette does: word prefixes in order, Unassigned included');
+  assert.deepEqual(plain(apply.typedUnassigned()), ['Unassigned'], 'typing toward Unassigned still reaches it');
   // taskResult reports through a 0 ms timer, which two setImmediates outrun on a loaded machine: wait for a timer
   const settle = () => new Promise((resolve) => setTimeout(resolve, 10));
   apply.status(); await settle();
@@ -1221,7 +1225,7 @@ async function runSyncShortcutCheck() {
     'Views: Inbox', 'Views: Today', 'Views: This week', 'Views: Library',
     'View options: Filter by type', 'View options: Filter rows by text',
     'Actions: Log in to Tana', 'Actions: Create new…', 'Actions: Search Tana', 'Actions: Go back', 'Actions: Go forward', 'Actions: Focus the sidebar', 'Actions: Hide sidebar',
-    'Actions: Undo', 'Actions: Redo', 'Actions: Sync', 'Actions: Edit hidden items', 'Actions: Toggle sensitive visibility',
+    'Actions: Undo', 'Actions: Redo', 'Actions: Sync', 'Actions: Reload', 'Actions: Edit hidden items', 'Actions: Toggle sensitive visibility',
     'Actions: Larger text', 'Actions: Smaller text', 'Actions: Reset text size', 'Actions: Toggle dark mode',
   ], 'the palette lists its rows in one fixed, meaningful order');
   // With a query the best match leads, whichever group it is in: Inbox starts with "in", Zoom in only has it as a word.
@@ -2996,8 +3000,55 @@ function runCurrentNodeStatusCheck() {
       items: [['k', row({ id: 'n2', text: 'just a note' }, DATE.id)]], focusedKey: 'k' })),
     { on: DATE.id, rows: [] }, 'while a plain note is nothing on its own, so it stays the page it belongs to, which has no status');
 }
+// A saved search page lists documents the way a view does, but its rows live in kids rather than in any view's nodes.
+// Three things used to stop at that boundary and leave the rows as they were first drawn: a live change to one of
+// them, a deletion, and the Clean up pill's idea of what is on screen.
+async function runSearchPageRowUpdateCheck() {
+  const SEARCH = 'tana:search:01j0search00000000000000';
+  const TASK = 'tana:text:01j0searchrow00000000000';
+  const helpers = [functionSource('forgetRecent'), functionSource('invalidatePinCaches'), functionSource('invalidateNode')].join('\n');
+  const context = {};
+  vm.runInNewContext(`
+    const SEARCH = '${SEARCH}', TASK = '${TASK}';
+    let views = [{ id: 'library', nodes: [] }], palRows = [], palDoc = null, pinInfo = null, view = 'library';
+    let zoom = { docId: SEARCH, nodeId: null };
+    const kids = new Map([[SEARCH, [{ id: TASK, kind: 'document', icon: 'task', text: 'old title', done: 0, stateType: 'proposed' }]]]);
+    const extra = new Map(), paths = new Map(), fresh = new Map(), taskMetaById = new Map(), relatedBy = new Map();
+    const railGroups = () => [], localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
+    const isTask = (node) => node.kind === 'document' && node.icon === 'task';
+    const asDoc = (node) => ({ ...node, text: node.text ?? node.title ?? '', kind: 'document' });
+    let rootsLoads = 0;
+    const loadRoots = async () => { rootsLoads++; };
+    const tana = { node: async () => ({ id: TASK, title: 'new title', kind: 'document', icon: 'task', done: 1, stateType: 'closed' }) };
+    // what shownDocs reads besides the rows: which page is in front of you, and the (empty) ⌘F box
+    const onSearchPage = () => !!zoom && !zoom.nodeId && String(zoom.docId || '').startsWith('tana:search:');
+    const viewOf = () => views.find((section) => section.id === view);
+    const filterEl = { value: '' };
+    ${functionSource('patchCopies')}
+    ${functionSource('patchDoc')}
+    ${helpers}
+    ${sourceBetween('// The rows the page in front of you shows', 'function setGroupBy')}
+    Object.assign(globalThis, {
+      patch: () => patchDoc(TASK),
+      drop: () => invalidateNode(TASK),
+      rows: () => (kids.get(SEARCH) || []).map((node) => [node.id, node.text, node.stateType]),
+      shown: () => shownDocs().map((node) => node.id),
+      shownInView: () => { zoom = null; return shownDocs().map((node) => node.id); },
+      loads: () => rootsLoads,
+    });
+  `, context);
+  await context.patch();
+  assert.deepEqual(plain(context.rows()), [[TASK, 'new title', 'closed']], 'a change to a document a saved search lists patches the row that page is showing');
+  assert.equal(context.loads(), 0, 'and the row was found there, so nothing falls back to reloading every view');
+  assert.deepEqual(plain(context.shown()), [TASK], 'Clean up asks what is on screen: on a search page that is the rows its query returned');
+  context.drop();
+  assert.deepEqual(plain(context.rows()), [], 'a deleted document leaves the saved search that listed it');
+  assert.deepEqual(plain(context.shownInView()), [], "back on a view, the same helper answers with the view's own rows");
+}
 
-const checks = [runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runDraftTailCheck,runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck];
+
+
+const checks = [runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runDraftTailCheck,runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck];
 // Red until the checks actually settle: an async check left awaiting something that never resolves empties the event
 // loop, and node would exit 0 without a word — a silent pass for a check that never finished.
 process.exitCode = 1;
