@@ -63,17 +63,17 @@ const VIEW_KINDS = ['meetings', 'tasks', 'docs', 'chats', 'canvases', 'agents', 
 const KIND_NODE_TYPE = { meetings: 'event', tasks: 'text', docs: 'text', chats: 'chat', canvases: 'canvas', agents: 'agent', skills: 'skill', searches: 'search', spaces: 'space', people: 'user-profile' };
 // Spaces and people are containers and members, not library content: they are listed when asked for by name.
 const ANY_KINDS = VIEW_KINDS.filter((k) => k !== 'people' && k !== 'spaces');
+// Meetings, Chats and People are no longer views: each was a fixed query over a single kind, which is what a saved
+// search is — except a search can be renamed, re-aimed and kept. The kinds themselves stay in VIEW_KINDS above, so
+// those lists remain one search away rather than being lost with the pages.
 const VIEW_PRESETS = {
   inbox: { types: null, states: ['proposed'], assignee: 'anyone' },
   tasks: { types: ['tasks'], states: ['proposed', 'open', 'not_now'], assignee: 'me' }, // everything not yet done: Inbox, In Progress, Later
-  meetings: { types: ['meetings'], participant: 'me', window: 'recent' },
   library: { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me', text: '' },
-  chats: { types: ['chats'] },
-  people: { types: ['people'] },
 };
-// A page that is a kind: Tasks lists tasks, People lists people. Its type is its identity, so it is not offered as a
-// filter and a stored one cannot override it — only the Library and the Inbox choose their kinds.
-const KIND_VIEWS = new Set(['tasks', 'meetings', 'chats', 'people']);
+// A page that is a kind: Tasks lists tasks. Its type is its identity, so it is not offered as a filter and a stored
+// one cannot override it — only the Library and the Inbox choose their kinds.
+const KIND_VIEWS = new Set(['tasks']);
 const viewTypes = (id, f) => (KIND_VIEWS.has(id) ? { ...f, types: VIEW_PRESETS[id].types } : f);
 
 // assignee: 'me' | 'anyone' | 'unassigned' | <user-profile uri>

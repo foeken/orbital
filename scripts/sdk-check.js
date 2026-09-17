@@ -514,7 +514,7 @@ async function main() {
     assert.equal(cachedNodeHue(space), 0, 'own hue survives the cached kind tag');
     assert.equal(cachedNodeHue({ id: plain.id, icon: null, tags: [{ label: 'Type', hue: 0 }] }), undefined, 'type hue is not a node hue');
     assert.equal(graphRow({ id: 'tana:chat:01exampler0000000000000000', title: 'Chat' }).icon, 'chat');
-    assert.ok(VIEWS.some((s) => s.id === 'people' && s.title === 'People' && s.icon === 'member'));
+    assert.ok(VIEWS.some((s) => s.id === 'tasks' && s.title === 'Tasks' && s.icon === 'task'));
     // A weekday on its own reads as the week ahead, so a past meeting has to carry its date: "Fri" for last Friday
     // in a list that also holds this Friday is the one thing a meeting row must never say.
     const at = (days, hour) => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + days); d.setHours(hour); return d.toISOString(); };
@@ -715,27 +715,30 @@ async function main() {
       const result = await backend.handlers.get('view:list')(null, view.id);
       assert.equal(result.nodes.length, 1, view.id + ' fetched through view:list');
     }
-    assert.equal(requests.length, 6, 'six views make six single queries');
+    assert.equal(requests.length, 3, 'three views make three single queries');
     const roots = await backend.handlers.get('outline:roots')();
-    assert.equal(requests.length, 6, 'roots reads SQLite without fetching');
-    assert.ok(roots.every((view) => view.nodes.length === 1), 'all six views load from their own cache section');
+    assert.equal(requests.length, 3, 'roots reads SQLite without fetching');
+    assert.ok(roots.every((view) => view.nodes.length === 1), 'all three views load from their own cache section');
     await backend.refresh();
-    assert.equal(requests.length, 7);
-    assert.deepEqual(requests.at(-1).nodeTypes, ['user-profile'], 'refresh repeats only the last listed view');
-    const custom = await backend.handlers.get('view:setFilter')(null, 'chats', { types: ['chats'], text: 'urgent' });
+    assert.equal(requests.length, 4);
+    // the last view listed above is now the Library, whose preset lists tasks
+    assert.deepEqual(requests.at(-1).nodeTypes, ['text'], 'refresh repeats only the last listed view');
+    const custom = await backend.handlers.get('view:setFilter')(null, 'library', { types: ['chats'], text: 'urgent' });
     assert.equal(custom.text, 'urgent');
-    assert.equal(cache.setting('viewFilter:chats').text, 'urgent');
-    const reset = await backend.handlers.get('view:setFilter')(null, 'chats', { types: ['unknown'] });
-    assert.equal(reset.types.join(','), 'chats', 'invalid writes store the preset');
-    assert.equal(reset.text, undefined, 'and drops the custom fields a prior valid write stored');
-    // A kind page cannot be turned into a different page: People lists people even if something stored otherwise,
+    assert.equal(cache.setting('viewFilter:library').text, 'urgent');
+    const reset = await backend.handlers.get('view:setFilter')(null, 'library', { types: ['unknown'] });
+    assert.equal(reset.types.join(','), 'tasks', 'invalid writes store the preset');
+    // the Library preset ships an empty text of its own, where the Chats preset this case used to run against had
+    // none at all: either way the stored 'urgent' is gone, which is what the case is about
+    assert.equal(reset.text, '', 'and drops the custom fields a prior valid write stored');
+    // A kind page cannot be turned into a different page: Tasks lists tasks even if something stored otherwise,
     // and the renderer is told which pages those are so it does not offer a type to pick.
-    assert.deepEqual((await backend.handlers.get('view:setFilter')(null, 'people', { types: ['meetings', 'people'] })).types, ['people'], 'People keeps listing people');
-    cache.setSetting('viewFilter:people', { types: ['skills'] });
-    assert.deepEqual((await backend.handlers.get('view:filter')(null, 'people')).types, ['people'], 'and heals a stored filter that says otherwise');
+    assert.deepEqual((await backend.handlers.get('view:setFilter')(null, 'tasks', { types: ['meetings', 'tasks'] })).types, ['tasks'], 'Tasks keeps listing tasks');
+    cache.setSetting('viewFilter:tasks', { types: ['skills'] });
+    assert.deepEqual((await backend.handlers.get('view:filter')(null, 'tasks')).types, ['tasks'], 'and heals a stored filter that says otherwise');
     assert.deepEqual((await backend.handlers.get('view:setFilter')(null, 'library', { types: ['meetings'] })).types, ['meetings'], 'the Library still picks its kinds');
-    assert.equal(roots.filter((view) => view.kind).map((view) => view.id).join(','), 'tasks,meetings,chats,people', 'and the four kind pages are marked as such');
-    console.log('ok  six view handlers share fetch/cache, roots stays offline, and refresh follows the active view');
+    assert.equal(roots.filter((view) => view.kind).map((view) => view.id).join(','), 'tasks', 'and the one remaining kind page is marked as such');
+    console.log('ok  three view handlers share fetch/cache, roots stays offline, and refresh follows the active view');
   }
 
   // The week node is a plain "Week <n> (<year>)" document beside the day nodes: ISO-8601 week numbers, created once
@@ -807,7 +810,7 @@ async function main() {
     const sections = await backend.handlers.get('outline:roots')();
     assert.equal(sections.map((s) => s.id).join(','), backend.VIEWS.map((s) => s.id).join(','));
     assert.equal(sections.find((s) => s.id === 'tasks').nodes.length, 1, 'roots reads the view cache without another graph query');
-    assert.equal(sections.find((s) => s.id === 'people').nodes.length, 0);
+    assert.equal(sections.find((s) => s.id === 'inbox').nodes.length, 0, 'and a view with nothing cached reads as empty rather than missing');
     tasks = [];
     await backend.handlers.get('view:list')(null, 'library', { types: ['meetings', 'tasks', 'docs'], states: null, assignee: 'anyone' });
     assert.deepEqual(unsubscribed, [taskId], 'a row that left the view is still unsubscribed');
@@ -1041,10 +1044,12 @@ async function main() {
     assert.deepEqual(viewParams(VIEW_PRESETS.inbox, ME), { nodeTypes: ['event', 'text', 'chat', 'canvas', 'agent', 'skill', 'search'], stateTypes: ['proposed'], limit: 1000, sortOptions: UPD, mode: COUNT });
     assert.deepEqual(viewParams(VIEW_PRESETS.tasks, ME), { nodeTypes: ['text'], stateTypes: ['proposed', 'open', 'not_now'], assignedTo: [ME], limit: 1000, sortOptions: UPD, mode: COUNT });
     assert.deepEqual(viewParams(VIEW_PRESETS.library, ME), { nodeTypes: ['text'], stateTypes: ['proposed', 'open'], assignedTo: [ME], limit: 1000, sortOptions: UPD, mode: COUNT });
-    assert.deepEqual(viewParams(VIEW_PRESETS.chats, ME), { nodeTypes: ['chat'], limit: 1000, sortOptions: UPD, mode: COUNT });
-    assert.deepEqual(viewParams(VIEW_PRESETS.people, ME), { nodeTypes: ['user-profile'], limit: 1000, sortOptions: UPD, mode: COUNT });
+    // Meetings, Chats and People are no longer presets, but they are still kinds a filter can name, so what they ask
+    // the graph for still matters: a saved search aimed at them must reach it the same way those pages used to.
+    assert.deepEqual(viewParams({ types: ['chats'] }, ME), { nodeTypes: ['chat'], limit: 1000, sortOptions: UPD, mode: COUNT });
+    assert.deepEqual(viewParams({ types: ['people'] }, ME), { nodeTypes: ['user-profile'], limit: 1000, sortOptions: UPD, mode: COUNT });
     const meetingStart = new Date(); meetingStart.setHours(0, 0, 0, 0); meetingStart.setDate(meetingStart.getDate() - 7);
-    assert.deepEqual(viewParams(VIEW_PRESETS.meetings, ME), {
+    assert.deepEqual(viewParams({ types: ['meetings'], participant: 'me', window: 'recent' }, ME), {
       nodeTypes: ['event'], limit: 1000, hasParticipantUris: [ME], eventStartTimeMin: meetingStart.toISOString(),
       eventStartTimeMax: new Date(meetingStart.getTime() + 14 * 864e5).toISOString(),
       sortOptions: [{ field: 'SORT_FIELD_EVENT_START_TIME', direction: 'SORT_DIRECTION_ASCENDING' }], mode: COUNT,
@@ -1157,8 +1162,8 @@ async function main() {
     assert.ok(validViewFilter(rich), 'a query carrying things the pills cannot show still reads back as a valid filter');
     assert.deepEqual(Object.keys(rich).sort(), ['assignee', 'participant', 'states', 'text', 'types', 'window'], 'and carries none of them into the filter');
     // A kind page is that kind, whatever a stored filter from an older build says.
-    assert.deepEqual(viewTypes('people', { types: ['meetings', 'people'], states: null }), { types: ['people'], states: null }, 'People lists people');
-    assert.deepEqual(viewTypes('meetings', { types: [] }).types, ['meetings']);
+    assert.deepEqual(viewTypes('tasks', { types: ['meetings', 'tasks'], states: null }), { types: ['tasks'], states: null }, 'Tasks lists tasks');
+    assert.deepEqual(viewTypes('tasks', { types: [] }).types, ['tasks']);
     assert.deepEqual(viewTypes('library', { types: ['meetings'] }).types, ['meetings'], 'the Library keeps the kinds it was given');
     assert.deepEqual(viewTypes('inbox', { types: null }).types, null);
     const id = ulid();

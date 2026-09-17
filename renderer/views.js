@@ -80,9 +80,9 @@ function groupsOf(list) {
 const SORTS = [['default', 'Default'], ['updated', 'Updated'], ['created', 'Created'], ['title', 'Title']];
 const SORT_KEY = { updated: (n) => n.updatedAt, created: (n) => n.createdAt, title: (n) => (n.text || n.title || '').toLowerCase() };
 const NEWEST_FIRST = new Set(['updated', 'created']); // times read newest first; Title stays A→Z
-// People read as a list of names, so that page sorts A→Z until the user says otherwise; Tasks puts what moved most
-// recently first; every other view keeps the order its query returned.
-const sortBy = () => { const k = pillKey(); return SORTS.some(([id]) => id === sortPref[k]) ? sortPref[k] : k === 'people' ? 'title' : k === 'tasks' ? 'updated' : 'default'; };
+// Tasks puts what moved most recently first; every other page, saved searches included, keeps the order its query
+// returned until the user says otherwise.
+const sortBy = () => { const k = pillKey(); return SORTS.some(([id]) => id === sortPref[k]) ? sortPref[k] : k === 'tasks' ? 'updated' : 'default'; };
 function setSortBy(id) { sortPref[pillKey()] = id; held = null; persistPref('sortBy', sortPref); render(); }
 function sortRows(list) {
   const id = sortBy(), key = SORT_KEY[id], desc = NEWEST_FIRST.has(id);

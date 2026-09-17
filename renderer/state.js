@@ -7,7 +7,9 @@ const tana = window.api || mockApi();
 let views = [];              // [{ id, title, icon, nodes: document Node[] }]
 let searches = [];           // [{ id, title, icon, … }] saved search documents, for the Cmd+K Searches group
 let view = localStorage.getItem('view') || 'tasks'; // active view id; the outline shows one view at a time
-if (view === 'members') view = 'people';
+// Views that no longer exist. A stored one would leave the app on a page with no filter, no rows and no way back,
+// so it lands in the Library, which lists every kind those pages used to list one of.
+if (['members', 'people', 'meetings', 'chats'].includes(view)) view = 'library';
 let authed = false, authChecking = true, signedOut = false;
 const extra = new Map();     // docId -> document Node reached through a mention (not in roots)
 const paths = new Map();     // docId -> [{ id, title }] location in Tana for the breadcrumb (api.path)
@@ -37,7 +39,7 @@ let palTaskCtx = null;
 let palReturn = null; // { key, offset } of the node focused when a palette opened; focus goes back there on close
 const fresh = new Map();     // docId -> { section, after, node }: documents created here that roots does not list yet, kept in place until it does
 let draftSeq = 0;
-const DRAFT_KIND = { tasks: 'task', meetings: 'meeting' }; // what Enter drafts in a view (any other view: a plain doc)
+const DRAFT_KIND = { tasks: 'task' }; // what Enter drafts in a view (any other view: a plain doc)
 let sel = null;              // multi-select: { keys: Set, anchor: key, focus: key }; the caret leaves the text
 let selectionFrozen = false;
 const filters = new Map();   // view id -> the persisted query filter

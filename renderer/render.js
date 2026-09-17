@@ -237,11 +237,9 @@ function renderOutline() {
       ? groups.flatMap((g) => [groupHeadEl(g.title), ...g.nodes.map(rowEl)])
       : list.map(rowEl)));
     animateRows(before);
-    const today = view === 'meetings' && !groups ? outline.children[todayIndex(list)] : null;
-    if (today) today.dataset.today = '';
-    if (list.length && !outline.hidden && scrolledView !== view) { // a view opens scrolled to today's first meeting (else the top)
+    if (list.length && !outline.hidden && scrolledView !== view) { // a view opens at the top
       scrolledView = view;
-      if (today) today.scrollIntoView({ block: 'start' }); else outline.parentElement.scrollTop = 0;
+      outline.parentElement.scrollTop = 0;
     }
   }
   if (parent && !list.length) {

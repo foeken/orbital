@@ -164,24 +164,13 @@ function forgetRecent(id) {
 // A recorded row keeps the title and meta it had when it was opened, and a meeting's meta ages: when the node is
 // loaded now, the palette shows what it says today rather than what it said then.
 const recentRows = () => recent().map((row) => { const live = docOf(row.id); return live ? { ...row, text: live.text, meta: live.meta, hue: live.hue } : row; });
-// index of the first meeting dated today or later. The list is oldest first over [today-7, today+7) and the meta
-// only carries a weekday ("Mon 9:00–9:30"), so walk the weekday sequence from the window start (same weekday as today).
-// ponytail: a gap of 7+ days without meetings under-counts a week; then nothing is marked and the view stays at the top
-function todayIndex(nodes) {
-  let d = 0, prev = new Date().getDay();
-  for (let i = 0; i < nodes.length; i++) {
-    const wd = WD.indexOf((nodes[i].meta || '').slice(0, 3));
-    if (wd < 0) continue;
-    d += (wd - prev + 7) % 7; prev = wd;
-    if (d >= 7) return i;
-  }
-  return -1;
-}
+// todayIndex lived here: it marked the first meeting dated today or later, so the Meetings view could open on it.
+// That view is gone, and no other page opens anywhere but its top, so the walk over weekday metas went with it.
 
 async function loadRoots() {
   await loadSensitive(); // privacy gate: no document reaches the first render before the local marks do
   const drafts = views.flatMap((s) => s.nodes.map((node, i) => ({ view: s.id, i, node })).filter((d) => d.node.draft)); // a refresh must not drop a draft being typed
-  views = (await tana.roots()).map((s) => ({ ...s, title: s.id === 'people' ? 'People' : s.title, icon: s.id === 'library' ? 'library' : s.icon, nodes: s.nodes.map(asDoc) }));
+  views = (await tana.roots()).map((s) => ({ ...s, icon: s.id === 'library' ? 'library' : s.icon, nodes: s.nodes.map(asDoc) }));
   for (const s of views) if (s.truncated) truncated.add(s.id); else if (s.truncated === false) truncated.delete(s.id); // roots carry the cap flag, so a refresh needs no second query
   rootsLoaded = true;
   for (const [id, f] of fresh) { // a created document stays where it was drafted until the roots query lists it

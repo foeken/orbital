@@ -57,8 +57,10 @@ assert.match(source, /if \(rowHue != null\) \{ icon\.classList\.add\('hue'\)/);
 assert.match(source, /if \(display\.hue != null\) \{ bullet\.classList\.add\('hue'\)/);
 assert.doesNotMatch(source, /iconSvg:|\.iconSvg\b|setIcon|startDrop/, 'app-local custom icons are gone');
 assert.match(source, /scrollIntoView\(\{ block: 'nearest', inline: 'nearest', container: 'nearest' \}\)/);
-assert.match(source, /id: 'people', title: 'People', icon: 'member'/);
-assert.match(source, /title: s\.id === 'people' \? 'People' : s\.title/);
+// Meetings, Chats and People are no longer views: each was a fixed query over one kind, which is what a saved search
+// is. The kinds stay, so those lists are a search away rather than gone with the pages.
+assert.doesNotMatch(source, /id: 'meetings', title: 'Meetings'|id: 'chats', title: 'Chats'|id: 'people', title: 'People'/,
+  'the removed views are not served as roots any more');
 assert.match(source, /id: 'library', title: 'Library', icon: 'library'/);
 assert.match(source, /value: names\(TYPES, f\.types\) \|\| 'Any type', icon: one \? one\[2\] : 'any'/);
 assert.match(source, /icon: s\.id === 'library' \? 'library' : s\.icon/);

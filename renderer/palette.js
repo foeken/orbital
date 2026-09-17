@@ -20,7 +20,7 @@ const docRow = (n, hint, run) => ({ node: n, icon: n.icon, label: n.text ?? n.ti
 // its link, and last the one destructive row. Rows without an id carry a `rank` from this list instead.
 const NODE_ROW_ORDER = ['zoomIn', 'expand', 'collapse', 'toggleDone', 'status', 'assign', 'assignTo', 'pinSidebar', 'pinToday', 'addToday', 'addWeek', 'move', 'moveLibrary', 'visibility', 'sensitive', 'copyLink', 'delete'];
 const nodeRank = (r) => { const i = NODE_ROW_ORDER.indexOf(r.rank || r.id); return i < 0 ? NODE_ROW_ORDER.length : i; };
-const VIEW_ORDER = ['inbox', 'today', 'week', 'tasks', 'meetings', 'people', 'chats', 'library'];
+const VIEW_ORDER = ['inbox', 'today', 'week', 'tasks', 'library'];
 // Matching a row, tiered the way Raycast ranks a title (its manual: aliases first, then the title's fuzzy score, which
 // favours the first letters of words). Best first:
 //   0  the label starts with the query      "in"    → **In**box
@@ -249,7 +249,9 @@ function loadCreationChoices() {
   }, (e) => { if (seq === palSeq && palMode === mode) { palBusy = false; showError(e); renderPalette(); } });
 }
 function creationSection(choice) {
-  const id = choice.kind === 'task' ? 'tasks' : choice.kind === 'meeting' || choice.appliesTo === 'events' ? 'meetings' : choice.kind === 'chat' ? 'chats' : 'library';
+  // Tasks has a page of its own; everything else — meetings, chats, saved searches, docs — is drafted in the Library,
+  // which is the one view that lists any kind. The kind pages those used to have are gone.
+  const id = choice.kind === 'task' ? 'tasks' : 'library';
   return views.find((section) => section.id === id) || viewOf();
 }
 function startCreation(choice) {

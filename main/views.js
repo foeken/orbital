@@ -88,7 +88,7 @@ async function searchList() {
 // The translation happens here rather than in the renderer because the renderer is classic scripts with no require,
 // so it cannot reach sdk/query — and main already owns the canonical filter anyway (viewFilter merges the preset
 // with whatever the user changed). The renderer therefore sends a view id, never a query it built itself.
-const SEARCH_NAME = { inbox: 'Inbox', tasks: 'Tasks', meetings: 'Meetings', library: 'Library', chats: 'Chats', people: 'People' };
+const SEARCH_NAME = { inbox: 'Inbox', tasks: 'Tasks', library: 'Library' };
 // A name from what the filter actually says, so a saved search does not arrive called "Untitled". Tana names its
 // own searches for the intent rather than the mechanism; this is the closest main can get without the pill labels,
 // which live in the renderer.

@@ -1372,12 +1372,12 @@ function runHistoryCheck() {
   assert.deepEqual(plain(api.where()), ['tasks', null, 0, 2], 'and nothing further back is a no-op');
   api.forward();
   assert.deepEqual(plain(api.where()), ['library', null, 1, 1], 'forward retraces');
-  api.go('meetings', null);
-  assert.deepEqual(plain(api.where()), ['meetings', null, 2, 0], 'a new place after going back drops what was ahead');
-  api.go('meetings', { docId: 'tana:event:m' }); api.hop('meetings', { docId: 'tana:text:writeup' });
-  assert.deepEqual(plain(api.where()), ['meetings', 'tana:text:writeup', 3, 0], 'a forwarded meeting is one place, not two');
+  api.go('inbox', null);
+  assert.deepEqual(plain(api.where()), ['inbox', null, 2, 0], 'a new place after going back drops what was ahead');
+  api.go('inbox', { docId: 'tana:event:m' }); api.hop('inbox', { docId: 'tana:text:writeup' });
+  assert.deepEqual(plain(api.where()), ['inbox', 'tana:text:writeup', 3, 0], 'a forwarded meeting is one place, not two');
   api.back();
-  assert.deepEqual(plain(api.where()), ['meetings', null, 2, 1], 'so back skips the empty event page');
+  assert.deepEqual(plain(api.where()), ['inbox', null, 2, 1], 'so back skips the empty event page');
 }
 function runZoomShortcutCheck() {
   const anchor = source.indexOf("filterEl.addEventListener('keydown'");
@@ -1930,7 +1930,9 @@ function runClearFiltersCheck() {
     let view = 'tasks';
     const filters = new Map([
       ['tasks', { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me', text: '' }],
-      ['meetings', { types: ['meetings'], states: null, assignee: 'anyone', text: '', participant: 'me', window: 'recent' }],
+      // no view ships a calendar scope any more, but a filter can still carry one — a saved search aimed at meetings
+      // does — and clearFilter has to preserve it, so the case keeps its coverage under a name that is not a page
+      ['scoped', { types: ['meetings'], states: null, assignee: 'anyone', text: '', participant: 'me', window: 'recent' }],
       ['library', { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me', text: '' }],
     ]);
     const render = () => {}, loadView = async () => {}, run = (fn) => fn();
@@ -1956,17 +1958,17 @@ function runClearFiltersCheck() {
   api.clear();
   assert.deepEqual(plain(api.state()), { types: null, states: null, assignee: 'anyone', text: '', participant: null, window: null }, 'clearing the Library means anything, not the shipped default');
   assert.equal(api.filtered(), false, 'and with everything set to any, the action goes away');
-  api.set('meetings');
+  api.set('scoped');
   api.clear();
-  assert.deepEqual(plain(api.state()), { types: null, states: null, assignee: 'anyone', text: '', participant: 'me', window: 'recent' }, 'clearing Meetings keeps the user calendar participant and window');
-  assert.equal(api.filtered(), false, 'the preserved calendar scope is the Meetings clear baseline');
+  assert.deepEqual(plain(api.state()), { types: null, states: null, assignee: 'anyone', text: '', participant: 'me', window: 'recent' }, 'clearing a filter that carries a calendar scope keeps the participant and the window');
+  assert.equal(api.filtered(), false, 'the preserved calendar scope is that filter\'s clear baseline');
 }
 
 async function runUnifiedViewsCheck() {
   const api = vm.runInNewContext(`
-    const ids = ['inbox', 'tasks', 'meetings', 'library', 'chats', 'people'];
-    const views = ids.map((id) => ({ id, title: id === 'people' ? 'People' : id, nodes: id === 'tasks' ? [{ id: 'draftdoc:1', draft: 'task' }] : [] }));
-    const types = { inbox: null, tasks: ['tasks'], meetings: ['meetings'], library: ['tasks'], chats: ['chats'], people: ['people'] };
+    const ids = ['inbox', 'tasks', 'library'];
+    const views = ids.map((id) => ({ id, title: id, nodes: id === 'tasks' ? [{ id: 'draftdoc:1', draft: 'task' }] : [] }));
+    const types = { inbox: null, tasks: ['tasks'], library: ['tasks'] };
     const filters = new Map(ids.map((id) => [id, { types: types[id], states: null, assignee: 'anyone', text: '' }]));
     const viewSeq = new Map(), truncated = new Set(), fresh = new Map(), calls = [], pending = [];
     const tana = { viewList: (id, filter) => { calls.push([id, filter]); return new Promise((resolve) => pending.push(resolve)); } };
@@ -1997,12 +1999,14 @@ async function runUnifiedViewsCheck() {
   loads.forEach((_load, i) => api.resolve(i + 2, { nodes: [{ id: api.ids.filter((id) => id !== 'tasks')[i], title: 'row' }], truncated: false }));
   await Promise.all(loads);
   assert.deepEqual(plain(api.calls().slice(2).map(([id, filter]) => [id, filter.types && filter.types[0]])), [
-    ['inbox', null], ['meetings', 'meetings'], ['library', 'tasks'], ['chats', 'chats'], ['people', 'people'],
-  ], 'Inbox, Meetings, Library, Chats and People all use the same viewList call as Tasks');
+    ['inbox', null], ['library', 'tasks'],
+  ], 'Inbox and Library use the same viewList call as Tasks');
   assert.doesNotMatch(source, /\b(taskF|libF|loadLibrary|loadChats|loadInbox)\b/, 'the renderer no longer carries a per-view filter or loader');
-  assert.match(source, /const DRAFT_KIND = \{ tasks: 'task', meetings: 'meeting' \}/, 'Tasks and Meetings retain their native draft kinds');
-  assert.match(source, /view === 'meetings' && !groups \? outline\.children\[todayIndex\(list\)\]/, 'only Meetings retains the today marker');
-  assert.match(source, /views\.push\(\{ id: 'people', title: 'People'[^}]*editable: false|views\.push\(\{ id: 'people', title: 'People'/, 'the mock exposes the People view by its final title');
+  // Tasks is the only view left with a native draft kind: with Meetings gone, Enter on any other view drafts a doc.
+  assert.match(source, /const DRAFT_KIND = \{ tasks: 'task' \}/, 'Tasks retains its native draft kind');
+  // The Meetings view is gone, and the today marker went with it: every page now opens at its top.
+  // the call form, not the bare word: the note left where it was removed should not read as the thing still existing
+  assert.doesNotMatch(source, /todayIndex\(/, 'the today marker was removed with the view that was its only caller');
 }
 
 // Sorting and grouping are view preferences over rows already loaded: the order and the headings come from fields the
@@ -2073,7 +2077,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   assert.deepEqual(order(rows), ['t4', 't2', 't3', 't1', 'd1'], 'Created reads newest first too');
   api.set('tasks', 'none', 'default');
   assert.deepEqual(order(rows), ['t1', 't2', 't3', 't4', 'd1'], 'Default leaves the order the view produced alone');
-  api.set('meetings', 'status', 'title');
+  api.set('inbox', 'status', 'title');
   assert.deepEqual(order(rows), ['t2', 't1', 't4', 't3', 'd1'], 'sorting applies to every view');
   assert.equal(api.groupsOf(rows).length, 5, 'grouping applies to every view too');
   api.set('library', 'type', 'title');
@@ -2083,10 +2087,8 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   assert.deepEqual(plain(api.prefs()), { group: 'status', sort: 'updated' }, 'an unset Tasks view groups by Status, most recently updated first');
   api.set('library', undefined, undefined);
   assert.deepEqual(plain(api.prefs()), { group: 'none', sort: 'default' }, 'and any other unset view falls back to None / Default');
-  api.set('people', undefined, undefined);
-  assert.deepEqual(plain(api.prefs()), { group: 'none', sort: 'title' }, 'People is a list of names, so it reads A→Z until the user picks another order');
-  api.set('people', undefined, 'updated');
-  assert.equal(plain(api.prefs()).sort, 'updated', 'and its own choice still wins');
+  api.set('library', undefined, 'updated');
+  assert.equal(plain(api.prefs()).sort, 'updated', 'a page\'s own choice still wins over the fallback');
   // the guard that matters: an option may only sort on a field the row objects really carry
   for (const [id] of plain(api.SORTS).filter(([id]) => id !== 'default')) {
     const key = api.SORT_KEY[id];
@@ -2143,13 +2145,10 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     const filters = new Map([
       ['tasks', { types: ['tasks'], states: ['open'], assignee: 'anyone', text: '' }],
       ['inbox', { types: null, states: ['proposed'], assignee: 'anyone', text: '' }],
-      ['meetings', { types: ['meetings'], states: null, assignee: 'anyone', text: '', participant: 'me', window: 'recent' }],
       ['library', { types: ['tasks'], states: ['open'], assignee: 'anyone', text: '' }],
-      ['chats', { types: ['chats'], states: null, assignee: 'anyone', text: '' }],
-      ['people', { types: ['people'], states: null, assignee: 'anyone', text: '' }],
     ]);
-    // Tasks, Meetings, Chats and People are kind pages: the type is their identity, not a filter (main sends the flag)
-    const views = [{ id: 'inbox' }, { id: 'tasks', kind: true }, { id: 'meetings', kind: true }, { id: 'library' }, { id: 'chats', kind: true }, { id: 'people', kind: true }];
+    // Tasks is the one kind page left: the type is its identity, not a filter (main sends the flag)
+    const views = [{ id: 'inbox' }, { id: 'tasks', kind: true }, { id: 'library' }];
     let members = [{ id: 'me', title: 'Robin', me: true }], groupPref = {}, sortPref = {};
     let pillCtx = null, palMode = 'cmd', palRows = [], palIndex = 0, renders = 0;
     const taskMetaById = new Map(), tana = {}, palette = { hidden: false };
@@ -2187,7 +2186,6 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     'Library includes its Type filter plus the other applicable pills');
   assert.deepEqual(plain(api.commands('inbox').map(([id]) => id)), ['pill:type', 'pill:status', 'pill:assigned', 'pill:sort', 'pill:group'],
     'the Inbox is a state rather than a kind, so it still picks types');
-  assert.deepEqual(plain(api.commands('meetings').map(([id]) => id)), ['pill:sort', 'pill:group'], 'Meetings is meetings: layout pills only');
   // Right on a pill steps to the next one; past the last (Group) it goes down to the first node, the way Up from
   // that node reaches the last pill (focusAbove).
   const pillArrows = vm.runInNewContext(`
@@ -2199,8 +2197,6 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   `);
   assert.deepEqual(plain(pillArrows.right(true)), { caret: null, focused: 'next pill' }, 'Right moves along the pills');
   assert.deepEqual(plain(pillArrows.right(false)), { caret: ['first node', 0], focused: null }, 'and from the last pill to the first node');
-  assert.deepEqual(plain(api.commands('chats').map(([id]) => id)), ['pill:sort', 'pill:group'], 'Chats is chats: layout pills only');
-  assert.deepEqual(plain(api.commands('people').map(([id]) => id)), ['pill:sort', 'pill:group'], 'People is people: nothing to filter by type, status or assignee');
   assert.match(functionSource('backPalette'), /palMode === 'pill'[\s\S]*openCommandPalette\(\)/, 'Escape from a pill returns one palette level');
 }
 // Opening a node has to leave a row to type in, without creating anything in Tana until it is typed into.
@@ -2549,7 +2545,7 @@ function runRecentRowsCheck() {
     const asDoc = (node) => ({ ...node, kind: 'document', text: node.text ?? node.title ?? '' });
     const docOf = (id) => (id === 'meeting' ? { id, text: 'AEGIS update', meta: 'Fri 11 Sep 13:00–13:30', hue: 77 } : null);
     ${sourceBetween('const recent =', 'function recordRecent')}
-    ${sourceBetween('const recentRows =', '// index of the first meeting')}
+    ${sourceBetween('const recentRows =', 'async function loadRoots')}
     recentRows;
   `);
   assert.deepEqual(plain(api().map((row) => [row.text, row.meta, row.hue])), [

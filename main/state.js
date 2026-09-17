@@ -2,9 +2,10 @@
 const { KIND_VIEWS } = require('../sdk/query');
 
 
-// Order is the Cmd+K Views order: what is waiting on you, then your work, then the calendar, then knowledge,
-// then conversations, then people.
-const VIEWS = [{ id: 'inbox', title: 'Inbox', icon: 'inbox' }, { id: 'tasks', title: 'Tasks', icon: 'task' }, { id: 'meetings', title: 'Meetings', icon: 'meeting' }, { id: 'library', title: 'Library', icon: 'library' }, { id: 'chats', title: 'Chats', icon: 'chat' }, { id: 'people', title: 'People', icon: 'member' }]
+// Order is the Cmd+K Views order: what is waiting on you, then your work, then knowledge.
+// Meetings, Chats and People were fixed views over one kind each — which is exactly what a saved search is, only
+// without being editable or nameable. They are gone; the kinds remain, so the same lists are a search away.
+const VIEWS = [{ id: 'inbox', title: 'Inbox', icon: 'inbox' }, { id: 'tasks', title: 'Tasks', icon: 'task' }, { id: 'library', title: 'Library', icon: 'library' }]
   .map((view) => ({ ...view, kind: KIND_VIEWS.has(view.id) })); // a kind page lists one kind and does not offer the type picker
 const TAG = { task: { label: 'task', color: 'grey' }, meeting: { label: 'meeting', color: 'gold' }, space: { label: 'space', color: 'grey' }, doc: { label: 'doc', color: 'grey' }, member: { label: 'member', color: 'grey' } };
 const KINDS = { doc: 'tana:text:', task: 'tana:text:', meeting: 'tana:event:', chat: 'tana:chat:', search: 'tana:search:' };

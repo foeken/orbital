@@ -52,7 +52,9 @@ function mockApi() {
     dateMeta['mockmeeting' + i] = WD[d.getDay()] + ' ' + d.getDate() + time;
     return { id: 'mockmeeting' + i, text, meta: WD[d.getDay()] + time, kind: 'document', hasChildren: true, icon: 'meeting', tags: [meeting] };
   });
-  const views = [{ id: 'inbox', title: 'Inbox', icon: 'inbox', nodes: [] }, { id: 'tasks', title: 'Tasks', icon: 'task', kind: true, nodes: docs }, { id: 'meetings', title: 'Meetings', icon: 'meeting', kind: true, nodes: meetings }, { id: 'library', title: 'Library', icon: 'library', nodes: [] }, { id: 'chats', title: 'Chats', icon: 'chat', kind: true, nodes: [] }];
+  // Meetings, Chats and People are no longer views. Their documents remain — the Library lists every kind, and a
+  // saved search can name any subset of them — so only the pages are gone, not the content they used to show.
+  const views = [{ id: 'inbox', title: 'Inbox', icon: 'inbox', nodes: [] }, { id: 'tasks', title: 'Tasks', icon: 'task', kind: true, nodes: docs }, { id: 'library', title: 'Library', icon: 'library', nodes: [] }];
   const all = [...docs, ...meetings, ...spaceDocs, space, ...kinds, ...chats];
   for (const node of all) node.editable = true;
   // org members (user profiles): searchable, linkable, and the "Assigned to" menu; me = the signed-in user
@@ -64,14 +66,10 @@ function mockApi() {
     participants: i % 2 === 0 ? [{ uri: members[0].id, type: 'user', role: 'admin' }] : [{ uri: members[0].id, type: 'user', role: 'admin' }, { uri: members[1].id, type: 'user', role: 'editor' }],
     audience: i % 2 === 0 ? 'only-me' : 'everyone',
   }]));
-  views.push({ id: 'people', title: 'People', icon: 'member', kind: true, nodes: members });
   const filters = {
     inbox: { types: null, states: ['proposed'], assignee: 'anyone', text: '' },
     tasks: { types: ['tasks'], states: ['proposed', 'open', 'not_now'], assignee: 'me', text: '' },
-    meetings: { types: ['meetings'], states: null, assignee: 'anyone', text: '', participant: 'me', window: 'recent' },
     library: { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me', text: '' },
-    chats: { types: ['chats'], states: null, assignee: 'anyone', text: '' },
-    people: { types: ['people'], states: null, assignee: 'anyone', text: '' },
   };
   const stateOf = (d) => d.state || (d.done == null ? null : d.done ? 'closed' : 'open');
   const listed = (d, f) => (!f.states || f.states.includes(stateOf(d))) && (!f.assignee || f.assignee === 'me' || f.assignee === 'anyone');
@@ -156,7 +154,7 @@ function mockApi() {
       if (f.text && f.text.trim()) bits.push('"' + f.text.trim() + '"');
       if (Array.isArray(f.states) && f.states.length) bits.push(f.states.join(', '));
       if (f.assignee === 'me') bits.push('mine'); else if (f.assignee === 'unassigned') bits.push('unassigned');
-      const base = { inbox: 'Inbox', tasks: 'Tasks', meetings: 'Meetings', library: 'Library', chats: 'Chats', people: 'People' }[viewId] || 'Search';
+      const base = { inbox: 'Inbox', tasks: 'Tasks', library: 'Library' }[viewId] || 'Search';
       const n = { id: 'tana:search:mocknew' + (++seq), text: (title && title.trim()) || (bits.length ? base + ' — ' + bits.join(' · ') : base), kind: 'document', hasChildren: true, editable: true, tags: [{ label: 'search', color: 'grey' }] };
       created[n.id] = n; content[n.id] = []; all.push(n);
       searchQueries[n.id] = { filter: structuredClone(f) }; // the query it was saved with, in the vocabulary the channel deals in
