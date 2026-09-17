@@ -145,7 +145,7 @@ function mockApi() {
         && (!filter.states || listed(d, filter))
         && d.text.toLowerCase().includes(text)).map(info), truncated: false };
     },
-    searches: async () => structuredClone(all.filter((d) => d.id.startsWith('tana:search:'))),
+    searches: async () => structuredClone(all.filter((d) => d.id.startsWith('tana:search:')).map(info)),
     // references resolve on read, as main does: the row always shows the target's current title and state
     children: async (docId) => structuredClone(content[docId] || []).map((n) => (n.type === 'reference' ? { ...n, reference: { ...n.reference, node: info([...all, ...members].find((d) => d.id === n.reference.uri)) } } : n)),
     node: async (docId) => {
