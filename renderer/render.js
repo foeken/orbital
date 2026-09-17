@@ -90,7 +90,7 @@ const typableRow = (n) => !!n && n.kind === 'block' && !isAtomic(n) && !isRefere
 // out of Tana until its first typed character (materialise) and is discarded by anything else.
 // A block with children appends through insertAfter(last); an empty block uses insertChild.
 function withDraftTail(list, parent) {
-  if (!Array.isArray(childrenOf(parent)) || isSpace(parent.node) || !canEditItem(parent) || !canInsertChild(parent)) return list;
+  if (!Array.isArray(childrenOf(parent)) || isSpace(parent.node) || isSearchDoc(parent.node) || !canEditItem(parent) || !canInsertChild(parent)) return list;
   if (typableRow(list.at(-1))) return list;
   return [...list, draftNode(parent)];
 }
@@ -195,6 +195,14 @@ function renderOutline() {
   if (parent) {
     if (!parent.node.draft) ensureLoaded(parent);
     list = parent.node.draft ? [] : childrenOf(parent) || [];
+    // A saved search page is a result list, like a view, so ⌘F narrows it the same way. No other zoomed page
+    // filters: an outline's rows are content you are editing, not a result set you are searching through.
+    if (isSearchDoc(parent.node)) {
+      const q = filterEl.value.trim().toLowerCase();
+      const found = q ? list.filter((n) => String(n.text || '').toLowerCase().includes(q)) : list;
+      hidden = list.length - found.length;
+      list = found;
+    }
     list = withDraftTail(list, parent); // an open node always has a row to type in; a read-only one (every chat) never does
     outline.replaceChildren(...list.map((n) => childEl(n, parent)));
     animView = null; // a zoom replaced every row, and a zoomed row is keyed docId/nodeId while a view row is keyed by
@@ -256,7 +264,7 @@ function renderOutline() {
   renderRail(parent);
   const showPills = !parent && authed && pillsApply();
   renderPills(showPills);
-  filterRow.hidden = !!parent || !(filterShown || filterEl.value);
+  filterRow.hidden = (!!parent && !isSearchDoc(parent.node)) || !(filterShown || filterEl.value);
   filterRow.classList.toggle('empty', !filterEl.value);
   $('filtered').textContent = [hidden ? hidden + ' items filtered out' : '', truncated.has(view) ? 'Showing the first 1,000 results' : ''].filter(Boolean).join(' · ');
   // Cached rows remain usable while auth and sync reconnect; reserve the skeleton for an empty outline.

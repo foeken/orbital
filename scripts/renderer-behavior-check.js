@@ -2208,6 +2208,7 @@ function runDraftTailCheck() {
     const hasKids = (item) => !!item.node.hasChildren || !!item.node.children?.length;
     const canEditItem = () => editable;
     const isSpace = (n) => n.id.startsWith('tana:space:');
+    const isSearchDoc = (n) => n.id.startsWith('tana:search:');
     ${sourceBetween('const canInsertChild =', 'const canExpand =')}
     ${sourceBetween('const typableRow =', '// Opening a node leaves a row')}
     ${functionSource('withDraftTail')}
@@ -2221,6 +2222,9 @@ function runDraftTailCheck() {
   assert.deepEqual(ids(api.tail([row('a', 'written'), row('b', '')], doc)), ['a', 'b'], 'an empty last row is already somewhere to type, so no draft is added');
   assert.deepEqual(ids(api.tail([{ id: 'img', kind: 'block', type: 'image' }], doc)), ['img', 'draft:doc'], 'an image, divider or reference row is not somewhere to type');
   assert.deepEqual(ids(api.tail([], { key: 's', docId: 's', node: { id: 'tana:space:1', kind: 'document' } })), [], 'a space lists documents, so it has no draft child');
+  // A saved search stays editable so its title can be renamed, so editability cannot be what keeps the draft row away:
+  // without its own exclusion, typing there would write outline content onto a document created with none.
+  assert.deepEqual(ids(api.tail([], { key: 'q', docId: 'q', node: { id: 'tana:search:1', kind: 'document' } })), [], 'a saved search lists the rows its query returns, so it has no draft child');
   const block = { key: 'doc/b', docId: 'doc', node: { id: 'b', kind: 'block', block: 'paragraph' } };
   assert.deepEqual(ids(api.tail([], block)), ['draft:doc/b'], 'an empty block opens on a draft child');
   const child = row('c', 'child'), parentWithChild = { ...block, node: { ...block.node, hasChildren: true, children: [child] } };

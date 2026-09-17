@@ -22,6 +22,11 @@ const mkItem = (docId, node, parent) => {
 const docCache = new Map();
 const docOf = (id) => { let d = docCache.get(id); if (!d) { d = allDocs().find((x) => x.id === id) || extra.get(id); if (d) docCache.set(id, d); } return d; };
 const isSpace = (node) => node.id.startsWith('tana:space:'); // its children are documents; no draft child
+// A saved search is the same shape as a space: what it lists are the rows its stored query returns, not content
+// anyone typed into it. It stays editable so its title can be renamed — only its body is off limits.
+const SEARCH_ID = 'tana:search:';
+const isSearchDoc = (node) => !!node && String(node.id || '').startsWith(SEARCH_ID);
+const onSearchPage = () => !!zoom && !zoom.nodeId && String(zoom.docId || '').startsWith(SEARCH_ID);
 const childrenOf = (item) => (item.node.kind === 'document' ? kids.get(item.docId) : item.node.children || []);
 const hasKids = (item) => { const c = childrenOf(item); return Array.isArray(c) ? c.length > 0 : !!item.node.hasChildren; };
 const isOpen = (item) => (open.has(item.key) ? open.get(item.key) : item.node.kind === 'block');

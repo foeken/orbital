@@ -16,7 +16,7 @@ const { NOT_CONNECTED, S, VIEWS, errText, idKind, isSearch, isSpace, metaSigs, p
 const { cachedNodeHue, graphRow, members, rememberNodeHue, toNode } = require('./main/rows');
 const { accessContext, chatOutline, createDocument, creationOptions, documentAction, history, info, linkShared, metaSig, moveTarget, mut, mutTasks, onChange, op, outlineWithReferences, setSensitive } = require('./main/documents');
 const { callOf, pathOf, related, searchChildren, spaceChildren, summaryUri } = require('./main/related');
-const { hiddenRules, listFilter, preset, refresh, search, searchList, setHidden, setViewFilter, start, viewFilter, viewRows } = require('./main/views');
+const { hiddenRules, listFilter, preset, refresh, search, searchCreate, searchList, searchTitle, setHidden, setViewFilter, start, viewFilter, viewRows } = require('./main/views');
 const { nodePin, pinState, pinTree, pinned, setPin, todayNode, weekNode, weekTitle } = require('./main/pins');
 const { image } = require('./main/images');
 
@@ -96,6 +96,9 @@ ipcMain.handle('doc:creationOptions', () => creationOptions());
 ipcMain.handle('doc:create', (_e, title, opts) => createDocument(title, opts || {}));
 ipcMain.handle('search', (_e, query) => search(query));
 ipcMain.handle('search:list', () => searchList());
+// The renderer sends a view id, never a query: the filter→query vocabulary lives in sdk/query, which classic
+// renderer scripts cannot require, and main already holds the canonical filter for every view.
+ipcMain.handle('search:create', (_e, id, title) => searchCreate(id, title));
 ipcMain.handle('history:undo', () => history(undoStack, redoStack, 'undo', 'canUndo'));
 ipcMain.handle('history:redo', () => history(redoStack, undoStack, 'redo', 'canRedo'));
 ipcMain.handle('doc:delete', (_e, id) => documentAction(id, 'softDelete'));
@@ -202,7 +205,7 @@ ipcMain.handle('sync:login', async () => {
 });
 
 if (process.env.TANA_MAIN_TEST) {
-  module.exports = { resolveInitialAuth, graphRow, cachedNodeHue, VIEWS, toNode, outlineWithReferences, chatOutline, op, onChange, documentAction, createDocument, creationOptions, search, viewRows, spaceChildren, start, refresh, related, callOf, weekTitle, weekNode,
+  module.exports = { resolveInitialAuth, graphRow, cachedNodeHue, VIEWS, toNode, outlineWithReferences, chatOutline, op, onChange, documentAction, createDocument, creationOptions, search, viewFilter, searchCreate, searchTitle, viewRows, spaceChildren, start, refresh, related, callOf, weekTitle, weekNode,
     statusSnapshot: () => ({ ...S.status }), rememberNodeHue, restoredBounds,
     undo: () => history(undoStack, redoStack, 'undo', 'canUndo'), redo: () => history(redoStack, undoStack, 'redo', 'canRedo'), visibleGraphNodes, pinTree,
     nodePin,

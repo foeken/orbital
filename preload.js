@@ -22,9 +22,10 @@ contextBridge.exposeInMainWorld('api', {
   deleteDocument: (id) => ipcRenderer.invoke('doc:delete', id), // native soft delete; undo restores
   restoreDocument: (id) => ipcRenderer.invoke('doc:restore', id), // native restore; undo deletes again
   creationOptions: () => ipcRenderer.invoke('doc:creationOptions'), // {options:[{id,kind,title,icon?,typeUri?,appliesTo?,ownerUri?,selectable,reason?}],complete}
-  createDocument: (title, opts) => ipcRenderer.invoke('doc:create', title, opts), // nonblank title; opts:{kind:doc|task|meeting|chat|custom,typeUri?}; returns Node to zoom
+  createDocument: (title, opts) => ipcRenderer.invoke('doc:create', title, opts), // nonblank title; opts:{kind:doc|task|meeting|chat|custom|search,typeUri?,query?}; a search requires query and nothing else may carry one; returns Node to zoom
   search: (query) => ipcRenderer.invoke('search', query),
   searches: () => ipcRenderer.invoke('search:list'), // saved search documents, newest first
+  createSearch: (viewId, title) => ipcRenderer.invoke('search:create', viewId, title), // saves that view's current filter as a saved search; returns the Node to zoom
   setTitle: (docId, title) => ipcRenderer.invoke('doc:setTitle', docId, title),
   setDone: (docId, done) => ipcRenderer.invoke('doc:setDone', docId, done),
   setState: (docId, state) => ipcRenderer.invoke('doc:setState', docId, state),

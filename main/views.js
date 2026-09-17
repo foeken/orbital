@@ -3,10 +3,10 @@ const db = require('../db');
 const path = require('node:path');
 const { peerIdentity } = require('../tana-session');
 const { createTanaClient } = require('../sdk');
-const { parseQuery, searchParams, needsTypes, viewParams, validViewFilter, viewTypes, VIEW_PRESETS, hideRules, isHidden } = require('../sdk/query');
-const { S, deletedNodes, errText, idKind, isMcp, memberTitle, now, truncatedViews, redoStack, send, setStatus, subscribed, undoStack, visibleGraphNodes } = require('./state');
+const { parseQuery, searchParams, needsTypes, viewParams, filterToSearchQuery, validViewFilter, viewTypes, VIEW_PRESETS, hideRules, isHidden } = require('../sdk/query');
+const { NOT_CONNECTED, S, deletedNodes, errText, idKind, isMcp, memberTitle, now, truncatedViews, redoStack, send, setStatus, subscribed, undoStack, visibleGraphNodes } = require('./state');
 const { graphRow, rememberNodeHue, resolveTypes, toNode, typesByTitle } = require('./rows');
-const { inHistory, onChange, subscribe } = require('./documents');
+const { createDocument, inHistory, onChange, subscribe } = require('./documents');
 
 
 // Persisted view filters are merged over their preset; an invalid saved value cannot strand a view across restarts.
@@ -84,6 +84,31 @@ async function searchList() {
   return nodes.filter((n) => !isHidden(n.title, rules)).map((n) => toNode(graphRow(n)));
 }
 
+// "Save this query as a search": the view's own stored filter, in the document vocabulary, as a new saved search.
+// The translation happens here rather than in the renderer because the renderer is classic scripts with no require,
+// so it cannot reach sdk/query — and main already owns the canonical filter anyway (viewFilter merges the preset
+// with whatever the user changed). The renderer therefore sends a view id, never a query it built itself.
+const SEARCH_NAME = { inbox: 'Inbox', tasks: 'Tasks', meetings: 'Meetings', library: 'Library', chats: 'Chats', people: 'People' };
+// A name from what the filter actually says, so a saved search does not arrive called "Untitled". Tana names its
+// own searches for the intent rather than the mechanism; this is the closest main can get without the pill labels,
+// which live in the renderer.
+function searchTitle(id, filter) {
+  const base = SEARCH_NAME[id] || 'Search';
+  const bits = [];
+  if (filter.text && filter.text.trim()) bits.push('"' + filter.text.trim() + '"');
+  if (Array.isArray(filter.states) && filter.states.length) bits.push(filter.states.join(', '));
+  if (filter.assignee === 'me') bits.push('mine');
+  else if (filter.assignee === 'unassigned') bits.push('unassigned');
+  return bits.length ? base + ' — ' + bits.join(' · ') : base;
+}
+async function searchCreate(id, title) {
+  if (!S.client) throw new Error(NOT_CONNECTED);
+  const filter = viewFilter(id); // throws on an unknown view before anything is created
+  const query = filterToSearchQuery(filter, S.me && S.me.userUri);
+  const name = typeof title === 'string' && title.trim() ? title.trim() : searchTitle(id, filter);
+  return createDocument(name, { kind: 'search', query });
+}
+
 async function start() {
   // A second login must not leave the previous stream, its listeners and its subscriptions running: the stale S.client
   // would keep emitting changes, and the new one would skip every id the old subscription set still claims.
@@ -151,4 +176,4 @@ async function setHidden(list) {
 // ponytail: on-demand subscriptions last for the S.session; drop the oldest if a long S.session ever holds too many.
 
 
-module.exports = { preset, viewFilter, setViewFilter, hiddenRules, viewRows, search, searchList, start, refresh, doRefresh, listFilter, setHidden };
+module.exports = { preset, viewFilter, setViewFilter, hiddenRules, viewRows, search, searchList, searchCreate, searchTitle, start, refresh, doRefresh, listFilter, setHidden };

@@ -61,12 +61,35 @@ function renderPills(show) {
   }));
   // rows kept in place (holdRow) no longer match the view: offer to redraw it as it is now
   if (defs.length && needsCleanup(shownDocs())) box.append(cleanupPill());
+  // a query worth coming back to becomes a place: keep it as a saved search
+  if (defs.length && tana.createSearch) box.append(saveSearchPill());
   const again = focusedId && box.querySelector('.pill[data-id="' + focusedId + '"]');
   if (again) again.focus();
   const open = box.querySelector('.menu'); // stop before the window edge; the rows scroll inside
   if (open) open.style.maxHeight = Math.min(360, innerHeight - open.getBoundingClientRect().top - 12) + 'px';
   const active = box.querySelector('.menu .mrow.active');
   if (active) active.scrollIntoView({ block: 'nearest', inline: 'nearest', container: 'nearest' });
+}
+// "Save as search": keep what the pills are showing as a saved search document, so a query worth returning to
+// becomes somewhere to go. The renderer sends only the view id — the filter→query vocabulary lives in sdk/query,
+// which classic renderer scripts cannot require, and main already holds the canonical filter for every view.
+// The new search is opened straight away: saving something you cannot see saved reads as nothing happening.
+function saveSearchPill() {
+  const pill = document.createElement('div'); pill.className = 'pill savesearch'; pill.tabIndex = 0; pill.dataset.id = 'saveSearch'; pill.setAttribute('role', 'button');
+  pill.title = 'Keep this query as a saved search';
+  const s = document.createElement('span'); s.innerHTML = iconSvg('search'); pill.append(s.firstChild, 'Save as search');
+  const go = () => run(async () => {
+    const node = await tana.createSearch(view);
+    if (!node || !node.id) return;
+    if (typeof loadSearches === 'function') loadSearches(); // the Cmd+K Searches group should list it without a relaunch
+    goTo(node.id);
+  });
+  pill.onclick = go;
+  pill.onkeydown = (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
+    else if (e.key === 'ArrowLeft' && pill.previousElementSibling) { e.preventDefault(); pill.previousElementSibling.focus(); }
+  };
+  return pill;
 }
 // Clean up: let go of the rows a status change kept in place and draw the view the way it is now. Like the last pill,
 // Right moves on to the first row.

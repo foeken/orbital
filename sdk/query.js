@@ -149,4 +149,32 @@ function searchQueryParams(query, me, limit = 1000) {
   return p;
 }
 
-module.exports = { parseQuery, searchParams, needsTypes, viewParams, searchQueryParams, validViewFilter, viewTypes, VIEW_PRESETS, VIEW_KINDS, KIND_VIEWS, hideRules, isHidden };
+// The inverse of searchQueryParams: a view's filter as a saved search's stored query, so "save this query as a
+// search" keeps what the pills are showing. It lives beside its inverse so one test can round-trip the pair.
+// Two asymmetries are deliberate, not oversights:
+//   - `participant: 'me'` has no viewer-relative form in the stored schema (it has participantUris and no
+//     participantsViewer, unlike assignedTo/createdBy), so it is baked in as the user's own uri. A search saved
+//     from Meetings therefore names you rather than "whoever is viewing" — correct for a personal search.
+//   - `window: 'recent'` becomes a concrete eventTime range at save time, since the stored schema's preset
+//     vocabulary (recent/upcoming/today/past) is not translated on the way back out.
+function filterToSearchQuery(filter = {}, me) {
+  const q = {};
+  const kinds = Array.isArray(filter.types) && filter.types.length ? filter.types : null;
+  if (kinds) q.types = [...new Set(kinds.map((k) => KIND_NODE_TYPE[k]).filter(Boolean))];
+  if (Array.isArray(filter.states) && filter.states.length) q.stateTypes = [...filter.states];
+  if (typeof filter.text === 'string' && filter.text.trim()) q.textQuery = filter.text.trim();
+  const a = filter.assignee;
+  // 'me' without a signed-in user stores nothing: falling through to the uri branch would write the literal
+  // string 'me' as a user-profile uri, which matches nobody and reads as a real filter for ever after.
+  if (a === 'me') { if (me) q.assignedToViewer = true; }
+  else if (a === 'unassigned') q.unassigned = true;
+  else if (a && a !== 'anyone') q.assignedTo = [a];
+  if (filter.participant === 'me' && me) q.participantUris = [me];
+  if (filter.window === 'recent') {
+    const start = new Date(); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() - 7);
+    q.eventTime = { min: start.getTime(), max: start.getTime() + 14 * 864e5 };
+  }
+  return q;
+}
+
+module.exports = { parseQuery, searchParams, needsTypes, viewParams, searchQueryParams, filterToSearchQuery, validViewFilter, viewTypes, VIEW_PRESETS, VIEW_KINDS, KIND_VIEWS, hideRules, isHidden };

@@ -23,12 +23,12 @@ function ulid(now = Date.now()) {
 // task fields); 'task': plus the open state assigned to byUri; 'meeting': a 'tana:event:' document laid out like a
 // Tana-created event (tana:event:01exampley0000000000000000, without the calendar-provider fields), starting at
 // the next half hour for 30 minutes.
-function initDocument(loro, title, byUri, { kind = 'doc', now = Date.now(), entityTypeUri, ownerUri } = {}) {
-  if (!['doc', 'task', 'meeting', 'chat'].includes(kind)) throw new Error('unknown kind ' + kind);
+function initDocument(loro, title, byUri, { kind = 'doc', now = Date.now(), entityTypeUri, ownerUri, query } = {}) {
+  if (!['doc', 'task', 'meeting', 'chat', 'search'].includes(kind)) throw new Error('unknown kind ' + kind);
   if (entityTypeUri !== undefined && (!/^tana:type:[0-9a-z]{26}$/.test(entityTypeUri) || kind === 'chat')) throw new Error('Invalid custom type');
   if (ownerUri !== undefined && !/^tana:space:[0-9a-z]{26}$/.test(ownerUri)) throw new Error('Invalid type home space');
   const data = loro.getMap('data');
-  data.set('type', kind === 'meeting' ? 'event' : kind === 'chat' ? 'chat' : 'text');
+  data.set('type', kind === 'meeting' ? 'event' : kind === 'chat' ? 'chat' : kind === 'search' ? 'search' : 'text');
   if (entityTypeUri) data.set('entityTypeUri', entityTypeUri);
   if (ownerUri) data.set('ownerUri', ownerUri);
   data.set('title', title);
@@ -37,6 +37,18 @@ function initDocument(loro, title, byUri, { kind = 'doc', now = Date.now(), enti
   const p = data.setContainer('participants', new LoroMap()).setContainer(byUri, new LoroMap());
   p.set('type', 'user');
   p.set('role', 'admin');
+  // A saved search carries no sharedPinDates: a real one (raw container dump, 2026-09-17) has exactly
+  // data{type,createdAt,title,restricted,participants} plus the query and view roots, and empty content and
+  // linkSharing — no ownerUri, since a Library-level search has no owner. Its query is written separately by
+  // the caller (setSearchQuery); an empty query map here would be indistinguishable from an unreadable one,
+  // which searchChildren treats as a failure, so the document is created with its query already in place.
+  if (kind === 'search') {
+    // The query is written here rather than after creation: searchChildren treats an empty query map as an
+    // unreadable document and refuses to run it, so a search created without one would be born broken.
+    writeSearchQuery(loro, query);
+    loro.getMap('view');
+    return; // no sharedPinDates, no assignedToUris, no outline content
+  }
   data.setContainer('sharedPinDates', new LoroList());
   if (kind === 'chat') {
     data.setContainer('participantUris', new LoroList());
@@ -168,6 +180,40 @@ async function audienceMetadata(document, userUri, graph, sync) {
 // Keep the original SDK classification contract for existing callers.
 async function audience(...args) { return (await audienceMetadata(...args)).audience; }
 
+// A saved search's stored query lives in a root container of its own, not in data. Tana's own client assigns
+// every key on write (arrays defaulting to empty) rather than patching, so a stored query is always whole and a
+// removed filter cannot linger; this does the same. Keys absent from `query` are written as empty, which is what
+// a real saved search carries — but the map as a whole is never left empty, since searchChildren reads an empty
+// map as an unreadable document and refuses to run it.
+const SEARCH_QUERY_LISTS = ['types', 'entityTypeUris', 'ownerUris', 'createdBy', 'assignedTo', 'participantUris', 'stateTypes', 'workflowStates'];
+const SEARCH_QUERY_FLAGS = ['textQuery', 'assignedToViewer', 'createdByViewer', 'unassigned', 'visibility'];
+function writeSearchQuery(loro, query = {}) {
+  const q = loro.getMap('query');
+  for (const key of SEARCH_QUERY_LISTS) {
+    const list = q.setContainer(key, new LoroList());
+    for (const v of Array.isArray(query[key]) ? query[key] : []) list.push(v);
+  }
+  // Set or delete, never skip: a flag left alone would survive a rewrite that dropped it, so turning off
+  // "assigned to me" and saving would silently keep it on — the lingering filter this whole function exists
+  // to prevent. Lists are replaced wholesale for the same reason.
+  for (const key of SEARCH_QUERY_FLAGS) {
+    if (query[key] !== undefined && query[key] !== null) q.set(key, query[key]);
+    else if (q.get(key) !== undefined) q.delete(key);
+  }
+  const attrs = q.setContainer('attributes', new LoroMap());
+  for (const [k, v] of Object.entries(query.attributes || {})) attrs.set(k, v);
+  // eventTime is set or removed for the same reason the flags are: a cleared date window that lingered would
+  // keep filtering a search the user thought they had widened.
+  if (query.eventTime && typeof query.eventTime === 'object') {
+    const t = q.setContainer('eventTime', new LoroMap());
+    for (const [k, v] of Object.entries(query.eventTime)) if (v !== undefined) t.set(k, v);
+  } else if (q.get('eventTime') !== undefined) q.delete('eventTime');
+}
+function setSearchQuery(document, query) {
+  if ((document.data.get('type')) !== 'search') throw new Error('not a saved search');
+  document.transact((loro) => { writeSearchQuery(loro, query); });
+}
+
 // Rewrites the task's existing list container; empty is the supported "unassigned" value.
 function setAssignees(document, uris, byUri) {
   if (!Array.isArray(uris)) throw new Error('assignees must be an array of user-profile URIs');
@@ -204,4 +250,4 @@ function render(node) {
   return kids.map(render).join(block ? '\n' : '');
 }
 
-module.exports = { readNode, editable, setTitle, setState, taskMeta, audience, audienceMetadata, setAssignees, contentText, ulid, initDocument, STATE_TYPES };
+module.exports = { readNode, editable, setTitle, setState, taskMeta, audience, audienceMetadata, setAssignees, setSearchQuery, contentText, ulid, initDocument, STATE_TYPES };

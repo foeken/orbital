@@ -71,6 +71,12 @@ async function createDocument(title, opts = {}) {
   let config = {kind:opts.kind || 'doc'};
   if (config.kind === 'custom') config = await customCreation(opts.typeUri);
   else if (opts.typeUri !== undefined) throw new Error('Custom type requires kind custom');
+  // A saved search is created from a query, never from a bare title: initDocument writes the query container at
+  // birth because searchChildren reads an empty one as unreadable and refuses to run it.
+  if (config.kind === 'search') {
+    if (!opts.query || typeof opts.query !== 'object' || Array.isArray(opts.query)) throw new Error('A saved search needs a query');
+    config = {...config, query: opts.query};
+  } else if (opts.query !== undefined) throw new Error('Only a saved search carries a query');
   if (!Object.hasOwn(KINDS, config.kind)) throw new Error('Unsupported creation kind'); // 'constructor' is a truthy lookup, not a kind
   const id = KINDS[config.kind] + ulid();
   const doc = await subscribe(id, loro => initDocument(loro, title, S.me.userUri, config));

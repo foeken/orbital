@@ -8,11 +8,11 @@ const { createRequire } = require('node:module');
 const { create, toBinary, fromBinary, toJson, fromJson } = require('@bufbuild/protobuf');
 const { createRouterTransport, ConnectError, Code } = require('@connectrpc/connect');
 const { message, SyncService } = require('../sdk/proto/descriptors');
-const { createTransport, SyncConnection, Document, derivePeerId, readNode, setTitle, setState, taskMeta, setAssignees, contentText, ulid, initDocument, STATE_TYPES } = require('../sdk');
+const { createTransport, SyncConnection, Document, derivePeerId, readNode, setTitle, setState, taskMeta, setAssignees, setSearchQuery, contentText, ulid, initDocument, STATE_TYPES } = require('../sdk');
 const outline = require('../sdk/content');
 const { fetchImage } = require('../sdk/assets');
 const { LoroMap, LoroList } = require('loro-crdt');
-const { parseQuery, searchParams, needsTypes, viewParams, searchQueryParams, validViewFilter, viewTypes, VIEW_PRESETS, hideRules, isHidden } = require('../sdk/query');
+const { parseQuery, searchParams, needsTypes, viewParams, searchQueryParams, filterToSearchQuery, validViewFilter, viewTypes, VIEW_PRESETS, hideRules, isHidden } = require('../sdk/query');
 const pins = require('../sdk/pins');
 
 const ORG = 'org_01EXAMPLE00000000000000000', DOC = 'tana:text:01exampleh0000000000000000', ME = 'tana:user-profile:01examplei0000000000000000';
@@ -44,6 +44,47 @@ function mainHelpers() {
 }
 
 async function main() {
+  {
+    // A created saved search must match a real one, byte shape for byte shape. The reference is a raw container
+    // dump of an actual Tana saved search (2026-09-17): data{type,createdAt,title,restricted,participants} and
+    // the query and view roots — with NO ownerUri (a Library-level search has no owner) and NO sharedPinDates,
+    // which initDocument writes for every other kind. Those two absences are the easiest thing to get silently
+    // wrong, so they are asserted rather than assumed.
+    const q = { types: ['text'], stateTypes: ['proposed', 'open'], assignedToViewer: true };
+    const d = new Document('tana:search:' + ulid());
+    d.transact((l) => initDocument(l, 'My Tasks', ME, { kind: 'search', now: 1789584742091, query: q }));
+    const data = d.data.toJSON();
+    assert.equal(data.type, 'search', 'a saved search declares its own kind');
+    assert.equal(data.title, 'My Tasks');
+    assert.equal(data.createdAt, 1789584742091);
+    assert.equal(data.restricted, true);
+    assert.deepEqual(data.participants, { [ME]: { type: 'user', role: 'admin' } }, 'the creator is an admin participant, which is what editable() reads to allow a rename');
+    assert.equal(data.sharedPinDates, undefined, 'a real saved search carries no sharedPinDates');
+    assert.equal(data.ownerUri, undefined, 'and no ownerUri: a Library-level search has no owner');
+    const stored = d.loro.getMap('query').toJSON();
+    assert.deepEqual(stored.types, ['text'], 'the query is written at creation, not left empty');
+    assert.deepEqual(stored.stateTypes, ['proposed', 'open']);
+    assert.equal(stored.assignedToViewer, true, 'viewer-relative flags survive the write');
+    assert.deepEqual(stored.assignedTo, [], 'every list key is present, empty when unset, as a real one is');
+    assert.deepEqual(stored.attributes, {});
+    assert.ok(Object.keys(stored).length > 0, 'never an empty query map: searchChildren reads that as unreadable and refuses to run it');
+    assert.deepEqual(d.loro.toJSON().view, {}, 'a view root exists, empty until the user groups or sorts');
+    // Replacing, not patching: Tana assigns every key on write, so a filter the user removed cannot linger.
+    setSearchQuery(d, { types: ['event'] });
+    const after = d.loro.getMap('query').toJSON();
+    assert.deepEqual(after.types, ['event']);
+    assert.deepEqual(after.stateTypes, [], 'the states from the previous query are gone, not merged');
+    assert.equal(after.assignedToViewer, undefined, 'and so is the viewer flag');
+    // Same lingering-filter risk as the flags: a cleared date window must go, not survive the rewrite.
+    setSearchQuery(d, { types: ['event'], eventTime: { min: 1, max: 2 } });
+    assert.deepEqual(d.loro.getMap('query').toJSON().eventTime, { min: 1, max: 2 }, 'a date window is stored');
+    setSearchQuery(d, { types: ['event'] });
+    assert.equal(d.loro.getMap('query').toJSON().eventTime, undefined, 'and clearing it removes the window rather than leaving it filtering');
+    const notASearch = new Document(DOC);
+    notASearch.transact((l) => initDocument(l, 'plain', ME));
+    assert.throws(() => setSearchQuery(notASearch, { types: ['text'] }), /not a saved search/, 'the query container is only written on a search');
+    console.log('ok  a created saved search matches a real one: no ownerUri, no sharedPinDates, query written at birth');
+  }
   {
     const access = require('../sdk/access'), docs = new Map();
     const make = (kind, title = kind) => { const d = new Document('tana:' + kind + ':' + ulid()); d.transact(l => { initDocument(l,title,ME); l.getMap('data').set('type',kind); }); docs.set(d.id,d); return d; };
@@ -213,10 +254,49 @@ async function main() {
     const event=await backend.createDocument('Working session',{kind:'custom',typeUri:eventType.id});
     assert.ok(event.id.startsWith('tana:event:'));assert.equal(readNode(docs.get(event.id)).entityTypeUri,eventType.id);
     assert.equal(readNode(docs.get(event.id)).origin,'tana');assert.equal(created.length,4);
+    // A saved search is created from a query, never from a bare title. Both directions are refused, and neither
+    // leaves a half-made document behind: a search born with an empty query map would be unopenable, since
+    // searchChildren reads that as unreadable and fails closed.
+    await assert.rejects(backend.createDocument('No query',{kind:'search'}),/needs a query/);
+    await assert.rejects(backend.createDocument('Not a search',{kind:'doc',query:{types:['text']}}),/Only a saved search carries a query/);
+    assert.equal(created.length,4,'a refused search creates nothing');
+    const search=await backend.createDocument('My Tasks',{kind:'search',query:{types:['text'],assignedToViewer:true}});
+    assert.ok(search.id.startsWith('tana:search:'),'a saved search gets its own id kind');
+    const searchDoc=docs.get(search.id);
+    assert.equal(readNode(searchDoc).type,'search');
+    assert.deepEqual(searchDoc.loro.getMap('query').toJSON().types,['text'],'the query survives the real create path, not just initDocument');
+    assert.equal(searchDoc.loro.getMap('query').toJSON().assignedToViewer,true);
+    assert.equal(readNode(searchDoc).sharedPinDates,undefined,'and it still carries none of the fields a real one lacks');
+    assert.equal(created.length,5);
+    // "Save this query as a search" goes through main, not the renderer: the renderer sends a view id, main
+    // translates the filter it already owns. An unknown view must be refused by viewFilter before anything exists.
+    await assert.rejects(backend.searchCreate('nope'),/unknown view/);
+    assert.equal(created.length,5,'a bad view id creates nothing');
+    const fromLibrary=await backend.searchCreate('library');
+    assert.ok(fromLibrary.id.startsWith('tana:search:'));
+    const libQuery=docs.get(fromLibrary.id).loro.getMap('query').toJSON();
+    // The stored query is the *written* form of the spec, not the spec itself: writeSearchQuery materialises every
+    // key so a filter the user removes cannot linger, while filterToSearchQuery returns only what carries a value.
+    // So the spec's keys must all be present and equal, and the rest must be present and empty.
+    const libSpec=filterToSearchQuery(backend.viewFilter('library'),ME);
+    for(const [k,v] of Object.entries(libSpec)) assert.deepEqual(libQuery[k],v,'stored query keeps '+k+' as the view asked');
+    assert.deepEqual(libQuery.assignedTo,[],'and every other list key is written empty rather than left out');
+    assert.deepEqual(libQuery.entityTypeUris,[]);
+    assert.deepEqual(libQuery.workflowStates,[]);
+    assert.deepEqual(libQuery.attributes,{});
+    assert.deepEqual(libQuery.types,['text'],'and it is in the document vocabulary, not the UI one');
+    assert.equal(libQuery.assignedToViewer,true,'the Library preset is assigned to me, stored viewer-relative');
+    // Named from the filter rather than "Untitled", and an explicit title wins.
+    assert.equal(backend.searchTitle('library',{states:['open'],assignee:'me'}),'Library — open · mine');
+    assert.equal(backend.searchTitle('tasks',{}),'Tasks','a bare filter still names its view');
+    assert.equal(backend.searchTitle('library',{text:'  dpa  '}),'Library — "dpa"');
+    const named=await backend.searchCreate('library','Quarterly review');
+    assert.equal(readNode(docs.get(named.id)).title,'Quarterly review','an explicit title beats the derived one');
+    assert.equal(created.length,7);
     space.transact(l=>l.getMap('data').get('participants').get(ME).set('role','viewer'));
     await assert.rejects(backend.createDocument('Blocked',{kind:'custom',typeUri:textType.id}),/permission/);
     await assert.rejects(backend.createDocument('Invalid',{kind:'custom',typeUri:unknownType.id}),/Unsupported type target/);
-    assert.equal(created.length,4,'invalid scope/types do not create partial documents');
+    assert.equal(created.length,7,'invalid scope/types do not create partial documents'); // 7: three legitimate saved searches are created above
     console.log('ok  creation chooser: native chats, actual typed docs/events, home-space validation and unsaved blank drafts');
   }
   {
@@ -1021,6 +1101,35 @@ async function main() {
     assert.equal(searchQueryParams({ unassigned: true }, ME).unassigned, true);
     assert.equal(searchQueryParams({ visibility: 'private' }, ME).visibility, undefined,
       'visibility has no graph equivalent: preserved in the document, ignored on execute');
+    // "Save this query as a search" is the inverse of the above, so the pair round-trips: what the pills show
+    // becomes a stored query, and that stored query asks the graph the same thing the view was asking.
+    const libFilter = { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me', text: ' dpa ' };
+    const saved = filterToSearchQuery(libFilter, ME);
+    assert.deepEqual(saved, { types: ['text'], stateTypes: ['proposed', 'open'], textQuery: 'dpa', assignedToViewer: true },
+      'a Library filter becomes a stored query in the document vocabulary, not the UI one');
+    const roundTrip = searchQueryParams(saved, ME);
+    assert.deepEqual(roundTrip.nodeTypes, ['text'], 'and asking the graph with it means the same thing');
+    assert.deepEqual(roundTrip.stateTypes, ['proposed', 'open']);
+    assert.deepEqual(roundTrip.assignedTo, [ME], 'assignedToViewer resolves back to the signed-in user');
+    assert.equal(roundTrip.textQuery, 'dpa');
+    assert.deepEqual(filterToSearchQuery({ types: ['tasks', 'docs'] }, ME).types, ['text'],
+      'two UI kinds that share a graph kind collapse to one, as viewParams does');
+    assert.equal(filterToSearchQuery({ assignee: 'unassigned' }, ME).unassigned, true);
+    assert.deepEqual(filterToSearchQuery({ assignee: OTHER }, ME).assignedTo, [OTHER], 'a named assignee is stored as that uri');
+    assert.equal(filterToSearchQuery({ assignee: 'anyone' }, ME).assignedTo, undefined, 'and "anyone" stores no assignee at all');
+    // 'me' with nobody signed in must store nothing: writing the literal string 'me' as a user-profile uri would
+    // match no one and read as a real assignee filter for the life of the document.
+    const noUser = filterToSearchQuery({ types: ['tasks'], assignee: 'me' }, undefined);
+    assert.equal(noUser.assignedTo, undefined, 'no signed-in user means no assignee uri, not the string "me"');
+    assert.equal(noUser.assignedToViewer, undefined, 'and no viewer flag either, since there is no viewer to resolve');
+    assert.deepEqual(noUser.types, ['text'], 'the rest of the filter still translates');
+    assert.equal(filterToSearchQuery({ text: '   ' }, ME).textQuery, undefined, 'blank text is not a filter on the way in either');
+    // The two documented asymmetries: neither has a viewer-relative form in the stored schema.
+    assert.deepEqual(filterToSearchQuery({ participant: 'me' }, ME).participantUris, [ME],
+      'participant has no viewer-relative flag, so a saved search names the user rather than the viewer');
+    const windowed = filterToSearchQuery({ types: ['meetings'], window: 'recent' }, ME);
+    assert.equal(typeof windowed.eventTime.min, 'number', 'a recent window becomes a concrete range at save time');
+    assert.equal(windowed.eventTime.max - windowed.eventTime.min, 14 * 864e5, 'spanning the same fourteen days the view asked for');
     // A kind page is that kind, whatever a stored filter from an older build says.
     assert.deepEqual(viewTypes('people', { types: ['meetings', 'people'], states: null }), { types: ['people'], states: null }, 'People lists people');
     assert.deepEqual(viewTypes('meetings', { types: [] }).types, ['meetings']);

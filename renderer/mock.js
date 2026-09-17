@@ -146,6 +146,20 @@ function mockApi() {
         && d.text.toLowerCase().includes(text)).map(info), truncated: false };
     },
     searches: async () => structuredClone(all.filter((d) => d.id.startsWith('tana:search:')).map(info)),
+    // Saving the current view as a search: main translates the filter it owns, so the mock only needs to produce a
+    // row of the same shape createDocument does — the real channel returns a Node, and a divergence here is exactly
+    // what let a mock-only shape mismatch through once before.
+    createSearch: async (viewId, title) => {
+      const f = filters[viewId] || {};
+      const bits = [];
+      if (f.text && f.text.trim()) bits.push('"' + f.text.trim() + '"');
+      if (Array.isArray(f.states) && f.states.length) bits.push(f.states.join(', '));
+      if (f.assignee === 'me') bits.push('mine'); else if (f.assignee === 'unassigned') bits.push('unassigned');
+      const base = { inbox: 'Inbox', tasks: 'Tasks', meetings: 'Meetings', library: 'Library', chats: 'Chats', people: 'People' }[viewId] || 'Search';
+      const n = { id: 'tana:search:mocknew' + (++seq), text: (title && title.trim()) || (bits.length ? base + ' — ' + bits.join(' · ') : base), kind: 'document', hasChildren: true, editable: true, tags: [{ label: 'search', color: 'grey' }] };
+      created[n.id] = n; content[n.id] = []; all.push(n);
+      return info(n);
+    },
     // references resolve on read, as main does: the row always shows the target's current title and state
     children: async (docId) => structuredClone(content[docId] || []).map((n) => (n.type === 'reference' ? { ...n, reference: { ...n.reference, node: info([...all, ...members].find((d) => d.id === n.reference.uri)) } } : n)),
     node: async (docId) => {
