@@ -83,13 +83,16 @@ async function resolveHue(id) {
   catch { hueLoaded.delete(id); }
 }
 // plain untyped document (no state, no type): 'doc' icon + chip; typed documents keep their type tag and the plain bullet
-const plainRow = (id, title, updatedAt, typeUri, hue) => (isSpace(id)
-  ? { id, title, done: 0, icon: 'space', hue, tags: [hue === undefined ? TAG.space : { ...TAG.space, hue }], sortKey: updatedAt, updatedAt }
+// createdAt is trailing so the other callers of these builders keep the shape they pass today. A row that is handed
+// a creation time has to carry it: nodeMeta is the backfill for a cached row, not a substitute for what the graph
+// just said, and without this Sort by Created silently did nothing for every kind that is not a task or a meeting.
+const plainRow = (id, title, updatedAt, typeUri, hue, createdAt) => (isSpace(id)
+  ? { id, title, done: 0, icon: 'space', hue, tags: [hue === undefined ? TAG.space : { ...TAG.space, hue }], sortKey: updatedAt, updatedAt, createdAt }
   // a typed document without its own icon shows the generic type glyph, tinted with its type's hue
-  : { id, title, done: 0, icon: typeUri ? 'type' : 'doc', hue: hueWithType(hue, typeUri), tags: typeUri ? typeTag(typeUri) : [hue === undefined ? TAG.doc : { ...TAG.doc, hue }], sortKey: updatedAt, updatedAt });
-const memberRow = (id, title, updatedAt, hue) => ({ id, title, done: 0, icon: 'member', hue, tags: [hue === undefined ? TAG.member : { ...TAG.member, hue }], sortKey: updatedAt, updatedAt });
+  : { id, title, done: 0, icon: typeUri ? 'type' : 'doc', hue: hueWithType(hue, typeUri), tags: typeUri ? typeTag(typeUri) : [hue === undefined ? TAG.doc : { ...TAG.doc, hue }], sortKey: updatedAt, updatedAt, createdAt });
+const memberRow = (id, title, updatedAt, hue, createdAt) => ({ id, title, done: 0, icon: 'member', hue, tags: [hue === undefined ? TAG.member : { ...TAG.member, hue }], sortKey: updatedAt, updatedAt, createdAt });
 // chat, canvas, agent and skill each have their own glyph in the renderer's icon set, so the kind is the icon
-const kindRow = (id, kind, title, updatedAt, hue) => ({ id, title, done: 0, icon: PLAIN_KINDS.has(kind) ? kind : null, hue, tags: [hue === undefined ? { label: kind, color: 'grey' } : { label: kind, hue }], sortKey: updatedAt, updatedAt });
+const kindRow = (id, kind, title, updatedAt, hue, createdAt) => ({ id, title, done: 0, icon: PLAIN_KINDS.has(kind) ? kind : null, hue, tags: [hue === undefined ? { label: kind, color: 'grey' } : { label: kind, hue }], sortKey: updatedAt, updatedAt, createdAt });
 // lowercase type title -> uri for #Type search filters; the type list is loaded once per S.session (and seeds typeTitles)
 async function typesByTitle() {
   S.typesLoaded ||= S.client.graph.listNodes({ nodeTypes: ['type'], limit: 200 }).then(({ nodes }) => { nodes.forEach(rememberType); }, () => { S.typesLoaded = null; });
@@ -120,10 +123,10 @@ const toNode = (r) => ({ id: r.id, title: r.title, text: r.title, kind: 'documen
 function graphRow(n, withDate) {
   n = liveState(n);
   if (n.calendarEvent || n.id.startsWith('tana:event:')) return meetingRow(n, withDate);
-  if (n.userProfile || idKind(n.id) === 'user-profile') return memberRow(n.id, memberTitle(n), n.updateTime || now(), hueOf(n));
-  if (PLAIN_KINDS.has(idKind(n.id))) return kindRow(n.id, idKind(n.id), n.title || '', n.updateTime || now(), hueOf(n));
+  if (n.userProfile || idKind(n.id) === 'user-profile') return memberRow(n.id, memberTitle(n), n.updateTime || now(), hueOf(n), n.createTime);
+  if (PLAIN_KINDS.has(idKind(n.id))) return kindRow(n.id, idKind(n.id), n.title || '', n.updateTime || now(), hueOf(n), n.createTime);
   if (n.state && n.state.type) return taskRow(n);
-  return plainRow(n.id, n.title || '', n.updateTime || now(), n.entityType, hueOf(n));
+  return plainRow(n.id, n.title || '', n.updateTime || now(), n.entityType, hueOf(n), n.createTime);
 }
 
 // all org members, cached per S.session, by display name

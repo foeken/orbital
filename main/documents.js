@@ -139,8 +139,13 @@ const notifyDefault = (n) => {
   if (!me) return false;
   // restricted === true is what makes the grant this document's own. Access that comes from the space it lives in
   // leaves the document unrestricted, and following everything in a shared space is not what was asked for.
-  const direct = n.restricted === true && !!(n.participants && n.participants[me]);
-  return direct && !(Array.isArray(n.assignedToUris) && n.assignedToUris.includes(me));
+  // It also has to be shared with somebody: "the list of people who have access" means a list. A node only you can
+  // see has nobody else to change it, so watching it could only announce your own edits back — which the origin gate
+  // refuses anyway. Every task you create is restricted with you as its one participant, so without this the default
+  // was on for essentially all of your own work.
+  const people = Object.keys((n.participants && typeof n.participants === 'object') ? n.participants : {});
+  const shared = n.restricted === true && people.includes(me) && people.some((uri) => uri !== me);
+  return shared && !(Array.isArray(n.assignedToUris) && n.assignedToUris.includes(me));
 };
 // An explicit choice wins; absent, the rule above decides. Stored as a map so "off for a node the rule would watch"
 // is a real answer and not the same as never having chosen.

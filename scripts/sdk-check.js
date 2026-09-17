@@ -783,6 +783,11 @@ async function main() {
     const watched = new Document('tana:text:' + ulid());
     watched.transact((l) => initDocument(l, 'Contract', ME, { kind: 'task' }));
     setAssignees(watched, [], ME); // stated rather than assumed: the rule turns on whether it is assigned
+    // and shared with somebody: initDocument leaves its creator as the only participant, which is not a list of
+    // people to follow — it is a node nobody else can touch. (OTHER is declared much further down this file, so
+    // this names its own collaborator; it only has to be a user-profile uri that is not ME.)
+    const COLLEAGUE = 'tana:user-profile:01examplew0000000000000000';
+    watched.transact((l) => { const p = l.getMap('data').get('participants').setContainer(COLLEAGUE, new LoroMap()); p.set('type', 'user'); p.set('role', 'editor'); });
     docs.set(watched.id, watched);
     backend.testRuntime({ me: { userUri: ME }, win: { isDestroyed: () => false, webContents: { send: () => {} } },
       client: { sync: { getDocument: (id) => docs.get(id), subscribe: async (id) => docs.get(id) } } });
@@ -828,6 +833,9 @@ async function main() {
     const mine = new Document('tana:text:' + ulid());
     mine.transact((l) => initDocument(l, 'My task', ME, { kind: 'task' }));
     setAssignees(mine, [ME], ME);
+    // shared, so assignment is the only thing keeping this one off: a single-participant fixture would be off for
+    // two reasons at once and could not tell which clause was doing the work
+    mine.transact((l) => { const p = l.getMap('data').get('participants').setContainer(COLLEAGUE, new LoroMap()); p.set('type', 'user'); p.set('role', 'editor'); });
     docs.set(mine.id, mine);
     assert.equal((await backend.handlers.get('notify:state')(null, mine.id)).default, false,
       'a node assigned to you is not watched by default: the assignee is already looking at it');
@@ -837,11 +845,23 @@ async function main() {
     const viaSpace = new Document('tana:text:' + ulid());
     viaSpace.transact((l) => initDocument(l, 'Team doc', ME, { kind: 'task' }));
     setAssignees(viaSpace, [], ME);
+    // shared and unassigned, so `restricted` is the only thing keeping this one off — otherwise it would be off for
+    // several reasons and removing the direct-access check would go unnoticed
+    viaSpace.transact((l) => { const p = l.getMap('data').get('participants').setContainer(COLLEAGUE, new LoroMap()); p.set('type', 'user'); p.set('role', 'editor'); });
     viaSpace.transact((l) => l.getMap('data').delete('restricted'));
     docs.set(viaSpace.id, viaSpace);
     assert.equal(readNode(viaSpace).restricted, undefined, 'the fixture really is unrestricted');
     assert.equal((await backend.handlers.get('notify:state')(null, viaSpace.id)).default, false,
       'access inherited from the space is not a reason to follow a node');
+    // Your own work: restricted, but you are its only participant. Nobody else can change it, so there is nothing to
+    // be told about — and every task you create looks exactly like this.
+    const onlyMine = new Document('tana:text:' + ulid());
+    onlyMine.transact((l) => initDocument(l, 'A note to myself', ME, { kind: 'task' }));
+    setAssignees(onlyMine, [], ME);
+    docs.set(onlyMine.id, onlyMine);
+    assert.deepEqual(Object.keys(readNode(onlyMine).participants), [ME], 'the fixture really is shared with nobody');
+    assert.equal((await backend.handlers.get('notify:state')(null, onlyMine.id)).default, false,
+      'a node only you can see is not watched: there is nobody else to change it');
     console.log('ok  watching a node: the default reads access and assignment, only remote changes announce, an explicit choice wins');
   }
 

@@ -43,7 +43,10 @@ function needsCleanup(list) {
 }
 // the view's rows before sorting and grouping, as renderOutline lists them (the text filter applied)
 const shownDocs = () => { const docs = (viewOf() || {}).nodes || [], q = filterEl.value.trim().toLowerCase(); return q ? docs.filter((n) => n.text.toLowerCase().includes(q)) : docs; };
-function setGroupBy(id) { groupPref[pillKey()] = id; held = null; persistPref('groupBy', groupPref); render(); }
+// Forced, like setDisplay: choosing an arrangement is an explicit action whose whole point is to redraw, so it must
+// not be deferred because a caret happens to sit in an editable title — which on a saved search page it often does,
+// since the title is renameable and there is no draft row to take the focus.
+function setGroupBy(id) { groupPref[pillKey()] = id; held = null; persistPref('groupBy', groupPref); render(true); }
 // main.js toNode now passes stateType, so all four states (Inbox, In Progress, Completed, Later) separate here.
 // done (0/1 for tasks, undefined otherwise) stays the fallback for rows that carry no state, which can only tell
 // Completed from In Progress.
@@ -83,7 +86,7 @@ const NEWEST_FIRST = new Set(['updated', 'created']); // times read newest first
 // Every page, saved searches included, keeps the order its query returned until the user says otherwise. Tasks was
 // the one exception (most recently moved first) and it is gone.
 const sortBy = () => { const k = pillKey(); return SORTS.some(([id]) => id === sortPref[k]) ? sortPref[k] : 'default'; };
-function setSortBy(id) { sortPref[pillKey()] = id; held = null; persistPref('sortBy', sortPref); render(); }
+function setSortBy(id) { sortPref[pillKey()] = id; held = null; persistPref('sortBy', sortPref); render(true); }
 function sortRows(list) {
   const id = sortBy(), key = SORT_KEY[id], desc = NEWEST_FIRST.has(id);
   const sorted = !key ? list : [...list].sort((a, b) => { // no key: Default, the order the view produced
