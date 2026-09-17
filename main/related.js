@@ -1,9 +1,10 @@
 'use strict';
 const fields = require('../sdk/fields');
 const pins = require('../sdk/pins');
+const { searchQueryParams } = require('../sdk/query');
 const { NOT_CONNECTED, PIN_HUBS, PLAIN_KINDS, S, idKind, isSpace, summaryCache, typeAttrTitles, typeTitles } = require('./state');
 const { graphRow, rememberNodeHue, resolveTypes, toNode } = require('./rows');
-const { canWriteDoc } = require('./documents');
+const { canWriteDoc, op } = require('./documents');
 
 const crumbIcon = (id) => ({ space: 'space', event: 'meeting', 'user-profile': 'member', chat: 'chat', agent: 'agent' })[idKind(id)] || 'doc';
 async function pathOf(id) {
@@ -24,6 +25,16 @@ async function pathOf(id) {
 async function spaceChildren(id) {
   if (!S.client) throw new Error(NOT_CONNECTED); // a space opened before the connection is a startup state, not an error (#97)
   const { nodes } = await S.client.graph.listNodes({ ownerIds: [id], limit: 200, sortOptions: [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }] });
+  nodes.forEach(rememberNodeHue);
+  await resolveTypes(nodes.map((n) => n.entityType));
+  return nodes.map((n) => toNode(graphRow(n)));
+}
+// A saved search's "content" is the rows its stored query returns. The query lives in a root Loro container of its
+// own (`query`), not in `data`, so readNode never sees it — take it off the document directly.
+async function searchChildren(id) {
+  if (!S.client) throw new Error(NOT_CONNECTED);
+  const query = await op(id, (doc) => doc.loro.getMap('query').toJSON());
+  const { nodes } = await S.client.graph.listNodes(searchQueryParams(query, S.me && S.me.userUri, 200));
   nodes.forEach(rememberNodeHue);
   await resolveTypes(nodes.map((n) => n.entityType));
   return nodes.map((n) => toNode(graphRow(n)));
@@ -136,4 +147,4 @@ async function related(id) {
   };
 }
 
-module.exports = { crumbIcon, pathOf, spaceChildren, attributeTitles, fieldsOf, writeUpOf, summaryUri, callOf, related };
+module.exports = { crumbIcon, pathOf, spaceChildren, searchChildren, attributeTitles, fieldsOf, writeUpOf, summaryUri, callOf, related };

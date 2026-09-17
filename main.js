@@ -12,10 +12,10 @@ const { readNode, setTitle, setState, taskMeta, audienceMetadata, setAssignees }
 const { isHidden } = require('./sdk/query');
 const content = require('./sdk/content');
 const fields = require('./sdk/fields');
-const { NOT_CONNECTED, S, VIEWS, errText, idKind, isSpace, metaSigs, pathCache, truncatedViews, redoStack, report, scheduleRefresh, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
+const { NOT_CONNECTED, S, VIEWS, errText, idKind, isSearch, isSpace, metaSigs, pathCache, truncatedViews, redoStack, report, scheduleRefresh, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
 const { cachedNodeHue, graphRow, members, rememberNodeHue, toNode } = require('./main/rows');
 const { accessContext, chatOutline, createDocument, creationOptions, documentAction, history, info, linkShared, metaSig, moveTarget, mut, mutTasks, onChange, op, outlineWithReferences, setSensitive } = require('./main/documents');
-const { callOf, pathOf, related, spaceChildren, summaryUri } = require('./main/related');
+const { callOf, pathOf, related, searchChildren, spaceChildren, summaryUri } = require('./main/related');
 const { hiddenRules, listFilter, preset, refresh, search, setHidden, setViewFilter, start, viewFilter, viewRows } = require('./main/views');
 const { nodePin, pinState, pinTree, pinned, setPin, todayNode, weekNode, weekTitle } = require('./main/pins');
 const { image } = require('./main/images');
@@ -90,7 +90,7 @@ ipcMain.handle('view:setFilter', (_e, id, filter) => {
   return stored;
 });
 // events start with an empty content map (no doc node yet); readOutline needs the children list
-ipcMain.handle('outline:children', (_e, id) => (isSpace(id) ? spaceChildren(id) : op(id, (doc) => (idKind(id) === 'chat' ? chatOutline(doc) : doc.content.get('children') ? outlineWithReferences(doc) : []))));
+ipcMain.handle('outline:children', (_e, id) => (isSearch(id) ? searchChildren(id) : isSpace(id) ? spaceChildren(id) : op(id, (doc) => (idKind(id) === 'chat' ? chatOutline(doc) : doc.content.get('children') ? outlineWithReferences(doc) : []))));
 ipcMain.handle('doc:info', (_e, id) => op(id, info));
 ipcMain.handle('doc:creationOptions', () => creationOptions());
 ipcMain.handle('doc:create', (_e, title, opts) => createDocument(title, opts || {}));
