@@ -1,7 +1,7 @@
 'use strict';
 const fields = require('../sdk/fields');
 const pins = require('../sdk/pins');
-const { searchQueryParams } = require('../sdk/query');
+const { filterToSearchQuery, searchQueryParams, validViewFilter } = require('../sdk/query');
 const { NOT_CONNECTED, PIN_HUBS, PLAIN_KINDS, S, idKind, isSpace, summaryCache, typeAttrTitles, typeTitles } = require('./state');
 const { graphRow, rememberNodeHue, resolveTypes, toNode } = require('./rows');
 const { canWriteDoc, op } = require('./documents');
@@ -40,6 +40,19 @@ async function searchChildren(id) {
   // back to "every listable kind", silently showing the wrong rows as if they were this search's results.
   if (!query || !Object.keys(query).length) throw new Error('this saved search has no readable query');
   const { nodes } = await S.client.graph.listNodes(searchQueryParams(query, S.me && S.me.userUri, 200));
+  nodes.forEach(rememberNodeHue);
+  await resolveTypes(nodes.map((n) => n.entityType));
+  return nodes.map((n) => toNode(graphRow(n)));
+}
+// The rows a filter would find, without storing it: what a saved search shows while its pills are being edited.
+// It asks the graph exactly what Save would store — filterToSearchQuery, then the same searchQueryParams the stored
+// query goes through — so the preview and the saved result cannot disagree. Saving is then only a write, never a
+// second answer to the same question. The untouched page still reads its stored query through searchChildren, which
+// keeps the parts of a Tana-authored query the filter vocabulary cannot express.
+async function searchPreview(filter) {
+  if (!S.client) throw new Error(NOT_CONNECTED);
+  if (!validViewFilter(filter)) throw new Error('invalid view filter');
+  const { nodes } = await S.client.graph.listNodes(searchQueryParams(filterToSearchQuery(filter, S.me && S.me.userUri), S.me && S.me.userUri, 200));
   nodes.forEach(rememberNodeHue);
   await resolveTypes(nodes.map((n) => n.entityType));
   return nodes.map((n) => toNode(graphRow(n)));
@@ -152,4 +165,4 @@ async function related(id) {
   };
 }
 
-module.exports = { crumbIcon, pathOf, spaceChildren, searchChildren, attributeTitles, fieldsOf, writeUpOf, summaryUri, callOf, related };
+module.exports = { crumbIcon, pathOf, spaceChildren, searchChildren, searchPreview, attributeTitles, fieldsOf, writeUpOf, summaryUri, callOf, related };

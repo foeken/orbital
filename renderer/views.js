@@ -12,13 +12,21 @@ const FALLBACK = { status: 'No status', assignee: 'Unassigned', updated: 'Older'
 // Group by Updated: how long ago the row last changed, newest first; past a month, or with no time to read, it is Older
 const UPDATED_BUCKETS = [[36e5, 'Last hour'], [864e5, 'Last day'], [7 * 864e5, 'Last week'], [30 * 864e5, 'Last month']];
 // Tasks reads as its states (Inbox, In Progress, Later) until the user picks another grouping; other views start ungrouped
-const groupBy = () => (GROUPS.some(([id]) => id === groupPref[view]) ? groupPref[view] : view === 'tasks' ? 'status' : 'none');
+// Keyed by the page, not the view: a saved search carries its own sort and grouping, stored in the document beside
+// its query, so opening one shows the arrangement it was saved with rather than whatever the last view was using.
+// A search's key is its document id, so the per-view defaults below simply do not match it.
+const groupBy = () => { const k = pillKey(); return GROUPS.some(([id]) => id === groupPref[k]) ? groupPref[k] : k === 'tasks' ? 'status' : 'none'; };
+// A saved search's arrangement belongs in its document, so its keys are kept out of the browser-local preference
+// blob: without this, changing any view's grouping would flush every search key it had accumulated to disk too.
+const persistPref = (key, pref) => localStorage.setItem(key, JSON.stringify(Object.fromEntries(Object.entries(pref).filter(([k]) => !k.startsWith('tana:')))));
 // Stay put: once a task's box is clicked, that row keeps its group and every row keeps its place until the view is left,
 // so nothing jumps away from the pointer (an Inbox task moving to In Progress read as "gone" and got undone). holdRow
 // snapshots the order on screen and the row's group before its state changes; setView and a new Sort or Group let go.
+// `view` here is the page key (a view id, or a saved search's document id), the same key the pills and the sort and
+// group preferences use: holding rows in place is about the list in front of you, whichever kind of page it is.
 let held = null, lastOrder = null; // held: { view, by, order: Map id -> index, groups: Map id -> title }; lastOrder: { view, ids }
 function holdRow(n) {
-  if (!held || held.view !== view) held = { view, by: groupBy(), order: new Map((lastOrder && lastOrder.view === view ? lastOrder.ids : []).map((id, i) => [id, i])), groups: new Map() };
+  if (!held || held.view !== pillKey()) held = { view: pillKey(), by: groupBy(), order: new Map((lastOrder && lastOrder.view === pillKey() ? lastOrder.ids : []).map((id, i) => [id, i])), groups: new Map() };
   if (!held.groups.has(n.id)) held.groups.set(n.id, groupKey(n, held.by));
 }
 const releaseHeld = () => { held = null; };
@@ -26,7 +34,7 @@ const releaseHeld = () => { held = null; };
 // another group, an order a refresh changed), the view offers a Clean up pill (renderer/pills.js) that lets go.
 function layoutOf(list) { const sorted = sortRows(list), groups = groupsOf(sorted); return JSON.stringify(groups ? groups.map((g) => [g.title, g.nodes.map((n) => n.id)]) : sorted.map((n) => n.id)); }
 function needsCleanup(list) {
-  if (!held || held.view !== view) return false;
+  if (!held || held.view !== pillKey()) return false;
   const kept = held, order = lastOrder, shown = layoutOf(list);
   held = null;
   const fresh = layoutOf(list);
@@ -35,13 +43,13 @@ function needsCleanup(list) {
 }
 // the view's rows before sorting and grouping, as renderOutline lists them (the text filter applied)
 const shownDocs = () => { const docs = (viewOf() || {}).nodes || [], q = filterEl.value.trim().toLowerCase(); return q ? docs.filter((n) => n.text.toLowerCase().includes(q)) : docs; };
-function setGroupBy(id) { groupPref[view] = id; held = null; localStorage.setItem('groupBy', JSON.stringify(groupPref)); render(); }
+function setGroupBy(id) { groupPref[pillKey()] = id; held = null; persistPref('groupBy', groupPref); render(); }
 // main.js toNode now passes stateType, so all four states (Inbox, In Progress, Completed, Later) separate here.
 // done (0/1 for tasks, undefined otherwise) stays the fallback for rows that carry no state, which can only tell
 // Completed from In Progress.
 const stateOf = (n) => n.stateType || (n.done == null ? null : n.done ? 'closed' : 'open');
 function groupKey(n, by) {
-  if (held && held.view === view && held.by === by && held.groups.has(n.id)) return held.groups.get(n.id); // stays put (holdRow)
+  if (held && held.view === pillKey() && held.by === by && held.groups.has(n.id)) return held.groups.get(n.id); // stays put (holdRow)
   if (by === 'status') return Object.fromEntries(STATES)[stateOf(n)] || FALLBACK.status;
   // updatedAt is the ISO time toNode passes; a missing one parses to NaN, which is under no bucket, so the row is Older
   if (by === 'updated') { const age = Date.now() - Date.parse(n.updatedAt); return (UPDATED_BUCKETS.find(([ms]) => age < ms) || [])[1] || FALLBACK.updated; }
@@ -74,8 +82,8 @@ const SORT_KEY = { updated: (n) => n.updatedAt, created: (n) => n.createdAt, tit
 const NEWEST_FIRST = new Set(['updated', 'created']); // times read newest first; Title stays A→Z
 // People read as a list of names, so that page sorts A→Z until the user says otherwise; Tasks puts what moved most
 // recently first; every other view keeps the order its query returned.
-const sortBy = () => (SORTS.some(([id]) => id === sortPref[view]) ? sortPref[view] : view === 'people' ? 'title' : view === 'tasks' ? 'updated' : 'default');
-function setSortBy(id) { sortPref[view] = id; held = null; localStorage.setItem('sortBy', JSON.stringify(sortPref)); render(); }
+const sortBy = () => { const k = pillKey(); return SORTS.some(([id]) => id === sortPref[k]) ? sortPref[k] : k === 'people' ? 'title' : k === 'tasks' ? 'updated' : 'default'; };
+function setSortBy(id) { sortPref[pillKey()] = id; held = null; persistPref('sortBy', sortPref); render(); }
 function sortRows(list) {
   const id = sortBy(), key = SORT_KEY[id], desc = NEWEST_FIRST.has(id);
   const sorted = !key ? list : [...list].sort((a, b) => { // no key: Default, the order the view produced
@@ -85,8 +93,8 @@ function sortRows(list) {
   });
   // held: every row keeps the place it had when a box was clicked; a row that arrived since goes first, in its own order
   const at = (n) => (held.order.has(n.id) ? held.order.get(n.id) : -1);
-  const out = held && held.view === view ? sorted.map((n, i) => [n, i]).sort((a, b) => at(a[0]) - at(b[0]) || a[1] - b[1]).map(([n]) => n) : sorted;
-  lastOrder = { view, ids: out.map((n) => n.id) };
+  const out = held && held.view === pillKey() ? sorted.map((n, i) => [n, i]).sort((a, b) => at(a[0]) - at(b[0]) || a[1] - b[1]).map(([n]) => n) : sorted;
+  lastOrder = { view: pillKey(), ids: out.map((n) => n.id) };
   return out;
 }
 // a heading is not a node: no key, no caret, no bullet, and nodeEls() already skips anything without .node

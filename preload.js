@@ -26,8 +26,9 @@ contextBridge.exposeInMainWorld('api', {
   search: (query) => ipcRenderer.invoke('search', query),
   searches: () => ipcRenderer.invoke('search:list'), // saved search documents, newest first
   createSearch: (viewId, title) => ipcRenderer.invoke('search:create', viewId, title), // saves that view's current filter as a saved search; returns the Node to zoom
-  searchFilter: (docId) => ipcRenderer.invoke('search:filter', docId), // a saved search's stored query as a view filter, for the pills
-  setSearchFilter: (docId, filter) => ipcRenderer.invoke('search:setFilter', docId, filter), // replaces that query with what the pills show
+  searchFilter: (docId) => ipcRenderer.invoke('search:filter', docId), // { filter, sort, group }: the stored query as a filter, plus how its rows are arranged
+  setSearchFilter: (docId, filter, sort, group) => ipcRenderer.invoke('search:setFilter', docId, filter, sort, group), // replaces the query and the arrangement together
+  searchPreview: (filter) => ipcRenderer.invoke('search:preview', filter), // the rows that filter would find, without storing it
   setTitle: (docId, title) => ipcRenderer.invoke('doc:setTitle', docId, title),
   setDone: (docId, done) => ipcRenderer.invoke('doc:setDone', docId, done),
   setState: (docId, state) => ipcRenderer.invoke('doc:setState', docId, state),

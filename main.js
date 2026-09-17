@@ -8,14 +8,14 @@ const db = require('./db');
 const { createTanaSession } = require('./tana-session');
 const updater = require('./updater');
 const access = require('./sdk/access');
-const { readNode, setTitle, setState, taskMeta, audienceMetadata, setAssignees, setSearchQuery } = require('./sdk/node');
+const { readNode, setTitle, setState, taskMeta, audienceMetadata, setAssignees, setSearchQuery, setSearchView } = require('./sdk/node');
 const { filterToSearchQuery, isHidden, searchQueryToFilter, validViewFilter } = require('./sdk/query');
 const content = require('./sdk/content');
 const fields = require('./sdk/fields');
 const { NOT_CONNECTED, S, VIEWS, errText, idKind, isSearch, isSpace, metaSigs, pathCache, truncatedViews, redoStack, report, scheduleRefresh, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
 const { cachedNodeHue, graphRow, members, rememberNodeHue, toNode } = require('./main/rows');
 const { accessContext, chatOutline, createDocument, creationOptions, documentAction, history, info, linkShared, metaSig, moveTarget, mut, mutTasks, onChange, op, outlineWithReferences, setSensitive } = require('./main/documents');
-const { callOf, pathOf, related, searchChildren, spaceChildren, summaryUri } = require('./main/related');
+const { callOf, pathOf, related, searchChildren, searchPreview, spaceChildren, summaryUri } = require('./main/related');
 const { hiddenRules, listFilter, preset, refresh, search, searchCreate, searchList, searchTitle, setHidden, setViewFilter, start, viewFilter, viewRows } = require('./main/views');
 const { nodePin, pinState, pinTree, pinned, setPin, todayNode, weekNode, weekTitle } = require('./main/pins');
 const { image } = require('./main/images');
@@ -102,10 +102,18 @@ ipcMain.handle('search:create', (_e, id, title) => searchCreate(id, title));
 // The same filter vocabulary in both directions, so the pills that edit a view can edit a saved search. The query
 // lives in a root container of its own, which readNode never sees, so reading takes it off the document directly.
 // Writing replaces it wholesale rather than patching: what the pills are showing is what the document ends up saying.
-ipcMain.handle('search:filter', (_e, id) => op(id, (doc) => searchQueryToFilter(doc.loro.getMap('query').toJSON(), S.me && S.me.userUri)));
-ipcMain.handle('search:setFilter', (_e, id, filter) => {
+ipcMain.handle('search:filter', (_e, id) => op(id, (doc) => {
+  const arrangement = doc.loro.getMap('view').toJSON() || {}; // sort and group live beside the query, not inside it
+  return { filter: searchQueryToFilter(doc.loro.getMap('query').toJSON(), S.me && S.me.userUri), sort: arrangement.sortBy, group: arrangement.groupBy };
+}));
+// What the pills would find if they were saved. A staged edit has to change the rows, or the pills read as broken.
+ipcMain.handle('search:preview', (_e, filter) => searchPreview(filter));
+ipcMain.handle('search:setFilter', (_e, id, filter, sort, group) => {
   if (!validViewFilter(filter)) throw new Error('invalid view filter'); // never let a bad filter empty a saved search
-  return mut(id, (doc) => { setSearchQuery(doc, filterToSearchQuery(filter, S.me && S.me.userUri)); });
+  return mut(id, (doc) => {
+    setSearchQuery(doc, filterToSearchQuery(filter, S.me && S.me.userUri));
+    setSearchView(doc, { sortBy: sort, groupBy: group }); // saved together: one press, one state of the page
+  });
 });
 ipcMain.handle('history:undo', () => history(undoStack, redoStack, 'undo', 'canUndo'));
 ipcMain.handle('history:redo', () => history(redoStack, undoStack, 'redo', 'canRedo'));

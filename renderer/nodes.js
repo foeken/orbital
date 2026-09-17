@@ -38,7 +38,10 @@ function draftNode(parent) { // shown under an expanded empty node; created on t
 // Draft documents stay local until their first title character, then use their selected native kind/type.
 function draftDocNode(kind, option = {}) {
   const nativeKind = kind === 'custom' ? 'doc' : kind;
-  return { id: 'draftdoc:' + (++draftSeq), text: '', kind: 'document', draft: kind, createOptions: { kind, ...(option.typeUri ? { typeUri: option.typeUri } : {}) }, icon: option.icon || nativeKind, tags: option.tags || [{ label: nativeKind, color: nativeKind === 'meeting' ? 'gold' : 'grey' }], done: nativeKind === 'task' ? 0 : undefined, hasChildren: false };
+  // A saved search is the one kind that cannot be created from a title alone: createDocument refuses a search with
+  // no query, because searchChildren reads an empty query container as unreadable. The empty query is a real one —
+  // writeSearchQuery materialises every key — so a search starts by finding everything and is narrowed by the pills.
+  return { id: 'draftdoc:' + (++draftSeq), text: '', kind: 'document', draft: kind, createOptions: { kind, ...(option.typeUri ? { typeUri: option.typeUri } : {}), ...(kind === 'search' ? { query: {} } : {}) }, icon: option.icon || nativeKind, tags: option.tags || [{ label: nativeKind, color: nativeKind === 'meeting' ? 'gold' : 'grey' }], done: nativeKind === 'task' ? 0 : undefined, hasChildren: false };
 }
 // a tag chip: { label, color: 'grey' | 'gold' } or { label, hue } (type colour: background hsl(hue 80% 92%), text hsl(hue 45% 30%), see styles.css .chip.hue)
 function chipEl(t, nodeHue) {
@@ -220,10 +223,33 @@ function setViewF(patch) {
 // The pills edit whatever page is in front of you: a view's persisted filter, or a saved search's stored query. One
 // key decides which, so pillDefs, pillsApply and every menu stay exactly as they were for both.
 const pillKey = () => (onSearchPage() ? zoom.docId : view);
-const searchFilters = new Map(); // saved search id -> the filter its document stores, as of the last load or save
+const searchFilters = new Map(); // saved search id -> { filter, sort, group } as its document stores them, at the last load or save
+const searchRows = new Map();    // saved search id -> the staged filter, as JSON, that produced the rows now in kids
 // A view persists every pill change as it is made; a saved search is a document other people may be looking at, so
 // its edits stay local until Save. That difference is the only reason these two write paths are not one.
-const searchDirty = () => onSearchPage() && !!searchFilters.get(zoom.docId) && !sameFilter(filters.get(zoom.docId), searchFilters.get(zoom.docId));
+// The arrangement counts as an edit too: it is stored in the document beside the query and saved by the same press.
+const searchDirty = () => {
+  if (!onSearchPage()) return false;
+  const saved = searchFilters.get(zoom.docId);
+  if (!saved) return false;
+  return !sameFilter(filters.get(zoom.docId), saved.filter) || sortBy() !== (saved.sort || 'default') || groupBy() !== (saved.group || 'none');
+};
+// The rows a saved search shows follow the pills above them, or editing a filter would read as doing nothing. While
+// the staged filter matches the document, the document's own rows are the right answer and keep the parts of a
+// Tana-authored query the filter vocabulary cannot express; once it differs, the preview answers instead — asking
+// exactly what Save would store, so nothing changes under the user at the moment they press it.
+function previewRows(docId) {
+  const saved = searchFilters.get(docId), staged = filters.get(docId);
+  if (!saved || !staged || !tana.searchPreview) return;
+  if (sameFilter(staged, saved.filter)) {
+    if (searchRows.delete(docId)) { kids.set(docId, null); reload(docId).then(() => render(true), (e) => { kids.delete(docId); showError(e); }); }
+    return;
+  }
+  const asked = JSON.stringify(staged);
+  if (searchRows.get(docId) === asked) return; // these rows already answer this filter
+  searchRows.set(docId, asked);
+  tana.searchPreview(staged).then((rows) => { kids.set(docId, rows); render(); }, (e) => { searchRows.delete(docId); showError(e); });
+}
 function setSearchF(patch) {
   const id = pillKey();
   filters.set(id, { ...filters.get(id), ...patch }); render();
@@ -231,9 +257,12 @@ function setSearchF(patch) {
 function loadSearchFilter(docId) {
   if (!tana.searchFilter || searchFilters.has(docId)) return;
   searchFilters.set(docId, null); // claimed, so the renders while it is in flight do not ask again
-  tana.searchFilter(docId).then((filter) => {
-    searchFilters.set(docId, filter);
-    if (!filters.has(docId)) filters.set(docId, filter); // a local edit already in progress is not overwritten
+  tana.searchFilter(docId).then((saved) => {
+    searchFilters.set(docId, saved);
+    if (!filters.has(docId)) filters.set(docId, saved.filter); // a local edit already in progress is not overwritten
+    // the arrangement it was saved with, unless this session has already chosen another one for this search
+    if (saved.sort && sortPref[docId] === undefined) sortPref[docId] = saved.sort;
+    if (saved.group && groupPref[docId] === undefined) groupPref[docId] = saved.group;
     render();
   }, (e) => { searchFilters.delete(docId); showError(e); });
 }

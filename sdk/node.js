@@ -213,6 +213,21 @@ function setSearchQuery(document, query) {
   if ((document.data.get('type')) !== 'search') throw new Error('not a saved search');
   document.transact((loro) => { writeSearchQuery(loro, query); });
 }
+// How a saved search's rows are arranged — sorted and grouped — lives in the `view` root container, beside the query
+// rather than inside it: it changes nothing about which rows the search finds, only how they are shown. Set or
+// delete for the same reason the query's flags are: an arrangement dropped from a save must not linger in the
+// document and come back the next time it is opened.
+function writeSearchView(loro, view = {}) {
+  const v = loro.getMap('view');
+  for (const key of ['sortBy', 'groupBy']) {
+    if (typeof view[key] === 'string' && view[key]) v.set(key, view[key]);
+    else if (v.get(key) !== undefined) v.delete(key);
+  }
+}
+function setSearchView(document, view) {
+  if ((document.data.get('type')) !== 'search') throw new Error('not a saved search');
+  document.transact((loro) => { writeSearchView(loro, view); });
+}
 
 // Rewrites the task's existing list container; empty is the supported "unassigned" value.
 function setAssignees(document, uris, byUri) {
@@ -250,4 +265,4 @@ function render(node) {
   return kids.map(render).join(block ? '\n' : '');
 }
 
-module.exports = { readNode, editable, setTitle, setState, taskMeta, audience, audienceMetadata, setAssignees, setSearchQuery, contentText, ulid, initDocument, STATE_TYPES };
+module.exports = { readNode, editable, setTitle, setState, taskMeta, audience, audienceMetadata, setAssignees, setSearchQuery, setSearchView, contentText, ulid, initDocument, STATE_TYPES };

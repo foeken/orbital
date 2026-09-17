@@ -27,13 +27,11 @@ function pillDefs() {
       ...(members || []).filter((x) => !x.me).map((x) => ({ label: x.title, checked: a === x.id, run: () => save({ assignee: x.id }) })),
     ] });
   }
-  // sorting and grouping are view preferences, not queries: they re-order and re-section the rows the view already has.
-  // A saved search is only the query, and the zoomed page it draws neither sorts nor groups, so it is not offered a
-  // control that would do nothing — the pills on a search are the ones that change what it finds.
-  if (!onSearchPage()) {
-    defs.push({ id: 'sort', label: 'Sort', command: 'Sort by', icon: 'sort', value: SORTS.find(([id]) => id === sortBy())[1], rows: () => SORTS.map(([id, label]) => ({ label, checked: sortBy() === id, run: () => setSortBy(id) })) });
-    defs.push({ id: 'group', label: 'Group', command: 'Group by', icon: 'group', value: GROUPS.find(([id]) => id === groupBy())[1], rows: () => GROUPS.map(([id, label]) => ({ label, checked: groupBy() === id, run: () => setGroupBy(id) })) });
-  }
+  // sorting and grouping re-order and re-section rows already loaded, rather than changing which rows are found.
+  // A view keeps them in the browser; a saved search stores them in its document, so the arrangement travels with
+  // the search and is what it opens on next time.
+  defs.push({ id: 'sort', label: 'Sort', command: 'Sort by', icon: 'sort', value: SORTS.find(([id]) => id === sortBy())[1], rows: () => SORTS.map(([id, label]) => ({ label, checked: sortBy() === id, run: () => setSortBy(id) })) });
+  defs.push({ id: 'group', label: 'Group', command: 'Group by', icon: 'group', value: GROUPS.find(([id]) => id === groupBy())[1], rows: () => GROUPS.map(([id, label]) => ({ label, checked: groupBy() === id, run: () => setGroupBy(id) })) });
   return defs;
 }
 const pillsApply = () => filters.has(pillKey());
@@ -84,11 +82,12 @@ function renderPills(show) {
 function savePill() {
   const pill = document.createElement('div'); pill.className = 'pill save'; pill.tabIndex = 0; pill.dataset.id = 'saveQuery'; pill.setAttribute('role', 'button');
   pill.title = 'Save these changes to this search';
-  const s = document.createElement('span'); s.innerHTML = iconSvg('apply'); pill.append(s.firstChild, 'Save');
+  pill.append('Save');
   const go = () => run(async () => {
-    const id = zoom.docId, next = filters.get(id);
-    await tana.setSearchFilter(id, next);
-    searchFilters.set(id, next);
+    const id = zoom.docId, next = filters.get(id), sort = sortBy(), group = groupBy();
+    await tana.setSearchFilter(id, next, sort, group);
+    searchFilters.set(id, { filter: next, sort, group });
+    searchRows.delete(id); // the stored query is what these rows answer now, so the preview stands down
     await reload(id); // the rows are the query's answer, so saving the query re-asks it
     render(true);
   });
@@ -106,7 +105,7 @@ function savePill() {
 function saveSearchPill() {
   const pill = document.createElement('div'); pill.className = 'pill savesearch'; pill.tabIndex = 0; pill.dataset.id = 'saveSearch'; pill.setAttribute('role', 'button');
   pill.title = 'Keep this query as a saved search';
-  const s = document.createElement('span'); s.innerHTML = iconSvg('search'); pill.append(s.firstChild, 'Save as search');
+  pill.append('Save as search');
   const go = () => run(async () => {
     const node = await tana.createSearch(view);
     if (!node || !node.id) return;

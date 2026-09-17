@@ -159,14 +159,21 @@ function mockApi() {
       const base = { inbox: 'Inbox', tasks: 'Tasks', meetings: 'Meetings', library: 'Library', chats: 'Chats', people: 'People' }[viewId] || 'Search';
       const n = { id: 'tana:search:mocknew' + (++seq), text: (title && title.trim()) || (bits.length ? base + ' — ' + bits.join(' · ') : base), kind: 'document', hasChildren: true, editable: true, tags: [{ label: 'search', color: 'grey' }] };
       created[n.id] = n; content[n.id] = []; all.push(n);
-      searchQueries[n.id] = structuredClone(f); // the query it was saved with, in the vocabulary the channel deals in
+      searchQueries[n.id] = { filter: structuredClone(f) }; // the query it was saved with, in the vocabulary the channel deals in
       return info(n);
     },
     // A saved search's stored query as the filter the pills speak, and back. The real channel translates through
     // sdk/query; the mock keeps the filter as it was given, since what it has to match is the channel's shape, not
     // the document's. A sample search that predates any save opens on the Library's filter rather than on nothing.
-    searchFilter: async (id) => structuredClone(searchQueries[id] || filters.library),
-    setSearchFilter: async (id, filter) => structuredClone(searchQueries[id] = filter),
+    searchFilter: async (id) => structuredClone(searchQueries[id] || { filter: filters.library }),
+    setSearchFilter: async (id, filter, sort, group) => structuredClone(searchQueries[id] = { filter, sort, group }),
+    // the rows a staged filter would find: the same selection viewList makes, so editing the pills moves the list
+    searchPreview: async (filter) => {
+      const text = String(filter.text || '').trim().toLowerCase();
+      return structuredClone([...all, ...members].filter((d) => (!filter.types ? kindOf(d) !== 'people' : filter.types.includes(kindOf(d)))
+        && (!filter.states || listed(d, filter))
+        && d.text.toLowerCase().includes(text)).map(info));
+    },
     // references resolve on read, as main does: the row always shows the target's current title and state
     children: async (docId) => structuredClone(content[docId] || []).map((n) => (n.type === 'reference' ? { ...n, reference: { ...n.reference, node: info([...all, ...members].find((d) => d.id === n.reference.uri)) } } : n)),
     node: async (docId) => {

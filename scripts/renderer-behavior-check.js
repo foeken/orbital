@@ -2715,7 +2715,8 @@ function runSearchPillsCheck() {
     let pillCtx = null, palMode = 'cmd', palRows = [], palIndex = 0, renders = 0;
     const taskMetaById = new Map(), tana = {}, palette = { hidden: false };
     const $ = () => ({ hidden: false }), showError = () => {}, renderPills = () => {};
-    const localStorage = { setItem() {} }, render = () => { renders++; };
+    const stored = {}; // what reached the browser's preference blobs, so the test can tell document from localStorage
+    const localStorage = { setItem: (k, v) => { stored[k] = v; } }, render = () => { renders++; };
     // an edit on a saved search must not write the view waiting behind it: fail loudly rather than quietly
     const setViewF = () => { throw new Error('a saved search edit reached setViewF'); };
     const palInput = { value: '', placeholder: '', focus() {} };
@@ -2729,8 +2730,10 @@ function runSearchPillsCheck() {
       ids: () => pillDefs().map((def) => def.id),
       applies: () => pillsApply(),
       dirty: () => searchDirty(),
-      loaded: () => { searchFilters.set(zoom.docId, filters.get(zoom.docId)); },
+      loaded: () => { searchFilters.set(zoom.docId, { filter: filters.get(zoom.docId), sort: sortBy(), group: groupBy() }); },
       edit: (patch) => { setSearchF(patch); return filters.get(zoom.docId); },
+      arrange: (sort, group) => { if (sort) setSortBy(sort); if (group) setGroupBy(group); return { sort: sortBy(), group: groupBy() }; },
+      stored: () => stored,
       behind: () => filters.get('tasks'),
       leave: () => { zoom = null; },
     });
@@ -2739,7 +2742,7 @@ function runSearchPillsCheck() {
   assert.equal(api.applies(), true, 'so they apply there at all');
   // A saved search is never a kind page: choosing what it lists is the whole point of it. Sort and Group are view
   // layout, and the page a search draws neither sorts nor groups, so offering them would offer something that does nothing.
-  assert.deepEqual(plain(api.ids()), ['type', 'status', 'assigned'], 'a saved search offers the pills that change what it finds, and not the layout ones');
+  assert.deepEqual(plain(api.ids()), ['type', 'status', 'assigned', 'sort', 'group'], 'a saved search offers the query pills and the arrangement ones, which it stores in its own document');
   api.loaded();
   assert.equal(api.dirty(), false, 'freshly loaded from the document, there is nothing to save');
   assert.deepEqual(plain(api.edit({ states: ['open'] })), { types: ['tasks'], states: ['open'], assignee: 'me', text: '' },
@@ -2747,6 +2750,14 @@ function runSearchPillsCheck() {
   assert.deepEqual(plain(api.behind()), { types: ['tasks'], states: ['open'], assignee: 'anyone', text: '' },
     'and leaves the view behind it exactly as it was');
   assert.equal(api.dirty(), true, 'a staged edit is something to save');
+  // How a saved search arranges its rows is part of what it stores, so changing that is something to save too — and
+  // it belongs in the document rather than in this browser, or the search would look different to everyone else.
+  api.loaded();
+  assert.equal(api.dirty(), false, 'saving re-baselines: nothing left over from the edit above');
+  assert.deepEqual(plain(api.arrange('title', 'status')), { sort: 'title', group: 'status' }, 'a saved search takes a sort and a grouping of its own');
+  assert.equal(api.dirty(), true, 'and changing the arrangement is something to save, exactly like changing the query');
+  assert.ok(!JSON.stringify(plain(api.stored())).includes('tana:search:'),
+    'a saved search keeps its arrangement in its document: its key never reaches the preference blob the views persist to');
   api.leave();
   assert.equal(api.key(), 'tasks', 'and off the search page the pills belong to the view again');
 }

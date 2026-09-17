@@ -197,15 +197,22 @@ function renderOutline() {
     list = parent.node.draft ? [] : childrenOf(parent) || [];
     // A saved search page is a result list, like a view, so ⌘F narrows it the same way. No other zoomed page
     // filters: an outline's rows are content you are editing, not a result set you are searching through.
+    let groups = null;
     if (isSearchDoc(parent.node)) {
       loadSearchFilter(parent.docId); // its stored query, as the filter the pills above it show
+      previewRows(parent.docId);      // and the rows that filter finds, so editing a pill moves the list
       const q = filterEl.value.trim().toLowerCase();
       const found = q ? list.filter((n) => String(n.text || '').toLowerCase().includes(q)) : list;
       hidden = list.length - found.length;
-      list = found;
+      // a saved search is a list of results, so it sorts and groups the way a view does, with its own stored choice
+      list = sortRows(found);
+      groups = groupsOf(list);
+      if (groups) list = groups.flatMap((g) => g.nodes); // keyboard order follows what is on screen
     }
     list = withDraftTail(list, parent); // an open node always has a row to type in; a read-only one (every chat) never does
-    outline.replaceChildren(...list.map((n) => childEl(n, parent)));
+    outline.replaceChildren(...(groups
+      ? groups.flatMap((g) => [groupHeadEl(g.title), ...g.nodes.map((n) => childEl(n, parent))])
+      : list.map((n) => childEl(n, parent))));
     animView = null; // a zoom replaced every row, and a zoomed row is keyed docId/nodeId while a view row is keyed by
     // its document id, so on the way back nothing would match and the whole view would flash as if it had just arrived
     // A node opens at its top, however far down the draft tail the caret goes (the caretOnOpen block below parks it
