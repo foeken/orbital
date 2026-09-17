@@ -108,7 +108,7 @@ function sortRows(list) {
 // ---- display: which of a row's facts it shows ----
 // When it was made, when it last moved and where it lives read as one grey sub-line under the title, because they are
 // all answers to "what is this row"; the rest stay where they already are — the type chips, the assignee, the box.
-const DISPLAY = [['type', 'Type'], ['space', 'Lives in'], ['status', 'Status'], ['assigned', 'Assigned'], ['updated', 'Updated'], ['created', 'Created']];
+const DISPLAY = [['type', 'Type'], ['space', 'Lives in'], ['status', 'Status'], ['assigned', 'Assigned'], ['updated', 'Updated'], ['created', 'Created'], ['creator', 'Created by']];
 const DISPLAY_DEFAULT = ['status', 'assigned', 'updated'];
 const displayKeys = () => { const chosen = displayPref[pillKey()]; return Array.isArray(chosen) ? chosen : DISPLAY_DEFAULT; };
 const displayOn = (id) => displayKeys().includes(id);
@@ -136,7 +136,12 @@ function agoText(iso) {
 function subtextOf(node, taskInfo) {
   const bits = [];
   if (displayOn('space') && taskInfo && taskInfo.audience && taskInfo.audience.space) bits.push(taskInfo.audience.space);
-  if (displayOn('created') && node.createdAt) bits.push('Created ' + agoText(node.createdAt));
+  // Who made it joins when it was made rather than repeating the word: "Created 2 days ago by Robin Vega". The name
+  // needs the member list, which loads once and re-renders when it lands; until then memberName answers with the uri.
+  if (displayOn('creator') && node.createdBy) loadMembers();
+  const by = displayOn('creator') && node.createdBy ? ' by ' + memberName(node.createdBy) : '';
+  if (displayOn('created') && node.createdAt) bits.push('Created ' + agoText(node.createdAt) + by);
+  else if (by) bits.push('Created' + by);
   if (displayOn('updated') && node.updatedAt) bits.push('Updated ' + agoText(node.updatedAt));
   return bits.join(' · ');
 }

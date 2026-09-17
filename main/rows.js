@@ -124,7 +124,7 @@ const meetingRow = (n, withDate) => {
 
 // updatedAt/createdAt (ISO) and stateType are optional sort/group data: the row carries what it knows, the rest
 // comes from nodeMeta, so a cached SQLite row sorts like a fresh graph row. done keeps its own meaning.
-const toNode = (r) => ({ id: r.id, title: r.title, text: r.title, kind: 'document', editable: editability.has(r.id) ? editability.get(r.id) : editable(r, S.me && S.me.userUri), done: r.icon === 'task' ? r.done : undefined, hasChildren: true, icon: PLAIN_KINDS.has(idKind(r.id)) ? idKind(r.id) : r.icon || undefined, hue: r.hue === undefined ? (nodeHues.has(r.id) ? nodeHues.get(r.id) : cachedNodeHue(r)) : r.hue, tags: r.tags, meta: r.meta || undefined, updatedAt: r.updatedAt || undefined, createdAt: r.createdAt || (nodeMeta.get(r.id) || {}).createdAt, stateType: r.stateType || (nodeMeta.get(r.id) || {}).stateType });
+const toNode = (r) => ({ id: r.id, title: r.title, text: r.title, kind: 'document', editable: editability.has(r.id) ? editability.get(r.id) : editable(r, S.me && S.me.userUri), done: r.icon === 'task' ? r.done : undefined, hasChildren: true, icon: PLAIN_KINDS.has(idKind(r.id)) ? idKind(r.id) : r.icon || undefined, hue: r.hue === undefined ? (nodeHues.has(r.id) ? nodeHues.get(r.id) : cachedNodeHue(r)) : r.hue, tags: r.tags, meta: r.meta || undefined, updatedAt: r.updatedAt || undefined, createdAt: r.createdAt || (nodeMeta.get(r.id) || {}).createdAt, createdBy: nodeCreators.get(r.id), stateType: r.stateType || (nodeMeta.get(r.id) || {}).stateType });
 
 // Node shape from any graph Node JSON (search results): events, tasks, typed and plain documents.
 function graphRow(n, withDate) {

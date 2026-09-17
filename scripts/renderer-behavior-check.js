@@ -2379,7 +2379,7 @@ function runRowAudienceCheck() {
     class IntersectionObserver { constructor(fn) { watching = fn; } observe(el) { observed.push(el); } unobserve() {} }
     const taskMetaById = new Map(), taskMetaLoading = new Set(), taskMetaFailed = new Map();
     const loadTaskMeta = (id) => { fetched.push(id); };
-    const loadMembers = () => {}, memberName = (uri) => uri;
+    const loadMembers = () => {}, memberName = (uri) => (uri === 'tana:user-profile:sam' ? 'Sam' : uri); // the real one answers with the uri until the member list lands
     const isRealId = (id) => typeof id === 'string' && id.startsWith('tana:');
     const tana = { taskMeta: () => {} };
     const document = { createElement: (tagName) => {
@@ -2440,6 +2440,14 @@ function runRowAudienceCheck() {
   assert.equal(row(doc, spaceMeta).sub, 'Studio LT', 'turning Lives in on names it again, the way the row always did');
   api.display(['status', 'assigned', 'updated']);
   assert.equal(row(doc, spaceMeta).sub, null, 'and turning it off takes the line away again');
+  // Created by: a name on the same sub-line, joined to the creation time rather than repeating the word.
+  const made = { ...doc, createdBy: 'tana:user-profile:sam', createdAt: new Date(Date.now() - 2 * 864e5).toISOString() };
+  api.display(['status', 'assigned', 'updated', 'creator']);
+  assert.equal(row(made, spaceMeta).sub, 'Created by Sam', 'Created by names the maker even when Created is off');
+  api.display(['status', 'assigned', 'updated', 'created', 'creator']);
+  assert.equal(row(made, spaceMeta).sub, 'Created 2 days ago by Sam', 'and with Created on it is one phrase, not two');
+  assert.equal(row(doc, spaceMeta).sub, null, 'a row the graph gave no creator for says nothing at all');
+  api.display(['status', 'assigned', 'updated']);
   // Type is the same shape: the chips are a fact about the row, shown only while the pill asks for them.
   const tagged = { ...doc, tags: [{ label: 'Charter' }] };
   api.display(['status', 'assigned', 'updated', 'type']);
