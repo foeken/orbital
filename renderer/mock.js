@@ -41,7 +41,7 @@ function mockApi() {
   const space = { id: 'tana:space:mock', text: 'Studio LT', kind: 'document', hasChildren: true, icon: 'space', hue: 150, tags: [{ label: 'space', color: 'grey' }] };
   // other library kinds (chats, canvases, agents, skills, saved searches): read-only rows, plain bullet + kind chip
   const kinds = ['chat', 'canvas', 'agent', 'skill', 'search'].map((k, i) => ({ id: 'tana:' + k + ':mock' + i, text: 'Sample ' + k, kind: 'document', hasChildren: true, tags: [{ label: k, color: 'grey' }] }));
-  // chats (api.chats): newest first; "MCP: …" ones carry meta 'MCP' and are hidden unless includeMcp
+  // chats (api.chats): newest first; "MCP: …" ones carry meta 'MCP' but are no longer hidden (the includeMcp toggle was removed, #247)
   const chats = ['Draft the Studio memo', 'MCP: list open tasks', 'Summarise the leadership notes', 'MCP: create meeting note', 'Rewrite the agreement clause']
     .map((text, i) => ({ id: 'tana:chat:mockchat' + i, text, kind: 'document', hasChildren: true, tags: [{ label: 'chat', color: 'grey' }], meta: /^MCP:/.test(text) ? 'MCP' : undefined }));
   // meetings over the past and next 7 days (day offset from today, start hour or null = all day); roots meta = weekday + time, search meta = weekday + day of month + time

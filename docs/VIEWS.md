@@ -82,7 +82,17 @@ Gone: `library:list`, `library:filter`, `library:setFilter`, `chats:list`, `inbo
 `tasks:filter`, `tasks:setFilter` and their `window.api` methods. The renderer's in-file mock
 implements the new surface too.
 
-## 6. Renderer
+## 6. Saved searches are not a view
+
+A saved search (`tana:search:…`) is a document, not a seventh preset: it has no filter, no `viewFilter`/
+`setViewFilter`, and no row cache (`search:list` never calls `db.replaceSection`, so it does not touch
+`S.activeView` or the refresh loop). `search:list` (`tana.searches()`) lists them read-only, newest first,
+for Cmd+K's `Searches` group; opening one goes through `outline:children` → `searchChildren(id)`, which
+reads the document's own stored `query` container and runs it through `graph.listNodes` directly —
+bypassing `viewParams`, the presets and the cache entirely. Phase 1 is read-only: creating, editing or
+saving a search is out of scope (see `TASKS.md` #247).
+
+## 7. Renderer
 
 - One `views` list (was `sections`), one `filters` map keyed by view id, one `loadView(id)`.
 - Pills are built from the filter for every view: Type, Status and Assigned to (when tasks are in
