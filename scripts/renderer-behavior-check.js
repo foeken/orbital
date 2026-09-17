@@ -34,6 +34,15 @@ const RENDER_SHIM = 'globalThis.renderSoon ??= (...a) => render(...a); globalThi
 const withShims = (src) => {
   if (/\bfuzzyMatch\b/.test(src) && !/function fuzzyMatch\(/.test(src)) src = functionSource('fuzzyMatch') + '\n' + src; // the real matcher: a harness that lists palette rows filters through it
   if (/\bchipOnly\(/.test(src) && !/const chipOnly =/.test(src)) src = 'globalThis.chipOnly ??= (el) => !!el.childNodes && el.childNodes.length === 1 && el.firstChild?.nodeType === 1 && !!el.firstChild.classList?.contains(\'mention\');\n' + src; // a harness that renders rows marks the chip-only ones too
+  // nodeEl, rowSig and patchMeta all ask what a row should show of itself. That choice lives in views.js and state.js,
+  // which most harnesses do not slice in, so they get the shipped default rather than each stubbing it by hand; one
+  // that does slice the real definitions declares displayKeys itself and is left alone.
+  // The real subtextOf, not a stub: a harness that renders rows is usually testing what ends up under the title, and a
+  // stub returning '' would quietly answer for it. The last guard stops the recursion its own source would cause.
+  if (/\b(displayOn|displayKeys|subtextOf)\b/.test(src) && !/const displayKeys =/.test(src) && !/function subtextOf\(/.test(src)) {
+    src = functionSource('agoText') + '\n' + functionSource('subtextOf') + '\n' + src;
+    src = "globalThis.displayKeys ??= () => ['status', 'assigned', 'updated']; globalThis.displayOn ??= (id) => globalThis.displayKeys().includes(id);\n" + src;
+  }
   return /\b(renderSoon|patchMeta|iconNode|hotkeyFor|hotkeyIds|comboOf|settleEnter)\b/.test(src) ? RENDER_SHIM + 'globalThis.settleEnter ??= () => {};\n' + src : src;
 };
 function functionSource(name) {
@@ -594,7 +603,7 @@ async function runMultiTaskPaletteCheck() {
 function runAssignedDropdown() {
   // The pills now serve two kinds of page, so pillDefs asks which one it is on. These harnesses are all about views,
 // so they answer "a view" — the saved search side gets its own check rather than a share of theirs.
-const definitions = 'const onSearchPage = () => false, pillKey = () => view, setSearchF = () => {};\n' + sourceBetween('const STATES =', 'function renderPills');
+const definitions = 'const onSearchPage = () => false, pillKey = () => view, setSearchF = () => {}, displayPref = {};\n' + sourceBetween('const STATES =', 'function renderPills');
   const api = vm.runInNewContext(`
     let view = 'tasks';
     const filters = new Map([['tasks', { types: ['tasks'], states: ['open'], assignee: 'me' }]]);
@@ -1734,7 +1743,7 @@ async function runSlashMenuCheck() {
 function runFilterMenuCloseCheck() {
   // The pills now serve two kinds of page, so pillDefs asks which one it is on. These harnesses are all about views,
 // so they answer "a view" — the saved search side gets its own check rather than a share of theirs.
-const definitions = 'const onSearchPage = () => false, pillKey = () => view, setSearchF = () => {};\n' + sourceBetween('const STATES =', 'function renderPills');
+const definitions = 'const onSearchPage = () => false, pillKey = () => view, setSearchF = () => {}, displayPref = {};\n' + sourceBetween('const STATES =', 'function renderPills');
   const api = vm.runInNewContext(`
     let view = 'library';
     const filters = new Map([['library', { types: ['tasks'], states: ['open'], assignee: 'me' }]]);
@@ -2014,7 +2023,7 @@ async function runUnifiedViewsCheck() {
 function runSortGroupCheck() {
   // The pills now serve two kinds of page, so pillDefs asks which one it is on. These harnesses are all about views,
 // so they answer "a view" — the saved search side gets its own check rather than a share of theirs.
-const definitions = 'const onSearchPage = () => false, pillKey = () => view, setSearchF = () => {};\n' + sourceBetween('const STATES =', 'function renderPills');
+const definitions = 'const onSearchPage = () => false, pillKey = () => view, setSearchF = () => {}, displayPref = {};\n' + sourceBetween('const STATES =', 'function renderPills');
   const api = vm.runInNewContext(`
     let view = 'tasks', groupPref = {}, sortPref = {};
     const filters = new Map([['tasks', { types: ['tasks'], states: ['open'], assignee: 'me' }]]);
@@ -2114,7 +2123,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     'a saved search hands its rows back in the order its own stored sort asks for');
   api.set('tasks', 'status', 'title');
   const defs = api.pillDefs(), ids = defs.map((d) => d.id);
-  assert.deepEqual(plain(ids.slice(-2)), ['sort', 'group'], 'Sort and Group sit at the end of the filter pills, in that order');
+  assert.deepEqual(plain(ids.slice(-3)), ['sort', 'group', 'display'], 'the pills that arrange and describe the rows sit after the filters, in that order');
   const sort = defs.find((d) => d.id === 'sort'), group = defs.find((d) => d.id === 'group');
   assert.deepEqual(plain([sort.label, sort.value, group.label, group.value]), ['Sort', 'Title', 'Group', 'Status'], 'both pills read their active option');
   assert.deepEqual(plain(sort.rows().map((r) => r.label)), ['Default', 'Updated', 'Created', 'Title'], 'the Sort menu offers only orders backed by row data');
@@ -2131,10 +2140,17 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     const taskMetaById = new Map(), taskMetaLoading = new Set(), open = new Map(), pending = new Map(), members = null;
     const sensitiveHidden = () => false;
     ${functionSource('rowSig')}
-    rowSig;
+    // what a row shows is one of the things it is built from, so changing that must change the signature
+    ({ sig: rowSig, display: (keys) => { globalThis.displayKeys = () => keys; } });
   `);
   const inboxRow = { id: 'r', text: 'Task', done: 0, icon: 'task', kind: 'document', stateType: 'proposed', tags: [] };
-  assert.notEqual(rowSig(inboxRow), rowSig({ ...inboxRow, stateType: 'open' }), 'accepting an Inbox task rebuilds its row, so the box does not keep the tick the click put in it');
+  assert.notEqual(rowSig.sig(inboxRow), rowSig.sig({ ...inboxRow, stateType: 'open' }), 'accepting an Inbox task rebuilds its row, so the box does not keep the tick the click put in it');
+  // The Display pill changes every row at once while no row's own data changed, so without this the outline would
+  // keep reusing rows and the choice would appear to do nothing until something else forced a rebuild.
+  rowSig.display(['status', 'assigned', 'updated']);
+  const beforeDisplay = rowSig.sig(inboxRow);
+  rowSig.display(['status', 'assigned', 'updated', 'created']);
+  assert.notEqual(rowSig.sig(inboxRow), beforeDisplay, 'changing what rows display rebuilds them, rather than leaving the old facts on screen');
   assert.match(source, /renderDeferred = true; markFalling\(\); refreshRowChrome\(\); return;/, 'a render that waits for the caret still brings every checkbox up to date');
   // A task's state also lives in copies (a reference in an open note, nested or not; a sidebar row): a change patches them
   const copies = vm.runInNewContext(`
@@ -2156,7 +2172,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
 function runCmdPillsCheck() {
   // The pills now serve two kinds of page, so pillDefs asks which one it is on. These harnesses are all about views,
 // so they answer "a view" — the saved search side gets its own check rather than a share of theirs.
-const definitions = 'const onSearchPage = () => false, pillKey = () => view, setSearchF = () => {};\n' + sourceBetween('const STATES =', 'function renderPills');
+const definitions = 'const onSearchPage = () => false, pillKey = () => view, setSearchF = () => {}, displayPref = {};\n' + sourceBetween('const STATES =', 'function renderPills');
   const api = vm.runInNewContext(`
     let view = 'tasks';
     const filters = new Map([
@@ -2188,6 +2204,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   assert.deepEqual(plain(api.commands('tasks')), [
     ['pill:status', 'Filter by status', 'In Progress', 'status'], ['pill:assigned', 'Filter by assignee', 'Anyone', 'assigned'],
     ['pill:sort', 'Sort by', 'Updated', 'sort'], ['pill:group', 'Group by', 'Status', 'group'],
+    ['pill:display', 'Display', 'Status, Assigned, Updated', 'field'],
   ], 'Cmd+K names the current Tasks view options for what they do, with the value as the hint and each its supplied icon (Tasks groups by Status until told otherwise), and Tasks is a kind page with no type to pick');
   assert.deepEqual(plain(api.open('status')), { mode: 'pill', rows: [['Any status', ''], ['Inbox', ''], ['In Progress', '✓'], ['Completed', ''], ['Later', '']] },
     'a command opens the same Status rows and active tick as the pill');
@@ -2199,9 +2216,9 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   assert.equal(api.pick('Assignee').group, 'assignee', 'Group uses the same shared action too');
   // A kind page is that kind: Tasks, Meetings, Chats and People do not offer a type to pick, so the page cannot be
   // turned into a different one; the Library picks its kinds, and so does the Inbox, which is a state, not a kind.
-  assert.deepEqual(plain(api.commands('library').map(([id]) => id)), ['pill:type', 'pill:status', 'pill:assigned', 'pill:sort', 'pill:group'],
+  assert.deepEqual(plain(api.commands('library').map(([id]) => id)), ['pill:type', 'pill:status', 'pill:assigned', 'pill:sort', 'pill:group', 'pill:display'],
     'Library includes its Type filter plus the other applicable pills');
-  assert.deepEqual(plain(api.commands('inbox').map(([id]) => id)), ['pill:type', 'pill:status', 'pill:assigned', 'pill:sort', 'pill:group'],
+  assert.deepEqual(plain(api.commands('inbox').map(([id]) => id)), ['pill:type', 'pill:status', 'pill:assigned', 'pill:sort', 'pill:group', 'pill:display'],
     'the Inbox is a state rather than a kind, so it still picks types');
   // Right on a pill steps to the next one; past the last (Group) it goes down to the first node, the way Up from
   // that node reaches the last pill (focusAbove).
@@ -2318,7 +2335,7 @@ function runRowAudienceCheck() {
     const mkItem = (docId, node, parent) => { const item = { key: keyFor(docId, node), docId, node, parent }; items.set(item.key, item); return item; };
     const hasKids = () => false, isOpen = () => false, setOpen = () => {}, zoomTo = () => {}, ensureLoaded = () => {}, childrenOf = () => [], isSpace = () => false, draftNode = () => ({ id: 'draft', kind: 'block', text: '', draft: true });
     const renderSegs = () => {}, segsOf = () => [], asDoc = (node) => ({ ...node, kind: 'document', text: node.text ?? node.title ?? '' });
-    const isImage = () => false, chipEl = () => ({}), iconSvg = (icon) => '<svg data-icon="' + icon + '"></svg>';
+    const isImage = () => false, chipEl = () => ({ className: 'chip' }), iconSvg = (icon) => '<svg data-icon="' + icon + '"></svg>';
     const iconNode = (icon) => { const svg = document.createElement('svg'); svg.attrs['data-icon'] = icon; return svg; }; // a cloned template in the app; here the name is what matters
     const childEl = () => document.createElement('div');
     const isDivider = () => false;
@@ -2353,6 +2370,10 @@ function runRowAudienceCheck() {
     ${functionSource('taskMetaEl')}
     ${sourceBetween('const canExpand =', 'function draftNode')}
     ${functionSource('nodeEl')}
+    // which facts a row shows. withShims defaults this; here the harness drives it, so the sub-line can be checked
+    // both with Lives in on and with it off. Assigned through globalThis because the shim's displayOn reads it there.
+    let displayNow = ['status', 'assigned', 'updated'];
+    globalThis.displayKeys = () => displayNow;
     ({
       row: (node, meta) => {
         fetched.length = 0; observed.length = 0; taskMetaById.clear();
@@ -2360,9 +2381,10 @@ function runRowAudienceCheck() {
         const el = nodeEl(node, node.id, null);
         const body = el.children[0].children.find((child) => child.className === 'body');
         const info = body.children.find((child) => child.className.split(' ')[0] === 'meta');
-        return { icons: info ? info.children.map((icon) => icon.attrs['aria-label'] || (icon.children[0] || { attrs: {} }).attrs['data-icon']) : null, gaps: info ? info.children.map((icon) => (icon.style.cssText.match(/margin-left:([^;]+)/) || [])[1] || null) : null, pending: info ? info.className.includes('pending') : null, sub: (body.children.find((child) => child.className === 'subtext') || {}).value || null, fetched: [...fetched], observed: observed.map((watched) => watched.dataset.metaFor) };
+        return { icons: info ? info.children.map((icon) => icon.attrs['aria-label'] || (icon.children[0] || { attrs: {} }).attrs['data-icon']) : null, gaps: info ? info.children.map((icon) => (icon.style.cssText.match(/margin-left:([^;]+)/) || [])[1] || null) : null, pending: info ? info.className.includes('pending') : null, sub: (body.children.find((child) => child.className === 'subtext') || {}).value || null, chips: body.children.filter((child) => child.className === 'chip').length, fetched: [...fetched], observed: observed.map((watched) => watched.dataset.metaFor) };
       },
       onScreen: () => { watching(observed.map((target) => ({ isIntersecting: true, target }))); return [...fetched]; },
+      display: (keys) => { displayNow = keys; },
     });
   `, { structuredClone });
   const doc = { id: 'tana:text:doc1', kind: 'document', text: 'Charter', icon: 'doc', hasChildren: true, editable: true };
@@ -2377,7 +2399,19 @@ function runRowAudienceCheck() {
   assert.deepEqual(row(task, { assignees: ['tana:user-profile:sam'], audience: 'only-me' }).gaps, ['6px'], 'an icon after an assignee name keeps its 6px');
   assert.deepEqual(row(doc, spaceMeta).gaps, ['0'], 'a row with no name in front of the icon does not add a second gap on top of the one the meta span carries');
   assert.deepEqual(row(doc, { assignees: [], audience: 'everyone', linkShared: true }).gaps, ['0', '6px'], 'the icons still stand apart from each other');
-  assert.equal(row(doc, spaceMeta).sub, 'Studio LT', 'a space audience still names the space under the title');
+  // The space sub-line used to be unconditional; it is now the Display pill's "Lives in", which ships off. Both
+  // directions are pinned: wiring it back to always-on would otherwise pass every test in this file.
+  assert.equal(row(doc, spaceMeta).sub, null, 'with Lives in off, a space audience does not name the space under the title');
+  api.display(['status', 'assigned', 'updated', 'space']);
+  assert.equal(row(doc, spaceMeta).sub, 'Studio LT', 'turning Lives in on names it again, the way the row always did');
+  api.display(['status', 'assigned', 'updated']);
+  assert.equal(row(doc, spaceMeta).sub, null, 'and turning it off takes the line away again');
+  // Type is the same shape: the chips are a fact about the row, shown only while the pill asks for them.
+  const tagged = { ...doc, tags: [{ label: 'Charter' }] };
+  api.display(['status', 'assigned', 'updated', 'type']);
+  assert.equal(row(tagged, spaceMeta).chips, 1, 'with Type on, a row shows its type chip');
+  api.display(['status', 'assigned', 'updated']);
+  assert.equal(row(tagged, spaceMeta).chips, 0, 'with Type off, it does not');
   assert.equal(row(doc, { assignees: [], audience: 'unknown' }).icons, null, 'a document with nothing shareable shows nothing at all');
   const settledGaps = row(doc, spaceMeta).gaps;
   const pending = row(doc, null);
@@ -2718,6 +2752,7 @@ function runSearchPillsCheck() {
   const api = vm.runInNewContext(`
     let view = 'tasks';
     let zoom = { docId: 'tana:search:s1', nodeId: null };
+    const displayPref = {}; // state.js declares it, which is outside the slices this harness takes
     const filters = new Map([
       ['tasks', { types: ['tasks'], states: ['open'], assignee: 'anyone', text: '' }],
       ['tana:search:s1', { types: ['tasks'], states: ['proposed'], assignee: 'me', text: '' }],
@@ -2743,9 +2778,10 @@ function runSearchPillsCheck() {
       ids: () => pillDefs().map((def) => def.id),
       applies: () => pillsApply(),
       dirty: () => searchDirty(),
-      loaded: () => { searchFilters.set(zoom.docId, { filter: filters.get(zoom.docId), sort: sortBy(), group: groupBy() }); },
+      loaded: () => { searchFilters.set(zoom.docId, { filter: filters.get(zoom.docId), sort: sortBy(), group: groupBy(), display: displayKeys() }); },
       edit: (patch) => { setSearchF(patch); return filters.get(zoom.docId); },
       arrange: (sort, group) => { if (sort) setSortBy(sort); if (group) setGroupBy(group); return { sort: sortBy(), group: groupBy() }; },
+      show: (id) => { setDisplay(id); return displayKeys(); },
       stored: () => stored,
       behind: () => filters.get('tasks'),
       leave: () => { zoom = null; },
@@ -2755,7 +2791,7 @@ function runSearchPillsCheck() {
   assert.equal(api.applies(), true, 'so they apply there at all');
   // A saved search is never a kind page: choosing what it lists is the whole point of it. Sort and Group are view
   // layout, and the page a search draws neither sorts nor groups, so offering them would offer something that does nothing.
-  assert.deepEqual(plain(api.ids()), ['type', 'status', 'assigned', 'sort', 'group'], 'a saved search offers the query pills and the arrangement ones, which it stores in its own document');
+  assert.deepEqual(plain(api.ids()), ['type', 'status', 'assigned', 'sort', 'group', 'display'], 'a saved search offers the query pills and the arrangement ones, which it stores in its own document');
   api.loaded();
   assert.equal(api.dirty(), false, 'freshly loaded from the document, there is nothing to save');
   assert.deepEqual(plain(api.edit({ states: ['open'] })), { types: ['tasks'], states: ['open'], assignee: 'me', text: '' },
@@ -2771,6 +2807,12 @@ function runSearchPillsCheck() {
   assert.equal(api.dirty(), true, 'and changing the arrangement is something to save, exactly like changing the query');
   assert.ok(!JSON.stringify(plain(api.stored())).includes('tana:search:'),
     'a saved search keeps its arrangement in its document: its key never reaches the preference blob the views persist to');
+  // What its rows show is stored beside the query and the arrangement, so changing it is the same kind of edit: if it
+  // did not count as unsaved, the Save pill would not appear and the choice would be lost on the way out.
+  api.loaded();
+  assert.equal(api.dirty(), false, 'freshly loaded, the display it was saved with is not an edit');
+  assert.deepEqual(plain(api.show('created')), ['status', 'assigned', 'updated', 'created'], 'a saved search takes a display of its own');
+  assert.equal(api.dirty(), true, 'and changing what its rows show is something to save, like the query and the arrangement');
   api.leave();
   assert.equal(api.key(), 'tasks', 'and off the search page the pills belong to the view again');
 }

@@ -103,16 +103,22 @@ ipcMain.handle('search:create', (_e, id, title) => searchCreate(id, title));
 // lives in a root container of its own, which readNode never sees, so reading takes it off the document directly.
 // Writing replaces it wholesale rather than patching: what the pills are showing is what the document ends up saying.
 ipcMain.handle('search:filter', (_e, id) => op(id, (doc) => {
-  const arrangement = doc.loro.getMap('view').toJSON() || {}; // sort and group live beside the query, not inside it
-  return { filter: searchQueryToFilter(doc.loro.getMap('query').toJSON(), S.me && S.me.userUri), sort: arrangement.sortBy, group: arrangement.groupBy };
+  const arrangement = doc.loro.getMap('view').toJSON() || {}; // how it is shown lives beside the query, not inside it
+  return {
+    filter: searchQueryToFilter(doc.loro.getMap('query').toJSON(), S.me && S.me.userUri),
+    sort: arrangement.sortBy,
+    group: arrangement.groupBy,
+    // stored as one string, since a Loro map holds scalars: '' is a real choice (a row showing nothing of itself)
+    display: typeof arrangement.display === 'string' ? arrangement.display.split(',').filter(Boolean) : undefined,
+  };
 }));
 // What the pills would find if they were saved. A staged edit has to change the rows, or the pills read as broken.
 ipcMain.handle('search:preview', (_e, filter) => searchPreview(filter));
-ipcMain.handle('search:setFilter', (_e, id, filter, sort, group) => {
+ipcMain.handle('search:setFilter', (_e, id, filter, sort, group, display) => {
   if (!validViewFilter(filter)) throw new Error('invalid view filter'); // never let a bad filter empty a saved search
   return mut(id, (doc) => {
     setSearchQuery(doc, filterToSearchQuery(filter, S.me && S.me.userUri));
-    setSearchView(doc, { sortBy: sort, groupBy: group }); // saved together: one press, one state of the page
+    setSearchView(doc, { sortBy: sort, groupBy: group, display }); // saved together: one press, one state of the page
   });
 });
 ipcMain.handle('history:undo', () => history(undoStack, redoStack, 'undo', 'canUndo'));

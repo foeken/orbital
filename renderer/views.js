@@ -97,6 +97,41 @@ function sortRows(list) {
   lastOrder = { view: pillKey(), ids: out.map((n) => n.id) };
   return out;
 }
+// ---- display: which of a row's facts it shows ----
+// When it was made, when it last moved and where it lives read as one grey sub-line under the title, because they are
+// all answers to "what is this row"; the rest stay where they already are — the type chips, the assignee, the box.
+const DISPLAY = [['type', 'Type'], ['space', 'Lives in'], ['status', 'Status'], ['assigned', 'Assigned'], ['updated', 'Updated'], ['created', 'Created']];
+const DISPLAY_DEFAULT = ['status', 'assigned', 'updated'];
+const displayKeys = () => { const chosen = displayPref[pillKey()]; return Array.isArray(chosen) ? chosen : DISPLAY_DEFAULT; };
+const displayOn = (id) => displayKeys().includes(id);
+function setDisplay(id) {
+  const on = displayKeys(), next = on.includes(id) ? on.filter((x) => x !== id) : [...on, id];
+  displayPref[pillKey()] = DISPLAY.map(([key]) => key).filter((key) => next.includes(key)); // stored in the menu's order
+  persistPref('display', displayPref);
+  render(true); // every row is built differently now, and rowSig carries the choice so none is reused
+}
+// "4 hours ago". Nothing else in the app says an age in words, so this is the one place that turns a time into one.
+function agoText(iso) {
+  const at = Date.parse(iso || '');
+  if (!at) return '';
+  const age = Math.max(0, Date.now() - at);
+  if (age < 60e3) return 'just now';
+  for (const [limit, size, unit] of [[36e5, 60e3, 'minute'], [864e5, 36e5, 'hour'], [30 * 864e5, 864e5, 'day'], [365 * 864e5, 30 * 864e5, 'month'], [Infinity, 365 * 864e5, 'year']]) {
+    if (age >= limit) continue;
+    const n = Math.max(1, Math.floor(age / size));
+    return n + ' ' + unit + (n === 1 ? '' : 's') + ' ago';
+  }
+  return '';
+}
+// The grey line under a title: when it was made, when it last moved, where it lives — in that order, bullet separated.
+// "Lives in" only has an answer for a document shared with a space, which is the only place a row learns a space name.
+function subtextOf(node, taskInfo) {
+  const bits = [];
+  if (displayOn('created') && node.createdAt) bits.push('Created ' + agoText(node.createdAt));
+  if (displayOn('updated') && node.updatedAt) bits.push('Updated ' + agoText(node.updatedAt));
+  if (displayOn('space') && taskInfo && taskInfo.audience && taskInfo.audience.space) bits.push(taskInfo.audience.space);
+  return bits.join(' · ');
+}
 // What a page shows, from the rows it has already loaded: the ⌘F text filter, then the arrangement its page key asks
 // for. A view and a saved search do exactly this and differ only in where that arrangement is stored, so both
 // branches of renderOutline go through here rather than repeating it — and this is the part of drawing a page that

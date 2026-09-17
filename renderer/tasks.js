@@ -57,10 +57,12 @@ function patchMeta(docId) {
     if (!item || !body) continue;
     const summary = taskSummary(item.node, true) || documentSummary(item.node, true);
     const old = body.querySelector(':scope > .meta.tmeta');
-    if (summary) { const el = taskMetaEl(summary); if (old) old.replaceWith(el); else body.append(el); } else if (old) old.remove();
-    if (summary && summary.audience && summary.audience.space && !body.querySelector(':scope > .subtext')) {
-      const sub = document.createElement('div'); sub.className = 'subtext'; sub.textContent = summary.audience.space; body.append(sub);
-    }
+    if (summary && displayOn('assigned')) { const el = taskMetaEl(summary); if (old) old.replaceWith(el); else body.append(el); } else if (old) old.remove();
+    // the same line a full render would build, so a row does not change shape when its metadata arrives late
+    const subText = subtextOf(item.node, summary), had = body.querySelector(':scope > .subtext');
+    if (subText && had) had.textContent = subText;
+    else if (subText) { const sub = document.createElement('div'); sub.className = 'subtext'; sub.textContent = subText; body.append(sub); }
+    else if (had) had.remove();
     row.dataset.sig = rowSig(item.node); // the row now matches what a fresh render would build
   }
 }

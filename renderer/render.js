@@ -184,7 +184,8 @@ function rowSig(n) {
   const meta = taskMetaById.get(n.id);
   // stateType too: accepting an Inbox task changes only the state, and a reused row would keep the tick the click put in its box
   return JSON.stringify([n.text, n.done, n.stateType, n.icon, n.hue, n.meta, n.tags, n.editable, n.draft, n.hasChildren, n.kind, n.type,
-    sensitiveHidden(n.id), meta || (taskMetaLoading.has(n.id) ? 'loading' : null), members ? members.length : 0, open.get(n.id), pending.has(n.id)]);
+    sensitiveHidden(n.id), meta || (taskMetaLoading.has(n.id) ? 'loading' : null), members ? members.length : 0, open.get(n.id), pending.has(n.id),
+    displayKeys().join(',')]); // which facts the row shows: without this a reused row would keep the old ones
 }
 function renderOutline() {
   const saved = focused();
@@ -412,7 +413,9 @@ function nodeEl(node, docId, parent) {
   bullet.onmousedown = (e) => e.preventDefault();
   if (!node.draft) bullet.onclick = () => reference ? openReference(node) : zoomTo(item);
   line.append(chev, bullet);
-  if (isTask(display) || isCheckboxBlock(display)) {
+  // a task's box is its status, so Display hides it with the rest of the status; a checkbox block is outline content
+  // the user typed, not a fact about the row, so it is never hidden
+  if ((isTask(display) && displayOn('status')) || (!isTask(display) && isCheckboxBlock(display))) {
     const check = document.createElement('input');
     check.type = 'checkbox'; check.className = 'check'; check.checked = !!display.done; check.tabIndex = -1;
     if (isTask(display) && display.stateType === 'proposed') check.classList.add('inbox'); // not accepted yet: a dashed box
@@ -447,13 +450,16 @@ function nodeEl(node, docId, parent) {
   if (display.meta) { const m = document.createElement('span'); m.className = 'meta'; m.textContent = display.meta; body.append(m); }
   // every row describes who can see it, not only task rows; the fetch waits until the row is on screen
   const taskInfo = taskSummary(display, true) || documentSummary(display, true);
-  if (taskInfo) body.append(taskMetaEl(taskInfo));
-  else if (observeMeta(el, display)) body.append(taskMetaEl({ assignees: '', pending: true })); // hold the slot: the real icon lands in the same place, so the row never shifts
-  appendTags(body, display);
-  // a node shared with a whole space names it as a sub-line under the title, the way Tana describes its location
-  if (taskInfo && taskInfo.audience && taskInfo.audience.space) {
+  if (displayOn('assigned')) {
+    if (taskInfo) body.append(taskMetaEl(taskInfo));
+    else if (observeMeta(el, display)) body.append(taskMetaEl({ assignees: '', pending: true })); // hold the slot: the real icon lands in the same place, so the row never shifts
+  } else if (!taskInfo) observeMeta(el, display); // "Lives in" reads the same answer, so the fetch still goes out
+  if (displayOn('type')) appendTags(body, display);
+  // when it was made, when it last moved and where it lives, as one grey line under the title (renderer/views.js)
+  const subText = subtextOf(display, taskInfo);
+  if (subText) {
     const sub = document.createElement('div');
-    sub.className = 'subtext'; sub.textContent = taskInfo.audience.space;
+    sub.className = 'subtext'; sub.textContent = subText;
     body.append(sub);
   }
   blurSensitive(body, docId, target && target.id);

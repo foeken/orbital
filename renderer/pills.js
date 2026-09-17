@@ -32,6 +32,8 @@ function pillDefs() {
   // the search and is what it opens on next time.
   defs.push({ id: 'sort', label: 'Sort', command: 'Sort by', icon: 'sort', value: SORTS.find(([id]) => id === sortBy())[1], rows: () => SORTS.map(([id, label]) => ({ label, checked: sortBy() === id, run: () => setSortBy(id) })) });
   defs.push({ id: 'group', label: 'Group', command: 'Group by', icon: 'group', value: GROUPS.find(([id]) => id === groupBy())[1], rows: () => GROUPS.map(([id, label]) => ({ label, checked: groupBy() === id, run: () => setGroupBy(id) })) });
+  // what each row shows of itself; multi-select, so the menu stays open to tick more, like the type and status lists
+  defs.push({ id: 'display', label: 'Display', command: 'Display', icon: 'field', value: names(DISPLAY, displayKeys()) || 'Nothing', rows: () => DISPLAY.map(([id, label]) => ({ label, keepOpen: true, checked: displayOn(id), run: () => setDisplay(id) })) });
   return defs;
 }
 const pillsApply = () => filters.has(pillKey());
@@ -84,9 +86,9 @@ function savePill() {
   pill.title = 'Save these changes to this search';
   pill.append('Save');
   const go = () => run(async () => {
-    const id = zoom.docId, next = filters.get(id), sort = sortBy(), group = groupBy();
-    await tana.setSearchFilter(id, next, sort, group);
-    searchFilters.set(id, { filter: next, sort, group });
+    const id = zoom.docId, next = filters.get(id), sort = sortBy(), group = groupBy(), display = displayKeys();
+    await tana.setSearchFilter(id, next, sort, group, display);
+    searchFilters.set(id, { filter: next, sort, group, display });
     searchRows.delete(id); // the stored query is what these rows answer now, so the preview stands down
     await reload(id); // the rows are the query's answer, so saving the query re-asks it
     render(true);

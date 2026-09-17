@@ -164,7 +164,7 @@ function mockApi() {
     // sdk/query; the mock keeps the filter as it was given, since what it has to match is the channel's shape, not
     // the document's. A sample search that predates any save opens on the Library's filter rather than on nothing.
     searchFilter: async (id) => structuredClone(searchQueries[id] || { filter: filters.library }),
-    setSearchFilter: async (id, filter, sort, group) => structuredClone(searchQueries[id] = { filter, sort, group }),
+    setSearchFilter: async (id, filter, sort, group, display) => structuredClone(searchQueries[id] = { filter, sort, group, display }),
     // the rows a staged filter would find: the same selection viewList makes, so editing the pills moves the list
     searchPreview: async (filter) => {
       const text = String(filter.text || '').trim().toLowerCase();

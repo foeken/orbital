@@ -58,6 +58,7 @@ let menu = null;             // open pill menu: { id, index }
 // document id and lives in the document, so only the view keys are written back to localStorage (persistPref).
 const groupPref = JSON.parse(localStorage.getItem('groupBy') || '{}'); // page key -> 'none' | 'status' | 'assignee' | 'updated' | 'type'
 const sortPref = JSON.parse(localStorage.getItem('sortBy') || '{}');   // page key -> 'default' | 'updated' | 'created' | 'title'
+const displayPref = JSON.parse(localStorage.getItem('display') || '{}'); // page key -> which of a row's facts it shows
 let rootsLoaded = false, connected = false; // for the loading skeleton: shown while the view has no rows and roots/library/connection are still pending
 // font size: native page zoom (⇧⌘+ / ⇧⌘− / ⌘0), persisted. Default is one step below native.
 const BASE_ZOOM = 0.91;

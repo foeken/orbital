@@ -217,12 +217,17 @@ function setSearchQuery(document, query) {
 // rather than inside it: it changes nothing about which rows the search finds, only how they are shown. Set or
 // delete for the same reason the query's flags are: an arrangement dropped from a save must not linger in the
 // document and come back the next time it is opened.
+// `display` is the list of facts each row shows, stored as one comma-joined string because a Loro map holds scalars,
+// not arrays. An empty list is a real choice — a row showing nothing of itself — so it is stored as an empty string
+// rather than deleted, which is what tells it apart from a search that has never been given a display at all.
 function writeSearchView(loro, view = {}) {
   const v = loro.getMap('view');
   for (const key of ['sortBy', 'groupBy']) {
     if (typeof view[key] === 'string' && view[key]) v.set(key, view[key]);
     else if (v.get(key) !== undefined) v.delete(key);
   }
+  if (Array.isArray(view.display)) v.set('display', view.display.join(','));
+  else if (v.get('display') !== undefined) v.delete('display');
 }
 function setSearchView(document, view) {
   if ((document.data.get('type')) !== 'search') throw new Error('not a saved search');

@@ -84,7 +84,9 @@ assert.match(source, /const docRow = \(n, hint, run\) => \(\{ node: n, icon: n\.
 assert.match(source, /parent\.node\?\.kind !== 'document' && parent\.node\?\.done != null \? 0 : undefined/);
 assert.match(source, /f && f\.node\.kind === 'block' && f\.node\.done != null \? 0 : undefined/);
 assert.match(source, /f\.node\.kind === 'block' && f\.node\.done != null \? 0 : undefined/);
-assert.match(source, /if \(isTask\(display\) \|\| isCheckboxBlock\(display\)\)/);
+// both still get a box, but a task's box is its status and the Display pill can hide it; a checkbox block is outline
+// content the user typed rather than a fact about the row, so it is never hidden
+assert.match(source, /if \(\(isTask\(display\) && displayOn\('status'\)\) \|\| \(!isTask\(display\) && isCheckboxBlock\(display\)\)\)/);
 assert.match(source, /function inheritCheckbox\(parent, nodeId\)/);
 assert.match(source, /const canEditNode = \(node\) => !!node && node\.editable !== false;/);
 assert.match(source, /check\.disabled = reference \? !canEditNode\(display\) : !canEditItem\(item\);/);
