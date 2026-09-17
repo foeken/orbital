@@ -7,8 +7,8 @@ const TYPES = [['meetings', 'Meetings', 'meeting'], ['tasks', 'Tasks', 'task'], 
 const toggleIn = (all, list, v) => { if (!list) return [v]; const next = all.filter((x) => list.includes(x) !== (x === v)); return next.length ? next : null; }; // null = any
 const names = (pairs, list) => (list ? pairs.filter((p) => p && list.includes(p[0])).map((p) => p[1]).join(', ') : null);
 // ---- group by: plain headings over the rows the view already loaded, no extra query ----
-const GROUPS = [['none', 'None'], ['status', 'Status'], ['assignee', 'Assignee'], ['updated', 'Updated'], ['type', 'Type']];
-const FALLBACK = { status: 'No status', assignee: 'Unassigned', updated: 'Older', type: 'No type' };
+const GROUPS = [['none', 'None'], ['status', 'Status'], ['assignee', 'Assignee'], ['notify', 'Notifications'], ['updated', 'Updated'], ['type', 'Type']];
+const FALLBACK = { status: 'No status', assignee: 'Unassigned', notify: 'Not notifying', updated: 'Older', type: 'No type' };
 // Group by Updated: how long ago the row last changed, newest first; past a month, or with no time to read, it is Older
 const UPDATED_BUCKETS = [[36e5, 'Last hour'], [864e5, 'Last day'], [7 * 864e5, 'Last week'], [30 * 864e5, 'Last month']];
 // Tasks reads as its states (Inbox, In Progress, Later) until the user picks another grouping; other views start ungrouped
@@ -60,6 +60,9 @@ function groupKey(n, by) {
   if (by === 'updated') { const age = Date.now() - Date.parse(n.updatedAt); return (UPDATED_BUCKETS.find(([ms]) => age < ms) || [])[1] || FALLBACK.updated; }
   // ponytail: a task with several assignees is filed under the first one, like the row's own summary reads
   if (by === 'assignee') { const meta = taskMetaById.get(n.id), uri = meta && meta.assignees[0]; return uri ? memberName(uri) : FALLBACK.assignee; }
+  // The same lazily read metadata the bell is drawn from, so a row whose answer has not arrived yet sits under
+  // "Not notifying" and moves up when it does — exactly how grouping by assignee already behaves.
+  if (by === 'notify') { const meta = taskMetaById.get(n.id); return meta && meta.watched ? 'Notifying' : FALLBACK.notify; }
   return (visibleTags(n)[0] || {}).label || FALLBACK.type;
 }
 // [{ title, nodes }] in a fixed order: the status sequence as the Status menu lists it, names alphabetically,

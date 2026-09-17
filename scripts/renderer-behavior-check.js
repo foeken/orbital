@@ -2051,7 +2051,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     const filters = new Map([['tasks', { types: ['tasks'], states: ['open'], assignee: 'me' }]]);
     const views = [{ id: 'tasks', kind: true }, { id: 'library' }];
     let members = [{ id: 'me', title: 'Robin', me: true }, { id: 'sam', title: 'Sam' }];
-    const taskMetaById = new Map([['t1', { assignees: ['sam'] }], ['t2', { assignees: ['me'] }], ['t4', { assignees: ['tana:user-profile:ghost'] }]]);
+    const taskMetaById = new Map([['t1', { assignees: ['sam'], watched: true }], ['t2', { assignees: ['me'] }], ['t4', { assignees: ['tana:user-profile:ghost'], watched: false }]]);
     const tana = {}, palette = { hidden: true };
     const $ = () => ({ hidden: true });
     const renderPills = () => {}, render = () => {}, showError = () => {}, setViewF = () => {};
@@ -2079,6 +2079,10 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     'assignees sort by name, a member without a loaded name keeps its uri, the rest is Unassigned');
   assert.deepEqual(titles(rows, 'type'), [['doc', ['d1']], ['Project', ['t1']], ['task', ['t2', 't3', 't4']]],
     'type groups on the tag the row already shows as its chip');
+  // The bell as a heading: watched first, everything else under one heading — including rows whose metadata has not
+  // arrived, which is the same approximation grouping by assignee makes and the reason the fallback sits last.
+  assert.deepEqual(titles(rows, 'notify'), [['Notifying', ['t1']], ['Not notifying', ['t2', 't3', 't4', 'd1']]],
+    'Notifications groups the watched rows apart; an unwatched row and one still waiting on its answer read the same');
   assert.deepEqual(titles([{ id: 'x', tags: [] }], 'type'), [['No type', ['x']]], 'a row without tags groups under No type');
   const ago = (ms) => new Date(Date.now() - ms).toISOString();
   const aged = [['u1', ago(10 * 60e3)], ['u2', ago(5 * 36e5)], ['u3', ago(3 * 864e5)], ['u4', ago(20 * 864e5)], ['u5', ago(90 * 864e5)], ['u6', undefined], ['u7', ago(20 * 60e3)]]
@@ -2154,7 +2158,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   const sort = defs.find((d) => d.id === 'sort'), group = defs.find((d) => d.id === 'group');
   assert.deepEqual(plain([sort.label, sort.value, group.label, group.value]), ['Sort', 'Title', 'Group', 'Status'], 'both pills read their active option');
   assert.deepEqual(plain(sort.rows().map((r) => r.label)), ['Default', 'Updated', 'Created', 'Title'], 'the Sort menu offers only orders backed by row data');
-  assert.deepEqual(plain(group.rows().map((r) => r.label)), ['None', 'Status', 'Assignee', 'Updated', 'Type'], 'the Group menu offers the five groupings');
+  assert.deepEqual(plain(group.rows().map((r) => r.label)), ['None', 'Status', 'Assignee', 'Notifications', 'Updated', 'Type'], 'the Group menu offers the six groupings');
   assert.ok(sort.rows().find((r) => r.label === 'Title').checked && group.rows().find((r) => r.label === 'Status').checked, 'the active option is ticked');
   assert.ok([...sort.rows(), ...group.rows()].every((r) => !r.keepOpen), 'choosing an option closes the popup, like every other single choice');
   assert.match(source, /const shown = pageRows\(docs, filterEl\.value\.trim\(\)\.toLowerCase\(\)\);/, 'a view draws its rows through pageRows, which sorts then groups them');
