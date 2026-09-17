@@ -114,7 +114,15 @@ function paletteRows(q) {
     loadNotify(palDoc.id);
     const watch = notifyById.get(palDoc.id);
     if (watch) rows.push({ rank: 'notify', group: docGroup, icon: 'notify', label: watch.on ? 'Stop notifying' : 'Notify on changes',
-      run: () => run(async () => { notifyById.set(palDoc.id, await tana.setNotify(palDoc.id, !watch.on)); renderPalette(); }) });
+      run: () => run(async () => {
+        const state = await tana.setNotify(palDoc.id, !watch.on);
+        notifyById.set(palDoc.id, state);
+        // the bell on the row is read from the cached metadata, which nothing else invalidates for a watch change
+        const meta = taskMetaById.get(palDoc.id); if (meta) taskMetaById.set(palDoc.id, { ...meta, watched: state.on });
+        // and the row is patched rather than re-rendered: the palette hands the caret back to the row it was opened
+        // from, and a render with the caret in a row is deferred until it leaves — which left the bell as it was.
+        renderPalette(); patchMeta(palDoc.id);
+      }) });
   }
   if (palDoc && tana.accessOptions) {
     loadAccess(palDoc.id);

@@ -85,7 +85,7 @@ function taskSummary(node, lazy) {
   if (!meta) { if (!lazy) loadTaskMeta(node.id); return null; }
   if (meta.assignees.length) loadMembers(); // names need the member list; loading it re-renders when it arrives
   const scope = typeof meta.audience === 'string' ? meta.audience : meta.audience?.scope;
-  return { assignees: meta.assignees.length ? meta.assignees.map(memberName).join(', ') : 'Unassigned', audience: audienceInfo(meta.audience, meta.audienceSpace), scope, unknownAudience: scope === 'unknown', linkShared: !!meta.linkShared };
+  return { assignees: meta.assignees.length ? meta.assignees.map(memberName).join(', ') : 'Unassigned', audience: audienceInfo(meta.audience, meta.audienceSpace), scope, unknownAudience: scope === 'unknown', linkShared: !!meta.linkShared, watched: !!meta.watched };
 }
 // the same facts for a document that is not a task: no assignee, but it can be shared or public
 function documentSummary(node, lazy) {
@@ -93,8 +93,8 @@ function documentSummary(node, lazy) {
   const meta = taskMetaById.get(node.id);
   if (!meta) { if (!lazy) loadTaskMeta(node.id); return null; }
   const audience = audienceInfo(meta.audience, meta.audienceSpace);
-  if (!audience && !meta.linkShared) return null;
-  return { assignees: '', audience, scope: typeof meta.audience === 'string' ? meta.audience : meta.audience?.scope, unknownAudience: false, linkShared: !!meta.linkShared };
+  if (!audience && !meta.linkShared && !meta.watched) return null;
+  return { assignees: '', audience, scope: typeof meta.audience === 'string' ? meta.audience : meta.audience?.scope, unknownAudience: false, linkShared: !!meta.linkShared, watched: !!meta.watched };
 }
 function taskMetaEl(summary) {
   const el = document.createElement('span');
@@ -122,6 +122,8 @@ function taskMetaEl(summary) {
   else if (summary.unknownAudience) el.append(' · Visibility unknown');
   // link sharing is separate from the Tana audience: anyone with the url can read it
   if (summary.linkShared) el.append(iconEl('globe', 'Anyone with the link'));
+  // last of the row's icons: a bell says changes to this node reach you, whether you asked or the rule decided
+  if (summary.watched) el.append(iconEl('notify', 'Notifying on changes'));
   return el;
 }
 function setTaskAssignees(doc, assignees) {

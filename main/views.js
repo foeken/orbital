@@ -6,7 +6,7 @@ const { createTanaClient } = require('../sdk');
 const { parseQuery, searchParams, needsTypes, viewParams, filterToSearchQuery, validViewFilter, viewTypes, VIEW_PRESETS, hideRules, isHidden } = require('../sdk/query');
 const { NOT_CONNECTED, S, deletedNodes, docStates, errText, idKind, isMcp, memberTitle, now, truncatedViews, redoStack, send, setStatus, subscribed, undoStack, visibleGraphNodes } = require('./state');
 const { graphRow, rememberNodeHue, resolveTypes, toNode, typesByTitle } = require('./rows');
-const { createDocument, inHistory, onChange, subscribe } = require('./documents');
+const { createDocument, inHistory, notifyWatchedIds, onChange, subscribe } = require('./documents');
 
 
 // Persisted view filters are merged over their preset; an invalid saved value cannot strand a view across restarts.
@@ -43,9 +43,10 @@ async function viewRows(id, filter) {
   db.replaceSection(id, rows);
   if (id === S.activeView && filter === S.activeFilter) {
     const ids = new Set(nodes.map((n) => n.id));
+    const watched = notifyWatchedIds(); // a node you asked to be told about stays subscribed wherever you are
     for (const nodeId of ids) if (!subscribed.has(nodeId)) { subscribed.add(nodeId); subscribe(nodeId); }
     // Leaving a filtered view must not discard a document whose local undo step still points at its Loro handle.
-    for (const nodeId of subscribed) if (!ids.has(nodeId) && !deletedNodes.has(nodeId) && !inHistory(nodeId)) { subscribed.delete(nodeId); docStates.delete(nodeId); S.client.sync.unsubscribe(nodeId).catch(() => {}); }
+    for (const nodeId of subscribed) if (!ids.has(nodeId) && !watched.has(nodeId) && !deletedNodes.has(nodeId) && !inHistory(nodeId)) { subscribed.delete(nodeId); docStates.delete(nodeId); S.client.sync.unsubscribe(nodeId).catch(() => {}); }
   }
   if (result.truncated) truncatedViews.add(id); else truncatedViews.delete(id);
   return { nodes: rows.map(toNode), truncated: !!result.truncated };
@@ -124,6 +125,8 @@ async function start() {
   S.client.sync.on('change', onChange);
   setStatus({ authenticated: true });
   await S.client.sync.connect();
+  // Watched nodes are live from boot, listed or not: a deleted or unreachable one is simply not watched any more.
+  for (const id of notifyWatchedIds()) S.client.sync.subscribe(id).catch(() => {});
   await refresh();
 }
 

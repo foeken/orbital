@@ -287,6 +287,7 @@ async function runSelectionChecks() {
       const render = () => { rendered++; };
       const showError = (value) => { error = value && value.message; };
       const reload = async () => {};
+      const patchDoc = async () => {}; // history() patches the changed row; this harness models the outline, not the row caches
       const run = async (fn) => fn();
       const flushAll = () => {}, focused = () => null, loadRoots = async () => {}, kids = new Map([['doc', nodes]]), caretNear = () => {};
       const open = new Map(), keyFor = (docId, node) => docId + '/' + node.id;
@@ -2442,6 +2443,10 @@ function runRowAudienceCheck() {
   api.display(['status', 'assigned', 'updated']);
   assert.equal(row(tagged, spaceMeta).chips, 0, 'with Type off, it does not');
   assert.equal(row(doc, { assignees: [], audience: 'unknown' }).icons, null, 'a document with nothing shareable shows nothing at all');
+  // A watched node says so on the row: the bell is the only place outside Cmd+K that tells you changes reach you.
+  assert.deepEqual(row(doc, { ...spaceMeta, watched: true }).icons, ['Visible to members of Studio LT', 'Notifying on changes'], 'a watched row carries a bell after its audience icon');
+  assert.deepEqual(row(task, { assignees: ['tana:user-profile:sam'], audience: 'only-me', watched: true }).icons, ['Visible only to you', 'Notifying on changes'], 'a task row carries it too');
+  assert.deepEqual(row(doc, { assignees: [], audience: 'unknown', watched: true }).icons, ['Notifying on changes'], 'and a document with nothing shareable still shows the bell rather than nothing');
   const settledGaps = row(doc, spaceMeta).gaps;
   const pending = row(doc, null);
   assert.deepEqual(pending.icons, ['pending'], 'a row still waiting on its metadata holds the slot with the dashed placeholder');
@@ -3048,7 +3053,48 @@ async function runSearchPageRowUpdateCheck() {
 
 
 
-const checks = [runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runDraftTailCheck,runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck];
+// Turning the bell on or off has to show on the row, and the palette hands the caret back to the row it was opened
+// from — where a render is deferred until the caret leaves. So the toggle patches the row itself; a regression to
+// the frame-coalesced render would leave the bell exactly as it was, which is how this was reported.
+function runNotifyToggleCheck() {
+  const harness = (on) => vm.runInNewContext(`
+    const DOC = 'tana:text:01examplea0000000000000000';
+    const patched = [];
+    const patchMeta = (id) => patched.push(id);
+    const renderSoon = () => patched.push('deferred render');
+    const renderPalette = () => {};
+    const run = (fn) => fn();
+    const loadNotify = () => {};
+    const isRealId = (id) => String(id).startsWith('tana:');
+    const notifyById = new Map([[DOC, { on: ${on}, default: false, explicit: true }]]);
+    const taskMetaById = new Map([[DOC, { assignees: [], audience: 'only-me', watched: ${on} }]]);
+    const palDoc = { id: DOC, text: 'Contract', kind: 'document', icon: 'doc' };
+    let asked = null;
+    const tana = { notifyState: async () => ({}), setNotify: async (id, next) => { asked = next; return { on: next, default: false, explicit: true }; } };
+    const views = [], pinTree = [], pinRows = () => [], selectionRows = () => [];
+    const pillCommandRows = () => [], taskActionRows = () => [], searches = [], goTo = () => {};
+    const authed = true, authChecking = false, signedOut = false, pinInfo = null, hotkeys = {}, theme = 'light';
+    const localDate = () => '2026-09-13', setTheme = () => {};
+    const docRow = () => ({}), sectionOf = () => null;
+    const zoom = null, railEl = { hidden: true }, navBack = [], navForward = [];
+    const railToggle = { hidden: false }, railHidden = false;
+    ${functionSource('paletteRows')}
+    const row = paletteRows('').find((r) => r.rank === 'notify');
+    ({ label: row.label, press: async () => { await row.run(); return { patched, asked, watched: taskMetaById.get(DOC).watched }; } });
+  `);
+  return Promise.all([harness(true), harness(false)].map(async (api, i) => {
+    const on = i === 0;
+    assert.equal(api.label, on ? 'Stop notifying' : 'Notify on changes', 'the row says what pressing it does');
+    const after = plain(await api.press());
+    assert.equal(after.asked, !on, 'pressing it asks main for the opposite of what is set');
+    assert.equal(after.watched, !on, 'and the cached metadata the bell is drawn from follows, rather than waiting for a re-read');
+    assert.deepEqual(after.patched, ['tana:text:01examplea0000000000000000'],
+      'the row itself is patched: a deferred render would leave the bell as it was, whichever way it was turned');
+  }));
+}
+
+
+const checks = [runNotifyToggleCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runDraftTailCheck,runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck];
 // Red until the checks actually settle: an async check left awaiting something that never resolves empties the event
 // loop, and node would exit 0 without a word — a silent pass for a check that never finished.
 process.exitCode = 1;

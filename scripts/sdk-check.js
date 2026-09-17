@@ -862,6 +862,18 @@ async function main() {
     setState(watched, 'closed', ME);
     backend.onChange(watched.id, { origin: 'remote' });
     assert.equal(notified.at(-1)[2], 'Now Completed', 'a status change says what the status became, not just that something moved');
+    // An edit is an edit: a body rewritten elsewhere moves neither title nor state, and a watched node nobody ever
+    // hears from is the same as an unwatched one. The document's own ops are what says something happened.
+    watched.transact((l) => l.getMap('content').set('rev', 1));
+    backend.onChange(watched.id, { origin: 'remote' });
+    assert.equal(notified.length, 3, 'a change to the body alone is announced too');
+    assert.equal(notified.at(-1)[2], 'Edited', 'as an edit, because no status moved');
+    watched.transact((l) => l.getMap('content').set('rev', 2));
+    backend.onChange(watched.id, { origin: 'remote' });
+    assert.equal(notified.length, 3, 'and the rest of that burst is quiet: remote typing arrives op by op');
+    // Nothing moved at all — a re-imported snapshot after a resync — is not an edit either.
+    backend.onChange(watched.id, { origin: 'remote' });
+    assert.equal(notified.length, 3, 'and re-seeing ops already seen announces nothing');
     // An explicit no beats a default yes, and clearing it returns to the rule rather than to off.
     await backend.handlers.get('notify:set')(null, watched.id, false);
     // Field by field: these objects are built inside the main-process vm, so a whole-object compare under
@@ -872,7 +884,7 @@ async function main() {
     assert.equal(off.explicit, true, 'and it is remembered as a choice rather than as the default');
     setTitle(watched, 'Contract v4');
     backend.onChange(watched.id, { origin: 'remote' });
-    assert.equal(notified.length, 2, 'and nothing is announced while it is off');
+    assert.equal(notified.length, 3, 'and nothing is announced while it is off');
     await backend.handlers.get('notify:set')(null, watched.id, null);
     const cleared = await backend.handlers.get('notify:state')(null, watched.id);
     assert.equal(cleared.explicit, false, 'clearing the choice forgets it');

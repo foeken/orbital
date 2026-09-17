@@ -151,6 +151,11 @@ const notifyDefault = (n) => {
 // is a real answer and not the same as never having chosen.
 const notifyChoices = () => { const stored = db.setting('notify'); return stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {}; };
 const notifyOn = (n) => { const chosen = notifyChoices()[n.id]; return typeof chosen === 'boolean' ? chosen : notifyDefault(n); };
+// The nodes you explicitly asked to be told about. A change only reaches onChange while its document is subscribed,
+// and the view refresh unsubscribes everything the active view stops listing, so without this "notify me" quietly
+// meant "while this view happens to list it". The rule-based defaults cannot be enumerated without reading every
+// document, so they stay as they were: watched while something is looking at them.
+const notifyWatchedIds = () => { const chosen = notifyChoices(); return new Set(Object.keys(chosen).filter((id) => chosen[id] === true)); };
 async function notifyState(id) {
   const n = await op(id, (doc) => readNode(doc));
   return { on: notifyOn(n), default: notifyDefault(n), explicit: typeof notifyChoices()[id] === 'boolean' };
@@ -162,16 +167,24 @@ async function setNotify(id, on) {
   return notifyState(id);
 }
 const NOTIFY_STATE = { proposed: 'Inbox', open: 'In Progress', closed: 'Completed', not_now: 'Later' };
-const notifySigs = new Map(); // docId -> [title, stateType] as last seen: what a change has to differ from to be one
+// docId -> [title, stateType, oplog frontiers] as last seen: what a change has to differ from to be one. The
+// frontiers are what makes an ordinary edit count — a body rewritten elsewhere moves neither title nor state, and
+// watching a node you never hear from is the same as not watching it. They also absorb a re-import of ops already
+// seen (a resync), which a version-free comparison would announce as an edit.
+const notifySigs = new Map();
+const notifyQuiet = new Map(); // docId -> when a plain edit was last announced
+const EDIT_QUIET_MS = 60000; // a remote edit arrives op by op: someone typing is one banner a minute, not fifty
 // Only changes from somewhere else. onChange fires for your own typing too, and being notified about your own edits
 // would make this unusable; sdk/document.js already marks every change local or remote, so the origin decides.
-function notifyWatched(id, n, info) {
-  const sig = [n.title ?? '', n.stateType ?? ''];
+function notifyWatched(id, doc, n, info) {
+  const sig = [n.title ?? '', n.stateType ?? '', JSON.stringify(doc.loro.oplogFrontiers())];
   const before = notifySigs.get(id);
   notifySigs.set(id, sig);
   if (!info || info.origin !== 'remote') return;
-  if (!before || (before[0] === sig[0] && before[1] === sig[1])) return; // first sight, or nothing worth saying moved
+  if (!before || JSON.stringify(before) === JSON.stringify(sig)) return; // first sight, or nothing worth saying moved
   if (!notifyOn(n)) return;
+  const moved = before[0] !== sig[0] || before[1] !== sig[1]; // a rename or a status change: rare, and always worth a banner
+  if (!moved) { const last = notifyQuiet.get(id) || 0; if (Date.now() - last < EDIT_QUIET_MS) return; notifyQuiet.set(id, Date.now()); }
   const body = before[1] !== sig[1] ? (NOTIFY_STATE[sig[1]] ? 'Now ' + NOTIFY_STATE[sig[1]] : 'Status changed') : 'Edited';
   if (S.notify) S.notify(id, n.title || 'Untitled', body);
 }
@@ -195,7 +208,7 @@ function onChange(docId, info) {
     // edit must not cost it the owner-chain and link-sharing lookups, so the event says whether they did.
     const sig = metaSig(n), meta = metaSigs.get(docId) !== sig;
     metaSigs.set(docId, sig);
-    notifyWatched(docId, n, info); // before the renderer hears about it: the same read, one decision
+    notifyWatched(docId, doc, n, info); // before the renderer hears about it: the same read, one decision
     send('outline:changed', docId, { meta }); // the renderer patches this one row from doc:info
     if (pinsChanged || restored) send('outline:changed', null);
     if (restored) scheduleRefresh(0);
@@ -351,4 +364,4 @@ async function moveTarget(spaceId) {
   return document(spaceId);
 }
 
-module.exports = { outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, createDocument, info, setSensitive, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, document, op, inHistory, mut, mutTasks, documentAction, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget };
+module.exports = { outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, createDocument, info, setSensitive, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, document, op, inHistory, mut, mutTasks, documentAction, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget };

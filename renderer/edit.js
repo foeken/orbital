@@ -24,7 +24,10 @@ function flush(key) {
   if (item.node.kind === 'block' && (typeof item.node.id !== 'string' || !item.node.id)) {
     return run(async () => { await reload(item.docId); render(true); throw new Error('This outline row no longer exists'); });
   }
-  item.node.text = text; item.node.segments = segs;
+  // A title is plain text (#53), and segsOf() prefers segments over text: left behind on a document node, the ones
+  // typed here would outlive every in-place patch of that row (an undo, a remote edit, a status change), since a
+  // patch carries only text. Same rule as the mark toggles in toolbar.js.
+  item.node.text = text; item.node.segments = item.node.kind === 'document' ? undefined : segs;
   run(async () => {
     try { await (item.node.kind === 'document' ? tana.setTitle(item.docId, text) : tana.setText(item.docId, item.node.id, saveValue(segs))); }
     catch (e) { if (item.node.kind === 'block') { await reload(item.docId); render(true); } throw e; }
@@ -132,6 +135,10 @@ async function history(op) {
   await run(async () => {
     const docId = await tana[op]();
     await loadRoots();
+    // The changed row, wherever it is listed: a view, or a page that lists documents (a saved search, a space),
+    // whose rows loadRoots never touches. onChanged patches it too, but its render is deferred while the caret is
+    // still in the row — which is exactly where it is after a Cmd+Z — so the undo would not show until you left.
+    if (docId) await patchDoc(docId);
     if (docId && kids.has(docId)) await reload(docId);
   });
   render(true);
