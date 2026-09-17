@@ -2610,10 +2610,37 @@ async function runMemberLoadCheck() {
   assert.equal(throttled.attempts, 3, 'a slow start cannot turn renders into a request loop: a fresh ask is throttled');
 }
 
-// Saved searches are places to go, so Cmd+K lists them under their own heading.
+// Saved searches are places to go, so Cmd+K lists them under their own heading, each opening its document via goTo.
 function runSearchesGroupCheck() {
-  assert.match(source, /group: 'Searches'/, 'the palette has a Searches group');
-  assert.match(source, /searches = await tana\.searches\(\)|tana\.searches\(\)/, 'and the renderer loads them from the read-only channel');
+  assert.match(source, /searches = await tana\.searches\(\)|tana\.searches\(\)/, 'the renderer loads saved searches from the read-only channel');
+  const paletteRows = functionSource('paletteRows');
+  // A minimal paletteRows harness, matching the one above (runSyncShortcutCheck): only `searches` and `goTo` vary,
+  // so a row from the new group and the effect of running it are both observed, not merely a string in the source.
+  const harness = (searchesLiteral) => vm.runInNewContext(`
+    const calls = [];
+    const goTo = (uri) => calls.push(uri);
+    const searches = ${searchesLiteral};
+    const views = [], pinTree = [], pinRows = () => [], selectionRows = () => [];
+    const pillCommandRows = () => [];
+    const taskActionRows = () => [];
+    const tana = { refresh: async () => {} }, run = () => {};
+    const authed = true, authChecking = false, signedOut = false, pinInfo = null, palDoc = null, hotkeys = {}, theme = 'light';
+    const localDate = () => '2026-09-13', setTheme = () => {};
+    const docRow = () => ({}), sectionOf = () => null;
+    const zoom = null, railEl = { hidden: true }, navBack = [], navForward = [];
+    ${paletteRows}
+    const rows = paletteRows('').filter((r) => r.group === 'Searches');
+    ({ rows: rows.map((r) => ({ id: r.id, label: r.label })), open: (i) => { rows[i].run(); return calls; } });
+  `);
+  // The fixture carries only `title` (no `text`), the shape the in-file mock's info() actually returns
+  // (renderer/mock.js), so this also exercises the `s.text || s.title` label fallback, not just the `s.text` path.
+  const populated = harness("[{ id: 'tana:search:01j0search0000000000000000', title: 'Weekly review' }]");
+  assert.deepEqual(plain(populated.rows), [{ id: 'search:tana:search:01j0search0000000000000000', label: 'Weekly review' }],
+    'a saved search is listed under Searches, labelled from the document');
+  assert.deepEqual(plain(populated.open(0)), ['tana:search:01j0search0000000000000000'], 'selecting it opens the search document via goTo');
+
+  const empty = harness('[]');
+  assert.deepEqual(plain(empty.rows), [], 'no saved searches means no Searches group at all');
 }
 
 const checks = [runDraftTailCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck];
