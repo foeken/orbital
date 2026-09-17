@@ -83,8 +83,9 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
   display: flex; align-items: center; justify-content: center;
   width: 24px; height: 24px; padding: 0; border: 0;
   background: none; color: #777; cursor: pointer; border-radius: 4px;
+  opacity: .4;
 }
-.railtoggle:hover { background: #ddd; }
+.railtoggle:hover { background: #ddd; opacity: 1; }
 .railtoggle[hidden] { display: none; }
 .railtoggle svg { display: block; width: 18px; height: 18px; }
 

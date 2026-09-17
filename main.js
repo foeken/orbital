@@ -12,7 +12,7 @@ const { readNode, setTitle, setState, taskMeta, audienceMetadata, setAssignees, 
 const { filterToSearchQuery, isHidden, searchQueryToFilter, validViewFilter } = require('./sdk/query');
 const content = require('./sdk/content');
 const fields = require('./sdk/fields');
-const { NOT_CONNECTED, S, VIEWS, errText, idKind, isSearch, isSpace, metaSigs, pathCache, truncatedViews, redoStack, report, scheduleRefresh, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
+const { NOT_CONNECTED, S, VIEWS, docStates, errText, idKind, isSearch, isSpace, metaSigs, pathCache, truncatedViews, redoStack, report, scheduleRefresh, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
 const { cachedNodeHue, graphRow, members, rememberNodeHue, toNode } = require('./main/rows');
 const { accessContext, chatOutline, createDocument, creationOptions, documentAction, history, info, linkShared, metaSig, moveTarget, mut, mutTasks, notifyState, setNotify, onChange, op, outlineWithReferences, setSensitive } = require('./main/documents');
 const { callOf, pathOf, related, searchChildren, searchPreview, spaceChildren, summaryUri } = require('./main/related');
@@ -128,10 +128,13 @@ ipcMain.handle('doc:restore', (_e, id) => documentAction(id, 'restore'));
 ipcMain.handle('doc:setTitle', (_e, id, title) => mut(id, (doc) => { setTitle(doc, title); }));
 ipcMain.handle('doc:setDone', (_e, id, done) => mut(id, (doc) => {
   setState(doc, done ? 'closed' : 'open', S.me.userUri);
+  docStates.set(id, done ? 'closed' : 'open');
   scheduleRefresh(2000); // a closed task drops off the open list
 }));
-ipcMain.handle('doc:setState', (_e, id, state) => mutTasks([id], (doc) => setState(doc, state, S.me.userUri)).then((count) => { scheduleRefresh(2000); return count; }));
-ipcMain.handle('doc:setStateMany', (_e, ids, state) => mutTasks(ids, (doc) => setState(doc, state, S.me.userUri)).then((count) => { scheduleRefresh(2000); return count; }));
+// The state is recorded here, where it is known, rather than left to whatever reads the document next: the refresh
+// two seconds from now asks the search index, which can still be answering with the state from before this write.
+ipcMain.handle('doc:setState', (_e, id, state) => mutTasks([id], (doc) => setState(doc, state, S.me.userUri)).then((count) => { docStates.set(id, state); scheduleRefresh(2000); return count; }));
+ipcMain.handle('doc:setStateMany', (_e, ids, state) => mutTasks(ids, (doc) => setState(doc, state, S.me.userUri)).then((count) => { for (const id of ids) docStates.set(id, state); scheduleRefresh(2000); return count; }));
 // linkSharing lives on the graph node, never in the document, so public-to-the-internet needs its own lookup
 ipcMain.handle('doc:taskMeta', (_e, id) => op(id, async doc => {
   metaSigs.set(id, metaSig(readNode(doc))); // from here on, only a change to these fields invalidates the renderer's copy

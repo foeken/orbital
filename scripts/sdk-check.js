@@ -184,6 +184,11 @@ async function main() {
     const agent=make('agent');org.transact(l=>l.getMap('featurePolicy').set('memberOrgWideCreation',false));
     assert.equal((await access.capabilities(agent,ME,ctx)).rules.includes('inherit'),false,'org policy');
     assert.equal((await access.capabilities(agent,ME,{...ctx,orgAdmin:true})).rules.includes('inherit'),true);
+    // A saved search is created by this app and owned by its creator, so it must be writable and deletable
+    // like any other document kind; leaving it out of the access kinds said "write permission unknown" instead.
+    const search=make('search');
+    assert.equal((await access.capabilities(search,ME,ctx)).deletable,true,'a saved search you own can be deleted');
+    assert.equal(await access.canDelete(search,ME,ctx),true);
     target.transact(l=>l.getMap('data').set('ownerUri',otherSpace.id));
     assert.equal((await access.previewMove(otherSpace,target,ME,ctx)).allowed,false,'ownership cycle');
     assert.deepEqual(source.content.toJSON(),beforeContent);assert.deepEqual(source.toJSON(),mirror.toJSON());
@@ -695,6 +700,44 @@ async function main() {
     const cached = (await backend.handlers.get('outline:roots')()).find((v) => v.id === 'library').nodes.find((n) => n.id === taskId);
     assert.equal(cached.stateType, 'proposed', 'and so does the cached row the next roots read hands the renderer');
     console.log('ok  a list refresh keeps the live state of a task over a lagging index');
+  }
+
+  // The same write, but sync has no handle to hand back — a task changed from a list is not always one it still holds.
+  // The document is still the newest answer about its own state, and a refresh arriving before anything reads it must
+  // not restore what the index still believes: that is "Set status to Inbox", In Progress again two seconds later.
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const taskId = 'tana:text:' + ulid(), live = new Document(taskId);
+    live.transact((l) => initDocument(l, 'Buy milk', ME, { kind: 'task' })); // starts out In Progress
+    backend.testRuntime({ me: { userUri: ME }, win: null, activeView: 'library', client: {
+      graph: { listNodes: async (p) => (p.nodeIds ? { nodes: [] } : { nodes: [{ id: taskId, title: 'Buy milk', state: { type: 'open' }, updateTime: '2026-09-17T12:00:00Z' }], totalCount: 1 }) },
+      sync: { subscribe: async () => live, unsubscribe: async () => {}, getDocument: () => undefined }, // nothing to ask
+    } });
+    await backend.handlers.get('doc:setState')(null, taskId, 'proposed');
+    const listed = (await backend.handlers.get('view:list')(null, 'library')).nodes.find((n) => n.id === taskId);
+    assert.equal(listed.stateType, 'proposed', 'a status write outlives the refresh even when sync hands back no document');
+    assert.equal(listed.icon, 'task', 'and the row is still a task, rather than a stateless index row without a box');
+    console.log('ok  a status write outlives a lagging index with no live document to consult');
+  }
+
+  // What is remembered must never outlive its truth. The point of the record is to beat a lagging index, not to beat
+  // Tana: once the document itself has moved on — somebody else completed the task — reading it replaces what we
+  // remembered. Without that, a status set here would override a status set anywhere else, for good.
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const taskId = 'tana:text:' + ulid(), live = new Document(taskId);
+    live.transact((l) => initDocument(l, 'Buy milk', ME, { kind: 'task' }));
+    backend.testRuntime({ me: { userUri: ME }, win: null, activeView: 'library', client: {
+      graph: { listNodes: async (p) => (p.nodeIds ? { nodes: [] } : { nodes: [{ id: taskId, title: 'Buy milk', state: { type: 'open' }, updateTime: '2026-09-17T12:00:00Z' }], totalCount: 1 }) },
+      sync: { subscribe: async () => live, unsubscribe: async () => {}, getDocument: () => undefined },
+    } });
+    const rowState = async () => ((await backend.handlers.get('view:list')(null, 'library')).nodes.find((n) => n.id === taskId) || {}).stateType;
+    await backend.handlers.get('doc:setState')(null, taskId, 'proposed');
+    assert.equal(await rowState(), 'proposed', 'the status just written is what the refresh reports');
+    setState(live, 'closed', ME); // completed in Tana by someone else; the renderer reads the row again through doc:info
+    await backend.handlers.get('doc:info')(null, taskId);
+    assert.equal(await rowState(), 'closed', 'a change from elsewhere replaces what was remembered, instead of being overridden by it');
+    console.log('ok  the remembered state gives way to the document once the document has moved on');
   }
 
   // The real IPC handlers put every preset through that path; roots is cache-only and refresh repeats only the

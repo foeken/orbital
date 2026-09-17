@@ -181,7 +181,7 @@ function applyTaskChange(ctx, call) {
     try {
       const changed = await call();
       closePalette(); taskResult(ctx, changed);
-      if (!frozen) render(true); // the caret is back in the row it changed, so a plain render would wait until it leaves
+      render(!frozen); // frozen: chrome only, so the selected rows stay put while their boxes and the Clean up pill catch up
     } catch (e) {
       if (frozen) { selectionFrozen = false; if (renderDeferred) render(); }
       throw e;

@@ -101,7 +101,7 @@ assert.match(source, /taskMetaFailed\.set\(docId, \{ until: Date\.now\(\) \+ wai
 // a new connection clears the metadata backoff and refetches the active view and the saved-search list, both of
 // which can fetch before the client existed and neither of which is retried on its own (searchesReconnectCheck
 // in renderer-check.js exercises the searches half of this behaviorally)
-assert.match(source, /const wasConnected = connected;[\s\S]*?if \(connected && !wasConnected\) \{ taskMetaFailed\.clear\(\); loadView\(\); loadSearches\(\); \}/);
+assert.match(source, /const wasConnected = connected;[\s\S]*?if \(connected && !wasConnected\) \{ taskMetaFailed\.clear\(\); loadView\(\); loadSearches\(\); restorePlace\(\); \}/);
 // a global change (a refresh, a pin, a filter) reloads the cached rows, which the refresh loop wrote before saying so;
 // it must not run the active view's query a second time, and a single document's change patches its row alone
 assert.match(source, /loadRoots\(\)\.then\(renderSoon, showError\)/);
@@ -272,7 +272,7 @@ async function cachedBootMetadataCheck() {
       return outcome === 'fail' ? Promise.reject(new Error('not connected')) : Promise.resolve({ assignees: [] });
     } };
     const palette = { hidden: true }, palDoc = null, outline = {};
-    const $ = () => ({}), showError = () => {}, loadView = () => {}, loadSearches = () => {};
+    const $ = () => ({}), showError = () => {}, loadView = () => {}, loadSearches = () => {}, restorePlace = () => {};
     const isRealId = (id) => typeof id === 'string' && id.startsWith('tana:');
     const render = () => { renders++; };
     ${functionSource('authView')}
@@ -307,7 +307,7 @@ async function searchesReconnectCheck() {
     let authed = false, authChecking = true, signedOut = false, connected = false, searches = [], attempts = 0;
     const taskMetaFailed = new Map();
     const outline = {}, palette = { hidden: true };
-    const $ = () => ({}), showError = () => {}, loadView = () => {}, render = () => {}, renderSoon = () => {};
+    const $ = () => ({}), showError = () => {}, loadView = () => {}, render = () => {}, renderSoon = () => {}, restorePlace = () => {};
     const tana = { searches: () => { attempts++; return Promise.resolve([{ id: 'tana:search:x' }]); } };
     ${functionSource('authView')}
     ${functionSource('showStatus')}

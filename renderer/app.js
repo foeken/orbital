@@ -14,7 +14,9 @@ function showStatus(s) {
   authed = state.authenticated; authChecking = state.checking; signedOut = state.signedOut; connected = !!s.connected;
   // The first fetch of a view can run before the sync client exists and fail quietly, so the view refetches the
   // moment the connection comes up; otherwise the Library or Chats stay empty until a filter is touched.
-  if (connected && !wasConnected) { taskMetaFailed.clear(); loadView(); loadSearches(); }
+  // restorePlace waits for this too: reopening the last page needs a connection to ask for its children, and boot
+  // reaches here with the cached roots already drawn, before the sync client exists.
+  if (connected && !wasConnected) { taskMetaFailed.clear(); loadView(); loadSearches(); restorePlace(); }
   $('loginBox').hidden = !state.showLogin;
   outline.hidden = $('filtered').hidden = !state.showOutline;
   showError(state.error);
@@ -72,7 +74,7 @@ if (tana.onUnpinned) tana.onUnpinned(unpinStale);
 tana.onStatus(showStatus);
 if (tana.onSystemTheme) tana.onSystemTheme((t) => { if (themePref === 'system') applyTheme(t); }); // macOS appearance changes re-theme a running window
 if (themePref === 'system') followSystem(true);
-loadRoots().then(render, showError).then(loadFilters);
+loadRoots().then(render, showError).then(restorePlace).then(loadFilters);
 // Cmd+K only: never blocks the first paint. Boot almost always races the sync connect (main creates the window
 // before S.client exists, so main/views.js:searchList answers []), so this alone would usually leave the group
 // empty; showStatus's connect edge above re-runs it once a client actually exists. Called here too so a session

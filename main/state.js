@@ -33,6 +33,10 @@ const editability = new Map(); // observed graph/document capabilities, never gu
 // createdAt (ms) and stateType; the SQLite view rows (db.js) have a column for neither, so both are cached per id
 // and toNode reads them back for cached rows. Times are ISO strings everywhere, so they compare as strings.
 const nodeMeta = new Map(); // document uri -> { createdAt?, stateType? }
+// What a document itself last said its state was. Kept apart from nodeMeta, which a lagging search-index row
+// overwrites: that is how "Set status to Inbox" used to come back as In Progress two seconds later. The refresh drops
+// the entry when it stops following the document (views.js), so this never outlives what it describes.
+const docStates = new Map(); // document uri -> stateType, from a Loro data map only, never from the index
 const iso = (v) => (typeof v === 'number' ? new Date(v).toISOString() : typeof v === 'string' ? v : undefined);
 const errText = (e) => String((e && e.message) || e);
 // Before the S.session and sync stream are ready, every view/metadata call fails the same benign way. That is a
@@ -70,4 +74,4 @@ function scheduleRefresh(ms) {
   S.refreshTimer = setTimeout(() => S.refresh && S.refresh(), ms);
 }
 
-module.exports = { VIEWS, TAG, KINDS, PLAIN_KINDS, PIN_HUBS, DOC_URI, S, subscribed, deletedNodes, isDeleted, visibleGraphNodes, typeTitles, typeHues, nodeHues, editability, nodeMeta, iso, errText, NOT_CONNECTED, notReady, report, now, isSpace, isSearch, idKind, memberTitle, isMcp, send, today, setStatus, pathCache, metaSigs, truncatedViews, summaryCache, typeAttrTitles, hueLoaded, imageCache, undoStack, redoStack, scheduleRefresh };
+module.exports = { VIEWS, TAG, KINDS, PLAIN_KINDS, PIN_HUBS, DOC_URI, S, subscribed, deletedNodes, isDeleted, visibleGraphNodes, typeTitles, typeHues, nodeHues, editability, nodeMeta, docStates, iso, errText, NOT_CONNECTED, notReady, report, now, isSpace, isSearch, idKind, memberTitle, isMcp, send, today, setStatus, pathCache, metaSigs, truncatedViews, summaryCache, typeAttrTitles, hueLoaded, imageCache, undoStack, redoStack, scheduleRefresh };

@@ -16,8 +16,12 @@ titleEl.addEventListener('keydown', (e) => {
 // the document Cmd+K context actions apply to: the zoomed one, else the document whose node is focused
 function currentDoc() {
   const f = focused(), item = f && items.get(f.key);
-  const docId = zoom ? zoom.docId : item ? item.docId : null;
-  const d = docId && (allDocs().find((x) => x.id === docId) || extra.get(docId));
+  // A row that is a document in its own right — a task listed in a view, or one referenced from a date page — is the
+  // current node ahead of the page holding it. Child rows carry their document's id, so without this the caret in a
+  // task under a date resolves to the date, and Cmd+K offers nothing to set a status on.
+  const own = item ? referenceTarget(item.node) || (item.node.kind === 'document' ? item.node : null) : null;
+  const docId = own ? own.id : zoom ? zoom.docId : item ? item.docId : null;
+  const d = (docId && (allDocs().find((x) => x.id === docId) || extra.get(docId))) || own; // the listed copy is fresher; a referenced one may be in neither
   return d && !d.draft ? d : null;
 }
 // ---- pins (api.pinState / pin / unpin): what the palette needs is whether this document is pinned, not the tree ----

@@ -230,12 +230,19 @@ function flushAll() { for (const key of [...pending.keys()]) flush(key); }
 const navBack = [], navForward = [];
 let navHere = null, navigating = false, navReplace = false; // navReplace: the next place stands in for the current one (a meeting forwarding to its write-up)
 const navPlace = () => ({ view, zoom: zoom && { ...zoom }, key: JSON.stringify([view, zoom && zoom.docId, zoom && zoom.nodeId, zoom && (zoom.via || []).map((v) => v.docId)]) });
+// The place to reopen at the next launch. Only the document and the node: the crumb trail (zoom.via) rebuilds itself
+// from tana.path, and naming its documents would mean fetching each one. A draft id means nothing after a restart.
+function rememberPlace() {
+  if (zoom && isRealId(zoom.docId)) localStorage.setItem('place', JSON.stringify({ docId: zoom.docId, nodeId: zoom.nodeId || null, from: zoom.from }));
+  else localStorage.removeItem('place');
+}
 function noteNavigation() {
   const here = navPlace();
   if (navHere && navHere.key === here.key) return;
   if (navHere && !navigating && !navReplace) { navBack.push(navHere); navForward.length = 0; if (navBack.length > 100) navBack.shift(); }
   navReplace = false;
   navHere = here;
+  rememberPlace();
 }
 function navigate(dir) {
   const from = dir < 0 ? navBack : navForward, to = dir < 0 ? navForward : navBack;
@@ -250,6 +257,34 @@ function navigate(dir) {
     caretOnOpen = !!zoom;
     render(true);
   } finally { navigating = false; }
+}
+// Reopen the last place, once the views are loaded. A document already in a view needs no fetch; one reached through a
+// mention or a search is pulled into extra the way goTo does it, but here a failure is silent — landing on the view is
+// fine, an error banner on every launch is not. renderOutline drops a zoom it cannot resolve, so a node that was
+// deleted or is no longer readable ends up on the view too.
+function readStoredPlace() {
+  try { return JSON.parse(localStorage.getItem('place') || 'null'); } catch { return null; } // a corrupt entry is simply not a place
+}
+// Read at load, before the first paint: renderOutline records the place it drew, and on boot that is the view with no
+// zoom, which clears the stored place. Reading it here means the first render can no longer erase what we reopen.
+let savedPlace = readStoredPlace();
+async function restorePlace() {
+  const saved = savedPlace;
+  if (!saved || !isRealId(saved.docId) || zoom) { savedPlace = null; return; }
+  // Boot draws the cached roots before the sync client exists, so reopening the page now would ask for its children
+  // with nothing to ask — "not connected to Tana" from outline:children. The place is kept rather than spent, and
+  // app.js runs this again the moment the connection comes up.
+  if (!connected) return;
+  savedPlace = null; // one restore per launch
+  if (!allDocs().some((d) => d.id === saved.docId) && !extra.has(saved.docId)) {
+    const before = navPlace().key;
+    try { const n = await tana.node(saved.docId); extra.set(saved.docId, { ...n, text: n.title || '', hasChildren: true }); }
+    catch { return; }
+    if (zoom || navPlace().key !== before) return; // you navigated while it loaded: you stay where you went
+  }
+  zoom = { docId: saved.docId, nodeId: saved.nodeId || null, from: saved.from };
+  render(true);
+  followSummary(saved.docId);
 }
 // Up past the first node: the editable page title (zoomed), else the last filter pill
 function focusAbove(el) {

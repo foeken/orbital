@@ -1,16 +1,20 @@
 'use strict';
 const db = require('../db');
 const { editable, readNode, STATE_TYPES } = require('../sdk/node');
-const { PLAIN_KINDS, S, TAG, editability, hueLoaded, idKind, isSpace, iso, memberTitle, nodeHues, nodeMeta, now, typeHues, typeTitles } = require('./state');
+const { PLAIN_KINDS, S, TAG, docStates, editability, hueLoaded, idKind, isSpace, iso, memberTitle, nodeHues, nodeMeta, now, typeHues, typeTitles } = require('./state');
 
 // The search index can trail a write by seconds, and every index result becomes a row through graphRow and records its
 // state in rememberMeta. A task this app holds live already has the newer state, so that one wins: a list refresh, a
 // search, a reference target or a sidebar row must not put back the state from before (set to Inbox, grey again two
 // seconds later). A document still bootstrapping reads no state and leaves the index's alone.
 function liveState(n) {
-  const sync = n && n.state && S.client && S.client.sync;
+  if (!n || !n.state) return n; // a Loro data map rather than an index row: there is no index answer to correct here
+  const sync = S.client && S.client.sync;
   const doc = sync && typeof sync.getDocument === 'function' ? sync.getDocument(n.id) : null;
-  const live = doc ? readNode(doc).stateType : undefined;
+  // The handle is not always there to ask — a task changed from a list is not necessarily one sync still hands back —
+  // and then the index's older answer used to win, putting In Progress back a couple of seconds after Set status to
+  // Inbox. docStates remembers what the document itself last said, so the write survives either way.
+  const live = doc ? readNode(doc).stateType : docStates.get(n.id);
   return STATE_TYPES.includes(live) && live !== n.state.type ? { ...n, state: { ...n.state, type: live } } : n;
 }
 function rememberMeta(n) {
@@ -18,6 +22,9 @@ function rememberMeta(n) {
   const createdAt = iso(n.createTime ?? n.createdAt) || (nodeMeta.get(n.id) || {}).createdAt;
   const state = (n.state && n.state.type) || n.stateType;
   const stateType = STATE_TYPES.includes(state) ? state : undefined;
+  // n.stateType means this came from a Loro data map rather than the search index: the document is the source of
+  // truth, so that answer is kept apart from nodeMeta, which any lagging index row overwrites.
+  if (stateType && n.stateType !== undefined) docStates.set(n.id, stateType);
   if (createdAt || stateType) nodeMeta.set(n.id, { createdAt, stateType });
 }
 const rememberType = (n) => { typeTitles.set(n.id, n.title || ''); if (n.appearance && typeof n.appearance.hue === 'number') typeHues.set(n.id, n.appearance.hue); };

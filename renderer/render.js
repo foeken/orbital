@@ -164,7 +164,7 @@ function refreshRowChrome() {
   }
 }
 function render(force = false) {
-  if (force !== true && (editingRow() || selectionFrozen)) { renderDeferred = true; markFalling(); refreshRowChrome(); return; }
+  if (force !== true && (editingRow() || selectionFrozen)) { renderDeferred = true; markFalling(); refreshRowChrome(); if (!$('pills').hidden) renderPills(true); return; }
   renderDeferred = false; rendering = true;
   try { renderOutline(); } finally { rendering = false; }
 }

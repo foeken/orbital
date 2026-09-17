@@ -74,7 +74,7 @@ function runTypingRenderStabilityCheck() {
     const document = { activeElement: editor };
     let rendering = false, renderDeferred = false, selectionFrozen = false, renders = 0, caret = 17, scroll = 240;
     const renderOutline = () => { renders++; row.isConnected = false; document.activeElement = {}; caret = 0; scroll = 0; };
-    const markFalling = () => {}, refreshRowChrome = () => {};
+    const markFalling = () => {}, refreshRowChrome = () => {}, renderPills = () => {}, $ = () => ({ hidden: true });
     ${functionSource('editingRow')}
     ${functionSource('render')}
     ({ trigger: (result) => render(result), blur: () => { document.activeElement = {}; render(); },
@@ -571,14 +571,17 @@ async function runMultiTaskPaletteCheck() {
     const docs = [{ id: 't1', stateType: 'open' }, { id: 't2', stateType: 'open' }];
     let sel = { keys: new Set(['t1', 'meeting', 't2']), anchor: 't2', focus: 't2' };
     let selectionFrozen = false, renderDeferred = false, closed = 0, note = null;
-    const calls = [], members = [{ id: 'person', title: 'Person' }];
+    const calls = [], renders = [], members = [{ id: 'person', title: 'Person' }];
     let palTaskCtx = { docs, selected: 3, skipped: 1, fromSelection: true, multi: true };
     const STATES = [['proposed', 'Inbox'], ['open', 'In Progress'], ['closed', 'Completed'], ['not_now', 'Later']];
     const stateOf = (node) => node.stateType, memberName = (id) => members.find((member) => member.id === id).title;
-    const loadMembers = () => {}, render = () => {}, closePalette = () => { closed++; }, holdRow = () => {};
+    const loadMembers = () => {}, closePalette = () => { closed++; }, holdRow = () => {};
+    // chrome = the branch a held render takes: the boxes and the pills catch up, the rows stay where they are
+    const render = (force) => { renders.push(force === true ? 'full' : 'chrome'); };
     const showNote = (value) => { note = value; };
     const run = (fn) => Promise.resolve().then(fn).catch((error) => { throw error; });
     const tana = {
+      setState: async (id, state) => { calls.push(['state', [id], state]); return 1; }, // the single-task path, for a change with nothing selected
       setStateMany: async (ids, state) => { calls.push(['state', [...ids], state]); return ids.length; },
       setAssigneesMany: async (ids, uris) => { calls.push(['assignees', [...ids], [...uris]]); return ids.length; },
     };
@@ -588,6 +591,8 @@ async function runMultiTaskPaletteCheck() {
       assign: () => manyAssigneeRows('').find((row) => row.label === 'Person').run(),
       typed: () => [statusRows('ipr').map((row) => row.label), statusRows('lat').map((row) => row.label), manyAssigneeRows('pe').map((row) => row.label)],
       state: () => ({ calls, selected: [...sel.keys], frozen: selectionFrozen, closed, note }),
+      rendered: () => [...renders],
+      solo: () => { sel = null; palTaskCtx = { docs: [docs[0]], selected: 1, skipped: 0, fromSelection: false, multi: false }; return statusRows('').find((row) => row.label === 'Completed').run(); },
     });
   `, { setTimeout, Promise });
   assert.deepEqual(plain(apply.typed()), [['In Progress'], ['Later'], ['Unassigned', 'Person']], 'the status and assignee levels match the way the command palette does: word prefixes in order');
@@ -598,9 +603,16 @@ async function runMultiTaskPaletteCheck() {
     calls: [['state', ['t1', 't2'], 'closed']], selected: ['t1', 'meeting', 't2'], frozen: true, closed: 1,
     note: 'Updated 2 tasks; skipped 1 non-task or read-only row',
   }, 'bulk status uses one batch, reports skips, and leaves the complete selection frozen in place');
+  // A frozen selection used to take no render at all, so the boxes kept the status they had and Clean up never appeared.
+  assert.deepEqual(plain(apply.rendered()), ['chrome'],
+    'a frozen selection still renders: chrome only, so the boxes and the Clean up pill catch up while the rows stay put');
   apply.assign(); await settle();
   assert.deepEqual(plain(apply.state().calls.at(-1)), ['assignees', ['t1', 't2'], ['person']], 'bulk assignment uses one batch for the same eligible selection');
   assert.deepEqual(plain(apply.state().selected), ['t1', 'meeting', 't2'], 'bulk assignment also preserves selected rows');
+  // Nothing selected: the caret is back in the row that changed, and nothing is being held, so it renders in full.
+  apply.solo(); await settle();
+  assert.deepEqual(plain(apply.rendered()), ['chrome', 'chrome', 'full'],
+    'while an unheld change renders in full, so the row can move to wherever it now belongs');
 }
 
 function runAssignedDropdown() {
@@ -1361,7 +1373,8 @@ async function runReservedComboCheck() {
 function runHistoryCheck() {
   const api = vm.runInNewContext(`
     let view = 'tasks', zoom = null, caretOnOpen = false, rendered = 0;
-    const localStorage = { setItem() {} };
+    const localStorage = { setItem() {}, removeItem() {} };
+    ${sourceBetween('const isRealId =', '\n')}
     const flushAll = () => {}, dropDrafts = () => {};
     const render = () => { rendered++; noteNavigation(); }; // what renderOutline does at its end
     ${sourceBetween('const navBack = [], navForward = [];', 'function noteNavigation')}
@@ -2160,7 +2173,10 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   const beforeDisplay = rowSig.sig(inboxRow);
   rowSig.display(['status', 'assigned', 'updated', 'created']);
   assert.notEqual(rowSig.sig(inboxRow), beforeDisplay, 'changing what rows display rebuilds them, rather than leaving the old facts on screen');
-  assert.match(source, /renderDeferred = true; markFalling\(\); refreshRowChrome\(\); return;/, 'a render that waits for the caret still brings every checkbox up to date');
+  // The pills go with it: whether a row still belongs where it sits is decided while they render (needsCleanup), so a
+  // render held back by the caret or a frozen selection would otherwise never be able to offer Clean up.
+  assert.match(source, /renderDeferred = true; markFalling\(\); refreshRowChrome\(\); if \(!\$\('pills'\)\.hidden\) renderPills\(true\); return;/,
+    'a render that waits for the caret still brings every checkbox up to date, and re-renders the pills so Clean up can appear');
   // A task's state also lives in copies (a reference in an open note, nested or not; a sidebar row): a change patches them
   const copies = vm.runInNewContext(`
     const ref = (id) => ({ id, type: 'reference', reference: { uri: 'tana:text:t1', node: { id: 'tana:text:t1', text: 'Task', title: 'Task', stateType: 'open', done: 0 } } });
@@ -2826,9 +2842,168 @@ function runSearchPillsCheck() {
   assert.equal(api.key(), 'tasks', 'and off the search page the pills belong to the view again');
 }
 
-const checks = [runSearchPillsCheck, runDraftTailCheck,runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck];
+// The app reopens where you left off. Every render records the place (noteNavigation), so whatever took you there —
+// a bullet, a mention, a crumb, a search, a pin — is remembered the same way; boot puts it back once the views load.
+async function runRestorePlaceCheck() {
+  const api = vm.runInNewContext(`
+    let view = 'inbox', zoom = null, rendered = 0, fetches = 0, nodeResolve = null, nodeMode = 'auto', docs = [], savedPlace = null, connected = true;
+    const storage = new Map();
+    const localStorage = {
+      getItem: (key) => (storage.has(key) ? storage.get(key) : null),
+      setItem: (key, value) => storage.set(key, value),
+      removeItem: (key) => storage.delete(key),
+    };
+    const extra = new Map(), summaries = [];
+    const allDocs = () => docs;
+    const render = () => { rendered++; };
+    const followSummary = (docId) => summaries.push(docId);
+    // Answers at once unless a case parks it: a fetch that never settles would hang the check, and an unsettled
+    // check empties the event loop and exits silently rather than failing.
+    const tana = { node: () => { fetches++;
+      if (nodeMode === 'fail') return Promise.reject(new Error('no longer readable'));
+      if (nodeMode === 'park') return new Promise((resolve) => { nodeResolve = () => resolve({ title: 'Fetched' }); });
+      return Promise.resolve({ title: 'Fetched' }); } };
+    ${sourceBetween('const isRealId =', '\n')}
+    ${sourceBetween('const navBack = [], navForward = [];', 'function noteNavigation')}
+    ${functionSource('readStoredPlace')}
+    ${functionSource('restorePlace')}
+    ({
+      remember: (z) => { zoom = z; rememberPlace(); return storage.has('place') ? storage.get('place') : null; },
+      store: (value) => { storage.set('place', value); savedPlace = readStoredPlace(); }, // left by the last session, read at load
+      clear: () => { storage.delete('place'); savedPlace = readStoredPlace(); },
+      firstPaint: () => { zoom = null; rememberPlace(); }, // what the boot render records: the view it drew, with no zoom
+      seed: (list) => { docs = list; },
+      reset: () => { zoom = null; rendered = 0; fetches = 0; nodeMode = 'auto'; connected = true; extra.clear(); summaries.length = 0; },
+      fail: () => { nodeMode = 'fail'; },
+      park: () => { nodeMode = 'park'; },
+      offline: () => { connected = false; }, online: () => { connected = true; },
+      start: () => restorePlace(),
+      settle: () => nodeResolve && nodeResolve(),
+      goto: (v, z) => { view = v; zoom = z; },
+      state: () => ({ docId: (zoom && zoom.docId) || null, nodeId: (zoom && zoom.nodeId) || null, from: (zoom && zoom.from) || null,
+                      rendered, fetches, fetched: extra.has('tana:text:far'), summaries: summaries.length }),
+    });
+  `);
+  assert.equal(api.remember({ docId: 'tana:text:a', nodeId: 'n1', from: 'Search' }), JSON.stringify({ docId: 'tana:text:a', nodeId: 'n1', from: 'Search' }),
+    'the node you are looking at is remembered as the place to reopen');
+  assert.equal(api.remember(null), null, 'a view is not a zoom: the stored place is cleared rather than left stale');
+  api.remember({ docId: 'tana:text:a', nodeId: null });
+  assert.equal(api.remember({ docId: 'draft:7', nodeId: null }), null, 'a draft id would mean nothing after a restart, so it replaces nothing');
+
+  api.reset(); api.seed([{ id: 'tana:text:a' }]);
+  api.store(JSON.stringify({ docId: 'tana:text:a', nodeId: 'n1', from: 'Search' }));
+  await api.start();
+  assert.deepEqual(plain(api.state()), { docId: 'tana:text:a', nodeId: 'n1', from: 'Search', rendered: 1, fetches: 0, fetched: false, summaries: 1 },
+    'the last place reopens down to the node, and one already in a view is not fetched again');
+
+  // The boot render draws the view before the restore runs, and recording that view clears the stored place. Reopening
+  // has to survive its own first paint, or every launch lands on the view — which is exactly what it did.
+  api.reset(); api.seed([{ id: 'tana:text:a' }]);
+  api.store(JSON.stringify({ docId: 'tana:text:a', nodeId: 'n1' }));
+  api.firstPaint();
+  await api.start();
+  assert.equal(api.state().docId, 'tana:text:a', 'the first paint records the view it drew, which must not erase the place being reopened');
+
+  // Boot reaches the restore with the cached roots already drawn, before the sync client exists. Reopening a page then
+  // asks for its children with nothing to ask, so the place waits instead of being spent on a launch that cannot serve it.
+  api.reset(); api.seed([{ id: 'tana:text:a' }]); api.offline();
+  api.store(JSON.stringify({ docId: 'tana:text:a', nodeId: 'n1' }));
+  await api.start();
+  assert.equal(api.state().docId, null, 'with no connection yet, the last place is not reopened');
+  api.online();
+  await api.start();
+  assert.equal(api.state().docId, 'tana:text:a', 'and it is still there to reopen once the connection arrives');
+
+  api.reset(); api.seed([]);
+  api.store(JSON.stringify({ docId: 'tana:text:far', nodeId: null }));
+  const pending = api.start(); api.settle(); await pending;
+  assert.deepEqual(plain(api.state()), { docId: 'tana:text:far', nodeId: null, from: null, rendered: 1, fetches: 1, fetched: true, summaries: 1 },
+    'a place reached through a mention or a search is pulled back in, the way goTo does it');
+
+  api.reset(); api.seed([]); api.fail();
+  api.store(JSON.stringify({ docId: 'tana:text:gone', nodeId: null }));
+  await api.start();
+  assert.deepEqual(plain(api.state()), { docId: null, nodeId: null, from: null, rendered: 0, fetches: 1, fetched: false, summaries: 0 },
+    'a node that was deleted or is no longer yours leaves you on the view, with no error to greet the launch');
+
+  api.reset(); api.seed([]); api.park();
+  api.store(JSON.stringify({ docId: 'tana:text:far', nodeId: null }));
+  const slow = api.start();
+  api.goto('library', { docId: 'tana:text:elsewhere', nodeId: null });
+  api.settle(); await slow;
+  assert.equal(api.state().docId, 'tana:text:elsewhere', 'you went somewhere while it loaded, so you stay where you went');
+
+  api.reset(); api.seed([{ id: 'tana:text:a' }]);
+  api.store(JSON.stringify({ docId: 'tana:text:a', nodeId: 'n1' }));
+  api.goto('library', { docId: 'tana:text:already', nodeId: null });
+  await api.start();
+  assert.equal(api.state().docId, 'tana:text:already', 'a page opened during boot — a link, a notification — is not overruled by the stored place');
+
+  api.reset(); api.clear();
+  await api.start();
+  assert.equal(api.state().docId, null, 'a first launch with nothing stored opens the view');
+  api.reset(); api.store('{ not json');
+  await api.start();
+  assert.equal(api.state().docId, null, 'and a corrupt entry is simply not a place, rather than a broken launch');
+  assert.match(source, /loadRoots\(\)\.then\(render, showError\)\.then\(restorePlace\)/,
+    'and boot reopens that place once the views have loaded, so the restore has somewhere to land');
+  assert.match(source, /if \(connected && !wasConnected\) \{ taskMetaFailed\.clear\(\); loadView\(\); loadSearches\(\); restorePlace\(\); \}/,
+    'and the connection coming up runs the restore that boot was too early for, beside the other refetches that wait on it');
+}
+
+// With nothing selected, Cmd+K acts on "the current node". Child rows carry the id of the document they live in, so a
+// task referenced from a date page used to resolve to the date — which has no status — and Set status vanished from
+// the palette entirely. What the caret is on wins over the page holding it, unless the row is nothing on its own.
+function runCurrentNodeStatusCheck() {
+  const api = vm.runInNewContext(`
+    let zoom = null, palDoc = null, focusedKey = null, docs = [];
+    const items = new Map(), extra = new Map();
+    const allDocs = () => docs;
+    const focused = () => (focusedKey ? { key: focusedKey, offset: 0 } : null);
+    const asDoc = (n) => n;
+    ${sourceBetween('const referenceTarget =', '\n')}
+    ${sourceBetween('const isTask =', '\n')}
+    ${sourceBetween('const canEditNode =', '\n')}
+    const selKeys = () => [];  // nothing selected: the palette is about the current node, not a selection
+    const STATES = [['proposed', 'Inbox'], ['open', 'In Progress'], ['closed', 'Completed'], ['not_now', 'Later']];
+    const stateOf = () => 'proposed';
+    const openStatusPalette = () => {}, statusRows = () => [];
+    const tana = { setState: async () => {} }; // only the status row can be built, so the rows read as what this is about
+    ${functionSource('currentDoc')}
+    ${functionSource('taskActionContext')}
+    ${functionSource('taskActionRows')}
+    ({ at: (scene) => {
+        zoom = scene.zoom || null; docs = scene.docs || [];
+        items.clear(); for (const [key, item] of scene.items) items.set(key, item);
+        focusedKey = scene.focusedKey;
+        palDoc = currentDoc();
+        return { on: (palDoc && palDoc.id) || null, rows: taskActionRows().map((row) => row.label) };
+      } });
+  `);
+  const TASK = { id: 'tana:text:task1', kind: 'document', icon: 'task', text: 'Buy milk', stateType: 'proposed' };
+  const DATE = { id: 'tana:text:day', kind: 'document', icon: 'calendar', text: '2026-09-17' };
+  const row = (node, docId) => ({ key: 'k', node, docId });
+
+  assert.deepEqual(plain(api.at({ docs: [TASK], items: [['k', row(TASK, TASK.id)]], focusedKey: 'k' })),
+    { on: TASK.id, rows: ['Set status'] }, 'a task listed in a view is the current node when the caret is in it');
+  assert.deepEqual(plain(api.at({ zoom: { docId: DATE.id, nodeId: null }, docs: [DATE, TASK],
+      items: [['k', row({ id: 'n1', text: '', reference: { node: TASK } }, DATE.id)]], focusedKey: 'k' })),
+    { on: TASK.id, rows: ['Set status'] }, 'and so is a task referenced from a date page: the row, not the date holding it');
+  assert.deepEqual(plain(api.at({ zoom: { docId: DATE.id, nodeId: null }, docs: [DATE],
+      items: [['k', row({ id: 'n3', text: '', reference: { node: TASK } }, DATE.id)]], focusedKey: 'k' })),
+    { on: TASK.id, rows: ['Set status'] }, 'even when that task sits in no view: a referenced document need not be one the app has listed');
+  assert.deepEqual(plain(api.at({ zoom: { docId: DATE.id, nodeId: null }, docs: [DATE],
+      items: [['k', row({ id: 'n2', text: 'just a note' }, DATE.id)]], focusedKey: 'k' })),
+    { on: DATE.id, rows: [] }, 'while a plain note is nothing on its own, so it stays the page it belongs to, which has no status');
+}
+
+const checks = [runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runDraftTailCheck,runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck];
+// Red until the checks actually settle: an async check left awaiting something that never resolves empties the event
+// loop, and node would exit 0 without a word — a silent pass for a check that never finished.
+process.exitCode = 1;
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);
   if (failures.length) throw new AggregateError(failures, failures.map((failure) => failure.message).join('\n'));
   console.log('renderer behavior check passed');
+  process.exitCode = 0;
 });

@@ -4,7 +4,7 @@ const path = require('node:path');
 const { peerIdentity } = require('../tana-session');
 const { createTanaClient } = require('../sdk');
 const { parseQuery, searchParams, needsTypes, viewParams, filterToSearchQuery, validViewFilter, viewTypes, VIEW_PRESETS, hideRules, isHidden } = require('../sdk/query');
-const { NOT_CONNECTED, S, deletedNodes, errText, idKind, isMcp, memberTitle, now, truncatedViews, redoStack, send, setStatus, subscribed, undoStack, visibleGraphNodes } = require('./state');
+const { NOT_CONNECTED, S, deletedNodes, docStates, errText, idKind, isMcp, memberTitle, now, truncatedViews, redoStack, send, setStatus, subscribed, undoStack, visibleGraphNodes } = require('./state');
 const { graphRow, rememberNodeHue, resolveTypes, toNode, typesByTitle } = require('./rows');
 const { createDocument, inHistory, onChange, subscribe } = require('./documents');
 
@@ -45,7 +45,7 @@ async function viewRows(id, filter) {
     const ids = new Set(nodes.map((n) => n.id));
     for (const nodeId of ids) if (!subscribed.has(nodeId)) { subscribed.add(nodeId); subscribe(nodeId); }
     // Leaving a filtered view must not discard a document whose local undo step still points at its Loro handle.
-    for (const nodeId of subscribed) if (!ids.has(nodeId) && !deletedNodes.has(nodeId) && !inHistory(nodeId)) { subscribed.delete(nodeId); S.client.sync.unsubscribe(nodeId).catch(() => {}); }
+    for (const nodeId of subscribed) if (!ids.has(nodeId) && !deletedNodes.has(nodeId) && !inHistory(nodeId)) { subscribed.delete(nodeId); docStates.delete(nodeId); S.client.sync.unsubscribe(nodeId).catch(() => {}); }
   }
   if (result.truncated) truncatedViews.add(id); else truncatedViews.delete(id);
   return { nodes: rows.map(toNode), truncated: !!result.truncated };
