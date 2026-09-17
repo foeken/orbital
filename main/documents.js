@@ -3,7 +3,7 @@ const db = require('../db');
 const access = require('../sdk/access');
 const content = require('../sdk/content');
 const chat = require('../sdk/chat');
-const { readNode, editable, ulid, initDocument, STATE_TYPES } = require('../sdk/node');
+const { readNode, audienceMetadata, editable, ulid, initDocument, STATE_TYPES } = require('../sdk/node');
 const { DOC_URI, KINDS, NOT_CONNECTED, PLAIN_KINDS, S, TAG, deletedNodes, editability, errText, hueLoaded, idKind, isDeleted, metaSigs, nodeHues, nodeMeta, now, pathCache, redoStack, report, scheduleRefresh, send, subscribed, summaryCache, typeHues, typeTitles, undoStack, visibleGraphNodes } = require('./state');
 const { eventMeta, graphRow, hueOf, hueWithType, kindRow, memberRow, members, nodeTag, ownHue, plainRow, rememberNodeHue, rememberType, resolveHue, resolveTypes, toNode, typeTag } = require('./rows');
 
@@ -131,34 +131,33 @@ function invalidateDeleted(id) {
 }
 
 // ---- watching a node for changes ----
-// On by default where Tana already implies you are following it: you were given access to this document itself
-// (restricted, with you among its participants) rather than through the space it lives in, and it is not assigned to
-// you — an assignee is already looking at their own work. Everything else is off until asked for, in Cmd+K.
-const notifyDefault = (n) => {
+// On by default where a named list of people can see the node — the same audience the row shows — and it is not
+// assigned to you, since an assignee is already looking at their own work. Every other audience is off until asked
+// for in Cmd+K: 'space' is visibility through the space it lives in, 'only-me' is your own private work with nobody
+// else to change it, 'everyone' is the whole organisation, and 'unknown' is nothing anyone can follow.
+// The document's own `restricted` flag cannot answer this. A document shared through the meeting it belongs to
+// carries no flag of its own, and that is most of what is actually shared with you: a sweep of sixty recent
+// documents found every 'people' one unrestricted and owned by an event, so the old test matched none of them.
+const notifyDefault = (n, audience) => {
   const me = S.me && S.me.userUri;
-  if (!me) return false;
-  // restricted === true is what makes the grant this document's own. Access that comes from the space it lives in
-  // leaves the document unrestricted, and following everything in a shared space is not what was asked for.
-  // It also has to be shared with somebody: "the list of people who have access" means a list. A node only you can
-  // see has nobody else to change it, so watching it could only announce your own edits back — which the origin gate
-  // refuses anyway. Every task you create is restricted with you as its one participant, so without this the default
-  // was on for essentially all of your own work.
-  const people = Object.keys((n.participants && typeof n.participants === 'object') ? n.participants : {});
-  const shared = n.restricted === true && people.includes(me) && people.some((uri) => uri !== me);
-  return shared && !(Array.isArray(n.assignedToUris) && n.assignedToUris.includes(me));
+  if (!me || audience !== 'people') return false;
+  return !(Array.isArray(n.assignedToUris) && n.assignedToUris.includes(me));
 };
+// An inherited audience costs an owner-chain lookup and a read of the boundary, so it is asked for only where the
+// answer decides something: never for a document whose choice is already explicit, and never for a local edit.
+const docAudience = (doc) => audienceMetadata(doc, S.me && S.me.userUri, S.client.graph, S.client.sync).then((a) => a.audience, () => 'unknown');
 // An explicit choice wins; absent, the rule above decides. Stored as a map so "off for a node the rule would watch"
 // is a real answer and not the same as never having chosen.
 const notifyChoices = () => { const stored = db.setting('notify'); return stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {}; };
-const notifyOn = (n) => { const chosen = notifyChoices()[n.id]; return typeof chosen === 'boolean' ? chosen : notifyDefault(n); };
+const notifyOn = (n, audience) => { const chosen = notifyChoices()[n.id]; return typeof chosen === 'boolean' ? chosen : notifyDefault(n, audience); };
 // The nodes you explicitly asked to be told about. A change only reaches onChange while its document is subscribed,
 // and the view refresh unsubscribes everything the active view stops listing, so without this "notify me" quietly
 // meant "while this view happens to list it". The rule-based defaults cannot be enumerated without reading every
 // document, so they stay as they were: watched while something is looking at them.
 const notifyWatchedIds = () => { const chosen = notifyChoices(); return new Set(Object.keys(chosen).filter((id) => chosen[id] === true)); };
 async function notifyState(id) {
-  const n = await op(id, (doc) => readNode(doc));
-  return { on: notifyOn(n), default: notifyDefault(n), explicit: typeof notifyChoices()[id] === 'boolean' };
+  const { n, audience } = await op(id, async (doc) => ({ n: readNode(doc), audience: await docAudience(doc) }));
+  return { on: notifyOn(n, audience), default: notifyDefault(n, audience), explicit: typeof notifyChoices()[id] === 'boolean' };
 }
 async function setNotify(id, on) {
   const chosen = notifyChoices();
@@ -176,13 +175,14 @@ const notifyQuiet = new Map(); // docId -> when a plain edit was last announced
 const EDIT_QUIET_MS = 60000; // a remote edit arrives op by op: someone typing is one banner a minute, not fifty
 // Only changes from somewhere else. onChange fires for your own typing too, and being notified about your own edits
 // would make this unusable; sdk/document.js already marks every change local or remote, so the origin decides.
-function notifyWatched(id, doc, n, info) {
+async function notifyWatched(id, doc, n, info) {
   const sig = [n.title ?? '', n.stateType ?? '', JSON.stringify(doc.loro.oplogFrontiers())];
   const before = notifySigs.get(id);
   notifySigs.set(id, sig);
   if (!info || info.origin !== 'remote') return;
   if (!before || JSON.stringify(before) === JSON.stringify(sig)) return; // first sight, or nothing worth saying moved
-  if (!notifyOn(n)) return;
+  const chosen = notifyChoices()[id];
+  if (!(typeof chosen === 'boolean' ? chosen : notifyDefault(n, await docAudience(doc)))) return;
   const moved = before[0] !== sig[0] || before[1] !== sig[1]; // a rename or a status change: rare, and always worth a banner
   if (!moved) { const last = notifyQuiet.get(id) || 0; if (Date.now() - last < EDIT_QUIET_MS) return; notifyQuiet.set(id, Date.now()); }
   const body = before[1] !== sig[1] ? (NOTIFY_STATE[sig[1]] ? 'Now ' + NOTIFY_STATE[sig[1]] : 'Status changed') : 'Edited';
@@ -208,7 +208,7 @@ function onChange(docId, info) {
     // edit must not cost it the owner-chain and link-sharing lookups, so the event says whether they did.
     const sig = metaSig(n), meta = metaSigs.get(docId) !== sig;
     metaSigs.set(docId, sig);
-    notifyWatched(docId, doc, n, info); // before the renderer hears about it: the same read, one decision
+    notifyWatched(docId, doc, n, info).catch(report); // the signature is taken here and now; the audience it may need is not
     send('outline:changed', docId, { meta }); // the renderer patches this one row from doc:info
     if (pinsChanged || restored) send('outline:changed', null);
     if (restored) scheduleRefresh(0);

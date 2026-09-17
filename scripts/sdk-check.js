@@ -827,7 +827,10 @@ async function main() {
   // Watching a node for changes: what is announced, what is deliberately not, and who decides.
   {
     const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
-    const docs = new Map(), notified = [];
+    const docs = new Map(), chains = new Map(), notified = [];
+    // The decision to announce may need the audience, which is a lookup: onChange takes the signature now and
+    // answers on its own. So each change is given a turn of the loop before what it announced is read.
+    const settle = () => new Promise(setImmediate);
     const watched = new Document('tana:text:' + ulid());
     watched.transact((l) => initDocument(l, 'Contract', ME, { kind: 'task' }));
     setAssignees(watched, [], ME); // stated rather than assumed: the rule turns on whether it is assigned
@@ -838,7 +841,12 @@ async function main() {
     watched.transact((l) => { const p = l.getMap('data').get('participants').setContainer(COLLEAGUE, new LoroMap()); p.set('type', 'user'); p.set('role', 'editor'); });
     docs.set(watched.id, watched);
     backend.testRuntime({ me: { userUri: ME }, win: { isDestroyed: () => false, webContents: { send: () => {} } },
-      client: { sync: { getDocument: (id) => docs.get(id), subscribe: async (id) => docs.get(id) } } });
+      client: {
+        sync: { getDocument: (id) => docs.get(id), subscribe: async (id) => docs.get(id) },
+        // A document with no audience of its own is answered by the thing that owns it, so the rule needs a graph:
+        // without one every inherited case comes back 'unknown' and passes for the wrong reason.
+        graph: { listNodes: async () => ({ nodes: [] }), getOwnerChain: async (id) => chains.get(id) || { entries: [], effectivelyRestricted: true } },
+      } });
     backend.S.notify = (id, title, body) => notified.push([id, title, body]);
 
     // initDocument makes its creator a direct participant of a restricted document: access to this node itself
@@ -846,6 +854,7 @@ async function main() {
     assert.equal((await backend.handlers.get('notify:state')(null, watched.id)).default, true,
       'access to the document itself and no assignee: watched without being asked');
     backend.onChange(watched.id, { origin: 'remote' });
+    await settle();
     assert.deepEqual(notified, [], 'the first sight of a node is a baseline, not a change to announce');
     // ...and it got there by returning, not by throwing. onChange catches everything it raises, so "nothing was
     // announced" is also exactly what a crash looks like from out here — without this, dropping the baseline guard
@@ -853,26 +862,32 @@ async function main() {
     assert.equal(backend.statusSnapshot().error, null, 'and the baseline is taken cleanly rather than by erroring');
     setTitle(watched, 'Contract v2');
     backend.onChange(watched.id, { origin: 'remote' });
+    await settle();
     assert.deepEqual(notified.map((n) => [n[0], n[2]]), [[watched.id, 'Edited']], 'a remote edit to a watched node is announced');
     // The whole feature rests on this: onChange fires for your own typing too, and being told about your own edits
     // would make it unusable. sdk/document.js marks every change local or remote; this is what reads that mark.
     setTitle(watched, 'Contract v3');
     backend.onChange(watched.id, { origin: 'local' });
+    await settle();
     assert.equal(notified.length, 1, 'your own edits are never announced back to you');
     setState(watched, 'closed', ME);
     backend.onChange(watched.id, { origin: 'remote' });
+    await settle();
     assert.equal(notified.at(-1)[2], 'Now Completed', 'a status change says what the status became, not just that something moved');
     // An edit is an edit: a body rewritten elsewhere moves neither title nor state, and a watched node nobody ever
     // hears from is the same as an unwatched one. The document's own ops are what says something happened.
     watched.transact((l) => l.getMap('content').set('rev', 1));
     backend.onChange(watched.id, { origin: 'remote' });
+    await settle();
     assert.equal(notified.length, 3, 'a change to the body alone is announced too');
     assert.equal(notified.at(-1)[2], 'Edited', 'as an edit, because no status moved');
     watched.transact((l) => l.getMap('content').set('rev', 2));
     backend.onChange(watched.id, { origin: 'remote' });
+    await settle();
     assert.equal(notified.length, 3, 'and the rest of that burst is quiet: remote typing arrives op by op');
     // Nothing moved at all — a re-imported snapshot after a resync — is not an edit either.
     backend.onChange(watched.id, { origin: 'remote' });
+    await settle();
     assert.equal(notified.length, 3, 'and re-seeing ops already seen announces nothing');
     // An explicit no beats a default yes, and clearing it returns to the rule rather than to off.
     await backend.handlers.get('notify:set')(null, watched.id, false);
@@ -884,6 +899,7 @@ async function main() {
     assert.equal(off.explicit, true, 'and it is remembered as a choice rather than as the default');
     setTitle(watched, 'Contract v4');
     backend.onChange(watched.id, { origin: 'remote' });
+    await settle();
     assert.equal(notified.length, 3, 'and nothing is announced while it is off');
     await backend.handlers.get('notify:set')(null, watched.id, null);
     const cleared = await backend.handlers.get('notify:state')(null, watched.id);
@@ -899,20 +915,46 @@ async function main() {
     docs.set(mine.id, mine);
     assert.equal((await backend.handlers.get('notify:state')(null, mine.id)).default, false,
       'a node assigned to you is not watched by default: the assignee is already looking at it');
-    // Access through the space it lives in, not through the document: unrestricted, so the participants map is not a
-    // grant of its own. Without a case like this the direct-access half of the rule cannot be falsified at all —
-    // every other document here is restricted, so both readings of it behave identically.
+    // The two inherited cases, which is what most shared work actually looks like: the document carries no audience
+    // of its own and the thing that owns it does. A space owner means "everyone in that space", which is the one
+    // audience this rule deliberately leaves alone; a meeting owner names the people in the meeting, which is the
+    // same kind of list a directly shared document has. Both fixtures are identical apart from the owner's kind.
+    const boundary = (uri, title) => {
+      const doc = new Document(uri);
+      doc.transact((l) => {
+        const data = l.getMap('data');
+        data.set('title', title);
+        data.set('restricted', true);
+        const people = data.setContainer('participants', new LoroMap());
+        for (const person of [ME, COLLEAGUE]) { const entry = people.setContainer(person, new LoroMap()); entry.set('type', 'user'); entry.set('role', 'editor'); }
+      });
+      docs.set(doc.id, doc);
+      return doc;
+    };
+    const space = boundary('tana:space:' + ulid(), 'Studio LT');
+    const meeting = boundary('tana:event:' + ulid(), 'Platform Guild');
     const viaSpace = new Document('tana:text:' + ulid());
     viaSpace.transact((l) => initDocument(l, 'Team doc', ME, { kind: 'task' }));
     setAssignees(viaSpace, [], ME);
-    // shared and unassigned, so `restricted` is the only thing keeping this one off — otherwise it would be off for
-    // several reasons and removing the direct-access check would go unnoticed
-    viaSpace.transact((l) => { const p = l.getMap('data').get('participants').setContainer(COLLEAGUE, new LoroMap()); p.set('type', 'user'); p.set('role', 'editor'); });
     viaSpace.transact((l) => l.getMap('data').delete('restricted'));
     docs.set(viaSpace.id, viaSpace);
+    chains.set(viaSpace.id, { entries: [{ uri: viaSpace.id }, { uri: space.id, restricted: true, accessible: true }] });
     assert.equal(readNode(viaSpace).restricted, undefined, 'the fixture really is unrestricted');
     assert.equal((await backend.handlers.get('notify:state')(null, viaSpace.id)).default, false,
       'access inherited from the space is not a reason to follow a node');
+    // The same shape with a meeting in the space's place: this is what a note or a task in a meeting looks like, and
+    // it is the case the rule used to miss entirely — it read the document's own flag, which such a document has not.
+    const viaMeeting = new Document('tana:text:' + ulid());
+    viaMeeting.transact((l) => initDocument(l, 'Meeting task', ME, { kind: 'task' }));
+    setAssignees(viaMeeting, [], ME);
+    viaMeeting.transact((l) => l.getMap('data').delete('restricted'));
+    docs.set(viaMeeting.id, viaMeeting);
+    chains.set(viaMeeting.id, { entries: [{ uri: viaMeeting.id }, { uri: meeting.id, restricted: true, accessible: true }] });
+    assert.equal((await backend.handlers.get('notify:state')(null, viaMeeting.id)).default, true,
+      'a node you can see through the meeting it belongs to is watched: that is a list of people, not a space');
+    setAssignees(viaMeeting, [ME], ME);
+    assert.equal((await backend.handlers.get('notify:state')(null, viaMeeting.id)).default, false,
+      'unless it is assigned to you, the same as a directly shared one');
     // Your own work: restricted, but you are its only participant. Nobody else can change it, so there is nothing to
     // be told about — and every task you create looks exactly like this.
     const onlyMine = new Document('tana:text:' + ulid());

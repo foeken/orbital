@@ -139,8 +139,9 @@ ipcMain.handle('doc:setStateMany', (_e, ids, state) => mutTasks(ids, (doc) => se
 ipcMain.handle('doc:taskMeta', (_e, id) => op(id, async doc => {
   const n = readNode(doc);
   metaSigs.set(id, metaSig(n)); // from here on, only a change to these fields invalidates the renderer's copy
-  // watched rides along: the row already asks for this once, and a second read would be a second bootstrap
-  return { ...taskMeta(doc), ...await audienceMetadata(doc, S.me.userUri, S.client.graph, S.client.sync), linkShared: await linkShared(id), watched: notifyOn(n) };
+  // watched rides along on the audience this row already asks for: the rule is read off that, not off the document
+  const audience = await audienceMetadata(doc, S.me.userUri, S.client.graph, S.client.sync);
+  return { ...taskMeta(doc), ...audience, linkShared: await linkShared(id), watched: notifyOn(n, audience.audience) };
 }));
 // Access has native capability checks independent of the outliner's editable-body support.
 // Watching a node for changes: on by default where you were given access to the document itself and are not its
