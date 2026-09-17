@@ -840,6 +840,7 @@ async function runStalePaletteInvalidationCheck() {
   vm.runInNewContext(`
     const goneId = 'tana:text:01j0stale0000000000000000';
     const keptId = 'tana:text:01j0keep00000000000000000';
+    const searchId = 'tana:search:01j0search000000000000000';
     let listener, removeListener, unpinListener;
     let pinTree = [
       { node: { id: goneId, title: 'alpha' }, children: [] },
@@ -858,6 +859,7 @@ async function runStalePaletteInvalidationCheck() {
     const openResult = () => {}, sectionOf = () => null;
     ${recent}
     let views = [], palRows = [], palDoc = null, pinInfo = null, dropDoc = null;
+    let searches = [{ id: searchId, title: 'saved' }, { id: keptId, title: 'beta' }];
     let zoom = { docId: keptId };
     const taskMetaById = new Map(), kids = new Map(), extra = new Map(), paths = new Map(), fresh = new Map();
     const loadRoots = async () => {};
@@ -882,6 +884,7 @@ async function runStalePaletteInvalidationCheck() {
       update: (id) => listener(id),
       removed: (id) => removeListener(id),
       unpinned: (id) => unpinListener(id),
+      searchIds: () => searches.map((s) => s.id),
       state: () => ({ recent: recent().map((node) => node.id), zoom: zoom && zoom.docId }),
     });
   `, context);
@@ -912,6 +915,10 @@ async function runStalePaletteInvalidationCheck() {
     recent: ['tana:text:01j0keep00000000000000000'],
     zoom: 'tana:text:01j0keep00000000000000000',
   }, 'an explicit removal event evicts only its exact ID from the recently viewed rows');
+
+  context.removed('tana:search:01j0search000000000000000');
+  await new Promise(setImmediate);
+  assert.deepEqual(plain(context.searchIds()), ['tana:text:01j0keep00000000000000000'], 'a deleted saved search leaves the Cmd+K Searches group');
 }
 
 function runReferenceEmbedRenderCheck() {

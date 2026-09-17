@@ -66,6 +66,7 @@ async function patchDoc(docId) {
   if (!hit) return loadRoots();
 }
 function removeStale(id) {
+  searches = searches.filter((s) => s.id !== id); // a deleted saved search must leave the Cmd+K Searches group too
   invalidateNode(id); loadPins();
   loadRoots().then(render, showError);
 }
