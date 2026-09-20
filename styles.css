@@ -254,7 +254,11 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 /* the row is the node, so its title reads as a title: the blue link is for a reference sitting among text, which is
    the only place it says "this word is somewhere else". The pointer stays, since clicking it still opens the node. */
 .node.fullref .text .mention { color: inherit; text-decoration: none; }
-.node.fullref:focus-within > .line, .selected.node.fullref > .line { outline: 2px solid #b5d0ee; outline-offset: 2px; border-radius: 4px; }
+/* the row's own line, not `:focus-within` on the row: the children below it are another document's, and a caret
+   down there is not the caret on the reference */
+.node.fullref > .line:focus-within, .selected.node.fullref > .line { outline: 2px solid #b5d0ee; outline-offset: 2px; border-radius: 4px; }
+/* what hangs under a reference belongs to the node it points at, not to this outline: the guide line says so */
+.node.fullref > .children { border-left-style: dashed; }
 .node.fullref.done > .line .text { color: #999; text-decoration: line-through; }
 .text .mention { color: #508fbb; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .text .mention:hover { color: #3a75a3; }
@@ -500,7 +504,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .text.image.loading { background: #303436; }
 [data-theme="dark"] .text.image:focus img, [data-theme="dark"] .selected .text.image img { outline-color: #58768a; }
 [data-theme="dark"] .text.chiponly:focus .mention, [data-theme="dark"] .selected .text.chiponly .mention, [data-theme="dark"] .reference .text:not([contenteditable]):focus { outline-color: #58768a; }
-[data-theme="dark"] .node.fullref:focus-within > .line, [data-theme="dark"] .selected.node.fullref > .line { outline-color: #58768a; }
+[data-theme="dark"] .node.fullref > .line:focus-within, [data-theme="dark"] .selected.node.fullref > .line { outline-color: #58768a; }
 [data-theme="dark"] .text .mention { color: #8fc1e1; }
 [data-theme="dark"] .text .mention:hover { color: #b5ddf4; }
 [data-theme="dark"] .text code { background: #303436; }

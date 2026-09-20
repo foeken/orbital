@@ -1075,6 +1075,12 @@ function runReferenceEmbedRenderCheck() {
   const styles = fs.readFileSync(require.resolve('../styles.css'), 'utf8');
   assert.match(styles, /\.node\.fullref \.text \.mention \{[^}]*color: inherit[^}]*text-decoration: none/,
     'and the row that is the node reads as a title: the blue underlined link is for a reference sitting among text');
+  assert.match(styles, /\.node\.fullref > \.children \{[^}]*border-left-style: dashed/,
+    'what hangs under it is another document, so its guide line is dashed');
+  assert.match(styles, /\.node\.fullref > \.line:focus-within/,
+    'and the ring follows the caret on the reference itself, not one in the rows it opened');
+  assert.doesNotMatch(styles, /\.node\.fullref:focus-within/,
+    'which is what :focus-within on the row would have got wrong');
 }
 
 async function runVisibilityPickerCheck() {
