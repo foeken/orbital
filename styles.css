@@ -259,8 +259,8 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .node.fullref > .line:focus-within, .selected.node.fullref > .line { outline: 2px solid #b5d0ee; outline-offset: 2px; border-radius: 4px; }
 /* what hangs under a reference belongs to the node it points at, not to this outline: the guide line says so. A
    border cannot set its own dash pattern, and the browser's is a barely visible 2px on 2px, so the line is drawn as
-   a repeating gradient instead — 4px of dash, 8px of gap — over a border kept transparent to hold the 1px column. */
-.node.fullref > .children { border-left-color: transparent; background: linear-gradient(#d0d0d0 4px, transparent 4px) 0 0 / 1px 12px repeat-y; background-origin: border-box; }
+   a repeating gradient instead — 4px of dash, 4px of gap — over a border kept transparent to hold the 1px column. */
+.node.fullref > .children { border-left-color: transparent; background: linear-gradient(#d0d0d0 4px, transparent 4px) 0 0 / 1px 8px repeat-y; background-origin: border-box; }
 .node.fullref.done > .line .text { color: #999; text-decoration: line-through; }
 .text .mention { color: #508fbb; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .text .mention:hover { color: #3a75a3; }
