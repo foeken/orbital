@@ -65,15 +65,34 @@ Edges (`ListEdges`, `Traverse`): LINKS_TO, CREATED_IN, BELONGS_TO, ATTRIBUTE_LIN
 - Events/spaces: root `pinnedItems` MovableList of { uri, mode?: 'document' | 'embed' }.
 All are plain Loro mutations; no dedicated RPC. Details: [../PINNING.md](../PINNING.md).
 
-## 5. Assets
+## 5. Calls and attendance
+
+A meeting that actually happened has a `tana:call:` document carrying **the same ULID as its event**, `data.ownerUri`
+back to it and an `EDGE_TYPE_BELONGS_TO` edge the graph derives from that. Its roots:
+
+- `sessions` (root LoroMap) — the live participants, one entry per session keyed `<user-profile uri>:<8 hex>` with
+  `{ joinedAt: ms, userUri }`. One user can hold several (a device or tab each). **It empties when the last
+  participant leaves**, so a non-empty entry is the only server-side proof that somebody is in a meeting right now.
+- `data.sessionLog` — the history: `[{ userUri, timestamp, event }]`, `event` being `join` or `leave`.
+- `data.videoProvider` / `videoRoomUrl` / `videoRoomName` / `videoRoomSecret` (LiveKit), `data.transcriptUri`,
+  `data.screenShareUri`, `data.summaryUri` once Tana has written the meeting up, and a `wrapUp` root of timestamps
+  for that summarising run.
+- `data.activeSessions`, `data.callParticipantState`, the `recordings`, `guestProfiles`, `documentPresentations` and
+  `federation` roots — empty in every call inspected, live or finished, so none of them is a usable signal.
+
+The event node says nothing about attendance: `calendarEvent.attendees` and `calendarEvent.roster` (`lineKey`, `email`,
+`displayName`, `identityUri`, `source`, `role`, `responseStatus`) are the calendar guest list and read the same before,
+during and after the meeting. `calendarEvent.mode` was empty everywhere. Read with [`sdk/calls.js`](03-api-reference.md).
+
+## 6. Assets
 
 `GET https://home.tana.inc/api/general/images/by-uri/<encodeURIComponent(uri)>[?w=&h=&format=&quality=&fit=]` with the bearer token → 302 to a signed imgproxy URL on `images.tana.inc` plus a `Cloud-CDN-Cookie`; the signed URL is 403 without that cookie. `/images/<cid>` and `/files/<cid>/download` also exist (need the cid from the image document). Upload path not mapped.
 
-## 6. Session and tokens
+## 7. Session and tokens
 
 `GET https://home.tana.inc/api/auth/session` (cookie session, WorkOS login) → `{ authenticated, user, accessToken, sessionId, organizationId, orgDocUri, userExternalId, role, permissions, featureFlags }`. The access token is a 5-minute JWT (`iss https://login.tana.inc`, claims `org_id`, `urn:tana:org:id` (bare ULID), `urn:tana:user:id`, `sid`); `?refresh=true` mints a new one. The platform rejects MCP OAuth tokens (audience `…/mcp`).
 
-## 7. What Tana does not store
+## 8. What Tana does not store
 
 Node icons (SVG/emoji), per-document colour, meeting notes inside events, a title with inline mentions (titles are strings). Anything like that must live app-side.
 

@@ -118,5 +118,29 @@ db.replaceSection('tasks', [{ id: 'tana:text:shared', title: 'Shared', done: 0, 
 db.replaceSection('inbox', [{ id: 'tana:text:shared', title: 'Shared', done: 0, sortKey: '1', updatedAt: '1' }]);
 assert.strictEqual((db.list().tasks || []).length + (db.list().inbox || []).length, 2, 'and the rebuilt cache holds one row per view');
 
+// The callback a Codex task makes on itself (scripts/agent-link.js): it runs as a separate process while the app is
+// open, so it is checked the way the task runs it — as a command, against a database file of its own.
+{
+  const link = path.join(__dirname, 'agent-link.js');
+  const store = path.join(path.dirname(file), 'link.sqlite');
+  const run = (args) => {
+    const r = require('node:child_process').spawnSync(process.execPath, [link, ...args], { encoding: 'utf8', env: { ...process.env, TANA_TASKS_DB: store } });
+    return { code: r.status, out: (r.stdout || '').trim(), err: (r.stderr || '').trim() };
+  };
+  const NODE = 'tana:text:01examplea0000000000000000', THREAD = '01a0b355-2197-7311-b576-ff4bd9c8901e';
+  assert.strictEqual(run(['--node', NODE]).code, 1, 'an unlinked node answers with nothing and says so in the exit code');
+  const linked = run(['--node', NODE, '--thread', THREAD]);
+  assert.strictEqual(linked.code, 0);
+  assert.match(linked.out, /^linked /, 'registering reports what it wrote');
+  const again = run(['--node', NODE, '--thread', THREAD]);
+  assert.strictEqual(again.code, 0, 'running it twice is not an error: a task may retry');
+  assert.match(again.out, /^already linked /, 'and says the link was already there rather than writing again');
+  assert.strictEqual(run(['--node', NODE]).out, THREAD, 'the link reads back');
+  assert.strictEqual(run(['--node', 'not-a-node', '--thread', THREAD]).code, 2, 'a node that is not a Tana uri is refused');
+  assert.strictEqual(run(['--node', NODE, '--thread', 'nonsense']).code, 2, 'so is a thread id that is not one');
+  assert.strictEqual(run(['--node', NODE]).out, THREAD, 'and a refused call changes nothing');
+  console.log('db-check: agent-link records nodeId -> threadId, validated and idempotent');
+}
+
 fs.rmSync(path.dirname(file), { recursive: true });
 console.log('db-check ok');

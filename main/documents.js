@@ -173,6 +173,54 @@ async function setNotify(id, on) {
   return notifyState(id);
 }
 const NOTIFY_STATE = { proposed: 'Inbox', open: 'In Progress', closed: 'Completed', not_now: 'Later' };
+// ---- handing a node to the local Codex agent ----
+// App-local on purpose: Tana's assignedToUris takes user-profile uris only, so an agent cannot be a native assignee.
+// The ids live in the settings table beside the watch choices; two states, so a list rather than a map.
+// Assignment only: nothing here dispatches, runs or reports back.
+const codexIds = () => { const stored = db.setting('codex'); return Array.isArray(stored) ? stored.filter((id) => typeof id === 'string') : []; };
+// What the agent was asked to do with the node, by id. A second map rather than a list of pairs: the assignment list
+// is what everything else reads, and turning it into objects would rewrite every reader for a field only the prompt
+// page writes. A prompt exists only alongside the assignment it was given with, so unassigning drops both.
+const codexPrompts = () => { const stored = db.setting('codexPrompt'); return stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {}; };
+const codexPrompt = (id) => codexPrompts()[id] || '';
+// The prompt also goes into the node itself, where a person reading it in Tana can see what the agent was handed:
+// one "Agent context" block on the document with the prompt's lines nested under it. Reassigning rewrites that
+// block's children rather than adding a second one — the heading is found by its exact title among the document's
+// own top-level blocks, the same way anything else here looks a child up. Unassigning leaves it alone: it is
+// ordinary content by then, and deleting what somebody may have edited is not this feature's call.
+const AGENT_HEADING = 'Agent context';
+function writeAgentContext(id, prompt) {
+  // Blank lines would be empty outline rows, which read as damage rather than as spacing; everything else is kept
+  // line for line, in order.
+  const lines = prompt.split('\n').map((line) => line.trim()).filter(Boolean);
+  if (!lines.length) return Promise.resolve(null);
+  return mut(id, (doc) => {
+    const heading = content.readOutline(doc).find((n) => (n.text || '').trim() === AGENT_HEADING);
+    if (heading) for (const child of heading.children || []) content.remove(doc, child.id); // this prompt replaces the last one
+    const headId = heading ? heading.id : content.insertAfter(doc, null, AGENT_HEADING);
+    // insertChild always lands at the top of the child list, so only the first line goes in that way and the rest
+    // follow their predecessor — the same pair of operations the day-node rows are written with.
+    let prev = content.insertChild(doc, headId, lines[0]);
+    for (const line of lines.slice(1)) prev = content.insertAfter(doc, prev, line);
+    return headId;
+  });
+}
+async function setCodex(id, on, prompt) {
+  const next = codexIds().filter((x) => x !== id);
+  const text = typeof prompt === 'string' ? prompt.trim() : '';
+  // The visible half first. If the document will not take the context there is nothing local to undo, so a badge
+  // never claims a handoff the node itself knows nothing about. With no prompt there is nothing to write, and the
+  // assignment is simply local.
+  if (on && text) await writeAgentContext(id, text);
+  if (on) next.push(id);
+  db.setSetting('codex', next);
+  const prompts = codexPrompts();
+  if (on && text) prompts[id] = text; else delete prompts[id];
+  db.setSetting('codexPrompt', prompts);
+  // an assigned node stays live wherever you are, the way an explicitly watched one does (main/views.js)
+  if (on && S.client) S.client.sync.subscribe(id).catch(() => {});
+  return !!on;
+}
 // docId -> [title, stateType, oplog frontiers] as last seen: what a change has to differ from to be one. The
 // frontiers are what makes an ordinary edit count — a body rewritten elsewhere moves neither title nor state, and
 // watching a node you never hear from is the same as not watching it. They also absorb a re-import of ops already
@@ -180,19 +228,49 @@ const NOTIFY_STATE = { proposed: 'Inbox', open: 'In Progress', closed: 'Complete
 const notifySigs = new Map();
 const notifyQuiet = new Map(); // docId -> when a plain edit was last announced
 const EDIT_QUIET_MS = 60000; // a remote edit arrives op by op: someone typing is one banner a minute, not fifty
+// The same pair, kept across restarts: id -> [title, stateType] as it was when the app last saw the node.
+// notifySigs lives only as long as the process and a bootstrap takes its baseline in silence, so a task completed
+// while the app was closed used to be lost outright — which is how a completion at 09:01 goes unmentioned by an app
+// started at 09:27. Pruned to what is still subscribed on every write, so it cannot grow into a history of
+// everything ever opened.
+// ponytail: one small write per node at launch and per move after that; batch it if it ever shows up in a profile.
+let seenPairs = null;
+let caughtUp = 0; // catch-up banners spent this launch
+const CATCH_UP_MAX = 3; // coming back to a busy week is not a reason to bury the screen
+const storedPairs = () => { const stored = db.setting('notifySeen'); return stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {}; };
+function rememberSeen(id, sig) {
+  seenPairs ||= storedPairs();
+  const pair = [sig[0], sig[1]];
+  if (String(seenPairs[id]) === String(pair)) return;
+  seenPairs[id] = pair;
+  const next = {};
+  for (const [key, value] of Object.entries(seenPairs)) if (key === id || subscribed.has(key)) next[key] = value; // the rest is history
+  seenPairs = next;
+  db.setSetting('notifySeen', next);
+}
 // Only changes from somewhere else. onChange fires for your own typing too, and being notified about your own edits
 // would make this unusable; sdk/document.js already marks every change local or remote, so the origin decides.
 async function notifyWatched(id, doc, n, info) {
   const sig = [n.title ?? '', n.stateType ?? '', JSON.stringify(doc.loro.oplogFrontiers())];
   const before = notifySigs.get(id);
   notifySigs.set(id, sig);
+  const away = before ? null : (seenPairs ||= storedPairs())[id]; // first sight this launch: what it was last time
+  rememberSeen(id, sig);
   if (!info || info.origin !== 'remote') return;
-  if (!before || JSON.stringify(before) === JSON.stringify(sig)) return; // first sight, or nothing worth saying moved
+  if (before && JSON.stringify(before) === JSON.stringify(sig)) return; // nothing worth saying moved
+  // First sight is a baseline, except where the stored pair says the status moved while the app was not running.
+  // Only the status, and only somebody else's: a title differing after a week is noise, and stateChangedBy is the
+  // only thing that can say who moved it, since a bootstrap arrives as 'remote' whoever made the change.
+  const catchUp = !before && away && away[1] !== sig[1] && n.stateChangedBy && n.stateChangedBy !== (S.me && S.me.userUri);
+  if (!before && !catchUp) return;
+  if (catchUp && caughtUp >= CATCH_UP_MAX) return;
   const chosen = notifyChoices()[id];
   if (!(typeof chosen === 'boolean' ? chosen : notifyDefault(n, await creatorOf(id)))) return;
-  const moved = before[0] !== sig[0] || before[1] !== sig[1]; // a rename or a status change: rare, and always worth a banner
+  const was = before || away; // what it is measured against: this launch's last sight, or the stored one
+  const moved = was[0] !== sig[0] || was[1] !== sig[1]; // a rename or a status change: rare, and always worth a banner
   if (!moved) { const last = notifyQuiet.get(id) || 0; if (Date.now() - last < EDIT_QUIET_MS) return; notifyQuiet.set(id, Date.now()); }
-  const body = before[1] !== sig[1] ? (NOTIFY_STATE[sig[1]] ? 'Now ' + NOTIFY_STATE[sig[1]] : 'Status changed') : 'Edited';
+  if (catchUp) caughtUp++;
+  const body = was[1] !== sig[1] ? (NOTIFY_STATE[sig[1]] ? 'Now ' + NOTIFY_STATE[sig[1]] : 'Status changed') : 'Edited';
   if (S.notify) S.notify(id, n.title || 'Untitled', body);
 }
 function onChange(docId, info) {
@@ -371,4 +449,4 @@ async function moveTarget(spaceId) {
   return document(spaceId);
 }
 
-module.exports = { outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, createDocument, info, setSensitive, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, creatorOf, document, op, inHistory, mut, mutTasks, documentAction, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget };
+module.exports = { outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, createDocument, info, setSensitive, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, codexIds, codexPrompt, setCodex, creatorOf, document, op, inHistory, mut, mutTasks, documentAction, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget };

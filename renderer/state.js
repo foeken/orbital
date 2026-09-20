@@ -6,7 +6,13 @@ const tana = window.api || mockApi();
 // ---- state ----
 let views = [];              // [{ id, title, icon, nodes: document Node[] }]
 let searches = [];           // [{ id, title, icon, … }] saved search documents, for the Cmd+K Searches group
-let view = localStorage.getItem('view') || 'inbox'; // active view id; the outline shows one view at a time
+let searchesLoaded = false;  // whether that list has answered once: until it has, a Home search is trusted, not repaired away
+// Home: the page this app comes back to — the Library, or a saved search, kept as the target's own id ("library" or a
+// tana:search: document id) rather than its name, so renaming the search in Tana keeps the choice and only changes
+// what it reads. It is the anchor crumb on every zoomed page, where Back lands with nothing to go back to, and the
+// page a launch opens with no place to restore. The Library is the default and the fallback (nodes.js).
+let home = localStorage.getItem('home') || 'library';
+let view = localStorage.getItem('view') || 'library'; // active view id; the outline shows one view at a time
 // Views that no longer exist. A stored one would leave the app on a page with no filter, no rows and no way back,
 // so it lands in the Library, which lists every kind those pages used to list one of.
 // Tasks lands in the Library rather than the Inbox: the two listed almost the same thing (your tasks, proposed and
@@ -54,6 +60,27 @@ const taskMetaById = new Map(), taskMetaLoading = new Set(), taskMetaFailed = ne
 const META_RETRY_MS = 500, META_RETRY_MAX = 30000;
 const accessById = new Map(), accessLoading = new Set();
 const notifyById = new Map(), notifyLoading = new Set(); // docId -> { on, default, explicit }: whether changes to it are announced
+let codexIds = new Set(), codexLoading = null; // documents handed to the local Codex agent (app-local mark, not a Tana assignee)
+// docId -> 'pending' | 'working' | 'waiting' | 'done' | 'broken': what the linked Codex task is doing, read on the
+// refresh (main/agent.js). A node with no entry is pending: assigned, but no task has registered itself yet, which
+// is the one thing the badge must never draw as finished.
+const agentStates = new Map();
+const AGENT_BADGE = {
+  pending: { label: 'Agent pending', title: 'Assignment requested; no Codex task yet' },
+  working: { label: 'Agent working', title: 'The Codex task is running' },
+  waiting: { label: 'Agent waiting for you', title: 'The Codex task is waiting for approval or input' },
+  done: { label: 'Agent completed', title: 'The Codex task finished its last turn' },
+  broken: { label: 'Agent needs attention', title: 'The Codex task failed or cannot be reached — assign again to retry' },
+  unavailable: { label: 'Agent host unavailable', title: 'The machine running this task cannot be reached; the task itself is fine' },
+};
+const agentStateOf = (id) => (AGENT_BADGE[agentStates.get(id)] ? agentStates.get(id) : 'pending');
+// The model for the assignment being written, chosen on the Assign to Agent page. '' is Codex's own default, which
+// is also what an unknown stored value falls back to: a model Codex no longer offers must not be sent.
+let agentModel = '', agentModels = [];
+// Which machine the task runs on, chosen per assignment. Laptop unless asked otherwise; the list is main's, so the
+// renderer only ever holds names.
+let agentHost = 'local', agentHosts = [];
+const agentTaskHosts = new Map(); // docId -> the machine its task runs on; only a local one can be opened from here
 let visibilityPeople = new Set();
 let visibilityRoles = new Map();
 let menu = null;             // open pill menu: { id, index }
@@ -62,6 +89,10 @@ let menu = null;             // open pill menu: { id, index }
 const groupPref = JSON.parse(localStorage.getItem('groupBy') || '{}'); // page key -> 'none' | 'status' | 'assignee' | 'updated' | 'type'
 const sortPref = JSON.parse(localStorage.getItem('sortBy') || '{}');   // page key -> 'default' | 'updated' | 'created' | 'title'
 const displayPref = JSON.parse(localStorage.getItem('display') || '{}'); // page key -> which of a row's facts it shows
+// Sections folded away (renderer/views.js), as "page key\ngrouping\nsection key" — folded ones only, so unfolding a
+// section drops its entry. Read here, at load, so the first render already draws them folded. A saved search's key is
+// its document id, which is why these are kept whole rather than filtered like the arrangement above.
+const collapsedGroups = new Set(JSON.parse(localStorage.getItem('collapsedGroups') || '[]'));
 let rootsLoaded = false, connected = false; // for the loading skeleton: shown while the view has no rows and roots/library/connection are still pending
 // font size: native page zoom (⇧⌘+ / ⇧⌘− / ⌘0), persisted. Default is one step below native.
 const BASE_ZOOM = 0.91;

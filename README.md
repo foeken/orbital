@@ -26,12 +26,18 @@ rolls back someone else's edit. The full keyboard contract is [docs/OUTLINER.md]
 
 **Cmd+K for everything else.** Switch views, run an action on the current node (copy link, show
 in Tana, pin, set an icon, change visibility, move to a space), or act on a multi-selection: Cmd+click
-rows, then mark them sensitive, add them to today's or the week's node, set a status, assign them or
+rows, then mark them sensitive, add them to today's, tomorrow's or the week's node, set a status, assign them or
 delete them; with nothing selected the same actions apply to the node you are on. "Today"
 and "This week" (both under Views) open (and create) the date-titled and the "Week 38 (2026)" documents.
 Cmd+Shift+K on any palette row records a hotkey for it, and refuses one the app already uses. Cmd+S
 searches Tana itself, with `#task`, `#meeting`, `#space`, `#member` and `#<Type>` filters; Cmd+F
 filters the rows already on screen.
+
+**Quick add from anywhere.** Cmd+Shift+Space opens a small panel over whatever app you are in: type a
+task and press Enter. If you are in a meeting right now it says so and pins the new task to that
+meeting; if you are not, it says that instead and creates a plain task. Tab picks an assignee from
+your workspace members without leaving the keyboard. The panel is described in
+[docs/QUICK-ADD.md](docs/QUICK-ADD.md).
 
 **The things a day needs.** Meetings carry their times and mark today; a meeting's sidebar shows its
 call link, its notes and its pins. Tasks carry state, assignee and audience. Sensitive nodes are

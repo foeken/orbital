@@ -114,6 +114,9 @@ async function removeNode(item, el) {
 }
 async function removeDocument(item) {
   if (!canEditItem(item) || !tana.deleteDocument || !tana.accessOptions) return;
+  // A draft has no Tana id yet: main reads a local one as "not connected to Tana", so asking it whether the node may
+  // be deleted fails with a connection error for a node that was never created. Dropping it is the whole delete.
+  if (item.node.draft) return dropDraft(item);
   flush(item.key);
   await run(async () => {
     const access = await tana.accessOptions(item.docId);
@@ -254,7 +257,9 @@ function noteNavigation() {
 function navigate(dir) {
   const from = dir < 0 ? navBack : navForward, to = dir < 0 ? navForward : navBack;
   const place = from.pop();
-  if (!place) return;
+  // Nothing to go back to: Back lands on Home rather than on whichever view happens to be behind the page. That is
+  // the whole point of choosing one — a note opened from a search or a link used to leave you in the Library.
+  if (!place) return dir < 0 && !atHome() ? goHome() : undefined;
   to.push(navHere);
   navigating = true;
   try {
@@ -275,6 +280,10 @@ function readStoredPlace() {
 // Read at load, before the first paint: renderOutline records the place it drew, and on boot that is the view with no
 // zoom, which clears the stored place. Reading it here means the first render can no longer erase what we reopen.
 let savedPlace = readStoredPlace();
+// Nothing to restore: a launch opens Home. The Library needs nothing here (it is the view already), and a saved
+// search is opened exactly the way a stored place is — it waits for the connection, is fetched if no view lists it,
+// and silently leaves you on the view if it cannot be read, which is the fallback a deleted Home needs anyway.
+if (!savedPlace && isRealId(home)) savedPlace = { docId: home, nodeId: null };
 async function restorePlace() {
   const saved = savedPlace;
   if (!saved || !isRealId(saved.docId) || zoom) { savedPlace = null; return; }

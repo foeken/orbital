@@ -175,6 +175,38 @@ function railGroups(data) {
     ['References', data.notes],
   ].filter(([, rows, action]) => (rows && rows.length) || action) : [];
 }
+// One entry of the zoomed node's own history (api.related().changes, newest first). The first line is what the
+// change was — Tana writes that sentence itself ("Added dependency on …") and the row falls back to the node's
+// title when the history service named nothing. Under it: who made it and when. The kind of change is the glyph
+// rather than a word, and the glyph names it for the pointer and for assistive tech, so the line reads
+// "who · when". Only what is known is written: an entry with no actor or no time simply has fewer parts, since
+// neither may be guessed, extra authors are counted rather than dropped, and a kind with no glyph of its own falls
+// back to saying itself rather than going unsaid. These rows open nothing and change nothing.
+const CHANGE_ICON = { Updated: 'updated', Created: 'created', Deleted: 'trash' };
+function railChangeEl(change, title, docId) {
+  const el = document.createElement('div');
+  el.className = 'rrow rchange';
+  el.tabIndex = -1; el.dataset.id = 'change:' + [change.action, change.by || '', change.at || ''].join(':');
+  if (change.note) el.title = change.note; // the longer description, for the pointer only: the row stays one line of its own
+  const glyph = iconNode(CHANGE_ICON[change.action]);
+  const icon = document.createElement('span');
+  icon.className = 'ricon';
+  if (glyph) { icon.append(glyph); icon.title = change.action; icon.setAttribute('aria-label', change.action); }
+  const text = document.createElement('span');
+  text.className = 'rtext';
+  const head = document.createElement('span');
+  head.className = 'rtitle'; head.textContent = change.title || title;
+  blurSensitive(head, docId);
+  const sub = document.createElement('span');
+  sub.className = 'rsub';
+  if (change.by) loadMembers(); // names come with the member list, which re-renders when it lands (memberName answers with the uri until then)
+  const who = change.by ? memberName(change.by) + (change.others ? ' +' + change.others : '') : '';
+  sub.textContent = [glyph ? '' : change.action, who, agoText(change.at)].filter(Boolean).join(' · ');
+  text.append(head, sub);
+  el.append(icon, text);
+  el.onkeydown = (e) => railMove(e, el);
+  return el;
+}
 function railPinAction(pinHub, docId) {
   const row = railMetaEl({ id: 'pinNew', icon: 'pin', label: 'Pin something…', run: () => togglePalette('search', null, { pinHub, docId }) });
   row.dataset.id = 'action:pinNew';
@@ -196,13 +228,15 @@ function renderRail(parent) {
   if (call) meta.unshift(call);
   // "Notes" is what api.related calls them; in the sidebar they read as References
   const groups = railGroups(data);
-  const empty = !groups.length && !meta.length;
+  const changes = (data && data.changes) || [];
+  const empty = !groups.length && !meta.length && !changes.length;
   railEl.hidden = railGrip.hidden = railOff(empty);
   renderRailToggle(!empty); // there is a sidebar to toggle even while it is hidden, so the button stays reachable
   const sectionHead = (label) => { // every sidebar section collapses the same way, Details included
     const head = document.createElement('button');
     head.className = 'rhead' + (railClosed.has(label) ? ' closed' : '');
     head.tabIndex = -1; head.innerHTML = CHEV; head.append(label);
+    head.setAttribute('aria-expanded', railClosed.has(label) ? 'false' : 'true'); // the caret is a disclosure, and says so
     head.onclick = () => toggleRailSection(label);
     railEl.append(head);
     return !railClosed.has(label);
@@ -212,6 +246,11 @@ function renderRail(parent) {
     if (!sectionHead(label)) continue;
     for (const node of rows) { const row = railRow(asDoc(node)); row.dataset.section = label; railEl.append(row); }
     if (pinHub) { const row = railPinAction(pinHub, docId); row.dataset.section = label; railEl.append(row); }
+  }
+  // Last section: the node's history, which is about the page itself rather than about anything it is linked to.
+  if (changes.length && sectionHead('Changes')) {
+    const title = parent.node.text || parent.node.title || 'Untitled';
+    for (const change of changes) { const row = railChangeEl(change, title, docId); row.dataset.section = 'Changes'; railEl.append(row); }
   }
   if (keep) { const again = railEl.querySelector('.rrow[data-id="' + keep + '"]'); if (again) again.focus(); }
 }

@@ -20,12 +20,16 @@ function liveState(n) {
 function rememberMeta(n) {
   n = liveState(n);
   const createdAt = iso(n.createTime ?? n.createdAt) || (nodeMeta.get(n.id) || {}).createdAt;
+  // updateTime exists on graph nodes only — a Loro data map never carries one — so, like the hue, the graph is the
+  // one source and a document read must not erase it. Without this a row built without a cached SQLite row (a saved
+  // search's rows, a live update patching one) came back with no updatedAt at all and lost its "Updated ..." line.
+  const updatedAt = iso(n.updateTime) || (nodeMeta.get(n.id) || {}).updatedAt;
   const state = (n.state && n.state.type) || n.stateType;
   const stateType = STATE_TYPES.includes(state) ? state : undefined;
   // n.stateType means this came from a Loro data map rather than the search index: the document is the source of
   // truth, so that answer is kept apart from nodeMeta, which any lagging index row overwrites.
   if (stateType && n.stateType !== undefined) docStates.set(n.id, stateType);
-  if (createdAt || stateType) nodeMeta.set(n.id, { createdAt, stateType });
+  if (createdAt || updatedAt || stateType) nodeMeta.set(n.id, { createdAt, updatedAt, stateType });
 }
 const rememberType = (n) => { typeTitles.set(n.id, n.title || ''); if (n.appearance && typeof n.appearance.hue === 'number') typeHues.set(n.id, n.appearance.hue); };
 const ownHue = (n) => n && n.appearance && typeof n.appearance.hue === 'number' ? n.appearance.hue : undefined;
@@ -119,12 +123,18 @@ const meetingRow = (n, withDate) => {
   return {
     id: n.id, title: n.title || '', done: 0, icon: 'meeting', meta: eventMeta(ev.startTime, ev.endTime, withDate), createdAt: n.createTime,
     hue: hueWithType(hueOf(n), n.entityType), tags: [nodeTag(TAG.meeting, n), ...typeTag(n.entityType)], sortKey: ev.startTime || now(), updatedAt: n.updateTime || now(),
+    // the event window itself, beside the text that displays it: anything that orders meetings by time has to read
+    // these rather than parse `meta`, which is a label and says "Fri 08:20" for six days either side of today
+    start: ev.startTime, end: ev.endTime,
   };
 };
 
 // updatedAt/createdAt (ISO) and stateType are optional sort/group data: the row carries what it knows, the rest
 // comes from nodeMeta, so a cached SQLite row sorts like a fresh graph row. done keeps its own meaning.
-const toNode = (r) => ({ id: r.id, title: r.title, text: r.title, kind: 'document', editable: editability.has(r.id) ? editability.get(r.id) : editable(r, S.me && S.me.userUri), done: r.icon === 'task' ? r.done : undefined, hasChildren: true, icon: PLAIN_KINDS.has(idKind(r.id)) ? idKind(r.id) : r.icon || undefined, hue: r.hue === undefined ? (nodeHues.has(r.id) ? nodeHues.get(r.id) : cachedNodeHue(r)) : r.hue, tags: r.tags, meta: r.meta || undefined, updatedAt: r.updatedAt || undefined, createdAt: r.createdAt || (nodeMeta.get(r.id) || {}).createdAt, createdBy: nodeCreators.get(r.id), stateType: r.stateType || (nodeMeta.get(r.id) || {}).stateType });
+// An event also carries its own window (`start`/`end`), and only an event does: the keys are added rather than always
+// present, so every other kind of node keeps the shape it had. A row restored from the SQLite cache has no window —
+// the cache stores the label, not the times — so a consumer that needs one asks the graph, as the meeting picker does.
+const toNode = (r) => ({ id: r.id, title: r.title, text: r.title, kind: 'document', editable: editability.has(r.id) ? editability.get(r.id) : editable(r, S.me && S.me.userUri), done: r.icon === 'task' ? r.done : undefined, hasChildren: true, icon: PLAIN_KINDS.has(idKind(r.id)) ? idKind(r.id) : r.icon || undefined, hue: r.hue === undefined ? (nodeHues.has(r.id) ? nodeHues.get(r.id) : cachedNodeHue(r)) : r.hue, tags: r.tags, meta: r.meta || undefined, updatedAt: r.updatedAt || (nodeMeta.get(r.id) || {}).updatedAt, createdAt: r.createdAt || (nodeMeta.get(r.id) || {}).createdAt, createdBy: nodeCreators.get(r.id), stateType: r.stateType || (nodeMeta.get(r.id) || {}).stateType, ...(r.start ? { start: r.start, end: r.end } : {}) });
 
 // Node shape from any graph Node JSON (search results): events, tasks, typed and plain documents.
 function graphRow(n, withDate) {

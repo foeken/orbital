@@ -12,7 +12,7 @@ renderer. It replaces the per-view paths: `taskParams`/`libraryQueries`/`MEETING
 ## 1. Filter
 
 ```js
-{ types, states, assignee, text, participant, window }
+{ types, states, assignee, text, participant, window, completedWithin }
 ```
 
 | key | values | meaning |
@@ -23,6 +23,7 @@ renderer. It replaces the per-view paths: `taskParams`/`libraryQueries`/`MEETING
 | `text` | string | server-side `textQuery`. |
 | `participant` | `me` or null | events the user is a participant of (`hasParticipantUris`). |
 | `window` | `recent` or null | events from 7 days ago to 7 days ahead. |
+| `completedWithin` | `7` | `30` | `'all'` | how old a **completed** task may be and still be listed. Not a way to hide them — `states` alone decides whether they are asked for — so it has no "off", and its value is kept while Completed is out of `states`. Unset reads as `7`. |
 
 ## 2. Presets
 
@@ -49,6 +50,16 @@ One `graph.listNodes` call per fetch, built by `viewParams(filter, meUri, limit 
   which is no filter at all to the graph).
 - `stateTypes` and `assignedTo`/`unassigned` only while tasks are among the kinds; `textQuery`
   when `text`; `hasParticipantUris` when `participant`; `eventStartTimeMin/Max` when `window`.
+- `completedWithin` is asked for **nowhere**: `ListNodesRequest` has no field for the age of a state
+  (checked against the descriptors — there is `event_start_time_min/max` and nothing for `state.entered_at`,
+  and no sort field for it either). It is applied to the answer instead, in `viewRows`, `searchChildren` and
+  `searchPreview`, by `completedInWindow` (sdk/query.js) reading each node's `state.enteredAt` — the time the
+  task entered the state it is in, which for a closed one is when it was completed, and which the index carries
+  on every node it lists. The window is rolling and absolute (exactly N×24h back from now), the boundary is
+  inclusive, and a completed task with no readable `enteredAt` is left out of 7/30 and kept by All.
+  **Consequence:** the limit applies before the window, so a graph answer full of old completed tasks can come
+  back thin. A saved search stores its window in its `view` map beside the sort and grouping, never inside
+  Tana's query vocabulary.
 - `sortOptions`: event start ascending when meetings are the only kind, else update time descending.
 - `mode: 'LIST_NODES_MODE_WITH_COUNT'`; `truncated` comes from the response.
 - `docs` selected without `tasks`: text nodes that carry a state are dropped after the query (today's rule).

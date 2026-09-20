@@ -3,12 +3,61 @@
 
 // ---- filter pills shared by every view ----
 const STATES = [['proposed', 'Inbox'], ['open', 'In Progress'], ['closed', 'Completed'], ['not_now', 'Later']];
+// How far back a completed task still counts. Whether completed tasks appear at all is the Status filter's business
+// and only its, so this has no "off": it ages them out, which is why the pill is shown only while Completed is in
+// Status, and why its value is kept when Completed is taken out — putting Completed back reads the same as before.
+// The rule itself is sdk/query.js (the task's own state.enteredAt, applied to what the query answers); here it is
+// only the vocabulary the pill speaks.
+const COMPLETED = [[7, '7 days'], [30, '30 days'], ['all', 'All']];
+const completedWindow = (f) => (COMPLETED.some(([v]) => v === (f || {}).completedWithin) ? f.completedWithin : 7);
+const showsCompleted = (f) => !!f && (!f.states || f.states.includes('closed'));
 const TYPES = [['meetings', 'Meetings', 'meeting'], ['tasks', 'Tasks', 'task'], ['docs', 'Docs', 'doc'], null, ['chats', 'Chats', 'chat'], ['canvases', 'Canvases', 'canvas'], ['agents', 'Agents', 'agent'], ['skills', 'Skills', 'skill'], ['searches', 'Searches', 'search'], ['spaces', 'Spaces', 'space'], ['people', 'People', 'member']];
 const toggleIn = (all, list, v) => { if (!list) return [v]; const next = all.filter((x) => list.includes(x) !== (x === v)); return next.length ? next : null; }; // null = any
 const names = (pairs, list) => (list ? pairs.filter((p) => p && list.includes(p[0])).map((p) => p[1]).join(', ') : null);
 // ---- group by: plain headings over the rows the view already loaded, no extra query ----
-const GROUPS = [['none', 'None'], ['status', 'Status'], ['assignee', 'Assignee'], ['notify', 'Notifications'], ['updated', 'Updated'], ['type', 'Type']];
-const FALLBACK = { status: 'No status', assignee: 'Unassigned', notify: 'Not notifying', updated: 'Older', type: 'No type' };
+const GROUPS = [['none', 'None'], ['status', 'Status'], ['assignee', 'Assignee'], ['responsibility', 'Responsibility'], ['updated', 'Updated'], ['type', 'Type']];
+const FALLBACK = { status: 'No status', assignee: 'Unassigned', updated: 'Older', type: 'No type' }; // responsibility has none: see below
+// Group by Responsibility: what a row is to you, from who made it (the graph's createdBy, on the row already) and who
+// it is assigned to. Made by you and yours to do, made by you and handed to someone else, made by you and waiting for
+// somebody to take it, and somebody else's task that landed on you. It is a view of your own work, so a row you are
+// no part of — somebody else's task on somebody else, or their unassigned one — has no section here and is left out
+// rather than piled under a heading of leftovers, which is what groupRows does with the null. A row whose assignees
+// have not arrived yet is left out on the same rule: never shown under a heading it may not belong to, and never
+// shown while it might be nobody's business of yours. Rows ask for their metadata when they reach the screen (#155)
+// and one that is filtered out never gets there, so this asks for what it is missing itself.
+// ponytail: that is one doc:taskMeta per row of the open view while this grouping is chosen; the graph node a view
+// lists already carries assignedTo, so a row could be told at list time instead if it ever costs too much.
+// The headings run in the order the work wants attention: nobody has taken it, you are waiting on somebody, then
+// your own work by its state, then what was handed to you. Your own — made by you and assigned to you — splits
+// across the four states the Status menu lists, so each such task sits in exactly one of them. The state is
+// stateOf, the reading the Status pill and the Status grouping already use, so a row carrying only the old done
+// flag lands in My completed or Mine as that flag says, and one with no state at all reads as under way. The rows
+// the grouping leaves out are simply not listed: an empty Other section explaining them was tried and removed.
+// Agent sits between Tracking and your own work, for the same reason Tracking does: it is work you are following
+// rather than doing. Handing a node to the local agent (⌘K, kept in the app's own settings — never a Tana assignee)
+// is an explicit act of tracking, so it decides the section on its own, ahead of every other rule: before "you" is
+// known, whatever Tana says about its assignees, and even for a row this grouping would otherwise not list at all,
+// since you asked for that one by name. Being first is also what keeps the sections exclusive — nothing handed to
+// the agent is drawn a second time under your own work.
+const MINE_STATES = { proposed: 'My inbox', open: 'Mine', closed: 'My completed', not_now: 'My later' };
+const RESPONSIBILITY = ['Unassigned', 'Tracking', 'Agent', 'My inbox', 'Mine', 'My completed', 'My later', 'Assigned by others'];
+function responsibilityOf(n) {
+  if (codexIds.has(n.id)) return 'Agent'; // the local mark the badge is drawn from (renderer/nodes.js loadCodex)
+  const uri = me() && me().id, meta = taskMetaById.get(n.id);
+  if (!uri) return null; // the member list has not landed, so "you" is not known yet
+  if (!meta) { loadTaskMeta(n.id); return null; } // it takes its section once the answer arrives
+  const mine = n.createdBy === uri, assigned = meta.assignees.includes(uri);
+  if (!meta.assignees.length) return mine ? 'Unassigned' : null; // its own section, never folded into Tracking
+  if (mine) return assigned ? MINE_STATES[stateOf(n)] || 'Mine' : 'Tracking';
+  return assigned ? 'Assigned by others' : null;
+}
+// Two of those sections are about rows a page filtered to "Assigned to you" can never return — the ones you handed
+// to someone else, and the ones nobody has — so grouping by Responsibility over such a page draws two permanently
+// empty headings out of an incomplete list. Choosing it therefore widens that one filter to Anyone, and a page that
+// arrives with the grouping already chosen (a preference restored at launch, a saved search's own arrangement) is
+// widened before its rows are asked for. Status, type and text are left exactly as they are.
+const needsAnyone = (key, f) => groupPref[key] === 'responsibility' && !!f && (f.assignee || 'anyone') !== 'anyone';
+const widenFilter = (key, f) => (needsAnyone(key, f) ? { ...f, assignee: 'anyone' } : f);
 // Group by Updated: how long ago the row last changed, newest first; past a month, or with no time to read, it is Older
 const UPDATED_BUCKETS = [[36e5, 'Last hour'], [864e5, 'Last day'], [7 * 864e5, 'Last week'], [30 * 864e5, 'Last month']];
 // Tasks reads as its states (Inbox, In Progress, Later) until the user picks another grouping; other views start ungrouped
@@ -48,7 +97,12 @@ const shownDocs = () => { const docs = (onSearchPage() ? kids.get(zoom.docId) : 
 // Forced, like setDisplay: choosing an arrangement is an explicit action whose whole point is to redraw, so it must
 // not be deferred because a caret happens to sit in an editable title — which on a saved search page it often does,
 // since the title is renameable and there is no draft row to take the focus.
-function setGroupBy(id) { groupPref[pillKey()] = id; held = null; persistPref('groupBy', groupPref); render(true); }
+function setGroupBy(id) {
+  groupPref[pillKey()] = id; held = null; persistPref('groupBy', groupPref);
+  // the same write the Assigned to pill makes: a view persists it and re-asks, a saved search stages it for Save
+  if (needsAnyone(pillKey(), filters.get(pillKey()))) (onSearchPage() ? setSearchF : setViewF)({ assignee: 'anyone' });
+  render(true);
+}
 // main.js toNode now passes stateType, so all four states (Inbox, In Progress, Completed, Later) separate here.
 // done (0/1 for tasks, undefined otherwise) stays the fallback for rows that carry no state, which can only tell
 // Completed from In Progress.
@@ -60,17 +114,18 @@ function groupKey(n, by) {
   if (by === 'updated') { const age = Date.now() - Date.parse(n.updatedAt); return (UPDATED_BUCKETS.find(([ms]) => age < ms) || [])[1] || FALLBACK.updated; }
   // ponytail: a task with several assignees is filed under the first one, like the row's own summary reads
   if (by === 'assignee') { const meta = taskMetaById.get(n.id), uri = meta && meta.assignees[0]; return uri ? memberName(uri) : FALLBACK.assignee; }
-  // The same lazily read metadata the bell is drawn from, so a row whose answer has not arrived yet sits under
-  // "Not notifying" and moves up when it does — exactly how grouping by assignee already behaves.
-  if (by === 'notify') { const meta = taskMetaById.get(n.id); return meta && meta.watched ? 'Notifying' : FALLBACK.notify; }
+  // The same lazily read metadata grouping by assignee uses; null means the row has no section here and is left out.
+  if (by === 'responsibility') return responsibilityOf(n);
   return (visibleTags(n)[0] || {}).label || FALLBACK.type;
 }
 // [{ title, nodes }] in a fixed order: the status sequence as the Status menu lists it, names alphabetically,
 // the "nothing here" group last. Only groups with rows are returned.
 function groupRows(list, by) {
   const buckets = new Map();
-  for (const n of list) { const k = groupKey(n, by); if (!buckets.has(k)) buckets.set(k, []); buckets.get(k).push(n); }
-  const fixed = by === 'status' ? STATES.map((s) => s[1]) : by === 'updated' ? UPDATED_BUCKETS.map((b) => b[1]) : [], last = FALLBACK[by]; // Updated: newest first
+  // no key means this grouping has no section for the row (Responsibility, above): it is left out, and since a
+  // grouped page takes its flat list from the sections, it leaves the keyboard order too.
+  for (const n of list) { const k = groupKey(n, by); if (!k) continue; if (!buckets.has(k)) buckets.set(k, []); buckets.get(k).push(n); }
+  const fixed = by === 'status' ? STATES.map((s) => s[1]) : by === 'updated' ? UPDATED_BUCKETS.map((b) => b[1]) : by === 'responsibility' ? RESPONSIBILITY : [], last = FALLBACK[by]; // Updated: newest first
   const rank = (t) => (t === last ? 2 : fixed.includes(t) ? 0 : 1);
   return [...buckets.keys()]
     .sort((a, b) => rank(a) - rank(b) || (rank(a) === 0 ? fixed.indexOf(a) - fixed.indexOf(b) : a.localeCompare(b)))
@@ -79,14 +134,46 @@ function groupRows(list, by) {
 function groupsOf(list) {
   const by = groupBy();
   if (by === 'none') return null;
-  if (by === 'assignee') loadMembers(); // the names for the headings; without them a heading falls back to the member uri
-  return groupRows(list, by);
+  if (by === 'assignee' || by === 'responsibility') loadMembers(); // the names for the headings, and who you are
+  // every section holds rows: folded away (below) the heading stays and its rows are left out
+  return groupRows(list, by).map((g) => { const id = groupId(g, by); return { ...g, id, collapsed: groupCollapsed(id) }; });
+}
+// ---- collapsing a section: the heading stays, its rows fold away, one heading at a time ----
+// Keyed by the page, its grouping and the section: Inbox folded away on Tasks says nothing about an Inbox heading on
+// another page, and each grouping of a page folds on its own. The page key is a view id or a saved search's document
+// id, so a search that is renamed keeps its folded sections.
+// A section's own key is not the heading's words wherever the row carries something steadier: an assignee heading is
+// a member's name, which arrives late and can be renamed, and a type heading is a type's title, so those two use the
+// uri the row already carries. Status, Updated and Responsibility headings are fixed words from the tables above —
+// their own key — and so are the fallbacks.
+function groupId(g, by) {
+  const n = g.nodes[0];
+  if (!n) return g.title;
+  if (by === 'assignee') { const meta = taskMetaById.get(n.id); return (meta && meta.assignees[0]) || FALLBACK.assignee; }
+  if (by === 'type') return (visibleTags(n)[0] || {}).uri || g.title;
+  return g.title;
+}
+// Remembered across launches, the way the sidebar remembers its closed sections (renderer/rail.js): the set itself is
+// read at load in renderer/state.js, and only folded sections are in it, so nothing accumulates but what you folded.
+const collapseKey = (id) => pillKey() + '\n' + groupBy() + '\n' + id;
+const groupCollapsed = (id) => collapsedGroups.has(collapseKey(id));
+// Forced, like setGroupBy: the click's whole point is to redraw, and on a saved search page the caret often sits in
+// the renameable title, which would otherwise defer the render.
+function toggleGroup(id) {
+  const key = collapseKey(id);
+  if (!collapsedGroups.delete(key)) collapsedGroups.add(key);
+  localStorage.setItem('collapsedGroups', JSON.stringify([...collapsedGroups]));
+  render(true);
 }
 // ---- sort: the same rows in another order, again without asking the backend for anything ----
 // Only what a row actually carries can be sorted on. main.js toNode passes updatedAt and createdAt as ISO 8601
 // strings, so they compare as strings; a row that carries neither (an older cached row) keeps its place at the end.
-const SORTS = [['default', 'Default'], ['updated', 'Updated'], ['created', 'Created'], ['title', 'Title']];
-const SORT_KEY = { updated: (n) => n.updatedAt, created: (n) => n.createdAt, title: (n) => (n.text || n.title || '').toLowerCase() };
+const SORTS = [['default', 'Default'], ['status', 'Status'], ['updated', 'Updated'], ['created', 'Created'], ['title', 'Title']];
+// Status sorts by the workflow rather than by the word: Inbox, In Progress, Completed, Later — the order the Status
+// menu and the Status grouping already run in, so the rank is that table's own index. A row with no task state has
+// nothing to rank and keeps its place at the end, like any other row missing the field it is sorted on.
+const statusRank = (n) => { const i = STATES.findIndex(([id]) => id === stateOf(n)); return i < 0 ? undefined : String(i); };
+const SORT_KEY = { status: statusRank, updated: (n) => n.updatedAt, created: (n) => n.createdAt, title: (n) => (n.text || n.title || '').toLowerCase() };
 const NEWEST_FIRST = new Set(['updated', 'created']); // times read newest first; Title stays A→Z
 // Every page, saved searches included, keeps the order its query returned until the user says otherwise. Tasks was
 // the one exception (most recently moved first) and it is gone.
@@ -153,7 +240,21 @@ function pageRows(list, q) {
   const found = q ? list.filter((n) => String(n.text || '').toLowerCase().includes(q)) : list;
   const sorted = sortRows(found);
   const groups = groupsOf(sorted); // null when the page is not grouped: one flat list
-  return { list: groups ? groups.flatMap((g) => g.nodes) : sorted, groups, hidden: list.length - found.length };
+  // a folded section's rows are not drawn, so they leave the keyboard order too — Down from the heading above lands
+  // on the next section, never on a row nobody can see
+  return { list: groups ? groups.flatMap((g) => (g.collapsed ? [] : g.nodes)) : sorted, groups, hidden: list.length - found.length };
 }
-// a heading is not a node: no key, no caret, no bullet, and nodeEls() already skips anything without .node
-function groupHeadEl(title) { const el = document.createElement('div'); el.className = 'ghead'; el.textContent = title; return el; }
+// a heading is not a node: no key, no bullet, and nodeEls() already skips anything without .node. It is a real button
+// so Tab reaches it and Enter or Space folds its section away, with the disclosure triangle drawn in CSS from
+// aria-expanded; mousedown is swallowed like a row's chevron does, so clicking a heading cannot take a selection away.
+function groupHeadEl(g) {
+  const el = document.createElement('button');
+  el.type = 'button'; el.className = 'ghead';
+  const chev = iconNode('chevronRight'); // the icon set's own chevron, turned a quarter down by CSS while the section is open
+  el.append(...(chev ? [chev] : []), document.createTextNode(g.title));
+  el.setAttribute('aria-expanded', g.collapsed ? 'false' : 'true');
+  el.title = g.collapsed ? 'Expand' : 'Collapse'; // the words the row chevrons already use
+  el.onmousedown = (e) => e.preventDefault();
+  el.onclick = () => toggleGroup(g.id);
+  return el;
+}

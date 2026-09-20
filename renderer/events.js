@@ -14,7 +14,7 @@ outline.addEventListener('keydown', (e) => {
   const el = e.target.closest && e.target.closest('.text');
   if (!el) return;
   const item = items.get(keyOfEl(el)), mod = e.metaKey || e.ctrlKey;
-  const off = caretOffset(el), len = el.textContent.length, collapsed = getSelection().isCollapsed;
+  const off = caretOffset(el), len = unanchored(el.textContent).length, collapsed = getSelection().isCollapsed; // the caret anchor before a leading chip is no character
   const isDoc = item.node.kind === 'document', combo = comboOf(e);
   if (isAtomic(item.node)) { // image or divider, not editable: Backspace / ⌘⇧⌫ removes, Up/Down step past, Shift+Up/Down select, ⌘⇧Up/Down moves; everything else is swallowed
     const vert = e.key === 'ArrowUp' || e.key === 'ArrowDown', dir = e.key === 'ArrowUp' ? -1 : 1;
@@ -49,7 +49,7 @@ outline.addEventListener('keydown', (e) => {
     else if (e.key === 'ArrowDown' && !mod && atEdge(el, 'down')) { e.preventDefault(); moveTo(el, 1, off); }
     else if (e.key === 'ArrowLeft' && !mod && off === 0 && collapsed) { e.preventDefault(); moveTo(el, -1, Infinity); }
     else if (e.key === 'ArrowRight' && !mod && off === len && collapsed) { e.preventDefault(); moveTo(el, 1, 0); }
-    else if (!(mod && (e.key.toLowerCase() === 'k' || e.key.toLowerCase() === 's'))) e.preventDefault();
+    else if (!mod) e.preventDefault(); // every ⌘ combo (⌘K, ⌘S, ⌘F …) is the document handler's to run, as the atomic branch above already does
     return;
   }
   if (item.node.draft) { // empty draft: Enter/Tab do nothing, Backspace drops it (caret to the node above); typing creates it (input handler)
@@ -96,6 +96,38 @@ outline.addEventListener('input', (e) => {
   if (!item.node.draft) scheduleSave(item, readSegs(el));
   else if (!item.busy && !item.node.pendingSplit) { item.busy = true; materialise(item, el); }
   if (item.node.kind === 'block' && el.textContent === '/' && palette.hidden) openSlash(item); // "/" alone in a node is the command menu
+});
+// A pasted Tana node link becomes the reference Tana itself inserts, not the url: the clipboard holds one node link,
+// the row is a real block, and the title is read before anything is written, so a link to something unreadable
+// leaves the row as it was and only shows the error. Everything else — prose around a url, another host, a broken
+// id, no clipboard text — pastes the browser's way. linkTo is the same path "@" uses, so the surrounding text,
+// the replaced selection and the caret behave exactly as they do there, and the url never lands as text beside it.
+// ponytail: a draft row pastes as text — it has no Tana id yet, so setText has nothing to write to
+outline.addEventListener('paste', (e) => {
+  const el = e.target.closest && e.target.closest('.text');
+  if (!el || !e.clipboardData || !tana.node) return;
+  const item = items.get(keyOfEl(el));
+  if (!item || item.node.kind !== 'block' || isAtomic(item.node) || isReference(item.node) || !canEditText(item)) return;
+  if (item.node.draft && (item.busy || item.node.pendingSplit)) return; // already being created: the text lands in it like any other typing
+  const uri = tanaNodeUri(e.clipboardData.getData('text/plain'));
+  if (!uri) return;
+  const off = caretOffset(el);
+  const range = getSelection().isCollapsed ? (off == null ? null : [off, off]) : selectionOffsets(el);
+  if (!range) return;
+  e.preventDefault();
+  flush(item.key);
+  const ctx = { item, segs: readSegs(el), start: range[0], end: range[1] };
+  // A draft row has no Tana id yet, so it is created first — by the same materialise the first typed character
+  // uses, which is what keeps it one create — and the reference is written into the row it became. The title is
+  // read before any of that, so a link that cannot be resolved creates nothing at all, and a create that fails
+  // (or a draft dropped while it ran) leaves the row a draft with nothing written and its own error already shown.
+  tana.node(uri).then(async (n) => {
+    const mention = { label: n.title || uri, uri };
+    if (!item.node.draft) return linkTo(ctx, mention);
+    item.busy = true;
+    await materialise(item, el);
+    if (!item.node.draft) return linkTo(ctx, mention);
+  }, showError).catch(showError);
 });
 outline.addEventListener('focusout', (e) => {
   const el = e.target, item = el.classList && el.classList.contains('text') && items.get(keyOfEl(el));

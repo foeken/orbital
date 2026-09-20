@@ -65,7 +65,22 @@ assert.match(source, /id: 'library', title: 'Library', icon: 'library'/);
 assert.match(source, /value: names\(TYPES, f\.types\) \|\| 'Any type', icon: one \? one\[2\] : 'any'/);
 assert.match(source, /icon: s\.id === 'library' \? 'library' : s\.icon/);
 // every view is the same screen: one loader, one filter per view id (docs/VIEWS.md)
-assert.match(source, /function loadView\(id = view\) \{\n  const filter = filters\.get\(id\);/);
+// widenFilter: a view restored with Group by Responsibility asks for Anyone, so the grouping never sections a list
+// that cannot hold two of its four headings (renderer/views.js)
+assert.match(source, /function loadView\(id = view\) \{\n[\s\S]*?  const filter = widenFilter\(id, filters\.get\(id\)\);\n  if \(filter !== filters\.get\(id\)\) filters\.set\(id, filter\);/);
+// a late metadata answer can put a row on screen that was not there (Group by Responsibility), so patchMeta falls
+// back to a render when it patched nothing
+assert.match(source, /row\.dataset\.sig = rowSig\(item\.node\);[\s\S]*?patched = true;\n  \}\n[\s\S]*?  if \(!patched\) renderSoon\(\);/);
+// every section on a grouped page holds rows: no empty heading, and no note under one
+assert.doesNotMatch(source, /groupNoteEl|RESPONSIBILITY_NOTE/, 'a section that explains itself instead of holding rows is gone');
+// folded sections are read back at load (state.js) and written the moment one is folded or unfolded, so a launch
+// draws them folded without a first render that shows the rows and takes them away again
+assert.match(source, /const collapsedGroups = new Set\(JSON\.parse\(localStorage\.getItem\('collapsedGroups'\) \|\| '\[\]'\)\);/, 'the folded sections are restored at load');
+assert.match(source, /if \(!collapsedGroups\.delete\(key\)\) collapsedGroups\.add\(key\);\n  localStorage\.setItem\('collapsedGroups', JSON\.stringify\(\[\.\.\.collapsedGroups\]\)\);/, 'and written on every toggle');
+// a page whose sections are all folded away is not an empty page: its headings are drawn, so neither the zoomed
+// "No content" nor a view's "Nothing here yet" may appear under them
+assert.match(source, /if \(parent && !list\.length && !outline\.children\.length\) \{/, 'the zoomed empty note goes by what was drawn, not by the row count');
+assert.match(source, /if \(!parent && !list\.length && !outline\.children\.length && !loading && !filterEl\.value\) \{/, 'and so does a view\'s');
 assert.doesNotMatch(source, /loadLibrary|loadChats|loadInbox|taskFilter|libraryFilter/);
 assert.match(source, /const chatIcon = \(n\) => n\.icon \|\| \(\(n\.tags \|\| \[\]\)\.some\(\(t\) => t\.label === 'chat'\) \? 'chat' : undefined\);/);
 assert.match(source, /const nodeIcon = \(n\) => chatIcon\(n\) \|\| \(\(n\.tags \|\| \[\]\)\.some\(\(t\) => t\.label === 'agent'\) \? 'agent' : undefined\);/);
@@ -107,6 +122,7 @@ assert.match(source, /const wasConnected = connected;[\s\S]*?if \(connected && !
 assert.match(source, /loadRoots\(\)\.then\(renderSoon, showError\)/);
 assert.doesNotMatch(source.slice(source.indexOf('tana.onChanged((docId, info) => {'), source.indexOf('function removeStale')), /loadView\(\)/, 'no second query per refresh');
 assert.match(source, /const work = \[patchDoc\(docId\)\];/);
+assert.match(source, /Promise\.all\(work\)\.then\(\(\) => render\(true\), showError\)/, 'a live document update redraws a zoom even while its parked caret would defer an ordinary render');
 assert.match(source, /const loading = !parent && !outline\.children\.length/);
 assert.match(source, /tana\.setAssignees\(doc\.id, assignees\)/);
 assert.match(source, /const AUDIENCES = \{/);
@@ -304,7 +320,8 @@ async function cachedBootMetadataCheck() {
 async function searchesReconnectCheck() {
   const context = { setTimeout, clearTimeout, Date };
   vm.runInNewContext(`
-    let authed = false, authChecking = true, signedOut = false, connected = false, searches = [], attempts = 0;
+    let authed = false, authChecking = true, signedOut = false, connected = false, searches = [], attempts = 0, searchesLoaded = false;
+    const repairHome = () => {}; // the Home repair has its own check; this one is about the reconnect edge
     const taskMetaFailed = new Map();
     const outline = {}, palette = { hidden: true };
     const $ = () => ({}), showError = () => {}, loadView = () => {}, render = () => {}, renderSoon = () => {}, restorePlace = () => {};
@@ -373,6 +390,11 @@ assert.match(source, /if \(viewFiltered\(\)\) \{/);
 // ⌘F on a saved search page: the key arrives as runAction('filter'), which only fires for a row that exists right
 // now, so the row has to be offered there — and the row it opens has to stay on screen and actually narrow the list.
 assert.match(source, /if \(!zoom \|\| onSearchPage\(\)\) rows\.push\(\{ id: 'filter'/, 'a saved search page offers the filter row, so ⌘F reaches it');
+// A key recorded for a row that is listed but off (Clean up with nothing held, Go back with no history) is answered
+// by doing nothing, rather than falling through to whatever else the combo might mean: one command, one meaning.
+assert.match(source, /if \(row\) \{ if \(!row\.disabled\) row\.run\(\); return true; \}/, 'a hotkey for a disabled row is a no-op the app still owns');
+// and the palette's own arrows land on such a row, which is the only way Cmd+Shift+K can record a shortcut for it
+assert.match(source, /if \(!rows\[next\]\.disabled \|\| rows\[next\]\.id\) return next;/, 'Up/Down reach a disabled row that has a stable id, so it can be given a key before it goes live');
 assert.match(source, /filterRow\.hidden = \(!!parent && !isSearchDoc\(parent\.node\)\)/, 'the filter row stays on screen on a saved search page');
 assert.match(source, /if \(isSearchDoc\(parent\.node\)\) \{/, 'the zoomed branch narrows a saved search the way a view narrows its rows');
 // the Library keeps the query it is showing as a saved search; main owns the filter→query translation
@@ -393,6 +415,72 @@ for (const rule of [/\.toolbar \{/, /\.tbtn \{/, /\.text code \{/, /\.text a\.li
 // a closed palette must hide even while it still carries the @ dropdown class (#240): same weight, later rule wins
 assert.doesNotMatch(styleSheet, /\.palette\.anchored \{/, 'the @ dropdown layout must not outweigh .palette[hidden]');
 assert.match(styleSheet, /\.palette\.anchored:not\(\[hidden\]\) \{/, 'the @ dropdown layout applies only while the palette is shown');
+// The agent prompt page is an editor, not a list to search: it never says "No results" under its one row, and the
+// query that found "Assign to Agent" is cleared on the way in, or its letters would show as bold in that row.
+assert.match(source, /palMode !== 'agentPrompt' && \(palMode === 'cmd'/, 'the no-results line skips the prompt page');
+assert.match(source, /function openAgentPrompt\(doc\) \{[\s\S]{0,400}palInput\.value = '';/, 'opening the prompt page clears the query behind it');
+// The agent badge sits at the end of the row — after the body, which is the flexible part of the line — and its
+// sweep is opt-in: a reduced-motion setting leaves it still, like every other animation here.
+assert.match(source, /line\.append\(body\);[\s\S]{0,240}if \(codexIds\.has\(display\.id\)\) line\.append\(codexBadgeEl\(display\.id\)\)/,
+  'the agent badge is appended after the body, so it ends the row');
+// The badge is a status, so it can never be drawn without one: every call names the node whose state it shows, and
+// the state falls back to pending rather than to the green it used to be.
+assert.doesNotMatch(source, /codexBadgeEl\(\)/, 'no badge is drawn without the node whose task status it reports');
+// A badge with a task behind it opens it; a pending one has nowhere to go and must not pretend otherwise.
+assert.match(source, /el\.setAttribute\('role', linked \? 'button' : 'img'\)/, 'only a linked badge is a button');
+assert.match(source, /tana\.openCodexTask\(id\)/, 'and it opens that node\'s own task, by node, never by a url the renderer builds');
+assert.match(source, /if \(e\.key === 'Enter' \|\| e\.key === ' '\)/, 'reachable from the keyboard, not the mouse alone');
+assert.match(source, /const agentStateOf = \(id\) => \(AGENT_BADGE\[agentStates\.get\(id\)\] \? agentStates\.get\(id\) : 'pending'\)/,
+  'an assigned node with no linked task reads as pending');
+for (const [state, label] of [['pending', 'Agent pending'], ['working', 'Agent working'], ['waiting', 'Agent waiting for you'], ['done', 'Agent completed'], ['broken', 'Agent needs attention']]) {
+  assert.match(source, new RegExp(state + ": \\{ label: '" + label + "'"), state + ' says "' + label + '" in words, so the colour is never the only signal');
+}
+// The sheen is a pseudo-element, so nothing about the badge itself moves, and it exists only where motion is welcome:
+// under reduced motion the rule is not even declared, which leaves the plain green tag.
+const sheen = styleSheet.match(/@media \(prefers-reduced-motion: no-preference\) \{ \.cbadge\.working::after \{[^\n]*\}/);
+assert.ok(sheen, 'the scan sweep is drawn on .cbadge::after, behind the reduced-motion gate');
+// and on working alone: every other state is still, whatever the colour says
+for (const state of ['pending', 'waiting', 'done', 'broken']) {
+  assert.doesNotMatch(styleSheet, new RegExp('\\.cbadge\\.' + state + '[^\\n]*animation:'), state + ' does not animate');
+}
+assert.match(sheen[0], /animation: cbadge-sweep (2\.[5-9]|3(\.0)?)s/, 'it crosses the badge every two and a half to three seconds');
+assert.match(styleSheet, /\.cbadge \{[^\n]*overflow: hidden/, 'and is clipped to the badge, so it reads as a sweep across it rather than a streak over the row');
+// Transform only: a sweep that moved the badge, resized it or faded the whole tag would be the thing this replaced.
+const sweep = styleSheet.match(/@keyframes cbadge-sweep \{[\s\S]*?\n/)[0];
+assert.match(sweep, /transform: translateX\(-?\d+%\)/, 'the sheen travels sideways');
+for (const property of ['width', 'height', 'margin', 'padding', 'font-size', 'opacity', 'scale']) {
+  assert.doesNotMatch(sweep, new RegExp('(^|[^-])' + property + ':'), 'the sweep must not animate ' + property);
+}
+assert.doesNotMatch(styleSheet, /\.cbadge \{[^\n]*animation:/, 'the badge itself never animates: only the sheen inside it does');
+// The Refresh pill's single turn is opt-in the same way: under reduced motion the rule the class selects is not
+// declared, so the glyph stays where it is. Transform only, so a turning icon cannot move the pill's text.
+assert.match(styleSheet, /@media \(prefers-reduced-motion: no-preference\) \{ \.pill svg\.spin \{ animation: pill-spin/,
+  'the Refresh icon turns only where motion is welcome');
+const turn = styleSheet.match(/@keyframes pill-spin \{[^\n]*\}/)[0];
+assert.match(turn, /transform: rotate\(360deg\)/, 'and it is one full turn');
+// The redraw waits exactly as long as the turn takes, and the two numbers live in different files: a turn lengthened
+// in the stylesheet alone would be cut off again, which is the bug this pairing exists to stop.
+const spinCss = Math.round(parseFloat(styleSheet.match(/animation: pill-spin (\.?\d*\.?\d+)s/)[1]) * 1000);
+assert.equal(spinCss, Number(source.match(/const SPIN_MS = (\d+)/)[1]), 'the wait before the redraw is the length of the turn itself');
+// The Refresh pill draws that glyph heavier than the icon set does — inside the svg, because the set puts
+// stroke-width on the wrapping <g>. Nowhere else changes an icon's weight, and the glyph itself is untouched, so the
+// same reload icon in Cmd+K is the one the set shipped.
+const heavier = styleSheet.match(/\.pill\.refresh svg \* \{[^}]*stroke-width: ([\d.]+)/);
+assert.ok(heavier && Number(heavier[1]) > 1, 'the Refresh pill draws its glyph a step heavier than the icon set does');
+// a declaration, not prose about one: the selector and the brace have to be on the line before the property
+for (const rule of styleSheet.split('\n').filter((line) => /\{[^}]*stroke-width:/.test(line))) {
+  assert.match(rule, /\.pill\.refresh/, 'only the Refresh pill changes an icon\'s weight: ' + rule.trim());
+}
+const icons = {};
+new Function('window', fs.readFileSync(require.resolve('../icons.js'), 'utf8'))(icons);
+assert.match(icons.ICONS.reload, /stroke-width="1"/, 'the generated glyph is untouched, so it is the icon set\'s weight everywhere else');
+// The machine a task runs on has its own glyph, from the icon build like every other one — not drawn here.
+assert.match(source, /group: HOST_GROUP, icon: 'host'/, 'the Run on rows carry the host glyph');
+assert.ok(icons.ICONS.host && icons.ICONS.host.includes('currentColor'), 'which is built into icons.js and takes the palette\'s colour');
+assert.doesNotMatch(icons.ICONS.host, /<script|<foreignObject|on[a-z]+=/i, 'and carries nothing executable');
+for (const property of ['width', 'height', 'margin', 'padding', 'top', 'left']) {
+  assert.doesNotMatch(turn, new RegExp('(^|[^-])' + property + ':'), 'the turn must not animate ' + property + ': that would move the pill');
+}
 
 Promise.all([splitTypingCheck(), cachedBootMetadataCheck(), mockCreationPermissionCheck(), searchesReconnectCheck()]).then(() => console.log('renderer auth check passed'));
 // a mention lands in the row the caret is in (an @ at the caret, or over a selection): the render must not defer

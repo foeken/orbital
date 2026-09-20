@@ -32,5 +32,5 @@ module.exports = {
   SyncService: sync.services[0],
   GraphService: graph.services[0],
   SearchService: search.services[0],
+  ChangeSummaryService: history.services[0],
 };
-

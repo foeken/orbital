@@ -93,6 +93,17 @@ await pins.listSidebar(client.sync, me);
 await pins.pinSidebar(client.sync, me, docUri); await pins.pinDate(client.sync, me, docUri, '2026-09-13');
 ```
 
+## Which meeting am I in right now?
+
+```js
+const calls = require('./sdk/calls');
+const [live] = await calls.currentCalls(client, me);   // [] when not in a call
+// live = { callUri, eventUri, title, joinedAt, otherUserUris, transcriptUri, screenShareUri }
+```
+An event with `startTime` around now and me in `calendarEvent.roster` proves I was invited, never that I turned up.
+Attendance is the call document (02-data-model.md section 5): `calls.inCall(doc, me)` for one meeting I already have,
+`calls.attended(doc)` for who was there earlier. `node scripts/platform-cli.js incall` is the same call from the CLI.
+
 ## Images in content
 
 ```js

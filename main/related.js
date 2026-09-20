@@ -1,7 +1,7 @@
 'use strict';
 const fields = require('../sdk/fields');
 const pins = require('../sdk/pins');
-const { filterToSearchQuery, searchQueryParams, validViewFilter } = require('../sdk/query');
+const { completedInWindow, filterToSearchQuery, searchQueryParams, validViewFilter } = require('../sdk/query');
 const { NOT_CONNECTED, PIN_HUBS, PLAIN_KINDS, S, idKind, isSpace, summaryCache, typeAttrTitles, typeTitles } = require('./state');
 const { graphRow, rememberNodeHue, resolveTypes, toNode } = require('./rows');
 const { canWriteDoc, op, subscribe } = require('./documents');
@@ -33,13 +33,16 @@ async function spaceChildren(id) {
 // own (`query`), not in `data`, so readNode never sees it — take it off the document directly.
 async function searchChildren(id) {
   if (!S.client) throw new Error(NOT_CONNECTED);
-  const query = await op(id, (doc) => doc.loro.getMap('query').toJSON());
+  // The completed window is the app's own setting, so it lives in the `view` map beside the sort and the grouping
+  // rather than in Tana's query vocabulary — read together, in one pass over the document.
+  const { query, view } = await op(id, (doc) => ({ query: doc.loro.getMap('query').toJSON(), view: doc.loro.getMap('view').toJSON() || {} }));
   // Tana's own client always writes every query key when it creates a search (arrays default to `[]`), so a real
   // saved search never reads back as an empty map. An empty result here means the container was missing or
   // unreadable, not that the user saved an unconstrained search — and searchQueryParams({}) would otherwise fall
   // back to "every listable kind", silently showing the wrong rows as if they were this search's results.
   if (!query || !Object.keys(query).length) throw new Error('this saved search has no readable query');
-  const { nodes } = await S.client.graph.listNodes(searchQueryParams(query, S.me && S.me.userUri, 200));
+  const answered = await S.client.graph.listNodes(searchQueryParams(query, S.me && S.me.userUri, 200));
+  const nodes = answered.nodes.filter((n) => completedInWindow(n, view.completedWithin));
   nodes.forEach(rememberNodeHue);
   await resolveTypes(nodes.map((n) => n.entityType));
   // A view subscribes every row it lists (views.js), which is what makes a change someone else makes show up in it.
@@ -58,7 +61,8 @@ async function searchChildren(id) {
 async function searchPreview(filter) {
   if (!S.client) throw new Error(NOT_CONNECTED);
   if (!validViewFilter(filter)) throw new Error('invalid view filter');
-  const { nodes } = await S.client.graph.listNodes(searchQueryParams(filterToSearchQuery(filter, S.me && S.me.userUri), S.me && S.me.userUri, 200));
+  const answered = await S.client.graph.listNodes(searchQueryParams(filterToSearchQuery(filter, S.me && S.me.userUri), S.me && S.me.userUri, 200));
+  const nodes = answered.nodes.filter((n) => completedInWindow(n, filter.completedWithin)); // as the saved page will show it
   nodes.forEach(rememberNodeHue);
   await resolveTypes(nodes.map((n) => n.entityType));
   return nodes.map((n) => toNode(graphRow(n)));
@@ -129,6 +133,58 @@ function callOf(ev) {
   } catch { return undefined; }
 }
 
+// The fallback history, from the graph node alone, used when the change-summary service has nothing to say.
+// It costs no extra request: `editors` is a map of user-profile uri -> { peerUserHash, editTime } (that person's
+// last edit), `createTime`/`createdBy` say who made it, and `archivedAt` when it was deleted. That is the whole
+// vocabulary the graph keeps — no per-edit log, no actor for a deletion, nothing about what changed — so an entry
+// carries only what is there and the renderer leaves out what is missing. `updateTime` stands in for an update
+// nobody is named for, and only when the node lists no editors at all, so it can never double-count one.
+function changesOf(node) {
+  const n = node || {};
+  const iso = (t) => (typeof t === 'string' && t ? t : undefined);
+  const out = [];
+  for (const [uri, editor] of Object.entries(n.editors || {})) out.push({ action: 'Updated', by: uri, at: iso(editor && editor.editTime) });
+  if (!out.length && iso(n.updateTime) && n.updateTime !== n.createTime) out.push({ action: 'Updated', at: iso(n.updateTime) });
+  if (iso(n.createTime) || iso(n.createdBy)) out.push({ action: 'Created', by: iso(n.createdBy), at: iso(n.createTime) });
+  if (iso(n.archivedAt)) out.push({ action: 'Deleted', at: iso(n.archivedAt) });
+  // newest first; an entry with no time of its own cannot claim a place among the dated ones, so it goes last
+  return out.sort((a, b) => (a.at ? Date.parse(a.at) : -Infinity) < (b.at ? Date.parse(b.at) : -Infinity) ? 1 : -1);
+}
+
+// What Tana's own Changes panel shows: written summaries from tana.history.v1alpha1.ChangeSummaryService, which
+// names each window of edits ("Added dependency on Finish reply document for Works Council") rather than leaving
+// the row to repeat the node's title. The service answers newest last, so the list is reversed here; the enum
+// default (UPDATED = 0) is omitted from protobuf JSON, which is why a missing changeType reads as an update.
+// Several people can share one summary: the first is named and the rest are counted, never dropped silently.
+const SUMMARY_ACTION = { CHANGE_SUMMARY_TYPE_CREATED: 'Created', CHANGE_SUMMARY_TYPE_DELETED: 'Deleted', CHANGE_SUMMARY_TYPE_UPDATED: 'Updated' };
+function summaryChanges(summaries) {
+  const iso = (t) => (typeof t === 'string' && t ? t : undefined);
+  return (summaries || []).map((s) => {
+    const authors = (s.authors || []).filter((a) => typeof a === 'string' && a);
+    return {
+      action: SUMMARY_ACTION[s.changeType] || 'Updated',
+      by: authors[0],
+      others: authors.length > 1 ? authors.length - 1 : undefined,
+      at: iso(s.endTime) || iso(s.startTime),
+      title: (typeof s.title === 'string' && s.title.trim()) || undefined,
+      note: (typeof s.description === 'string' && s.description.trim()) || undefined,
+    };
+  }).reverse();
+}
+// The node's history for the sidebar: the written summaries when the service answers, the graph node's own
+// editors/creation when it does not (an older server, a node it knows nothing about, or a refusal). A history
+// failure must not cost the sidebar its other sections, so it is caught here rather than left to the caller.
+async function historyOf(id, node) {
+  if (S.client.history) {
+    try {
+      const { summaries } = await S.client.history.listChanges({ uri: id, limit: 20 });
+      const changes = summaryChanges(summaries);
+      if (changes.length) return changes;
+    } catch { /* fall back to what the node itself says */ }
+  }
+  return changesOf(node);
+}
+
 async function related(id) {
   if (!S.client) throw new Error(NOT_CONNECTED);
   // The meeting event is the hub: opening its notes document should still show the meeting's pins and outcomes.
@@ -168,7 +224,8 @@ async function related(id) {
     pinned: pinned.map(row),
     outcomes: owns.filter(stated).map(row),
     notes: owns.filter((n) => !stated(n) && (!writeUp || n.id !== writeUp.id)).map(row),
+    changes: await historyOf(id, self0), // the zoomed node's own history: written summaries, else the node's own record
   };
 }
 
-module.exports = { crumbIcon, pathOf, spaceChildren, searchChildren, searchPreview, attributeTitles, fieldsOf, writeUpOf, summaryUri, callOf, related };
+module.exports = { crumbIcon, pathOf, spaceChildren, searchChildren, searchPreview, attributeTitles, fieldsOf, writeUpOf, summaryUri, callOf, changesOf, summaryChanges, historyOf, related };

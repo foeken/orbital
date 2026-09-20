@@ -1,6 +1,6 @@
 # sdk/ — Tana platform SDK
 
-Self-contained Node client for the new Tana (home.tana.inc): graph queries, live Loro document sync, outline editing, pins, assets. No Electron, no app knowledge; auth is injected as `getAccessToken({ refresh })`.
+Self-contained Node client for the new Tana (home.tana.inc): graph queries, live Loro document sync, outline editing, pins, assets, meeting attendance. No Electron, no app knowledge; auth is injected as `getAccessToken({ refresh })`.
 
 Docs, in reading order:
 

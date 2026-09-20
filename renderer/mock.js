@@ -31,7 +31,8 @@ function mockApi() {
   const docs = titles.map((text, i) => ({ id: 'mockdoc' + i, text, kind: 'document', done: 0, hasChildren: true, icon: 'task', tags: [task] }));
   docs[2].tags = [task, project];
   docs[0].state = 'proposed'; // Inbox; the rest are In Progress (open) unless done
-  for (const text of ['Renew the data agreement', 'Send the Q3 board deck']) docs.push({ id: 'mockdoc' + docs.length, text, kind: 'document', done: 1, state: 'closed', hasChildren: true, icon: 'task', tags: [task] }); // Completed: hidden by the default filter
+  // Completed: out of the default filter, and when it is let back in the window decides which of the two is old news
+  for (const [text, closedDaysAgo] of [['Renew the data agreement', 2], ['Send the Q3 board deck', 45]]) docs.push({ id: 'mockdoc' + docs.length, text, kind: 'document', done: 1, state: 'closed', closedDaysAgo, hasChildren: true, icon: 'task', tags: [task] });
   docs.push({ id: 'mockdoc' + titles.length, text: 'Studio programme', kind: 'document', hasChildren: true, hue: 268, tags: [project] }); // typed, not a task: plain bullet tinted with the type hue
   // a space: pinned, its "content" is the documents it owns (document Nodes, not blocks)
   const spaceDocs = [
@@ -72,7 +73,10 @@ function mockApi() {
     library: { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me', text: '' },
   };
   const stateOf = (d) => d.state || (d.done == null ? null : d.done ? 'closed' : 'open');
-  const listed = (d, f) => (!f.states || f.states.includes(stateOf(d))) && (!f.assignee || f.assignee === 'me' || f.assignee === 'anyone');
+  // main applies the completed window to what the graph answers (sdk/query.js); the mock has no graph, so it ages
+  // its own two completed rows the same way — 2 days and 45 days old, so each choice shows something different.
+  const inWindow = (d, f) => stateOf(d) !== 'closed' || completedWindow(f) === 'all' || (d.closedDaysAgo || 0) <= completedWindow(f);
+  const listed = (d, f) => (!f.states || f.states.includes(stateOf(d))) && inWindow(d, f) && (!f.assignee || f.assignee === 'me' || f.assignee === 'anyone');
   const kindOf = (d) => (d.icon === 'member' ? 'people' : d.icon === 'task' ? 'tasks' : d.icon === 'meeting' ? 'meetings' : d.tags && ['chat', 'canvas', 'agent', 'skill', 'search'].includes(d.tags[0].label) ? d.tags[0].label + 's' : 'docs');
   const created = {};   // documents made with createDocument
   const searchQueries = {}; // saved search id -> the filter its stored query holds
@@ -104,7 +108,7 @@ function mockApi() {
   content.mockdoc0.unshift({ id: 'ref' + (++seq), kind: 'block', type: 'reference', editable: false, reference: { uri: 'mockdoc9' }, hasChildren: false, children: [] });
   content.mockdoc0.splice(1, 0, { id: 'ref' + (++seq), kind: 'block', type: 'reference', editable: false, reference: { uri: 'tana:user-profile:sam' }, hasChildren: false, children: [] });
   const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGPoyroWu7WKIX9dU1fWNQAuWQbA8sXmUwAAAABJRU5ErkJggg==';
-  const changed = [], removed = [], statusCbs = [], deleted = new Map(), sensitive = new Set();
+  const changed = [], removed = [], statusCbs = [], deleted = new Map(), sensitive = new Set(), codexAssigned = new Set(), codexPrompts = new Map();
   let status = { authenticated: false, authChecking: false, connected: false, syncing: false, lastSync: null, error: null };
   const emit = (docId) => setTimeout(() => changed.forEach((cb) => cb(docId)), 0);
   const fix = (n) => { n.hasChildren = n.children.length > 0; };
@@ -248,6 +252,12 @@ function mockApi() {
     restoreDocument: async (docId) => { undelete(docId); step(docId, 'delete'); },
     sensitiveIds: async () => [...sensitive],
     setSensitive: async (docId, on) => { if (on) sensitive.add(docId); else sensitive.delete(docId); return on; },
+    codexIds: async () => [...codexAssigned],
+    setCodex: async (docId, on, prompt) => {
+      if (on) { codexAssigned.add(docId); if (typeof prompt === 'string' && prompt.trim()) codexPrompts.set(docId, prompt.trim()); }
+      else { codexAssigned.delete(docId); codexPrompts.delete(docId); }
+      return !!on;
+    },
     nodeLink: async (docId) => 'https://home.tana.inc/o/mockorg/l/' + encodeURIComponent(docId),
     // the mock has no participants model, so nothing is watched by default here: the choice is all there is
     notifyState: async (docId) => ({ on: !!notifyChoices[docId], default: false, explicit: docId in notifyChoices }),
@@ -256,7 +266,7 @@ function mockApi() {
       return { on: !!notifyChoices[docId], default: false, explicit: docId in notifyChoices };
     },
     openExternal: async (url) => { if (!/^https?:\/\//i.test(url)) throw new Error('Only http(s) links can be opened'); return url; },
-    todayNode: async () => { const date = new Date().toLocaleDateString('sv-SE'); const found = all.find((d) => d.text === date); if (found) return found.id; const n = { id: 'mocktoday', text: date, kind: 'document', hasChildren: true, editable: true, icon: 'doc', tags: [{ label: 'doc', color: 'grey' }] }; content[n.id] = []; all.push(n); views[0].nodes.unshift(n); datePins[n.id] = [date]; emit(null); return n.id; },
+    todayNode: async (offset = 0) => { const d = new Date(); d.setDate(d.getDate() + offset); const date = d.toLocaleDateString('sv-SE'); const found = all.find((d2) => d2.text === date); if (found) return found.id; const n = { id: 'mockday' + date, text: date, kind: 'document', hasChildren: true, editable: true, icon: 'doc', tags: [{ label: 'doc', color: 'grey' }] }; content[n.id] = []; all.push(n); views[0].nodes.unshift(n); datePins[n.id] = [date]; emit(null); return n.id; },
     weekNode: async () => { const t = new Date(); t.setDate(t.getDate() + 4 - (t.getDay() || 7)); const title = 'Week ' + Math.ceil(((t - new Date(t.getFullYear(), 0, 1)) / 864e5 + 1) / 7) + ' (' + t.getFullYear() + ')'; const found = all.find((d) => d.text === title); if (found) return found.id; const n = { id: 'mockweek', text: title, kind: 'document', hasChildren: true, editable: true, icon: 'doc', tags: [{ label: 'doc', color: 'grey' }] }; content[n.id] = []; all.push(n); views[0].nodes.unshift(n); emit(null); return n.id; },
     setTitle: async (docId, title) => mut(docId, () => { all.find((d) => d.id === docId).text = title; emit(docId); }),
     setDone: async (docId, done) => mut(docId, () => { const d = all.find((x) => x.id === docId); d.done = done ? 1 : 0; d.state = done ? 'closed' : 'open'; emit(docId); }),

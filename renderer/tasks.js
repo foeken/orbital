@@ -51,20 +51,26 @@ function loadTaskMeta(docId) {
 // and the rail as well, so that one takes the next frame's render.
 function patchMeta(docId) {
   if (zoom && zoom.docId === docId) return renderSoon();
+  let patched = false;
   for (const row of outline.querySelectorAll('.node.document')) {
     if (row.dataset.key !== docId) continue;
     const item = items.get(row.dataset.key), body = row.querySelector(':scope > .line > .body');
     if (!item || !body) continue;
     const summary = taskSummary(item.node, true) || documentSummary(item.node, true);
     const old = body.querySelector(':scope > .meta.tmeta');
-    if (summary && displayOn('assigned')) { const el = taskMetaEl(summary); if (old) old.replaceWith(el); else body.append(el); } else if (old) old.remove();
+    if (summary && displayOn('assigned')) { const el = taskMetaEl(summary, docId); if (old) old.replaceWith(el); else body.append(el); } else if (old) old.remove();
     // the same line a full render would build, so a row does not change shape when its metadata arrives late
     const subText = subtextOf(item.node, summary), had = body.querySelector(':scope > .subtext');
     if (subText && had) had.textContent = subText;
     else if (subText) { const sub = document.createElement('div'); sub.className = 'subtext'; sub.textContent = subText; body.append(sub); }
     else if (had) had.remove();
     row.dataset.sig = rowSig(item.node); // the row now matches what a fresh render would build
+    patched = true;
   }
+  // The answer can also decide whether a row is shown at all — Group by Responsibility leaves out what it has no
+  // section for, including rows whose assignees had not arrived — so one that is not on screen asks for a render
+  // rather than being patched. renderSoon coalesces, so a burst of answers still costs one.
+  if (!patched) renderSoon();
 }
 // One metadata read is a document bootstrap plus a graph lookup, so with every row wanting an audience icon the
 // request only goes out once the row is on screen. Rows further down stay quiet until they scroll into view.
@@ -96,15 +102,15 @@ function documentSummary(node, lazy) {
   if (!audience && !meta.linkShared && !meta.watched) return null;
   return { assignees: '', audience, scope: typeof meta.audience === 'string' ? meta.audience : meta.audience?.scope, unknownAudience: false, linkShared: !!meta.linkShared, watched: !!meta.watched };
 }
-function taskMetaEl(summary) {
+function taskMetaEl(summary, docId) {
   const el = document.createElement('span');
   el.className = 'meta tmeta' + (summary.pending ? ' pending' : ''); el.textContent = summary.assignees;
   // the icons stand 6px apart, but the first one needs no gap of its own: a row with no assignee name in front of it
   // (every doc and meeting row) already has the 8px the .meta span carries, and 14px reads as a hole
   const gap = () => (el.textContent || el.children.length ? '6px' : '0');
   // an icon in the 14px slot; no label means it carries no information of its own (the placeholder)
-  const iconEl = (name, label) => {
-    const icon = document.createElement('span');
+  const iconEl = (name, label, tag = 'span') => {
+    const icon = document.createElement(tag);
     if (label) { icon.setAttribute('role', 'img'); icon.setAttribute('aria-label', label); icon.title = label; } else icon.setAttribute('aria-hidden', 'true');
     icon.style.cssText = 'display:inline-block;width:14px;height:14px;margin-left:' + gap() + ';vertical-align:-2px';
     const svg = iconNode(name); if (svg) { svg.setAttribute('width', '14'); svg.setAttribute('height', '14'); icon.append(svg); }
@@ -123,8 +129,21 @@ function taskMetaEl(summary) {
   // link sharing is separate from the Tana audience: anyone with the url can read it
   if (summary.linkShared) el.append(iconEl('globe', 'Anyone with the link'));
   // last of the row's icons: a bell says changes to this node reach you, whether you asked or the rule decided
-  if (summary.watched) el.append(iconEl('notify', 'Notifying on changes'));
+  if (summary.watched) {
+    const bell = iconEl('notify', 'Stop notifying', 'button');
+    bell.type = 'button'; bell.setAttribute('role', 'button');
+    bell.style.cssText += ';padding:0;border:0;background:none;color:inherit;cursor:pointer';
+    bell.onmousedown = (e) => { e.preventDefault(); e.stopPropagation(); };
+    bell.onclick = (e) => { e.stopPropagation(); run(() => setNodeNotify(docId, false)); };
+    el.append(bell);
+  }
   return el;
+}
+async function setNodeNotify(id, on) {
+  const state = await tana.setNotify(id, on);
+  notifyById.set(id, state);
+  const meta = taskMetaById.get(id); if (meta) taskMetaById.set(id, { ...meta, watched: state.on });
+  renderPalette(); patchMeta(id);
 }
 function setTaskAssignees(doc, assignees) {
   const meta = taskMetaById.get(doc.id);
@@ -153,6 +172,12 @@ function assigneeRows(q, doc = palDoc) {
   // Enter ran the highlighted first row and cleared the assignee instead of setting the one that was typed.
   const rows = fuzzyMatch('Unassigned', q) ? [{ group: 'Assignees', icon: 'unassigned', label: 'Unassigned', hint: ids.length ? '' : '✓', keepOpen: true, run: () => setTaskAssignees(doc, []) }] : [];
   for (const member of members || []) if (fuzzyMatch(memberName(member.id), q)) rows.push({ group: 'Assignees', icon: 'member', label: memberName(member.id), hint: ids.includes(member.id) ? '✓' : '', keepOpen: true, run: () => setTaskAssignees(doc, toggle(member.id)) });
+  // The agent belongs in the same list a person is chosen from — it is the same question. It is not a Tana assignee
+  // though (those are user profiles), so choosing it goes into the one Agent flow: the prompt page and its model
+  // chooser, which owns the writing. Nothing is stored here.
+  if (tana.setCodex && isRealId(doc.id) && fuzzyMatch('Agent', q)) {
+    rows.push({ group: 'Assignees', icon: 'robot', label: 'Agent', hint: codexIds.has(doc.id) ? '✓' : '', keepOpen: true, run: () => openAgentPrompt(doc) });
+  }
   return rows;
 }
 function openAssigneePalette(doc, ctx) {
@@ -286,6 +311,7 @@ function selectionRows() {
   rows.push(...taskActionRows(group));
   if (nodes.length && tana.insertAfter && tana.setText) {
     if (tana.todayNode) rows.push({ id: 'addToday', group, icon: 'addTo', label: `Add${count(nodes.length, 'item')} to Today`, run: () => addToDateNode(nodes, 'today') });
+    if (tana.todayNode) rows.push({ id: 'addTomorrow', group, icon: 'addTo', label: `Add${count(nodes.length, 'item')} to Tomorrow`, run: () => addToDateNode(nodes, 'tomorrow') });
     if (tana.weekNode) rows.push({ id: 'addWeek', group, icon: 'addTo', label: `Add${count(nodes.length, 'item')} to This Week`, run: () => addToDateNode(nodes, 'week') });
   }
   if (ids.length && tana.setSensitive && sensitiveIds) {
@@ -311,12 +337,13 @@ function selectionRows() {
 // writes for an @ link, so the two documents stay independent.
 function addToDateNode(nodes, target) {
   return run(async () => {
-    const docId = target === 'week' ? await tana.weekNode() : await tana.todayNode();
+    const label = target === 'week' ? 'This Week' : target === 'tomorrow' ? 'Tomorrow' : 'Today';
+    const docId = target === 'week' ? await tana.weekNode() : await tana.todayNode(target === 'tomorrow' ? 1 : 0);
     for (const node of nodes) {
       const block = await tana.insertAfter(docId, null, node.text || '');
       await tana.setText(docId, block, [{ mention: { uri: node.id, label: node.text || '' } }]);
     }
-    showNote(`Added ${nodes.length} ${nodes.length === 1 ? 'item' : 'items'} to ${target === 'week' ? 'This Week' : 'Today'}`);
+    showNote(`Added ${nodes.length} ${nodes.length === 1 ? 'item' : 'items'} to ${label}`);
   });
 }
 // One selection, two kinds of removal: rows that are documents are deleted one by one (each undoable on its own),

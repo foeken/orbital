@@ -9,6 +9,10 @@ const localDate = () => { const d = new Date(); return d.getFullYear() + '-' + S
 const segsOf = (v) => (Array.isArray(v) ? v : typeof v === 'string' ? (v ? [{ text: v }] : []) : v.segments || (v.text ? [{ text: v.text }] : []));
 const plainOf = (v) => segsOf(v).map((s) => ('text' in s ? s.text : s.mention.label)).join('');
 const MARK_TAGS = { code: 'code', strike: 's', italic: 'em', bold: 'strong' }; // innermost first: the order a run is wrapped in
+// The caret anchor is a placeholder, not content: readSegs strips it and every offset helper counts it as nothing,
+// so what is stored and what the caret reports are the same with it as without it.
+const CARET_ANCHOR = '\u200b';
+const unanchored = (s) => (s && s.includes(CARET_ANCHOR) ? s.split(CARET_ANCHOR).join('') : s);
 const hasMarks = (marks) => !!marks && Object.keys(marks).length > 0;
 const markKey = (marks) => JSON.stringify(Object.entries(marks || {}).sort()); // two runs merge only when their marks match
 function markWrap(nodes, marks) {
@@ -18,7 +22,7 @@ function markWrap(nodes, marks) {
   return out;
 }
 function renderSegs(el, segs) {
-  el.replaceChildren(...segs.flatMap((s, i) => {
+  const nodes = segs.flatMap((s, i) => {
     // Chromium needs a placeholder newline after a trailing soft break to put the caret on the empty line; readSegs strips it
     if ('text' in s) {
       const text = s.text + (i === segs.length - 1 && s.text.endsWith('\n') ? '\n' : '');
@@ -27,11 +31,29 @@ function renderSegs(el, segs) {
     }
     const a = document.createElement('a'); a.className = 'mention'; a.dataset.uri = s.mention.uri; a.contentEditable = 'false'; a.textContent = s.mention.label;
     return [a];
-  }));
+  });
+  // Same kind of placeholder: Chromium holds no caret before a non-editable inline that starts the field, so a row
+  // beginning with a chip — a block whose only content is a reference, which is Tana's full-reference presentation —
+  // gets a zero-width space to hold it. Typing there prepends text and the block becomes an inline reference.
+  if (segs.length && !('text' in segs[0])) nodes.unshift(document.createTextNode(CARET_ANCHOR));
+  el.replaceChildren(...nodes);
 }
 // Plain http(s) URLs inside a text run become clickable without leaving the text editable: readSegs reads the
 // anchor back as its own characters, so the stored text is unchanged.
 const URL_RE = /https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"]/g;
+// The node uri behind a link home.tana.inc opens, the reverse of main's doc:link (/o/<org>/l/<encoded node uri>),
+// or a bare uri. One link and nothing else: prose that merely contains one, another host or an id that is not a
+// 26-character ULID all read as "not a node link". The one parser for this, used by the paste handler.
+const TANA_URI_RE = /^tana:[a-z-]+:[0-9a-z]{26}$/;
+function tanaNodeUri(text) {
+  const s = String(text ?? '').trim();
+  if (!s || /\s/.test(s)) return null;
+  let decoded = s;
+  try { decoded = decodeURIComponent(s); } catch { /* a stray % is not a link */ }
+  if (TANA_URI_RE.test(decoded)) return decoded;
+  const m = /^https:\/\/home\.tana\.inc\/\S*\/(tana:[a-z-]+:[0-9a-z]{26})(?:[/?#]\S*)?$/.exec(decoded);
+  return m ? m[1] : null;
+}
 function linkify(text) {
   const out = [];
   let last = 0;
@@ -56,6 +78,7 @@ function marksOf(el, marks) {
 function readSegs(el) {
   const segs = [];
   const add = (t, marks) => {
+    t = unanchored(t);
     if (!t) return;
     const last = segs.at(-1);
     if (last && 'text' in last && markKey(last.marks) === markKey(marks)) last.text += t;

@@ -129,6 +129,25 @@ const nodeIcon = (n) => chatIcon(n) || ((n.tags || []).some((t) => t.label === '
 const asDoc = (n) => ({ ...n, kind: 'document', text: n.text ?? n.title ?? '', hasChildren: true, icon: nodeIcon(n) }); // api.node / search / library result -> document Node
 // a draft row keeps a local "draftdoc:N" id until it is created, and the main process knows nothing about it
 const isRealId = (id) => typeof id === 'string' && id.startsWith('tana:');
+// ---- Home ----
+// The saved search Home points at, while the list knows it. The list is the only proof we have that a search is still
+// there and still readable: main answers it from the graph, and app.js drops a deleted one from it as the deletion
+// arrives, so a Home that has gone away shows up here as a search nobody lists.
+const homeSearch = () => (home === 'library' ? null : (searches || []).find((s) => s.id === home));
+// A Home the list has answered on and does not have is stale: it is repaired to the Library rather than left to dangle
+// (app.js calls this when the list lands and when a deletion arrives). Before the first answer nothing is concluded.
+function repairHome() { if (home !== 'library' && searchesLoaded && !homeSearch()) setHome('library'); }
+const homeId = () => (home !== 'library' && searchesLoaded && !homeSearch() ? 'library' : home);
+// What the Home crumb reads: the search's current title, so a rename in Tana shows through. null while a Home search
+// is still unknown — the anchor waits for its name rather than borrowing the Library's.
+const homeName = () => { const s = homeSearch(); return s ? s.text || s.title || 'Untitled search' : homeId() === 'library' ? 'Library' : null; };
+const atHome = () => (zoom ? !zoom.nodeId && zoom.docId === homeId() : homeId() === view);
+// The id this page would set as Home: the Library view, or the saved search you are looking at. Anything else — a
+// note, the Inbox, a space — is not a place to come back to, so the command is not offered there.
+const homeTarget = () => (onSearchPage() ? zoom.docId : !zoom && view === 'library' ? 'library' : null);
+function setHome(id) { home = id; localStorage.setItem('home', id); render(true); }
+// Going Home: a saved search is a document you open, the Library is a view you switch to.
+function goHome() { const id = homeId(); if (id !== 'library') goTo(id); else if (view === 'library') { zoom = null; render(true); } else setView('library'); }
 function sensitiveHidden(id) {
   return !sensitiveVisible && typeof id === 'string' && (sensitiveIds === null || sensitiveIds.has(id));
 }
@@ -148,6 +167,27 @@ function loadSensitive() {
   if (!sensitiveLoading) sensitiveLoading = Promise.resolve(tana.sensitiveIds ? tana.sensitiveIds() : [])
     .then((ids) => { sensitiveIds = new Set(ids); }, showError);
   return sensitiveLoading;
+}
+// The nodes assigned to the local Codex agent, once per launch. Unlike the sensitive marks nothing waits on it: a
+// row that renders before the answer lands simply has no badge yet, and the load re-renders.
+function loadCodex() {
+  if (!codexLoading) codexLoading = Promise.resolve(tana.codexIds ? tana.codexIds() : [])
+    .then((ids) => { codexIds = new Set(ids); renderSoon(); }, showError);
+  return codexLoading;
+}
+// What each linked task is doing, read on the refresh rather than on a timer of its own: one bounded app-server
+// child in main answers for every linked node at once. A node it says nothing about stays pending.
+function loadAgentStates() {
+  // No guard on codexIds: it is filled by loadCodex, which is still in flight at boot, so gating on it meant the
+  // status was never asked for after a reload and every linked task sat grey until the next refresh. Main knows the
+  // links; an answer for none of them is cheap and correct.
+  if (!tana.codexStatus) return;
+  tana.codexStatus().then((states) => {
+    agentStates.clear();
+    for (const [id, state] of Object.entries(states || {})) agentStates.set(id, state);
+    renderSoon();
+  }, () => {}); // a status read that fails leaves the badges as they were; it is not an error the user can act on
+  if (tana.codexTaskHosts) tana.codexTaskHosts().then((hosts) => { agentTaskHosts.clear(); for (const [id, host] of Object.entries(hosts || {})) agentTaskHosts.set(id, host); }, () => {});
 }
 // recently viewed documents (localStorage "recent"), most recent first, max 20
 const recent = () => { try { return (JSON.parse(localStorage.getItem('recent')) || []).map((n) => asDoc(!n.icon && !n.tags?.length && n.id?.startsWith('tana:text:') ? { ...n, icon: 'doc', tags: [{ label: 'doc', color: 'grey' }] } : n)); } catch { return []; } };
@@ -169,6 +209,8 @@ const recentRows = () => recent().map((row) => { const live = docOf(row.id); ret
 
 async function loadRoots() {
   await loadSensitive(); // privacy gate: no document reaches the first render before the local marks do
+  loadCodex();
+  loadAgentStates();
   const drafts = views.flatMap((s) => s.nodes.map((node, i) => ({ view: s.id, i, node })).filter((d) => d.node.draft)); // a refresh must not drop a draft being typed
   views = (await tana.roots()).map((s) => ({ ...s, icon: s.id === 'library' ? 'library' : s.icon, nodes: s.nodes.map(asDoc) }));
   for (const s of views) if (s.truncated) truncated.add(s.id); else if (s.truncated === false) truncated.delete(s.id); // roots carry the cap flag, so a refresh needs no second query
@@ -182,7 +224,10 @@ async function loadRoots() {
 }
 async function reload(docId) { kids.set(docId, await tana.children(docId)); }
 function loadView(id = view) {
-  const filter = filters.get(id);
+  // widenFilter (renderer/views.js): a view restored with Group by Responsibility asks for Anyone, so its sections
+  // are never drawn from a list that cannot fill them. The map is updated too, or the pill would read the old value.
+  const filter = widenFilter(id, filters.get(id));
+  if (filter !== filters.get(id)) filters.set(id, filter);
   if (!filter || !tana.viewList) return Promise.resolve();
   const seq = (viewSeq.get(id) || 0) + 1;
   viewSeq.set(id, seq);
@@ -262,6 +307,7 @@ const sameList = (a, b) => JSON.stringify(a ? [...a].sort() : a) === JSON.string
 function sameFilter(a = {}, b = {}) {
   return sameList(a.types || null, b.types || null) && sameList(a.states || null, b.states || null)
     && (a.assignee || 'anyone') === (b.assignee || 'anyone') && String(a.text || '') === String(b.text || '')
+    && completedWindow(a) === completedWindow(b) // unset reads as the default, so a stored 7 and an unset one are one filter
     && (a.participant || null) === (b.participant || null) && (a.window || null) === (b.window || null);
 }
 function viewFiltered() {

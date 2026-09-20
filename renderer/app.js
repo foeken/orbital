@@ -33,9 +33,12 @@ if (tana.onNotifyOpen) tana.onNotifyOpen((docId) => { if (docId) goTo(docId); })
 tana.onChanged((docId, info) => {
   if (docId) {
     if (!info || info.meta !== false) { taskMetaById.delete(docId); if (typeof taskMetaFailed !== 'undefined') taskMetaFailed.delete(docId); }
+    relatedBy.delete(docId); // the sidebar is fetched once per page: its Changes section would otherwise still show the edit before this one
     const work = [patchDoc(docId)];
     if (kids.has(docId)) work.push(reload(docId));
-    Promise.all(work).then(renderSoon, showError);
+    // A zoom parks the caret in its blank tail, so an ordinary render defers until focus leaves and remote children
+    // stay invisible. The forced render already preserves the caret and pending local text.
+    Promise.all(work).then(() => render(true), showError);
   } else {
     loadPins();
     loadRoots().then(renderSoon, showError);
@@ -67,6 +70,7 @@ async function patchDoc(docId) {
 }
 function removeStale(id) {
   searches = searches.filter((s) => s.id !== id); // a deleted saved search must leave the Cmd+K Searches group too
+  repairHome(); // and if it was Home, the Library takes over rather than an id nothing can open
   invalidateNode(id); loadPins();
   loadRoots().then(render, showError);
 }
@@ -83,6 +87,6 @@ loadRoots().then(render, showError).then(restorePlace).then(loadFilters);
 // before S.client exists, so main/views.js:searchList answers []), so this alone would usually leave the group
 // empty; showStatus's connect edge above re-runs it once a client actually exists. Called here too so a session
 // that is already connected (e.g. a reload) does not wait for a transition that will not happen.
-function loadSearches() { if (tana.searches) tana.searches().then((list) => { searches = list || []; renderSoon(); }, () => {}); }
+function loadSearches() { if (tana.searches) tana.searches().then((list) => { searches = list || []; searchesLoaded = true; repairHome(); renderSoon(); }, () => {}); }
 loadSearches();
 tana.status().then(showStatus, showError);

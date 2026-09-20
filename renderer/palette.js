@@ -2,9 +2,11 @@
 // Cmd+K commands and Cmd+S search, hidden items, creation, results, and the shortcut recorder.
 
 // ---- palette: Cmd+K commands (Views, Actions, matching Documents while typing) or Cmd+S live search (api.search) ----
-const palette = $('palette'), palInput = $('paletteInput'), palList = $('paletteList');
+const palette = $('palette'), palInput = $('paletteInput'), palText = $('paletteText'), palList = $('paletteList');
 let palMode = 'cmd', palRows = [], palIndex = 0, palBusy = false, palSeq = 0, palTimer, creationChoices = [];
 let palEnter = null; // an Enter pressed while a search was still running: 'pick' or 'create', applied when the rows land
+let meetingNow; // the active meeting as last read: undefined = not asked this open, { meeting } or { error } after
+let meetingList = null, meetingListError = null, pinMeetingDoc = null; // the meeting picker: rows, why it has none, and the node being pinned
 // Enter chooses: the highlighted row, or for an @ selection ⌘↩ always creates. While the search is still out, the
 // choice is kept and made the moment the rows arrive, so the first Enter after "@" is never lost.
 function chooseRow(create) {
@@ -18,7 +20,7 @@ const docRow = (n, hint, run) => ({ node: n, icon: n.icon, label: n.text ?? n.ti
 // The order of the rows about the node you are on: where it goes (open it, unfold it), what it is (done, status,
 // assignee), where it lives (pins, the date nodes, its space), what it looks like (image, visibility, sensitivity),
 // its link, and last the one destructive row. Rows without an id carry a `rank` from this list instead.
-const NODE_ROW_ORDER = ['zoomIn', 'expand', 'collapse', 'toggleDone', 'status', 'assign', 'assignTo', 'pinToday', 'addToday', 'addWeek', 'move', 'moveLibrary', 'visibility', 'notify', 'sensitive', 'copyLink', 'delete'];
+const NODE_ROW_ORDER = ['zoomIn', 'expand', 'collapse', 'toggleDone', 'status', 'assign', 'assignTo', 'codex', 'codexOpen', 'pinToday', 'pinToMeeting', 'pinToSelectedMeeting', 'addToday', 'addTomorrow', 'addWeek', 'move', 'moveLibrary', 'visibility', 'notify', 'sensitive', 'copyLink', 'delete'];
 const nodeRank = (r) => { const i = NODE_ROW_ORDER.indexOf(r.rank || r.id); return i < 0 ? NODE_ROW_ORDER.length : i; };
 const VIEW_ORDER = ['inbox', 'today', 'week', 'library'];
 // Matching a row, tiered the way Raycast ranks a title (its manual: aliases first, then the title's fuzzy score, which
@@ -104,6 +106,24 @@ function paletteRows(q) {
     const td = pinInfo.dates.includes(localDate());
     rows.push({ rank: 'pinToday', group: docGroup, icon: 'pinDate', label: td ? 'Unpin from today' : 'Pin to today', run: () => pinAction(td ? 'unpin' : 'pin', 'today') });
   }
+  // Pin this node onto the meeting I am in, through the same event pin the quick-add panel writes (docs/QUICK-ADD.md)
+  // and the sidebar reads back under Pinned. The row is listed whenever a real node is on screen, so ⇧⌘K can record
+  // a key against it, and says why instead of disappearing when there is no meeting to pin to. Its id is unchanged
+  // from when it was called "Pin to meeting": a recorded key belongs to the id, and the label is only what it reads.
+  if (palDoc && tana.currentMeeting && tana.pinTo && isRealId(palDoc.id)) {
+    loadMeeting();
+    const doc = palDoc, live = meetingNow;
+    rows.push({ id: 'pinToMeeting', group: docGroup, icon: 'pin', label: 'Pin to current meeting',
+      hint: live.pending ? 'Checking…' : live.meeting ? live.meeting.title || 'Current meeting' : live.error || 'No active meeting',
+      disabled: !(live && live.meeting), run: () => pinToMeeting(doc) });
+  }
+  // And any other meeting, chosen from a page of its own: the same pin, a target picked rather than detected. It
+  // needs no live meeting, so it is never disabled — a workspace with no meetings at all says so on that page.
+  if (palDoc && tana.searchPreview && tana.pinTo && isRealId(palDoc.id)) {
+    const doc = palDoc;
+    rows.push({ id: 'pinToSelectedMeeting', group: docGroup, icon: 'pin', label: 'Pin to meeting', hint: 'Choose a meeting',
+      keepOpen: true, run: () => openMeetingPicker(doc) });
+  }
   // the node's web link, for pasting into Slack or a doc
   if (palDoc && tana.nodeLink && isRealId(palDoc.id)) {
     rows.push({ id: 'copyLink', group: docGroup, icon: 'link', label: 'Copy link', run: () => run(async () => copyText(await tana.nodeLink(palDoc.id), 'Link copied')) });
@@ -114,15 +134,39 @@ function paletteRows(q) {
     loadNotify(palDoc.id);
     const watch = notifyById.get(palDoc.id);
     if (watch) rows.push({ rank: 'notify', group: docGroup, icon: 'notify', label: watch.on ? 'Stop notifying' : 'Notify on changes',
-      run: () => run(async () => {
-        const state = await tana.setNotify(palDoc.id, !watch.on);
-        notifyById.set(palDoc.id, state);
-        // the bell on the row is read from the cached metadata, which nothing else invalidates for a watch change
-        const meta = taskMetaById.get(palDoc.id); if (meta) taskMetaById.set(palDoc.id, { ...meta, watched: state.on });
-        // and the row is patched rather than re-rendered: the palette hands the caret back to the row it was opened
-        // from, and a render with the caret in a row is deferred until it leaves — which left the bell as it was.
-        renderPalette(); patchMeta(palDoc.id);
-      }) });
+      run: () => run(() => setNodeNotify(palDoc.id, !watch.on)) });
+  }
+  // Handing this node to the agent on this machine. App-local: Tana's assignees are user profiles, so nothing is
+  // written into the node's own assignees. The label says what pressing it does, so it carries no id — same reason
+  // as the watch row above. Assigning asks what the agent should do first (the prompt page keeps the palette open);
+  // taking it back needs nothing typed, so it happens on the press.
+  if (palDoc && tana.setCodex && isRealId(palDoc.id)) {
+    const assigned = codexIds.has(palDoc.id), doc = palDoc;
+    rows.push({ rank: 'codex', group: docGroup, icon: 'robot', label: assigned ? 'Unassign from Agent' : 'Assign to Agent',
+      keepOpen: !assigned,
+      run: () => {
+        if (!assigned) return openAgentPrompt(doc);
+        run(async () => {
+          holdRow(doc); // taking it back moves the row out of Agent: it stays put, and Clean up offers the redraw
+          await tana.setCodex(doc.id, false); // the prompt goes with the assignment
+          codexIds.delete(doc.id);
+          agentStates.delete(doc.id); // main lets go of the task id; the snapshot has to let go with it, not next refresh
+          renderPalette(); patchCodex(doc.id);
+          renderPills(true); // Clean up is decided while the pills render, and nothing else here redraws them
+        });
+      } });
+  }
+  // The way into the task the agent is handling, from the keyboard. Both halves have to hold: the node is assigned
+  // now, and a task id is known for it. The status map alone was not enough — it is a snapshot, and an unassigned
+  // node kept its entry until the next read, which is how this row turned up on nodes with no agent on them.
+  if (palDoc && tana.openCodexTask && codexIds.has(palDoc.id) && agentStates.has(palDoc.id)) {
+    const doc = palDoc;
+    const where = agentTaskHosts.get(doc.id);
+    // A task on another machine has no route from here, so the row says where it is rather than offering to open
+    // something it cannot. Disabled rather than hidden: the palette already greys rows it will not run, and knowing
+    // where the work is happening is worth a line.
+    if (!where || where === 'local') rows.push({ rank: 'codexOpen', group: docGroup, icon: 'robot', label: 'Go to Agent task', run: () => run(() => tana.openCodexTask(doc.id)) });
+    else rows.push({ rank: 'codexOpen', group: docGroup, icon: 'host', label: 'Agent task is on ' + ((agentHosts.find((h) => h.id === where) || {}).title || where), disabled: true, run: () => {} });
   }
   if (palDoc && tana.accessOptions) {
     loadAccess(palDoc.id);
@@ -149,23 +193,35 @@ function paletteRows(q) {
   rows.push(...pillCommandRows());
   // ⌘F arrives as runAction('filter'), which only fires if this row exists right now — so a saved search page has to
   // offer it, or the key falls through to the browser exactly as it did before.
-  if (!zoom || onSearchPage()) rows.push({ id: 'filter', group: 'View options', icon: 'filter', label: 'Filter rows by text', run: () => { filterShown = true; render(); filterEl.focus(); } });
+  // The field is shown here rather than left to the render: a render is deferred while the caret is in a row or a
+  // selection is frozen, and focusing a still-hidden input does nothing — which is why ⌘F used to need a click first.
+  if (!zoom || onSearchPage()) rows.push({ id: 'filter', group: 'View options', icon: 'filter', label: 'Filter rows by text', run: () => { filterShown = true; filterRow.hidden = false; render(); filterEl.focus(); } });
   // Actions: getting in first, then making and finding things, moving around, undoing, and last the app's own settings
   if (signedOut) rows.push({ id: 'login', group: 'Actions', label: 'Log in to Tana', run: () => tana.login().catch(showError) });
   if (tana.creationOptions) rows.push({ id: 'create', group: 'Actions', icon: 'createNew', label: 'Create new…', keepOpen: true, run: openCreationPalette, sub: async () => { creationChoices = (await tana.creationOptions()).options || []; return creationRows(''); } });
   // the keys the outline answers to, as rows: each has a default combo in DEFAULT_HOTKEYS and can be re-recorded
   rows.push({ id: 'search', group: 'Actions', icon: 'search', label: 'Search Tana', keepOpen: true, run: () => togglePalette('search') });
-  rows.push({ id: 'back', group: 'Actions', icon: 'back', label: 'Go back', disabled: !navBack.length, run: () => navigate(-1) });
+  // Go back with an empty stack is still a move while you are away from Home, which is where it lands (edit.js)
+  rows.push({ id: 'back', group: 'Actions', icon: 'back', label: 'Go back', disabled: !navBack.length && atHome(), run: () => navigate(-1) });
   rows.push({ id: 'forward', group: 'Actions', icon: 'forward', label: 'Go forward', disabled: !navForward.length, run: () => navigate(1) });
+  // Where Back lands with no history and what the anchor crumb points at, as a row: the same goHome (renderer/nodes.js),
+  // so there is one route Home and it reads the choice live. On Home it stays, disabled, saying so — discoverable, and
+  // still something ⇧⌘K can record a key against.
+  rows.push({ id: 'goHome', group: 'Actions', icon: 'home', label: 'Go to Home', hint: atHome() ? 'Current' : homeName() || '', disabled: atHome(), run: () => goHome() });
   if (!railEl.hidden) rows.push({ id: 'rail', group: 'Actions', icon: 'rail', label: 'Focus the sidebar', run: () => focusRail() });
   // Always reachable, unlike "Focus the sidebar" above: once the sidebar is hidden there would otherwise be no way back to it.
   if (!railToggle.hidden) rows.push({ id: 'railToggle', group: 'Actions', icon: railHidden ? 'railShow' : 'railHide', label: railHidden ? 'Show sidebar' : 'Hide sidebar', run: () => toggleRail() });
+  // Choosing where the app comes back to: offered on the Library and on a saved search, the two pages that are places.
+  // On the page that already is Home it stays, disabled and saying so, rather than disappearing or pretending to act.
+  const homeNext = homeTarget();
+  if (homeNext) rows.push({ id: 'setHome', group: 'Actions', icon: 'home', label: 'Set as Home', hint: homeNext === homeId() ? 'Current' : '', disabled: homeNext === homeId(), run: () => setHome(homeNext) });
   rows.push({ id: 'undo', group: 'Actions', icon: 'undo', label: 'Undo', run: () => history('undo') });
   rows.push({ id: 'redo', group: 'Actions', icon: 'redo', label: 'Redo', run: () => history('redo') });
   rows.push({ id: 'sync', group: 'Actions', icon: 'sync', label: 'Sync', run: () => run(() => tana.refresh()) });
   rows.push({ id: 'reload', group: 'Actions', icon: 'reload', label: 'Reload', run: () => location.reload() });
   // the list of titles hidden from every view and from search, edited in the palette itself
   if (tana.filters) rows.push({ id: 'hidden', group: 'Actions', icon: 'hiddenItems', label: 'Edit hidden items', keepOpen: true, run: openHiddenPalette });
+  if (tana.codexHosts) rows.push({ id: 'codexHosts', group: 'Actions', icon: 'host', label: 'Manage Codex hosts', keepOpen: true, run: openHostsPalette });
   if (tana.sensitiveIds) rows.push({ id: 'sensitiveVisibility', group: 'Actions', icon: 'hidden', label: 'Toggle sensitive visibility', hint: sensitiveVisible ? 'Shown' : 'Hidden', run: toggleSensitiveVisibility });
   // text size stays on the fixed keys (their characters depend on the keyboard layout), so the chips are literal
   rows.push({ id: 'textLarger', group: 'Actions', icon: 'textLarger', label: 'Larger text', kbd: '⇧⌘+', run: () => setZoom(zoomFactor * 1.1) });
@@ -190,11 +246,13 @@ function paletteRows(q) {
   return matched.filter((r) => r.group !== 'Documents' || docsLeft-- > 0).map((r) => { const k = r.id && hotkeyFor(r.id); return k ? { ...r, kbd: k } : r; });
 }
 // a hotkey, recorded or default, runs its palette row's action (views/sync/login by id; documents wherever they live);
-// false when no such row exists right now, so the key can fall through to whatever else it means
+// false when no such row exists right now, so the key can fall through to whatever else it means. A row that is here
+// but off (Clean up with nothing held, Go back with no history) answers the key by doing nothing: it is the same
+// command either way, so it must not mean one thing while it is live and something else while it is not.
 function runAction(id) {
   if (palette.hidden) palDoc = currentDoc(); // a key fires with the palette closed, so the "current node" is whatever is focused now
   const row = paletteRows('').find((r) => r.id === id);
-  if (row && !row.disabled) { row.run(); return true; }
+  if (row) { if (!row.disabled) row.run(); return true; }
   if (id.startsWith('doc:')) { goTo(id.slice(4)); return true; }
   return false;
 }
@@ -220,15 +278,147 @@ function openPillPalette(id) {
   palInput.placeholder = 'Choose ' + id; palInput.value = ''; renderPalette(); palInput.focus();
 }
 function openCommandPalette() {
-  pillCtx = null; palMode = 'cmd'; palRows = []; palIndex = 0;
+  pillCtx = null; promptEditor(false); palMode = 'cmd'; palRows = []; palIndex = 0;
   palInput.placeholder = 'Search or run a command'; palInput.value = ''; renderPalette(); palInput.focus();
 }
 function backPalette() {
   if (palMode === 'pill') openCommandPalette();
+  // Escape on the prompt page cancels the whole thing rather than stepping back a level: the page was opened to
+  // answer one question, and abandoning that question is abandoning the assignment. Nothing is written either way.
+  else if (palMode === 'agentPrompt') closePalette();
   else if (palMode === 'visibilityPeople') openVisibilityPalette(palDoc);
+  // The meeting picker was opened from the command page and steps back to it, like every other second level here.
+  else if (palMode === 'pinMeeting') openCommandPalette();
   else closePalette();
 }
 // ---- hidden items (api.filters): titles every view and search skips, edited from Cmd+K ----
+// ---- the machines a task can run on, managed from Cmd+K ----
+// One page: what is configured, and a line to add another. The form is the palette's own field — "Name, address,
+// path to codex", three values separated by spaces — because a page of three inputs is more machinery than this
+// needs and the palette already knows how to take one line. Main validates and stores; nothing is run here.
+const HOSTS_GROUP = 'Codex hosts · type "Name ssh-address /path/to/codex" to add one, ↩ on a host removes it';
+let hostList = null; // null while the list is in flight
+const hostsApply = (call) => run(async () => { hostList = await call(); agentHosts = hostList; renderPalette(); });
+function hostRows(q) {
+  const rows = (hostList || []).filter((h) => h.id !== 'local').map((h) => ({ group: HOSTS_GROUP, icon: 'host', label: h.title,
+    hint: '↩ removes it · its tasks stay', keepOpen: true, run: () => hostsApply(() => tana.removeCodexHost(h.id)) }));
+  const parts = q.trim().split(/\s+/);
+  if (parts.length >= 3) {
+    const [title, ssh, bin] = [parts.slice(0, parts.length - 2).join(' '), parts[parts.length - 2], parts[parts.length - 1]];
+    rows.unshift({ group: HOSTS_GROUP, icon: 'createNew', label: 'Add "' + title + '" on ' + ssh, hint: bin, keepOpen: true,
+      run: () => run(async () => { await tana.addCodexHost(title, ssh, bin); palInput.value = ''; hostsApply(() => tana.codexHosts()); }) });
+  }
+  if (!rows.length) rows.push({ group: HOSTS_GROUP, label: hostList ? 'No other machines yet' : 'Loading…', disabled: true });
+  return rows;
+}
+function openHostsPalette() {
+  palMode = 'hosts'; palRows = []; palIndex = 0; palette.hidden = false;
+  promptEditor(false);
+  palInput.placeholder = 'Name  ssh-address  /path/to/codex';
+  palInput.value = '';
+  hostList = null; renderPalette(); palInput.focus();
+  hostsApply(() => tana.codexHosts());
+}
+// ---- assigning a node to the local agent: the prompt page, one level down in Cmd+K ----
+// "Assign to Agent" does not assign: it advances to this page, where the palette's single-line field is swapped for a
+// few lines of text. The node is the context, so the page asks only what to do with it. ↩ is an ordinary newline
+// here, ⌘↩ assigns, Esc cancels the assignment and closes the palette without writing anything. The one row below
+// the editor is the same action as ⌘↩, so it can be clicked, and it reports why a blank prompt cannot be sent.
+let agentCtx = null; // { id } of the node the prompt being typed belongs to, while this page is up
+const AGENT_GROUP = 'Assign to Agent · ↩ adds a line, ⌘↩ assigns, Esc cancels';
+const MODEL_GROUP = 'Model for this task';
+const HOST_GROUP = 'Where it runs';
+function promptEditor(on) {
+  palText.hidden = !on; palInput.hidden = !!on;
+  if (!on) { palText.value = ''; agentCtx = null; }
+}
+function openAgentPrompt(doc) {
+  palMode = 'agentPrompt'; palRows = []; palIndex = 0; palette.hidden = false;
+  promptEditor(true); // shows the editor, empty; leaving the page clears it and the context with it
+  palInput.value = ''; // the query that found "Assign to Agent" is not a query here, and would bold letters in the row
+  agentCtx = { id: doc.id, doc }; // the row itself, so the assignment can hold it where it sits
+  agentModel = ''; // every assignment chooses again; Codex's own default until it does
+  agentHost = 'local'; // this machine unless the page says otherwise
+  if (tana.codexHosts && !agentHosts.length) tana.codexHosts().then((list) => { agentHosts = Array.isArray(list) ? list : []; if (palMode === 'agentPrompt') renderPalette(); }, () => {});
+  if (tana.codexModels && !agentModels.length) tana.codexModels().then((list) => { agentModels = Array.isArray(list) ? list : []; if (palMode === 'agentPrompt') renderPalette(); }, () => {});
+  renderPalette(); palText.focus();
+}
+function agentPromptRows() {
+  const prompt = palText.value.trim();
+  // Where it will run is named on the row that sends it: the tick sits in a list you have to Tab into, so ⌘↩ from
+  // the editor was the only thing most assignments ever saw, and a task meant for another machine ran here silently.
+  const runsOn = (agentHosts.find((h) => h.id === agentHost) || {}).title || 'This Mac';
+  const rows = [{ group: AGENT_GROUP, icon: 'robot', label: prompt ? 'Assign to Agent on ' + runsOn : 'What should the agent do?',
+    hint: prompt ? '⌘↩' : 'Nothing to send yet', disabled: !prompt, keepOpen: true, run: submitAgentPrompt }];
+  // The model for this one assignment, chosen with the same keys as any other palette row. The list is Codex's own
+  // (model/list), so nothing here goes stale; with no list the default stands alone rather than a guessed menu.
+  // Choosing keeps the keyboard where it already was: picked from the list, the list keeps it so another can be
+  // tried; clicked or reached from the editor, the caret goes back to what you were writing.
+  const pick = (id) => ({ group: MODEL_GROUP, icon: 'brain', label: id || 'Codex default', hint: agentModel === id ? '✓' : '',
+    keepOpen: true, run: () => { const onList = document.activeElement === palList; agentModel = id; renderPalette(); (onList ? palList : palText).focus(); } });
+  rows.push(pick(''));
+  for (const id of agentModels) rows.push(pick(id));
+  // And which machine runs it, chosen the same way. Only names: the address and the command live in main.
+  const host = (h) => ({ group: HOST_GROUP, icon: 'host', label: h.title, hint: agentHost === h.id ? '✓' : '',
+    keepOpen: true, run: () => { const onList = document.activeElement === palList; agentHost = h.id; renderPalette(); (onList ? palList : palText).focus(); } });
+  for (const h of agentHosts) rows.push(host(h));
+  return rows;
+}
+// Saving the prompt is all "send" means in this slice: nothing is run, nothing is dispatched. The prompt is written
+// with the assignment, so a node is never marked as the agent's with no idea of what it was handed.
+function submitAgentPrompt() {
+  const prompt = palText.value.trim(), id = agentCtx && agentCtx.id, doc = agentCtx && agentCtx.doc;
+  if (!prompt || !id) return; // ⌘↩ on a blank page is not a press to answer
+  run(async () => {
+    // Under Group by Responsibility the row belongs in Agent the moment this is written, and under any grouping it
+    // may now sort elsewhere. Held, it keeps the place it had — nothing jumps away from the pointer — and the Clean
+    // up pill appears to redraw the list where the row now belongs, exactly as a status change behaves.
+    if (doc) holdRow(doc);
+    await tana.setCodex(id, true, prompt, agentModel || undefined, agentHost); // '' model means Codex's own default
+    // Only now: a machine that could not be reached leaves the page exactly as it was — prompt, model and host still
+    // chosen — so the press can simply be repeated once it wakes up.
+    closePalette();
+    codexIds.add(id);
+    patchCodex(id);
+    loadAgentStates(); // the task exists now: ask what it is doing rather than waiting for the next refresh
+    renderPills(true); // the row is held above, so this is what puts Clean up in front of it (renderer/pills.js)
+    // The context block is content main wrote on its own, so the open page has to be told: the live change does say
+    // so, but the palette hands the caret back to the row it came from and a render with a caret in a row is
+    // deferred until it leaves — which left the block invisible until the page was reopened. Re-asked and drawn
+    // here, forced, the way the Refresh pill draws its own answer. render() puts the caret back where it was.
+    if (kids.has(id)) { await reload(id); render(true); }
+  });
+}
+function agentPromptKey(e) {
+  const mod = e.metaKey || e.ctrlKey;
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); backPalette(); return true; }
+  if (e.key === 'Enter' && mod) { e.preventDefault(); e.stopPropagation(); submitAgentPrompt(); return true; }
+  // ⇥ crosses to the model list and back, so the picker is reachable without leaving the keyboard. The editor eats
+  // Tab either way — a tab character in a prompt is not what anyone means by pressing it here.
+  if (e.key === 'Tab') { e.preventDefault(); e.stopPropagation(); focusModelRows(); return true; }
+  return false; // a plain ↩ is a newline, which the textarea does by itself
+}
+// The model rows take the keyboard as a group: the list itself holds the focus, and the highlighted row is the one
+// the palette already draws, so this borrows the navigation every other level uses rather than inventing one.
+function focusModelRows() {
+  const first = palRows.findIndex((r) => r.group === MODEL_GROUP);
+  if (first < 0) return;
+  palIndex = first;
+  palList.tabIndex = -1;
+  renderPalette();
+  palList.focus();
+}
+function agentRowsKey(e) {
+  if (palMode !== 'agentPrompt') return false;
+  if (e.key === 'Tab') { e.preventDefault(); e.stopPropagation(); palText.focus(); return true; } // back to what you were writing
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); backPalette(); return true; }
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); e.stopPropagation(); palIndex = nextPalIndex(palRows, palIndex, e.key === 'ArrowDown' ? 1 : -1); renderPalette(); palList.focus(); return true; }
+  if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); runRow(palRows[palIndex]); return true; }
+  return false;
+}
+palList.addEventListener('keydown', agentRowsKey);
+palText.addEventListener('input', () => { if (palMode === 'agentPrompt') renderPalette(); });
+palText.addEventListener('keydown', agentPromptKey);
 // The rule lives in the group header because that is the one line in the palette that wraps.
 const HIDDEN_GROUP = 'Hidden items · whole title, case-insensitive; end with * to match a prefix';
 let hiddenList = null; // null while api.filters() is in flight
@@ -274,7 +464,10 @@ function startCreation(choice) {
   const section = creationSection(choice), tags = choice.kind === 'custom' ? [{ label: choice.title, hue: choice.hue }] : undefined;
   const node = draftDocNode(choice.kind, { typeUri: choice.typeUri, icon: choice.icon, tags });
   section.nodes.unshift(node); view = section.id; localStorage.setItem('view', view);
-  closePalette(); zoom = { docId: node.id, nodeId: null }; render(); setCaret(titleEl, 0);
+  // render(true), like every other action that changes the page: closePalette puts the caret back in the row ⌘K was
+  // opened from, and an ordinary render defers while a row holds the caret. The draft page was then never drawn, the
+  // caret never reached its title, and the empty draft sat in the view as a node nobody created.
+  closePalette(); zoom = { docId: node.id, nodeId: null }; render(true); setCaret(titleEl, 0);
   loadView(view); // the target view may not have fetched its rows yet
 }
 // search result / pin: zoom into it wherever it lives (api.node shape -> extra); from = breadcrumb root when not opened in its view
@@ -297,6 +490,74 @@ function pinResult(ctx, node) {
     await tana.pinTo(ctx.pinHub, node.id);
     relatedBy.delete(ctx.pinHub); relatedBy.delete(ctx.docId); render();
   });
+}
+// The active meeting behind the Pin to meeting row. Asked once per palette open (togglePalette clears it), because a
+// lookup is a round trip and the row is rebuilt on every keystroke; a failure is kept as the reason the row shows.
+function loadMeeting() {
+  if (!tana.currentMeeting || meetingNow !== undefined) return;
+  meetingNow = { meeting: null, pending: true }; // asked: the row says Checking… until this is replaced
+  tana.currentMeeting().then((meeting) => { meetingNow = { meeting }; }, (e) => { meetingNow = { meeting: null, error: (e && e.message) || String(e) }; })
+    .then(() => { if (palMode === 'cmd' && !palette.hidden) renderPalette(); });
+}
+// Pin the node onto the meeting, looking the meeting up again first: the palette may have been open for minutes and
+// "the meeting I am in" outlives that by not much. A lookup that fails is reported like any other failed action
+// rather than read as "no meeting". The pin itself is idempotent — sdk/pins.js dedups on uri — so a second press on
+// an already pinned node writes nothing new.
+function pinToMeeting(doc) {
+  return run(async () => {
+    const live = await tana.currentMeeting();
+    meetingNow = { meeting: live || null };
+    if (!live) throw new Error('No active meeting to pin to');
+    await pinDocToMeeting(live.id, doc.id);
+  });
+}
+// The pin itself, shared by the meeting you are in and the meeting you pick: one write and the two cached sidebar
+// payloads it invalidates. It is deliberately not wrapped in run() — both callers already are, and run() chains on
+// one queue, so a run() awaited from inside another would wait for itself.
+async function pinDocToMeeting(meetingId, docId) {
+  await tana.pinTo(meetingId, docId);
+  relatedBy.delete(meetingId); relatedBy.delete(docId); render();
+}
+// ---- the meeting picker: a page of meetings to pin the current node on ----
+// The list is the old Meetings view's query — the meetings I take part in from a week back to a week ahead (the
+// 'recent' window in sdk/query.js) — read through searchPreview, which runs a filter without storing it. One call
+// per open, matched here with the palette’s own matcher, so typing costs no round trip; the rows are ordinary
+// document rows, so each carries the meeting’s own date and time as its hint and same-named meetings are told apart.
+const MEETING_GROUP = 'Meetings';
+const MEETING_FILTER = { types: ['meetings'], participant: 'me', window: 'recent' };
+// Next meeting first, against the clock at the moment the page opens: what is on now or still to come, soonest
+// first, then what is over, most recent first. It reads the event window the row carries (`start`/`end`, ISO from
+// the graph), never the `meta` label, which says "Fri 08:20" for six days either side of today and cannot be
+// ordered. Array.prototype.sort is stable, so meetings sharing a start keep the order the server gave them.
+const eventStart = (m) => Date.parse(m.start) || 0;
+const byNextFirst = (now) => (a, b) => {
+  const ahead = (m) => (m.end ? Date.parse(m.end) : eventStart(m)) >= now; // in progress counts as ahead, not past
+  return (ahead(b) - ahead(a)) || (ahead(a) ? eventStart(a) - eventStart(b) : eventStart(b) - eventStart(a));
+};
+function loadMeetingList() {
+  meetingList = null; meetingListError = null; // null while in flight: the page says Loading…
+  tana.searchPreview(MEETING_FILTER).then(
+    // sorted once, here: the page is ordered by time and a query only filters it, so matches never reorder — and
+    // every open loads again, so the order is always against the current time rather than the one it was drawn with.
+    (rows) => { meetingList = (Array.isArray(rows) ? rows : []).sort(byNextFirst(Date.now())); },
+    (e) => { meetingList = []; meetingListError = (e && e.message) || String(e); },
+  ).then(() => { if (palMode === 'pinMeeting') renderPalette(); });
+}
+function meetingPickRows(q) {
+  if (meetingListError) return [{ group: MEETING_GROUP, label: meetingListError, disabled: true }];
+  if (!meetingList) return [{ group: MEETING_GROUP, label: 'Loading…', disabled: true }];
+  const doc = pinMeetingDoc;
+  const rows = meetingList.filter((m) => fuzzyMatch(String(m.text ?? m.title ?? ''), q))
+    .map((m) => ({ ...docRow(m, undefined, () => run(() => pinDocToMeeting(m.id, doc.id))), group: MEETING_GROUP }));
+  // With something typed, an empty list is the palette’s own "No results" line; with nothing typed it means there
+  // are no meetings to offer at all, which is worth saying.
+  if (!rows.length && !q) rows.push({ group: MEETING_GROUP, label: 'No meetings in the last week or the week ahead', disabled: true });
+  return rows;
+}
+function openMeetingPicker(doc) {
+  pinMeetingDoc = doc; palMode = 'pinMeeting'; palRows = []; palIndex = 0; palette.hidden = false;
+  palInput.placeholder = 'Pin to which meeting?'; palInput.value = '';
+  loadMeetingList(); renderPalette(); palInput.focus();
 }
 // The typed words a search result's title holds (#type filters left out): their positions, for the bold letters, with
 // `hits` (words found) and `starts` (how many of those begin a word) on the array.
@@ -346,6 +607,9 @@ function renderPalette() {
   else if (palMode === 'visibility') palRows = visibilityRows(q.toLowerCase());
   else if (palMode === 'visibilityPeople') palRows = visibilityPeopleRows(q.toLowerCase());
   else if (palMode === 'hidden') palRows = hiddenRows(q);
+  else if (palMode === 'pinMeeting') palRows = meetingPickRows(q.toLowerCase());
+  else if (palMode === 'hosts') palRows = hostRows(q);
+  else if (palMode === 'agentPrompt') palRows = agentPromptRows();
   else if (palMode === 'pill') palRows = pillRows(q.toLowerCase());
   palIndex = Math.max(0, Math.min(palIndex, palRows.length - 1));
   const els = [];
@@ -373,7 +637,7 @@ function renderPalette() {
     row.onclick = () => runRow(r);
     els.push(row);
   });
-  if (!palRows.some((r) => palMode === 'cmd' || palMode === 'slash' || palMode === 'hidden' || r.node) && (palMode === 'cmd' || palMode === 'slash' || (q && !palBusy))) { const n = document.createElement('div'); n.className = 'group'; n.textContent = 'No results'; els.push(n); }
+  if (!palRows.some((r) => palMode === 'cmd' || palMode === 'slash' || palMode === 'hidden' || r.node) && palMode !== 'agentPrompt' && (palMode === 'cmd' || palMode === 'slash' || (q && !palBusy))) { const n = document.createElement('div'); n.className = 'group'; n.textContent = 'No results'; els.push(n); }
   palList.replaceChildren(...els);
   const active = palList.querySelector('.row.active');
   if (active) active.scrollIntoView({ block: 'nearest' });
@@ -390,8 +654,10 @@ function togglePalette(mode, link, pin) {
   anchorPalette(link && link.rect);
   pinCtx = pin || null;
   if (mode !== 'slash') slashCtx = null;
+  promptEditor(false); // ⌘K over the prompt page leaves it, without assigning
   palMode = mode; palRows = []; palIndex = 0; palBusy = false; palEnter = null; clearTimeout(palTimer); palTimer = null;
-  if (mode === 'cmd') { palDoc = currentDoc(); palTaskCtx = null; loadPins(); subCache.clear(); }
+  // meetingNow is cleared, not kept: every open re-reads the meeting, the same rule the quick-add panel follows.
+  if (mode === 'cmd') { palDoc = currentDoc(); palTaskCtx = null; meetingNow = undefined; loadPins(); subCache.clear(); }
   palInput.placeholder = mode === 'search' ? 'Search Tana' : mode === 'slash' ? 'Choose a block type or create' : 'Search or run a command';
   palInput.value = link ? link.text : '';
   if (mode === 'search') searchNow(); else renderPalette();
@@ -411,20 +677,23 @@ function anchorPalette(rect) {
   card.style.maxHeight = Math.min(360, up ? above : below) + 'px';
   if (up) card.style.bottom = (innerHeight - rect.top + 6) + 'px'; else card.style.top = (rect.bottom + 6) + 'px';
 }
-function closePalette() { palette.hidden = true; clearTimeout(palTimer); palTimer = null; cancelLink(); pinCtx = null; pillCtx = null; returnFocus(); }
+function closePalette() { palette.hidden = true; clearTimeout(palTimer); palTimer = null; cancelLink(); pinCtx = null; pillCtx = null; promptEditor(false); returnFocus(); }
 // back to the node that had the caret when the palette opened (the @ link path places its own caret); with nothing to
 // return to (a row selection, the sidebar) the hidden input must not keep the keys, so it lets go of the focus
 function returnFocus() { const r = palReturn; palReturn = null; if (r && !focused()) placeCaret(r.key, r.offset); else if (document.activeElement === palInput) palInput.blur(); }
 function runRow(r) { if (!r || r.disabled) return; if (!r.keepOpen) closePalette(); r.run(); }
-// Up/Down step over rows that cannot run (info lines, unavailable choices) so the keyboard never lands on a dead row
+// Up/Down step over rows that cannot run (info lines, unavailable choices) so the keyboard never lands on a dead row.
+// A disabled row with a stable id is not dead: Cmd+Shift+K records a shortcut against it, which is how Clean up gets
+// a key before there is anything to clean up. Enter on it still does nothing, since runRow refuses it.
 function nextPalIndex(rows, index, step) {
   const n = rows.length;
-  for (let i = 1; i <= n; i++) { const next = ((index + step * i) % n + n) % n; if (!rows[next].disabled) return next; }
+  for (let i = 1; i <= n; i++) { const next = ((index + step * i) % n + n) % n; if (!rows[next].disabled || rows[next].id) return next; }
   return index;
 }
 palInput.addEventListener('input', () => {
   palIndex = 0; palEnter = null; // typing on supersedes an Enter that was waiting for the previous query
-  if (palMode === 'cmd' || palMode === 'create' || palMode === 'slash' || palMode === 'assignees' || palMode === 'assigneesMany' || palMode === 'status' || palMode === 'visibility' || palMode === 'visibilityPeople' || palMode === 'hidden' || palMode === 'pill') return renderPalette();
+  if (palMode === 'cmd' || palMode === 'create' || palMode === 'slash' || palMode === 'assignees' || palMode === 'assigneesMany' || palMode === 'status' || palMode === 'visibility' || palMode === 'visibilityPeople' || palMode === 'hidden' || palMode === 'pill' || palMode === 'pinMeeting') return renderPalette();
+  if (palMode === 'hosts') return renderPalette();
   if (palMode === 'spaces') { palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchSpacesNow, 150); return; }
   palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchNow, 150);
 });

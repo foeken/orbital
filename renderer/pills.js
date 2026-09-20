@@ -16,6 +16,10 @@ function pillDefs() {
       { label: 'Any status', checked: !f.states, run: () => save({ states: null }) },
       ...STATES.map(([v, l]) => ({ label: l, keepOpen: true, checked: !!f.states && f.states.includes(v), run: () => save({ states: toggleIn(STATES.map((s) => s[0]), f.states, v) }) })), // multi-select, like the type list
     ] });
+    // Only while the Status filter lets completed tasks in, and never as a second way to keep them out: this says
+    // how old a completed task may be and still count (renderer/views.js). Taking Completed out of Status hides the
+    // pill and keeps its value, so putting it back shows the same window as before.
+    if (showsCompleted(f)) defs.push({ id: 'completed', label: 'Completed', command: 'Filter completed by age', icon: 'task', value: COMPLETED.find(([v]) => v === completedWindow(f))[1], rows: () => COMPLETED.map(([v, l]) => ({ label: l, checked: completedWindow(f) === v, run: () => save({ completedWithin: v }) })) });
     loadMembers();
     const you = 'You' + (me() ? ' (' + me().title + ')' : '');
     const a = f.assignee, m = (members || []).find((x) => x.id === a), who = a === 'anyone' ? 'Anyone' : a === 'unassigned' ? 'Unassigned' : a === 'me' || !a ? you : m ? m.title : '…';
@@ -41,11 +45,31 @@ const pillName = (def) => def.label || def.id[0].toUpperCase() + def.id.slice(1)
 // In Cmd+K a pill is a row named for what it does ("Sort by", "Filter by status") with its current value as the hint;
 // its choices fold in as "Sort by Title", "Filter by status In Progress".
 function pillCommandRows() {
-  return (pillsApply() ? pillDefs() : []).map((def) => ({
+  const defs = pillsApply() ? pillDefs() : [];
+  const rows = defs.map((def) => ({
     id: 'pill:' + def.id, group: 'View options', icon: def.icon, label: def.command, hint: def.value || '',
     keepOpen: !!def.rows, run: def.rows ? () => openPillPalette(def.id) : def.toggle,
     sub: def.rows ? () => pillRowsFor(def, '') : undefined,
   }));
+  // The Clean up pill as a command row, and unlike the pill it is always listed: greyed out with "Nothing to clean up"
+  // while no row is being kept in place, live the moment one is. A key is recorded against a row that is in the
+  // palette, and cleanup is wanted before it is ever needed, so a row that came and went with the pill could only be
+  // given a shortcut in the seconds it happened to be offered. Disabled is the whole of "does nothing": runRow and
+  // runAction both refuse such a row, so neither the press nor the recorded key reaches cleanupNow.
+  if (defs.length) {
+    const now = needsCleanup(shownDocs());
+    rows.push({ id: 'cleanup', group: 'View options', icon: 'cleanup', label: 'Clean up', hint: now ? '' : 'Nothing to clean up', disabled: !now, run: cleanupNow });
+  }
+  return rows;
+}
+// Let go of the rows a status change kept in place and draw the page the way it is now. The header pill and the
+// Cmd+K row are two ways of pressing this one thing.
+// A view's rows are re-asked by the refresh loop, so letting go is enough there. A saved search is asked only when
+// it is opened, so a row that no longer answers its query would sit there until the page is left: ask again.
+function cleanupNow() {
+  releaseHeld();
+  if (onSearchPage() && !searchRows.has(zoom.docId)) { const id = zoom.docId; return run(async () => { await reload(id); render(true); }); }
+  render(true);
 }
 function renderPills(show) {
   const box = $('pills'), defs = show ? pillDefs() : [];
@@ -130,12 +154,38 @@ function saveSearchPill() {
 // Refresh: ask this saved search's query again. Its rows are subscribed (main/related.js), so an edit elsewhere
 // reaches the rows it is already showing — but a row that has since started or stopped answering the query is only
 // learned by asking again, which nothing else on this page does.
+// One turn of an icon, as the feedback a press gives before its answer arrives. Restartable: dropping the class and
+// re-adding it in the same frame does nothing at all, so the reflow read in between is what makes a second press
+// start the turn again instead of being swallowed by the one still running. Under reduced motion the rule the class
+// selects is not declared, so the icon simply stays where it is.
+// It returns when the turn is over, because the caller is about to rebuild the element the turn is running on: an
+// answer that arrives in 80 ms would otherwise replace the icon a tenth of the way round, which is what "I can
+// hardly see it" was. Keep SPIN_MS and the .75s in styles.css in step — renderer-check compares them.
+const SPIN_MS = 750;
+const stillPreferred = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+function spinOnce(icon) {
+  if (!icon || !icon.classList || stillPreferred()) return Promise.resolve(); // nothing turns, so nothing is waited for
+  icon.classList.remove('spin');
+  void icon.offsetWidth;
+  icon.classList.add('spin');
+  return new Promise((done) => setTimeout(done, SPIN_MS));
+}
 function refreshPill() {
   const pill = document.createElement('div'); pill.className = 'pill refresh'; pill.tabIndex = 0; pill.dataset.id = 'refreshSearch'; pill.setAttribute('role', 'button');
   pill.title = 'Ask this search again';
   pill.setAttribute('aria-label', 'Refresh'); // icon only, so the name has to come from here
-  const s = document.createElement('span'); s.innerHTML = iconSvg('reload'); pill.append(s.firstChild);
-  const go = () => { const id = zoom.docId; releaseHeld(); run(async () => { await reload(id); render(true); }); };
+  const s = document.createElement('span'); s.innerHTML = iconSvg('reload');
+  const icon = s.firstChild;
+  pill.append(icon);
+  // The answer is a round trip, so the press needs an answer of its own: one turn of the glyph, then back to rest.
+  // The query goes out first and is never held back; only the redraw waits, and only until the turn is done — the
+  // redraw builds a new pill, so without that the turn would be cut off wherever the answer happened to land.
+  const go = () => {
+    const turning = spinOnce(icon);
+    const id = zoom.docId;
+    releaseHeld();
+    run(async () => { const answered = reload(id); await Promise.all([answered, turning]); render(true); });
+  };
   pill.onmousedown = (e) => e.preventDefault(); // the caret may be in a row with a render waiting on it (cleanupPill)
   pill.onclick = go;
   pill.onkeydown = (e) => {
@@ -150,13 +200,7 @@ function cleanupPill() {
   const pill = document.createElement('div'); pill.className = 'pill cleanup'; pill.tabIndex = 0; pill.dataset.id = 'cleanup'; pill.setAttribute('role', 'button');
   pill.title = 'Put every row where it belongs now';
   const s = document.createElement('span'); s.innerHTML = iconSvg('cleanup'); pill.append(s.firstChild, 'Clean up');
-  // A view's rows are re-asked by the refresh loop, so letting go is enough there. A saved search is asked only when
-  // it is opened, so a row that no longer answers its query would sit there until the page is left: ask again.
-  const go = () => {
-    releaseHeld();
-    if (onSearchPage() && !searchRows.has(zoom.docId)) { const id = zoom.docId; return run(async () => { await reload(id); render(true); }); }
-    render(true);
-  };
+  const go = cleanupNow; // the same action the Cmd+K "Clean up" row runs
   // The caret is in the row whose status just changed, so a render is deferred until it loses focus. Taking focus on
   // mousedown ran that render, which rebuilds the pills, and the mouseup then landed on a new element — no click at
   // all, and the first press did nothing. Keeping the focus where it is (the bullets and menu rows do the same) lets

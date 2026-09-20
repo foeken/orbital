@@ -6,31 +6,38 @@ function caretOffset(el) {
   const sel = getSelection();
   if (!sel.rangeCount || !el.contains(sel.focusNode)) return null;
   const r = document.createRange(); r.selectNodeContents(el); r.setEnd(sel.focusNode, sel.focusOffset);
-  return r.toString().length;
+  return unanchored(r.toString()).length;
 }
 // preventScroll: for putting a caret back where it already was. Focusing a freshly built element scrolls it into
 // view, which is right when the user moved the caret and wrong when a re-render moved the element under a caret
 // that never went anywhere.
 function setCaret(el, offset, preventScroll) {
   el.focus({ preventScroll: !!preventScroll });
-  let left = Math.max(0, Math.min(offset, el.textContent.length));
+  let left = Math.max(0, Math.min(offset, unanchored(el.textContent).length));
   const r = document.createRange(), walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
   let t, placed = false;
   while ((t = walker.nextNode())) {
-    if (left <= t.data.length) {
+    const len = unanchored(t.data).length; // the caret anchor is no character: offset 0 lands in it, before the chip
+    if (left <= len) {
       const a = t.parentNode !== el && t.parentNode.closest('.mention');
       if (a) { if (left === 0) r.setStartBefore(a); else r.setStartAfter(a); } else r.setStart(t, left); // never inside a mention
       placed = true; break;
     }
-    left -= t.data.length;
+    left -= len;
   }
   if (!placed) r.setStart(el, el.childNodes.length);
   r.collapse(true);
   const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
 }
-// A row that is nothing but one mention chip. Chromium draws no caret beside a non-editable inline and will not delete
-// one from a plaintext field, so the chip shows the focus itself (.chiponly) and Backspace removes the row.
-const chipOnly = (el) => el.childNodes.length === 1 && el.firstChild.nodeType === 1 && el.firstChild.classList.contains('mention');
+// A row that is nothing but one mention chip — Tana's full-reference presentation, a block whose only content is a
+// reference. The caret anchor renderSegs puts before the chip is not content, so it does not make the row ordinary.
+// Chromium will not delete a non-editable inline from a plaintext field, so Backspace removes the row, and the chip
+// shows the focus itself (.chiponly). The caret still lands before and after it, and typing either side makes the
+// row ordinary again — text plus an inline reference.
+const chipOnly = (el) => {
+  const kids = [...el.childNodes].filter((n) => n.nodeType !== 3 || unanchored(n.data));
+  return kids.length === 1 && kids[0].nodeType === 1 && !!kids[0].classList.contains('mention');
+};
 function focused() {
   const el = document.activeElement;
   if (el === titleEl && titleEl.isContentEditable) return { key: titleEl.dataset.key, offset: caretOffset(titleEl) };
@@ -38,10 +45,10 @@ function focused() {
 }
 // [node, offset] for a plain-text offset inside el (the DOM point the same character sits at)
 function textPoint(el, offset) {
-  let left = Math.max(0, Math.min(offset, el.textContent.length));
+  let left = Math.max(0, Math.min(offset, unanchored(el.textContent).length));
   const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
   let t;
-  while ((t = walker.nextNode())) { if (left <= t.data.length) return [t, left]; left -= t.data.length; }
+  while ((t = walker.nextNode())) { const len = unanchored(t.data).length; if (left <= len) return [t, left]; left -= len; }
   return [el, el.childNodes.length];
 }
 // put the selection back after a formatting round trip re-rendered the node
@@ -60,8 +67,8 @@ function selectionOffsets(el) {
   const r = sel.getRangeAt(0);
   if (!el.contains(r.startContainer) || !el.contains(r.endContainer)) return null;
   const pre = document.createRange(); pre.selectNodeContents(el);
-  pre.setEnd(r.startContainer, r.startOffset); const start = pre.toString().length;
-  pre.setEnd(r.endContainer, r.endOffset); const end = pre.toString().length;
+  pre.setEnd(r.startContainer, r.startOffset); const start = unanchored(pre.toString()).length;
+  pre.setEnd(r.endContainer, r.endOffset); const end = unanchored(pre.toString()).length;
   return end > start ? [start, end] : null;
 }
 function placeCaret(key, offset, preventScroll) {
@@ -184,8 +191,9 @@ function rowSig(n) {
   const meta = taskMetaById.get(n.id);
   // stateType too: accepting an Inbox task changes only the state, and a reused row would keep the tick the click put in its box
   return JSON.stringify([n.text, n.done, n.stateType, n.icon, n.hue, n.meta, n.tags, n.editable, n.draft, n.hasChildren, n.kind, n.type,
+    n.updatedAt, n.createdAt, n.createdBy, // the subtext's times and author: they arrive after the row and a reused row would still show none
     sensitiveHidden(n.id), meta || (taskMetaLoading.has(n.id) ? 'loading' : null), members ? members.length : 0, open.get(n.id), pending.has(n.id),
-    displayKeys().join(',')]); // which facts the row shows: without this a reused row would keep the old ones
+    displayKeys().join(','), codexIds.has(n.id), agentStateOf(n.id)]); // which facts the row shows: without this a reused row would keep the old ones
 }
 function renderOutline() {
   const saved = focused();
@@ -212,7 +220,7 @@ function renderOutline() {
     }
     list = withDraftTail(list, parent); // an open node always has a row to type in; a read-only one (every chat) never does
     outline.replaceChildren(...(groups
-      ? groups.flatMap((g) => [groupHeadEl(g.title), ...g.nodes.map((n) => childEl(n, parent))])
+      ? groups.flatMap((g) => [groupHeadEl(g), ...(g.collapsed ? [] : g.nodes.map((n) => childEl(n, parent)))])
       : list.map((n) => childEl(n, parent))));
     animView = null; // a zoom replaced every row, and a zoomed row is keyed docId/nodeId while a view row is keyed by
     // its document id, so on the way back nothing would match and the whole view would flash as if it had just arrived
@@ -232,7 +240,7 @@ function renderOutline() {
       const el = nodeEl(n, n.id, null); el.dataset.sig = sig; return el;
     };
     outline.replaceChildren(...(groups
-      ? groups.flatMap((g) => [groupHeadEl(g.title), ...g.nodes.map(rowEl)])
+      ? groups.flatMap((g) => [groupHeadEl(g), ...(g.collapsed ? [] : g.nodes.map(rowEl))])
       : list.map(rowEl)));
     animateRows(before);
     if (list.length && !outline.hidden && scrolledView !== view) { // a view opens at the top
@@ -240,7 +248,9 @@ function renderOutline() {
       outline.parentElement.scrollTop = 0;
     }
   }
-  if (parent && !list.length) {
+  // "No content" is about a page with nothing on it, so it goes by what was just drawn rather than by the row count:
+  // a grouped page with every section folded away has no rows and is not empty — its headings are right there.
+  if (parent && !list.length && !outline.children.length) {
     const note = document.createElement('div');
     note.className = 'empty-note'; note.textContent = kids.get(parent.docId) === null ? 'Loading…' : 'No content';
     outline.append(note);
@@ -258,6 +268,7 @@ function renderOutline() {
   titleCheck.disabled = zoomedTask && !canEditItem(parent);
   titleCheck.onclick = zoomedTask && canEditItem(parent) ? () => toggleDone(parent) : null;
   titleEl.classList.toggle('done', zoomedTask && !!parent.node.done);
+  codexHeader(); // a rebuilt header loses the badge with everything else, so it is put back with the title
   // assignees and visibility now live at the top of the sidebar (railMetaRows); under the title only the chips remain
   const titleTags = zoomedTask && visibleTags(parent.node).some((tag) => tag.label !== 'task');
   taskInfoEl.hidden = !titleTags; taskInfoEl.replaceChildren();
@@ -275,7 +286,8 @@ function renderOutline() {
   // Cached rows remain usable while auth and sync reconnect; reserve the skeleton for an empty outline.
   const loading = !parent && !outline.children.length && (authChecking || !rootsLoaded || !filters.has(view) || (authed && !connected));
   $('skeleton').classList.toggle('gone', !loading);
-  if (!parent && !list.length && !loading && !filterEl.value) { // an empty view says so; a filtered-out list is explained by the count below it
+  // the same rule as "No content" above: a view with every section folded away has no rows and is not empty
+  if (!parent && !list.length && !outline.children.length && !loading && !filterEl.value) { // an empty view says so; a filtered-out list is explained by the count below it
     const note = document.createElement('div');
     note.className = 'empty-note'; note.textContent = 'Nothing here yet';
     if (viewFiltered()) { // the view is empty because of its filters, not because there is nothing there
@@ -356,12 +368,31 @@ function crumbWhen(id) {
   }
   return eventWhen.get(id) || null;
 }
+// One link, icon and name together, so the whole thing is the target and the icon is never the only thing to read.
+function homeCrumb() {
+  const name = homeName();
+  if (!name || homeId() === 'library' || atHome()) return null;
+  const a = document.createElement('a');
+  const icon = iconNode('home');
+  if (icon) { const ricon = document.createElement('span'); ricon.className = 'ricon home'; ricon.append(icon); a.append(ricon); }
+  a.append(name);
+  a.setAttribute('aria-label', 'Go to Home: ' + name);
+  a.title = 'Go to Home: ' + name;
+  a.onclick = () => goHome();
+  return a;
+}
 function renderCrumbs(trail) {
   const nav = $('crumbs');
   nav.hidden = !trail;
   if (!trail) return;
   const back = () => { zoom = null; render(); };
   nav.replaceChildren();
+  // The Home anchor, ahead of the location: the house glyph and Home's own current name, then a bullet to keep it
+  // apart from the › chain that follows. It is a shortcut, not an ancestor — the structural path behind it is
+  // untouched, so nothing suggests a saved search owns the node. Left out where it would only repeat what is already
+  // there: on Home itself, and when Home is the Library, whose crumb the location already starts with.
+  const homeEl = homeCrumb();
+  if (homeEl) { const dot = document.createElement('span'); dot.className = 'sep'; dot.textContent = '•'; nav.append(homeEl, dot); }
   // location in Tana (owner chain from api.path, e.g. "Library" or "Automation Guild › Meeting"), loaded once per document.
   // A document reached through a space (zoom.via) starts at the space's location; the spaces follow as crumbs.
   const root = zoom.via ? zoom.via[0] : zoom, rootId = root.docId;
@@ -393,6 +424,57 @@ function renderCrumbs(trail) {
 
 // a child row: document children (inside a space) are their own document, so their key, children and edits go by their own id
 const childEl = (n, item) => nodeEl(n, n.kind === 'document' ? n.id : item.docId, item);
+// A node assigned to the local Codex agent. Not an icon in the metadata strip: that strip is one of the facts the
+// Display pill can switch off, and this mark says the agent has the node.
+// The badge says what the linked task is doing, not merely that a node was assigned: an assignment with no task
+// behind it yet is pending and grey, and only work in progress animates. The wording carries the state as well as
+// the colour, so the colour is never the only signal.
+function codexBadgeEl(id) {
+  const state = agentStateOf(id), words = AGENT_BADGE[state];
+  const el = document.createElement('span');
+  el.className = 'cbadge ' + state;
+  // A badge with a task behind it is the way into that task; a pending one has nowhere to go, so it stays a plain
+  // image rather than a button that does nothing. Only linked nodes have a status entry at all, which is the same
+  // fact — no second list to keep in step.
+  // Only a task on this machine can be opened from here: the deep link resolves against this app. One elsewhere is
+  // still a badge with its status, but not a way in, and its wording says where it is instead of pretending.
+  const where = agentTaskHosts.get(id);
+  const linked = agentStates.has(id) && (!where || where === 'local');
+  const elsewhere = agentStates.has(id) && where && where !== 'local';
+  el.setAttribute('role', linked ? 'button' : 'img');
+  const hostName = elsewhere ? (agentHosts.find((h) => h.id === where) || {}).title || where : '';
+  el.setAttribute('aria-label', linked ? words.label + ', open the Codex task' : elsewhere ? words.label + ', on ' + hostName : words.label);
+  el.title = linked ? words.title + ' — click to open the task' : elsewhere ? words.title + ' — this task runs on ' + hostName : words.title;
+  if (linked) {
+    el.tabIndex = 0;
+    el.onmousedown = (e) => e.preventDefault(); // the caret stays where it is, as every other row control does
+    el.onclick = (e) => { e.stopPropagation(); run(() => tana.openCodexTask(id)); };
+    el.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); run(() => tana.openCodexTask(id)); } };
+  }
+  const svg = iconNode('robot');
+  if (svg) { svg.setAttribute('width', '14'); svg.setAttribute('height', '14'); el.append(svg); }
+  return el;
+}
+// Assigning from Cmd+K has to show on the row, and the palette hands the caret back to the row it was opened from,
+// where a render is deferred until the caret leaves — so the badge is put on the row itself, as patchMeta does.
+function patchCodex(docId) {
+  for (const row of outline.querySelectorAll('.node')) {
+    const item = items.get(row.dataset.key), line = row.querySelector(':scope > .line');
+    if (!item || !line || (referenceTarget(item.node) || item.node).id !== docId) continue;
+    line.querySelector(':scope > .cbadge')?.remove();
+    if (codexIds.has(docId)) line.append(codexBadgeEl(docId));
+    if (row.dataset.sig) row.dataset.sig = rowSig(item.node); // the row now matches what a fresh render would build
+  }
+  codexHeader(); // the open page says it too, and for the same reason it is patched rather than re-rendered
+}
+// The badge beside the zoomed title, from the same element the rows use. Only on the document's own page: zooming
+// into a block shows that block's title, and the agent was handed the document, not the block.
+function codexHeader() {
+  const head = titleEl.parentElement;
+  if (!head) return;
+  head.querySelector(':scope > .cbadge')?.remove();
+  if (zoom && !zoom.nodeId && codexIds.has(zoom.docId)) head.append(codexBadgeEl(zoom.docId));
+}
 function nodeEl(node, docId, parent) {
   const item = mkItem(docId, node, parent);
   const target = referenceTarget(node), display = target || node, reference = isReference(node);
@@ -451,7 +533,7 @@ function nodeEl(node, docId, parent) {
   // every row describes who can see it, not only task rows; the fetch waits until the row is on screen
   const taskInfo = taskSummary(display, true) || documentSummary(display, true);
   if (displayOn('assigned')) {
-    if (taskInfo) body.append(taskMetaEl(taskInfo));
+    if (taskInfo) body.append(taskMetaEl(taskInfo, display.id));
     else if (observeMeta(el, display)) body.append(taskMetaEl({ assignees: '', pending: true })); // hold the slot: the real icon lands in the same place, so the row never shifts
   } else if (!taskInfo) observeMeta(el, display); // "Lives in" reads the same answer, so the fetch still goes out
   if (displayOn('type')) appendTags(body, display);
@@ -464,6 +546,8 @@ function nodeEl(node, docId, parent) {
   }
   blurSensitive(body, docId, target && target.id);
   line.append(body);
+  // handed to the local Codex agent: the robot badge at the end of the row, after everything the row says about itself
+  if (codexIds.has(display.id)) line.append(codexBadgeEl(display.id));
   line.onclick = (e) => { if (!e.metaKey && !e.shiftKey && !reference && (e.target === line || e.target === body || e.target.parentElement === text)) setCaret(text, text.textContent.length); };
   // a reference row: the bullet zooms into the target, a click selects the row, a click on the selected row puts the caret where you clicked
   if (reference) line.onmousedown = (e) => {

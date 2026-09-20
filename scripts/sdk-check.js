@@ -12,7 +12,7 @@ const { createTransport, SyncConnection, Document, derivePeerId, readNode, setTi
 const outline = require('../sdk/content');
 const { fetchImage } = require('../sdk/assets');
 const { LoroMap, LoroList } = require('loro-crdt');
-const { parseQuery, searchParams, needsTypes, viewParams, searchQueryParams, filterToSearchQuery, searchQueryToFilter, validViewFilter, viewTypes, VIEW_PRESETS, hideRules, isHidden } = require('../sdk/query');
+const { parseQuery, searchParams, needsTypes, viewParams, searchQueryParams, filterToSearchQuery, searchQueryToFilter, validViewFilter, viewTypes, VIEW_PRESETS, hideRules, isHidden, completedInWindow, completedWindow } = require('../sdk/query');
 const pins = require('../sdk/pins');
 
 const ORG = 'org_01EXAMPLE00000000000000000', DOC = 'tana:text:01exampleh0000000000000000', ME = 'tana:user-profile:01examplei0000000000000000';
@@ -21,10 +21,15 @@ const b64 = (u8) => Buffer.from(u8).toString('base64');
 
 // Load the real main-process helpers without Electron startup or a Tana connection: main.js and everything under
 // main/ run in one sandboxed context (one realm, stubbed timers, a fake electron), the rest through the real require.
-function mainHelpers() {
+// `childProcess` stands in for node:child_process, so the agent's real spawn/teardown path can be driven without an
+// app-server: the writer lifecycle is exactly what the lock bug lives in, and it is unreachable any other way.
+function mainHelpers(childProcess) {
   const nodePath = require('node:path'), root = nodePath.join(__dirname, '..');
   const handlers = new Map();
-  const electron = { app: {}, BrowserWindow: function () {}, Menu: {}, ipcMain: { handle: (name, fn) => handlers.set(name, fn) } };
+  // opened: every url main asked the OS to open, so a check can see whether assigning actually handed the work over
+  const opened = [];
+  const electron = { app: {}, BrowserWindow: function () {}, Menu: {}, ipcMain: { handle: (name, fn) => handlers.set(name, fn), on: () => {} },
+    shell: { openExternal: async (url) => { if (electron.shell.refuse) throw new Error('no handler for codex://'); opened.push(url); } } };
   const context = vm.createContext({
     Buffer, console, URL, // URL is a global in Electron's main process
     setTimeout: () => 0, clearTimeout: () => {}, // no refresh/network timers in offline main helpers
@@ -35,12 +40,15 @@ function mainHelpers() {
     if (cache.has(file)) return cache.get(file).exports;
     const mod = { exports: {} }; cache.set(file, mod);
     const req = createRequire(file);
-    const localRequire = (id) => { if (id === 'electron') return electron; const resolved = id.startsWith('.') ? req.resolve(id) : id; return ours(resolved) ? load(resolved) : req(id); };
+    const localRequire = (id) => { if (id === 'electron') return electron; if (id === 'node:child_process' && childProcess) return childProcess;
+      const resolved = id.startsWith('.') ? req.resolve(id) : id; return ours(resolved) ? load(resolved) : req(id); };
     const wrapped = vm.runInContext('(function (require, module, exports, __dirname, __filename) {' + fs.readFileSync(file, 'utf8') + '\n})', context, { filename: file });
     wrapped(localRequire, mod, mod.exports, nodePath.dirname(file), file);
     return mod.exports;
   };
-  return { ...load(nodePath.join(root, 'main.js')), handlers };
+  // the agent module itself as well: creating a task spawns a real app-server, which a check stubs out by replacing
+  // that one function on the module main.js holds
+  return { ...load(nodePath.join(root, 'main.js')), handlers, opened, electron, agent: load(nodePath.join(root, 'main', 'agent.js')) };
 }
 
 async function main() {
@@ -303,6 +311,144 @@ async function main() {
     await assert.rejects(backend.createDocument('Invalid',{kind:'custom',typeUri:unknownType.id}),/Unsupported type target/);
     assert.equal(created.length,7,'invalid scope/types do not create partial documents'); // 7: three legitimate saved searches are created above
     console.log('ok  creation chooser: native chats, actual typed docs/events, home-space validation and unsaved blank drafts');
+  }
+  // Quick add (docs/QUICK-ADD.md): what the panel is told when it opens, the one write it makes, and the shortcut
+  // and window lifecycle behind it. The meeting is the live call, the link is a pin on the event, and neither the
+  // assignment nor the pin may turn a created task into a failure.
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    // main/ runs in its own vm realm, so anything that comes back from it is built from that realm's prototypes and
+    // deepEqual rejects it as "same structure but not reference-equal". Normalise once, here, rather than reaching
+    // for a spread or Array.from at each assertion and hitting the same trap with the next one.
+    const plainJson = (value) => JSON.parse(JSON.stringify(value));
+    const docs = new Map(), created = [], asked = [];
+    const OTHER = 'tana:user-profile:01examplek0000000000000000';
+    const make = (kind, title, extra = {}) => {
+      const d = new Document('tana:' + kind + ':' + ulid());
+      d.transact((l) => { initDocument(l, title, ME); const data = l.getMap('data'); data.set('type', kind); for (const [k, v] of Object.entries(extra)) data.set(k, v); });
+      docs.set(d.id, d); return d;
+    };
+    const meeting = make('event', 'Platform Sync');
+    const callDoc = new Document('tana:call:' + ulid());
+    const joinCall = (live) => callDoc.transact((l) => {
+      l.getMap('data').set('ownerUri', meeting.id);
+      const sessions = l.getMap('sessions');
+      if (live) sessions.set(ME + ':aa11bb22', { userUri: ME, joinedAt: 111 });
+      else for (const key of sessions.keys()) sessions.delete(key);
+    });
+    joinCall(true);
+    docs.set(callDoc.id, callDoc);
+    let failMembers = false, failCalls = false;
+    backend.testRuntime({
+      me: { userUri: ME, orgId: ORG },
+      win: { isDestroyed: () => false, webContents: { send: () => {} } },
+      session: { getAccessToken: async () => 'x.' + Buffer.from(JSON.stringify({ org_id: ORG, role: 'member' })).toString('base64url') + '.x' },
+      client: {
+        graph: { listNodes: async (p) => {
+          asked.push(p);
+          if ((p.nodeTypes || [])[0] === 'call') { if (failCalls) throw new Error('graph unavailable'); return { nodes: [{ id: callDoc.id }] }; }
+          if ((p.nodeTypes || [])[0] === 'user-profile') { if (failMembers) throw new Error('members unavailable'); return { nodes: [{ id: ME, title: 'Andre' }, { id: OTHER, title: 'Renate' }] }; }
+          if (p.nodeIds) return { nodes: p.nodeIds.map((id) => ({ id, title: docs.has(id) ? readNode(docs.get(id)).title : null })) };
+          return { nodes: [] };
+        } },
+        sync: { subscribe: async (id, init) => { if (init) { const d = new Document(id); d.transact(init); docs.set(id, d); created.push(d); return d; } if (!docs.has(id)) throw new Error(id + ' unavailable'); return docs.get(id); },
+          getDocument: (id) => docs.get(id) || null }, // a document already open, which is how the handoff reads a title without subscribing again
+      },
+    });
+    const joined = await backend.quickContext();
+    assert.deepEqual({ id: joined.meeting.id, title: joined.meeting.title }, { id: meeting.id, title: 'Platform Sync' }, 'the panel is told the meeting whose call this user has joined');
+    assert.deepEqual(plainJson(joined.members).map((m) => m.title), ['Andre', 'Renate']);
+    assert.equal(joined.me, ME);
+    joinCall(false); // the call ended between two presses of the shortcut
+    assert.equal((await backend.quickContext()).meeting, null, 'the meeting is read at every open, never cached from the last one');
+    joinCall(true);
+    failMembers = true; backend.S.membersLoaded = null;
+    const halfA = await backend.quickContext();
+    assert.ok(halfA.meeting && /members unavailable/.test(halfA.membersError), 'a broken member list still leaves the meeting');
+    failMembers = false; failCalls = true; backend.S.membersLoaded = null;
+    const halfB = await backend.quickContext();
+    assert.equal(halfB.meeting, null);
+    assert.ok(/graph unavailable/.test(halfB.meetingError) && halfB.members.length === 2, 'and a broken meeting lookup still leaves the people');
+    failCalls = false;
+    const before = created.length;
+    await assert.rejects(backend.quickCreate({ title: '   ' }), /needs a title/);
+    await assert.rejects(backend.quickCreate({ title: 'Ok', assigneeUri: 'Renate' }), /assignee from the member list/);
+    await assert.rejects(backend.quickCreate({ title: 'Ok', meetingId: meeting.id.replace('event', 'text') }), /Not a meeting/);
+    assert.equal(created.length, before, 'a refused quick add creates nothing');
+    const added = await backend.quickCreate({ title: '  Draft the agenda  ', assigneeUri: OTHER, meetingId: meeting.id });
+    const task = readNode(docs.get(added.node.id));
+    assert.equal(task.title, 'Draft the agenda', 'the title is trimmed, and it is a task');
+    assert.equal(task.stateType, 'open');
+    assert.deepEqual(plainJson(task.assignedToUris), [OTHER], 'the chosen member replaces the creator the task is assigned to by default');
+    assert.deepEqual(plainJson(pins.items(meeting)).map((p) => p.uri), [added.node.id], 'the link is a pin on the meeting itself, not a copy of its title');
+    assert.deepEqual([added.assigned, added.linked], [OTHER, meeting.id]);
+    assert.equal(added.linkError, undefined);
+    // A meeting this user may not write: the task is still created and says why it could not be linked, because a
+    // thrown error here would invite a second submit and a second task.
+    meeting.transact((l) => l.getMap('data').get('participants').get(ME).set('role', 'viewer'));
+    const unlinked = await backend.quickCreate({ title: 'Someone else meeting', meetingId: meeting.id });
+    assert.ok(unlinked.node.id.startsWith('tana:text:'), 'the task exists');
+    assert.equal(unlinked.linked, null);
+    assert.ok(/permission/.test(unlinked.linkError), 'and the refusal is carried, not thrown');
+    assert.equal(backend.S.status.error, unlinked.linkError, 'which the window shows too');
+    assert.deepEqual(plainJson(pins.items(meeting)).map((p) => p.uri), [added.node.id], 'nothing was pinned');
+    // The agent is not a member: it is handed the task through main.js's own handoff, injected here, and never
+    // becomes a Tana assignee. A handoff that fails must not cost the task either.
+    const handoffs = [];
+    const deps = { assignToAgent: async (id, prompt, model) => { handoffs.push({ id, prompt, model }); return true; } };
+    await assert.rejects(backend.quickCreate({ title: 'Both', assigneeUri: OTHER, agent: { prompt: 'do it' } }, deps), /agent or to a person/);
+    await assert.rejects(backend.quickCreate({ title: 'Silent', agent: { prompt: '   ' } }, deps), /Tell the agent what to do/);
+    await assert.rejects(backend.quickCreate({ title: 'Nowhere', agent: { prompt: 'do it' } }), /agent is unavailable/);
+    const handed = await backend.quickCreate({ title: 'Ship the notes', agent: { prompt: '  Draft them from the changelog  ', model: 'gpt-5-codex' } }, deps);
+    assert.deepEqual(plainJson(handoffs), [{ id: handed.node.id, prompt: 'Draft them from the changelog', model: 'gpt-5-codex' }],
+      'the prompt is trimmed and the model rides with it, through the one handoff Cmd+K already uses');
+    assert.equal(handed.agent, true);
+    assert.deepEqual(plainJson(readNode(docs.get(handed.node.id)).assignedToUris), [ME],
+      'and the task keeps its ordinary creator assignee: the agent is an app-local mark, not a person');
+    await backend.quickCreate({ title: 'Default model', agent: { prompt: 'do it', model: '' } }, deps);
+    assert.equal(handoffs.at(-1).model, undefined, "an unchosen model is sent as nothing, which is Codex's own default");
+    const stuck = await backend.quickCreate({ title: 'Codex missing', agent: { prompt: 'do it' } },
+      { assignToAgent: async () => { throw new Error('Cannot open Codex from here'); } });
+    assert.ok(stuck.node.id.startsWith('tana:text:') && stuck.agent === false, 'the task exists even when the handoff does not');
+    assert.ok(/Cannot open Codex/.test(stuck.agentError), 'and the reason is carried, not thrown');
+    // Both ways in name the task the same way, because both go through main.js's own handoff. Driven here through
+    // the real one rather than the stub above, so what is asserted is the prompt the panel's task is actually given.
+    require('../db').open(':memory:');
+    const fromPanel = [];
+    backend.agent.createTask = async (opts) => { fromPanel.push(opts); return '01a0b3a3-c000-70b0-896e-08e86986ca0e'; };
+    await backend.quickCreate({ title: 'Review the Q3 risk log', agent: { prompt: 'Summarise it' } },
+      { assignToAgent: backend.assignToAgent, hostReady: async () => true });
+    assert.equal(String(fromPanel[0].prompt).split('\n')[0], 'Tana: Review the Q3 risk log',
+      'a task made in the quick-add panel opens with its node title, so Codex names it after the work');
+    assert.equal(backend.S.status.error, stuck.agentError, 'which the window shows too');
+    // The shortcut: both ways registration can fail used to be silent.
+    const ok = backend.registerShortcut({ register: () => true }, () => {});
+    assert.deepEqual(plainJson(ok), { accelerator: backend.QUICK_ACCELERATOR, registered: true, error: null });
+    assert.deepEqual(plainJson(backend.S.status.quickAdd), plainJson(ok), 'and the status the window reads carries it');
+    const taken = backend.registerShortcut({ register: () => false }, () => {});
+    assert.ok(/held by another app/.test(taken.error) && taken.registered === false);
+    assert.ok(/Quick add shortcut unavailable/.test(backend.S.status.error), 'a shortcut nothing answers is visible in the app, not silent');
+    const refused = backend.registerShortcut({ register: () => { throw new Error('bad accelerator'); } }, () => {}, { accelerator: 'Nonsense' });
+    assert.deepEqual([refused.accelerator, refused.registered, refused.error], ['Nonsense', false, 'bad accelerator']);
+    // One panel, reused: a press shows it, a press while it has focus hides it, and a press while it is buried
+    // raises the same window rather than building a second one.
+    let built = 0;
+    const fakeWin = () => { built += 1; const win = { visible: false, focused: false, destroyed: false, opens: 0 };
+      Object.assign(win, { isDestroyed: () => win.destroyed, isVisible: () => win.visible, isFocused: () => win.focused,
+        show: () => { win.visible = true; }, focus: () => { win.focused = true; }, hide: () => { win.visible = false; win.focused = false; },
+        webContents: { send: (channel) => { if (channel === 'quick:open') win.opens += 1; } } });
+      return win; };
+    const panel = { win: null };
+    const first = backend.togglePanel(panel, fakeWin);
+    assert.deepEqual([first.action, built, first.win.visible, first.win.focused, first.win.opens], ['shown', 1, true, true, 1]);
+    assert.equal(backend.togglePanel(panel, fakeWin).action, 'hidden', 'a second press closes it');
+    assert.equal(built, 1);
+    first.win.visible = true; first.win.focused = false; // open, but behind the app the user is in
+    assert.deepEqual([backend.togglePanel(panel, fakeWin).action, built, first.win.opens], ['shown', 1, 2], 'that press raises the same window and re-reads the meeting');
+    first.win.destroyed = true;
+    assert.equal(backend.togglePanel(panel, fakeWin).action, 'shown');
+    assert.equal(built, 2, 'only a destroyed panel is built again');
+    console.log('ok  quick add: fresh meeting per open, half-broken context, the meeting pin, the agent handoff with its prompt and model, refusals, created-but-unlinked, shortcut failure and one reused panel');
   }
   {
     const backend=mainHelpers(), d=new Document(DOC);
@@ -581,6 +727,20 @@ async function main() {
     backend.rememberNodeHue(readNode(doc));
     assert.equal(backend.toNode({ id: taskId, title: 'x', icon: 'task', done: 1, tags: [] }).createdAt, new Date(1788262342702).toISOString());
     assert.equal(backend.toNode({ id: taskId, title: 'x', icon: 'task', done: 1, tags: [] }).stateType, 'closed');
+    // A row with no cached view row behind it — a saved search's rows, and the doc:info answer a live update patches
+    // one with — used to come back with no updatedAt at all, so its "Updated ..." line simply vanished while its
+    // siblings (which a view had cached) kept theirs. The graph's updateTime is the one authority; reading the
+    // document must not erase it, and no current time is invented in its place.
+    assert.equal(backend.toNode({ id: taskId, title: 'x', icon: 'task', done: 1, tags: [] }).updatedAt, task.updateTime, 'a row without its own time falls back to what the graph last said');
+    const uncached = 'tana:text:' + ulid(), uncachedDoc = new Document(uncached);
+    uncachedDoc.transact((l) => initDocument(l, 'Add self-service temporary budget limit adjustment feature to Penny', ME, { kind: 'task' }));
+    backend.testRuntime({ me: { userUri: ME }, win: null, client: {
+      sync: { subscribe: async () => uncachedDoc, getDocument: () => uncachedDoc },
+      graph: { listNodes: async () => ({ nodes: [] }) },
+    } });
+    backend.rememberNodeHue({ id: uncached, title: 'Add self-service temporary budget limit adjustment feature to Penny', createTime: '2026-09-17T14:33:36.288Z', updateTime: '2026-09-17T17:48:39Z', state: { type: 'proposed' } });
+    const info = await backend.handlers.get('doc:info')(null, uncached);
+    assert.equal(info.updatedAt, '2026-09-17T17:48:39Z', 'doc:info keeps the update time for a task no view has cached');
     console.log('ok  rows carry updatedAt/createdAt/stateType, from the graph and from cached view rows');
   }
 
@@ -596,6 +756,57 @@ async function main() {
     assert.deepEqual(plainJson(restoredBounds({ x: 'a', width: 0 }, [laptop])), { width: 900, height: 700 }, 'and a setting that is not a frame');
     console.log('ok  window frame is restored only where a display still shows it');
   }
+
+  // The sidebar's Changes section (#273): the node's own history, exactly as the graph keeps it. `editors` is one
+  // entry per person with that person's last edit; create and archive times stand on their own. Nothing is invented:
+  // a deletion has no actor in the graph, so it has none here either.
+  {
+    const { changesOf } = mainHelpers(), plainJson = (v) => JSON.parse(JSON.stringify(v));
+    const ANA = 'tana:user-profile:01exampleana00000000000000', BEN = 'tana:user-profile:01exampleben00000000000000';
+    const node = {
+      id: DOC, title: 'Send reply', createTime: '2026-09-18T06:04:45.181Z', createdBy: ANA, updateTime: '2026-09-18T09:32:55Z',
+      editors: { [ANA]: { peerUserHash: '159370730943085', editTime: '2026-09-18T06:32:55Z' }, [BEN]: { peerUserHash: '2', editTime: '2026-09-18T09:32:55Z' } },
+    };
+    assert.deepEqual(plainJson(changesOf(node)), [
+      { action: 'Updated', by: BEN, at: '2026-09-18T09:32:55Z' },
+      { action: 'Updated', by: ANA, at: '2026-09-18T06:32:55Z' },
+      { action: 'Created', by: ANA, at: '2026-09-18T06:04:45.181Z' },
+    ], 'every editor is an entry, newest first, and the creation is the oldest one');
+    assert.deepEqual(plainJson(changesOf({ ...node, archivedAt: '2026-09-18T10:00:00Z' })[0]), { action: 'Deleted', at: '2026-09-18T10:00:00Z' },
+      'a deleted node leads with its deletion, and claims no actor the graph does not name');
+    assert.deepEqual(plainJson(changesOf({ createTime: '2026-09-18T06:04:45.181Z', updateTime: '2026-09-18T09:32:55Z' })), [
+      { action: 'Updated', at: '2026-09-18T09:32:55Z' },
+      { action: 'Created', at: '2026-09-18T06:04:45.181Z' },
+    ], 'with no editors listed the update time still says when, and nobody is named for it');
+    assert.deepEqual(plainJson(changesOf({ createTime: '2026-09-18T06:04:45.181Z', updateTime: '2026-09-18T06:04:45.181Z' })), [{ action: 'Created', at: '2026-09-18T06:04:45.181Z' }],
+      'a node nobody has touched since it was made shows one entry, not an edit that never happened');
+    assert.deepEqual(plainJson(changesOf({ createdBy: ANA })), [{ action: 'Created', by: ANA }], 'a creation with no time keeps the actor and says nothing about when');
+    assert.deepEqual(plainJson(changesOf({})), [], 'a node the graph knows nothing about has no history to show');
+    assert.deepEqual(plainJson(changesOf(undefined)), [], 'and neither has a node that could not be read');
+    console.log('ok  node history: editors, creation and archival, newest first, nothing invented');
+  }
+
+  // The written summaries Tana's own Changes panel shows (tana.history.v1alpha1). The service answers oldest first
+  // and leaves the default enum out of its JSON, which is exactly where a mapping like this goes wrong.
+  {
+    const { summaryChanges } = mainHelpers(), plainJson = (v) => JSON.parse(JSON.stringify(v));
+    const ANA = 'tana:user-profile:01exampleana00000000000000', BEN = 'tana:user-profile:01exampleben00000000000000';
+    const answered = [
+      { id: 'a', level: 'CHANGE_SUMMARY_LEVEL_MINUTES', startTime: '2026-09-18T06:04:45Z', endTime: '2026-09-18T06:04:45Z', title: 'Draft written', description: 'A first draft was written.', authors: [ANA], changeType: 'CHANGE_SUMMARY_TYPE_CREATED' },
+      { id: 'b', level: 'CHANGE_SUMMARY_LEVEL_MINUTES', startTime: '2026-09-18T06:17:22Z', endTime: '2026-09-18T06:32:55Z', title: 'Reviewers added', description: 'Two reviewers joined the document.', authors: [ANA, BEN] },
+    ];
+    assert.deepEqual(plainJson(summaryChanges(answered)), [
+      { action: 'Updated', by: ANA, others: 1, at: '2026-09-18T06:32:55Z', title: 'Reviewers added', note: 'Two reviewers joined the document.' },
+      { action: 'Created', by: ANA, at: '2026-09-18T06:04:45Z', title: 'Draft written', note: 'A first draft was written.' },
+    ], 'summaries come back newest first, dated by when the window closed, and a summary with no changeType is an update (the enum default protobuf JSON omits)');
+    assert.deepEqual(plainJson(summaryChanges([{ id: 'c', startTime: '2026-09-18T06:00:00Z', title: '  ', authors: [], changeType: 'CHANGE_SUMMARY_TYPE_DELETED' }])),
+      [{ action: 'Deleted', at: '2026-09-18T06:00:00Z' }], 'an empty title, no author and no end time leave those parts out rather than filling them in');
+    assert.deepEqual(plainJson(summaryChanges([])), [], 'nothing answered is nothing shown');
+    assert.deepEqual(plainJson(summaryChanges(undefined)), [], 'and a service that answered nothing at all is not an error here');
+    console.log('ok  change summaries: newest first, enum default, extra authors counted, empty parts left out');
+  }
+
+
 
   // #97: before the session and sync stream are ready, every view/metadata/permission call fails the same benign
   // way. Boot must stay quiet: no error status, no work fired against a client that does not exist yet.
@@ -658,6 +869,35 @@ async function main() {
     console.log('ok  searchChildren: a readable query runs, an unreadable one fails closed instead of listing everything');
   }
 
+  // A saved search carries its own completed window, stored in the `view` map beside its sort and grouping rather
+  // than inside Tana's query vocabulary, and read back the same way: opening the search shows what it was saved with.
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const DAY = 864e5, ago = (days) => new Date(Date.now() - days * DAY).toISOString();
+    const searchId = 'tana:search:' + ulid(), searchDoc = new Document(searchId);
+    searchDoc.transact((l) => {
+      initDocument(l, 'Recently completed', ME); l.getMap('data').set('type', 'search');
+      l.getMap('query').setContainer('types', new LoroList()).push('text');
+      l.getMap('query').setContainer('stateTypes', new LoroList()).push('closed');
+    });
+    const fresh = { id: 'tana:text:' + ulid(), title: 'Done yesterday', state: { type: 'closed', enteredAt: ago(1) } };
+    const older = { id: 'tana:text:' + ulid(), title: 'Done three weeks ago', state: { type: 'closed', enteredAt: ago(21) } };
+    backend.testRuntime({ me: { userUri: ME }, win: null, client: {
+      sync: { subscribe: async () => searchDoc },
+      graph: { listNodes: async () => ({ nodes: [fresh, older] }) },
+    } });
+    const opened = async () => (await backend.handlers.get('outline:children')(null, searchId)).map((n) => n.title);
+    assert.deepEqual(await opened(), ['Done yesterday'], 'a search with no window stored opens on the same 7 days a view does');
+    await backend.handlers.get('search:setFilter')(null, searchId, { types: ['tasks'], states: ['closed'], assignee: 'anyone', completedWithin: 30 }, 'updated', 'status', ['status']);
+    assert.equal(searchDoc.loro.getMap('view').toJSON().completedWithin, 30, 'saving writes the window beside the arrangement, not into the query');
+    assert.equal(searchDoc.loro.getMap('query').toJSON().completedWithin, undefined, 'so no key Tana does not know gets into its own vocabulary');
+    assert.deepEqual(await opened(), ['Done yesterday', 'Done three weeks ago'], 'and opening the search again shows the window it was saved with');
+    assert.equal((await backend.handlers.get('search:filter')(null, searchId)).filter.completedWithin, 30, 'which is what the pills read back, so the pill shows what the rows are');
+    await backend.handlers.get('search:setFilter')(null, searchId, { types: ['tasks'], states: ['proposed', 'open'], assignee: 'anyone', completedWithin: 30 }, 'updated', 'status', ['status']);
+    assert.equal(searchDoc.loro.getMap('view').toJSON().completedWithin, 30, 'taking Completed out of the Status filter keeps the window, so putting it back reads the same as before');
+    console.log('ok  a saved search stores and reapplies its own completed window, beside the query rather than inside it');
+  }
+
   // A view is one graph query, then docs-without-tasks/hidden post-filters, row mapping and its own cache.
   {
     const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
@@ -686,6 +926,33 @@ async function main() {
     assert.equal((await backend.handlers.get('view:list')(null, 'library', { types: ['meetings', 'docs'], states: null, assignee: 'anyone' })).truncated, false,
       'local post-filters do not create a false truncation warning');
     console.log('ok  one view fetch queries, post-filters, maps and caches rows');
+  }
+
+  // The completed window over a real view fetch: one more post-filter beside hidden titles, applied to the answer
+  // because the graph has no field to ask for it. It composes rather than competes — the assignee filter still
+  // reaches the query, and nothing but completed tasks is touched.
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const DAY = 864e5, ago = (days) => new Date(Date.now() - days * DAY).toISOString();
+    const open = { id: 'tana:text:' + ulid(), title: 'Still going', state: { type: 'open', enteredAt: ago(400) }, updateTime: ago(1) };
+    const fresh = { id: 'tana:text:' + ulid(), title: 'Done yesterday', state: { type: 'closed', enteredAt: ago(1) }, updateTime: ago(1) };
+    const older = { id: 'tana:text:' + ulid(), title: 'Done three weeks ago', state: { type: 'closed', enteredAt: ago(21) }, updateTime: ago(1) };
+    const ancient = { id: 'tana:text:' + ulid(), title: 'Done last year', state: { type: 'closed', enteredAt: ago(300) }, updateTime: ago(1) };
+    const requests = [];
+    backend.testRuntime({ me: { userUri: ME }, win: null, client: { graph: { listNodes: async (p) => {
+      requests.push(p);
+      return p.nodeIds ? { nodes: [] } : { nodes: [open, fresh, older, ancient], totalCount: 4 };
+    } }, sync: { subscribe: async () => null, unsubscribe: async () => {} } } });
+    const listed = async (completedWithin) => (await backend.handlers.get('view:list')(null, 'library',
+      { types: ['tasks'], states: ['open', 'closed'], assignee: 'me', completedWithin })).nodes.map((n) => n.title);
+    assert.deepEqual(await listed(7), ['Still going', 'Done yesterday'], '7 days lists this week\'s completed work and leaves the rest behind');
+    assert.deepEqual(await listed(30), ['Still going', 'Done yesterday', 'Done three weeks ago'], '30 days reaches further back');
+    assert.deepEqual(await listed('all'), ['Still going', 'Done yesterday', 'Done three weeks ago', 'Done last year'], 'All keeps every completed task there is');
+    assert.deepEqual(await listed(undefined), ['Still going', 'Done yesterday'], 'and a filter that has never been given one reads as 7 days');
+    assert.deepEqual(requests.at(-1).stateTypes, ['open', 'closed'], 'the Status filter still decides what is asked for');
+    assert.deepEqual(requests.at(-1).assignedTo, [ME], 'and the assignee filter still reaches the query, so the window composes with it');
+    assert.equal('completedWithin' in requests.at(-1), false, 'the window itself is asked for nowhere: the graph has no field for it');
+    console.log('ok  the completed window ages completed rows out of a view and leaves every other row alone');
   }
 
   // The index can trail a write: a task this app holds live keeps its live state on every row built from the index,
@@ -768,7 +1035,11 @@ async function main() {
     assert.equal(requests.length, 2, 'roots reads SQLite without fetching');
     assert.ok(roots.every((view) => view.nodes.length === 1), 'both views load from their own cache section');
     await backend.refresh();
-    assert.equal(requests.length, 3);
+    assert.equal(requests.length, 4, 'a refresh asks two questions: the rows of the view, and the tasks the watch rule follows');
+    // The watch query is what makes the default watch mean anything: the tasks it is about are in no view's rows.
+    const watchAsk = requests.find((p) => p.createdBy); // joined rather than compared as an array: built in the main vm
+    assert.equal(watchAsk.createdBy.join(), ME, 'it asks for the tasks you made');
+    assert.equal(watchAsk.stateTypes.includes('closed'), true, 'and asks for completions made while the app was away');
     // the last view listed above is now the Library, whose preset lists tasks
     assert.deepEqual(requests.at(-1).nodeTypes, ['text'], 'refresh repeats only the last listed view');
     const custom = await backend.handlers.get('view:setFilter')(null, 'library', { types: ['chats'], text: 'urgent' });
@@ -943,7 +1214,291 @@ async function main() {
     docs.set(orphan.id, orphan);
     assert.equal((await backend.handlers.get('notify:state')(null, orphan.id)).default, false,
       'a node with no creator in the graph is not watched');
+    // Completed while the app was not running. This is the reported case: a task closed at 09:01 by somebody else,
+    // an app started at 09:27. A second backend over the same settings is that restart — its own notifySigs start
+    // empty, so only the stored pair can tell it that anything moved.
+    const runtime = { me: { userUri: ME }, win: { isDestroyed: () => false, webContents: { send: () => {} } },
+      client: {
+        sync: { getDocument: (id) => docs.get(id), subscribe: async (id) => docs.get(id) },
+        graph: { listNodes: async ({ nodeIds }) => ({ nodes: (nodeIds || []).filter((id) => creators.has(id)).map((id) => ({ id, createdBy: creators.get(id) })) }) },
+      } };
+    assert.deepEqual(cache.setting('notifySeen')[watched.id], ['Contract v4', 'closed'],
+      'what a node looked like when it was last seen outlives the process that saw it');
+    const away = new Document('tana:text:' + ulid());
+    away.transact((l) => initDocument(l, 'Talk to Peter', ME, { kind: 'task' }));
+    setAssignees(away, [COLLEAGUE], ME); // created by you, given to somebody else: the rule watches it
+    docs.set(away.id, away); creators.set(away.id, ME);
+    cache.setSetting('notifySeen', { ...cache.setting('notifySeen'), [away.id]: ['Talk to Peter', 'open'] });
+    setState(away, 'closed', COLLEAGUE); // they finished it while the app was closed
+    const subscribedAfterRestart = [], discovery = [];
+    runtime.client.sync.subscribe = async (id) => { subscribedAfterRestart.push(id); return docs.get(id); };
+    runtime.client.sync.unsubscribe = async () => {};
+    runtime.client.graph.listNodes = async (p) => {
+      if (p.createdBy) { discovery.push(p); return { nodes: [{ id: away.id, assignedTo: [COLLEAGUE], state: { type: 'closed' } }] }; }
+      if (p.nodeIds) return { nodes: p.nodeIds.filter((id) => creators.has(id)).map((id) => ({ id, createdBy: creators.get(id) })) };
+      return { nodes: [], totalCount: 0 };
+    };
+    const restarted = mainHelpers(); restarted.testRuntime(runtime);
+    const afterRestart = []; restarted.S.notify = (id, title, body) => afterRestart.push([id, title, body]);
+    await restarted.refresh();
+    assert.ok(discovery[0].stateTypes.includes('closed'), 'watch discovery includes a task completed while the app was away');
+    assert.ok(subscribedAfterRestart.includes(away.id), 'and subscribes it so its bootstrap can reach catch-up notification');
+    restarted.onChange(away.id, { origin: 'remote' }); // the bootstrap, which used to be a silent baseline
+    await settle();
+    assert.deepEqual(afterRestart.map((n) => [n[0], n[2]]), [[away.id, 'Now Completed']],
+      'a task somebody else completed while the app was closed is announced on the way back');
+    restarted.onChange(away.id, { origin: 'remote' });
+    await settle();
+    assert.equal(afterRestart.length, 1, 'once: the stored pair is caught up the moment it is read');
+    // Your own completion, and a status that did not move, stay silent across a restart the same as they do within one.
+    const byMe = new Document('tana:text:' + ulid());
+    byMe.transact((l) => initDocument(l, 'My own', ME, { kind: 'task' }));
+    setAssignees(byMe, [COLLEAGUE], ME);
+    docs.set(byMe.id, byMe); creators.set(byMe.id, ME);
+    cache.setSetting('notifySeen', { ...cache.setting('notifySeen'), [byMe.id]: ['My own', 'open'] });
+    setState(byMe, 'closed', ME);
+    const mine2 = mainHelpers(); mine2.testRuntime(runtime);
+    const afterMine = []; mine2.S.notify = (id, title, body) => afterMine.push([id, title, body]);
+    mine2.onChange(byMe.id, { origin: 'remote' });
+    await settle();
+    assert.deepEqual(afterMine, [], 'a task you completed yourself before quitting is not announced back to you');
     console.log('ok  watching a node: the default is a task you made and did not keep, only remote changes announce, an explicit choice wins');
+    console.log('ok  a status that moved while the app was closed is announced once on the way back, not replayed');
+  }
+
+  // Handing a node to the local Codex agent: an app-local mark in the settings table, never a Tana assignee, and one
+  // the view refresh's unsubscribe sweep is not allowed to drop.
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const subscribed = [];
+    const task = new Document('tana:text:' + ulid());
+    task.transact((l) => initDocument(l, 'Draft the release notes', ME, { kind: 'task' }));
+    const assigneesOf = () => (readNode(task).assignedToUris || []).join(',');
+    const before = assigneesOf();
+    backend.testRuntime({ me: { userUri: ME }, win: null,
+      // only this one document exists: an id nothing answers for is how a write that cannot land is tested
+      client: { sync: { getDocument: (id) => (id === task.id ? task : null),
+        subscribe: async (id) => { if (id !== task.id) throw new Error('unavailable'); subscribed.push(id); return task; } } } });
+    // the handlers answer from inside the vm, so their arrays are compared as text rather than by identity
+    const assigned = async () => (await backend.handlers.get('codex:list')(null)).join(',');
+    // Creating the task is a real app-server child; here it answers with an id, so the rest of the flow is checked.
+    const created = [];
+    backend.agent.createTask = async (opts) => { created.push(opts); return '01a0b379-afbc-74c3-a191-c419e6543bcc'; };
+    assert.equal(await assigned(), '', 'nothing is handed to the agent to begin with');
+    assert.equal(await backend.handlers.get('codex:set')(null, task.id, true), true);
+    assert.equal(await assigned(), task.id, 'assigning stores the id');
+    assert.equal((cache.setting('codex') || []).join(','), task.id, 'in the settings table, so it survives a restart');
+    // The acceptance case: confirming an assignment hands the work over. Before this, assigning marked the node and
+    // opened nothing, so the badge claimed a delegation that did not exist anywhere.
+    // Created here and opened directly: a blank workspace of its own, the chosen model, and an id up front — so the
+    // task is linked the moment it exists and Codex opens it without a trip through the browser.
+    assert.equal(created.length, 1, 'assigning creates the task through the app-server');
+    assert.equal(created[0].nodeUri, task.id, 'for this node');
+    assert.notEqual(created[0].userData, undefined, 'in a workspace of its own, not the last project and not this repo');
+    // Reported from a screenshot: every task was called after this prompt's opening sentence, so the list read as a
+    // column of identical names. The first line is the node's own title now, and Codex titles a task from it.
+    assert.equal(String(created[0].prompt).split('\n')[0], 'Tana: Draft the release notes',
+      'a task assigned from Cmd+K opens with its node title');
+    // That title is text from the graph, so it is handled as data: one line, no control characters, capped without
+    // splitting a character in half, and a node with no usable title still gets a name of its own.
+    const firstLine = (t) => String(backend.agent.agentPrompt(task.id, '/repo', t)).split('\n')[0];
+    assert.equal(firstLine('Create specific risk around network risk'), 'Tana: Create specific risk around network risk',
+      'an ordinary title is carried through as it is');
+    assert.equal(firstLine('  Two\nlines\tand\u0007a bell  '), 'Tana: Two lines and a bell',
+      'newlines, tabs and control characters collapse into one readable line');
+    assert.equal(firstLine('Café ☕ 🇳🇱 naïve'), 'Tana: Café ☕ 🇳🇱 naïve', 'and ordinary Unicode survives untouched');
+    assert.equal([...firstLine('x'.repeat(200))].length, 'Tana: '.length + 81, 'an overlong title is capped, with an ellipsis for what was cut');
+    assert.equal(firstLine('🙂'.repeat(200)), 'Tana: ' + '🙂'.repeat(80) + '…',
+      'and the cap counts code points, so a cut never leaves half a character behind');
+    assert.equal(firstLine('   '), 'Tana task', 'a node with no usable title is still named, rather than falling back to the old opening sentence');
+    assert.equal(firstLine(undefined), 'Tana task', 'and so is one whose title could not be read at all');
+    assert.equal(backend.opened.length, 1, 'and opens it');
+    assert.equal(backend.opened[0], 'codex://threads/01a0b379-afbc-74c3-a191-c419e6543bcc', 'by id, directly');
+    assert.equal(/chatgpt\.com/.test(backend.opened[0]), false, 'with no browser route for creation');
+    assert.equal((await backend.handlers.get('codex:list')(null)).join(','), task.id, 'and the node is linked at once');
+    assert.equal(assigneesOf(), before,
+      'and the document is untouched: Tana assignees are user profiles, so an agent cannot be one');
+    assert.equal(subscribed.join(','), task.id, 'an assigned node is subscribed at once, so changes to it keep arriving');
+    // The prompt the agent was given rides along in a map of its own, so the id list every other reader walks is
+    // unchanged. It is stored trimmed, and only ever beside an assignment.
+    await backend.handlers.get('codex:set')(null, task.id, true, '  Draft the release notes\nthen tell me  ');
+    assert.equal((cache.setting('codexPrompt') || {})[task.id], 'Draft the release notes\nthen tell me',
+      'the prompt is stored under the node, trimmed at the ends and otherwise as typed');
+    assert.equal(await assigned(), task.id, 'and the node is still assigned exactly once');
+    // ...and it is written into the node itself, where somebody reading it in Tana can see what the agent was handed.
+    const context = () => outline.readOutline(task).filter((n) => (n.text || '').trim() === 'Agent context');
+    assert.equal(context().length, 1, 'one "Agent context" block is added to the document');
+    assert.deepEqual(context()[0].children.map((n) => n.text), ['Draft the release notes', 'then tell me'],
+      'with the prompt nested under it, one block per line and in the order it was typed');
+    // Assigning again is the same decision made twice, not two contexts: the block is found by its title and rewritten.
+    await backend.handlers.get('codex:set')(null, task.id, true, 'One line only\n\n  and a third  ');
+    assert.equal(context().length, 1, 'reassigning reuses the block rather than adding a second one');
+    assert.deepEqual(context()[0].children.map((n) => n.text), ['One line only', 'and a third'],
+      'its children are replaced by the new prompt, and a blank line is not an empty row');
+    // A document that cannot be written must leave nothing behind locally: a badge would claim a handoff the node
+    // knows nothing about. The visible half goes first, so there is nothing to roll back.
+    const unreachable = 'tana:text:' + ulid();
+    await assert.rejects(() => backend.handlers.get('codex:set')(null, unreachable, true, 'Do the thing'),
+      'a document that cannot take the context fails the assignment');
+    assert.equal((await backend.handlers.get('codex:list')(null)).includes(unreachable), false, 'and is not marked as assigned');
+    assert.equal((cache.setting('codexPrompt') || {})[unreachable], undefined, 'nor is its prompt kept');
+    await backend.handlers.get('codex:set')(null, task.id, true);
+    assert.equal(await assigned(), task.id, 'assigning twice is still one entry');
+    assert.equal(await backend.handlers.get('codex:set')(null, task.id, false), false);
+    assert.equal(await assigned(), '', 'unassigning takes it back out');
+    assert.deepEqual(Object.keys(cache.setting('codexPrompt') || {}), [], 'and takes the prompt with it: the two are one decision');
+    assert.equal(context().length, 1, 'but the context stays in the document: by then it is ordinary content somebody may have edited');
+    // A handoff that cannot be opened is not a handoff: the call fails, so the renderer shows why rather than
+    // drawing a badge for a task nobody opened.
+    backend.electron.shell.refuse = true;
+    await assert.rejects(() => backend.handlers.get('codex:set')(null, task.id, true, 'Try again'),
+      'an assignment that cannot open Codex fails rather than claiming delegation');
+    backend.electron.shell.refuse = false;
+    // Unassigning opens nothing at all: it takes the assignment away and leaves the task and the context alone.
+    const openedBefore = backend.opened.length;
+    await backend.handlers.get('codex:set')(null, task.id, false);
+    assert.equal(backend.opened.length, openedBefore, 'unassigning opens nothing');
+    // The link goes with the assignment: a later one is a new task rather than a return to the old one. The Codex
+    // task itself is untouched — nothing here archives or deletes it.
+    assert.equal(backend.agent.codexTaskFor(task.id), null, 'and lets go of the task id');
+    created.length = 0;
+    await backend.handlers.get('codex:set')(null, task.id, true, 'Have another go');
+    assert.equal(created.length, 1, 'so assigning again creates a fresh task rather than reopening the old one');
+    // An assignment with nothing typed writes nothing into the document — there is no context to add.
+    const beforeBlocks = outline.readOutline(task).length, beforeContext = context()[0].children.map((n) => n.text).join('|');
+    await backend.handlers.get('codex:set')(null, task.id, true);
+    assert.equal(outline.readOutline(task).length, beforeBlocks, 'assigning with no prompt leaves the document alone');
+    assert.equal(context().length, 1, 'and adds no second heading of its own');
+    assert.equal(context()[0].children.map((n) => n.text).join('|'), beforeContext, 'and does not touch the context already there');
+    await backend.handlers.get('codex:set')(null, task.id, false);
+    cache.setSetting('codex', 'nonsense'); // an older build or a bad write
+    assert.equal(await assigned(), '', 'and an unreadable list is no assignment, not a crash');
+    console.log('ok  local Codex assignment: stored in settings, off the document, subscribed while assigned');
+  }
+
+  // Linking a node to the Codex task that handles it. The task registers itself (scripts/agent-link.js reads
+  // CODEX_THREAD_ID), so the only thing decided here is which url opens the work and what is said to it.
+  {
+    const agent = require('../main/agent'), cache = require('../db'); cache.open(':memory:');
+    const NODE = 'tana:text:' + ulid(), THREAD = '01a0b355-2197-7311-b576-ff4bd9c8901e';
+    const first = agent.handoff(NODE, 'Draft the release notes', '/repo');
+    assert.equal(first.kind, 'create', 'a node with no task opens a new one');
+    assert.equal(first.threadId, null, 'and has no id yet, which is what keeps it pending rather than delegated');
+    // The supported external entry point, which the app translates into its own codex://threads/new route. Handing
+    // it that internal route directly is what silently did nothing in the running app.
+    const open = new URL(first.url);
+    assert.equal(open.protocol, 'https:', 'a new task is opened through the https entry point');
+    assert.equal(open.hostname, 'chatgpt.com');
+    assert.equal(open.pathname, '/codex/open-app', 'the path the app actually listens on');
+    const prompt = open.searchParams.get('q');
+    assert.ok(prompt, 'with the prompt in q, the parameter that entry point reads');
+    assert.match(prompt, /agent-link\.js --node tana:text:[0-9a-z]{26} --thread "\$CODEX_THREAD_ID"/,
+      'whose first concrete action is the task registering itself, by the id its own shell carries');
+    // "first action" is the claim, so the first command in the prompt is the one that has to be the callback:
+    // comparing it only against the fetch would pass a prompt that asks for the work first and the link later.
+    const commands = prompt.split('\n').map((line) => line.trim()).filter((line) => line.startsWith('node '));
+    assert.match(commands[0], /^node scripts\/agent-link\.js /, 'registering is the first thing the task is asked to run');
+    assert.ok(prompt.includes('node uri: ' + NODE), 'then it fetches that exact node, by uri');
+    assert.match(prompt, /through your Tana connection/, 'through the Tana connection it already has, choosing its own tool');
+    assert.equal(/platform-cli/.test(prompt), false, 'and not through a local CLI: retrieval is the MCP\'s job');
+    assert.match(prompt, /no Tana connection[\s\S]*say so and stop/, 'an unreachable Tana is reported, not worked around with this stale copy');
+    assert.ok(prompt.includes('Agent context'), 'and is told that block is the work request');
+    assert.equal(prompt.includes('tana:user-profile'), false, 'nothing else about the graph travels with it');
+    // Once the task has registered itself, the same assignment reopens it and says what changed.
+    assert.equal(agent.setCodexTask(NODE, THREAD), THREAD);
+    assert.equal(agent.setCodexTask(NODE, THREAD), THREAD, 'registering twice is the same link, not a second one');
+    const again = agent.handoff(NODE, 'Now also tell me when it ships', '/repo');
+    assert.equal(again.kind, 'reuse', 'a linked node reopens its task');
+    assert.equal(again.url, 'codex://threads/' + THREAD, 'by id, so no duplicate is created');
+    assert.equal(again.queue, 'Now also tell me when it ships', 'and the current request is queued to it');
+    assert.equal(agent.setCodexTask(NODE, 'not-a-thread-id'), null, 'a malformed id is no link');
+    // and one that got into the settings some other way (an older build, a hand edit) is not trusted on the way out
+    cache.setSetting('codexTask', { [NODE]: 'not-a-thread-id' });
+    assert.equal(agent.codexTaskFor(NODE), null, 'a stored id that is not a thread id is no link either');
+    assert.equal(agent.handoff(NODE, 'retry', '/repo').kind, 'create', 'so it opens a new task rather than a broken url');
+    agent.setCodexTask(NODE, THREAD);
+    agent.clearCodexTask(NODE);
+    assert.equal(agent.codexTaskFor(NODE), null, 'a broken link is dropped');
+    assert.equal(agent.handoff(NODE, 'retry', '/repo').kind, 'create', 'and the retry opens a new composer, replacing nothing until it registers');
+    // A link let go of deliberately must not come back: recovery creates, it never resurrects.
+    agent.setCodexTask(NODE, THREAD);
+    agent.clearCodexTask(NODE);
+    assert.equal(agent.codexTasks()[NODE], undefined, 'a cleared link leaves nothing behind in the map');
+    assert.equal(agent.handoff(NODE, 'again', '/repo').threadId, null, 'so the next assignment carries no id from the old task');
+    // Which machine holds the task travels with the id, because a thread's rollout only exists where it was made.
+    // Machines are records the user adds, not names in the source. The local one is the only built-in.
+    assert.deepEqual(agent.hosts().map((h) => h.id), ['local'], 'only this machine is built in');
+    const added = agent.addHost({ title: 'Donut', ssh: 'donut.example.ts.net', bin: '/Users/someone/.local/bin/codex' });
+    assert.match(added.id, /^h[a-z0-9]+$/, 'a new machine gets an opaque id of ours');
+    assert.deepEqual(agent.hosts().map((h) => h.title), ['This Mac', 'Donut'], 'and joins the list the choosers read');
+    assert.equal(agent.hostRecord(added.id).ssh, 'donut.example.ts.net', 'its address is kept in main, never in the renderer');
+    for (const bad of [{ title: '', ssh: 'a', bin: '/x' }, { title: 'x', ssh: 'a b; rm -rf /', bin: '/x' }, { title: 'x', ssh: 'a', bin: 'codex' }, { title: 'x', ssh: 'a', bin: '/x; rm -rf /' }]) {
+      assert.throws(() => agent.addHost(bad), 'a record that is not a name, a hostname and one absolute path is refused: ' + JSON.stringify(bad));
+    }
+    // Which machine travels with the id, because a thread's rollout only exists where it was made.
+    agent.setCodexTask(NODE, THREAD, added.id);
+    assert.deepEqual(agent.taskLink(NODE), { host: added.id, threadId: THREAD }, 'the host is stored beside the id');
+    // Forgetting a machine leaves its tasks alone: the link keeps pointing at a host nobody knows, which is what
+    // makes it read as unavailable rather than being run against this one.
+    agent.removeHost(added.id);
+    assert.equal(agent.hostRecord(added.id), null, 'a removed machine is unknown');
+    assert.equal(agent.taskLink(NODE).host, added.id, 'but its tasks still say where they are, never "local"');
+    assert.equal(agent.hostId(added.id), null, 'and nothing will run against it');
+    // A mapping written before hosts existed is a task on this machine: that is where it was created.
+    cache.setSetting('codexTask', { [NODE]: THREAD });
+    assert.deepEqual(agent.taskLink(NODE), { host: 'local', threadId: THREAD }, 'an old id-only mapping still works, as a laptop task');
+    assert.equal(agent.codexTaskFor(NODE), THREAD, 'and still answers with its id');
+    cache.setSetting('codexTask', { [NODE]: { host: 'local', threadId: 'not-a-thread' } });
+    assert.equal(agent.taskLink(NODE), null, 'a malformed id is no link, whatever host it claims');
+    console.log('ok  Codex task link: self-registration prompt, reuse by id, stale recovery');
+  }
+
+  // What the badge is allowed to say: the linked task's own status, one read for every linked node.
+  {
+    const agent = require('../main/agent');
+    const thread = (id, status, flags) => ({ id, status: flags ? { type: status, activeFlags: flags } : { type: status } });
+    const state = (status, flags, turn, live) => agent.agentState(status === null ? null : thread('t', status, flags), turn, live);
+    assert.equal(state('active'), 'working', 'a running task is working');
+    assert.equal(state('active', ['waitingOnApproval']), 'waiting', 'one waiting on approval is paused, not failed');
+    assert.equal(state('active', ['waitingOnUserInput']), 'waiting', 'and so is one waiting on the user');
+    // Both boundaries, from the live cases. The turns are the authority: the loaded flag proves nothing either way,
+    // and asking the thread directly is impossible while the app holds it ("already has an active writer").
+    assert.equal(state('idle', null, 'completed'), 'done', 'a task whose turn completed is finished');
+    assert.equal(state('notLoaded', null, 'completed'), 'done', 'and being unloaded does not keep it spinning');
+    assert.equal(state('notLoaded', null, 'inProgress'), 'working', 'a turn still running is still working, loaded or not');
+    assert.equal(state('notLoaded', null, null), 'pending', 'and a task that exists but has never run is pending, never finished');
+    assert.equal(state('idle', null, 'inProgress'), 'working', 'a quiet thread with a turn still running is working');
+    assert.equal(state('idle', null, 'failed'), 'broken', 'a failed turn needs attention');
+    // An interrupted turn is a run that was cut, not a task that broke: the launcher starts the bootstrap turn and
+    // Codex takes the thread over, which records exactly this shape while the work carries on.
+    assert.equal(state('notLoaded', null, 'interrupted'), 'working', 'an interrupted turn is a handover, not a failure');
+    assert.equal(state('idle', null, null), 'pending', 'a task that has never run is pending, not finished');
+    assert.equal(state('notLoaded', null, 'completed', { type: 'idle' }), 'done', 'not being loaded says nothing about the work, but a live idle answer does');
+    assert.equal(state('systemError'), 'broken', 'a system error needs attention');
+    assert.equal(state(null), 'broken', 'and an id the app cannot account for is a stale link, which is recoverable');
+    // One thread/list for all of them, and the latest turn only for the quiet ones.
+    const asked = [];
+    const rpc = async (method, params) => {
+      asked.push(method + (params.threadId ? ' ' + params.threadId : ''));
+      if (method === 'thread/list') return { data: [thread('t-run', 'active'), thread('t-quiet', 'idle'), thread('t-err', 'systemError')] };
+      assert.equal(params.limit, 1, 'the latest turn is one turn, not a page of them');
+      return { data: [{ status: params.threadId === 't-quiet' ? 'completed' : 'failed' }] };
+    };
+    const links = { n1: 't-run', n2: 't-quiet', n3: 't-err', n4: 't-gone' };
+    assert.deepEqual(await agent.agentStatuses(links, rpc), { n1: 'working', n2: 'done', n3: 'broken', n4: 'broken' },
+      'every linked node is answered from one read');
+    assert.deepEqual(asked, ['thread/list', 'thread/turns/list t-quiet'],
+      'the turn call is made only where the thread is quiet: a running, failed or missing one already knows its state');
+    assert.deepEqual(await agent.agentStatuses({}, async () => assert.fail('nothing linked, nothing asked')), {},
+      'and with no linked nodes there is no read at all');
+    // A reader that cannot answer — no app-server, a timeout — is red for everything, never a quiet green.
+    const dead = async () => { throw new Error('timed out'); };
+    assert.deepEqual(await agent.agentStatuses(links, dead), { n1: 'broken', n2: 'broken', n3: 'broken', n4: 'broken' },
+      'an unreachable app-server needs attention rather than claiming anything finished');
+    // A thread whose turns cannot be read is pending: it is there, but nothing says the work is done.
+    const halfDead = async (method) => { if (method === 'thread/list') return { data: [thread('t-quiet', 'idle')] }; throw new Error('no turns'); };
+    assert.deepEqual(await agent.agentStatuses({ n2: 't-quiet' }, halfDead), { n2: 'pending' }, 'an unreadable turn is not a completed one');
+    console.log('ok  Agent badge state comes from the task: one read, quiet threads ask for their latest turn');
   }
 
   // The week node is a plain "Week <n> (<year>)" document beside the day nodes: ISO-8601 week numbers, created once
@@ -967,6 +1522,10 @@ async function main() {
     assert.equal(backend.weekTitle(new Date(2026, 11, 31)), 'Week 53 (2026)', 'a December day belongs to the year holding its Thursday');
     assert.equal(backend.weekTitle(new Date(2027, 0, 1)), 'Week 53 (2026)', 'and so a new year can still open in the old one');
     assert.equal(backend.weekTitle(new Date(2027, 8, 14)), 'Week 37 (2027)', 'and the year in the title keeps next year apart from this one');
+    // The day node's title: today, or N days on ("Add to Tomorrow" asks for 1), as a local YYYY-MM-DD.
+    assert.match(backend.today(), /^\d{4}-\d{2}-\d{2}$/, 'the day node title is a local date');
+    assert.equal(backend.today(), backend.today(0), 'no argument is the same as no offset');
+    assert.equal(Date.parse(backend.today(1)) - Date.parse(backend.today()), 864e5, 'and an offset of one is the next day');
 
     const first = await backend.weekNode(new Date(2026, 8, 14));
     assert.equal(titleOf(docs.get(first.id)), 'Week 38 (2026)', 'the missing week node is created');
@@ -990,12 +1549,20 @@ async function main() {
     const eventId = 'tana:event:' + ulid(), writeUpId = 'tana:text:' + ulid();
     const opened = new Document(openId); opened.transact((l) => initDocument(l, 'Opened from a pin', ME));
     const documents = new Map([[openId, opened]]);
-    const unsubscribed = [], queries = [];
+    const unsubscribed = [], subscribedIds = [], queries = [];
     let tasks = [{ id: taskId, title: 'Task', state: { type: 'open' }, updateTime: '2026-09-13T10:00:00Z' }];
+    // The shape of the reported bug: a task you created and handed to somebody else. No view lists it — Inbox and
+    // Library are both about your own work — so before the watch query nothing ever subscribed it, and the other
+    // person completing it reached onChange never and announced nothing.
+    const delegatedId = 'tana:text:' + ulid(), OTHER_USER = 'tana:user-profile:01examplek0000000000000000';
+    const delegated = new Document(delegatedId); delegated.transact((l) => initDocument(l, 'Talk to Peter', ME, { kind: 'task' }));
+    documents.set(delegatedId, delegated);
+    let watchedTasks = [{ id: delegatedId, title: 'Talk to Peter', state: { type: 'open' }, assignedTo: [OTHER_USER], createdBy: ME }];
     let writeUp = [], ownerQueries = 0;
     const listNodes = async (p) => {
       if (p.ownerIds) { ownerQueries++; return { nodes: p.ownerIds[0] === eventId ? writeUp : [] }; }
       if (p.nodeIds) return { nodes: p.nodeIds.map((id) => (id === eventId ? { id, calendarEvent: { tagline: 'Notes' } } : { id, title: id === spaceId ? 'Deal' : 'Node', ...(id === spaceId ? { appearance: { hue: 200 } } : {}) })) };
+      if (p.createdBy) return { nodes: watchedTasks }; // the watch query, which asks by maker rather than by view
       const [kind] = p.nodeTypes || [];
       if (kind === 'user-profile') return { nodes: [] };
       if (kind === 'event' || kind === 'type') return { nodes: [] };
@@ -1005,7 +1572,7 @@ async function main() {
     // This block is about subscriptions and caching around the refresh loop, not about one view's semantics, so it
     // names the view it refreshes: the fixture's task is In Progress, which the Inbox preset would filter out.
     backend.testRuntime({ me: { userUri: ME }, activeView: 'library', win: { isDestroyed: () => false, webContents: { send: () => {} } }, client: {
-      sync: { subscribe: async (id) => documents.get(id), getDocument: (id) => documents.get(id), unsubscribe: async (id) => { unsubscribed.push(id); } },
+      sync: { subscribe: async (id) => { subscribedIds.push(id); return documents.get(id); }, getDocument: (id) => documents.get(id), unsubscribe: async (id) => { unsubscribed.push(id); } },
       graph: { listNodes, getOwnerChain: async () => ({ entries: [{ uri: spaceId }] }) },
     } });
 
@@ -1013,6 +1580,7 @@ async function main() {
     assert.equal(await backend.handlers.get('doc:create')(null, 'Title', { kind: 'constructor' }).then(() => null, (e) => e.message), 'Unsupported creation kind');
     await backend.refresh();
     assert.ok(cache.get(taskId), 'the refresh caches the listed task');
+    assert.ok(subscribedIds.includes(delegatedId), 'a task you created and gave away is subscribed although no view lists it: without this the watch rule can never fire');
     assert.deepEqual(unsubscribed, [], 'the refresh leaves a document it never listed subscribed, with its live updates and undo history');
     const sections = await backend.handlers.get('outline:roots')();
     assert.equal(sections.map((s) => s.id).join(','), backend.VIEWS.map((s) => s.id).join(','));
@@ -1022,6 +1590,13 @@ async function main() {
     tasks = [];
     await backend.handlers.get('view:list')(null, 'library', { types: ['meetings', 'tasks', 'docs'], states: null, assignee: 'anyone' });
     assert.deepEqual(unsubscribed, [taskId], 'a row that left the view is still unsubscribed');
+    assert.equal(unsubscribed.includes(delegatedId), false, 'but a watched task is exempt from that sweep, whatever view is in front of you');
+    // Assignment is the whole difference: the same task, taken back, is your own work to look at.
+    watchedTasks = [{ ...watchedTasks[0], assignedTo: [ME] }];
+    subscribedIds.length = 0; unsubscribed.length = 0;
+    await backend.refresh();
+    await backend.handlers.get('view:list')(null, 'library', { types: ['meetings', 'tasks', 'docs'], states: null, assignee: 'anyone' });
+    assert.deepEqual(unsubscribed, [delegatedId], 'a task assigned back to you leaves the watch set, and with it the subscription');
     tasks = [{ id: taskId, title: 'Task', state: { type: 'open' }, updateTime: '2026-09-13T10:00:00Z' }];
     // Back to the view's own filter first. The explicit one above asks for kinds this fixture answers empty, and it
     // stays on S.activeFilter, so a refresh would re-ask that same empty query. What this case is about is a refresh
@@ -1283,6 +1858,25 @@ async function main() {
     assert.equal(validViewFilter({ types: ['docs'], states: null, assignee: 'anyone', text: '', participant: null, window: null }), true);
     assert.equal(validViewFilter({ types: ['nope'] }), false);
     assert.equal(validViewFilter({ types: ['tasks'], extra: true }), false);
+    // The completed window: how old a completed task may be and still be listed. Whether completed tasks are asked
+    // for at all is the Status filter (stateTypes), so this never has an "off" — and the graph has no field to ask
+    // it for, so it is applied to the answer. The clock is the task's own state.enteredAt, not update time.
+    const DAY = 864e5, now = Date.UTC(2026, 8, 18, 12), closedAt = (ms) => ({ id: 'tana:text:x', state: { type: 'closed', enteredAt: new Date(ms).toISOString() } });
+    assert.deepEqual([7, 30, 'all'].map((w) => completedInWindow(closedAt(now - 10 * DAY), w, now)), [false, true, true],
+      'a task completed ten days ago is out of 7 days, inside 30, and always inside All');
+    assert.equal(completedInWindow(closedAt(now - 7 * DAY), 7, now), true, 'the boundary is inclusive and exact: seven times twenty-four hours back still counts');
+    assert.equal(completedInWindow(closedAt(now - 7 * DAY - 1), 7, now), false, 'and one millisecond older does not, so there is no day-bucket to argue about');
+    assert.equal(completedInWindow(closedAt(now - 10 * DAY), undefined, now), false, 'an unset window is 7 days, the default the pill shows when Completed is first asked for');
+    assert.equal(completedWindow(undefined), 7, 'which is what an unset value reads as everywhere');
+    assert.equal(completedWindow(14), 7, 'and so does a value no pill can produce');
+    for (const type of ['proposed', 'open', 'not_now']) assert.equal(completedInWindow({ state: { type, enteredAt: new Date(now - 400 * DAY).toISOString() } }, 7, now), true,
+      'the window is about completed tasks only: an Inbox, In Progress or Later task is left alone however old its state is');
+    assert.equal(completedInWindow({ id: 'tana:event:x', updateTime: new Date(now - 400 * DAY).toISOString() }, 7, now), true, 'and a node with no task state at all is not a completed task');
+    assert.equal(completedInWindow({ state: { type: 'closed' } }, 7, now), false, 'a completed task with no completion time cannot be shown to be recent, so a window leaves it out');
+    assert.equal(completedInWindow({ state: { type: 'closed' } }, 'all', now), true, 'while All has no clock to fail: it keeps every completed task');
+    assert.deepEqual([7, 30, 'all', 14, '7', true, null].map((w) => validViewFilter({ completedWithin: w })), [true, true, true, false, false, false, false],
+      'only the three the pill offers are a valid filter value');
+    assert.equal(viewParams({ types: ['tasks'], states: ['closed'], completedWithin: 7 }, ME).limit, 1000, 'and the window asks the graph for nothing: there is no request field for it');
     assert.throws(() => viewParams({ types: ['nope'] }, ME), /invalid view filter/);
     // Unticking the last kind must not become an unconstrained query: the graph would answer with images, calls and
     // transcripts, which no view can render and which wedged the app when it tried.
@@ -2000,6 +2594,73 @@ async function main() {
     assert.equal(outline.readOutline(host).length, 1);
     console.log('ok  native embed identity, task resolution, unavailable fallback and non-destructive outline operations');
   }
+
+  // Who holds the thread, and when it is let go. The child that starts a turn is that thread's writer for as long as
+  // it lives, and Codex refuses to open a thread another writer holds — the "This is open in another app" card. The
+  // child used to be closed on a fixed 15-minute timer, so a task that finished in one minute stayed locked for
+  // fourteen. Driven through a stand-in for node:child_process: nothing is spawned, and what is asserted is the real
+  // spawn arguments and the real teardown.
+  {
+    const nodePath = require('node:path'), os = require('node:os');
+    const userData = fs.mkdtempSync(nodePath.join(os.tmpdir(), 'tana-agent-'));
+    const NODES = ['tana:text:01examplea0000000000000000', 'tana:text:01exampleb0000000000000000', 'tana:text:01examplec0000000000000000'];
+    const THREADS = ['01a0b3a3-c000-70b0-896e-08e86986ca0e', '01a0b3bc-6b77-74a3-ae33-dcc82967896f', '01a0b3c1-1111-7000-8000-000000000000'];
+    const spawned = [];
+    // Answers every request the moment it is written, the way a real app-server does, and hands back the thread id
+    // this connection was given. Notifications are pushed in by the check itself.
+    const childProcess = { spawn(cmd, args) {
+      const child = { cmd, args, killed: 0, sent: [], onData: null, kill() { child.killed++; }, on() {},
+        stdout: { on: (ev, fn) => { if (ev === 'data') child.onData = fn; } },
+        stdin: { write(line) {
+          const m = JSON.parse(line); child.sent.push(m);
+          const result = m.method === 'thread/start' ? { thread: { id: THREADS[spawned.indexOf(child)] } } : {};
+          Promise.resolve().then(() => child.onData(JSON.stringify({ id: m.id, result }) + '\n'));
+        } } };
+      spawned.push(child); return child; } };
+    const backend = mainHelpers(childProcess), cache = require('../db'); cache.open(':memory:');
+    const agent = backend.agent;
+    const tick = async () => { for (let i = 0; i < 10; i++) await Promise.resolve(); };
+    const notify = async (child, method, params) => { child.onData(JSON.stringify({ jsonrpc: '2.0', method, params }) + '\n'); await tick(); };
+    const methods = (child) => child.sent.map((m) => m.method);
+
+    const local = await agent.createTask({ nodeUri: NODES[0], prompt: 'Draft it', userData, host: 'local' });
+    assert.equal(local, THREADS[0], 'the task is created and its id comes back');
+    assert.equal(spawned[0].cmd, 'codex', 'on this machine the app-server is run directly');
+    assert.equal([...spawned[0].args].join(' '), 'app-server', 'with no shell line and nothing else on the command');
+    assert.equal(spawned[0].killed, 0, 'and the child is left alive while the turn runs: the work is not cut off to free a lock');
+    // Someone else's turn ending says nothing about this one. Without the thread id being compared, one finished
+    // task would release every writer the app holds.
+    await notify(spawned[0], 'turn/completed', { threadId: THREADS[1], turn: { status: 'completed' } });
+    assert.equal(spawned[0].killed, 0, 'another thread finishing does not release this one');
+    assert.equal(methods(spawned[0]).includes('thread/unsubscribe'), false, 'and hands nothing back on its behalf');
+
+    await notify(spawned[0], 'turn/completed', { threadId: THREADS[0], turn: { status: 'completed' } });
+    assert.equal(JSON.stringify(spawned[0].sent.filter((m) => m.method === 'thread/unsubscribe').map((m) => m.params)),
+      JSON.stringify([{ threadId: THREADS[0] }]), 'the finished thread is handed back through the protocol, by id');
+    assert.equal(spawned[0].killed, 1, 'and only then is the writer closed, so Codex can open the task normally');
+
+    // The same lifecycle over SSH, with the address and the binary as separate arguments — never joined into a line
+    // a shell could read — and a release that closes this connection alone.
+    const donut = agent.addHost({ title: 'Donut', ssh: 'donut.example.ts.net', bin: '/Users/someone/.local/bin/codex' });
+    const remote = await agent.createTask({ nodeUri: NODES[1], prompt: 'Draft it there', userData, host: donut.id });
+    assert.equal(remote, THREADS[1], 'a task on another machine is created the same way');
+    assert.equal(spawned[1].cmd, 'ssh', 'reached over the user\'s own SSH');
+    assert.equal([...spawned[1].args].join(' '), '-o BatchMode=yes -o ConnectTimeout=8 donut.example.ts.net /Users/someone/.local/bin/codex app-server',
+      'with the host and the absolute binary as arguments of their own');
+    assert.equal(spawned[1].killed, 0, 'and it too runs until its work is done');
+    await notify(spawned[1], 'turn/completed', { threadId: THREADS[1], turn: { status: 'failed' } });
+    assert.equal(spawned[1].killed, 1, 'a turn that failed is still a turn that ended, so the SSH child is closed rather than left running');
+    assert.equal(spawned[0].killed, 1, 'and releasing one machine leaves the other exactly as it was');
+
+    // Quitting cannot wait for a round trip, so the children this app is still holding are simply closed. Only those:
+    // it is a list of what was spawned here, not a search for processes that look like ours.
+    await agent.createTask({ nodeUri: NODES[2], prompt: 'Still running', userData, host: 'local' });
+    assert.equal(spawned[2].killed, 0, 'a task still running is still owned');
+    agent.stopOwnedTasks();
+    assert.equal(spawned[2].killed, 1, 'and is closed when the app goes away, so no writer outlives it');
+    fs.rmSync(userData, { recursive: true, force: true });
+    console.log('ok  agent writer lifecycle: released on the turn that ends it, scoped by thread and by machine, closed on quit');
+  }
   // A chat has no outline: its conversation is data.messages, rendered as read-only rows (docs/CHATS.md).
   {
     const backend = mainHelpers();
@@ -2044,6 +2705,49 @@ async function main() {
     assert.deepEqual(Array.from(graphed.at(-1).nodeIds).sort(), [fileUri, proposedUri, subUri].sort());
     assert.deepEqual(doc.toJSON().content, {}, 'reading a chat never writes an outline into it');
     console.log('ok  chat rows: hidden/context skipped, list order, read-only rows, mentions, attachments, proposals and subagent links');
+  }
+  // Attendance (docs/MEETINGS.md): an entry in the `sessions` root of a call document is the only proof that somebody
+  // is in a meeting now; the event node only ever proves they were invited.
+  {
+    const callsSdk = require('../sdk/calls');
+    const EVENT = 'tana:event:01examplec0000000000000000', CALL = 'tana:call:01examplec0000000000000000';
+    const OTHER = 'tana:user-profile:01examplej0000000000000000';
+    const callDoc = (sessions, log) => {
+      const doc = new Document(CALL);
+      doc.transact((l) => {
+        const data = l.getMap('data');
+        data.set('type', 'call'); data.set('ownerUri', EVENT); data.set('sessionLog', log);
+        data.set('activeSessions', []); data.set('callParticipantState', {});
+        const map = l.getMap('sessions');
+        for (const [key, value] of Object.entries(sessions)) map.set(key, value);
+      });
+      return doc;
+    };
+    const joins = [{ userUri: ME, timestamp: 1000, event: 'join' }, { userUri: OTHER, timestamp: 1500, event: 'join' }];
+    const livedoc = callDoc({ [ME + ':86c9068d']: { userUri: ME, joinedAt: 2000 }, [ME + ':0f1a2b3c']: { userUri: ME, joinedAt: 1000 },
+      [OTHER + ':11112222']: { userUri: OTHER, joinedAt: 1500 } }, joins);
+    const live = callsSdk.callSessions(livedoc);
+    assert.equal(live.eventUri, EVENT);
+    assert.deepEqual(live.sessions.map((s) => s.joinedAt), [1000, 1500, 2000], 'sessions come back oldest join first');
+    assert.deepEqual(live.userUris.sort(), [ME, OTHER].sort());
+    assert.equal(callsSdk.inCall(livedoc, ME), true);
+    assert.equal(callsSdk.joinedAt(livedoc, ME), 1000, 'two devices of one user report the earliest join');
+    const ended = callDoc({}, [...joins, { userUri: ME, timestamp: 3000, event: 'leave' }, { userUri: OTHER, timestamp: 3200, event: 'leave' }]);
+    assert.equal(callsSdk.inCall(ended, ME), false, 'a finished call empties sessions however long its log is');
+    assert.equal(callsSdk.joinedAt(ended, ME), null);
+    assert.deepEqual(callsSdk.attended(ended).sort(), [ME, OTHER].sort(), 'the log still proves who was there');
+    const asked = [];
+    const client = {
+      graph: { listNodes: async (p) => { asked.push(p);
+        return { nodes: p.nodeIds ? [{ id: EVENT, title: 'Bingo' }] : [{ id: CALL }, { id: 'tana:call:01exampled0000000000000000' }] }; } },
+      sync: { subscribe: async (id) => (id === CALL ? livedoc : ended) },
+    };
+    const mine = await callsSdk.currentCalls(client, ME, { limit: 5 });
+    assert.deepEqual(mine.map((c) => [c.title, c.callUri, c.eventUri, c.joinedAt, c.otherUserUris]), [['Bingo', CALL, EVENT, 1000, [OTHER]]],
+      'only the call I am in is reported, with its meeting title');
+    assert.deepEqual(asked[0], { nodeTypes: ['call'], limit: 5, sortOptions: [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }] });
+    assert.equal(asked.length, 2, 'one query for the candidate calls and one for every title');
+    console.log('ok  call attendance: live sessions, a finished call, multi-device joins and the current-call query');
   }
   // 4. Transport: headers and the 401 -> refresh -> retry-once rule, with a fake fetch
   const calls = [];

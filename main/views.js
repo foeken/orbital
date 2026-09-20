@@ -3,10 +3,10 @@ const db = require('../db');
 const path = require('node:path');
 const { peerIdentity } = require('../tana-session');
 const { createTanaClient } = require('../sdk');
-const { parseQuery, searchParams, needsTypes, viewParams, filterToSearchQuery, validViewFilter, viewTypes, VIEW_PRESETS, hideRules, isHidden } = require('../sdk/query');
+const { parseQuery, searchParams, needsTypes, viewParams, completedInWindow, filterToSearchQuery, validViewFilter, viewTypes, VIEW_PRESETS, hideRules, isHidden } = require('../sdk/query');
 const { NOT_CONNECTED, S, deletedNodes, docStates, errText, idKind, isMcp, memberTitle, now, truncatedViews, redoStack, send, setStatus, subscribed, undoStack, visibleGraphNodes } = require('./state');
 const { graphRow, rememberNodeHue, resolveTypes, toNode, typesByTitle } = require('./rows');
-const { createDocument, inHistory, notifyWatchedIds, onChange, subscribe } = require('./documents');
+const { codexIds, createDocument, inHistory, notifyWatchedIds, onChange, subscribe } = require('./documents');
 
 
 // Persisted view filters are merged over their preset; an invalid saved value cannot strand a view across restarts.
@@ -35,6 +35,8 @@ async function viewRows(id, filter) {
   const docsWithoutTasks = Array.isArray(f.types) && f.types.includes('docs') && !f.types.includes('tasks');
   const rules = hiddenRules();
   const nodes = result.nodes.filter((n) => !(docsWithoutTasks && idKind(n.id) === 'text' && n.state && n.state.type))
+    // the completed window (sdk/query.js): the graph has no field to ask it for, so it is applied to the answer
+    .filter((n) => completedInWindow(n, f.completedWithin))
     .filter((n) => !isHidden(memberTitle(n), rules));
   nodes.forEach(rememberNodeHue);
   await resolveTypes(nodes.map((n) => n.entityType));
@@ -43,7 +45,9 @@ async function viewRows(id, filter) {
   db.replaceSection(id, rows);
   if (id === S.activeView && filter === S.activeFilter) {
     const ids = new Set(nodes.map((n) => n.id));
-    const watched = notifyWatchedIds(); // a node you asked to be told about stays subscribed wherever you are
+    // a node you asked to be told about — or the rule watches, or that was handed to the Codex agent — stays
+    // subscribed wherever you are
+    const watched = new Set([...notifyWatchedIds(), ...ruleWatched, ...codexIds()]);
     for (const nodeId of ids) if (!subscribed.has(nodeId)) { subscribed.add(nodeId); subscribe(nodeId); }
     // Leaving a filtered view must not discard a document whose local undo step still points at its Loro handle.
     for (const nodeId of subscribed) if (!ids.has(nodeId) && !watched.has(nodeId) && !deletedNodes.has(nodeId) && !inHistory(nodeId)) { subscribed.delete(nodeId); docStates.delete(nodeId); S.client.sync.unsubscribe(nodeId).catch(() => {}); }
@@ -126,7 +130,7 @@ async function start() {
   setStatus({ authenticated: true });
   await S.client.sync.connect();
   // Watched nodes are live from boot, listed or not: a deleted or unreachable one is simply not watched any more.
-  for (const id of notifyWatchedIds()) S.client.sync.subscribe(id).catch(() => {});
+  for (const id of new Set([...notifyWatchedIds(), ...codexIds()])) S.client.sync.subscribe(id).catch(() => {});
   await refresh();
 }
 
@@ -145,9 +149,33 @@ function refresh() {
   return S.refreshing ||= doRefresh().finally(() => { S.refreshing = null; });
 }
 S.refresh = refresh;
+// The tasks the watch rule follows: made by you and not assigned to you (main/documents.js notifyDefault). They are
+// precisely what no view lists — Inbox and Library are about your own work — so nothing subscribed them and their
+// changes never reached onChange: somebody else completing a task you gave them announced nothing at all. One query
+// beside the view's own, on the same loop, and the ids it finds are exempt from the unsubscribe sweep above.
+// Closed tasks with a previously seen non-closed state stay in the answer: that is how a completion made while the
+// app was away reaches the catch-up comparison in documents.js. Old completed work has no stored transition and is
+// dropped before subscribing, so it cannot turn this into a history crawl.
+// ponytail: capped at 200 recently indexed tasks you created; page it if anyone ever passes that.
+const ruleWatched = new Set();
+async function refreshWatched() {
+  const me = S.me && S.me.userUri;
+  if (!me) return;
+  const seen = db.setting('notifySeen') || {};
+  const { nodes } = await S.client.graph.listNodes({ nodeTypes: ['text'], createdBy: [me], stateTypes: ['proposed', 'open', 'closed', 'not_now'], limit: 200 });
+  ruleWatched.clear();
+  for (const n of nodes) {
+    if ((n.assignedTo || []).includes(me)) continue; // yours to look at, so the rule leaves it alone
+    if (n.state?.type === 'closed' && (!Array.isArray(seen[n.id]) || seen[n.id][1] === 'closed')) continue;
+    ruleWatched.add(n.id);
+    if (!subscribed.has(n.id)) { subscribed.add(n.id); subscribe(n.id); }
+  }
+}
 async function doRefresh() {
   setStatus({ syncing: true, error: null });
   try {
+    // before the view, so the sweep in viewRows sees the set this refresh found rather than the last one's
+    try { await refreshWatched(); } catch { /* the watch set keeps what it had, like the badge keeps its number */ }
     await viewRows(S.activeView, S.activeFilter);
     send('outline:changed', null);
     setStatus({ syncing: false, lastSync: now() });

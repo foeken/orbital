@@ -13,7 +13,10 @@ function loadNotify(docId) {
   }, () => { notifyLoading.delete(docId); });
 }
 function loadAccess(docId) {
-  if (!tana.accessOptions || accessById.has(docId) || accessLoading.has(docId)) return;
+  // The readiness rule loadTaskMeta already uses: a local draft id and a client that is not up yet both come back as
+  // "not connected to Tana" (main/documents.js: document()), which is a startup state rather than something to put in
+  // front of the user. Every render asks again, so neither case needs a retry of its own, and a real refusal still shows.
+  if (!connected || !tana.accessOptions || !isRealId(docId) || accessById.has(docId) || accessLoading.has(docId)) return;
   accessLoading.add(docId);
   tana.accessOptions(docId).then((access) => { accessLoading.delete(docId); accessById.set(docId, access); if (!palette.hidden && palDoc?.id === docId) renderPalette(); }, (e) => { accessLoading.delete(docId); showError(e); });
 }

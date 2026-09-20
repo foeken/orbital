@@ -11,12 +11,22 @@ contextBridge.exposeInMainWorld('api', {
   path: (docId) => ipcRenderer.invoke('doc:path', docId),
   related: (docId) => ipcRenderer.invoke('doc:related', docId), // meeting context: {summary,tagline,call?:{url,label},pinned[],outcomes[],notes[]}
   summaryUri: (docId) => ipcRenderer.invoke('doc:summaryUri', docId), // a meeting's write-up document, or null
-  todayNode: () => ipcRenderer.invoke('doc:todayNode'), // the date-titled node pinned to today, created if missing
+  todayNode: (offset) => ipcRenderer.invoke('doc:todayNode', offset), // the date-titled node pinned to that day (0 today, 1 tomorrow), created if missing
   weekNode: () => ipcRenderer.invoke('doc:weekNode'), // the "Week 38 (2026)" document (ISO week), created if missing; not linked to the day nodes
   openExternal: (url) => ipcRenderer.invoke('shell:open', url), // http(s) link from node text, in the default browser
   nodeLink: (docId) => ipcRenderer.invoke('doc:link', docId), // the home.tana.inc url for a node
   notifyState: (docId) => ipcRenderer.invoke('notify:state', docId), // { on, default, explicit }: is this node watched for changes
   setNotify: (docId, on) => ipcRenderer.invoke('notify:set', docId, on), // true/false to choose; null forgets the choice
+  codexIds: () => ipcRenderer.invoke('codex:list'), // nodes handed to the local Codex agent; app-local, not a Tana assignee
+  setCodex: (docId, on, prompt, model, host) => ipcRenderer.invoke('codex:set', docId, on, prompt, model, host), // prompt, model and the machine it runs on are per assignment
+  codexModels: (host) => ipcRenderer.invoke('codex:models', host), // the models that host offers
+  codexHosts: () => ipcRenderer.invoke('codex:hosts'), // [{ id, title }] — names only
+  addCodexHost: (title, ssh, bin) => ipcRenderer.invoke('codex:hostAdd', title, ssh, bin), // validated in main; nothing is run here
+  removeCodexHost: (id) => ipcRenderer.invoke('codex:hostRemove', id), // the machine is forgotten; its tasks are not touched
+  codexTaskHost: (docId) => ipcRenderer.invoke('codex:taskHost', docId), // which machine this node's task runs on
+  codexTaskHosts: () => ipcRenderer.invoke('codex:taskHosts'), // nodeId -> host, for every linked node
+  openCodexTask: (docId) => ipcRenderer.invoke('codex:open', docId), // open the Codex task this node is linked to
+  codexStatus: () => ipcRenderer.invoke('codex:status'), // docId -> pending|working|waiting|done|broken for every linked node
   setField: (docId, key, text) => ipcRenderer.invoke('doc:setField', docId, key, text), // typed field value (plain text)
   viewList: (id, filter) => ipcRenderer.invoke('view:list', id, filter), // { nodes, truncated }
   viewFilter: (id) => ipcRenderer.invoke('view:filter', id),
@@ -66,10 +76,19 @@ contextBridge.exposeInMainWorld('api', {
   // api.related(id).pinHub, which is set only when this user may write that hub. Resolves to the hub's pinned uris.
   pinTo: (hubId, docId) => ipcRenderer.invoke('pins:pinTo', hubId, docId),
   unpinFrom: (hubId, docId) => ipcRenderer.invoke('pins:unpinFrom', hubId, docId),
+  // The meeting this user has actually *joined* right now (sdk/calls through main/quickadd), or null. Read fresh:
+  // "the meeting I am in" is only true for minutes at a time, so nothing caches it across an open.
+  currentMeeting: () => ipcRenderer.invoke('meeting:current'), // { id, title, joinedAt, callUri } | null
   sensitiveIds: () => ipcRenderer.invoke('sensitive:list'),
   setSensitive: (docId, on) => ipcRenderer.invoke('sensitive:set', docId, on),
   image: (uri) => ipcRenderer.invoke('image', uri), // tana:image: uri -> data URL (main fetches with the session token and caches)
   members: () => ipcRenderer.invoke('members'),
+  // Quick add (docs/QUICK-ADD.md), used by quick-add.html only: what the panel shows when it opens, the one write it
+  // makes, and the two ends of its lifecycle.
+  quickContext: () => ipcRenderer.invoke('quick:context'), // { meeting:{id,title,joinedAt}|null, meetingError?, members[], membersError?, me }
+  quickCreate: (input) => ipcRenderer.invoke('quick:create', input), // { title, assigneeUri?, meetingId? } -> { node, assigned, linked, assignedError?, linkError? }
+  quickClose: () => ipcRenderer.invoke('quick:close'),
+  onQuickOpen: (fn) => ipcRenderer.on('quick:open', () => fn()), // the shortcut showed the panel again: re-read the meeting
   // Hidden titles: patterns that keep matching nodes out of every list and search (a node opened directly still opens).
   // Case-insensitive; a pattern matches the whole title, or its start when it ends with '*' ("Block*", "Lunch").
   // All four resolve to the stored list (string[]) after the views have refreshed.

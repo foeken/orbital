@@ -54,7 +54,8 @@ const isMcp = (n) => (n.invocationContext && n.invocationContext.intent === 'mcp
 function send(channel, ...payload) {
   if (S.win && !S.win.isDestroyed()) S.win.webContents.send(channel, ...payload);
 }
-const today = () => new Date().toLocaleDateString('sv-SE'); // local YYYY-MM-DD
+// local YYYY-MM-DD, optionally N days from now (1 = tomorrow)
+const today = (offset = 0) => { const d = new Date(); d.setDate(d.getDate() + offset); return d.toLocaleDateString('sv-SE'); };
 function setStatus(patch) {
   Object.assign(S.status, patch);
   send('sync:status', S.status);

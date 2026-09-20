@@ -52,11 +52,11 @@ async function pinState(id) {
   if (!S.client) throw new Error(NOT_CONNECTED);
   return { sidebar: (await pins.listSidebar(S.client.sync, S.me.userUri)).includes(id), dates: await pins.dates(S.client.sync, S.me.userUri, id) };
 }
-async function setPin(id, target, on) {
+async function setPin(id, target, on, date = today()) {
   if (!S.client) throw new Error(NOT_CONNECTED);
   const sync = S.client.sync, user = S.me.userUri;
   if (pinTarget(target) === 'sidebar') await (on ? pins.pinSidebar : pins.unpinSidebar)(sync, user, id);
-  else await (on ? pins.pinDate : pins.unpinDate)(sync, user, id, today());
+  else await (on ? pins.pinDate : pins.unpinDate)(sync, user, id, date);
 }
 // Items pinned *on* a meeting or a space: the hub document's own pinnedItems list (docs/PINNING.md section 4), which
 // is what the graph reports as EDGE_TYPE_HAS_PIN. Not the sidebar/date pins above, which are private per-user state.
@@ -72,18 +72,19 @@ async function nodePin(hubId, uri, on) {
   send('outline:changed', hubId);
   return pins.items(doc).map((p) => p.uri);
 }
-async function todayNode() {
+// offset 0 is today, 1 tomorrow: the document titled with that date, pinned to it.
+async function todayNode(offset = 0) {
   if (!S.client) throw new Error(NOT_CONNECTED);
-  const date = today();
+  const date = today(offset);
   const { nodes = [] } = await S.client.graph.listNodes({ textQuery: date, nodeTypes: ['text'], limit: 20 }).catch(() => ({ nodes: [] }));
   const existing = nodes.find((n) => (n.title || '').trim() === date);
   if (existing) {
     const pinnedDates = await pins.dates(S.client.sync, S.me.userUri, existing.id).catch(() => []);
-    if (!pinnedDates.includes(date)) await setPin(existing.id, 'today', true);
+    if (!pinnedDates.includes(date)) await setPin(existing.id, 'today', true, date);
     return existing.id;
   }
   const created = await createDocument(date, { kind: 'doc' });
-  await setPin(created.id, 'today', true);
+  await setPin(created.id, 'today', true, date);
   scheduleRefresh(1000);
   return created.id;
 }

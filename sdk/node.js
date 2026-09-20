@@ -220,6 +220,10 @@ function setSearchQuery(document, query) {
 // `display` is the list of facts each row shows, stored as one comma-joined string because a Loro map holds scalars,
 // not arrays. An empty list is a real choice — a row showing nothing of itself — so it is stored as an empty string
 // rather than deleted, which is what tells it apart from a search that has never been given a display at all.
+// `completedWithin` (7, 30 or 'all') is here rather than in the query for the same reason the rest is: Tana's stored
+// query has no field for how old a completed task may be, and inventing one would put a key no other client
+// understands inside their vocabulary. It does decide which rows are shown, so main applies it to what the query
+// answers (sdk/query.js completedInWindow).
 function writeSearchView(loro, view = {}) {
   const v = loro.getMap('view');
   for (const key of ['sortBy', 'groupBy']) {
@@ -228,6 +232,8 @@ function writeSearchView(loro, view = {}) {
   }
   if (Array.isArray(view.display)) v.set('display', view.display.join(','));
   else if (v.get('display') !== undefined) v.delete('display');
+  if (view.completedWithin === 7 || view.completedWithin === 30 || view.completedWithin === 'all') v.set('completedWithin', view.completedWithin);
+  else if (v.get('completedWithin') !== undefined) v.delete('completedWithin');
 }
 function setSearchView(document, view) {
   if ((document.data.get('type')) !== 'search') throw new Error('not a saved search');

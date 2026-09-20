@@ -1,0 +1,62 @@
+/* The quick-add panel (docs/QUICK-ADD.md): a frameless window summoned by the global shortcut. It links styles.css
+   for the app font, colours and the [data-theme="dark"] contract, and adds only its own compact layout. */
+body.quick { background: transparent; display: block; }
+.qpanel {
+  height: 100%; padding: 14px 16px 10px; border-radius: 12px; background: #fff; color: #1a1a1a;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .28); display: flex; flex-direction: column; gap: 8px;
+  overflow: hidden; -webkit-app-region: drag;
+}
+.qpanel input, .qpanel button, .qlist div { -webkit-app-region: no-drag; }
+/* The hidden property only hides an element while nothing gives it a display of its own, and the chooser is a flex
+   column — without this it stayed on screen after a pick had already been committed and focus had gone back to the
+   title. The outliner pairs every hidden box with such a rule (.pills[hidden], .palette[hidden]); one rule for the
+   whole panel means the next hidden element here cannot forget it. */
+.qpanel [hidden] { display: none; }
+#qtitle {
+  font: inherit; font-size: 21px; width: 100%; border: 0; outline: none; background: transparent; color: inherit;
+}
+#qtitle::placeholder { color: #b6b9bb; }
+.qrow { display: flex; align-items: center; gap: 10px; }
+.qmeeting { flex: 1; min-width: 0; font-size: 13px; color: #85898c; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qmeeting.live { color: #2e7d4f; }
+.qmeeting.none { color: #9aa0a3; }
+/* The same pill the outliner uses for its own filters, down to the colours: neutral until something is chosen, then
+   the app accent (styles.css .pill). The icon is the app's own member/robot glyph at the 14px the sidebar uses. */
+.qassignee {
+  font-size: 13px; padding: 3px 9px; border: 0; border-radius: 999px; background: #f1f1f1; color: #777; cursor: pointer;
+  display: flex; align-items: center; gap: 5px; font-weight: 600;
+}
+.qassignee:focus { outline: none; box-shadow: 0 0 0 2px #b7d2f5; }
+.qassignee.set { background: #e8f1fb; color: #2b6fcf; }
+.qassignee svg { flex: none; width: 14px; height: 14px; }
+/* the prompt the agent is handed with the task: ↵ is an ordinary newline here, ⌘↵ creates (quick-add.js) */
+.qprompt {
+  font: inherit; font-size: 14px; min-height: 52px; max-height: 96px; padding: 6px 8px; border: 0; border-radius: 6px;
+  background: #f1f1f1; color: inherit; outline: none; resize: none;
+}
+.qprompt:focus { background: #ebebeb; }
+.qerror { font-size: 13px; color: #c0392b; }
+/* The chooser takes what is left of the panel and no more: flex items refuse to shrink below their content unless
+   min-height says otherwise, which is what let a long member list push the form past the bottom of the window.
+   Bounding it here rather than at a fixed pixel height means the list is capped by the popup itself. */
+.qchooser { display: flex; flex-direction: column; gap: 6px; flex: 1; min-height: 0; }
+#qfilter { font: inherit; font-size: 14px; padding: 5px 8px; border: 0; border-radius: 6px; background: #f1f1f1; color: inherit; outline: none; }
+#qfilter:focus { background: #ebebeb; }
+.qlist { flex: 1; min-height: 0; overflow-y: auto; } /* every member stays in the list; the list scrolls instead of growing */
+.qlist div { font-size: 14px; padding: 5px 8px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 7px; }
+.qlist div.on { background: #e8f1fb; } /* the same selection blue as a selected row in the outliner */
+.qlist div.picked::after { content: "✓"; margin-left: auto; color: #2b6fcf; }
+.qlist svg { flex: none; width: 14px; height: 14px; color: #8a8a8a; }
+.qlist .qempty { color: #9aa0a3; cursor: default; }
+.qhint { display: flex; gap: 14px; font-size: 11px; color: #b0b4b7; margin-top: auto; } /* stays at the foot of the card whether or not the chooser is open */
+[data-theme="dark"] .qpanel { background: #232628; color: #c9c9c9; box-shadow: 0 18px 50px rgba(0, 0, 0, .5); }
+[data-theme="dark"] #qtitle::placeholder { color: #6a7073; }
+[data-theme="dark"] .qassignee { background: #2a2d2f; color: #9a9fa1; }
+[data-theme="dark"] .qassignee:focus { box-shadow: 0 0 0 2px #58768a; }
+[data-theme="dark"] .qassignee.set { background: #263842; color: #b9dcf2; }
+[data-theme="dark"] .qprompt, [data-theme="dark"] #qfilter { background: #282b2d; }
+[data-theme="dark"] .qprompt:focus, [data-theme="dark"] #qfilter:focus { background: #303437; }
+[data-theme="dark"] .qlist div.on { background: #2d4149; }
+[data-theme="dark"] .qlist div.picked::after { color: #9cc9e8; }
+[data-theme="dark"] .qmeeting.live { color: #7fc79b; }
+[data-theme="dark"] .qerror { color: #ed8b83; }

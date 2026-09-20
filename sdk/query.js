@@ -83,8 +83,25 @@ function assigneeParams(assignee, me) {
   return { assignedTo: [assignee === 'me' || !assignee ? me : assignee] };
 }
 
-const FILTER_KEYS = new Set(['types', 'states', 'assignee', 'text', 'participant', 'window']);
+const FILTER_KEYS = new Set(['types', 'states', 'assignee', 'text', 'participant', 'window', 'completedWithin']);
 const USER = /^tana:user-profile:[0-9a-z]{26}$/;
+// Completed tasks are the one thing a list drowns in, so a window says how far back they still count: 7 days, 30
+// days, or All. Whether they appear at all is the Status filter's business and only its — this never hides them,
+// it only ages them out, which is why it has no "off" and why its value is kept while Completed is out of Status.
+// The clock is the task's own `state.enteredAt`: when it entered the state it is in, which for a closed task is
+// when it was completed. Not update time, which moves for an edit or a re-sync long after the work was done. The
+// graph's index carries it on every node it lists (Node.TaskState.entered_at), so this costs no extra read — and
+// the request has no field for it, so the window is applied to what the query answers rather than asked for.
+// Rolling and absolute: exactly N×24h back from now, so "does today count" has no answer to get wrong at a
+// boundary. A closed task whose enteredAt is missing or unreadable cannot be shown to be recent, so a window
+// leaves it out; All has no clock and keeps every one of them.
+const COMPLETED_WINDOWS = [7, 30, 'all'];
+const completedWindow = (within) => (COMPLETED_WINDOWS.includes(within) ? within : 7); // unset, or a stale value, is the default
+function completedInWindow(n, within, now = Date.now()) {
+  const days = completedWindow(within);
+  if (days === 'all' || !n || !n.state || n.state.type !== 'closed') return true;
+  return Date.parse(n.state.enteredAt) >= now - days * 864e5; // NaN compares false: an unknown time is not a recent one
+}
 function validViewFilter(f) {
   return !!f && !Array.isArray(f) && typeof f === 'object' && Object.keys(f).every((k) => FILTER_KEYS.has(k))
     && (f.types === undefined || f.types === null || Array.isArray(f.types) && f.types.every((x) => VIEW_KINDS.includes(x)))
@@ -92,7 +109,8 @@ function validViewFilter(f) {
     && (f.assignee === undefined || ['me', 'anyone', 'unassigned'].includes(f.assignee) || USER.test(f.assignee))
     && (f.text === undefined || typeof f.text === 'string')
     && (f.participant === undefined || f.participant === null || f.participant === 'me')
-    && (f.window === undefined || f.window === null || f.window === 'recent');
+    && (f.window === undefined || f.window === null || f.window === 'recent')
+    && (f.completedWithin === undefined || COMPLETED_WINDOWS.includes(f.completedWithin));
 }
 
 function viewParams(f, me, limit = 1000) {
@@ -209,4 +227,4 @@ function searchQueryToFilter(query, me) {
   return f;
 }
 
-module.exports = { parseQuery, searchParams, needsTypes, viewParams, searchQueryParams, filterToSearchQuery, searchQueryToFilter, validViewFilter, viewTypes, VIEW_PRESETS, VIEW_KINDS, KIND_VIEWS, hideRules, isHidden };
+module.exports = { parseQuery, searchParams, needsTypes, viewParams, searchQueryParams, filterToSearchQuery, searchQueryToFilter, validViewFilter, viewTypes, VIEW_PRESETS, VIEW_KINDS, KIND_VIEWS, hideRules, isHidden, COMPLETED_WINDOWS, completedWindow, completedInWindow };

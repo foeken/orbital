@@ -2,23 +2,25 @@
 // Electron main: the process boundary. Everything that knows Tana lives in main/ (state, rows, documents, related,
 // views, pins, images); this file owns the window, the menu, the IPC table and the boot sequence, plus the test hook
 // that scripts/sdk-check.js and the CLI use to drive the same modules without a window.
-const { app, BrowserWindow, Menu, Notification, ipcMain, nativeTheme, screen, shell } = require('electron');
+const { app, BrowserWindow, Menu, Notification, globalShortcut, ipcMain, nativeTheme, screen, shell } = require('electron');
 const path = require('node:path');
 const db = require('./db');
 const { createTanaSession } = require('./tana-session');
 const updater = require('./updater');
 const access = require('./sdk/access');
 const { readNode, setTitle, setState, taskMeta, audienceMetadata, setAssignees, setSearchQuery, setSearchView } = require('./sdk/node');
-const { filterToSearchQuery, isHidden, searchQueryToFilter, validViewFilter } = require('./sdk/query');
+const { completedWindow, filterToSearchQuery, isHidden, searchQueryToFilter, validViewFilter } = require('./sdk/query');
 const content = require('./sdk/content');
+const agent = require('./main/agent');
 const fields = require('./sdk/fields');
-const { NOT_CONNECTED, S, VIEWS, docStates, errText, idKind, isSearch, isSpace, metaSigs, pathCache, truncatedViews, redoStack, report, scheduleRefresh, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
+const { NOT_CONNECTED, S, VIEWS, docStates, errText, idKind, isSearch, isSpace, metaSigs, pathCache, today, truncatedViews, redoStack, report, scheduleRefresh, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
 const { cachedNodeHue, graphRow, members, rememberNodeHue, toNode } = require('./main/rows');
-const { accessContext, chatOutline, createDocument, creationOptions, creatorOf, documentAction, history, info, linkShared, metaSig, moveTarget, mut, mutTasks, notifyOn, notifyState, setNotify, onChange, op, outlineWithReferences, setSensitive } = require('./main/documents');
-const { callOf, pathOf, related, searchChildren, searchPreview, spaceChildren, summaryUri } = require('./main/related');
+const { accessContext, chatOutline, codexIds, createDocument, creationOptions, creatorOf, documentAction, history, info, linkShared, metaSig, moveTarget, mut, mutTasks, notifyOn, notifyState, setCodex, setNotify, onChange, op, outlineWithReferences, setSensitive } = require('./main/documents');
+const { callOf, changesOf, pathOf, related, searchChildren, searchPreview, spaceChildren, summaryChanges, summaryUri } = require('./main/related');
 const { hiddenRules, inboxCount, listFilter, preset, refresh, search, searchCreate, searchList, searchTitle, setHidden, setViewFilter, start, viewFilter, viewRows } = require('./main/views');
 const { nodePin, pinState, pinTree, pinned, setPin, todayNode, weekNode, weekTitle } = require('./main/pins');
 const { image } = require('./main/images');
+const quick = require('./main/quickadd');
 
 ipcMain.handle('doc:path', async (_e, id) => { try { const p = await pathOf(id); pathCache.set(id, p); return p; } catch (e) { report(e); return pathCache.get(id) || []; } });
 
@@ -53,8 +55,32 @@ function createWindow() {
   S.win.on('close', saveBounds);
   S.win.on('page-title-updated', (e) => e.preventDefault());
   S.win.on('focus', () => refresh());
+  // The quick-add panel is a window of its own, and a hidden one still counts as open: without this, closing the
+  // outliner after the panel had been summoned once would leave the app running invisibly instead of quitting.
+  S.win.on('closed', () => { const panel = quick.panelState.win; if (panel && !panel.isDestroyed()) panel.destroy(); });
   S.win.loadFile(path.join(__dirname, 'index.html'));
 }
+
+// Quick add (docs/QUICK-ADD.md): a second, frameless window the global shortcut summons from any app. It is not a
+// mode of the main window — the outliner keeps its own state and the panel stays cheap — and there is only ever one
+// of it: main/quickadd.js decides whether a press shows, raises or hides it.
+// Tall enough that the assignee list has somewhere to scroll; the card fills the window and the chooser takes
+// whatever the form leaves it (quick-add.css).
+const QUICK_PANEL = { width: 560, height: 320 };
+function createQuickPanel() {
+  const win = new BrowserWindow({
+    ...QUICK_PANEL, show: false, frame: false, transparent: true, resizable: false, minimizable: false,
+    maximizable: false, fullscreenable: false, skipTaskbar: true, alwaysOnTop: true, title: 'Quick add',
+    webPreferences: { preload: path.join(__dirname, 'preload.js') },
+  });
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true }); // summoned over whatever the user is in
+  win.on('blur', () => { if (!win.isDestroyed()) win.hide(); }); // clicking away dismisses it, like the shortcut does
+  win.on('closed', () => { quick.panelState.win = null; });
+  win.loadFile(path.join(__dirname, 'quick-add.html'));
+  return win;
+}
+const toggleQuickPanel = () => quick.togglePanel(quick.panelState, createQuickPanel);
+const hideQuickPanel = () => { const win = quick.panelState.win; if (win && !win.isDestroyed()) win.hide(); };
 
 function createMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate([
@@ -105,7 +131,9 @@ ipcMain.handle('search:create', (_e, id, title) => searchCreate(id, title));
 ipcMain.handle('search:filter', (_e, id) => op(id, (doc) => {
   const arrangement = doc.loro.getMap('view').toJSON() || {}; // how it is shown lives beside the query, not inside it
   return {
-    filter: searchQueryToFilter(doc.loro.getMap('query').toJSON(), S.me && S.me.userUri),
+    // the completed window is the app's own, so it is stored beside the query and handed back as part of the filter
+    // the pills edit; absent, it reads as the default the pill shows the first time Completed is asked for
+    filter: { ...searchQueryToFilter(doc.loro.getMap('query').toJSON(), S.me && S.me.userUri), completedWithin: completedWindow(arrangement.completedWithin) },
     sort: arrangement.sortBy,
     group: arrangement.groupBy,
     // stored as one string, since a Loro map holds scalars: '' is a real choice (a row showing nothing of itself)
@@ -118,7 +146,7 @@ ipcMain.handle('search:setFilter', (_e, id, filter, sort, group, display) => {
   if (!validViewFilter(filter)) throw new Error('invalid view filter'); // never let a bad filter empty a saved search
   return mut(id, (doc) => {
     setSearchQuery(doc, filterToSearchQuery(filter, S.me && S.me.userUri));
-    setSearchView(doc, { sortBy: sort, groupBy: group, display }); // saved together: one press, one state of the page
+    setSearchView(doc, { sortBy: sort, groupBy: group, display, completedWithin: filter.completedWithin }); // saved together: one press, one state of the page
   });
 });
 ipcMain.handle('history:undo', () => history(undoStack, redoStack, 'undo', 'canUndo'));
@@ -147,6 +175,80 @@ ipcMain.handle('doc:taskMeta', (_e, id) => op(id, async doc => {
 // assignee. null clears the choice and falls back to that rule, so "default" stays a live answer rather than a copy.
 ipcMain.handle('notify:state', (_e, id) => notifyState(id));
 ipcMain.handle('notify:set', (_e, id, on) => setNotify(id, on));
+// Assigned to the local Codex agent: an app-local mark, not a Tana assignee (see main/documents.js).
+ipcMain.handle('codex:list', () => codexIds());
+// Assigning hands the node to a Codex task: the context is written, the local mark is stored, and then the work is
+// opened — a new composer carrying the self-registration prompt, or the task this node already has, told what
+// changed. openExternal failing raises, so the renderer shows why and the node keeps no badge it has not earned.
+ipcMain.handle('codex:models', (_e, host) => agent.listModels(undefined, host));
+// The machines a task can be sent to, named for the chooser. No addresses, no commands, no credentials leave main.
+ipcMain.handle('codex:hosts', () => agent.hosts());
+// Adding and removing machines. The form's three fields are validated here, and an invalid one is refused rather
+// than stored: the renderer can name a host, never reach past this boundary with a command.
+ipcMain.handle('codex:hostAdd', (_e, title, ssh, bin) => agent.addHost({ title, ssh, bin }));
+ipcMain.handle('codex:hostRemove', (_e, id) => agent.removeHost(id));
+ipcMain.handle('codex:taskHost', (_e, id) => { const link = agent.taskLink(id); return link ? link.host : null; });
+// Which machine each linked node's task is on, read with the statuses so the UI knows what it may offer to open.
+ipcMain.handle('codex:taskHosts', () => Object.fromEntries(Object.keys(agent.codexTasks()).map((id) => [id, (agent.taskLink(id) || {}).host]).filter(([, host]) => host)));
+// The badge's destination: the task this node is linked to, opened by id the same way creating one does. The renderer
+// passes the node, never a url, so there is nothing here to point somewhere else.
+ipcMain.handle('codex:open', async (_e, id) => {
+  const link = agent.taskLink(id);
+  if (!link) return false; // nothing linked yet: the badge is not a button in that state either
+  if (link.host !== 'local') return false; // the deep link resolves against this app only; the UI says where it is instead
+  if (!shell || !shell.openExternal) throw new Error('Cannot open Codex from here');
+  await shell.openExternal(agent.TASK + encodeURIComponent(link.threadId));
+  return true;
+});
+// The handoff itself, lifted out of the handler below unchanged so the quick-add panel can hand a new task over
+// through this exact path instead of a second one of its own (docs/QUICK-ADD.md).
+async function assignToAgent(id, prompt, model, host) {
+  const where = agent.hostId(host); // an id the registry knows, or nothing
+  if (!where) throw new Error('That machine is not configured any more');
+  // A machine that is not there cannot take the task: say so before anything is written, so the page keeps the
+  // prompt, the model and the choice of host and the press can simply be repeated.
+  if (where !== 'local' && !(await agent.hostReady(where))) throw new Error((agent.hostRecord(where).title || where) + ' cannot be reached right now');
+  const result = await setCodex(id, true, prompt);
+  // The node's own title, taken off the document the assignment just wrote to, so the Codex task is named after the
+  // work rather than after the prompt's opening sentence. Read here and not passed in by each window: one authority
+  // for both entry points, never a string a panel has been holding since it opened, and no second subscription —
+  // setCodex has the document open by the time this runs.
+  const open = S.client && S.client.sync.getDocument(id);
+  const title = open ? readNode(open).title : '';
+  const plan = agent.handoff(id, prompt, __dirname, title);
+  if (plan.kind === 'create') {
+    // Made here rather than through the public link: this is what gets a blank workspace, the chosen model and the
+    // id up front, so the badge can stop being pending the moment the task exists and the app opens it directly.
+    const threadId = await agent.createTask({ nodeUri: id, prompt: agent.agentPrompt(id, __dirname, title), model, userData: S.userData, host: where });
+    agent.setCodexTask(id, threadId, where); // host and id land together, before anything reads either
+    // Only a task on this machine can be opened by the local deep link; one on another host is linked and watched,
+    // but the app has no route to it, and the UI says that rather than opening the wrong thing.
+    if (where === 'local') {
+      if (!shell || !shell.openExternal) throw new Error('Cannot open Codex from here');
+      await shell.openExternal(agent.TASK + encodeURIComponent(threadId));
+    }
+    return result;
+  }
+  if (!shell || !shell.openExternal) throw new Error('Cannot open Codex from here'); // no silent success
+  await shell.openExternal(plan.url);
+  if (plan.queue) queueToTask(plan.threadId, plan.queue);
+  return result;
+}
+ipcMain.handle('codex:set', async (_e, id, on, prompt, model, host) => {
+  // Unassigning lets go of the link as well: the next assignment is a new task, not a return to the old one. The
+  // Codex task itself is left alone — it is the user's, with its own history — and so is the Tana context.
+  // Letting go of the link lets go of the writer with it: a child still holding that thread is what makes Codex
+  // refuse to open it. The Codex task itself is untouched — not deleted, not archived — so its history stays.
+  if (!on) { const result = await setCodex(id, false, prompt); agent.clearCodexTask(id); await agent.releaseTask(id); return result; }
+  return assignToAgent(id, prompt, model, host);
+});
+// The current request, delivered to the task this node already has. Best effort on purpose: the task is open in
+// front of the user either way, and a queue that does not land must not undo an assignment that did.
+function queueToTask(threadId, message) {
+  try { require('node:child_process').execFile('codex', ['queue', '--thread', threadId, '--message', message], { timeout: 20000 }, () => {}); } catch { /* the task is open regardless */ }
+}
+// One bounded app-server child per refresh answers for every linked node (main/agent.js).
+ipcMain.handle('codex:status', () => agent.readAgentStatuses(agent.codexTasks()));
 ipcMain.handle('doc:accessOptions', (_e, id) => op(id, async doc => access.capabilities(doc, S.me.userUri, await accessContext())));
 ipcMain.handle('doc:setSharing', (_e, id, selection) => mut(id, async doc => {
   await access.setSharing(doc, S.me.userUri, selection, await accessContext()); scheduleRefresh(2000);
@@ -211,7 +313,7 @@ ipcMain.handle('shell:open', (_e, url) => {
 });
 // The node for today: a document titled with today's date, pinned to today. Created and pinned when missing,
 // so "Show today node" always lands somewhere. Matching is by exact title, the same string the pin uses.
-ipcMain.handle('doc:todayNode', () => todayNode());
+ipcMain.handle('doc:todayNode', (_e, offset) => todayNode(offset === 1 ? 1 : 0));
 ipcMain.handle('doc:weekNode', async () => (await weekNode()).id);
 // macOS appearance, for the renderer's "follow the system" theme: current value on demand, plus live changes
 const systemTheme = () => (nativeTheme && nativeTheme.shouldUseDarkColors ? 'dark' : 'light');
@@ -219,6 +321,15 @@ ipcMain.handle('theme:system', () => systemTheme());
 if (nativeTheme) nativeTheme.on('updated', () => send('theme:system', systemTheme()));
 ipcMain.handle('image', (_e, uri) => image(uri));
 ipcMain.handle('members', () => members());
+// The quick-add panel's whole surface: what to show when it opens, and the one write it makes.
+ipcMain.handle('quick:context', () => quick.quickContext());
+// assignToAgent is injected rather than required: main/quickadd.js knows Tana, not electron's shell, and the Agent
+// handoff must stay the one above rather than a copy living in the panel's path.
+ipcMain.handle('quick:create', (_e, input) => quick.quickCreate(input || {}, { assignToAgent, hostReady: (host) => agent.hostReady(agent.hostId(host) || 'local') }));
+ipcMain.handle('quick:close', () => { hideQuickPanel(); return true; });
+// The meeting this user has joined right now, for the outliner's Pin to meeting row: the same read the panel makes,
+// so meeting detection lives in one place (main/quickadd.js) rather than once per window.
+ipcMain.handle('meeting:current', () => quick.currentMeeting());
 // Hidden titles: the user's list of patterns, applied to every list and search (see listFilter/sdk-query isHidden).
 ipcMain.handle('filters:list', () => hiddenRules());
 ipcMain.handle('filters:set', (_e, patterns) => setHidden(patterns));
@@ -237,9 +348,11 @@ ipcMain.handle('sync:login', async () => {
 
 if (process.env.TANA_MAIN_TEST) {
   module.exports = { resolveInitialAuth, graphRow, cachedNodeHue, VIEWS, toNode, outlineWithReferences, chatOutline, op, onChange, documentAction, createDocument, creationOptions, search, viewFilter, searchCreate, searchTitle, viewRows, spaceChildren, start, refresh, related, callOf, weekTitle, weekNode,
-    statusSnapshot: () => ({ ...S.status }), rememberNodeHue, restoredBounds,
-    undo: () => history(undoStack, redoStack, 'undo', 'canUndo'), redo: () => history(redoStack, undoStack, 'redo', 'canRedo'), visibleGraphNodes, pinTree,
+    statusSnapshot: () => ({ ...S.status }), rememberNodeHue, restoredBounds, today,
+    undo: () => history(undoStack, redoStack, 'undo', 'canUndo'), redo: () => history(redoStack, undoStack, 'redo', 'canRedo'), visibleGraphNodes, pinTree, changesOf, summaryChanges,
     nodePin,
+    quickContext: quick.quickContext, quickCreate: quick.quickCreate, togglePanel: quick.togglePanel, registerShortcut: quick.registerShortcut, QUICK_ACCELERATOR: quick.ACCELERATOR,
+    assignToAgent, // the one handoff both entry points use, so a check can drive the panel through the real path
     accessContext, inboxCount, S,
     testRuntime: (runtime) => { S.client = runtime.client; S.me = runtime.me; S.win = runtime.win; S.session = runtime.session; S.userData = runtime.userData || null; S.activeView = runtime.activeView || 'inbox'; S.activeFilter = undefined; if (S.client) listFilter(S.client); } };
 } else {
@@ -262,6 +375,9 @@ if (process.env.TANA_MAIN_TEST) {
     S.session = createTanaSession();
     createMenu();
     createWindow();
+    // The global shortcut is registered once the app is ready and released at quit; a refusal (another app holds the
+    // combo) lands in the status the window shows rather than leaving a key that quietly does nothing.
+    quick.registerShortcut(globalShortcut, toggleQuickPanel);
     const auth = await resolveInitialAuth(S.session);
     setStatus({ authChecking: false, authenticated: auth.authenticated, error: auth.error ? errText(auth.error) : null });
     if (auth.authenticated) {
@@ -276,5 +392,6 @@ if (process.env.TANA_MAIN_TEST) {
   });
 
   app.on('window-all-closed', () => app.quit());
-  app.on('before-quit', () => { if (S.client) S.client.close().catch(() => {}); });
+  app.on('before-quit', () => { if (S.client) S.client.close().catch(() => {}); agent.stopOwnedTasks(); }); // no writer outlives the app that spawned it
+  app.on('will-quit', () => globalShortcut.unregisterAll());
 }

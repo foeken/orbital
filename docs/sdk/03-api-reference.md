@@ -8,7 +8,7 @@ All modules are CommonJS. "Node" below means the plain graph JSON node; "Documen
 createTanaClient({ baseUrl?, getAccessToken, orgId, peerId, storageId?, logger?, clientName? })
   → { transport, graph: GraphClient, sync: SyncConnection, close(): Promise }
 ```
-Also re-exports `createTransport`, `GraphClient`, `SyncConnection`, `Document`, `derivePeerId`, everything in `node.js`, and `access` (`capabilities`, `setSharing`, `previewMove`, `moveToSpace`, `canWrite`, `canDelete`, `audienceOf`).
+Also re-exports `createTransport`, `GraphClient`, `SyncConnection`, `Document`, `derivePeerId`, everything in `node.js`, `access` (`capabilities`, `setSharing`, `previewMove`, `moveToSpace`, `canWrite`, `canDelete`, `audienceOf`) and `calls` (`callSessions`, `inCall`, `joinedAt`, `attended`, `currentCalls`).
 
 ## `sdk/transport.js`
 
@@ -153,6 +153,14 @@ The SDK's `Document.undo()`/`redo()` only undo local CRDT transactions for that 
 `listSidebar` → uris in tree order · `sidebarTree` → the collection's tree with its section labels · `pinSidebar(docUri)` (dedup) · `unpinSidebar(docUri)` · `dates(docUri)` → `['YYYY-MM-DD']` · `pinDate(docUri, date)` (dedup, unmutes) · `unpinDate(docUri, date)`. They subscribe the profile, then the collection / pin-map it points to; throw if the profile has no `pinnedCollectionUri` / `pinMapUri` yet (the web client creates those lazily on first pin; we don't).
 
 Items pinned *on* an event or a space are a different thing (docs/PINNING.md section 4) and take the document itself, synchronously: `items(doc)` → `[{ uri, mode? }]` · `pinItem(doc, uri, mode?)` (dedup on uri) · `unpinItem(doc, uri)`.
+
+## `sdk/calls.js` — who is in a meeting
+
+`callSessions(doc)` → `{ eventUri, sessions: [{ key, userUri, joinedAt }] (oldest join first), userUris, log: [{ userUri, timestamp, event }], transcriptUri, screenShareUri }` for a subscribed `tana:call:` document · `inCall(doc, userUri)` → boolean · `joinedAt(doc, userUri)` → ms or null (earliest of that user’s live sessions, so several devices read as one) · `attended(doc)` → everyone whose join is in the log, whether or not they are still there.
+
+`currentCalls(client, userUri, { limit = 5 })` → `[{ callUri, eventUri, title, joinedAt, otherUserUris, transcriptUri, screenShareUri }]`: lists `nodeTypes: ['call']` sorted by update time descending, subscribes to the newest `limit`, keeps those whose `sessions` hold `userUri`, and resolves every event title in one further query. A live call is touched constantly, so the newest few are the only candidates; the graph exposes no presence of its own.
+
+This is the only way to tell *joined* from *invited*: see [02-data-model.md](02-data-model.md) section 5 and [../MEETINGS.md](../MEETINGS.md). What it cannot answer is whether a participant is speaking or idle — that would have to come from the transcript document.
 
 ## `sdk/chat.js`
 

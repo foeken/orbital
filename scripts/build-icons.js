@@ -24,6 +24,17 @@ WANT.assignTo = path.join(__dirname, '..', 'build', 'icons', 'circle-user-plus.s
 WANT.cleanup = path.join(__dirname, '..', 'build', 'icons', 'brush-2.svg'); // the view's Clean up pill: let go of the rows kept in place
 WANT.notify = path.join(__dirname, '..', 'build', 'icons', 'bell-on.svg'); // "Notify on changes": watching a node for edits
 WANT.reload = path.join(__dirname, '..', 'build', 'icons', 'refresh-anticlockwise.svg'); // Cmd+K "Reload": reloads the window, unlike sync's cloud-refresh
+WANT.robot = path.join(__dirname, '..', 'build', 'icons', 'face-robot-2.svg'); // the badge on a node assigned to the local Codex agent
+WANT.brain = path.join(__dirname, '..', 'build', 'icons', 'brain.svg'); // the model rows on the Assign to Agent page
+WANT.host = path.join(__dirname, '..', 'build', 'icons', 'monitor.svg'); // the machine a Codex task runs on
+WANT.home = path.join(__dirname, '..', 'build', 'icons', 'house.svg'); // the Home anchor crumb: the Library, or the saved search chosen as Home
+// the disclosure chevron on a group heading: pointing right folded, turned a quarter down while the section is open,
+// so the pair (chevron-left.svg is its mirror, kept beside it) needs only the one glyph built in
+WANT.chevronRight = path.join(__dirname, '..', 'build', 'icons', 'chevron-right.svg');
+// The sidebar's Changes section: one glyph per kind of change. A deletion keeps the trash glyph already built in
+// above, so the same art is not carried under two names.
+WANT.updated = path.join(__dirname, '..', 'build', 'icons', 'pen-writing.svg');
+WANT.created = path.join(__dirname, '..', 'build', 'icons', 'file-plus.svg');
 // Cmd+K rows for the keys the outline answers to
 for (const [name, file] of [['expand', 'v-shaped-arrow-down'], ['collapse', 'v-shaped-arrow-up'], ['undo', 'undo'], ['redo', 'redo'], ['textLarger', 'text-size-increase'], ['textSmaller', 'text-size-decrease'], ['textReset', 'text'], ['rail', 'sidebar-right-4'], ['railShow', 'sidebar-right-show'], ['railHide', 'sidebar-right-hide'], ['back', 'arrow-left'], ['forward', 'arrow-right'], ['zoomIn', 'magnifier-3'], ['search', 'file-search'], ['filter', 'filter-2']]) WANT[name] = path.join(__dirname, '..', 'build', 'icons', file + '.svg');
 const out = {};

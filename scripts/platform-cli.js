@@ -101,6 +101,17 @@ const commands = {
       catch (e) { out(dir + ' failed: ' + (e && e.message)); }
     }
   },
+  // changes <id> [--within <summary id>] [--limit 20]: the written change summaries Tana's own Changes panel shows,
+  // straight from tana.history.v1alpha1 (sdk/history.js). --within opens an expandable summary.
+  async changes() {
+    await connect();
+    const id = positional[0];
+    if (!id) throw new Error('usage: changes <id> [--within <summary id>] [--limit 20]');
+    const { parent, summaries } = await client.history.listChanges({ uri: id, withinId: flag('within', ''), limit: Number(flag('limit', 20)) });
+    if (parent) out('parent: ' + JSON.stringify(parent));
+    out(summaries.length + ' summaries (oldest first, as the service answers)');
+    for (const s of summaries) out(JSON.stringify(s));
+  },
   async list() {
     const me = await connect();
     const state = flag('state', 'open');
@@ -479,6 +490,17 @@ commands.rawdoc = async () => {
   }
   out(JSON.stringify(doc.toJSON(), null, 1));
 };
+// incall: the meeting the signed-in user is in *right now*, through sdk/calls.js — an entry in the call document's
+// `sessions` root is the only server-side proof of "joined"; the event node proves invitation and schedule, never
+// attendance (docs/MEETINGS.md). Read-only.
+commands.incall = async () => {
+  const me = await connect();
+  await client.sync.connect();
+  const limit = Number(flag('limit', 5));
+  const live = await require('../sdk/calls').currentCalls(client, me.userUri, { limit });
+  out(live.length ? live.map((c) => ({ ...c, joinedAt: c.joinedAt && new Date(c.joinedAt).toLocaleString('sv-SE') }))
+    : 'not in a call (checked the ' + limit + ' most recently updated call documents)');
+};
 // Sidebar pins as the renderer receives them: the only path where spaces reach a row (#63).
 commands.pinrows = async () => {
   const main = backend(await connect());
@@ -624,7 +646,7 @@ const USAGE = [
   '             meetings [--days 7] | chatlist [--limit 200] | get <id> | outline <id> | rawdoc <id> [--containers 1] |',
   '             graphnode <id> | edges <id> | listkind <nodeType> [--limit 50] | image <tana:image:uri> | pins [--dates]',
   '  diagnose   inspect <id...> | audiences [--limit 80] [--mine 0] [--kind text] | refs <id> | rows <query> | pinrows |',
-  '             caps <id...> | related <id> | pageprobe | libraryprobe | boot [--settle ms]',
+  '             caps <id...> | related <id> | incall [--limit 5] | pageprobe | libraryprobe | boot [--settle ms]',
   '  live       watch <id...>',
   '  WRITES     create <title> [--kind doc|task|meeting] | delete <id> | set-title <id> <title> |',
   '             set-state <id> <proposed|open|closed|not_now> | pin <id> <sidebar|today> | unpin <id> <sidebar|today> |',

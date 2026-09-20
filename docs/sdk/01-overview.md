@@ -18,6 +18,7 @@ Read in this order: this file → [02-data-model.md](02-data-model.md) → [03-a
 | Query building | `query.js` | Search text + `#task/#meeting/#member/#space/#Type` tokens → ListNodes params; the one view query (`viewParams`) with its six presets; hidden-title rules. |
 | Typed fields | `fields.js` | Read/write "attributes": the per-field ProseMirror trees in a document's own data map, named by its type's template. |
 | Pins | `pins.js` | Sidebar (collection tree) and date (pin-map) pins, exactly as the web client writes them; items pinned on an event or a space (`pinnedItems`). |
+| Meeting attendance | `calls.js` | Who is in a meeting *now*, from the live `sessions` of its `tana:call:` document, and who was in it earlier, from `data.sessionLog`. |
 | Assets | `assets.js` | Image bytes for a `tana:image:` uri (two-hop CDN fetch). |
 | Schemas | `proto/descriptors.js` | Protobuf descriptors extracted from Tana's bundle, loaded at runtime (no codegen). |
 
