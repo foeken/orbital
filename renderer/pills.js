@@ -72,7 +72,22 @@ function cleanupNow() {
   render(true);
 }
 function renderPills(show) {
-  const box = $('pills'), defs = show ? pillDefs() : [];
+  const box = $('pills'), search = !!show && onSearchPage();
+  pillsDrawn = !!show; // what "this page has pills" means for everyone else: the row itself may be folded away
+  renderPillsToggle(search);
+  // Offered wherever the pills are, folded or not, and on a view as well: a row kept in place by a status change is
+  // exactly when it is wanted (needsCleanup, renderer/views.js).
+  renderCleanupBtn(!!show && needsCleanup(shownDocs()));
+  // Not while the pills are staging an unsaved filter: those rows are a preview of what Save would store, and
+  // re-asking the stored query would quietly replace them with something else.
+  renderRefreshBtn(search && !searchRows.has(zoom.docId));
+  if (search && !pillsShown()) return foldPills(box);
+  // Folded until now, so the pills come in rather than appear. Only on a saved search, and only for a press on the
+  // button: the movement is what answers that press. A view's pills are the view, and a page you have just arrived
+  // at — a reload, a link, the Library — is drawn as it stands rather than assembling itself in front of you.
+  const arriving = search && pillsPressed && (box.hidden || box.classList.contains('out'));
+  box.classList.remove('out');
+  const defs = show ? pillDefs() : [];
   box.hidden = !defs.length;
   const focusedId = box.contains(document.activeElement) && document.activeElement.closest('.pill') ? document.activeElement.closest('.pill').dataset.id : null;
   if (menu && !defs.some((d) => d.id === menu.id)) menu = null;
@@ -88,23 +103,80 @@ function renderPills(show) {
     if (menu && menu.id === d.id) pill.append(menuEl(d));
     return pill;
   }));
-  // rows kept in place (holdRow) no longer match the page: offer to redraw it as it is now. A saved search holds
-  // rows the same way a view does, so it gets the same pill — shownDocs() answers with the list on screen.
-  if (defs.length && needsCleanup(shownDocs())) box.append(cleanupPill());
-  // A view re-asks its query every half minute; a saved search is asked once, when it is opened. This is the button
-  // that asks it again. Not while the pills are staging an unsaved filter: those rows are a preview of what Save
-  // would store, and re-asking the stored query would quietly replace them with something else.
-  if (onSearchPage() && !searchRows.has(zoom.docId)) box.append(refreshPill());
   // a saved search's edits are held back until they are saved, so there has to be something to press
   if (searchDirty()) box.append(savePill());
   // a query worth coming back to becomes a place: keep it as a saved search (a saved search already is one)
   if (defs.length && tana.createSearch && !onSearchPage()) box.append(saveSearchPill());
+  // The order each pill arrives and leaves in: its place in the row, whatever it is (a filter, Save, Refresh).
+  // Arriving is marked on the pills rather than on the row, because every render builds them again: with the mark
+  // on the row, a redraw landing while they were still coming in handed it straight back to the new ones and the
+  // whole entrance played a second time. A rebuilt pill is simply a pill, so there is nothing to replay.
+  [...box.children].forEach((el, i) => { el.style.setProperty('--i', i); if (arriving) el.classList.add('in'); });
+  if (arriving && !box.hidden) unfoldPills(box);
   const again = focusedId && box.querySelector('.pill[data-id="' + focusedId + '"]');
   if (again) again.focus();
   const open = box.querySelector('.menu'); // stop before the window edge; the rows scroll inside
   if (open) open.style.maxHeight = Math.min(360, innerHeight - open.getBoundingClientRect().top - 12) + 'px';
   const active = box.querySelector('.menu .mrow.active');
   if (active) active.scrollIntoView({ block: 'nearest', inline: 'nearest', container: 'nearest' });
+}
+// The pills of a saved search fold away behind a button beside back and forward. A view's pills are the view, so
+// they stay; a saved search is a page read far more often than it is re-aimed, and its query is already its title.
+// Unsaved edits hold the row open whatever the button says, or Save would be behind something that does not
+// mention it. The choice follows you between machines, like the sidebar's.
+const pillsToggle = $('pillsToggle');
+let pillsOpen = pref('pillsOpen', false) === true;
+let pillsPressed = false; // the row moves for a press on the button, and for nothing else
+let pillsDrawn = false;   // the page the pills belong to, which a folded row no longer says (renderer/render.js, renderer/tasks.js)
+const pillsShown = () => pillsOpen || searchDirty();
+pillsToggle.onclick = () => {
+  pillsOpen = !pillsShown();
+  setPref('pillsOpen', pillsOpen);
+  pillsPressed = true;
+  try { renderPills(true); } finally { pillsPressed = false; } // renderPills is synchronous, so the flag lasts exactly this draw
+};
+function renderPillsToggle(available) {
+  pillsToggle.hidden = !available;
+  if (!available) return;
+  const open = pillsShown(), label = open ? 'Hide search options' : 'Show search options';
+  pillsToggle.title = label;
+  pillsToggle.setAttribute('aria-label', label);
+  pillsToggle.setAttribute('aria-pressed', String(open));
+  if (!pillsToggle.childNodes.length) { const svg = iconNode('options'); if (svg) pillsToggle.append(svg); } // the glyph never changes, like the nav buttons'
+}
+// Opening and closing the row: the pills come in one after another, left to right, and leave the same way, and the
+// row's own height follows them, so the outline below slides instead of jumping when it goes. Both are CSS
+// (styles.css: --i per pill for the stagger, height to and from auto for the row); what is left here is when each
+// class goes on and when the row may finally be hidden — the pills' last animation and the height's own transition
+// answer that, so no duration is guessed twice. Under reduced motion neither rule is declared, so nothing would
+// ever report back: both paths skip straight to the end.
+function unfoldPills(box) {
+  box.classList.remove('sliding', 'folding'); // whatever a close that was interrupted left behind
+  if (stillPreferred()) return;
+  box.classList.add('sliding', 'folding');
+  void box.offsetWidth; // the closed state has to be laid out, or there is nothing to open from
+  box.classList.remove('folding');
+  afterSlide(box, () => box.classList.remove('sliding'));
+}
+function foldPills(box) {
+  menu = null;
+  if (box.hidden || box.classList.contains('out')) return; // already away, or already on its way out
+  box.classList.add('out');
+  // Reopened while it was leaving: it is on screen and staying, and renderPills has taken the 'out' class off it.
+  const shut = () => { if (!box.classList.contains('out')) return; box.classList.remove('out', 'sliding', 'folding'); box.hidden = true; box.replaceChildren(); };
+  const last = stillPreferred() || !pillsPressed ? null : box.lastElementChild;
+  if (!last) return shut();
+  last.addEventListener('animationend', () => {
+    if (!box.classList.contains('out')) return;
+    box.classList.add('sliding', 'folding'); // the pills have gone; now the space they were in closes after them
+    afterSlide(box, shut); // hidden only at the end: taken away at nought height, it takes nothing with it
+  }, { once: true });
+}
+// The row moves its height and its bottom margin together. The height is the one that says when it is over: the
+// margin finishing first would hide a row still a step from closed, which is the jump this is here to remove.
+function afterSlide(box, done) {
+  const end = (e) => { if (e && e.propertyName !== 'height') return; box.removeEventListener('transitionend', end); done(); };
+  box.addEventListener('transitionend', end);
 }
 // Save: write the pills back to the saved search they came from. A view persists each change as it is made, but a
 // saved search is a document other people may be looking at, so its edits are held here until this is pressed —
@@ -151,70 +223,75 @@ function saveSearchPill() {
 }
 // Clean up: let go of the rows a status change kept in place and draw the view the way it is now. Like the last pill,
 // Right moves on to the first row.
+// One shot of a class: the turn a press gives before its answer arrives, the pop a button makes when it turns up.
+// Restartable, which is the whole reason it is a function: dropping the class and re-adding it in the same frame
+// does nothing at all, so the reflow read in between is what lets a second run start instead of being swallowed by
+// the one still going. Under reduced motion the rules these classes select are not declared, so the class is
+// dropped and never re-added and the element simply is where it is.
+const stillPreferred = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+function playOnce(el, name) {
+  if (!el || !el.classList) return;
+  el.classList.remove(name); // dropped before anything is asked: these elements are not rebuilt, so a class left on one would be
+  if (stillPreferred()) return;
+  void el.offsetWidth;
+  el.classList.add(name);
+}
 // Refresh: ask this saved search's query again. Its rows are subscribed (main/related.js), so an edit elsewhere
 // reaches the rows it is already showing — but a row that has since started or stopped answering the query is only
-// learned by asking again, which nothing else on this page does.
-// One turn of an icon, as the feedback a press gives before its answer arrives. Restartable: dropping the class and
-// re-adding it in the same frame does nothing at all, so the reflow read in between is what makes a second press
-// start the turn again instead of being swallowed by the one still running. Under reduced motion the rule the class
-// selects is not declared, so the icon simply stays where it is.
-// It returns when the turn is over, because the caller is about to rebuild the element the turn is running on: an
-// answer that arrives in 80 ms would otherwise replace the icon a tenth of the way round, which is what "I can
-// hardly see it" was. Keep SPIN_MS and the .75s in styles.css in step — renderer-check compares them.
-const SPIN_MS = 750;
-const stillPreferred = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-function spinOnce(icon) {
-  if (!icon || !icon.classList || stillPreferred()) return Promise.resolve(); // nothing turns, so nothing is waited for
-  icon.classList.remove('spin');
-  void icon.offsetWidth;
-  icon.classList.add('spin');
-  return new Promise((done) => setTimeout(done, SPIN_MS));
+// learned by asking again, which nothing else on this page does. It sits beside the fold button rather than among
+// the pills: it asks the query rather than describing it, and folding them away must not take it with them.
+// The button outlives the redraw its answer brings — the glyph is appended once, like the nav buttons' — so the
+// turn runs to the end on its own and the rows land as soon as they arrive rather than waiting for it.
+const refreshBtn = $('navRefresh');
+function renderRefreshBtn(available) {
+  refreshBtn.hidden = !available;
+  if (!available) return;
+  refreshBtn.title = 'Ask this search again';
+  refreshBtn.setAttribute('aria-label', 'Refresh'); // icon only, so the name has to come from here
+  if (!refreshBtn.childNodes.length) { const svg = iconNode('reload'); if (svg) refreshBtn.append(svg); }
 }
-function refreshPill() {
-  const pill = document.createElement('div'); pill.className = 'pill refresh'; pill.tabIndex = 0; pill.dataset.id = 'refreshSearch'; pill.setAttribute('role', 'button');
-  pill.title = 'Ask this search again';
-  pill.setAttribute('aria-label', 'Refresh'); // icon only, so the name has to come from here
-  const s = document.createElement('span'); s.innerHTML = iconSvg('reload');
-  const icon = s.firstChild;
-  pill.append(icon);
-  // The answer is a round trip, so the press needs an answer of its own: one turn of the glyph, then back to rest.
-  // The query goes out first and is never held back; only the redraw waits, and only until the turn is done — the
-  // redraw builds a new pill, so without that the turn would be cut off wherever the answer happened to land.
-  const go = () => {
-    const turning = spinOnce(icon);
-    const id = zoom.docId;
-    releaseHeld();
-    run(async () => { const answered = reload(id); await Promise.all([answered, turning]); render(true); });
-  };
-  pill.onmousedown = (e) => e.preventDefault(); // the caret may be in a row with a render waiting on it (cleanupPill)
-  pill.onclick = go;
-  pill.onkeydown = (e) => {
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
-    else if (e.key === 'ArrowLeft' && pill.previousElementSibling) { e.preventDefault(); pill.previousElementSibling.focus(); }
-    else if (e.key === 'ArrowRight' && pill.nextElementSibling) { e.preventDefault(); pill.nextElementSibling.focus(); }
-    else if (e.key === 'Escape') { e.preventDefault(); pill.blur(); }
-  };
-  return pill;
+refreshBtn.onmousedown = (e) => e.preventDefault(); // the caret may be in a row with a render waiting on it (cleanupPill)
+refreshBtn.onclick = () => {
+  playOnce(refreshBtn.firstChild, 'spin');
+  const id = zoom.docId;
+  releaseHeld();
+  run(async () => { await reload(id); render(true); });
+};
+// Clean up: let go of the rows a status change kept in place and draw the page the way it is now. A header button
+// beside the other two rather than a pill, for the same reason Refresh is one — a row kept in place is exactly when
+// you want it, and folding the pills away must not take it with them. Icon only; Cmd+K carries the words.
+const cleanupBtn = $('navCleanup');
+function renderCleanupBtn(available) {
+  if (!available) return hideCleanupBtn();
+  // it comes and goes with the rows being held: a pop says it has turned up, including when it was on its way out
+  const arriving = cleanupBtn.hidden || cleanupBtn.classList.contains('out');
+  cleanupBtn.classList.remove('out'); // staying after all
+  cleanupBtn.hidden = false;
+  cleanupBtn.title = 'Put every row where it belongs now';
+  cleanupBtn.setAttribute('aria-label', 'Clean up');
+  if (!cleanupBtn.childNodes.length) { const svg = iconNode('cleanup'); if (svg) cleanupBtn.append(svg); }
+  if (arriving) playOnce(cleanupBtn, 'in');
 }
-function cleanupPill() {
-  const pill = document.createElement('div'); pill.className = 'pill cleanup'; pill.tabIndex = 0; pill.dataset.id = 'cleanup'; pill.setAttribute('role', 'button');
-  pill.title = 'Put every row where it belongs now';
-  const s = document.createElement('span'); s.innerHTML = iconSvg('cleanup'); pill.append(s.firstChild, 'Clean up');
-  const go = cleanupNow; // the same action the Cmd+K "Clean up" row runs
-  // The caret is in the row whose status just changed, so a render is deferred until it loses focus. Taking focus on
-  // mousedown ran that render, which rebuilds the pills, and the mouseup then landed on a new element — no click at
-  // all, and the first press did nothing. Keeping the focus where it is (the bullets and menu rows do the same) lets
-  // the press through.
-  pill.onmousedown = (e) => e.preventDefault();
-  pill.onclick = go;
-  pill.onkeydown = (e) => {
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
-    else if (e.key === 'ArrowLeft' && pill.previousElementSibling) { e.preventDefault(); pill.previousElementSibling.focus(); }
-    else if (e.key === 'ArrowRight' && texts()[0]) { e.preventDefault(); setCaret(texts()[0], 0); }
-    else if (e.key === 'Escape') { e.preventDefault(); pill.blur(); }
-  };
-  return pill;
+// Leaving: it shrinks away rather than being gone between two frames, and is hidden only once that has played —
+// hiding it first would take the animation off screen with it. A button that becomes wanted again while it is
+// going stays: the render that keeps it takes the class off, and the animation still running then ends on an
+// element that is staying put, which is what the second test is for.
+function hideCleanupBtn() {
+  if (cleanupBtn.hidden || cleanupBtn.classList.contains('out')) return; // already gone, or already going
+  cleanupBtn.classList.remove('in');
+  if (stillPreferred()) { cleanupBtn.hidden = true; return; }
+  cleanupBtn.classList.add('out');
+  cleanupBtn.addEventListener('animationend', () => {
+    if (!cleanupBtn.classList.contains('out')) return;
+    cleanupBtn.classList.remove('out');
+    cleanupBtn.hidden = true;
+  }, { once: true });
 }
+// The caret is in the row whose status just changed, so a render is deferred until it loses focus. Taking focus on
+// mousedown ran that render, and the mouseup then landed on what it had drawn — no click at all, and the first
+// press did nothing. Keeping the focus where it is (the bullets and menu rows do the same) lets the press through.
+cleanupBtn.onmousedown = (e) => e.preventDefault();
+cleanupBtn.onclick = cleanupNow; // the same action the Cmd+K "Clean up" row runs
 // Typing in an open menu narrows it, so a long list (every member, in Assigned to) is reachable without the mouse.
 // Headings and dividers describe a full list, so a narrowed one drops them and shows only what matched.
 function menuRows(d) {

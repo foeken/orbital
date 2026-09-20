@@ -46,10 +46,17 @@ const withShims = (src) => {
   // where a row's grey facts sit is decided from real layout, which no fake DOM has; the harnesses that test it
   // slice the real function in themselves, and the rest are only calling it because render() does
   if (/\bfitRowMeta\(/.test(src) && !/function fitRowMeta\(/.test(src)) src = 'globalThis.fitRowMeta ??= () => {};\n' + src;
+  // "this page has pills" (renderer/pills.js), which a folded row no longer answers for: a harness that is not about
+  // folding gets the page it always had, so the calls guarded by it still run.
+  if (/\bpillsDrawn\b/.test(src) && !/let pillsDrawn =/.test(src)) src = 'globalThis.pillsDrawn ??= true;\n' + src;
   // Deleted nodes (renderer/nodes.js) are one Set the whole app shares. A harness that is not about deletion gets
   // "nothing is gone", with markGone still answering main's own mark, so rows and chips draw as they always did;
   // the real helpers are sliced in by runDeletedNodeCheck.
   if (/\bdeletedIds\b/.test(src) && !/const deletedIds =/.test(src)) src = 'globalThis.deletedIds ??= new Set();\n' + src;
+  // the just-completed ids (renderer/state.js) and the flourish a render plays for them (render.js playTicks): a
+  // harness that is not about that sees none and plays nothing
+  if (/\bjustDone\b/.test(src) && !/const justDone =/.test(src)) src = 'globalThis.justDone ??= new Map();\n' + src;
+  if (/\bplayTicks\(/.test(src) && !/function playTicks\(/.test(src)) src = 'globalThis.playTicks ??= () => {};\n' + src;
   if (/\b(isGone|markGone|noteGone)\(/.test(src) && !/const isGone =/.test(src)) src = 'globalThis.isGone ??= () => false; globalThis.markGone ??= (_uri, deleted) => !!deleted; globalThis.noteGone ??= () => false;\n' + src;
   if (/\bunanchored\(/.test(src) && !/const unanchored =/.test(src)) src = ANCHOR_SRC + '\n' + src; // the real helper, not a restatement of it
   if (/\bisAtomic\(/.test(src) && !/const isAtomic =/.test(src)) src = ATOMIC_SRC + '\n' + src;
@@ -1031,6 +1038,7 @@ function runReferenceEmbedRenderCheck() {
     const asDoc = (node) => ({ ...node, kind: 'document', text: node.text ?? node.title ?? '' });
     const isImage = () => false, taskSummary = () => null, chipEl = () => ({}), iconSvg = () => '';
     const documentSummary = () => null, observeMeta = () => {};
+    const displayOn = (what) => what === 'status'; // the box a task row draws; tags and the grey facts are other harnesses
     const tana = {};
     let toggled = null;
     const toggleReference = (node) => { toggled = 'reference:' + node.reference.uri; };
@@ -1162,6 +1170,13 @@ function runReferenceEmbedRenderCheck() {
     'a row whose reference is gone reads as gone: its text is struck through');
   assert.match(styles, /\.node\.gone > \.line \.text \.mention\.gone svg \{[^}]*display: none/,
     'and it shows one trash glyph — the bullet — rather than a second one on the chip that is the whole of its text');
+
+  // A task put off is drawn asleep. It is still a task — same box, same status — so only the glyph changes.
+  const task = (stateType) => plain(api.built({ id: 'tana:text:01j0task00000000000000000', kind: 'document', icon: 'task', stateType, text: 'a task', editable: true }));
+  assert.deepEqual([task('not_now').bulletIcon, task('not_now').checked], ['later', false],
+    'a Later task is drawn with the zzz glyph instead of the task one, and keeps its box');
+  assert.deepEqual([task('open').bulletIcon, task('proposed').bulletIcon, task('closed').bulletIcon], ['task', 'task', 'task'],
+    'while every other state keeps the task glyph');
 }
 
 async function runVisibilityPickerCheck() {
@@ -2791,8 +2806,8 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   assert.notEqual(rowSig.sig(inboxRow), beforeDisplay, 'changing what rows display rebuilds them, rather than leaving the old facts on screen');
   // The pills go with it: whether a row still belongs where it sits is decided while they render (needsCleanup), so a
   // render held back by the caret or a frozen selection would otherwise never be able to offer Clean up.
-  assert.match(source, /renderDeferred = true; markFalling\(\); refreshRowChrome\(\); if \(!\$\('pills'\)\.hidden\) renderPills\(true\); return;/,
-    'a render that waits for the caret still brings every checkbox up to date, and re-renders the pills so Clean up can appear');
+  assert.match(source, /renderDeferred = true; markFalling\(\); refreshRowChrome\(\); if \(pillsDrawn\) renderPills\(true\); return;/,
+    'a render that waits for the caret still brings every checkbox up to date, and re-renders the pills so Clean up can appear — by the page it is on, not by whether the row is folded away');
   // A task's state also lives in copies (a reference in an open note, nested or not; a sidebar row): a change patches them
   const copies = vm.runInNewContext(`
     const ref = (id) => ({ id, type: 'reference', reference: { uri: 'tana:text:t1', node: { id: 'tana:text:t1', text: 'Task', title: 'Task', stateType: 'open', done: 0 } } });
@@ -4341,68 +4356,191 @@ function runCodexAssignCheck() {
 // path rather than a second one, restartable, and — the part that was reported as "I can hardly see it" — not cut
 // off by its own answer. The redraw builds a new pill, so an answer that lands in 80 ms used to replace the icon a
 // tenth of the way round. The query still goes out first; only the redraw waits.
+// ---- a saved search folds its pills away behind the header button (renderer/pills.js) ----
+// Two things here are worth a check rather than an eye: the row may only go once the last pill has finished leaving,
+// and unsaved edits have to hold it open whatever the button was last set to, or Save would be out of reach.
+function runPillsFoldCheck() {
+  const api = vm.runInNewContext(`
+    let dirty = false, redrawn = 0, reduced = false;
+    const log = [];
+    const matchMedia = (query) => ({ matches: reduced && query.includes('reduce') });
+    const mkEl = (id) => {
+      const classes = new Set(), handlers = [];
+      return { id, hidden: false, childNodes: [], children: [], attrs: {}, style: { setProperty() {} },
+        classList: { add: (...n) => { n.forEach((x) => classes.add(x)); log.push(id + ' add ' + n.join(' ')); },
+          remove: (...n) => { n.forEach((x) => classes.delete(x)); log.push(id + ' remove ' + n.join(' ')); },
+          contains: (n) => classes.has(n) },
+        get offsetWidth() { log.push(id + ' reflow'); return 0; },
+        get lastElementChild() { return this.children[this.children.length - 1] || null; },
+        addEventListener: (type, fn, opts) => handlers.push({ type, fn, once: !!(opts && opts.once) }),
+        removeEventListener: (type, fn) => { const at = handlers.findIndex((h) => h.type === type && h.fn === fn); if (at >= 0) handlers.splice(at, 1); },
+        fire: (type, event) => { for (const h of handlers.filter((h) => h.type === type)) { if (h.once) handlers.splice(handlers.indexOf(h), 1); h.fn(event); } },
+        setAttribute(name, value) { this.attrs[name] = String(value); },
+        append(...kids) { this.childNodes.push(...kids); },
+        replaceChildren(...kids) { this.childNodes = kids; this.children = kids; } };
+    };
+    const box = mkEl('pills'), toggleEl = mkEl('pillsToggle'), cleanupEl = mkEl('navCleanup');
+    cleanupEl.hidden = true; // index.html ships it hidden, and whether it was is how it knows it has just turned up
+    const fill = (n) => { box.replaceChildren(...Array.from({ length: n }, () => mkEl('pill'))); box.hidden = false; };
+    fill(3);
+    const stored = {};
+    const pref = (k, fb) => (k in stored ? stored[k] : fb), setPref = (k, v) => { stored[k] = v; };
+    const \$ = (id) => (id === 'pills' ? box : id === 'navCleanup' ? cleanupEl : toggleEl);
+    const renderPills = () => { redrawn++; };
+    const iconNode = () => mkEl('svg');
+    const searchDirty = () => dirty;
+    const cleanupNow = () => {};
+    let menu = { id: 'status', index: 0 };
+    ${sourceBetween('const stillPreferred =', 'function playOnce(')}
+    ${functionSource('playOnce')}
+    ${sourceBetween('const pillsToggle =', 'function unfoldPills')}
+    ${functionSource('unfoldPills')}
+    ${functionSource('foldPills')}
+    ${functionSource('afterSlide')}
+    ${sourceBetween('const cleanupBtn =', 'function menuRows')}
+    const state = () => ({ log: [...log], hidden: box.hidden, out: box.classList.contains('out'),
+      sliding: box.classList.contains('sliding'), folding: box.classList.contains('folding'),
+      rows: box.children.length, menu: !!menu, label: toggleEl.attrs['aria-label'], pressed: toggleEl.attrs['aria-pressed'], stored: { ...stored } });
+    ({
+      open: () => pillsShown(),
+      press: () => { log.length = 0; toggleEl.onclick(); return { redrawn, shown: pillsShown() }; },
+      toggleFor: (available) => { renderPillsToggle(available); return { ...state(), button: toggleEl.hidden }; },
+      fold: (pressed = true) => { log.length = 0; pillsPressed = pressed; foldPills(box); pillsPressed = false; return state(); },
+      unfold: () => { log.length = 0; fill(3); unfoldPills(box); return state(); },
+      end: () => { const last = box.lastElementChild; if (last) last.fire('animationend'); return state(); },
+      settle: (property) => { box.fire('transitionend', { propertyName: property || 'height' }); return state(); },
+      reopen: () => { box.classList.remove('out'); return state(); },
+      cleanup: (available) => { renderCleanupBtn(available); return { hidden: cleanupEl.hidden, in: cleanupEl.classList.contains('in'), out: cleanupEl.classList.contains('out'), glyphs: cleanupEl.childNodes.length, label: cleanupEl.attrs['aria-label'] }; },
+      cleanupEnd: () => { cleanupEl.fire('animationend'); return { hidden: cleanupEl.hidden, in: cleanupEl.classList.contains('in'), out: cleanupEl.classList.contains('out') }; },
+      setDirty: (value) => { dirty = value; },
+      setReduced: (value) => { reduced = value; },
+    });
+  `);
+  assert.equal(api.open(), false, 'a saved search opens with its pills folded away: the query is already its title');
+  assert.equal(plain(api.toggleFor(true)).label, 'Show search options', 'and the button beside back and forward says what it will do');
+  assert.equal(plain(api.toggleFor(false)).button, true, 'off a saved search there is nothing to fold, so the button is not there');
+  // Closing: the pills leave one after another and the row goes only when the last of them is gone. Hiding it on the
+  // press would take the animation off screen halfway through.
+  const folding = plain(api.fold());
+  assert.equal(folding.out, true, 'the press starts them leaving');
+  assert.equal(folding.hidden, false, 'and the row is still there while they do');
+  assert.equal(folding.menu, false, 'an open pill menu closes with them');
+  // The row's height is the last thing to move: hiding it the moment the pills were gone took a whole line of the
+  // outline out from under the page in one frame, which is what read as a jump.
+  const empty = plain(api.end());
+  assert.deepEqual([empty.hidden, empty.folding], [false, true], 'with the last pill gone the row closes its own height, still on screen while it does');
+  assert.equal(plain(api.settle('margin-bottom')).hidden, false, 'and the margin travelling with it does not answer for it: it is the height that says when this is over');
+  const gone = plain(api.settle());
+  assert.deepEqual([gone.hidden, gone.out, gone.sliding, gone.rows], [true, false, false, 0], 'only once the height is down does the row go, taking nothing visible with it');
+  // Re-opened while they were leaving: the row is on screen and staying, so the close it interrupted must not hide it
+  // underneath the pills that have just been drawn back into it.
+  api.unfold(); api.settle(); api.fold();
+  api.reopen();
+  api.end();
+  assert.equal(plain(api.settle()).hidden, false, 'a row re-opened mid-flight is not hidden by the close it interrupted');
+  const arriving = plain(api.unfold());
+  assert.deepEqual(arriving.log.filter((line) => line.startsWith('pills ')),
+    ['pills remove sliding folding', 'pills add sliding folding', 'pills reflow', 'pills remove folding'],
+    'opening lays the row out closed and then lets it go, so the height grows from nought rather than appearing');
+  assert.deepEqual([arriving.sliding, arriving.folding], [true, false], 'so the row is moving, and moving open');
+  assert.equal(plain(api.settle()).sliding, false, 'the clipping comes off at the end, or a pill menu could not hang out of the row');
+  // Unsaved edits: the Save pill lives in this row, so a staged change holds it open and the button offers to hide
+  // rather than to show. Pressing it there is still a request to fold, which a Save makes good on.
+  api.setDirty(true);
+  assert.equal(api.open(), true, 'a staged edit keeps the pills open: Save is one of them');
+  assert.equal(plain(api.toggleFor(true)).pressed, 'true', 'and the button reads as open, because it is');
+  assert.equal(api.press().shown, true, 'pressing it there cannot take Save off the screen: the edit still holds the row open');
+  api.setDirty(false);
+  assert.equal(api.open(), false, 'but the press was recorded, so the row folds away the moment the edit is saved');
+  assert.equal(plain(api.toggleFor(true)).stored.pillsOpen, false, 'the choice is a preference, so it follows you between machines');
+  // Reduced motion: nothing animates, so nothing is waited for either.
+  api.setReduced(true);
+  api.unfold();
+  assert.equal(plain(api.fold()).hidden, true, 'under reduced motion the row is hidden on the press rather than waiting for an animation that never runs');
+  // A reload, a link, the Library: the page is drawn as it stands. Only the press moves the row, which is what the
+  // movement is there to answer.
+  api.setReduced(false);
+  api.unfold();
+  assert.equal(plain(api.fold(false)).hidden, true, 'a fold nobody pressed is drawn folded, not played out');
+  // Clean up is a header button that comes and goes with the rows a status change keeps in place, so it arrives with
+  // a pop and shrinks away again. Hiding it on the way out is what the animation is waiting for; a button that
+  // becomes wanted again while it is leaving has to stay, and the animation still running must not take it away.
+  api.setReduced(false);
+  cleanupEl_start: {
+    const up = plain(api.cleanup(true));
+    assert.deepEqual([up.hidden, up.in, up.glyphs, up.label], [false, true, 1, 'Clean up'], 'a row kept in place brings the button in with a pop');
+    const staying = plain(api.cleanup(true));
+    assert.equal(staying.in, true, 'and the renders that merely keep it there leave that alone');
+    const going = plain(api.cleanup(false));
+    assert.deepEqual([going.hidden, going.out, going.in], [false, true, false], 'nothing left to clean up: it leaves, and is still on screen while it does');
+    const gone = plain(api.cleanupEnd());
+    assert.deepEqual([gone.hidden, gone.out], [true, false], 'and is hidden only once that has played');
+    api.cleanup(true);
+    api.cleanup(false);
+    const back = plain(api.cleanup(true));
+    assert.deepEqual([back.hidden, back.out, back.in], [false, false, true], 'wanted again while it was leaving, it stays and pops back');
+    assert.equal(plain(api.cleanupEnd()).hidden, false, 'and the animation it interrupted cannot hide it afterwards');
+  }
+  api.setReduced(true);
+  api.cleanup(true);
+  assert.equal(plain(api.cleanup(false)).hidden, true, 'under reduced motion it goes at once rather than waiting for an animation that never runs');
+  api.setReduced(false);
+}
+
 function runRefreshSpinCheck() {
   const api = vm.runInNewContext(`
     const DOC = 'tana:search:01exampleq0000000000000000';
     const asked = [], log = [];
-    let pending = [], reduced = false;
-    const setTimeout = (fn, ms) => { pending.push({ fn, ms }); return pending.length; };
+    let reduced = false, available = true, staged = false;
     const matchMedia = (query) => ({ matches: reduced && query.includes('reduce') });
     const mkEl = (tagName) => {
       const classes = new Set();
-      const node = { tagName, children: [], dataset: {}, attrs: {}, svg: null,
+      return { tagName, hidden: false, childNodes: [], attrs: {},
         classList: { add: (...names) => { names.forEach((name) => classes.add(name)); log.push('add ' + names.join(' ')); },
           remove: (...names) => { names.forEach((name) => classes.delete(name)); log.push('remove ' + names.join(' ')); },
           contains: (name) => classes.has(name) },
         get offsetWidth() { log.push('reflow'); return 0; },
-        get className() { return [...classes].join(' '); },
-        set className(value) { classes.clear(); for (const name of String(value).split(' ')) if (name) classes.add(name); },
-        setAttribute(name, value) { this.attrs[name] = value; },
-        append(...kids) { this.children.push(...kids); },
-        set innerHTML(value) { this.svg = mkEl('svg'); },
-        get firstChild() { return this.svg; } };
-      return node;
+        setAttribute(name, value) { this.attrs[name] = String(value); },
+        append(...kids) { this.childNodes.push(...kids); },
+        get firstChild() { return this.childNodes[0] || null; } };
     };
-    const document = { createElement: mkEl };
-    const iconSvg = () => '<svg></svg>';
+    const button = mkEl('button');
+    const \$ = () => button;
+    const iconNode = () => mkEl('svg');
     const zoom = { docId: DOC };
     const releaseHeld = () => asked.push('release');
     const run = (fn) => fn();
     const reload = async (id) => asked.push('reload ' + id); // the fastest answer there is: back within the same tick
     const render = (force) => asked.push('render ' + force);
-    ${sourceBetween('const SPIN_MS =', 'function spinOnce(')}
-    ${functionSource('spinOnce')}
-    ${functionSource('refreshPill')}
-    const pill = refreshPill();
-    const tick = async () => { for (let i = 0; i < 5; i++) await Promise.resolve(); };
-    const state = () => ({ log: [...log], asked: [...asked], waits: pending.map((t) => t.ms), spinning: pill.children[0].classList.contains('spin') });
+    ${sourceBetween('const stillPreferred =', 'function playOnce(')}
+    ${functionSource('playOnce')}
+    ${sourceBetween('const refreshBtn =', '// Clean up: let go of the rows')}
+    const state = () => ({ log: [...log], asked: [...asked], hidden: button.hidden, glyphs: button.childNodes.length,
+      label: button.attrs['aria-label'], spinning: !!button.firstChild && button.firstChild.classList.contains('spin') });
     ({
-      spinMs: SPIN_MS,
-      press: async () => { log.length = 0; asked.length = 0; pill.onclick(); await tick(); return state(); },
-      finish: async () => { const queued = pending; pending = []; for (const t of queued) t.fn(); await tick(); return state(); },
+      draw: (offered) => { log.length = 0; renderRefreshBtn(offered); return state(); },
+      press: async () => { log.length = 0; asked.length = 0; button.onclick(); for (let i = 0; i < 5; i++) await Promise.resolve(); return state(); },
       setReduced: (value) => { reduced = value; },
     });
   `, { Promise });
   return (async () => {
+    const drawn = plain(api.draw(true));
+    assert.deepEqual([drawn.hidden, drawn.glyphs, drawn.label], [false, 1, 'Refresh'], 'a saved search is offered Refresh beside the fold button, as a named glyph');
+    assert.equal(plain(api.draw(true)).glyphs, 1, 'and a redraw keeps the glyph it already has, so a turn in progress is not thrown away');
+    assert.equal(plain(api.draw(false)).hidden, true, 'a page with nothing to re-ask is not offered it');
+    api.draw(true);
     const pressed = plain(await api.press());
     assert.equal(pressed.spinning, true, 'pressing Refresh turns the glyph');
-    assert.deepEqual(pressed.asked, ['release', 'reload tana:search:01exampleq0000000000000000'],
-      'the query goes out on the press, through the pill\'s own refresh rather than a second mechanism beside it');
-    assert.deepEqual(pressed.waits, [api.spinMs], 'and one wait is outstanding, exactly as long as the turn');
-    assert.equal(pressed.asked.includes('render true'), false,
-      'the redraw has not happened yet: an answer this fast would otherwise replace the pill mid-turn, which is the whole bug');
-    const done = plain(await api.finish());
-    assert.deepEqual(done.asked, ['release', 'reload tana:search:01exampleq0000000000000000', 'render true'],
-      'and once the turn is over the page is drawn, in the order it always was');
+    assert.deepEqual(pressed.asked, ['release', 'reload tana:search:01exampleq0000000000000000', 'render true'],
+      'the rows kept in place are let go, the query goes out, and the page is drawn the moment it answers — the turn finishes on its own, on a button no redraw rebuilds');
     const again = plain(await api.press());
     assert.deepEqual(again.log, ['remove spin', 'reflow', 'add spin'],
       'a second press restarts the turn: dropped, laid out again, re-added — without the reflow in between the class never leaves and nothing moves');
-    await api.finish();
     api.setReduced(true);
     const still = plain(await api.press());
-    assert.deepEqual(still.waits, [], 'under reduced motion nothing turns, so nothing is waited for');
+    assert.equal(still.spinning, false, 'under reduced motion nothing turns');
     assert.deepEqual(still.asked, ['release', 'reload tana:search:01exampleq0000000000000000', 'render true'],
-      'and the refresh is drawn as soon as it answers');
+      'and the refresh is drawn as soon as it answers, exactly as it is with the turn');
   })();
 }
 
@@ -5911,7 +6049,63 @@ function runPrefsStoreCheck() {
   console.log('ok  preferences: the store writes into its own copy, not the frozen bridge object, so a choice sticks, reaches main and lets what follows it run');
 }
 
-const checks = [runPrefsStoreCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runSetIconCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runAgentStatusBootCheck, runQuickAddPanelCheck, runRailChangesCheck, runPasteLinkCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runDraftTailCheck,runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck];
+
+// A click that misses the words still belongs to the row, and a row is bigger than its text: the padding around
+// it, and the blank line a soft break leaves inside it. Layout is the input here, so the geometry and the
+// browser's answer are given rather than measured.
+function runCaretAtPointCheck() {
+  const api = vm.runInNewContext(`
+    ${ANCHOR_SRC}
+    const TEXT = 'Document the risk.\\na\\nPotentially 7 mio';
+    let asked = [], answer = () => null;
+    const node = { data: TEXT };
+    const text = {
+      textContent: TEXT,
+      getBoundingClientRect: () => box,
+      contains: (n) => n === node,
+    };
+    let box = { left: 100, right: 500, top: 200, bottom: 290, width: 400, height: 90 };
+    const document = {
+      caretRangeFromPoint: (x, y) => { asked.push([x, y]); return answer(x, y); },
+      createRange: () => ({ selectNodeContents() {}, setEnd(container, offset) { this.offset = offset; }, toString() { return TEXT.slice(0, this.offset); } }),
+    };
+    ${functionSource('caretAt')}
+    ({
+      at: (x, y, reply, rect) => { asked = []; answer = reply; if (rect) box = rect; return { offset: caretAt(text, x, y), asked }; },
+      node: () => node,
+      inText: (offset) => () => ({ startContainer: node, startOffset: offset }),
+      elsewhere: () => ({ startContainer: { other: true }, startOffset: 0 }),
+    });
+  `);
+  const node = api.node();
+  const hit = api.inText(9);
+  const inside = api.at(300, 240, hit);
+  assert.equal(inside.offset, 9, 'a click the browser can read lands where it was read');
+  assert.deepEqual(plain(inside.asked), [[300, 240]], 'and the point is asked for as it was clicked, since it is already inside the text');
+
+  const beside = api.at(40, 240, hit);
+  assert.deepEqual(plain(beside.asked[0]), [101, 240], 'a click in the padding beside a line is pulled onto that line, not down to the end of the row');
+  const below = api.at(300, 600, hit);
+  assert.deepEqual(plain(below.asked[0]), [300, 289], 'and one below the last line onto the last line');
+  const above = api.at(300, 10, hit);
+  assert.deepEqual(plain(above.asked[0]), [300, 201], 'one above the first onto the first');
+
+  // the blank line a soft break leaves: the point is inside the row but over no words, so the browser may answer
+  // with something outside this text; the left edge of the line is asked before the row falls back to its end
+  let calls = 0;
+  const retried = api.at(300, 240, (x) => (++calls === 1 ? { startContainer: { other: true }, startOffset: 0 } : { startContainer: node, startOffset: 19 }));
+  assert.equal(retried.offset, 19, 'an answer from outside the text is retried at the start of the line');
+  assert.deepEqual(plain(retried.asked.map(([x]) => x)), [300, 101], 'which is the only second place worth asking');
+  const refused = api.at(300, 240, () => ({ startContainer: { other: true }, startOffset: 0 }));
+  assert.equal(refused.offset, 38, 'and a row the browser will not read a position from still answers with its end, as it always did');
+  const empty = api.at(300, 240, () => null, { left: 100, right: 100, top: 200, bottom: 200, width: 0, height: 0 });
+  assert.equal(empty.offset, 38, 'a row with nothing rendered has nothing to aim at');
+  assert.deepEqual(plain(empty.asked), [], 'and is not asked about');
+
+  assert.match(functionSource('nodeEl'), /setCaret\(text, caretAt\(text, e\.clientX, e\.clientY\)\)/, 'the row places the caret where the click was');
+}
+
+const checks = [runCaretAtPointCheck, runPrefsStoreCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runSetIconCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runAgentStatusBootCheck, runQuickAddPanelCheck, runRailChangesCheck, runPasteLinkCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck,runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck];
 // The chips under a zoomed title, driven through the shipped line itself: a typed document shows its type whatever
 // kind it is, and the kind chip (task, doc, meeting, space, chat…) stays out of the header, as it always did for a task.
 function runZoomTypeChipCheck() {

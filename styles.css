@@ -35,7 +35,6 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .pagehead { display: flex; align-items: flex-start; }
 .pagehead h1 { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .pagehead .check { width: 22px; height: 22px; margin: 11px 12px 0 0; border-radius: 6px; }
-.pagehead .check:checked::after { left: 8px; top: 3px; width: 5px; height: 11px; }
 .pagehead h1.done { color: #999; text-decoration: line-through; }
 .pagehead .cbadge { margin-top: 12px; } /* the title's first line, not its top edge */
 /* the type chip line under a zoomed title: a block, so it lines up with the title, and it may wrap. The 6px a chip
@@ -107,7 +106,19 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 }
 .navbtn:hover:not(:disabled) { background: #ddd; opacity: 1; }
 .navbtn:disabled { opacity: .15; cursor: default; } /* nowhere to go: still there, saying so */
+/* Back and forward are always there; Refresh and the fold button are offered only on a saved search, and their
+   own display would otherwise win over the browser's rule for [hidden] and leave a blank, glyphless slot. */
+.navbtn[hidden] { display: none; }
 .navbtn svg { display: block; width: 18px; height: 18px; }
+/* Clean up comes and goes with the rows a status change keeps in place, so it arrives with a pop and shrinks away
+   again rather than appearing and disappearing between two frames. Only where motion is welcome; the classes are
+   put on by renderer/pills.js, which also waits for the leaving one before hiding the button. */
+@media (prefers-reduced-motion: no-preference) {
+  .navbtn.in { animation: btn-in .45s cubic-bezier(.2, .9, .3, 1.4) backwards; }
+  .navbtn.out { animation: btn-out .35s cubic-bezier(.4, 0, .7, .2) forwards; }
+}
+@keyframes btn-in { from { opacity: 0; transform: scale(.5); } }
+@keyframes btn-out { to { opacity: 0; transform: scale(.5); } }
 
 /* filter pills (Tasks / Library): "Status <Inbox, In Progress>", "Assigned to <You>", "<Type>"; each opens a menu below it */
 .pills { position: relative; display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 32px 12px; }
@@ -115,23 +126,33 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .pill { position: relative; border: 0; border-radius: 999px; padding: 6px 14px; background: #e8f1fb; color: #4f8ad9; font-weight: 600; font-size: 15px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
 .pill b { color: #2b6fcf; font-weight: 700; }
 .pill svg { width: 16px; height: 16px; }
-/* the Refresh pill answers the press before the query does: one turn of the glyph, on transform alone, and only
-   where motion is welcome — under reduced motion the class selects nothing and the icon stands still */
-/* and it is drawn a step heavier than the icon set's hairline, which at 16px in a pale pill read as barely there.
-   The weight is on the pill's own glyph, not on the icon: the same reload glyph in Cmd+K is unchanged. It has to
-   reach inside the svg, because the set puts stroke-width on the wrapping <g> and a rule on the svg alone would
-   lose to that attribute. Nothing about the size, the box or the turn moves: the stroke grows inside the viewBox. */
-.pill.refresh svg * { stroke-width: 1.5; }
-@media (prefers-reduced-motion: no-preference) { .pill svg.spin { animation: pill-spin .75s ease-in-out; transform-origin: 50% 50%; } }
+/* Refresh is a header button beside the fold one (renderer/pills.js), and it answers the press before the query
+   does: one turn of the glyph, on transform alone, and only where motion is welcome — under reduced motion the
+   class selects nothing and the icon stands still. */
+@media (prefers-reduced-motion: no-preference) { .navbtn svg.spin { animation: pill-spin .75s ease-in-out; transform-origin: 50% 50%; } }
 @keyframes pill-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+/* A saved search folds its pills away behind the header button (renderer/pills.js). They arrive and leave one after
+   another, left to right -- --i is the pill's place in the row -- and the row's own height follows them, so what is
+   under it slides rather than jumping the moment the last pill has gone. The height travels to and from auto
+   (interpolate-size), which is why nothing has to be measured in JS; it is clipped only while it moves, or a pill
+   menu could not hang out of the row. Under reduced motion none of it is declared, and the row simply appears and
+   disappears -- which is what pills.js falls back to. */
+@media (prefers-reduced-motion: no-preference) {
+  .pills { interpolate-size: allow-keywords; } /* declared on the row, not on .sliding: the height it opens from is read before that class lands */
+  .pills > .pill.in { animation: pill-in .3s cubic-bezier(.2, .9, .3, 1.35) backwards; animation-delay: calc(var(--i, 0) * 35ms); }
+  .pills.out > .pill { animation: pill-out .24s ease-in forwards; animation-delay: calc(var(--i, 0) * 25ms); }
+  .pills.sliding { overflow: hidden; transition: height .3s cubic-bezier(.3, 0, .2, 1), margin-bottom .3s cubic-bezier(.3, 0, .2, 1); }
+  .pills.folding { height: 0; margin-bottom: 0; }
+}
+@keyframes pill-in { from { opacity: 0; transform: translateY(-10px) scale(.8); } }
+@keyframes pill-out { to { opacity: 0; transform: translateY(-10px) scale(.8); } }
 .pill:hover, .pill.open { background: #d9e8fa; }
 .pill:focus { outline: none; box-shadow: 0 0 0 2px #b7d2f5; }
 /* Sort and Group arrange the rows the view already has, so they sit beside the filters in grey rather than filter blue */
-.pill[data-id="sort"], .pill[data-id="group"], .pill[data-id="display"], .pill[data-id="refreshSearch"] { background: #f1f1f1; color: #777; }
-.pill[data-id="refreshSearch"] { padding: 6px 10px; } /* icon only: the label's side padding would read as a gap */
+.pill[data-id="sort"], .pill[data-id="group"], .pill[data-id="display"] { background: #f1f1f1; color: #777; }
 .pill[data-id="sort"] b, .pill[data-id="group"] b, .pill[data-id="display"] b { color: #444; }
 .pill[data-id="sort"]:hover, .pill[data-id="sort"].open, .pill[data-id="group"]:hover, .pill[data-id="group"].open,
-.pill[data-id="display"]:hover, .pill[data-id="display"].open, .pill[data-id="refreshSearch"]:hover { background: #e6e6e6; }
+.pill[data-id="display"]:hover, .pill[data-id="display"].open { background: #e6e6e6; }
 /* Saving a query — keeping this one, or keeping a view's as a new search — makes something rather than narrowing
    something, so it reads green instead of filter blue, and says what it does in words rather than a glyph. */
 .pill.save, .pill.savesearch { background: #e6f4ea; color: #2e7d4f; }
@@ -244,12 +265,15 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .check {
   flex: none; width: 18px; height: 18px; margin: 3px 8px 0 2px; border-radius: 5px; background: #e4e4e4;
   border: 0; padding: 0; cursor: pointer; -webkit-appearance: none; appearance: none; position: relative;
+  --check-on: #6fae82;
 }
 .check:hover { background: #d6d6d6; }
-.check:checked { background: #6fae82; }
-.check:checked::after {
-  content: ""; position: absolute; left: 6px; top: 2px; width: 4px; height: 9px;
-  border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg);
+/* the tick is a background layer under a green cover of the same colour that is 0 wide: completing a task here
+   plays the cover shrinking from the left (render.js playTick), so the tick appears stroke by stroke. A layer on
+   the input itself rather than ::after, whose animation a render's replaceChildren cuts short. */
+.check:checked {
+  background: linear-gradient(var(--check-on), var(--check-on)) right / 0 100% no-repeat,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 8.7l3.3 3.3 6.9-6.9'/%3E%3C/svg%3E") center / 100% 100% no-repeat var(--check-on);
 }
 /* an Inbox task is not accepted yet: the grey box becomes a dashed outline (square-dashed, cropped to its outer edge
    so the dashes sit where the box's edge is, at every checkbox size) */
@@ -552,7 +576,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .pill b { color: #b9dcf2; }
 [data-theme="dark"] .pill:hover, [data-theme="dark"] .pill.open { background: #314955; }
 [data-theme="dark"] .pill:focus { box-shadow: 0 0 0 2px #58768a; }
-[data-theme="dark"] .pill[data-id="sort"], [data-theme="dark"] .pill[data-id="group"], [data-theme="dark"] .pill[data-id="display"], [data-theme="dark"] .pill[data-id="refreshSearch"] { background: #2a2d2f; color: #9a9fa1; }
+[data-theme="dark"] .pill[data-id="sort"], [data-theme="dark"] .pill[data-id="group"], [data-theme="dark"] .pill[data-id="display"] { background: #2a2d2f; color: #9a9fa1; }
 [data-theme="dark"] .pill[data-id="sort"] b, [data-theme="dark"] .pill[data-id="group"] b, [data-theme="dark"] .pill[data-id="display"] b { color: #c9c9c9; }
 [data-theme="dark"] .pill[data-id="sort"]:hover, [data-theme="dark"] .pill[data-id="sort"].open,
 [data-theme="dark"] .pill[data-id="group"]:hover, [data-theme="dark"] .pill[data-id="group"].open,
@@ -582,10 +606,8 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .bullet.icon:hover svg, [data-theme="dark"] .collapsed > .line > .bullet.icon svg { color: #d0d2d2; }
 [data-theme="dark"] .bullet.meeting svg, [data-theme="dark"] .collapsed > .line > .bullet.meeting svg { color: #d7b54d; }
 [data-theme="dark"] .bullet.icon.hue svg, [data-theme="dark"] .bullet.icon.hue:hover svg, [data-theme="dark"] .collapsed > .line > .bullet.icon.hue svg { color: hsl(var(--hue) 70% 72%); }
-[data-theme="dark"] .check { background: #3a3e40; }
-[data-theme="dark"] .check:hover { background: #474c4e; }
-[data-theme="dark"] .check:checked { background: #5b976c; }
-[data-theme="dark"] .check:checked::after { border-color: #f4f5f5; }
+[data-theme="dark"] .check { background: #3a3e40; --check-on: #5b976c; }
+[data-theme="dark"] .check:hover:not(:checked) { background: #474c4e; }
 [data-theme="dark"] .check.inbox:not(:checked) { background: #5d6467; }
 [data-theme="dark"] .document.done > .line .text { color: #777d80; }
 [data-theme="dark"] .meta, [data-theme="dark"] .filtered, [data-theme="dark"] .empty-note { color: #858b8e; }

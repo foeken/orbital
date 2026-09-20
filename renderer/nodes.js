@@ -150,6 +150,9 @@ function iconNode(icon) {
   return t ? t.cloneNode(true) : null;
 }
 const isTask = (node) => node.kind === 'document' && node.icon === 'task';
+// A task put off is drawn with the zzz glyph instead of the task one: the row still is a task (its box, its
+// status, its metadata are unchanged), it only says at a glance that it is asleep.
+const iconOf = (node) => (isTask(node) && node.stateType === 'not_now' ? 'later' : node.icon);
 // an unchecked Inbox task: its (dashed) box accepts it, In Progress, before a second click completes it
 const acceptsFirst = (node) => isTask(node) && !node.done && node.stateType === 'proposed';
 const isCheckboxBlock = (node) => node?.kind === 'block' && node.done != null;

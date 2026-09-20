@@ -430,6 +430,12 @@ them is trimmed.
   starts a list in it. There is no setting: this was briefly a Cmd+K switch between an outliner and a text editor
   (`outlinerMode`, `opts.bullet`), and it was removed once the inheritance rule left it deciding one row. The
   list a "- " creates is built inside the same transaction as the row, so Enter and "- " are each one undo step.
+- **A click that misses the words still belongs to the row, and lands where it was aimed.** A row is bigger than
+  its text — the padding around it, and the blank line a soft break leaves inside it — and a click there used to
+  answer with the end of the row, walking the caret past everything written after the point that was clicked.
+  `caretAt` (renderer/render.js) pulls the point into the text's own box and reads the position there, asking the
+  left edge of the line as a second try, since the browser may answer with something outside this text for a point
+  over no words. A row it cannot read a position from still answers with its end, which is what it always did.
 - **A picture is not a line of text.** An image draws a marker only where a list row would: `blockType` reports
   the list an atom sits in (a child is a list row whatever it holds) and nothing when it stands on its own, so a
   top-level image is the picture and nothing else, outdented like every other marker-less row. Space on the row or

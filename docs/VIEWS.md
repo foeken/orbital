@@ -4,6 +4,13 @@ Inbox, Tasks, Meetings, Library, Chats and People are **the same view**: one lis
 with a filter on it. A view is a preset filter plus a persisted copy of whatever the user changed.
 There is one query builder, one fetch path, one cache, one loader and one set of pills.
 
+On a **saved search** that one set of pills folds away behind a button beside back and forward
+(`pillsOpen`, a preference; renderer/pills.js): its query is already its title, and the pills are
+wanted while it is being re-aimed rather than every time it is read. A view keeps its pills in front
+of it, an unsaved edit holds the row open — Save is one of the pills in it — and Cmd+K lists every
+pill either way. **Refresh** is a header button beside that one rather than a pill: it asks the query
+rather than describing it, so folding the pills away must not take it with them.
+
 This file is the contract between the main process (`sdk/query.js`, `main.js`, `preload.js`) and the
 renderer. It replaces the per-view paths: `taskParams`/`libraryQueries`/`MEETINGS_QUERY`/`inbox()`/
 `chats()`/`library()` on one side and `loadLibrary`/`loadChats`/`loadInbox`/`loadMembers`-as-a-view,

@@ -108,6 +108,7 @@ function toggleRelated(node) {
   if (acceptsFirst(node)) { node.stateType = 'open'; patchCopies(node.id, { stateType: 'open' }); run(async () => { await tana.setState(node.id, 'open'); }); return render(true); } // Inbox: accept first, complete next
   const done = node.done ? 0 : 1;
   node.done = done; node.stateType = done ? 'closed' : 'open';
+  if (done) justDone.set(node.id, Date.now());
   patchCopies(node.id, { done, stateType: node.stateType });
   run(async () => { await tana.setDone(node.id, !!done); });
   render(true);

@@ -28,6 +28,8 @@ WANT.robot = path.join(__dirname, '..', 'build', 'icons', 'face-robot-2.svg'); /
 WANT.brain = path.join(__dirname, '..', 'build', 'icons', 'brain.svg'); // the model rows on the Assign to Agent page
 WANT.host = path.join(__dirname, '..', 'build', 'icons', 'monitor.svg'); // the machine a Codex task runs on
 WANT.home = path.join(__dirname, '..', 'build', 'icons', 'house.svg'); // the Home anchor crumb: the Library, or the saved search chosen as Home
+// a task put off: the Later state's own glyph (zzz, asleep), drawn instead of the task list-checkbox on those rows
+WANT.later = path.join(__dirname, '..', 'build', 'icons', 'zzz.svg');
 // "No type" on the Set type page: a circle with a slash through it, for taking a choice off rather than making one
 WANT.none = path.join(__dirname, '..', 'build', 'icons', 'slash-circle.svg');
 // the disclosure chevron on a group heading: pointing right folded, turned a quarter down while the section is open,
@@ -37,6 +39,8 @@ WANT.chevronRight = path.join(__dirname, '..', 'build', 'icons', 'chevron-right.
 // above, so the same art is not carried under two names.
 WANT.updated = path.join(__dirname, '..', 'build', 'icons', 'pen-writing.svg');
 WANT.created = path.join(__dirname, '..', 'build', 'icons', 'file-plus.svg');
+// A saved search folds its pills away behind this, beside back and forward (renderer/pills.js)
+WANT.options = path.join(__dirname, '..', 'build', 'icons', 'sliders-vertical.svg');
 // Cmd+K rows for the keys the outline answers to
 for (const [name, file] of [['expand', 'v-shaped-arrow-down'], ['collapse', 'v-shaped-arrow-up'], ['undo', 'undo'], ['redo', 'redo'], ['textLarger', 'text-size-increase'], ['textSmaller', 'text-size-decrease'], ['textReset', 'text'], ['rail', 'sidebar-right-4'], ['railShow', 'sidebar-right-show'], ['railHide', 'sidebar-right-hide'], ['back', 'arrow-left'], ['forward', 'arrow-right'], ['zoomIn', 'magnifier-3'], ['search', 'file-search'], ['filter', 'filter-2']]) WANT[name] = path.join(__dirname, '..', 'build', 'icons', file + '.svg');
 const out = {};

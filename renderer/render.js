@@ -2,6 +2,22 @@
 // Caret helpers and the outline render: rows, drafts, crumbs, fields, animation of arriving and leaving rows.
 
 // ---- caret helpers (contenteditable: text nodes + non-editable mention anchors) ----
+// Where in a row's text a point lands. The point is pulled into the text's own box first, so a click beside a
+// line lands on that line rather than at the end of the row, and only a click past the last line lands at the end.
+// A point the browser cannot read a position from — a row with nothing rendered, an answer outside this text —
+// falls back to the end, which is what the row always used to answer.
+function caretAt(text, x, y) {
+  const box = text.getBoundingClientRect(), end = () => unanchored(text.textContent).length;
+  if (!box.width && !box.height) return end();
+  const at = Math.min(Math.max(y, box.top + 1), box.bottom - 1);
+  for (const px of [Math.min(Math.max(x, box.left + 1), box.right - 1), box.left + 1]) {
+    const hit = document.caretRangeFromPoint && document.caretRangeFromPoint(px, at);
+    if (!hit || !text.contains(hit.startContainer)) continue;
+    const r = document.createRange(); r.selectNodeContents(text); r.setEnd(hit.startContainer, hit.startOffset);
+    return unanchored(r.toString()).length; // the same count every offset in this file is made of
+  }
+  return end();
+}
 function caretOffset(el) {
   const sel = getSelection();
   if (!sel.rangeCount || !el.contains(sel.focusNode)) return null;
@@ -169,11 +185,62 @@ function refreshRowChrome() {
     if (!n || !check) continue;
     check.checked = !!n.done; check.classList.toggle('inbox', n.stateType === 'proposed'); row.classList.toggle('done', !!n.done);
   }
+  playTicks();
+}
+// Completing a task here (not a live update from elsewhere) is worth a flourish: the box squashes, pops and sends out
+// a green ring, the tick appears stroke by stroke (a cover the colour of the box, wiped off left to right; styles.css
+// .check:checked) and the strike sweeps across the text before the plain line-through takes over. Script animations
+// on the elements rather than a CSS class: a render puts reused rows back with replaceChildren, which restarts a
+// CSS animation mid-flight and leaves these running. A row rebuilt meanwhile (the live update of the task lands
+// within the moment, and a zoomed page builds its rows afresh) joins at the time the click's animation has reached.
+const TICK_MS = 700; // longer than the last of the three below
+// Where Chrome draws a line-through (Blink's TextDecorationInfo): a stroke of max(1px, font-size / 10) centred two
+// thirds of the font's ascent down from the top of the text's content area, which sits at the top of an inline box
+// and is centred in the line box of a block (the page title, a sidebar row). Measured from the font itself so the
+// sweep lands on the line that replaces it, at every size.
+function strikeTop(text) {
+  const cs = getComputedStyle(text), ctx = (strikeTop.ctx ||= document.createElement('canvas').getContext('2d'));
+  ctx.font = cs.font;
+  const m = ctx.measureText('x'), lh = parseFloat(cs.lineHeight) || m.fontBoundingBoxAscent + m.fontBoundingBoxDescent;
+  const lead = cs.display === 'inline' ? 0 : (lh - m.fontBoundingBoxAscent - m.fontBoundingBoxDescent) / 2;
+  const thick = Math.max(1, parseFloat(cs.fontSize) / 20); // the system font's own underline weight: 1px at 16px, under 2px on the page title
+  // ponytail: checked by eye against Blink's own line at 16px on a 1.8x display; tune STRIKE_NUDGE (px) if a font
+  // or scale disagrees
+  const snap = (v) => Math.round(v * devicePixelRatio) / devicePixelRatio; // on device pixels, like Blink's stroke: no anti-aliased smear that reads as weight
+  return { top: snap(lead + m.fontBoundingBoxAscent * 2 / 3 - thick / 2 + STRIKE_NUDGE), lh, thick: snap(thick) };
+}
+const STRIKE_NUDGE = 0;
+function playTick(check, text, at) {
+  if (!check || !text || check.dataset.tick === String(at) || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  check.dataset.tick = String(at);
+  const ring = (px, a) => '0 0 0 ' + px + 'px rgba(111, 174, 130, ' + a + ')';
+  // one stroke per line (a line-high tile repeated down), so a wrapped title is struck on every line, where the line-through will be
+  const { top, lh, thick } = strikeTop(text);
+  const strike = (w) => ({ backgroundImage: 'linear-gradient(transparent ' + top + 'px, currentColor ' + top + 'px ' + (top + thick) + 'px, transparent 0)', backgroundRepeat: 'repeat-y', backgroundSize: w + ' ' + lh + 'px', textDecorationColor: 'transparent' });
+  const anims = [
+    check.animate([{ transform: 'scale(1)', boxShadow: ring(0, .6) }, { transform: 'scale(.8)', offset: .25 }, { transform: 'scale(1.18)', boxShadow: ring(7, .25), offset: .6 }, { transform: 'scale(1)', boxShadow: ring(12, 0) }],
+      { duration: 550, easing: 'cubic-bezier(.34, 1.56, .64, 1)' }),
+    check.animate([{ backgroundSize: '100% 100%, 100% 100%' }, { backgroundSize: '0% 100%, 100% 100%' }], { duration: 260, delay: 120, easing: 'ease-out', fill: 'backwards' }),
+    text.animate([strike('0'), strike('100%')], { duration: 400, delay: 180, easing: 'ease-in-out', fill: 'backwards' }),
+  ];
+  for (const a of anims) a.currentTime = Date.now() - at;
+}
+// At the end of a render: every place a task completed here is drawn (its row, its sidebar row, the page head).
+function playTicks() {
+  if (!justDone.size) return;
+  const now = Date.now();
+  for (const [id, at] of justDone) if (now - at > TICK_MS) justDone.delete(id);
+  for (const el of outline.querySelectorAll('.node.done')) { // a task row, or a line that is one mention of a task
+    const item = items.get(el.dataset.key), n = item && (referenceTarget(item.node) || item.node);
+    if (n && justDone.has(n.id)) playTick(el.querySelector(':scope > .line > .check'), el.querySelector(':scope > .line .text'), justDone.get(n.id));
+  }
+  for (const row of railEl.querySelectorAll('.rrow.done[data-id]')) if (justDone.has(row.dataset.id)) playTick(row.querySelector('.check'), row.querySelector('.rtitle'), justDone.get(row.dataset.id));
+  if (zoom && !zoom.nodeId && justDone.has(zoom.docId) && titleEl.classList.contains('done')) playTick(titleCheck, titleEl, justDone.get(zoom.docId));
 }
 function render(force = false) {
-  if (force !== true && (editingRow() || selectionFrozen)) { renderDeferred = true; markFalling(); refreshRowChrome(); if (!$('pills').hidden) renderPills(true); return; }
+  if (force !== true && (editingRow() || selectionFrozen)) { renderDeferred = true; markFalling(); refreshRowChrome(); if (pillsDrawn) renderPills(true); return; }
   renderDeferred = false; rendering = true;
-  try { renderOutline(); } finally { rendering = false; }
+  try { renderOutline(); } finally { rendering = false; playTicks(); }
   fitRowMeta();
 }
 // A task row carries its grey facts — who it is for, who can see it, whether it notifies — after the title. When the
@@ -577,7 +644,7 @@ function nodeEl(node, docId, parent) {
   chev.onmousedown = (e) => e.preventDefault();
   chev.classList.toggle('off', !expandable); // hidden glyph, kept in the layout so the row never shifts
   const bullet = document.createElement('span'); bullet.className = 'bullet'; bullet.title = 'Zoom in';
-  const bulletIcon = gone ? 'trash' : display.icon;
+  const bulletIcon = gone ? 'trash' : iconOf(display);
   if (bulletIcon) { bullet.classList.add('icon', bulletIcon); const svg = iconNode(bulletIcon); if (svg) bullet.append(svg); }
   if (display.hue != null) { bullet.classList.add('hue'); bullet.style.setProperty('--hue', String(display.hue)); } // type hue tints the icon and the plain bullet alike
   bullet.onmousedown = (e) => e.preventDefault();
@@ -638,7 +705,10 @@ function nodeEl(node, docId, parent) {
   line.append(body);
   // handed to the local Codex agent: the robot badge at the end of the row, after everything the row says about itself
   if (codexIds.has(display.id)) line.append(codexBadgeEl(display.id, display.done));
-  line.onclick = (e) => { if (!e.metaKey && !e.shiftKey && !reference && !fullref && (e.target === line || e.target === body || e.target.parentElement === text)) setCaret(text, text.textContent.length); };
+  // A click that misses the words still belongs to the row, and the row is bigger than its text: the padding
+  // around it, and the blank line a soft break leaves inside it, are all places a caret can sit. It used to answer
+  // with the end of the row, which walked the caret past everything written after the point that was clicked.
+  line.onclick = (e) => { if (!e.metaKey && !e.shiftKey && !reference && !fullref && (e.target === line || e.target === body || e.target.parentElement === text)) setCaret(text, caretAt(text, e.clientX, e.clientY)); };
   // a reference row: the bullet opens the target, a click selects the row, and a click on the selected row starts
   // editing it — a native embed takes the caret where it was clicked, while a full reference has nothing to click
   // into (its text is one chip), so the caret goes to the end, which is where Enter on the selection puts it too

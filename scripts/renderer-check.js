@@ -410,13 +410,24 @@ assert.match(source, /filterRow\.hidden = \(!!parent && !isSearchDoc\(parent\.no
 assert.match(source, /if \(isSearchDoc\(parent\.node\)\) \{/, 'the zoomed branch narrows a saved search the way a view narrows its rows');
 // the Library keeps the query it is showing as a saved search; main owns the filter→query translation
 assert.match(source, /if \(defs\.length && tana\.createSearch && !onSearchPage\(\)\) box\.append\(saveSearchPill\(\)\)/, 'a view with pills offers to save its query as a search, and a saved search does not: it already is one');
-// The pill is pressed straight after a status change, so the caret is still in that row and a render is waiting on it.
-// Without this the mousedown focused the pill, ran the deferred render, rebuilt the pills, and the mouseup landed on a
-// new element: the first press did nothing at all.
-assert.match(source, /pill\.onmousedown = \(e\) => e\.preventDefault\(\);\n  pill\.onclick = go;/, 'Clean up keeps the focus where it is, so the press is not lost to the render it would otherwise trigger');
+// Clean up is a header button beside the fold one, offered wherever the pills are — folded or not, on a view as
+// well — because a row kept in place is exactly when it is wanted.
+assert.match(source, /renderCleanupBtn\(!!show && needsCleanup\(shownDocs\(\)\)\)/, 'Clean up is decided while the pills render, whether or not the row is on screen');
+// It is pressed straight after a status change, so the caret is still in that row and a render is waiting on it.
+// Without this the mousedown moved the focus, ran that render, and the mouseup landed on what it had drawn: the
+// first press did nothing at all.
+assert.match(source, /cleanupBtn\.onmousedown = \(e\) => e\.preventDefault\(\);\ncleanupBtn\.onclick = cleanupNow;/, 'Clean up keeps the focus where it is, so the press is not lost to the render it would otherwise trigger');
+// It comes and goes with the rows being held, so it arrives with a pop rather than appearing between two frames —
+// through the same one-shot helper the Refresh turn uses, which is what makes a second arrival play again.
+assert.match(source, /const arriving = cleanupBtn\.hidden \|\| cleanupBtn\.classList\.contains\('out'\);/, 'Clean up knows when it has turned up, including while it was leaving');
+assert.match(source, /if \(arriving\) playOnce\(cleanupBtn, 'in'\);/, 'and pops in then, rather than on every render that keeps it');
+// Leaving waits for the animation, and a button wanted again while it is going stays: the render that keeps it
+// takes the class off, and the animation still running then ends on an element that is staying put.
+assert.match(source, /if \(!cleanupBtn\.classList\.contains\('out'\)\) return;\n    cleanupBtn\.classList\.remove\('out'\);\n    cleanupBtn\.hidden = true;/, 'and it is hidden only at the end of a leave nothing interrupted');
 // A view re-asks its query every half minute; a saved search is asked once, when it is opened, so it needs a button.
-assert.match(source, /if \(onSearchPage\(\) && !searchRows\.has\(zoom\.docId\)\) box\.append\(refreshPill\(\)\)/, 'a saved search offers Refresh, and not while a staged filter preview owns its rows');
-assert.match(source, /pill\.dataset\.id = 'refreshSearch';[\s\S]{0,240}iconSvg\('reload'\)/, 'the Refresh pill carries the reload glyph');
+// It is a header button beside the fold one, not a pill: folding the pills away must not take it with them.
+assert.match(source, /renderRefreshBtn\(search && !searchRows\.has\(zoom\.docId\)\)/, 'a saved search offers Refresh, and not while a staged filter preview owns its rows');
+assert.match(source, /function renderRefreshBtn\(available\) \{[\s\S]{0,320}iconNode\('reload'\)/, 'the Refresh button carries the reload glyph');
 const html = fs.readFileSync(require.resolve('../index.html'), 'utf8');
 assert.match(html, /<div id="toolbar" class="toolbar" role="toolbar"/);
 const styleSheet = fs.readFileSync(require.resolve('../styles.css'), 'utf8');
@@ -465,21 +476,32 @@ for (const property of ['width', 'height', 'margin', 'padding', 'font-size', 'op
   assert.doesNotMatch(sweep, new RegExp('(^|[^-])' + property + ':'), 'the sweep must not animate ' + property);
 }
 assert.doesNotMatch(styleSheet, /\.cbadge \{[^\n]*animation:/, 'the badge itself never animates: only the sheen inside it does');
-// The Refresh pill's single turn is opt-in the same way: under reduced motion the rule the class selects is not
-// declared, so the glyph stays where it is. Transform only, so a turning icon cannot move the pill's text.
-assert.match(styleSheet, /@media \(prefers-reduced-motion: no-preference\) \{ \.pill svg\.spin \{ animation: pill-spin/,
+// The Refresh button's single turn is opt-in the same way: under reduced motion the rule the class selects is not
+// declared, so the glyph stays where it is. Transform only, so a turning icon cannot move anything around it.
+assert.match(styleSheet, /@media \(prefers-reduced-motion: no-preference\) \{ \.navbtn svg\.spin \{ animation: pill-spin/,
   'the Refresh icon turns only where motion is welcome');
 const turn = styleSheet.match(/@keyframes pill-spin \{[^\n]*\}/)[0];
 assert.match(turn, /transform: rotate\(360deg\)/, 'and it is one full turn');
-// The redraw waits exactly as long as the turn takes, and the two numbers live in different files: a turn lengthened
-// in the stylesheet alone would be cut off again, which is the bug this pairing exists to stop.
-const spinCss = Math.round(parseFloat(styleSheet.match(/animation: pill-spin (\.?\d*\.?\d+)s/)[1]) * 1000);
-assert.equal(spinCss, Number(source.match(/const SPIN_MS = (\d+)/)[1]), 'the wait before the redraw is the length of the turn itself');
-// The Refresh pill draws that glyph heavier than the icon set does — inside the svg, because the set puts
-// stroke-width on the wrapping <g>. Nowhere else changes an icon's weight, and the glyph itself is untouched, so the
-// same reload icon in Cmd+K is the one the set shipped.
-const heavier = styleSheet.match(/\.pill\.refresh svg \* \{[^}]*stroke-width: ([\d.]+)/);
-assert.ok(heavier && Number(heavier[1]) > 1, 'the Refresh pill draws its glyph a step heavier than the icon set does');
+// A header button that is offered on some pages and not others has to be able to disappear: .navbtn sets its own
+// display, which wins over the browser's rule for [hidden] and left Refresh and the fold button as blank slots.
+assert.match(styleSheet, /\.navbtn\[hidden\] \{ display: none; \}/, 'a withheld header button is gone rather than empty');
+// Clean up arrives with a pop and shrinks away again rather than appearing and disappearing between two frames,
+// and both are opt-in: under reduced motion neither rule is declared and pills.js hides it on the spot.
+const btnMotion = styleSheet.match(/@media \(prefers-reduced-motion: no-preference\) \{\n  \.navbtn\.in \{[^}]*\}\n  \.navbtn\.out \{[^}]*\}\n\}/);
+assert.ok(btnMotion, 'a header button that comes and goes pops in and shrinks away, only where motion is welcome');
+assert.match(btnMotion[0], /animation: btn-in [\d.]+s/, 'the arrival is one shot');
+assert.match(btnMotion[0], /animation: btn-out [\d.]+s[^;]*forwards/, 'and the departure holds where it ends, so nothing flashes back before it is hidden');
+// Every render builds the pills again, so the arrival is marked on each pill rather than on the row: with it on the
+// row, a redraw landing while they were still coming in handed the mark to the new pills and played it all again.
+assert.match(source, /el\.style\.setProperty\('--i', i\); if \(arriving\) el\.classList\.add\('in'\)/, 'a pill knows it is arriving; the row does not');
+assert.match(styleSheet, /\.pills > \.pill\.in \{ animation: pill-in/, 'and that is what the entrance is drawn from');
+// Only the press moves the row: a view's pills are the view, and a page just arrived at — a reload, a link, the
+// Library — is drawn as it stands rather than assembling itself in front of you.
+assert.match(source, /const arriving = search && pillsPressed && \(box\.hidden \|\| box\.classList\.contains\('out'\)\)/, 'only a pressed fold animates the pills in');
+assert.match(source, /const last = stillPreferred\(\) \|\| !pillsPressed \? null : box\.lastElementChild;/, 'and only a pressed fold plays them out');
+// Nothing waits for that turn any more: the button is drawn once and outlives the redraw its answer brings, so the
+// rows land when they arrive and the glyph finishes turning on its own.
+assert.doesNotMatch(source, /SPIN_MS|await Promise\.all\(\[answered, turning\]\)/, 'the redraw no longer waits for the turn, and no duration is kept in step with the stylesheet');
 // a declaration, not prose about one: the selector and the brace have to be on the line before the property
 // The Nucleo set built into the app is the one exception, and it is the opposite of an exception in spirit: those
 // glyphs carry `stroke-width: var(--nucleo-stroke-width, 1.5)` of their own, so the app supplies the variable to put

@@ -11,7 +11,7 @@ function loadMembers() {
   tana.members().then((m) => {
     members = m;
     if (!m.length) setTimeout(renderSoon, META_RETRY_MS); // a render asks again, the way loadTaskMeta retries
-    if (!$('pills').hidden) renderPills(true); if (!palette.hidden) renderPalette(); renderSoon(); // so the Assigned pill reads "You (<name>)"
+    if (pillsDrawn) renderPills(true); if (!palette.hidden) renderPalette(); renderSoon(); // so the Assigned pill reads "You (<name>)"
   }, showError);
 }
 const me = () => (members || []).find((m) => m.me);
@@ -238,6 +238,7 @@ function statusRows(q, ctx = palTaskCtx) {
       const changed = await (ctx.multi ? tana.setStateMany(ctx.docs.map((doc) => doc.id), state) : tana.setState(ctx.docs[0].id, state));
       // shown now rather than when the live update lands: the caret is back in this row, where a plain render waits
       for (const doc of ctx.docs) { doc.stateType = state; doc.done = state === 'closed' ? 1 : 0; }
+      if (state === 'closed') for (const doc of ctx.docs) justDone.set(doc.id, Date.now());
       return changed;
     }),
   }));
