@@ -57,16 +57,21 @@ function patchMeta(docId) {
     const item = items.get(row.dataset.key), body = row.querySelector(':scope > .line > .body');
     if (!item || !body) continue;
     const summary = taskSummary(item.node, true) || documentSummary(item.node, true);
-    const old = body.querySelector(':scope > .meta.tmeta');
-    if (summary && displayOn('assigned')) { const el = taskMetaEl(summary, docId); if (old) old.replaceWith(el); else body.append(el); } else if (old) old.remove();
+    // anywhere in the body, since fitRowMeta may have moved it onto the subtext line; it is taken out before the
+    // subtext is rewritten and put back inline, and the fit is decided again at the end
+    const old = body.querySelector('.meta.tmeta'), sep = body.querySelector('.metasep');
+    if (old) old.remove();
+    if (sep) sep.remove();
     // the same line a full render would build, so a row does not change shape when its metadata arrives late
     const subText = subtextOf(item.node, summary), had = body.querySelector(':scope > .subtext');
+    if (summary && displayOn('assigned')) body.insertBefore(taskMetaEl(summary, docId), had || null);
     if (subText && had) had.textContent = subText;
     else if (subText) { const sub = document.createElement('div'); sub.className = 'subtext'; sub.textContent = subText; body.append(sub); }
     else if (had) had.remove();
     row.dataset.sig = rowSig(item.node); // the row now matches what a fresh render would build
     patched = true;
   }
+  if (patched) fitRowMeta(); // the row was rebuilt in place, so where its facts belong is decided again
   // The answer can also decide whether a row is shown at all — Group by Responsibility leaves out what it has no
   // section for, including rows whose assignees had not arrived — so one that is not on screen asks for a render
   // rather than being patched. renderSoon coalesces, so a burst of answers still costs one.

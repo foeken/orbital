@@ -174,7 +174,42 @@ function render(force = false) {
   if (force !== true && (editingRow() || selectionFrozen)) { renderDeferred = true; markFalling(); refreshRowChrome(); if (!$('pills').hidden) renderPills(true); return; }
   renderDeferred = false; rendering = true;
   try { renderOutline(); } finally { rendering = false; }
+  fitRowMeta();
 }
+// A task row carries its grey facts — who it is for, who can see it, whether it notifies — after the title. When the
+// title fills the line the browser wraps them onto a line of their own, where they read as a second title rather
+// than as facts about the first; there they belong with the subtext instead, joined to it by the same separator its
+// own parts use. Every row is measured before any is moved, so the whole outline costs one layout rather than one
+// per row, and the measurement asks how much room the line leaves rather than where the facts currently sit — the
+// same answer whether they are inline or already below, which is what keeps them from flipping back and forth.
+const META_SEP = ' · ';
+const META_GAP = 8; // .meta's margin-left in styles.css, which offsetWidth does not carry
+function fitRowMeta() {
+  const plan = [];
+  for (const body of outline.querySelectorAll('.node > .line > .body')) {
+    const meta = body.querySelector('.meta.tmeta'), sub = body.querySelector(':scope > .subtext');
+    if (!meta || !sub) continue;
+    const anchor = body.querySelector(':scope > .meta:not(.tmeta)') || body.querySelector(':scope > .text');
+    const rects = anchor ? anchor.getClientRects() : [], last = rects[rects.length - 1];
+    if (!last) continue; // nothing on screen to measure against: a hidden row keeps whatever it has
+    plan.push({ body, meta, sub, below: meta.offsetWidth + META_GAP > body.getBoundingClientRect().right - last.right });
+  }
+  for (const { body, meta, sub, below } of plan) {
+    if (below === (meta.parentElement === sub)) continue;
+    const sep = body.querySelector('.metasep');
+    if (sep) sep.remove();
+    if (below) { const mark = document.createElement('span'); mark.className = 'metasep'; mark.textContent = META_SEP; sub.append(mark, meta); }
+    else body.insertBefore(meta, body.querySelector(':scope > .chip') || sub);
+  }
+}
+// the outline changes width with the window, the sidebar drag and the text-size keys, and all three land here.
+// Only a width change is answered: moving the facts changes the outline's height, which would otherwise come back.
+let fitWidth = null;
+if (typeof ResizeObserver === 'function') new ResizeObserver(() => {
+  if (outline.clientWidth === fitWidth) return;
+  fitWidth = outline.clientWidth;
+  fitRowMeta();
+}).observe(outline);
 // Metadata and sync may finish between keystrokes. Apply their deferred render only after the caret leaves editable rows.
 document.addEventListener('focusout', () => queueMicrotask(() => { if (renderDeferred && !editingRow() && !selectionFrozen) render(); }));
 // Answers that arrive on their own — a row's metadata, pins, the rail, a crumb date, live updates — render once per
@@ -314,6 +349,7 @@ function renderOutline() {
     if (el && el.isContentEditable && !el.textContent) { el.focus({ preventScroll: true }); setCaret(el, 0); scrollOnType = true; }
   }
   noteNavigation(); // where this render landed, for Cmd+[ and Cmd+]
+  renderNav(); // and what the two arrows can do from here, which only the line above knows
 }
 
 function resolveZoom() {

@@ -229,6 +229,9 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .document.done > .line .text { color: #999; text-decoration: line-through; }
 .meta { margin-left: 8px; color: #999; font-size: 14px; white-space: nowrap; user-select: none; }
 .subtext { color: #999; font-size: 14px; line-height: 18px; user-select: none; } /* the space a node is shared with */
+/* the row's facts, moved down by fitRowMeta when the title left them no room: already grey and 14px, so they only
+   need the 8px that separated them from the title taken back off */
+.subtext .tmeta { margin-left: 0; }
 /* the visibility icon arrives after the row does, so the row holds its place with a dashed outline of one */
 .meta.pending { color: #d5d5d5; }
 .chip {

@@ -40,6 +40,9 @@ const RENDER_SHIM = 'globalThis.renderSoon ??= (...a) => render(...a); globalThi
 const withShims = (src) => {
   if (/\bfuzzyMatch\b/.test(src) && !/function fuzzyMatch\(/.test(src)) src = functionSource('fuzzyMatch') + '\n' + src; // the real matcher: a harness that lists palette rows filters through it
   if (/\bchipOnly\(/.test(src) && !/const chipOnly =/.test(src)) src = 'globalThis.chipOnly ??= (el) => { const kids = [...(el.childNodes || [])].filter((n) => n.nodeType !== 3 || unanchored(n.data)); return kids.length === 1 && kids[0].nodeType === 1 && !!kids[0].classList?.contains(\'mention\'); };\n' + src; // a harness that renders rows marks the chip-only ones too (the real one is asserted in runSelectionChecks)
+  // where a row's grey facts sit is decided from real layout, which no fake DOM has; the harnesses that test it
+  // slice the real function in themselves, and the rest are only calling it because render() does
+  if (/\bfitRowMeta\(/.test(src) && !/function fitRowMeta\(/.test(src)) src = 'globalThis.fitRowMeta ??= () => {};\n' + src;
   if (/\bunanchored\(/.test(src) && !/const unanchored =/.test(src)) src = ANCHOR_SRC + '\n' + src; // the real helper, not a restatement of it
   // nodeEl, rowSig and patchMeta all ask what a row should show of itself. That choice lives in views.js and state.js,
   // which most harnesses do not slice in, so they get the shipped default rather than each stubbing it by hand; one
@@ -5080,7 +5083,119 @@ function runAgentStatusBootCheck() {
     assert.deepEqual(after.hosts, [['tana:text:01examplea0000000000000000', 'local']], 'and the machine it runs on is known with it');
   })();
 }
-const checks = [runPinToMeetingCheck, runAgentStatusBootCheck, runQuickAddPanelCheck, runRailChangesCheck, runPasteLinkCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runDraftTailCheck,runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck];
+
+// A task row's grey facts sit after the title and wrap onto a line of their own when it fills the line, where they
+// read as a second title. fitRowMeta moves them onto the subtext instead. Layout is the input, so the geometry is
+// given rather than measured: what is tested is the decision, and that it is the same one whichever side the facts
+// are currently on, which is what keeps a row from flipping back and forth.
+function runRowMetaFitCheck() {
+  const api = vm.runInNewContext(`
+    const parse = (sel) => {
+      const scoped = sel.startsWith(':scope > ');
+      const rest = scoped ? sel.slice(9) : sel;
+      const not = /:not\\(\\.([\\w-]+)\\)/.exec(rest);
+      const names = rest.replace(/:not\\([^)]*\\)/, '').split('.').filter(Boolean);
+      return { scoped, ok: (node) => names.every((name) => node.classList.contains(name)) && (!not || !node.classList.contains(not[1])) };
+    };
+    const find = (root, sel) => {
+      const { scoped, ok } = parse(sel);
+      const walk = (node, depth) => {
+        for (const kid of node.children) {
+          if (ok(kid) && (!scoped || depth === 0)) return kid;
+          if (!scoped) { const hit = walk(kid, depth + 1); if (hit) return hit; }
+        }
+        return null;
+      };
+      return walk(root, 0);
+    };
+    const make = (cls, extra = {}) => {
+      const classes = new Set(String(cls).split(' ').filter(Boolean));
+      const el = {
+        children: [], parentElement: null, textContent: '',
+        classList: { contains: (name) => classes.has(name) },
+        get className() { return [...classes].join(' '); },
+        set className(value) { classes.clear(); for (const name of String(value).split(' ')) if (name) classes.add(name); },
+        append(...kids) { for (const kid of kids) { if (kid.parentElement) kid.remove(); kid.parentElement = el; el.children.push(kid); } },
+        insertBefore(kid, ref) { if (kid.parentElement) kid.remove(); kid.parentElement = el; const i = ref ? el.children.indexOf(ref) : -1; if (i < 0) el.children.push(kid); else el.children.splice(i, 0, kid); return kid; },
+        remove() { const p = el.parentElement; if (p) { p.children.splice(p.children.indexOf(el), 1); el.parentElement = null; } },
+        querySelector: (sel) => find(el, sel),
+        getClientRects: () => extra.rects || [],
+        getBoundingClientRect: () => extra.box || { right: 0 },
+        offsetWidth: extra.width || 0,
+      };
+      return el;
+    };
+    const document = { createElement: () => make('') };
+    let bodies = [];
+    const outline = { querySelectorAll: () => bodies };
+    ${functionSource('fitRowMeta')}
+    ${source.match(/const META_SEP = [^\n]*\nconst META_GAP = [^\n]*/)[0]}
+    ({
+      row: ({ width, lastRight, metaWidth, subtext = 'Updated 2 days ago', time, chip, below = false }) => {
+        const body = make('body', { box: { right: width } });
+        const text = make('text', { rects: time ? [{ right: 40 }] : [{ right: lastRight }] });
+        const meta = make('meta tmeta', { width: metaWidth });
+        body.append(text);
+        if (time) body.append(make('meta', { rects: [{ right: lastRight }] }));
+        body.append(meta);
+        if (chip) body.append(make('chip'));
+        if (subtext !== null) { const sub = make('subtext'); sub.textContent = subtext; body.append(sub); }
+        if (below) { const sub = body.querySelector(':scope > .subtext'); const sep = make('metasep'); sep.textContent = META_SEP; sub.append(sep, meta); }
+        bodies = [body];
+        return body;
+      },
+      fit: () => fitRowMeta(),
+      shape: (body) => body.children.map((kid) => kid.className + (kid.children.length ? '[' + kid.children.map((k) => k.className).join(',') + ']' : '')),
+      sep: (body) => { const s = body.querySelector('.metasep'); return s ? s.textContent : null; },
+    });
+  `);
+
+  const roomy = api.row({ width: 600, lastRight: 300, metaWidth: 200 });
+  api.fit();
+  assert.deepEqual(plain(api.shape(roomy)), ['text', 'meta tmeta', 'subtext'], 'facts that fit after the title stay on it');
+
+  const tight = api.row({ width: 600, lastRight: 500, metaWidth: 200 });
+  api.fit();
+  assert.deepEqual(plain(api.shape(tight)), ['text', 'subtext[metasep,meta tmeta]'], 'facts with no room join the subtext');
+  assert.equal(api.sep(tight), ' · ', 'separated from it the way its own parts are');
+
+  const edge = api.row({ width: 600, lastRight: 392, metaWidth: 200 });
+  api.fit();
+  assert.deepEqual(plain(api.shape(edge)), ['text', 'meta tmeta', 'subtext'], 'the gap the facts carry counts as room they need');
+  const overEdge = api.row({ width: 600, lastRight: 393, metaWidth: 200 });
+  api.fit();
+  assert.deepEqual(plain(api.shape(overEdge)), ['text', 'subtext[metasep,meta tmeta]'], 'one pixel past it and they move');
+
+  const widened = api.row({ width: 600, lastRight: 300, metaWidth: 200, below: true });
+  api.fit();
+  assert.deepEqual(plain(api.shape(widened)), ['text', 'meta tmeta', 'subtext'], 'and they come back up when the row is wide enough again');
+  assert.equal(api.sep(widened), null, 'taking the separator with them');
+
+  const tagged = api.row({ width: 600, lastRight: 300, metaWidth: 200, chip: true, below: true });
+  api.fit();
+  assert.deepEqual(plain(api.shape(tagged)), ['text', 'meta tmeta', 'chip', 'subtext'], 'back in front of the tags, where a fresh render puts them');
+
+  const settled = api.row({ width: 600, lastRight: 500, metaWidth: 200 });
+  api.fit(); const once = plain(api.shape(settled));
+  api.fit();
+  assert.deepEqual(plain(api.shape(settled)), once, 'a second pass over the same row moves nothing: the decision does not depend on where they sit');
+
+  const timed = api.row({ width: 600, lastRight: 500, metaWidth: 200, time: true });
+  api.fit();
+  assert.deepEqual(plain(api.shape(timed)), ['text', 'meta', 'subtext[metasep,meta tmeta]'],
+    'a meeting row is measured from the time after its title, not from the title');
+
+  const bare = api.row({ width: 600, lastRight: 500, metaWidth: 200, subtext: null });
+  api.fit();
+  assert.deepEqual(plain(api.shape(bare)), ['text', 'meta tmeta'], 'with no subtext there is nowhere to move them, so they are left alone');
+
+  const styles = fs.readFileSync(require.resolve('../styles.css'), 'utf8');
+  assert.match(styles, /\.meta \{[^}]*margin-left: 8px/, 'META_GAP is that margin, and the two must not drift apart');
+  assert.match(styles, /\.subtext \.tmeta \{[^}]*margin-left: 0/, 'which comes back off once they are on the subtext line');
+}
+
+
+const checks = [runRowMetaFitCheck, runPinToMeetingCheck, runAgentStatusBootCheck, runQuickAddPanelCheck, runRailChangesCheck, runPasteLinkCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runDraftTailCheck,runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck];
 // Red until the checks actually settle: an async check left awaiting something that never resolves empties the event
 // loop, and node would exit 0 without a word — a silent pass for a check that never finished.
 process.exitCode = 1;
