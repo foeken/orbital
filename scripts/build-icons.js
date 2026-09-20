@@ -20,6 +20,7 @@ WANT.addTo = path.join(__dirname, '..', 'build', 'icons', 'folder-plus.svg');
 WANT.today = path.join(__dirname, '..', 'build', 'icons', 'calendar-event.svg');
 WANT.week = path.join(__dirname, '..', 'build', 'icons', 'calendar-minus-2.svg');
 WANT.hiddenItems = path.join(__dirname, '..', 'build', 'icons', 'eye-closed.svg'); // Edit hidden items (Mark as sensitive keeps the eye-slash)
+WANT.visible = path.join(__dirname, '..', 'build', 'icons', 'eye.svg'); // the header's sensitive switch while sensitive items are shown (eye-slash while hidden)
 WANT.assignTo = path.join(__dirname, '..', 'build', 'icons', 'circle-user-plus.svg');
 WANT.cleanup = path.join(__dirname, '..', 'build', 'icons', 'brush-2.svg'); // the view's Clean up pill: let go of the rows kept in place
 WANT.notify = path.join(__dirname, '..', 'build', 'icons', 'bell-on.svg'); // "Notify on changes": watching a node for edits

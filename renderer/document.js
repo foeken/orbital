@@ -61,4 +61,21 @@ function setSensitiveMark(ids, on) {
 function toggleSensitiveVisibility() {
   sensitiveVisible = !sensitiveVisible;
   refreshSensitive();
+  renderSensitiveBtn();
 }
+// The same switch in the header, left of the search options, on every page: sensitive rows are blurred wherever
+// they are listed, so the button that shows them belongs to the app rather than to a page. Icon only, and the
+// glyph is the state — an open eye while they are shown, the crossed one while hidden — at the same weight as the
+// buttons beside it: a full-black glyph among faded ones read as a different kind of button, not as a switch on.
+const sensitiveBtn = $('navSensitive');
+function renderSensitiveBtn() {
+  const label = sensitiveVisible ? 'Hide sensitive items' : 'Show sensitive items';
+  sensitiveBtn.title = label;
+  sensitiveBtn.setAttribute('aria-label', label);
+  sensitiveBtn.setAttribute('aria-pressed', String(sensitiveVisible));
+  const svg = iconNode(sensitiveVisible ? 'visible' : 'hidden');
+  if (svg) sensitiveBtn.replaceChildren(svg);
+}
+sensitiveBtn.onmousedown = (e) => e.preventDefault(); // the caret stays in its row, as with the other header buttons
+sensitiveBtn.onclick = toggleSensitiveVisibility; // the same action the Cmd+K row runs
+renderSensitiveBtn();
