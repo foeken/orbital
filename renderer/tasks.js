@@ -319,7 +319,7 @@ function selectionRows() {
   const ids = nodes.map((node) => node.id), rows = [];
   // A row you are on but not in: Zoom in opens it, the same as clicking its bullet. The zoomed document itself
   // has nowhere further to go, so the row is absent there.
-  if (!selected.length && !zoom && nodes.length === 1 && nodes[0].kind === 'document') {
+  if (!selected.length && !zoom && nodes.length === 1 && nodes[0].kind === 'document' && zoomable(nodes[0])) {
     const doc = nodes[0];
     rows.push({ id: 'zoomIn', group, icon: 'zoomIn', label: 'Zoom in', run: () => openDoc(doc.id) });
     // the row's own chevron, with the keys the outline already answers to (⌘↓ opens, ⌘↑ closes)

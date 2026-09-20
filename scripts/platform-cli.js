@@ -224,6 +224,7 @@ const commands = {
     await connect();
     await client.sync.connect();
     const doc = await client.sync.subscribe(positional[0]);
+    if (args.includes('--raw')) return out(doc.loro.toJSON()); // every root container, not just data (appearance lives outside it)
     out({ ...readNode(doc), content: contentText(doc) });
   },
   async outline() {
@@ -325,6 +326,27 @@ const commands = {
     setState(doc, stateType, me.userUri);
     await new Promise((r) => setTimeout(r, 1500));
     out(summary(doc));
+  },
+  // addfield <type uri> <title> [--type member|date|link|...] [--multiple]: define a field on a type (sdk/fields.js)
+  async addfield() {
+    const [typeUri, title] = positional;
+    if (!typeUri || !title) throw new Error('usage: addfield <tana:type:...> <title> [--type member|date|link] [--multiple]');
+    await connect();
+    await client.sync.connect();
+    const doc = await client.sync.subscribe(typeUri);
+    if (doc.data.get('type') !== 'type') throw new Error(typeUri + ' is not a type');
+    const key = require('../sdk/fields').addField(doc, { title, type: flag('type') || undefined, cardinality: args.includes('--multiple') ? 'multiple' : 'single' });
+    await new Promise((r) => setTimeout(r, 1500)); // let the live update go out
+    out(key + ' ' + JSON.stringify(doc.data.get('template').toJSON().attributes));
+  },
+  // set-hue <type uri> <0-360|none>: the type colour Cmd+K writes, through main's own path (appearance root map)
+  async 'set-hue'() {
+    const [typeUri, value] = positional;
+    if (!typeUri || value == null) throw new Error('usage: set-hue <tana:type:...> <0-360|none>');
+    const main = backend(await connect());
+    await client.sync.connect();
+    out(await main.setTypeHue(typeUri, value === 'none' ? null : Number(value)));
+    await new Promise((r) => setTimeout(r, 1500)); // let the live update go out
   },
   async pins() {
     const me = await connect();
@@ -679,7 +701,7 @@ const USAGE = [
   '             settype <id>   (listing only; with a target it writes)',
   '             caps <id...> | related <id> | incall [--limit 5] | pageprobe | libraryprobe | boot [--settle ms]',
   '  live       watch <id...>',
-  '  WRITES     create <title> [--kind doc|task|meeting] | delete <id> | set-title <id> <title> |',
+  '  WRITES     create <title> [--kind doc|task|meeting] | delete <id> | set-title <id> <title> | addfield <type uri> <title> [--type member|date|link] [--multiple] |',
   '             set-state <id> <proposed|open|closed|not_now> | pin <id> <sidebar|today> | unpin <id> <sidebar|today> |',
   '             pinto <event|space id> <id> | unpinfrom <event|space id> <id> | settype <id> <tana:type:...|none>',
 ].join('\n');

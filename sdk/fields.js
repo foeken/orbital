@@ -2,7 +2,7 @@
 // Typed fields ("attributes"): each value is a ProseMirror-style tree stored in the document's own data map under
 // "<type uri>?attribute=<key>", exactly like 'content' but rooted per field. Field names live in the type
 // document's template.attributes ([{ key, title, type?, cardinality?, to? }]). Verified on a real typed node.
-const { LoroMap, LoroList, LoroText } = require('loro-crdt');
+const { LoroMap, LoroList, LoroMovableList, LoroText } = require('loro-crdt');
 
 const newBlockId = () => { let s = ''; while (s.length < 8) s += Math.random().toString(36).slice(2); return s.slice(0, 8); };
 const parseKey = (key) => { const [typeUri, attribute] = String(key).split('?attribute='); return { typeUri, attribute }; };
@@ -70,3 +70,26 @@ function setFieldText(document, key, text) {
 }
 
 module.exports = { readFields, templateTitles, setFieldText, valueText, parseKey };
+
+// Define a field on a type: one more entry in the type document's template.attributes, in the layout a real type
+// carries (a MovableList of maps: { key, title, type?, cardinality? }). Types seen on the wire: member, date, link;
+// a plain text field has no type at all. Keys are 8 lowercase alphanumerics like Tana's own. Returns the key.
+function addField(typeDocument, { title, type, cardinality } = {}) {
+  if (typeof title !== 'string' || !title.trim()) throw new Error('field title required');
+  if (type !== undefined && typeof type !== 'string') throw new Error('field type must be a string');
+  if (cardinality !== undefined && cardinality !== 'single' && cardinality !== 'multiple') throw new Error('cardinality must be single or multiple');
+  const key = newBlockId();
+  typeDocument.transact((loro) => {
+    const data = loro.getMap('data');
+    let template = data.get('template');
+    if (!template || typeof template.setContainer !== 'function') template = data.setContainer('template', new LoroMap());
+    let attrs = template.get('attributes');
+    if (!attrs || typeof attrs.pushContainer !== 'function') attrs = template.setContainer('attributes', new LoroMovableList());
+    const def = attrs.pushContainer(new LoroMap());
+    def.set('key', key); def.set('title', title.trim());
+    if (type) def.set('type', type);
+    if (cardinality) def.set('cardinality', cardinality);
+  });
+  return key;
+}
+module.exports.addField = addField;

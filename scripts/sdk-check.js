@@ -154,6 +154,18 @@ async function main() {
       const typeDoc = make('type');
       typeDoc.transact((l) => l.getMap('data').set('template', { attributes: [{ key: 'gcx3bvn5', title: 'Fase' }] }));
       assert.deepEqual(fields.templateTitles(typeDoc), { gcx3bvn5: 'Fase' }, 'field names come from the type template');
+      { // defining a field: one more map in template.attributes, in the container layout a real type carries
+        const real = make('type');
+        const key = fields.addField(real, { title: 'Discuss with', type: 'member', cardinality: 'single' });
+        assert.match(key, /^[a-z0-9]{8}$/, 'a Tana-style key');
+        const plain = fields.addField(real, { title: 'Notes' });
+        const tpl = real.data.get('template');
+        assert.equal(tpl.get('attributes').kind(), 'MovableList', 'the list Tana keeps its field definitions in');
+        assert.deepEqual(tpl.toJSON().attributes, [{ key, title: 'Discuss with', type: 'member', cardinality: 'single' }, { key: plain, title: 'Notes' }]);
+        assert.deepEqual(fields.templateTitles(real), { [key]: 'Discuss with', [plain]: 'Notes' });
+        assert.throws(() => fields.addField(real, { title: ' ' }), /title required/);
+        assert.throws(() => fields.addField(real, { title: 'x', cardinality: 'many' }), /single or multiple/);
+      }
       // a reference value is a mention node: its label is its text, not an empty string
       typed.transact((l) => {
         const runs = l.getMap('data').get('attributes').get(key).get('children').get(0).get('children');
@@ -1099,6 +1111,23 @@ async function main() {
     const unnamed = await backend.related(docId);
     assert.deepEqual(JSON.parse(JSON.stringify(unnamed.backlinks.map((g) => g.label))), ['Mentioned in'], 'a field whose title cannot be read joins the mentions rather than naming a section after a key');
     console.log('ok  backlinks: mentions and field references, grouped by field with the mentions last');
+  }
+  // The fields a page shows (main/related.js fieldsOf): every field the type defines, empty or filled — an empty one
+  // used to be left out, so there was nothing to fill in — then any value left under another type.
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const docId = 'tana:text:' + ulid(), typeUri = 'tana:type:' + ulid(), otherKey = 'tana:type:' + ulid() + '?attribute=q1q1q1q1';
+    const filled = typeUri + '?attribute=n5e1hgxz';
+    const typed = { data: { get: (key) => (key === 'entityTypeUri' ? typeUri : key === 'attributes' ? { [filled]: { nodeName: 'doc', children: [{ nodeName: 'paragraph', children: ['Sam'] }] }, [otherKey]: 'old' } : undefined) } };
+    const typeDoc = { data: { get: (key) => (key === 'template' ? { attributes: [{ key: 'n5e1hgxz', title: 'Discuss with' }, { key: 'dd1dd1dd', title: 'Due' }] } : undefined) } };
+    backend.testRuntime({ me: { userUri: ME }, win: null, client: {
+      sync: { subscribe: async (id) => { if (id === typeUri) return typeDoc; if (id === docId) return typed; throw new Error('unreadable'); } },
+      graph: { listNodes: async () => ({ nodes: [] }), listEdges: async () => ({ edges: [] }), getOwnerChain: async () => ({ entries: [] }) },
+    } });
+    const shown = JSON.parse(JSON.stringify((await backend.related(docId)).fields));
+    assert.deepEqual(shown, [{ key: filled, label: 'Discuss with', text: 'Sam' }, { key: typeUri + '?attribute=dd1dd1dd', label: 'Due', text: '' }, { key: otherKey, text: 'old' }],
+      'the type\'s fields in template order, the empty one included, then the stray value');
+    console.log('ok  fields: a type\'s empty field is listed so it can be filled in');
   }
 
   // A saved search carries its own completed window, stored in the `view` map beside its sort and grouping rather
@@ -2961,6 +2990,9 @@ async function main() {
       events.length = 0;
       setAssignees(pinDoc, [ME], ME);
       assert.deepEqual(metaEvents(), [true], 'an assignee change invalidates it');
+      events.length = 0;
+      pinDoc.transact((l) => { l.getMap('data').set('entityTypeUri', 'tana:type:' + ulid()); });
+      assert.deepEqual(metaEvents(), [true], 'so does a type change: the page\'s fields come with the sidebar it refreshes');
       pinDoc.removeAllListeners('change');
     }
     const remotePin = new Document(pinId, {peerId:'889'});

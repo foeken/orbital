@@ -300,6 +300,16 @@ function mockApi() {
       emit(null);
       return icon ? structuredClone({ uri: typeUri, ...icon }) : null;
     },
+    // Set colour: the hue Tana keeps on the type, so the type and everything wearing it change together.
+    setTypeHue: async (typeUri, hue) => {
+      const type = types.find((t) => t.id === typeUri);
+      if (!type) throw new Error('Colours are set on a type');
+      if (hue !== null && (!Number.isInteger(hue) || hue < 0 || hue > 360)) throw new Error('A hue is 0-360');
+      type.hue = hue === null ? undefined : hue;
+      for (const d of all) for (const t of d.tags || []) if (t.uri === typeUri) { t.hue = type.hue; d.hue = type.hue; }
+      emit(null);
+      return hue;
+    },
     creationOptions: async () => ({ options: [
       { id: 'task', kind: 'task', title: 'Task', icon: 'task', selectable: true },
       { id: 'meeting', kind: 'meeting', title: 'Meeting', icon: 'meeting', selectable: true },
@@ -318,8 +328,8 @@ function mockApi() {
     },
     pins: async () => sidebar.map((id) => info(all.find((d) => d.id === id))),
     pinState: async (docId) => ({ sidebar: sidebar.includes(docId), dates: datePins[docId] || [] }),
-    pin: async (docId, target) => { if (target === 'sidebar') { if (!sidebar.includes(docId)) sidebar.push(docId); } else (datePins[docId] ||= []).push(localDate()); emit(null); },
-    unpin: async (docId, target) => { if (target === 'sidebar') sidebar.splice(sidebar.indexOf(docId) >>> 0, 1); else datePins[docId] = (datePins[docId] || []).filter((d) => d !== localDate()); emit(null); },
+    pin: async (docId, target, date = localDate()) => { if (target === 'sidebar') { if (!sidebar.includes(docId)) sidebar.push(docId); } else (datePins[docId] ||= []).push(date); emit(null); },
+    unpin: async (docId, target, date = localDate()) => { if (target === 'sidebar') sidebar.splice(sidebar.indexOf(docId) >>> 0, 1); else datePins[docId] = (datePins[docId] || []).filter((d) => d !== date); emit(null); },
     deleteDocument: async (docId) => { softDelete(docId); step(docId, 'restore'); },
     restoreDocument: async (docId) => { undelete(docId); step(docId, 'delete'); },
     sensitiveIds: async () => [...sensitive],

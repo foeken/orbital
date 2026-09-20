@@ -440,6 +440,13 @@ for (const rule of [/\.toolbar \{/, /\.tbtn \{/, /\.text code \{/, /\.text a\.li
 }
 // a closed palette must hide even while it still carries the @ dropdown class (#240): same weight, later rule wins
 assert.doesNotMatch(styleSheet, /\.palette\.anchored \{/, 'the @ dropdown layout must not outweigh .palette[hidden]');
+// A type's colour is an OKLCH hue in Tana (Organization's 232 is #58aad2 = oklch(0.7 0.1 232)); as an HSL angle the
+// same number is 42° away and half as light. And it must be written into the rule: a custom property substitutes
+// its own var() where it is declared, so `--hue-color: oklch(… var(--hue))` on <html> — which has no --hue —
+// computes invalid and leaves every hued thing on the page with no colour at all.
+assert.doesNotMatch(styleSheet, /hsl\(var\(--hue\)/, 'hued rules draw in OKLCH, not HSL: the same number is a different colour');
+assert.doesNotMatch(styleSheet, /--[\w-]+\s*:[^;}]*var\(--hue\)/, 'a custom property must not hold the hue colour: it resolves where it is declared, not where it is used');
+assert.match(styleSheet, /\.bullet\.icon\.hue svg[^{]*\{ color: oklch\(0\.7 0\.1 var\(--hue\)\); \}/, 'a hued glyph is Tana\u2019s own colour for that hue');
 assert.match(styleSheet, /\.palette\.anchored:not\(\[hidden\]\) \{/, 'the @ dropdown layout applies only while the palette is shown');
 // The agent prompt page is an editor, not a list to search: it never says "No results" under its one row, and the
 // query that found "Assign to Agent" is cleared on the way in, or its letters would show as bold in that row.

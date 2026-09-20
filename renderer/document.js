@@ -11,7 +11,7 @@ titleEl.addEventListener('keydown', (e) => {
   else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); toggleDone(item); }
   else if (e.key === 'Enter') { e.preventDefault(); flush(item.key); const first = texts()[0]; if (first) setCaret(first, 0); else titleEl.blur(); }
   else if (e.key === 'Escape') { e.preventDefault(); dropPending(item.key); titleEl.textContent = item.node.text; titleEl.blur(); }
-  else if (e.key === 'ArrowDown' && atEdge(titleEl, 'down')) { const first = texts()[0]; if (first) { e.preventDefault(); flush(item.key); setCaret(first, 0); } }
+  else if (e.key === 'ArrowDown' && atEdge(titleEl, 'down')) { const first = fieldValues()[0] || texts()[0]; if (first) { e.preventDefault(); flush(item.key); setCaret(first, 0); } } // down through the fields, then the outline
 });
 // the document Cmd+K context actions apply to: the zoomed one, else the document whose node is focused
 function currentDoc() {
@@ -33,7 +33,7 @@ function loadPins() {
     if (!palette.hidden && palMode === 'cmd') renderPalette();
   }, showError);
 }
-function pinAction(op, target) { run(async () => { await tana[op](pinInfo.docId, target); loadPins(); }); }
+function pinAction(op, target, date) { run(async () => { await tana[op](pinInfo.docId, target, date); loadPins(); }); } // date: a local YYYY-MM-DD for the 'today' target; omitted means today
 function invalidatePinCaches(id, includeRecent = true) {
   if (pinInfo && pinInfo.docId === id) pinInfo = null;
   if (includeRecent) forgetRecent(id);

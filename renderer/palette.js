@@ -20,7 +20,7 @@ const docRow = (n, hint, run) => ({ node: n, icon: n.icon, label: n.text ?? n.ti
 // The order of the rows about the node you are on: where it goes (open it, unfold it), what it is (done, status,
 // assignee), where it lives (pins, the date nodes, its space), what it looks like (image, visibility, sensitivity),
 // its link, and last the one destructive row. Rows without an id carry a `rank` from this list instead.
-const NODE_ROW_ORDER = ['zoomIn', 'expand', 'collapse', 'toggleDone', 'status', 'setType', 'setIcon', 'assign', 'assignTo', 'codex', 'codexOpen', 'pinToday', 'pinToMeeting', 'pinToSelectedMeeting', 'addToday', 'addTomorrow', 'addWeek', 'move', 'moveLibrary', 'visibility', 'notify', 'sensitive', 'copyLink', 'delete'];
+const NODE_ROW_ORDER = ['zoomIn', 'expand', 'collapse', 'toggleDone', 'status', 'setType', 'setIcon', 'setHue', 'assign', 'assignTo', 'codex', 'codexOpen', 'pinToday', 'pinTomorrow', 'pinToMeeting', 'pinToSelectedMeeting', 'addToday', 'addTomorrow', 'addWeek', 'move', 'moveLibrary', 'visibility', 'notify', 'sensitive', 'copyLink', 'delete'];
 const nodeRank = (r) => { const i = NODE_ROW_ORDER.indexOf(r.rank || r.id); return i < 0 ? NODE_ROW_ORDER.length : i; };
 const VIEW_ORDER = ['inbox', 'today', 'week', 'library'];
 // Matching a row, tiered the way Raycast ranks a title (its manual: aliases first, then the title's fuzzy score, which
@@ -108,6 +108,10 @@ function paletteRows(q, typed = q) {
   if (pinInfo && palDoc && pinInfo.docId === palDoc.id) { // no ids: their labels depend on state, so no hotkeys
     const td = pinInfo.dates.includes(localDate());
     rows.push({ rank: 'pinToday', group: docGroup, icon: 'pinDate', label: td ? 'Unpin from today' : 'Pin to today', run: () => pinAction(td ? 'unpin' : 'pin', 'today') });
+    // The same date pin one day on. The date is computed here because the label has to know whether it is already
+    // pinned, and pinInfo.dates is what answers that; main defaults to today when no date comes with the call.
+    const tm = localDate(1), tmPinned = pinInfo.dates.includes(tm);
+    rows.push({ rank: 'pinTomorrow', group: docGroup, icon: 'pinDate', label: tmPinned ? 'Unpin from tomorrow' : 'Pin to tomorrow', run: () => pinAction(tmPinned ? 'unpin' : 'pin', 'today', tm) });
   }
   // Pin this node onto the meeting I am in, through the same event pin the quick-add panel writes (docs/QUICK-ADD.md)
   // and the sidebar reads back under Pinned. The row is listed whenever a real node is on screen, so ⇧⌘K can record
@@ -145,6 +149,13 @@ function paletteRows(q, typed = q) {
     const doc = palDoc;
     rows.push({ id: 'setIcon', group: docGroup, icon: typeGlyphs.get(doc.id) || 'type', label: 'Set icon',
       hint: typeGlyphs.has(doc.id) ? 'Chosen' : 'The generic glyph', keepOpen: true, run: () => openIconPalette(doc) });
+  }
+  // And what colour it is. Unlike the glyph this one is Tana's own: the hue on the type, which colours its documents
+  // in Tana too, not only here.
+  if (palDoc && tana.setTypeHue && TYPE_NODE.test(palDoc.id)) {
+    const doc = palDoc;
+    rows.push({ id: 'setHue', group: docGroup, icon: typeGlyphs.get(doc.id) || 'type', hue: doc.hue, label: 'Set colour',
+      hint: doc.hue == null ? 'No colour' : 'Hue ' + doc.hue, keepOpen: true, run: () => openHuePalette(doc) });
   }
   // Watching this node: the label says what pressing it does, so it carries no id — a hotkey whose meaning flips
   // between "start" and "stop" would be a key you cannot learn.
@@ -316,6 +327,7 @@ function backPalette() {
   else if (palMode === 'pinMeeting') openCommandPalette();
   else if (palMode === 'setType') openCommandPalette();
   else if (palMode === 'setIcon') openCommandPalette();
+  else if (palMode === 'setHue') openCommandPalette();
   else closePalette();
 }
 // ---- hidden items (api.filters): titles every view and search skips, edited from Cmd+K ----
@@ -667,6 +679,45 @@ function applyIcon(doc, name) {
     closePalette();
   });
 }
+// ---- Set colour: the hue Tana keeps on a type (appearance.hue, 0-360) ----
+// The picker is the palette itself: one row per colour, each drawn with the glyph the type already wears, in the
+// colour it would become — the same tint its documents, chips and bullets get. Typing narrows by name, and typing
+// a number picks that hue exactly, since the wheel has 360 of them and a list of twelve does not.
+const HUE_GROUP = 'Colour';
+const HUES = [['Red', 0], ['Orange', 30], ['Yellow', 60], ['Lime', 90], ['Green', 120], ['Sea', 150], ['Cyan', 180],
+  ['Sky', 210], ['Blue', 240], ['Violet', 270], ['Magenta', 300], ['Pink', 330]];
+let hueCtx = null;
+function huePickRows(q) {
+  const doc = hueCtx;
+  if (!doc) return [];
+  const glyph = typeGlyphs.get(doc.id) || 'type';
+  const rows = [];
+  const typed = Number(q);
+  if (q && Number.isInteger(typed) && typed >= 0 && typed <= 360 && !HUES.some(([, h]) => h === typed)) {
+    rows.push({ group: HUE_GROUP, icon: glyph, hue: typed, label: 'Hue ' + typed, hint: doc.hue === typed ? '✓' : 'Exact', keepOpen: true, run: () => applyHue(doc, typed) });
+  }
+  for (const [name, hue] of HUES) {
+    if (!fuzzyMatch(name, q) && String(hue) !== q) continue;
+    rows.push({ group: HUE_GROUP, icon: glyph, hue, label: name, hint: doc.hue === hue ? '✓' : String(hue), keepOpen: true, run: () => applyHue(doc, hue) });
+  }
+  if (doc.hue != null && fuzzyMatch('No colour', q)) rows.push({ group: HUE_GROUP, icon: 'none', label: 'No colour', hint: 'Back to grey', keepOpen: true, run: () => applyHue(doc, null) });
+  if (!rows.length) rows.push({ group: HUE_GROUP, label: 'No colour matches', disabled: true });
+  return rows;
+}
+function openHuePalette(doc) {
+  hueCtx = doc; palMode = 'setHue'; palRows = []; palIndex = 0; palBusy = false; palette.hidden = false;
+  palInput.placeholder = 'Choose a colour or type a hue…'; palInput.value = '';
+  renderPalette(); palInput.focus();
+}
+// Written on the type in Tana, so everything wearing it follows — here and in Tana's own client. Main rebuilds the
+// rows and announces them, the same way the icon does; the node in hand is patched so the page it came from agrees.
+function applyHue(doc, hue) {
+  run(async () => {
+    await tana.setTypeHue(doc.id, hue);
+    doc.hue = hue == null ? undefined : hue;
+    closePalette();
+  });
+}
 // The row redraws itself: main's change event carries the document, and doc:info rebuilds a row whose type has moved
 // on rather than handing back the cached one (main/documents.js info).
 function applyType(doc, uri) {
@@ -723,6 +774,7 @@ function renderPalette() {
   else if (palMode === 'pinMeeting') palRows = meetingPickRows(q.toLowerCase());
   else if (palMode === 'setType') palRows = typeRows(q.toLowerCase());
   else if (palMode === 'setIcon') palRows = iconPickRows();
+  else if (palMode === 'setHue') palRows = huePickRows(q.toLowerCase());
   else if (palMode === 'hosts') palRows = hostRows(q);
   else if (palMode === 'agentPrompt') palRows = agentPromptRows();
   else if (palMode === 'pill') palRows = pillRows(q.toLowerCase());
@@ -807,7 +859,7 @@ function nextPalIndex(rows, index, step) {
 }
 palInput.addEventListener('input', () => {
   palIndex = 0; palEnter = null; // typing on supersedes an Enter that was waiting for the previous query
-  if (palMode === 'cmd' || palMode === 'create' || palMode === 'slash' || palMode === 'assignees' || palMode === 'assigneesMany' || palMode === 'status' || palMode === 'setType' || palMode === 'visibility' || palMode === 'visibilityPeople' || palMode === 'hidden' || palMode === 'pill' || palMode === 'pinMeeting') return renderPalette();
+  if (palMode === 'cmd' || palMode === 'create' || palMode === 'slash' || palMode === 'assignees' || palMode === 'assigneesMany' || palMode === 'status' || palMode === 'setType' || palMode === 'setHue' || palMode === 'visibility' || palMode === 'visibilityPeople' || palMode === 'hidden' || palMode === 'pill' || palMode === 'pinMeeting') return renderPalette();
   if (palMode === 'hosts') return renderPalette();
   // the set lives in main, so typing asks it — debounced like the document search, and the page says it is busy
   if (palMode === 'setIcon') { palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchIconsNow, 150); return renderPalette(); }

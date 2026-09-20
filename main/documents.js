@@ -101,6 +101,7 @@ async function creationOptions() {
 // A type that is out of scope is listed and disabled with the space it belongs to, the way the creation chooser
 // lists a type it cannot use: hiding it answers "why is my type not there?" with nothing.
 const TYPED_KINDS = new Set(['text', 'event']); // only a document or a meeting carries a type; blocks and the rest do not
+const TYPE_URI = /^tana:type:[0-9a-z]{26}$/;
 const typeContext = (id) => (idKind(id) === 'event' ? 'events' : 'docs');
 async function typeChoices(id) {
   if (!S.client) throw new Error(NOT_CONNECTED);
@@ -139,6 +140,35 @@ async function setType(id, typeUri) {
   await mut(id, (doc) => setEntityType(doc, uri, { workflow, byUri: S.me.userUri }));
   scheduleRefresh(2000); // the row updates from the change event; this is the index catching up for the next list
   return uri;
+}
+// A type's colour. Tana keeps it in an `appearance` root map beside `data`, not inside the data map readNode reads
+// (the raw roots of a real type are { data, appearance: { hue } }), so it is written straight on the document.
+// 0-360, null clears it. `editable` answers false for a type (only text, space, event and search are editable
+// documents here), so this goes through op rather than mut: one field on a type, and no undo step for a colour.
+async function setTypeHue(typeUri, hue) {
+  if (typeof typeUri !== 'string' || !TYPE_URI.test(typeUri)) throw new Error('Colours are set on a type');
+  if (hue !== null && (!Number.isInteger(hue) || hue < 0 || hue > 360)) throw new Error('A hue is 0-360');
+  await op(typeUri, (doc) => {
+    if (readNode(doc).type !== 'type') throw new Error('Colours are set on a type');
+    doc.transact((loro) => {
+      const appearance = loro.getMap('appearance');
+      if (hue === null) appearance.delete('hue'); else appearance.set('hue', hue);
+    });
+  });
+  // No change event carries this one — appearance is not in the data map onChange reads — so the redraw is asked
+  // for here. The caches are told on both sides of it: before, so every row rebuilt with a type tag is the new
+  // colour, and again after, because the graph index can still answer the refresh with the old one.
+  // ponytail: the type's own row is built from the graph node, so a lagging index leaves it the old colour until
+  // the delayed refresh; a longer wait would only make the redraw feel slow.
+  const remember = () => {
+    if (hue === null) { typeHues.delete(typeUri); nodeHues.delete(typeUri); }
+    else { typeHues.set(typeUri, hue); nodeHues.set(typeUri, hue); }
+  };
+  remember();
+  if (S.refresh) await S.refresh(); // rebuilds the cached rows and tells the renderer to reload them
+  remember();
+  scheduleRefresh(2000); // the index catching up, for the rows built next
+  return hue;
 }
 async function createDocument(title, opts = {}) {
   if (typeof title !== 'string' || !title.trim()) throw new Error('Keep an empty draft local until it has a title');
@@ -396,7 +426,8 @@ function onChange(docId, info) {
 }
 // What doc:taskMeta is built from, as one string per document: seeded when the renderer reads the metadata, compared
 // on every change. participants carry roles and restricted the audience rule; assignedToUris the assignees.
-const metaSig = (n) => JSON.stringify([n.assignedToUris, n.restricted, n.participants]);
+// the type is metadata too: it decides which fields the page shows, and those are read with the sidebar (related)
+const metaSig = (n) => JSON.stringify([n.assignedToUris, n.restricted, n.participants, n.entityTypeUri]);
 
 async function document(id) {
   if (!S.client || !S.me) throw new Error(NOT_CONNECTED);
@@ -554,4 +585,4 @@ async function moveTarget(spaceId) {
   return document(spaceId);
 }
 
-module.exports = { outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, createDocument, typeChoices, setType, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, codexIds, codexPrompt, setCodex, creatorOf, document, op, inHistory, mut, mutTasks, documentAction, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget };
+module.exports = { outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, createDocument, typeChoices, setType, setTypeHue, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, codexIds, codexPrompt, setCodex, creatorOf, document, op, inHistory, mut, mutTasks, documentAction, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget };

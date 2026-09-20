@@ -103,6 +103,7 @@ const referenceLabel = (node) => referenceTarget(node)?.text || node.reference?.
 const showError = (e) => { const el = $('error'); el.textContent = e ? String(e.message || e) : ''; el.hidden = !e; };
 const run = (fn) => (queue = queue.then(fn).then((value) => { showError(null); return value; }, showError));
 const texts = () => [...outline.querySelectorAll('.node:not(.leaving) .text')]; // a row on its way out is not a keyboard stop
+const fieldValues = () => ($('fields').hidden ? [] : [...$('fields').querySelectorAll('.fvalue[contenteditable]')]); // the page's editable field values, in order: keyboard stops between the title and the outline
 const titleEl = $('title');  // zoomed into a document: contenteditable with data-key = that document's key
 const keyOfEl = (el) => (el.closest('.node') || el).dataset.key;
 const textEl = (key) => outline.querySelector('.node[data-key="' + CSS.escape(key) + '"] > .line .text') || (titleEl.isContentEditable && titleEl.dataset.key === key ? titleEl : null);
@@ -150,9 +151,13 @@ function iconNode(icon) {
   return t ? t.cloneNode(true) : null;
 }
 const isTask = (node) => node.kind === 'document' && node.icon === 'task';
+// A member or a type is a fact about other nodes, not a page: nothing zooms into one (bullet, Space, Zoom in)
+const zoomable = (node) => !!node && !/^tana:(user-profile|type):/.test(node.id || '');
 // A task put off is drawn with the zzz glyph instead of the task one: the row still is a task (its box, its
 // status, its metadata are unchanged), it only says at a glance that it is asleep.
-const iconOf = (node) => (isTask(node) && node.stateType === 'not_now' ? 'later' : node.icon);
+// A task keeps 'task' as its icon (that is what isTask reads), so its type's glyph — the one a typed document wears
+// (main/rows.js) — is chosen here at draw time; Later's own glyph still wins, it says what the task is doing.
+const iconOf = (node) => (isTask(node) && node.stateType === 'not_now' ? 'later' : (isTask(node) && typeGlyphs.get((node.tags || []).map((t) => t && t.uri).find(Boolean))) || node.icon);
 // an unchecked Inbox task: its (dashed) box accepts it, In Progress, before a second click completes it
 const acceptsFirst = (node) => isTask(node) && !node.done && node.stateType === 'proposed';
 const isCheckboxBlock = (node) => node?.kind === 'block' && node.done != null;

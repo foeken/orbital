@@ -83,13 +83,23 @@ async function attributeTitles(typeUri) {
   try { const titles = fields.templateTitles(await S.client.sync.subscribe(typeUri)); typeAttrTitles.set(typeUri, titles); return titles; }
   catch { return {}; }
 }
-// A document's own fields, values included, from its data map (the same place an edit writes to).
+// A document's fields: every field its type defines, empty or not, so one can be filled in — then any value it
+// carries under another type (a type it used to have). Values come from its data map, the same place an edit writes.
 async function fieldsOf(id) {
   let document;
   try { document = await S.client.sync.subscribe(id); } catch { return []; }
   const rows = fields.readFields(document);
+  const typeUri = document.data.get('entityTypeUri');
   const out = [];
+  if (typeUri) {
+    const titles = await attributeTitles(typeUri);
+    for (const [attribute, label] of Object.entries(titles)) {
+      const key = typeUri + '?attribute=' + attribute, row = rows.find((r) => r.key === key);
+      out.push({ key, label, text: row ? row.text : '' });
+    }
+  }
   for (const row of rows) {
+    if (out.some((f) => f.key === row.key)) continue;
     const titles = row.attribute ? await attributeTitles(row.typeUri) : {};
     out.push({ key: row.key, label: (row.attribute && titles[row.attribute]) || undefined, text: row.text });
   }

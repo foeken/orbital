@@ -3,6 +3,13 @@ html, body { margin: 0; height: 100%; }
 /* The Nucleo set built into the app draws its strokes at var(--nucleo-stroke-width, 1.5); the app's own glyphs are
    1, so one declaration puts 3500 icons on the same line weight as the rest instead of rewriting them. */
 html { --nucleo-stroke-width: 1; }
+/* A type's colour is Tana's `appearance.hue`, and it is an **OKLCH** hue, not an HSL one: the Organization type's
+   232 draws as #58aad2 in Tana, which is oklch(0.7 0.1 232) — read as an HSL angle the same number lands 42° away
+   and half as light (a navy #2b336f instead of that blue). So every hued rule below is oklch(L C var(--hue)), with
+   the lightness the only thing the dark theme moves. The colour is written out in each rule rather than held in
+   one `--hue-color` token on <html>: a custom property substitutes its own var() where it is *declared*, and
+   <html> has no `--hue` (the renderer sets it per element), so such a token computes invalid and every hued thing
+   on the page loses its colour entirely. */
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
   font-size: 16px; color: #1a1a1a; background: #fff;
@@ -40,7 +47,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 /* the type chip line under a zoomed title: a block, so it lines up with the title, and it may wrap. The 6px a chip
    carries is the gap from whatever precedes it, which at the start of this line is nothing — so the first chip
    starts flush with the title and the rest keep their spacing. */
-#taskInfo { margin-left: 0; white-space: normal; }
+#taskInfo { margin-left: 0; margin-top: 6px; white-space: normal; }
 #taskInfo .chip:first-child { margin-left: 0; }
 /* only the crumb links block the drag; the empty band beside them moves the window */
 .crumbs { font-size: 13px; color: #888; margin-bottom: 14px; }
@@ -55,14 +62,17 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .crumbs .cdate { margin-left: 6px; color: #bbb; }
 .error { font-size: 13px; color: #c0392b; margin-top: 6px; }
 /* a zoomed node's fields (type attributes), under the title */
-.fields { margin-top: 8px; display: flex; flex-direction: column; gap: 2px; }
-.fields .field { display: flex; align-items: baseline; gap: 6px; font-size: 14px; color: #1a1a1a; }
-.fields .ricon { flex: none; width: 14px; height: 14px; color: #8a8a8a; align-self: center; }
+/* The zoomed page's fields sit in a block of their own between two hairlines under the title and its tag, laid
+   out as a property list: icon, label and value in three columns shared by every row, so the labels line up. */
+.fields { margin-top: 18px; padding: 12px 0; border-top: 1px solid #e6e6e6; border-bottom: 1px solid #e6e6e6; display: grid; grid-template-columns: 14px max-content 1fr; column-gap: 10px; row-gap: 10px; align-items: baseline; }
+.fields .field { display: contents; color: #1a1a1a; }
+.fields[hidden] { display: none; } /* the grid's own display would otherwise win over [hidden] and leave the two lines on a page with no fields */
+.fields .ricon { width: 14px; height: 14px; color: #8a8a8a; align-self: center; }
 .fields .ricon svg { display: block; width: 14px; height: 14px; }
 .fields .flabel { color: #888; }
-.fields .fvalue { outline: none; min-width: 40px; border-bottom: 1px solid transparent; }
-.fields .fvalue:focus { border-bottom-color: #d6e3f2; }
-.fields .fvalue:empty::before { content: 'Empty'; color: #bbb; }
+.fields .fvalue { outline: none; min-width: 40px; color: #1a1a1a; }
+.fields .fvalue:nth-child(2) { grid-column: 2 / 4; } /* an unreadable type names no field: the value takes the label's column too */
+.fields .fvalue:empty::before { content: '…'; color: #bbb; }
 .tbtn.c svg { width: 13px; height: 13px; display: block; }
 .fields a { color: #508fbb; text-decoration: underline; cursor: pointer; }
 .error[hidden] { display: none; }
@@ -192,7 +202,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 /* the icon sits in the same box as a task row's checkbox (18px + its 2px/8px margins), so every title starts at one x */
 .rail .rrow .ricon { flex: none; display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin: 0 8px 0 2px; color: #8a8a8a; align-self: center; }
 .rail .rrow .ricon svg { display: block; width: 15px; height: 15px; }
-.rail .rrow .ricon.hue { color: hsl(var(--hue) 45% 30%); } /* a hued node keeps its colour in the sidebar too */
+.rail .rrow .ricon.hue { color: oklch(0.7 0.1 var(--hue)); } /* a hued node keeps its colour in the sidebar too */
 /* collapsed, the chip shows its "#" alone; the label appears only while the row expands it */
 .rail .rrow .chip { flex: none; max-width: 1.63em; overflow: hidden; white-space: nowrap; transition: max-width 0.12s ease; }
 .rail .rrow .chip-label { display: none; }
@@ -239,7 +249,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 }
 .bullet:hover::before { background: #1c2024; }
 /* typed node without its own icon: the plain bullet takes the type hue (same colour as .bullet.icon.hue) */
-.bullet.hue::before, .bullet.hue:hover::before { background: hsl(var(--hue) 45% 30%); }
+.bullet.hue::before, .bullet.hue:hover::before { background: oklch(0.7 0.1 var(--hue)); }
 .collapsed > .line > .bullet::before { box-shadow: 0 0 0 6px #e6e6e6; } /* collapsed with children: dot on an 18px halo */
 /* Only a list row carries a marker, the way Tana draws it: a bulletList/orderedList item has one, and text,
    headings, quotes and code have none — not on hover either, so a heading reads as a heading whatever the mouse
@@ -256,6 +266,8 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .node.block:not(.t-bullet):not(.t-numbered):not(.has) > .line:hover > .chev { width: 0; visibility: hidden; }
 .node.block:not(.t-bullet):not(.t-numbered):not(.has) > .line > .bullet { width: 11px; }
 .bullet.icon::before { display: none; }
+.bullet.still { cursor: default; } /* a member's or a type's glyph: nothing to zoom into */
+.bullet.still.icon:hover svg { color: #8a8a8a; }
 .bullet.icon svg { position: absolute; left: 0; top: 4px; width: 16px; height: 16px; color: #8a8a8a; }
 /* one colour whether or not the row has children: a saved search draws its rows before their children are known,
    so they all counted as collapsed and their icons came out darker than the same rows in a view */
@@ -263,7 +275,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .bullet.meeting svg { color: #c99b1b; }
 .bullet.meeting:hover svg { color: #8a6a17; }
 /* Renderer contract: appearance-driven icons add .hue and set --hue, including 0. */
-.bullet.icon.hue svg, .bullet.icon.hue:hover svg { color: hsl(var(--hue) 45% 30%); }
+.bullet.icon.hue svg, .bullet.icon.hue:hover svg { color: oklch(0.7 0.1 var(--hue)); }
 .check {
   flex: none; width: 18px; height: 18px; margin: 3px 8px 0 2px; border-radius: 5px; background: #e4e4e4;
   border: 0; padding: 0; cursor: pointer; -webkit-appearance: none; appearance: none; position: relative;
@@ -306,7 +318,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 }
 .chip.grey { background: #f1f1f1; color: #6b6b6b; }
 .chip.gold { background: #fbf3d9; color: #8a6a17; }
-.chip.hue { background: hsl(var(--hue) 80% 92%); color: hsl(var(--hue) 45% 30%); } /* type colour: --hue 0-360 set per chip */
+.chip.hue { background: oklch(0.95 0.04 var(--hue)); color: oklch(0.45 0.12 var(--hue)); } /* type colour: --hue 0-360 set per chip */
 /* image block: not editable, focus = selected frame; .loading = placeholder box until api.image resolves */
 .text.image { display: block; cursor: default; }
 .text.image img { display: block; max-width: 100%; max-height: 360px; height: auto; border-radius: 6px; }
@@ -518,7 +530,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .palette .ricon.meeting { color: #c99b1b; }
 .palette .ricon.dot::before { content: ""; display: block; width: 6px; height: 6px; margin: 5px; border-radius: 50%; background: #555; }
 .palette .ricon.right { color: #aaa; }
-.palette .ricon.hue { color: hsl(var(--hue) 45% 30%); } /* hued nodes: same icon colour as .bullet.icon.hue */
+.palette .ricon.hue { color: oklch(0.7 0.1 var(--hue)); } /* hued nodes: same icon colour as .bullet.icon.hue */
 .palette .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .palette .hint { color: #999; font-size: 14px; white-space: nowrap; }
 .palette kbd { font: inherit; font-size: 13px; color: #666; background: #f1f1f1; border-radius: 6px; padding: 1px 8px; }
@@ -602,12 +614,12 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .chev:hover::before { border-color: #747b7e; }
 [data-theme="dark"] .bullet::before { background: #aeb4b6; }
 [data-theme="dark"] .bullet:hover::before { background: #e0e1e1; }
-[data-theme="dark"] .bullet.hue::before, [data-theme="dark"] .bullet.hue:hover::before { background: hsl(var(--hue) 70% 72%); }
+[data-theme="dark"] .bullet.hue::before, [data-theme="dark"] .bullet.hue:hover::before { background: oklch(0.8 0.1 var(--hue)); }
 [data-theme="dark"] .collapsed > .line > .bullet::before { box-shadow: 0 0 0 6px #353a3c; }
 [data-theme="dark"] .bullet.icon svg { color: #aeb4b6; }
 [data-theme="dark"] .bullet.icon:hover svg { color: #d0d2d2; }
 [data-theme="dark"] .bullet.meeting svg { color: #d7b54d; }
-[data-theme="dark"] .bullet.icon.hue svg, [data-theme="dark"] .bullet.icon.hue:hover svg { color: hsl(var(--hue) 70% 72%); }
+[data-theme="dark"] .bullet.icon.hue svg, [data-theme="dark"] .bullet.icon.hue:hover svg { color: oklch(0.8 0.1 var(--hue)); }
 [data-theme="dark"] .check { background: #3a3e40; --check-on: #5b976c; }
 [data-theme="dark"] .check:hover:not(:checked) { background: #474c4e; }
 [data-theme="dark"] .check.inbox:not(:checked) { background: #5d6467; }
@@ -618,7 +630,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .clearfilters:focus { box-shadow: 0 0 0 2px #58768a; }
 [data-theme="dark"] .chip.grey { background: #303436; color: #b7bcbe; }
 [data-theme="dark"] .chip.gold { background: #4b4024; color: #e4c968; }
-[data-theme="dark"] .chip.hue { background: hsl(var(--hue) 35% 25%); color: hsl(var(--hue) 75% 78%); }
+[data-theme="dark"] .chip.hue { background: oklch(0.33 0.06 var(--hue)); color: oklch(0.83 0.09 var(--hue)); }
 [data-theme="dark"] .text.image.loading { background: #303436; }
 [data-theme="dark"] .text.image:focus img, [data-theme="dark"] .selected .text.image img { outline-color: #58768a; }
 [data-theme="dark"] .text.chiponly:focus .mention, [data-theme="dark"] .selected .text.chiponly .mention, [data-theme="dark"] .reference .text:not([contenteditable]):focus { outline-color: #58768a; }
@@ -669,7 +681,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .palette .ricon { color: #aeb4b6; }
 [data-theme="dark"] .palette .ricon.meeting { color: #d7b54d; }
 [data-theme="dark"] .palette .ricon.right { color: #858b8e; }
-[data-theme="dark"] .palette .ricon.hue { color: hsl(var(--hue) 70% 72%); }
+[data-theme="dark"] .palette .ricon.hue { color: oklch(0.8 0.1 var(--hue)); }
 [data-theme="dark"] .palette .row.disabled { color: #7e8487; }
 [data-theme="dark"] .palette .row.disabled .ricon { color: #5d6467; }
 [data-theme="dark"] .rail .rhead { color: #858b8e; }
@@ -682,14 +694,15 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .rail .rrow:hover { background: #24282a; }
 [data-theme="dark"] .rail .rrow:focus { background: #2b3237; }
 [data-theme="dark"] .rail .rrow .ricon { color: #aeb4b6; }
-[data-theme="dark"] .rail .rrow .ricon.hue { color: hsl(var(--hue) 70% 72%); }
+[data-theme="dark"] .rail .rrow .ricon.hue { color: oklch(0.8 0.1 var(--hue)); }
 [data-theme="dark"] .rail { border-left-color: #2b2f31; background: #191c1d; }
 [data-theme="dark"] .railgrip:hover, [data-theme="dark"] .railgrip.dragging { background: #2f4658; }
 [data-theme="dark"] .rail .rrow .rtitle { color: #e6e8e9; }
 [data-theme="dark"] .rail .rrow .rsub { color: #858b8e; }
 [data-theme="dark"] .rail .rrow.done .rtitle { color: #858b8e; }
 [data-theme="dark"] .rail .rrow.rmeta .rtitle { color: #a8adaf; }
-[data-theme="dark"] .fields .field { color: #e6e8e9; }
+[data-theme="dark"] .fields { border-color: #3a3f41; }
+[data-theme="dark"] .fields .field, [data-theme="dark"] .fields .fvalue { color: #e6e8e9; }
 [data-theme="dark"] .fields .flabel, [data-theme="dark"] .fields .ricon { color: #858b8e; }
 [data-theme="dark"] .fields a { color: #7fb8dd; }
 [data-theme="dark"] .subtext { color: #858b8e; }

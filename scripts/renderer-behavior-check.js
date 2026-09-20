@@ -49,6 +49,12 @@ const withShims = (src) => {
   // "this page has pills" (renderer/pills.js), which a folded row no longer answers for: a harness that is not about
   // folding gets the page it always had, so the calls guarded by it still run.
   if (/\bpillsDrawn\b/.test(src) && !/let pillsDrawn =/.test(src)) src = 'globalThis.pillsDrawn ??= true;\n' + src;
+  // the glyphs types were given (renderer/nodes.js): a harness that is not about type icons draws every task with its box
+  if (/\btypeGlyphs\b/.test(src) && !/const typeGlyphs =/.test(src)) src = 'globalThis.typeGlyphs ??= new Map();\n' + src;
+  // what has a page of its own (renderer/nodes.js): a harness that is not about members or types keeps every document zoomable
+  if (/\bzoomable\(/.test(src) && !/const zoomable =/.test(src)) src = 'globalThis.zoomable ??= (node) => !!node;\n' + src;
+  // a related answer draws the page's fields and sidebar at once when a render would wait (renderer/rail.js loadRelated): a harness with no page has nothing to draw
+  if (/\bloadRelated\b/.test(src) && !/let zoom\b/.test(src) && !/const zoom\b/.test(src)) src = 'globalThis.zoom ??= null;\n' + src;
   // Deleted nodes (renderer/nodes.js) are one Set the whole app shares. A harness that is not about deletion gets
   // "nothing is gone", with markGone still answering main's own mark, so rows and chips draw as they always did;
   // the real helpers are sliced in by runDeletedNodeCheck.
@@ -208,6 +214,21 @@ async function runZoomedBlockTitleSaveCheck() {
 }
 
 function runSensitiveBlurCheck() {
+  { // a task wears its type's glyph, the way a typed document does; Later's own glyph still says what it is doing
+    const line = (name) => { const m = source.match(new RegExp('^const ' + name + ' = .*$', 'm')); assert.ok(m, 'renderer const ' + name + ' is present'); return m[0]; };
+    const iconOf = vm.runInNewContext(`
+      const typeGlyphs = new Map([['tana:type:t1', 'rocket']]);
+      ${line('isTask')}
+      ${line('iconOf')}
+      iconOf;
+    `);
+    const task = (extra) => ({ kind: 'document', icon: 'task', tags: [{ label: 'task' }, { label: 'Discussion Task', uri: 'tana:type:t1' }], ...extra });
+    assert.equal(iconOf(task({})), 'rocket', 'a typed task draws its type\'s glyph');
+    assert.equal(iconOf(task({ tags: [{ label: 'task' }] })), 'task', 'an untyped task keeps its box');
+    assert.equal(iconOf(task({ tags: [{ label: 'task' }, { label: 'Project', uri: 'tana:type:none' }] })), 'task', 'a type without a glyph changes nothing');
+    assert.equal(iconOf(task({ stateType: 'not_now' })), 'later', 'Later wins over the type glyph');
+    assert.equal(iconOf({ kind: 'document', icon: 'doc', tags: [{ label: 'x', uri: 'tana:type:t1' }] }), 'doc', 'only tasks are decided here; a document already carries the glyph from main');
+  }
   const api = vm.runInNewContext(`
     let sensitiveIds = null, sensitiveVisible = false;
     const sensitiveEls = new Map();
@@ -1426,23 +1447,26 @@ async function runSyncShortcutCheck() {
     const authed = true, authChecking = false, signedOut = true, theme = 'light', hotkeys = {}, themePref = 'light';
     const palDoc = { id: 'tana:text:01j0doc000000000000000000' }, pinInfo = { docId: palDoc.id, sidebar: false, dates: [] };
     const accessById = new Map([[palDoc.id, { sharing: true, move: true, ownerUri: 'tana:space:01j0space00000000000000000' }]]), loadAccess = () => {}, isRealId = () => true;
-    const localDate = () => '2026-09-13', setTheme = () => {}, docRow = () => ({}), sectionOf = () => null;
+    const localDate = (offset = 0) => (offset ? '2026-09-14' : '2026-09-13'), setTheme = () => {}, docRow = () => ({}), sectionOf = () => null;
     const palette = { hidden: false }, palMode = 'cmd', renderPalette = () => {}, showError = () => {};
     const zoom = null, railEl = { hidden: false }, navBack = [], navForward = [], sensitiveVisible = false;
     const railToggle = { hidden: false }, railHidden = false; // sidebar visible here, so both the focus row and the toggle row are built
     const went = []; // Go to Home runs the real goHome, so where it sends you is observable here
-    const openCreationPalette = () => {}, openHiddenPalette = () => {}, toggleSensitiveVisibility = () => {}, followSystem = () => {}, openVisibilityPalette = () => {}, openMovePalette = () => {}, pinAction = () => {}, copyText = () => {}, togglePalette = () => {}, navigate = () => {}, history = () => {}, focusRail = () => {}, setZoom = () => {}, goTo = (id) => went.push(id), setView = (id) => went.push('view:' + id), openDoc = () => {}, filterEl = {}, render = () => {}, zoomFactor = 1, BASE_ZOOM = 1;
+    const pinCalls = []; // what a date-pin row asks of api.pin/api.unpin: the op, the target and the day
+    const openCreationPalette = () => {}, openHiddenPalette = () => {}, toggleSensitiveVisibility = () => {}, followSystem = () => {}, openVisibilityPalette = () => {}, openMovePalette = () => {}, pinAction = (...args) => pinCalls.push(args), copyText = () => {}, togglePalette = () => {}, navigate = () => {}, history = () => {}, focusRail = () => {}, setZoom = () => {}, goTo = (id) => went.push(id), setView = (id) => went.push('view:' + id), openDoc = () => {}, filterEl = {}, render = () => {}, zoomFactor = 1, BASE_ZOOM = 1;
     ${sourceBetween('const NODE_ROW_ORDER', 'function paletteRows')}
     ${sourceBetween('const homeSearch =', 'function sensitiveHidden')}
     const visibilityRows = () => [], moveTargets = async () => [], previewMoveToSpace = () => {};
     ${functionSource('paletteRows')}
     ({ labels: (q) => paletteRows(q).map((row) => row.group + ': ' + row.label),
        row: (id) => paletteRows('').find((r) => r.id === id),
+       datePin: (rank) => { const row = paletteRows('').find((r) => r.rank === rank); pinCalls.length = 0; row.run(); return [row.label, ...pinCalls[0]]; },
+       pinnedOn: (dates) => { pinInfo.dates.length = 0; pinInfo.dates.push(...dates); },
        went: () => { const out = [...went]; went.length = 0; return out; },
        choose: (id, list) => { home = id; searches = list || []; } });
   `);
   assert.deepEqual(plain(order.labels('')), [
-    'Current node: Zoom in', 'Current node: Set status', 'Current node: Pin to today', 'Current node: Move to …', 'Current node: Move to Library',
+    'Current node: Zoom in', 'Current node: Set status', 'Current node: Pin to today', 'Current node: Pin to tomorrow', 'Current node: Move to …', 'Current node: Move to Library',
     'Current node: Edit visibility', 'Current node: Mark as sensitive', 'Current node: Copy link', 'Current node: Delete',
     'Views: Inbox', 'Views: Today', 'Views: This week', 'Views: Library',
     'View options: Filter by type', 'View options: Filter rows by text',
@@ -1450,6 +1474,14 @@ async function runSyncShortcutCheck() {
     'Actions: Undo', 'Actions: Redo', 'Actions: Sync', 'Actions: Reload', 'Actions: Edit hidden items', 'Actions: Toggle sensitive visibility',
     'Actions: Larger text', 'Actions: Smaller text', 'Actions: Reset text size', 'Actions: Toggle dark mode',
   ], 'the palette lists its rows in one fixed, meaningful order');
+  // The two date pins differ only in the day they name: today's row passes no date (main defaults to today), the
+  // tomorrow row passes the next local day, and each label follows whether that day is already pinned.
+  assert.deepEqual(plain(order.datePin('pinToday')), ['Pin to today', 'pin', 'today'], 'Pin to today pins the default day');
+  assert.deepEqual(plain(order.datePin('pinTomorrow')), ['Pin to tomorrow', 'pin', 'today', '2026-09-14'], 'Pin to tomorrow pins the next local day');
+  order.pinnedOn(['2026-09-14']);
+  assert.deepEqual(plain(order.datePin('pinTomorrow')), ['Unpin from tomorrow', 'unpin', 'today', '2026-09-14'], 'and unpins that same day once it is pinned');
+  assert.deepEqual(plain(order.datePin('pinToday')), ['Pin to today', 'pin', 'today'], 'while a pin on tomorrow leaves today\'s row offering to pin');
+  order.pinnedOn([]);
   // Nothing matched: one row that carries the query into Cmd+S, under the "No results" heading.
   assert.deepEqual(plain(order.labels('zzqq')), ['No results: Search Tana for \u201Czzqq\u201D'],
     'a query nothing matches offers the Tana search with what was typed');
@@ -6106,7 +6138,7 @@ function runCaretAtPointCheck() {
   assert.match(functionSource('nodeEl'), /setCaret\(text, caretAt\(text, e\.clientX, e\.clientY\)\)/, 'the row places the caret where the click was');
 }
 
-const checks = [runCaretAtPointCheck, runPrefsStoreCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runSetIconCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runAgentStatusBootCheck, runQuickAddPanelCheck, runRailChangesCheck, runPasteLinkCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck,runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck];
+const checks = [runCaretAtPointCheck, runPrefsStoreCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runSetIconCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runAgentStatusBootCheck, runQuickAddPanelCheck, runRailChangesCheck, runPasteLinkCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck,runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck];
 // The chips under a zoomed title, driven through the shipped line itself: a typed document shows its type whatever
 // kind it is, and the kind chip (task, doc, meeting, space, chat…) stays out of the header, as it always did for a task.
 function runZoomTypeChipCheck() {
@@ -6404,6 +6436,107 @@ async function runSetIconCheck() {
   assert.deepEqual(plain(api.page().map((r) => [r.label, r.disabled])), [['No icon matches', true]], 'and a query that matches nothing says so');
   console.log('ok  Set icon: offered on a type, the page searches main\u2019s set and registers what it draws, the current glyph is ticked and removable, one call per choice');
 }
+
+// Cmd+K "Set colour": the hue Tana keeps on a type (appearance.hue). The row is offered to a type and nothing else,
+// the page previews every colour with the glyph the type wears, a typed number picks a hue the list does not hold,
+// the current colour is ticked and removable, and each choice is one call.
+async function runSetHueCheck() {
+  const TYPE = 'tana:type:01j0type000000000000000000', DOC = 'tana:text:01j0doc000000000000000000';
+  const api = vm.runInNewContext(`
+    const views = [], pinTree = [], pinRows = () => [], searches = [], searchesLoaded = true;
+    let home = 'library', view = 'library';
+    const localStorage = { setItem() {} }, onSearchPage = () => false;
+    const selectionRows = () => [], pillCommandRows = () => [], taskActionRows = () => [];
+    let palDoc = { id: '${TYPE}', tags: [] };
+    const pinInfo = null, isRealId = () => true;
+    const accessById = new Map(), loadAccess = () => {}, localDate = () => '2026-09-18', setTheme = () => {};
+    const sectionOf = () => null, visibleTags = () => [];
+    const palette = { hidden: false }; let palMode = 'cmd', palRows = [], palIndex = 0, palBusy = false, palSeq = 0, palTimer = null;
+    const palInput = { placeholder: '', value: '', focus() {} };
+    const zoom = null, railEl = { hidden: false }, navBack = [], navForward = [], sensitiveVisible = false;
+    const railToggle = { hidden: false }, railHidden = false;
+    const authed = true, authChecking = false, signedOut = false, theme = 'light', hotkeys = {}, themePref = 'light';
+    const openCreationPalette = () => {}, openHiddenPalette = () => {}, toggleSensitiveVisibility = () => {}, followSystem = () => {};
+    const openVisibilityPalette = () => {}, openMovePalette = () => {}, pinAction = () => {}, copyText = () => {};
+    const togglePalette = () => {}, navigate = () => {}, history = () => {}, focusRail = () => {}, setZoom = () => {};
+    const goTo = () => {}, setView = () => {}, openDoc = () => {}, filterEl = {}, zoomFactor = 1, BASE_ZOOM = 1;
+    const visibilityRows = () => [], moveTargets = async () => [], previewMoveToSpace = () => {};
+    const openTypePalette = () => {}, typesLoaded = async () => {}, typeRows = () => [], typeNameOf = () => '';
+    const openIconPalette = () => {};
+    const typeGlyphs = new Map();
+    const TYPE_NODE = /^tana:type:[0-9a-z]{26}$/;
+    let renderedPages = 0; const renderPalette = () => { renderedPages++; };
+    let closed = 0; const closePalette = () => { closed++; }, promptEditor = () => {};
+    const openCommandPalette = () => { palMode = 'cmd'; palRows = []; palIndex = 0; };
+    const errors = []; let queue = Promise.resolve();
+    const showError = (e) => { if (e) errors.push((e && e.message) || String(e)); };
+    const run = (fn) => (queue = queue.then(fn).then((v) => { showError(null); return v; }, showError));
+    const render = () => {};
+    const written = [];
+    const tana = { refresh: async () => {}, filters: {}, sensitiveIds: () => {},
+      setTypeHue: async (uri, hue) => { written.push([uri, hue]); return hue; } };
+    ${sourceBetween('const docRow =', 'const NODE_ROW_ORDER')}
+    ${sourceBetween('const NODE_ROW_ORDER', 'function paletteRows')}
+    ${sourceBetween('const homeSearch =', 'function sensitiveHidden')}
+    ${functionSource('paletteRows')}
+    ${sourceBetween('const HUE_GROUP', 'function openHuePalette')}
+    ${functionSource('openHuePalette')}
+    ${functionSource('applyHue')}
+    ${functionSource('backPalette')}
+    ({ row: () => paletteRows('').find((r) => r.id === 'setHue'),
+       node: (next) => { palDoc = next; },
+       wearing: (uri, name) => { if (name) typeGlyphs.set(uri, name); else typeGlyphs.delete(uri); },
+       page: (q) => huePickRows(q || ''),
+       mode: () => palMode,
+       escape: () => backPalette(),
+       settle: async () => { await queue; await Promise.resolve(); },
+       state: () => ({ written: [...written], errors: [...errors], closed, placeholder: palInput.placeholder }) });
+  `);
+
+  // 1. The row belongs to a type, and says what colour it is now.
+  assert.deepEqual(plain([api.row().label, api.row().hint, api.row().icon, api.row().hue]), ['Set colour', 'No colour', 'type', null],
+    'an uncoloured type offers the row in grey');
+  api.node({ id: TYPE, tags: [], hue: 268 });
+  api.wearing(TYPE, 'nc-rocket');
+  assert.deepEqual(plain([api.row().hint, api.row().icon, api.row().hue]), ['Hue 268', 'nc-rocket', 268], 'and a coloured one wears its own glyph and colour');
+  for (const id of [DOC, 'tana:event:01j0event00000000000000000', 'tana:space:01j0space00000000000000000', 'b12']) {
+    api.node({ id, tags: [] });
+    assert.equal(api.row(), undefined, (id.split(':')[1] || 'a block') + ' has no type colour to set');
+  }
+
+  // 2. The page is the picker: every colour drawn with the glyph the type wears, in the colour it would become.
+  api.node({ id: TYPE, tags: [], hue: 240 });
+  api.row().run();
+  assert.deepEqual(plain([api.mode(), api.state().placeholder]), ['setHue', 'Choose a colour or type a hue…'], 'it opens a page of its own');
+  const page = api.page();
+  assert.deepEqual(plain([page.length, page[0].label, page[0].hue, page[0].icon]), [13, 'Red', 0, 'nc-rocket'], 'twelve colours and the way back to grey, each previewing the type\u2019s own glyph');
+  assert.deepEqual(plain(page.filter((r) => r.hint === '✓').map((r) => r.label)), ['Blue'], 'the colour it already has is ticked');
+  assert.deepEqual(plain(page.slice(-1).map((r) => [r.label, r.hint])), [['No colour', 'Back to grey']], 'and it can be taken off');
+
+  // 3. Typing narrows by name, and a number picks a hue the list of twelve does not hold.
+  assert.deepEqual(plain(api.page('green').map((r) => r.label)), ['Green'], 'typing a name narrows the list');
+  assert.deepEqual(plain(api.page('268').map((r) => [r.label, r.hue])), [['Hue 268', 268]], 'a number is the hue itself, so all 360 are reachable');
+  assert.deepEqual(plain(api.page('240').map((r) => r.label)), ['Blue'], 'one the list already holds is that row, not a duplicate');
+  assert.deepEqual(plain(api.page('400').map((r) => [r.label, r.disabled])), [['No colour matches', true]], 'and a hue that is not one says so');
+
+  // 4. Choosing is one call, and the palette closes behind it.
+  api.page().find((r) => r.label === 'Violet').run();
+  await api.settle();
+  assert.deepEqual(plain(api.state().written), [[TYPE, 270]], 'choosing writes exactly that hue');
+  api.page('268')[0].run();
+  await api.settle();
+  api.page().find((r) => r.label === 'No colour').run();
+  await api.settle();
+  assert.deepEqual(plain(api.state().written.slice(1)), [[TYPE, 268], [TYPE, null]], 'a typed hue and "No colour" go the same way');
+  assert.deepEqual(plain([api.state().closed, api.state().errors]), [3, []], 'each choice closes the palette, with nothing reported wrong');
+
+  // 5. Escape steps back to the command page.
+  api.row().run();
+  api.escape();
+  assert.equal(api.mode(), 'cmd', 'escape on the colour page goes back to the command page');
+  console.log('ok  Set colour: offered on a type, the page previews every hue with the type\u2019s glyph, a typed number reaches all 360, the current one is ticked and removable, one call per choice');
+}
+
 
 
 // A node can be gone while a copy of it is still on screen — a mention in a note, a reference row, a page in the Back

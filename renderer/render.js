@@ -460,7 +460,16 @@ function renderFields(parent) {
     if (tana.setField && canEditItem(parent)) { // a field value is ordinary text on this document
       value.contentEditable = 'plaintext-only'; value.spellcheck = false;
       value.onblur = () => { const next = value.textContent.trim(); if (next !== (field.text || '')) { field.text = next; run(() => tana.setField(parent.docId, field.key, next)); } };
-      value.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); value.blur(); } else if (e.key === 'Escape') { e.preventDefault(); value.textContent = field.text || ''; value.blur(); } };
+      value.onkeydown = (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); value.blur(); }
+        else if (e.key === 'Escape') { e.preventDefault(); value.textContent = field.text || ''; value.blur(); }
+        // Up and Down walk the page: title, the fields in order, then the outline (the blur saves the value)
+        else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+          const all = fieldValues(), i = all.indexOf(value), up = e.key === 'ArrowUp';
+          const next = up ? (all[i - 1] || (titleEl.isContentEditable ? titleEl : null)) : (all[i + 1] || texts()[0]);
+          if (next) { e.preventDefault(); setCaret(next, up ? next.textContent.length : 0); }
+        }
+      };
     }
     row.append(value);
     el.append(row);
@@ -643,12 +652,14 @@ function nodeEl(node, docId, parent) {
   const chev = document.createElement('button'); chev.className = 'chev'; chev.tabIndex = -1;
   chev.onmousedown = (e) => e.preventDefault();
   chev.classList.toggle('off', !expandable); // hidden glyph, kept in the layout so the row never shifts
-  const bullet = document.createElement('span'); bullet.className = 'bullet'; bullet.title = 'Zoom in';
+  const bullet = document.createElement('span'); bullet.className = 'bullet';
+  const opens = reference || fullref || zoomable(node);
+  if (opens) bullet.title = 'Zoom in'; else bullet.classList.add('still'); // a member or a type has no page: the bullet is only a glyph
   const bulletIcon = gone ? 'trash' : iconOf(display);
   if (bulletIcon) { bullet.classList.add('icon', bulletIcon); const svg = iconNode(bulletIcon); if (svg) bullet.append(svg); }
-  if (display.hue != null) { bullet.classList.add('hue'); bullet.style.setProperty('--hue', String(display.hue)); } // type hue tints the icon and the plain bullet alike
+  if (display.hue != null) { bullet.classList.add('hue'); bullet.style.setProperty('--hue', String(display.hue)); } // type hue tints the icon and the plain bullet alike, a task's type glyph included
   bullet.onmousedown = (e) => e.preventDefault();
-  if (!node.draft) bullet.onclick = () => (reference || fullref ? openReference(node) : zoomTo(item));
+  if (!node.draft && opens) bullet.onclick = () => (reference || fullref ? openReference(node) : zoomTo(item));
   line.append(chev, bullet);
   // a task's box is its status, so Display hides it with the rest of the status; a checkbox block is outline content
   // the user typed, not a fact about the row, so it is never hidden

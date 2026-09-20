@@ -25,7 +25,7 @@ selecting text opens the formatting bar. Undo and redo are CRDT-aware and local-
 rolls back someone else's edit. The full keyboard contract is [docs/OUTLINER.md](docs/OUTLINER.md).
 
 **Cmd+K for everything else.** Switch views, run an action on the current node (copy link, show
-in Tana, pin, set an icon, change visibility, move to a space), or act on a multi-selection: Cmd+click
+in Tana, pin it to the sidebar or to today or tomorrow, set an icon, change visibility, move to a space), or act on a multi-selection: Cmd+click
 rows, then mark them sensitive, add them to today's, tomorrow's or the week's node, set a status, assign them or
 delete them; with nothing selected the same actions apply to the node you are on. "Today"
 and "This week" (both under Views) open (and create) the date-titled and the "Week 38 (2026)" documents.

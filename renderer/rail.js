@@ -61,7 +61,15 @@ function loadRelated(docId) {
   const stale = relatedStale.delete(docId);
   if (relatedBy.has(docId) && !stale) return;
   if (!relatedBy.has(docId)) relatedBy.set(docId, null); // nothing to show yet: this is the first read
-  tana.related(docId).then((data) => { relatedBy.set(docId, data); renderSoon(); }, () => { if (!relatedBy.get(docId)) relatedBy.delete(docId); });
+  tana.related(docId).then((data) => {
+    relatedBy.set(docId, data);
+    // The answer usually lands while the caret sits in the page's tail row (a zoom parks it there), and a render
+    // with the caret in a row waits for focus to leave — so the fields under the title and the sidebar, which are
+    // outside the outline, are drawn now rather than at the next click.
+    const page = zoom && zoom.docId === docId && !zoom.nodeId ? items.get(docId) : null;
+    if (page && (editingRow() || selectionFrozen)) { renderFields(page); renderRail(page); }
+    renderSoon();
+  }, () => { if (!relatedBy.get(docId)) relatedBy.delete(docId); });
 }
 // This document's relations have moved on (an edit, a pin): read them again without taking the sidebar down.
 function refreshRelated(docId) { if (docId) { relatedStale.add(docId); loadRelated(docId); } }

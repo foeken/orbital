@@ -15,7 +15,7 @@ const agent = require('./main/agent');
 const fields = require('./sdk/fields');
 const { NOT_CONNECTED, S, VIEWS, docStates, errText, idKind, isSearch, isSpace, metaSigs, pathCache, today, truncatedViews, redoStack, report, scheduleRefresh, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
 const { cachedNodeHue, graphRow, members, rememberNodeHue, toNode } = require('./main/rows');
-const { accessContext, chatOutline, codexIds, createDocument, creationOptions, creatorOf, documentAction, history, info, linkShared, metaSig, moveTarget, mut, mutTasks, notifyOn, notifyState, setCodex, setNotify, onChange, op, outlineWithReferences, sensitiveIds, setSensitive, setType, typeChoices } = require('./main/documents');
+const { accessContext, chatOutline, codexIds, createDocument, creationOptions, creatorOf, documentAction, history, info, linkShared, metaSig, moveTarget, mut, mutTasks, notifyOn, notifyState, setCodex, setNotify, onChange, op, outlineWithReferences, sensitiveIds, setSensitive, setType, setTypeHue, typeChoices } = require('./main/documents');
 const { callOf, changesOf, pathOf, related, searchChildren, searchPreview, spaceChildren, summaryChanges, summaryUri } = require('./main/related');
 const { hiddenRules, inboxCount, listFilter, mcpHidden, preset, refresh, search, searchCreate, searchList, searchTitle, setHidden, setMcpHidden, setViewFilter, start, viewFilter, viewRows } = require('./main/views');
 const { nodePin, pinState, pinTree, pinned, setPin, todayNode, weekNode, weekTitle } = require('./main/pins');
@@ -124,6 +124,9 @@ ipcMain.handle('doc:creationOptions', () => creationOptions());
 // A document's type: the choices it can be given (with the ones it cannot, and why), and the change itself.
 ipcMain.handle('doc:types', (_e, id) => typeChoices(id));
 ipcMain.handle('doc:setType', (_e, id, typeUri) => setType(id, typeUri ?? null));
+// A type's colour: the one `appearance` field Tana keeps, written on the type itself, so every document wearing
+// it follows. setTypeHue rebuilds the rows and announces them itself, since no change event carries appearance.
+ipcMain.handle('doc:setTypeHue', (_e, typeUri, hue) => setTypeHue(typeUri, hue ?? null));
 // A type's own glyph: the built-in Nucleo set to search, the glyphs currently chosen (sent with every roots load so
 // no row is drawn before the glyph it names exists), and the choice itself. App-local: Tana has nowhere to keep it.
 ipcMain.handle('icons:search', (_e, query) => icons.searchIcons(query));
@@ -310,8 +313,8 @@ ipcMain.handle('block:move', (_e, id, nodeId, direction) => mut(id, (doc) => { c
 ipcMain.handle('block:toggleCheckbox', (_e, id, nodeId) => mut(id, (doc) => { content.toggleCheckbox(doc, nodeId); }));
 ipcMain.handle('pins:list', () => pinned());
 ipcMain.handle('pins:state', (_e, id) => pinState(id));
-ipcMain.handle('pins:pin', (_e, id, target) => setPin(id, target, true));
-ipcMain.handle('pins:unpin', (_e, id, target) => setPin(id, target, false));
+ipcMain.handle('pins:pin', (_e, id, target, date) => setPin(id, target, true, date));
+ipcMain.handle('pins:unpin', (_e, id, target, date) => setPin(id, target, false, date));
 ipcMain.handle('pins:pinTo', (_e, hubId, uri) => nodePin(hubId, uri, true)); // pin a document on a meeting/space
 ipcMain.handle('pins:unpinFrom', (_e, hubId, uri) => nodePin(hubId, uri, false));
 ipcMain.handle('sensitive:list', () => sensitiveIds()); // the synced setting sensitive:set writes; db's table is only its migration source
@@ -371,7 +374,7 @@ ipcMain.handle('sync:login', async () => {
 });
 
 if (process.env.TANA_MAIN_TEST) {
-  module.exports = { resolveInitialAuth, graphRow, cachedNodeHue, VIEWS, toNode, outlineWithReferences, chatOutline, op, onChange, documentAction, createDocument, creationOptions, typeChoices, setType, icons, settings, search, viewFilter, searchCreate, searchTitle, viewRows, spaceChildren, start, refresh, related, callOf, weekTitle, weekNode,
+  module.exports = { resolveInitialAuth, graphRow, cachedNodeHue, VIEWS, toNode, outlineWithReferences, chatOutline, op, onChange, documentAction, createDocument, creationOptions, typeChoices, setType, setTypeHue, icons, settings, search, viewFilter, searchCreate, searchTitle, viewRows, spaceChildren, start, refresh, related, callOf, weekTitle, weekNode,
     statusSnapshot: () => ({ ...S.status }), rememberNodeHue, restoredBounds, today,
     undo: () => history(undoStack, redoStack, 'undo', 'canUndo'), redo: () => history(redoStack, undoStack, 'redo', 'canRedo'), visibleGraphNodes, pinTree, changesOf, summaryChanges,
     nodePin,

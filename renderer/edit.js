@@ -385,6 +385,8 @@ async function restorePlace() {
 function focusAbove(el) {
   if (el) flush(keyOfEl(el));
   const p = $('pills').lastElementChild;
-  if (titleEl.isContentEditable) setCaret(titleEl, titleEl.textContent.length);
+  const field = fieldValues().at(-1); // the last field value sits between the outline and the title
+  if (field) setCaret(field, field.textContent.length);
+  else if (titleEl.isContentEditable) setCaret(titleEl, titleEl.textContent.length);
   else if (p && !$('pills').hidden) { if (el) el.blur(); p.focus(); }
 }

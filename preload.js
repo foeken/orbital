@@ -39,6 +39,7 @@ contextBridge.exposeInMainWorld('api', {
   searchIcons: (query) => ipcRenderer.invoke('icons:search', query), // [{name,label,svg}] from the built-in Nucleo UI set
   typeIcons: () => ipcRenderer.invoke('icons:types'), // [{uri,name,label,svg}] the glyphs types are drawn with now
   setTypeIcon: (typeUri, name) => ipcRenderer.invoke('icons:setType', typeUri, name ?? null), // null goes back to the generic glyph
+  setTypeHue: (typeUri, hue) => ipcRenderer.invoke('doc:setTypeHue', typeUri, hue ?? null), // 0-360 on the type in Tana; null clears it
   // The preferences that follow you between machines (main/settings.js), read synchronously so renderer/prefs.js has
   // them before the first paint, and written through one at a time.
   prefs: ipcRenderer.sendSync('prefs:snapshot'),
@@ -82,8 +83,8 @@ contextBridge.exposeInMainWorld('api', {
   move: (docId, nodeId, direction) => ipcRenderer.invoke('block:move', docId, nodeId, direction),
   pins: () => ipcRenderer.invoke('pins:list'),
   pinState: (docId) => ipcRenderer.invoke('pins:state', docId),
-  pin: (docId, target) => ipcRenderer.invoke('pins:pin', docId, target),
-  unpin: (docId, target) => ipcRenderer.invoke('pins:unpin', docId, target),
+  pin: (docId, target, date) => ipcRenderer.invoke('pins:pin', docId, target, date), // date: local YYYY-MM-DD for target 'today'; omitted = today
+  unpin: (docId, target, date) => ipcRenderer.invoke('pins:unpin', docId, target, date),
   // items pinned on a meeting or a space (that node's own pinnedItems, docs/PINNING.md section 4); hubId comes from
   // api.related(id).pinHub, which is set only when this user may write that hub. Resolves to the hub's pinned uris.
   pinTo: (hubId, docId) => ipcRenderer.invoke('pins:pinTo', hubId, docId),
