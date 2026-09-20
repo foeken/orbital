@@ -66,6 +66,11 @@ async function splitNode(item, el, off) {
       await reload(docId);
     });
     open.set(item.key, true);
+  } else if (off === 0 && plainOf(original).length) {
+    // Enter at the very start: an empty row goes in front and takes the caret, the node keeps its text and children.
+    // Splitting here would move everything into a new node, and into a new child when the node is open.
+    dropPending(item.key);
+    await run(async () => { newId = await tana.insertBefore(docId, node.id, ''); await reload(docId); });
   } else {
     dropPending(item.key);
     asChild = hasKids(item) && isOpen(item);
@@ -75,9 +80,8 @@ async function splitNode(item, el, off) {
       addSplitDraft(list, asChild ? 0 : list.indexOf(node) + 1);
     }
     await run(async () => {
-      if (JSON.stringify(before) !== JSON.stringify(original)) await tana.setText(docId, node.id, saveValue(before));
-      newId = asChild ? await tana.insertChild(docId, node.id, plainOf(after)) : await tana.insertAfter(docId, node.id, plainOf(after));
-      if (after.some((s) => 'mention' in s)) await tana.setText(docId, newId, after); // insert ops take plain text; restore the mentions
+      // Truncation and insertion are one mutation, so one undo puts the node back whole.
+      newId = await tana.split(docId, node.id, saveValue(before), saveValue(after), asChild);
       readSplitDraft();
       await reload(docId);
       if (asChild) await inheritCheckbox(item, newId);
@@ -88,6 +92,7 @@ async function splitNode(item, el, off) {
     const key = docId + '/' + newId, real = typeof items !== 'undefined' && items.get(key);
     if (real && JSON.stringify(typed) !== JSON.stringify(after)) { renderSegs(textEl(key), typed); scheduleSave(real, typed); }
     placeCaret(key, typedOffset);
+    lastEnter = { from: item.key, created: key, at: off }; // undoing this Enter belongs in the row it acted on, not in whatever sits above
   }
 }
 
@@ -145,7 +150,13 @@ async function history(op) {
     if (docId && kids.has(docId)) await reload(docId);
   });
   render(true);
-  if (saved && !focused()) caretNear(keys, keys.indexOf(saved.key), saved.offset);
+  if (saved && !focused()) {
+    // Undoing an Enter takes the row it created away. The caret belongs back where Enter ran — the row below when
+    // the new row went in above it, the row above when the node was split — which is not what "nearest" would pick.
+    const undone = typeof lastEnter !== 'undefined' && lastEnter && lastEnter.created === saved.key && textEl(lastEnter.from) ? lastEnter : null;
+    if (undone) { placeCaret(undone.from, undone.at); lastEnter = null; }
+    else caretNear(keys, keys.indexOf(saved.key), saved.offset);
+  }
 }
 
 function setOpen(item, value) {
@@ -269,6 +280,22 @@ function navigate(dir) {
     caretOnOpen = !!zoom;
     render(true);
   } finally { navigating = false; }
+}
+// The same two moves as a pair of buttons in the header, beside the sidebar toggle: the mouse route to Cmd+[ and
+// Cmd+]. They run navigate, so there is one history and one set of rules; every render draws their state.
+const backBtn = $('navBack'), fwdBtn = $('navFwd');
+backBtn.addEventListener('click', () => navigate(-1));
+fwdBtn.addEventListener('click', () => navigate(1));
+function renderNav() {
+  // Back with an empty stack is still a move while you are away from Home, which is where it lands (navigate above),
+  // so it reads as live there -- the same rule the Cmd+K row uses.
+  for (const [el, id, label, live] of [[backBtn, 'back', 'Go back', navBack.length || !atHome()], [fwdBtn, 'forward', 'Go forward', navForward.length]]) {
+    el.disabled = !live;
+    const key = hotkeyFor(id);
+    el.title = key ? label + ' ' + key : label;
+    el.setAttribute('aria-label', label);
+    if (!el.childNodes.length) { const svg = iconNode(id); if (svg) el.append(svg); } // the glyph never changes: drawn once, not on every render
+  }
 }
 // Reopen the last place, once the views are loaded. A document already in a view needs no fetch; one reached through a
 // mention or a search is pulled into extra the way goTo does it, but here a failure is silent — landing on the view is

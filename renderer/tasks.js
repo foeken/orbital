@@ -149,6 +149,9 @@ async function setNodeNotify(id, on) {
   notifyById.set(id, state);
   const meta = taskMetaById.get(id); if (meta) taskMetaById.set(id, { ...meta, watched: state.on });
   renderPalette(); patchMeta(id);
+  // Group by Responsibility files a handed-over task by that same watch state, so the row has to change section
+  // rather than only lose its bell; every other grouping is unaffected and keeps the cheap patch.
+  if (groupBy() === 'responsibility') renderSoon();
 }
 function setTaskAssignees(doc, assignees) {
   const meta = taskMetaById.get(doc.id);

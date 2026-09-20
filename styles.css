@@ -25,7 +25,7 @@ button { font: inherit; }
 .titlebar, .rail { -webkit-app-region: drag; }
 button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -webkit-app-region: no-drag; }
 
-.titlebar { padding: 40px 32px 10px; user-select: none; }
+.titlebar { padding: 48px 32px 10px; user-select: none; }
 .titlebar h1 { margin: 0; font-size: 34px; font-weight: 700; letter-spacing: -0.5px; }
 .titlebar h1[contenteditable] { outline: none; user-select: text; min-height: 1lh; }
 .titlebar h1[contenteditable]:empty { display: inline-block; min-width: 1px; }
@@ -80,7 +80,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
    and always in the same place whether or not a sidebar exists. Only shown when there is one to toggle. */
 .titlebar { position: relative; }
 .railtoggle {
-  position: absolute; top: 36px; right: 32px; z-index: 1;
+  position: absolute; top: 44px; right: 32px; z-index: 1;
   display: flex; align-items: center; justify-content: center;
   width: 24px; height: 24px; padding: 0; border: 0;
   background: none; color: #777; cursor: pointer; border-radius: 4px;
@@ -89,6 +89,19 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .railtoggle:hover { background: #ddd; opacity: 1; }
 .railtoggle[hidden] { display: none; }
 .railtoggle svg { display: block; width: 18px; height: 18px; }
+/* Back and forward: the moves Cmd+[ and Cmd+] make, for the mouse. Same band and the same absolute anchor as the
+   sidebar toggle, just left of it, so the pair stays put as the crumbs, task meta and fields rows appear and
+   disappear beneath them -- and whether or not there is a sidebar to toggle beside them. */
+.navbtns { position: absolute; top: 44px; right: 64px; z-index: 1; display: flex; gap: 2px; }
+.navbtn {
+  display: flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; padding: 0; border: 0;
+  background: none; color: #777; cursor: pointer; border-radius: 4px;
+  opacity: .4;
+}
+.navbtn:hover:not(:disabled) { background: #ddd; opacity: 1; }
+.navbtn:disabled { opacity: .15; cursor: default; } /* nowhere to go: still there, saying so */
+.navbtn svg { display: block; width: 18px; height: 18px; }
 
 /* filter pills (Tasks / Library): "Status <Inbox, In Progress>", "Assigned to <You>", "<Type>"; each opens a menu below it */
 .pills { position: relative; display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 32px 12px; }
@@ -134,7 +147,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 /* a real sidebar: full height beside the document, holding its relationships (edges, never editable) */
 .rail { flex: none; width: 272px; height: 100%; overflow-y: auto; user-select: none;
   /* padding-top lines the first section heading up with the breadcrumbs (heading text sits 10px into its button) */
-  border-left: 1px solid #ececec; background: #fafbfc; padding: 30px 12px 32px; }
+  border-left: 1px solid #ececec; background: #fafbfc; padding: 38px 12px 32px; }
 .railgrip { flex: none; width: 5px; margin-right: -1px; cursor: col-resize; z-index: 2; }
 .railgrip:hover, .railgrip.dragging { background: #d8e4f0; }
 .rail .rhead { display: flex; align-items: center; gap: 6px; width: 100%; border: 0; background: none; margin-top: 18px; padding: 10px 6px 4px; cursor: pointer;
@@ -320,6 +333,9 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .cbadge.done { background: #d9f0de; color: #17652f; }
 .cbadge.broken { background: #fbdede; color: #8f1b1b; }
 .cbadge.unavailable { background: #ececec; color: #6a6a6a; } /* the machine is away, not the task broken: grey, still */
+/* the task is completed: whatever the agent did is over, so the badge drops to a grey outline and stops sweeping */
+.cbadge.closed { background: none; border: 1px solid #d5d5d5; color: #9a9a9a; padding: 1px 4px; }
+.cbadge.closed::after { content: none; }
 @keyframes cbadge-sweep { 0%, 18% { transform: translateX(-130%); } 72%, 100% { transform: translateX(130%); } }
 .selected .text { caret-color: transparent; }
 .children { margin-left: 33px; padding-left: 0; border-left: 1px solid #ececec; }
@@ -582,6 +598,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .cbadge.done { background: #1d3c27; color: #7fd396; }
 [data-theme="dark"] .cbadge.broken { background: #45201f; color: #f0a3a0; }
 [data-theme="dark"] .cbadge.unavailable { background: #33383a; color: #a8adaf; }
+[data-theme="dark"] .cbadge.closed { background: none; border-color: #45494b; color: #8c9194; }
 [data-theme="dark"] .palette kbd { color: #b7bcbe; background: #303436; }
 [data-theme="dark"] .palette .row.active kbd { background: #42484a; }
 [data-theme="dark"] .recorder h2 { color: #c9c9c9; }

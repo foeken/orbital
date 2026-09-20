@@ -799,8 +799,12 @@ async function runCheckboxInheritanceCheck() {
     let seq = 0;
     const tana = {
       setText: async () => { calls.push('setText'); },
-      insertAfter: async () => { const child = { id: 'new' + (++seq), kind: 'block', text: '', done: 0 }; nodes.push(child); calls.push('insertAfter'); return child.id; },
-      insertChild: async () => { const child = { id: 'new' + (++seq), kind: 'block', text: '', done: 0 }; node.children.push(child); calls.push('insertChild'); return child.id; },
+      split: async (_docId, _id, _before, _after, asChild) => {
+        const child = { id: 'new' + (++seq), kind: 'block', text: '', done: 0 };
+        if (asChild) node.children.push(child); else nodes.push(child);
+        calls.push(asChild ? 'split:child' : 'split:sibling');
+        return child.id;
+      },
     };
     ${inheritCheckbox}
     ${splitNode}
@@ -809,12 +813,12 @@ async function runCheckboxInheritanceCheck() {
   const after = makeHarness(false);
   await after.split();
   assert.deepEqual(plain(after.state()), {
-    calls: ['insertAfter'], child: { id: 'new1', kind: 'block', text: '', done: 0 },
+    calls: ['split:sibling'], child: { id: 'new1', kind: 'block', text: '', done: 0 },
   }, 'Enter after a checkbox keeps the new sibling as an unchecked native checkbox');
   const under = makeHarness(true);
   await under.split();
   assert.deepEqual(plain(under.state()), {
-    calls: ['insertChild'], child: { id: 'new1', kind: 'block', text: '', done: 0 },
+    calls: ['split:child'], child: { id: 'new1', kind: 'block', text: '', done: 0 },
   }, 'Enter under a checkbox converts the new child to an unchecked native checkbox');
   assert.deepEqual(plain(draftNode({ key: 'doc/checkbox', node: { kind: 'block', done: 1 } })), { id: 'draft:doc/checkbox', text: '', kind: 'block', done: 0, draft: true }, 'empty checkbox draft is unchecked and local-only until input materialises it');
 }
@@ -1673,6 +1677,61 @@ async function runAssigneeCloseCheck() {
 }
 
 async function runPendingSplitDraftCheck() {
+  // Enter at the very start of a node: the empty row goes in front and takes the caret, the node keeps its text,
+  // and undoing that Enter hands the caret back to the node it ran on — the row below, not the nearest one above.
+  const context0 = {};
+  vm.runInNewContext(`
+    const source = { id: 'source', kind: 'block', text: 'Hardware Depreciation Risk', segments: [{ text: 'Hardware Depreciation Risk' }], children: [{ id: 'kid', kind: 'block', text: '170+ machines', children: [] }] };
+    const above = { id: 'above', kind: 'block', text: 'Hardware capacity need unclear', children: [] };
+    let serverRows = [above, source], rows = serverRows.slice();
+    const kids = new Map([['doc', rows]]), items = new Map();
+    const item = { key: 'doc/source', docId: 'doc', node: source, parent: { node: { kind: 'document' } } };
+    const calls = [];
+    let focus, lastEnter = null;
+    const canEditItem = () => true, hasKids = () => true, isOpen = () => true;
+    const readSegs = () => [{ text: 'Hardware Depreciation Risk' }];
+    const splitSegs = (segs, offset) => [[], segs];
+    const plainOf = (segs) => segs.map((segment) => segment.text).join('');
+    const dropPending = () => {}, saveValue = (value) => value, renderSegs = () => {}, scheduleSave = () => {};
+    const textEl = (key) => (rows.some((node) => 'doc/' + node.id === key) ? { key } : null);
+    const caretOffset = () => 0;
+    const render = () => { for (const node of rows) items.set('doc/' + node.id, { key: 'doc/' + node.id, docId: 'doc', node }); };
+    const placeCaret = (key, offset) => { focus = { key, offset }; };
+    const reload = async () => { rows = serverRows.slice(); kids.set('doc', rows); };
+    const run = (fn) => fn();
+    const flushAll = () => {}, loadRoots = async () => {}, patchDoc = async () => {};
+    const focused = () => (focus && textEl(focus.key) ? { key: focus.key, offset: focus.offset } : null);
+    const texts = () => rows.map((node) => ({ key: 'doc/' + node.id }));
+    const keyOfEl = (el) => el.key;
+    const caretNear = (keys, i) => { focus = { key: 'nearest:' + (keys[i] || ''), offset: null }; }; // the old behaviour, so a fallback is visible
+    const tana = {
+      insertBefore: async (docId, id, text) => { calls.push(['insertBefore', id, text]); serverRows = [above, { id: 'fresh', kind: 'block', text: '', children: [] }, source]; return 'fresh'; },
+      split: async () => { throw new Error('Enter at offset 0 must not split the node'); },
+      undo: async () => { calls.push(['undo']); serverRows = [above, source]; return 'doc'; },
+    };
+    ${functionSource('splitNode')}
+    ${functionSource('history')}
+    Object.assign(globalThis, {
+      start: () => splitNode(item, {}, 0),
+      undo: () => history('undo'),
+      state: () => ({ rows: rows.map((node) => ({ id: node.id, text: node.text })), calls, focus, kids: source.children.length }),
+    });
+  `, context0);
+  await context0.start();
+  assert.deepEqual(plain(context0.state()), {
+    rows: [{ id: 'above', text: 'Hardware capacity need unclear' }, { id: 'fresh', text: '' }, { id: 'source', text: 'Hardware Depreciation Risk' }],
+    calls: [['insertBefore', 'source', '']],
+    focus: { key: 'doc/fresh', offset: 0 },
+    kids: 1,
+  }, 'Enter at the start of a node adds an empty sibling in front, keeps the node and its children, and takes the caret there');
+  await context0.undo();
+  assert.deepEqual(plain(context0.state()), {
+    rows: [{ id: 'above', text: 'Hardware capacity need unclear' }, { id: 'source', text: 'Hardware Depreciation Risk' }],
+    calls: [['insertBefore', 'source', ''], ['undo']],
+    focus: { key: 'doc/source', offset: 0 },
+    kids: 1,
+  }, 'undoing that Enter puts the caret back in the node it ran on, at the offset it ran at');
+
   const splitNode = functionSource('splitNode');
   const context = {};
   vm.runInNewContext(`
@@ -1703,7 +1762,7 @@ async function runPendingSplitDraftCheck() {
     const run = (fn) => fn();
     const tana = {
       setText: async (_docId, id) => { calls.push(['setText', id]); },
-      insertAfter: async () => { calls.push(['insertAfter']); await insertGate; return 'inserted'; },
+      split: async (_docId, id) => { calls.push(['split', id]); await insertGate; return 'inserted'; },
     };
     ${splitNode}
     Object.assign(globalThis, {
@@ -1727,7 +1786,7 @@ async function runPendingSplitDraftCheck() {
       { id: 'source', draft: false, pendingSplit: false, text: 'left' },
       { id: 'inserted', draft: false, pendingSplit: false, text: '-right' },
     ],
-    calls: [['setText', 'source'], ['insertAfter']],
+    calls: [['split', 'source']],
     saves: [['doc/inserted', [{ text: 'typed during insert' }]]],
     focus: { key: 'doc/inserted', offset: 19 },
   }, 'typing into the pending draft survives reload and saves to the inserted block');
@@ -2273,7 +2332,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     const filters = new Map([['tasks', { types: ['tasks'], states: ['open'], assignee: 'me' }]]);
     const views = [{ id: 'tasks', kind: true }, { id: 'library' }];
     let members = [{ id: 'me', title: 'Robin', me: true }, { id: 'sam', title: 'Sam' }];
-    const taskMetaById = new Map([['t1', { assignees: ['sam'], watched: true }], ['t2', { assignees: ['me'] }], ['t4', { assignees: ['tana:user-profile:ghost'], watched: false }], ['t5', { assignees: ['me'] }], ['t6', { assignees: [] }], ['t7', { assignees: [] }], ['t8', { assignees: ['me'] }], ['t9', { assignees: ['me'] }], ['t10', { assignees: ['me'] }], ['ta1', { assignees: ['tana:user-profile:ghost'] }], ['ta2', { assignees: ['me'] }]]);
+    const taskMetaById = new Map([['t1', { assignees: ['sam'], watched: true }], ['t2', { assignees: ['me'] }], ['t4', { assignees: ['tana:user-profile:ghost'], watched: false }], ['t5', { assignees: ['me'] }], ['t6', { assignees: [] }], ['t7', { assignees: [] }], ['t8', { assignees: ['me'] }], ['t9', { assignees: ['me'] }], ['t10', { assignees: ['me'] }], ['t11', { assignees: ['sam'], watched: false }], ['ta1', { assignees: ['tana:user-profile:ghost'] }], ['ta2', { assignees: ['me'] }]]);
     // the app-local agent marks the badge is drawn from (renderer/state.js), not Tana assignees
     const codexIds = new Set(['ta1', 'ta2', 'ta3']);
     // loadTaskMeta is the real one (renderer/tasks.js): Responsibility asks for the metadata it is missing, since a
@@ -2328,6 +2387,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     { id: 't10', tags: [], stateType: 'open', createdBy: 'me' },    // you made it and have it, under way
     { id: 't9', tags: [], stateType: 'not_now', createdBy: 'me' },  // you made it and have it, and put it off
     { ...rows[0], createdBy: 'me' },        // t1: you made it, Sam has it
+    { id: 't11', tags: [], createdBy: 'me' }, // you made it and Sam has it, but you turned notifications off
     { id: 't6', tags: [], createdBy: 'me' },  // you made it, nobody has it
     { id: 't7', tags: [], createdBy: 'sam' }, // Sam made it, nobody has it: no business of yours
     { id: 't5', tags: [], createdBy: 'sam' }, // Sam made it, you have it
@@ -2350,6 +2410,10 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   assert.deepEqual(titles(responsibility, 'responsibility'),
     [['Unassigned', ['t6']], ['Tracking', ['t1']], ['My inbox', ['t8']], ['Mine', ['t10']], ['My completed', ['t2']], ['My later', ['t9']], ['Assigned by others', ['t5']]],
     'and with nothing handed to the agent the other sections are exactly as they were');
+  // Tracking follows the bell, not the hand-off: silencing a task you gave away takes it out of the section, the
+  // same watch state (an explicit choice, else the default rule) the row's own bell is drawn from.
+  assert.deepEqual(titles([{ ...rows[0], id: 't11', createdBy: 'me' }], 'responsibility'), [],
+    'a task you made and handed over with notifications off is not Tracking, and is left out like anything else this grouping has no section for');
   const owned = (extra) => titles([{ id: 't2', tags: [], createdBy: 'me', ...extra }], 'responsibility')[0][0];
   assert.deepEqual(['proposed', 'open', 'closed', 'not_now'].map((stateType) => owned({ stateType })), ['My inbox', 'Mine', 'My completed', 'My later'],
     'a task you made and hold sits in exactly one of the four state sections, in the order the Status menu lists them');
@@ -3334,6 +3398,36 @@ function runSearchesGroupCheck() {
   assert.deepEqual(plain(empty.rows), [], 'no saved searches means no Searches group at all');
 }
 
+// The two header arrows are only as good as the state they draw: a Forward that looks live with nothing ahead, or a
+// Back that greys out on Home's neighbours, is a button that lies. The moves themselves are runHistoryCheck's.
+function runNavButtonsCheck() {
+  const api = vm.runInNewContext(`
+    ${FAKE_DOM}
+    const moves = [];
+    const navigate = (dir) => moves.push(dir);
+    const iconNode = (name) => makeEl('svg-' + name);
+    const hotkeys = {};
+    const backBtn = makeEl('button'), fwdBtn = makeEl('button');
+    let navBack = [], navForward = [], home = false;
+    const atHome = () => home;
+    ${RENDER_SHIM}
+    ${functionSource('renderNav')}
+    ({
+      draw: (state) => { navBack = state.back; navForward = state.forward; home = state.home; renderNav(); return [backBtn, fwdBtn].map((el) => ({ disabled: el.disabled, title: el.title, label: el.getAttribute('aria-label'), icons: el.childNodes.length })); },
+    });
+  `);
+  const away = plain(api.draw({ back: [], forward: [], home: false }));
+  assert.deepEqual(away.map((b) => b.disabled), [false, true], 'away from Home, Back is live with an empty stack (it lands on Home) and Forward is not');
+  assert.deepEqual(away.map((b) => b.label), ['Go back', 'Go forward'], 'each says what it is');
+  assert.deepEqual(away.map((b) => b.title), ['Go back ⌘[', 'Go forward ⌘]'], 'and carries the combo that does the same thing');
+  assert.deepEqual(away.map((b) => b.icons), [1, 1], 'each is drawn with its arrow');
+  const atHome = plain(api.draw({ back: [], forward: [], home: true }));
+  assert.deepEqual(atHome.map((b) => b.disabled), [true, true], 'on Home with nothing either way, neither arrow pretends to move');
+  const both = plain(api.draw({ back: [{}], forward: [{}], home: true }));
+  assert.deepEqual(both.map((b) => b.disabled), [false, false], 'a history in both directions lights both, Home or not');
+  assert.deepEqual(both.map((b) => b.icons), [1, 1], 'and a redraw does not stack a second glyph in the button');
+}
+
 // The sidebar can be put away by hand, and that preference outlives any document: hiding wins over
 // content, so a sidebar you closed does not reopen because the next node happens to have pins.
 function runRailToggleCheck() {
@@ -3652,12 +3746,13 @@ async function runSearchPageRowUpdateCheck() {
 // from — where a render is deferred until the caret leaves. So the toggle patches the row itself; a regression to
 // the frame-coalesced render would leave the bell exactly as it was, which is how this was reported.
 function runNotifyToggleCheck() {
-  const harness = (on) => vm.runInNewContext(`
+  const harness = (on, group = 'none') => vm.runInNewContext(`
     const DOC = 'tana:text:01examplea0000000000000000';
     const patched = [];
     const patchMeta = (id) => patched.push(id);
     const renderSoon = () => patched.push('deferred render');
     const renderPalette = () => {};
+    const groupBy = () => '${group}';
     const run = (fn) => fn();
     const loadNotify = () => {};
     const isRealId = (id) => String(id).startsWith('tana:');
@@ -3686,7 +3781,13 @@ function runNotifyToggleCheck() {
     assert.equal(after.watched, !on, 'and the cached metadata the bell is drawn from follows, rather than waiting for a re-read');
     assert.deepEqual(after.patched, ['tana:text:01examplea0000000000000000'],
       'the row itself is patched: a deferred render would leave the bell as it was, whichever way it was turned');
-  }));
+  })).then(async () => {
+    // The one grouping that files a row by its watch state: turning the bell off has to move the row out of
+    // Tracking, which the patch alone cannot do, so it is followed by one coalesced render.
+    const after = plain(await harness(true, 'responsibility').press());
+    assert.deepEqual(after.patched, ['tana:text:01examplea0000000000000000', 'deferred render'],
+      'under Group by Responsibility the row is patched and then re-grouped, so a silenced task leaves the Tracking section');
+  });
 }
 
 
@@ -3699,6 +3800,7 @@ function runNotifyBellCheck() {
     const patched = [];
     const patchMeta = (id) => patched.push(id);
     const renderPalette = () => {};
+    const groupBy = () => 'none';
     const run = (fn) => fn();
     const notifyById = new Map();
     const taskMetaById = new Map([[DOC, { assignees: [], audience: 'only-me', watched: true }]]);
@@ -3791,6 +3893,7 @@ function runCodexAssignCheck() {
     const outline = { querySelectorAll: () => [row] };
     const items = new Map([[DOC, { node: { id: DOC, kind: 'document' } }]]);
     const referenceTarget = () => null, rowSig = (n) => 'sig:' + codexIds.has(n.id);
+    const docOf = (id) => (id === DOC ? palDoc : null); // the badge reads the node's own state to know the task is finished
     let zoom = null;
     // the zoomed page: the title's own header box, the children cache behind it, and a second document's cache that
     // nothing here may touch
@@ -3854,6 +3957,10 @@ function runCodexAssignCheck() {
       refuse: (value) => { refuse = value; },
       // the badge as a way in: linked opens that node's task, pending has nowhere to go
       badge: (linked) => { if (linked) agentStates.set(DOC, 'working'); else agentStates.delete(DOC); const el = codexBadgeEl(DOC); return { role: el.attrs.role, label: el.attrs['aria-label'], tabIndex: el.tabIndex, hasClick: typeof el.onclick === 'function' }; },
+      // a finished task still shows its thread, but quietly: the badge class says so, and the stylesheet greys it out
+      badgeWhenDone: (done) => { const el = codexBadgeEl(DOC, done); return { className: el.className, label: el.attrs['aria-label'], role: el.attrs.role, hasClick: typeof el.onclick === 'function' }; },
+      // the row it is drawn beside is the source: a view cache elsewhere must not decide what this row shows
+      badgeFromStaleCache: (done) => { palDoc.done = done ? 1 : 0; const el = codexBadgeEl(DOC, false); palDoc.done = 0; return el.className; },
       // "Go to Agent task" is offered only where both halves hold: assigned now, and a task id known for it
       goRow: (assigned, linked) => { if (assigned) codexIds.add(DOC); else codexIds.delete(DOC); if (linked) agentStates.set(DOC, 'working'); else agentStates.delete(DOC); const r = paletteRows('').find((row) => row.rank === 'codexOpen'); return r ? r.label : null; },
       // where the task runs decides whether there is a way in at all
@@ -3975,6 +4082,15 @@ function runCodexAssignCheck() {
     assert.equal(live.tabIndex, 0, 'reachable by keyboard');
     assert.deepEqual(plain(await api.pressBadge(false)), [CODEX_DOC], 'clicking it opens that node\'s own task');
     assert.deepEqual(plain(await api.pressBadge(true)), [CODEX_DOC], 'and Enter does the same');
+    // Asked for: a completed task's thread should stop shouting. The badge stays, and stays a way in, but the class
+    // that greys it out is on it.
+    const finished = plain(api.badgeWhenDone(true));
+    assert.match(finished.className, /\bcbadge\b.*\bclosed\b/, 'a completed task greys its badge down to an outline');
+    assert.equal(finished.role, 'button', 'it is still the way into the task');
+    assert.doesNotMatch(plain(api.badgeWhenDone(false)).className, /\bclosed\b/, 'an open task keeps the colour of its state');
+    // Reported: completed rows stayed green. The badge asked docOf, which answers with the first copy of the node in
+    // any view's cache — a view that had not refreshed still held it open — so the row it sits on decides instead.
+    assert.doesNotMatch(plain(api.badgeFromStaleCache(true)), /\bclosed\b/, 'the row it is drawn beside outranks any cached copy of the node');
     // The row used to read a snapshot alone, so an unassigned node kept offering it until the next status read.
     assert.equal(api.goRow(true, true), 'Go to Agent task', 'an assigned node with a task offers the way in');
     assert.equal(api.goRow(false, true), null, 'an unassigned node does not, however stale the status map is');
@@ -4682,11 +4798,11 @@ async function runHomeCheck() {
   // The crumb: icon and name in one link, which is the whole target, and it goes Home
   api.go({ docId: OTHER, nodeId: null });
   const crumb = api.crumb();
-  assert.deepEqual([crumb.text, crumb.label, crumb.icon], ['Everything of mine', 'Go to Home: Everything of mine', 'home'],
-    'a zoomed page starts with the Home anchor: the house glyph and Home\'s own name, in one link that says where it goes');
+  assert.deepEqual([crumb.text, crumb.label, crumb.icon], ['Home', 'Go to Home: Everything of mine', 'home'],
+    'a zoomed page starts with the Home anchor: the house glyph and the word Home, in one link whose label says where it goes');
   crumb.click();
   assert.deepEqual(plain(api.went()), [SEARCH], 'and pressing it opens Home');
-  assert.equal(api.crumb(), null, 'on Home itself there is no anchor to repeat');
+  assert.equal(api.crumb().text, 'Home', 'the anchor stays on Home itself: one fixed way back, always in the same place');
   api.go({ docId: OTHER, nodeId: null });
   assert.equal(api.target(), null, 'a note is not a place to come back to, so it does not offer itself as Home');
 
@@ -4715,7 +4831,10 @@ async function runHomeCheck() {
   assert.deepEqual([api.id(), api.name(), api.stored().home], ['library', 'Library', 'library'],
     'a deleted Home falls back to the Library and the stale preference is repaired, not left behind');
   api.view('library');
-  assert.equal(api.crumb(), null, 'and with the Library as Home the location already starts there, so no anchor is added');
+  assert.equal(api.crumb().text, 'Home', 'and with the Library as Home the anchor still shows, rather than disappearing with the choice');
+  // A view page has no location, so the bar used to be hidden outright; the anchor alone is enough to show it.
+  assert.match(source, /nav\.hidden = !trail && !homeEl;\n\s*if \(homeEl\) nav\.append\(homeEl\);/,
+    'the crumb bar is shown for the Home anchor alone, so a view page (the Library, Inbox, Tasks) keeps it too');
   assert.equal(api.seed(null), null, 'a Library Home needs no restore target: it is the view a launch already opens');
   api.view('inbox');
   api.home();
@@ -5195,7 +5314,7 @@ function runRowMetaFitCheck() {
 }
 
 
-const checks = [runRowMetaFitCheck, runPinToMeetingCheck, runAgentStatusBootCheck, runQuickAddPanelCheck, runRailChangesCheck, runPasteLinkCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runDraftTailCheck,runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck];
+const checks = [runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runAgentStatusBootCheck, runQuickAddPanelCheck, runRailChangesCheck, runPasteLinkCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runDraftTailCheck,runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck];
 // Red until the checks actually settle: an async check left awaiting something that never resolves empties the event
 // loop, and node would exit 0 without a word — a silent pass for a check that never finished.
 process.exitCode = 1;

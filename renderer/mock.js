@@ -42,9 +42,11 @@ function mockApi() {
   const space = { id: 'tana:space:mock', text: 'Studio LT', kind: 'document', hasChildren: true, icon: 'space', hue: 150, tags: [{ label: 'space', color: 'grey' }] };
   // other library kinds (chats, canvases, agents, skills, saved searches): read-only rows, plain bullet + kind chip
   const kinds = ['chat', 'canvas', 'agent', 'skill', 'search'].map((k, i) => ({ id: 'tana:' + k + ':mock' + i, text: 'Sample ' + k, kind: 'document', hasChildren: true, tags: [{ label: k, color: 'grey' }] }));
-  // chats (api.chats): newest first; "MCP: …" ones carry meta 'MCP' but are no longer hidden (the includeMcp toggle was removed, #247)
+  // chats (api.chats): newest first; "MCP: …" ones carry meta 'MCP' and are hidden from every list and search while
+  // the Cmd+K switch is on (mcpOff below; the per-view includeMcp filter is still gone, #247)
   const chats = ['Draft the Studio memo', 'MCP: list open tasks', 'Summarise the leadership notes', 'MCP: create meeting note', 'Rewrite the agreement clause']
     .map((text, i) => ({ id: 'tana:chat:mockchat' + i, text, kind: 'document', hasChildren: true, tags: [{ label: 'chat', color: 'grey' }], meta: /^MCP:/.test(text) ? 'MCP' : undefined }));
+  let mcpOff = false; // the app-local switch, off every launch of the mock
   // meetings over the past and next 7 days (day offset from today, start hour or null = all day); roots meta = weekday + time, search meta = weekday + day of month + time
   const dateMeta = {};
   const meetings = [['Last week retro', -6, 10], ['Board prep', -2, 14], ['Leadership sync', 0, 9], ['Platform Guild', 0, 13], ['1-1 with Sam', 1, 11], ['Offsite', 3, null]].map(([text, off, h], i) => {
@@ -234,8 +236,10 @@ function mockApi() {
       await new Promise((r) => setTimeout(r, 30));
       const tokens = (q.match(/#\S+/g) || []).map((t) => t.slice(1).toLowerCase()), text = q.replace(/#\S+/g, '').trim().toLowerCase();
       const hit = (d, t) => (['task', 'meeting', 'member'].includes(t) ? d.icon === t : (d.tags || []).some((x) => x.label.toLowerCase() === t));
-      return [...all, ...members].filter((d) => d.text.toLowerCase().includes(text) && tokens.every((t) => hit(d, t))).slice(0, 20).map((d) => ({ ...info(d), meta: dateMeta[d.id] || d.meta }));
+      return [...all, ...members].filter((d) => d.text.toLowerCase().includes(text) && tokens.every((t) => hit(d, t)) && !(mcpOff && /^MCP:/.test(d.text))).slice(0, 20).map((d) => ({ ...info(d), meta: dateMeta[d.id] || d.meta }));
     },
+    mcpHidden: async () => mcpOff,
+    setMcpHidden: async (on) => { mcpOff = !!on; emit(null); return mcpOff; },
     creationOptions: async () => ({ options: [
       { id: 'task', kind: 'task', title: 'Task', icon: 'task', selectable: true },
       { id: 'meeting', kind: 'meeting', title: 'Meeting', icon: 'meeting', selectable: true },
@@ -293,6 +297,19 @@ function mockApi() {
       emit(docId); return n.id;
     }),
     insertChild: async (docId, id, text) => mut(docId, () => { const f = locate(content[docId], id), n = block(text, [], undefined, f.node.kind === 'block' && f.node.done != null ? 0 : undefined); f.node.children.unshift(n); fix(f.node); emit(docId); return n.id; }),
+    insertBefore: async (docId, id, text) => mut(docId, () => {
+      const f = locate(content[docId], id), n = block(text, [], undefined, f.node.kind === 'block' && f.node.done != null ? 0 : undefined);
+      f.list.splice(f.index, 0, n);
+      emit(docId); return n.id;
+    }),
+    split: async (docId, id, before, after, asChild) => mut(docId, () => {
+      const f = locate(content[docId], id), done = f.node.kind === 'block' && f.node.done != null ? 0 : undefined;
+      f.node.text = plainOf(before); f.node.segments = segsOf(before);
+      const n = block(plainOf(after), [], undefined, done);
+      n.segments = segsOf(after);
+      if (asChild) { f.node.children.unshift(n); fix(f.node); } else f.list.splice(f.index + 1, 0, n);
+      emit(docId); return n.id;
+    }),
     remove: async (docId, id) => mut(docId, () => { const f = locate(content[docId], id); f.list.splice(f.index, 1); const p = f.trail.at(-1); if (p) fix(p.node); emit(docId); }),
     removeMany: async (docId, ids) => mut(docId, () => { for (const id of [...ids].reverse()) { const f = locate(content[docId], id); f.list.splice(f.index, 1); const p = f.trail.at(-1); if (p) fix(p.node); } emit(docId); }),
     indent: async (docId, id) => mut(docId, () => {

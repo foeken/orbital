@@ -111,6 +111,8 @@ Outline node: `{ id: blockId, text, kind: 'block', block?: type, heading?: level
 | `insertDivider(document, id \| null)` → newId | Inserts Tana's `horizontalRule` after `id` (`null` appends at the end). A list holds `listItem`s only, so a rule between two items splits the list rather than landing inside it. |
 | `insertAfter(document, id | null, text)` → newId | Sibling after `id` (inside a listItem: a new listItem); `null` appends at the end of the doc; creates the doc skeleton if missing. |
 | `insertChild(document, id, text)` → newId or null | First child (creates the nested bulletList/listItem; wraps a bare paragraph into a listItem). Null for headings/quotes/code. |
+| `insertBefore(document, id, text)` → newId | Sibling before `id` (same level, same listItem rules as `insertAfter`). What Enter at the very start of a node does: the node keeps its text and children. |
+| `split(document, id, before, after, asChild)` → newId | Enter inside a node: `setText(id, before)` plus the insert of `after` as the next sibling (or the first child when `asChild`) in **one** transaction, so one undo puts the node back whole. `before`/`after` are strings or segments; segments with mentions or marks are written back over the plain insert. |
 | `remove(document, id)` | Removes the node and its children; prunes emptied lists. |
 | `indent(document, id)` / `outdent(document, id)` | Under the previous sibling / after the parent. No-ops at the edges; only paragraphs and listItems can be moved. |
 | `move(document, id, 'up' | 'down')` | Swap with the neighbouring sibling (lists move as a whole). |

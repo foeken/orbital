@@ -59,6 +59,8 @@ contextBridge.exposeInMainWorld('api', {
   setBlockType: (docId, nodeId, type) => ipcRenderer.invoke('block:setBlockType', docId, nodeId, type), // paragraph|heading1..3|bullet|numbered|code|quote
   insertDivider: (docId, nodeId) => ipcRenderer.invoke('block:insertDivider', docId, nodeId), // horizontal rule after nodeId; returns its block id
   insertAfter: (docId, nodeId, text) => ipcRenderer.invoke('block:insertAfter', docId, nodeId, text),
+  insertBefore: (docId, nodeId, text) => ipcRenderer.invoke('block:insertBefore', docId, nodeId, text),
+  split: (docId, nodeId, before, after, asChild) => ipcRenderer.invoke('block:split', docId, nodeId, before, after, asChild), // truncate + insert the rest in one undo step
   insertChild: (docId, nodeId, text) => ipcRenderer.invoke('block:insertChild', docId, nodeId, text),
   removeMany: (docId, nodeIds) => ipcRenderer.invoke('block:removeMany', docId, nodeIds),
   moveMany: (docId, nodeIds, direction) => ipcRenderer.invoke('block:moveMany', docId, nodeIds, direction),
@@ -96,6 +98,10 @@ contextBridge.exposeInMainWorld('api', {
   setFilters: (patterns) => ipcRenderer.invoke('filters:set', patterns), // string[]; replaces the list
   addFilter: (pattern) => ipcRenderer.invoke('filters:add', pattern),
   removeFilter: (pattern) => ipcRenderer.invoke('filters:remove', pattern), // matched case-insensitively
+  // MCP chats: hidden from every list and search while on (a chat opened directly still opens). Both resolve to the
+  // new state after the views have refreshed.
+  mcpHidden: () => ipcRenderer.invoke('mcp:hidden'),
+  setMcpHidden: (on) => ipcRenderer.invoke('mcp:setHidden', on),
   refresh: () => ipcRenderer.invoke('sync:refresh'),
   undo: () => ipcRenderer.invoke('history:undo'),
   redo: () => ipcRenderer.invoke('history:redo'),

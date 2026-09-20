@@ -17,7 +17,7 @@ const { NOT_CONNECTED, S, VIEWS, docStates, errText, idKind, isSearch, isSpace, 
 const { cachedNodeHue, graphRow, members, rememberNodeHue, toNode } = require('./main/rows');
 const { accessContext, chatOutline, codexIds, createDocument, creationOptions, creatorOf, documentAction, history, info, linkShared, metaSig, moveTarget, mut, mutTasks, notifyOn, notifyState, setCodex, setNotify, onChange, op, outlineWithReferences, setSensitive } = require('./main/documents');
 const { callOf, changesOf, pathOf, related, searchChildren, searchPreview, spaceChildren, summaryChanges, summaryUri } = require('./main/related');
-const { hiddenRules, inboxCount, listFilter, preset, refresh, search, searchCreate, searchList, searchTitle, setHidden, setViewFilter, start, viewFilter, viewRows } = require('./main/views');
+const { hiddenRules, inboxCount, listFilter, mcpHidden, preset, refresh, search, searchCreate, searchList, searchTitle, setHidden, setMcpHidden, setViewFilter, start, viewFilter, viewRows } = require('./main/views');
 const { nodePin, pinState, pinTree, pinned, setPin, todayNode, weekNode, weekTitle } = require('./main/pins');
 const { image } = require('./main/images');
 const quick = require('./main/quickadd');
@@ -277,6 +277,8 @@ ipcMain.handle('block:setText', (_e, id, nodeId, value) => mut(id, (doc) => { co
 ipcMain.handle('block:setBlockType', (_e, id, nodeId, type) => mut(id, (doc) => { content.setBlockType(doc, nodeId, type); })); // type: one of content.BLOCK_TYPES
 ipcMain.handle('block:insertDivider', (_e, id, nodeId) => mut(id, (doc) => content.insertDivider(doc, nodeId))); // nodeId null appends at the end
 ipcMain.handle('block:insertAfter', (_e, id, nodeId, text) => mut(id, (doc) => content.insertAfter(doc, nodeId, text)));
+ipcMain.handle('block:insertBefore', (_e, id, nodeId, text) => mut(id, (doc) => content.insertBefore(doc, nodeId, text)));
+ipcMain.handle('block:split', (_e, id, nodeId, before, after, asChild) => mut(id, (doc) => content.split(doc, nodeId, before, after, asChild))); // one undo step for both halves
 ipcMain.handle('block:insertChild', (_e, id, nodeId, text) => mut(id, (doc) => content.insertChild(doc, nodeId, text)));
 ipcMain.handle('block:removeMany', (_e, id, nodeIds) => mut(id, doc => content.removeMany(doc, nodeIds)));
 ipcMain.handle('block:moveMany', (_e, id, nodeIds, direction) => mut(id, doc => content.moveMany(doc, nodeIds, direction)));
@@ -335,6 +337,9 @@ ipcMain.handle('filters:list', () => hiddenRules());
 ipcMain.handle('filters:set', (_e, patterns) => setHidden(patterns));
 ipcMain.handle('filters:add', (_e, pattern) => setHidden([...hiddenRules(), pattern]));
 ipcMain.handle('filters:remove', (_e, pattern) => setHidden(hiddenRules().filter((p) => p.toLowerCase() !== String(pattern ?? '').trim().toLowerCase())));
+// MCP chats: one switch over every list and search, applied in the same listFilter the hidden titles go through.
+ipcMain.handle('mcp:hidden', () => mcpHidden());
+ipcMain.handle('mcp:setHidden', (_e, on) => setMcpHidden(on));
 ipcMain.handle('sync:refresh', () => refresh());
 ipcMain.handle('sync:status', () => S.status);
 ipcMain.handle('sync:login', async () => {

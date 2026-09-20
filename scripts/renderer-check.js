@@ -255,8 +255,7 @@ async function splitTypingCheck() {
     const run = async (fn) => fn();
     const tana = {
       setText: async () => {},
-      insertAfter: async () => new Promise((resolve) => { resolveInsert = resolve; }),
-      insertChild: async () => { throw new Error('unexpected child insert'); },
+      split: async (_docId, _id, _before, _after, asChild) => { if (asChild) throw new Error('unexpected child insert'); return new Promise((resolve) => { resolveInsert = resolve; }); },
     };
     ${functionSource('splitNode')}
     Object.assign(globalThis, {
@@ -422,8 +421,8 @@ assert.match(source, /palMode !== 'agentPrompt' && \(palMode === 'cmd'/, 'the no
 assert.match(source, /function openAgentPrompt\(doc\) \{[\s\S]{0,400}palInput\.value = '';/, 'opening the prompt page clears the query behind it');
 // The agent badge sits at the end of the row — after the body, which is the flexible part of the line — and its
 // sweep is opt-in: a reduced-motion setting leaves it still, like every other animation here.
-assert.match(source, /line\.append\(body\);[\s\S]{0,240}if \(codexIds\.has\(display\.id\)\) line\.append\(codexBadgeEl\(display\.id\)\)/,
-  'the agent badge is appended after the body, so it ends the row');
+assert.match(source, /line\.append\(body\);[\s\S]{0,240}if \(codexIds\.has\(display\.id\)\) line\.append\(codexBadgeEl\(display\.id, display\.done\)\)/,
+  'the agent badge is appended after the body, so it ends the row, and is told whether that row is finished');
 // The badge is a status, so it can never be drawn without one: every call names the node whose state it shows, and
 // the state falls back to pending rather than to the green it used to be.
 assert.doesNotMatch(source, /codexBadgeEl\(\)/, 'no badge is drawn without the node whose task status it reports');

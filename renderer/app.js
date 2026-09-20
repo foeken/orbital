@@ -89,4 +89,5 @@ loadRoots().then(render, showError).then(restorePlace).then(loadFilters);
 // that is already connected (e.g. a reload) does not wait for a transition that will not happen.
 function loadSearches() { if (tana.searches) tana.searches().then((list) => { searches = list || []; searchesLoaded = true; repairHome(); renderSoon(); }, () => {}); }
 loadSearches();
+if (tana.mcpHidden) tana.mcpHidden().then((on) => { mcpHidden = !!on; }, () => {}); // Cmd+K only: the rows themselves are filtered in main
 tana.status().then(showStatus, showError);

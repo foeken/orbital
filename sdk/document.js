@@ -28,7 +28,9 @@ class Document extends EventEmitter {
 
   // Run local mutations, commit, and emit the update since the last exported version.
   transact(fn) {
-    fn(this.loro);
+    if (this._inTransact) return fn(this.loro); // nested: the outer call commits, so the whole thing is one undo step
+    this._inTransact = true;
+    try { fn(this.loro); } finally { this._inTransact = false; }
     this.loro.commit();
     this._flushLocal();
   }

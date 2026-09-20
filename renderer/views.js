@@ -39,6 +39,9 @@ const FALLBACK = { status: 'No status', assignee: 'Unassigned', updated: 'Older'
 // known, whatever Tana says about its assignees, and even for a row this grouping would otherwise not list at all,
 // since you asked for that one by name. Being first is also what keeps the sections exclusive — nothing handed to
 // the agent is drawn a second time under your own work.
+// Tracking is what you are still following, so it reads the same watch state the bell does (meta.watched, the
+// effective answer: an explicit Cmd+K choice, else the default rule). Silencing a task you handed over takes it out
+// of the section and out of the list, like every other row this grouping has no section for.
 const MINE_STATES = { proposed: 'My inbox', open: 'Mine', closed: 'My completed', not_now: 'My later' };
 const RESPONSIBILITY = ['Unassigned', 'Tracking', 'Agent', 'My inbox', 'Mine', 'My completed', 'My later', 'Assigned by others'];
 function responsibilityOf(n) {
@@ -48,7 +51,7 @@ function responsibilityOf(n) {
   if (!meta) { loadTaskMeta(n.id); return null; } // it takes its section once the answer arrives
   const mine = n.createdBy === uri, assigned = meta.assignees.includes(uri);
   if (!meta.assignees.length) return mine ? 'Unassigned' : null; // its own section, never folded into Tracking
-  if (mine) return assigned ? MINE_STATES[stateOf(n)] || 'Mine' : 'Tracking';
+  if (mine) return assigned ? MINE_STATES[stateOf(n)] || 'Mine' : (meta.watched ? 'Tracking' : null);
   return assigned ? 'Assigned by others' : null;
 }
 // Two of those sections are about rows a page filtered to "Assigned to you" can never return — the ones you handed

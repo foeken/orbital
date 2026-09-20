@@ -168,6 +168,9 @@ const notifyOn = (n, creator) => { const chosen = notifyChoices()[n.id]; return 
 // meant "while this view happens to list it". The rule-based defaults cannot be enumerated without reading every
 // document, so they stay as they were: watched while something is looking at them.
 const notifyWatchedIds = () => { const chosen = notifyChoices(); return new Set(Object.keys(chosen).filter((id) => chosen[id] === true)); };
+// The other half of that map: the nodes you silenced. The watch rule (main/views.js refreshWatched) reads graph
+// nodes, whose shape notifyDefault cannot take, so it needs the choice as a set rather than as notifyOn.
+const notifySilencedIds = () => { const chosen = notifyChoices(); return new Set(Object.keys(chosen).filter((id) => chosen[id] === false)); };
 async function notifyState(id) {
   const n = await op(id, (doc) => readNode(doc));
   const creator = await creatorOf(id);
@@ -456,4 +459,4 @@ async function moveTarget(spaceId) {
   return document(spaceId);
 }
 
-module.exports = { outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, createDocument, info, setSensitive, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, codexIds, codexPrompt, setCodex, creatorOf, document, op, inHistory, mut, mutTasks, documentAction, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget };
+module.exports = { outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, createDocument, info, setSensitive, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, codexIds, codexPrompt, setCodex, creatorOf, document, op, inHistory, mut, mutTasks, documentAction, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget };

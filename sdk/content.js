@@ -302,14 +302,33 @@ function applyRuns(text, delta, marked) {
   }
 }
 
-function insertAfter(document, id, text) {
+function insertAfter(document, id, text, before = false) {
   let out = null;
   document.transact(() => {
     const list = rootKids(document);
     if (id == null) { out = blockId(paragraph(list, list.length, text)); return; }
     const { block, item: li } = must(document, id);
-    const unit = li || block, l = unit.parent(), i = indexOf(l, unit) + 1;
+    const unit = li || block, l = unit.parent(), i = indexOf(l, unit) + (before ? 0 : 1);
     out = blockId(li ? kids(item(l, i, text, li)).get(0) : paragraph(l, i, text));
+  });
+  return out;
+}
+
+// Enter at the very start of a node: the empty node goes in front and the node keeps its text and children.
+function insertBefore(document, id, text) {
+  if (id == null) throw new Error('outline node id must be a string');
+  return insertAfter(document, id, text, true);
+}
+
+// Enter inside a node: what is left of the caret stays, the rest moves to a new sibling (or first child when the
+// node shows its children). One transaction, so one undo step puts both halves back the way they were.
+function split(document, id, before, after, asChild) {
+  const plain = (v) => (typeof v === 'string' ? v : v.map((s) => (s.mention ? s.mention.label : s.text)).join(''));
+  let out = null;
+  document.transact(() => {
+    setText(document, id, before);
+    out = asChild ? insertChild(document, id, plain(after)) : insertAfter(document, id, plain(after));
+    if (typeof after !== 'string' && after.some((s) => s.mention || s.marks)) setText(document, out, after); // inserts take plain text
   });
   return out;
 }
@@ -545,4 +564,4 @@ function divider(list, index) {
   return id;
 }
 
-module.exports = { readOutline, setText, setBlockType, insertDivider, insertAfter, insertChild, remove, removeMany, indent, indentMany, outdent, outdentMany, move, moveMany, toggleCheckbox, BLOCK_TYPES };
+module.exports = { readOutline, setText, setBlockType, insertDivider, insertAfter, insertBefore, insertChild, split, remove, removeMany, indent, indentMany, outdent, outdentMany, move, moveMany, toggleCheckbox, BLOCK_TYPES };

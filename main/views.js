@@ -6,7 +6,7 @@ const { createTanaClient } = require('../sdk');
 const { parseQuery, searchParams, needsTypes, viewParams, completedInWindow, filterToSearchQuery, validViewFilter, viewTypes, VIEW_PRESETS, hideRules, isHidden } = require('../sdk/query');
 const { NOT_CONNECTED, S, deletedNodes, docStates, errText, idKind, isMcp, memberTitle, now, truncatedViews, redoStack, send, setStatus, subscribed, undoStack, visibleGraphNodes } = require('./state');
 const { graphRow, rememberNodeHue, resolveTypes, toNode, typesByTitle } = require('./rows');
-const { codexIds, createDocument, inHistory, notifyWatchedIds, onChange, subscribe } = require('./documents');
+const { codexIds, createDocument, inHistory, notifySilencedIds, notifyWatchedIds, onChange, subscribe } = require('./documents');
 
 
 // Persisted view filters are merged over their preset; an invalid saved value cannot strand a view across restarts.
@@ -26,6 +26,10 @@ const setViewFilter = (id, filter) => {
 // The user's hidden-title patterns ("Block*", "Lunch", …): normalised on every read, so a list written by an older
 // build or by a bad renderer call cannot empty a view (sdk/query.js has the matching rule).
 const hiddenRules = () => hideRules(db.setting('hiddenTitles'));
+// MCP chats (Tana's own MCP writes them) kept out of every list and search: one app-local switch, toggled from Cmd+K.
+// Not a view filter: a filter key has to round-trip into a saved search, which is what killed the per-view
+// includeMcp toggle (#247). Off unless the setting says otherwise.
+const mcpHidden = () => db.setting('hideMcp') === true;
 async function viewRows(id, filter) {
   if (!S.client) return { nodes: [], truncated: false };
   const base = viewFilter(id);
@@ -162,9 +166,11 @@ async function refreshWatched() {
   const me = S.me && S.me.userUri;
   if (!me) return;
   const seen = db.setting('notifySeen') || {};
+  const silenced = notifySilencedIds(); // an explicit "stop notifying" wins over the rule, here as everywhere else
   const { nodes } = await S.client.graph.listNodes({ nodeTypes: ['text'], createdBy: [me], stateTypes: ['proposed', 'open', 'closed', 'not_now'], limit: 200 });
   ruleWatched.clear();
   for (const n of nodes) {
+    if (silenced.has(n.id)) continue; // you turned it off: not watched, and not held subscribed either
     if ((n.assignedTo || []).includes(me)) continue; // yours to look at, so the rule leaves it alone
     if (n.state?.type === 'closed' && (!Array.isArray(seen[n.id]) || seen[n.id][1] === 'closed')) continue;
     ruleWatched.add(n.id);
@@ -200,8 +206,8 @@ function listFilter(c) {
     const truncated = result.totalCount != null ? result.totalCount > result.nodes.length : !!result.truncated;
     const nodes = visibleGraphNodes(result.nodes);
     if (params && params.nodeIds) return { ...result, nodes, truncated };
-    const rules = hiddenRules();
-    return { ...result, nodes: rules.length ? nodes.filter(n => !isHidden(memberTitle(n), rules)) : nodes, truncated };
+    const rules = hiddenRules(), hideMcp = mcpHidden();
+    return { ...result, nodes: nodes.filter(n => !isHidden(memberTitle(n), rules) && !(hideMcp && isMcp(n))), truncated };
   };
 }
 // Changing the list refreshes like any other filter change: replaceSection drops the rows that are now hidden, so
@@ -214,10 +220,18 @@ async function setHidden(list) {
   send('outline:changed', null); // also when there is no connection to refresh with
   return rules;
 }
+// The MCP switch refreshes the same way: the rows that are now hidden leave the cache with the refresh.
+async function setMcpHidden(on) {
+  db.setSetting('hideMcp', !!on);
+  await S.refreshing;
+  await refresh();
+  send('outline:changed', null);
+  return mcpHidden();
+}
 
 // Subscribing on demand (zoom, create, metadata) does not put a document in a view, and only the refresh unsubscribes:
 // a document listed here as well would lose its live updates and its Loro undo history under the open editor.
 // ponytail: on-demand subscriptions last for the S.session; drop the oldest if a long S.session ever holds too many.
 
 
-module.exports = { preset, viewFilter, setViewFilter, hiddenRules, viewRows, inboxCount, search, searchList, searchCreate, searchTitle, start, refresh, doRefresh, listFilter, setHidden };
+module.exports = { preset, viewFilter, setViewFilter, hiddenRules, mcpHidden, viewRows, inboxCount, search, searchList, searchCreate, searchTitle, start, refresh, doRefresh, listFilter, setHidden, setMcpHidden };

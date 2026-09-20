@@ -407,11 +407,11 @@ function crumbWhen(id) {
 // One link, icon and name together, so the whole thing is the target and the icon is never the only thing to read.
 function homeCrumb() {
   const name = homeName();
-  if (!name || homeId() === 'library' || atHome()) return null;
+  if (!name) return null; // only while a Home search is still loading
   const a = document.createElement('a');
   const icon = iconNode('home');
   if (icon) { const ricon = document.createElement('span'); ricon.className = 'ricon home'; ricon.append(icon); a.append(ricon); }
-  a.append(name);
+  a.append('Home'); // the label is the role, not the target; the name it points at stays in the tooltip
   a.setAttribute('aria-label', 'Go to Home: ' + name);
   a.title = 'Go to Home: ' + name;
   a.onclick = () => goHome();
@@ -419,16 +419,18 @@ function homeCrumb() {
 }
 function renderCrumbs(trail) {
   const nav = $('crumbs');
-  nav.hidden = !trail;
-  if (!trail) return;
-  const back = () => { zoom = null; render(); };
   nav.replaceChildren();
-  // The Home anchor, ahead of the location: the house glyph and Home's own current name, then a bullet to keep it
-  // apart from the › chain that follows. It is a shortcut, not an ancestor — the structural path behind it is
-  // untouched, so nothing suggests a saved search owns the node. Left out where it would only repeat what is already
-  // there: on Home itself, and when Home is the Library, whose crumb the location already starts with.
+  // The Home anchor, ahead of the location: the house glyph and the word Home, then a bullet to keep it apart from
+  // the › chain that follows. It is a shortcut, not an ancestor — the structural path behind it is untouched, so
+  // nothing suggests a saved search owns the node. Always shown, even on Home itself or with the Library as Home:
+  // one fixed way back beats a link that comes and goes.
   const homeEl = homeCrumb();
-  if (homeEl) { const dot = document.createElement('span'); dot.className = 'sep'; dot.textContent = '•'; nav.append(homeEl, dot); }
+  // A view page has no location to show, but it still gets the anchor: the bar is one fixed place, on every page.
+  nav.hidden = !trail && !homeEl;
+  if (homeEl) nav.append(homeEl);
+  if (!trail) return;
+  if (homeEl) { const dot = document.createElement('span'); dot.className = 'sep'; dot.textContent = '•'; nav.append(dot); }
+  const back = () => { zoom = null; render(); };
   // location in Tana (owner chain from api.path, e.g. "Library" or "Automation Guild › Meeting"), loaded once per document.
   // A document reached through a space (zoom.via) starts at the space's location; the spaces follow as crumbs.
   const root = zoom.via ? zoom.via[0] : zoom, rootId = root.docId;
@@ -465,10 +467,15 @@ const childEl = (n, item) => nodeEl(n, n.kind === 'document' ? n.id : item.docId
 // The badge says what the linked task is doing, not merely that a node was assigned: an assignment with no task
 // behind it yet is pending and grey, and only work in progress animates. The wording carries the state as well as
 // the colour, so the colour is never the only signal.
-function codexBadgeEl(id) {
+// `done` is the row's own node, which is what the tick and the strikethrough beside it are drawn from. It is passed
+// rather than looked up because `docOf` scans every view's cached rows and answers with the first copy it finds —
+// one that may still be open in a view that has not refreshed since.
+function codexBadgeEl(id, done = !!docOf(id)?.done) {
   const state = agentStateOf(id), words = AGENT_BADGE[state];
   const el = document.createElement('span');
-  el.className = 'cbadge ' + state;
+  // The task itself being finished outranks whatever the agent state was: the badge becomes history, a grey outline
+  // with a grey glyph, so a completed row says "there was a thread" without competing with the live ones.
+  el.className = 'cbadge ' + state + (done ? ' closed' : '');
   // A badge with a task behind it is the way into that task; a pending one has nowhere to go, so it stays a plain
   // image rather than a button that does nothing. Only linked nodes have a status entry at all, which is the same
   // fact — no second list to keep in step.
@@ -496,9 +503,10 @@ function codexBadgeEl(id) {
 function patchCodex(docId) {
   for (const row of outline.querySelectorAll('.node')) {
     const item = items.get(row.dataset.key), line = row.querySelector(':scope > .line');
-    if (!item || !line || (referenceTarget(item.node) || item.node).id !== docId) continue;
+    const node = item && (referenceTarget(item.node) || item.node);
+    if (!item || !line || node.id !== docId) continue;
     line.querySelector(':scope > .cbadge')?.remove();
-    if (codexIds.has(docId)) line.append(codexBadgeEl(docId));
+    if (codexIds.has(docId)) line.append(codexBadgeEl(docId, node.done));
     if (row.dataset.sig) row.dataset.sig = rowSig(item.node); // the row now matches what a fresh render would build
   }
   codexHeader(); // the open page says it too, and for the same reason it is patched rather than re-rendered
@@ -591,7 +599,7 @@ function nodeEl(node, docId, parent) {
   blurSensitive(body, docId, target && target.id);
   line.append(body);
   // handed to the local Codex agent: the robot badge at the end of the row, after everything the row says about itself
-  if (codexIds.has(display.id)) line.append(codexBadgeEl(display.id));
+  if (codexIds.has(display.id)) line.append(codexBadgeEl(display.id, display.done));
   line.onclick = (e) => { if (!e.metaKey && !e.shiftKey && !reference && !fullref && (e.target === line || e.target === body || e.target.parentElement === text)) setCaret(text, text.textContent.length); };
   // a reference row: the bullet opens the target, a click selects the row, and a click on the selected row starts
   // editing it — a native embed takes the caret where it was clicked, while a full reference has nothing to click

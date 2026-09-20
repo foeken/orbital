@@ -26,6 +26,7 @@ const open = new Map();      // key -> bool; default: blocks open, documents clo
 let zoom = null;             // { docId, nodeId | null, from?: string } from = breadcrumb root label when not the view (e.g. 'Search')
 const items = new Map();     // key -> { key, node, docId, parent }, rebuilt on render
 const pending = new Map();   // key -> { item, segs, timer } debounced edits
+let lastEnter = null;        // { from, created, at } the last Enter: the row it acted on, the row it made, and the caret offset it ran at — so undoing it hands the caret back
 let filterShown = false;
 let queue = Promise.resolve();
 let scrolledView = null;     // view already scrolled to today's first meeting when it opened
@@ -55,6 +56,7 @@ const viewSeq = new Map();   // stale viewList responses never replace a newer f
 const truncated = new Set();
 let members = null;
 let sensitiveIds = null, sensitiveVisible = false, sensitiveLoading = null; // marks persist; every launch starts blurred
+let mcpHidden = false; // the Cmd+K switch: MCP chats out of every list and search; main owns it, read once at boot
 const sensitiveEls = new Map(); // rendered surface -> document ids; lets a toggle update live DOM without rebuilding it
 const taskMetaById = new Map(), taskMetaLoading = new Set(), taskMetaFailed = new Map(); // docId -> { until, wait }: a failed metadata read backs off, it is never given up on
 const META_RETRY_MS = 500, META_RETRY_MAX = 30000;

@@ -786,8 +786,8 @@ async function main() {
     console.log('ok  node history: editors, creation and archival, newest first, nothing invented');
   }
 
-  // The written summaries Tana's own Changes panel shows (tana.history.v1alpha1). The service answers oldest first
-  // and leaves the default enum out of its JSON, which is exactly where a mapping like this goes wrong.
+  // The written summaries Tana's own Changes panel shows (tana.history.v1alpha1). The service has answered in both
+  // orders and leaves the default enum out of its JSON, which is exactly where a mapping like this goes wrong.
   {
     const { summaryChanges } = mainHelpers(), plainJson = (v) => JSON.parse(JSON.stringify(v));
     const ANA = 'tana:user-profile:01exampleana00000000000000', BEN = 'tana:user-profile:01exampleben00000000000000';
@@ -799,6 +799,8 @@ async function main() {
       { action: 'Updated', by: ANA, others: 1, at: '2026-09-18T06:32:55Z', title: 'Reviewers added', note: 'Two reviewers joined the document.' },
       { action: 'Created', by: ANA, at: '2026-09-18T06:04:45Z', title: 'Draft written', note: 'A first draft was written.' },
     ], 'summaries come back newest first, dated by when the window closed, and a summary with no changeType is an update (the enum default protobuf JSON omits)');
+    assert.deepEqual(plainJson(summaryChanges([...answered].reverse())).map((c) => c.title), ['Reviewers added', 'Draft written'],
+      'and newest first whichever order the service answered in: the times decide, not the position');
     assert.deepEqual(plainJson(summaryChanges([{ id: 'c', startTime: '2026-09-18T06:00:00Z', title: '  ', authors: [], changeType: 'CHANGE_SUMMARY_TYPE_DELETED' }])),
       [{ action: 'Deleted', at: '2026-09-18T06:00:00Z' }], 'an empty title, no author and no end time leave those parts out rather than filling them in');
     assert.deepEqual(plainJson(summaryChanges([])), [], 'nothing answered is nothing shown');
@@ -916,7 +918,14 @@ async function main() {
     } }, sync: { subscribe: async () => null, unsubscribe: async () => {} } } });
     const payload = await backend.handlers.get('view:list')(null, 'library', { types: ['meetings', 'docs', 'chats'], states: null, assignee: 'anyone' });
     assert.equal(requests.length, 1, 'one view fetch makes one graph query');
-    assert.deepEqual(payload.nodes.map((n) => n.title).sort(), ['Doc', 'MCP: helper', 'Meeting'], 'docs without tasks and hidden titles are post-filtered, MCP chats are not');
+    assert.deepEqual(payload.nodes.map((n) => n.title).sort(), ['Doc', 'MCP: helper', 'Meeting'], 'docs without tasks and hidden titles are post-filtered, MCP chats only when the switch is on');
+    await backend.handlers.get('mcp:setHidden')(null, true);
+    assert.equal(await backend.handlers.get('mcp:hidden')(), true, 'the MCP switch is remembered like any other setting');
+    assert.deepEqual((await backend.handlers.get('view:list')(null, 'library', { types: ['meetings', 'docs', 'chats'], states: null, assignee: 'anyone' })).nodes.map((n) => n.title).sort(),
+      ['Doc', 'Meeting'], 'with it on, MCP chats leave every list and search');
+    assert.equal((await backend.handlers.get('search')(null, 'helper')).some((n) => n.title === 'MCP: helper'), false, 'search is filtered by the same switch, not only the views');
+    await backend.handlers.get('mcp:setHidden')(null, false);
+    assert.equal((await backend.handlers.get('search')(null, 'helper')).some((n) => n.title === 'MCP: helper'), true, 'and they come back when it is off');
     assert.equal(payload.truncated, true);
     assert.equal('iconSvg' in payload.nodes.find((n) => n.id === doc.id), false, 'rows carry no app-local icon');
     assert.deepEqual(Object.keys(cache.list()), ['library'], 'the fetched rows use the view id as their cache section');
@@ -1230,11 +1239,19 @@ async function main() {
     docs.set(away.id, away); creators.set(away.id, ME);
     cache.setSetting('notifySeen', { ...cache.setting('notifySeen'), [away.id]: ['Talk to Peter', 'open'] });
     setState(away, 'closed', COLLEAGUE); // they finished it while the app was closed
+    // The same shape, silenced by hand. The rule would take it — made by you, given away, still open — so this is
+    // the one place an explicit no has to reach: without it the node stays subscribed and keeps its place in
+    // anything reading the watch set, which is how "I turned notifications off and it is still tracked" happens.
+    const hushed = new Document('tana:text:' + ulid());
+    hushed.transact((l) => initDocument(l, 'Quiet one', ME, { kind: 'task' }));
+    setAssignees(hushed, [COLLEAGUE], ME);
+    docs.set(hushed.id, hushed); creators.set(hushed.id, ME);
+    cache.setSetting('notify', { ...cache.setting('notify'), [hushed.id]: false });
     const subscribedAfterRestart = [], discovery = [];
     runtime.client.sync.subscribe = async (id) => { subscribedAfterRestart.push(id); return docs.get(id); };
     runtime.client.sync.unsubscribe = async () => {};
     runtime.client.graph.listNodes = async (p) => {
-      if (p.createdBy) { discovery.push(p); return { nodes: [{ id: away.id, assignedTo: [COLLEAGUE], state: { type: 'closed' } }] }; }
+      if (p.createdBy) { discovery.push(p); return { nodes: [{ id: away.id, assignedTo: [COLLEAGUE], state: { type: 'closed' } }, { id: hushed.id, assignedTo: [COLLEAGUE], state: { type: 'open' } }] }; }
       if (p.nodeIds) return { nodes: p.nodeIds.filter((id) => creators.has(id)).map((id) => ({ id, createdBy: creators.get(id) })) };
       return { nodes: [], totalCount: 0 };
     };
@@ -1243,6 +1260,7 @@ async function main() {
     await restarted.refresh();
     assert.ok(discovery[0].stateTypes.includes('closed'), 'watch discovery includes a task completed while the app was away');
     assert.ok(subscribedAfterRestart.includes(away.id), 'and subscribes it so its bootstrap can reach catch-up notification');
+    assert.ok(!subscribedAfterRestart.includes(hushed.id), 'a task you silenced is not picked up by the watch rule, however exactly it fits it');
     restarted.onChange(away.id, { origin: 'remote' }); // the bootstrap, which used to be a silent baseline
     await settle();
     assert.deepEqual(afterRestart.map((n) => [n[0], n[2]]), [[away.id, 'Now Completed']],
@@ -2310,6 +2328,30 @@ async function main() {
     assert.equal(m.redo(), true);
     assert.deepEqual(outline.readOutline(m).map((n) => n.text), ['A', 'D', 'B', 'C']);
     console.log('ok  atomic multi-remove/move undo and redo');
+  }
+  // Enter is one user action too: the truncation and the new node are one transaction, and Enter at the very
+  // start of a node puts the empty row in front instead of moving the text out of the node.
+  {
+    const d = new Document(DOC, { peerId: '744' });
+    const a = outline.insertAfter(d, null, 'left-right');
+    const rest = outline.split(d, a, 'left', [{ text: '-right' }, { mention: { uri: 'tana:text:x', label: 'Ref' } }]);
+    assert.deepEqual(outline.readOutline(d).map((n) => n.text), ['left', '-rightRef'], 'the caret splits the node in two');
+    assert.equal(d.undo(), true);
+    assert.deepEqual(outline.readOutline(d).map((n) => n.text), ['left-right'], 'one undo restores both halves');
+    assert.equal(d.redo(), true);
+    assert.deepEqual(outline.readOutline(d).map((n) => n.text), ['left', '-rightRef']);
+    const child = outline.split(d, rest, '-rightRef', 'tail', true);
+    assert.deepEqual(outline.readOutline(d).at(-1).children.map((n) => n.text), ['tail'], 'an open node takes the rest as its first child');
+    assert.equal(d.undo(), true);
+    assert.deepEqual(outline.readOutline(d).at(-1).children, [], 'and undoes in one step as well');
+    assert.ok(child);
+
+    outline.insertBefore(d, a, '');
+    const rows = outline.readOutline(d);
+    assert.deepEqual(rows.map((n) => n.text), ['', 'left', '-rightRef'], 'Enter at the start leaves the node and its children alone');
+    assert.equal(d.undo(), true);
+    assert.deepEqual(outline.readOutline(d).map((n) => n.text), ['left', '-rightRef']);
+    console.log('ok  atomic split undo/redo and insert-before');
   }
   // The same for a whole indented range: one transaction, so Tab on a selection is one undo step, not one per row.
   {

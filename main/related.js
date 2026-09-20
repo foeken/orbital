@@ -139,6 +139,11 @@ function callOf(ev) {
 // vocabulary the graph keeps — no per-edit log, no actor for a deletion, nothing about what changed — so an entry
 // carries only what is there and the renderer leaves out what is missing. `updateTime` stands in for an update
 // nobody is named for, and only when the node lists no editors at all, so it can never double-count one.
+// newest first; an entry with no time of its own (or an unreadable one) cannot claim a place among the dated ones,
+// so it goes last. Both histories sort this way, so neither depends on the order it was handed.
+const changeTime = (c) => { const t = c && c.at ? Date.parse(c.at) : NaN; return Number.isNaN(t) ? -Infinity : t; };
+const byNewest = (a, b) => (changeTime(a) === changeTime(b) ? 0 : changeTime(b) > changeTime(a) ? 1 : -1);
+
 function changesOf(node) {
   const n = node || {};
   const iso = (t) => (typeof t === 'string' && t ? t : undefined);
@@ -147,14 +152,14 @@ function changesOf(node) {
   if (!out.length && iso(n.updateTime) && n.updateTime !== n.createTime) out.push({ action: 'Updated', at: iso(n.updateTime) });
   if (iso(n.createTime) || iso(n.createdBy)) out.push({ action: 'Created', by: iso(n.createdBy), at: iso(n.createTime) });
   if (iso(n.archivedAt)) out.push({ action: 'Deleted', at: iso(n.archivedAt) });
-  // newest first; an entry with no time of its own cannot claim a place among the dated ones, so it goes last
-  return out.sort((a, b) => (a.at ? Date.parse(a.at) : -Infinity) < (b.at ? Date.parse(b.at) : -Infinity) ? 1 : -1);
+  return out.sort(byNewest);
 }
 
 // What Tana's own Changes panel shows: written summaries from tana.history.v1alpha1.ChangeSummaryService, which
 // names each window of edits ("Added dependency on Finish reply document for Works Council") rather than leaving
-// the row to repeat the node's title. The service answers newest last, so the list is reversed here; the enum
-// default (UPDATED = 0) is omitted from protobuf JSON, which is why a missing changeType reads as an update.
+// the row to repeat the node's title. The service's own order is not relied on — it has answered both ways — so
+// the list is sorted by when each window closed, newest on top; the enum default (UPDATED = 0) is omitted from
+// protobuf JSON, which is why a missing changeType reads as an update.
 // Several people can share one summary: the first is named and the rest are counted, never dropped silently.
 const SUMMARY_ACTION = { CHANGE_SUMMARY_TYPE_CREATED: 'Created', CHANGE_SUMMARY_TYPE_DELETED: 'Deleted', CHANGE_SUMMARY_TYPE_UPDATED: 'Updated' };
 function summaryChanges(summaries) {
@@ -169,7 +174,7 @@ function summaryChanges(summaries) {
       title: (typeof s.title === 'string' && s.title.trim()) || undefined,
       note: (typeof s.description === 'string' && s.description.trim()) || undefined,
     };
-  }).reverse();
+  }).sort(byNewest);
 }
 // The node's history for the sidebar: the written summaries when the service answers, the graph node's own
 // editors/creation when it does not (an older server, a node it knows nothing about, or a refusal). A history
