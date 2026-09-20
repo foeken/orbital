@@ -968,7 +968,15 @@ function runReferenceEmbedRenderCheck() {
     const docOf = () => ({ editable: true });
     const keyFor = (docId, node) => node.kind === 'document' ? docId : docId + '/' + node.id;
     const mkItem = (docId, node, parent) => { const item = { key: keyFor(docId, node), docId, node, parent }; items.set(item.key, item); return item; };
-    const hasKids = () => false, isOpen = () => false, setOpen = () => {}, zoomTo = () => {}, blurSensitive = () => {};
+    const setOpen = () => {}, blurSensitive = () => {}, isSpace = () => false, draftNode = () => ({ id: 'draft', kind: 'block', draft: true });
+    const kids = new Map();
+    let loaded = null, opened = null;
+    const ensureLoaded = (item) => { loaded = item.docId; };
+    const zoomTo = () => { opened = 'zoomed the block'; };
+    const openReference = (node) => { opened = 'opened ' + node.reference.uri; };
+    // the real ones: what a row shows below it, and whether it is open, is the whole point of the reference case
+    ${sourceBetween('const childrenOf =', 'const canInsertChild =')}
+    ${sourceBetween('const childEl =', '\n')}
     const rendered = new Map();
     const renderSegs = (el, segs) => { rendered.set(el, segs); }, segsOf = (node) => node.segments || (node.text ? [{ text: node.text }] : []);
     const isDivider = () => false;
@@ -992,12 +1000,17 @@ function runReferenceEmbedRenderCheck() {
     ${canExpand}
     ${functionSource('nodeEl')}
     const parentItem = { node: { kind: 'document', editable: true } };
-    const built = (node) => {
+    const built = (node, scene = {}) => {
+      kids.clear(); open.clear(); items.clear(); loaded = null; opened = null;
+      if (scene.kids) kids.set(scene.kids[0], scene.kids[1]);
+      if (scene.open) open.set('tana:doc:01j0container000000000000/' + node.id, true);
       const el = nodeEl(node, 'tana:doc:01j0container000000000000', parentItem);
-      const line = el.children[0], text = line.children.at(-1).children[0];
+      const line = el.children[0], text = line.children.at(-1).children[0], wrap = el.children[1];
       const check = line.children.find((kid) => kid.tagName === 'input');
       return { className: el.className, editable: text.contentEditable === 'plaintext-only', rendered: rendered.get(text),
-        checked: check ? !!check.checked : null, disabled: check ? !!check.disabled : null, toggles: check && check.onclick ? (check.onclick(), toggled) : null };
+        checked: check ? !!check.checked : null, disabled: check ? !!check.disabled : null, toggles: check && check.onclick ? (check.onclick(), toggled) : null,
+        selectsOnClick: typeof line.onmousedown === 'function', bullet: (line.children[1].onclick(), opened), loadedFrom: loaded,
+        kidKeys: wrap ? wrap.children.map((kid) => kid.dataset.key) : null };
     };
     ({ embed: (targetEditable) => {
       const embedded = {
@@ -1025,7 +1038,7 @@ function runReferenceEmbedRenderCheck() {
   // at, box and all, while the block keeps its own identity and its editable text.
   const TARGET = { id: 'tana:text:01j0task00000000000000000', text: 'Ship the thing', kind: 'document', icon: 'task', done: 0, stateType: 'open', editable: true };
   const mention = { mention: { label: 'Stale label', uri: TARGET.id } };
-  const line = (segments, resolved = true) => ({ id: 'n1', kind: 'block', text: segments.map((s) => s.text ?? s.mention.label).join(''), segments,
+  const line = (segments, resolved = true) => ({ id: 'n1', kind: 'block', block: 'bullet', text: segments.map((s) => s.text ?? s.mention.label).join(''), segments,
     reference: { uri: TARGET.id, label: 'Stale label', ...(resolved ? { node: TARGET } : {}) } });
 
   const full = plain(api.built(line([mention])));
@@ -1041,6 +1054,27 @@ function runReferenceEmbedRenderCheck() {
   const unresolved = plain(api.built(line([mention], false)));
   assert.ok(!unresolved.className.includes('fullref'), 'a reference whose target could not be read stays the plain chip it was');
   assert.deepEqual(unresolved.rendered, [mention], 'with the label the block stored');
+
+  assert.deepEqual([full.selectsOnClick, full.bullet], [true, 'opened ' + TARGET.id],
+    'clicking the row selects it instead of following a link out of it, and its bullet is the way into the node');
+  assert.deepEqual([beside.selectsOnClick, beside.bullet], [false, 'zoomed the block'],
+    'while an ordinary line with a link keeps the plain caret click and zooms into itself');
+
+  // A row with an outline of its own is never a full reference, because expanding one opens the outline of the node
+  // it points at, which would leave the block's own with nowhere to go.
+  const parentRow = plain(api.built({ ...line([mention]), hasChildren: true, children: [{ id: 'own', kind: 'block', text: 'a child of the block itself' }] }));
+  assert.ok(!parentRow.className.includes('fullref'), 'a block that already has children stays an ordinary line with a link');
+  assert.deepEqual(parentRow.rendered, [mention], 'and shows the chip it stores');
+
+  const closed = plain(api.built(line([mention])));
+  assert.deepEqual([closed.kidKeys, closed.loadedFrom], [null, null], 'a full reference starts closed and reads nothing until it is opened');
+  const loading = plain(api.built(line([mention]), { open: true }));
+  assert.deepEqual([loading.kidKeys, loading.loadedFrom], [[], TARGET.id], 'opening it loads the target document, not the one the block lives in');
+  const withKids = plain(api.built(line([mention]), { open: true, kids: [TARGET.id, [{ id: 'kid1', kind: 'block', text: 'a step of the task' }]] }));
+  assert.deepEqual([withKids.kidKeys, withKids.loadedFrom], [[TARGET.id + '/kid1'], null],
+    'and the rows below it are the target\'s own blocks, so editing one edits that document');
+
+  assert.match(source, /mention && !mention\.closest\('\.fullref'\)/, 'a chip on such a row does not navigate: the row itself answers the click');
 
   const styles = fs.readFileSync(require.resolve('../styles.css'), 'utf8');
   assert.match(styles, /\.node\.fullref \.text \.mention \{[^}]*color: inherit[^}]*text-decoration: none/,

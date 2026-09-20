@@ -182,7 +182,7 @@ function mockApi() {
     // references resolve on read, as main does: the row always shows the target's current title and state, and a
     // block whose whole content is one mention is resolved the same way
     children: async (docId) => structuredClone(content[docId] || []).map((n) => {
-      const one = n.type !== 'reference' && n.segments?.length === 1 && n.segments[0].mention;
+      const one = n.type !== 'reference' && !n.children?.length && n.segments?.length === 1 && n.segments[0].mention;
       const ref = n.type === 'reference' ? n.reference : one ? { uri: one.uri, label: one.label } : null;
       const target = ref && [...all, ...members].find((d) => d.id === ref.uri);
       return target ? { ...n, reference: { ...ref, node: info(target) } } : n;

@@ -479,7 +479,10 @@ function nodeEl(node, docId, parent) {
   const item = mkItem(docId, node, parent);
   const target = referenceTarget(node), display = target || node, reference = isReference(node);
   const fullref = !!target && !reference; // a line that is one mention: the row is the node, the text stays editable
-  const has = hasKids(item), opened = isOpen(item);
+  // Expanding a full reference opens the outline of the node it points at, not the block's own (a block with
+  // children is never one): the rows below it belong to that document, so they are built against it.
+  const childHost = fullref ? { key: item.key, docId: target.id, node: { ...target, hasChildren: false }, parent: item } : item;
+  const has = hasKids(childHost), opened = isOpen(item);
   const expandable = has || (!node.draft && canEditItem(item) && (node.kind === 'document' || node.done != null || ['paragraph', 'bullet', 'numbered'].includes(node.block)));
   const el = document.createElement('div');
   const heading = headingOf(node); // a heading arrives as node.heading or as the heading1-3 block type
@@ -494,7 +497,7 @@ function nodeEl(node, docId, parent) {
   if (display.icon) { bullet.classList.add('icon', display.icon); const svg = iconNode(display.icon); if (svg) bullet.append(svg); }
   if (display.hue != null) { bullet.classList.add('hue'); bullet.style.setProperty('--hue', String(display.hue)); } // type hue tints the icon and the plain bullet alike
   bullet.onmousedown = (e) => e.preventDefault();
-  if (!node.draft) bullet.onclick = () => reference ? openReference(node) : zoomTo(item);
+  if (!node.draft) bullet.onclick = () => (reference || fullref ? openReference(node) : zoomTo(item));
   line.append(chev, bullet);
   // a task's box is its status, so Display hides it with the rest of the status; a checkbox block is outline content
   // the user typed, not a fact about the row, so it is never hidden
@@ -550,9 +553,9 @@ function nodeEl(node, docId, parent) {
   line.append(body);
   // handed to the local Codex agent: the robot badge at the end of the row, after everything the row says about itself
   if (codexIds.has(display.id)) line.append(codexBadgeEl(display.id));
-  line.onclick = (e) => { if (!e.metaKey && !e.shiftKey && !reference && (e.target === line || e.target === body || e.target.parentElement === text)) setCaret(text, text.textContent.length); };
-  // a reference row: the bullet zooms into the target, a click selects the row, a click on the selected row puts the caret where you clicked
-  if (reference) line.onmousedown = (e) => {
+  line.onclick = (e) => { if (!e.metaKey && !e.shiftKey && !reference && !fullref && (e.target === line || e.target === body || e.target.parentElement === text)) setCaret(text, text.textContent.length); };
+  // a reference row: the bullet opens the target, a click selects the row, a click on the selected row puts the caret where you clicked
+  if (reference || fullref) line.onmousedown = (e) => {
     if (e.metaKey || e.shiftKey || e.target.closest('.check') || e.target.closest('.bullet') || e.target.closest('.chev')) return;
     if (selKeys().includes(item.key) && canEditText(item)) return;
     e.preventDefault(); sel = { keys: new Set([item.key]), anchor: item.key, focus: item.key }; leaveText(); applySel();
@@ -564,10 +567,10 @@ function nodeEl(node, docId, parent) {
   chev.onclick = () => setOpen(item, !expanded);
   if (expanded) {
     const wrap = document.createElement('div'); wrap.className = 'children';
-    const c = childrenOf(item);
-    if (c == null) { ensureLoaded(item); wrap.classList.add('loading'); wrap.textContent = 'Loading…'; }
-    else if (c.length) wrap.append(...c.map((k) => childEl(k, item)));
-    else if (!isSpace(node) && canEditItem(item) && (node.kind === 'document' || node.done != null || ['paragraph', 'bullet', 'numbered'].includes(node.block))) wrap.append(nodeEl(draftNode(item), docId, item));
+    const c = childrenOf(childHost);
+    if (c == null) { ensureLoaded(childHost); wrap.classList.add('loading'); wrap.textContent = 'Loading…'; }
+    else if (c.length) wrap.append(...c.map((k) => childEl(k, childHost)));
+    else if (!fullref && !isSpace(node) && canEditItem(item) && (node.kind === 'document' || node.done != null || ['paragraph', 'bullet', 'numbered'].includes(node.block))) wrap.append(nodeEl(draftNode(item), docId, item));
     el.append(wrap);
   }
   return el;

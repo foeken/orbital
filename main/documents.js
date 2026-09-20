@@ -16,7 +16,7 @@ async function outlineWithReferences(doc) {
 // embed so the row can show the node it points at, while keeping its own identity and its editable text.
 async function resolveReferences(nodes) {
   const refs = [];
-  const lone = n => n.segments?.length === 1 && n.segments[0].mention;
+  const lone = n => !n.children?.length && n.segments?.length === 1 && n.segments[0].mention;
   const visit = rows => { for (const n of rows) {
     if (n.type === 'reference') refs.push(n.reference);
     else { const one = lone(n); if (one) refs.push(n.reference = { uri: one.uri, label: one.label }); }

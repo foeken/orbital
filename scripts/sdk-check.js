@@ -2599,6 +2599,10 @@ async function main() {
     assert.equal(full.reference.node.icon, 'task'); assert.equal(full.reference.node.done, 0, 'the row can show the task it points at, and check it off');
     outline.setText(host, headingId, [mention, {text:' by Friday'}]);
     assert.equal((await backend.outlineWithReferences(host))[1].reference, undefined, 'text beside it makes it an ordinary line with an inline link');
+    outline.setText(host, headingId, [mention]);
+    const ownKid = outline.insertChild(host, headingId, 'a step of its own');
+    assert.equal((await backend.outlineWithReferences(host))[1].reference, undefined, 'and neither is a block with children of its own, since expanding one opens the target instead');
+    outline.remove(host, ownKid);
     outline.setText(host, headingId, 'Strategic Goals 2026-2027');
     assert.throws(() => outline.move(host, blockId, 'sideways'), /up or down/, 'a bad direction is refused, never silently down');
     outline.move(host, blockId, 'down');

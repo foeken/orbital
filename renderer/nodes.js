@@ -71,7 +71,9 @@ const isAtomic = (node) => isImage(node) || isDivider(node); // shown, focusable
 const isReference = (node) => node.type === 'reference';
 // Tana's full-reference presentation: a block whose whole content is one mention stands in for the node it points at
 // — its box, its status, its tags — and becomes an ordinary line with a link again the moment anything else is typed.
-const isFullReference = (node) => node.kind === 'block' && !isReference(node) && segsOf(node).length === 1 && !!segsOf(node)[0].mention;
+// Children rule it out: the row stands in for another node, and expanding it opens that node's outline, so a block
+// with an outline of its own would have nowhere left to show it.
+const isFullReference = (node) => node.kind === 'block' && !isReference(node) && !node.hasChildren && !node.children?.length && segsOf(node).length === 1 && !!segsOf(node)[0].mention;
 const referenceTarget = (node) => ((isReference(node) || isFullReference(node)) && node.reference?.node ? asDoc(node.reference.node) : null);
 const referenceLabel = (node) => referenceTarget(node)?.text || node.reference?.label || node.text || node.reference?.uri || 'Unavailable reference';
 // An error from an action is transient: it clears when the next action succeeds, so a stale message never
