@@ -102,6 +102,7 @@ function selKey(e) { // keys while a selection is active (nothing focused); docu
   else if (mod && e.shiftKey && vert) { if (blockSelection(keys, true, 'Move')) moveSel(keys, e.key === 'ArrowUp' ? 'up' : 'down'); }
   else if (e.key === 'Tab' && !mod) { if (blockSelection(keys, true, e.shiftKey ? 'Outdent' : 'Indent')) indentSel(keys, e.shiftKey ? 'outdent' : 'indent'); }
   else if (e.key === ' ' && !mod && keys.length === 1) { const it = items.get(keys[0]); sel = null; if (referenceTarget(it.node)) openReference(it.node); else zoomTo(it); } // Space on one selected row zooms into it, or opens what it references
+  else if (e.key === 'Enter' && !mod && keys.length === 1 && canEditText(items.get(keys[0]))) clearSel(keys[0]); // Enter starts editing the selected row, caret at the end — the way a second click on it does
   else if (e.key === 'Escape' || (e.key.startsWith('Arrow') && !mod)) clearSel(sel.focus);
   else return false;
   return true;

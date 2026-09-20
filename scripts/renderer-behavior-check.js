@@ -380,6 +380,20 @@ async function runSelectionChecks() {
 
   const event = (metaKey = false, shiftKey = false) => ({ key: 'Backspace', metaKey, ctrlKey: false, shiftKey });
   const settle = () => new Promise(setImmediate);
+  // Enter on one selected row starts editing it, the way a second click on it does. placeCaret is called without an
+  // offset, which is its "end of the row" case, so the caret lands after the text rather than in front of it.
+  const enterKey = { key: 'Enter', metaKey: false, ctrlKey: false, shiftKey: false };
+  const enter = makeHarness();
+  enter.set({ keys: ['b'], anchor: 'b', focus: 'b' });
+  assert.equal(enter.selKey(enterKey), true, 'Enter on one selected row is the selection to answer');
+  assert.deepEqual(plain(enter.state().sel), null, 'it lets the selection go');
+  assert.equal(plain(enter.state().caret), 'b', 'and puts the caret in that row, at its end');
+  const enterMany = makeHarness();
+  enterMany.set({ anchor: 'b', focus: 'c' });
+  assert.equal(enterMany.selKey(enterKey), false, 'with more than one row selected there is no one row to edit, so Enter is left alone');
+  const enterReadOnly = makeHarness(true);
+  enterReadOnly.set({ keys: ['b'], anchor: 'b', focus: 'b' });
+  assert.equal(enterReadOnly.selKey(enterKey), false, 'and a row with nothing to edit is left alone too');
   for (const [metaKey, shiftKey, label] of [[false, false, 'plain Backspace'], [true, true, 'Cmd+Shift+Backspace']]) {
     const remove = makeHarness();
     remove.set({ anchor: 'b', focus: 'c' });
@@ -1071,12 +1085,14 @@ function runReferenceEmbedRenderCheck() {
     'and the rows below it are the target\'s own blocks, so editing one edits that document');
 
   assert.match(source, /mention && !mention\.closest\('\.fullref'\)/, 'a chip on such a row does not navigate: the row itself answers the click');
+  assert.match(source, /if \(selKeys\(\)\.includes\(item\.key\) && canEditText\(item\)\) \{ if \(fullref\) \{ e\.preventDefault\(\); setCaret\(text, text\.textContent\.length\); \} return; \}/,
+    'and a click on the row once it is selected starts editing it, caret at the end, since its text is one chip with nothing to click into');
 
   const styles = fs.readFileSync(require.resolve('../styles.css'), 'utf8');
   assert.match(styles, /\.node\.fullref \.text \.mention \{[^}]*color: inherit[^}]*text-decoration: none/,
     'and the row that is the node reads as a title: the blue underlined link is for a reference sitting among text');
-  assert.match(styles, /\.node\.fullref > \.children \{[^}]*border-left-style: dashed/,
-    'what hangs under it is another document, so its guide line is dashed');
+  assert.match(styles, /\.node\.fullref > \.children \{[^}]*linear-gradient\([^)]*\) 0 0 \/ 1px 12px repeat-y/,
+    'what hangs under it is another document, so its guide line is dashed, with a gap a border could not have given it');
   assert.match(styles, /\.node\.fullref > \.line:focus-within/,
     'and the ring follows the caret on the reference itself, not one in the rows it opened');
   assert.doesNotMatch(styles, /\.node\.fullref:focus-within/,
