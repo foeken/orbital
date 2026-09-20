@@ -1091,10 +1091,10 @@ function runReferenceEmbedRenderCheck() {
   const styles = fs.readFileSync(require.resolve('../styles.css'), 'utf8');
   assert.match(styles, /\.node\.fullref \.text \.mention \{[^}]*color: inherit[^}]*text-decoration: none/,
     'and the row that is the node reads as a title: the blue underlined link is for a reference sitting among text');
-  // the dash and gap themselves are taste and get tuned; what is pinned is that the line is a repeating gradient,
-  // since a dashed border cannot set a pattern of its own and its default was too faint to read
-  assert.match(styles, /\.node\.fullref > \.children \{[^}]*linear-gradient\([^)]*\) 0 0 \/ 1px \d+px repeat-y/,
-    'what hangs under it is another document, so its guide line is dashed, with a gap a border could not have given it');
+  assert.match(styles, /\.node\.fullref > \.children \{[^}]*border-left-style: dashed/,
+    'what hangs under it is another document, so its guide line is dashed');
+  assert.doesNotMatch(styles, /\.node\.fullref > \.children \{[^}]*linear-gradient/,
+    'and it is the border itself, not a background column, which renders a pixel wider and lighter than every other guide');
   assert.match(styles, /\.node\.fullref > \.line:focus-within/,
     'and the ring follows the caret on the reference itself, not one in the rows it opened');
   assert.doesNotMatch(styles, /\.node\.fullref:focus-within/,
