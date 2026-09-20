@@ -87,13 +87,15 @@ function subRowsFor(row) {
 }
 // With a query the closest matches come first ("in": Inbox before Zoom in): rows sort by match tier, then by where the
 // match starts, else keep their place. A group moves as a whole to where its best row lands, so every heading shows
-// once, and groups that match equally well keep the fixed order.
+// once, and groups whose best rows match at the same tier keep the fixed order — where the match starts decides only
+// within a group, so "sensitive" puts the current node's Mark as sensitive above Toggle sensitive visibility instead
+// of losing to it by one character.
 function rankRows(rows) {
   const cmp = (a, b) => a.match.rank - b.match.rank || a.match[0] - b.match[0];
   const best = new Map(), first = new Map();
   rows.forEach((r, i) => { if (!first.has(r.group)) first.set(r.group, i); if (!best.has(r.group) || cmp(r, best.get(r.group)) < 0) best.set(r.group, r); });
   return rows.map((r, i) => ({ r, i }))
-    .sort((a, b) => (a.r.group === b.r.group ? cmp(a.r, b.r) || a.i - b.i : cmp(best.get(a.r.group), best.get(b.r.group)) || first.get(a.r.group) - first.get(b.r.group)))
+    .sort((a, b) => (a.r.group === b.r.group ? cmp(a.r, b.r) || a.i - b.i : best.get(a.r.group).match.rank - best.get(b.r.group).match.rank || first.get(a.r.group) - first.get(b.r.group)))
     .map(({ r }) => r);
 }
 // typed is the query as it was typed; q is the lowercased one every row is matched against.

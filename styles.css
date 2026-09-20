@@ -257,11 +257,13 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .node.block:not(.t-bullet):not(.t-numbered):not(.has) > .line > .bullet { width: 11px; }
 .bullet.icon::before { display: none; }
 .bullet.icon svg { position: absolute; left: 0; top: 4px; width: 16px; height: 16px; color: #8a8a8a; }
-.bullet.icon:hover svg, .collapsed > .line > .bullet.icon svg { color: #333; }
-.bullet.meeting svg, .collapsed > .line > .bullet.meeting svg { color: #c99b1b; }
+/* one colour whether or not the row has children: a saved search draws its rows before their children are known,
+   so they all counted as collapsed and their icons came out darker than the same rows in a view */
+.bullet.icon:hover svg { color: #333; }
+.bullet.meeting svg { color: #c99b1b; }
 .bullet.meeting:hover svg { color: #8a6a17; }
 /* Renderer contract: appearance-driven icons add .hue and set --hue, including 0. */
-.bullet.icon.hue svg, .bullet.icon.hue:hover svg, .collapsed > .line > .bullet.icon.hue svg { color: hsl(var(--hue) 45% 30%); }
+.bullet.icon.hue svg, .bullet.icon.hue:hover svg { color: hsl(var(--hue) 45% 30%); }
 .check {
   flex: none; width: 18px; height: 18px; margin: 3px 8px 0 2px; border-radius: 5px; background: #e4e4e4;
   border: 0; padding: 0; cursor: pointer; -webkit-appearance: none; appearance: none; position: relative;
@@ -603,9 +605,9 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .bullet.hue::before, [data-theme="dark"] .bullet.hue:hover::before { background: hsl(var(--hue) 70% 72%); }
 [data-theme="dark"] .collapsed > .line > .bullet::before { box-shadow: 0 0 0 6px #353a3c; }
 [data-theme="dark"] .bullet.icon svg { color: #aeb4b6; }
-[data-theme="dark"] .bullet.icon:hover svg, [data-theme="dark"] .collapsed > .line > .bullet.icon svg { color: #d0d2d2; }
-[data-theme="dark"] .bullet.meeting svg, [data-theme="dark"] .collapsed > .line > .bullet.meeting svg { color: #d7b54d; }
-[data-theme="dark"] .bullet.icon.hue svg, [data-theme="dark"] .bullet.icon.hue:hover svg, [data-theme="dark"] .collapsed > .line > .bullet.icon.hue svg { color: hsl(var(--hue) 70% 72%); }
+[data-theme="dark"] .bullet.icon:hover svg { color: #d0d2d2; }
+[data-theme="dark"] .bullet.meeting svg { color: #d7b54d; }
+[data-theme="dark"] .bullet.icon.hue svg, [data-theme="dark"] .bullet.icon.hue:hover svg { color: hsl(var(--hue) 70% 72%); }
 [data-theme="dark"] .check { background: #3a3e40; --check-on: #5b976c; }
 [data-theme="dark"] .check:hover:not(:checked) { background: #474c4e; }
 [data-theme="dark"] .check.inbox:not(:checked) { background: #5d6467; }

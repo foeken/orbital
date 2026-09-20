@@ -472,6 +472,13 @@ async function main() {
     await settings.hydrate();
     assert.equal(settings.get('hiddenTitles').join(), 'Standup', 'the document decides what a key means');
     assert.equal(cache.setting('hiddenTitles').join(), 'Standup', 'and the mirror follows it');
+    // A sensitive mark is one of these settings, and the list the renderer loads at startup has to read the same
+    // place the mark is written: it once read db's legacy table, so every mark was gone after a restart.
+    const marked = 'tana:text:' + ulid();
+    assert.equal(await backend.handlers.get('sensitive:set')(null, marked, true), true);
+    assert.equal((await backend.handlers.get('sensitive:list')(null)).join(), marked, 'the mark is read back from where it was written');
+    assert.equal(await backend.handlers.get('sensitive:set')(null, marked, false), false);
+    assert.equal((await backend.handlers.get('sensitive:list')(null)).join(), '', 'and unmarking takes it out again');
     // It is app plumbing rather than a note, so no list or search offers it.
     backend.testRuntime({ me: { userUri: ME }, win: null, client: { sync, graph: { listNodes: async (p) => (p.nodeIds ? { nodes: [] } : { nodes: [{ id: doc.id, title: settings.TITLE, updateTime: '2026-09-20T10:00:00Z' }, { id: 'tana:text:' + ulid(), title: 'A real note', updateTime: '2026-09-20T10:00:00Z' }] }) } } });
     const rows = await backend.handlers.get('view:list')(null, 'library', { types: ['docs'], states: null, assignee: 'anyone' });

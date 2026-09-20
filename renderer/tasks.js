@@ -67,7 +67,7 @@ function patchMeta(docId) {
     if (sep) sep.remove();
     // the same line a full render would build, so a row does not change shape when its metadata arrives late
     const subText = subtextOf(item.node, summary), had = body.querySelector(':scope > .subtext');
-    if (summary && displayOn('assigned')) body.insertBefore(taskMetaEl(summary, docId), had || null);
+    if (summary && displayOn('assigned')) body.insertBefore(taskMetaEl(summary, docId, item.node), had || null);
     if (subText && had) had.textContent = subText;
     else if (subText) { const sub = document.createElement('div'); sub.className = 'subtext'; sub.textContent = subText; body.append(sub); }
     else if (had) had.remove();
@@ -110,9 +110,20 @@ function documentSummary(node, lazy) {
   if (!audience && !meta.linkShared && !meta.watched) return null;
   return { assignees: '', audience, scope: typeof meta.audience === 'string' ? meta.audience : meta.audience?.scope, unknownAudience: false, linkShared: !!meta.linkShared, watched: !!meta.watched };
 }
-function taskMetaEl(summary, docId) {
+// node: the row's document, so its facts open the Cmd+K pickers they describe (Edit assignees, Edit visibility)
+function taskMetaEl(summary, docId, node) {
   const el = document.createElement('span');
-  el.className = 'meta tmeta' + (summary.pending ? ' pending' : ''); el.textContent = summary.assignees;
+  el.className = 'meta tmeta' + (summary.pending ? ' pending' : '');
+  const writable = node && canEditNode(node) && isRealId(node.id);
+  // a click opens the picker and leaves the caret where it is, as every other row control does
+  const clickable = (target, open) => {
+    target.setAttribute('role', 'button'); target.style.cursor = 'pointer';
+    target.onmousedown = (e) => { e.preventDefault(); e.stopPropagation(); };
+    target.onclick = (e) => { e.stopPropagation(); open(); };
+  };
+  const who = document.createElement('span'); who.textContent = summary.assignees;
+  if (summary.assignees) el.append(who);
+  if (summary.assignees && writable && isTask(node) && tana.setAssignees) { who.title = 'Edit assignees'; clickable(who, () => openAssigneePalette(node)); }
   // the icons stand 6px apart, but the first one needs no gap of its own: a row with no assignee name in front of it
   // (every doc and meeting row) already has the 8px the .meta span carries, and 14px reads as a hole
   const gap = () => (el.textContent || el.children.length ? '6px' : '0');
@@ -130,9 +141,13 @@ function taskMetaEl(summary, docId) {
     icon.setAttribute('aria-hidden', 'true'); icon.title = 'Unassigned';
     icon.style.cssText = 'display:inline-block;width:14px;height:14px;margin-right:4px;vertical-align:-2px';
     const svg = iconNode('unassigned'); if (svg) { svg.setAttribute('width', '14'); svg.setAttribute('height', '14'); icon.append(svg); }
-    el.prepend(icon);
+    who.prepend(icon);
   }
-  if (summary.audience) el.append(iconEl(summary.audience.icon, summary.audience.label));
+  if (summary.audience) {
+    const icon = iconEl(summary.audience.icon, summary.audience.label);
+    if (writable && tana.accessOptions) { icon.title = summary.audience.label + ' — click to edit visibility'; clickable(icon, () => openVisibility(node, summary.scope)); }
+    el.append(icon);
+  }
   else if (summary.unknownAudience) el.append(' · Visibility unknown');
   // link sharing is separate from the Tana audience: anyone with the url can read it
   if (summary.linkShared) el.append(iconEl('globe', 'Anyone with the link'));

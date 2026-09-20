@@ -690,7 +690,7 @@ function nodeEl(node, docId, parent) {
   // every row describes who can see it, not only task rows; the fetch waits until the row is on screen
   const taskInfo = taskSummary(display, true) || documentSummary(display, true);
   if (displayOn('assigned')) {
-    if (taskInfo) body.append(taskMetaEl(taskInfo, display.id));
+    if (taskInfo) body.append(taskMetaEl(taskInfo, display.id, display));
     else if (observeMeta(el, display)) body.append(taskMetaEl({ assignees: '', pending: true })); // hold the slot: the real icon lands in the same place, so the row never shifts
   } else if (!taskInfo) observeMeta(el, display); // "Lives in" reads the same answer, so the fetch still goes out
   if (displayOn('type')) appendTags(body, display);
