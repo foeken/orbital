@@ -2587,6 +2587,19 @@ async function main() {
     backend.testRuntime({me:{userUri:ME},client:{graph:{listNodes:async()=>{throw new Error('unavailable');}}}});
     const unresolved = await backend.outlineWithReferences(host);
     assert.deepEqual(unresolved[0].reference, {uri:targetUri});
+    // A line whose whole content is one mention is Tana's full-reference presentation: resolved like a native embed,
+    // while staying an ordinary editable block, and only for as long as nothing else is on the line.
+    const mentionUri = 'tana:text:01examplem0000000000000000';
+    const mention = {mention:{uri:mentionUri,label:'Stale label'}};
+    backend.testRuntime({me:{userUri:ME},client:{graph:{listNodes:async()=>({nodes:[{id:mentionUri,title:'Mentioned task',state:{type:'open'}}]})}}});
+    outline.setText(host, headingId, [mention]);
+    const full = (await backend.outlineWithReferences(host))[1];
+    assert.equal(full.id, headingId); assert.equal(full.type, undefined, 'the block keeps its own identity rather than becoming a native embed');
+    assert.equal(full.reference.uri, mentionUri); assert.equal(full.reference.label, 'Stale label');
+    assert.equal(full.reference.node.icon, 'task'); assert.equal(full.reference.node.done, 0, 'the row can show the task it points at, and check it off');
+    outline.setText(host, headingId, [mention, {text:' by Friday'}]);
+    assert.equal((await backend.outlineWithReferences(host))[1].reference, undefined, 'text beside it makes it an ordinary line with an inline link');
+    outline.setText(host, headingId, 'Strategic Goals 2026-2027');
     assert.throws(() => outline.move(host, blockId, 'sideways'), /up or down/, 'a bad direction is refused, never silently down');
     outline.move(host, blockId, 'down');
     assert.equal(outline.readOutline(host)[1].reference.uri, targetUri);

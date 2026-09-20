@@ -36,6 +36,8 @@ function renderSegs(el, segs) {
   // beginning with a chip — a block whose only content is a reference, which is Tana's full-reference presentation —
   // gets a zero-width space to hold it. Typing there prepends text and the block becomes an inline reference.
   if (segs.length && !('text' in segs[0])) nodes.unshift(document.createTextNode(CARET_ANCHOR));
+  // and none after one that ends the field either, which is why the caret showed at the start of such a line but not at its end
+  if (segs.length && !('text' in segs.at(-1))) nodes.push(document.createTextNode(CARET_ANCHOR));
   el.replaceChildren(...nodes);
 }
 // Plain http(s) URLs inside a text run become clickable without leaving the text editable: readSegs reads the

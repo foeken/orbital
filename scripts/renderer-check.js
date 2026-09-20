@@ -104,7 +104,8 @@ assert.match(source, /f\.node\.kind === 'block' && f\.node\.done != null \? 0 : 
 assert.match(source, /if \(\(isTask\(display\) && displayOn\('status'\)\) \|\| \(!isTask\(display\) && isCheckboxBlock\(display\)\)\)/);
 assert.match(source, /function inheritCheckbox\(parent, nodeId\)/);
 assert.match(source, /const canEditNode = \(node\) => !!node && node\.editable !== false;/);
-assert.match(source, /check\.disabled = reference \? !canEditNode\(display\) : !canEditItem\(item\);/);
+// a resolved reference (native embed or full-line) checks its target off; an ordinary row checks itself
+assert.match(source, /check\.disabled = target \? !canEditNode\(display\) : !canEditItem\(item\);/);
 assert.match(source, /if \(!canEditItem\(item\)\) \{/);
 assert.match(source, /tana\.taskMeta\(docId\)/);
 assert.match(source, /const taskMetaById = new Map\(\), taskMetaLoading = new Set\(\), taskMetaFailed = new Map\(\);/);

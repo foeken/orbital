@@ -12,9 +12,16 @@ async function outlineWithReferences(doc) {
   return resolveReferences(content.readOutline(doc));
 }
 // The reference rows of any outline (content embeds, chat attachments and proposals) resolved in one place.
+// A block whose whole content is one mention is Tana's full-reference presentation: it is resolved like a native
+// embed so the row can show the node it points at, while keeping its own identity and its editable text.
 async function resolveReferences(nodes) {
   const refs = [];
-  const visit = rows => { for (const n of rows) { if (n.type === 'reference') refs.push(n.reference); visit(n.children || []); } };
+  const lone = n => n.segments?.length === 1 && n.segments[0].mention;
+  const visit = rows => { for (const n of rows) {
+    if (n.type === 'reference') refs.push(n.reference);
+    else { const one = lone(n); if (one) refs.push(n.reference = { uri: one.uri, label: one.label }); }
+    visit(n.children || []);
+  } };
   visit(nodes);
   const uris = [...new Set(refs.map(r => r.uri).filter(uri => typeof uri === 'string' && DOC_URI.test(uri)))];
   const targets = new Map();

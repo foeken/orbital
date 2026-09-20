@@ -478,12 +478,13 @@ function codexHeader() {
 function nodeEl(node, docId, parent) {
   const item = mkItem(docId, node, parent);
   const target = referenceTarget(node), display = target || node, reference = isReference(node);
+  const fullref = !!target && !reference; // a line that is one mention: the row is the node, the text stays editable
   const has = hasKids(item), opened = isOpen(item);
   const expandable = has || (!node.draft && canEditItem(item) && (node.kind === 'document' || node.done != null || ['paragraph', 'bullet', 'numbered'].includes(node.block)));
   const el = document.createElement('div');
   const heading = headingOf(node); // a heading arrives as node.heading or as the heading1-3 block type
   const blockClass = node.kind === 'block' ? ' t-' + (isDivider(node) ? 'divider' : blockTypeOf(node)) : '';
-  el.className = 'node ' + node.kind + (reference ? ' reference' : '') + blockClass + (heading ? ' h' + heading : '') + (display.done ? ' done' : '') + (has ? ' has' : '') + (has && !opened ? ' collapsed' : '') + (node.draft ? ' draft' : '');
+  el.className = 'node ' + node.kind + (reference ? ' reference' : '') + (fullref ? ' fullref' : '') + blockClass + (heading ? ' h' + heading : '') + (display.done ? ' done' : '') + (has ? ' has' : '') + (has && !opened ? ' collapsed' : '') + (node.draft ? ' draft' : '');
   el.dataset.key = item.key;
   const line = document.createElement('div'); line.className = 'line';
   const chev = document.createElement('button'); chev.className = 'chev'; chev.tabIndex = -1;
@@ -502,8 +503,8 @@ function nodeEl(node, docId, parent) {
     check.type = 'checkbox'; check.className = 'check'; check.checked = !!display.done; check.tabIndex = -1;
     if (isTask(display) && display.stateType === 'proposed') check.classList.add('inbox'); // not accepted yet: a dashed box
     check.onmousedown = (e) => e.preventDefault();
-    check.disabled = reference ? !canEditNode(display) : !canEditItem(item);
-    check.onclick = reference && canEditNode(display) ? () => toggleReference(node) : canEditItem(item) ? () => (isTask(node) ? toggleDone(item) : toggleCheckbox(item)) : null;
+    check.disabled = target ? !canEditNode(display) : !canEditItem(item);
+    check.onclick = target && canEditNode(display) ? () => toggleReference(node) : canEditItem(item) ? () => (isTask(node) ? toggleDone(item) : toggleCheckbox(item)) : null;
     line.append(check);
   }
   const body = document.createElement('div'); body.className = 'body'; // text + meta + chips; only .text is editable
@@ -525,7 +526,8 @@ function nodeEl(node, docId, parent) {
   } else {
     if (canEditText(item)) text.contentEditable = 'plaintext-only'; else text.tabIndex = -1;
     text.spellcheck = false;
-    renderSegs(text, pending.has(item.key) ? pending.get(item.key).segs : reference ? [{ text: referenceLabel(node) }] : segsOf(node));
+    // a full reference reads its label from the target, like the rest of the row, so a rename in Tana shows through
+    renderSegs(text, pending.has(item.key) ? pending.get(item.key).segs : reference ? [{ text: referenceLabel(node) }] : fullref ? [{ mention: { uri: node.reference.uri, label: referenceLabel(node) } }] : segsOf(node));
     text.classList.toggle('chiponly', chipOnly(text));
   }
   body.append(text);

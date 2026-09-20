@@ -973,6 +973,9 @@ function runReferenceEmbedRenderCheck() {
     const isImage = () => false, taskSummary = () => null, chipEl = () => ({}), iconSvg = () => '';
     const documentSummary = () => null, observeMeta = () => {};
     const tana = {};
+    let toggled = null;
+    const toggleReference = (node) => { toggled = 'reference:' + node.reference.uri; };
+    const toggleDone = () => { toggled = 'own task'; }, toggleCheckbox = () => { toggled = 'own checkbox'; };
     const document = { createElement: (tagName) => {
       const classes = new Set();
       return { tagName, children: [], dataset: {}, style: { setProperty() {} }, classList: {
@@ -984,7 +987,15 @@ function runReferenceEmbedRenderCheck() {
     ${presentation}
     ${canExpand}
     ${functionSource('nodeEl')}
-    (targetEditable) => {
+    const parentItem = { node: { kind: 'document', editable: true } };
+    const built = (node) => {
+      const el = nodeEl(node, 'tana:doc:01j0container000000000000', parentItem);
+      const line = el.children[0], text = line.children.at(-1).children[0];
+      const check = line.children.find((kid) => kid.tagName === 'input');
+      return { className: el.className, editable: text.contentEditable === 'plaintext-only', rendered: rendered.get(text),
+        checked: check ? !!check.checked : null, disabled: check ? !!check.disabled : null, toggles: check && check.onclick ? (check.onclick(), toggled) : null };
+    };
+    ({ embed: (targetEditable) => {
       const embedded = {
         id: 'block-identity', kind: 'block', type: 'reference', editable: false,
         text: 'native embed text', segments: [{ text: 'native embed text' }],
@@ -993,18 +1004,39 @@ function runReferenceEmbedRenderCheck() {
       const el = nodeEl(embedded, 'tana:doc:01j0container000000000000', { node: { kind: 'document', editable: true } });
       const text = el.children[0].children.at(-1).children[0];
       return { key: el.dataset.key, editable: text.contentEditable === 'plaintext-only', rendered: rendered.get(text) };
-    };
+    }, built });
   `);
-  assert.deepEqual(plain(api(true)), {
+  assert.deepEqual(plain(api.embed(true)), {
     key: 'tana:doc:01j0container000000000000/block-identity',
     editable: true,
     rendered: [{ text: 'Resolved target' }],
   }, 'a resolved reference embed displays its target and edits that target, keeping the original block identity');
-  assert.deepEqual(plain(api(false)), {
+  assert.deepEqual(plain(api.embed(false)), {
     key: 'tana:doc:01j0container000000000000/block-identity',
     editable: false,
     rendered: [{ text: 'Resolved target' }],
   }, 'a reference to a read-only target stays read-only');
+
+  // A line whose whole content is one mention is Tana's full-reference presentation: the row is the task it points
+  // at, box and all, while the block keeps its own identity and its editable text.
+  const TARGET = { id: 'tana:text:01j0task00000000000000000', text: 'Ship the thing', kind: 'document', icon: 'task', done: 0, stateType: 'open', editable: true };
+  const mention = { mention: { label: 'Stale label', uri: TARGET.id } };
+  const line = (segments, resolved = true) => ({ id: 'n1', kind: 'block', text: segments.map((s) => s.text ?? s.mention.label).join(''), segments,
+    reference: { uri: TARGET.id, label: 'Stale label', ...(resolved ? { node: TARGET } : {}) } });
+
+  const full = plain(api.built(line([mention])));
+  assert.ok(full.className.includes('fullref'), 'the row says it stands in for the node it points at, so the selection can be drawn around all of it');
+  assert.deepEqual(full.rendered, [{ mention: { uri: TARGET.id, label: 'Ship the thing' } }], 'and reads its label from the target, so a rename in Tana shows through');
+  assert.deepEqual([full.checked, full.disabled, full.toggles], [false, false, 'reference:' + TARGET.id], 'its box is the target task\'s, so the task can be checked off from the line referencing it');
+  assert.equal(full.editable, true, 'the text stays editable: typing beside the chip is what turns the row back into an ordinary line');
+
+  const beside = plain(api.built(line([mention, { text: ' by Friday' }])));
+  assert.ok(!beside.className.includes('fullref'), 'text beside the reference makes it an ordinary line with a link again');
+  assert.deepEqual([beside.rendered, beside.checked], [[mention, { text: ' by Friday' }], null], 'which shows the stored segments and no box of its own');
+
+  const unresolved = plain(api.built(line([mention], false)));
+  assert.ok(!unresolved.className.includes('fullref'), 'a reference whose target could not be read stays the plain chip it was');
+  assert.deepEqual(unresolved.rendered, [mention], 'with the label the block stored');
 }
 
 async function runVisibilityPickerCheck() {
@@ -3461,7 +3493,8 @@ function runCurrentNodeStatusCheck() {
     const allDocs = () => docs;
     const focused = () => (focusedKey ? { key: focusedKey, offset: 0 } : null);
     const asDoc = (n) => n;
-    ${sourceBetween('const referenceTarget =', '\n')}
+    const segsOf = (n) => (n.segments || (n.text ? [{ text: n.text }] : []));
+    ${sourceBetween('const isReference =', 'const referenceLabel =')}
     ${sourceBetween('const isTask =', '\n')}
     ${sourceBetween('const canEditNode =', '\n')}
     const selKeys = () => [];  // nothing selected: the palette is about the current node, not a selection
@@ -3483,17 +3516,20 @@ function runCurrentNodeStatusCheck() {
   const TASK = { id: 'tana:text:task1', kind: 'document', icon: 'task', text: 'Buy milk', stateType: 'proposed' };
   const DATE = { id: 'tana:text:day', kind: 'document', icon: 'calendar', text: '2026-09-17' };
   const row = (node, docId) => ({ key: 'k', node, docId });
+  // how the app itself puts a task on a date page (renderer/tasks.js): a block whose whole content is one mention,
+  // resolved by main into the same reference a native embed carries
+  const refRow = (id) => ({ id, kind: 'block', text: 'Buy milk', segments: [{ mention: { uri: TASK.id, label: 'Buy milk' } }], reference: { uri: TASK.id, node: TASK } });
 
   assert.deepEqual(plain(api.at({ docs: [TASK], items: [['k', row(TASK, TASK.id)]], focusedKey: 'k' })),
     { on: TASK.id, rows: ['Set status'] }, 'a task listed in a view is the current node when the caret is in it');
   assert.deepEqual(plain(api.at({ zoom: { docId: DATE.id, nodeId: null }, docs: [DATE, TASK],
-      items: [['k', row({ id: 'n1', text: '', reference: { node: TASK } }, DATE.id)]], focusedKey: 'k' })),
+      items: [['k', row(refRow('n1'), DATE.id)]], focusedKey: 'k' })),
     { on: TASK.id, rows: ['Set status'] }, 'and so is a task referenced from a date page: the row, not the date holding it');
   assert.deepEqual(plain(api.at({ zoom: { docId: DATE.id, nodeId: null }, docs: [DATE],
-      items: [['k', row({ id: 'n3', text: '', reference: { node: TASK } }, DATE.id)]], focusedKey: 'k' })),
+      items: [['k', row(refRow('n3'), DATE.id)]], focusedKey: 'k' })),
     { on: TASK.id, rows: ['Set status'] }, 'even when that task sits in no view: a referenced document need not be one the app has listed');
   assert.deepEqual(plain(api.at({ zoom: { docId: DATE.id, nodeId: null }, docs: [DATE],
-      items: [['k', row({ id: 'n2', text: 'just a note' }, DATE.id)]], focusedKey: 'k' })),
+      items: [['k', row({ id: 'n2', kind: 'block', text: 'just a note' }, DATE.id)]], focusedKey: 'k' })),
     { on: DATE.id, rows: [] }, 'while a plain note is nothing on its own, so it stays the page it belongs to, which has no status');
 }
 // A saved search page lists documents the way a view does, but its rows live in kids rather than in any view's nodes.
@@ -4391,6 +4427,7 @@ function runReferenceCaretCheck() {
     };
     ({ build, readSegs, chipOnly, plainOf,
        firstOf: (el) => (el.childNodes[0].nodeType === 3 ? ['text', el.childNodes[0].data] : ['element', el.childNodes[0].className]),
+       lastOf: (el) => { const n = el.childNodes.at(-1); return n.nodeType === 3 ? ['text', n.data] : ['element', n.className]; },
        chipOf: (el) => el.childNodes.find((n) => n.nodeType === 1),
        place: (el, offset) => { placed = null; setCaret(el, offset); const at = placed[1]; return [placed[0], at.nodeType === 3 ? (at.data === '\u200b' ? 'anchor' : at.data) : 'chip', placed[2]]; },
        offsetAt: (el, node, at) => { focus = [node, at]; return caretOffset(el); },
@@ -4402,6 +4439,7 @@ function runReferenceCaretCheck() {
 
   const sole = api.build([mention]);
   assert.deepEqual(plain(api.firstOf(sole)), ['text', ANCHOR], 'a block that is only a reference gets a caret position before the chip');
+  assert.deepEqual(plain(api.lastOf(sole)), ['text', ANCHOR], 'and one after it: Chromium paints no caret after a non-editable inline that ends the field either');
   assert.deepEqual(plain(api.readSegs(sole)), [mention], 'and the anchor is not content: the block still stores one mention and no text');
   assert.equal(api.chipOnly(sole), true, 'the row is still the full-reference presentation');
   assert.deepEqual(plain(api.place(sole, 0)), ['setStart', 'anchor', 0],
@@ -4418,10 +4456,12 @@ function runReferenceCaretCheck() {
 
   const trailing = api.build([{ text: 'see ' }, mention]);
   assert.deepEqual(plain(api.firstOf(trailing)), ['text', 'see '], 'a row that starts with text needs no anchor and gets none');
+  assert.deepEqual(plain(api.lastOf(trailing)), ['text', ANCHOR], 'a row that ends with a chip is anchored after it, so the caret shows at the end of the line');
   assert.deepEqual(plain(api.readSegs(trailing)), [{ text: 'see ' }, mention], 'and is stored exactly as before');
   // A leading chip with text after it: the anchor sits before the chip, so every offset past it has to be counted
   // without it or the caret lands one character short of where it was asked for.
   const leading = api.build([mention, { text: ' now' }]);
+  assert.deepEqual(plain(api.lastOf(leading)), ['text', ' now'], 'a row ending in text needs no anchor there');
   assert.deepEqual(plain(api.readSegs(leading)), [mention, { text: ' now' }], 'the anchor is no part of what such a row stores');
   assert.deepEqual(plain(api.place(leading, 17)), ['setStart', ' now', 4], 'the end of the row is the end of its text');
   assert.deepEqual(plain(api.place(leading, 13)), ['setStartAfter', 'chip', null], 'and the position between the chip and the text is still after the chip');

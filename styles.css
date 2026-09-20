@@ -248,6 +248,11 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 /* A lone chip (Tana's full-reference presentation) keeps its caret: renderSegs anchors a position before it, so the
    caret can be put there and typing prepends text, which is what turns the block into an inline reference. */
 .text.chiponly:focus .mention, .selected .text.chiponly .mention, .reference .text:not([contenteditable]):focus { outline: 2px solid #b5d0ee; outline-offset: 2px; border-radius: 3px; }
+/* A resolved full reference stands in for the node it points at — its box, its status, its tags — so the focus and
+   the selection are drawn around the whole row rather than around the chip alone. */
+.node.fullref .text.chiponly .mention { outline: none; }
+.node.fullref:focus-within > .line, .selected.node.fullref > .line { outline: 2px solid #b5d0ee; outline-offset: 2px; border-radius: 4px; }
+.node.fullref.done > .line .text { color: #999; text-decoration: line-through; }
 .text .mention { color: #508fbb; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .text .mention:hover { color: #3a75a3; }
 /* inline marks on a text run (readOutline segments): bold, italic, strike, code, and link marks */
@@ -492,6 +497,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .text.image.loading { background: #303436; }
 [data-theme="dark"] .text.image:focus img, [data-theme="dark"] .selected .text.image img { outline-color: #58768a; }
 [data-theme="dark"] .text.chiponly:focus .mention, [data-theme="dark"] .selected .text.chiponly .mention, [data-theme="dark"] .reference .text:not([contenteditable]):focus { outline-color: #58768a; }
+[data-theme="dark"] .node.fullref:focus-within > .line, [data-theme="dark"] .selected.node.fullref > .line { outline-color: #58768a; }
 [data-theme="dark"] .text .mention { color: #8fc1e1; }
 [data-theme="dark"] .text .mention:hover { color: #b5ddf4; }
 [data-theme="dark"] .text code { background: #303436; }

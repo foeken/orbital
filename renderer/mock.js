@@ -88,6 +88,8 @@ function mockApi() {
     block('Context', [], 2),
     block('First point about task ' + i, [block('Detail A'), block('Detail B', [block('Deeper detail')])]),
     block([{ text: 'Discuss with ' }, { mention: { label: 'Sam Okafor', uri: 'tana:user-profile:sam' } }, { text: ' and see ' }, { mention: { label: titles[2], uri: 'mockdoc2' } }]),
+    // a line that is only a mention: Tana's full-reference presentation, so the row shows (and checks off) that task
+    block([{ mention: { label: 'Stale label', uri: 'mockdoc1' } }]),
     // every mark and block type the outline can receive, so formatting is visible without the main process
     block([{ text: 'Marks: ' }, { text: 'bold', marks: { bold: true } }, { text: ', ' }, { text: 'italic', marks: { italic: true } }, { text: ', ' },
       { text: 'strike', marks: { strike: true } }, { text: ', ' }, { text: 'code', marks: { code: true } }, { text: ', ' },
@@ -177,8 +179,14 @@ function mockApi() {
         && (!filter.states || listed(d, filter))
         && d.text.toLowerCase().includes(text)).map(info));
     },
-    // references resolve on read, as main does: the row always shows the target's current title and state
-    children: async (docId) => structuredClone(content[docId] || []).map((n) => (n.type === 'reference' ? { ...n, reference: { ...n.reference, node: info([...all, ...members].find((d) => d.id === n.reference.uri)) } } : n)),
+    // references resolve on read, as main does: the row always shows the target's current title and state, and a
+    // block whose whole content is one mention is resolved the same way
+    children: async (docId) => structuredClone(content[docId] || []).map((n) => {
+      const one = n.type !== 'reference' && n.segments?.length === 1 && n.segments[0].mention;
+      const ref = n.type === 'reference' ? n.reference : one ? { uri: one.uri, label: one.label } : null;
+      const target = ref && [...all, ...members].find((d) => d.id === ref.uri);
+      return target ? { ...n, reference: { ...ref, node: info(target) } } : n;
+    }),
     node: async (docId) => {
       const d = [...all, ...members].find((x) => x.id === docId);
       if (d) return info(d);
@@ -285,6 +293,19 @@ function mockApi() {
       emit(docId); return n.id;
     }),
     insertChild: async (docId, id, text) => mut(docId, () => { const f = locate(content[docId], id), n = block(text, [], undefined, f.node.kind === 'block' && f.node.done != null ? 0 : undefined); f.node.children.unshift(n); fix(f.node); emit(docId); return n.id; }),
+    insertBefore: async (docId, id, text) => mut(docId, () => {
+      const f = locate(content[docId], id), n = block(text, [], undefined, f.node.kind === 'block' && f.node.done != null ? 0 : undefined);
+      f.list.splice(f.index, 0, n);
+      emit(docId); return n.id;
+    }),
+    split: async (docId, id, before, after, asChild) => mut(docId, () => {
+      const f = locate(content[docId], id), done = f.node.kind === 'block' && f.node.done != null ? 0 : undefined;
+      f.node.text = plainOf(before); f.node.segments = segsOf(before);
+      const n = block(plainOf(after), [], undefined, done);
+      n.segments = segsOf(after);
+      if (asChild) { f.node.children.unshift(n); fix(f.node); } else f.list.splice(f.index + 1, 0, n);
+      emit(docId); return n.id;
+    }),
     remove: async (docId, id) => mut(docId, () => { const f = locate(content[docId], id); f.list.splice(f.index, 1); const p = f.trail.at(-1); if (p) fix(p.node); emit(docId); }),
     removeMany: async (docId, ids) => mut(docId, () => { for (const id of [...ids].reverse()) { const f = locate(content[docId], id); f.list.splice(f.index, 1); const p = f.trail.at(-1); if (p) fix(p.node); } emit(docId); }),
     indent: async (docId, id) => mut(docId, () => {
