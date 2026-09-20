@@ -2,16 +2,16 @@
   "name": "tana-tasks",
   "version": "0.3.0",
   "private": true,
-  "description": "Tana companion: an outliner over your Tana documents, kept live over Tana's platform sync",
+  "description": "Orbital: an outliner over your Tana documents, kept live over Tana's platform sync",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "tana": "electron scripts/platform-cli.js",
     "check": "node scripts/db-check.js && node scripts/sdk-check.js && node scripts/renderer-check.js && node scripts/renderer-behavior-check.js && node scripts/updater-check.js",
     "icon": "electron scripts/build-icon.js",
-    "package": "electron-packager . 'Tana Companion' --platform=darwin --arch=arm64 --icon=build/icon.icns --out=dist --overwrite --ignore='^/(dist|docs|build/icon\\.png|\\.git|TASKS\\.md|AGENTS\\.md)' --app-bundle-id=inc.tana.companion",
+    "package": "electron-packager . 'Orbital' --platform=darwin --arch=arm64 --icon=build/icon.icns --out=dist --overwrite --ignore='^/(dist|docs|build/icon\\.png|\\.git|TASKS\\.md|AGENTS\\.md)' --app-bundle-id=com.dreetje.orbital",
     "release": "sh scripts/release.sh",
-    "postinstall": "plutil -replace CFBundleName -string 'Tana Companion' node_modules/electron/dist/Electron.app/Contents/Info.plist && plutil -replace CFBundleDisplayName -string 'Tana Companion' node_modules/electron/dist/Electron.app/Contents/Info.plist && codesign --force --deep --sign - node_modules/electron/dist/Electron.app || true"
+    "postinstall": "sh -c \"plutil -replace CFBundleName -string Orbital node_modules/electron/dist/Electron.app/Contents/Info.plist && plutil -replace CFBundleDisplayName -string Orbital node_modules/electron/dist/Electron.app/Contents/Info.plist && plutil -replace CFBundleIdentifier -string com.dreetje.orbital.dev node_modules/electron/dist/Electron.app/Contents/Info.plist && cp build/icon.icns node_modules/electron/dist/Electron.app/Contents/Resources/electron.icns && codesign --force --deep --sign - node_modules/electron/dist/Electron.app\" || true"
   },
   "dependencies": {
     "@bufbuild/protobuf": "^2.15.0",
@@ -23,5 +23,5 @@
     "@electron/packager": "^20.3.0",
     "electron": "^44.3.0"
   },
-  "productName": "Tana Companion"
+  "productName": "Orbital"
 }

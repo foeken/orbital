@@ -39,12 +39,12 @@ async function check({ manual = false } = {}) {
     }
     const release = await latestRelease();
     if (!isNewer(release.tag_name, app.getVersion())) {
-      if (manual) await dialog.showMessageBox({ message: `Tana Companion ${app.getVersion()} is up to date.` });
+      if (manual) await dialog.showMessageBox({ message: `Orbital ${app.getVersion()} is up to date.` });
       return;
     }
     const { response } = await dialog.showMessageBox({
       type: 'question',
-      message: `Tana Companion ${release.tag_name.replace(/^v/, '')} is available.`,
+      message: `Orbital ${release.tag_name.replace(/^v/, '')} is available.`,
       detail: `You have ${app.getVersion()}. The app restarts to finish updating.`,
       buttons: ['Update and Restart', 'Later'], defaultId: 0, cancelId: 1,
     });
@@ -63,9 +63,9 @@ async function install(release) {
   if (!res.ok) throw new Error(`Download failed with ${res.status}`);
   await pipeline(Readable.fromWeb(res.body), createWriteStream(zip)); // streamed: the bundle is well over 100 MB
   await run('/usr/bin/ditto', ['-xk', zip, dir]);
-  const fresh = path.join(dir, 'Tana Companion.app');
+  const fresh = path.join(dir, 'Orbital.app');
   await fs.access(path.join(fresh, 'Contents', 'Info.plist')); // a half-downloaded zip must not reach the rm below
-  const target = path.resolve(app.getPath('exe'), '../../..'); // …/Tana Companion.app/Contents/MacOS/<exe>
+  const target = path.resolve(app.getPath('exe'), '../../..'); // …/Orbital.app/Contents/MacOS/<exe>
   if (!target.endsWith('.app')) throw new Error('Cannot locate the running app bundle');
   // The zip came over https from GitHub; before anything is replaced, codesign confirms the bundle inside it is
   // intact and signed by the team that signed the running copy. A tampered, truncated or ad-hoc build fails here,

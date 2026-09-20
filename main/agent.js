@@ -235,7 +235,7 @@ function appServerRpc(timeoutMs = 20000, host, onNote) {
     setTimeout(() => { if (waiting.delete(id)) reject(new Error('app-server timed out')); }, timeoutMs).unref?.();
     child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
-  return { call, stop, ready: call('initialize', { clientInfo: { name: 'tana-companion', title: 'Tana Companion', version: '1' } }) };
+  return { call, stop, ready: call('initialize', { clientInfo: { name: 'orbital', title: 'Orbital', version: '1' } }) };
 }
 // The refresh asks this once for every linked node; it is one process, opened and closed around the read.
 // One child per machine that holds any of these tasks, not one per task. A machine that cannot be reached leaves its

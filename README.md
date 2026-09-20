@@ -1,4 +1,4 @@
-# Tana Companion
+# Orbital
 
 A small macOS app for the new Tana (home.tana.inc), rendered the way Tana's own outliner reads: every
 line is a node, top-level rows are documents and their children are the document's content blocks.
@@ -102,7 +102,7 @@ every non-trivial change is expected to leave a check behind that fails when the
 
 ```sh
 npm run check                       # all offline checks
-npm run package                     # dist/Tana Companion-darwin-arm64/Tana Companion.app
+npm run package                     # dist/Orbital-darwin-arm64/Orbital.app
 npm run tana -- whoami              # the platform, without the UI
 npm run icon                        # re-render build/icon.icns
 node scripts/build-icons.js <dir>   # regenerate icons.js from the line icon set

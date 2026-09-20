@@ -380,7 +380,9 @@ if (process.env.TANA_MAIN_TEST) {
     accessContext, inboxCount, S,
     testRuntime: (runtime) => { S.client = runtime.client; S.me = runtime.me; S.win = runtime.win; S.session = runtime.session; S.userData = runtime.userData || null; S.activeView = runtime.activeView || 'inbox'; S.activeFilter = undefined; if (S.client) listFilter(S.client); } };
 } else {
-  app.setName('Tana Companion');
+  app.setName('Orbital');
+  // The About panel reads the bundle's plist, which in a dev run is Electron's own name and version; say it here instead.
+  app.setAboutPanelOptions({ applicationName: 'Orbital', applicationVersion: app.getVersion(), version: '', iconPath: path.join(__dirname, 'build', 'icon.png') });
   app.setPath('userData', path.join(app.getPath('appData'), 'tana-tasks')); // before 'ready': same S.session/cache for dev runs, the CLI and the packaged app
 
   app.whenReady().then(async () => {

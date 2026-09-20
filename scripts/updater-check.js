@@ -9,7 +9,7 @@ assert.equal(isNewer('v0.1.9', '0.2.0'), false, 'a higher patch in a lower minor
 assert.equal(isNewer('v0.2.10', '0.2.9'), true, 'versions are numbers, not strings');
 assert.equal(isNewer('v1.0.0', '0.9.9'), true);
 assert.equal(isNewer('0.2.1', '0.2.0'), true, 'the v prefix is optional');
-assert.equal(teamOf('Executable=/x\nIdentifier=inc.tana.companion\nTeamIdentifier=ABCDE12345\nSealed Resources=none'), 'ABCDE12345');
-assert.equal(teamOf('Identifier=inc.tana.companion\nSignature=adhoc\nTeamIdentifier=not set'), null, 'an ad-hoc build belongs to no team');
-assert.equal(teamOf('Identifier=inc.tana.companion'), null, 'and no line at all is no team either');
+assert.equal(teamOf('Executable=/x\nIdentifier=com.dreetje.orbital\nTeamIdentifier=ABCDE12345\nSealed Resources=none'), 'ABCDE12345');
+assert.equal(teamOf('Identifier=com.dreetje.orbital\nSignature=adhoc\nTeamIdentifier=not set'), null, 'an ad-hoc build belongs to no team');
+assert.equal(teamOf('Identifier=com.dreetje.orbital'), null, 'and no line at all is no team either');
 console.log('updater ok');

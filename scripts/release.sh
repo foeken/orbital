@@ -23,12 +23,12 @@ version=$(node -p "require('./package.json').version")
 # @electron/osx-sign signs the helpers inside-out with the hardened runtime and Electron's entitlements, and
 # @electron/notarize submits, waits and staples the ticket into the bundle. Both already ship with the packager.
 npm run package -- --osx-sign --osx-notarize.keychainProfile="$profile"
-app="dist/Tana Companion-darwin-arm64/Tana Companion.app"
+app="dist/Orbital-darwin-arm64/Orbital.app"
 xcrun stapler validate "$app"
 spctl --assess --type execute -vv "$app" # what Gatekeeper will say on a stranger's Mac, before it is published
 zip="dist/Tana-Companion-$version-arm64.zip"
 rm -f "$zip"
 ditto -c -k --sequesterRsrc --keepParent "$app" "$zip"
 git push --follow-tags
-gh release create "v$version" "$zip" --repo "$releases" --title "v$version" --notes "Tana Companion $version for Apple Silicon. Signed and notarized; unzip and move it to Applications."
+gh release create "v$version" "$zip" --repo "$releases" --title "v$version" --notes "Orbital $version for Apple Silicon. Signed and notarized; unzip and move it to Applications."
 echo "released v$version to $releases"

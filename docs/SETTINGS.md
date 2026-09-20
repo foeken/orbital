@@ -1,7 +1,7 @@
 # SETTINGS.md — the app's own settings document
 
 Everything this app decides *about your content* lives in one document in Tana, so the choices you make on one
-machine are the choices the app opens with on the next. The document is created by the app, titled **Tana Companion**,
+machine are the choices the app opens with on the next. The document is created by the app, titled **Orbital**,
 and its first line says so. Deleting it in Tana puts every synced choice back to its default; nothing else breaks.
 
 ## Why a document of our own

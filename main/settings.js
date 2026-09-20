@@ -19,7 +19,7 @@ const content = require('../sdk/content');
 const { initDocument, ulid } = require('../sdk/node');
 const { S, report, send } = require('./state');
 
-const TITLE = 'Tana Companion'; // how a machine that has never seen the document finds it
+const TITLE = 'Orbital'; // how a machine that has never seen the document finds it (the node was renamed by hand from "Tana Companion")
 const POINTER = 'settingsDoc'; // local, never synced: this machine's note of which document that is
 const ROOT = 'settings'; // the root container the keys live in
 
@@ -114,7 +114,7 @@ async function create() {
 }
 // One line of content, so the document explains itself to whoever opens it in Tana rather than sitting there as an
 // empty note with a curious name. Written only into an empty first line: anything you write there is yours.
-const EXPLAINER = 'Settings for the Tana Companion app — hidden titles, view filters, type icons and the rest — kept here so they follow you between machines. The app manages this document; deleting it puts those choices back to their defaults.';
+const EXPLAINER = 'Settings for the Orbital app — hidden titles, view filters, type icons and the rest — kept here so they follow you between machines. The app manages this document; deleting it puts those choices back to their defaults.';
 function describe(doc) {
   try {
     const [first] = content.readOutline(doc);
