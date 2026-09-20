@@ -1078,6 +1078,9 @@ function runReferenceEmbedRenderCheck() {
 
   const closed = plain(api.built(line([mention])));
   assert.deepEqual([closed.kidKeys, closed.loadedFrom], [null, null], 'a full reference starts closed and reads nothing until it is opened');
+  const alreadyLoaded = plain(api.built(line([mention]), { kids: [TARGET.id, [{ id: 'kid1', kind: 'block', text: 'a step of the task' }]] }));
+  assert.deepEqual([alreadyLoaded.kidKeys, alreadyLoaded.loadedFrom], [null, null],
+    'and stays closed even when that document is already loaded, so a pasted reference arrives collapsed rather than opened by the block default');
   const loading = plain(api.built(line([mention]), { open: true }));
   assert.deepEqual([loading.kidKeys, loading.loadedFrom], [[], TARGET.id], 'opening it loads the target document, not the one the block lives in');
   const withKids = plain(api.built(line([mention]), { open: true, kids: [TARGET.id, [{ id: 'kid1', kind: 'block', text: 'a step of the task' }]] }));

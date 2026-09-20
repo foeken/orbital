@@ -482,7 +482,10 @@ function nodeEl(node, docId, parent) {
   // Expanding a full reference opens the outline of the node it points at, not the block's own (a block with
   // children is never one): the rows below it belong to that document, so they are built against it.
   const childHost = fullref ? { key: item.key, docId: target.id, node: { ...target, hasChildren: false }, parent: item } : item;
-  const has = hasKids(childHost), opened = isOpen(item);
+  // A reference opens only when it is asked to: isOpen has blocks open by default, which is right for a block's own
+  // children and wrong for another document's — a pasted reference would arrive expanded whenever that document
+  // happened to be loaded already.
+  const has = hasKids(childHost), opened = fullref ? open.get(item.key) === true : isOpen(item);
   const expandable = has || (!node.draft && canEditItem(item) && (node.kind === 'document' || node.done != null || ['paragraph', 'bullet', 'numbered'].includes(node.block)));
   const el = document.createElement('div');
   const heading = headingOf(node); // a heading arrives as node.heading or as the heading1-3 block type
