@@ -782,8 +782,12 @@ async function runCheckboxInheritanceCheck() {
     let seq = 0;
     const tana = {
       setText: async () => { calls.push('setText'); },
-      insertAfter: async () => { const child = { id: 'new' + (++seq), kind: 'block', text: '', done: 0 }; nodes.push(child); calls.push('insertAfter'); return child.id; },
-      insertChild: async () => { const child = { id: 'new' + (++seq), kind: 'block', text: '', done: 0 }; node.children.push(child); calls.push('insertChild'); return child.id; },
+      split: async (_docId, _id, _before, _after, asChild) => {
+        const child = { id: 'new' + (++seq), kind: 'block', text: '', done: 0 };
+        if (asChild) node.children.push(child); else nodes.push(child);
+        calls.push(asChild ? 'split:child' : 'split:sibling');
+        return child.id;
+      },
     };
     ${inheritCheckbox}
     ${splitNode}
@@ -792,12 +796,12 @@ async function runCheckboxInheritanceCheck() {
   const after = makeHarness(false);
   await after.split();
   assert.deepEqual(plain(after.state()), {
-    calls: ['insertAfter'], child: { id: 'new1', kind: 'block', text: '', done: 0 },
+    calls: ['split:sibling'], child: { id: 'new1', kind: 'block', text: '', done: 0 },
   }, 'Enter after a checkbox keeps the new sibling as an unchecked native checkbox');
   const under = makeHarness(true);
   await under.split();
   assert.deepEqual(plain(under.state()), {
-    calls: ['insertChild'], child: { id: 'new1', kind: 'block', text: '', done: 0 },
+    calls: ['split:child'], child: { id: 'new1', kind: 'block', text: '', done: 0 },
   }, 'Enter under a checkbox converts the new child to an unchecked native checkbox');
   assert.deepEqual(plain(draftNode({ key: 'doc/checkbox', node: { kind: 'block', done: 1 } })), { id: 'draft:doc/checkbox', text: '', kind: 'block', done: 0, draft: true }, 'empty checkbox draft is unchecked and local-only until input materialises it');
 }
@@ -1037,6 +1041,10 @@ function runReferenceEmbedRenderCheck() {
   const unresolved = plain(api.built(line([mention], false)));
   assert.ok(!unresolved.className.includes('fullref'), 'a reference whose target could not be read stays the plain chip it was');
   assert.deepEqual(unresolved.rendered, [mention], 'with the label the block stored');
+
+  const styles = fs.readFileSync(require.resolve('../styles.css'), 'utf8');
+  assert.match(styles, /\.node\.fullref \.text \.mention \{[^}]*color: inherit[^}]*text-decoration: none/,
+    'and the row that is the node reads as a title: the blue underlined link is for a reference sitting among text');
 }
 
 async function runVisibilityPickerCheck() {
@@ -1635,7 +1643,7 @@ async function runPendingSplitDraftCheck() {
     const run = (fn) => fn();
     const tana = {
       setText: async (_docId, id) => { calls.push(['setText', id]); },
-      insertAfter: async () => { calls.push(['insertAfter']); await insertGate; return 'inserted'; },
+      split: async (_docId, id) => { calls.push(['split', id]); await insertGate; return 'inserted'; },
     };
     ${splitNode}
     Object.assign(globalThis, {
@@ -1659,7 +1667,7 @@ async function runPendingSplitDraftCheck() {
       { id: 'source', draft: false, pendingSplit: false, text: 'left' },
       { id: 'inserted', draft: false, pendingSplit: false, text: '-right' },
     ],
-    calls: [['setText', 'source'], ['insertAfter']],
+    calls: [['split', 'source']],
     saves: [['doc/inserted', [{ text: 'typed during insert' }]]],
     focus: { key: 'doc/inserted', offset: 19 },
   }, 'typing into the pending draft survives reload and saves to the inserted block');

@@ -251,6 +251,9 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 /* A resolved full reference stands in for the node it points at — its box, its status, its tags — so the focus and
    the selection are drawn around the whole row rather than around the chip alone. */
 .node.fullref .text.chiponly .mention { outline: none; }
+/* the row is the node, so its title reads as a title: the blue link is for a reference sitting among text, which is
+   the only place it says "this word is somewhere else". The pointer stays, since clicking it still opens the node. */
+.node.fullref .text .mention { color: inherit; text-decoration: none; }
 .node.fullref:focus-within > .line, .selected.node.fullref > .line { outline: 2px solid #b5d0ee; outline-offset: 2px; border-radius: 4px; }
 .node.fullref.done > .line .text { color: #999; text-decoration: line-through; }
 .text .mention { color: #508fbb; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
