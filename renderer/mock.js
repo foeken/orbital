@@ -293,19 +293,6 @@ function mockApi() {
       emit(docId); return n.id;
     }),
     insertChild: async (docId, id, text) => mut(docId, () => { const f = locate(content[docId], id), n = block(text, [], undefined, f.node.kind === 'block' && f.node.done != null ? 0 : undefined); f.node.children.unshift(n); fix(f.node); emit(docId); return n.id; }),
-    insertBefore: async (docId, id, text) => mut(docId, () => {
-      const f = locate(content[docId], id), n = block(text, [], undefined, f.node.kind === 'block' && f.node.done != null ? 0 : undefined);
-      f.list.splice(f.index, 0, n);
-      emit(docId); return n.id;
-    }),
-    split: async (docId, id, before, after, asChild) => mut(docId, () => {
-      const f = locate(content[docId], id), done = f.node.kind === 'block' && f.node.done != null ? 0 : undefined;
-      f.node.text = plainOf(before); f.node.segments = segsOf(before);
-      const n = block(plainOf(after), [], undefined, done);
-      n.segments = segsOf(after);
-      if (asChild) { f.node.children.unshift(n); fix(f.node); } else f.list.splice(f.index + 1, 0, n);
-      emit(docId); return n.id;
-    }),
     remove: async (docId, id) => mut(docId, () => { const f = locate(content[docId], id); f.list.splice(f.index, 1); const p = f.trail.at(-1); if (p) fix(p.node); emit(docId); }),
     removeMany: async (docId, ids) => mut(docId, () => { for (const id of [...ids].reverse()) { const f = locate(content[docId], id); f.list.splice(f.index, 1); const p = f.trail.at(-1); if (p) fix(p.node); } emit(docId); }),
     indent: async (docId, id) => mut(docId, () => {

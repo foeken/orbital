@@ -782,12 +782,8 @@ async function runCheckboxInheritanceCheck() {
     let seq = 0;
     const tana = {
       setText: async () => { calls.push('setText'); },
-      split: async (_docId, _id, _before, _after, asChild) => {
-        const child = { id: 'new' + (++seq), kind: 'block', text: '', done: 0 };
-        if (asChild) node.children.push(child); else nodes.push(child);
-        calls.push(asChild ? 'split:child' : 'split:sibling');
-        return child.id;
-      },
+      insertAfter: async () => { const child = { id: 'new' + (++seq), kind: 'block', text: '', done: 0 }; nodes.push(child); calls.push('insertAfter'); return child.id; },
+      insertChild: async () => { const child = { id: 'new' + (++seq), kind: 'block', text: '', done: 0 }; node.children.push(child); calls.push('insertChild'); return child.id; },
     };
     ${inheritCheckbox}
     ${splitNode}
@@ -796,12 +792,12 @@ async function runCheckboxInheritanceCheck() {
   const after = makeHarness(false);
   await after.split();
   assert.deepEqual(plain(after.state()), {
-    calls: ['split:sibling'], child: { id: 'new1', kind: 'block', text: '', done: 0 },
+    calls: ['insertAfter'], child: { id: 'new1', kind: 'block', text: '', done: 0 },
   }, 'Enter after a checkbox keeps the new sibling as an unchecked native checkbox');
   const under = makeHarness(true);
   await under.split();
   assert.deepEqual(plain(under.state()), {
-    calls: ['split:child'], child: { id: 'new1', kind: 'block', text: '', done: 0 },
+    calls: ['insertChild'], child: { id: 'new1', kind: 'block', text: '', done: 0 },
   }, 'Enter under a checkbox converts the new child to an unchecked native checkbox');
   assert.deepEqual(plain(draftNode({ key: 'doc/checkbox', node: { kind: 'block', done: 1 } })), { id: 'draft:doc/checkbox', text: '', kind: 'block', done: 0, draft: true }, 'empty checkbox draft is unchecked and local-only until input materialises it');
 }
@@ -1677,7 +1673,7 @@ async function runPendingSplitDraftCheck() {
     const run = (fn) => fn();
     const tana = {
       setText: async (_docId, id) => { calls.push(['setText', id]); },
-      split: async (_docId, id) => { calls.push(['split', id]); await insertGate; return 'inserted'; },
+      insertAfter: async () => { calls.push(['insertAfter']); await insertGate; return 'inserted'; },
     };
     ${splitNode}
     Object.assign(globalThis, {
@@ -1701,7 +1697,7 @@ async function runPendingSplitDraftCheck() {
       { id: 'source', draft: false, pendingSplit: false, text: 'left' },
       { id: 'inserted', draft: false, pendingSplit: false, text: '-right' },
     ],
-    calls: [['split', 'source']],
+    calls: [['setText', 'source'], ['insertAfter']],
     saves: [['doc/inserted', [{ text: 'typed during insert' }]]],
     focus: { key: 'doc/inserted', offset: 19 },
   }, 'typing into the pending draft survives reload and saves to the inserted block');
