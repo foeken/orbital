@@ -12,12 +12,14 @@ const railToggle = $('railToggle');
 // The sidebar can be put away by hand; the preference persists like the width and the collapsed sections.
 // Hiding wins over content: a sidebar the user closed must not reappear because the next document has pins.
 // Only the "nothing to show" case composes with it — a node with no sidebar at all stays hidden regardless.
-let railHidden = localStorage.getItem('railHidden') === '1';
+let railHidden = pref('railHidden', false) === true;
 function railOff(empty) { return railHidden || empty; }
 function toggleRail() {
   railHidden = !railHidden;
-  localStorage.setItem('railHidden', railHidden ? '1' : '0');
-  render();
+  setPref('railHidden', railHidden);
+  // Cmd+K closes the palette before running the row, which puts the caret back in the row being edited, so a plain
+  // render would be deferred until the caret left. Showing or hiding the sidebar cannot drop that row, so it forces.
+  render(true);
 }
 railToggle.addEventListener('click', toggleRail);
 // The button only appears when there is a sidebar to toggle; its glyph is the direction it will move the panel.
@@ -45,14 +47,24 @@ railGrip.addEventListener('pointerdown', (e) => {
   };
   railGrip.addEventListener('pointermove', move); railGrip.addEventListener('pointerup', up);
 });
-const relatedBy = new Map(); // docId -> related payload, or null while loading
-const railClosed = new Set(JSON.parse(localStorage.getItem('railClosed') || '[]'));
-// api.related for the zoomed document, fetched once per id; a failure simply leaves the rail empty
+const relatedBy = new Map(); // docId -> related payload, or null while the first one is loading
+const relatedStale = new Set(); // ids whose payload is known to be behind: re-read, but keep showing the old one
+const railClosed = new Set(pref('railClosed', []));
+// api.related for the zoomed document, fetched once per id; a failure simply leaves the rail empty.
+// Not before the sync client exists: main answers then with "not connected to Tana" and logs the throw
+// (the same readiness rule loadAccess and ensureLoaded follow); the render the connection brings asks again.
+// A document that changed is re-read the same way, but its payload stays on screen until the new one lands: adding
+// a row to a page is a change to that page, and dropping the cache made the whole sidebar blank and come back on
+// every edit. The mark is consumed when the fetch starts, so a render during that fetch does not ask again.
 function loadRelated(docId) {
-  if (!tana.related || !isRealId(docId) || relatedBy.has(docId)) return;
-  relatedBy.set(docId, null);
-  tana.related(docId).then((data) => { relatedBy.set(docId, data); renderSoon(); }, () => { relatedBy.delete(docId); });
+  if (!connected || !tana.related || !isRealId(docId)) return;
+  const stale = relatedStale.delete(docId);
+  if (relatedBy.has(docId) && !stale) return;
+  if (!relatedBy.has(docId)) relatedBy.set(docId, null); // nothing to show yet: this is the first read
+  tana.related(docId).then((data) => { relatedBy.set(docId, data); renderSoon(); }, () => { if (!relatedBy.get(docId)) relatedBy.delete(docId); });
 }
+// This document's relations have moved on (an edit, a pin): read them again without taking the sidebar down.
+function refreshRelated(docId) { if (docId) { relatedStale.add(docId); loadRelated(docId); } }
 function railRow(node) {
   const row = document.createElement('div');
   row.className = 'rrow' + (node.done ? ' done' : '');
@@ -165,7 +177,7 @@ function railMetaEl(row) {
 }
 function toggleRailSection(label) {
   if (railClosed.has(label)) railClosed.delete(label); else railClosed.add(label);
-  localStorage.setItem('railClosed', JSON.stringify([...railClosed]));
+  setPref('railClosed', [...railClosed]);
   render(true);
 }
 function railGroups(data) {
@@ -173,6 +185,9 @@ function railGroups(data) {
     ['Pinned', data.pinned || [], data.pinHub],
     ['Outcomes', data.outcomes],
     ['References', data.notes],
+    // the documents that mention this one: one section per typed field, "Mentioned in" last, named by main the way
+    // Tana's own Backlinks panel names them
+    ...(data.backlinks || []).map((group) => [group.label, group.rows]),
   ].filter(([, rows, action]) => (rows && rows.length) || action) : [];
 }
 // One entry of the zoomed node's own history (api.related().changes, newest first). The first line is what the

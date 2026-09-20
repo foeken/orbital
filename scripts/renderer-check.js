@@ -55,7 +55,12 @@ assert.match(source, /const rowHue = r\.node \? r\.node\.hue : r\.hue;/);
 assert.match(source, /const entry = \{ id: n\.id,[^}]*hue: n\.hue \}/);
 assert.match(source, /if \(rowHue != null\) \{ icon\.classList\.add\('hue'\)/);
 assert.match(source, /if \(display\.hue != null\) \{ bullet\.classList\.add\('hue'\)/);
-assert.doesNotMatch(source, /iconSvg:|\.iconSvg\b|setIcon|startDrop/, 'app-local custom icons are gone');
+// Per-node icons are still gone: no node carries markup of its own and nothing is dropped onto a row. What came
+// back is narrower — a glyph chosen for a *type*, kept app-local as a name (main/icons.js), which every document of
+// that type is then drawn with. So the old shape stays out, and what the renderer keeps is a name, never an SVG.
+assert.doesNotMatch(source, /iconSvg:|\.iconSvg\b|startDrop/, 'per-node icons and the drop target are gone');
+assert.match(source, /customIcons\.set\(icon\.name, icon\.svg\)/, 'the renderer registers glyphs main hands it, by name');
+assert.match(source, /typeGlyphs\.set\(icon\.uri, icon\.name\)/, 'and remembers which type wears which, so the picker knows what it has');
 assert.match(source, /scrollIntoView\(\{ block: 'nearest', inline: 'nearest', container: 'nearest' \}\)/);
 // Meetings, Chats and People are no longer views: each was a fixed query over one kind, which is what a saved search
 // is. The kinds stay, so those lists are a search away rather than gone with the pages.
@@ -75,8 +80,8 @@ assert.match(source, /row\.dataset\.sig = rowSig\(item\.node\);[\s\S]*?patched =
 assert.doesNotMatch(source, /groupNoteEl|RESPONSIBILITY_NOTE/, 'a section that explains itself instead of holding rows is gone');
 // folded sections are read back at load (state.js) and written the moment one is folded or unfolded, so a launch
 // draws them folded without a first render that shows the rows and takes them away again
-assert.match(source, /const collapsedGroups = new Set\(JSON\.parse\(localStorage\.getItem\('collapsedGroups'\) \|\| '\[\]'\)\);/, 'the folded sections are restored at load');
-assert.match(source, /if \(!collapsedGroups\.delete\(key\)\) collapsedGroups\.add\(key\);\n  localStorage\.setItem\('collapsedGroups', JSON\.stringify\(\[\.\.\.collapsedGroups\]\)\);/, 'and written on every toggle');
+assert.match(source, /const collapsedGroups = new Set\(pref\('collapsedGroups', \[\]\)\);/, 'the folded sections are restored at load, from the preferences that follow you');
+assert.match(source, /if \(!collapsedGroups\.delete\(key\)\) collapsedGroups\.add\(key\);\n(?:[^\n]*\n)?  setPref\('collapsedGroups', \[\.\.\.collapsedGroups\]\);/, 'and written on every toggle');
 // a page whose sections are all folded away is not an empty page: its headings are drawn, so neither the zoomed
 // "No content" nor a view's "Nothing here yet" may appear under them
 assert.match(source, /if \(parent && !list\.length && !outline\.children\.length\) \{/, 'the zoomed empty note goes by what was drawn, not by the row count');
@@ -109,7 +114,7 @@ assert.match(source, /check\.disabled = target \? !canEditNode\(display\) : !can
 assert.match(source, /if \(!canEditItem\(item\)\) \{/);
 assert.match(source, /tana\.taskMeta\(docId\)/);
 assert.match(source, /const taskMetaById = new Map\(\), taskMetaLoading = new Set\(\), taskMetaFailed = new Map\(\);/);
-assert.match(source, /if \(!connected \|\| !tana\.taskMeta \|\| !isRealId\(docId\) \|\| taskMetaById\.has\(docId\) \|\| taskMetaLoading\.has\(docId\) \|\| \(backoff && Date\.now\(\) < backoff\.until\)\) return;/);
+assert.match(source, /if \(!connected \|\| !tana\.taskMeta \|\| !isRealId\(docId\) \|\| isGone\(docId\) \|\| taskMetaById\.has\(docId\) \|\| taskMetaLoading\.has\(docId\) \|\| \(backoff && Date\.now\(\) < backoff\.until\)\) return;/);
 assert.match(source, /const isRealId = \(id\) => typeof id === 'string' && id\.startsWith\('tana:'\);/);
 // Tana titles are plain text: the @ picker must not open there, so the key types an ordinary character (#53)
 assert.doesNotMatch(source.slice(source.indexOf("titleEl.addEventListener('keydown'"), source.indexOf('// the document Cmd+K context actions')), /startLink/, 'the title keydown handler never opens the link picker');
@@ -117,13 +122,15 @@ assert.match(source, /taskMetaFailed\.set\(docId, \{ until: Date\.now\(\) \+ wai
 // a new connection clears the metadata backoff and refetches the active view and the saved-search list, both of
 // which can fetch before the client existed and neither of which is retried on its own (searchesReconnectCheck
 // in renderer-check.js exercises the searches half of this behaviorally)
-assert.match(source, /const wasConnected = connected;[\s\S]*?if \(connected && !wasConnected\) \{ taskMetaFailed\.clear\(\); loadView\(\); loadSearches\(\); restorePlace\(\); \}/);
+assert.match(source, /const wasConnected = connected;[\s\S]*?if \(connected && !wasConnected\) \{ taskMetaFailed\.clear\(\); loadSearches\(\); restorePlace\(\)\.finally\(\(\) => loadView\(\)\); \}/);
 // a global change (a refresh, a pin, a filter) reloads the cached rows, which the refresh loop wrote before saying so;
 // it must not run the active view's query a second time, and a single document's change patches its row alone
 assert.match(source, /loadRoots\(\)\.then\(renderSoon, showError\)/);
 assert.doesNotMatch(source.slice(source.indexOf('tana.onChanged((docId, info) => {'), source.indexOf('function removeStale')), /loadView\(\)/, 'no second query per refresh');
 assert.match(source, /const work = \[patchDoc\(docId\)\];/);
-assert.match(source, /Promise\.all\(work\)\.then\(\(\) => render\(true\), showError\)/, 'a live document update redraws a zoom even while its parked caret would defer an ordinary render');
+// Forced, so a zoom whose parked caret defers an ordinary render still redraws — and coalesced, because a view
+// announces one of these per document it subscribes and each forced redraw is a whole outline.
+assert.match(source, /Promise\.all\(work\)\.then\(\(\) => renderSoon\(true\), showError\)/, 'a live document update redraws a zoom even while its parked caret would defer an ordinary render');
 assert.match(source, /const loading = !parent && !outline\.children\.length/);
 assert.match(source, /tana\.setAssignees\(doc\.id, assignees\)/);
 assert.match(source, /const AUDIENCES = \{/);
@@ -240,6 +247,7 @@ async function splitTypingCheck() {
     const segsOf = (node) => node.segments || (node.text ? [{ text: node.text }] : []);
     const saveValue = (segs) => segs;
     const hasKids = () => false, isOpen = () => false, dropPending = () => {};
+    ${source.match(/const siblingBlock = .*/)[0]}
     const textEl = (key) => key.includes('draft:split:') ? draftEl : realEl;
     const caretOffset = (el) => el.offset;
     const placeCaret = (key, offset) => { focused = { key, offset }; };
@@ -288,8 +296,9 @@ async function cachedBootMetadataCheck() {
       return outcome === 'fail' ? Promise.reject(new Error('not connected')) : Promise.resolve({ assignees: [] });
     } };
     const palette = { hidden: true }, palDoc = null, outline = {};
-    const $ = () => ({}), showError = () => {}, loadView = () => {}, loadSearches = () => {}, restorePlace = () => {};
+    const $ = () => ({}), showError = () => {}, loadView = () => {}, loadSearches = () => {}, restorePlace = async () => {};
     const isRealId = (id) => typeof id === 'string' && id.startsWith('tana:');
+    const isGone = () => false, noteGone = () => false; // the deleted-node set is exercised in renderer-behavior-check
     const render = () => { renders++; };
     ${functionSource('authView')}
     ${functionSource('showStatus')}
@@ -324,7 +333,7 @@ async function searchesReconnectCheck() {
     const repairHome = () => {}; // the Home repair has its own check; this one is about the reconnect edge
     const taskMetaFailed = new Map();
     const outline = {}, palette = { hidden: true };
-    const $ = () => ({}), showError = () => {}, loadView = () => {}, render = () => {}, renderSoon = () => {}, restorePlace = () => {};
+    const $ = () => ({}), showError = () => {}, loadView = () => {}, render = () => {}, renderSoon = () => {}, restorePlace = async () => {};
     const tana = { searches: () => { attempts++; return Promise.resolve([{ id: 'tana:search:x' }]); } };
     ${functionSource('authView')}
     ${functionSource('showStatus')}
@@ -385,7 +394,9 @@ assert.match(source, /if \(!r\.keepOpen\) menu = null;/);
 assert.match(source, /\['References', data\.notes\]/);
 assert.doesNotMatch(source, /\['Notes', data\.notes\]/);
 assert.match(source, /function railCallRow\(data\) \{/);
-assert.match(source, /taskInfoEl\.hidden = !titleTags/); // assignees/visibility moved into the sidebar
+assert.match(source, /taskInfoEl\.hidden = !titleTags\.length/); // assignees/visibility moved into the sidebar
+// every zoomed document shows its type, not only a task: only the kind chip (label === the row's icon) is dropped
+assert.match(source, /const titleTags = parent \? visibleTags\(parent\.node\)\.filter\(\(tag\) => tag\.label !== parent\.node\.icon\) : \[\];/);
 assert.match(source, /if \(viewFiltered\(\)\) \{/);
 // ⌘F on a saved search page: the key arrives as runAction('filter'), which only fires for a row that exists right
 // now, so the row has to be offered there — and the row it opens has to stay on screen and actually narrow the list.
@@ -409,7 +420,9 @@ assert.match(source, /pill\.dataset\.id = 'refreshSearch';[\s\S]{0,240}iconSvg\(
 const html = fs.readFileSync(require.resolve('../index.html'), 'utf8');
 assert.match(html, /<div id="toolbar" class="toolbar" role="toolbar"/);
 const styleSheet = fs.readFileSync(require.resolve('../styles.css'), 'utf8');
-for (const rule of [/\.toolbar \{/, /\.tbtn \{/, /\.text code \{/, /\.text a\.link \{/, /\.node\.t-numbered \{/, /\.node\.t-code > \.line \.text \{/, /\.node\.t-quote > \.line \.text \{/, /\.text\.divider hr \{/, /\.clearfilters \{/]) {
+// #taskInfo .chip:first-child — the chip under a zoomed title starts where the title starts: the 6px a chip carries
+// is its gap from what precedes it, and at the start of that line nothing does.
+for (const rule of [/\.toolbar \{/, /\.tbtn \{/, /\.text code \{/, /\.text a\.link \{/, /\.node\.t-numbered \{/, /\.node\.t-code > \.line \.text \{/, /\.node\.t-quote > \.line \.text \{/, /\.text\.divider hr \{/, /\.clearfilters \{/, /#taskInfo \.chip:first-child \{ margin-left: 0; \}/]) {
   assert.match(styleSheet, rule, 'styles.css carries ' + rule.source);
 }
 // a closed palette must hide even while it still carries the @ dropdown class (#240): same weight, later rule wins
@@ -468,7 +481,12 @@ assert.equal(spinCss, Number(source.match(/const SPIN_MS = (\d+)/)[1]), 'the wai
 const heavier = styleSheet.match(/\.pill\.refresh svg \* \{[^}]*stroke-width: ([\d.]+)/);
 assert.ok(heavier && Number(heavier[1]) > 1, 'the Refresh pill draws its glyph a step heavier than the icon set does');
 // a declaration, not prose about one: the selector and the brace have to be on the line before the property
-for (const rule of styleSheet.split('\n').filter((line) => /\{[^}]*stroke-width:/.test(line))) {
+// The Nucleo set built into the app is the one exception, and it is the opposite of an exception in spirit: those
+// glyphs carry `stroke-width: var(--nucleo-stroke-width, 1.5)` of their own, so the app supplies the variable to put
+// them on the same weight as everything else rather than leaving them a half-step heavier.
+const nucleoWeight = styleSheet.match(/--nucleo-stroke-width: ([\d.]+)/);
+assert.ok(nucleoWeight && Number(nucleoWeight[1]) === 1, 'the built-in Nucleo set is drawn at the icon set\'s own weight');
+for (const rule of styleSheet.split('\n').filter((line) => /\{[^}]*[^-]stroke-width:/.test(line))) {
   assert.match(rule, /\.pill\.refresh/, 'only the Refresh pill changes an icon\'s weight: ' + rule.trim());
 }
 const icons = {};

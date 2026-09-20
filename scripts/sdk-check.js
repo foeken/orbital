@@ -312,6 +312,172 @@ async function main() {
     assert.equal(created.length,7,'invalid scope/types do not create partial documents'); // 7: three legitimate saved searches are created above
     console.log('ok  creation chooser: native chats, actual typed docs/events, home-space validation and unsaved blank drafts');
   }
+  // Setting a document's type (Cmd+K "Set type"), by Tana's own two rules (their shared bundle, read 2026-09-20):
+  // a type applies to documents or to meetings, and a type that lives in a space only goes on a document already in
+  // that space — exactly that space, not a sub-space — while a type with no home space goes on anything.
+  {
+    const backend=mainHelpers(), cache=require('../db');cache.open(':memory:');
+    const docs=new Map();
+    const make=(kind,title,extra={})=>{const d=new Document('tana:'+kind+':'+ulid());d.transact(l=>{initDocument(l,title,ME,kind==='event'?{kind:'meeting'}:{});const data=l.getMap('data');data.set('type',kind);for(const [k,v] of Object.entries(extra))data.set(k,v);});docs.set(d.id,d);return d;};
+    const home=make('space','Foundry'), elsewhere=make('space','CTO');
+    const homed=make('type','Decision Record',{ownerUri:home.id});
+    const anywhere=make('type','Co-Worker');
+    const forMeetings=make('type','Progress Meeting',{appliesTo:'events'});
+    const workflowed=make('type','Pipeline',{workflowUri:'tana:workflow:'+ulid()});
+    const inSpace=make('text','Tuxis',{ownerUri:home.id}), loose=make('text','Loose note'), elsewhereDoc=make('text','Other',{ownerUri:elsewhere.id});
+    const meeting=make('event','Weekly');
+    // what the index answers for a type: its home space, and appliesTo inside typeDef (absent = documents)
+    const typeNode=(d)=>{const n=readNode(d);return {id:d.id,title:n.title,...(n.ownerUri?{ownerUri:n.ownerUri}:{}),...(n.appliesTo?{typeDef:{appliesTo:n.appliesTo}}:{})};};
+    const typeNodes=[homed,anywhere,forMeetings,workflowed].map(typeNode);
+    const byId=new Map([...typeNodes.map(n=>[n.id,n]),[home.id,{id:home.id,title:'Foundry'}],[elsewhere.id,{id:elsewhere.id,title:'CTO'}]]);
+    backend.testRuntime({me:{userUri:ME},win:null,client:{
+      graph:{listNodes:async(p)=>(p.nodeIds?{nodes:p.nodeIds.map(id=>byId.get(id)).filter(Boolean)}:{nodes:typeNodes,totalCount:typeNodes.length})},
+      sync:{subscribe:async(id)=>{if(!docs.has(id))throw new Error('unavailable');return docs.get(id);},getDocument:(id)=>docs.get(id),unsubscribe:async()=>{}},
+    }});
+    await assert.rejects(backend.typeChoices(home.id),/documents and meetings/,'a space carries no type, so it is not offered the list');
+    const inHome=await backend.typeChoices(inSpace.id);
+    assert.deepEqual(inHome.options.map(o=>o.title),['Co-Worker','Decision Record','Pipeline'],'a meeting type is not offered to a document, and the list is by title');
+    assert.deepEqual(inHome.options.filter(o=>o.selectable).map(o=>o.title),['Co-Worker','Decision Record','Pipeline'],'its own space\u2019s type and the homeless ones fit');
+    const outside=await backend.typeChoices(loose.id);
+    const record=outside.options.find(o=>o.title==='Decision Record');
+    assert.equal(record.selectable,false,'a space\u2019s type does not fit a document outside it');
+    assert.equal(record.reason,'Lives in Foundry','and the row says which space it belongs to rather than vanishing');
+    assert.equal(outside.options.find(o=>o.title==='Co-Worker').selectable,true,'a Library type fits everything');
+    assert.deepEqual((await backend.typeChoices(meeting.id)).options.map(o=>o.title),['Progress Meeting'],'a meeting is offered meeting types only');
+    await assert.rejects(backend.setType(loose.id,homed.id),/Lives in Foundry|lives in Foundry/,'the write applies the same scope rule as the list');
+    await assert.rejects(backend.setType(elsewhereDoc.id,homed.id),/Foundry/,'another space is no closer than none');
+    await assert.rejects(backend.setType(inSpace.id,forMeetings.id),/applies to meetings/);
+    await assert.rejects(backend.setType(meeting.id,homed.id),/applies to documents/);
+    assert.equal(readNode(inSpace).entityTypeUri,undefined,'a refusal writes nothing');
+    await backend.setType(inSpace.id,homed.id);
+    assert.equal(readNode(inSpace).entityTypeUri,homed.id);
+    assert.equal((await backend.typeChoices(inSpace.id)).current,homed.id,'the list says which one it has now');
+    // The type a document already has can be replaced outright: Tana's setEntityType refuses that and points at
+    // retype, which is what this command is.
+    await backend.setType(inSpace.id,anywhere.id);
+    assert.equal(readNode(inSpace).entityTypeUri,anywhere.id);
+    await backend.undo();
+    assert.equal(readNode(inSpace).entityTypeUri,homed.id,'a retype is one undo step, like every other mutation');
+    await backend.redo();
+    assert.equal(readNode(inSpace).entityTypeUri,anywhere.id);
+    assert.equal(await backend.setType(inSpace.id,null),null);
+    assert.equal(readNode(inSpace).entityTypeUri,undefined,'"No type" removes the key rather than emptying it');
+    // A type that defines a workflow expects its documents to be in it, so an untyped document enters the first state.
+    await backend.setType(loose.id,workflowed.id);
+    assert.equal(readNode(loose).stateType,'proposed','a workflow type starts its document in the workflow');
+    assert.equal(readNode(loose).stateChangedBy,ME);
+    await backend.setType(loose.id,anywhere.id);
+    assert.equal(readNode(loose).stateType,'proposed','and a later retype leaves the state where it is');
+    assert.equal(readNode(loose).stateWorkflowUri,undefined,'while the workflow state keys leave with the type that defined them');
+    // The row a list cached carries the chip it was built with, so a retype has to rebuild it rather than patch it.
+    cache.upsert({...backend.graphRow({id:inSpace.id,title:'Tuxis',updateTime:new Date().toISOString()}),section:'library'});
+    await backend.setType(inSpace.id,homed.id);
+    const patched=await backend.handlers.get('doc:info')(null,inSpace.id);
+    assert.equal((patched.tags||[]).some(t=>t.uri===homed.id),true,'doc:info rebuilds a row whose type moved on');
+    console.log('ok  set type: what a type applies to, the space it keeps its documents in, removal, undo and the row that follows');
+  }
+  // A type's own glyph. The Nucleo UI set is built into the app (build/nucleo-ui.json.gz) and stays in main; the
+  // choice is app-local, because Tana has nowhere to keep an icon and an SVG does not belong in its CRDT.
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const icons = backend.icons; icons.forgetTypeIcons();
+    const TYPE = 'tana:type:' + ulid(), OTHER = 'tana:type:' + ulid();
+    const all = icons.searchIcons('', 1e9);
+    assert.ok(all.length > 3000, 'the whole UI family is built in, not a sample: ' + all.length);
+    assert.ok(all.every((i) => /^nc-[\w.-]+$/.test(i.name)), 'every name is prefixed, so none can collide with the app\u2019s own glyphs, and all of them are usable as a CSS class');
+    assert.ok(all.every((i) => i.svg.startsWith('<svg') && i.svg.endsWith('</svg>')), 'and each one is a whole 18x18 document rather than the inner markup the library stores');
+    assert.equal(all.some((i) => /<script|<foreignObject|\son[a-z]+=/i.test(i.svg)), false, 'with nothing executable in any of them');
+    // Four of the 3503 are drawn entirely from filled dots and carry no stroke at all; every other one keeps the
+    // library's own `var(--nucleo-stroke-width, 1.5)`, which is what one CSS line matches to the app's weight.
+    assert.ok(all.filter((i) => i.svg.includes('--nucleo-stroke-width')).length > all.length - 10, 'the library\u2019s own stroke variable is kept rather than rewritten per glyph');
+    // Ranked in main because the set is in main: the name first, then the tags, so "launch" still finds the rocket.
+    assert.equal(icons.searchIcons('rocket')[0].label, 'rocket', 'an exact name leads');
+    assert.equal(icons.searchIcons('calendar-che')[0].label, 'calendar-check', 'then a name that starts with the query');
+    assert.ok(icons.searchIcons('launch').some((i) => i.label === 'rocket'), 'and a tag finds an icon whose name says nothing about it');
+    assert.equal(icons.searchIcons('nothinglikethis').length, 0, 'a query that matches nothing answers nothing');
+    assert.ok(icons.searchIcons('user').length <= 60, 'a page at a time: the renderer never receives the set');
+    // The choice, and what wears it.
+    assert.equal(icons.typeIcons().length, 0, 'nothing is chosen to begin with');
+    assert.equal(icons.typeIconName(TYPE), null);
+    assert.throws(() => icons.setTypeIcon('tana:text:' + ulid(), 'nc-rocket'), /set on a type/, 'an icon belongs to a type, not to one document');
+    assert.throws(() => icons.setTypeIcon(TYPE, 'nc-nothinglikethis'), /No icon called/, 'and it has to be one of the glyphs built in');
+    const chosen = icons.setTypeIcon(TYPE, 'nc-rocket');
+    assert.equal([chosen.uri, chosen.name, chosen.svg.startsWith('<svg')].join('|'), [TYPE, 'nc-rocket', true].join('|'), 'choosing answers with the glyph, so the renderer can draw it without asking again');
+    assert.equal(icons.typeIconName(TYPE), 'nc-rocket');
+    assert.equal(JSON.stringify(cache.setting('typeIcons')), JSON.stringify({ [TYPE]: 'rocket' }), 'what is stored is a name, never markup');
+    // Every surface reads the row's icon, so the name has to arrive on the row itself.
+    const typed = backend.graphRow({ id: 'tana:text:' + ulid(), title: 'Tuxis', entityType: TYPE, updateTime: '2026-09-20T10:00:00Z' });
+    assert.equal(typed.icon, 'nc-rocket', 'a document of that type is drawn with it');
+    assert.equal(backend.graphRow({ id: 'tana:text:' + ulid(), title: 'Other', entityType: OTHER, updateTime: '2026-09-20T10:00:00Z' }).icon, 'type', 'and a type with no glyph keeps the generic one');
+    assert.equal(backend.toNode({ id: TYPE, title: 'Organization', icon: 'type', tags: [] }).icon, 'nc-rocket', 'the type itself wears it too, which is where it is chosen');
+    assert.equal(backend.toNode({ id: 'tana:chat:' + ulid(), title: 'Chat', icon: 'chat', tags: [] }).icon, 'chat', 'no other kind is touched');
+    assert.equal(icons.setTypeIcon(TYPE, null), null, 'clearing answers with nothing to draw');
+    assert.equal(icons.typeIcons().length, 0, 'and the type goes back to the generic glyph');
+    assert.equal(JSON.stringify(cache.setting('typeIcons')), '{}', 'with nothing left behind in the setting');
+    console.log('ok  type icons: the built-in Nucleo set searched in main, the choice stored as a name, and every row of that type drawn with it');
+  }
+  // The app's own settings document: one document in Tana carrying the choices this app makes about your content,
+  // so a machine that has never seen them opens with them. SQLite stays as the mirror the app boots from.
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const settings = backend.settings; settings.reset();
+    const docs = new Map(), created = [];
+    let listed = [];
+    const sync = {
+      subscribe: async (id, init) => {
+        if (!docs.has(id)) { if (!init) return Promise.reject(new Error('unavailable')); const d = new Document(id); d.transact(init); docs.set(id, d); created.push(d); }
+        return docs.get(id);
+      },
+      getDocument: (id) => docs.get(id), unsubscribe: async () => {},
+    };
+    backend.testRuntime({ me: { userUri: ME }, win: null, client: { sync, graph: { listNodes: async (p) => ({ nodes: p.textQuery ? listed : [] }) } } });
+    settings.set('hiddenTitles', ['Lunch']);
+    await settings.flush();
+    assert.equal(created.length, 1, 'the first synced setting is what makes the document');
+    const doc = created[0];
+    assert.equal(readNode(doc).title, settings.TITLE, 'it is an ordinary document with a name you can find');
+    assert.equal(readNode(doc).type, 'text', 'and an ordinary kind, so Tana shows it like any other note');
+    assert.match(require('../sdk/node').contentText(doc), /follow you between machines/, 'and it says what it is, for whoever opens it in Tana');
+    const stored = () => doc.loro.getMap(settings.ROOT).toJSON();
+    assert.equal(JSON.parse(stored().hiddenTitles).join(), 'Lunch', 'the value lives in a container of its own, as JSON under its own key');
+    assert.equal(cache.setting('hiddenTitles').join(), 'Lunch', 'and in SQLite, which is what the app opens with before the network is there');
+    assert.equal(cache.setting(settings.POINTER), doc.id, 'this machine notes which document that is, so it costs one lookup per machine');
+    // What cannot follow you stays where it is: a window size belongs to the screen it was sized on.
+    settings.set('window', { width: 900 });
+    settings.setPref('home', 'tana:search:' + ulid());
+    await settings.flush();
+    assert.equal(Object.hasOwn(stored(), 'window'), false, 'a machine-local setting never reaches the document');
+    settings.set('codexTask', { 'tana:text:x': { host: 'local', threadId: '00000000-0000-4000-8000-000000000000' } });
+    await settings.flush();
+    assert.ok(Object.hasOwn(stored(), 'codexTask'), 'an agent task does: the thread id is global, and the record names the machine it runs on');
+    assert.ok(Object.hasOwn(stored(), 'pref:home'), 'a renderer preference does, under the prefix the renderer reads back');
+    assert.equal(Object.keys(settings.prefs()).join(), 'home', 'which is what the renderer receives, with the prefix off');
+    // A second machine: its own empty database, the same document, found by name.
+    const first = { ...settings.prefs() };
+    cache.open(':memory:');
+    settings.reset();
+    assert.equal(settings.get('hiddenTitles'), undefined, 'the new machine knows nothing yet');
+    listed = [{ id: doc.id, title: settings.TITLE, createTime: '2026-09-20T10:00:00Z' }];
+    await settings.hydrate();
+    assert.equal(settings.get('hiddenTitles').join(), 'Lunch', 'and finds the document by name, without being told which it is');
+    assert.equal(JSON.stringify(settings.prefs()), JSON.stringify(first), 'so its preferences are the ones you set on the other machine');
+    assert.equal(cache.setting(settings.POINTER), doc.id, 'and it notes the document for next time');
+    assert.equal(created.length, 1, 'rather than making a second one');
+    // A setting only this machine has is pushed up, which is what makes the first run a migration and needs no step
+    // of its own; a key the document has wins over what this machine remembered.
+    settings.set('typeIcons', { 'tana:type:local': 'rocket' });
+    await settings.flush();
+    assert.equal(JSON.parse(stored().typeIcons)['tana:type:local'], 'rocket');
+    doc.transact((loro) => loro.getMap(settings.ROOT).set('hiddenTitles', JSON.stringify(['Standup'])));
+    await settings.hydrate();
+    assert.equal(settings.get('hiddenTitles').join(), 'Standup', 'the document decides what a key means');
+    assert.equal(cache.setting('hiddenTitles').join(), 'Standup', 'and the mirror follows it');
+    // It is app plumbing rather than a note, so no list or search offers it.
+    backend.testRuntime({ me: { userUri: ME }, win: null, client: { sync, graph: { listNodes: async (p) => (p.nodeIds ? { nodes: [] } : { nodes: [{ id: doc.id, title: settings.TITLE, updateTime: '2026-09-20T10:00:00Z' }, { id: 'tana:text:' + ulid(), title: 'A real note', updateTime: '2026-09-20T10:00:00Z' }] }) } } });
+    const rows = await backend.handlers.get('view:list')(null, 'library', { types: ['docs'], states: null, assignee: 'anyone' });
+    assert.deepEqual(rows.nodes.map((n) => n.title), ['A real note'], 'the settings document is kept out of every list, like a hidden title');
+    console.log('ok  settings document: created or found by name, JSON per key, machine-local settings left behind, and a new machine opens with your choices');
+  }
   // Quick add (docs/QUICK-ADD.md): what the panel is told when it opens, the one write it makes, and the shortcut
   // and window lifecycle behind it. The meeting is the live call, the link is a pin on the event, and neither the
   // assignment nor the pin may turn a created task into a failure.
@@ -871,6 +1037,63 @@ async function main() {
     console.log('ok  searchChildren: a readable query runs, an unreadable one fails closed instead of listing everything');
   }
 
+  // Backlinks (main/related.js): the sidebar's "Mentioned in" and the typed fields this node sits in, grouped the way
+  // Tana's own Backlinks panel groups them — a field section per attribute, the plain mentions last.
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const docId = 'tana:text:' + ulid(), mentionId = 'tana:text:' + ulid(), fieldDocId = 'tana:text:' + ulid();
+    const typeUri = 'tana:type:' + ulid(), attributeUri = typeUri + '?attribute=n5e1hgxz';
+    const typeDoc = { data: { get: (key) => (key === 'template' ? { attributes: [{ key: 'n5e1hgxz', title: 'Discuss with' }] } : undefined) } };
+    const nodes = {
+      [docId]: { id: docId, title: 'Tuxis' },
+      [mentionId]: { id: mentionId, title: 'Risks Foundry' },
+      [fieldDocId]: { id: fieldDocId, title: 'Discussion Point' },
+      [typeUri]: { id: typeUri, title: 'Discussion Point' },
+    };
+    const edgeCalls = [];
+    backend.testRuntime({ me: { userUri: ME }, win: null, client: {
+      sync: { subscribe: async (id) => (id === typeUri ? typeDoc : { data: { get: () => undefined } }) },
+      graph: {
+        listNodes: async (p) => ({ nodes: (p.nodeIds || []).map((id) => nodes[id]).filter(Boolean) }),
+        listEdges: async (p) => {
+          edgeCalls.push(p);
+          if (p.fromNodeIds) return { edges: [] }; // no pins
+          return { edges: [
+            { fromNodeId: mentionId, toNodeId: docId, type: 'EDGE_TYPE_LINKS_TO', properties: { label: 'Tuxis' } },
+            { fromNodeId: fieldDocId, toNodeId: docId, type: 'EDGE_TYPE_ATTRIBUTE_LINKS_TO', properties: { attributeUri } },
+            { fromNodeId: fieldDocId, toNodeId: docId, type: 'EDGE_TYPE_ATTRIBUTE_LINKS_TO', properties: { attributeUri } }, // the same field twice
+            { fromNodeId: docId, toNodeId: docId, type: 'EDGE_TYPE_LINKS_TO' }, // a node never lists itself
+            { fromNodeId: 'tana:text:' + ulid(), toNodeId: docId, type: 'EDGE_TYPE_LINKS_TO' }, // unreadable target
+          ] };
+        },
+        getOwnerChain: async () => ({ entries: [] }),
+      },
+    } });
+    const answered = await backend.related(docId);
+    const incoming = edgeCalls.find((p) => p.toNodeIds);
+    const asked = JSON.parse(JSON.stringify(incoming)); // main runs in its own vm context, so compare plain values
+    assert.deepEqual(asked.edgeTypes, ['EDGE_TYPE_LINKS_TO', 'EDGE_TYPE_ATTRIBUTE_LINKS_TO'], 'both kinds of backlink are asked for: mentions and field references');
+    assert.deepEqual(asked.toNodeIds, [docId], 'and for the zoomed node itself');
+    assert.deepEqual(JSON.parse(JSON.stringify(answered.backlinks.map((g) => g.label))), ['Discussion Point › Discuss with', 'Mentioned in'],
+      'a field reference is named "<Type> › <Field>" and the plain mentions come last, as Tana orders them');
+    assert.deepEqual(JSON.parse(JSON.stringify(answered.backlinks.map((g) => g.rows.map((n) => n.title)))), [['Discussion Point'], ['Risks Foundry']],
+      'each group lists its documents once, whatever it is unreadable or self-referential edges say');
+
+    // A field whose title cannot be read is not given an invented section name.
+    const otherAttribute = 'tana:type:' + ulid() + '?attribute=zz1abcde'; // a type this session has never read
+    backend.testRuntime({ me: { userUri: ME }, win: null, client: {
+      sync: { subscribe: async () => { throw new Error('unreadable'); } },
+      graph: {
+        listNodes: async (p) => ({ nodes: (p.nodeIds || []).map((id) => nodes[id]).filter(Boolean) }),
+        listEdges: async (p) => (p.fromNodeIds ? { edges: [] } : { edges: [{ fromNodeId: fieldDocId, toNodeId: docId, type: 'EDGE_TYPE_ATTRIBUTE_LINKS_TO', properties: { attributeUri: otherAttribute } }] }),
+        getOwnerChain: async () => ({ entries: [] }),
+      },
+    } });
+    const unnamed = await backend.related(docId);
+    assert.deepEqual(JSON.parse(JSON.stringify(unnamed.backlinks.map((g) => g.label))), ['Mentioned in'], 'a field whose title cannot be read joins the mentions rather than naming a section after a key');
+    console.log('ok  backlinks: mentions and field references, grouped by field with the mentions last');
+  }
+
   // A saved search carries its own completed window, stored in the `view` map beside its sort and grouping rather
   // than inside Tana's query vocabulary, and read back the same way: opening the search shows what it was saved with.
   {
@@ -935,6 +1158,25 @@ async function main() {
     assert.equal((await backend.handlers.get('view:list')(null, 'library', { types: ['meetings', 'docs'], states: null, assignee: 'anyone' })).truncated, false,
       'local post-filters do not create a false truncation warning');
     console.log('ok  one view fetch queries, post-filters, maps and caches rows');
+  }
+
+  // The Types view: one query over type nodes, each row carrying the space it lives in.
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const spaceUri = 'tana:space:' + ulid();
+    const inSpace = { id: 'tana:type:' + ulid(), title: 'Decision Record', spaceUri, updateTime: '2026-09-17T09:00:00Z' };
+    const loose = { id: 'tana:type:' + ulid(), title: 'Co-Worker', updateTime: '2026-09-17T08:00:00Z' };
+    const requests = [];
+    backend.testRuntime({ me: { userUri: ME }, win: null, client: { graph: { listNodes: async (p) => {
+      requests.push(p);
+      return p.nodeIds ? { nodes: [{ id: spaceUri, title: 'Studio LT' }] } : { nodes: [inSpace, loose] };
+    } }, sync: { subscribe: async () => null, unsubscribe: async () => {} } } });
+    const { nodes } = await backend.handlers.get('view:list')(null, 'types');
+    assert.deepEqual(requests[0].nodeTypes, ['type'], 'the Types view asks the graph for type nodes and nothing else');
+    assert.deepEqual(nodes.map((n) => [n.title, n.meta]), [['Decision Record', 'Studio LT'], ['Co-Worker', 'Library']],
+      'each type is listed with the space it lives in, and one with no space reads as Library');
+    assert.equal(requests.filter((p) => p.nodeIds).length, 1, 'the space titles are one nodeIds lookup, not an owner chain per row');
+    console.log('ok  the Types view lists every type with its space');
   }
 
   // The completed window over a real view fetch: one more post-filter beside hidden titles, applied to the answer
@@ -1039,18 +1281,18 @@ async function main() {
       const result = await backend.handlers.get('view:list')(null, view.id);
       assert.equal(result.nodes.length, 1, view.id + ' fetched through view:list');
     }
-    assert.equal(requests.length, 2, 'two views make two single queries');
+    assert.equal(requests.length, backend.VIEWS.length, 'each view makes one single query');
     const roots = await backend.handlers.get('outline:roots')();
-    assert.equal(requests.length, 2, 'roots reads SQLite without fetching');
-    assert.ok(roots.every((view) => view.nodes.length === 1), 'both views load from their own cache section');
+    assert.equal(requests.length, backend.VIEWS.length, 'roots reads SQLite without fetching');
+    assert.ok(roots.every((view) => view.nodes.length === 1), 'every view loads from its own cache section');
     await backend.refresh();
-    assert.equal(requests.length, 4, 'a refresh asks two questions: the rows of the view, and the tasks the watch rule follows');
+    assert.equal(requests.length, backend.VIEWS.length + 2, 'a refresh asks two questions: the rows of the view, and the tasks the watch rule follows');
     // The watch query is what makes the default watch mean anything: the tasks it is about are in no view's rows.
     const watchAsk = requests.find((p) => p.createdBy); // joined rather than compared as an array: built in the main vm
     assert.equal(watchAsk.createdBy.join(), ME, 'it asks for the tasks you made');
     assert.equal(watchAsk.stateTypes.includes('closed'), true, 'and asks for completions made while the app was away');
-    // the last view listed above is now the Library, whose preset lists tasks
-    assert.deepEqual(requests.at(-1).nodeTypes, ['text'], 'refresh repeats only the last listed view');
+    // the last view listed above is now Types, whose preset lists type nodes
+    assert.deepEqual(requests.at(-1).nodeTypes, ['type'], 'refresh repeats only the last listed view');
     const custom = await backend.handlers.get('view:setFilter')(null, 'library', { types: ['chats'], text: 'urgent' });
     assert.equal(custom.text, 'urgent');
     assert.equal(cache.setting('viewFilter:library').text, 'urgent');
@@ -1463,10 +1705,12 @@ async function main() {
     assert.equal(agent.taskLink(NODE).host, added.id, 'but its tasks still say where they are, never "local"');
     assert.equal(agent.hostId(added.id), null, 'and nothing will run against it');
     // A mapping written before hosts existed is a task on this machine: that is where it was created.
-    cache.setSetting('codexTask', { [NODE]: THREAD });
+    // …and the shapes an older build left behind, through the store the app reads (main/settings.js) rather than
+    // past it: what is being tested is the shape, not who wrote it.
+    require('../main/settings').set('codexTask', { [NODE]: THREAD });
     assert.deepEqual(agent.taskLink(NODE), { host: 'local', threadId: THREAD }, 'an old id-only mapping still works, as a laptop task');
     assert.equal(agent.codexTaskFor(NODE), THREAD, 'and still answers with its id');
-    cache.setSetting('codexTask', { [NODE]: { host: 'local', threadId: 'not-a-thread' } });
+    require('../main/settings').set('codexTask', { [NODE]: { host: 'local', threadId: 'not-a-thread' } });
     assert.equal(agent.taskLink(NODE), null, 'a malformed id is no link, whatever host it claims');
     console.log('ok  Codex task link: self-registration prompt, reuse by id, stale recovery');
   }
@@ -1653,6 +1897,64 @@ async function main() {
     console.log('ok  refresh keeps on-demand subscriptions, survives a failing query, and caches only real answers');
   }
 
+  // A wide list keeps its head live, not all of it. A subscription is a bootstrap RPC and a LoroDoc each, and every
+  // bootstrap announces itself to the renderer, so a Library of several hundred rows used to open with a subscription
+  // storm on the one sync connection: the page lagged and whatever you opened next waited behind it.
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const { LIVE_ROWS } = require('../main/state');
+    const rows = Array.from({ length: LIVE_ROWS + 50 }, (_, i) => ({ id: 'tana:text:' + ulid(), title: 'Row ' + i, updateTime: '2026-09-13T10:00:00Z' }));
+    const subscribedIds = [], unsubscribed = [];
+    backend.testRuntime({ me: { userUri: ME }, activeView: 'library', win: null, client: {
+      sync: { subscribe: async (id) => { subscribedIds.push(id); return null; }, getDocument: () => null, unsubscribe: async (id) => { unsubscribed.push(id); } },
+      graph: { listNodes: async (p) => (p.nodeIds || (p.nodeTypes || []).some((k) => k !== 'text') ? { nodes: [] } : { nodes: rows }) },
+    } });
+    const listed = await backend.handlers.get('view:list')(null, 'library', { types: ['tasks', 'docs'], states: null, assignee: 'anyone' });
+    assert.equal(listed.nodes.length, rows.length, 'every row is still listed, cached and drawn');
+    assert.equal(subscribedIds.length, LIVE_ROWS, 'but only the head of the list is subscribed');
+    assert.deepEqual([subscribedIds.includes(rows[0].id), subscribedIds.includes(rows.at(-1).id)], [true, false],
+      'the rows at the top are the live ones; the tail rides the 30 s refresh like the rest of the list');
+    // And the cap is a set the sweep agrees with: a row that drops out of the head is let go on the next list.
+    rows.unshift({ id: 'tana:text:' + ulid(), title: 'Newest', updateTime: '2026-09-14T10:00:00Z' });
+    const pushedOut = rows[LIVE_ROWS].id;
+    await backend.handlers.get('view:list')(null, 'library', { types: ['tasks', 'docs'], states: null, assignee: 'anyone' });
+    assert.deepEqual(unsubscribed, [pushedOut], 'a row pushed past the cap is unsubscribed, so the live set stays bounded');
+    console.log('ok  a wide view subscribes the head of its list, not every row in it');
+  }
+
+  // A read in flight holds its document. The refresh sweep lets go of the rows a view no longer lists, and letting go
+  // of a bootstrap somebody is waiting for rejects it as 'unsubscribed <id>' under the reader — which is exactly what
+  // a doc:info for a row of the view you just left reported, in red, whenever a view change raced it.
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const eventId = 'tana:event:' + ulid();
+    const doc = new Document(eventId); doc.transact((l) => initDocument(l, 'Leadership sync', ME, { kind: 'meeting' }));
+    const deferred = () => { let resolve, reject; const promise = new Promise((res, rej) => { resolve = res; reject = rej; }); return { promise, resolve, reject }; };
+    let bootstrap = deferred();
+    const unsubscribed = [];
+    let rows = [{ id: eventId, title: 'Leadership sync', calendarEvent: { startTime: '2026-09-14T10:00:00Z' }, updateTime: '2026-09-13T10:00:00Z' }];
+    const sync = {
+      subscribe: (id) => (id === eventId ? bootstrap.promise : Promise.resolve(null)),
+      getDocument: () => null,
+      // the real one (sdk/sync.js): unsubscribing rejects a bootstrap that has not landed yet
+      unsubscribe: async (id) => { unsubscribed.push(id); if (id === eventId) bootstrap.reject(new Error('unsubscribed ' + id)); },
+    };
+    backend.testRuntime({ me: { userUri: ME }, win: null, activeView: 'library', client: { sync, graph: { listNodes: async (p) => (p.nodeIds ? { nodes: [] } : { nodes: rows }) } } });
+    await backend.handlers.get('view:list')(null, 'library'); // the meeting is a row here, so the refresh follows it
+    const reading = backend.handlers.get('doc:info')(null, eventId); // opened while its bootstrap is still in flight
+    await Promise.resolve();
+    rows = [];
+    await backend.handlers.get('view:list')(null, 'library'); // …and the view it was listed in is left
+    assert.deepEqual(unsubscribed, [], 'a document a read is waiting for is not swept out from under it');
+    bootstrap.resolve(doc);
+    assert.equal((await reading).title, 'Leadership sync', 'so the read answers instead of failing as unsubscribed');
+    assert.equal(backend.statusSnapshot().error, null, 'and nothing red is shown');
+    bootstrap = deferred(); bootstrap.resolve(doc); // the read is over: the next sweep is free to let go
+    await backend.handlers.get('view:list')(null, 'library');
+    assert.deepEqual(unsubscribed, [eventId], 'once it has answered, the row leaves the subscription set as before');
+    console.log('ok  a document being read is held through a view change, and let go on the next one');
+  }
+
   // Checking a task is what takes it off the Tasks list, and the refresh that follows used to unsubscribe it: the
   // Document went with it, and its Loro undo history with that, so Cmd+Z could not uncheck the task and silently
   // undid an older step in another document instead.
@@ -1741,7 +2043,8 @@ async function main() {
 
     assert.equal(await rules('filters:remove', ' LUNCH '), 'Block* | Remote / WFH (non-blocking)', 'removal matches case-insensitively');
     assert.equal(await listed(), 'Lunch | Lunch roster', 'unhiding brings the row back on the next refresh');
-    cache.setSetting('hiddenTitles', 'Block'); // an older build or a bad renderer call
+    cache.setSetting('hiddenTitles', 'Block'); // an older build or a bad renderer call, found at startup
+    backend.settings.reset(); // …which is to say: read at launch, not written past the settings cache while running
     assert.equal(await rules('filters:list'), '', 'a stored list that is not a list hides nothing');
     await backend.refresh();
     assert.equal(await listed(), ALL);
@@ -2260,6 +2563,48 @@ async function main() {
     assert.throws(() => outline.setBlockType(a, 'r4hz3a0b', 'heading4'), /Unknown block type/);
     assert.throws(() => outline.setBlockType(a, 'nope0000', 'quote'), /no outline node/);
 
+    // What a new row is: the row it comes from, on either side of it. A document's own first row has nothing to
+    // follow, so it is plain text, and every row after it inherits — which is what makes a document plain text
+    // until a "- " starts a list in it.
+    {
+      const walk = (list) => list.flatMap((n) => [n, ...walk(n.children || [])]);
+      const typeOf = (doc, id) => (walk(outline.readOutline(doc)).find((n) => n.id === id) || {}).block;
+      const d = new Document('tana:text:' + ulid(), { peerId: '7' });
+      const first = outline.insertAfter(d, null, 'First');
+      assert.equal(typeOf(d, first), 'paragraph', 'the first row of a document is plain text');
+      assert.equal(typeOf(d, outline.insertAfter(d, first, 'Next')), 'paragraph', 'and so is the row after it');
+      const listed = outline.insertAfter(d, null, 'Listed');
+      outline.setBlockType(d, listed, 'bullet');
+      assert.equal(typeOf(d, outline.insertAfter(d, listed, 'Also listed')), 'bullet', 'a bullet makes another bullet');
+      assert.equal(typeOf(d, outline.insertBefore(d, listed, 'Above it')), 'bullet', 'on either side of it');
+      const numbered = outline.insertAfter(d, null, 'One');
+      outline.setBlockType(d, numbered, 'numbered');
+      assert.equal(typeOf(d, outline.insertAfter(d, numbered, 'Two')), 'numbered', 'and a numbered item stays numbered');
+      const quoted = outline.insertAfter(d, null, 'Quoted');
+      outline.setBlockType(d, quoted, 'quote');
+      assert.equal(typeOf(d, outline.insertAfter(d, quoted, 'Still quoted')), 'quote', 'Enter inside a quote stays in the quote');
+      const head = outline.insertAfter(d, null, 'A heading');
+      outline.setBlockType(d, head, 'heading2');
+      assert.equal(typeOf(d, outline.insertAfter(d, head, 'Under a heading')), 'paragraph', 'a heading continues as the plain text that follows one');
+      assert.equal(typeOf(d, outline.insertBefore(d, head, '')), 'paragraph', 'and a row pushed in front of one is plain text too');
+      assert.equal(typeOf(d, head), 'heading2', 'the heading itself is untouched');
+      const outliner = d; // the rest of this block reads the same document
+
+      // Only a document's own row can be plain text: a child lives inside its parent's listItem, where a bare
+      // paragraph is not a row Tana reads back, and the conversion would move it out of the list its parent keeps
+      // its children in.
+      const parent = outline.insertAfter(outliner, null, 'Parent', { bullet: true });
+      const kid = outline.insertChild(outliner, parent, 'Child');
+      const untouched = JSON.stringify(outliner.content.toJSON());
+      assert.throws(() => outline.setBlockType(outliner, kid, 'paragraph'), /child node cannot be plain text/, 'a child node refuses plain text');
+      assert.equal(JSON.stringify(outliner.content.toJSON()), untouched, 'and the refusal leaves the outline exactly as it was');
+      outline.setBlockType(outliner, kid, 'numbered');
+      assert.equal(typeOf(outliner, kid), 'numbered', 'a child can still change between list kinds');
+      assert.deepEqual(walk(outline.readOutline(outliner)).find((n) => n.id === parent).children.map((n) => n.id), [kid], 'and it is still its parent\'s child');
+      outline.setBlockType(outliner, parent, 'paragraph');
+      assert.equal(typeOf(outliner, parent), 'paragraph', "a document's own row is still free to be plain text");
+    }
+
     // divider: Tana's childless horizontalRule; a list holds listItems only, so it splits the list
     const second = outline.insertAfter(a, child, 'Second');
     const rule = step(() => outline.insertDivider(a, child));
@@ -2390,6 +2735,22 @@ async function main() {
     const o = outline.readOutline(c1), img = o[o.length - 1];
     assert.deepEqual(img, { id: 'img00001', text: '', kind: 'block', hasChildren: false, children: [], segments: [], type: 'image', image: { uri: IMG, alt: null, width: 640, height: null } });
     assert.equal(o[o.length - 2].type, undefined, 'paragraphs carry no type');
+    assert.equal(img.block, undefined, 'an image on its own has no block type, so it draws no marker: it is the picture and nothing else');
+    // a list row is a list row whatever it holds, which is what says whether it draws one: the same picture
+    // inside a listItem reads as a bullet, so a child keeps the marker its siblings have
+    {
+      const listed = new Document('tana:text:' + ulid());
+      const rowId = outline.insertAfter(listed, null, '');
+      outline.setBlockType(listed, rowId, 'bullet');
+      listed.transact(() => {
+        const inner = listed.content.get('children').get(0).get('children').get(0).get('children').get(0); // bulletList > listItem > paragraph
+        inner.set('nodeName', 'image');
+        inner.get('attributes').set('tanaUri', IMG);
+      });
+      const row = outline.readOutline(listed)[0];
+      assert.equal(row.type, 'image', 'the row is the picture');
+      assert.equal(row.block, 'bullet', 'and reads as the list row it is, so it keeps its marker');
+    }
     step(() => outline.move(c1, 'img00001', 'up'));
     assert.deepEqual(outline.readOutline(c1).slice(-2).map((n) => n.id), ['img00001', first]);
     step(() => outline.remove(c1, 'img00001'));
@@ -2426,7 +2787,7 @@ async function main() {
     a.transact((l) => { l.getMap('data').set('title', 'one'); });
     assert.equal(a.canUndo(), true);
     setTitle(a, 'two');
-    outline.insertAfter(a, null, 'para');
+    outline.insertAfter(a, null, 'para', { bullet: true }); // list + item + paragraph, one undo step
     assert.equal(outline.readOutline(a).length, 1);
     assert.equal(a.undo(), true);
     assert.equal(outline.readOutline(a).length, 0);
@@ -2560,6 +2921,18 @@ async function main() {
     documents.set(coldDeletedId, coldDeleted);
     remoteCollection.transact(l => l.getTree('tree').createNode().data.set('uri', coldDeletedId));
     assert.equal((await backend.pinTree()).length, 1, 'already-deleted snapshot pin is suppressed before any live notification');
+    // Nothing has announced this one: it was deleted elsewhere and this app never subscribed it, so no change event
+    // ever ran. A read is where it is found out, and that read has to say so — otherwise the renderer kept the row,
+    // went on asking for its metadata on every backoff, and would still open the page.
+    const unseenId = 'tana:text:' + ulid(), unseen = new Document(unseenId);
+    unseen.transact(l => { initDocument(l, 'deleted elsewhere, never announced here', ME); l.getMap('data').set('deletedAt', 100); });
+    documents.set(unseenId, unseen);
+    events.length = 0;
+    await assert.rejects(backend.op(unseenId, () => 'read anyway'), /has been deleted/, 'a read of a deleted node is refused');
+    assert.ok(events.some(([channel, id]) => channel === 'outline:removed' && id === unseenId), 'and the refusal tells the renderer, which is what stops it asking again');
+    events.length = 0;
+    await assert.rejects(backend.op(unseenId, () => 'read anyway'), /has been deleted/);
+    assert.equal(events.filter(([channel]) => channel === 'outline:removed').length, 0, 'said once: the tombstone is remembered, so every later read is quiet');
 
     remoteCollection.transact(l => l.getTree('tree').delete(l.getTree('tree').nodes().find(n => n.data.get('uri') === pinId).id));
     assert.ok(events.some(([channel,id]) => channel === 'outline:changed' && id === null), 'remote unpin invalidates palette globally despite no cached collection row');
@@ -2641,6 +3014,24 @@ async function main() {
     assert.equal(full.reference.node.icon, 'task'); assert.equal(full.reference.node.done, 0, 'the row can show the task it points at, and check it off');
     outline.setText(host, headingId, [mention, {text:' by Friday'}]);
     assert.equal((await backend.outlineWithReferences(host))[1].reference, undefined, 'text beside it makes it an ordinary line with an inline link');
+    // A target that is gone is not the same as one that cannot be read: the renderer strikes a deleted reference
+    // through behind a trash glyph and refuses to open it, and an unreadable one stays an ordinary link, so the
+    // resolution has to tell them apart rather than dropping both.
+    backend.testRuntime({me:{userUri:ME},client:{graph:{listNodes:async()=>({nodes:[{id:mentionUri,title:'Deleted task',deletedAt:Date.now()}]})}}});
+    outline.setText(host, headingId, [mention]);
+    const deletedFull = (await backend.outlineWithReferences(host))[1];
+    assert.equal(deletedFull.reference.node, undefined, 'a deleted target is not drawn as the node it was');
+    assert.equal(deletedFull.reference.deleted, true, 'but the row is told it is gone rather than merely unreadable');
+    outline.setText(host, headingId, [{text:'follows '}, mention]);
+    const deletedInline = (await backend.outlineWithReferences(host))[1];
+    assert.equal(deletedInline.segments[1].mention.deleted, true, 'and so is a mention written inside a line');
+    assert.equal(deletedInline.segments[1].mention.icon, undefined, 'which takes no kind icon: the renderer gives it the trash glyph');
+    // An answer that leaves a uri out says nothing: no permission, an index that has not caught up, a broken id. Only
+    // a tombstone marks a reference as gone, which is why the two are separate answers rather than one "not resolved".
+    const unreadableUri = 'tana:text:01exampleu0000000000000000';
+    outline.setText(host, headingId, [{text:'follows '}, {mention:{uri:unreadableUri,label:'Somebody else’s note'}}]);
+    backend.testRuntime({me:{userUri:ME},client:{graph:{listNodes:async()=>({nodes:[]})}}});
+    assert.equal((await backend.outlineWithReferences(host))[1].segments[1].mention.deleted, undefined, 'a target that simply did not come back is unreadable, not deleted');
     outline.setText(host, headingId, [mention]);
     const ownKid = outline.insertChild(host, headingId, 'a step of its own');
     assert.equal((await backend.outlineWithReferences(host))[1].reference, undefined, 'and neither is a block with children of its own, since expanding one opens the target instead');
@@ -2750,7 +3141,8 @@ async function main() {
     assert.ok(readOnly(rows), 'no chat row is editable');
     const [human, ai] = rows;
     assert.equal(human.icon, 'member'); assert.equal(ai.icon, 'chat');
-    assert.deepEqual(human.children[0].segments, [{ text: 'From ' }, { mention: { label: 'Notes', uri: noteUri } }, { text: ', extract the goals.' }]);
+    assert.deepEqual(human.children[0].segments, [{ text: 'From ' }, { mention: { label: 'Notes', uri: noteUri, icon: 'doc' } }, { text: ', extract the goals.' }],
+      'a reference written inside a line carries its target\'s icon, resolved in the same batch the rows use');
     const attachment = human.children[1];
     assert.equal(attachment.type, 'reference'); assert.equal(attachment.reference.uri, fileUri);
     assert.equal(attachment.reference.node.id, fileUri, 'attachment titles resolve through the shared reference lookup');
@@ -2760,8 +3152,10 @@ async function main() {
     assert.equal(ai.children[5].text, 'create · approved');
     assert.equal(ai.children[5].children[0].reference.uri, proposedUri);
     assert.equal(ai.children[6].reference.uri, subUri, 'a subagent tool call links its own chat');
-    // a mention carries its own label, so only reference rows cost a lookup
-    assert.deepEqual(Array.from(graphed.at(-1).nodeIds).sort(), [fileUri, proposedUri, subUri].sort());
+    // A mention carries its own label, so nothing is looked up to render the words. Its target is asked for all
+    // the same — one batch for the reference rows and every inline mention together, deduplicated by uri — because
+    // that is what tells a reference which icon it is.
+    assert.deepEqual(Array.from(graphed.at(-1).nodeIds).sort(), [fileUri, noteUri, proposedUri, subUri].sort());
     assert.deepEqual(doc.toJSON().content, {}, 'reading a chat never writes an outline into it');
     console.log('ok  chat rows: hidden/context skipped, list order, read-only rows, mentions, attachments, proposals and subagent links');
   }
@@ -2850,6 +3244,7 @@ async function main() {
       assert.equal(req.peerId, peerId);
       if (kind === 'beginDocumentSync') {
         const sessionId = 's' + (++server.session);
+        if (server.fail503 > 0) { server.fail503--; throw new ConnectError('HTTP 503', Code.Unavailable); } // Tana shedding load
         const cold = value.clientVv.length === 0;
         if (value.documentId !== DOC && !server.created.has(value.documentId)) { // unknown id: MISSING, nothing to send (§2.1)
           return fromJson(message('sync', 'ServerSyncCommandResponse'), { bootstrapResponse: { sessionId, status: 'BOOTSTRAP_STATUS_MISSING', serverVv: '', serverUpdates: '' } });
@@ -2876,7 +3271,8 @@ async function main() {
       return {};
     },
   }));
-  const log = { warn: () => {}, error: (m) => console.error(m), info: () => {} };
+  const warns = [];
+  const log = { warn: (m) => warns.push(m), error: (m) => console.error(m), info: () => {} };
   const sync = new SyncConnection({ transport: router, orgId: ORG, peerId, logger: log });
   const changes = [];
   sync.on('change', (id, info) => changes.push(info.origin));
@@ -2945,6 +3341,15 @@ async function main() {
   assert.equal(server.commands.at(-1), 'documentAction');
   assert.equal((await sync.restore(NEW)).responseUnion.case, 'documentActionResponse');
   assert.equal(server.commands.at(-1), 'documentAction');
+  // [unavailable] on bootstrap is retried, so a single one is not worth saying: it reads as a failure that needs
+  // acting on when the next attempt has already taken it. Two in a row is an outage, and that is still said.
+  server.fail503 = 2;
+  const FLAKY = 'tana:text:' + ulid();
+  const flaky = await sync.subscribe(FLAKY, (l) => initDocument(l, 'survived a 503', ME));
+  assert.equal(readNode(flaky).title, 'survived a 503', 'a 503 on bootstrap is retried until it lands');
+  const said = warns.filter((w) => w.startsWith('sync: bootstrap ' + FLAKY));
+  assert.equal(said.length, 1, 'the first [unavailable] stays quiet, the second is reported: ' + JSON.stringify(said));
+  assert.match(said[0], /failed \(attempt 2\): .*503/);
   await sync.close();
   assert.equal(sync.connected, false);
   assert.ok(server.commands.includes('unsubscribeDocument'), 'unsubscribe sent on close');

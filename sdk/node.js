@@ -141,6 +141,37 @@ function taskMeta(document) {
   };
 }
 
+// A document's type, set or removed. This is Tana's own `retype` (their shared bundle, read 2026-09-20): the type uri
+// is written or deleted and the workflow state keys go with it, because a workflow state is defined by the type that
+// is leaving. Their `setEntityType` refuses to replace an existing type and points at `retype` for an explicit
+// change, which is exactly what a "Set type" command is, so this follows the retype path and accepts both.
+// `workflow` is Tana's one extra rule: a type that defines a workflow expects its documents to be in it, so a
+// document with no state at all enters the first one. Which types those are is the caller's to read (the type's own
+// `workflowUri`), and the scope rules — what a type applies to, and the space it keeps its documents in — belong
+// there too, beside the type node they are read from.
+const TYPE_URI = /^tana:type:[0-9a-z]{26}$/;
+function setEntityType(document, typeUri, { workflow = false, byUri } = {}) {
+  const uri = typeUri == null ? null : typeUri;
+  if (uri !== null && !TYPE_URI.test(uri)) throw new Error('Select a workspace type');
+  const kind = (document.id || '').split(':')[1];
+  if (!['text', 'event'].includes(kind)) throw new Error('Only documents and meetings carry a type');
+  const n = readNode(document);
+  if ((n.entityTypeUri ?? null) === uri) return uri; // nothing to write, and nothing to undo
+  if (workflow && uri && !n.stateType && !USER_URI.test(byUri || '')) throw new Error('stateChangedBy must be a tana:user-profile: URI');
+  document.transact((loro) => {
+    const data = loro.getMap('data');
+    if (uri) data.set('entityTypeUri', uri); else data.delete('entityTypeUri');
+    data.delete('stateWorkflowUri');
+    data.delete('stateWorkflowStateId');
+    if (workflow && uri && !n.stateType) {
+      data.set('stateType', 'proposed');
+      data.set('stateEnteredAt', Date.now());
+      data.set('stateChangedBy', byUri);
+    }
+  });
+  return uri;
+}
+
 // Mirrors native Bc scope selection, but unresolved/group audiences stay unknown.
 async function audienceMetadata(document, userUri, graph, sync) {
   const direct = taskMeta(document);
@@ -276,4 +307,4 @@ function render(node) {
   return kids.map(render).join(block ? '\n' : '');
 }
 
-module.exports = { readNode, editable, setTitle, setState, taskMeta, audience, audienceMetadata, setAssignees, setSearchQuery, setSearchView, contentText, ulid, initDocument, STATE_TYPES };
+module.exports = { readNode, editable, setTitle, setState, setEntityType, taskMeta, audience, audienceMetadata, setAssignees, setSearchQuery, setSearchView, contentText, ulid, initDocument, STATE_TYPES };

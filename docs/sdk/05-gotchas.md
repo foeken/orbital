@@ -25,8 +25,16 @@
 - An event proves *invited* and *scheduled*, never *attended*: `calendarEvent.attendees` / `roster` (with `responseStatus`) read the same before, during and after the meeting. Attendance is the `tana:call:` document, whose `sessions` root empties when the last participant leaves — `sdk/calls.js`. Fewer calls exist than events: no call, no attendance record.
 - Provider-synced events have fields you must not copy when creating (`externalId`, `calendarSubscriptionUri`, `origin: 'provider'`).
 - `appearance` holds only `imageUri` (avatar/cover) and `hue` (types). No icon field.
+- Because of that, the glyph a type is drawn with is **app-local**: a Nucleo label kept in SQLite (`main/icons.js`),
+  not anything written to Tana. A document's data map *does* round-trip keys Tana does not know — a scratch document
+  given `data.companionIcon = 'rocket'` still carried it when a fresh process read it back from the server
+  (2026-09-20) — so the name could be stored on the type itself and follow it between machines. It is not, for now:
+  it would put a key outside Tana's vocabulary into their CRDT, which nothing else here does.
 - `appearance` exists **only on graph nodes**. A document's Loro data map never carries it (verified read-only for spaces, typed documents and tasks), so a hue must come from `listNodes` and a read of the CRDT must never be treated as "this node has no hue". Documents reached without a graph query (sidebar pins, zoom) need one `nodeIds` lookup to get their colour; `main.js` caches it per id, including "no hue".
 - Type titles resolve through `nodeTypes: ['type']` nodes; the same `nodeIds` lookup resolves spaces/events for breadcrumbs.
+- **A type's home space owns its documents.** A type with an `ownerUri` keeps every document of that type in that space, *exactly* that space and not a sub-space: Tana's own scope check is `!type.ownerUri || type.ownerUri === space`, their placement handler redirects a typed item into its type's home space ("the 'X' type is scoped to that space"), and their move rules say "items typed with a space-scoped type cannot move outside that type's home space". A type with no `ownerUri` — a Library type — goes on anything. So setting a type is allowed only when the type is homeless or the document already lives in its home space (`main/documents.js typeChoices`), and `sdk/access.js` enforces the same rule from the other side when a typed document is moved.
+- **A type applies to documents or to meetings, never both**: `appliesTo` on the type document (`typeDef.appliesTo` on the graph node), absent meaning `'docs'`. Tana refuses the other direction outright, and so does `setType`. The index does not always carry `typeDef`, so the list filters on the graph node and the write re-reads the type's own document before touching anything.
+- Tana's `setEntityType` refuses to replace a type that is already there and points at `retype` for an explicit change; the Cmd+K "Set type" command is that explicit change, so it goes through the retype path in both directions (set, replace, remove).
 - Pins: the web client appends on re-pin, so unpin+pin changes order; collection/pin-map are created lazily by Tana on the user's first pin — the SDK does not create them.
 
 ## Access, confirmation and deletion

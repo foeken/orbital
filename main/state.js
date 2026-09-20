@@ -5,13 +5,19 @@ const { KIND_VIEWS } = require('../sdk/query');
 // Order is the Cmd+K Views order: what is waiting on you, then your work, then knowledge.
 // Meetings, Chats and People were fixed views over one kind each — which is exactly what a saved search is, only
 // without being editable or nameable. They are gone; the kinds remain, so the same lists are a search away.
-const VIEWS = [{ id: 'inbox', title: 'Inbox', icon: 'inbox' }, { id: 'library', title: 'Library', icon: 'library' }]
+const VIEWS = [{ id: 'inbox', title: 'Inbox', icon: 'inbox' }, { id: 'library', title: 'Library', icon: 'library' }, { id: 'types', title: 'Types', icon: 'type' }]
   .map((view) => ({ ...view, kind: KIND_VIEWS.has(view.id) })); // a kind page lists one kind and does not offer the type picker
 const TAG = { task: { label: 'task', color: 'grey' }, meeting: { label: 'meeting', color: 'gold' }, space: { label: 'space', color: 'grey' }, doc: { label: 'doc', color: 'grey' }, member: { label: 'member', color: 'grey' } };
 const KINDS = { doc: 'tana:text:', task: 'tana:text:', meeting: 'tana:event:', chat: 'tana:chat:', search: 'tana:search:' };
 const PLAIN_KINDS = new Set(['chat', 'canvas', 'agent', 'skill', 'type', 'search']); // tana:<kind>: ids listed read-only: kind icon + kind tag
 const PIN_HUBS = new Set(['event', 'space']); // the only schemas with a pinnedItems container (docs/PINNING.md section 4)
 const DOC_URI = /^tana:[a-z-]+:[0-9a-z]{26}$/; // a real document id; a renderer draft keeps a local id until it materialises (#112)
+// How many rows of a list are kept live. A subscription is a bootstrap RPC and a LoroDoc of its own, and every
+// bootstrap lands as a change the renderer redraws on, so subscribing a whole list (the Library lists hundreds)
+// flooded the one sync connection and the outline with it: the page lagged and the read for whatever you opened
+// next queued behind it. The head of the list is what you are looking at; the rest ride the 30 s refresh, which
+// re-queries the graph anyway. 100 also sits at the usual HTTP/2 stream limit, so the burst is one round.
+const LIVE_ROWS = 100;
 // Everything the modules share and reassign lives on S, so one require gives every file the same live values.
 // The caches below are plain consts: sharing the Map is enough.
 const S = {
@@ -22,6 +28,11 @@ const S = {
   badge: null, // main.js sets this: the app icon's badge belongs to electron, the counting to views.js (same split as refresh)
 };
 const subscribed = new Set(); // ids the view refresh subscribed: the only ones it unsubscribes again
+// Ids an on-demand read (doc:info, a zoom, a mutation) is waiting on a bootstrap for. The view refresh unsubscribes
+// every row it no longer lists, and unsubscribing a subscription that is still bootstrapping rejects it as
+// 'unsubscribed <id>' under whoever is awaiting it — which is what a doc:info for a row of the view you just left
+// reported as a red error. A read holds its document for as long as it is waiting; the next refresh sweeps it.
+const reading = new Map(); // docId -> how many reads are waiting on it
 const deletedNodes = new Set();
 const isDeleted = n => typeof n.deletedAt === 'number' && n.deletedAt > 0;
 const visibleGraphNodes = nodes => nodes.filter(n => !deletedNodes.has(n.id) && !isDeleted(n));
@@ -76,4 +87,4 @@ function scheduleRefresh(ms) {
   S.refreshTimer = setTimeout(() => S.refresh && S.refresh(), ms);
 }
 
-module.exports = { VIEWS, TAG, KINDS, PLAIN_KINDS, PIN_HUBS, DOC_URI, S, subscribed, deletedNodes, isDeleted, visibleGraphNodes, typeTitles, typeHues, nodeHues, nodeCreators, editability, nodeMeta, docStates, iso, errText, NOT_CONNECTED, notReady, report, now, isSpace, isSearch, idKind, memberTitle, isMcp, send, today, setStatus, pathCache, metaSigs, truncatedViews, summaryCache, typeAttrTitles, hueLoaded, imageCache, undoStack, redoStack, scheduleRefresh };
+module.exports = { VIEWS, TAG, KINDS, PLAIN_KINDS, PIN_HUBS, DOC_URI, LIVE_ROWS, S, subscribed, reading, deletedNodes, isDeleted, visibleGraphNodes, typeTitles, typeHues, nodeHues, nodeCreators, editability, nodeMeta, docStates, iso, errText, NOT_CONNECTED, notReady, report, now, isSpace, isSearch, idKind, memberTitle, isMcp, send, today, setStatus, pathCache, metaSigs, truncatedViews, summaryCache, typeAttrTitles, hueLoaded, imageCache, undoStack, redoStack, scheduleRefresh };

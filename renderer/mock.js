@@ -42,6 +42,20 @@ function mockApi() {
   const space = { id: 'tana:space:mock', text: 'Studio LT', kind: 'document', hasChildren: true, icon: 'space', hue: 150, tags: [{ label: 'space', color: 'grey' }] };
   // other library kinds (chats, canvases, agents, skills, saved searches): read-only rows, plain bullet + kind chip
   const kinds = ['chat', 'canvas', 'agent', 'skill', 'search'].map((k, i) => ({ id: 'tana:' + k + ':mock' + i, text: 'Sample ' + k, kind: 'document', hasChildren: true, tags: [{ label: k, color: 'grey' }] }));
+  // the workspace's types (the Types view): the space each lives in is the row's subtext, 'Library' when it has none.
+  // The home space is also what decides which documents can be given the type (api.docTypes below).
+  const types = [['Project', space.id, 268], ['Decision Record', space.id, 150], ['Co-Worker', null, 32]]
+    .map(([text, ownerUri, hue], i) => ({ id: 'tana:type:mock' + i, text, kind: 'document', hasChildren: true, hue, ownerUri,
+      meta: ownerUri ? space.text : 'Library', tags: [{ label: 'type', color: 'grey' }] }));
+  // The icons a type can be given: main searches 3.5k of them, the mock carries four, in the channel's shape.
+  const glyph = (d) => '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18"><path d="' + d + '" fill="none" stroke="currentColor" stroke-width="var(--nucleo-stroke-width, 1.5)" stroke-linecap="round" stroke-linejoin="round"></path></svg>';
+  const mockIcons = [
+    { name: 'nc-rocket', label: 'rocket', tags: 'launch,ship,start', svg: glyph('M9 1.75c3 2 4.25 5 4.25 8l-4.25 4-4.25-4c0-3 1.25-6 4.25-8Z') },
+    { name: 'nc-flask', label: 'flask', tags: 'lab,experiment,science', svg: glyph('M7.25 1.75v4.5l-3.5 7a1 1 0 0 0 .9 1.5h8.7a1 1 0 0 0 .9-1.5l-3.5-7v-4.5') },
+    { name: 'nc-book', label: 'book', tags: 'read,note,library', svg: glyph('M3.75 3.25h4.5a1 1 0 0 1 1 1v10.5a1 1 0 0 0-1-1h-4.5Zm10.5 0h-4.5a1 1 0 0 0-1 1v10.5a1 1 0 0 1 1-1h4.5Z') },
+    { name: 'nc-user-key', label: 'user-key', tags: 'person,account,access', svg: glyph('M9 7.25a2.75 2.75 0 1 0 0-5.5 2.75 2.75 0 0 0 0 5.5Zm-6 9v-1.5a4.5 4.5 0 0 1 4.5-4.5h3') },
+  ];
+  const typeIconChoices = {}; // type uri -> icon name, the app-local choice main keeps in SQLite
   // chats (api.chats): newest first; "MCP: …" ones carry meta 'MCP' and are hidden from every list and search while
   // the Cmd+K switch is on (mcpOff below; the per-view includeMcp filter is still gone, #247)
   const chats = ['Draft the Studio memo', 'MCP: list open tasks', 'Summarise the leadership notes', 'MCP: create meeting note', 'Rewrite the agreement clause']
@@ -57,8 +71,8 @@ function mockApi() {
   });
   // Meetings, Chats and People are no longer views. Their documents remain — the Library lists every kind, and a
   // saved search can name any subset of them — so only the pages are gone, not the content they used to show.
-  const views = [{ id: 'inbox', title: 'Inbox', icon: 'inbox', nodes: [] }, { id: 'library', title: 'Library', icon: 'library', nodes: docs }];
-  const all = [...docs, ...meetings, ...spaceDocs, space, ...kinds, ...chats];
+  const views = [{ id: 'inbox', title: 'Inbox', icon: 'inbox', nodes: [] }, { id: 'library', title: 'Library', icon: 'library', nodes: docs }, { id: 'types', title: 'Types', icon: 'type', nodes: types }];
+  const all = [...docs, ...meetings, ...spaceDocs, space, ...kinds, ...chats, ...types];
   for (const node of all) node.editable = true;
   // org members (user profiles): searchable, linkable, and the "Assigned to" menu; me = the signed-in user
   const members = [['robin', 'Robin Vega', true], ['sam', 'Sam Okafor'], ['priya', 'Priya Raman'], ['tomas', 'Tomas Ilves']]
@@ -73,13 +87,14 @@ function mockApi() {
     inbox: { types: null, states: ['proposed'], assignee: 'anyone', text: '' },
     tasks: { types: ['tasks'], states: ['proposed', 'open', 'not_now'], assignee: 'me', text: '' },
     library: { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me', text: '' },
+    types: { types: ['types'], states: null, assignee: 'anyone', text: '' },
   };
   const stateOf = (d) => d.state || (d.done == null ? null : d.done ? 'closed' : 'open');
   // main applies the completed window to what the graph answers (sdk/query.js); the mock has no graph, so it ages
   // its own two completed rows the same way — 2 days and 45 days old, so each choice shows something different.
   const inWindow = (d, f) => stateOf(d) !== 'closed' || completedWindow(f) === 'all' || (d.closedDaysAgo || 0) <= completedWindow(f);
   const listed = (d, f) => (!f.states || f.states.includes(stateOf(d))) && inWindow(d, f) && (!f.assignee || f.assignee === 'me' || f.assignee === 'anyone');
-  const kindOf = (d) => (d.icon === 'member' ? 'people' : d.icon === 'task' ? 'tasks' : d.icon === 'meeting' ? 'meetings' : d.tags && ['chat', 'canvas', 'agent', 'skill', 'search'].includes(d.tags[0].label) ? d.tags[0].label + 's' : 'docs');
+  const kindOf = (d) => (d.icon === 'member' ? 'people' : d.icon === 'task' ? 'tasks' : d.icon === 'meeting' ? 'meetings' : d.tags && ['chat', 'canvas', 'agent', 'skill', 'search', 'type'].includes(d.tags[0].label) ? d.tags[0].label + 's' : 'docs');
   const created = {};   // documents made with createDocument
   const searchQueries = {}; // saved search id -> the filter its stored query holds
   const notifyChoices = {}; // doc id -> an explicit watch choice; absent means the default rule decides
@@ -89,7 +104,8 @@ function mockApi() {
   const content = Object.fromEntries(all.map((d, i) => [d.id, [
     block('Context', [], 2),
     block('First point about task ' + i, [block('Detail A'), block('Detail B', [block('Deeper detail')])]),
-    block([{ text: 'Discuss with ' }, { mention: { label: 'Sam Okafor', uri: 'tana:user-profile:sam' } }, { text: ' and see ' }, { mention: { label: titles[2], uri: 'mockdoc2' } }]),
+    // main resolves an inline mention's target in the same batch the rows use and hands back its icon (main/documents.js)
+    block([{ text: 'Discuss with ' }, { mention: { label: 'Sam Okafor', uri: 'tana:user-profile:sam', icon: 'member' } }, { text: ' and see ' }, { mention: { label: titles[2], uri: 'mockdoc2', icon: 'task' } }]),
     // a line that is only a mention: Tana's full-reference presentation, so the row shows (and checks off) that task
     block([{ mention: { label: 'Stale label', uri: 'mockdoc1' } }]),
     // every mark and block type the outline can receive, so formatting is visible without the main process
@@ -149,7 +165,7 @@ function mockApi() {
     viewList: async (_id, filter) => {
       await new Promise((r) => setTimeout(r, 30));
       const text = String(filter.text || '').trim().toLowerCase();
-      return { nodes: [...all, ...members].filter((d) => (!filter.types ? kindOf(d) !== 'people' : filter.types.includes(kindOf(d)))
+      return { nodes: [...all, ...members].filter((d) => (!filter.types ? !['people', 'types'].includes(kindOf(d)) : filter.types.includes(kindOf(d)))
         && (!filter.states || listed(d, filter))
         && d.text.toLowerCase().includes(text)).map(info), truncated: false };
     },
@@ -199,7 +215,9 @@ function mockApi() {
     // relationships of a node (main.js related): pinned edges, task outcomes and note documents
     related: async (docId) => {
       const doc = all.find((d) => d.id === docId);
-      if (!doc || doc.icon !== 'meeting') return { pinned: [], outcomes: [], notes: [] };
+      // anything that is not a meeting still has backlinks: one mock document mentions it
+      const mentions = all.filter((d) => d.icon === 'doc' && d.id !== docId).slice(0, 1).map(info);
+      if (!doc || doc.icon !== 'meeting') return { pinned: [], outcomes: [], notes: [], backlinks: mentions.length ? [{ label: 'Mentioned in', rows: mentions }] : [] };
       const pick = (n) => n && info(n);
       return {
         summary: 'Mock meeting summary for ' + doc.text,
@@ -207,6 +225,7 @@ function mockApi() {
         pinned: [pick(all.find((d) => d.icon === 'doc')), pick(all.find((d) => d.icon === 'task'))].filter(Boolean),
         outcomes: all.filter((d) => d.icon === 'task').slice(1, 3).map(info),
         notes: [pick(all.find((d) => d.icon === 'doc' && d.text))].filter(Boolean),
+        backlinks: mentions.length ? [{ label: 'Mentioned in', rows: mentions }] : [],
       };
     },
     accessOptions: async (docId) => { const writable = !!all.find((doc) => doc.id === docId)?.editable; return { sharing: writable, move: writable, deletable: writable, rules: writable ? ['me', 'people', 'inherit'] : [], roles: ['editor', 'admin'], sharingToken: 'mock-sharing', inheritAudience: { scope: 'space', title: space.text } }; },
@@ -240,6 +259,47 @@ function mockApi() {
     },
     mcpHidden: async () => mcpOff,
     setMcpHidden: async (on) => { mcpOff = !!on; emit(null); return mcpOff; },
+    // Set type: the mock keeps main's two rules so the page behaves the same without the main process — a type that
+    // lives in a space fits only a document in that space, a Library type fits anything (main/documents.js).
+    docTypes: async (docId) => {
+      const doc = all.find((d) => d.id === docId);
+      if (!doc) throw new Error('unknown document');
+      const home = spaceDocs.some((d) => d.id === docId) ? space.id : null;
+      return structuredClone({
+        current: (doc.tags || []).map((t) => t.uri).find(Boolean) || null,
+        options: types.map((t) => ({ uri: t.id, title: t.text, hue: t.hue, selectable: !t.ownerUri || t.ownerUri === home,
+          reason: !t.ownerUri || t.ownerUri === home ? undefined : 'Lives in ' + space.text })),
+      });
+    },
+    setType: async (docId, typeUri) => {
+      const doc = all.find((d) => d.id === docId);
+      if (!doc) throw new Error('unknown document');
+      const type = typeUri ? types.find((t) => t.id === typeUri) : null;
+      if (typeUri && !type) throw new Error('Select a workspace type');
+      const kindTags = (doc.tags || []).filter((t) => t && ['task', 'meeting'].includes(t.label));
+      doc.tags = type ? [...kindTags, { label: type.text, hue: type.hue, uri: type.id }] : kindTags.length ? kindTags : [{ label: 'doc', color: 'grey' }];
+      doc.hue = type ? type.hue : undefined;
+      emit(docId);
+      return typeUri || null;
+    },
+    // Set icon: four glyphs instead of the 3500 main holds, enough to drive the page without the main process.
+    // The shape is the channel's — { name, label, svg }, and { uri, … } for the ones a type is wearing.
+    searchIcons: async (query) => {
+      const q = String(query || '').trim().toLowerCase();
+      return structuredClone(mockIcons.filter((i) => !q || i.label.includes(q) || i.tags.includes(q)).map(({ tags, ...icon }) => icon));
+    },
+    typeIcons: async () => structuredClone(Object.entries(typeIconChoices).map(([uri, name]) => ({ uri, ...mockIcons.find((i) => i.name === name) }))),
+    setTypeIcon: async (typeUri, name) => {
+      if (!types.some((t) => t.id === typeUri)) throw new Error('Icons are set on a type');
+      const icon = name ? mockIcons.find((i) => i.name === name) : null;
+      if (name && !icon) throw new Error('No icon called ' + name);
+      if (icon) typeIconChoices[typeUri] = icon.name; else delete typeIconChoices[typeUri];
+      const type = types.find((t) => t.id === typeUri);
+      type.icon = icon ? icon.name : undefined;
+      for (const d of all) if ((d.tags || []).some((t) => t.uri === typeUri)) d.icon = icon ? icon.name : 'type';
+      emit(null);
+      return icon ? structuredClone({ uri: typeUri, ...icon }) : null;
+    },
     creationOptions: async () => ({ options: [
       { id: 'task', kind: 'task', title: 'Task', icon: 'task', selectable: true },
       { id: 'meeting', kind: 'meeting', title: 'Meeting', icon: 'meeting', selectable: true },

@@ -10,7 +10,7 @@
 // out of the app's own https -> codex:// translation), so the task starts wherever the app puts it and the callback
 // writes outside that directory. That costs one visible approval on the first run, which is honest: the badge stays
 // pending until the write lands.
-const db = require('../db');
+const settings = require('./settings');
 
 // Opening a *new* task from outside goes through the https form, not codex://threads/new. That codex: route is
 // internal: the app produces it itself when it translates this link (hostname chatgpt.com, path /codex/open-app,
@@ -20,16 +20,18 @@ const NEW_TASK = 'https://chatgpt.com/codex/open-app?q=';
 const TASK = 'codex://threads/';
 const THREAD_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// nodeId -> Codex thread id. Written by the task itself (scripts/agent-link.js) and read here; unassigning leaves it
-// alone, so reassigning a node reopens the task it already has.
-const codexTasks = () => { const stored = db.setting('codexTask'); return stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {}; };
+// nodeId -> { host, threadId }. Written by the task itself (scripts/agent-link.js) and read here; unassigning leaves
+// it alone, so reassigning a node reopens the task it already has. It follows you between machines like the rest of
+// the assignment: a thread id is global, and the record names the machine its rollout lives on, which is what lets
+// another machine show the badge and say where the work is instead of showing nothing at all.
+const codexTasks = () => { const stored = settings.get('codexTask'); return stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {}; };
 const codexTaskFor = (id) => { const link = taskLink(id); return link ? link.threadId : null; };
 function setCodexTask(id, threadId, host) {
   const map = codexTasks();
   // host and id together: a thread id is unique, but its rollout only exists on the machine that created it, so a
   // status read sent to the wrong one would look like a task that vanished.
   if (threadId && THREAD_ID.test(String(threadId))) map[id] = { host: hostId(host) || 'local', threadId }; else delete map[id];
-  db.setSetting('codexTask', map);
+  settings.set('codexTask', map);
   return codexTaskFor(id);
 }
 // A link that no longer answers is not deleted quietly: the badge goes red and the retry replaces the mapping only
@@ -43,7 +45,9 @@ const clearCodexTask = (id) => setCodexTask(id, null);
 // "command not found". Address and path are passed to ssh as separate arguments and never joined into a shell line.
 const LOCAL = { id: 'local', title: 'This Mac' };
 const HOST_ID = /^[a-z0-9-]{1,40}$/; // opaque, ours: nothing the renderer sends can become an address
-const remoteHosts = () => { const stored = db.setting('codexHosts'); return Array.isArray(stored) ? stored.filter(validHost) : []; };
+// The machines a task can run on: an address and a path on *that* machine, so the list means the same thing
+// wherever the app is opened — one of the settings that follows you (main/settings.js).
+const remoteHosts = () => { const stored = settings.get('codexHosts'); return Array.isArray(stored) ? stored.filter(validHost) : []; };
 const validHost = (h) => !!h && HOST_ID.test(String(h.id)) && h.id !== 'local' && String(h.title || '').trim()
   && /^[A-Za-z0-9._-]{1,253}$/.test(String(h.ssh || '')) // a hostname, never a command or an option
   && /^\/[^\s;|&$`'"<>]{1,255}$/.test(String(h.bin || '')); // one absolute path, nothing a shell could read as more
@@ -54,13 +58,13 @@ const hostRecord = (id) => (!id || id === 'local' ? LOCAL : remoteHosts().find((
 function addHost({ title, ssh, bin }) {
   const record = { id: 'h' + Date.now().toString(36), title: String(title || '').trim(), ssh: String(ssh || '').trim(), bin: String(bin || '').trim() };
   if (!validHost(record)) throw new Error('A host needs a name, an SSH address and the absolute path to codex on it');
-  db.setSetting('codexHosts', [...remoteHosts(), record]);
+  settings.set('codexHosts', [...remoteHosts(), record]);
   return { id: record.id, title: record.title };
 }
 function removeHost(id) {
   // The tasks on it are left alone: they are the user's, and their links stay pointing at a host nobody knows, which
   // is what makes them read as unavailable instead of being run against the wrong machine.
-  db.setSetting('codexHosts', remoteHosts().filter((h) => h.id !== id));
+  settings.set('codexHosts', remoteHosts().filter((h) => h.id !== id));
   return hosts();
 }
 const hostId = (host) => (hostRecord(host) ? host || 'local' : null); // unknown is unknown, never this machine

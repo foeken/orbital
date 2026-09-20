@@ -4,9 +4,10 @@ const path = require('node:path');
 const { peerIdentity } = require('../tana-session');
 const { createTanaClient } = require('../sdk');
 const { parseQuery, searchParams, needsTypes, viewParams, completedInWindow, filterToSearchQuery, validViewFilter, viewTypes, VIEW_PRESETS, hideRules, isHidden } = require('../sdk/query');
-const { NOT_CONNECTED, S, deletedNodes, docStates, errText, idKind, isMcp, memberTitle, now, truncatedViews, redoStack, send, setStatus, subscribed, undoStack, visibleGraphNodes } = require('./state');
+const { LIVE_ROWS, NOT_CONNECTED, S, deletedNodes, docStates, errText, idKind, isDeleted, isMcp, memberTitle, now, reading, truncatedViews, typeTitles, redoStack, report, send, setStatus, subscribed, undoStack, visibleGraphNodes } = require('./state');
 const { graphRow, rememberNodeHue, resolveTypes, toNode, typesByTitle } = require('./rows');
 const { codexIds, createDocument, inHistory, notifySilencedIds, notifyWatchedIds, onChange, subscribe } = require('./documents');
+const settings = require('./settings');
 
 
 // Persisted view filters are merged over their preset; an invalid saved value cannot strand a view across restarts.
@@ -15,21 +16,21 @@ const preset = (id) => {
   return { ...VIEW_PRESETS[id] };
 };
 const viewFilter = (id) => {
-  const saved = db.setting('viewFilter:' + id);
+  const saved = settings.get('viewFilter:' + id);
   return viewTypes(id, validViewFilter(saved) ? { ...preset(id), ...saved } : preset(id));
 };
 const setViewFilter = (id, filter) => {
   const next = viewTypes(id, validViewFilter(filter) ? { ...preset(id), ...filter } : preset(id));
-  db.setSetting('viewFilter:' + id, next);
+  settings.set('viewFilter:' + id, next);
   return next;
 };
 // The user's hidden-title patterns ("Block*", "Lunch", …): normalised on every read, so a list written by an older
 // build or by a bad renderer call cannot empty a view (sdk/query.js has the matching rule).
-const hiddenRules = () => hideRules(db.setting('hiddenTitles'));
+const hiddenRules = () => hideRules(settings.get('hiddenTitles'));
 // MCP chats (Tana's own MCP writes them) kept out of every list and search: one app-local switch, toggled from Cmd+K.
 // Not a view filter: a filter key has to round-trip into a saved search, which is what killed the per-view
 // includeMcp toggle (#247). Off unless the setting says otherwise.
-const mcpHidden = () => db.setting('hideMcp') === true;
+const mcpHidden = () => settings.get('hideMcp') === true;
 async function viewRows(id, filter) {
   if (!S.client) return { nodes: [], truncated: false };
   const base = viewFilter(id);
@@ -43,18 +44,32 @@ async function viewRows(id, filter) {
     .filter((n) => completedInWindow(n, f.completedWithin))
     .filter((n) => !isHidden(memberTitle(n), rules));
   nodes.forEach(rememberNodeHue);
-  await resolveTypes(nodes.map((n) => n.entityType));
+  // Also the spaces the rows live in, for the Types view's subtext. A type node carries its space on the graph node
+  // itself (verified: `spaceUri`, the same uri as `ownerUri`), so this is the one nodeIds lookup resolveTypes already
+  // does for type titles rather than an owner chain per row.
+  await resolveTypes([...nodes.map((n) => n.entityType), ...nodes.filter((n) => idKind(n.id) === 'type').map((n) => n.spaceUri)]);
   const withDate = !(f.types && f.types.length === 1 && f.types[0] === 'meetings');
-  const rows = nodes.map((n) => { const row = graphRow(n, withDate); return isMcp(n) ? { ...row, meta: 'MCP' } : row; });
+  const rows = nodes.map((n) => {
+    const row = graphRow(n, withDate);
+    if (isMcp(n)) return { ...row, meta: 'MCP' };
+    // Where a type lives, beside its name: two spaces can hold a type of the same title, and an unowned one is in the Library.
+    if (idKind(n.id) === 'type') return { ...row, meta: typeTitles.get(n.spaceUri) || 'Library' };
+    return row;
+  });
   db.replaceSection(id, rows);
   if (id === S.activeView && filter === S.activeFilter) {
-    const ids = new Set(nodes.map((n) => n.id));
+    // The head of the list, not all of it (LIVE_ROWS in main/state.js): a wide Library lists hundreds of rows, and
+    // subscribing every one of them meant hundreds of bootstraps on one connection and a redraw per bootstrap.
+    // The tail keeps its cached row and is re-read by the 30 s refresh like everything else.
+    const ids = new Set(nodes.slice(0, LIVE_ROWS).map((n) => n.id));
     // a node you asked to be told about — or the rule watches, or that was handed to the Codex agent — stays
     // subscribed wherever you are
     const watched = new Set([...notifyWatchedIds(), ...ruleWatched, ...codexIds()]);
     for (const nodeId of ids) if (!subscribed.has(nodeId)) { subscribed.add(nodeId); subscribe(nodeId); }
     // Leaving a filtered view must not discard a document whose local undo step still points at its Loro handle.
-    for (const nodeId of subscribed) if (!ids.has(nodeId) && !watched.has(nodeId) && !deletedNodes.has(nodeId) && !inHistory(nodeId)) { subscribed.delete(nodeId); docStates.delete(nodeId); S.client.sync.unsubscribe(nodeId).catch(() => {}); }
+    // ...and neither is a document an on-demand read is still waiting for: unsubscribing a bootstrap in flight
+    // rejects it as 'unsubscribed <id>' under the reader (main/state.js reading).
+    for (const nodeId of subscribed) if (!ids.has(nodeId) && !watched.has(nodeId) && !deletedNodes.has(nodeId) && !inHistory(nodeId) && !reading.has(nodeId)) { subscribed.delete(nodeId); docStates.delete(nodeId); S.client.sync.unsubscribe(nodeId).catch(() => {}); }
   }
   if (result.truncated) truncatedViews.add(id); else truncatedViews.delete(id);
   return { nodes: rows.map(toNode), truncated: !!result.truncated };
@@ -133,6 +148,9 @@ async function start() {
   S.client.sync.on('change', onChange);
   setStatus({ authenticated: true });
   await S.client.sync.connect();
+  // The settings document decides before anything is listed: a view's filter, the hidden titles and the MCP switch
+  // are all read on the way into the first refresh, and on a new machine this is also what pushes them up.
+  try { await settings.hydrate(); } catch (e) { report(e); }
   // Watched nodes are live from boot, listed or not: a deleted or unreachable one is simply not watched any more.
   for (const id of new Set([...notifyWatchedIds(), ...codexIds()])) S.client.sync.subscribe(id).catch(() => {});
   await refresh();
@@ -204,17 +222,24 @@ function listFilter(c) {
     const result = await listNodes(params);
     // Compare the count with the raw response: local delete/title filters must not masquerade as server truncation.
     const truncated = result.totalCount != null ? result.totalCount > result.nodes.length : !!result.truncated;
+    // This is also the only place a deletion nobody told us about arrives: a node deleted on another device, never
+    // subscribed here, so no change event ever ran. Remembering the tombstone rather than only dropping the row is
+    // what lets a reference to it be drawn as deleted (main/documents.js) instead of merely unreadable.
+    for (const n of result.nodes) if (isDeleted(n)) deletedNodes.add(n.id);
     const nodes = visibleGraphNodes(result.nodes);
     if (params && params.nodeIds) return { ...result, nodes, truncated };
     const rules = hiddenRules(), hideMcp = mcpHidden();
-    return { ...result, nodes: nodes.filter(n => !isHidden(memberTitle(n), rules) && !(hideMcp && isMcp(n))), truncated };
+    // The app's own settings document is app plumbing, not a note: it is kept out of every list and search the way
+    // a hidden title is, and stays reachable by id like everything else that is filtered here.
+    const settingsDoc = settings.settingsDocId();
+    return { ...result, nodes: nodes.filter(n => n.id !== settingsDoc && !isHidden(memberTitle(n), rules) && !(hideMcp && isMcp(n))), truncated };
   };
 }
 // Changing the list refreshes like any other filter change: replaceSection drops the rows that are now hidden, so
 // nothing comes back from the SQLite cache.
 async function setHidden(list) {
   const rules = hideRules(list);
-  db.setSetting('hiddenTitles', rules);
+  settings.set('hiddenTitles', rules);
   await S.refreshing; // a run with the old list
   await refresh();
   send('outline:changed', null); // also when there is no connection to refresh with
@@ -222,7 +247,7 @@ async function setHidden(list) {
 }
 // The MCP switch refreshes the same way: the rows that are now hidden leave the cache with the refresh.
 async function setMcpHidden(on) {
-  db.setSetting('hideMcp', !!on);
+  settings.set('hideMcp', !!on);
   await S.refreshing;
   await refresh();
   send('outline:changed', null);

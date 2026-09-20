@@ -244,7 +244,10 @@ class SyncConnection extends EventEmitter {
         if (c === Code.PermissionDenied) return this._detach(entry, e);
         if (c === Code.FailedPrecondition && /no active streams|is not assigned to this pod/.test(msg)) return this.abort.abort();
         if (c === Code.FailedPrecondition && /system-doc-discard-local/.test(msg)) entry.document.reset();
-        this.logger.warn('sync: bootstrap ' + entry.id + ' failed (attempt ' + (attempt + 1) + '): ' + msg);
+        // A single [unavailable] is Tana shedding load, and the retry below takes it: logging it looked like a
+        // failure that needed acting on when nothing had gone wrong. It is said from the second attempt on, so a
+        // real outage is still visible — and every other code is still said the first time.
+        if (attempt > 0 || c !== Code.Unavailable) this.logger.warn('sync: bootstrap ' + entry.id + ' failed (attempt ' + (attempt + 1) + '): ' + msg);
         entry.state = 'retrying';
       }
     }

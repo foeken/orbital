@@ -15,11 +15,13 @@ const agent = require('./main/agent');
 const fields = require('./sdk/fields');
 const { NOT_CONNECTED, S, VIEWS, docStates, errText, idKind, isSearch, isSpace, metaSigs, pathCache, today, truncatedViews, redoStack, report, scheduleRefresh, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
 const { cachedNodeHue, graphRow, members, rememberNodeHue, toNode } = require('./main/rows');
-const { accessContext, chatOutline, codexIds, createDocument, creationOptions, creatorOf, documentAction, history, info, linkShared, metaSig, moveTarget, mut, mutTasks, notifyOn, notifyState, setCodex, setNotify, onChange, op, outlineWithReferences, setSensitive } = require('./main/documents');
+const { accessContext, chatOutline, codexIds, createDocument, creationOptions, creatorOf, documentAction, history, info, linkShared, metaSig, moveTarget, mut, mutTasks, notifyOn, notifyState, setCodex, setNotify, onChange, op, outlineWithReferences, setSensitive, setType, typeChoices } = require('./main/documents');
 const { callOf, changesOf, pathOf, related, searchChildren, searchPreview, spaceChildren, summaryChanges, summaryUri } = require('./main/related');
 const { hiddenRules, inboxCount, listFilter, mcpHidden, preset, refresh, search, searchCreate, searchList, searchTitle, setHidden, setMcpHidden, setViewFilter, start, viewFilter, viewRows } = require('./main/views');
 const { nodePin, pinState, pinTree, pinned, setPin, todayNode, weekNode, weekTitle } = require('./main/pins');
 const { image } = require('./main/images');
+const icons = require('./main/icons');
+const settings = require('./main/settings');
 const quick = require('./main/quickadd');
 
 ipcMain.handle('doc:path', async (_e, id) => { try { const p = await pathOf(id); pathCache.set(id, p); return p; } catch (e) { report(e); return pathCache.get(id) || []; } });
@@ -119,6 +121,23 @@ ipcMain.handle('view:setFilter', (_e, id, filter) => {
 ipcMain.handle('outline:children', (_e, id) => (isSearch(id) ? searchChildren(id) : isSpace(id) ? spaceChildren(id) : op(id, (doc) => (idKind(id) === 'chat' ? chatOutline(doc) : doc.content.get('children') ? outlineWithReferences(doc) : []))));
 ipcMain.handle('doc:info', (_e, id) => op(id, info));
 ipcMain.handle('doc:creationOptions', () => creationOptions());
+// A document's type: the choices it can be given (with the ones it cannot, and why), and the change itself.
+ipcMain.handle('doc:types', (_e, id) => typeChoices(id));
+ipcMain.handle('doc:setType', (_e, id, typeUri) => setType(id, typeUri ?? null));
+// A type's own glyph: the built-in Nucleo set to search, the glyphs currently chosen (sent with every roots load so
+// no row is drawn before the glyph it names exists), and the choice itself. App-local: Tana has nowhere to keep it.
+ipcMain.handle('icons:search', (_e, query) => icons.searchIcons(query));
+ipcMain.handle('icons:types', () => icons.typeIcons());
+// The renderer's preferences, from the same store: a synchronous snapshot at load (preload reads it before the
+// first paint) and one write per change.
+ipcMain.on('prefs:snapshot', (e) => { e.returnValue = settings.prefs(); });
+ipcMain.handle('prefs:set', (_e, key, value) => settings.setPref(key, value));
+ipcMain.handle('icons:setType', async (_e, typeUri, name) => {
+  const chosen = icons.setTypeIcon(typeUri, name ?? null);
+  await refresh(); // the cached rows carry the icon name, so they are rebuilt before anything is told to redraw
+  send('outline:changed', null);
+  return chosen;
+});
 ipcMain.handle('doc:create', (_e, title, opts) => createDocument(title, opts || {}));
 ipcMain.handle('search', (_e, query) => search(query));
 ipcMain.handle('search:list', () => searchList());
@@ -297,7 +316,7 @@ ipcMain.handle('pins:pinTo', (_e, hubId, uri) => nodePin(hubId, uri, true)); // 
 ipcMain.handle('pins:unpinFrom', (_e, hubId, uri) => nodePin(hubId, uri, false));
 ipcMain.handle('sensitive:list', () => db.sensitiveIds());
 ipcMain.handle('sensitive:set', (_e, id, on) => setSensitive(id, on));
-ipcMain.handle('doc:related', (_e, id) => related(id)); // { summary, tagline, pinned[], outcomes[], notes[] }
+ipcMain.handle('doc:related', (_e, id) => related(id)); // { summary, tagline, pinned[], outcomes[], notes[], backlinks[] }
 ipcMain.handle('doc:summaryUri', (_e, id) => summaryUri(id)); // where a meeting should actually open, or null
 ipcMain.handle('doc:setField', (_e, id, key, text) => mut(id, (doc) => fields.setFieldText(doc, key, text)));
 // The web link for a node, the same url home.tana.inc opens: /o/<org>/l/<encoded node uri>
@@ -352,7 +371,7 @@ ipcMain.handle('sync:login', async () => {
 });
 
 if (process.env.TANA_MAIN_TEST) {
-  module.exports = { resolveInitialAuth, graphRow, cachedNodeHue, VIEWS, toNode, outlineWithReferences, chatOutline, op, onChange, documentAction, createDocument, creationOptions, search, viewFilter, searchCreate, searchTitle, viewRows, spaceChildren, start, refresh, related, callOf, weekTitle, weekNode,
+  module.exports = { resolveInitialAuth, graphRow, cachedNodeHue, VIEWS, toNode, outlineWithReferences, chatOutline, op, onChange, documentAction, createDocument, creationOptions, typeChoices, setType, icons, settings, search, viewFilter, searchCreate, searchTitle, viewRows, spaceChildren, start, refresh, related, callOf, weekTitle, weekNode,
     statusSnapshot: () => ({ ...S.status }), rememberNodeHue, restoredBounds, today,
     undo: () => history(undoStack, redoStack, 'undo', 'canUndo'), redo: () => history(redoStack, undoStack, 'redo', 'canRedo'), visibleGraphNodes, pinTree, changesOf, summaryChanges,
     nodePin,

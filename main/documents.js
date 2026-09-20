@@ -3,9 +3,10 @@ const db = require('../db');
 const access = require('../sdk/access');
 const content = require('../sdk/content');
 const chat = require('../sdk/chat');
-const { readNode, editable, ulid, initDocument, STATE_TYPES } = require('../sdk/node');
-const { DOC_URI, KINDS, NOT_CONNECTED, PLAIN_KINDS, S, TAG, deletedNodes, editability, errText, hueLoaded, idKind, isDeleted, metaSigs, nodeCreators, nodeHues, nodeMeta, now, pathCache, redoStack, report, scheduleRefresh, send, subscribed, summaryCache, typeHues, typeTitles, undoStack, visibleGraphNodes } = require('./state');
-const { eventMeta, graphRow, hueOf, hueWithType, kindRow, memberRow, members, nodeTag, ownHue, plainRow, rememberNodeHue, rememberType, resolveHue, resolveTypes, toNode, typeTag } = require('./rows');
+const { readNode, editable, setEntityType, ulid, initDocument, STATE_TYPES } = require('../sdk/node');
+const { DOC_URI, KINDS, NOT_CONNECTED, PLAIN_KINDS, S, TAG, deletedNodes, editability, errText, hueLoaded, idKind, isDeleted, metaSigs, nodeCreators, nodeHues, nodeMeta, now, pathCache, reading, redoStack, report, scheduleRefresh, send, subscribed, summaryCache, typeHues, typeTitles, undoStack, visibleGraphNodes } = require('./state');
+const { eventMeta, graphRow, hueOf, hueWithType, kindRow, memberRow, members, nodeTag, ownHue, plainRow, rememberNodeHue, rememberType, resolveHue, resolveTypes, toNode, typeTag, typeUriOf } = require('./rows');
+const settings = require('./settings');
 
 // Resolve native embeds without replacing the containing block identity or loading target content recursively.
 async function outlineWithReferences(doc) {
@@ -15,15 +16,19 @@ async function outlineWithReferences(doc) {
 // A block whose whole content is one mention is Tana's full-reference presentation: it is resolved like a native
 // embed so the row can show the node it points at, while keeping its own identity and its editable text.
 async function resolveReferences(nodes) {
-  const refs = [];
+  const refs = [], mentions = [];
   const lone = n => !n.children?.length && n.segments?.length === 1 && n.segments[0].mention;
   const visit = rows => { for (const n of rows) {
     if (n.type === 'reference') refs.push(n.reference);
     else { const one = lone(n); if (one) refs.push(n.reference = { uri: one.uri, label: one.label }); }
+    // every reference written inside a line, so it can show what it points at rather than reading as a bare link;
+    // they ride along in the batch the rows above already need, and an unreadable one simply stays a link
+
+    for (const s of n.segments || []) if (s.mention) mentions.push(s.mention);
     visit(n.children || []);
   } };
   visit(nodes);
-  const uris = [...new Set(refs.map(r => r.uri).filter(uri => typeof uri === 'string' && DOC_URI.test(uri)))];
+  const uris = [...new Set([...refs, ...mentions].map(r => r.uri).filter(uri => typeof uri === 'string' && DOC_URI.test(uri)))];
   const targets = new Map();
   for (let i = 0; i < uris.length; i += 200) {
     try {
@@ -34,7 +39,15 @@ async function resolveReferences(nodes) {
       for (const n of visible) targets.set(n.id, toNode(graphRow(n)));
     } catch { /* Keep unresolved reference identity; inaccessible targets must not break the surrounding outline. */ }
   }
-  for (const ref of refs) if (targets.has(ref.uri)) ref.node = targets.get(ref.uri);
+  // A deleted target is not the same as an unreadable one, and the renderer draws them differently: a reference to
+  // something that is gone reads as its old label, struck through behind a trash glyph, and does not open. Without
+  // the mark both look like "Unavailable reference", so a deleted node stayed a live-looking link.
+  // The tombstones are what the graph answers taught listFilter (main/views.js), which is also what dropped these
+  // targets from the answer above, plus anything deleted from this app.
+  const deleted = uri => deletedNodes.has(uri);
+  for (const ref of refs) { if (targets.has(ref.uri)) ref.node = targets.get(ref.uri); else if (deleted(ref.uri)) ref.deleted = true; }
+  // the icon alone: a mention says what kind of thing it points at, and takes the link's own colour to say it
+  for (const m of mentions) { const icon = targets.has(m.uri) && targets.get(m.uri).icon; if (icon) m.icon = icon; else if (deleted(m.uri)) m.deleted = true; }
   return nodes;
 }
 
@@ -75,6 +88,58 @@ async function creationOptions() {
   }));
   return {options:[...options,...types.sort((a,b)=>a.title.localeCompare(b.title))],complete:result.totalCount !== undefined && result.totalCount === result.nodes.length};
 }
+
+// ---- a document's type (Cmd+K "Set type") ----
+// Two rules decide which types a document can be given, and both are Tana's own (their shared bundle, read 2026-09-20):
+//   - a type applies to documents or to meetings (`appliesTo`, 'docs' unless it says otherwise), never to both;
+//   - a type that lives in a space keeps its documents there — "Items typed with a space-scoped type cannot move
+//     outside that type's home space", and their placement handler redirects a typed item into its type's home space
+//     rather than letting it land elsewhere. So a space's type can only be set on a document already in that space,
+//     exactly (not a sub-space: their scope check is `!type.ownerUri || type.ownerUri === space`), and a type with no
+//     home space — a Library type — goes on anything. It is the same rule sdk/access.js enforces on a move, from the
+//     other side: a typed document may not leave its type's home space.
+// A type that is out of scope is listed and disabled with the space it belongs to, the way the creation chooser
+// lists a type it cannot use: hiding it answers "why is my type not there?" with nothing.
+const TYPED_KINDS = new Set(['text', 'event']); // only a document or a meeting carries a type; blocks and the rest do not
+const typeContext = (id) => (idKind(id) === 'event' ? 'events' : 'docs');
+async function typeChoices(id) {
+  if (!S.client) throw new Error(NOT_CONNECTED);
+  if (typeof id !== 'string' || !DOC_URI.test(id) || !TYPED_KINDS.has(idKind(id))) throw new Error('Only documents and meetings carry a type');
+  const n = readNode(await document(id));
+  const context = typeContext(id), home = n.ownerUri || null;
+  // One query, like the creation chooser's: archived types are out of it by default, which is also what Tana refuses
+  // to set. The type's own document is read only when one is chosen (setType), so opening the list costs one call.
+  const { nodes } = await S.client.graph.listNodes({ nodeTypes: ['type'], limit: 200 });
+  nodes.forEach(rememberType);
+  const scoped = nodes.filter((t) => ((t.typeDef && t.typeDef.appliesTo) || 'docs') === context);
+  await resolveTypes(scoped.map((t) => t.ownerUri)); // the home space titles, for the line that says why a type is out
+  const options = scoped.map((t) => ({
+    uri: t.id, title: t.title || '', hue: ownHue(t) === undefined ? typeHues.get(t.id) : ownHue(t),
+    selectable: !t.ownerUri || t.ownerUri === home,
+    reason: !t.ownerUri || t.ownerUri === home ? undefined : 'Lives in ' + (typeTitles.get(t.ownerUri) || 'another space'),
+  })).sort((a, b) => a.title.localeCompare(b.title));
+  return { current: n.entityTypeUri || null, options };
+}
+async function setType(id, typeUri) {
+  if (!S.client) throw new Error(NOT_CONNECTED);
+  if (typeof id !== 'string' || !DOC_URI.test(id) || !TYPED_KINDS.has(idKind(id))) throw new Error('Only documents and meetings carry a type');
+  const uri = typeUri == null ? null : typeUri;
+  let workflow = false;
+  if (uri !== null) {
+    // The type's own document decides, as it does for creation: the index carries `typeDef` for the list, but what a
+    // type applies to and where it lives is read from the type itself before anything is written.
+    const type = readNode(await document(uri));
+    if (type.type !== 'type' || isDeleted(type)) throw new Error('Type is unavailable');
+    const context = typeContext(id);
+    if ((type.appliesTo ?? 'docs') !== context) throw new Error(context === 'events' ? 'That type applies to documents, not meetings' : 'That type applies to meetings, not documents');
+    const home = readNode(await document(id)).ownerUri || null;
+    if (type.ownerUri && type.ownerUri !== home) throw new Error('That type lives in ' + (typeTitles.get(type.ownerUri) || 'another space') + '; move the document there first');
+    workflow = !!type.workflowUri;
+  }
+  await mut(id, (doc) => setEntityType(doc, uri, { workflow, byUri: S.me.userUri }));
+  scheduleRefresh(2000); // the row updates from the change event; this is the index catching up for the next list
+  return uri;
+}
 async function createDocument(title, opts = {}) {
   if (typeof title !== 'string' || !title.trim()) throw new Error('Keep an empty draft local until it has a title');
   if (!S.client) throw new Error(NOT_CONNECTED);
@@ -102,7 +167,10 @@ async function info(doc) {
   // A cached row carries the short list form of an event's meta ("Mon 9:00"); a zoomed node shows the full date
   // like search does (#113), so the meta is rebuilt from the event itself when there is one.
   const ev = n.type === 'event' || doc.id.startsWith('tana:event:') ? eventMeta(n.startTime, n.endTime, true) : undefined;
-  if (row) return toNode({ ...row, title: n.title ?? row.title, done: n.stateType === 'closed' ? 1 : 0, meta: ev || row.meta });
+  // The document owns its type, as it owns its title and its state. A cached row still carries the chip the list was
+  // built with, so a retype — here or in Tana — would show nothing until a refresh replaced the whole section; a row
+  // whose type has moved on is therefore rebuilt from the document below rather than patched.
+  if (row && (typeUriOf(row) || null) === (n.entityTypeUri || null)) return toNode({ ...row, title: n.title ?? row.title, done: n.stateType === 'closed' ? 1 : 0, meta: ev || row.meta });
   await resolveHue(doc.id); // cached rows already carry the hue the refresh learned from the graph
   if (idKind(doc.id) === 'user-profile') return toNode(memberRow(doc.id, n.title || doc.data.get('name') || doc.data.get('displayName') || '', now(), hueOf(n)));
   if (PLAIN_KINDS.has(idKind(doc.id))) return toNode(kindRow(doc.id, idKind(doc.id), n.title || '', now(), hueOf(n)));
@@ -118,8 +186,21 @@ async function info(doc) {
 function setSensitive(id, on) {
   if (typeof id !== 'string' || !DOC_URI.test(id)) throw new Error('Not a Tana document id');
   if (typeof on !== 'boolean') throw new Error('Sensitive state must be true or false');
-  db.setSensitive(id, on);
+  // A mark on your own content, so it follows you: the ids are one synced setting rather than a table of this
+  // machine's own (main/settings.js). db keeps its table as the migration source, read once below.
+  const ids = new Set(sensitiveIds());
+  if (on) ids.add(id); else ids.delete(id);
+  settings.set('sensitive', [...ids].sort());
   return on;
+}
+// The marks, from the synced setting — falling back to the SQLite table a build before this one wrote, which is
+// also what seeds the setting the first time a machine runs this version.
+function sensitiveIds() {
+  const stored = settings.get('sensitive');
+  if (Array.isArray(stored)) return stored.filter((id) => typeof id === 'string');
+  const legacy = db.sensitiveIds();
+  if (legacy.length) settings.set('sensitive', legacy);
+  return legacy;
 }
 
 function subscribe(id, init) {
@@ -161,7 +242,7 @@ async function creatorOf(id) {
 }
 // An explicit choice wins; absent, the rule above decides. Stored as a map so "off for a node the rule would watch"
 // is a real answer and not the same as never having chosen.
-const notifyChoices = () => { const stored = db.setting('notify'); return stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {}; };
+const notifyChoices = () => { const stored = settings.get('notify'); return stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {}; };
 const notifyOn = (n, creator) => { const chosen = notifyChoices()[n.id]; return typeof chosen === 'boolean' ? chosen : notifyDefault(n, creator); };
 // The nodes you explicitly asked to be told about. A change only reaches onChange while its document is subscribed,
 // and the view refresh unsubscribes everything the active view stops listing, so without this "notify me" quietly
@@ -179,7 +260,7 @@ async function notifyState(id) {
 async function setNotify(id, on) {
   const chosen = notifyChoices();
   if (on === null || on === undefined) delete chosen[id]; else chosen[id] = !!on;
-  db.setSetting('notify', chosen);
+  settings.set('notify', chosen);
   return notifyState(id);
 }
 const NOTIFY_STATE = { proposed: 'Inbox', open: 'In Progress', closed: 'Completed', not_now: 'Later' };
@@ -187,11 +268,11 @@ const NOTIFY_STATE = { proposed: 'Inbox', open: 'In Progress', closed: 'Complete
 // App-local on purpose: Tana's assignedToUris takes user-profile uris only, so an agent cannot be a native assignee.
 // The ids live in the settings table beside the watch choices; two states, so a list rather than a map.
 // Assignment only: nothing here dispatches, runs or reports back.
-const codexIds = () => { const stored = db.setting('codex'); return Array.isArray(stored) ? stored.filter((id) => typeof id === 'string') : []; };
+const codexIds = () => { const stored = settings.get('codex'); return Array.isArray(stored) ? stored.filter((id) => typeof id === 'string') : []; };
 // What the agent was asked to do with the node, by id. A second map rather than a list of pairs: the assignment list
 // is what everything else reads, and turning it into objects would rewrite every reader for a field only the prompt
 // page writes. A prompt exists only alongside the assignment it was given with, so unassigning drops both.
-const codexPrompts = () => { const stored = db.setting('codexPrompt'); return stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {}; };
+const codexPrompts = () => { const stored = settings.get('codexPrompt'); return stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {}; };
 const codexPrompt = (id) => codexPrompts()[id] || '';
 // The prompt also goes into the node itself, where a person reading it in Tana can see what the agent was handed:
 // one "Agent context" block on the document with the prompt's lines nested under it. Reassigning rewrites that
@@ -223,10 +304,10 @@ async function setCodex(id, on, prompt) {
   // assignment is simply local.
   if (on && text) await writeAgentContext(id, text);
   if (on) next.push(id);
-  db.setSetting('codex', next);
+  settings.set('codex', next);
   const prompts = codexPrompts();
   if (on && text) prompts[id] = text; else delete prompts[id];
-  db.setSetting('codexPrompt', prompts);
+  settings.set('codexPrompt', prompts);
   // an assigned node stays live wherever you are, the way an explicitly watched one does (main/views.js)
   if (on && S.client) S.client.sync.subscribe(id).catch(() => {});
   return !!on;
@@ -285,6 +366,8 @@ async function notifyWatched(id, doc, n, info) {
 }
 function onChange(docId, info) {
   try {
+    // The app's own settings document is not content: it is applied and nothing else hears about it.
+    if (settings.applyRemote(docId) !== false) return;
     const doc = S.client.sync.getDocument(docId);
     if (!doc) return;
     const n = readNode(doc), row = db.get(docId);
@@ -320,15 +403,27 @@ async function document(id) {
   // A renderer draft carries a local id until it is materialised; subscribing one would create a phantom document
   // whose pending bootstrap then rejects as "unsubscribed <id>" on the next refresh.
   if (!DOC_URI.test(id)) throw new Error(NOT_CONNECTED);
-  const doc = await subscribe(id); // getDocument can expose an empty handle before bootstrap completes
-  if (!doc) throw new Error(S.status.error || 'could not subscribe to ' + id);
-  return doc;
+  // Held for the length of the wait (main/state.js reading): the refresh sweep must not unsubscribe a bootstrap
+  // somebody is awaiting, which rejected the read as 'unsubscribed <id>' whenever a view change raced a doc:info.
+  reading.set(id, (reading.get(id) || 0) + 1);
+  try {
+    const doc = await subscribe(id); // getDocument can expose an empty handle before bootstrap completes
+    if (!doc) throw new Error(S.status.error || 'could not subscribe to ' + id);
+    return doc;
+  } finally {
+    const left = (reading.get(id) || 1) - 1;
+    if (left > 0) reading.set(id, left); else reading.delete(id);
+  }
 }
 
 async function op(id, fn) {
   try {
     const doc = await document(id);
-    if (isDeleted(readNode(doc)) || deletedNodes.has(id)) throw new Error('Node has been deleted');
+    // Finding it deleted here is news worth telling: a node this app never subscribed before has nothing else to
+    // announce it, so the renderer kept the row, went on asking (doc:taskMeta once per backoff, for ever) and would
+    // still open the page. invalidateDeleted evicts the caches and sends outline:removed, which is what stops both.
+    if (isDeleted(readNode(doc)) && !deletedNodes.has(id)) invalidateDeleted(id);
+    if (deletedNodes.has(id)) throw new Error('Node has been deleted');
     return await fn(doc);
   } catch (e) {
     report(e);
@@ -459,4 +554,4 @@ async function moveTarget(spaceId) {
   return document(spaceId);
 }
 
-module.exports = { outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, createDocument, info, setSensitive, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, codexIds, codexPrompt, setCodex, creatorOf, document, op, inHistory, mut, mutTasks, documentAction, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget };
+module.exports = { outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, createDocument, typeChoices, setType, info, setSensitive, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, codexIds, codexPrompt, setCodex, creatorOf, document, op, inHistory, mut, mutTasks, documentAction, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget };

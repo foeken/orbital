@@ -1,6 +1,7 @@
 'use strict';
 const db = require('../db');
 const { editable, readNode, STATE_TYPES } = require('../sdk/node');
+const { typeIconName } = require('./icons');
 const { PLAIN_KINDS, S, TAG, docStates, editability, hueLoaded, idKind, isSpace, iso, memberTitle, nodeCreators, nodeHues, nodeMeta, now, typeHues, typeTitles } = require('./state');
 
 // The search index can trail a write by seconds, and every index result becomes a row through graphRow and records its
@@ -100,10 +101,13 @@ async function resolveHue(id) {
 const plainRow = (id, title, updatedAt, typeUri, hue, createdAt) => (isSpace(id)
   ? { id, title, done: 0, icon: 'space', hue, tags: [hue === undefined ? TAG.space : { ...TAG.space, hue }], sortKey: updatedAt, updatedAt, createdAt }
   // a typed document without its own icon shows the generic type glyph, tinted with its type's hue
-  : { id, title, done: 0, icon: typeUri ? 'type' : 'doc', hue: hueWithType(hue, typeUri), tags: typeUri ? typeTag(typeUri) : [hue === undefined ? TAG.doc : { ...TAG.doc, hue }], sortKey: updatedAt, updatedAt, createdAt });
+  // A type can be given a glyph of its own (main/icons.js), and a document wears its type's: the row's icon is what
+  // every other surface reads — the bullet, the rail, a breadcrumb, and the chip an inline mention of it draws
+  // (resolveReferences hands the target's icon to the mention) — so one name here reaches all of them.
+  : { id, title, done: 0, icon: typeUri ? typeIconName(typeUri) || 'type' : 'doc', hue: hueWithType(hue, typeUri), tags: typeUri ? typeTag(typeUri) : [hue === undefined ? TAG.doc : { ...TAG.doc, hue }], sortKey: updatedAt, updatedAt, createdAt });
 const memberRow = (id, title, updatedAt, hue, createdAt) => ({ id, title, done: 0, icon: 'member', hue, tags: [hue === undefined ? TAG.member : { ...TAG.member, hue }], sortKey: updatedAt, updatedAt, createdAt });
 // chat, canvas, agent and skill each have their own glyph in the renderer's icon set, so the kind is the icon
-const kindRow = (id, kind, title, updatedAt, hue, createdAt) => ({ id, title, done: 0, icon: PLAIN_KINDS.has(kind) ? kind : null, hue, tags: [hue === undefined ? { label: kind, color: 'grey' } : { label: kind, hue }], sortKey: updatedAt, updatedAt, createdAt });
+const kindRow = (id, kind, title, updatedAt, hue, createdAt) => ({ id, title, done: 0, icon: (kind === 'type' && typeIconName(id)) || (PLAIN_KINDS.has(kind) ? kind : null), hue, tags: [hue === undefined ? { label: kind, color: 'grey' } : { label: kind, hue }], sortKey: updatedAt, updatedAt, createdAt });
 // lowercase type title -> uri for #Type search filters; the type list is loaded once per S.session (and seeds typeTitles)
 async function typesByTitle() {
   S.typesLoaded ||= S.client.graph.listNodes({ nodeTypes: ['type'], limit: 200 }).then(({ nodes }) => { nodes.forEach(rememberType); }, () => { S.typesLoaded = null; });
@@ -134,7 +138,7 @@ const meetingRow = (n, withDate) => {
 // An event also carries its own window (`start`/`end`), and only an event does: the keys are added rather than always
 // present, so every other kind of node keeps the shape it had. A row restored from the SQLite cache has no window —
 // the cache stores the label, not the times — so a consumer that needs one asks the graph, as the meeting picker does.
-const toNode = (r) => ({ id: r.id, title: r.title, text: r.title, kind: 'document', editable: editability.has(r.id) ? editability.get(r.id) : editable(r, S.me && S.me.userUri), done: r.icon === 'task' ? r.done : undefined, hasChildren: true, icon: PLAIN_KINDS.has(idKind(r.id)) ? idKind(r.id) : r.icon || undefined, hue: r.hue === undefined ? (nodeHues.has(r.id) ? nodeHues.get(r.id) : cachedNodeHue(r)) : r.hue, tags: r.tags, meta: r.meta || undefined, updatedAt: r.updatedAt || (nodeMeta.get(r.id) || {}).updatedAt, createdAt: r.createdAt || (nodeMeta.get(r.id) || {}).createdAt, createdBy: nodeCreators.get(r.id), stateType: r.stateType || (nodeMeta.get(r.id) || {}).stateType, ...(r.start ? { start: r.start, end: r.end } : {}) });
+const toNode = (r) => ({ id: r.id, title: r.title, text: r.title, kind: 'document', editable: editability.has(r.id) ? editability.get(r.id) : editable(r, S.me && S.me.userUri), done: r.icon === 'task' ? r.done : undefined, hasChildren: true, icon: PLAIN_KINDS.has(idKind(r.id)) ? (typeIconName(r.id) || idKind(r.id)) : r.icon || undefined, hue: r.hue === undefined ? (nodeHues.has(r.id) ? nodeHues.get(r.id) : cachedNodeHue(r)) : r.hue, tags: r.tags, meta: r.meta || undefined, updatedAt: r.updatedAt || (nodeMeta.get(r.id) || {}).updatedAt, createdAt: r.createdAt || (nodeMeta.get(r.id) || {}).createdAt, createdBy: nodeCreators.get(r.id), stateType: r.stateType || (nodeMeta.get(r.id) || {}).stateType, ...(r.start ? { start: r.start, end: r.end } : {}) });
 
 // Node shape from any graph Node JSON (search results): events, tasks, typed and plain documents.
 function graphRow(n, withDate) {

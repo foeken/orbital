@@ -421,6 +421,34 @@ commands.rows = async () => {
   const main = backend(await connect());
   out(await main.search(positional.join(' ')));
 };
+// settings [<key> <json>]: the app's own settings document (main/settings.js) — which document it is and what it
+// carries. Read-only without arguments; with a key and a JSON value it writes one setting the way the app does.
+commands.settings = async () => {
+  const main = backend(await connect());
+  await client.sync.connect();
+  const hydrated = await main.settings.hydrate().catch((e) => { out('hydrate failed: ' + (e && e.message || e)); return null; });
+  if (hydrated === null) out('status: ' + JSON.stringify(main.statusSnapshot()));
+  const [key, value] = positional;
+  if (key) { main.settings.set(key, value === undefined ? undefined : JSON.parse(value)); await main.settings.flush(); }
+  out('document: ' + (main.settings.settingsDocId() || 'none'));
+  for (const [k, v] of Object.entries(main.settings.synced()).sort()) out('  ' + k + ' = ' + JSON.stringify(v).slice(0, 120));
+  await new Promise((r) => setTimeout(r, 1500)); // whatever opening wrote — the explanatory line, a pushed setting — leaves with the stream
+};
+// settype <id> [<tana:type:…|none>]: the Cmd+K "Set type" command through main's own rules. With no target it only
+// lists what the document may be given and why the rest is out (read-only); with one it writes, which is a WRITE.
+commands.settype = async () => {
+  const [id, target] = positional;
+  if (!id) throw new Error('usage: settype <id> [<tana:type:...|none>]  (listing is read-only; a target WRITES)');
+  const main = backend(await connect());
+  await client.sync.connect();
+  const choices = await main.typeChoices(id);
+  out('current: ' + (choices.current || 'no type'));
+  for (const o of choices.options) out((o.selectable ? '  ' : '✗ ') + o.uri + '\t' + o.title + (o.reason ? '\t' + o.reason : ''));
+  if (!target) return;
+  await main.setType(id, target === 'none' ? null : target);
+  await new Promise((r) => setTimeout(r, 1500)); // the local update leaves with the stream, like the other write commands
+  out('now: ' + JSON.stringify(readNode(await client.sync.subscribe(id)).entityTypeUri ?? null));
+};
 // libraryprobe: one cold Library load through main.js, including conversion to the exact IPC payload.
 commands.libraryprobe = async () => {
   const me = await connect();
@@ -621,8 +649,10 @@ commands.pageprobe = async () => {
       } } });
   }
 };
-// The real startup path (session -> client -> sync -> first refresh), read-only, with every warning and error
-// the app would log on boot (#97). Nothing is written to Tana: bootstrap and catch-up carry no local ops.
+// The real startup path (session -> client -> sync -> first refresh), with every warning and error the app would log
+// on boot (#97). Bootstrap and catch-up carry no local ops, so the only thing it can write is the app's own settings
+// document, which starting is what creates or finds (main/settings.js) — in its own temporary database, so the
+// pointer it notes is thrown away and the real app finds the same document by name.
 commands.boot = async () => {
   process.env.TANA_MAIN_TEST = '1';
   require('../db').open(path.join(app.getPath('temp'), 'tana-cli-boot.sqlite'));
@@ -646,11 +676,12 @@ const USAGE = [
   '             meetings [--days 7] | chatlist [--limit 200] | get <id> | outline <id> | rawdoc <id> [--containers 1] |',
   '             graphnode <id> | edges <id> | listkind <nodeType> [--limit 50] | image <tana:image:uri> | pins [--dates]',
   '  diagnose   inspect <id...> | audiences [--limit 80] [--mine 0] [--kind text] | refs <id> | rows <query> | pinrows |',
+  '             settype <id>   (listing only; with a target it writes)',
   '             caps <id...> | related <id> | incall [--limit 5] | pageprobe | libraryprobe | boot [--settle ms]',
   '  live       watch <id...>',
   '  WRITES     create <title> [--kind doc|task|meeting] | delete <id> | set-title <id> <title> |',
   '             set-state <id> <proposed|open|closed|not_now> | pin <id> <sidebar|today> | unpin <id> <sidebar|today> |',
-  '             pinto <event|space id> <id> | unpinfrom <event|space id> <id>',
+  '             pinto <event|space id> <id> | unpinfrom <event|space id> <id> | settype <id> <tana:type:...|none>',
 ].join('\n');
 
 app.whenReady().then(async () => {

@@ -11,7 +11,7 @@ let searchesLoaded = false;  // whether that list has answered once: until it ha
 // tana:search: document id) rather than its name, so renaming the search in Tana keeps the choice and only changes
 // what it reads. It is the anchor crumb on every zoomed page, where Back lands with nothing to go back to, and the
 // page a launch opens with no place to restore. The Library is the default and the fallback (nodes.js).
-let home = localStorage.getItem('home') || 'library';
+let home = pref('home', 'library');
 let view = localStorage.getItem('view') || 'library'; // active view id; the outline shows one view at a time
 // Views that no longer exist. A stored one would leave the app on a page with no filter, no rows and no way back,
 // so it lands in the Library, which lists every kind those pages used to list one of.
@@ -20,6 +20,7 @@ let view = localStorage.getItem('view') || 'library'; // active view id; the out
 if (['members', 'people', 'meetings', 'chats', 'tasks'].includes(view)) view = 'library';
 let authed = false, authChecking = true, signedOut = false;
 const extra = new Map();     // docId -> document Node reached through a mention (not in roots)
+const deletedIds = new Set(); // nodes main has said are gone (outline:removed, a resolved reference, a refused read): drawn struck through, never opened
 const paths = new Map();     // docId -> [{ id, title }] location in Tana for the breadcrumb (api.path)
 const kids = new Map();      // docId -> Node[] | null (loading)
 const open = new Map();      // key -> bool; default: blocks open, documents closed
@@ -34,12 +35,12 @@ let animView = null;         // view whose rows are already on screen: only then
 let linkCtx = null;          // @ linking in progress: { item, segs, start, end, text }
 let pinCtx = null;           // relationship pin picker: { pinHub, docId }
 let pillCtx = null;          // Cmd+K sublevel for one current view pill
-const hotkeys = JSON.parse(localStorage.getItem('hotkeys') || '{}'); // palette row id -> combo ("⇧⌘M")
-if (hotkeys.sync) { delete hotkeys.sync; localStorage.setItem('hotkeys', JSON.stringify(hotkeys)); }
+const hotkeys = { ...pref('hotkeys', {}) }; // palette row id -> combo ("⇧⌘M"), one of the preferences that follow you
+if (hotkeys.sync) { delete hotkeys.sync; setPref('hotkeys', hotkeys); }
 // The built-in keys are palette rows with a default combo, in the same map the recorder edits: a recorded combo
 // overrides the default, and Reset in the recorder restores it. What is not here is fixed on purpose (⌘K, ⇧⌘K,
 // the text-size keys, ⇧⌘⌫ and the ⇧⌘↑/↓ moves, which act on blocks the palette does not address).
-const DEFAULT_HOTKEYS = { search: '⌘S', filter: '⌘F', copyLink: '⌘C', back: '⌘[', forward: '⌘]', undo: '⌘Z', redo: '⇧⌘Z', rail: '⌘→', expand: '⌘↓', collapse: '⌘↑', toggleDone: '⌘↩', today: '⌃⇧D', reload: '⌘R' };
+const DEFAULT_HOTKEYS = { search: '⌘S', filter: '⌘F', copyLink: '⌘C', back: '⌘[', forward: '⌘]', undo: '⌘Z', redo: '⇧⌘Z', expand: '⌘↓', collapse: '⌘↑', toggleDone: '⌘↩', today: '⌃⇧D', reload: '⌘R' }; // "Focus the sidebar" is a palette row with no default key
 const hotkeyFor = (id) => (Object.hasOwn(hotkeys, id) ? hotkeys[id] : DEFAULT_HOTKEYS[id]);
 const hotkeyIds = () => [...new Set([...Object.keys(DEFAULT_HOTKEYS), ...Object.keys(hotkeys)])];
 let pinInfo = null;          // { docId, sidebar, dates } of the palette's document (api.pinState)
@@ -88,13 +89,13 @@ let visibilityRoles = new Map();
 let menu = null;             // open pill menu: { id, index }
 // Page key -> arrangement. A view's key is its id and lives here, in the browser; a saved search's key is its
 // document id and lives in the document, so only the view keys are written back to localStorage (persistPref).
-const groupPref = JSON.parse(localStorage.getItem('groupBy') || '{}'); // page key -> 'none' | 'status' | 'assignee' | 'updated' | 'type'
-const sortPref = JSON.parse(localStorage.getItem('sortBy') || '{}');   // page key -> 'default' | 'updated' | 'created' | 'title'
-const displayPref = JSON.parse(localStorage.getItem('display') || '{}'); // page key -> which of a row's facts it shows
+const groupPref = { ...pref('groupBy', {}) }; // page key -> 'none' | 'status' | 'assignee' | 'updated' | 'type'
+const sortPref = { ...pref('sortBy', {}) };   // page key -> 'default' | 'updated' | 'created' | 'title'
+const displayPref = { ...pref('display', {}) }; // page key -> which of a row's facts it shows
 // Sections folded away (renderer/views.js), as "page key\ngrouping\nsection key" — folded ones only, so unfolding a
 // section drops its entry. Read here, at load, so the first render already draws them folded. A saved search's key is
 // its document id, which is why these are kept whole rather than filtered like the arrangement above.
-const collapsedGroups = new Set(JSON.parse(localStorage.getItem('collapsedGroups') || '[]'));
+const collapsedGroups = new Set(pref('collapsedGroups', []));
 let rootsLoaded = false, connected = false; // for the loading skeleton: shown while the view has no rows and roots/library/connection are still pending
 // font size: native page zoom (⇧⌘+ / ⇧⌘− / ⌘0), persisted. Default is one step below native.
 const BASE_ZOOM = 0.91;

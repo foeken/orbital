@@ -5,7 +5,7 @@
 // when the answer lands if it is still showing that node. The default depends on participants and assignment, so the
 // answer is main's to give rather than the renderer's to guess.
 function loadNotify(docId) {
-  if (!tana.notifyState || notifyById.has(docId) || notifyLoading.has(docId)) return;
+  if (!connected || !tana.notifyState || notifyById.has(docId) || notifyLoading.has(docId)) return; // same readiness rule as loadAccess below
   notifyLoading.add(docId);
   tana.notifyState(docId).then((state) => {
     notifyLoading.delete(docId); notifyById.set(docId, state);

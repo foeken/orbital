@@ -1,5 +1,8 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
+/* The Nucleo set built into the app draws its strokes at var(--nucleo-stroke-width, 1.5); the app's own glyphs are
+   1, so one declaration puts 3500 icons on the same line weight as the rest instead of rewriting them. */
+html { --nucleo-stroke-width: 1; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
   font-size: 16px; color: #1a1a1a; background: #fff;
@@ -26,7 +29,7 @@ button { font: inherit; }
 button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -webkit-app-region: no-drag; }
 
 .titlebar { padding: 48px 32px 10px; user-select: none; }
-.titlebar h1 { margin: 0; font-size: 34px; font-weight: 700; letter-spacing: -0.5px; }
+.titlebar h1 { margin: 0; font-size: 34px; font-weight: 700; letter-spacing: -0.5px; color: #1c2024; } /* the page title is a heading: the same near-black */
 .titlebar h1[contenteditable] { outline: none; user-select: text; min-height: 1lh; }
 .titlebar h1[contenteditable]:empty { display: inline-block; min-width: 1px; }
 .pagehead { display: flex; align-items: flex-start; }
@@ -35,8 +38,11 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .pagehead .check:checked::after { left: 8px; top: 3px; width: 5px; height: 11px; }
 .pagehead h1.done { color: #999; text-decoration: line-through; }
 .pagehead .cbadge { margin-top: 12px; } /* the title's first line, not its top edge */
-/* the assignee/visibility line under a zoomed task title: a block, so it lines up with the title, and it may wrap */
+/* the type chip line under a zoomed title: a block, so it lines up with the title, and it may wrap. The 6px a chip
+   carries is the gap from whatever precedes it, which at the start of this line is nothing — so the first chip
+   starts flush with the title and the rest keep their spacing. */
 #taskInfo { margin-left: 0; white-space: normal; }
+#taskInfo .chip:first-child { margin-left: 0; }
 /* only the crumb links block the drag; the empty band beside them moves the window */
 .crumbs { font-size: 13px; color: #888; margin-bottom: 14px; }
 .crumbs a { color: #888; text-decoration: none; cursor: pointer; }
@@ -132,6 +138,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .pill.save:hover, .pill.savesearch:hover { background: #d7ecdd; }
 .pill.save:focus, .pill.savesearch:focus { box-shadow: 0 0 0 2px #a8d8ba; }
 .menu { position: absolute; left: 0; top: calc(100% + 6px); z-index: 5; min-width: 260px; max-height: min(400px, calc(100dvh - 96px)); overflow-y: auto; overscroll-behavior-y: contain; padding: 8px; background: #fff; border-radius: 10px; box-shadow: 0 8px 30px rgba(0, 0, 0, .16), 0 0 0 1px rgba(0, 0, 0, .06); font-weight: 400; color: #1a1a1a; text-align: left; }
+.menu.up { top: auto; bottom: calc(100% + 6px); } /* no room under the button: the menu opens upwards instead */
 .menu .mrow { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 8px; font-size: 16px; cursor: pointer; user-select: none; }
 .menu .mrow.active { background: #d6e6fa; }
 .menu .mrow:hover { background: #edf5ff; }
@@ -140,6 +147,9 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .menu .mrow .micon svg { display: block; width: 18px; height: 18px; }
 .menu .mrow .mlabel { flex: 1; }
 .menu .mrow .tick { color: #1a1a1a; font-size: 15px; }
+.menu .mrow.disabled { color: #aaa; cursor: default; } /* offered but not available here, e.g. Text on a child node */
+.menu .mrow.disabled:hover { background: none; }
+.menu .mrow.disabled .micon { color: #bbb; }
 .menu .mhead { padding: 10px 12px 4px; font-size: 13px; font-weight: 600; color: #999; user-select: none; }
 .menu .mdiv { height: 1px; margin: 6px 4px; background: #e6e6e6; }
 
@@ -204,12 +214,26 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .draft > .line > .bullet::before, .draft > .line > .bullet:hover::before { background: #c4c4c4; } /* placeholder: not in Tana until typed into */
 .bullet::before {
   content: ""; position: absolute; left: 6px; top: 9px; width: 6px; height: 6px;
-  border-radius: 50%; background: #555;
+  border-radius: 50%; background: #7f838d; /* Tana's marker grey (rgb 127,131,141): quieter than the text beside it */
 }
-.bullet:hover::before { background: #000; }
+.bullet:hover::before { background: #1c2024; }
 /* typed node without its own icon: the plain bullet takes the type hue (same colour as .bullet.icon.hue) */
 .bullet.hue::before, .bullet.hue:hover::before { background: hsl(var(--hue) 45% 30%); }
 .collapsed > .line > .bullet::before { box-shadow: 0 0 0 6px #e6e6e6; } /* collapsed with children: dot on an 18px halo */
+/* Only a list row carries a marker, the way Tana draws it: a bulletList/orderedList item has one, and text,
+   headings, quotes and code have none — not on hover either, so a heading reads as a heading whatever the mouse
+   is over. The dot is hidden rather than removed, so the gutter keeps its width in every row state. A collapsed
+   row keeps its dot: that is the halo saying it has children, which is a state and not a hover. */
+.node.block:not(.t-bullet):not(.t-numbered):not(.collapsed) > .line > .bullet::before { visibility: hidden; }
+/* And a row with no marker is not indented for one either: its text starts where the document title starts. What
+   is left of its gutter is still the row's zoom target, silent now rather than drawn under the pointer. The
+   gutter is narrowed, never taken out of the layout (no display: none on a chevron — that is what used to move
+   rows between states): .scroll's 16px + 11px of gutter + the body's 5px is the 32px .titlebar reserves for the
+   title, so a heading and the title share a left edge. A row with children keeps the full gutter: it has a
+   chevron to show, and in Tana's schema it is a list row anyway. */
+.node.block:not(.t-bullet):not(.t-numbered):not(.has) > .line > .chev,
+.node.block:not(.t-bullet):not(.t-numbered):not(.has) > .line:hover > .chev { width: 0; visibility: hidden; }
+.node.block:not(.t-bullet):not(.t-numbered):not(.has) > .line > .bullet { width: 11px; }
 .bullet.icon::before { display: none; }
 .bullet.icon svg { position: absolute; left: 0; top: 4px; width: 16px; height: 16px; color: #8a8a8a; }
 .bullet.icon:hover svg, .collapsed > .line > .bullet.icon svg { color: #333; }
@@ -234,7 +258,10 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
   -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='2.25 2.25 13.5 13.5' fill='none' stroke='black' stroke-width='1' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.75 4.75c0-1.105.895-2 2-2M13.25 2.75c1.105 0 2 .895 2 2M15.25 13.25c0 1.105-.895 2-2 2M4.75 15.25c-1.105 0-2-.895-2-2M7.75 2.75h2.5M7.75 15.25h2.5M15.25 7.75v2.5M2.75 7.75v2.5'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
 }
 .body { flex: 1; min-width: 0; padding-left: 5px; }
-.text { display: inline; outline: none; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* Sampled from the same document in Tana: a heading is the near-black (rgb 28,32,36) the page title uses, so the
+   headings carry the page and the prose sits back a step. The prose is a little blacker than Tana's own grey
+   (rgb 73,75,79) by choice — enough of a step to stay behind the headings, dark enough to read as text. */
+.text { display: inline; outline: none; white-space: pre-wrap; overflow-wrap: anywhere; color: #3c3e42; }
 .text:empty { display: inline-block; min-width: 1px; min-height: 1lh; vertical-align: top; } /* an empty node still has a box, so the caret shows */
 /* a read-only row takes focus but shows no caret, so the ring is the only sign the keyboard is on it (images ring their own <img>) */
 .text[tabindex]:not(.image):focus { outline: 2px solid #b5d0ee; outline-offset: 2px; border-radius: 3px; }
@@ -279,7 +306,27 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .node.fullref > .children { border-left-style: dashed; }
 .node.fullref.done > .line .text { color: #999; text-decoration: line-through; }
 .text .mention { color: #508fbb; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+/* a reference that knows what it points at draws its icon in front, in the link's own colour; the underline is
+   moved onto the label so it runs under the words rather than under the icon */
+.text .mention:has(svg) { text-decoration: none; }
+.text .mention .mlabel { text-decoration: underline; text-underline-offset: 2px; }
+/* the underline is a tint of the link rather than the link colour itself: it marks the words without competing
+   with them, and the rule covers both shapes because .mlabel redeclares the decoration */
+.text .mention, .text .mention .mlabel { text-decoration-color: #cbddeb; }
+.text .mention svg { width: 1em; height: 1em; vertical-align: -0.15em; margin-right: 3px; }
 .text .mention:hover { color: #3a75a3; }
+/* A mention of a node that has been deleted: the words stay — they are what was written — struck through, in the
+   ordinary text colour behind a trash glyph, and the pointer goes back to the caret, since there is nowhere to go.
+   The strike is declared on both shapes for the same reason the underline is: .mlabel redeclares the decoration. */
+.text .mention.gone, .text .mention.gone .mlabel { color: #999; text-decoration: line-through; text-decoration-color: #999; cursor: text; }
+.text .mention.gone:hover { color: #999; }
+/* and a whole row that references something deleted (a reference row, or a lone chip): the same struck-through grey,
+   with the trash glyph as its bullet */
+.node.gone > .line .text { color: #999; text-decoration: line-through; }
+/* one trash glyph, not two: on such a row the bullet is already the trash, and the row's whole text is the chip that
+   would draw a second one right beside it. Inside a line of other words a chip keeps its own glyph — there is no
+   bullet standing for it there. */
+.node.gone > .line .text .mention.gone svg { display: none; }
 /* inline marks on a text run (readOutline segments): bold, italic, strike, code, and link marks */
 .text strong { font-weight: 700; }
 .text em { font-style: italic; }
@@ -298,12 +345,29 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .node.t-code > .line .text { display: block; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px; background: #f5f5f5; border-radius: 6px; padding: 6px 10px; }
 .node.t-quote > .line .text { display: block; border-left: 3px solid #d8d8d8; padding-left: 12px; color: #555; }
 /* divider: an atomic block, focusable like an image so the keyboard can still reach and delete it */
+/* a full view of an image, over everything: Space on the row or a click on it, and a click anywhere closes it */
+.lightbox { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; background: rgba(20, 22, 24, .72); cursor: zoom-out; outline: none; }
+.lightbox img { max-width: 92vw; max-height: 92vh; border-radius: 6px; box-shadow: 0 20px 60px rgba(0, 0, 0, .45); }
+.text.image img { cursor: zoom-in; }
 .text.divider { display: block; cursor: default; }
 .text.divider hr { border: 0; border-top: 1px solid #dcdcdc; margin: 10px 0; }
 .text.divider:focus hr, .selected .text.divider hr { border-top-color: #b5d0ee; }
 .h1 > .line .text { font-size: 24px; font-weight: 700; line-height: 30px; }
 .h2 > .line .text { font-size: 20px; font-weight: 700; line-height: 28px; }
 .h3 > .line .text { font-weight: 700; }
+.h1 > .line .text, .h2 > .line .text, .h3 > .line .text { color: #1c2024; }
+/* A heading opens a section, so it gets air above it and a little under it, the way the same document reads in
+   Tana. The space is on the node, not the line, so a selected or focused heading keeps its tight highlight, and
+   the first row of a page takes none — the title above it is already the space. */
+.node.h1 { margin-top: 30px; }
+.node.h2 { margin-top: 24px; }
+.node.h3 { margin-top: 20px; }
+.node.h1, .node.h2, .node.h3 { margin-bottom: 6px; }
+/* A plain row is prose rather than a list row, and Tana gives it air underneath: measured against the same
+   document, the gap from a paragraph to the row after it is 1.42x the pitch between two list rows, which at our
+   30px row is 12px more. Margins collapse, so a paragraph in front of a heading still takes the heading's. */
+.node.t-paragraph { margin-bottom: 12px; }
+#outline > .node:first-child, .children > .node:first-child { margin-top: 0; }
 .selected { background: #e8f1fb; } /* the whole node: a selected parent takes its children with it, so they show as selected too */
 .selected .line { border-radius: 0; }
 /* a row arriving in or dropping out of a view: green tint fading in, red tint fading out; a row you are still
@@ -353,6 +417,10 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .ghead:focus { outline: none; box-shadow: 0 0 0 2px #b7d2f5; border-radius: 3px; }
 @media (prefers-reduced-motion: reduce) { .ghead svg { transition: none; } }
 .ghead:first-child { margin-top: 0; }
+/* the tail of a trimmed section (Tracking): a quiet link where the next row's text would start, not a row itself */
+.gmore { display: block; margin: 2px 0 0; padding: 4px 0 4px 47px; border: 0; background: none; font: inherit; font-size: 14px; color: #8a8a8a; text-align: left; cursor: pointer; }
+.gmore:hover { color: #508fbb; }
+.gmore:focus { outline: none; box-shadow: 0 0 0 2px #b7d2f5; border-radius: 3px; }
 /* offered beside "Nothing here yet" only while a filter is narrowing the view; a real button, so Tab and Enter reach it */
 .clearfilters { border: 0; background: none; color: #aaa; font: inherit; font-size: 16px; padding: 0; margin-left: 10px; text-decoration: underline; cursor: pointer; }
 .clearfilters:hover { color: #1a1a1a; }
@@ -465,6 +533,9 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 /* Dark theme contract: renderer sets document.documentElement.dataset.theme = "dark". */
 [data-theme="dark"] { color-scheme: dark; }
 [data-theme="dark"] body { color: #c9c9c9; background: #1b1d1e; }
+/* the same step the light theme takes, the other way up: the prose sits back from the headings, not under them */
+[data-theme="dark"] .text { color: #ccd0d3; }
+[data-theme="dark"] .titlebar h1, [data-theme="dark"] .h1 > .line .text, [data-theme="dark"] .h2 > .line .text, [data-theme="dark"] .h3 > .line .text { color: #e8eaec; }
 [data-theme="dark"] .titlebar h1.done { color: #777d80; }
 [data-theme="dark"] .crumbs, [data-theme="dark"] .crumbs a { color: #858b8e; }
 [data-theme="dark"] .crumbs a:hover { color: #c9c9c9; }
@@ -491,6 +562,8 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .pill.save:focus, [data-theme="dark"] .pill.savesearch:focus { box-shadow: 0 0 0 2px #46705a; }
 [data-theme="dark"] .menu { background: #242729; color: #c9c9c9; box-shadow: 0 8px 30px rgba(0, 0, 0, .45), 0 0 0 1px rgba(255, 255, 255, .08); }
 [data-theme="dark"] .menu .mrow.active { background: #344047; }
+[data-theme="dark"] .menu .mrow.disabled { color: #6a7073; }
+[data-theme="dark"] .menu .mrow.disabled .micon { color: #5b6164; }
 [data-theme="dark"] .menu .mrow:hover { background: #2d3538; }
 [data-theme="dark"] .menu .mrow.active:hover { background: #344047; }
 [data-theme="dark"] .menu .mrow .micon { color: #aeb4b6; }
@@ -527,7 +600,10 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .text.chiponly:focus .mention, [data-theme="dark"] .selected .text.chiponly .mention, [data-theme="dark"] .reference .text:not([contenteditable]):focus { outline-color: #58768a; }
 [data-theme="dark"] .node.fullref > .line:focus-within, [data-theme="dark"] .selected.node.fullref > .line { outline-color: #58768a; }
 [data-theme="dark"] .text .mention { color: #8fc1e1; }
+[data-theme="dark"] .text .mention, [data-theme="dark"] .text .mention .mlabel { text-decoration-color: #445662; } /* dimmer than the words, as the light tint is paler than them */
 [data-theme="dark"] .text .mention:hover { color: #b5ddf4; }
+[data-theme="dark"] .text .mention.gone, [data-theme="dark"] .text .mention.gone .mlabel, [data-theme="dark"] .text .mention.gone:hover { color: #8a8a8a; text-decoration-color: #8a8a8a; }
+[data-theme="dark"] .node.gone > .line .text { color: #8a8a8a; }
 [data-theme="dark"] .text code { background: #303436; }
 [data-theme="dark"] .text a.link { color: #7fb8dd; }
 [data-theme="dark"] .text a.link:hover { color: #b5ddf4; }
@@ -576,6 +652,9 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .ghead { color: #858b8e; }
 [data-theme="dark"] .ghead:hover { color: #c3c8ca; }
 [data-theme="dark"] .ghead:focus { box-shadow: 0 0 0 2px #58768a; }
+[data-theme="dark"] .gmore { color: #858b8e; }
+[data-theme="dark"] .gmore:hover { color: #8fc1e1; }
+[data-theme="dark"] .gmore:focus { box-shadow: 0 0 0 2px #58768a; }
 [data-theme="dark"] .rail .rrow:hover { background: #24282a; }
 [data-theme="dark"] .rail .rrow:focus { background: #2b3237; }
 [data-theme="dark"] .rail .rrow .ricon { color: #aeb4b6; }

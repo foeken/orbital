@@ -59,16 +59,18 @@ const isHidden = (title, rules) => {
 // ---- Views (docs/VIEWS.md) ----
 // A saved search is a document like any other listed kind: Tana's own client groups `search` with text, event, chat,
 // canvas, agent and skill as a document kind (and keeps `liveQuery`, a materialised result cache, well away from them).
-const VIEW_KINDS = ['meetings', 'tasks', 'docs', 'chats', 'canvases', 'agents', 'skills', 'searches', 'spaces', 'people'];
-const KIND_NODE_TYPE = { meetings: 'event', tasks: 'text', docs: 'text', chats: 'chat', canvases: 'canvas', agents: 'agent', skills: 'skill', searches: 'search', spaces: 'space', people: 'user-profile' };
-// Spaces and people are containers and members, not library content: they are listed when asked for by name.
-const ANY_KINDS = VIEW_KINDS.filter((k) => k !== 'people' && k !== 'spaces');
+const VIEW_KINDS = ['meetings', 'tasks', 'docs', 'chats', 'canvases', 'agents', 'skills', 'searches', 'spaces', 'people', 'types'];
+const KIND_NODE_TYPE = { meetings: 'event', tasks: 'text', docs: 'text', chats: 'chat', canvases: 'canvas', agents: 'agent', skills: 'skill', searches: 'search', spaces: 'space', people: 'user-profile', types: 'type' };
+// Spaces, people and types are containers, members and schema, not library content: each is listed when asked for by name.
+const ANY_KINDS = VIEW_KINDS.filter((k) => !['people', 'spaces', 'types'].includes(k));
 // Meetings, Chats and People are no longer views: each was a fixed query over a single kind, which is what a saved
 // search is — except a search can be renamed, re-aimed and kept. The kinds themselves stay in VIEW_KINDS above, so
 // those lists remain one search away rather than being lost with the pages.
 const VIEW_PRESETS = {
   inbox: { types: null, states: ['proposed'], assignee: 'anyone' },
   library: { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me', text: '' },
+  // The workspace's schema, with the space each type lives in (main/views.js puts the space title on the row).
+  types: { types: ['types'] },
 };
 // A page that is a kind: its type was its identity, so it was not offered as a filter and a stored one could not
 // override it. Tasks was the last of them, so no view is a kind page now — every view chooses what it lists, and
@@ -204,7 +206,7 @@ function filterToSearchQuery(filter = {}, me) {
 //     Those are dropped here rather than approximated, so what comes back is exactly what the pills can show.
 // Saving therefore rewrites the query from the pills alone: anything in the first bullet survives, anything in the
 // second does not, which is why saving is an explicit action on a saved search rather than a write per keystroke.
-const NODE_TYPE_KIND = { event: 'meetings', chat: 'chats', canvas: 'canvases', agent: 'agents', skill: 'skills', search: 'searches', space: 'spaces', 'user-profile': 'people' };
+const NODE_TYPE_KIND = { event: 'meetings', chat: 'chats', canvas: 'canvases', agent: 'agents', skill: 'skills', search: 'searches', space: 'spaces', 'user-profile': 'people', type: 'types' };
 function searchQueryToFilter(query, me) {
   const q = query || {};
   const list = (v) => (Array.isArray(v) && v.length ? v : null);

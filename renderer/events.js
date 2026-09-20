@@ -19,6 +19,8 @@ outline.addEventListener('keydown', (e) => {
   if (isAtomic(item.node)) { // image or divider, not editable: Backspace / ⌘⇧⌫ removes, Up/Down step past, Shift+Up/Down select, ⌘⇧Up/Down moves; everything else is swallowed
     const vert = e.key === 'ArrowUp' || e.key === 'ArrowDown', dir = e.key === 'ArrowUp' ? -1 : 1;
     if (e.key === 'Backspace') removeNode(item, el);
+    else if (e.key === ' ' && isImage(item.node)) openImage(item.node); // the row cannot be typed into: Space looks at the picture
+
     else if (vert && e.shiftKey && mod) shiftNode(item, el, 'move', dir < 0 ? 'up' : 'down');
     else if (vert && e.shiftKey) extendSel(item, dir);
     else if (vert && !mod) moveTo(el, dir, 0);
@@ -75,7 +77,13 @@ outline.addEventListener('keydown', (e) => {
   else if (e.key === 'Tab') { e.preventDefault(); if (!isDoc) shiftNode(item, el, e.shiftKey ? 'outdent' : 'indent'); }
   // a document row is the document: the same shortcut deletes it (reversibly, like the zoomed title), not just blocks
   else if (e.key === 'Backspace' && mod && e.shiftKey) { e.preventDefault(); if (isDoc) removeDocument(item); else removeNode(item, el); }
-  else if (e.key === 'Backspace' && off === 0 && collapsed) { e.preventDefault(); if (!isDoc && len === 0) removeNode(item, el); }
+  // at the start of a row: the bullet comes off first (unbullet), then the row itself when it is empty, and
+  // otherwise the empty row above it — the one a plain empty row leaves invisible
+  else if (e.key === 'Backspace' && off === 0 && collapsed) {
+    e.preventDefault();
+    if (isDoc || unbullet(item)) return;
+    if (len === 0) removeNode(item, el); else removeEmptyAbove(item, el);
+  }
   else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && mod && e.shiftKey) { e.preventDefault(); if (!isDoc) shiftNode(item, el, 'move', e.key === 'ArrowUp' ? 'up' : 'down'); }
   else if (combo === hotkeyFor('collapse')) { e.preventDefault(); setOpen(item, false); }
   else if (combo === hotkeyFor('expand')) { e.preventDefault(); setOpen(item, true); } // an empty node opens onto a draft child
@@ -92,10 +100,19 @@ outline.addEventListener('input', (e) => {
   // the caret was parked below the fold when the node opened: typing is the moment to scroll to it, once, and
   // "nearest" is the smallest move that shows it (and nothing at all when the row is already on screen)
   if (scrollOnType) { scrollOnType = false; el.scrollIntoView({ block: 'nearest' }); }
-  el.classList.toggle('chiponly', chipOnly(el)); // typing beside the chip gives the row a caret again
+  const chip = chipOnly(el);
+  el.classList.toggle('chiponly', chip); // typing beside the chip gives the row a caret again
   if (!item.node.draft) scheduleSave(item, readSegs(el));
   else if (!item.busy && !item.node.pendingSplit) { item.busy = true; materialise(item, el); }
+  // A full reference stops being one the moment anything is typed beside its chip, and becomes one again when that
+  // is deleted. Both are redrawn here, on the keystroke: waiting for the debounced save to come back left the row
+  // standing in for the other node — box, tags and all — for the length of the round trip.
+  const row = el.closest('.node');
+  // Not mid-composition: rebuilding the row under an IME would drop what is being composed, and the flip can wait
+  // the one keystroke until the composed character lands.
+  if (row && !e.isComposing && !isReference(item.node) && referenceTarget(item.node) && row.classList.contains('fullref') !== chip) render(true);
   if (item.node.kind === 'block' && el.textContent === '/' && palette.hidden) openSlash(item); // "/" alone in a node is the command menu
+  else if (item.node.kind === 'block' && el.textContent === '- ') rebullet(item); // "- " alone in a plain row starts a list there
 });
 // A pasted Tana node link becomes the reference Tana itself inserts, not the url: the clipboard holds one node link,
 // the row is a real block, and the title is read before anything is written, so a link to something unreadable

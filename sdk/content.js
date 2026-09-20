@@ -101,16 +101,33 @@ function holderOf(block) {
   return listMap && isList(listMap) ? listMap : null;
 }
 
+// True when this unit is one of the document's own rows rather than another node's child. A child lives inside
+// its parent's listItem — that is the only place Tana's schema keeps children — so anything under a listItem
+// belongs to the node that listItem is, however many lists and quotes sit in between.
+function atRoot(unit) {
+  for (let list = unit.parent(); list; ) {
+    const owner = list.parent();
+    if (!owner) return true;            // the root children list
+    if (isItem(owner)) return false;    // inside a listItem: somebody's child
+    if (!isHolder(owner)) return true;  // the content root map
+    list = owner.parent();
+  }
+  return true;
+}
+
 // One of BLOCK_TYPES (plus 'divider'), or undefined for blocks that carry their own type (image, embed).
 function blockType(block) {
   const n = name(block);
   if (n === 'horizontalRule') return 'divider';
-  if (ATOMS.includes(n)) return undefined;
   if (n === 'heading') return 'heading' + (block.get('attributes').get('level') || 1);
   if (n === 'codeBlock') return 'code';
   const holder = holderOf(block);
-  if (!holder) return 'paragraph';
-  return isQuote(holder) ? 'quote' : name(holder) === 'orderedList' ? 'numbered' : 'bullet';
+  const listed = holder ? (isQuote(holder) ? 'quote' : name(holder) === 'orderedList' ? 'numbered' : 'bullet') : null;
+  // An image carries its own type rather than a block type, so on its own it has none — but a list row is a list
+  // row whatever it holds, and that is what says whether it draws a marker. A quote holds no atoms, so one there
+  // reads as standing on its own.
+  if (ATOMS.includes(n)) return listed === 'quote' ? undefined : listed || undefined;
+  return listed || 'paragraph';
 }
 
 // Inline runs of a block as segments; null when the block holds child blocks instead. One LoroText carries several
@@ -302,6 +319,10 @@ function applyRuns(text, delta, marked) {
   }
 }
 
+// A new row follows the row it comes from: a listItem makes another listItem, so a quote stays inside its quote
+// and a numbered item stays numbered, and anything bare makes plain text — a heading and a code block each
+// continue as the plain text that follows one. A document's own first row, which has nothing to follow, is plain
+// text too.
 function insertAfter(document, id, text, before = false) {
   let out = null;
   document.transact(() => {
@@ -309,6 +330,9 @@ function insertAfter(document, id, text, before = false) {
     if (id == null) { out = blockId(paragraph(list, list.length, text)); return; }
     const { block, item: li } = must(document, id);
     const unit = li || block, l = unit.parent(), i = indexOf(l, unit) + (before ? 0 : 1);
+    // Either side of a row, the new one is the row's own kind: a listItem beside a listItem (which keeps a quote
+    // inside its quote and a numbered item numbered), and plain text beside anything bare — a heading and a code
+    // block each continue as the plain text under them rather than as whatever the default mode says.
     out = blockId(li ? kids(item(l, i, text, li)).get(0) : paragraph(l, i, text));
   });
   return out;
@@ -472,6 +496,11 @@ function setBlockType(document, id, type) {
   if (!BLOCK_TYPES.includes(type)) throw new Error('Unknown block type ' + type);
   document.transact(() => {
     if (ATOMS.includes(name(must(document, id).block))) throw new Error('This block cannot change type');
+    if (type === 'paragraph' && !atRoot(unit(document, id))) throw new Error('A child node cannot be plain text');
+    // Only a document's own row can be plain text. A child is a block inside its parent's listItem, and a bare
+    // paragraph there is not a row Tana can read back: the conversion takes it out of the list its parent keeps
+    // its children in, which quietly rearranges the outline around it.
+
     rehome(document, id, type === 'bullet' ? 'bulletList' : type === 'numbered' ? 'orderedList' : type === 'quote' ? 'blockquote' : null);
     setLeaf(must(document, id).block, type);
   });

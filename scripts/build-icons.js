@@ -28,6 +28,8 @@ WANT.robot = path.join(__dirname, '..', 'build', 'icons', 'face-robot-2.svg'); /
 WANT.brain = path.join(__dirname, '..', 'build', 'icons', 'brain.svg'); // the model rows on the Assign to Agent page
 WANT.host = path.join(__dirname, '..', 'build', 'icons', 'monitor.svg'); // the machine a Codex task runs on
 WANT.home = path.join(__dirname, '..', 'build', 'icons', 'house.svg'); // the Home anchor crumb: the Library, or the saved search chosen as Home
+// "No type" on the Set type page: a circle with a slash through it, for taking a choice off rather than making one
+WANT.none = path.join(__dirname, '..', 'build', 'icons', 'slash-circle.svg');
 // the disclosure chevron on a group heading: pointing right folded, turned a quarter down while the section is open,
 // so the pair (chevron-left.svg is its mirror, kept beside it) needs only the one glyph built in
 WANT.chevronRight = path.join(__dirname, '..', 'build', 'icons', 'chevron-right.svg');

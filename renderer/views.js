@@ -11,7 +11,7 @@ const STATES = [['proposed', 'Inbox'], ['open', 'In Progress'], ['closed', 'Comp
 const COMPLETED = [[7, '7 days'], [30, '30 days'], ['all', 'All']];
 const completedWindow = (f) => (COMPLETED.some(([v]) => v === (f || {}).completedWithin) ? f.completedWithin : 7);
 const showsCompleted = (f) => !!f && (!f.states || f.states.includes('closed'));
-const TYPES = [['meetings', 'Meetings', 'meeting'], ['tasks', 'Tasks', 'task'], ['docs', 'Docs', 'doc'], null, ['chats', 'Chats', 'chat'], ['canvases', 'Canvases', 'canvas'], ['agents', 'Agents', 'agent'], ['skills', 'Skills', 'skill'], ['searches', 'Searches', 'search'], ['spaces', 'Spaces', 'space'], ['people', 'People', 'member']];
+const TYPES = [['meetings', 'Meetings', 'meeting'], ['tasks', 'Tasks', 'task'], ['docs', 'Docs', 'doc'], null, ['chats', 'Chats', 'chat'], ['canvases', 'Canvases', 'canvas'], ['agents', 'Agents', 'agent'], ['skills', 'Skills', 'skill'], ['searches', 'Searches', 'search'], ['spaces', 'Spaces', 'space'], ['people', 'People', 'member'], ['types', 'Types', 'type']];
 const toggleIn = (all, list, v) => { if (!list) return [v]; const next = all.filter((x) => list.includes(x) !== (x === v)); return next.length ? next : null; }; // null = any
 const names = (pairs, list) => (list ? pairs.filter((p) => p && list.includes(p[0])).map((p) => p[1]).join(', ') : null);
 // ---- group by: plain headings over the rows the view already loaded, no extra query ----
@@ -70,7 +70,7 @@ const UPDATED_BUCKETS = [[36e5, 'Last hour'], [864e5, 'Last day'], [7 * 864e5, '
 const groupBy = () => { const k = pillKey(); return GROUPS.some(([id]) => id === groupPref[k]) ? groupPref[k] : 'none'; };
 // A saved search's arrangement belongs in its document, so its keys are kept out of the browser-local preference
 // blob: without this, changing any view's grouping would flush every search key it had accumulated to disk too.
-const persistPref = (key, pref) => localStorage.setItem(key, JSON.stringify(Object.fromEntries(Object.entries(pref).filter(([k]) => !k.startsWith('tana:')))));
+const persistPref = (key, chosen) => setPref(key, Object.fromEntries(Object.entries(chosen).filter(([k]) => !k.startsWith('tana:'))));
 // Stay put: once a task's box is clicked, that row keeps its group and every row keeps its place until the view is left,
 // so nothing jumps away from the pointer (an Inbox task moving to In Progress read as "gone" and got undone). holdRow
 // snapshots the order on screen and the row's group before its state changes; setView and a new Sort or Group let go.
@@ -139,7 +139,7 @@ function groupsOf(list) {
   if (by === 'none') return null;
   if (by === 'assignee' || by === 'responsibility') loadMembers(); // the names for the headings, and who you are
   // every section holds rows: folded away (below) the heading stays and its rows are left out
-  return groupRows(list, by).map((g) => { const id = groupId(g, by); return { ...g, id, collapsed: groupCollapsed(id) }; });
+  return groupRows(list, by).map((g) => { const id = groupId(g, by); return { ...g, id, collapsed: groupCollapsed(id) }; }).map(trimTracking);
 }
 // ---- collapsing a section: the heading stays, its rows fold away, one heading at a time ----
 // Keyed by the page, its grouping and the section: Inbox folded away on Tasks says nothing about an Inbox heading on
@@ -165,9 +165,28 @@ const groupCollapsed = (id) => collapsedGroups.has(collapseKey(id));
 function toggleGroup(id) {
   const key = collapseKey(id);
   if (!collapsedGroups.delete(key)) collapsedGroups.add(key);
-  localStorage.setItem('collapsedGroups', JSON.stringify([...collapsedGroups]));
+  trackingShown.delete(key); // an unfolded Tracking section opens on what moved lately again (trimTracking)
+  setPref('collapsedGroups', [...collapsedGroups]);
   render(true);
 }
+// ---- Tracking: the long tail behind a link ----
+// Work you handed over piles up, and most of it has not moved in weeks, so the section opens on what has: the rows
+// updated in the last three days. The rest arrives on one click and stays for as long as the section stays open —
+// folding it forgets, so it opens short again, which is the whole point of opening short. A row with no update time
+// to read is part of the tail. Session state, like holding rows in place: it is about the list in front of you, so
+// there is nothing to store and nothing to clean up. Only Tracking: every other section is work with your name on
+// it, where a row that has not moved is exactly the one you need to see.
+const TRACKING_RECENT = 3 * 864e5;
+const trackingShown = new Set(); // collapseKey of a Tracking section that has been asked for whole
+const movedRecently = (n) => Date.now() - Date.parse(n.updatedAt) < TRACKING_RECENT;
+function trimTracking(g) {
+  if (g.id !== 'Tracking' || g.collapsed || trackingShown.has(collapseKey(g.id))) return g;
+  const recent = g.nodes.filter(movedRecently);
+  // "more" is what the link offers; without one the section is drawn exactly as any other
+  return recent.length === g.nodes.length ? g : { ...g, nodes: recent, more: g.nodes.length - recent.length };
+}
+// Forced, like toggleGroup: the click's whole point is to redraw.
+function showAllTracking(id) { trackingShown.add(collapseKey(id)); render(true); }
 // ---- sort: the same rows in another order, again without asking the backend for anything ----
 // Only what a row actually carries can be sorted on. main.js toNode passes updatedAt and createdAt as ISO 8601
 // strings, so they compare as strings; a row that carries neither (an older cached row) keeps its place at the end.
@@ -259,5 +278,16 @@ function groupHeadEl(g) {
   el.title = g.collapsed ? 'Expand' : 'Collapse'; // the words the row chevrons already use
   el.onmousedown = (e) => e.preventDefault();
   el.onclick = () => toggleGroup(g.id);
+  return el;
+}
+// The tail of a trimmed section, one click away. A button like the heading rather than a row: no key, no bullet, and
+// nodeEls() passes it by, so it is not somewhere the keyboard can land; mousedown is swallowed the same way, so
+// clicking it cannot take a selection away.
+function groupMoreEl(g) {
+  const el = document.createElement('button');
+  el.type = 'button'; el.className = 'gmore';
+  el.textContent = 'Show ' + g.more + ' more task' + (g.more === 1 ? '' : 's');
+  el.onmousedown = (e) => e.preventDefault();
+  el.onclick = () => showAllTracking(g.id);
   return el;
 }

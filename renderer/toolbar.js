@@ -85,6 +85,23 @@ function renderToolbar() {
   toolbarEl.hidden = false;
   placeToolbar();
 }
+// Where the style menu opens and how tall it may be, from the room on each side of its button and the height it
+// wants. It stays under the button while it fits there, flips above when that side is roomier, and is capped to
+// the side it uses — a menu capped to the window instead would hang off the bottom edge with rows that scrolling
+// cannot reach, which is exactly what it used to do near the end of a page.
+function menuFit(below, above, want) {
+  const up = below < want && above > below;
+  return { up, maxHeight: Math.max(96, Math.min(400, up ? above : below)) };
+}
+function fitMenu() {
+  const menu = toolbarEl.querySelector('.menu'), button = menu && menu.parentElement;
+  if (!menu || !button.getBoundingClientRect) return;
+  const r = button.getBoundingClientRect();
+  const { up, maxHeight } = menuFit(innerHeight - r.bottom - 14, r.top - 14, menu.scrollHeight + 8);
+  menu.classList.toggle('up', up);
+  menu.style.maxHeight = maxHeight + 'px';
+  menu.querySelector('.mrow.active')?.scrollIntoView({ block: 'nearest' }); // arrowing past the fold brings the row with it
+}
 function placeToolbar() {
   const sel = getSelection();
   if (!sel.rangeCount || !toolbarEl.getBoundingClientRect) return;
@@ -93,7 +110,10 @@ function placeToolbar() {
   const width = toolbarEl.getBoundingClientRect().width || 280;
   toolbarEl.style.left = Math.max(8, Math.min(innerWidth - width - 8, r.left)) + 'px';
   toolbarEl.style.top = Math.max(8, r.top - 44) + 'px';
+  fitMenu();
 }
+// The one type a row can be refused: plain text for a child node (sdk/content.js atRoot).
+const blockedType = (item, type) => type === 'paragraph' && nestedRow(item);
 function styleMenuEl(item) {
   const el = document.createElement('div'); el.className = 'menu';
   BLOCK_TYPES.forEach(([type, label], i) => {
@@ -102,7 +122,10 @@ function styleMenuEl(item) {
     const text = document.createElement('span'); text.className = 'mlabel'; text.textContent = label;
     row.append(icon, text);
     if (blockTypeOf(item.node) === type) { const tick = document.createElement('span'); tick.className = 'tick'; tick.textContent = '✓'; row.append(tick); }
-    row.onclick = () => applyBlockType(type);
+    // Text is not offered to a child node: its place in Tana is inside its parent's listItem, which cannot hold a
+    // bare paragraph. The row stays in the menu, greyed, so the list does not shift under the keyboard.
+    if (blockedType(item, type)) row.classList.add('disabled');
+    else row.onclick = () => applyBlockType(type);
     el.append(row);
   });
   return el;
@@ -121,7 +144,7 @@ toolbarEl.addEventListener('keydown', (e) => {
   const buttons = [...toolbarEl.querySelectorAll('.tbtn')], i = Math.max(0, buttons.indexOf(document.activeElement));
   if (toolMenu) {
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); toolMenu.index = (toolMenu.index + (e.key === 'ArrowDown' ? 1 : BLOCK_TYPES.length - 1)) % BLOCK_TYPES.length; renderToolbar(); focusToolbar(); }
-    else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); applyBlockType(BLOCK_TYPES[toolMenu.index][0]); }
+    else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); const type = BLOCK_TYPES[toolMenu.index][0]; if (!blockedType(toolItem(), type)) applyBlockType(type); }
     else if (e.key === 'Escape') { e.preventDefault(); toolMenu = null; renderToolbar(); focusToolbar(); }
     return;
   }
@@ -157,6 +180,37 @@ async function applyBlockType(type) {
   await run(async () => { await tana.setBlockType(item.docId, item.node.id, type); await reload(item.docId); });
   render(true);
   if (ctx) selectRange(ctx.key, ctx.start, ctx.end);
+}
+// Backspace at the start of a row takes its bullet off instead of deleting the row: the outliner is the default
+// mode, so plain text is what is left when the bullet goes. (Tana works the other way round — a row is plain text
+// until "- " starts a list.) Pressing it again on the plain row removes it, as it always did.
+// ponytail: a row with children keeps its bullet, because a plain paragraph cannot own an outline in Tana's schema
+// and setBlockType would outdent them; "/" -> Text still converts one by hand.
+function unbullet(item) {
+  if (!item || item.node.kind !== 'block' || item.node.draft || !tana.setBlockType || !canEditItem(item)) return false;
+  if (nestedRow(item)) return false; // a child node cannot be plain text, so Backspace leaves its bullet alone
+
+  if (!['bullet', 'numbered'].includes(blockTypeOf(item.node))) return false;
+  if (hasKids(item) || item.node.hasChildren) return false;
+  const { docId, node, key } = item;
+  flush(key);
+  run(async () => { await tana.setBlockType(docId, node.id, 'paragraph'); await reload(docId); render(true); placeCaret(key, 0); });
+  return true;
+}
+// The other direction, from the keyboard: "- " typed into a row with no marker starts a list there, the way Tana
+// starts one, so the two modes are reversible without leaving the row. The dash is the command, not text, so it
+// is dropped rather than saved — and like the "/" menu it is only the whole content of the row, so a line that
+// merely begins with a dash (a paste, a sentence) is left alone. A code block is content, not prose: "- " there
+// stays "- ".
+function rebullet(item) {
+  if (!item || item.node.kind !== 'block' || item.node.draft || !tana.setBlockType || !canEditItem(item)) return false;
+  const type = blockTypeOf(item.node);
+  if (type === 'code' || ['bullet', 'numbered'].includes(type)) return false;
+  const { docId, node, key } = item;
+  dropPending(key); // the "- " is never written: the pending save for it goes with it
+  node.text = ''; node.segments = [];
+  run(async () => { await tana.setText(docId, node.id, []); await tana.setBlockType(docId, node.id, 'bullet'); await reload(docId); render(true); placeCaret(key, 0); });
+  return true;
 }
 function linkSelection() { // the @ button runs the same linking flow as typing "@" over a selection
   const ctx = toolCtx, item = toolItem(), el = ctx && textEl(ctx.key);

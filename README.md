@@ -106,6 +106,7 @@ npm run package                     # dist/Tana Companion-darwin-arm64/Tana Comp
 npm run tana -- whoami              # the platform, without the UI
 npm run icon                        # re-render build/icon.icns
 node scripts/build-icons.js <dir>   # regenerate icons.js from the line icon set
+node scripts/build-nucleo.js        # rebuild build/nucleo-ui.json.gz (the Set icon set) from the local Nucleo library
 ```
 
 `npm run tana` is an Electron-run CLI over the same SDK: `login`, `whoami`, `search`, `get`,

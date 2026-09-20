@@ -33,14 +33,17 @@ function audienceInfo(audience, audienceSpace) {
 function loadTaskMeta(docId) {
   // Metadata is supplemental. Calling it before the sync client connects retries on every render.
   const backoff = taskMetaFailed.get(docId);
-  if (!connected || !tana.taskMeta || !isRealId(docId) || taskMetaById.has(docId) || taskMetaLoading.has(docId) || (backoff && Date.now() < backoff.until)) return;
+  // A deleted node answers nothing and never will, so it is not asked: the backoff doubles but never gives up, which
+  // is what turned one gone row into a "Node has been deleted" in the log for the rest of the session.
+  if (!connected || !tana.taskMeta || !isRealId(docId) || isGone(docId) || taskMetaById.has(docId) || taskMetaLoading.has(docId) || (backoff && Date.now() < backoff.until)) return;
   taskMetaLoading.add(docId);
   tana.taskMeta(docId).then((meta) => {
     taskMetaLoading.delete(docId); taskMetaFailed.delete(docId); taskMetaById.set(docId, meta);
     if (!palette.hidden && palDoc && palDoc.id === docId) renderPalette();
     patchMeta(docId);
-  }, () => { // a brand-new document can still be settling in main: wait, then let the next render ask again
+  }, (e) => { // a brand-new document can still be settling in main: wait, then let the next render ask again
     taskMetaLoading.delete(docId);
+    if (noteGone(docId, e)) return; // gone, not settling: nothing to wait for
     const wait = Math.min(META_RETRY_MAX, backoff ? backoff.wait * 2 : META_RETRY_MS);
     taskMetaFailed.set(docId, { until: Date.now() + wait, wait });
     setTimeout(() => { if (!taskMetaById.has(docId)) renderSoon(); }, wait);

@@ -50,7 +50,10 @@ async function splitNode(item, el, off) {
     if (draftEl) { typed = readSegs(draftEl); typedOffset = typeof caretOffset === 'function' ? caretOffset(draftEl) ?? 0 : 0; }
   };
   const addSplitDraft = (list, index) => {
-    splitDraft = { id: 'draft:split:' + node.id + ':' + Date.now(), text: plainOf(after), segments: after, kind: 'block', done: node.kind === 'block' && node.done != null ? 0 : undefined, draft: true, pendingSplit: true };
+    // the kind the write will make it (siblingBlock), not the default one: a bullet flashing under the caret for
+    // the length of a round trip on a row that is about to be plain text is a visible wrong answer
+    const block = asChild ? 'bullet' : siblingBlock(node); // a child is a listItem in Tana's schema, whatever its parent is
+    splitDraft = { id: 'draft:split:' + node.id + ':' + Date.now(), text: plainOf(after), segments: after, kind: 'block', block, done: node.kind === 'block' && node.done != null ? 0 : undefined, draft: true, pendingSplit: true };
     list.splice(index, 0, splitDraft);
     splitKey = docId + '/' + splitDraft.id;
     render(true); placeCaret(splitKey, 0);
@@ -109,13 +112,35 @@ async function shiftNode(item, el, op, arg) {
   placeCaret(item.key, off);
 }
 
+// An empty node shows a draft row only while it is explicitly expanded (renderer/render.js), and that expansion
+// was made to hold a child. When a removal takes the last one away, the expansion goes with it, so no draft row
+// is left standing where the child was. Deleted rather than set false, so children arriving again — an undo, a
+// live update from another client — show without having to be expanded a second time.
+function closeIfEmpty(parent) { if (parent && !hasKids(parent)) open.delete(parent.key); }
 async function removeNode(item, el) {
   if (!canEditStructure(item)) return;
   const keys = texts().map(keyOfEl), i = keys.indexOf(item.key);
   dropPending(item.key);
   await run(async () => { await tana.remove(item.docId, item.node.id); await reload(item.docId); });
+  closeIfEmpty(item.parent);
   render(true);
   caretNear(keys, i, null);
+}
+// Backspace at the start of a row takes the empty row above it away. A plain empty row draws nothing at all now,
+// so there is no bullet left to click and no text to put a caret in — without this it can only be reached from
+// the row below, which is also what every editor does at the start of a line. The caret does not move: it stays
+// where it already was, at the start of the row the user is typing in, so the text does not jump.
+// A row with children, an image, a divider, a reference, a draft or a row belonging to another document (the
+// rows an opened reference borrows) is not "an empty row above" and is left alone.
+function removeEmptyAbove(item, el) {
+  const all = texts(), prev = all[all.indexOf(el) - 1], above = prev && items.get(keyOfEl(prev));
+  if (!above || above.docId !== item.docId || above.node.kind !== 'block' || above.node.draft) return false;
+  if (isAtomic(above.node) || isReference(above.node) || hasKids(above) || above.node.hasChildren) return false;
+  if (unanchored(prev.textContent).length || plainOf(above.node).length) return false;
+  if (!canEditStructure(above)) return false;
+  dropPending(above.key);
+  run(async () => { await tana.remove(above.docId, above.node.id); await reload(above.docId); closeIfEmpty(above.parent); render(true); placeCaret(item.key, 0); });
+  return true;
 }
 async function removeDocument(item) {
   if (!canEditItem(item) || !tana.deleteDocument || !tana.accessOptions) return;
@@ -222,6 +247,10 @@ function toggleReference(node) {
 function setView(id) { dropDrafts(); releaseHeld(); view = id; localStorage.setItem('view', id); zoom = null; sel = null; menu = null; loadView(id); render(true); }
 // zoom into a document, switching to its view first when it belongs to another one; from = breadcrumb root instead of the view
 function openDoc(docId, from) {
+  // Every zoom of a document comes through here, whichever route asked for it — a row, a pin, the rail, a crumb, a
+  // mention, a notification, a meeting's write-up redirect — so this is where a deleted node is refused. Opening one
+  // put an empty page on screen whose every read came back "Node has been deleted", once per metadata retry.
+  if (isGone(docId)) return showError(new Error('That node has been deleted'));
   flushAll(); dropDrafts(); caretOnOpen = true;
   const s = from ? null : sectionOf(docId);
   if (s && s.id !== view) { releaseHeld(); view = s.id; localStorage.setItem('view', view); }
@@ -238,9 +267,12 @@ function followSummary(docId) {
   tana.summaryUri(docId).then((uri) => { if (uri && zoom && zoom.docId === docId) { navReplace = true; goTo(uri); } }, () => {}); // the event page is a hop, not a place to come back to
 }
 async function goTo(uri) {
+  if (isGone(uri)) return showError(new Error('That node has been deleted'));
   if (!allDocs().some((d) => d.id === uri) && !extra.has(uri)) {
+    // A read refused because the node is gone is how a link into something deleted is usually found out: noteGone
+    // remembers it, so every copy of it on screen is struck through and the next click does not ask again.
     try { const n = await tana.node(uri); extra.set(uri, { ...n, text: n.title || '', hasChildren: true }); }
-    catch (e) { return showError(e); }
+    catch (e) { noteGone(uri, e); return showError(e); }
   }
   openDoc(uri);
 }
@@ -251,10 +283,12 @@ function flushAll() { for (const key of [...pending.keys()]) flush(key); }
 const navBack = [], navForward = [];
 let navHere = null, navigating = false, navReplace = false; // navReplace: the next place stands in for the current one (a meeting forwarding to its write-up)
 const navPlace = () => ({ view, zoom: zoom && { ...zoom }, key: JSON.stringify([view, zoom && zoom.docId, zoom && zoom.nodeId, zoom && (zoom.via || []).map((v) => v.docId)]) });
-// The place to reopen at the next launch. Only the document and the node: the crumb trail (zoom.via) rebuilds itself
-// from tana.path, and naming its documents would mean fetching each one. A draft id means nothing after a restart.
+// The place to reopen at the next launch: the document, the node, and the document's own title and glyph — enough
+// for the next launch to draw the page before anything is fetched. The crumb trail (zoom.via) rebuilds itself from
+// tana.path, and naming its documents would mean fetching each one. A draft id means nothing after a restart.
 function rememberPlace() {
-  if (zoom && isRealId(zoom.docId)) localStorage.setItem('place', JSON.stringify({ docId: zoom.docId, nodeId: zoom.nodeId || null, from: zoom.from }));
+  const doc = zoom ? docOf(zoom.docId) : null; // a row the app does not have simply stores no title: the next launch opens on the view, as before
+  if (zoom && isRealId(zoom.docId)) localStorage.setItem('place', JSON.stringify({ docId: zoom.docId, nodeId: zoom.nodeId || null, from: zoom.from, title: doc ? doc.text : undefined, icon: doc ? doc.icon : undefined }));
   else localStorage.removeItem('place');
 }
 function noteNavigation() {
@@ -268,6 +302,9 @@ function noteNavigation() {
 function navigate(dir) {
   const from = dir < 0 ? navBack : navForward, to = dir < 0 ? navForward : navBack;
   const place = from.pop();
+  // A page that has been deleted since you were on it is skipped rather than reopened: keep walking the stack, which
+  // also empties one that is nothing but deleted pages (it lands on Home, as an empty stack does).
+  if (place && place.zoom && isGone(place.zoom.docId)) return navigate(dir);
   // Nothing to go back to: Back lands on Home rather than on whichever view happens to be behind the page. That is
   // the whole point of choosing one — a note opened from a search or a link used to leave you in the Library.
   if (!place) return dir < 0 && !atHome() ? goHome() : undefined;
@@ -311,19 +348,32 @@ let savedPlace = readStoredPlace();
 // search is opened exactly the way a stored place is — it waits for the connection, is fetched if no view lists it,
 // and silently leaves you on the view if it cannot be read, which is the fallback a deleted Home needs anyway.
 if (!savedPlace && isRealId(home)) savedPlace = { docId: home, nodeId: null };
+// The page itself, before the first paint. A launch used to draw the view behind the place it was about to reopen
+// and replace it once the connection came up, which read as the Library flashing past on every start; the stored
+// title and glyph are enough for the header, and the rows say Loading… until there is a connection to ask. Only
+// with a title: a Home search that has never been drawn has no name to show, so that one still opens on the view.
+// restorePlace reads the real node over this stub the moment it can.
+if (savedPlace && isRealId(savedPlace.docId) && savedPlace.title != null) {
+  extra.set(savedPlace.docId, asDoc({ id: savedPlace.docId, title: savedPlace.title, icon: savedPlace.icon }));
+  zoom = { docId: savedPlace.docId, nodeId: savedPlace.nodeId || null, from: savedPlace.from };
+}
 async function restorePlace() {
   const saved = savedPlace;
-  if (!saved || !isRealId(saved.docId) || zoom) { savedPlace = null; return; }
+  // Somewhere else already — a link, a notification — wins. The page seeded above is this same place, so it does not.
+  if (!saved || !isRealId(saved.docId) || (zoom && zoom.docId !== saved.docId)) { savedPlace = null; return; }
   // Boot draws the cached roots before the sync client exists, so reopening the page now would ask for its children
   // with nothing to ask — "not connected to Tana" from outline:children. The place is kept rather than spent, and
   // app.js runs this again the moment the connection comes up.
   if (!connected) return;
   savedPlace = null; // one restore per launch
-  if (!allDocs().some((d) => d.id === saved.docId) && !extra.has(saved.docId)) {
+  // extra is not proof any more: the seeded page is a stub with a title and nothing else — no state, no tags, no
+  // editability — so a document no view lists is read for real here whether or not the stub is sitting in it.
+  if (!allDocs().some((d) => d.id === saved.docId)) {
     const before = navPlace().key;
     try { const n = await tana.node(saved.docId); extra.set(saved.docId, { ...n, text: n.title || '', hasChildren: true }); }
-    catch { return; }
-    if (zoom || navPlace().key !== before) return; // you navigated while it loaded: you stay where you went
+    // Deleted, or no longer yours: the stub is taken down again and the launch lands on the view, as it used to.
+    catch { if (zoom && zoom.docId === saved.docId) { zoom = null; extra.delete(saved.docId); render(true); } return; }
+    if (navPlace().key !== before) return; // you navigated while it loaded: you stay where you went
   }
   zoom = { docId: saved.docId, nodeId: saved.nodeId || null, from: saved.from };
   render(true);

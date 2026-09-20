@@ -17,7 +17,7 @@ renderer. It replaces the per-view paths: `taskParams`/`libraryQueries`/`MEETING
 
 | key | values | meaning |
 |-----|--------|---------|
-| `types` | array of kinds, or `null` | kinds: `meetings tasks docs chats canvases agents skills searches spaces people`. `null` = every kind **except people and spaces** (a person is a member and a space a container, not library content; both are listed when asked for by name). `searches` are saved searches (`tana:search:`), documents that store a search definition. |
+| `types` | array of kinds, or `null` | kinds: `meetings tasks docs chats canvases agents skills searches spaces people types`. `null` = every kind **except people, spaces and types** (a person is a member, a space a container and a type is schema, not library content; each is listed when asked for by name). `searches` are saved searches (`tana:search:`), documents that store a search definition. `types` are the workspace's own types (`tana:type:`). |
 | `states` | array of `proposed open closed not_now`, or `null` | `null` = any state. Like the assignee, in effect only when tasks are in scope: no other kind carries a state, so a stored "Inbox, In Progress" must not empty a People or Docs listing. |
 | `assignee` | `me` \| `anyone` \| `unassigned` \| user-profile uri | in effect only when tasks are in scope (`types` is null or contains `tasks`). |
 | `text` | string | server-side `textQuery`. |
@@ -34,6 +34,7 @@ meetings: { types: ['meetings'],  participant: 'me', window: 'recent' }
 library:  { types: ['tasks'],     states: ['proposed', 'open'],  assignee: 'me', text: '' }
 chats:    { types: ['chats'] }
 people:   { types: ['people'] }
+types:    { types: ['types'] }                                                                    // the workspace's schema, each row showing its space
 ```
 
 Each view persists its own filter under the setting key `viewFilter:<id>`; a stored filter that is not
@@ -72,12 +73,19 @@ truncation note the Library already shows still tells the user when there is mor
 
 - Rows are mapped by the existing `graphRow`/`toNode` pair. Member rows keep `editable: false`,
   meeting rows keep their `meta` (weekday and time), hidden-title rules apply to every view.
+- A type row keeps the space it lives in as its `meta`, read from the graph node's own `spaceUri` and resolved to a
+  title by the `nodeIds` lookup `resolveTypes` already makes; a type with no space reads as `Library`.
 - Every view caches its rows in SQLite under its own id (`db.replaceSection(viewId, rows)`), so any
   view opens instantly from cache and stays readable while auth or sync reconnect. Today only tasks
   and meetings do.
 - `outline:roots` returns `[{ id, title, icon, nodes }]` for the six views from that cache.
-- The refresh loop refreshes the **active** view (the last one listed) and subscribes its rows, with
-  the undo-history retention from #178 unchanged.
+- The refresh loop refreshes the **active** view (the last one listed) and subscribes the first
+  `LIVE_ROWS` (100, main/state.js) of its rows, with the undo-history retention from #178 unchanged.
+  Not the whole list: a subscription is a bootstrap RPC and a LoroDoc each, and every bootstrap reaches
+  the renderer as a change, so a Library of several hundred rows opened with a subscription storm on the
+  one sync connection — the page lagged and the read for whatever was opened next queued behind it. The
+  tail keeps its cached row and is re-read by the 30 s refresh. `searchChildren` (main/related.js) caps
+  its rows the same way.
 
 ## 5. IPC
 

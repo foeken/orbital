@@ -30,10 +30,14 @@ const onSearchPage = () => !!zoom && !zoom.nodeId && String(zoom.docId || '').st
 const childrenOf = (item) => (item.node.kind === 'document' ? kids.get(item.docId) : item.node.children || []);
 const hasKids = (item) => { const c = childrenOf(item); return Array.isArray(c) ? c.length > 0 : !!item.node.hasChildren; };
 const isOpen = (item) => (open.has(item.key) ? open.get(item.key) : item.node.kind === 'block');
-const canInsertChild = (item) => item.node.kind === 'document' || hasKids(item) || item.node.done != null || ['paragraph', 'bullet', 'numbered'].includes(item.node.block);
+const canInsertChild = (item) => item.node.kind === 'document' || hasKids(item) || item.node.done != null || (!isAtomic(item.node) && ['paragraph', 'bullet', 'numbered'].includes(item.node.block));
 const canExpand = (item) => hasKids(item) || (!item.node.draft && canEditItem(item));
-function draftNode(parent) { // shown under an expanded empty node; created on the first typed character
-  return { id: 'draft:' + parent.key, text: '', kind: 'block', done: parent.node?.kind !== 'document' && parent.node?.done != null ? 0 : undefined, draft: true };
+function draftNode(parent, prev) { // shown under an expanded empty node; created on the first typed character
+  // It is drawn as what main will write it as the moment it is typed into (materialise): after a row, whatever
+  // that row makes of a sibling; as the first row of a document, plain text; and as a child of a block, a
+  // bullet, because a child is a listItem in Tana's schema whatever its parent is.
+  const block = prev ? siblingBlock(prev) : parent.node?.kind === 'document' ? siblingBlock(parent.node) : 'bullet';
+  return { id: 'draft:' + parent.key, text: '', kind: 'block', block, done: parent.node?.kind !== 'document' && parent.node?.done != null ? 0 : undefined, draft: true };
 }
 // Draft documents stay local until their first title character, then use their selected native kind/type.
 function draftDocNode(kind, option = {}) {
@@ -59,8 +63,18 @@ const BLOCK_TYPES = [['paragraph', 'Text'], ['heading1', 'Heading 1'], ['heading
   ['bullet', 'Bullet List'], ['numbered', 'Numbered List'], ['code', 'Code Block'], ['quote', 'Quote']];
 const BLOCK_LABEL = new Map(BLOCK_TYPES);
 const BLOCK_GLYPH = { paragraph: 'T', heading1: 'H1', heading2: 'H2', heading3: 'H3', bullet: '•', numbered: '1.', code: '</>', quote: '❝', divider: '—' };
-const blockTypeOf = (node) => (BLOCK_LABEL.has(node.block) ? node.block : node.heading ? 'heading' + node.heading : 'paragraph');
+// A row with no type of its own is an outline row: every row readOutline returns carries one, so this is the
+// mock's rows and anything built by hand. The draft tail states the mode it will be written in (draftNode).
+const blockTypeOf = (node) => (BLOCK_LABEL.has(node.block) ? node.block : node.heading ? 'heading' + node.heading : 'bullet');
 const headingOf = (node) => node.heading || Number((blockTypeOf(node).match(/^heading(\d)$/) || [])[1]) || 0;
+// What the write will make of a new sibling of this row (sdk/content.js insertAfter), so a row the renderer shows
+// before the write lands is already the right kind and nothing flashes under the caret: a list row makes a list
+// row, a quote stays in its quote, and a heading, a code block or a document's own first row is plain text.
+const siblingBlock = (node) => (node.kind === 'block' && ['bullet', 'numbered', 'quote'].includes(node.block) ? node.block : 'paragraph');
+// A row that is another node's child rather than one of the document's own rows. Tana keeps children inside their
+// parent's listItem, which has no place for a bare paragraph, so only a document's own rows can be plain text
+// (sdk/content.js refuses the rest). Zooming does not change the answer: what counts is the row's real parent.
+const nestedRow = (item) => item?.parent?.node?.kind === 'block';
 // the icon slot of a palette/menu row: a real icon where we have one, else the text glyph. The icon sits in the
 // same slot so it matches the weight of H1/•/1. beside it.
 function glyphSvg(type) { return type === 'code' ? '<span class="glyph icon">' + iconSvg('code') + '</span>' : '<span class="glyph">' + (BLOCK_GLYPH[type] || '') + '</span>'; }
@@ -73,8 +87,16 @@ const isReference = (node) => node.type === 'reference';
 // — its box, its status, its tags — and becomes an ordinary line with a link again the moment anything else is typed.
 // Children rule it out: the row stands in for another node, and expanding it opens that node's outline, so a block
 // with an outline of its own would have nowhere left to show it.
-const isFullReference = (node) => node.kind === 'block' && !isReference(node) && !node.hasChildren && !node.children?.length && segsOf(node).length === 1 && !!segsOf(node)[0].mention;
+const oneMention = (segs) => segs.length === 1 && !!segs[0].mention;
+const isFullReference = (node) => node.kind === 'block' && !isReference(node) && !node.hasChildren && !node.children?.length && oneMention(segsOf(node));
 const referenceTarget = (node) => ((isReference(node) || isFullReference(node)) && node.reference?.node ? asDoc(node.reference.node) : null);
+// What the row stands in for *right now*. A save is debounced, so between the keystroke and the write the node still
+// carries the segments from before it: a full reference typed into would keep the other node's chrome — its box, its
+// tags, its strikethrough — until the write came back, most of a second later. With an edit in flight the row is
+// judged by what is in the editor (the same pending segments the text is drawn from), so text beside the chip makes
+// it an ordinary line at once, and deleting that text makes it a full reference again. An inline reference (type
+// 'reference') is unaffected: typing there edits the target's title, so it never stops pointing at it.
+const liveTarget = (node, typing) => (typing && !isReference(node) && !oneMention(typing.segs) ? null : referenceTarget(node));
 const referenceLabel = (node) => referenceTarget(node)?.text || node.reference?.label || node.text || node.reference?.uri || 'Unavailable reference';
 // An error from an action is transient: it clears when the next action succeeds, so a stale message never
 // outlives the problem it described.
@@ -100,7 +122,26 @@ const LIB_ICONS = {
   // placeholder while a row's visibility is still being read: the audience icons in the same 18px grid, drawn open
   pending: STROKE + '<path d="M9 11.75C10.5188 11.75 11.75 10.5188 11.75 9C11.75 7.48122 10.5188 6.25 9 6.25C7.48122 6.25 6.25 7.48122 6.25 9C6.25 10.5188 7.48122 11.75 9 11.75Z"/><path d="M10.4277 3.3967C9.97907 3.3022 9.50347 3.25 8.99997 3.25C8.49647 3.25 8.02087 3.3022 7.57227 3.3967"/><path d="M3.59241 5.7576C4.03861 5.2786 4.56019 4.81329 5.16119 4.41629"/><path d="M2.0443 10.1133C1.6519 9.42061 1.6519 8.57951 2.0443 7.88681"/><path d="M14.4077 5.7576C13.9615 5.2786 13.4399 4.81329 12.8389 4.41629"/><path d="M10.4277 14.6033C9.97907 14.6978 9.50347 14.75 8.99997 14.75C8.49647 14.75 8.02087 14.6978 7.57227 14.6033"/><path d="M3.59241 12.2424C4.03861 12.7214 4.56019 13.1867 5.16119 13.5837"/><path d="M14.4077 12.2424C13.9615 12.7214 13.4399 13.1867 12.8389 13.5837"/><path d="M15.9557 10.1133C16.3481 9.42061 16.3481 8.57951 15.9557 7.88681"/></svg>',
 };
-const iconSvg = (icon) => ICONS[icon === 'meeting' ? 'calendar' : icon] || LIB_ICONS[icon] || '';
+// Glyphs a type has been given (main/icons.js): the Nucleo set is built into the app but stays in main, so what
+// arrives here is the handful actually in use, plus whatever a search page is showing. Registered before the rows
+// that name them are drawn (loadRoots below), so a bullet never renders empty and waits for a second render.
+const customIcons = new Map(); // 'nc-<label>' -> svg markup
+const typeGlyphs = new Map(); // type uri -> the icon name it is drawn with, so the picker knows what it has now
+function registerIcons(list) {
+  for (const icon of Array.isArray(list) ? list : []) {
+    if (!icon || typeof icon.name !== 'string' || typeof icon.svg !== 'string') continue;
+    if (customIcons.get(icon.name) === icon.svg) continue;
+    customIcons.set(icon.name, icon.svg);
+    iconTemplates.delete(icon.name); // a name that is drawn from new markup must not keep the parsed copy
+  }
+}
+// The whole answer, not a patch: a type whose icon was cleared has to leave the map with it.
+function setTypeGlyphs(list) {
+  typeGlyphs.clear();
+  for (const icon of Array.isArray(list) ? list : []) if (icon && icon.uri) typeGlyphs.set(icon.uri, icon.name);
+  registerIcons(list);
+}
+const iconSvg = (icon) => ICONS[icon === 'meeting' ? 'calendar' : icon] || LIB_ICONS[icon] || customIcons.get(icon) || '';
 // The same SVG parsed once, then cloned per row: rows used to re-parse their icon markup on every render.
 const iconTemplates = new Map();
 function iconNode(icon) {
@@ -134,6 +175,23 @@ const nodeIcon = (n) => chatIcon(n) || ((n.tags || []).some((t) => t.label === '
 const asDoc = (n) => ({ ...n, kind: 'document', text: n.text ?? n.title ?? '', hasChildren: true, icon: nodeIcon(n) }); // api.node / search / library result -> document Node
 // a draft row keeps a local "draftdoc:N" id until it is created, and the main process knows nothing about it
 const isRealId = (id) => typeof id === 'string' && id.startsWith('tana:');
+// ---- deleted nodes ----
+// A node can be gone while a copy of it is still on screen: a mention typed into a note, a reference row, a page in
+// the Back stack. Main knows first and says so three ways — outline:removed, a reference it resolved as deleted, and
+// "Node has been deleted" from any read — and all three land in one set, because what the app does about it is the
+// same in every case: draw it struck through behind a trash glyph, and refuse to open it.
+const isGone = (uri) => typeof uri === 'string' && deletedIds.has(uri);
+// main's answer, remembered: a reference drawn as deleted is one the navigation guards must know about too
+const markGone = (uri, deleted) => { if (deleted && typeof uri === 'string') deletedIds.add(uri); return isGone(uri); };
+// Any read refused because the node is gone. The message is main's (main/documents.js op), carried through the IPC
+// wrapper, so it reads "…: Error: Node has been deleted" by the time it arrives here.
+function noteGone(uri, e) {
+  if (!isRealId(uri) || deletedIds.has(uri) || !/has been deleted/i.test(String((e && e.message) || e || ''))) return false;
+  deletedIds.add(uri);
+  if (zoom && zoom.docId === uri) zoom = null; // the page it refused to answer for is not a page any more
+  renderSoon();
+  return true;
+}
 // ---- Home ----
 // The saved search Home points at, while the list knows it. The list is the only proof we have that a search is still
 // there and still readable: main answers it from the graph, and app.js drops a deleted one from it as the deletion
@@ -150,7 +208,7 @@ const atHome = () => (zoom ? !zoom.nodeId && zoom.docId === homeId() : homeId() 
 // The id this page would set as Home: the Library view, or the saved search you are looking at. Anything else — a
 // note, the Inbox, a space — is not a place to come back to, so the command is not offered there.
 const homeTarget = () => (onSearchPage() ? zoom.docId : !zoom && view === 'library' ? 'library' : null);
-function setHome(id) { home = id; localStorage.setItem('home', id); render(true); }
+function setHome(id) { home = id; setPref('home', id); render(true); }
 // Going Home: a saved search is a document you open, the Library is a view you switch to.
 function goHome() { const id = homeId(); if (id !== 'library') goTo(id); else if (view === 'library') { zoom = null; render(true); } else setView('library'); }
 function sensitiveHidden(id) {
@@ -217,7 +275,10 @@ async function loadRoots() {
   loadCodex();
   loadAgentStates();
   const drafts = views.flatMap((s) => s.nodes.map((node, i) => ({ view: s.id, i, node })).filter((d) => d.node.draft)); // a refresh must not drop a draft being typed
-  views = (await tana.roots()).map((s) => ({ ...s, icon: s.id === 'library' ? 'library' : s.icon, nodes: s.nodes.map(asDoc) }));
+  // The type glyphs come with the roots rather than on their own: a row carries the *name* of its type's icon, so
+  // the markup has to be here before the rows are, and a roots load is exactly when the rows change.
+  const [roots] = await Promise.all([tana.roots(), tana.typeIcons ? tana.typeIcons().then(setTypeGlyphs, () => {}) : null]);
+  views = roots.map((s) => ({ ...s, icon: s.id === 'library' ? 'library' : s.icon, nodes: s.nodes.map(asDoc) }));
   for (const s of views) if (s.truncated) truncated.add(s.id); else if (s.truncated === false) truncated.delete(s.id); // roots carry the cap flag, so a refresh needs no second query
   rootsLoaded = true;
   for (const [id, f] of fresh) { // a created document stays where it was drafted until the roots query lists it
@@ -295,7 +356,11 @@ function setSearchF(patch) {
   filters.set(id, { ...filters.get(id), ...patch }); render();
 }
 function loadSearchFilter(docId) {
-  if (!tana.searchFilter || searchFilters.has(docId)) return;
+  // Not before the sync client exists: main reads the stored query through op(), which answers a missing client with
+  // "not connected to Tana" — logged in main and shown red here. Boot draws the page it reopens before connecting
+  // (renderer/app.js restorePlace), so a saved search as the last page hit this on every launch. The render the
+  // connection brings asks again.
+  if (!connected || !tana.searchFilter || searchFilters.has(docId)) return;
   searchFilters.set(docId, null); // claimed, so the renders while it is in flight do not ask again
   tana.searchFilter(docId).then((saved) => {
     searchFilters.set(docId, saved);
@@ -321,7 +386,10 @@ function viewFiltered() {
 }
 function clearFilters() { setViewF(clearFilter(filters.get(view))); }
 function ensureLoaded(item) {
-  if (item.node.kind !== 'document' || kids.has(item.docId)) return;
+  // Not before there is a connection to ask: the page a launch reopens (the seeded place in renderer/edit.js) is
+  // drawn before the sync client exists, and asking then greeted every start with a red "not connected to Tana".
+  // It stays "Loading…", and the render the connection brings with it asks again.
+  if (item.node.kind !== 'document' || kids.has(item.docId) || !connected) return;
   kids.set(item.docId, null);
   // The rows arrive while the caret is still in the row that was just expanded (⌘↓), which a plain render() would
   // wait out, leaving "Loading…" until the caret moves; this render is the answer to that keypress, so it is forced.

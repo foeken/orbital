@@ -30,6 +30,22 @@ function renderSegs(el, segs) {
       return hasMarks(s.marks) ? markWrap(nodes, s.marks) : nodes;
     }
     const a = document.createElement('a'); a.className = 'mention'; a.dataset.uri = s.mention.uri; a.contentEditable = 'false'; a.textContent = s.mention.label;
+    // A reference says what it points at: its target's icon, in the link's own colour (main resolves it). The
+    // label moves into a span of its own so the underline stays under the words, the way Tana draws it, and
+    // textContent still reads back as the label alone — an icon is paths, not text.
+    // A mention of a node that is gone keeps its words — that is what was written — but takes the trash glyph, the
+    // strike and the plain text colour: it is no longer somewhere to go, and the click is refused as well.
+    const gone = markGone(s.mention.uri, s.mention.deleted);
+    const icon = gone ? 'trash' : s.mention.icon;
+    if (gone) a.classList.add('gone');
+    // dataset.icon is what readSegs carries back, so it stays the kind the target is: the trash glyph belongs to the
+    // state the app found it in, not to the mention that was written.
+    if (s.mention.icon) a.dataset.icon = s.mention.icon;
+    if (icon) {
+      const label = document.createElement('span'); label.className = 'mlabel'; label.textContent = s.mention.label;
+      const svg = iconNode(icon);
+      a.replaceChildren(...(svg ? [svg, label] : [label]));
+    }
     return [a];
   });
   // Same kind of placeholder: Chromium holds no caret before a non-editable inline that starts the field, so a row
@@ -88,7 +104,8 @@ function readSegs(el) {
   };
   const walk = (parent, marks) => {
     for (const n of parent.childNodes) {
-      if (n.nodeType === 1 && n.classList.contains('mention')) { segs.push({ mention: { label: n.textContent, uri: n.dataset.uri } }); continue; }
+      // the icon travels with the mention, so typing beside one does not drop it until the next reload
+      if (n.nodeType === 1 && n.classList.contains('mention')) { segs.push({ mention: { label: n.textContent, uri: n.dataset.uri, ...(n.dataset.icon ? { icon: n.dataset.icon } : {}) } }); continue; }
       if (n.nodeName === 'BR') { add('\n', marks); continue; }
       if (n.nodeType === 1) { walk(n, marksOf(n, marks)); continue; }
       add(n.textContent, marks);

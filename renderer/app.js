@@ -16,7 +16,10 @@ function showStatus(s) {
   // moment the connection comes up; otherwise the Library or Chats stay empty until a filter is touched.
   // restorePlace waits for this too: reopening the last page needs a connection to ask for its children, and boot
   // reaches here with the cached roots already drawn, before the sync client exists.
-  if (connected && !wasConnected) { taskMetaFailed.clear(); loadView(); loadSearches(); restorePlace(); }
+  // The page you are on before the page behind it: the restore asks for one document's children, the view for a
+  // list of up to a thousand rows and the subscriptions that go with it, and on one connection the second used to
+  // go first. Any later reconnect finds the place already spent, so this is boot order only.
+  if (connected && !wasConnected) { taskMetaFailed.clear(); loadSearches(); restorePlace().finally(() => loadView()); }
   $('loginBox').hidden = !state.showLogin;
   outline.hidden = $('filtered').hidden = !state.showOutline;
   showError(state.error);
@@ -33,12 +36,20 @@ if (tana.onNotifyOpen) tana.onNotifyOpen((docId) => { if (docId) goTo(docId); })
 tana.onChanged((docId, info) => {
   if (docId) {
     if (!info || info.meta !== false) { taskMetaById.delete(docId); if (typeof taskMetaFailed !== 'undefined') taskMetaFailed.delete(docId); }
-    relatedBy.delete(docId); // the sidebar is fetched once per page: its Changes section would otherwise still show the edit before this one
+    // The sidebar is read once per page and left alone while the page is edited: its sections are relations, and
+    // typing in a document changes none of them (a task row in it is patched by patchCopies, not re-fetched).
+    // Only a metadata change — assignees, audience, participants, which main is already comparing for this flag —
+    // asks for it again, and that read keeps the old payload on screen until the new one lands. What this gives up
+    // is the Changes section noticing your own latest edit: it says what it said when the page opened. Pins refresh
+    // it themselves, because they do change a section.
+    if (!info || info.meta !== false) refreshRelated(docId);
     const work = [patchDoc(docId)];
     if (kids.has(docId)) work.push(reload(docId));
     // A zoom parks the caret in its blank tail, so an ordinary render defers until focus leaves and remote children
-    // stay invisible. The forced render already preserves the caret and pending local text.
-    Promise.all(work).then(() => render(true), showError);
+    // stay invisible. The forced render already preserves the caret and pending local text. Coalesced, because these
+    // arrive in bursts — every document a view subscribes announces its first bootstrap — and one forced redraw of a
+    // several-hundred-row outline per announcement is what made a wide view crawl.
+    Promise.all(work).then(() => renderSoon(true), showError);
   } else {
     loadPins();
     loadRoots().then(renderSoon, showError);
@@ -58,7 +69,8 @@ function patchCopies(docId, state) {
 async function patchDoc(docId) {
   if (!tana.node) return loadRoots();
   let fresh;
-  try { fresh = asDoc(await tana.node(docId)); } catch { return loadRoots(); } // deleted or unreadable: the lists decide
+  try { fresh = asDoc(await tana.node(docId)); } catch (e) { noteGone(docId, e); return loadRoots(); } // deleted or unreadable: the lists decide
+  deletedIds.delete(docId); // it answered, so it is not gone: an undo of a delete brings the rows and the chips back
   if (isTask(fresh)) patchCopies(docId, { text: fresh.text, title: fresh.title, done: fresh.done, stateType: fresh.stateType });
   let hit = extra.has(docId);
   if (hit) Object.assign(extra.get(docId), fresh);
@@ -69,6 +81,7 @@ async function patchDoc(docId) {
   if (!hit) return loadRoots();
 }
 function removeStale(id) {
+  deletedIds.add(id); // it stays known: copies of it elsewhere (a mention, a reference row) are drawn as gone, and nothing opens it
   searches = searches.filter((s) => s.id !== id); // a deleted saved search must leave the Cmd+K Searches group too
   repairHome(); // and if it was Home, the Library takes over rather than an id nothing can open
   invalidateNode(id); loadPins();
@@ -80,6 +93,22 @@ function unpinStale(id) {
 if (tana.onRemoved) tana.onRemoved(removeStale);
 if (tana.onUnpinned) tana.onUnpinned(unpinStale);
 tana.onStatus(showStatus);
+// Another machine changed a preference: take the new set and apply it where it is already on screen. Everything a
+// preference feeds is visible from here, which is why the applying lives in this file and not beside the store.
+if (tana.onSettings) tana.onSettings((next) => {
+  mergePrefs(next);
+  home = pref('home', 'library');
+  for (const key of Object.keys(hotkeys)) delete hotkeys[key];
+  Object.assign(hotkeys, pref('hotkeys', {}));
+  for (const [store, key] of [[groupPref, 'groupBy'], [sortPref, 'sortBy'], [displayPref, 'display']]) {
+    for (const k of Object.keys(store)) if (!k.startsWith('tana:')) delete store[k]; // a saved search keeps its own, which lives in the document
+    Object.assign(store, pref(key, {}));
+  }
+  collapsedGroups.clear(); for (const key of pref('collapsedGroups', [])) collapsedGroups.add(key);
+  const nextTheme = ['dark', 'system', 'light'].includes(pref('theme')) ? pref('theme') : 'light';
+  if (nextTheme !== themePref) { if (nextTheme === 'system') followSystem(true); else setTheme(nextTheme); } // writes the same value back, which is a no-op in the store
+  renderSoon();
+});
 if (tana.onSystemTheme) tana.onSystemTheme((t) => { if (themePref === 'system') applyTheme(t); }); // macOS appearance changes re-theme a running window
 if (themePref === 'system') followSystem(true);
 loadRoots().then(render, showError).then(restorePlace).then(loadFilters);
@@ -87,7 +116,10 @@ loadRoots().then(render, showError).then(restorePlace).then(loadFilters);
 // before S.client exists, so main/views.js:searchList answers []), so this alone would usually leave the group
 // empty; showStatus's connect edge above re-runs it once a client actually exists. Called here too so a session
 // that is already connected (e.g. a reload) does not wait for a transition that will not happen.
-function loadSearches() { if (tana.searches) tana.searches().then((list) => { searches = list || []; searchesLoaded = true; repairHome(); renderSoon(); }, () => {}); }
+// searchesLoaded is the flag repairHome trusts, so only an answer that could have listed something sets it: the
+// boot call above lands before the client exists and its empty list is empty for everyone, which repairHome read
+// as "the saved search you chose is gone" and wrote the Library over the stored choice on every launch.
+function loadSearches() { if (tana.searches) tana.searches().then((list) => { searches = list || []; searchesLoaded = connected; repairHome(); renderSoon(); }, () => {}); }
 loadSearches();
 if (tana.mcpHidden) tana.mcpHidden().then((on) => { mcpHidden = !!on; }, () => {}); // Cmd+K only: the rows themselves are filtered in main
 tana.status().then(showStatus, showError);

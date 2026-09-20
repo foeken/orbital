@@ -1,7 +1,7 @@
 'use strict';
 // Cmd+K commands and Cmd+S search, hidden items, creation, results, and the shortcut recorder.
 
-// ---- palette: Cmd+K commands (Views, Actions, matching Documents while typing) or Cmd+S live search (api.search) ----
+// ---- palette: Cmd+K commands (Views, Actions; documents are Cmd+S live search, api.search) ----
 const palette = $('palette'), palInput = $('paletteInput'), palText = $('paletteText'), palList = $('paletteList');
 let palMode = 'cmd', palRows = [], palIndex = 0, palBusy = false, palSeq = 0, palTimer, creationChoices = [];
 let palEnter = null; // an Enter pressed while a search was still running: 'pick' or 'create', applied when the rows land
@@ -20,7 +20,7 @@ const docRow = (n, hint, run) => ({ node: n, icon: n.icon, label: n.text ?? n.ti
 // The order of the rows about the node you are on: where it goes (open it, unfold it), what it is (done, status,
 // assignee), where it lives (pins, the date nodes, its space), what it looks like (image, visibility, sensitivity),
 // its link, and last the one destructive row. Rows without an id carry a `rank` from this list instead.
-const NODE_ROW_ORDER = ['zoomIn', 'expand', 'collapse', 'toggleDone', 'status', 'assign', 'assignTo', 'codex', 'codexOpen', 'pinToday', 'pinToMeeting', 'pinToSelectedMeeting', 'addToday', 'addTomorrow', 'addWeek', 'move', 'moveLibrary', 'visibility', 'notify', 'sensitive', 'copyLink', 'delete'];
+const NODE_ROW_ORDER = ['zoomIn', 'expand', 'collapse', 'toggleDone', 'status', 'setType', 'setIcon', 'assign', 'assignTo', 'codex', 'codexOpen', 'pinToday', 'pinToMeeting', 'pinToSelectedMeeting', 'addToday', 'addTomorrow', 'addWeek', 'move', 'moveLibrary', 'visibility', 'notify', 'sensitive', 'copyLink', 'delete'];
 const nodeRank = (r) => { const i = NODE_ROW_ORDER.indexOf(r.rank || r.id); return i < 0 ? NODE_ROW_ORDER.length : i; };
 const VIEW_ORDER = ['inbox', 'today', 'week', 'library'];
 // Matching a row, tiered the way Raycast ranks a title (its manual: aliases first, then the title's fuzzy score, which
@@ -96,7 +96,8 @@ function rankRows(rows) {
     .sort((a, b) => (a.r.group === b.r.group ? cmp(a.r, b.r) || a.i - b.i : cmp(best.get(a.r.group), best.get(b.r.group)) || first.get(a.r.group) - first.get(b.r.group)))
     .map(({ r }) => r);
 }
-function paletteRows(q) {
+// typed is the query as it was typed; q is the lowercased one every row is matched against.
+function paletteRows(q, typed = q) {
   const selection = selectionRows();
   const rows = [...selection];
   // What acts on the current document (pins, link, icon, visibility, location) sits with the rest of its rows under
@@ -127,6 +128,21 @@ function paletteRows(q) {
   // the node's web link, for pasting into Slack or a doc
   if (palDoc && tana.nodeLink && isRealId(palDoc.id)) {
     rows.push({ id: 'copyLink', group: docGroup, icon: 'link', label: 'Copy link', run: () => run(async () => copyText(await tana.nodeLink(palDoc.id), 'Link copied')) });
+  }
+  // What this document is: its Tana type, or none. Only a document or a meeting carries one, so a block, a space or a
+  // member is not offered the row at all. The list is main's (the rules for which types fit live there); the hint is
+  // the type it has now, read from the chip the row already carries.
+  if (palDoc && tana.docTypes && tana.setType && isRealId(palDoc.id) && TYPED_KIND.test(palDoc.id)) {
+    const doc = palDoc;
+    rows.push({ id: 'setType', group: docGroup, icon: 'type', label: 'Set type', subBase: 'Set type to', hint: typeNameOf(doc) || 'No type',
+      keepOpen: true, subAlways: true, run: () => openTypePalette(doc), sub: async () => { await typesLoaded(doc); return typeRows(''); } });
+  }
+  // And what a type looks like. The glyph belongs to the type, so every document of that type is drawn with it: its
+  // bullet, its row in the sidebar, a breadcrumb, and the chip an inline mention of it draws.
+  if (palDoc && tana.searchIcons && tana.setTypeIcon && TYPE_NODE.test(palDoc.id)) {
+    const doc = palDoc;
+    rows.push({ id: 'setIcon', group: docGroup, icon: typeGlyphs.get(doc.id) || 'type', label: 'Set icon',
+      hint: typeGlyphs.has(doc.id) ? 'Chosen' : 'The generic glyph', keepOpen: true, run: () => openIconPalette(doc) });
   }
   // Watching this node: the label says what pressing it does, so it carries no id — a hotkey whose meaning flips
   // between "start" and "stop" would be a key you cannot learn.
@@ -234,7 +250,6 @@ function paletteRows(q) {
   const dark = typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark';
   rows.push({ id: 'theme', group: 'Actions', icon: 'darkLight', label: 'Toggle ' + (dark ? 'light' : 'dark') + ' mode', run: () => setTheme(dark ? 'light' : 'dark') });
   if (tana.systemTheme) rows.push({ id: 'systemTheme', group: 'Actions', icon: 'darkLight', label: 'Toggle system dark/light mode', hint: themePref === 'system' ? 'Following macOS' : '', run: () => followSystem(themePref !== 'system') });
-  if (q) for (const s of views) for (const n of s.nodes) rows.push({ ...docRow(n, n.meta || s.title, () => openDoc(n.id)), id: 'doc:' + n.id, group: 'Documents' });
   // A second level is folded in once the query's first two letters reach its row, as a prefix or as the first words'
   // initials ("mo" or "mt" for Move to …, "as" or "at" for Assign to), and loaded once per palette opening. The spaces
   // and the four statuses are short fixed lists, so "Move to …" and "Set status" (`subAlways`) load them as the palette
@@ -243,11 +258,15 @@ function paletteRows(q) {
     const kids = subRowsFor(r);
     if (q) rows.splice(rows.indexOf(r) + 1, 0, ...kids);
   }
-  const seen = new Set(), key = (r) => r.id || r.group + '\n' + r.label; // a document listed by several views, or a folded choice that reads like its parent, once
+  const seen = new Set(), key = (r) => r.id || r.group + '\n' + r.label; // a folded choice that reads like its parent, once
   let matched = rows.map((r) => ({ ...r, match: fuzzyMatch(r.label, q) })).filter((r) => r.match && !seen.has(key(r)) && seen.add(key(r)));
   if (q) matched = rankRows(matched);
-  let docsLeft = 8; // the best eight documents, now that they are ranked
-  return matched.filter((r) => r.group !== 'Documents' || docsLeft-- > 0).map((r) => { const k = r.id && hotkeyFor(r.id); return k ? { ...r, kbd: k } : r; });
+  // Nothing here matches what was typed, so the words are probably a document's: offer the one thing that can still
+  // find it, carrying the query into Cmd+S instead of making it be typed a second time. Its heading is the "No
+  // results" line, which renderPalette leaves out once there is a row.
+  if (q && !matched.length) return [{ group: 'No results', icon: 'search', label: 'Search Tana for “' + typed + '”', keepOpen: true,
+    run: () => { togglePalette('search'); palInput.value = typed; searchNow(); } }];
+  return matched.map((r) => { const k = r.id && hotkeyFor(r.id); return k ? { ...r, kbd: k } : r; });
 }
 // a hotkey, recorded or default, runs its palette row's action (views/sync/login by id; documents wherever they live);
 // false when no such row exists right now, so the key can fall through to whatever else it means. A row that is here
@@ -283,7 +302,7 @@ function openPillPalette(id) {
 }
 function openCommandPalette() {
   pillCtx = null; promptEditor(false); palMode = 'cmd'; palRows = []; palIndex = 0;
-  palInput.placeholder = 'Search or run a command'; palInput.value = ''; renderPalette(); palInput.focus();
+  palInput.placeholder = 'Run a command'; palInput.value = ''; renderPalette(); palInput.focus();
 }
 function backPalette() {
   if (palMode === 'pill') openCommandPalette();
@@ -293,6 +312,8 @@ function backPalette() {
   else if (palMode === 'visibilityPeople') openVisibilityPalette(palDoc);
   // The meeting picker was opened from the command page and steps back to it, like every other second level here.
   else if (palMode === 'pinMeeting') openCommandPalette();
+  else if (palMode === 'setType') openCommandPalette();
+  else if (palMode === 'setIcon') openCommandPalette();
   else closePalette();
 }
 // ---- hidden items (api.filters): titles every view and search skips, edited from Cmd+K ----
@@ -492,7 +513,7 @@ function resultRows(nodes, group) {
 function pinResult(ctx, node) {
   return run(async () => {
     await tana.pinTo(ctx.pinHub, node.id);
-    relatedBy.delete(ctx.pinHub); relatedBy.delete(ctx.docId); render();
+    refreshRelated(ctx.pinHub); refreshRelated(ctx.docId); render();
   });
 }
 // The active meeting behind the Pin to meeting row. Asked once per palette open (togglePalette clears it), because a
@@ -515,12 +536,12 @@ function pinToMeeting(doc) {
     await pinDocToMeeting(live.id, doc.id);
   });
 }
-// The pin itself, shared by the meeting you are in and the meeting you pick: one write and the two cached sidebar
-// payloads it invalidates. It is deliberately not wrapped in run() — both callers already are, and run() chains on
+// The pin itself, shared by the meeting you are in and the meeting you pick: one write and the two sidebar payloads
+// it sends for a re-read. It is deliberately not wrapped in run() — both callers already are, and run() chains on
 // one queue, so a run() awaited from inside another would wait for itself.
 async function pinDocToMeeting(meetingId, docId) {
   await tana.pinTo(meetingId, docId);
-  relatedBy.delete(meetingId); relatedBy.delete(docId); render();
+  refreshRelated(meetingId); refreshRelated(docId); render();
 }
 // ---- the meeting picker: a page of meetings to pin the current node on ----
 // The list is the old Meetings view's query — the meetings I take part in from a week back to a week ahead (the
@@ -563,6 +584,92 @@ function openMeetingPicker(doc) {
   palInput.placeholder = 'Pin to which meeting?'; palInput.value = '';
   loadMeetingList(); renderPalette(); palInput.focus();
 }
+// ---- Set type: the types this document can be given, and "No type", which takes the one it has off ----
+// Which types those are is main's answer (main/documents.js typeChoices): a type applies to documents or to meetings,
+// and a type that lives in a space can only go on a document in that space, while a Library type goes on anything.
+// A type that does not fit is listed and disabled with the space it belongs to, so the list answers "why not this
+// one?" instead of leaving it out.
+const TYPE_GROUP = 'Type';
+const TYPED_KIND = /^tana:(text|event):/; // only a document or a meeting carries a type
+const typeNameOf = (n) => (((n.tags || []).find((t) => t && t.uri) || {}).label || ''); // the chip the row already shows
+let typeCtx = null, typeList = null, typeListError = null; // the document the page is about, and main's answer for it
+function loadTypeList(doc) {
+  typeList = null; typeListError = null;
+  return tana.docTypes(doc.id).then(
+    (list) => { typeList = list && Array.isArray(list.options) ? list : { current: null, options: [] }; },
+    (e) => { typeListError = (e && e.message) || String(e); },
+  ).then(() => { if (palMode === 'setType') renderPalette(); });
+}
+// the list as a promise, so the folded level under "Set type" can show it before the page is opened
+async function typesLoaded(doc) { typeCtx = doc; await loadTypeList(doc); }
+function typeRows(q) {
+  const doc = typeCtx;
+  if (!doc) return [];
+  if (typeListError) return [{ group: TYPE_GROUP, label: typeListError, disabled: true }];
+  if (!typeList) return [{ group: TYPE_GROUP, label: 'Loading…', disabled: true }];
+  const rows = [];
+  // Only when there is one to remove: an untyped document offered "No type" would be a row that does nothing.
+  if (typeList.current && fuzzyMatch('No type', q)) rows.push({ group: TYPE_GROUP, icon: 'none', label: 'No type', hint: 'Removes the type', keepOpen: true, run: () => applyType(doc, null) });
+  for (const t of typeList.options) {
+    if (!fuzzyMatch(t.title || '', q)) continue;
+    const current = t.uri === typeList.current;
+    rows.push({ group: TYPE_GROUP, icon: 'type', hue: t.hue, label: t.title || 'Untitled type',
+      hint: current ? '✓' : t.selectable ? '' : t.reason || 'Lives in another space',
+      disabled: !t.selectable || current, keepOpen: true, run: () => applyType(doc, t.uri) });
+  }
+  if (!rows.length && !q) rows.push({ group: TYPE_GROUP, label: 'No types for this kind of document', disabled: true });
+  return rows;
+}
+function openTypePalette(doc) {
+  typeCtx = doc; palMode = 'setType'; palRows = []; palIndex = 0; palBusy = false; palette.hidden = false;
+  palInput.placeholder = 'Set type to…'; palInput.value = '';
+  loadTypeList(doc); renderPalette(); palInput.focus();
+}
+// ---- Set icon: the Nucleo UI set built into the app, searched in main, a page of results at a time ----
+// The set is not in the renderer: main holds it (3.5k glyphs, half a megabyte gzipped) and answers with the page
+// being shown, which is registered as it arrives so the rows can draw it. Choosing writes the choice against the
+// type and main rebuilds the rows — every document of that type carries the icon's name, so they all follow.
+const ICON_GROUP = 'Icon';
+const TYPE_NODE = /^tana:type:[0-9a-z]{26}$/;
+let iconCtx = null, iconList = [];
+function searchIconsNow() {
+  const seq = ++palSeq, q = palInput.value.trim();
+  tana.searchIcons(q).then((list) => {
+    if (seq !== palSeq || palMode !== 'setIcon') return;
+    iconList = Array.isArray(list) ? list : [];
+    registerIcons(iconList); // the rows about to be drawn name these glyphs
+    palBusy = false; renderPalette();
+  }, (e) => { if (seq === palSeq) { palBusy = false; iconList = []; showError(e); renderPalette(); } });
+}
+function iconPickRows() {
+  const doc = iconCtx;
+  if (!doc) return [];
+  const rows = [];
+  if (typeGlyphs.has(doc.id)) rows.push({ group: ICON_GROUP, icon: 'none', label: 'No icon', hint: 'Back to the generic glyph', keepOpen: true, run: () => applyIcon(doc, null) });
+  for (const icon of iconList) rows.push({ group: ICON_GROUP, icon: icon.name, label: icon.label,
+    hint: typeGlyphs.get(doc.id) === icon.name ? '✓' : '', keepOpen: true, run: () => applyIcon(doc, icon.name) });
+  if (!rows.length) rows.push({ group: ICON_GROUP, label: palBusy ? 'Loading…' : 'No icon matches', disabled: true });
+  return rows;
+}
+function openIconPalette(doc) {
+  iconCtx = doc; palMode = 'setIcon'; palRows = []; palIndex = 0; palBusy = true; iconList = []; palette.hidden = false;
+  palInput.placeholder = 'Search icons…'; palInput.value = '';
+  searchIconsNow(); renderPalette(); palInput.focus();
+}
+// The rows redraw themselves: main rebuilds the cached rows with the new name and announces it, which reloads the
+// roots — and that load is where the glyphs are registered, so a name a row carries always has markup behind it.
+function applyIcon(doc, name) {
+  run(async () => {
+    const chosen = await tana.setTypeIcon(doc.id, name);
+    if (chosen) { registerIcons([chosen]); typeGlyphs.set(doc.id, chosen.name); } else typeGlyphs.delete(doc.id);
+    closePalette();
+  });
+}
+// The row redraws itself: main's change event carries the document, and doc:info rebuilds a row whose type has moved
+// on rather than handing back the cached one (main/documents.js info).
+function applyType(doc, uri) {
+  run(async () => { await tana.setType(doc.id, uri); closePalette(); });
+}
 // The typed words a search result's title holds (#type filters left out): their positions, for the bold letters, with
 // `hits` (words found) and `starts` (how many of those begin a word) on the array.
 function titleHits(title, q) {
@@ -602,7 +709,7 @@ function searchNow() {
 }
 function renderPalette() {
   const q = palInput.value.trim();
-  if (palMode === 'cmd') palRows = paletteRows(q.toLowerCase());
+  if (palMode === 'cmd') palRows = paletteRows(q.toLowerCase(), q);
   else if (palMode === 'create') palRows = creationRows(q.toLowerCase());
   else if (palMode === 'slash') palRows = slashRows(q.toLowerCase());
   else if (palMode === 'assignees') palRows = assigneeRows(q.toLowerCase());
@@ -612,6 +719,8 @@ function renderPalette() {
   else if (palMode === 'visibilityPeople') palRows = visibilityPeopleRows(q.toLowerCase());
   else if (palMode === 'hidden') palRows = hiddenRows(q);
   else if (palMode === 'pinMeeting') palRows = meetingPickRows(q.toLowerCase());
+  else if (palMode === 'setType') palRows = typeRows(q.toLowerCase());
+  else if (palMode === 'setIcon') palRows = iconPickRows();
   else if (palMode === 'hosts') palRows = hostRows(q);
   else if (palMode === 'agentPrompt') palRows = agentPromptRows();
   else if (palMode === 'pill') palRows = pillRows(q.toLowerCase());
@@ -662,7 +771,7 @@ function togglePalette(mode, link, pin) {
   palMode = mode; palRows = []; palIndex = 0; palBusy = false; palEnter = null; clearTimeout(palTimer); palTimer = null;
   // meetingNow is cleared, not kept: every open re-reads the meeting, the same rule the quick-add panel follows.
   if (mode === 'cmd') { palDoc = currentDoc(); palTaskCtx = null; meetingNow = undefined; loadPins(); subCache.clear(); }
-  palInput.placeholder = mode === 'search' ? 'Search Tana' : mode === 'slash' ? 'Choose a block type or create' : 'Search or run a command';
+  palInput.placeholder = mode === 'search' ? 'Search Tana' : mode === 'slash' ? 'Choose a block type or create' : 'Run a command';
   palInput.value = link ? link.text : '';
   if (mode === 'search') searchNow(); else renderPalette();
   palInput.focus();
@@ -696,8 +805,10 @@ function nextPalIndex(rows, index, step) {
 }
 palInput.addEventListener('input', () => {
   palIndex = 0; palEnter = null; // typing on supersedes an Enter that was waiting for the previous query
-  if (palMode === 'cmd' || palMode === 'create' || palMode === 'slash' || palMode === 'assignees' || palMode === 'assigneesMany' || palMode === 'status' || palMode === 'visibility' || palMode === 'visibilityPeople' || palMode === 'hidden' || palMode === 'pill' || palMode === 'pinMeeting') return renderPalette();
+  if (palMode === 'cmd' || palMode === 'create' || palMode === 'slash' || palMode === 'assignees' || palMode === 'assigneesMany' || palMode === 'status' || palMode === 'setType' || palMode === 'visibility' || palMode === 'visibilityPeople' || palMode === 'hidden' || palMode === 'pill' || palMode === 'pinMeeting') return renderPalette();
   if (palMode === 'hosts') return renderPalette();
+  // the set lives in main, so typing asks it — debounced like the document search, and the page says it is busy
+  if (palMode === 'setIcon') { palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchIconsNow, 150); return renderPalette(); }
   if (palMode === 'spaces') { palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchSpacesNow, 150); return; }
   palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchNow, 150);
 });
@@ -743,7 +854,7 @@ function showCombo() {
   $('recSave').disabled = !validCombo(rec.combo) || !!warn;
 }
 function closeRecorder() { rec = null; recorder.hidden = true; renderPalette(); palInput.focus(); }
-const saveHotkeys = () => localStorage.setItem('hotkeys', JSON.stringify(hotkeys));
+const saveHotkeys = () => setPref('hotkeys', hotkeys);
 $('recReset').onclick = () => { delete hotkeys[rec.row.id]; saveHotkeys(); closeRecorder(); };
 $('recCancel').onclick = closeRecorder;
 $('recSave').onclick = () => { if (validCombo(rec.combo) && !comboTaken(rec.combo, rec.row.id)) { hotkeys[rec.row.id] = rec.combo; saveHotkeys(); closeRecorder(); } };

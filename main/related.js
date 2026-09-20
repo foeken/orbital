@@ -2,7 +2,7 @@
 const fields = require('../sdk/fields');
 const pins = require('../sdk/pins');
 const { completedInWindow, filterToSearchQuery, searchQueryParams, validViewFilter } = require('../sdk/query');
-const { NOT_CONNECTED, PIN_HUBS, PLAIN_KINDS, S, idKind, isSpace, summaryCache, typeAttrTitles, typeTitles } = require('./state');
+const { LIVE_ROWS, NOT_CONNECTED, PIN_HUBS, PLAIN_KINDS, S, idKind, isSpace, summaryCache, typeAttrTitles, typeTitles } = require('./state');
 const { graphRow, rememberNodeHue, resolveTypes, toNode } = require('./rows');
 const { canWriteDoc, op, subscribe } = require('./documents');
 
@@ -45,12 +45,13 @@ async function searchChildren(id) {
   const nodes = answered.nodes.filter((n) => completedInWindow(n, view.completedWithin));
   nodes.forEach(rememberNodeHue);
   await resolveTypes(nodes.map((n) => n.entityType));
-  // A view subscribes every row it lists (views.js), which is what makes a change someone else makes show up in it.
-  // These rows are listed the same way and were not subscribed, so a saved search only ever showed what its query
-  // answered when the page opened. sync.subscribe is idempotent, and these ids stay out of `subscribed` — that set
-  // belongs to the view refresh, which unsubscribes everything in it the active view no longer lists.
+  // A view keeps the head of its list live (views.js), which is what makes a change someone else makes show up in
+  // it. These rows are listed the same way and were not subscribed at all, so a saved search only ever showed what
+  // its query answered when the page opened. The same cap applies here, and for the same reason: a search answers
+  // up to 200 rows, and these subscriptions are never swept. sync.subscribe is idempotent, and these ids stay out
+  // of `subscribed` — that set belongs to the view refresh, which unsubscribes what the active view no longer lists.
   // ponytail: they stay subscribed for the rest of the session, like every other on-demand subscription.
-  nodes.forEach((n) => subscribe(n.id));
+  nodes.slice(0, LIVE_ROWS).forEach((n) => subscribe(n.id));
   return nodes.map((n) => toNode(graphRow(n)));
 }
 // The rows a filter would find, without storing it: what a saved search shows while its pills are being edited.
@@ -190,6 +191,37 @@ async function historyOf(id, node) {
   return changesOf(node);
 }
 
+// Backlinks, grouped the way Tana's own Backlinks panel groups them (read out of their web bundle, 2026-09-20):
+// an incoming EDGE_TYPE_LINKS_TO edge is a mention in someone's text and lands under "Mentioned in"; an incoming
+// EDGE_TYPE_ATTRIBUTE_LINKS_TO edge is this node sitting in a typed field and carries that field in
+// `properties.attributeUri` ("tana:type:<id>?attribute=<key>"), so it lands under "<Type> › <Field>". Tana lists the
+// field groups first and "Mentioned in" last, which is the order kept here. A field whose title cannot be read is
+// not guessed at: that edge joins the mentions rather than inventing a section name.
+const MENTIONED_IN = 'Mentioned in';
+async function backlinkLabel(attributeUri) {
+  const { typeUri, attribute } = fields.parseKey(attributeUri || '');
+  if (!attribute || !typeUri) return MENTIONED_IN;
+  const title = (await attributeTitles(typeUri))[attribute];
+  if (!title) return MENTIONED_IN;
+  const type = typeTitles.get(typeUri);
+  return type ? type + ' › ' + title : title;
+}
+// [{ label, rows }] for the sidebar: one group per field, mentions last, each document listed once per group.
+async function backlinkGroups(edges, node, row) {
+  const groups = new Map();
+  for (const edge of edges) {
+    const target = node(edge.fromNodeId);
+    if (!target) continue;
+    const label = await backlinkLabel(edge.properties && edge.properties.attributeUri);
+    if (!groups.has(label)) groups.set(label, new Map());
+    groups.get(label).set(target.id, target);
+  }
+  const mentions = groups.get(MENTIONED_IN);
+  groups.delete(MENTIONED_IN);
+  if (mentions) groups.set(MENTIONED_IN, mentions);
+  return [...groups].map(([label, targets]) => ({ label, rows: [...targets.values()].map(row) }));
+}
+
 async function related(id) {
   if (!S.client) throw new Error(NOT_CONNECTED);
   // The meeting event is the hub: opening its notes document should still show the meeting's pins and outcomes.
@@ -200,15 +232,24 @@ async function related(id) {
     S.client.graph.listNodes({ ownerIds: [hub], limit: 200, sortOptions: [{ field: 'SORT_FIELD_CREATE_TIME', direction: 'SORT_DIRECTION_ASCENDING' }] }).catch(() => ({ nodes: [] })),
     hub === id ? Promise.resolve({ nodes: self0 ? [self0] : [] }) : S.client.graph.listNodes({ nodeIds: [hub], limit: 1 }).catch(() => ({ nodes: [] })),
   ]);
+  // Backlinks are the zoomed node's own, not the meeting hub's: a document created in a meeting is not mentioned by
+  // whatever mentions the meeting. A mention is an incoming LINKS_TO edge (verified read-only on a real node: one per
+  // mentioning document, carrying the label and the block ids); a field reference is an incoming ATTRIBUTE_LINKS_TO
+  // edge, the pair Tana's own client names "@ mentions and inline references" and "field-level references".
+  const mentions = await S.client.graph.listEdges({ toNodeIds: [id], edgeTypes: ['EDGE_TYPE_LINKS_TO', 'EDGE_TYPE_ATTRIBUTE_LINKS_TO'] }).catch(() => ({ edges: [] }));
+  const mentionEdges = (mentions.edges || []).filter((e) => e.fromNodeId && e.fromNodeId !== id);
+  const mentionIds = [...new Set(mentionEdges.map((e) => e.fromNodeId))];
   // HAS_PIN is derived server-side from the hub's own pinnedItems, so read that list too: a pin this app just wrote
   // is in the document before the edge exists, and the hub says whether a new one may be added at all.
   const hubDoc = PIN_HUBS.has(idKind(hub)) ? await S.client.sync.subscribe(hub).catch(() => null) : null;
   const canPin = hubDoc ? await canWriteDoc(hubDoc).catch(() => false) : false;
   const pinIds = [...new Set([...(hubDoc ? pins.items(hubDoc).map((p) => p.uri) : []), ...(edges.edges || []).map((e) => e.toNodeId).filter(Boolean)])];
-  const pinned = pinIds.length ? (await S.client.graph.listNodes({ nodeIds: pinIds, limit: pinIds.length })).nodes : [];
-  const all = [...pinned, ...(owned.nodes || [])];
+  const list = (ids) => (ids.length ? S.client.graph.listNodes({ nodeIds: ids, limit: ids.length }).then((r) => r.nodes) : Promise.resolve([]));
+  const [pinned, mentioned] = await Promise.all([list(pinIds), list(mentionIds)]);
+  const all = [...pinned, ...mentioned, ...(owned.nodes || [])];
   all.forEach(rememberNodeHue);
-  await resolveTypes(all.map((n) => n.entityType));
+  // the types of the listed nodes, and the types the field references come from: both are title lookups, one call
+  await resolveTypes([...all.map((n) => n.entityType), ...mentionEdges.map((e) => fields.parseKey((e.properties && e.properties.attributeUri) || '').typeUri)]);
   const row = (n) => toNode(graphRow(n, true));
   const event = (self.nodes || [])[0] || {};
   const ev = event.calendarEvent || {};
@@ -229,8 +270,10 @@ async function related(id) {
     pinned: pinned.map(row),
     outcomes: owns.filter(stated).map(row),
     notes: owns.filter((n) => !stated(n) && (!writeUp || n.id !== writeUp.id)).map(row),
+    // an untitled draft mentions nothing worth listing, and a document already shown as a pin is not listed twice
+    backlinks: await backlinkGroups(mentionEdges, (uri) => mentioned.find((n) => n.id === uri && (n.title || '').trim() && !pinnedIds.has(n.id)), row),
     changes: await historyOf(id, self0), // the zoomed node's own history: written summaries, else the node's own record
   };
 }
 
-module.exports = { crumbIcon, pathOf, spaceChildren, searchChildren, searchPreview, attributeTitles, fieldsOf, writeUpOf, summaryUri, callOf, changesOf, summaryChanges, historyOf, related };
+module.exports = { crumbIcon, pathOf, spaceChildren, searchChildren, searchPreview, attributeTitles, fieldsOf, writeUpOf, summaryUri, callOf, changesOf, summaryChanges, historyOf, backlinkGroups, related };

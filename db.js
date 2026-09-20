@@ -1,12 +1,14 @@
 const { DatabaseSync } = require('node:sqlite');
 
 let db;
+let generation = 0; // bumped on every open: whoever caches what the database says can tell a new one from the old
 // Cached rows come back in the order their view's query returns them, so a boot from the cache and a refresh agree:
 // meetings by start time ascending, everything else newest first (sortKey is the update time there).
 const DESC = new Set(['inbox', 'tasks', 'library', 'chats']);
 
 function open(path) {
   db = new DatabaseSync(path);
+  generation++;
   db.exec('DROP TABLE IF EXISTS tasks'); // pre-sections schema; the cache is rebuilt on the next refresh
   // One row per (view, document): the views overlap heavily — a task is in Inbox, Tasks and Library at once — and
   // keying on the id alone let whichever view fetched last steal the row out of the others' caches.
@@ -93,4 +95,12 @@ function setSetting(key, value) {
   else db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, JSON.stringify(value));
 }
 
-module.exports = { open, list, get, remove, upsert, setRow, replaceSection, sensitiveIds, setSensitive, setting, setSetting };
+// Every setting at once, for the in-memory cache main keeps (main/settings.js): the app answers a setting read on a
+// hot path — every listed row asks for its type's glyph — so it is read once at open rather than per question.
+function settings() {
+  const out = {};
+  for (const r of db.prepare('SELECT key, value FROM settings').all()) { try { out[r.key] = JSON.parse(r.value); } catch { /* an unreadable value reads as unset, as it always did */ } }
+  return out;
+}
+
+module.exports = { open, list, get, remove, upsert, setRow, replaceSection, sensitiveIds, setSensitive, setting, setSetting, settings, generation: () => generation };

@@ -102,7 +102,7 @@ const typableRow = (n) => !!n && n.kind === 'block' && !isAtomic(n) && !isRefere
 function withDraftTail(list, parent) {
   if (!Array.isArray(childrenOf(parent)) || isSpace(parent.node) || isSearchDoc(parent.node) || !canEditItem(parent) || !canInsertChild(parent)) return list;
   if (typableRow(list.at(-1))) return list;
-  return [...list, draftNode(parent)];
+  return [...list, draftNode(parent, list.at(-1))];
 }
 function editingRow() {
   const el = document.activeElement;
@@ -214,11 +214,16 @@ if (typeof ResizeObserver === 'function') new ResizeObserver(() => {
 document.addEventListener('focusout', () => queueMicrotask(() => { if (renderDeferred && !editingRow() && !selectionFrozen) render(); }));
 // Answers that arrive on their own — a row's metadata, pins, the rail, a crumb date, live updates — render once per
 // frame between them rather than once each: a view of N rows used to rebuild itself N times as its metadata came in.
-let renderQueued = false;
-function renderSoon() {
+// A live update needs the forced render (it must not be deferred while the caret sits in a row), and those arrive in
+// bursts of their own — one per document a view subscribes — so the force rides the same frame rather than skipping
+// the queue: renderSoon(true) coalesces with anything else waiting and redraws once. Only a literal true forces, so
+// a stray promise value from .then(renderSoon) cannot turn into one.
+let renderQueued = false, renderQueuedForce = false;
+function renderSoon(force) {
+  renderQueuedForce ||= force === true;
   if (renderQueued) return;
   renderQueued = true;
-  requestAnimationFrame(() => { renderQueued = false; render(); });
+  requestAnimationFrame(() => { renderQueued = false; const forced = renderQueuedForce; renderQueuedForce = false; render(forced); });
 }
 // What a list row is built from. A row whose signature has not changed since the last render is kept as it is,
 // which turns a live update or a refresh into a handful of rebuilt rows instead of a whole new outline.
@@ -255,7 +260,7 @@ function renderOutline() {
     }
     list = withDraftTail(list, parent); // an open node always has a row to type in; a read-only one (every chat) never does
     outline.replaceChildren(...(groups
-      ? groups.flatMap((g) => [groupHeadEl(g), ...(g.collapsed ? [] : g.nodes.map((n) => childEl(n, parent)))])
+      ? groups.flatMap((g) => [groupHeadEl(g), ...(g.collapsed ? [] : g.nodes.map((n) => childEl(n, parent))), ...(g.more ? [groupMoreEl(g)] : [])])
       : list.map((n) => childEl(n, parent))));
     animView = null; // a zoom replaced every row, and a zoomed row is keyed docId/nodeId while a view row is keyed by
     // its document id, so on the way back nothing would match and the whole view would flash as if it had just arrived
@@ -275,7 +280,7 @@ function renderOutline() {
       const el = nodeEl(n, n.id, null); el.dataset.sig = sig; return el;
     };
     outline.replaceChildren(...(groups
-      ? groups.flatMap((g) => [groupHeadEl(g), ...(g.collapsed ? [] : g.nodes.map(rowEl))])
+      ? groups.flatMap((g) => [groupHeadEl(g), ...(g.collapsed ? [] : g.nodes.map(rowEl)), ...(g.more ? [groupMoreEl(g)] : [])])
       : list.map(rowEl)));
     animateRows(before);
     if (list.length && !outline.hidden && scrolledView !== view) { // a view opens at the top
@@ -287,7 +292,9 @@ function renderOutline() {
   // a grouped page with every section folded away has no rows and is not empty — its headings are right there.
   if (parent && !list.length && !outline.children.length) {
     const note = document.createElement('div');
-    note.className = 'empty-note'; note.textContent = kids.get(parent.docId) === null ? 'Loading…' : 'No content';
+    // Empty is an answer the page has been given: no entry at all means it has not been asked yet, which is where a
+    // launch starts — the page it reopens is drawn before there is a connection to ask with (renderer/edit.js).
+    note.className = 'empty-note'; note.textContent = kids.has(parent.docId) && kids.get(parent.docId) !== null ? 'No content' : 'Loading…';
     outline.append(note);
   }
   // the page title is the zoom target itself: documents use setTitle, blocks use setText through the same debounce
@@ -304,10 +311,12 @@ function renderOutline() {
   titleCheck.onclick = zoomedTask && canEditItem(parent) ? () => toggleDone(parent) : null;
   titleEl.classList.toggle('done', zoomedTask && !!parent.node.done);
   codexHeader(); // a rebuilt header loses the badge with everything else, so it is put back with the title
-  // assignees and visibility now live at the top of the sidebar (railMetaRows); under the title only the chips remain
-  const titleTags = zoomedTask && visibleTags(parent.node).some((tag) => tag.label !== 'task');
-  taskInfoEl.hidden = !titleTags; taskInfoEl.replaceChildren();
-  if (titleTags) appendTags(taskInfoEl, parent.node);
+  // assignees and visibility now live at the top of the sidebar (railMetaRows); under the title only the chips remain.
+  // Any zoomed document shows its type, not only a task: what is dropped is the kind chip, whose label is the row's
+  // own icon name (task, doc, meeting, space, chat…), so an Organization or any other type stays.
+  const titleTags = parent ? visibleTags(parent.node).filter((tag) => tag.label !== parent.node.icon) : [];
+  taskInfoEl.hidden = !titleTags.length; taskInfoEl.replaceChildren();
+  for (const tag of titleTags) taskInfoEl.append(chipEl(tag, parent.node.hue));
   blurSensitive(taskInfoEl, parent && parent.docId);
   renderFields(parent);
   renderCrumbs(trail);
@@ -519,9 +528,35 @@ function codexHeader() {
   head.querySelector(':scope > .cbadge')?.remove();
   if (zoom && !zoom.nodeId && codexIds.has(zoom.docId)) head.append(codexBadgeEl(zoom.docId));
 }
+// A full view of an image: Space on the row, or a click on it. Built when it is asked for and taken away again,
+// so there is nothing to keep in step while it is not showing, and the focus goes back to the row it came from.
+// The picture is whatever the row already has (the same cache), so opening one costs no fetch.
+function openImage(node) {
+  if (document.querySelector('.lightbox')) return;
+  const uri = node.image.uri, from = document.activeElement;
+  const box = document.createElement('div'); box.className = 'lightbox'; box.tabIndex = -1;
+  const img = document.createElement('img');
+  const close = () => { box.remove(); if (from && from.focus) from.focus(); };
+  box.onclick = close;
+  // its own keys: Escape, Space and Enter close it, and nothing reaches the outline behind it
+  box.onkeydown = (e) => { e.stopPropagation(); if (['Escape', ' ', 'Enter'].includes(e.key)) { e.preventDefault(); close(); } };
+  box.append(img);
+  document.body.append(box);
+  box.focus();
+  Promise.resolve(images.get(uri) ?? tana.image(uri)).then((url) => { images.set(uri, url); img.src = url; }, (e) => { close(); showError(e); });
+}
 function nodeEl(node, docId, parent) {
   const item = mkItem(docId, node, parent);
-  const target = referenceTarget(node), display = target || node, reference = isReference(node);
+  const reference = isReference(node);
+  // A reference to a node that is gone (main marked it, or a refused read did): it keeps the label it was written
+  // with, struck through behind a trash bullet, and opens nothing — an "Unavailable reference" in blue read as a
+  // live link to a page that answers "Node has been deleted" to everything. Decided before the target, because the
+  // row may still be holding the copy of it that was resolved before the deletion: drawing that copy put the node's
+  // own glyph on the line beside the trash on the chip, as though it were both there and not.
+  const gone = markGone(node.reference?.uri, node.reference?.deleted);
+  // liveTarget, not referenceTarget: a full reference being typed into is already an ordinary line here, rather than
+  // when the debounced save comes back (renderSegs draws the same pending segments).
+  const target = gone ? null : liveTarget(node, pending.get(item.key)), display = target || node;
   const fullref = !!target && !reference; // a line that is one mention: the row is the node, the text stays editable
   // Expanding a full reference opens the outline of the node it points at, not the block's own (a block with
   // children is never one): the rows below it belong to that document, so they are built against it.
@@ -530,18 +565,20 @@ function nodeEl(node, docId, parent) {
   // children and wrong for another document's — a pasted reference would arrive expanded whenever that document
   // happened to be loaded already.
   const has = hasKids(childHost), opened = fullref ? open.get(item.key) === true : isOpen(item);
-  const expandable = has || (!node.draft && canEditItem(item) && (node.kind === 'document' || node.done != null || ['paragraph', 'bullet', 'numbered'].includes(node.block)));
+  const expandable = has || (!node.draft && canEditItem(item) && !isAtomic(node) && (node.kind === 'document' || node.done != null || ['paragraph', 'bullet', 'numbered'].includes(node.block)));
   const el = document.createElement('div');
   const heading = headingOf(node); // a heading arrives as node.heading or as the heading1-3 block type
-  const blockClass = node.kind === 'block' ? ' t-' + (isDivider(node) ? 'divider' : blockTypeOf(node)) : '';
-  el.className = 'node ' + node.kind + (reference ? ' reference' : '') + (fullref ? ' fullref' : '') + blockClass + (heading ? ' h' + heading : '') + (display.done ? ' done' : '') + (has ? ' has' : '') + (has && !opened ? ' collapsed' : '') + (node.draft ? ' draft' : '');
+  // an image draws a marker only where a list row would: on its own it is the picture and nothing else
+  const blockClass = node.kind === 'block' ? ' t-' + (isDivider(node) ? 'divider' : isImage(node) ? (node.block || 'image') : blockTypeOf(node)) : '';
+  el.className = 'node ' + node.kind + (reference ? ' reference' : '') + (fullref ? ' fullref' : '') + (gone ? ' gone' : '') + blockClass + (heading ? ' h' + heading : '') + (display.done ? ' done' : '') + (has ? ' has' : '') + (has && !opened ? ' collapsed' : '') + (node.draft ? ' draft' : '');
   el.dataset.key = item.key;
   const line = document.createElement('div'); line.className = 'line';
   const chev = document.createElement('button'); chev.className = 'chev'; chev.tabIndex = -1;
   chev.onmousedown = (e) => e.preventDefault();
   chev.classList.toggle('off', !expandable); // hidden glyph, kept in the layout so the row never shifts
   const bullet = document.createElement('span'); bullet.className = 'bullet'; bullet.title = 'Zoom in';
-  if (display.icon) { bullet.classList.add('icon', display.icon); const svg = iconNode(display.icon); if (svg) bullet.append(svg); }
+  const bulletIcon = gone ? 'trash' : display.icon;
+  if (bulletIcon) { bullet.classList.add('icon', bulletIcon); const svg = iconNode(bulletIcon); if (svg) bullet.append(svg); }
   if (display.hue != null) { bullet.classList.add('hue'); bullet.style.setProperty('--hue', String(display.hue)); } // type hue tints the icon and the plain bullet alike
   bullet.onmousedown = (e) => e.preventDefault();
   if (!node.draft) bullet.onclick = () => (reference || fullref ? openReference(node) : zoomTo(item));
@@ -569,6 +606,7 @@ function nodeEl(node, docId, parent) {
     const cached = images.get(uri);
     if (typeof cached === 'string') img.src = cached;
     else { text.classList.add('loading'); (cached || images.set(uri, tana.image(uri)).get(uri)).then(show, (e) => { images.delete(uri); showError(e); }); }
+    img.onclick = (e) => { e.stopPropagation(); openImage(node); }; // the row is not text to put a caret in: a click is a look at the picture
     text.append(img);
   } else if (isDivider(node)) { // atomic like an image: focusable so Up/Down and Backspace still reach it
     text.classList.add('divider'); text.tabIndex = -1;

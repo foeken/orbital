@@ -63,6 +63,7 @@ async function removeSel(keys) { // Cmd+Shift+Backspace: every selected block, l
   sel = null;
   for (const it of its) dropPending(it.key);
   await run(async () => { await tana.removeMany(its[0].docId, its.map((it) => it.node.id)); await reload(its[0].docId); });
+  for (const it of its) closeIfEmpty(it.parent); // a selection can empty more than one node
   render(true);
   const k = before || texts().map(keyOfEl)[0];
   if (k) placeCaret(k); else focusAbove();
