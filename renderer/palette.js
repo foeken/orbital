@@ -138,7 +138,10 @@ function paletteRows(q, typed = q) {
   // already carries for the rows above, so the page costs nothing to announce.
   if (palDoc && tana.pinState && isRealId(palDoc.id)) {
     const doc = palDoc, info = pinInfo && pinInfo.docId === doc.id ? pinInfo : null;
-    const where = info ? [info.sidebar ? 'Sidebar' : '', info.dates.length ? info.dates.length + (info.dates.length === 1 ? ' date' : ' dates') : ''].filter(Boolean) : [];
+    const hubs = (info && info.hubs) || [];
+    const meetings = hubs.filter((hub) => hub.kind !== 'space').length, spaces = hubs.length - meetings; // a space pin is the same edge, and must not be counted as a meeting
+    const where = info ? [info.sidebar ? 'Sidebar' : '', info.dates.length ? info.dates.length + (info.dates.length === 1 ? ' date' : ' dates') : '',
+      meetings ? meetings + (meetings === 1 ? ' meeting' : ' meetings') : '', spaces ? spaces + (spaces === 1 ? ' space' : ' spaces') : ''].filter(Boolean) : [];
     rows.push({ id: 'editPins', group: docGroup, icon: 'pinned', label: 'Edit pins',
       hint: info ? where.join(' · ') || 'Not pinned' : '', keepOpen: true, run: () => openPinsPalette(doc) });
   }

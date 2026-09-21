@@ -35,6 +35,12 @@ function loadPins() {
   }, showError);
 }
 function pinAction(op, target, date) { run(async () => { await tana[op](pinInfo.docId, target, date); loadPins(); }); } // date: a local YYYY-MM-DD for the 'today' target; omitted means today
+// A pin on a meeting or a space is a write to that hub's own pinnedItems rather than to your sidebar or pin-map, so
+// it goes through api.unpinFrom. Both sidebars are re-read: the item leaves a section of the hub's page as it goes.
+function unpinFromHub(hubId) {
+  const docId = pinInfo.docId;
+  run(async () => { await tana.unpinFrom(hubId, docId); refreshRelated(hubId); refreshRelated(docId); loadPins(); render(); });
+}
 // ---- Edit pins: where this document is pinned, on a page of its own (⌘K, or the pin mark on the row) ----
 // Unpinning is what the page is for, so every pin it lists runs one, and the page stays open to show the rest.
 const PIN_GROUP = 'Pinned · ↩ unpins';
@@ -44,6 +50,9 @@ function editPinRows(q) {
   const listed = [];
   if (pinInfo.sidebar) listed.push({ group: PIN_GROUP, icon: 'pinned', label: 'Sidebar', keepOpen: true, run: () => pinAction('unpin', 'sidebar') });
   for (const date of [...pinInfo.dates].sort()) listed.push({ group: PIN_GROUP, icon: 'pinDate', label: pinDateLabel(date), keepOpen: true, run: () => pinAction('unpin', 'today', date) });
+  // and the meetings and spaces it hangs on, which are pins on those documents rather than on yours (api.unpinFrom)
+  for (const hub of pinInfo.hubs || []) listed.push({ group: PIN_GROUP, icon: hub.kind === 'space' ? 'space' : 'meeting', label: hub.title || 'Untitled',
+    hint: hub.kind === 'space' ? 'Space' : 'Meeting', keepOpen: true, run: () => unpinFromHub(hub.id) });
   const rows = listed.filter((row) => fuzzyMatch(row.label, q));
   if (!rows.length) rows.push({ group: PIN_GROUP, label: listed.length ? 'No pin matches' : 'Not pinned anywhere', disabled: true });
   // and the other direction from the same page: the sidebar pin is asked for nowhere else, and today's is the one ⌘K offers

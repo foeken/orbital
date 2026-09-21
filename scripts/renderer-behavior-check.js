@@ -3488,8 +3488,10 @@ async function runEditPinsCheck() {
       pinIds: async () => { calls.push(['pinIds']); return [...ids]; },
       pin: async (id, target, date) => { calls.push(['pin', id, target, date]); },
       unpin: async (id, target, date) => { calls.push(['unpin', id, target, date]); },
+      unpinFrom: async (hubId, id) => { calls.push(['unpinFrom', hubId, id]); },
       searchPreview: async () => [], pinTo: async () => {}, // enough for the meeting row to be offered
     };
+    const refreshRelated = (id) => { calls.push(['refreshRelated', id]); };
     const isRealId = (id) => typeof id === 'string';
     let picker = null; // the meeting picker is its own page with its own check; here what matters is what opens it
     const openMeetingPicker = (doc, back) => { picker = { doc: doc.id, back }; };
@@ -3498,6 +3500,7 @@ async function runEditPinsCheck() {
     ${functionSource('loadPins')}
     ${functionSource('loadPinned')}
     ${functionSource('pinAction')}
+    ${functionSource('unpinFromHub')}
     ${sourceBetween('const PIN_GROUP =', 'function openPinsPalette')}
     ${functionSource('openPinsPalette')}
     ({
@@ -3512,17 +3515,25 @@ async function runEditPinsCheck() {
   `, { setImmediate, Date, Promise });
 
   const today = api.today();
-  const opened = plain(await api.open({ sidebar: true, dates: [today, '2099-01-01'] }, ['doc', 'other']));
+  const HUBS = [{ id: 'tana:event:m1', title: 'Leadership sync', kind: 'event' }, { id: 'tana:space:s1', title: 'Studio', kind: 'space' }];
+  const opened = plain(await api.open({ sidebar: true, dates: [today, '2099-01-01'], hubs: HUBS }, ['doc', 'other']));
   assert.deepEqual([opened.palMode, opened.hidden, opened.placeholder], ['pins', false, 'Edit pins'], 'the page opens in its own mode');
   assert.deepEqual(opened.calls, [['pinIds'], ['pinState', 'doc']], 'it re-reads the marks and asks where this one is pinned');
   assert.deepEqual(plain(api.marks()), ['doc', 'other'], 'the marks every row draws come from that one list');
   assert.deepEqual(plain(api.page().map((r) => [r.icon, r.label, !!r.keepOpen])),
-    [['pinned', 'Sidebar', true], ['pinDate', 'Today · ' + today, true], ['pinDate', '2099-01-01', true], ['pin', 'Pin to meeting', true]],
-    'every pin is a row, dates in order and today named, with the meeting pin offered whatever else is pinned');
+    [['pinned', 'Sidebar', true], ['pinDate', 'Today · ' + today, true], ['pinDate', '2099-01-01', true],
+      ['meeting', 'Leadership sync', true], ['space', 'Studio', true], ['pin', 'Pin to meeting', true]],
+    'every pin is a row — sidebar, dates in order with today named, then the meetings and spaces it hangs on — with the meeting pin offered whatever else is pinned');
+  assert.deepEqual(plain(api.page().map((r) => r.hint)).slice(3, 5), ['Meeting', 'Space'], 'a hub pin says which kind it is, since its title alone does not');
   assert.deepEqual(plain(api.page().map((r) => r.group)).filter((g, i, all) => all.indexOf(g) === i), ['Pinned · ↩ unpins', 'Pin it'], 'the pins under one header that says what Enter does, what can still be pinned under another');
   assert.deepEqual(plain(api.page('side').map((r) => r.label)), ['Sidebar', 'Pin to meeting'], 'typing narrows the pins it lists; what can still be pinned stays offered');
   assert.deepEqual(plain(await api.press('', 0)), [['unpin', 'doc', 'sidebar', null], ['pinIds'], ['pinState', 'doc']], 'the sidebar row unpins and the page re-reads itself');
   assert.deepEqual(plain(await api.press('', 2)), [['unpin', 'doc', 'today', '2099-01-01'], ['pinIds'], ['pinState', 'doc']], 'and a date row unpins that date, not today');
+  // A meeting pin lives on the meeting, so it is taken off with api.unpinFrom and both sidebars are re-read: the
+  // item leaves a section of the hub's page as it goes.
+  assert.deepEqual(plain(await api.press('', 3)),
+    [['unpinFrom', 'tana:event:m1', 'doc'], ['refreshRelated', 'tana:event:m1'], ['refreshRelated', 'doc'], ['pinIds'], ['pinState', 'doc']],
+    'the meeting row unpins the document from that meeting');
 
   const none = plain(await api.open({ sidebar: false, dates: [] }, []));
   assert.equal(none.palMode, 'pins');

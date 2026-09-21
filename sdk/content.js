@@ -519,6 +519,58 @@ function moveMany(document, ids, direction) {
   });
 }
 
+// ---- moving a node to a place (a drag, docs/OUTLINER.md) ----
+// The keyboard moves a row one step at a time; a drag names the place outright, so this takes one: `afterId` is the
+// row it lands behind, `parentId` the row it lands inside when there is nothing to land behind, and neither means
+// the first row of the outline. `from` is the outline it comes from — another view of the same Loro document (a
+// field value, sdk/fields.js) — so dragging a row between a page and one of its fields is one transaction, and one
+// undo step, like every other move here.
+// The row travels whole: its children, its checkbox and its block ids come with it, and the list or quote it leaves
+// behind is pruned when it empties. Both refusals — into itself, and a block that cannot be a list item — are
+// decided before anything is written, so a refused drag leaves the outline exactly as it was.
+function moveTo(document, id, { parentId = null, afterId = null, from = document } = {}) {
+  if (typeof id !== 'string' || !id) throw new Error('outline node id must be a string');
+  if (id === parentId || id === afterId) throw new Error('A node cannot move inside itself');
+  const src = unit(from, id);
+  const target = afterId != null ? unit(document, afterId) : parentId != null ? unit(document, parentId) : null;
+  if (target && insideOf(target, src)) throw new Error('A node cannot move inside itself');
+  // A list holds listItems whose first block is a paragraph, so a heading, a code block or an image standing on its
+  // own cannot join one — the rule indentUnit already follows, from the other side.
+  const intoList = afterId != null ? isList(target.parent().parent()) : parentId != null;
+  if (intoList && !isItem(src) && name(src) !== 'paragraph') throw new Error('This block cannot become a list item');
+  document.transact(() => {
+    const { list, index } = dropSlot(document, parentId, afterId);
+    const moving = unit(from, id); // after dropSlot: wrapping a bare parent replaces its container
+    place(list, index, moving);
+    removeUnit(moving);
+  });
+}
+
+// The list a drop lands in, and where in it: behind a row, at the top of a row's children (made the way
+// insertChild makes them), or at the top of the outline's own rows.
+function dropSlot(document, parentId, afterId) {
+  if (afterId != null) { const after = unit(document, afterId), list = after.parent(); return { list, index: indexOf(list, after) + 1 }; }
+  if (parentId == null) { const list = rootKids(document); return { list, index: 0 }; }
+  const { block, item: li } = must(document, parentId);
+  const owner = li || (name(block) === 'paragraph' ? wrap(block) : null);
+  if (!owner) throw new Error('This block cannot contain child nodes');
+  const c = kids(owner), second = c.length > 1 ? c.get(1) : null;
+  return { list: second && isList(second) ? kids(second) : kids(create(c, 1, 'bulletList')), index: 0 };
+}
+
+// Put a unit where the destination keeps its rows: a list holds listItems and everything else holds bare blocks, so
+// a paragraph dropped into a list becomes an item of it and a list row dropped among prose brings a list with it —
+// the one already beside it where there is one, so a drop between two bullets does not split them into two lists.
+function place(list, index, src) {
+  const intoItems = isList(list.parent());
+  if (isItem(src) === intoItems) return copy(list, index, src);
+  if (intoItems) return copy(kids(create(list, index, 'listItem')), 0, src);
+  const before = index > 0 ? list.get(index - 1) : null, after = index < list.length ? list.get(index) : null;
+  if (before && isList(before)) return copy(kids(before), kids(before).length, src);
+  if (after && isList(after)) return copy(kids(after), 0, src);
+  return copy(kids(create(list, index, 'bulletList')), 0, src);
+}
+
 // Scratchpad: checked belongs to listItem.attributes, never the paragraph or document data.
 // Plain -> unchecked; existing checkbox -> toggle. wrap copies inline marks, mentions and blockId.
 function toggleCheckbox(document, id) {
@@ -639,4 +691,4 @@ function divider(list, index) {
   return id;
 }
 
-module.exports = { readOutline, assignBlockIds, setText, inlineGroups, writeInline, styleDoc, setBlockType, insertDivider, insertAfter, insertBefore, insertChild, split, remove, removeMany, indent, indentMany, outdent, outdentMany, move, moveMany, toggleCheckbox, BLOCK_TYPES };
+module.exports = { readOutline, assignBlockIds, setText, inlineGroups, writeInline, styleDoc, setBlockType, insertDivider, insertAfter, insertBefore, insertChild, split, remove, removeMany, indent, indentMany, outdent, outdentMany, move, moveMany, moveTo, toggleCheckbox, BLOCK_TYPES };

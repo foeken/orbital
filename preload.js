@@ -89,7 +89,7 @@ contextBridge.exposeInMainWorld('api', {
   outdent: (docId, nodeId) => ipcRenderer.invoke('block:outdent', docId, nodeId),
   move: (docId, nodeId, direction) => ipcRenderer.invoke('block:move', docId, nodeId, direction),
   pins: () => ipcRenderer.invoke('pins:list'),
-  pinState: (docId) => ipcRenderer.invoke('pins:state', docId),
+  pinState: (docId) => ipcRenderer.invoke('pins:state', docId), // { sidebar, dates: ['YYYY-MM-DD'], hubs: [{ id, title, kind }] }: the meetings/spaces it is pinned on come with it
   pinIds: () => ipcRenderer.invoke('pins:ids'), // every pinned document id (sidebar + dates), for the pin mark on a row
   pin: (docId, target, date) => ipcRenderer.invoke('pins:pin', docId, target, date), // date: local YYYY-MM-DD for target 'today'; omitted = today
   unpin: (docId, target, date) => ipcRenderer.invoke('pins:unpin', docId, target, date),

@@ -48,9 +48,26 @@ async function pinTree() {
   };
   return (await Promise.all((await pins.sidebarTree(S.client.sync, S.me.userUri)).map(fill))).filter(Boolean);
 }
+// The meetings and spaces this document is pinned *on*: the reverse of the hub's own pinnedItems, which the graph
+// derives as EDGE_TYPE_HAS_PIN (docs/PINNING.md §4). One ListEdges for the hubs and one ListNodes for their titles;
+// a hub the graph will not name is still listed, by its id, rather than dropped, and a deleted one is left out.
+async function pinHubs(id) {
+  const { edges = [] } = await S.client.graph.listEdges({ toNodeIds: [id], edgeTypes: ['EDGE_TYPE_HAS_PIN'] }).catch(() => ({ edges: [] }));
+  const hubs = [...new Set(edges.map((e) => e.fromNodeId).filter((uri) => uri && !deletedNodes.has(uri)))];
+  if (!hubs.length) return [];
+  const { nodes = [] } = await S.client.graph.listNodes({ nodeIds: hubs, limit: hubs.length }).catch(() => ({ nodes: [] }));
+  return hubs.map((uri) => ({ id: uri, title: (nodes.find((n) => n.id === uri) || {}).title || '', kind: idKind(uri) }));
+}
+// Everywhere one document is pinned: your sidebar, your dates, and the meetings and spaces it hangs on. The first
+// two are private per-user state, the third is the hub's own list and visible to everyone who can see the hub.
 async function pinState(id) {
   if (!S.client) throw new Error(NOT_CONNECTED);
-  return { sidebar: (await pins.listSidebar(S.client.sync, S.me.userUri)).includes(id), dates: await pins.dates(S.client.sync, S.me.userUri, id) };
+  const [sidebar, dates, hubs] = await Promise.all([
+    pins.listSidebar(S.client.sync, S.me.userUri).then((uris) => uris.includes(id)),
+    pins.dates(S.client.sync, S.me.userUri, id),
+    pinHubs(id),
+  ]);
+  return { sidebar, dates, hubs };
 }
 // Every uri this user has pinned, sidebar or date, for the pin mark a row draws. Ids only: pinned() subscribes and
 // reads each pinned document, which is a bootstrap per pin and far more than "is this one pinned". A pointer this
@@ -100,4 +117,4 @@ async function todayNode(offset = 0) {
   return created.id;
 }
 
-module.exports = { weekTitle, weekNode, pinTarget, pinnedNode, pinned, pinnedUris, pinTree, pinState, setPin, nodePin, todayNode };
+module.exports = { weekTitle, weekNode, pinTarget, pinnedNode, pinned, pinnedUris, pinHubs, pinTree, pinState, setPin, nodePin, todayNode };

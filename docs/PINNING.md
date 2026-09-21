@@ -125,6 +125,8 @@ The SDK's read-only `sidebarTree(sync, userUri)` preserves this as `[{ uri?, lab
 
 "Is this document pinned at all", for a whole list of rows, is the same two documents read once rather than a `pinState` per row: `listSidebar` plus `datePinned(sync, userUri)`, which walks the pin-map's `entries` and keeps the keys that still hold a `plain` pin — an entry survives its last unpin as an empty `pins` list, so the key being there is not a pin. Main exposes the union as `pinnedUris()` / `api.pinIds()` for the pin mark the outliner draws on a row.
 
+The other direction — "which meetings and spaces is *this* document pinned on" — is the derived edge read backwards: `ListEdges({ toNodeIds: [doc], edgeTypes: ['EDGE_TYPE_HAS_PIN'] })` answers with one edge per hub (verified live on 2026-09-21: `tana:event:…` → a task pinned on it), and one `ListNodes` over those ids gives their titles. `main/pins.js pinHubs` is that pair, and `pinState(id)` returns it as `hubs: [{ id, title, kind }]` beside `sidebar` and `dates`. It is a server-derived view of the hub's own `pinnedItems`, so a pin this app has just written is in the hub document before the edge exists — which is why `related()` reads the list itself as well (section 6).
+
 ## 4. Events and spaces
 
 Different container, same document-sync mechanism. Event (`ode`) and space (`Lle`) docs have a root **MovableList** `pinnedItems`:
