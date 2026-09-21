@@ -79,12 +79,12 @@ failure afterwards would leave a local commit and tag to undo:
 
 - a **Developer ID Application** certificate in the Keychain, and
 - a `notarytool` keychain profile that still authenticates (`xcrun notarytool store-credentials`).
-  Override the profile name with `TANA_NOTARY_PROFILE`.
+  Override the profile name with `ORBITAL_NOTARY_PROFILE`.
 
 Then it bumps the version, packages the arm64 bundle with the hardened runtime, notarizes and staples
 it, validates the staple, prints the verdict Gatekeeper will give on someone else's Mac, zips the
 bundle with `ditto` (which preserves both the signature and the ticket), pushes the commit and tag,
-and publishes the zip to `foeken/tana-companion-releases` — override with `TANA_RELEASES_REPO`.
+and publishes the zip to `foeken/orbital-releases` — override with `ORBITAL_RELEASES_REPO`.
 Signing every nested file takes a few minutes; let it finish, and never run two packager builds at
 once, because the packager clears a shared temporary tree at startup and the second run breaks the
 first in a way that looks like a signing bug.

@@ -11,8 +11,8 @@ cd "$(dirname "$0")/.."
 
 # Both credentials are checked before the version is bumped: a failure afterwards leaves a local commit and tag
 # to undo. `store-credentials` created the profile; `history` is the cheapest proof that it still authenticates.
-profile="${TANA_NOTARY_PROFILE:-notarytool}"
-releases=${TANA_RELEASES_REPO:-foeken/tana-companion-releases}
+profile="${ORBITAL_NOTARY_PROFILE:-notarytool}"
+releases=${ORBITAL_RELEASES_REPO:-foeken/orbital-releases}
 security find-identity -v -p codesigning | grep -q 'Developer ID Application' \
   || { echo "no Developer ID Application identity in the keychain"; exit 1; }
 xcrun notarytool history --keychain-profile "$profile" >/dev/null \
@@ -26,7 +26,7 @@ npm run package -- --osx-sign --osx-notarize.keychainProfile="$profile"
 app="dist/Orbital-darwin-arm64/Orbital.app"
 xcrun stapler validate "$app"
 spctl --assess --type execute -vv "$app" # what Gatekeeper will say on a stranger's Mac, before it is published
-zip="dist/Tana-Companion-$version-arm64.zip"
+zip="dist/Orbital-$version-arm64.zip"
 rm -f "$zip"
 ditto -c -k --sequesterRsrc --keepParent "$app" "$zip"
 # main is protected by a ruleset with no bypass (direct pushes are refused, locally by the global pre-push hook

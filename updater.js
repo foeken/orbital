@@ -13,7 +13,7 @@ const { Readable } = require('node:stream');
 const os = require('node:os');
 const path = require('node:path');
 
-const REPO = 'foeken/tana-companion-releases';
+const REPO = 'foeken/orbital-releases';
 const run = promisify(execFile);
 
 // Release tags are npm versions ("v0.2.10"), which is all release.sh ever writes, so three integers decide it.
@@ -57,7 +57,7 @@ async function check({ manual = false } = {}) {
 async function install(release) {
   const asset = (release.assets || []).find((a) => a.name.endsWith('.zip'));
   if (!asset) throw new Error(`Release ${release.tag_name} has no .zip asset`);
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'tana-update-'));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'orbital-update-'));
   const zip = path.join(dir, asset.name);
   const res = await fetch(asset.browser_download_url); // redirects to the asset CDN; fetch follows them
   if (!res.ok) throw new Error(`Download failed with ${res.status}`);
