@@ -27,12 +27,18 @@ contextBridge.exposeInMainWorld('api', {
   codexTaskHosts: () => ipcRenderer.invoke('codex:taskHosts'), // nodeId -> host, for every linked node
   openCodexTask: (docId) => ipcRenderer.invoke('codex:open', docId), // open the Codex task this node is linked to
   codexStatus: () => ipcRenderer.invoke('codex:status'), // docId -> pending|working|waiting|done|broken for every linked node
-  setField: (docId, key, text) => ipcRenderer.invoke('doc:setField', docId, key, text), // typed field value (plain text)
+  // Cmd+K "Discuss with …": gives the document the Discussion Task type (created in the Library when the workspace
+  // has none) and writes who into its "Discuss with" field. Resolves to { typeUri, key, who }.
+  discussWith: (docId, who) => ipcRenderer.invoke('doc:discussWith', docId, who),
+  // What the title says that name is, from the model (main/ai.js): a string to offer, or null when there is no key
+  // on this machine or the title names nobody. Rejects when the call itself failed.
+  suggestDiscussWith: (title) => ipcRenderer.invoke('ai:discussWith', title),
   viewList: (id, filter) => ipcRenderer.invoke('view:list', id, filter), // { nodes, truncated }
   viewFilter: (id) => ipcRenderer.invoke('view:filter', id),
   setViewFilter: (id, filter) => ipcRenderer.invoke('view:setFilter', id, filter),
   deleteDocument: (id) => ipcRenderer.invoke('doc:delete', id), // native soft delete; undo restores
   restoreDocument: (id) => ipcRenderer.invoke('doc:restore', id), // native restore; undo deletes again
+  deletedList: () => ipcRenderer.invoke('deleted:list'), // [{id,title,deletedAt}] newest first: the deletions this app saw
   creationOptions: () => ipcRenderer.invoke('doc:creationOptions'), // {options:[{id,kind,title,icon?,typeUri?,appliesTo?,ownerUri?,selectable,reason?}],complete}
   docTypes: (id) => ipcRenderer.invoke('doc:types', id), // {current, options:[{uri,title,hue?,selectable,reason?}]} for one document
   setType: (id, typeUri) => ipcRenderer.invoke('doc:setType', id, typeUri ?? null), // null removes the type
@@ -44,6 +50,7 @@ contextBridge.exposeInMainWorld('api', {
   // them before the first paint, and written through one at a time.
   prefs: ipcRenderer.sendSync('prefs:snapshot'),
   setPref: (key, value) => ipcRenderer.invoke('prefs:set', key, value),
+  setOpenAIKey: (key) => ipcRenderer.invoke('openai:setKey', key),
   onSettings: (cb) => ipcRenderer.on('settings:changed', (_e, synced) => cb(synced)),
   createDocument: (title, opts) => ipcRenderer.invoke('doc:create', title, opts), // nonblank title; opts:{kind:doc|task|meeting|chat|custom|search,typeUri?,query?}; a search requires query and nothing else may carry one; returns Node to zoom
   search: (query) => ipcRenderer.invoke('search', query),
@@ -69,7 +76,7 @@ contextBridge.exposeInMainWorld('api', {
   // segments carry marks: { text, marks?: { bold, italic, strike, code, link: href } } | { mention: { uri, label } }
   setBlockType: (docId, nodeId, type) => ipcRenderer.invoke('block:setBlockType', docId, nodeId, type), // paragraph|heading1..3|bullet|numbered|code|quote
   insertDivider: (docId, nodeId) => ipcRenderer.invoke('block:insertDivider', docId, nodeId), // horizontal rule after nodeId; returns its block id
-  insertAfter: (docId, nodeId, text) => ipcRenderer.invoke('block:insertAfter', docId, nodeId, text),
+  insertAfter: (docId, nodeId, text, block) => ipcRenderer.invoke('block:insertAfter', docId, nodeId, text, block), // block: 'bullet' where the row that has nothing to inherit should still be a list row
   insertBefore: (docId, nodeId, text) => ipcRenderer.invoke('block:insertBefore', docId, nodeId, text),
   split: (docId, nodeId, before, after, asChild) => ipcRenderer.invoke('block:split', docId, nodeId, before, after, asChild), // truncate + insert the rest in one undo step
   insertChild: (docId, nodeId, text) => ipcRenderer.invoke('block:insertChild', docId, nodeId, text),

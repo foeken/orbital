@@ -83,7 +83,14 @@ async function search(query) {
   if (!params) return [];
   // The server ranks by full-text relevance, so a document titled exactly like the query can sit past the first
   // page: fetch wide, rank here, and hand back a page's worth.
-  const { nodes } = await S.client.graph.listNodes({ ...params, limit: 200 });
+  // Members ride in a query of their own: a profile's title is a name, which loses the relevance race to every
+  // document that mentions it, so a plain search's 200 never held one and "@" could not find a person.
+  const [{ nodes: found }, { nodes: people }] = await Promise.all([
+    S.client.graph.listNodes({ ...params, limit: 200 }),
+    params.textQuery && params.nodeTypes.includes('user-profile') && params.nodeTypes.length > 1
+      ? S.client.graph.listNodes({ ...params, nodeTypes: ['user-profile'], limit: 50 }).catch(() => ({ nodes: [] })) : { nodes: [] },
+  ]);
+  const seen = new Set(found.map((n) => n.id)), nodes = [...found, ...people.filter((n) => !seen.has(n.id))];
   nodes.forEach(rememberNodeHue);
   await resolveTypes(nodes.map((n) => n.entityType));
   // Title matches first (exact, then prefix, then contains), and within a class the title the query covers most:

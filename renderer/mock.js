@@ -61,6 +61,7 @@ function mockApi() {
   const chats = ['Draft the Studio memo', 'MCP: list open tasks', 'Summarise the leadership notes', 'MCP: create meeting note', 'Rewrite the agreement clause']
     .map((text, i) => ({ id: 'tana:chat:mockchat' + i, text, kind: 'document', hasChildren: true, tags: [{ label: 'chat', color: 'grey' }], meta: /^MCP:/.test(text) ? 'MCP' : undefined }));
   let mcpOff = false; // the app-local switch, off every launch of the mock
+  let openAIKey = '';
   // meetings over the past and next 7 days (day offset from today, start hour or null = all day); roots meta = weekday + time, search meta = weekday + day of month + time
   const dateMeta = {};
   const meetings = [['Last week retro', -6, 10], ['Board prep', -2, 14], ['Leadership sync', 0, 9], ['Platform Guild', 0, 13], ['1-1 with Sam', 1, 11], ['Offsite', 3, null]].map(([text, off, h], i) => {
@@ -101,6 +102,12 @@ function mockApi() {
   const settling = new Set(); // a brand-new document: the first taskMeta read fails while main is still subscribing it
   const unlisted = [];  // created tasks/meetings the roots "query" has not caught up with yet: listed after the next refresh()
   const sidebar = ['mockdoc2', 'mockmeeting2', space.id], datePins = { mockdoc2: [localDate()] }; // pins: sidebar order, personal date pins per doc
+  // Typed fields, so the page under the title can be tried without the main process: one holds two lines, because
+  // a field holds what a node holds and the second line is the part that used to be invisible.
+  // A field value is an outline like any other, kept under the id the page asks for it by ("<doc>|<field>"), so the
+  // mock needs no field editor of its own either: children, setText, indent and the rest already work by id.
+  const FIELD_KEY = 'tana:type:mock?attribute=n5e1hgxz';
+  const mockFields = (docId) => (docId === 'mockdoc1' ? [{ key: FIELD_KEY, label: 'Discuss with', text: 'Stan Engbers', segments: [{ text: 'Stan Engbers' }] }] : []);
   const content = Object.fromEntries(all.map((d, i) => [d.id, [
     block('Context', [], 2),
     block('First point about task ' + i, [block('Detail A'), block('Detail B', [block('Deeper detail')])]),
@@ -147,7 +154,7 @@ function mockApi() {
   };
   function softDelete(docId) {
     const i = all.findIndex((doc) => doc.id === docId); if (i < 0) throw new Error('unknown document');
-    deleted.set(docId, { doc: all[i], content: content[docId], views: views.map((view) => ({ view, index: view.nodes.findIndex((node) => node.id === docId) })).filter((entry) => entry.index >= 0) });
+    deleted.set(docId, { doc: all[i], at: new Date().toISOString(), content: content[docId], views: views.map((view) => ({ view, index: view.nodes.findIndex((node) => node.id === docId) })).filter((entry) => entry.index >= 0) });
     all.splice(i, 1); for (const view of views) view.nodes = view.nodes.filter((node) => node.id !== docId);
     sidebar.splice(0, sidebar.length, ...sidebar.filter((id) => id !== docId)); delete datePins[docId]; delete content[docId];
     setTimeout(() => removed.forEach((cb) => cb(docId)), 0);
@@ -217,7 +224,7 @@ function mockApi() {
       const doc = all.find((d) => d.id === docId);
       // anything that is not a meeting still has backlinks: one mock document mentions it
       const mentions = all.filter((d) => d.icon === 'doc' && d.id !== docId).slice(0, 1).map(info);
-      if (!doc || doc.icon !== 'meeting') return { pinned: [], outcomes: [], notes: [], backlinks: mentions.length ? [{ label: 'Mentioned in', rows: mentions }] : [] };
+      if (!doc || doc.icon !== 'meeting') return { fields: mockFields(docId), pinned: [], outcomes: [], notes: [], backlinks: mentions.length ? [{ label: 'Mentioned in', rows: mentions }] : [] };
       const pick = (n) => n && info(n);
       return {
         summary: 'Mock meeting summary for ' + doc.text,
@@ -259,6 +266,7 @@ function mockApi() {
     },
     mcpHidden: async () => mcpOff,
     setMcpHidden: async (on) => { mcpOff = !!on; emit(null); return mcpOff; },
+    setOpenAIKey: async (key) => { if (!String(key || '').trim()) throw new Error('OpenAI API key cannot be empty'); openAIKey = String(key).trim(); return true; },
     // Set type: the mock keeps main's two rules so the page behaves the same without the main process — a type that
     // lives in a space fits only a document in that space, a Library type fits anything (main/documents.js).
     docTypes: async (docId) => {
@@ -282,6 +290,25 @@ function mockApi() {
       emit(docId);
       return typeUri || null;
     },
+    // The model's read of a title, slow enough to show the page thinking: the last capitalised words of the title.
+    suggestDiscussWith: async (title) => {
+      await new Promise((done) => setTimeout(done, 700));
+      const names = String(title || '').match(/\b[A-Z][a-z]+(?: [A-Z][a-z]+)*/g) || [];
+      return names.length ? names.slice(-2).join(' and ') : null;
+    },
+    // "Discuss with …": the Discussion Task type, invented the first time it is asked for the way main creates it
+    // in the Library, and worn by the document. The mock keeps no field values, so only the type shows here.
+    discussWith: async (docId, who) => {
+      const doc = all.find((d) => d.id === docId);
+      if (!doc) throw new Error('unknown document');
+      if (!String(who || '').trim()) throw new Error('Who should this be discussed with?');
+      let type = types.find((t) => t.text === 'Discussion Task');
+      if (!type) { type = { id: 'mocktype' + types.length, text: 'Discussion Task', hue: 200 }; types.push(type); }
+      doc.tags = [...(doc.tags || []).filter((t) => t && ['task', 'meeting'].includes(t.label)), { label: type.text, hue: type.hue, uri: type.id }];
+      doc.hue = type.hue;
+      emit(docId);
+      return { typeUri: type.id, key: type.id + '?attribute=discusswith', who: who.trim() };
+    },
     // Set icon: four glyphs instead of the 3500 main holds, enough to drive the page without the main process.
     // The shape is the channel's — { name, label, svg }, and { uri, … } for the ones a type is wearing.
     searchIcons: async (query) => {
@@ -300,12 +327,12 @@ function mockApi() {
       emit(null);
       return icon ? structuredClone({ uri: typeUri, ...icon }) : null;
     },
-    // Set colour: the hue Tana keeps on the type, so the type and everything wearing it change together.
+    // Set colour: this app's own hue for the type (a setting), so the type and everything wearing it change together.
     setTypeHue: async (typeUri, hue) => {
       const type = types.find((t) => t.id === typeUri);
       if (!type) throw new Error('Colours are set on a type');
-      if (hue !== null && (!Number.isInteger(hue) || hue < 0 || hue > 360)) throw new Error('A hue is 0-360');
-      type.hue = hue === null ? undefined : hue;
+      if (hue !== null && hue !== 'grey' && (!Number.isInteger(hue) || hue < 0 || hue > 360)) throw new Error('A hue is 0-360, or grey');
+      type.hue = hue === null || hue === 'grey' ? undefined : hue; // the mock has no Tana colour underneath to fall back to
       for (const d of all) for (const t of d.tags || []) if (t.uri === typeUri) { t.hue = type.hue; d.hue = type.hue; }
       emit(null);
       return hue;
@@ -332,6 +359,8 @@ function mockApi() {
     unpin: async (docId, target, date = localDate()) => { if (target === 'sidebar') sidebar.splice(sidebar.indexOf(docId) >>> 0, 1); else datePins[docId] = (datePins[docId] || []).filter((d) => d !== date); emit(null); },
     deleteDocument: async (docId) => { softDelete(docId); step(docId, 'restore'); },
     restoreDocument: async (docId) => { undelete(docId); step(docId, 'delete'); },
+    // what Cmd+K "Recently deleted" reads: here it is the mock's own tombstones, newest first
+    deletedList: async () => [...deleted].reverse().map(([id, saved]) => ({ id, title: saved.doc.text || 'Untitled', deletedAt: saved.at })),
     sensitiveIds: async () => [...sensitive],
     setSensitive: async (docId, on) => { if (on) sensitive.add(docId); else sensitive.delete(docId); return on; },
     codexIds: async () => [...codexAssigned],

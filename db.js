@@ -20,6 +20,10 @@ function open(path) {
     PRIMARY KEY (section, id))`);
   db.exec("DROP TABLE IF EXISTS icons"); // app-local custom icons were removed (#224); an old cache still carries the table
   db.exec('CREATE TABLE IF NOT EXISTS sensitive_nodes (id TEXT PRIMARY KEY)'); // app-local sensitive documents
+  // Deletions this app saw, for Cmd+K "Recently deleted". Tana keeps the document itself (a soft delete only sets
+  // deletedAt, and a restore by id still works), but its graph node stops being listed, so nothing server-side can
+  // answer "what did I delete": this table is the list.
+  db.exec('CREATE TABLE IF NOT EXISTS deleted_nodes (id TEXT PRIMARY KEY, title TEXT NOT NULL, deletedAt TEXT NOT NULL)');
   db.exec('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)'); // JSON values (task filter, ...)
 }
 
@@ -78,6 +82,23 @@ function sensitiveIds() {
   return db.prepare('SELECT id FROM sensitive_nodes ORDER BY id').all().map((r) => r.id);
 }
 
+// A deletion, remembered under the title the document had. Deleting the same id twice keeps one row, dated the last time.
+function noteDeleted(id, title) {
+  db.prepare(`INSERT INTO deleted_nodes (id, title, deletedAt) VALUES (?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET title = excluded.title, deletedAt = excluded.deletedAt`).run(id, title || 'Untitled', new Date().toISOString());
+}
+
+// A restore (from here, from undo, or from another device) takes it off the list.
+function unnoteDeleted(id) { db.prepare('DELETE FROM deleted_nodes WHERE id = ?').run(id); }
+
+// Newest first, and only what "recently" can mean: anything older is dropped as the list is read. Deleting a
+// selection writes several rows within the same millisecond, so the insertion order breaks the tie.
+function deletedList(limit = 25, days = 30) {
+  const cutoff = new Date(Date.now() - days * 864e5).toISOString();
+  db.prepare('DELETE FROM deleted_nodes WHERE deletedAt <= ?').run(cutoff);
+  return db.prepare('SELECT id, title, deletedAt FROM deleted_nodes ORDER BY deletedAt DESC, rowid DESC LIMIT ?').all(limit);
+}
+
 function setSensitive(id, on) {
   if (on) db.prepare('INSERT OR IGNORE INTO sensitive_nodes (id) VALUES (?)').run(id);
   else db.prepare('DELETE FROM sensitive_nodes WHERE id = ?').run(id);
@@ -103,4 +124,4 @@ function settings() {
   return out;
 }
 
-module.exports = { open, list, get, remove, upsert, setRow, replaceSection, sensitiveIds, setSensitive, setting, setSetting, settings, generation: () => generation };
+module.exports = { open, list, get, remove, upsert, setRow, replaceSection, sensitiveIds, setSensitive, noteDeleted, unnoteDeleted, deletedList, setting, setSetting, settings, generation: () => generation };

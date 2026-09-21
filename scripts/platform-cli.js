@@ -203,6 +203,14 @@ const commands = {
     await client.sync.connect();
     out(await client.sync.softDelete(positional[0]));
   },
+  // The other half of delete: a soft-deleted document keeps everything and comes back by id alone, which is what
+  // Cmd+K "Recently deleted" does with the ids the app wrote down.
+  async restore() {
+    if (!positional[0]) throw new Error('usage: restore <id>  (document_action restore)');
+    await connect();
+    await client.sync.connect();
+    out(await client.sync.restore(positional[0]));
+  },
   async meetings() {
     const me = await connect();
     const start = new Date(); start.setHours(0, 0, 0, 0);
@@ -471,6 +479,33 @@ commands.settype = async () => {
   await new Promise((r) => setTimeout(r, 1500)); // the local update leaves with the stream, like the other write commands
   out('now: ' + JSON.stringify(readNode(await client.sync.subscribe(id)).entityTypeUri ?? null));
 };
+// discusswith <id> <who…>: the Cmd+K "Discuss with …" command through main — the Discussion Task type (found by
+// title, or created in the Library with its field when the workspace has none) and the name in that field. WRITES.
+commands.discusswith = async () => {
+  const [id, ...rest] = positional;
+  const who = rest.join(' ');
+  if (!id || !who) throw new Error('usage: discusswith <id> <who…>  (WRITES: types the document and fills its field)');
+  const main = backend(await connect());
+  await client.sync.connect();
+  out(await main.discussWith(id, who));
+  await new Promise((r) => setTimeout(r, 1500)); // the local update leaves with the stream, like the other write commands
+  const doc = await client.sync.subscribe(id);
+  out('type: ' + (readNode(doc).entityTypeUri || 'none'));
+  out(require('../sdk/fields').readFields(doc));
+};
+// setfield <id> <type-uri?attribute=key> <line…>: write a field value, one argument per line, the way the page's
+// field editor does (sdk/fields.js). A line written as "- words" is a bullet, as typing "- " in the page makes one.
+// WRITES.
+commands.setfield = async () => {
+  const [id, key, ...lines] = positional;
+  if (!id || !key || !lines.length) throw new Error('usage: setfield <id> <tana:type:...?attribute=key> <line> [<line>...]  (WRITES)');
+  const main = backend(await connect());
+  await client.sync.connect();
+  const sdkFields = require('../sdk/fields');
+  await main.op(id, (doc) => sdkFields.setFieldText(doc, key, lines.map((line) => (line.startsWith('- ') ? { segments: line.slice(2), block: 'bullet' } : { segments: line, block: 'paragraph' }))));
+  await new Promise((r) => setTimeout(r, 1500)); // the local update leaves with the stream, like the other write commands
+  out(sdkFields.readFields(await client.sync.subscribe(id)));
+};
 // libraryprobe: one cold Library load through main.js, including conversion to the exact IPC payload.
 commands.libraryprobe = async () => {
   const me = await connect();
@@ -701,7 +736,8 @@ const USAGE = [
   '             settype <id>   (listing only; with a target it writes)',
   '             caps <id...> | related <id> | incall [--limit 5] | pageprobe | libraryprobe | boot [--settle ms]',
   '  live       watch <id...>',
-  '  WRITES     create <title> [--kind doc|task|meeting] | delete <id> | set-title <id> <title> | addfield <type uri> <title> [--type member|date|link] [--multiple] |',
+  '  WRITES     create <title> [--kind doc|task|meeting] | delete <id> | restore <id> | set-title <id> <title> |',
+  '             addfield <type uri> <title> [--type member|date|link] [--multiple] |',
   '             set-state <id> <proposed|open|closed|not_now> | pin <id> <sidebar|today> | unpin <id> <sidebar|today> |',
   '             pinto <event|space id> <id> | unpinfrom <event|space id> <id> | settype <id> <tana:type:...|none>',
 ].join('\n');

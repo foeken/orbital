@@ -60,6 +60,7 @@ function setSensitiveMark(ids, on) {
 }
 function toggleSensitiveVisibility() {
   sensitiveVisible = !sensitiveVisible;
+  localStorage.setItem('sensitiveVisible', sensitiveVisible ? '1' : '0'); // remembered for the next launch, on this machine
   refreshSensitive();
   renderSensitiveBtn();
 }

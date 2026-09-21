@@ -29,6 +29,14 @@ spctl --assess --type execute -vv "$app" # what Gatekeeper will say on a strange
 zip="dist/Tana-Companion-$version-arm64.zip"
 rm -f "$zip"
 ditto -c -k --sequesterRsrc --keepParent "$app" "$zip"
-git push --follow-tags
+# main is protected by a ruleset with no bypass (direct pushes are refused, locally by the global pre-push hook
+# and server-side by GitHub), so the version bump lands through a pull request; the tag is pushed on its own.
+git switch -c "release/v$version"
+git push -u origin "release/v$version"
+gh pr create --title "v$version" --body "Version bump for v$version."
+gh pr merge --merge --delete-branch # a merge commit keeps the tagged commit reachable from main; squash would not
+git switch main
+git pull --ff-only
+git push origin "v$version"
 gh release create "v$version" "$zip" --repo "$releases" --title "v$version" --notes "Orbital $version for Apple Silicon. Signed and notarized; unzip and move it to Applications."
 echo "released v$version to $releases"

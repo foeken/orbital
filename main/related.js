@@ -4,7 +4,7 @@ const pins = require('../sdk/pins');
 const { completedInWindow, filterToSearchQuery, searchQueryParams, validViewFilter } = require('../sdk/query');
 const { LIVE_ROWS, NOT_CONNECTED, PIN_HUBS, PLAIN_KINDS, S, idKind, isSpace, summaryCache, typeAttrTitles, typeTitles } = require('./state');
 const { graphRow, rememberNodeHue, resolveTypes, toNode } = require('./rows');
-const { canWriteDoc, op, subscribe } = require('./documents');
+const { canWriteDoc, op, resolveReferences, subscribe } = require('./documents');
 
 const crumbIcon = (id) => ({ space: 'space', event: 'meeting', 'user-profile': 'member', chat: 'chat', agent: 'agent' })[idKind(id)] || 'doc';
 async function pathOf(id) {
@@ -95,14 +95,19 @@ async function fieldsOf(id) {
     const titles = await attributeTitles(typeUri);
     for (const [attribute, label] of Object.entries(titles)) {
       const key = typeUri + '?attribute=' + attribute, row = rows.find((r) => r.key === key);
-      out.push({ key, label, text: row ? row.text : '' });
+      out.push({ key, label, text: row ? row.text : '', lines: row ? row.lines : [] });
     }
   }
   for (const row of rows) {
     if (out.some((f) => f.key === row.key)) continue;
     const titles = row.attribute ? await attributeTitles(row.typeUri) : {};
-    out.push({ key: row.key, label: (row.attribute && titles[row.attribute]) || undefined, text: row.text });
+    out.push({ key: row.key, label: (row.attribute && titles[row.attribute]) || undefined, text: row.text, lines: row.lines });
   }
+  // the segments beside the text, with every reference in them resolved (icon, colour, gone) the way a line's are
+  for (const f of out) { const row = rows.find((r) => r.key === f.key); f.segments = row ? row.segments : []; }
+  // every line, not only the first: the page draws them all, and segments is the first line's own array, so it is
+  // resolved with them rather than twice
+  try { await resolveReferences(out.flatMap((f) => (f.lines && f.lines.length ? f.lines.map((line) => ({ segments: line.segments })) : [{ segments: f.segments }]))); } catch { /* a reference stays a bare link */ }
   return out;
 }
 // The write-up of an event has no edge of its own: it is the document the event owns whose title is the event's

@@ -20,7 +20,8 @@ const docRow = (n, hint, run) => ({ node: n, icon: n.icon, label: n.text ?? n.ti
 // The order of the rows about the node you are on: where it goes (open it, unfold it), what it is (done, status,
 // assignee), where it lives (pins, the date nodes, its space), what it looks like (image, visibility, sensitivity),
 // its link, and last the one destructive row. Rows without an id carry a `rank` from this list instead.
-const NODE_ROW_ORDER = ['zoomIn', 'expand', 'collapse', 'toggleDone', 'status', 'setType', 'setIcon', 'setHue', 'assign', 'assignTo', 'codex', 'codexOpen', 'pinToday', 'pinTomorrow', 'pinToMeeting', 'pinToSelectedMeeting', 'addToday', 'addTomorrow', 'addWeek', 'move', 'moveLibrary', 'visibility', 'notify', 'sensitive', 'copyLink', 'delete'];
+const NODE_ROW_ORDER = ['zoomIn', 'expand', 'collapse', 'toggleDone', 'status', 'setType', 'discussWith', 'setIcon', 'setHue', 'assign', 'assignTo', 'codex', 'codexOpen', 'pinToday', 'pinTomorrow', 'pinToMeeting', 'pinToSelectedMeeting', 'addToday', 'addTomorrow', 'addWeek', 'move', 'moveLibrary', 'visibility', 'notify', 'sensitive', 'copyLink', 'delete'];
+const DOC_KIND = /^tana:text:/; // the Discussion Task type applies to documents, so a meeting is not offered that row
 const nodeRank = (r) => { const i = NODE_ROW_ORDER.indexOf(r.rank || r.id); return i < 0 ? NODE_ROW_ORDER.length : i; };
 const VIEW_ORDER = ['inbox', 'today', 'week', 'library'];
 // Matching a row, tiered the way Raycast ranks a title (its manual: aliases first, then the title's fuzzy score, which
@@ -85,17 +86,18 @@ function subRowsFor(row) {
   const base = subBase(row);
   return kids.filter((k) => k.label && !k.disabled).map((k) => ({ ...k, id: undefined, sub: undefined, group: row.group, icon: k.icon || row.icon, label: base + ' ' + k.label }));
 }
-// With a query the closest matches come first ("in": Inbox before Zoom in): rows sort by match tier, then by where the
-// match starts, else keep their place. A group moves as a whole to where its best row lands, so every heading shows
-// once, and groups whose best rows match at the same tier keep the fixed order — where the match starts decides only
-// within a group, so "sensitive" puts the current node's Mark as sensitive above Toggle sensitive visibility instead
-// of losing to it by one character.
+// With a query the closest matches come first ("in": Inbox before Zoom in): rows sort by match tier, then the shorter
+// label ("tasks": My tasks before Set type to discussion tasks), then by where the match starts, else keep their
+// place. A group moves as a whole to where its best row lands, so every heading shows once, and groups whose best rows
+// tie on tier and length keep the fixed order — where the match starts decides only within a group, so "sensitive"
+// puts the current node's Mark as sensitive above Toggle sensitive visibility instead of losing to it by one character.
 function rankRows(rows) {
-  const cmp = (a, b) => a.match.rank - b.match.rank || a.match[0] - b.match[0];
+  const tier = (a, b) => a.match.rank - b.match.rank || a.label.length - b.label.length;
+  const cmp = (a, b) => tier(a, b) || a.match[0] - b.match[0];
   const best = new Map(), first = new Map();
   rows.forEach((r, i) => { if (!first.has(r.group)) first.set(r.group, i); if (!best.has(r.group) || cmp(r, best.get(r.group)) < 0) best.set(r.group, r); });
   return rows.map((r, i) => ({ r, i }))
-    .sort((a, b) => (a.r.group === b.r.group ? cmp(a.r, b.r) || a.i - b.i : best.get(a.r.group).match.rank - best.get(b.r.group).match.rank || first.get(a.r.group) - first.get(b.r.group)))
+    .sort((a, b) => (a.r.group === b.r.group ? cmp(a.r, b.r) || a.i - b.i : tier(best.get(a.r.group), best.get(b.r.group)) || first.get(a.r.group) - first.get(b.r.group)))
     .map(({ r }) => r);
 }
 // typed is the query as it was typed; q is the lowercased one every row is matched against.
@@ -143,6 +145,13 @@ function paletteRows(q, typed = q) {
     rows.push({ id: 'setType', group: docGroup, icon: 'type', label: 'Set type', subBase: 'Set type to', hint: typeNameOf(doc) || 'No type',
       keepOpen: true, subAlways: true, run: () => openTypePalette(doc), sub: async () => { await typesLoaded(doc); return typeRows(''); } });
   }
+  // One type a document is given by answering a question instead of picking it from a list: who it is to be
+  // discussed with. A meeting is not offered it — the type applies to documents.
+  if (palDoc && tana.discussWith && isRealId(palDoc.id) && DOC_KIND.test(palDoc.id)) {
+    const doc = palDoc;
+    rows.push({ id: 'discussWith', group: docGroup, icon: 'member', label: 'Discuss with …', hint: 'Discussion Task',
+      keepOpen: true, run: () => openDiscussPalette(doc) });
+  }
   // And what a type looks like. The glyph belongs to the type, so every document of that type is drawn with it: its
   // bullet, its row in the sidebar, a breadcrumb, and the chip an inline mention of it draws.
   if (palDoc && tana.searchIcons && tana.setTypeIcon && TYPE_NODE.test(palDoc.id)) {
@@ -150,12 +159,12 @@ function paletteRows(q, typed = q) {
     rows.push({ id: 'setIcon', group: docGroup, icon: typeGlyphs.get(doc.id) || 'type', label: 'Set icon',
       hint: typeGlyphs.has(doc.id) ? 'Chosen' : 'The generic glyph', keepOpen: true, run: () => openIconPalette(doc) });
   }
-  // And what colour it is. Unlike the glyph this one is Tana's own: the hue on the type, which colours its documents
-  // in Tana too, not only here.
+  // And what colour it is here: our own hue or grey for the type, kept with the glyph in the settings document, so
+  // Tana's colour on the type is left alone (docs/SETTINGS.md).
   if (palDoc && tana.setTypeHue && TYPE_NODE.test(palDoc.id)) {
     const doc = palDoc;
     rows.push({ id: 'setHue', group: docGroup, icon: typeGlyphs.get(doc.id) || 'type', hue: doc.hue, label: 'Set colour',
-      hint: doc.hue == null ? 'No colour' : 'Hue ' + doc.hue, keepOpen: true, run: () => openHuePalette(doc) });
+      hint: doc.hue == null ? 'Grey' : 'Hue ' + doc.hue, keepOpen: true, run: () => openHuePalette(doc) });
   }
   // Watching this node: the label says what pressing it does, so it carries no id — a hotkey whose meaning flips
   // between "start" and "stop" would be a key you cannot learn.
@@ -246,12 +255,14 @@ function paletteRows(q, typed = q) {
   if (homeNext) rows.push({ id: 'setHome', group: 'Actions', icon: 'home', label: 'Set as Home', hint: homeNext === homeId() ? 'Current' : '', disabled: homeNext === homeId(), run: () => setHome(homeNext) });
   rows.push({ id: 'undo', group: 'Actions', icon: 'undo', label: 'Undo', run: () => history('undo') });
   rows.push({ id: 'redo', group: 'Actions', icon: 'redo', label: 'Redo', run: () => history('redo') });
+  if (tana.deletedList) rows.push({ id: 'recentlyDeleted', group: 'Actions', icon: 'trash', label: 'Recently deleted', keepOpen: true, run: openTrashPalette });
   rows.push({ id: 'sync', group: 'Actions', icon: 'sync', label: 'Sync', run: () => run(() => tana.refresh()) });
   rows.push({ id: 'reload', group: 'Actions', icon: 'reload', label: 'Reload', run: () => location.reload() });
   // the list of titles hidden from every view and from search, edited in the palette itself
   if (tana.filters) rows.push({ id: 'hidden', group: 'Actions', icon: 'hiddenItems', label: 'Edit hidden items', keepOpen: true, run: openHiddenPalette });
   if (tana.codexHosts) rows.push({ id: 'codexHosts', group: 'Actions', icon: 'host', label: 'Manage Codex hosts', keepOpen: true, run: openHostsPalette });
   if (tana.sensitiveIds) rows.push({ id: 'sensitiveVisibility', group: 'Actions', icon: 'hidden', label: 'Toggle sensitive visibility', hint: sensitiveVisible ? 'Shown' : 'Hidden', run: toggleSensitiveVisibility });
+  if (tana.setOpenAIKey) rows.push({ id: 'openaiKey', group: 'Actions', icon: 'openaiKey', label: 'Set OpenAI API key', hint: 'Stored locally', keepOpen: true, run: openOpenAIKeyPalette });
   // Every list and every search, not this page: the switch lives in main (main/views.js listFilter), so the Library
   // and Cmd+S stop offering MCP chats too. Stable label + hint, like the row above, so a recorded key keeps meaning.
   if (tana.setMcpHidden) rows.push({ id: 'mcpChats', group: 'Actions', icon: 'hiddenItems', label: 'Toggle MCP chats', hint: mcpHidden ? 'Hidden' : 'Shown',
@@ -318,19 +329,49 @@ function openCommandPalette() {
   palInput.placeholder = 'Run a command'; palInput.value = ''; renderPalette(); palInput.focus();
 }
 function backPalette() {
+  const SECOND_LEVEL = new Set(['pinMeeting', 'setType', 'trash', 'discuss', 'setIcon', 'setHue', 'openaiKey']); // pages opened from the command page
   if (palMode === 'pill') openCommandPalette();
   // Escape on the prompt page cancels the whole thing rather than stepping back a level: the page was opened to
   // answer one question, and abandoning that question is abandoning the assignment. Nothing is written either way.
   else if (palMode === 'agentPrompt') closePalette();
   else if (palMode === 'visibilityPeople') openVisibilityPalette(palDoc);
-  // The meeting picker was opened from the command page and steps back to it, like every other second level here.
-  else if (palMode === 'pinMeeting') openCommandPalette();
-  else if (palMode === 'setType') openCommandPalette();
-  else if (palMode === 'setIcon') openCommandPalette();
-  else if (palMode === 'setHue') openCommandPalette();
+  // These pickers were opened from the command page and step back to it, like every other second level here.
+  else if (SECOND_LEVEL.has(palMode)) openCommandPalette();
   else closePalette();
 }
+function openOpenAIKeyPalette() {
+  palMode = 'openaiKey'; palRows = []; palIndex = 0; palette.hidden = false;
+  promptEditor(false); palInput.type = 'password'; palInput.placeholder = 'Paste OpenAI API key'; palInput.value = '';
+  renderPalette(); palInput.focus();
+}
+function openAIKeyRows() {
+  const key = palInput.value.trim();
+  return [{ group: 'OpenAI API key', icon: 'openaiKey', label: key ? 'Save OpenAI API key' : 'Enter OpenAI API key',
+    hint: key ? '↩ saves locally' : 'Nothing to save yet', disabled: !key, keepOpen: true,
+    run: () => run(async () => { await tana.setOpenAIKey(key); closePalette(); }) }];
+}
 // ---- hidden items (api.filters): titles every view and search skips, edited from Cmd+K ----
+// ---- recently deleted: undo without the undo stack ----
+// A delete here is Tana's soft delete: the document keeps everything it had and only its deletedAt is set, so
+// restoring it is one call with its id. What nothing can answer is which ids those are — a deleted document leaves
+// the graph, so no list, search or query names it again — and the undo stack only reaches back through this
+// session, in order. So main writes down every deletion it sees (db.js) and this page reads that list back.
+const TRASH_GROUP = 'Recently deleted · ↩ restores it';
+let trashList = null; // null while the list is in flight
+function trashRows(q) {
+  const rows = (trashList || []).filter((d) => fuzzyMatch(d.title, q)).map((d) => ({ group: TRASH_GROUP, icon: 'trash', label: d.title,
+    hint: agoText(d.deletedAt), keepOpen: true, run: () => run(async () => { await tana.restoreDocument(d.id); closePalette(); goTo(d.id); }) }));
+  if (!rows.length) rows.push({ group: TRASH_GROUP, label: trashList ? 'Nothing deleted recently' : 'Loading…', disabled: true });
+  return rows;
+}
+function openTrashPalette() {
+  palMode = 'trash'; palRows = []; palIndex = 0; palette.hidden = false;
+  promptEditor(false);
+  palInput.placeholder = 'Restore something deleted';
+  palInput.value = '';
+  trashList = null; renderPalette(); palInput.focus();
+  run(async () => { const list = await tana.deletedList(); trashList = Array.isArray(list) ? list : []; if (palMode === 'trash') renderPalette(); });
+}
 // ---- the machines a task can run on, managed from Cmd+K ----
 // One page: what is configured, and a line to add another. The form is the palette's own field — "Name, address,
 // path to codex", three values separated by spaces — because a page of three inputs is more machinery than this
@@ -369,7 +410,7 @@ const MODEL_GROUP = 'Model for this task';
 const HOST_GROUP = 'Where it runs';
 function promptEditor(on) {
   palText.hidden = !on; palInput.hidden = !!on;
-  if (!on) { palText.value = ''; agentCtx = null; }
+  if (!on) { palText.value = ''; agentCtx = null; palInput.type = 'text'; }
 }
 function openAgentPrompt(doc) {
   palMode = 'agentPrompt'; palRows = []; palIndex = 0; palette.hidden = false;
@@ -518,7 +559,7 @@ function openResult(n, from) {
 function resultRows(nodes, group) {
   nodes = nodes.map(asDoc);
   const ctx = linkCtx, pin = pinCtx;
-  const rows = nodes.map((n) => ({ ...docRow(n, n.meta, () => (ctx ? linkTo(ctx, { label: n.title ?? n.text, uri: n.id }) : pin ? pinResult(pin, n) : openResult(n, 'Search'))), group }));
+  const rows = nodes.map((n) => ({ ...docRow(n, n.meta, () => (ctx ? linkTo(ctx, { label: n.title ?? n.text, uri: n.id, ...(n.icon ? { icon: n.icon } : {}), ...(n.hue != null ? { hue: n.hue } : {}) }) : pin ? pinResult(pin, n) : openResult(n, 'Search'))), group }));
   if (!ctx) return rows;
   const title = ctx.text || palInput.value.trim(); // "@" at a caret has no selection: what is typed becomes the new document's title
   if (!title) return rows;
@@ -639,6 +680,60 @@ function openTypePalette(doc) {
   palInput.placeholder = 'Set type to…'; palInput.value = '';
   loadTypeList(doc); renderPalette(); palInput.focus();
 }
+
+// ---- Discuss with …: the Discussion Task type and the one field it exists for, in a single answer ----
+// Main owns both writes (main/documents.js discussWith): it finds the type by title, creates it in the Library with
+// its "Discuss with" field when the workspace has none, types the document and writes the words. The field holds
+// text, not a member reference — a real value as often names a team ("Heads of Technology") or two people at once
+// as it does one colleague — so the page is the palette's own field and whatever is typed is the answer.
+const DISCUSS_GROUP = 'Discuss with';
+let discussCtx = null; // the document the page is about
+// and what the model made of its title, while this page is open: { title, state: 'thinking'|'ready'|'failed', value, error }
+let discussAI = null;
+// One read per open, not per keystroke: the title does not change while the page is up. A page opened again asks
+// again, which is how a key added in the meantime starts working without a restart.
+function loadDiscussSuggestion(doc) {
+  const title = (doc.text || '').trim();
+  discussAI = tana.suggestDiscussWith && title ? { title, state: 'thinking' } : null;
+  if (!discussAI) return;
+  const mine = discussAI;
+  tana.suggestDiscussWith(title).then(
+    (value) => { mine.state = 'ready'; mine.value = typeof value === 'string' ? value.trim() : ''; mine.arriving = true; },
+    (e) => { mine.state = 'failed'; mine.error = (e && e.message) || String(e); mine.arriving = true; },
+  ).then(() => { if (discussAI === mine && palMode === 'discuss') renderPalette(); }); // a page left in the meantime is not redrawn
+}
+function discussRows(typed) {
+  const doc = discussCtx, words = (typed || '').trim();
+  if (!doc) return [];
+  // Same glyph on the placeholder as on the row it becomes, so the line does not step sideways once there is
+  // something to run.
+  const rows = words
+    ? [{ group: DISCUSS_GROUP, icon: 'member', label: '\u201C' + words + '\u201D', hint: '\u21A9', run: () => applyDiscussWith(doc, words) }]
+    : [{ group: DISCUSS_GROUP, icon: 'member', label: 'Type who this is for', disabled: true }];
+  // What the title suggests goes *under* what you typed, never above it: Enter is always your own answer, and the
+  // suggestion is one arrow key away. It says it is thinking rather than appearing out of nowhere, and says why
+  // when the call failed rather than looking like a title that named nobody.
+  const guess = discussAI;
+  // The turning glyph would otherwise stop dead the moment the answer lands. `arrive` marks the one build that
+  // follows the answer — it is spent here, so the letters typed after it rebuild the row without replaying the
+  // landing — and the row that carries it settles out of the spin instead of being swapped for a still one.
+  const arrive = !!(guess && guess.arriving);
+  if (guess) guess.arriving = false;
+  if (guess && guess.state === 'thinking') rows.push({ group: DISCUSS_GROUP, icon: 'sparkle', spin: true, label: 'Reading the title\u2026', disabled: true });
+  else if (guess && guess.state === 'failed') rows.push({ group: DISCUSS_GROUP, icon: 'sparkle', arrive, label: guess.error, disabled: true });
+  else if (guess && guess.value && guess.value !== words) rows.push({ group: DISCUSS_GROUP, icon: 'sparkle', arrive, label: '\u201C' + guess.value + '\u201D', hint: 'From the title', run: () => applyDiscussWith(doc, guess.value) });
+  return rows;
+}
+function applyDiscussWith(doc, who) {
+  // Like a retype (applyType): the row, the chip and the page's fields all follow main's change event for this
+  // document, so nothing is patched here.
+  run(async () => { await tana.discussWith(doc.id, who); closePalette(); });
+}
+function openDiscussPalette(doc) {
+  discussCtx = doc; palMode = 'discuss'; palRows = []; palIndex = 0; palBusy = false; palette.hidden = false;
+  palInput.placeholder = 'Discuss with…'; palInput.value = '';
+  loadDiscussSuggestion(doc); renderPalette(); palInput.focus();
+}
 // ---- Set icon: the Nucleo UI set built into the app, searched in main, a page of results at a time ----
 // The set is not in the renderer: main holds it (3.5k glyphs, half a megabyte gzipped) and answers with the page
 // being shown, which is registered as it arrives so the rows can draw it. Choosing writes the choice against the
@@ -700,7 +795,8 @@ function huePickRows(q) {
     if (!fuzzyMatch(name, q) && String(hue) !== q) continue;
     rows.push({ group: HUE_GROUP, icon: glyph, hue, label: name, hint: doc.hue === hue ? '✓' : String(hue), keepOpen: true, run: () => applyHue(doc, hue) });
   }
-  if (doc.hue != null && fuzzyMatch('No colour', q)) rows.push({ group: HUE_GROUP, icon: 'none', label: 'No colour', hint: 'Back to grey', keepOpen: true, run: () => applyHue(doc, null) });
+  if (fuzzyMatch('Grey', q)) rows.push({ group: HUE_GROUP, icon: glyph, label: 'Grey', hint: doc.hue == null ? '✓' : 'No tint, whatever Tana says', keepOpen: true, run: () => applyHue(doc, 'grey') });
+  if (fuzzyMatch("Tana's colour", q)) rows.push({ group: HUE_GROUP, icon: 'none', label: "Tana's colour", hint: 'Forget the override', keepOpen: true, run: () => applyHue(doc, null) });
   if (!rows.length) rows.push({ group: HUE_GROUP, label: 'No colour matches', disabled: true });
   return rows;
 }
@@ -709,12 +805,13 @@ function openHuePalette(doc) {
   palInput.placeholder = 'Choose a colour or type a hue…'; palInput.value = '';
   renderPalette(); palInput.focus();
 }
-// Written on the type in Tana, so everything wearing it follows — here and in Tana's own client. Main rebuilds the
-// rows and announces them, the same way the icon does; the node in hand is patched so the page it came from agrees.
+// Written into this app's settings, so everything wearing the type follows here and Tana keeps its own colour. Main
+// rebuilds the rows and announces them, the same way the icon does; the node in hand is patched so the page it
+// came from agrees — a forgotten override shows Tana's hue again, which only the rebuilt rows know.
 function applyHue(doc, hue) {
   run(async () => {
     await tana.setTypeHue(doc.id, hue);
-    doc.hue = hue == null ? undefined : hue;
+    if (hue !== null) doc.hue = hue === 'grey' ? undefined : hue;
     closePalette();
   });
 }
@@ -773,17 +870,21 @@ function renderPalette() {
   else if (palMode === 'hidden') palRows = hiddenRows(q);
   else if (palMode === 'pinMeeting') palRows = meetingPickRows(q.toLowerCase());
   else if (palMode === 'setType') palRows = typeRows(q.toLowerCase());
+  else if (palMode === 'discuss') palRows = discussRows(q);
   else if (palMode === 'setIcon') palRows = iconPickRows();
   else if (palMode === 'setHue') palRows = huePickRows(q.toLowerCase());
   else if (palMode === 'hosts') palRows = hostRows(q);
+  else if (palMode === 'trash') palRows = trashRows(q.toLowerCase());
   else if (palMode === 'agentPrompt') palRows = agentPromptRows();
+  else if (palMode === 'openaiKey') palRows = openAIKeyRows();
   else if (palMode === 'pill') palRows = pillRows(q.toLowerCase());
   palIndex = Math.max(0, Math.min(palIndex, palRows.length - 1));
   const els = [];
   palRows.forEach((r, i) => {
     if (r.group && (!i || palRows[i - 1].group !== r.group)) { const h = document.createElement('div'); h.className = 'group'; h.textContent = r.group; els.push(h); }
-    const row = document.createElement('div'); row.className = 'row' + (i === palIndex ? ' active' : '') + (r.disabled ? ' disabled' : ''); row.dataset.index = i;
+    const row = document.createElement('div'); row.className = 'row' + (i === palIndex ? ' active' : '') + (r.disabled ? ' disabled' : '') + (r.arrive ? ' arrive' : ''); row.dataset.index = i;
     const icon = document.createElement('span'); icon.className = 'ricon' + (r.node ? ' ' + (r.icon || 'dot') : ''); icon.innerHTML = r.icon ? iconSvg(r.icon) : '';
+    if (r.spin) icon.classList.add('thinking'); // a row waiting on an answer: its glyph breathes while it waits
     const rowHue = r.node ? r.node.hue : r.hue; // documents and "Create new…" type choices both carry the type hue
     if (rowHue != null) { icon.classList.add('hue'); icon.style.setProperty('--hue', String(rowHue)); }
     const label = document.createElement('span'); label.className = 'label';
@@ -804,7 +905,9 @@ function renderPalette() {
     row.onclick = () => runRow(r);
     els.push(row);
   });
-  if (!palRows.some((r) => palMode === 'cmd' || palMode === 'slash' || palMode === 'hidden' || r.node) && palMode !== 'agentPrompt' && (palMode === 'cmd' || palMode === 'slash' || (q && !palBusy))) { const n = document.createElement('div'); n.className = 'group'; n.textContent = 'No results'; els.push(n); }
+  // "No results" belongs under a list that was searched and found nothing. Two pages are not lists: the agent
+  // prompt and "Discuss with …" turn what is typed into their one row, so there is nothing for them to not find.
+  if (!palRows.some((r) => palMode === 'cmd' || palMode === 'slash' || palMode === 'hidden' || r.node) && palMode !== 'agentPrompt' && palMode !== 'discuss' && (palMode === 'cmd' || palMode === 'slash' || (q && !palBusy))) { const n = document.createElement('div'); n.className = 'group'; n.textContent = 'No results'; els.push(n); }
   palList.replaceChildren(...els);
   const active = palList.querySelector('.row.active');
   if (active) active.scrollIntoView({ block: 'nearest' });
@@ -857,10 +960,11 @@ function nextPalIndex(rows, index, step) {
   for (let i = 1; i <= n; i++) { const next = ((index + step * i) % n + n) % n; if (!rows[next].disabled || rows[next].id) return next; }
   return index;
 }
+// pages whose rows are built from what is typed, with nothing to fetch
+const LOCAL_MODES = new Set(['cmd', 'create', 'slash', 'assignees', 'assigneesMany', 'status', 'setType', 'discuss', 'setHue', 'visibility', 'visibilityPeople', 'hidden', 'pill', 'pinMeeting', 'openaiKey', 'hosts', 'trash']);
 palInput.addEventListener('input', () => {
   palIndex = 0; palEnter = null; // typing on supersedes an Enter that was waiting for the previous query
-  if (palMode === 'cmd' || palMode === 'create' || palMode === 'slash' || palMode === 'assignees' || palMode === 'assigneesMany' || palMode === 'status' || palMode === 'setType' || palMode === 'setHue' || palMode === 'visibility' || palMode === 'visibilityPeople' || palMode === 'hidden' || palMode === 'pill' || palMode === 'pinMeeting') return renderPalette();
-  if (palMode === 'hosts') return renderPalette();
+  if (LOCAL_MODES.has(palMode)) return renderPalette();
   // the set lives in main, so typing asks it — debounced like the document search, and the page says it is busy
   if (palMode === 'setIcon') { palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchIconsNow, 150); return renderPalette(); }
   if (palMode === 'spaces') { palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchSpacesNow, 150); return; }

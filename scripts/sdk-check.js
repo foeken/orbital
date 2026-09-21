@@ -11,7 +11,7 @@ const { message, SyncService } = require('../sdk/proto/descriptors');
 const { createTransport, SyncConnection, Document, derivePeerId, readNode, setTitle, setState, taskMeta, setAssignees, setSearchQuery, contentText, ulid, initDocument, STATE_TYPES } = require('../sdk');
 const outline = require('../sdk/content');
 const { fetchImage } = require('../sdk/assets');
-const { LoroMap, LoroList } = require('loro-crdt');
+const { LoroMap, LoroList, LoroText } = require('loro-crdt');
 const { parseQuery, searchParams, needsTypes, viewParams, searchQueryParams, filterToSearchQuery, searchQueryToFilter, validViewFilter, viewTypes, VIEW_PRESETS, hideRules, isHidden, completedInWindow, completedWindow } = require('../sdk/query');
 const pins = require('../sdk/pins');
 
@@ -173,6 +173,93 @@ async function main() {
         runs.get(1).setContainer('attributes', new LoroMap()).set('label', ' / Example Corp');
       });
       assert.deepEqual(fields.readFields(typed).map((f) => f.text), ['Onderhandeling / Example Corp'], 'a mention reads as its label');
+      // a value with a reference in it: written as segments through the same code a line uses, read back as segments
+      const who = 'tana:text:' + ulid();
+      fields.setFieldText(typed, key, [{ text: 'Discuss with ' }, { mention: { label: 'Sam Okafor', uri: who } }, { text: ' first' }]);
+      const runs = typed.data.toJSON().attributes[key].children[0].children;
+      assert.deepEqual([runs.length, runs[1].nodeName, runs[1].attributes.tanaUri], [3, 'mention', who], 'the mention is the map Tana expects, between the text runs');
+      assert.deepEqual(fields.readFields(typed)[0].segments, [{ text: 'Discuss with ' }, { mention: { label: 'Sam Okafor', uri: who } }, { text: ' first' }], 'and reads back as segments');
+      assert.equal(fields.readFields(typed)[0].text, 'Discuss with Sam Okafor first', 'with the plain text still the label');
+      fields.setFieldText(typed, key, 'plain again');
+      assert.deepEqual(fields.readFields(typed)[0].segments, [{ text: 'plain again' }], 'a string replaces the whole value');
+      { // A field value is a content tree like a page's, so the outline editor drives it: same functions, same ids,
+        // same undo. This is what keeps one editor in the app rather than two that drift apart.
+        const view = fields.fieldView(typed, key, { create: true });
+        assert.deepEqual(outline.readOutline(view).map((n) => n.segments.map((s) => ('text' in s ? s.text : s.mention.label)).join('')), ['plain again'], 'the value reads as an outline');
+        const [first] = outline.readOutline(view);
+        outline.insertAfter(view, first.id, 'a second row');
+        outline.insertChild(view, first.id, 'a child of the first');
+        const rows = outline.readOutline(view);
+        assert.deepEqual(rows.map((n) => n.segments.map((s) => ('text' in s ? s.text : s.mention.label)).join('')), ['plain again', 'a second row'], 'rows are added the way they are on a page');
+        assert.deepEqual(rows[0].children.map((n) => n.segments.map((s) => ('text' in s ? s.text : s.mention.label)).join('')), ['a child of the first'], 'and a row can hold children, which a field value could not before');
+        outline.setBlockType(view, rows[1].id, 'bullet');
+        assert.equal(outline.readOutline(view)[1].block, 'bullet', 'block types are the page\'s own');
+        outline.setText(view, rows[1].id, [{ text: 'with a reference to ' }, { mention: { label: 'Sam Okafor', uri: who } }]);
+        assert.deepEqual(outline.readOutline(view)[1].segments.at(-1), { mention: { label: 'Sam Okafor', uri: who } }, 'and so are references');
+        // The flat reading still answers for everything that only wants the words (search, backlinks, the
+        // "Discuss with" write): a child is one of the lines, like any other row.
+        assert.deepEqual(fields.readFields(typed)[0].lines.map((line) => line.segments.map((s) => ('text' in s ? s.text : s.mention.label)).join('')),
+          ['plain again', 'a child of the first', 'with a reference to Sam Okafor'], 'the flat reading lists every row, children included');
+        // nothing of this reaches the document's own outline: a field value is a tree beside it, not part of it
+        assert.equal(outline.readOutline(typed).some((n) => (n.segments || []).some((s) => (s.text || '').includes('second row'))), false,
+          'the document\'s own outline is untouched');
+        // a read of a field that has no value must not write one: opening a typed page would fill in every empty field
+        const empty = fields.fieldView(typed, 'tana:type:01j0typ000000000000000000?attribute=zzzzzzzz');
+        assert.deepEqual(outline.readOutline(empty), [], 'an absent value reads as an empty outline');
+        assert.equal(Object.keys(typed.data.toJSON().attributes).length, 1, 'and is not created by reading it');
+      }
+      // A field holds what a node holds: several blocks, and the block types a line can have. Every block that
+      // carries words is one line, whatever it is nested in, and a write keeps each block as it found it.
+      fields.setFieldText(typed, key, ['First line', [{ text: 'and ' }, { mention: { label: 'Sam Okafor', uri: who } }]]);
+      assert.deepEqual(fields.readFields(typed)[0].lines, [
+        { segments: [{ text: 'First line' }], block: 'paragraph' },
+        { segments: [{ text: 'and ' }, { mention: { label: 'Sam Okafor', uri: who } }], block: 'paragraph' },
+      ], 'an array of lines is a block each, and a line says what kind of block it is');
+      assert.equal(typed.data.toJSON().attributes[key].children.length, 2, 'written as two blocks, not one line with a newline in it');
+      assert.equal(fields.readFields(typed)[0].text, 'First line\nand Sam Okafor', 'the plain text joins them with a newline');
+      assert.deepEqual(fields.readFields(typed)[0].segments, [{ text: 'First line' }], 'and segments stays the first line, which is all a single-line value has');
+      fields.setFieldText(typed, key, ['Only this']);
+      assert.equal(typed.data.toJSON().attributes[key].children.length, 1, 'a line taken away takes its block with it');
+      assert.deepEqual(fields.readFields(typed)[0].lines, [{ segments: [{ text: 'Only this' }], block: 'paragraph' }]);
+      // "- " in the field editor: the line becomes a bullet, which is a shape change, so the value is written again
+      // as the bulletList/listItem/paragraph layout a value Tana bulleted already has.
+      fields.setFieldText(typed, key, [{ segments: 'Only this', block: 'paragraph' }, { segments: 'and a bullet', block: 'bullet' }]);
+      const shaped = typed.data.toJSON().attributes[key].children;
+      assert.deepEqual([shaped.length, shaped[0].nodeName, shaped[1].nodeName, shaped[1].children[0].nodeName], [2, 'paragraph', 'bulletList', 'listItem'],
+        'a bullet after a paragraph is a list of its own, in Tana\u2019s layout');
+      assert.deepEqual(fields.readFields(typed)[0].lines, [{ segments: [{ text: 'Only this' }], block: 'paragraph' }, { segments: [{ text: 'and a bullet' }], block: 'bullet' }],
+        'and reads back as the two kinds of line it is');
+      fields.setFieldText(typed, key, [{ segments: 'Only this', block: 'paragraph' }, { segments: 'plain again', block: 'paragraph' }]);
+      assert.deepEqual(fields.readFields(typed)[0].lines.map((line) => line.block), ['paragraph', 'paragraph'], 'and a bullet taken off goes back to a paragraph');
+      { // a value Tana wrote as bullets: read one line per bullet, and still bullets after an edit
+        const bullets = make('text');
+        bullets.transact((l) => {
+          const value = l.getMap('data').setContainer('attributes', new LoroMap()).setContainer(key, new LoroMap());
+          value.set('nodeName', 'doc');
+          const kids = value.setContainer('children', new LoroList());
+          const list = kids.insertContainer(0, new LoroMap());
+          list.set('nodeName', 'bulletList');
+          const items = list.setContainer('children', new LoroList());
+          for (const words of ['Ask Stan', 'Then Peter']) {
+            const item = items.insertContainer(items.length, new LoroMap());
+            item.set('nodeName', 'listItem');
+            const paragraphs = item.setContainer('children', new LoroList());
+            const paragraph = paragraphs.insertContainer(0, new LoroMap());
+            paragraph.set('nodeName', 'paragraph');
+            paragraph.setContainer('children', new LoroList()).insertContainer(0, new LoroText()).insert(0, words);
+          }
+        });
+        assert.deepEqual(fields.readFields(bullets)[0].lines, [{ segments: [{ text: 'Ask Stan' }], block: 'bullet' }, { segments: [{ text: 'Then Peter' }], block: 'bullet' }],
+          'a bulleted value is one line per bullet, however deep it is nested, and each says it is a bullet');
+        fields.setFieldText(bullets, key, [{ segments: 'Ask Stan first', block: 'bullet' }, { segments: 'Then Peter', block: 'bullet' }]);
+        const tree = bullets.data.toJSON().attributes[key].children;
+        assert.deepEqual([tree.length, tree[0].nodeName, tree[0].children.length], [1, 'bulletList', 2], 'editing a line leaves the value bulleted rather than flattening it');
+        assert.deepEqual(fields.readFields(bullets)[0].lines, [{ segments: [{ text: 'Ask Stan first' }], block: 'bullet' }, { segments: [{ text: 'Then Peter' }], block: 'bullet' }]);
+        fields.setFieldText(bullets, key, [{ segments: 'Ask Stan first', block: 'bullet' }]);
+        assert.deepEqual(fields.readFields(bullets)[0].lines, [{ segments: [{ text: 'Ask Stan first' }], block: 'bullet' }], 'a bullet removed leaves one');
+        fields.setFieldText(bullets, key, []);
+        assert.deepEqual(fields.readFields(bullets)[0].lines, [{ segments: [], block: 'paragraph' }], 'and emptying the value altogether leaves one empty plain line, not a bullet with nothing in it');
+      }
     }
     { // Library = no owner: the key goes away, the audience follows the participants, and a type still needs a space
       const loose=make('text'); loose.transact(l=>l.getMap('data').set('ownerUri',target.id));
@@ -388,6 +475,166 @@ async function main() {
     assert.equal((patched.tags||[]).some(t=>t.uri===homed.id),true,'doc:info rebuilds a row whose type moved on');
     console.log('ok  set type: what a type applies to, the space it keeps its documents in, removal, undo and the row that follows');
   }
+  // "Discuss with …" (Cmd+K): one answer types the document and fills the one field that type exists for. The type
+  // and the field are matched by title because a workspace that has never seen either has nothing else to match on,
+  // and Tana's field keys are eight characters generated per workspace. The field holds plain text: every instance
+  // of the real type read on 2026-09-20 does, and several name a team rather than a person.
+  {
+    const backend=mainHelpers(), cache=require('../db');cache.open(':memory:');
+    const fieldsSdk=require('../sdk/fields');
+    const docs=new Map(), created=[], events=[];
+    const make=(kind,title,extra={})=>{const d=new Document('tana:'+kind+':'+ulid());d.transact(l=>{initDocument(l,title,ME);const data=l.getMap('data');data.set('type',kind);for(const [k,v] of Object.entries(extra))data.set(k,v);});docs.set(d.id,d);return d;};
+    const target=make('text','Roadmap gap'), other=make('text','Second one');
+    // the workspace's people: two Stans, so a first name alone is ambiguous for them and not for anyone else
+    const people=[['Stan Engbers'],['Stan Vermeer'],['Peter Leppers'],['Martijn van de Wiel'],['Steven Rekk\u00e9']].map(([title])=>({id:'tana:user-profile:'+ulid(),title,userProfile:{name:title}}));
+    const node=(d)=>{const n=readNode(d);return {id:d.id,title:n.title,...(n.ownerUri?{ownerUri:n.ownerUri}:{})};};
+    const typeNodes=()=>[...docs.values()].filter(d=>readNode(d).type==='type').map(node);
+    const runtime=()=>backend.testRuntime({me:{userUri:ME},win:{isDestroyed:()=>false,webContents:{send:(...args)=>events.push(args)}},client:{
+      graph:{listNodes:async(p)=>(p.nodeIds?{nodes:[...docs.values()].filter(d=>p.nodeIds.includes(d.id)).map(node)}
+        :(p.nodeTypes||[]).includes('user-profile')?{nodes:people}
+        :{nodes:typeNodes(),totalCount:typeNodes().length})},
+      sync:{subscribe:async(id,init)=>{if(init){const d=new Document(id);d.transact(init);docs.set(id,d);created.push(d);return d;}if(!docs.has(id))throw new Error('unavailable');return docs.get(id);},getDocument:(id)=>docs.get(id),unsubscribe:async()=>{}},
+    }});
+    runtime();
+    await assert.rejects(backend.discussWith(target.id,'   '),/discussed with/);
+    await assert.rejects(backend.discussWith('tana:event:'+ulid(),'Someone'),/document/,'a meeting cannot be a discussion task: the type applies to documents');
+    assert.equal(created.length,0,'a refusal creates no type');
+    const first=await backend.discussWith(target.id,'Peter Leppers');
+    assert.equal(created.length,1,'the workspace had no such type, so one was made');
+    const type=created[0], typeJson=type.loro.toJSON();
+    assert.ok(type.id.startsWith('tana:type:'));
+    assert.deepEqual(Object.keys(typeJson.data).sort(),['sharedPinDates','template','title','type'],'a type carries what a real one carries, and none of what a document carries');
+    assert.deepEqual([typeJson.data.title,typeJson.data.type,typeJson.data.ownerUri],['Discussion Task','type',undefined],'titled, a type, and in the Library so it fits a document in any space');
+    const attrs=typeJson.data.template.attributes;
+    assert.deepEqual(attrs.map(a=>[a.title,a.cardinality]),[['Discuss with','multiple']],'born with the field it exists for');
+    assert.equal(first.key,type.id+'?attribute='+attrs[0].key,'the key is the type\u2019s own, not one this app invented');
+    assert.equal(readNode(target).entityTypeUri,type.id,'the document wears the type');
+    assert.deepEqual(fieldsSdk.readFields(docs.get(target.id)).map(f=>[f.key,f.text]),[[first.key,'Peter Leppers']],'and the name is in its field');
+    const second=await backend.discussWith(other.id,'Heads of Technology');
+    assert.equal(created.length,1,'the next one finds the type instead of making a second');
+    assert.equal(second.key,first.key,'and the same field, found by title');
+    assert.deepEqual(fieldsSdk.readFields(docs.get(other.id)).map(f=>f.text),['Heads of Technology'],'a team is a name like any other: the field is plain text');
+    await backend.discussWith(target.id,'Martijn van de Wiel');
+    assert.deepEqual(fieldsSdk.readFields(docs.get(target.id)).map(f=>f.text),['Martijn van de Wiel'],'a second answer replaces the first rather than adding to it');
+    assert.equal(created.length,1);
+    // A workspace where the type was made by hand and carries no such field: the field is added to it, rather than
+    // a second type appearing beside the one that is already there.
+    docs.clear(); created.length=0;
+    const handmade=make('type','discussion task'), plain=make('text','Handmade workspace');
+    runtime();
+    const third=await backend.discussWith(plain.id,'Olaf van Zandwijk');
+    assert.equal(created.length,0,'the existing type is used, whatever its capitals');
+    assert.equal(third.typeUri,handmade.id);
+    assert.deepEqual(readNode(handmade).template.attributes.map(a=>[a.title,a.cardinality]),[['Discuss with','multiple']],'and it gains the field');
+    assert.deepEqual(fieldsSdk.readFields(docs.get(plain.id)).map(f=>f.text),['Olaf van Zandwijk']);
+    // The people in that answer become references to their profiles, and the rest stays words.
+    const seg=(id)=>fieldsSdk.readFields(docs.get(id))[0].segments;
+    const uriOf=(title)=>people.find(p=>p.title===title).id;
+    const both=await backend.discussWith(plain.id,'Stan Engbers and Ria');
+    assert.deepEqual(seg(plain.id),[{mention:{label:'Stan Engbers',uri:uriOf('Stan Engbers')}},{text:' and Ria'}],
+      'a member is an inline reference to their profile; someone who is not stays words');
+    assert.deepEqual([...both.mentions],[uriOf('Stan Engbers')],'and the call says who it referenced');
+    await backend.discussWith(plain.id,'Peter Leppers and Martijn van de Wiel');
+    assert.deepEqual(seg(plain.id),[{mention:{label:'Peter Leppers',uri:uriOf('Peter Leppers')}},{text:' and '},{mention:{label:'Martijn van de Wiel',uri:uriOf('Martijn van de Wiel')}}],
+      'two people are two references, with the words between them kept');
+    await backend.discussWith(plain.id,'Steven Rekk\u00e9');
+    assert.deepEqual(seg(plain.id),[{mention:{label:'Steven Rekk\u00e9',uri:uriOf('Steven Rekk\u00e9')}}],'a name ending in a letter \\b does not know still ends');
+    await backend.discussWith(plain.id,'Peter');
+    assert.deepEqual(seg(plain.id),[{mention:{label:'Peter',uri:uriOf('Peter Leppers')}}],'a first name alone is enough when only one person has it, and the words typed stay the label');
+    await backend.discussWith(plain.id,'Stan');
+    assert.deepEqual(seg(plain.id),[{text:'Stan'}],'but not when two people share it: an ambiguous first name is words, not a guess at one of them');
+    await backend.discussWith(plain.id,'Standard procedure with Peterson');
+    assert.deepEqual(seg(plain.id),[{text:'Standard procedure with Peterson'}],'and a name inside a longer word is not that name');
+    const twice=await backend.discussWith(plain.id,'Peter Leppers and Peter Leppers');
+    assert.deepEqual(seg(plain.id),[{mention:{label:'Peter Leppers',uri:uriOf('Peter Leppers')}},{text:' and Peter Leppers'}],'nobody is referenced twice in one answer');
+    assert.equal(twice.mentions.length,1);
+    await backend.discussWith(plain.id,'Heads of Technology');
+    assert.deepEqual(seg(plain.id),[{text:'Heads of Technology'}],'a team nobody here is named after is written as it was typed');
+    // Undo is not only the write going back: the page has to hear about it, or it keeps showing the name that was
+    // undone until something else refreshes it. The field's value is part of what doc:taskMeta compares, so both
+    // directions announce a metadata change and the zoomed page re-reads its fields.
+    docs.get(plain.id).on('change',()=>backend.onChange(plain.id));
+    const metaOf=()=>events.filter(([channel,id])=>channel==='outline:changed'&&id===plain.id).map(e=>e[2]&&e[2].meta);
+    await backend.discussWith(plain.id,'Peter Leppers');
+    await backend.discussWith(plain.id,'Stan Engbers');
+    events.length=0;
+    assert.equal(await backend.undo(),plain.id);
+    assert.deepEqual(fieldsSdk.readFields(docs.get(plain.id)).map(f=>f.text),['Peter Leppers'],'undo puts the previous name back');
+    assert.deepEqual(metaOf(),[true],'and announces it as metadata, which is what redraws the field');
+    events.length=0;
+    await backend.redo();
+    assert.deepEqual(fieldsSdk.readFields(docs.get(plain.id)).map(f=>f.text),['Stan Engbers'],'redo brings it forward again');
+    assert.deepEqual(metaOf(),[true],'and says so the same way');
+    console.log('ok  discuss with: the type found by title or created in the Library with its field, the document typed and the name written');
+  }
+  // A field value edited through main, by the id the page uses: "<document>|<type>?attribute=<key>". Every block:
+  // handler takes it, because document() hands back the field view and the rest is the same code as a page.
+  {
+    const backend=mainHelpers(), cache=require('../db');cache.open(':memory:');
+    const fieldsSdk=require('../sdk/fields'), outlineSdk=require('../sdk/content');
+    const docs=new Map();
+    const doc=new Document('tana:text:'+ulid());doc.transact(l=>initDocument(l,'Typed',ME));docs.set(doc.id,doc);
+    const key='tana:type:'+ulid()+'?attribute=n5e1hgxz', fieldId=doc.id+'|'+key;
+    backend.testRuntime({me:{userUri:ME},win:{isDestroyed:()=>false,webContents:{send:()=>{}}},client:{
+      graph:{listNodes:async()=>({nodes:[]})},
+      sync:{subscribe:async(id)=>{if(!docs.has(id))throw new Error('unavailable');return docs.get(id);},getDocument:(id)=>docs.get(id),unsubscribe:async()=>{}},
+    }});
+    const handler=(name)=>backend.handlers.get(name);
+    const flat=(value)=>JSON.parse(JSON.stringify(value));
+    assert.deepEqual(flat(await handler('outline:children')(null,fieldId)),[],'a field with no value reads as no rows');
+    assert.deepEqual(Object.keys(doc.data.toJSON().attributes||{}),[],'and reading it wrote nothing: opening a typed page must not fill in its empty fields');
+    const first=await handler('block:insertAfter')(null,fieldId,null,'Rob Schuurman'); // the new block's id, as on a page
+    await handler('block:insertAfter')(null,fieldId,first,'Rianne Jans');
+    await handler('block:insertChild')(null,fieldId,first,'a note under Rob');
+    const rows=flat(await handler('outline:children')(null,fieldId));
+    assert.deepEqual(rows.map(r=>r.segments.map(s=>s.text).join('')),['Rob Schuurman','Rianne Jans'],'rows are written into the field, by the same handler a page uses');
+    assert.deepEqual(rows[0].children.map(r=>r.segments.map(s=>s.text).join('')),['a note under Rob'],'and a row in a field can hold children');
+    await handler('block:setText')(null,fieldId,rows[1].id,'Rianne Jans ');
+    assert.equal(fieldsSdk.readFields(doc)[0].text.split('\n')[1].trim(),'a note under Rob','the value is one field of the document, not a second document');
+    assert.equal(outlineSdk.readOutline(doc).some(r=>(r.segments||[]).some(s=>(s.text||'').includes('Rob'))),false,'and none of it reached the document\u2019s own outline');
+    // undo belongs to the document that carries the field, so ⌘Z on a field row is the same stack as everything else
+    assert.equal(await backend.undo(),doc.id,'the undo step is the document, not the field id');
+    assert.deepEqual(flat(await handler('outline:children')(null,fieldId))[1].segments.map(s=>s.text).join(''),'Rianne Jans','and it puts the row back');
+    await assert.rejects(handler('outline:children')(null,doc.id+'|not-a-field'),/./,'an id that is not a field is not a document either');
+    console.log('ok  field values are outlines: every block handler takes "<document>|<field>", children and all, on the document\u2019s own undo stack');
+  }
+  // The suggestion behind that page (main/ai.js): the one call this app makes to a model. A title goes out and a
+  // name comes back; nothing is sent without a key, and the key never leaves this machine. fetch is injected, so
+  // this check is offline like every other one here.
+  {
+    const ai=require('../main/ai'), settings=require('../main/settings'), cache=require('../db');
+    cache.open(':memory:'); settings.reset();
+    const calls=[];
+    const answer=(text)=>({ok:true,status:200,json:async()=>({output:[{type:'message',content:[{type:'output_text',text}]}]})});
+    const fetchWith=(result)=>async(url,init)=>{calls.push({url,init:{...init,body:JSON.parse(init.body)}});return typeof result==='function'?result():result;};
+    assert.equal(await ai.suggestDiscussWith('Discuss this with Stan',fetchWith(answer('Stan'))),null,'no key on this machine means no suggestion, and nothing sent');
+    assert.equal(calls.length,0);
+    settings.set('openaiApiKey','sk-local-only');
+    assert.equal(await ai.suggestDiscussWith('   ',fetchWith(answer('Stan'))),null,'an untitled document has nothing to read');
+    assert.equal(calls.length,0,'and still nothing is sent');
+    assert.equal(await ai.suggestDiscussWith('Discuss this with Stan',fetchWith(answer('Stan'))),'Stan');
+    assert.deepEqual([calls[0].url,calls[0].init.headers.authorization],[ai.ENDPOINT,'Bearer sk-local-only']);
+    assert.deepEqual([calls[0].init.body.model,calls[0].init.body.reasoning.effort],[ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT]);
+    assert.deepEqual([ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT],['gpt-5.6-luna','none'],'a small model, not reasoning at all: a page is waiting on this, so thinking time is latency');
+    assert.deepEqual([calls[0].init.body.input,calls[0].init.body.instructions],['Discuss this with Stan',ai.INSTRUCTIONS],'the title is the input; the rule is the instructions, so a title cannot be one');
+    assert.equal(Object.keys(calls[0].init.body).length,4,'the title and nothing else about the document goes out');
+    settings.set('aiModel','gpt-5.6-sol'); settings.set('aiEffort','high');
+    await ai.suggestDiscussWith('Discuss this with Stan',fetchWith(answer('Stan')));
+    assert.deepEqual([calls[1].init.body.model,calls[1].init.body.reasoning.effort],['gpt-5.6-sol','high'],'both are settings, changeable without a release');
+    assert.equal(settings.isSynced('aiModel')&&settings.isSynced('aiEffort'),true,'and they follow you, unlike the key that pays for them');
+    assert.equal(settings.isSynced('openaiApiKey'),false,'which never leaves this machine');
+    settings.set('aiModel',undefined); settings.set('aiEffort',undefined);
+    // What comes back, in the shapes the Responses API answers in, and the answers that are not a name.
+    assert.equal(await ai.suggestDiscussWith('t',fetchWith({ok:true,status:200,json:async()=>({output_text:'Heads of Tech'})})),'Heads of Tech','the convenience field is read too');
+    assert.equal(await ai.suggestDiscussWith('t',fetchWith(answer('  \u201CStan and Peter\u201D  '))),'Stan and Peter','trimmed, and the quotes a model likes to add are taken off');
+    assert.equal(await ai.suggestDiscussWith('t',fetchWith(answer(''))),null,'a title naming nobody is an empty answer, not a guess');
+    assert.equal(await ai.suggestDiscussWith('t',fetchWith(answer('This title does not name anyone to discuss it with, so there is nobody to suggest here.'))),null,'a sentence is the model explaining itself: not a name');
+    assert.equal(await ai.suggestDiscussWith('t',fetchWith(answer('Stan\nPeter'))),null,'nor is a list of lines');
+    await assert.rejects(ai.suggestDiscussWith('t',fetchWith({ok:false,status:401,json:async()=>({})})),/401: check the API key/,'a rejected key says so rather than looking like an empty title');
+    await assert.rejects(ai.suggestDiscussWith('t',fetchWith({ok:false,status:500,json:async()=>({})})),/OpenAI answered 500/);
+    settings.set('openaiApiKey',undefined); settings.reset();
+    console.log('ok  discuss suggestion: nothing sent without a key or a title, model and effort are settings, and only a name comes back');
+  }
   // A type's own glyph. The Nucleo UI set is built into the app (build/nucleo-ui.json.gz) and stays in main; the
   // choice is app-local, because Tana has nowhere to keep an icon and an SVG does not belong in its CRDT.
   {
@@ -427,6 +674,23 @@ async function main() {
     assert.equal(icons.typeIcons().length, 0, 'and the type goes back to the generic glyph');
     assert.equal(JSON.stringify(cache.setting('typeIcons')), '{}', 'with nothing left behind in the setting');
     console.log('ok  type icons: the built-in Nucleo set searched in main, the choice stored as a name, and every row of that type drawn with it');
+    // The colour the same way: a hue of our own, or grey, kept beside the glyph in the settings; Tana's own hue on
+    // the type shows through when there is no entry, and is never written.
+    {
+      const HUED = 'tana:type:' + ulid();
+      backend.rememberType({ id: HUED, title: 'Hued', appearance: { hue: 259 } }); // what the graph says the type is
+      const row = () => backend.graphRow({ id: 'tana:text:' + ulid(), title: 'Tuxis', entityType: HUED, updateTime: '2026-09-20T10:00:00Z' });
+      assert.deepEqual([row().hue, row().tags[0].hue], [259, 259], 'with no override a document of the type takes Tana\u2019s hue');
+      await backend.setTypeHue(HUED, 120);
+      assert.deepEqual([row().hue, row().tags[0].hue], [120, 120], 'our own hue replaces it on every row of the type');
+      assert.equal(JSON.stringify(cache.setting('typeHues')), JSON.stringify({ [HUED]: 120 }), 'stored under the type, in the settings that follow you');
+      await backend.setTypeHue(HUED, 'grey');
+      assert.deepEqual([row().hue, row().tags[0].color], [undefined, 'grey'], 'grey is a colour of ours Tana cannot express: no tint at all');
+      await backend.setTypeHue(HUED, null);
+      assert.deepEqual([row().hue, JSON.stringify(cache.setting('typeHues'))], [259, '{}'], 'forgetting the override brings Tana\u2019s hue back');
+      await assert.rejects(backend.setTypeHue(HUED, 400), /0-360, or grey/);
+      console.log('ok  type colours: our own hue or grey per type in the settings, Tana\u2019s hue underneath and never written');
+    }
   }
   // The app's own settings document: one document in Tana carrying the choices this app makes about your content,
   // so a machine that has never seen them opens with them. SQLite stays as the mirror the app boots from.
@@ -1055,6 +1319,22 @@ async function main() {
     assert.equal(listCalls.length, 1, 'the graph is never queried once the read is known to be unusable');
     console.log('ok  searchChildren: a readable query runs, an unreadable one fails closed instead of listing everything');
   }
+  // Search (main/views.js): a member's name loses the relevance race to every document mentioning it, so the
+  // people come from a query of their own and are merged in; a #member search is that query and nothing else.
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const calls = [];
+    const sam = { id: 'tana:user-profile:' + ulid(), title: 'Sam Okafor', userProfile: { name: 'Sam Okafor' }, updateTime: '2026-09-20T10:00:00Z' };
+    const doc = { id: 'tana:text:' + ulid(), title: 'Notes with Sam', updateTime: '2026-09-20T10:00:00Z' };
+    backend.testRuntime({ me: { userUri: ME }, win: null, client: { graph: { listNodes: async (p) => { calls.push(p); return { nodes: p.nodeTypes.length === 1 && p.nodeTypes[0] === 'user-profile' ? [sam] : [doc] }; } } } });
+    const plain = JSON.parse(JSON.stringify(await backend.search('Sam')));
+    assert.deepEqual(plain.map((n) => n.id), [sam.id, doc.id], 'a plain search lists the member beside the documents, the name match first');
+    assert.deepEqual(calls.map((p) => p.nodeTypes.join()), ['text,event,user-profile,space,search', 'user-profile'], 'one query for everything, one for the people');
+    calls.length = 0;
+    await backend.search('Sam #member');
+    assert.deepEqual(calls.map((p) => p.nodeTypes.join()), ['user-profile'], 'a #member search is the people query alone');
+    console.log('ok  search: members are fetched beside the full-text hits, so "@" finds a person by name');
+  }
 
   // Backlinks (main/related.js): the sidebar's "Mentioned in" and the typed fields this node sits in, grouped the way
   // Tana's own Backlinks panel groups them — a field section per attribute, the plain mentions last.
@@ -1125,8 +1405,11 @@ async function main() {
       graph: { listNodes: async () => ({ nodes: [] }), listEdges: async () => ({ edges: [] }), getOwnerChain: async () => ({ entries: [] }) },
     } });
     const shown = JSON.parse(JSON.stringify((await backend.related(docId)).fields));
-    assert.deepEqual(shown, [{ key: filled, label: 'Discuss with', text: 'Sam' }, { key: typeUri + '?attribute=dd1dd1dd', label: 'Due', text: '' }, { key: otherKey, text: 'old' }],
-      'the type\'s fields in template order, the empty one included, then the stray value');
+    assert.deepEqual(shown, [
+      { key: filled, label: 'Discuss with', text: 'Sam', lines: [{ segments: [{ text: 'Sam' }], block: 'paragraph' }], segments: [{ text: 'Sam' }] },
+      { key: typeUri + '?attribute=dd1dd1dd', label: 'Due', text: '', lines: [], segments: [] },
+      { key: otherKey, text: 'old', lines: [{ segments: [{ text: 'old' }], block: 'paragraph' }], segments: [{ text: 'old' }] },
+    ], 'the type\'s fields in template order, the empty one included, then the stray value — each with its lines, and the first of them as segments');
     console.log('ok  fields: a type\'s empty field is listed so it can be filled in');
   }
 
@@ -2535,6 +2818,26 @@ async function main() {
   assert.equal(flat(outline.readOutline(c1)), 'Research con,The sample a');
   assert.deepEqual(c2.content.toJSON(), c1.content.toJSON(), 'raw structure converges');
   console.log('ok  outline read/segments/setText/insertAfter/insertChild/indent/outdent/move/remove');
+  { // blocks with no blockId (Tana's agent writes some): given one on read, once, so the rows can be edited at all
+    const bare = new Document('tana:text:' + ulid());
+    bare.transact((l) => {
+      const data = l.getMap('data'); data.set('type', 'text'); data.set('title', 'Agent-written');
+      const c = l.getMap('content'); c.set('nodeName', 'doc'); c.setContainer('attributes', new LoroMap());
+      const children = c.setContainer('children', new LoroList());
+      const p = children.insertContainer(0, new LoroMap()); p.set('nodeName', 'paragraph'); p.setContainer('attributes', new LoroMap()); p.setContainer('children', new LoroList()).insertContainer(0, new LoroText()).insert(0, 'no id here');
+      const list = children.insertContainer(1, new LoroMap()); list.set('nodeName', 'bulletList'); list.setContainer('attributes', new LoroMap());
+      const li = list.setContainer('children', new LoroList()).insertContainer(0, new LoroMap()); li.set('nodeName', 'listItem'); li.setContainer('attributes', new LoroMap());
+      const q = li.setContainer('children', new LoroList()).insertContainer(0, new LoroMap()); q.set('nodeName', 'paragraph'); q.setContainer('attributes', new LoroMap()); q.setContainer('children', new LoroList()).insertContainer(0, new LoroText()).insert(0, 'nor here');
+    });
+    assert.deepEqual(outline.readOutline(bare).map((n) => n.id), [undefined, undefined], 'read as they are, the rows have no id');
+    assert.equal(outline.assignBlockIds(bare), 2, 'both blocks are given one');
+    const ids = outline.readOutline(bare).map((n) => n.id);
+    assert.ok(ids.every((id) => /^[a-z0-9]{8}$/.test(id)), 'in the shape Tana uses: ' + ids.join());
+    assert.equal(outline.assignBlockIds(bare), 0, 'and a second pass writes nothing');
+    outline.setText(bare, ids[1], 'edited by id'); // the point of it: the row can now be written to
+    assert.equal(outline.readOutline(bare)[1].text, 'edited by id');
+    console.log('ok  outline: blocks with no blockId get one on read, so agent-written rows can be edited');
+  }
   // Marks and block types (Tana's own ProseMirror schema: bold/italic/strike/code/link, paragraph/heading/
   // bulletList/orderedList/codeBlock/blockquote/horizontalRule). Two peers so every conversion has to converge.
   {
@@ -2608,6 +2911,10 @@ async function main() {
       const d = new Document('tana:text:' + ulid(), { peerId: '7' });
       const first = outline.insertAfter(d, null, 'First');
       assert.equal(typeOf(d, first), 'paragraph', 'the first row of a document is plain text');
+      // unless the caller asks for a list row: expanding a row is asking it to hold sub-items, and the draft the
+      // renderer shows for that is a bullet, so the write has to be one too or the row changes shape when typed into
+      assert.equal(typeOf(d, outline.insertAfter(d, null, 'Asked for', false, 'bullet')), 'bullet', 'a row asked to open onto a list gets one');
+      assert.equal(typeOf(d, outline.insertAfter(d, null, 'Not asked', false, null)), 'paragraph', 'and nothing else changes');
       assert.equal(typeOf(d, outline.insertAfter(d, first, 'Next')), 'paragraph', 'and so is the row after it');
       const listed = outline.insertAfter(d, null, 'Listed');
       outline.setBlockType(d, listed, 'bullet');
@@ -2696,6 +3003,30 @@ async function main() {
     assert.deepEqual(outline.readOutline(d).map((n) => n.text), ['Detail A', 'Detail B']);
     assert.equal(d.redo(), true);
     assert.deepEqual(outline.readOutline(d), []);
+    // A selection to delete is a set of rows, whatever levels they sit on: selecting a row and something inside
+    // it, or rows under two different parents, is an ordinary thing to do, and refusing it left the rows gone
+    // from the screen and still in the document.
+    {
+      const doc = new Document(DOC, { peerId: '743' });
+      const top = outline.insertAfter(doc, null, 'sdfdfsg');
+      const child = outline.insertChild(doc, top, 'dsfsdgsfd');
+      const second = outline.insertAfter(doc, top, 'second');
+      const under = outline.insertChild(doc, second, 'under second');
+      outline.removeMany(doc, [top, child]); // a row and something inside it
+      assert.deepEqual(outline.readOutline(doc).map((n) => n.text), ['second'], 'the row goes, and what was inside it goes with it');
+      assert.equal(doc.undo(), true);
+      assert.deepEqual(outline.readOutline(doc).map((n) => n.text), ['sdfdfsg', 'second'], 'and one undo brings the whole selection back');
+      assert.deepEqual(outline.readOutline(doc)[0].children.map((n) => n.text), ['dsfsdgsfd']);
+      const rows = outline.readOutline(doc);
+      outline.removeMany(doc, [rows[0].children[0].id, under]); // rows under two different parents
+      assert.deepEqual(outline.readOutline(doc).map((n) => [n.text, (n.children || []).length]), [['sdfdfsg', 0], ['second', 0]],
+        'and a selection spanning two parents takes one row out of each');
+      assert.equal(doc.undo(), true);
+      assert.deepEqual(outline.readOutline(doc).map((n) => (n.children || []).map((c) => c.text)), [['dsfsdgsfd'], ['under second']], 'as one step');
+      // moving, indenting and outdenting still carry the rows as one block, so those do need siblings
+      assert.throws(() => outline.moveMany(doc, [outline.readOutline(doc)[0].id, outline.readOutline(doc)[0].children[0].id], 'down'), /siblings/);
+      assert.throws(() => outline.indentMany(doc, [outline.readOutline(doc)[0].id, outline.readOutline(doc)[0].children[0].id]), /siblings/);
+    }
 
     const m = new Document(DOC, { peerId: '742' });
     const first = outline.insertAfter(m, null, 'A');
@@ -2993,6 +3324,9 @@ async function main() {
       events.length = 0;
       pinDoc.transact((l) => { l.getMap('data').set('entityTypeUri', 'tana:type:' + ulid()); });
       assert.deepEqual(metaEvents(), [true], 'so does a type change: the page\'s fields come with the sidebar it refreshes');
+      events.length = 0;
+      require('../sdk/fields').setFieldText(pinDoc, 'tana:type:01j0typ000000000000000000?attribute=n5e1hgxz', 'Stan Engbers');
+      assert.deepEqual(metaEvents(), [true], 'and so does a value written into one of those fields, or a zoomed page shows it empty until something else refreshes it');
       pinDoc.removeAllListeners('change');
     }
     const remotePin = new Document(pinId, {peerId:'889'});
@@ -3006,8 +3340,12 @@ async function main() {
     assert.ok(events.some(([channel,id]) => channel === 'outline:removed' && id === pinId));
     assert.equal(backend.visibleGraphNodes([{id:pinId,title:'stale graph row'}]).length, 0);
     assert.equal(backend.visibleGraphNodes([{id:'another',deletedAt:123}]).length, 0);
+    // Nothing server-side lists a deleted document, so the deletion is written down here, under the title it had
+    // while the document was still open — that list is all Cmd+K "Recently deleted" has to offer.
+    assert.equal((cache.deletedList().find((d) => d.id === pinId) || {}).title, 'second title', 'a deletion is remembered with its title');
     remotePin.transact(l => l.getMap('data').delete('deletedAt'));
     assert.equal(backend.visibleGraphNodes([{id:pinId}]).length, 1, 'native restore clears tombstone');
+    assert.equal(cache.deletedList().some((d) => d.id === pinId), false, 'and a restore takes it off that list again');
     assert.equal(backend.VIEWS.find(s => s.id === 'library').icon, 'library');
     const agentId = 'tana:agent:' + ulid();
     assert.equal(backend.graphRow({id:agentId,title:'Agent'}).icon, 'agent');

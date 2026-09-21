@@ -47,6 +47,9 @@ assert.match(source, /if \(signedOut\) rows\.push\(\{ id: 'login'/);
 assert.match(source, /s\.authChecking === false && s\.authenticated === false/);
 assert.match(source, /if \(hotkeys\.sync\) \{ delete hotkeys\.sync;/);
 assert.doesNotMatch(source, /id: 'sync', group: 'Actions', icon: 'sync', label: 'Sync', kbd:/);
+assert.match(source, /id: 'openaiKey', group: 'Actions', icon: 'openaiKey', label: 'Set OpenAI API key'/);
+assert.match(source, /function openOpenAIKeyPalette\(\)[\s\S]*palInput\.type = 'password'/);
+assert.match(source, /function openAIKeyRows\(\)[\s\S]*tana\.setOpenAIKey\(key\)/);
 assert.doesNotMatch(source, /mod && e\.key === 'r'/);
 assert.match(source, /t\.hue != null \? t\.hue : nodeHue/);
 assert.match(source, /display\.hue != null/);
@@ -164,7 +167,11 @@ assert.match(source, /tana\.createDocument\(text, node\.createOptions \|\| \{ ki
 // one fetch path for every view: its rows replace that view's list, and its truncation is remembered per view
 assert.match(source, /if \(result\.truncated\) truncated\.add\(id\); else truncated\.delete\(id\);/);
 assert.match(source, /truncated\.has\(view\) \? 'Showing the first 1,000 results' : ''/);
-assert.match(source, /function blockSelection\(keys, contiguous, action\)/);
+assert.match(source, /function blockSelection\(keys, contiguous, action, siblings = true\)/);
+// Removing a selection does not need siblings: a set of rows across levels is an ordinary thing to delete, and
+// the write takes it (sdk/content.js removeMany). Moving, indenting and outdenting still do.
+assert.match(source, /blockSelection\(keys, false, 'Remove', false\)/, 'a selection is removed whatever levels its rows sit on');
+assert.match(source, /blockSelection\(keys, true, 'Move'\)/, 'while moving it still asks for a contiguous run of siblings');
 assert.match(source, /tana\.setStateMany\(ctx\.docs\.map\(\(doc\) => doc\.id\), state\)/);
 assert.match(source, /tana\.setAssigneesMany\(ctx\.docs\.map\(\(doc\) => doc\.id\), uris\)/);
 assert.match(source, /const rows = \[\.\.\.selection\];/, 'what acts on the selection comes before everything else in Cmd+K');
@@ -450,7 +457,9 @@ assert.match(styleSheet, /\.bullet\.icon\.hue svg[^{]*\{ color: oklch\(0\.7 0\.1
 assert.match(styleSheet, /\.palette\.anchored:not\(\[hidden\]\) \{/, 'the @ dropdown layout applies only while the palette is shown');
 // The agent prompt page is an editor, not a list to search: it never says "No results" under its one row, and the
 // query that found "Assign to Agent" is cleared on the way in, or its letters would show as bold in that row.
-assert.match(source, /palMode !== 'agentPrompt' && \(palMode === 'cmd'/, 'the no-results line skips the prompt page');
+// "Discuss with …" is the same shape — what is typed *is* the row — so it is skipped too, or every name typed
+// would be answered with "No results" under the row offering to write it.
+assert.match(source, /palMode !== 'agentPrompt' && palMode !== 'discuss' && \(palMode === 'cmd'/, 'the no-results line skips the two pages whose row is what was typed');
 assert.match(source, /function openAgentPrompt\(doc\) \{[\s\S]{0,400}palInput\.value = '';/, 'opening the prompt page clears the query behind it');
 // The agent badge sits at the end of the row — after the body, which is the flexible part of the line — and its
 // sweep is opt-in: a reduced-motion setting leaves it still, like every other animation here.
@@ -523,6 +532,104 @@ for (const rule of styleSheet.split('\n').filter((line) => /\{[^}]*[^-]stroke-wi
 const icons = {};
 new Function('window', fs.readFileSync(require.resolve('../icons.js'), 'utf8'))(icons);
 assert.match(icons.ICONS.reload, /stroke-width="1"/, 'the generated glyph is untouched, so it is the icon set\'s weight everywhere else');
+assert.ok(icons.ICONS.openaiKey && icons.ICONS.openaiKey.includes('currentColor'), 'the OpenAI key row uses the supplied generated glyph');
+// What a model suggested is drawn with its own glyph, so a row the app worked out is never mistaken for one you
+// typed or one Tana knows, and the glyph breathes only where motion is welcome.
+assert.ok(icons.ICONS.sparkle && icons.ICONS.sparkle.includes('currentColor'), 'the suggestion row uses the supplied sparkle glyph');
+assert.match(styleSheet, /@media \(prefers-reduced-motion: no-preference\) \{\s*\.palette \.ricon\.thinking svg \{ animation: sparkle-orbit/, 'the waiting glyph turns behind the reduced-motion gate');
+assert.match(styleSheet, /\.palette \.ricon\.thinking svg path \{ transform-origin: 50% 50%; transform-box: fill-box;/, 'and each star twinkles around its own centre, not the icon\u2019s');
+// The answer takes that glyph's place rather than replacing it between two frames: the row it arrives in settles
+// out of the spin, and the row carries the class that says so.
+assert.match(styleSheet, /\.palette \.row\.arrive \.ricon svg \{ animation: sparkle-settle/, 'the arriving row settles behind the reduced-motion gate');
+assert.match(source, /\(r\.arrive \? ' arrive' : ''\)/, 'and only the row that marks itself as arriving gets it');
+assert.match(source, /icon: 'sparkle', spin: true, label: 'Reading the title/, 'and the waiting row is the one that spins');
+// A field value is an outline of its own and is drawn by the outline's own rows: the same items, the same keys,
+// the same keyboard, so "- ", Tab, Enter, references and checkboxes are the page's behaviour rather than a second
+// implementation of it. Its id is the document and the field together, which is the only thing that differs.
+assert.match(source, /const hostId = parent\.docId \+ '\|' \+ field\.key;\s*const host = mkItem\(hostId, \{/, 'a field value is an outline addressed by document and field');
+assert.match(source, /values\.replaceChildren\(\.\.\.withDraftTail\(rows, host\)\.map\(\(n\) => childEl\(n, host\)\)\)/,
+  'and its rows are the page\u2019s rows, under the page\u2019s own rule for the empty row to type into');
+assert.match(source, /ensureLoaded\(host\);/, 'read through the same children call every outline uses');
+// A row in a field is not a page: its bullet opens nothing, and a reference in it is opened by the chip itself.
+assert.match(source, /const opens = reference \|\| fullref \|\| \(zoomable\(node\) && !field\);/,
+  'a field row does not zoom; only a reference in it opens anything');
+assert.match(styleSheet, /\.fields \.fvalues \.node\.block:not\(\.t-bullet\):not\(\.t-numbered\) > \.line > \.bullet::before \{ visibility: hidden; \}/,
+  'and a plain row in a field shows no marker in any state, hover and collapsed included');
+assert.doesNotMatch(source, /function fieldLine\(/, 'and there is no second line editor left beside it');
+// "- " is one rule for rows and, now, for the field rows that are the same code (renderer/segments.js).
+assert.match(source, /const startsList = \(before\) => before === '- ';/, 'the list shortcut is the dash *and* the space, in one place');
+assert.match(source, /const listRest = \(segs, offset\) => splitSegs\(segs, offset \|\| 0\)\[1\];/, 'and so does what the line keeps when the marker goes');
+// Tab at the start of a plain line is the same gesture as "- ", and ⇧Tab there is the same as Backspace: the
+// marker comes off when there is nothing left to outdent into. Anywhere else Tab is the indent it always was.
+assert.match(source, /e\.key === 'Tab' && off === 0 && collapsed && !isDoc && \(e\.shiftKey \? unbullet\(item\) : bulletOrIndent\(item, el\)\)/,
+  'Tab at the start of a line starts a list there, and ⇧Tab takes the marker off');
+assert.match(source, /const under = !!above && \['bullet', 'numbered'\]\.includes\(blockTypeOf\(above\)\);/,
+  'and the new bullet joins the row above only when that row is a list row, so a paragraph is never made a parent');
+// And every row listener is bound to both places rows live, so a field row has the same keyboard as a page row
+// rather than a second one written for it.
+assert.match(source, /const onRows = \(type, handler\) => \{ for \(const root of \[outline, \$\('fields'\)\]\) root\.addEventListener\(type, handler\); \};/,
+  'row listeners are bound to the outline and to the fields');
+assert.doesNotMatch(source, /outline\.addEventListener\('keydown'/, 'and not to the outline alone');
+// A row in a field that is one reference stays a line with a link in it: turning into the node it points at gives
+// that line a glyph, a status and a grey subline, and a list of names where every second line is twice the height.
+assert.match(source, /const field = inField\(docId\);[\s\S]{0,1200}?const target = gone \|\| field \? null : liveTarget\(node, pending\.get\(item\.key\)\)/,
+  'references in a field are drawn inline, not as the node they point at');
+assert.match(source, /const inField = \(docId\) => typeof docId === 'string' && docId\.includes\('\|tana:type:'\);/, 'and a field row is known by the id it is addressed with');
+// Two lists, deliberately: the caret walks the whole page, while anything that changes what a row belongs to stays
+// in the list that row lives in. Merging them made Backspace at the top of the page reach into the field above it.
+assert.match(source, /const texts = \(\) => rowsIn\(outline\);/, 'the outline\u2019s rows are their own list');
+assert.match(source, /const caretRows = \(\) => \[\.\.\.\(titleEl\.isContentEditable \? \[titleEl\] : \[\]\), \.\.\.fieldValues\(\), \.\.\.texts\(\)\];/,
+  'and the caret walks title, fields, outline in reading order');
+assert.match(source, /const all = caretRows\(\), target = all\[all\.indexOf\(el\) \+ dir\];/, 'Up and Down move through every stop on the page');
+// ⌘A escalates: the row's words, then the rows of the editor the caret is in — the page's, or the field's.
+assert.match(source, /if \(range && range\[0\] === 0 && range\[1\] === len\) selectAllRows\(el\); else selectRange\(item\.key, 0, len\);/,
+  'a second ⌘A selects the rows themselves');
+assert.match(source, /const keys = rowsBeside\(el\)\.map\(keyOfEl\)\.filter\(Boolean\);/, 'and it takes the rows of that editor alone');
+// Finding a row is one thing, wherever it is drawn: the page's outline and the fields under the title. These three
+// are the family every "it works on the page but not in a field" bug came through.
+assert.match(source, /const rowRoots = \(\) => \[outline, \$\('fields'\)\];/, 'rows live in two places, named once');
+assert.match(source, /const nodeElOf = \(key\) => queryRow\(/, 'a row is found in either of them');
+assert.match(source, /for \(const n of eachRow\('\.node\.selected'\)\) n\.classList\.remove\('selected'\);/, 'a selection is painted and cleared in both');
+assert.match(source, /return el && el\.classList\.contains\('text'\) && inRows\(el\) \? \{ key: keyOfEl\(el\), offset: caretOffset\(el\) \} : null;/,
+  'and the focused row is the focused row in either of them');
+assert.match(source, /const all = rowsBeside\(el\), prev = all\[all\.indexOf\(el\) - 1\], above = prev && items\.get\(keyOfEl\(prev\)\);/,
+  'while merging into the row above stays inside the list the row lives in');
+// Clicking the empty space under a list carries on where its words end, each zone answering for its own rows.
+assert.match(source, /for \(const \[zone, rows\] of \[\[\$\('fields'\), \(\) => fieldValues\(\)\], \[outline\.parentElement, \(\) => texts\(\)\]\]\)/,
+  'the fields and the page each answer for the space under their own rows');
+assert.match(source, /const target = all\.filter\(\(row\) => row\.getBoundingClientRect\(\)\.top <= e\.clientY\)\.at\(-1\) \|\| all\[0\];/,
+  'a click in a gap belongs to the row above it, and one below everything to the last row');
+assert.match(source, /setCaret\(target, e\.clientY <= box\.bottom \? caretAt\(target, e\.clientX, e\.clientY\) : target\.textContent\.length\);/,
+  'beside the words the caret lands where it was clicked, below them at the end of the line');
+// The glyph, the label and the value all begin at the top of the field's first line: a baseline cannot align them
+// now that the value is rows rather than one line box, which left the label sitting below the name beside it.
+assert.match(styleSheet, /\.fields \{[^}]*align-items: start; \}/, 'the three columns of a field start together');
+assert.match(styleSheet, /\.fields \.flabel \{ color: #888; line-height: 20px; \}/, 'and the label carries a row\u2019s line height, so its first line is a row\u2019s first line');
+assert.match(styleSheet, /\.fields \.fvalues \.chev, \.fields \.fvalues \.bullet \{ height: 22px; \}/, 'a field row is as tall as its words, bullet included');
+// The space above a row is padding, not margin: a margin on the first row inside a children container collapses
+// through it, which left exactly one row — the first child — sitting flush under its parent.
+assert.match(styleSheet, /\.fields \.fvalues \.node > \.line \{ padding: 8px 0 0; line-height: 22px; \}/,
+  'every row of a field carries the same space above it, as padding, so no row can collapse it away');
+assert.match(styleSheet, /\.fields \.fvalues > \.node:first-child > \.line \{ padding-top: 0; \}/, 'except the first, which the block already spaces');
+assert.match(styleSheet, /\.fields \.fvalues \.node \{ margin-top: 0; margin-bottom: 0; \}/, 'and no margin decides the rhythm here');
+// a marker sits where words sit: the dot of a list row shares its left edge with the text of a plain row
+assert.match(styleSheet, /\.node\.block\.t-bullet > \.line, \.node\.block\.t-numbered > \.line \{ margin-left: -10px; \}/,
+  'a list row pulls its marker back to where a plain row starts its words');
+assert.match(styleSheet, /\.node\.block\.t-bullet > \.children, \.node\.block\.t-numbered > \.children \{ margin-left: 23px; \}/,
+  'and its guide line comes with it, 33px less the 10px the row moved, so it still runs under the bullet');
+assert.match(styleSheet, /\.fields \.fvalues \{ display: flex; flex-direction: column; row-gap: 0; min-width: 0; padding-left: 2px; \}/, 'the rows keep their gutter, so the expand caret is not drawn over the label');
+assert.match(styleSheet, /\.fields \.ricon \{ width: 14px; height: 14px; color: #8a8a8a; align-self: start;/, 'the field glyph stays on the first line rather than drifting to the middle of a long value');
+assert.match(styleSheet, /\.fields \.fvalue:only-child:empty::before \{ content: '…'/, 'the empty-field placeholder is for a field with nothing in it, not for every line added to one');
+assert.match(styleSheet, /\.fields \.fvalues \{ display: flex; flex-direction: column;/, 'the lines stack in the value column');
+// A render while the caret is in a field would rebuild the block and drop the caret mid-word, which every live
+// update, the refresh loop and the field's own save coming back all cause. The redraw waits for the blur instead.
+assert.match(source, /function renderFields\(parent, force = false\) \{\s*const el = \$\('fields'\);[\s\S]{0,900}?if \(!force && el\.contains\(document\.activeElement\)\) \{ fieldsDeferred = true; return; \}/,
+  'the fields block is not rebuilt while the caret is in it');
+assert.match(source, /if \(\(renderDeferred \|\| fieldsDeferred\) && !editingRow\(\) && !selectionFrozen\) render\(\);/, 'and the render it held back runs when the caret leaves');
+assert.match(source, /if \(!force && el\.contains\(document\.activeElement\)\) \{ fieldsDeferred = true; return; \}/,
+  'while a forced render — the answer to what the user just did in the field — draws it straight away');
+assert.match(source, /return !!\(el && el\.isContentEditable && \(el === titleEl \|\| inRows\(el\)\)\);/,
+  'a caret in a field row defers a render the way a caret in an outline row does');
 // The machine a task runs on has its own glyph, from the icon build like every other one — not drawn here.
 assert.match(source, /group: HOST_GROUP, icon: 'host'/, 'the Run on rows carry the host glyph');
 assert.ok(icons.ICONS.host && icons.ICONS.host.includes('currentColor'), 'which is built into icons.js and takes the palette\'s colour');
@@ -534,3 +641,9 @@ for (const property of ['width', 'height', 'margin', 'padding', 'top', 'left']) 
 Promise.all([splitTypingCheck(), cachedBootMetadataCheck(), mockCreationPermissionCheck(), searchesReconnectCheck()]).then(() => console.log('renderer auth check passed'));
 // a mention lands in the row the caret is in (an @ at the caret, or over a selection): the render must not defer
 assert.match(functionSource('linkTo'), /render\(true\);[^\n]*\n\s*placeCaret\(/, 'linkTo forces the render before placing the caret after the mention');
+// A document's fields are outlines of that document: re-reading its rows has to re-read theirs, or an undo and a
+// live update land on the page and not in the field beside it.
+assert.match(source, /const outlinesOf = \(docId\) => \[\.\.\.kids\.keys\(\)\]\.filter\(\(id\) => id === docId \|\| id\.startsWith\(docId \+ '\|'\)\);/,
+  'a document\u2019s outlines are its page and its fields');
+assert.match(source, /for \(const id of docId \? outlinesOf\(docId\) : \[\]\) await reload\(id\);/, 'undo re-reads all of them');
+assert.match(source, /for \(const id of outlinesOf\(docId\)\) work\.push\(reload\(id\)\);/, 'and so does a live update');

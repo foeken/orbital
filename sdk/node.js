@@ -24,14 +24,25 @@ function ulid(now = Date.now()) {
 // Tana-created event (tana:event:01exampley0000000000000000, without the calendar-provider fields), starting at
 // the next half hour for 30 minutes.
 function initDocument(loro, title, byUri, { kind = 'doc', now = Date.now(), entityTypeUri, ownerUri, query } = {}) {
-  if (!['doc', 'task', 'meeting', 'chat', 'search'].includes(kind)) throw new Error('unknown kind ' + kind);
+  if (!['doc', 'task', 'meeting', 'chat', 'search', 'type'].includes(kind)) throw new Error('unknown kind ' + kind);
   if (entityTypeUri !== undefined && (!/^tana:type:[0-9a-z]{26}$/.test(entityTypeUri) || kind === 'chat')) throw new Error('Invalid custom type');
   if (ownerUri !== undefined && !/^tana:space:[0-9a-z]{26}$/.test(ownerUri)) throw new Error('Invalid type home space');
   const data = loro.getMap('data');
-  data.set('type', kind === 'meeting' ? 'event' : kind === 'chat' ? 'chat' : kind === 'search' ? 'search' : 'text');
+  data.set('type', kind === 'meeting' ? 'event' : kind === 'chat' ? 'chat' : kind === 'search' ? 'search' : kind === 'type' ? 'type' : 'text');
   if (entityTypeUri) data.set('entityTypeUri', entityTypeUri);
   if (ownerUri) data.set('ownerUri', ownerUri);
   data.set('title', title);
+  // A type carries none of what a document carries: four real types (raw container dumps, 2026-09-20) hold exactly
+  // data{type,title,sharedPinDates,template} — plus instructions and ownerUri when they have them — an empty
+  // content map and their colour in the appearance root, with no createdAt, restricted or participants. A type
+  // with no ownerUri is a Library type and goes on documents anywhere. Its fields are added with fields.addField,
+  // which writes template.attributes as the MovableList a real one uses.
+  if (kind === 'type') {
+    data.setContainer('sharedPinDates', new LoroList());
+    data.setContainer('template', new LoroMap());
+    loro.getMap('content');
+    return;
+  }
   data.set('createdAt', now);
   data.set('restricted', true);
   const p = data.setContainer('participants', new LoroMap()).setContainer(byUri, new LoroMap());
