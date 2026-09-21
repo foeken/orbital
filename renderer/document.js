@@ -53,17 +53,25 @@ function editPinRows(q) {
   // and the meetings and spaces it hangs on, which are pins on those documents rather than on yours (api.unpinFrom)
   for (const hub of pinInfo.hubs || []) listed.push({ group: PIN_GROUP, icon: hub.kind === 'space' ? 'space' : 'meeting', label: hub.title || 'Untitled',
     hint: hub.kind === 'space' ? 'Space' : 'Meeting', keepOpen: true, run: () => unpinFromHub(hub.id) });
-  const rows = listed.filter((row) => fuzzyMatch(row.label, q));
-  if (!rows.length) rows.push({ group: PIN_GROUP, label: listed.length ? 'No pin matches' : 'Not pinned anywhere', disabled: true });
-  // and the other direction from the same page: the sidebar pin is asked for nowhere else, and today's is the one ⌘K offers
-  if (!pinInfo.sidebar) rows.push({ group: 'Pin it', icon: 'pinned', label: 'Pin to sidebar', keepOpen: true, run: () => pinAction('pin', 'sidebar') });
-  if (!pinInfo.dates.includes(localDate())) rows.push({ group: 'Pin it', icon: 'pinDate', label: 'Pin to today', keepOpen: true, run: () => pinAction('pin', 'today') });
-  // and onto a meeting, which is a pin on that meeting's own document (docs/PINNING.md §4) rather than one of these
-  // two: the same picker ⌘K opens, told to come back here when Escape leaves it.
+  // and the other direction from the same page: the sidebar pin is asked for nowhere else, and the two days are the
+  // ones ⌘K offers. A day it is already pinned to is listed above instead, so it is not offered twice.
+  const adds = [];
+  if (!pinInfo.sidebar) adds.push({ group: 'Pin it', icon: 'pinned', label: 'Pin to sidebar', keepOpen: true, run: () => pinAction('pin', 'sidebar') });
+  for (const [offset, label] of [[0, 'Pin to today'], [1, 'Pin to tomorrow']]) {
+    const date = localDate(offset); // the day is computed here, as the ⌘K rows do it: main defaults to today when none comes with the call
+    if (!pinInfo.dates.includes(date)) adds.push({ group: 'Pin it', icon: 'pinDate', label, keepOpen: true, run: () => pinAction('pin', 'today', date) });
+  }
+  // and onto a meeting, which is a pin on that meeting's own document (docs/PINNING.md §4) rather than one of the
+  // three above: the same picker ⌘K opens, told to come back here when Escape leaves it. Offered whatever else is
+  // pinned, because a document can hang on more than one meeting.
   if (tana.searchPreview && tana.pinTo && isRealId(palDoc.id)) {
     const doc = palDoc;
-    rows.push({ group: 'Pin it', icon: 'pin', label: 'Pin to meeting', hint: 'Choose a meeting', keepOpen: true, run: () => openMeetingPicker(doc, () => openPinsPalette(doc)) });
+    adds.push({ group: 'Pin it', icon: 'pin', label: 'Pin to meeting', hint: 'Choose a meeting', keepOpen: true, run: () => openMeetingPicker(doc, () => openPinsPalette(doc)) });
   }
+  // one query over both halves, so typing narrows what can be pinned as well as what is; with no pin left on screen
+  // the page says which of the two silences that is — none match what was typed, or there are none at all
+  const rows = [...listed, ...adds].filter((row) => fuzzyMatch(row.label, q));
+  if (!rows.some((row) => row.group === PIN_GROUP)) rows.unshift({ group: PIN_GROUP, label: listed.length ? 'No pin matches' : 'Not pinned anywhere', disabled: true });
   return rows;
 }
 function openPinsPalette(doc) {
