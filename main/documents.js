@@ -601,6 +601,21 @@ async function mutTasks(ids, fn) {
 }
 // ponytail: one undo step per mutation call across docs; inside a document the UndoManager keeps one step per
 // transact (mergeInterval 0), so a multi-document mutation is as many steps as documents.
+// The two ends of a drag (docs/OUTLINER.md): the move is written on the outline the row lands in, and the outline
+// it came from is read from the same document — a page and one of its fields are two roots of one Loro document
+// (sdk/fields.js), so the whole move is one transaction and one undo step. Across two documents it is refused:
+// a block belongs to the node that holds it.
+const moveBlock = (id, nodeId, toId, parentId, afterId) => mut(toId, async (dest) => {
+  if (baseOf(id) !== baseOf(toId)) throw new Error('A block can only move within its own document');
+  content.moveTo(dest, nodeId, { parentId: parentId ?? null, afterId: afterId ?? null, from: id === toId ? dest : await document(id, { create: true }) });
+});
+// The other half of a drag: a document dropped into an outline leaves a reference where it landed rather than
+// moving (a document is not a block, and Alt asks for the same thing on a row that points at one). Written on the
+// outline it lands in, which may be one of that document's fields.
+const referenceIn = (toId, uri, label, parentId, afterId) => mut(toId, (dest) => {
+  if (typeof uri !== 'string' || !DOC_URI.test(uri)) throw new Error('A reference points at a node');
+  return content.insertMention(dest, { uri, label }, { parentId: parentId ?? null, afterId: afterId ?? null });
+});
 async function documentAction(id, action, record = true) {
   if (record && S.historyBusy) throw new Error('History operation is still running');
   if (record) S.historyBusy = true;
@@ -685,4 +700,4 @@ async function moveTarget(spaceId) {
   return document(spaceId);
 }
 
-module.exports = { outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, createDocument, typeChoices, setType, setTypeHue, discussWith, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, codexIds, codexPrompt, setCodex, creatorOf, document, op, inHistory, mut, mutTasks, documentAction, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget };
+module.exports = { outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, createDocument, typeChoices, setType, setTypeHue, discussWith, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, codexIds, codexPrompt, setCodex, creatorOf, document, op, inHistory, mut, mutTasks, moveBlock, referenceIn, documentAction, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget };

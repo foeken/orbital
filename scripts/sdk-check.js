@@ -918,7 +918,22 @@ async function main() {
     assert.deepEqual(outline.readOutline(d)[0].children.map(n=>n.text),['B','C'],'B and C became children of A');
     await backend.undo();assert.deepEqual(outline.readOutline(d).map(n=>n.text),['A','B','C']);
     assert.equal(await backend.undo(),null,'one main history entry for batch indent');
-    console.log('ok  removeMany/moveMany/indentMany IPC bridges each record exactly one undo step');
+    // a drag: the place, not a direction, and the field it may land in is the same document seen through another root
+    await backend.handlers.get('block:moveTo')(null,DOC,ids[2],DOC,ids[0],null);
+    assert.deepEqual(outline.readOutline(d).map(n=>n.text),['A','B'],'C left the top level');
+    assert.deepEqual(outline.readOutline(d)[0].children.map(n=>n.text),['C'],'and is the first row inside A');
+    await backend.undo();assert.deepEqual(outline.readOutline(d).map(n=>n.text),['A','B','C']);
+    assert.equal(await backend.undo(),null,'one main history entry for a drag');
+    const FIELD=DOC+'|tana:type:01j0typ0000000000000000000?attribute=n5e1hgxz';
+    await backend.handlers.get('block:moveTo')(null,DOC,ids[2],FIELD,null,null);
+    assert.deepEqual(outline.readOutline(d).map(n=>n.text),['A','B'],'a row dragged into a field leaves the page');
+    assert.deepEqual(require('../sdk/fields').readFields(d).map(f=>f.text),['C'],'and is what the field now says');
+    await backend.undo();assert.deepEqual(outline.readOutline(d).map(n=>n.text),['A','B','C'],'in one step, because a page and its fields are one document');
+    await assert.rejects(backend.handlers.get('block:moveTo')(null,'tana:text:01examplew0000000000000000',ids[2],DOC,null,null),/within its own document/,'and a block cannot be dragged into another document');
+    await backend.handlers.get('block:insertMention')(null,DOC,'tana:text:01examplew0000000000000000','Elsewhere',null,ids[0]);
+    assert.deepEqual(outline.readOutline(d).map(n=>n.text),['A','Elsewhere','B','C'],'a document dropped into an outline lands as a reference to it');
+    await backend.undo();assert.deepEqual(outline.readOutline(d).map(n=>n.text),['A','B','C'],'in one step');
+    console.log('ok  removeMany/moveMany/indentMany/moveTo IPC bridges each record exactly one undo step');
   }
   {
     const backend=mainHelpers(), docs=new Map();
@@ -3086,6 +3101,77 @@ async function main() {
     assert.throws(() => outline.outdentMany(d, []), /at least one node/);
     console.log('ok  atomic multi-indent/outdent undo and redo');
   }
+  // A drag names the place outright (docs/OUTLINER.md): behind a row, at the top of a row's children, or at the
+  // top of an outline — and the outline it lands in may be a field of the same document, which is a second root
+  // of the same Loro document rather than a second document.
+  {
+    const fieldsSdk = require('../sdk/fields');
+    const d = new Document(DOC, { peerId: '746' });
+    const shape = (rows, level = 0) => rows.flatMap((n) => [[n.text, level], ...shape(n.children || [], level + 1)]);
+    const a = outline.insertAfter(d, null, 'A');
+    const b = outline.insertAfter(d, a, 'B');
+    const c = outline.insertChild(d, b, 'C');
+    assert.deepEqual(shape(outline.readOutline(d)), [['A', 0], ['B', 0], ['C', 1]]);
+    outline.moveTo(d, b, {}); // neither: the top of the outline, with its child
+    assert.deepEqual(shape(outline.readOutline(d)), [['B', 0], ['C', 1], ['A', 0]], 'a row moves with everything under it');
+    assert.equal(d.undo(), true);
+    assert.deepEqual(shape(outline.readOutline(d)), [['A', 0], ['B', 0], ['C', 1]], 'one undo step for the whole move');
+    outline.moveTo(d, c, { afterId: a }); // out of B, behind a bare paragraph: a list row brings a list with it
+    assert.deepEqual(shape(outline.readOutline(d)), [['A', 0], ['C', 0], ['B', 0]], 'a child dropped at the top level lands behind the row it was dropped on');
+    assert.equal(d.content.toJSON().children.length, 2, 'and joins the list already there rather than starting a second one');
+    outline.moveTo(d, c, { parentId: b }); // and back in, as B's first row
+    assert.deepEqual(shape(outline.readOutline(d)), [['A', 0], ['B', 0], ['C', 1]]);
+    assert.throws(() => outline.moveTo(d, b, { parentId: c }), /inside itself/, 'a row cannot be dropped into its own subtree');
+    assert.throws(() => outline.moveTo(d, b, { afterId: b }), /inside itself/);
+    const heading = outline.insertAfter(d, null, 'Heading');
+    outline.setBlockType(d, heading, 'heading2');
+    const before = JSON.stringify(d.content.toJSON());
+    assert.throws(() => outline.moveTo(d, heading, { parentId: b }), /list item/, 'a heading cannot become a list row');
+    assert.equal(JSON.stringify(d.content.toJSON()), before, 'and the refusal leaves the outline exactly as it was');
+    outline.moveTo(d, heading, { afterId: c }); // beside a list row it is fine: the list splits and the heading stands after it
+    assert.deepEqual(shape(outline.readOutline(d)), [['A', 0], ['B', 0], ['C', 1], ['Heading', 1]], 'a heading dropped beside a list row splits the list instead of joining it');
+    assert.equal(d.undo(), true);
+    assert.deepEqual(shape(outline.readOutline(d)), [['A', 0], ['B', 0], ['C', 1], ['Heading', 0]]);
+    // the page and one of its fields, in both directions: one document, so one transaction and one undo step
+    const KEY = 'tana:type:01j0typ000000000000000000?attribute=n5e1hgxz';
+    const field = fieldsSdk.fieldView(d, KEY, { create: true });
+    const line = outline.insertAfter(field, null, 'Stan Engbers');
+    outline.moveTo(field, a, { afterId: line, from: d });
+    assert.deepEqual(outline.readOutline(field).map((n) => n.text), ['Stan Engbers', 'A'], 'a page row dropped in a field lands in the field');
+    assert.ok(!outline.readOutline(d).some((n) => n.text === 'A'), 'and leaves the page');
+    assert.equal(d.undo(), true);
+    assert.deepEqual([outline.readOutline(field).map((n) => n.text), outline.readOutline(d)[0].text], [['Stan Engbers'], 'A'], 'one undo puts it back');
+    outline.moveTo(d, line, { parentId: b, from: field });
+    assert.deepEqual(shape(outline.readOutline(d)).slice(0, 4), [['A', 0], ['B', 0], ['Stan Engbers', 1], ['C', 1]], 'and a field row can be dropped into the page');
+    assert.deepEqual(outline.readOutline(field).map((n) => n.text), [], 'the field keeps only what is left of it');
+    console.log('ok  moveTo: a row lands where a drag says, with its children, across a page and its fields, in one undo step');
+  }
+  // What a row is decides what it stays. Text dropped among a document's own rows is still text — the list splits
+  // around it rather than swallowing it — while a child is a list row whatever it was, because that is the only
+  // child Tana's schema has. And a document dropped into an outline lands as a reference to itself.
+  {
+    const d = new Document(DOC, { peerId: '747' });
+    const kinds = () => outline.readOutline(d).map((n) => [n.text, n.block]);
+    const one = outline.insertAfter(d, null, 'one');
+    const first = outline.insertAfter(d, one, 'bullet A');
+    outline.setBlockType(d, first, 'bullet');
+    outline.insertAfter(d, first, 'bullet B');
+    const text = outline.insertAfter(d, null, 'text');
+    outline.moveTo(d, text, { afterId: first }); // between the two bullets, at the document's own level
+    assert.deepEqual(kinds(), [['one', 'paragraph'], ['bullet A', 'bullet'], ['text', 'paragraph'], ['bullet B', 'bullet']],
+      'a text row dropped between two bullets stays text, and the list splits around it');
+    outline.moveTo(d, text, { parentId: first });
+    assert.deepEqual(outline.readOutline(d)[1].children.map((n) => [n.text, n.block]), [['text', 'bullet']],
+      'dropped inside a row it is a list row, which is the only child this schema has');
+    const ref = outline.insertMention(d, { uri: 'tana:text:01examplet0000000000000000', label: 'Sample' }, { afterId: one });
+    const row = outline.readOutline(d)[1];
+    assert.equal(row.id, ref);
+    assert.deepEqual(row.segments, [{ mention: { label: 'Sample', uri: 'tana:text:01examplet0000000000000000' } }], 'a reference is one row whose whole content is a mention');
+    assert.equal(row.text, 'Sample', 'which reads as the label it was written with');
+    assert.equal(d.undo(), true);
+    assert.equal(outline.readOutline(d).length, 3, 'and it is one undo step of its own');
+    console.log('ok  a dropped text row keeps its kind, a dropped child becomes a list row, and a dropped document lands as a reference');
+  }
   // 3c. Image blocks (addendum 12): { nodeName 'image', attributes { blockId, tanaUri, displayWidth?, displayHeight? }, children [] }
   //     as seen in tana:text:01exampleu0000000000000000; read as { type 'image', image }, removable and movable like any block.
   {
@@ -3211,6 +3297,12 @@ async function main() {
     await pins.unpinDate(sync, ME, A, '2026-09-14');
     await pins.unpinDate(sync, ME, B, '2026-09-14'); // no entry: no-op
     assert.deepEqual(await pins.dates(sync, ME, A), ['2026-09-13', '2026-09-15']);
+    // the same map read the other way round: which documents carry a date pin at all, for the pin mark on a row
+    assert.deepEqual(await pins.datePinned(sync, ME), [A]);
+    await pins.unpinDate(sync, ME, A, '2026-09-13');
+    await pins.unpinDate(sync, ME, A, '2026-09-15');
+    assert.deepEqual(await pins.datePinned(sync, ME), [], 'an entry left behind by its last unpin is not a pin');
+    await pins.pinDate(sync, ME, A, '2026-09-13');
     assert.deepEqual(mirror[PM].toJSON(), docs[PM].toJSON());
     assert.deepEqual([...new Set(sync.subscribed)], [ME, COL, PM], 'only the profile and the two pointed documents are subscribed');
     console.log('ok  pins (sidebar tree, personal date pins, converge)');

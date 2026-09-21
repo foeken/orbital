@@ -308,7 +308,7 @@ function rowSig(n) {
   // stateType too: accepting an Inbox task changes only the state, and a reused row would keep the tick the click put in its box
   return JSON.stringify([n.text, n.done, n.stateType, n.icon, n.hue, n.meta, n.tags, n.editable, n.draft, n.hasChildren, n.kind, n.type,
     n.updatedAt, n.createdAt, n.createdBy, // the subtext's times and author: they arrive after the row and a reused row would still show none
-    sensitiveHidden(n.id), meta || (taskMetaLoading.has(n.id) ? 'loading' : null), members ? members.length : 0, open.get(n.id), pending.has(n.id),
+    sensitiveHidden(n.id), isPinned(n.id), meta || (taskMetaLoading.has(n.id) ? 'loading' : null), members ? members.length : 0, open.get(n.id), pending.has(n.id),
     displayKeys().join(','), codexIds.has(n.id), agentStateOf(n.id)]); // which facts the row shows: without this a reused row would keep the old ones
 }
 function renderOutline() {
@@ -319,6 +319,7 @@ function renderOutline() {
   let trail = null;
   if (zoom) { trail = resolveZoom(); if (!trail) zoom = null; }
   const parent = trail && trail.at(-1);
+  outline.dataset.key = parent ? parent.key : ''; // whose rows these are, for a drop (renderer/drag.js); a view owns none
   let list, hidden = 0;
   if (parent) {
     if (!parent.node.draft) ensureLoaded(parent);
@@ -483,6 +484,7 @@ function renderFields(parent, force = false) {
     const host = mkItem(hostId, {
       id: hostId, text: field.label || '', kind: 'document', hasChildren: true, editable: canEditItem(parent),
     }, parent);
+    values.dataset.key = hostId; // a field is an outline of its own, and a drop has to know which one (renderer/drag.js)
     ensureLoaded(host);
     const rows = kids.get(host.docId);
     if (rows === null || rows === undefined) { // still being read: the value it was last seen holding, as words
@@ -698,7 +700,11 @@ function nodeEl(node, docId, parent) {
   const bulletIcon = gone ? 'trash' : iconOf(display);
   if (bulletIcon) { bullet.classList.add('icon', bulletIcon); const svg = iconNode(bulletIcon); if (svg) bullet.append(svg); }
   if (display.hue != null) { bullet.classList.add('hue'); bullet.style.setProperty('--hue', String(display.hue)); } // type hue tints the icon and the plain bullet alike, a task's type glyph included
-  bullet.onmousedown = (e) => e.preventDefault();
+  if (canDragItem(item)) bullet.draggable = true; // the grab: a row is picked up by its own marker (renderer/drag.js)
+  // The press on a marker keeps the caret where it is — except on one that can be dragged, where Chromium starts
+  // the drag from exactly this default and preventDefault would quietly stop it from ever beginning. Ending an
+  // edit is what reaching for another row means anyway, and the row being left flushes as it blurs.
+  bullet.onmousedown = (e) => { if (!bullet.draggable) e.preventDefault(); };
   if (!node.draft && opens) bullet.onclick = () => (reference || fullref ? openReference(node) : zoomTo(item));
   line.append(chev, bullet);
   // a task's box is its status, so Display hides it with the rest of the status; a checkbox block is outline content

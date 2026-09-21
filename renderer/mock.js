@@ -355,6 +355,7 @@ function mockApi() {
     },
     pins: async () => sidebar.map((id) => info(all.find((d) => d.id === id))),
     pinState: async (docId) => ({ sidebar: sidebar.includes(docId), dates: datePins[docId] || [] }),
+    pinIds: async () => [...new Set([...sidebar, ...Object.keys(datePins).filter((id) => datePins[id].length)])],
     pin: async (docId, target, date = localDate()) => { if (target === 'sidebar') { if (!sidebar.includes(docId)) sidebar.push(docId); } else (datePins[docId] ||= []).push(date); emit(null); },
     unpin: async (docId, target, date = localDate()) => { if (target === 'sidebar') sidebar.splice(sidebar.indexOf(docId) >>> 0, 1); else datePins[docId] = (datePins[docId] || []).filter((d) => d !== date); emit(null); },
     deleteDocument: async (docId) => { softDelete(docId); step(docId, 'restore'); },
@@ -425,6 +426,32 @@ function mockApi() {
       [f.list[f.index], f.list[j]] = [f.list[j], f.list[f.index]]; emit(docId);
     }),
     moveMany: async (docId, ids, dir) => mut(docId, () => { for (const id of dir === 'up' ? ids : [...ids].reverse()) { const f = locate(content[docId], id), j = f.index + (dir === 'up' ? -1 : 1); if (j >= 0 && j < f.list.length) [f.list[f.index], f.list[j]] = [f.list[j], f.list[f.index]]; } emit(docId); }),
+    // a drag: the node leaves where it was, children and all, and lands behind afterId, at the top of parentId, or
+    // at the top of the outline it was dropped in (which may be one of the document's fields)
+    moveTo: async (docId, id, toDocId, parentId, afterId) => mut(docId, () => {
+      const f = locate(content[docId], id);
+      f.list.splice(f.index, 1);
+      const left = f.trail.at(-1);
+      if (left) fix(left.node);
+      const dest = content[toDocId] || (content[toDocId] = []);
+      const after = afterId ? locate(dest, afterId) : null, parent = !after && parentId ? locate(dest, parentId) : null;
+      if (after) after.list.splice(after.index + 1, 0, f.node);
+      else if (parent) { parent.node.children.unshift(f.node); fix(parent.node); }
+      else dest.unshift(f.node);
+      emit(docId);
+      if (toDocId !== docId) emit(toDocId);
+    }),
+    // a document dropped into an outline (or an Alt-drag): a row whose whole content is one mention of it
+    insertMention: async (toDocId, uri, label, parentId, afterId) => mut(toDocId, () => {
+      const dest = content[toDocId] || (content[toDocId] = []);
+      const node = block([{ mention: { label: label || uri, uri } }]);
+      const after = afterId ? locate(dest, afterId) : null, parent = !after && parentId ? locate(dest, parentId) : null;
+      if (after) after.list.splice(after.index + 1, 0, node);
+      else if (parent) { parent.node.children.unshift(node); fix(parent.node); }
+      else dest.unshift(node);
+      emit(toDocId);
+      return node.id;
+    }),
     undo: () => history(undoStack, redoStack),
     redo: () => history(redoStack, undoStack),
     refresh: async () => { for (const n of unlisted.splice(0)) (n.icon === 'task' ? docs : meetings).push(n); emit(null); },

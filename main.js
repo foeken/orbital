@@ -15,10 +15,10 @@ const agent = require('./main/agent');
 const ai = require('./main/ai');
 const { NOT_CONNECTED, S, VIEWS, docStates, errText, idKind, isSearch, isSpace, metaSigs, pathCache, today, truncatedViews, redoStack, report, scheduleRefresh, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
 const { cachedNodeHue, graphRow, members, rememberNodeHue, rememberType, toNode } = require('./main/rows');
-const { accessContext, chatOutline, codexIds, createDocument, creationOptions, creatorOf, discussWith, documentAction, history, info, linkShared, metaSig, moveTarget, mut, mutTasks, notifyOn, notifyState, setCodex, setNotify, onChange, op, outlineWithReferences, sensitiveIds, setSensitive, setType, setTypeHue, typeChoices } = require('./main/documents');
+const { accessContext, chatOutline, codexIds, createDocument, creationOptions, creatorOf, discussWith, documentAction, history, info, linkShared, metaSig, moveBlock, moveTarget, mut, mutTasks, notifyOn, notifyState, referenceIn, setCodex, setNotify, onChange, op, outlineWithReferences, sensitiveIds, setSensitive, setType, setTypeHue, typeChoices } = require('./main/documents');
 const { callOf, changesOf, pathOf, related, searchChildren, searchPreview, spaceChildren, summaryChanges, summaryUri } = require('./main/related');
 const { hiddenRules, inboxCount, listFilter, mcpHidden, preset, refresh, search, searchCreate, searchList, searchTitle, setHidden, setMcpHidden, setViewFilter, start, viewFilter, viewRows } = require('./main/views');
-const { nodePin, pinState, pinTree, pinned, setPin, todayNode, weekNode, weekTitle } = require('./main/pins');
+const { nodePin, pinState, pinTree, pinned, pinnedUris, setPin, todayNode, weekNode, weekTitle } = require('./main/pins');
 const { image } = require('./main/images');
 const icons = require('./main/icons');
 const settings = require('./main/settings');
@@ -316,9 +316,15 @@ ipcMain.handle('block:remove', (_e, id, nodeId) => mut(id, (doc) => { content.re
 ipcMain.handle('block:indent', (_e, id, nodeId) => mut(id, (doc) => { content.indent(doc, nodeId); }));
 ipcMain.handle('block:outdent', (_e, id, nodeId) => mut(id, (doc) => { content.outdent(doc, nodeId); }));
 ipcMain.handle('block:move', (_e, id, nodeId, direction) => mut(id, (doc) => { content.move(doc, nodeId, direction); }));
+// A drag names the place outright: the row lands behind afterId, or at the top of parentId, or at the top of toId's
+// own rows. toId is the outline it lands in, which is the page or one of its fields (main/documents.js moveBlock).
+ipcMain.handle('block:moveTo', (_e, id, nodeId, toId, parentId, afterId) => moveBlock(id, nodeId, toId, parentId, afterId));
+// The same place, with a link landing in it instead of the row itself (main/documents.js referenceIn).
+ipcMain.handle('block:insertMention', (_e, toId, uri, label, parentId, afterId) => referenceIn(toId, uri, label, parentId, afterId));
 ipcMain.handle('block:toggleCheckbox', (_e, id, nodeId) => mut(id, (doc) => { content.toggleCheckbox(doc, nodeId); }));
 ipcMain.handle('pins:list', () => pinned());
 ipcMain.handle('pins:state', (_e, id) => pinState(id));
+ipcMain.handle('pins:ids', () => pinnedUris()); // which documents carry a pin at all, for the mark on a row
 ipcMain.handle('pins:pin', (_e, id, target, date) => setPin(id, target, true, date));
 ipcMain.handle('pins:unpin', (_e, id, target, date) => setPin(id, target, false, date));
 ipcMain.handle('pins:pinTo', (_e, hubId, uri) => nodePin(hubId, uri, true)); // pin a document on a meeting/space

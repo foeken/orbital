@@ -111,6 +111,9 @@ const withShims = (src) => {
   // The row behind a document id, which rememberPlace reads for the title and glyph it stores. A slice that cares
   // about either declares its own; the rest are only storing a place.
   if (/\bdocOf\(/.test(src) && !/const docOf =/.test(src)) src = 'globalThis.docOf ??= () => null;\n' + src;
+  // Whether a row can be picked up (renderer/drag.js). A harness that draws rows is not about dragging, so its
+  // rows are simply not draggable; the drop harness slices the real rules in instead.
+  if (/\bcanDragItem\(/.test(src) && !/const canDragItem =/.test(src)) src = 'globalThis.canDragItem ??= () => false;\n' + src;
   // The Home anchor (renderer/nodes.js): the palette's Go back row reads it, Set as Home offers itself from it, and
   // navigate lands on it. A slice that is not about Home gets the shipped default — the Library, and you are on it —
   // so nothing it asserts depends on a choice it never made; the Home harness slices the real ones instead.
@@ -2276,15 +2279,19 @@ async function runSidebarRowsCheck() {
     const openVisibilityPeople = (doc) => calls.push(['people', doc.id]);
     const accessById = new Map(), accessLoading = new Set(), taskMetaById = new Map();
     let palDoc = null, palette = { hidden: true };
+    const pinnedHere = new Set();
+    const isPinned = (id) => pinnedHere.has(id);
+    const openPinsPalette = (doc) => calls.push(['pins', doc.id]);
     const loadAccess = () => {}, loadTaskMeta = () => {};
     const run = (fn) => fn();
-    const tana = { taskMeta: async () => ({}), setAssignees: async () => {}, accessOptions: async () => ({}), nodeLink: async (id) => 'https://home.tana.inc/l/' + id, openExternal: async (url) => calls.push(['open', url]) };
+    const tana = { taskMeta: async () => ({}), setAssignees: async () => {}, accessOptions: async () => ({}), pinState: async () => ({}), nodeLink: async (id) => 'https://home.tana.inc/l/' + id, openExternal: async (url) => calls.push(['open', url]) };
     ${functionSource('railCallRow')}
     ${functionSource('railMetaRows')}
     ${functionSource('openVisibility')}
     ${functionSource('banSvg')}
     ${functionSource('visibilityRows')}
     ({ rows: (node, value, accessNode) => { summary = value; return railMetaRows(node, accessNode); }, call: (data) => railCallRow(data), calls: () => calls,
+       pin: (id) => { pinnedHere.add(id); },
        known: (id, meta, access) => { if (meta) taskMetaById.set(id, meta); else taskMetaById.delete(id); if (access) accessById.set(id, access); else accessById.delete(id); },
        permission: (access, loading) => { palDoc = { id: 'doc' }; accessById.delete('doc'); accessLoading.delete('doc'); if (access) accessById.set('doc', access); if (loading) accessLoading.add('doc'); return visibilityRows(''); },
        opened: () => ({ doc: palDoc && palDoc.id, hidden: palette.hidden }) });
@@ -2310,6 +2317,14 @@ async function runSidebarRowsCheck() {
     [['assignees', 'member'], ['visibility', 'lock'], ['linkShared', 'globe'], ['showInTana', 'tana']], 'a link-shared node adds a globe row');
   assert.deepEqual(plain(api.rows({ id: 'doc' }, { assignees: '', audience: null, linkShared: true }).map((row) => [row.id, row.label])),
     [['linkShared', 'Anyone with the link'], ['showInTana', 'Show in Tana']], 'a public document with no assignee still reports that anyone with the link can read it');
+  // A pinned node says so in Details too, and that row opens the page its pins are taken off from
+  api.pin('pinnedDoc');
+  const pinnedRows = api.rows({ id: 'pinnedDoc' }, { assignees: '', audience: { icon: 'lock', label: 'Visible only to you' } });
+  assert.deepEqual(plain(pinnedRows.map((row) => [row.id, row.icon, row.label])),
+    [['visibility', 'lock', 'Visible only to you'], ['pinned', 'pinned', 'Pinned'], ['showInTana', 'tana', 'Show in Tana']], 'a pinned node carries the tack beside its audience');
+  pinnedRows[1].run();
+  assert.deepEqual(plain(api.calls().at(-1)), ['pins', 'pinnedDoc'], 'and that row opens Edit pins for it');
+  assert.ok(!api.rows({ id: 'doc' }, { assignees: '', audience: { icon: 'lock', label: 'Visible only to you' } }).some((row) => row.id === 'pinned'), 'an unpinned node has no such row');
   await api.rows({ id: 'doc' }, null)[0].run();
   assert.deepEqual(plain(api.calls().at(-1)), ['open', 'https://home.tana.inc/l/doc'], 'Show in Tana reuses nodeLink and openExternal');
   assert.deepEqual(plain(api.permission(null, true)), [{ group: 'Visibility', label: 'Checking permission…', disabled: true }], 'visibility explains while permission loads');
@@ -2871,6 +2886,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   const rowSig = vm.runInNewContext(`
     const taskMetaById = new Map(), taskMetaLoading = new Set(), open = new Map(), pending = new Map(), members = null;
     const sensitiveHidden = () => false;
+    const isPinned = () => false;
     ${functionSource('rowSig')}
     // what a row shows is one of the things it is built from, so changing that must change the signature
     ({ sig: rowSig, display: (keys) => { globalThis.displayKeys = () => keys; } });
@@ -3282,6 +3298,7 @@ function runRowAudienceCheck() {
     class IntersectionObserver { constructor(fn) { watching = fn; } observe(el) { observed.push(el); } unobserve() {} }
     const taskMetaById = new Map(), taskMetaLoading = new Set(), taskMetaFailed = new Map();
     const loadTaskMeta = (id) => { fetched.push(id); };
+    const isPinned = () => false; // the pin mark has its own check; here the audience icons are the subject
     const loadMembers = () => {}, memberName = (uri) => (uri === 'tana:user-profile:sam' ? 'Sam' : uri); // the real one answers with the uri until the member list lands
     const isRealId = (id) => typeof id === 'string' && id.startsWith('tana:');
     const tana = { taskMeta: () => {} };
@@ -3456,6 +3473,87 @@ async function runHiddenItemsCheck() {
   assert.deepEqual(opened.list, ['Lunch', 'Block*'], 'and renders what came back');
   assert.match(source, /id: 'hidden'[^}]*Edit hidden items/, 'Cmd+K carries the command that opens it');
   assert.match(source, /palMode === 'hidden'/, 'and the palette renders, filters and types in that mode like any other');
+}
+
+// Edit pins: the page that says where this document is pinned and takes those pins off again, and the marks every
+// row draws from one api.pinIds read (renderer/document.js, renderer/nodes.js).
+async function runEditPinsCheck() {
+  const api = vm.runInNewContext(`
+    const calls = [];
+    let state = { sidebar: false, dates: [] }, ids = ['doc'];
+    let pinInfo = null, pinnedIds = null, pinnedLoading = null;
+    let palDoc = { id: 'doc' }, palMode = 'cmd', palRows = [], palIndex = 3;
+    const palette = { hidden: true }, palInput = { value: '', placeholder: '', focus() {} };
+    const renderPalette = () => {}, showError = () => {}, run = (fn) => fn();
+    const render = () => {}; // the shimmed renderSoon a refreshed mark set asks for
+    const tana = {
+      pinState: async (id) => { calls.push(['pinState', id]); return state; },
+      pinIds: async () => { calls.push(['pinIds']); return [...ids]; },
+      pin: async (id, target, date) => { calls.push(['pin', id, target, date]); },
+      unpin: async (id, target, date) => { calls.push(['unpin', id, target, date]); },
+      unpinFrom: async (hubId, id) => { calls.push(['unpinFrom', hubId, id]); },
+      searchPreview: async () => [], pinTo: async () => {}, // enough for the meeting row to be offered
+    };
+    const refreshRelated = (id) => { calls.push(['refreshRelated', id]); };
+    const isRealId = (id) => typeof id === 'string';
+    let picker = null; // the meeting picker is its own page with its own check; here what matters is what opens it
+    const openMeetingPicker = (doc, back) => { picker = { doc: doc.id, back }; };
+    ${sourceLine('const localDate =')}
+    ${functionSource('fuzzyMatch')}
+    ${functionSource('loadPins')}
+    ${functionSource('loadPinned')}
+    ${functionSource('pinAction')}
+    ${functionSource('unpinFromHub')}
+    ${sourceBetween('const PIN_GROUP =', 'function openPinsPalette')}
+    ${functionSource('openPinsPalette')}
+    ({
+      open: async (pins, marks) => { state = pins; ids = marks || ids; calls.length = 0; openPinsPalette({ id: 'doc' }); await new Promise(setImmediate); return { palMode, placeholder: palInput.placeholder, hidden: palette.hidden, calls: [...calls] }; },
+      page: (q) => editPinRows(q || ''),
+      press: async (q, index) => { calls.length = 0; editPinRows(q || '')[index].run(); await new Promise(setImmediate); await new Promise(setImmediate); return [...calls]; },
+      marks: () => (pinnedIds ? [...pinnedIds] : null),
+      today: () => localDate(),
+      tomorrow: () => localDate(1),
+      picker: () => (picker ? { doc: picker.doc, back: typeof picker.back } : null),
+      escape: () => { picker.back(); return palMode; },
+    });
+  `, { setImmediate, Date, Promise });
+
+  const today = api.today();
+  const HUBS = [{ id: 'tana:event:m1', title: 'Leadership sync', kind: 'event' }, { id: 'tana:space:s1', title: 'Studio', kind: 'space' }];
+  const opened = plain(await api.open({ sidebar: true, dates: [today, '2099-01-01'], hubs: HUBS }, ['doc', 'other']));
+  assert.deepEqual([opened.palMode, opened.hidden, opened.placeholder], ['pins', false, 'Edit pins'], 'the page opens in its own mode');
+  assert.deepEqual(opened.calls, [['pinIds'], ['pinState', 'doc']], 'it re-reads the marks and asks where this one is pinned');
+  assert.deepEqual(plain(api.marks()), ['doc', 'other'], 'the marks every row draws come from that one list');
+  assert.deepEqual(plain(api.page().map((r) => [r.icon, r.label, !!r.keepOpen])),
+    [['pinned', 'Sidebar', true], ['pinDate', 'Today · ' + today, true], ['pinDate', '2099-01-01', true],
+      ['meeting', 'Leadership sync', true], ['space', 'Studio', true], ['pinDate', 'Pin to tomorrow', true], ['pin', 'Pin to meeting', true]],
+    'every pin is a row — sidebar, dates in order with today named, then the meetings and spaces it hangs on — and under them only the pins that can still be made: not today, which is already on, but tomorrow and another meeting');
+  assert.deepEqual(plain(api.page().map((r) => r.hint)).slice(3, 5), ['Meeting', 'Space'], 'a hub pin says which kind it is, since its title alone does not');
+  assert.deepEqual(plain(api.page().map((r) => r.group)).filter((g, i, all) => all.indexOf(g) === i), ['Pinned · ↩ unpins', 'Pin it'], 'the pins under one header that says what Enter does, what can still be pinned under another');
+  assert.deepEqual(plain(api.page('side').map((r) => r.label)), ['Sidebar'], 'one query narrows both halves: the pins it lists and the ones that can still be made');
+  assert.deepEqual(plain(await api.press('', 0)), [['unpin', 'doc', 'sidebar', null], ['pinIds'], ['pinState', 'doc']], 'the sidebar row unpins and the page re-reads itself');
+  assert.deepEqual(plain(await api.press('', 2)), [['unpin', 'doc', 'today', '2099-01-01'], ['pinIds'], ['pinState', 'doc']], 'and a date row unpins that date, not today');
+  // A meeting pin lives on the meeting, so it is taken off with api.unpinFrom and both sidebars are re-read: the
+  // item leaves a section of the hub's page as it goes.
+  assert.deepEqual(plain(await api.press('', 3)),
+    [['unpinFrom', 'tana:event:m1', 'doc'], ['refreshRelated', 'tana:event:m1'], ['refreshRelated', 'doc'], ['pinIds'], ['pinState', 'doc']],
+    'the meeting row unpins the document from that meeting');
+
+  const none = plain(await api.open({ sidebar: false, dates: [] }, []));
+  assert.equal(none.palMode, 'pins');
+  assert.deepEqual(plain(api.page().map((r) => [r.label, !!r.disabled])),
+    [['Not pinned anywhere', true], ['Pin to sidebar', false], ['Pin to today', false], ['Pin to tomorrow', false], ['Pin to meeting', false]], 'a node pinned nowhere says so, and every pin that can be made is offered');
+  assert.deepEqual(plain(await api.press('', 1)), [['pin', 'doc', 'sidebar', null], ['pinIds'], ['pinState', 'doc']], 'the sidebar pin is written from this page');
+  assert.deepEqual(plain(await api.press('', 3)), [['pin', 'doc', 'today', api.tomorrow()], ['pinIds'], ['pinState', 'doc']], 'and tomorrow is written as that date, the way the ⌘K row does it');
+  assert.deepEqual(plain(api.page('nothing here').map((r) => r.label)), ['Not pinned anywhere'], 'a query that matches nothing says so rather than listing rows that do not match it');
+  // A meeting pin lives on the meeting's own document, so the page hands that one to the picker ⌘K already opens —
+  // and tells it to come back here, rather than to the command page, when Escape leaves it.
+  api.page().find((r) => r.label === 'Pin to meeting').run();
+  assert.deepEqual(plain(api.picker()), { doc: 'doc', back: 'function' }, 'the meeting row opens the picker for this document');
+  assert.equal(api.escape(), 'pins', 'and escaping the picker comes back to Edit pins');
+  assert.match(source, /id: 'editPins'[^}]*'Edit pins'/, 'Cmd+K carries the command that opens it');
+  assert.match(source, /palMode === 'pins'/, 'and the palette renders and types in that mode like any other');
+  console.log('ok  Edit pins: the page opens with this document\u2019s pins, names today, unpins each of them, offers the sidebar, date and meeting pins that can be made, and the row marks come from one list');
 }
 
 // A view that gains and loses rows between two renders: arrivals flash, departures go back where they were.
@@ -3938,7 +4036,7 @@ async function runRestorePlaceCheck() {
   assert.equal(api.state().docId, null, 'and a corrupt entry is simply not a place, rather than a broken launch');
   assert.match(source, /loadRoots\(\)\.then\(render, showError\)\.then\(restorePlace\)/,
     'and boot reopens that place once the views have loaded, so the restore has somewhere to land');
-  assert.match(source, /if \(connected && !wasConnected\) \{ taskMetaFailed\.clear\(\); loadSearches\(\); restorePlace\(\)\.finally\(\(\) => loadView\(\)\); \}/,
+  assert.match(source, /if \(connected && !wasConnected\) \{ taskMetaFailed\.clear\(\); loadSearches\(\); loadPinned\(true\); restorePlace\(\)\.finally\(\(\) => loadView\(\)\); \}/,
     'the connection coming up runs the restore that boot was too early for, and the view behind it is fetched after that page, not ahead of it');
 }
 
@@ -6261,7 +6359,7 @@ function runCaretAtPointCheck() {
   assert.match(functionSource('materialise'), /tana\.insertAfter\(parent\.docId, last\?\.id \|\| null, text, node\.block\)/, 'and the draft is written as the kind it was drawn as');
 }
 
-const checks = [runCaretAtPointCheck, runPrefsStoreCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runSetIconCheck, runDiscussWithCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runAgentStatusBootCheck, runQuickAddPanelCheck, runRailChangesCheck, runPasteLinkCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck,runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck];
+const checks = [runCaretAtPointCheck, runPrefsStoreCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runSetIconCheck, runDiscussWithCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runAgentStatusBootCheck, runQuickAddPanelCheck, runRailChangesCheck, runPasteLinkCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck,runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck];
 // The chips under a zoomed title, driven through the shipped line itself: a typed document shows its type whatever
 // kind it is, and the kind chip (task, doc, meeting, space, chat…) stays out of the header, as it always did for a task.
 function runZoomTypeChipCheck() {
@@ -6982,8 +7080,161 @@ async function runRecentlyDeletedCheck() {
   console.log('ok  Recently deleted: the row is offered, the page reads main\u2019s list with its ages, restores and opens what is chosen, and is honest while loading or empty');
 }
 
+// Dragging a row (renderer/drag.js): what a pointer over a gap asks for, where it asks for nothing, and whether
+// what lands is the row itself or a reference to it. Geometry is all a real window would add here, so the rows are
+// laid out by hand — 24px lines, one level every 33px — and the plan is read back as the write it would make.
+function runDropPlanCheck() {
+  const api = vm.runInNewContext(`
+    const el = (cls) => {
+      const node = {
+        cls: new Set(cls), dataset: {}, children: [], parentElement: null, rect: { top: 0, bottom: 0, height: 0, left: 16, right: 600 },
+        classList: { contains: (name) => node.cls.has(name) },
+        getBoundingClientRect: () => node.rect,
+        append(...kids) { for (const kid of kids) { kid.parentElement = node; node.children.push(kid); } },
+        all() { return node.children.flatMap((kid) => [kid, ...kid.all()]); },
+        querySelectorAll(selector) { return node.all().filter((kid) => selector.slice(1).split('.').every((name) => kid.cls.has(name))); },
+        querySelector(selector) { const want = selector.includes('children') ? 'children' : 'line'; return node.children.find((kid) => kid.cls.has(want)) || null; },
+        contains(other) { for (let p = other; p; p = p.parentElement) if (p === node) return true; return false; },
+        closest(selector) { for (let p = node; p; p = p.parentElement) if (p.cls.has(selector.slice(1))) return p; return null; },
+      };
+      return node;
+    };
+    const FIELD = 'd1|tana:type:01j0typ0000000000000000000?attribute=n5e1hgxz';
+    const scroll = el(['scroll']), outline = el(['outline']), fieldEl = el(['fvalues']);
+    scroll.append(outline);
+    const items = new Map(), elByKey = new Map();
+    const host = (key, docId, node) => { const item = { key, docId, node: node || { id: docId, kind: 'document', editable: true, children: [] } }; items.set(key, item); return item; };
+    let dragKey = null;
+    // [key, level, block type, options] in reading order: one 24px line each, a level 33px in (23 under a list row,
+    // whose marker hangs in the space the level would otherwise use), exactly as styles.css draws them.
+    const build = (root, rows, rootItem, x0 = 16) => {
+      let y = 0;
+      const stack = [{ el: root, item: rootItem, left: x0 }];
+      for (const [key, depth, block, opts = {}] of rows) {
+        const owner = stack[depth], left = owner.left, listRow = block === 'bullet' || block === 'numbered';
+        const row = el(['node', opts.kind === 'document' ? 'document' : 'block', 't-' + block, ...(opts.draft ? ['draft'] : [])]);
+        row.dataset.key = key;
+        row.rect = { top: y, bottom: y + 24, height: 24, left, right: x0 + 584 };
+        const line = el(['line']);
+        line.rect = { ...row.rect, left: left - (listRow ? 10 : 0) };
+        row.append(line);
+        y += 24;
+        stack.length = depth + 1;
+        if (owner.el === root) root.append(row);
+        else {
+          let kids = owner.el.children.find((c) => c.cls.has('children'));
+          if (!kids) { kids = el(['children']); kids.rect = { top: y, bottom: y, height: 0, left, right: x0 + 584 }; owner.el.append(kids); }
+          kids.append(row);
+        }
+        const node = opts.kind === 'document'
+          ? { id: opts.id || 'tana:text:01docrow00000000000000000', kind: 'document', text: opts.text ?? key, editable: true, children: [] }
+          : { id: key, kind: 'block', block, text: opts.text ?? key, editable: opts.editable !== false, children: [], ...(opts.ref ? { reference: { uri: opts.ref } } : {}) };
+        const item = { key, docId: opts.docId || 'd1', node, parent: owner.item };
+        if (owner.item && owner.item.node.children) owner.item.node.children.push(node);
+        items.set(key, item); elByKey.set(key, row);
+        stack[depth + 1] = { el: row, item, left: left + (listRow ? 23 : 33) };
+      }
+      root.rect = { top: 0, bottom: y, height: y, left: x0, right: x0 + 584 };
+    };
+    outline.dataset.key = 'page'; fieldEl.dataset.key = 'field';
+    build(outline, [['a', 0, 'paragraph'], ['b', 0, 'bullet'], ['c', 1, 'bullet'], ['d', 0, 'paragraph'],
+      ['e', 0, 'bullet', { editable: false }], ['x', 0, 'bullet', { docId: 'd2' }], ['h', 0, 'heading2'],
+      ['blank', 0, 'paragraph', { text: '' }], ['link', 0, 'bullet', { ref: 'tana:text:01target000000000000000000' }],
+      ['row-doc', 0, 'bullet', { kind: 'document', id: 'tana:text:01docrow00000000000000000' }]], host('page', 'd1'));
+    // the fields sit beside the outline in this harness, so a point says which of the two outlines it is in
+    build(fieldEl, [['f', 0, 'paragraph', { docId: FIELD }], ['fdraft', 0, 'bullet', { docId: FIELD, draft: true }]], host('field', FIELD), 1016);
+    const document = { elementFromPoint: (x) => (x >= 1000 ? fieldEl : outline) };
+    const nodeElOf = (key) => elByKey.get(key) || null;
+    const canEditStructure = (item) => !!item && item.node.editable !== false, canEditItem = canEditStructure;
+    const hasKids = (item) => (item.node.children || []).length > 0;
+    const childrenOf = (item) => item.node.children || [];
+    const referenceTarget = (node) => (node.reference ? { id: node.reference.uri, text: 'Target' } : null);
+    const isSearchDoc = (node) => String((node || {}).id || '').startsWith('tana:search:');
+    const isSpace = (node) => String((node || {}).id || '').startsWith('tana:space:');
+    const isRealId = (id) => typeof id === 'string' && id.startsWith('tana:');
+    const isGone = () => false;
+    const tana = { moveTo: async () => {}, insertMention: async () => {} };
+    ${sourceLine('const DRAG_STEP =')}
+    ${sourceLine('const DRAG_STEP_LIST =')}
+    ${sourceLine('const DRAG_GUTTER =')}
+    ${sourceBetween('const BLOCK_TYPES = [', 'const BLOCK_GLYPH')}
+    ${sourceLine('const blockTypeOf =')}
+    ${sourceLine('const canInsertChild =')}
+    ${sourceLine('const dragBase =')}
+    ${sourceLine('const dragListable =')}
+    ${sourceLine('const dragEmpty =')}
+    ${sourceBetween('const canDragItem =', 'const dragLine =')}
+    ${sourceLine('const dragLine =')}
+    ${sourceLine('const rowDepth =')}
+    ${functionSource('dropHost')}
+    ${functionSource('dropDepth')}
+    ${functionSource('dropPlan')}
+    ({ plan: (key, x, y) => { dragKey = key; const plan = dropPlan(x, y); return plan && { docId: plan.docId, parentId: plan.parentId, afterId: plan.afterId, ref: plan.ref || null, left: plan.left, top: plan.top }; },
+       canDrag: (key) => canDragItem(items.get(key)),
+       inView: () => { outline.dataset.key = ''; } });
+  `);
+
+  // 1. One gap is several places, and the pointer's x says which: out to the level it was dragged to, behind the
+  //    row that sits there, or one level inside the row above it. The line starts where that level's words start —
+  //    the row's own column plus the gutter it keeps for a marker — so the top level lines up with ordinary text
+  //    rather than with a bullet hanging left of it.
+  assert.deepEqual(plain(api.plan('a', 6, 80)), { docId: 'd1', parentId: null, afterId: 'b', ref: null, left: 32, top: 72 }, 'far left: out of the list, behind the row that owns it');
+  assert.deepEqual(plain(api.plan('a', 30, 80)), { docId: 'd1', parentId: null, afterId: 'c', ref: null, left: 55, top: 72 }, 'one level in: behind the row it was dropped under');
+  assert.deepEqual(plain(api.plan('a', 60, 80)), { docId: 'd1', parentId: 'c', afterId: null, ref: null, left: 78, top: 72 }, 'further right: the first row inside it');
+
+  // 2. The gap between a row and its own first child can only mean one thing, whatever x says, and the line is
+  //    drawn against the children box that is already on screen.
+  assert.deepEqual(plain(api.plan('a', 6, 40)), { docId: 'd1', parentId: 'b', afterId: null, ref: null, left: 55, top: 48 }, 'above a row\u2019s first child there is one level to land on');
+  assert.equal(plain(api.plan('a', 400, 40)).parentId, 'b');
+
+  // 3. Above every row is the top of the outline it is drawn in — the page, or a field, which is an outline of the
+  //    same document. A view has no top to land on: its rows are documents, and a block is not one.
+  assert.deepEqual(plain(api.plan('a', 20, 5)), { docId: 'd1', parentId: null, afterId: null, ref: null, left: 32, top: 0 }, 'the top of the page');
+  assert.deepEqual(plain(api.plan('a', 1020, 5)).docId, 'd1|tana:type:01j0typ0000000000000000000?attribute=n5e1hgxz', 'and the top of a field, which is where a row dragged out of the page lands');
+  // The empty row a field keeps to type in is not in the document yet, so nothing can land behind it: a drop aimed
+  // at it lands behind the last row that is really there.
+  assert.equal(plain(api.plan('a', 1020, 60)).afterId, 'f', 'a draft row is not a place to land');
+
+  // 4. Nothing lands on a read-only row, in another document, or inside the row being dragged.
+  assert.equal(api.plan('a', 20, 112), null, 'a read-only row is nobody\u2019s neighbour');
+  assert.equal(api.plan('a', 20, 136), null, 'and a row of another document is not a place: a block belongs to the node that holds it');
+  assert.deepEqual(plain(api.plan('b', 6, 60)), { docId: 'd1', parentId: null, afterId: 'a', ref: null, left: 32, top: 24 }, 'the row being dragged, and everything under it, is not a target');
+
+  // 5. A heading cannot be a list row, so it is not offered a place inside one; beside one it is, and the write
+  //    splits the list there (sdk/content.js place).
+  assert.equal(api.plan('h', 60, 80), null, 'a heading is not offered as somebody\u2019s child');
+  assert.equal(plain(api.plan('h', 30, 80)).afterId, 'c', 'but beside a list row it is');
+
+  // 6. A view, where the top level is documents rather than rows of one.
+  api.inView();
+  assert.equal(api.plan('a', 20, 5), null, 'the top of a view is not a place for a block');
+
+  // 7. What can be picked up: a writable block with something in it, and any real document row — never a
+  //    read-only row, and never an empty line, which has nothing to take hold of.
+  assert.deepEqual([api.canDrag('a'), api.canDrag('h'), api.canDrag('row-doc'), api.canDrag('e'), api.canDrag('blank')], [true, true, true, false, false],
+    'a read-only row and an empty line are not dragged; a document row is');
+  assert.match(source, /if \(canDragItem\(item\)\) bullet\.draggable = true;/, 'and it is the row\u2019s own marker that carries it');
+  // Chromium begins a drag from the mousedown default, so the marker that can be dragged must not prevent it —
+  // this is the line that decides whether a drag starts at all.
+  assert.match(source, /bullet\.onmousedown = \(e\) => \{ if \(!bullet\.draggable\) e\.preventDefault\(\); \};/, 'a draggable marker lets the press through');
+
+  // 8. A document row never moves into an outline — it lives in Tana, not inside this node — so what lands is a
+  //    reference to it, and it may land in another document, which a move may not.
+  const linked = plain(api.plan('row-doc', 30, 80));
+  assert.deepEqual(linked.ref, { uri: 'tana:text:01docrow00000000000000000', label: 'row-doc' }, 'a dragged document lands as a reference to itself');
+  assert.equal(linked.afterId, 'c');
+  assert.equal(plain(api.plan('row-doc', 20, 136)).docId, 'd2', 'and a reference may land in another document');
+
+  // 9. What was picked up decides the write, and nothing else does: a block moves even when it is a row that
+  //    points at a document, because the row is the thing being dragged.
+  assert.equal(plain(api.plan('link', 30, 80)).ref, null, 'a row that points at a document still moves: it is a block like any other');
+  assert.equal(plain(api.plan('link', 30, 80)).afterId, 'c');
+  console.log('ok  drag and drop: one gap reads as several places, x chooses the level and the line marks it, documents land as references, blocks move, and nothing lands read-only, empty, in another document, in a view or inside itself');
+}
+
 // Red until the checks actually settle: an async check left awaiting something that never resolves empties the event
 // loop, and node would exit 0 without a word — a silent pass for a check that never finished.
+checks.push(runDropPlanCheck);
 process.exitCode = 1;
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);

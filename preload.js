@@ -88,8 +88,15 @@ contextBridge.exposeInMainWorld('api', {
   indent: (docId, nodeId) => ipcRenderer.invoke('block:indent', docId, nodeId),
   outdent: (docId, nodeId) => ipcRenderer.invoke('block:outdent', docId, nodeId),
   move: (docId, nodeId, direction) => ipcRenderer.invoke('block:move', docId, nodeId, direction),
+  // drag and drop: the node lands behind afterId, else at the top of parentId, else at the top of toDocId's own
+  // rows. toDocId is the outline it lands in — the page, or one of its fields ("<doc>|<type>?attribute=<key>") —
+  // and must belong to the same document the node comes from.
+  moveTo: (docId, nodeId, toDocId, parentId, afterId) => ipcRenderer.invoke('block:moveTo', docId, nodeId, toDocId, parentId ?? null, afterId ?? null),
+  // the same place, with a reference to uri landing in it: a document dragged into an outline, or an Alt-drag
+  insertMention: (toDocId, uri, label, parentId, afterId) => ipcRenderer.invoke('block:insertMention', toDocId, uri, label ?? '', parentId ?? null, afterId ?? null),
   pins: () => ipcRenderer.invoke('pins:list'),
-  pinState: (docId) => ipcRenderer.invoke('pins:state', docId),
+  pinState: (docId) => ipcRenderer.invoke('pins:state', docId), // { sidebar, dates: ['YYYY-MM-DD'], hubs: [{ id, title, kind }] }: the meetings/spaces it is pinned on come with it
+  pinIds: () => ipcRenderer.invoke('pins:ids'), // every pinned document id (sidebar + dates), for the pin mark on a row
   pin: (docId, target, date) => ipcRenderer.invoke('pins:pin', docId, target, date), // date: local YYYY-MM-DD for target 'today'; omitted = today
   unpin: (docId, target, date) => ipcRenderer.invoke('pins:unpin', docId, target, date),
   // items pinned on a meeting or a space (that node's own pinnedItems, docs/PINNING.md section 4); hubId comes from

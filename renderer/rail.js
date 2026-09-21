@@ -167,6 +167,9 @@ function railMetaRows(node, accessNode = node) {
   });
   // link sharing is a separate fact from the Tana audience, and read-only here: Tana owns that switch
   if (summary?.linkShared) rows.push({ id: 'linkShared', icon: 'globe', label: 'Anyone with the link', run: null });
+  // Pinned to the sidebar or to a date, like the mark on a list row: the row opens the page that lists those pins
+  // and takes them off. A pin is personal, so write access to the node has nothing to do with it.
+  if (isPinned(node.id)) rows.push({ id: 'pinned', icon: 'pinned', label: 'Pinned', run: tana.pinState ? () => openPinsPalette(node) : null });
   if (tana.nodeLink && tana.openExternal && isRealId(node.id)) rows.push({
     id: 'showInTana', icon: 'tana', label: 'Show in Tana',
     run: () => run(async () => tana.openExternal(await tana.nodeLink(node.id))),

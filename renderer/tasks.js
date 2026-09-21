@@ -99,7 +99,7 @@ function taskSummary(node, lazy) {
   if (!meta) { if (!lazy) loadTaskMeta(node.id); return null; }
   if (meta.assignees.length) loadMembers(); // names need the member list; loading it re-renders when it arrives
   const scope = typeof meta.audience === 'string' ? meta.audience : meta.audience?.scope;
-  return { assignees: meta.assignees.length ? meta.assignees.map(memberName).join(', ') : 'Unassigned', audience: audienceInfo(meta.audience, meta.audienceSpace), scope, unknownAudience: scope === 'unknown', linkShared: !!meta.linkShared, watched: !!meta.watched };
+  return { assignees: meta.assignees.length ? meta.assignees.map(memberName).join(', ') : 'Unassigned', audience: audienceInfo(meta.audience, meta.audienceSpace), scope, unknownAudience: scope === 'unknown', linkShared: !!meta.linkShared, watched: !!meta.watched, pinned: isPinned(node.id) };
 }
 // the same facts for a document that is not a task: no assignee, but it can be shared or public
 function documentSummary(node, lazy) {
@@ -107,8 +107,8 @@ function documentSummary(node, lazy) {
   const meta = taskMetaById.get(node.id);
   if (!meta) { if (!lazy) loadTaskMeta(node.id); return null; }
   const audience = audienceInfo(meta.audience, meta.audienceSpace);
-  if (!audience && !meta.linkShared && !meta.watched) return null;
-  return { assignees: '', audience, scope: typeof meta.audience === 'string' ? meta.audience : meta.audience?.scope, unknownAudience: false, linkShared: !!meta.linkShared, watched: !!meta.watched };
+  if (!audience && !meta.linkShared && !meta.watched && !isPinned(node.id)) return null;
+  return { assignees: '', audience, scope: typeof meta.audience === 'string' ? meta.audience : meta.audience?.scope, unknownAudience: false, linkShared: !!meta.linkShared, watched: !!meta.watched, pinned: isPinned(node.id) };
 }
 // node: the row's document, so its facts open the Cmd+K pickers they describe (Edit assignees, Edit visibility)
 function taskMetaEl(summary, docId, node) {
@@ -149,6 +149,14 @@ function taskMetaEl(summary, docId, node) {
     el.append(icon);
   }
   else if (summary.unknownAudience) el.append(' · Visibility unknown');
+  // Pinned, in the same slot and with the same behaviour as the audience icon beside it: the glyph says the node is
+  // pinned somewhere, and a click opens the page that says where and takes it off. Pins are personal, so a node you
+  // cannot write still carries the mark and still opens the page.
+  if (summary.pinned && node && isRealId(node.id)) {
+    const icon = iconEl('pinned', 'Pinned');
+    if (tana.pinState) { icon.title = 'Pinned — click to edit pins'; clickable(icon, () => openPinsPalette(node)); }
+    el.append(icon);
+  }
   // link sharing is separate from the Tana audience: anyone with the url can read it
   if (summary.linkShared) el.append(iconEl('globe', 'Anyone with the link'));
   // last of the row's icons: a bell says changes to this node reach you, whether you asked or the rule decided

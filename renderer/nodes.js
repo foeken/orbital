@@ -260,6 +260,20 @@ function loadSensitive() {
     .then((ids) => { sensitiveIds = new Set(ids); }, showError);
   return sensitiveLoading;
 }
+// Which documents carry a pin at all (api.pinIds): the mark a row draws, read as one list rather than a pinState
+// call per row. Same shape as the sensitive marks above — read once, kept, and re-read whenever a pin is written or
+// a global change arrives (loadPins). A set that has not moved redraws nothing, so the read behind every ⌘K costs
+// a render only when a pin actually changed.
+const isPinned = (id) => !!pinnedIds && pinnedIds.has(id);
+function loadPinned(force) {
+  if (!tana.pinIds || (pinnedLoading && !force)) return;
+  pinnedLoading = tana.pinIds().then((ids) => {
+    const next = new Set(ids);
+    if (pinnedIds && next.size === pinnedIds.size && [...next].every((id) => pinnedIds.has(id))) return;
+    pinnedIds = next;
+    renderSoon();
+  }, () => {}); // not connected yet: the next read asks again, and until then a row simply carries no mark
+}
 // The nodes assigned to the local Codex agent, once per launch. Unlike the sensitive marks nothing waits on it: a
 // row that renders before the answer lands simply has no badge yet, and the load re-renders.
 function loadCodex() {

@@ -307,6 +307,21 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 /* The guide line under a list row hangs off the row's box, not off its line, so it stayed where it was when the
    line moved: the same 8px, or it no longer runs under the bullet it belongs to. */
 .node.block.t-bullet > .children, .node.block.t-numbered > .children { margin-left: 23px; }
+/* Dragging a row (renderer/drag.js). A row with a marker is picked up by it. A row without one keeps the 11px
+   gutter and nothing to grab, so a grip is drawn there while the pointer is on the row — inside the gutter it
+   already has, so nothing moves when it appears, and only while the row is hovered, so a page of prose is not a
+   field of dots. A collapsed row is left alone: its dot is back, and that is the thing to grab. */
+.bullet[draggable="true"] { cursor: grab; } /* a marker that can be picked up says so, wherever it is drawn */
+.bullet[draggable="true"]:active { cursor: grabbing; }
+.node.block:not(.t-bullet):not(.t-numbered):not(.collapsed) > .line:hover > .bullet[draggable="true"]::after {
+  content: ''; position: absolute; left: 0; top: 7px; width: 9px; height: 11px;
+  background-image: radial-gradient(circle at center, #b9bbbe 1.1px, transparent 1.3px); background-size: 4.5px 4px;
+}
+.node.dragging > .line { opacity: .45; }
+/* Where it will land, at the level it will land on: a line across the outline from that level's left edge, with a
+   dot on the end the row will start at. Fixed, because it is drawn from what the rows measure on screen. */
+#dropline { position: fixed; z-index: 15; height: 2px; margin-top: -1px; border-radius: 2px; background: #5b9bd5; pointer-events: none; }
+#dropline::before { content: ''; position: absolute; left: -5px; top: -3px; width: 8px; height: 8px; border-radius: 50%; background: inherit; }
 .bullet.icon::before { display: none; }
 .bullet.still { cursor: default; } /* a member's or a type's glyph: nothing to zoom into */
 .bullet.still.icon:hover svg { color: #8a8a8a; }
@@ -693,6 +708,8 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .bullet.icon:hover svg { color: #d0d2d2; }
 [data-theme="dark"] .bullet.meeting svg { color: #d7b54d; }
 [data-theme="dark"] .bullet.icon.hue svg, [data-theme="dark"] .bullet.icon.hue:hover svg { color: oklch(0.8 0.1 var(--hue)); }
+[data-theme="dark"] .node.block:not(.t-bullet):not(.t-numbered):not(.collapsed) > .line:hover > .bullet[draggable="true"]::after { background-image: radial-gradient(circle at center, #6f7679 1.1px, transparent 1.3px); }
+[data-theme="dark"] #dropline { background: #6ea8dc; }
 [data-theme="dark"] .check { background: #3a3e40; --check-on: #5b976c; }
 [data-theme="dark"] .check:hover:not(:checked) { background: #474c4e; }
 [data-theme="dark"] .check.inbox:not(:checked) { background: #5d6467; }

@@ -27,13 +27,58 @@ function currentDoc() {
 // ---- pins (api.pinState / pin / unpin): what the palette needs is whether this document is pinned, not the tree ----
 function loadPins() {
   const doc = palDoc;
+  loadPinned(true); // a pin was just written, or something changed globally: the marks on the rows are re-read with it
   if (!doc || !tana.pinState) { pinInfo = null; return; }
   tana.pinState(doc.id).then((s) => {
     pinInfo = s ? { docId: doc.id, ...s } : null;
-    if (!palette.hidden && palMode === 'cmd') renderPalette();
+    if (!palette.hidden && (palMode === 'cmd' || palMode === 'pins')) renderPalette();
   }, showError);
 }
 function pinAction(op, target, date) { run(async () => { await tana[op](pinInfo.docId, target, date); loadPins(); }); } // date: a local YYYY-MM-DD for the 'today' target; omitted means today
+// A pin on a meeting or a space is a write to that hub's own pinnedItems rather than to your sidebar or pin-map, so
+// it goes through api.unpinFrom. Both sidebars are re-read: the item leaves a section of the hub's page as it goes.
+function unpinFromHub(hubId) {
+  const docId = pinInfo.docId;
+  run(async () => { await tana.unpinFrom(hubId, docId); refreshRelated(hubId); refreshRelated(docId); loadPins(); render(); });
+}
+// ---- Edit pins: where this document is pinned, on a page of its own (⌘K, or the pin mark on the row) ----
+// Unpinning is what the page is for, so every pin it lists runs one, and the page stays open to show the rest.
+const PIN_GROUP = 'Pinned · ↩ unpins';
+const pinDateLabel = (date) => { const near = date === localDate() ? 'Today' : date === localDate(1) ? 'Tomorrow' : date === localDate(-1) ? 'Yesterday' : ''; return near ? near + ' · ' + date : date; };
+function editPinRows(q) {
+  if (!pinInfo || !palDoc || pinInfo.docId !== palDoc.id) return [{ group: PIN_GROUP, label: 'Loading…', disabled: true }];
+  const listed = [];
+  if (pinInfo.sidebar) listed.push({ group: PIN_GROUP, icon: 'pinned', label: 'Sidebar', keepOpen: true, run: () => pinAction('unpin', 'sidebar') });
+  for (const date of [...pinInfo.dates].sort()) listed.push({ group: PIN_GROUP, icon: 'pinDate', label: pinDateLabel(date), keepOpen: true, run: () => pinAction('unpin', 'today', date) });
+  // and the meetings and spaces it hangs on, which are pins on those documents rather than on yours (api.unpinFrom)
+  for (const hub of pinInfo.hubs || []) listed.push({ group: PIN_GROUP, icon: hub.kind === 'space' ? 'space' : 'meeting', label: hub.title || 'Untitled',
+    hint: hub.kind === 'space' ? 'Space' : 'Meeting', keepOpen: true, run: () => unpinFromHub(hub.id) });
+  // and the other direction from the same page: the sidebar pin is asked for nowhere else, and the two days are the
+  // ones ⌘K offers. A day it is already pinned to is listed above instead, so it is not offered twice.
+  const adds = [];
+  if (!pinInfo.sidebar) adds.push({ group: 'Pin it', icon: 'pinned', label: 'Pin to sidebar', keepOpen: true, run: () => pinAction('pin', 'sidebar') });
+  for (const [offset, label] of [[0, 'Pin to today'], [1, 'Pin to tomorrow']]) {
+    const date = localDate(offset); // the day is computed here, as the ⌘K rows do it: main defaults to today when none comes with the call
+    if (!pinInfo.dates.includes(date)) adds.push({ group: 'Pin it', icon: 'pinDate', label, keepOpen: true, run: () => pinAction('pin', 'today', date) });
+  }
+  // and onto a meeting, which is a pin on that meeting's own document (docs/PINNING.md §4) rather than one of the
+  // three above: the same picker ⌘K opens, told to come back here when Escape leaves it. Offered whatever else is
+  // pinned, because a document can hang on more than one meeting.
+  if (tana.searchPreview && tana.pinTo && isRealId(palDoc.id)) {
+    const doc = palDoc;
+    adds.push({ group: 'Pin it', icon: 'pin', label: 'Pin to meeting', hint: 'Choose a meeting', keepOpen: true, run: () => openMeetingPicker(doc, () => openPinsPalette(doc)) });
+  }
+  // one query over both halves, so typing narrows what can be pinned as well as what is; with no pin left on screen
+  // the page says which of the two silences that is — none match what was typed, or there are none at all
+  const rows = [...listed, ...adds].filter((row) => fuzzyMatch(row.label, q));
+  if (!rows.some((row) => row.group === PIN_GROUP)) rows.unshift({ group: PIN_GROUP, label: listed.length ? 'No pin matches' : 'Not pinned anywhere', disabled: true });
+  return rows;
+}
+function openPinsPalette(doc) {
+  palDoc = doc; palMode = 'pins'; palRows = []; palIndex = 0; palette.hidden = false;
+  palInput.placeholder = 'Edit pins'; palInput.value = '';
+  pinInfo = null; loadPins(); renderPalette(); palInput.focus();
+}
 function invalidatePinCaches(id, includeRecent = true) {
   if (pinInfo && pinInfo.docId === id) pinInfo = null;
   if (includeRecent) forgetRecent(id);

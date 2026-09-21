@@ -45,6 +45,7 @@ const DEFAULT_HOTKEYS = { search: '⌘S', filter: '⌘F', copyLink: '⌘C', back
 const hotkeyFor = (id) => (Object.hasOwn(hotkeys, id) ? hotkeys[id] : DEFAULT_HOTKEYS[id]);
 const hotkeyIds = () => [...new Set([...Object.keys(DEFAULT_HOTKEYS), ...Object.keys(hotkeys)])];
 let pinInfo = null;          // { docId, sidebar, dates } of the palette's document (api.pinState)
+let pinnedIds = null, pinnedLoading = null; // every pinned document (api.pinIds), for the pin mark on a row; null until the first answer
 let palDoc = null;           // document the Cmd+K context actions apply to (zoomed, else the one whose node is focused)
 let palTaskCtx = null;
 let palReturn = null; // { key, offset } of the node focused when a palette opened; focus goes back there on close
