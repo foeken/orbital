@@ -43,6 +43,8 @@ WANT.created = path.join(__dirname, '..', 'build', 'icons', 'file-plus.svg');
 // A saved search folds its pills away behind this, beside back and forward (renderer/pills.js)
 WANT.options = path.join(__dirname, '..', 'build', 'icons', 'sliders-vertical.svg');
 WANT.openaiKey = path.join(__dirname, '..', 'build', 'icons', 'key-4.svg');
+// A node pinned to the sidebar or to a date: the tack, distinct from the map-marker 'pin' the meeting rows use
+WANT.pinned = path.join(__dirname, '..', 'build', 'icons', 'pin-tack.svg');
 // What the model suggested, rather than what you typed or what Tana knows (Cmd+K "Discuss with …")
 WANT.sparkle = path.join(__dirname, '..', 'build', 'icons', 'orbit-sparkle.svg');
 // Cmd+K rows for the keys the outline answers to

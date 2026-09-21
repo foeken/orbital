@@ -2276,15 +2276,19 @@ async function runSidebarRowsCheck() {
     const openVisibilityPeople = (doc) => calls.push(['people', doc.id]);
     const accessById = new Map(), accessLoading = new Set(), taskMetaById = new Map();
     let palDoc = null, palette = { hidden: true };
+    const pinnedHere = new Set();
+    const isPinned = (id) => pinnedHere.has(id);
+    const openPinsPalette = (doc) => calls.push(['pins', doc.id]);
     const loadAccess = () => {}, loadTaskMeta = () => {};
     const run = (fn) => fn();
-    const tana = { taskMeta: async () => ({}), setAssignees: async () => {}, accessOptions: async () => ({}), nodeLink: async (id) => 'https://home.tana.inc/l/' + id, openExternal: async (url) => calls.push(['open', url]) };
+    const tana = { taskMeta: async () => ({}), setAssignees: async () => {}, accessOptions: async () => ({}), pinState: async () => ({}), nodeLink: async (id) => 'https://home.tana.inc/l/' + id, openExternal: async (url) => calls.push(['open', url]) };
     ${functionSource('railCallRow')}
     ${functionSource('railMetaRows')}
     ${functionSource('openVisibility')}
     ${functionSource('banSvg')}
     ${functionSource('visibilityRows')}
     ({ rows: (node, value, accessNode) => { summary = value; return railMetaRows(node, accessNode); }, call: (data) => railCallRow(data), calls: () => calls,
+       pin: (id) => { pinnedHere.add(id); },
        known: (id, meta, access) => { if (meta) taskMetaById.set(id, meta); else taskMetaById.delete(id); if (access) accessById.set(id, access); else accessById.delete(id); },
        permission: (access, loading) => { palDoc = { id: 'doc' }; accessById.delete('doc'); accessLoading.delete('doc'); if (access) accessById.set('doc', access); if (loading) accessLoading.add('doc'); return visibilityRows(''); },
        opened: () => ({ doc: palDoc && palDoc.id, hidden: palette.hidden }) });
@@ -2310,6 +2314,14 @@ async function runSidebarRowsCheck() {
     [['assignees', 'member'], ['visibility', 'lock'], ['linkShared', 'globe'], ['showInTana', 'tana']], 'a link-shared node adds a globe row');
   assert.deepEqual(plain(api.rows({ id: 'doc' }, { assignees: '', audience: null, linkShared: true }).map((row) => [row.id, row.label])),
     [['linkShared', 'Anyone with the link'], ['showInTana', 'Show in Tana']], 'a public document with no assignee still reports that anyone with the link can read it');
+  // A pinned node says so in Details too, and that row opens the page its pins are taken off from
+  api.pin('pinnedDoc');
+  const pinnedRows = api.rows({ id: 'pinnedDoc' }, { assignees: '', audience: { icon: 'lock', label: 'Visible only to you' } });
+  assert.deepEqual(plain(pinnedRows.map((row) => [row.id, row.icon, row.label])),
+    [['visibility', 'lock', 'Visible only to you'], ['pinned', 'pinned', 'Pinned'], ['showInTana', 'tana', 'Show in Tana']], 'a pinned node carries the tack beside its audience');
+  pinnedRows[1].run();
+  assert.deepEqual(plain(api.calls().at(-1)), ['pins', 'pinnedDoc'], 'and that row opens Edit pins for it');
+  assert.ok(!api.rows({ id: 'doc' }, { assignees: '', audience: { icon: 'lock', label: 'Visible only to you' } }).some((row) => row.id === 'pinned'), 'an unpinned node has no such row');
   await api.rows({ id: 'doc' }, null)[0].run();
   assert.deepEqual(plain(api.calls().at(-1)), ['open', 'https://home.tana.inc/l/doc'], 'Show in Tana reuses nodeLink and openExternal');
   assert.deepEqual(plain(api.permission(null, true)), [{ group: 'Visibility', label: 'Checking permission…', disabled: true }], 'visibility explains while permission loads');
@@ -2871,6 +2883,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   const rowSig = vm.runInNewContext(`
     const taskMetaById = new Map(), taskMetaLoading = new Set(), open = new Map(), pending = new Map(), members = null;
     const sensitiveHidden = () => false;
+    const isPinned = () => false;
     ${functionSource('rowSig')}
     // what a row shows is one of the things it is built from, so changing that must change the signature
     ({ sig: rowSig, display: (keys) => { globalThis.displayKeys = () => keys; } });
@@ -3282,6 +3295,7 @@ function runRowAudienceCheck() {
     class IntersectionObserver { constructor(fn) { watching = fn; } observe(el) { observed.push(el); } unobserve() {} }
     const taskMetaById = new Map(), taskMetaLoading = new Set(), taskMetaFailed = new Map();
     const loadTaskMeta = (id) => { fetched.push(id); };
+    const isPinned = () => false; // the pin mark has its own check; here the audience icons are the subject
     const loadMembers = () => {}, memberName = (uri) => (uri === 'tana:user-profile:sam' ? 'Sam' : uri); // the real one answers with the uri until the member list lands
     const isRealId = (id) => typeof id === 'string' && id.startsWith('tana:');
     const tana = { taskMeta: () => {} };
@@ -3456,6 +3470,63 @@ async function runHiddenItemsCheck() {
   assert.deepEqual(opened.list, ['Lunch', 'Block*'], 'and renders what came back');
   assert.match(source, /id: 'hidden'[^}]*Edit hidden items/, 'Cmd+K carries the command that opens it');
   assert.match(source, /palMode === 'hidden'/, 'and the palette renders, filters and types in that mode like any other');
+}
+
+// Edit pins: the page that says where this document is pinned and takes those pins off again, and the marks every
+// row draws from one api.pinIds read (renderer/document.js, renderer/nodes.js).
+async function runEditPinsCheck() {
+  const api = vm.runInNewContext(`
+    const calls = [];
+    let state = { sidebar: false, dates: [] }, ids = ['doc'];
+    let pinInfo = null, pinnedIds = null, pinnedLoading = null;
+    let palDoc = { id: 'doc' }, palMode = 'cmd', palRows = [], palIndex = 3;
+    const palette = { hidden: true }, palInput = { value: '', placeholder: '', focus() {} };
+    const renderPalette = () => {}, showError = () => {}, run = (fn) => fn();
+    const render = () => {}; // the shimmed renderSoon a refreshed mark set asks for
+    const tana = {
+      pinState: async (id) => { calls.push(['pinState', id]); return state; },
+      pinIds: async () => { calls.push(['pinIds']); return [...ids]; },
+      pin: async (id, target, date) => { calls.push(['pin', id, target, date]); },
+      unpin: async (id, target, date) => { calls.push(['unpin', id, target, date]); },
+    };
+    ${sourceLine('const localDate =')}
+    ${functionSource('fuzzyMatch')}
+    ${functionSource('loadPins')}
+    ${functionSource('loadPinned')}
+    ${functionSource('pinAction')}
+    ${sourceBetween('const PIN_GROUP =', 'function openPinsPalette')}
+    ${functionSource('openPinsPalette')}
+    ({
+      open: async (pins, marks) => { state = pins; ids = marks || ids; calls.length = 0; openPinsPalette({ id: 'doc' }); await new Promise(setImmediate); return { palMode, placeholder: palInput.placeholder, hidden: palette.hidden, calls: [...calls] }; },
+      page: (q) => editPinRows(q || ''),
+      press: async (q, index) => { calls.length = 0; editPinRows(q || '')[index].run(); await new Promise(setImmediate); await new Promise(setImmediate); return [...calls]; },
+      marks: () => (pinnedIds ? [...pinnedIds] : null),
+      today: () => localDate(),
+    });
+  `, { setImmediate, Date, Promise });
+
+  const today = api.today();
+  const opened = plain(await api.open({ sidebar: true, dates: [today, '2099-01-01'] }, ['doc', 'other']));
+  assert.deepEqual([opened.palMode, opened.hidden, opened.placeholder], ['pins', false, 'Edit pins'], 'the page opens in its own mode');
+  assert.deepEqual(opened.calls, [['pinIds'], ['pinState', 'doc']], 'it re-reads the marks and asks where this one is pinned');
+  assert.deepEqual(plain(api.marks()), ['doc', 'other'], 'the marks every row draws come from that one list');
+  assert.deepEqual(plain(api.page().map((r) => [r.icon, r.label, !!r.keepOpen])),
+    [['pinned', 'Sidebar', true], ['pinDate', 'Today · ' + today, true], ['pinDate', '2099-01-01', true]],
+    'every pin is a row, dates in order and today named');
+  assert.deepEqual(plain(api.page().map((r) => r.group)).filter((g, i, all) => all.indexOf(g) === i), ['Pinned · ↩ unpins'], 'one header, which says what Enter does');
+  assert.deepEqual(plain(api.page('side').map((r) => r.label)), ['Sidebar'], 'typing narrows the list');
+  assert.deepEqual(plain(await api.press('', 0)), [['unpin', 'doc', 'sidebar', null], ['pinIds'], ['pinState', 'doc']], 'the sidebar row unpins and the page re-reads itself');
+  assert.deepEqual(plain(await api.press('', 2)), [['unpin', 'doc', 'today', '2099-01-01'], ['pinIds'], ['pinState', 'doc']], 'and a date row unpins that date, not today');
+
+  const none = plain(await api.open({ sidebar: false, dates: [] }, []));
+  assert.equal(none.palMode, 'pins');
+  assert.deepEqual(plain(api.page().map((r) => [r.label, !!r.disabled])),
+    [['Not pinned anywhere', true], ['Pin to sidebar', false], ['Pin to today', false]], 'a node pinned nowhere says so, and the two pins can be made from here');
+  assert.deepEqual(plain(await api.press('', 1)), [['pin', 'doc', 'sidebar', null], ['pinIds'], ['pinState', 'doc']], 'the sidebar pin is written from this page');
+  assert.deepEqual(plain(api.page('nothing here').map((r) => r.label)), ['Not pinned anywhere', 'Pin to sidebar', 'Pin to today'], 'a query that matches nothing still leaves the page usable');
+  assert.match(source, /id: 'editPins'[^}]*'Edit pins'/, 'Cmd+K carries the command that opens it');
+  assert.match(source, /palMode === 'pins'/, 'and the palette renders and types in that mode like any other');
+  console.log('ok  Edit pins: the page opens with this document\u2019s pins, names today, unpins each of them, offers the two that can be made, and the row marks come from one list');
 }
 
 // A view that gains and loses rows between two renders: arrivals flash, departures go back where they were.
@@ -3938,7 +4009,7 @@ async function runRestorePlaceCheck() {
   assert.equal(api.state().docId, null, 'and a corrupt entry is simply not a place, rather than a broken launch');
   assert.match(source, /loadRoots\(\)\.then\(render, showError\)\.then\(restorePlace\)/,
     'and boot reopens that place once the views have loaded, so the restore has somewhere to land');
-  assert.match(source, /if \(connected && !wasConnected\) \{ taskMetaFailed\.clear\(\); loadSearches\(\); restorePlace\(\)\.finally\(\(\) => loadView\(\)\); \}/,
+  assert.match(source, /if \(connected && !wasConnected\) \{ taskMetaFailed\.clear\(\); loadSearches\(\); loadPinned\(true\); restorePlace\(\)\.finally\(\(\) => loadView\(\)\); \}/,
     'the connection coming up runs the restore that boot was too early for, and the view behind it is fetched after that page, not ahead of it');
 }
 
@@ -6261,7 +6332,7 @@ function runCaretAtPointCheck() {
   assert.match(functionSource('materialise'), /tana\.insertAfter\(parent\.docId, last\?\.id \|\| null, text, node\.block\)/, 'and the draft is written as the kind it was drawn as');
 }
 
-const checks = [runCaretAtPointCheck, runPrefsStoreCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runSetIconCheck, runDiscussWithCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runAgentStatusBootCheck, runQuickAddPanelCheck, runRailChangesCheck, runPasteLinkCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck,runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck];
+const checks = [runCaretAtPointCheck, runPrefsStoreCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runSetIconCheck, runDiscussWithCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runAgentStatusBootCheck, runQuickAddPanelCheck, runRailChangesCheck, runPasteLinkCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck,runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck];
 // The chips under a zoomed title, driven through the shipped line itself: a typed document shows its type whatever
 // kind it is, and the kind chip (task, doc, meeting, space, chat…) stays out of the header, as it always did for a task.
 function runZoomTypeChipCheck() {

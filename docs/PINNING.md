@@ -123,6 +123,8 @@ session and the collection via `useUserPinnedCollection`; the same for `pinMapUr
 
 The SDK's read-only `sidebarTree(sync, userUri)` preserves this as `[{ uri?, label?, children }]` in LoroTree order. A `label` is evidence of a folder node, not an access rule; the schema allows `uri` and `label` independently, so consumers must retain both if present. `listSidebar` is only the legacy depth-first URI projection. We have observed labelled root folders with child pins and unsectioned root pins, but not a nested-folder or combined URI/label node in a live collection.
 
+"Is this document pinned at all", for a whole list of rows, is the same two documents read once rather than a `pinState` per row: `listSidebar` plus `datePinned(sync, userUri)`, which walks the pin-map's `entries` and keeps the keys that still hold a `plain` pin — an entry survives its last unpin as an empty `pins` list, so the key being there is not a pin. Main exposes the union as `pinnedUris()` / `api.pinIds()` for the pin mark the outliner draws on a row.
+
 ## 4. Events and spaces
 
 Different container, same document-sync mechanism. Event (`ode`) and space (`Lle`) docs have a root **MovableList** `pinnedItems`:

@@ -27,13 +27,35 @@ function currentDoc() {
 // ---- pins (api.pinState / pin / unpin): what the palette needs is whether this document is pinned, not the tree ----
 function loadPins() {
   const doc = palDoc;
+  loadPinned(true); // a pin was just written, or something changed globally: the marks on the rows are re-read with it
   if (!doc || !tana.pinState) { pinInfo = null; return; }
   tana.pinState(doc.id).then((s) => {
     pinInfo = s ? { docId: doc.id, ...s } : null;
-    if (!palette.hidden && palMode === 'cmd') renderPalette();
+    if (!palette.hidden && (palMode === 'cmd' || palMode === 'pins')) renderPalette();
   }, showError);
 }
 function pinAction(op, target, date) { run(async () => { await tana[op](pinInfo.docId, target, date); loadPins(); }); } // date: a local YYYY-MM-DD for the 'today' target; omitted means today
+// ---- Edit pins: where this document is pinned, on a page of its own (⌘K, or the pin mark on the row) ----
+// Unpinning is what the page is for, so every pin it lists runs one, and the page stays open to show the rest.
+const PIN_GROUP = 'Pinned · ↩ unpins';
+const pinDateLabel = (date) => { const near = date === localDate() ? 'Today' : date === localDate(1) ? 'Tomorrow' : date === localDate(-1) ? 'Yesterday' : ''; return near ? near + ' · ' + date : date; };
+function editPinRows(q) {
+  if (!pinInfo || !palDoc || pinInfo.docId !== palDoc.id) return [{ group: PIN_GROUP, label: 'Loading…', disabled: true }];
+  const listed = [];
+  if (pinInfo.sidebar) listed.push({ group: PIN_GROUP, icon: 'pinned', label: 'Sidebar', keepOpen: true, run: () => pinAction('unpin', 'sidebar') });
+  for (const date of [...pinInfo.dates].sort()) listed.push({ group: PIN_GROUP, icon: 'pinDate', label: pinDateLabel(date), keepOpen: true, run: () => pinAction('unpin', 'today', date) });
+  const rows = listed.filter((row) => fuzzyMatch(row.label, q));
+  if (!rows.length) rows.push({ group: PIN_GROUP, label: listed.length ? 'No pin matches' : 'Not pinned anywhere', disabled: true });
+  // and the other direction from the same page: the sidebar pin is asked for nowhere else, and today's is the one ⌘K offers
+  if (!pinInfo.sidebar) rows.push({ group: 'Pin it', icon: 'pinned', label: 'Pin to sidebar', keepOpen: true, run: () => pinAction('pin', 'sidebar') });
+  if (!pinInfo.dates.includes(localDate())) rows.push({ group: 'Pin it', icon: 'pinDate', label: 'Pin to today', keepOpen: true, run: () => pinAction('pin', 'today') });
+  return rows;
+}
+function openPinsPalette(doc) {
+  palDoc = doc; palMode = 'pins'; palRows = []; palIndex = 0; palette.hidden = false;
+  palInput.placeholder = 'Edit pins'; palInput.value = '';
+  pinInfo = null; loadPins(); renderPalette(); palInput.focus();
+}
 function invalidatePinCaches(id, includeRecent = true) {
   if (pinInfo && pinInfo.docId === id) pinInfo = null;
   if (includeRecent) forgetRecent(id);

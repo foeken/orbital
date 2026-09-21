@@ -19,7 +19,7 @@ function showStatus(s) {
   // The page you are on before the page behind it: the restore asks for one document's children, the view for a
   // list of up to a thousand rows and the subscriptions that go with it, and on one connection the second used to
   // go first. Any later reconnect finds the place already spent, so this is boot order only.
-  if (connected && !wasConnected) { taskMetaFailed.clear(); loadSearches(); restorePlace().finally(() => loadView()); }
+  if (connected && !wasConnected) { taskMetaFailed.clear(); loadSearches(); loadPinned(true); restorePlace().finally(() => loadView()); }
   $('loginBox').hidden = !state.showLogin;
   outline.hidden = $('filtered').hidden = !state.showOutline;
   showError(state.error);

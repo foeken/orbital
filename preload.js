@@ -90,6 +90,7 @@ contextBridge.exposeInMainWorld('api', {
   move: (docId, nodeId, direction) => ipcRenderer.invoke('block:move', docId, nodeId, direction),
   pins: () => ipcRenderer.invoke('pins:list'),
   pinState: (docId) => ipcRenderer.invoke('pins:state', docId),
+  pinIds: () => ipcRenderer.invoke('pins:ids'), // every pinned document id (sidebar + dates), for the pin mark on a row
   pin: (docId, target, date) => ipcRenderer.invoke('pins:pin', docId, target, date), // date: local YYYY-MM-DD for target 'today'; omitted = today
   unpin: (docId, target, date) => ipcRenderer.invoke('pins:unpin', docId, target, date),
   // items pinned on a meeting or a space (that node's own pinnedItems, docs/PINNING.md section 4); hubId comes from

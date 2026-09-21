@@ -20,7 +20,7 @@ const docRow = (n, hint, run) => ({ node: n, icon: n.icon, label: n.text ?? n.ti
 // The order of the rows about the node you are on: where it goes (open it, unfold it), what it is (done, status,
 // assignee), where it lives (pins, the date nodes, its space), what it looks like (image, visibility, sensitivity),
 // its link, and last the one destructive row. Rows without an id carry a `rank` from this list instead.
-const NODE_ROW_ORDER = ['zoomIn', 'expand', 'collapse', 'toggleDone', 'status', 'setType', 'discussWith', 'setIcon', 'setHue', 'assign', 'assignTo', 'codex', 'codexOpen', 'pinToday', 'pinTomorrow', 'pinToMeeting', 'pinToSelectedMeeting', 'addToday', 'addTomorrow', 'addWeek', 'move', 'moveLibrary', 'visibility', 'notify', 'sensitive', 'copyLink', 'delete'];
+const NODE_ROW_ORDER = ['zoomIn', 'expand', 'collapse', 'toggleDone', 'status', 'setType', 'discussWith', 'setIcon', 'setHue', 'assign', 'assignTo', 'codex', 'codexOpen', 'pinToday', 'pinTomorrow', 'pinToMeeting', 'pinToSelectedMeeting', 'editPins', 'addToday', 'addTomorrow', 'addWeek', 'move', 'moveLibrary', 'visibility', 'notify', 'sensitive', 'copyLink', 'delete'];
 const DOC_KIND = /^tana:text:/; // the Discussion Task type applies to documents, so a meeting is not offered that row
 const nodeRank = (r) => { const i = NODE_ROW_ORDER.indexOf(r.rank || r.id); return i < 0 ? NODE_ROW_ORDER.length : i; };
 const VIEW_ORDER = ['inbox', 'today', 'week', 'library'];
@@ -132,6 +132,15 @@ function paletteRows(q, typed = q) {
     const doc = palDoc;
     rows.push({ id: 'pinToSelectedMeeting', group: docGroup, icon: 'pin', label: 'Pin to meeting', hint: 'Choose a meeting',
       keepOpen: true, run: () => openMeetingPicker(doc) });
+  }
+  // Everywhere this node is pinned, on one page, with each of them one press from being taken off. Offered whether
+  // or not it is pinned: "Edit pins" is also where you find out that it is not. The hint is the state pinInfo
+  // already carries for the rows above, so the page costs nothing to announce.
+  if (palDoc && tana.pinState && isRealId(palDoc.id)) {
+    const doc = palDoc, info = pinInfo && pinInfo.docId === doc.id ? pinInfo : null;
+    const where = info ? [info.sidebar ? 'Sidebar' : '', info.dates.length ? info.dates.length + (info.dates.length === 1 ? ' date' : ' dates') : ''].filter(Boolean) : [];
+    rows.push({ id: 'editPins', group: docGroup, icon: 'pinned', label: 'Edit pins',
+      hint: info ? where.join(' · ') || 'Not pinned' : '', keepOpen: true, run: () => openPinsPalette(doc) });
   }
   // the node's web link, for pasting into Slack or a doc
   if (palDoc && tana.nodeLink && isRealId(palDoc.id)) {
@@ -329,7 +338,7 @@ function openCommandPalette() {
   palInput.placeholder = 'Run a command'; palInput.value = ''; renderPalette(); palInput.focus();
 }
 function backPalette() {
-  const SECOND_LEVEL = new Set(['pinMeeting', 'setType', 'trash', 'discuss', 'setIcon', 'setHue', 'openaiKey']); // pages opened from the command page
+  const SECOND_LEVEL = new Set(['pinMeeting', 'setType', 'trash', 'discuss', 'setIcon', 'setHue', 'openaiKey', 'pins']); // pages opened from the command page
   if (palMode === 'pill') openCommandPalette();
   // Escape on the prompt page cancels the whole thing rather than stepping back a level: the page was opened to
   // answer one question, and abandoning that question is abandoning the assignment. Nothing is written either way.
@@ -868,6 +877,7 @@ function renderPalette() {
   else if (palMode === 'visibility') palRows = visibilityRows(q.toLowerCase());
   else if (palMode === 'visibilityPeople') palRows = visibilityPeopleRows(q.toLowerCase());
   else if (palMode === 'hidden') palRows = hiddenRows(q);
+  else if (palMode === 'pins') palRows = editPinRows(q.toLowerCase());
   else if (palMode === 'pinMeeting') palRows = meetingPickRows(q.toLowerCase());
   else if (palMode === 'setType') palRows = typeRows(q.toLowerCase());
   else if (palMode === 'discuss') palRows = discussRows(q);
@@ -961,7 +971,7 @@ function nextPalIndex(rows, index, step) {
   return index;
 }
 // pages whose rows are built from what is typed, with nothing to fetch
-const LOCAL_MODES = new Set(['cmd', 'create', 'slash', 'assignees', 'assigneesMany', 'status', 'setType', 'discuss', 'setHue', 'visibility', 'visibilityPeople', 'hidden', 'pill', 'pinMeeting', 'openaiKey', 'hosts', 'trash']);
+const LOCAL_MODES = new Set(['cmd', 'create', 'slash', 'assignees', 'assigneesMany', 'status', 'setType', 'discuss', 'setHue', 'visibility', 'visibilityPeople', 'hidden', 'pins', 'pill', 'pinMeeting', 'openaiKey', 'hosts', 'trash']);
 palInput.addEventListener('input', () => {
   palIndex = 0; palEnter = null; // typing on supersedes an Enter that was waiting for the previous query
   if (LOCAL_MODES.has(palMode)) return renderPalette();

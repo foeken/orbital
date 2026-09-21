@@ -355,6 +355,7 @@ function mockApi() {
     },
     pins: async () => sidebar.map((id) => info(all.find((d) => d.id === id))),
     pinState: async (docId) => ({ sidebar: sidebar.includes(docId), dates: datePins[docId] || [] }),
+    pinIds: async () => [...new Set([...sidebar, ...Object.keys(datePins).filter((id) => datePins[id].length)])],
     pin: async (docId, target, date = localDate()) => { if (target === 'sidebar') { if (!sidebar.includes(docId)) sidebar.push(docId); } else (datePins[docId] ||= []).push(date); emit(null); },
     unpin: async (docId, target, date = localDate()) => { if (target === 'sidebar') sidebar.splice(sidebar.indexOf(docId) >>> 0, 1); else datePins[docId] = (datePins[docId] || []).filter((d) => d !== date); emit(null); },
     deleteDocument: async (docId) => { softDelete(docId); step(docId, 'restore'); },

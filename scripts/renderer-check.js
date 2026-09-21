@@ -93,6 +93,15 @@ assert.doesNotMatch(source, /loadLibrary|loadChats|loadInbox|taskFilter|libraryF
 assert.match(source, /const chatIcon = \(n\) => n\.icon \|\| \(\(n\.tags \|\| \[\]\)\.some\(\(t\) => t\.label === 'chat'\) \? 'chat' : undefined\);/);
 assert.match(source, /const nodeIcon = \(n\) => chatIcon\(n\) \|\| \(\(n\.tags \|\| \[\]\)\.some\(\(t\) => t\.label === 'agent'\) \? 'agent' : undefined\);/);
 assert.doesNotMatch(source, /pinTree|pinRows/, 'the sidebar pin sections are gone from Cmd+K; only the pin state of the current document is read');
+// A pinned node says so where its audience does, and the mark, the sidebar row and the Cmd+K row all open the one
+// page that lists this document's pins and takes them off (api.pinIds for the mark, api.pinState for the page).
+assert.match(source, /const isPinned = \(id\) => !!pinnedIds && pinnedIds\.has\(id\);/);
+assert.match(source, /function loadPinned\(force\)[\s\S]*tana\.pinIds\(\)/);
+assert.match(source, /if \(summary\.pinned && node && isRealId\(node\.id\)\)[\s\S]*openPinsPalette\(node\)/, 'the row mark opens Edit pins');
+assert.match(source, /if \(isPinned\(node\.id\)\) rows\.push\(\{ id: 'pinned', icon: 'pinned', label: 'Pinned'/, 'and the sidebar carries the same fact');
+assert.match(source, /id: 'editPins', group: docGroup, icon: 'pinned', label: 'Edit pins'/);
+assert.match(source, /function editPinRows\(q\)[\s\S]*pinAction\('unpin', 'sidebar'\)[\s\S]*pinAction\('unpin', 'today', date\)/, 'every pin the page lists can be taken off');
+assert.match(source, /isPinned\(n\.id\)/, 'a reused row is rebuilt when its pin state changes (rowSig)');
 assert.match(source, /\{ create: true, label: 'Create “' \+ title/);
 // linking preselects a result only when its title starts with the typed text; otherwise "Create" stays selected
 assert.match(source, /const starts = nodes\.findIndex\(\(n\) => \(n\.title \?\? n\.text \?\? ''\)\.toLowerCase\(\)\.startsWith\(q\.toLowerCase\(\)\)\);/);
@@ -125,7 +134,7 @@ assert.match(source, /taskMetaFailed\.set\(docId, \{ until: Date\.now\(\) \+ wai
 // a new connection clears the metadata backoff and refetches the active view and the saved-search list, both of
 // which can fetch before the client existed and neither of which is retried on its own (searchesReconnectCheck
 // in renderer-check.js exercises the searches half of this behaviorally)
-assert.match(source, /const wasConnected = connected;[\s\S]*?if \(connected && !wasConnected\) \{ taskMetaFailed\.clear\(\); loadSearches\(\); restorePlace\(\)\.finally\(\(\) => loadView\(\)\); \}/);
+assert.match(source, /const wasConnected = connected;[\s\S]*?if \(connected && !wasConnected\) \{ taskMetaFailed\.clear\(\); loadSearches\(\); loadPinned\(true\); restorePlace\(\)\.finally\(\(\) => loadView\(\)\); \}/);
 // a global change (a refresh, a pin, a filter) reloads the cached rows, which the refresh loop wrote before saying so;
 // it must not run the active view's query a second time, and a single document's change patches its row alone
 assert.match(source, /loadRoots\(\)\.then\(renderSoon, showError\)/);
@@ -305,7 +314,7 @@ async function cachedBootMetadataCheck() {
       return outcome === 'fail' ? Promise.reject(new Error('not connected')) : Promise.resolve({ assignees: [] });
     } };
     const palette = { hidden: true }, palDoc = null, outline = {};
-    const $ = () => ({}), showError = () => {}, loadView = () => {}, loadSearches = () => {}, restorePlace = async () => {};
+    const $ = () => ({}), showError = () => {}, loadView = () => {}, loadSearches = () => {}, loadPinned = () => {}, restorePlace = async () => {};
     const isRealId = (id) => typeof id === 'string' && id.startsWith('tana:');
     const isGone = () => false, noteGone = () => false; // the deleted-node set is exercised in renderer-behavior-check
     const render = () => { renders++; };
@@ -342,7 +351,7 @@ async function searchesReconnectCheck() {
     const repairHome = () => {}; // the Home repair has its own check; this one is about the reconnect edge
     const taskMetaFailed = new Map();
     const outline = {}, palette = { hidden: true };
-    const $ = () => ({}), showError = () => {}, loadView = () => {}, render = () => {}, renderSoon = () => {}, restorePlace = async () => {};
+    const $ = () => ({}), showError = () => {}, loadView = () => {}, render = () => {}, renderSoon = () => {}, loadPinned = () => {}, restorePlace = async () => {};
     const tana = { searches: () => { attempts++; return Promise.resolve([{ id: 'tana:search:x' }]); } };
     ${functionSource('authView')}
     ${functionSource('showStatus')}

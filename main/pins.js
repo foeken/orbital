@@ -52,6 +52,17 @@ async function pinState(id) {
   if (!S.client) throw new Error(NOT_CONNECTED);
   return { sidebar: (await pins.listSidebar(S.client.sync, S.me.userUri)).includes(id), dates: await pins.dates(S.client.sync, S.me.userUri, id) };
 }
+// Every uri this user has pinned, sidebar or date, for the pin mark a row draws. Ids only: pinned() subscribes and
+// reads each pinned document, which is a bootstrap per pin and far more than "is this one pinned". A pointer this
+// account has never had (nothing pinned yet) is an empty half, not an error.
+async function pinnedUris() {
+  if (!S.client) return [];
+  const [sidebar, dated] = await Promise.all([
+    pins.listSidebar(S.client.sync, S.me.userUri).catch(() => []),
+    pins.datePinned(S.client.sync, S.me.userUri).catch(() => []),
+  ]);
+  return [...new Set([...sidebar, ...dated])];
+}
 async function setPin(id, target, on, date = today()) {
   if (!S.client) throw new Error(NOT_CONNECTED);
   const sync = S.client.sync, user = S.me.userUri;
@@ -89,4 +100,4 @@ async function todayNode(offset = 0) {
   return created.id;
 }
 
-module.exports = { weekTitle, weekNode, pinTarget, pinnedNode, pinned, pinTree, pinState, setPin, nodePin, todayNode };
+module.exports = { weekTitle, weekNode, pinTarget, pinnedNode, pinned, pinnedUris, pinTree, pinState, setPin, nodePin, todayNode };

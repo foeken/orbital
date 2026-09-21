@@ -3211,6 +3211,12 @@ async function main() {
     await pins.unpinDate(sync, ME, A, '2026-09-14');
     await pins.unpinDate(sync, ME, B, '2026-09-14'); // no entry: no-op
     assert.deepEqual(await pins.dates(sync, ME, A), ['2026-09-13', '2026-09-15']);
+    // the same map read the other way round: which documents carry a date pin at all, for the pin mark on a row
+    assert.deepEqual(await pins.datePinned(sync, ME), [A]);
+    await pins.unpinDate(sync, ME, A, '2026-09-13');
+    await pins.unpinDate(sync, ME, A, '2026-09-15');
+    assert.deepEqual(await pins.datePinned(sync, ME), [], 'an entry left behind by its last unpin is not a pin');
+    await pins.pinDate(sync, ME, A, '2026-09-13');
     assert.deepEqual(mirror[PM].toJSON(), docs[PM].toJSON());
     assert.deepEqual([...new Set(sync.subscribed)], [ME, COL, PM], 'only the profile and the two pointed documents are subscribed');
     console.log('ok  pins (sidebar tree, personal date pins, converge)');
