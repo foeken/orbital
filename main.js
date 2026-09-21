@@ -12,10 +12,10 @@ const { readNode, setTitle, setState, taskMeta, audienceMetadata, setAssignees, 
 const { completedWindow, filterToSearchQuery, isHidden, searchQueryToFilter, validViewFilter } = require('./sdk/query');
 const content = require('./sdk/content');
 const agent = require('./main/agent');
-const fields = require('./sdk/fields');
+const ai = require('./main/ai');
 const { NOT_CONNECTED, S, VIEWS, docStates, errText, idKind, isSearch, isSpace, metaSigs, pathCache, today, truncatedViews, redoStack, report, scheduleRefresh, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
-const { cachedNodeHue, graphRow, members, rememberNodeHue, toNode } = require('./main/rows');
-const { accessContext, chatOutline, codexIds, createDocument, creationOptions, creatorOf, documentAction, history, info, linkShared, metaSig, moveTarget, mut, mutTasks, notifyOn, notifyState, setCodex, setNotify, onChange, op, outlineWithReferences, sensitiveIds, setSensitive, setType, setTypeHue, typeChoices } = require('./main/documents');
+const { cachedNodeHue, graphRow, members, rememberNodeHue, rememberType, toNode } = require('./main/rows');
+const { accessContext, chatOutline, codexIds, createDocument, creationOptions, creatorOf, discussWith, documentAction, history, info, linkShared, metaSig, moveTarget, mut, mutTasks, notifyOn, notifyState, setCodex, setNotify, onChange, op, outlineWithReferences, sensitiveIds, setSensitive, setType, setTypeHue, typeChoices } = require('./main/documents');
 const { callOf, changesOf, pathOf, related, searchChildren, searchPreview, spaceChildren, summaryChanges, summaryUri } = require('./main/related');
 const { hiddenRules, inboxCount, listFilter, mcpHidden, preset, refresh, search, searchCreate, searchList, searchTitle, setHidden, setMcpHidden, setViewFilter, start, viewFilter, viewRows } = require('./main/views');
 const { nodePin, pinState, pinTree, pinned, setPin, todayNode, weekNode, weekTitle } = require('./main/pins');
@@ -135,6 +135,11 @@ ipcMain.handle('icons:types', () => icons.typeIcons());
 // first paint) and one write per change.
 ipcMain.on('prefs:snapshot', (e) => { e.returnValue = settings.prefs(); });
 ipcMain.handle('prefs:set', (_e, key, value) => settings.setPref(key, value));
+ipcMain.handle('openai:setKey', (_e, key) => {
+  if (typeof key !== 'string' || !key.trim()) throw new Error('OpenAI API key cannot be empty');
+  settings.set('openaiApiKey', key.trim());
+  return true;
+});
 ipcMain.handle('icons:setType', async (_e, typeUri, name) => {
   const chosen = icons.setTypeIcon(typeUri, name ?? null);
   await refresh(); // the cached rows carry the icon name, so they are rebuilt before anything is told to redraw
@@ -175,6 +180,7 @@ ipcMain.handle('history:undo', () => history(undoStack, redoStack, 'undo', 'canU
 ipcMain.handle('history:redo', () => history(redoStack, undoStack, 'redo', 'canRedo'));
 ipcMain.handle('doc:delete', (_e, id) => documentAction(id, 'softDelete'));
 ipcMain.handle('doc:restore', (_e, id) => documentAction(id, 'restore'));
+ipcMain.handle('deleted:list', () => db.deletedList()); // local: the graph does not list deleted documents
 ipcMain.handle('doc:setTitle', (_e, id, title) => mut(id, (doc) => { setTitle(doc, title); }));
 ipcMain.handle('doc:setDone', (_e, id, done) => mut(id, (doc) => {
   setState(doc, done ? 'closed' : 'open', S.me.userUri);
@@ -298,7 +304,7 @@ ipcMain.handle('doc:setAssigneesMany', (_e, ids, uris) => mutTasks(ids, (doc) =>
 ipcMain.handle('block:setText', (_e, id, nodeId, value) => mut(id, (doc) => { content.setText(doc, nodeId, value); })); // value: string or segments
 ipcMain.handle('block:setBlockType', (_e, id, nodeId, type) => mut(id, (doc) => { content.setBlockType(doc, nodeId, type); })); // type: one of content.BLOCK_TYPES
 ipcMain.handle('block:insertDivider', (_e, id, nodeId) => mut(id, (doc) => content.insertDivider(doc, nodeId))); // nodeId null appends at the end
-ipcMain.handle('block:insertAfter', (_e, id, nodeId, text) => mut(id, (doc) => content.insertAfter(doc, nodeId, text)));
+ipcMain.handle('block:insertAfter', (_e, id, nodeId, text, block) => mut(id, (doc) => content.insertAfter(doc, nodeId, text, false, block)));
 ipcMain.handle('block:insertBefore', (_e, id, nodeId, text) => mut(id, (doc) => content.insertBefore(doc, nodeId, text)));
 ipcMain.handle('block:split', (_e, id, nodeId, before, after, asChild) => mut(id, (doc) => content.split(doc, nodeId, before, after, asChild))); // one undo step for both halves
 ipcMain.handle('block:insertChild', (_e, id, nodeId, text) => mut(id, (doc) => content.insertChild(doc, nodeId, text)));
@@ -321,7 +327,10 @@ ipcMain.handle('sensitive:list', () => sensitiveIds()); // the synced setting se
 ipcMain.handle('sensitive:set', (_e, id, on) => setSensitive(id, on));
 ipcMain.handle('doc:related', (_e, id) => related(id)); // { summary, tagline, pinned[], outcomes[], notes[], backlinks[] }
 ipcMain.handle('doc:summaryUri', (_e, id) => summaryUri(id)); // where a meeting should actually open, or null
-ipcMain.handle('doc:setField', (_e, id, key, text) => mut(id, (doc) => fields.setFieldText(doc, key, text)));
+// "Discuss with …": one call for the type and the field, because both are the same decision (main/documents.js)
+ipcMain.handle('doc:discussWith', (_e, id, who) => discussWith(id, who));
+// and what the title suggests that name is (main/ai.js). No key on this machine means no suggestion, not an error.
+ipcMain.handle('ai:discussWith', (_e, title) => ai.suggestDiscussWith(title));
 // The web link for a node, the same url home.tana.inc opens: /o/<org>/l/<encoded node uri>
 ipcMain.handle('doc:link', (_e, id) => {
   // the path segment is the org *document* ulid (tana:org:01ks7…), not the WorkOS org id in S.me.orgId
@@ -374,7 +383,7 @@ ipcMain.handle('sync:login', async () => {
 });
 
 if (process.env.TANA_MAIN_TEST) {
-  module.exports = { resolveInitialAuth, graphRow, cachedNodeHue, VIEWS, toNode, outlineWithReferences, chatOutline, op, onChange, documentAction, createDocument, creationOptions, typeChoices, setType, setTypeHue, icons, settings, search, viewFilter, searchCreate, searchTitle, viewRows, spaceChildren, start, refresh, related, callOf, weekTitle, weekNode,
+  module.exports = { resolveInitialAuth, graphRow, cachedNodeHue, rememberType, VIEWS, toNode, outlineWithReferences, chatOutline, op, onChange, documentAction, createDocument, creationOptions, typeChoices, setType, setTypeHue, discussWith, ai, icons, settings, search, viewFilter, searchCreate, searchTitle, viewRows, spaceChildren, start, refresh, related, callOf, weekTitle, weekNode,
     statusSnapshot: () => ({ ...S.status }), rememberNodeHue, restoredBounds, today,
     undo: () => history(undoStack, redoStack, 'undo', 'canUndo'), redo: () => history(redoStack, undoStack, 'redo', 'canRedo'), visibleGraphNodes, pinTree, changesOf, summaryChanges,
     nodePin,

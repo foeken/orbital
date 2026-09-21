@@ -52,7 +52,7 @@ api.outdent(docId, nodeId)         // Promise<void>
 api.refresh()                      // Promise<void> re-query roots
 api.login()                        // Promise<void>
 api.status()                       // Promise<{authenticated, connected, syncing, lastSync, error}>
-api.onChanged(cb)                  // cb(docId | null, info?): null = roots changed; docId = that document changed (remote or local), info.meta says whether its assignees/audience/sharing did; the renderer patches the row (and its children when open) and re-renders (addendum 18)
+api.onChanged(cb)                  // cb(docId | null, info?): null = roots changed; docId = that document changed (remote or local), info.meta says whether its metadata did — assignees, audience, sharing, its type, and the values in its typed fields, all of which the zoomed page and the sidebar are read from; the renderer patches the row (and its children when open) and re-renders (addendum 18)
 api.onStatus(cb)
 ```
 IPC channels: outline:roots, outline:children, doc:setTitle, doc:setDone, block:setText, block:insertAfter, block:insertBefore, block:insertChild, block:split, block:remove, block:indent, block:outdent, sync:refresh, sync:login, sync:status; events outline:changed (payload docId|null), sync:status.
@@ -246,10 +246,19 @@ contract is unchanged.
   pinning it when it does not exist yet, so the command always lands somewhere. Matching is on the exact title; a second
   run reuses the same node. "Add to Tomorrow" is the only caller that passes an offset.
 - **Fields under the title**: a zoomed node shows its typed fields (text-input icon, label, value) between the title
-  and the outline, from `api.related(docId).fields` (`[{ key, label, text }]`). Values are editable in place -- Enter
-  commits through `api.setField(docId, key, text)`, Escape reverts. Fields are Tana "attributes": the value lives in
-  the node's own data map, the label in its type's template (sdk/fields.js, docs/MEETINGS.md). A field value is written
-  as one plain text run, so editing a reference field flattens it to its label text.
+  and the outline, from `api.related(docId).fields` (`[{ key, label, text, lines, segments }]`, which is what the
+  label and the words are read from). The value itself is **an outline**, drawn by the outline's own rows: a field
+  holds what a node holds — several rows, children under them, bullets, block types, references, checkboxes — and
+  it is the same code, so everything a row does a field row does, including "- ", Tab, Enter and ⌘Z — every row listener is bound to both places rows live (`onRows`, renderer/events.js), and `texts()` spans them in reading order, so Up and Down walk title → fields → outline (`caretRows()`, renderer/nodes.js). That list is for the caret only: `texts()` is the outline’s own rows and `fieldValues()` the field’s, and anything that changes what a row belongs to — removing it, merging into the row above, selecting a range — works in `rowsBeside(el)`, the list that row lives in, so Backspace at the top of the page cannot reach into the field above it. Tab on a plain line bullets it and, when the row above is already a list row, indents it under that row; a plain line above is never made a parent. Tab at the start of a plain line starts a list there, the same gesture as "- ", and ⇧Tab takes that marker off a top-level bullet. A row whose whole content is one reference stays a line with a live chip in it here rather than being drawn as the node it points at: a field is a list of names, and a row that grows a glyph and a grey subline is twice the height of the line above it. Its id is the
+  document and the field together, `<document uri>|<type uri>?attribute=<key>`: `api.children` and every `block:`
+  call take one, main resolves it to the field's value (`fields.fieldView`, `document()` in main/documents.js) and
+  the rest of the path is unchanged. Undo belongs to the document that carries the field. A read never creates a
+  value — opening a typed page would otherwise write an empty tree into every empty field it has — while a write
+  creates it. A render defers while the caret is in a field row, as it does for a row in the outline.
+  Fields are Tana "attributes": the value lives in the
+  node's own data map, the label in its type's template (sdk/fields.js, docs/MEETINGS.md); for a field whose
+  cardinality is multiple, Tana reads each block as one of its values.
+
 - **Meetings open at their write-up**: an event has no content of its own, so zooming a meeting forwards to the
   document it owns whose title is the event's tagline (generated appearance image as the fallback), through
   `api.summaryUri(docId)`. One rule in main (`writeUpOf`) serves both the navigation and the rail, so every route --
@@ -283,11 +292,11 @@ What changed after addendum 16, stated once here; the details and evidence are i
 - **A task's state shows everywhere at once** (#243): a status change reaches every place the task is drawn without waiting for the caret or a reload. The main process builds every row from the search index through `graphRow` and records its state in `rememberMeta`, and the index can trail a write by seconds, so a task this app holds live keeps its live state there (`liveState` in main/rows.js); otherwise the refresh two seconds after a status change put the old state back. In the renderer, a render deferred while the caret is in a row (or a selection is frozen) still updates every checkbox, the page title's and the sidebar's (`refreshRowChrome`), and a change to a task patches its copies: reference rows in open notes and sidebar rows (`patchCopies`, also on a sidebar click).
 - **Hidden items**: `api.filters()/setFilters/addFilter/removeFilter` keep title patterns (whole title, or a prefix with a trailing `*`, case-insensitive) that drop matching nodes from every list and search; edited from Cmd+K "Edit hidden items". A hidden node opened directly still opens.
 - **A row's facts follow the title, or the subtext** (`fitRowMeta` in renderer/render.js): who a node is for, who can see it and whether it notifies are grey facts drawn after the title. When the title fills the line the browser wraps them onto a line of their own, where they read as a second title rather than as facts about the first; there they join the `.subtext` instead, behind a `.metasep` carrying the same " · " its own parts are joined with, and its 8px lead-in comes off (`.subtext .tmeta`). One pass after every render measures every row before moving any, so the outline costs one layout rather than one per row, and a `ResizeObserver` on the outline answers the window, the sidebar drag and the text-size keys — width only, since moving the facts changes the height and would otherwise come straight back. The measurement asks how much room the line leaves (the body's right edge against the right edge of the last client rect of whatever precedes the facts — the meeting time when there is one, the title otherwise) rather than where the facts currently sit, so it gives the same answer from either side and a row cannot flip back and forth. `patchMeta` takes them out wherever they are before it rewrites the subtext, puts them back in front of the tags, and asks again.
-- **Sensitive marks** (app-local, `api.sensitiveIds()/setSensitive`): marked documents render blurred on every surface (rows, title, chips, crumbs, rail); Cmd+K "Toggle sensitive visibility" lifts the blur for the session, and every launch starts blurred.
+- **Sensitive marks** (app-local, `api.sensitiveIds()/setSensitive`): marked documents render blurred on every surface (rows, title, chips, crumbs, rail); Cmd+K "Toggle sensitive visibility" (and the header button) lifts the blur, and that choice is remembered on this machine (localStorage `sensitiveVisible`), so a launch opens the way you left it. It stays local rather than joining the settings that follow you: showing them on your own laptop should not unblur them on a shared one.
 - **Selection and the current node in Cmd+K**: with rows selected (Cmd+click toggles, Shift+click and Shift+Up/Down extend) the palette leads with a "Selection" group — Mark/Unmark as sensitive, Add to Today, Add to Tomorrow, Add to This Week, Set status, Assign, Delete — each counting what it acts on and reporting "N skipped" for rows it cannot; with nothing selected the same rows apply to the current node (zoomed, or under the caret) under "Current node" without counts. Delete counts writable documents, or writable blocks when only blocks are selected; a read-only current node shows it disabled. Adding to a date node appends one block per document whose text is a mention of it.
 - **Today and week nodes**: "Today" (`api.todayNode`, default ⌃⇧D; under Views in Cmd+K) opens the document titled `YYYY-MM-DD`, pinned to today; "This week" (`api.weekNode`) opens "Week N (YYYY)" for the ISO week. Both create the document when it is missing; they are separate documents with no link between them. Tomorrow’s node has no view row of its own: "Add to Tomorrow" creates it with api.todayNode(1), titled and pinned the same way.
 - **Hotkeys**: every command row, the selection rows included, has a stable id that Cmd+Shift+K records against. The built-in keys are rows too, with a default combo in `DEFAULT_HOTKEYS` (renderer/state.js) that a recorded combo overrides and Reset restores: Search Tana ⌘S, Filter rows by text ⌘F, Go back ⌘[, Go forward ⌘], Undo ⌘Z, Redo ⇧⌘Z, Expand ⌘↓, Collapse ⌘↑, Complete/Reopen ⌘↩, Today ⌃⇧D. "Focus the sidebar" is a palette row with no default key: it fires only from one the user records. The document handler dispatches any of them by id; a key the focused node already answered to (⌘↑, ⌘↩) arrives defaultPrevented and is not run twice, and a row absent right now (no sidebar, nothing to go back to) leaves its key alone. Only ⌘K, ⇧⌘K, the text-size keys (⌘0, ⇧⌘+/-, shown as literal chips on their rows), ⇧⌘⌫ and the ⇧⌘↑/↓ moves stay fixed; the recorder refuses those, and any combo another row already has, with the reason shown (⌃ counts as ⌘, ⌥ is ignored for the fixed ones). ⌘Y is no longer a redo alias. A read-only row has no editor to defend, so it passes every ⌘ combo to the document handler and swallows only the plain keys it answers to. A command that reveals a field and then focuses it (Filter rows by text) shows the field itself rather than leaving that to the render, which is deferred while the caret is in a row: focusing a hidden field moves nothing.
-- **Palette order**: groups run Selection or Current node, Views (Inbox, Today, This week, Tasks, Meetings, People, Chats, Library — `VIEW_ORDER`), View options, Actions. Node rows follow `NODE_ROW_ORDER` in renderer/palette.js whichever file they come from: Zoom in, Expand/Collapse, Complete/Reopen, Set status, Edit assignees, Assign to …, Pin to sidebar, Pin to today, Pin to tomorrow, Pin to current meeting, Pin to meeting, Add to Today, Add to Tomorrow, Add to This Week, Move to …, Move to Library, Edit visibility, Mark as sensitive, Copy link, Delete. View options are the pills named for what they do — Filter by type, Filter by status, Filter by assignee, Sort by, Group by, each with its current value as the hint — then Clean up (always listed, grey with "Nothing to clean up" until rows are being kept in place), then Filter rows by text. Actions run Log in (when signed out), Create new…, Search Tana, Go back, Go forward, Focus the sidebar, Undo, Redo, Sync, Edit hidden items, Toggle sensitive visibility, the three text sizes, the two theme toggles. A new node row gets a place in that list (an `id`, or a `rank` when it must not be recordable); a new action goes where it belongs in the push order.
+- **Palette order**: groups run Selection or Current node, Views (Inbox, Today, This week, Tasks, Meetings, People, Chats, Library — `VIEW_ORDER`), View options, Actions. Node rows follow `NODE_ROW_ORDER` in renderer/palette.js whichever file they come from: Zoom in, Expand/Collapse, Complete/Reopen, Set status, Discuss with …, Edit assignees, Assign to …, Pin to sidebar, Pin to today, Pin to tomorrow, Pin to current meeting, Pin to meeting, Add to Today, Add to Tomorrow, Add to This Week, Move to …, Move to Library, Edit visibility, Mark as sensitive, Copy link, Delete. View options are the pills named for what they do — Filter by type, Filter by status, Filter by assignee, Sort by, Group by, each with its current value as the hint — then Clean up (always listed, grey with "Nothing to clean up" until rows are being kept in place), then Filter rows by text. Actions run Log in (when signed out), Create new…, Search Tana, Go back, Go forward, Focus the sidebar, Undo, Redo, Sync, Edit hidden items, Toggle sensitive visibility, the three text sizes, the two theme toggles. A new node row gets a place in that list (an `id`, or a `rank` when it must not be recordable); a new action goes where it belongs in the push order.
 - **Palette matching, ranking and folded levels**: `fuzzyMatch` in renderer/palette.js matches a row in tiers, the way Raycast ranks a title (first letters of words count for a lot): 0 the label starts with the query ("in" → **In**box), 1 the first words' initials in a row ("mtl" → **M**ove **t**o **L**ibrary), 2 the query starts a later word ("in" → Zoom **in**), 3 word-prefix chunks that skip words ("molib" → **Mo**ve to **Lib**rary), 4 a substring inside a word, 5 the letters in order with the first one starting a word ("inbx" → **Inb**o**x**). The matched letters are shown in bold. With a query, Cmd+K sorts by tier and then by where the match starts; a group moves as a whole to where its best row lands (so headings show once) and equally good groups keep the fixed order. A row that opens a second level (Move to …, Set status, Edit assignees / Assign to … / Assign N tasks to, Create new…, Edit visibility, the view option rows) carries `sub`, that level's rows; once the first two letters of the query reach such a row (as a prefix or its initials: "mo"/"mt", "as"/"at"), the level is loaded (once per palette opening) and each choice is offered as one row right below it — "Move to Foundry", "Set status to In Progress", "Assign to Robin", "Create new Task", "Sort by Title" — so one query reaches the choice without going down. "Move to …" and "Set status" (one task or a selection) are marked `subAlways`: the spaces (at most 50) and the four statuses are short lists, so they load as the palette opens and fold in for any query ("inb" → Set status to Inbox). "Move to …" (formerly Move to space) offers the spaces and Library; the Inbox is a state rather than a place, reached with Set status to Inbox. "Assign to" sets a task's assignee outright (setAssigneesMany with one document), where Edit assignees toggles them one by one.
 - **A row that is only a mention chip** (`chipOnly` in renderer/render.js): this is Tana's full-reference presentation, a block whose only content is a reference. Chromium holds no caret before a non-editable inline that starts the field, nor after one that ends it, so `renderSegs` puts a zero-width space (`CARET_ANCHOR`) on each side that needs one, and every offset helper (`caretOffset`, `selectionOffsets`, `setCaret`, `textPoint`, the keydown `len`) counts it as nothing, so it is a placeholder like the trailing soft-break newline rather than content — `readSegs` strips it and `chipOnly` ignores it. The caret therefore shows both before and after the chip: without the trailing anchor it was placed after the chip correctly but painted nowhere, so the end of such a line read as having no caret at all. Typing either side prepends or appends ordinary text, which stores the block as text plus a mention: Tana's inline presentation, the same data shape Tana writes itself (verified live: a full reference and an inline one are both a `paragraph` holding a `mention`, the full one holding nothing else). Chromium still will not delete a non-editable inline from a plaintext field, so the row carries `.chiponly` and Backspace or Delete removes the row the way they remove an image or a divider. A read-only reference row, which has no caret either, is outlined when focused, and so is a lone chip whose target could not be read.
 - **A full-line reference is the node it points at** (`isFullReference` in renderer/nodes.js, `.fullref`): main resolves such a block like a native embed — `resolveReferences` gives it the same `reference: { uri, label, node }` — and the renderer then builds the row from the target rather than from the block: its bullet and hue, its tag chips, its subtext and its checkbox, wired to `toggleReference`, so a task can be accepted and completed from the line that references it. The label is read from the target too, so a rename in Tana shows through; nothing is written back, because `setText` reuses a mention whose uri is unchanged. The block keeps its own identity and its editable text: the focus and the selection are drawn as a box around the whole row instead of around the chip, and the moment anything else is typed on the line the row is an ordinary one with an inline link again, since `isFullReference` reads the segments the row currently holds. That happens on the keystroke, not on the save: saves are debounced by 400 ms and the node keeps the old segments until the write comes back, so `nodeEl` asks `liveTarget(node, pending.get(item.key))` — the edit in flight, the same segments `renderSegs` draws — and the input handler redraws the row when that answer flips (`.fullref` against `chipOnly`), except mid-composition, where rebuilding the row would drop what the IME holds. Otherwise the box, the tags and the strikethrough of the other node stood on the line for the length of the round trip. Such a row's title is ordinary text, struck through and grey when the target is done, like any other node row: the blue underlined chip is for a reference **among** text, where it is what says these words live somewhere else. A lone chip whose target could not be read is still only a link, so it keeps the blue. Three rules follow from the row being the node rather than a link to it. **It cannot have children of its own**: expanding it opens the target's outline (`childHost` in renderer/render.js builds those rows against the target document, so editing one edits that document, and it is loaded on demand rather than with the page), so a block that already holds an outline is left an ordinary line with a link. It opens only when asked: `isOpen` has blocks open by default, which is right for a block's own children and wrong for another document's, so `opened` is read straight from `open` for these rows — otherwise a pasted reference arrived expanded whenever its target happened to be loaded already — `isFullReference` reads `hasChildren`, and main skips the lookup for the same reason. It does not offer a draft tail: adding to the referenced node is not something this row does. **A click selects it**, the way it already did for a native embed: the row takes the border, a second click puts the caret where you clicked, so typing beside the chip still works. The chip therefore does not navigate (`mention.closest('.fullref')` in renderer/events.js) — **the bullet is the way in**, and so is Space on the selected row. What hangs under an opened one is another document, so its guide line is dashed — the same 1px guide every other row has, only dashed: painting it as a background gradient buys a longer dash and loses the line, since a border snaps to device pixels and a 1px background column does not, so it renders wider and washed out — and the focus ring is drawn from `> .line:focus-within` rather than `:focus-within` on the row — a caret in the rows it opened is not a caret on the reference. Once the row is selected, clicking it again starts editing it, and so does Enter (`selKey` in renderer/select.js, through the same `clearSel`): the caret goes to the end, since a full reference has nothing to click into — its text is one chip.
@@ -422,6 +431,10 @@ them is trimmed.
   children keeps the full gutter, since it has a chevron to show. Headings also open a section: 30/24/20px above
   h1/h2/h3 and 6px under, set on the node so a selected heading keeps its tight highlight, and the first row of a
   page takes none because the title above it is already the space.
+- **Expanding a row is asking it for sub-items, so it opens onto a bullet.** The draft an expanded empty row shows
+  is a list row whatever the parent is, and the write is told which kind to make (`insertAfter(…, block)`, which
+  `materialise` passes the kind the draft was drawn as), so the row does not change shape on the first keystroke.
+  A document's own page is a different question and still starts as plain text.
 - **A new row follows the row it comes from, and a document starts as plain text.** Either side of a row, Enter
   gives a row of that row's own kind: a listItem beside a listItem (so a quote stays in its quote and a numbered
   item stays numbered), and plain text beside anything bare — a heading and a code block each continue as the
@@ -530,11 +543,91 @@ Tana has nowhere to keep an icon — `appearance` holds an image uri and a hue �
 somebody else's CRDT. The glyphs a type wears arrive with the roots (`renderer/nodes.js loadRoots`), so a row is
 never drawn before the markup its icon name refers to exists.
 
-**Set colour** (Cmd+K on a type, beside Set icon) is the other half, and unlike the glyph it is Tana's own: the hue
-on the type (`appearance.hue`, 0-360), which colours that type's chips and documents in Tana as well as here. The
-picker is the palette itself — twelve named colours, each row drawn with the glyph the type already wears in the
-colour it would become, the current one ticked, and **No colour** to go back to grey (offered only when there is a
-colour to remove). Typing a name narrows the list; typing a number picks that hue exactly, because the wheel has 360
-of them and a list of twelve does not. The write is `doc:setTypeHue` → `setTypeHue` (main/documents.js), which
-writes the `appearance` root container, primes the type and node hue caches and refreshes the rows itself: no
-change event carries appearance, since `onChange` reads the data map.
+**Set colour** (Cmd+K on a type, beside Set icon) is the other half, and like the glyph it is this app's own: a hue
+(0-360) or **grey** for the type, kept in the settings document under `typeHues` (docs/SETTINGS.md), so it follows you
+between machines and leaves the hue Tana keeps on the type (`appearance.hue`) untouched — Tana has no grey, every hue
+it stores is a colour, which is why the override exists. With no entry Tana's hue shows through. The picker is the
+palette itself — twelve named colours, each row drawn with the glyph the type already wears in the colour it would
+become, the current one ticked, **Grey** for no tint at all, and **Tana's colour** to forget the override. Typing a
+name narrows the list; typing a number picks that hue exactly. The write is `doc:setTypeHue` → `setTypeHue`
+(main/documents.js), which stores the setting and refreshes the rows itself; `typeHue` (main/rows.js) is the one
+place the override is read, for tags, inherited hues and the type's own row. Tana's hue is written only by the CLI's
+`set-hue`.
+
+## Addendum: Discuss with …
+
+Cmd+K on a document offers **Discuss with …** (id `discussWith`, so ⇧⌘K can record a key against it), hinted with
+"Discussion Task" — the type it gives the document. It opens a page whose only row is what is being typed: the answer
+is a name, and the field it lands in holds text rather than a member reference, so a team ("Heads of Technology") or
+two people at once are as good an answer as one colleague. Enter writes it; with nothing typed the page says so and
+there is nothing to run.
+
+One call does both writes, because they are one decision: `api.discussWith(id, who)` → `discussWith`
+(main/documents.js) finds the type titled "Discussion Task" among the workspace's types, gives the document that type
+unless it has it already, and writes the words into the type's "Discuss with" field. The type and the field are
+matched by title, not by id: a workspace that has never seen either has nothing else to match on, and Tana's field
+keys are eight generated characters that differ per workspace. When the type is missing it is created in the Library
+(no home space, so it fits a document wherever it lives) with that one field, cardinality multiple; when the type is
+there but the field is not, the field is added to it rather than a second type appearing beside it. The row and the
+page's fields follow main's change event, like a retype. Verified end to end against Tana on a scratch document
+(2026-09-20): the index reports `entityType` and `attributes["<type>?attribute=n5e1hgxz"] = { text, listItems }`,
+the same shape the nine real instances of that type carry. The type carries a workflow, so typing the document also
+puts it in that workflow's first state — which is what Tana's own "Set type" does.
+
+## Addendum: Recently deleted
+
+Cmd+K offers **Recently deleted** (id `recentlyDeleted`, so ⇧⌘K can record a key against it), beside Undo and Redo.
+It opens a page of what this app has seen deleted, newest first, each row saying how long ago it went; typing
+narrows it by title and Enter restores that document and opens it. Nothing is confirmed and nothing is thrown away:
+a restore is the same `doc:restore` the undo stack runs.
+
+It exists because deletion in Tana keeps the document. A soft delete only sets `deletedAt`, so the title, content,
+fields and participants are all still there and a restore by id brings it back whole — but the graph stops answering
+for it, so no search, list or query can ever name it again, and the undo stack only reaches back through this
+session and only in order. Which ids those are is therefore the one thing that has to be remembered locally:
+`invalidateDeleted` (main/documents.js), the single point every deletion this app learns about passes through —
+your own delete, an undo of a create, a deletion on another device, a read that finds a tombstone — writes the id
+and the title into `deleted_nodes` (db.js) before the cached row is dropped, taking the title from the document
+while it is still open. A restore takes it off that list again, wherever the restore came from, because the same
+change event that clears the tombstone clears the row. The list holds a month and is capped at 25, in SQLite rather
+than in the settings document: it is about this machine's history, and an id that is gone is not worth syncing.
+
+What it cannot show is a deletion that happened while the app was not running, or one from before it recorded any:
+the app has to have seen it. Tana's own trash, if it grows one, would be the better source.
+
+### The suggestion beside it
+
+While that page is open the document's title is read by a model, and what it makes of it is offered as a second row
+under the one you are typing into: "Discuss this with Stan" suggests `Stan`, "Discuss this with the heads of tech"
+suggests `Heads of Tech`, and two people become "Stan and Peter". It is never the first row — Enter is always your
+own answer — so taking it is one arrow key down, and it is drawn with the sparkle glyph, which is what marks a row
+the app worked out rather than one you typed or one Tana knows. While the answer is on its way the row says
+"Reading the title…" under the same glyph, breathing (`.ricon.thinking`, behind the reduced-motion gate) so the
+page does not look finished; the answer then replaces that row in place. A suggestion equal to what you have typed
+is not offered twice, a title naming nobody adds no row at all, and a call that failed shows its message rather
+than passing for a title that named nobody.
+
+The call is main's, in `main/ai.js`, and it is the only place this app talks to a model: `api.suggestDiscussWith(title)`
+sends the title and nothing else — no content, no ids — to the Responses API, with the extraction rule as
+`instructions` so that a title cannot become one. It is asked once per open, never per keystroke. Nothing is sent
+without an API key, and that key stays on this machine (`openaiApiKey`, never synced to Tana); no key simply means
+no suggestion. Which model answers and how hard it thinks are the settings `aiModel` and `aiEffort`, defaulting to
+a small model that does no reasoning at all (`none`), because a page is waiting on it and thinking time is latency. They follow you between machines like the
+other choices about your own content, and they have no UI yet: change them in the settings document.
+
+- **The Library is not shown in the breadcrumbs once Home is something else** (`renderCrumbs`): the location from `api.path` still begins at the Library, and the crumb for it is dropped whenever `homeId()` is not `library`. A document whose only location was the Library then shows the Home anchor alone; separators are appended with each crumb (`addCrumb`) rather than counted by index, so the • sits before the first crumb that is actually drawn and nothing dangles when there is none.
+
+### The names that are people here
+
+Whatever reaches the field — typed or suggested — is read for the workspace's own members before it is written, and
+each one found becomes an inline reference to their profile while the rest stays words: "Stan Engbers and Ria" is a
+mention of Stan followed by " and Ria", and Tana's index reports it under that field's `references` (verified on a
+scratch document, 2026-09-20). The words are kept as the mention's label rather than replaced by the profile's
+title, so the line reads the way it was written and the reference is the id beside it.
+
+Three rules keep a match from being a guess (`nameSegments`, main/documents.js). A name matches whole words only,
+counted in letters rather than `\\w`, so "Rekké" ends where it ends and "Stan" is not found inside "Standard". The
+longest name wins, so "Stan Engbers" is one person rather than a first name and a leftover surname. A first name
+shared by two members is not a name at all — with two Stans in the workspace only the full name matches — and
+nobody is referenced twice in one answer, so a name repeated stays words the second time. When nobody matches, or
+the member list cannot be read, the value is written as the plain string it always was.

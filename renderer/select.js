@@ -17,10 +17,20 @@ function selKeys() { // visible selected keys in outline order; stale rows simpl
   return keys;
 }
 function applySel() {
-  for (const n of outline.querySelectorAll('.node.selected')) n.classList.remove('selected');
+  for (const n of eachRow('.node.selected')) n.classList.remove('selected');
   for (const k of selKeys()) nodeElOf(k).classList.add('selected');
 }
-function leaveText() { const el = document.activeElement; if (el && (outline.contains(el) || el === titleEl) && (el.isContentEditable || el.classList.contains('text'))) { flush(keyOfEl(el)); el.blur(); } }
+function leaveText() { const el = document.activeElement; if ((inRows(el) || el === titleEl) && (el.isContentEditable || el.classList.contains('text'))) { flush(keyOfEl(el)); el.blur(); } }
+// ⌘A twice: every row of the editor the caret is in — the page's rows, or the rows of the field it is in, never
+// both. A selection here is rows rather than characters, which is what ⌫, ⇧⌘↑/↓ and the Selection group in ⌘K act
+// on; the browser's own select-all would take the window and leave nothing to act on.
+function selectAllRows(el) {
+  const keys = rowsBeside(el).map(keyOfEl).filter(Boolean);
+  if (!keys.length) return false;
+  sel = { keys: new Set(keys), anchor: keys[0], focus: keys.at(-1) };
+  leaveText(); applySel();
+  return true;
+}
 function toggleSel(key) {
   const keys = new Set(sel ? sel.keys : []);
   if (keys.has(key)) keys.delete(key); else keys.add(key);
@@ -42,11 +52,15 @@ function extendSel(item, dir) { // grow (or shrink) the range from the focus end
   if (next) rangeSelTo(next.dataset.key, sel.anchor);
 }
 function clearSel(key) { sel = null; selectionFrozen = false; render(); if (key) placeCaret(key); }
-function blockSelection(keys, contiguous, action) {
+// Moving, indenting and outdenting carry the rows as one block, so they need siblings, and a contiguous run of
+// them. Removing does not: a selection to delete is a set of rows, whatever levels they sit on (sdk/content.js
+// removeMany takes any of them, a row inside another going with the row that holds it). Requiring siblings there
+// refused an ordinary \u2318A \u2192 \u232b outright.
+function blockSelection(keys, contiguous, action, siblings = true) {
   const its = keys.map((key) => items.get(key));
   const first = its[0];
-  if (!first || its.some((it) => !it || it.node.kind !== 'block' || !canEditStructure(it) || it.docId !== first.docId || it.parent !== first.parent)) {
-    showError(new Error(action + ' requires writable sibling blocks'));
+  if (!first || its.some((it) => !it || it.node.kind !== 'block' || !canEditStructure(it) || it.docId !== first.docId || (siblings && it.parent !== first.parent))) {
+    showError(new Error(action + (siblings ? ' requires writable sibling blocks' : ' requires writable blocks of one document')));
     return null;
   }
   if (contiguous) {
@@ -99,7 +113,7 @@ function selKey(e) { // keys while a selection is active (nothing focused); docu
   if (!keys.length) return false;
   const vert = e.key === 'ArrowUp' || e.key === 'ArrowDown';
   if (e.shiftKey && !mod && vert) extendSel(items.get(sel.focus), e.key === 'ArrowUp' ? -1 : 1);
-  else if (e.key === 'Backspace' && (!mod || e.shiftKey)) { if (blockSelection(keys, false, 'Remove')) removeSel(keys); }
+  else if (e.key === 'Backspace' && (!mod || e.shiftKey)) { if (blockSelection(keys, false, 'Remove', false)) removeSel(keys); }
   else if (mod && e.shiftKey && vert) { if (blockSelection(keys, true, 'Move')) moveSel(keys, e.key === 'ArrowUp' ? 'up' : 'down'); }
   else if (e.key === 'Tab' && !mod) { if (blockSelection(keys, true, e.shiftKey ? 'Outdent' : 'Indent')) indentSel(keys, e.shiftKey ? 'outdent' : 'indent'); }
   else if (e.key === ' ' && !mod && keys.length === 1) { const it = items.get(keys[0]); sel = null; if (referenceTarget(it.node)) openReference(it.node); else zoomTo(it); } // Space on one selected row zooms into it, or opens what it references

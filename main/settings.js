@@ -26,7 +26,11 @@ const ROOT = 'settings'; // the root container the keys live in
 // What follows you between machines, and what cannot. A window's size belongs to the screen it was sized on; the
 // agent's task ids belong to the machine that ran them; where you happened to be belongs to the machine you were at.
 // Everything else is a choice about your own content, which is the same choice wherever you open the app.
-const SYNCED = [/^viewFilter:/, /^hiddenTitles$/, /^hideMcp$/, /^typeIcons$/, /^notify$/, /^codex$/, /^codexPrompt$/, /^codexHosts$/, /^codexTask$/, /^sensitive$/, /^pref:/];
+// openaiApiKey is deliberately absent: it must remain on this machine, never in Tana.
+// aiModel/aiEffort are which model writes the "Discuss with" suggestion and how hard it thinks (main/ai.js): a
+// choice about your own content, so it follows you, while the key that pays for it stays put. Neither has UI yet —
+// unset means the defaults in main/ai.js.
+const SYNCED = [/^viewFilter:/, /^hiddenTitles$/, /^hideMcp$/, /^typeIcons$/, /^typeHues$/, /^notify$/, /^codex$/, /^codexPrompt$/, /^codexHosts$/, /^codexTask$/, /^sensitive$/, /^aiModel$/, /^aiEffort$/, /^pref:/];
 const isSynced = (key) => SYNCED.some((rule) => rule.test(key));
 
 let cache = null; // key -> value, the answer every read gets

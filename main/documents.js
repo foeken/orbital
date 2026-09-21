@@ -4,12 +4,16 @@ const access = require('../sdk/access');
 const content = require('../sdk/content');
 const chat = require('../sdk/chat');
 const { readNode, editable, setEntityType, ulid, initDocument, STATE_TYPES } = require('../sdk/node');
-const { DOC_URI, KINDS, NOT_CONNECTED, PLAIN_KINDS, S, TAG, deletedNodes, editability, errText, hueLoaded, idKind, isDeleted, metaSigs, nodeCreators, nodeHues, nodeMeta, now, pathCache, reading, redoStack, report, scheduleRefresh, send, subscribed, summaryCache, typeHues, typeTitles, undoStack, visibleGraphNodes } = require('./state');
+const fields = require('../sdk/fields');
+const { DOC_URI, KINDS, NOT_CONNECTED, PLAIN_KINDS, S, TAG, deletedNodes, editability, errText, hueLoaded, idKind, isDeleted, metaSigs, nodeCreators, nodeHues, nodeMeta, now, pathCache, reading, redoStack, report, scheduleRefresh, send, subscribed, summaryCache, typeAttrTitles, typeHues, typeTitles, undoStack, visibleGraphNodes } = require('./state');
 const { eventMeta, graphRow, hueOf, hueWithType, kindRow, memberRow, members, nodeTag, ownHue, plainRow, rememberNodeHue, rememberType, resolveHue, resolveTypes, toNode, typeTag, typeUriOf } = require('./rows');
 const settings = require('./settings');
 
 // Resolve native embeds without replacing the containing block identity or loading target content recursively.
 async function outlineWithReferences(doc) {
+  // a block with no id (Tana's agent writes some) gets one first, so the row it becomes can be edited; only where
+  // this user may write, since it is an op like any other
+  if (editable(readNode(doc), S.me && S.me.userUri) !== false) content.assignBlockIds(doc);
   return resolveReferences(content.readOutline(doc));
 }
 // The reference rows of any outline (content embeds, chat attachments and proposals) resolved in one place.
@@ -46,8 +50,13 @@ async function resolveReferences(nodes) {
   // targets from the answer above, plus anything deleted from this app.
   const deleted = uri => deletedNodes.has(uri);
   for (const ref of refs) { if (targets.has(ref.uri)) ref.node = targets.get(ref.uri); else if (deleted(ref.uri)) ref.deleted = true; }
-  // the icon alone: a mention says what kind of thing it points at, and takes the link's own colour to say it
-  for (const m of mentions) { const icon = targets.has(m.uri) && targets.get(m.uri).icon; if (icon) m.icon = icon; else if (deleted(m.uri)) m.deleted = true; }
+  // the icon and the hue: a mention says what kind of thing it points at, and is drawn in its type's colour when
+  // the target has one (the link's own blue otherwise)
+  for (const m of mentions) {
+    const target = targets.get(m.uri);
+    if (target && target.icon) m.icon = target.icon; else if (deleted(m.uri)) m.deleted = true;
+    if (target && target.hue != null) m.hue = target.hue;
+  }
   return nodes;
 }
 
@@ -82,7 +91,7 @@ async function creationOptions() {
   const types = await Promise.all(result.nodes.map(async n => {
     rememberType(n);
     // the chooser shows a type the way its documents render: the type's own hue and its app-local icon
-    const look = { hue: ownHue(n) === undefined ? typeHues.get(n.id) : ownHue(n) };
+    const look = { hue: hueOf(n) };
     try { const config=await customCreation(n.id); return {id:n.id,kind:'custom',typeUri:n.id,title:n.title || '',...look,icon:config.kind === 'meeting' ? 'meeting' : 'doc',ownerUri:config.ownerUri,appliesTo:config.kind === 'meeting' ? 'events' : 'docs',selectable:true}; }
     catch(e) { return {id:n.id,kind:'custom',typeUri:n.id,title:n.title || '',...look,icon:'doc',selectable:false,reason:errText(e)}; }
   }));
@@ -115,7 +124,7 @@ async function typeChoices(id) {
   const scoped = nodes.filter((t) => ((t.typeDef && t.typeDef.appliesTo) || 'docs') === context);
   await resolveTypes(scoped.map((t) => t.ownerUri)); // the home space titles, for the line that says why a type is out
   const options = scoped.map((t) => ({
-    uri: t.id, title: t.title || '', hue: ownHue(t) === undefined ? typeHues.get(t.id) : ownHue(t),
+    uri: t.id, title: t.title || '', hue: hueOf(t),
     selectable: !t.ownerUri || t.ownerUri === home,
     reason: !t.ownerUri || t.ownerUri === home ? undefined : 'Lives in ' + (typeTitles.get(t.ownerUri) || 'another space'),
   })).sort((a, b) => a.title.localeCompare(b.title));
@@ -141,35 +150,107 @@ async function setType(id, typeUri) {
   scheduleRefresh(2000); // the row updates from the change event; this is the index catching up for the next list
   return uri;
 }
-// A type's colour. Tana keeps it in an `appearance` root map beside `data`, not inside the data map readNode reads
-// (the raw roots of a real type are { data, appearance: { hue } }), so it is written straight on the document.
-// 0-360, null clears it. `editable` answers false for a type (only text, space, event and search are editable
-// documents here), so this goes through op rather than mut: one field on a type, and no undo step for a colour.
+// A type's colour, as this app draws it: our own hue (0-360) or 'grey', kept in the settings document under the
+// type (main/rows.js typeHue), so Tana's own hue on the type is left alone and the choice still follows you between
+// machines. null forgets the override and Tana's colour shows again. (Tana's hue itself is written by the CLI's
+// set-hue: `appearance.hue`, a root map beside `data`.)
 async function setTypeHue(typeUri, hue) {
   if (typeof typeUri !== 'string' || !TYPE_URI.test(typeUri)) throw new Error('Colours are set on a type');
-  if (hue !== null && (!Number.isInteger(hue) || hue < 0 || hue > 360)) throw new Error('A hue is 0-360');
-  await op(typeUri, (doc) => {
-    if (readNode(doc).type !== 'type') throw new Error('Colours are set on a type');
-    doc.transact((loro) => {
-      const appearance = loro.getMap('appearance');
-      if (hue === null) appearance.delete('hue'); else appearance.set('hue', hue);
-    });
-  });
-  // No change event carries this one — appearance is not in the data map onChange reads — so the redraw is asked
-  // for here. The caches are told on both sides of it: before, so every row rebuilt with a type tag is the new
-  // colour, and again after, because the graph index can still answer the refresh with the old one.
-  // ponytail: the type's own row is built from the graph node, so a lagging index leaves it the old colour until
-  // the delayed refresh; a longer wait would only make the redraw feel slow.
-  const remember = () => {
-    if (hue === null) { typeHues.delete(typeUri); nodeHues.delete(typeUri); }
-    else { typeHues.set(typeUri, hue); nodeHues.set(typeUri, hue); }
-  };
-  remember();
-  if (S.refresh) await S.refresh(); // rebuilds the cached rows and tells the renderer to reload them
-  remember();
-  scheduleRefresh(2000); // the index catching up, for the rows built next
+  if (hue !== null && hue !== 'grey' && (!Number.isInteger(hue) || hue < 0 || hue > 360)) throw new Error('A hue is 0-360, or grey');
+  const next = { ...(settings.get('typeHues') || {}) };
+  if (hue === null) delete next[typeUri]; else next[typeUri] = hue;
+  settings.set('typeHues', next);
+  if (S.refresh) await S.refresh(); // no change event carries a setting: the rows are rebuilt and announced here
   return hue;
 }
+// ---- "Discuss with …" (Cmd+K): the Discussion Task type, and the name that goes in its one field ----
+// The type and its field are matched by title, because a title is all a workspace that has never seen either can be
+// matched on: keys are Tana's own eight characters and differ per workspace. A missing type is created in the
+// Library (no home space, so it goes on a document wherever it lives) with that one field, cardinality multiple,
+// which is how the type this was built from carries it. The field holds plain text rather than member references:
+// every instance of the real type (9 read on 2026-09-20) does, and half of them name a team rather than a person.
+const DISCUSSION_TYPE = 'Discussion Task', DISCUSS_FIELD = 'Discuss with';
+const sameTitle = (a, b) => String(a || '').trim().toLowerCase() === b.toLowerCase();
+async function discussionType() {
+  if (!S.client) throw new Error(NOT_CONNECTED);
+  const { nodes = [] } = await S.client.graph.listNodes({ nodeTypes: ['type'], limit: 200 });
+  // A type living in a space only goes on documents in that space, so a Library one is preferred when a workspace
+  // has both; among equals the first the index reports wins, which is the oldest.
+  const found = nodes.filter((t) => sameTitle(t.title, DISCUSSION_TYPE) && ((t.typeDef && t.typeDef.appliesTo) || 'docs') === 'docs')
+    .sort((a, b) => (a.ownerUri ? 1 : 0) - (b.ownerUri ? 1 : 0))[0];
+  const uri = found ? found.id : (await createDocument(DISCUSSION_TYPE, { kind: 'type' })).id;
+  const type = await document(uri);
+  const titles = fields.templateTitles(type);
+  let attribute = Object.keys(titles).find((key) => sameTitle(titles[key], DISCUSS_FIELD));
+  if (!attribute) { attribute = fields.addField(type, { title: DISCUSS_FIELD, cardinality: 'multiple' }); typeAttrTitles.delete(uri); }
+  return { uri, key: uri + '?attribute=' + attribute };
+}
+// The names in that answer who are people here become inline references to their profiles, and the rest stays
+// words: "Stan and Ria", with only Stan in the workspace, is a mention of Stan followed by " and Ria". The words
+// are kept as the mention's label rather than replaced with the profile's full title, so the line still reads the
+// way it was written; the reference is the id beside it.
+//
+// Three rules keep a match from being a guess. A name matches on whole words only, counted in letters rather than
+// \w, or "Rekké" would never end and "Stan" would match "Standard". The longest name wins, so "Stan Engbers"
+// matches as one person rather than as "Stan" plus a surname. A first name shared by two people is not a name at
+// all here — with two Stans in the workspace, only "Stan Engbers" matches — and nobody is referenced twice, so a
+// name repeated in one answer leaves the second mention as words.
+const isWordChar = (ch) => !!ch && /[\p{L}\p{N}]/u.test(ch);
+function findWord(text, needle, taken) {
+  const lower = text.toLowerCase(), want = needle.toLowerCase();
+  for (let at = lower.indexOf(want); at >= 0; at = lower.indexOf(want, at + 1)) {
+    const end = at + want.length;
+    if (isWordChar(text[at - 1]) || isWordChar(text[end])) continue; // inside a longer word: not this name
+    if (taken.some((hit) => at < hit.end && end > hit.start)) continue; // already part of a longer name
+    return at;
+  }
+  return -1;
+}
+// segments when anyone matched, the plain string when nobody did — the same write this made before there was any
+// matching at all, so a workspace whose members cannot be read still gets its answer.
+async function nameSegments(who) {
+  const people = await members().catch(() => []);
+  const firsts = new Map();
+  for (const person of people) { const first = String(person.title || person.text || '').trim().split(/\s+/)[0].toLowerCase(); if (first) firsts.set(first, (firsts.get(first) || 0) + 1); }
+  const names = [];
+  for (const person of people) {
+    const title = String(person.title || person.text || '').trim();
+    if (!title) continue;
+    names.push({ needle: title, uri: person.id });
+    const first = title.split(/\s+/)[0];
+    if (first && first !== title && firsts.get(first.toLowerCase()) === 1) names.push({ needle: first, uri: person.id });
+  }
+  names.sort((a, b) => b.needle.length - a.needle.length);
+  const hits = [];
+  for (const name of names) {
+    if (hits.some((hit) => hit.uri === name.uri)) continue;
+    const at = findWord(who, name.needle, hits);
+    if (at >= 0) hits.push({ start: at, end: at + name.needle.length, uri: name.uri });
+  }
+  if (!hits.length) return who;
+  hits.sort((a, b) => a.start - b.start);
+  const segments = [];
+  let at = 0;
+  for (const hit of hits) {
+    if (hit.start > at) segments.push({ text: who.slice(at, hit.start) });
+    segments.push({ mention: { label: who.slice(hit.start, hit.end), uri: hit.uri } });
+    at = hit.end;
+  }
+  if (at < who.length) segments.push({ text: who.slice(at) });
+  return segments;
+}
+// One action: type the document if it is not that type already, then write the name into the field. The two writes
+// are separate undo steps, as a retype and a field edit are anywhere else.
+async function discussWith(id, who) {
+  if (typeof who !== 'string' || !who.trim()) throw new Error('Who should this be discussed with?');
+  if (typeof id !== 'string' || !DOC_URI.test(id) || idKind(id) !== 'text') throw new Error('Only a document can be a discussion task');
+  const { uri, key } = await discussionType();
+  if (readNode(await document(id)).entityTypeUri !== uri) await setType(id, uri);
+  const value = await nameSegments(who.trim());
+  await mut(id, (doc) => fields.setFieldText(doc, key, value));
+  return { typeUri: uri, key, who: who.trim(), mentions: typeof value === 'string' ? [] : value.filter((s) => s.mention).map((s) => s.mention.uri) };
+}
+
 async function createDocument(title, opts = {}) {
   if (typeof title !== 'string' || !title.trim()) throw new Error('Keep an empty draft local until it has a title');
   if (!S.client) throw new Error(NOT_CONNECTED);
@@ -239,6 +320,10 @@ function subscribe(id, init) {
 
 function invalidateDeleted(id) {
   deletedNodes.add(id);
+  // What Cmd+K "Recently deleted" offers to restore. The title is taken before the cached row goes, from the
+  // document itself while it is still open: a deleted document survives with its title, but nothing lists it.
+  const open = S.client && S.client.sync.getDocument(id);
+  db.noteDeleted(id, (open && readNode(open).title) || (db.get(id) || {}).title);
   db.remove(id);
   nodeHues.delete(id); hueLoaded.delete(id); editability.delete(id); pathCache.delete(id); nodeMeta.delete(id);
   typeTitles.delete(id); typeHues.delete(id);
@@ -406,6 +491,7 @@ function onChange(docId, info) {
       return;
     }
     const restored = deletedNodes.delete(docId);
+    if (restored) db.unnoteDeleted(docId); // back from the dead: off the Recently deleted list, wherever the restore came from
     const hueChanged = rememberNodeHue(n);
     const done = n.stateType === 'closed' ? 1 : 0, title = n.title ?? row?.title;
     const rowChanged = row && (title !== row.title || done !== row.done || hueChanged);
@@ -426,10 +512,22 @@ function onChange(docId, info) {
 }
 // What doc:taskMeta is built from, as one string per document: seeded when the renderer reads the metadata, compared
 // on every change. participants carry roles and restricted the audience rule; assignedToUris the assignees.
-// the type is metadata too: it decides which fields the page shows, and those are read with the sidebar (related)
-const metaSig = (n) => JSON.stringify([n.assignedToUris, n.restricted, n.participants, n.entityTypeUri]);
+// The type is metadata too: it decides which fields the page shows, and those are read with the sidebar (related).
+// So are the values in them: a field written anywhere else — "Discuss with …", another machine, Tana itself —
+// changes what a zoomed page shows, and without this the page kept the values it opened with until something else
+// refreshed it. The page's own field editor already shows what it just typed, so the extra read costs it nothing.
+const metaSig = (n) => JSON.stringify([n.assignedToUris, n.restricted, n.participants, n.entityTypeUri, n.attributes]);
 
-async function document(id) {
+// A field's value is an outline of its own, addressed as "<document uri>|<type uri>?attribute=<key>". Everything
+// that edits an outline — every block: handler, undo, the children read — takes one of these without knowing it:
+// document() hands back the field view (sdk/fields.js) instead of the document, and the rest is the same code. It
+// is what keeps the page and the field editor from being two editors rather than one.
+const FIELD_ID = /^(tana:[a-z-]+:[0-9a-z]{26})\|(tana:type:[0-9a-z]{26}\?attribute=[0-9a-z]{8})$/;
+const baseOf = (id) => { const field = typeof id === 'string' ? FIELD_ID.exec(id) : null; return field ? field[1] : id; };
+async function document(id, opts = {}) {
+  // A read must not create the value: opening a typed page would write an empty tree into every field it has.
+  const field = typeof id === 'string' ? FIELD_ID.exec(id) : null;
+  if (field) return fields.fieldView(await document(field[1]), field[2], { create: !!opts.create });
   if (!S.client || !S.me) throw new Error(NOT_CONNECTED);
   // A renderer draft carries a local id until it is materialised; subscribing one would create a phantom document
   // whose pending bootstrap then rejects as "unsubscribed <id>" on the next refresh.
@@ -447,14 +545,14 @@ async function document(id) {
   }
 }
 
-async function op(id, fn) {
+async function op(id, fn, opts = {}) {
   try {
-    const doc = await document(id);
+    const doc = await document(id, opts);
     // Finding it deleted here is news worth telling: a node this app never subscribed before has nothing else to
     // announce it, so the renderer kept the row, went on asking (doc:taskMeta once per backoff, for ever) and would
     // still open the page. invalidateDeleted evicts the caches and sends outline:removed, which is what stops both.
-    if (isDeleted(readNode(doc)) && !deletedNodes.has(id)) invalidateDeleted(id);
-    if (deletedNodes.has(id)) throw new Error('Node has been deleted');
+    if (isDeleted(readNode(doc)) && !deletedNodes.has(baseOf(id))) invalidateDeleted(baseOf(id));
+    if (deletedNodes.has(baseOf(id))) throw new Error('Node has been deleted');
     return await fn(doc);
   } catch (e) {
     report(e);
@@ -467,13 +565,15 @@ async function op(id, fn) {
 const inHistory = (id) => [...undoStack, ...redoStack].some((step) => step === id || step?.id === id || (Array.isArray(step) && step.includes(id)));
 async function mut(id, fn, accessMutation = false) {
   if (S.historyBusy) throw new Error('History operation is still running');
+  // A write into a field needs its value to exist; a read of the same id must not make one.
   const result = await op(id, (doc) => {
     if (!accessMutation && editable(readNode(doc), S.me && S.me.userUri) === false) throw new Error('This node is read-only in the outliner');
     return fn(doc);
-  });
+  }, { create: true });
   // Sharing and moves are gated by an audience disclosure and a preview token; a raw CRDT undo would rewrite
   // participants, restricted or ownerUri without either, so those mutations do not enter the undo stack.
-  if (!accessMutation) { undoStack.push(id); redoStack.length = 0; }
+  // The undo stack holds documents: a field's rows are undone on the document that carries them.
+  if (!accessMutation) { undoStack.push(baseOf(id)); redoStack.length = 0; }
   return result;
 }
 // Task metadata lives in separate CRDT documents. Preflight the whole selection, then group those
@@ -585,4 +685,4 @@ async function moveTarget(spaceId) {
   return document(spaceId);
 }
 
-module.exports = { outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, createDocument, typeChoices, setType, setTypeHue, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, codexIds, codexPrompt, setCodex, creatorOf, document, op, inHistory, mut, mutTasks, documentAction, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget };
+module.exports = { outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, createDocument, typeChoices, setType, setTypeHue, discussWith, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, codexIds, codexPrompt, setCodex, creatorOf, document, op, inHistory, mut, mutTasks, documentAction, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget };

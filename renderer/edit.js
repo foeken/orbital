@@ -46,8 +46,8 @@ async function splitNode(item, el, off) {
   let newId, asChild = false, splitDraft, splitKey, typed = after, typedOffset = 0;
   const splitList = (parent) => parent?.node?.kind === 'block' ? parent.node.children : kids.get(docId);
   const readSplitDraft = () => {
-    const draftEl = splitKey && typeof textEl === 'function' && textEl(splitKey);
-    if (draftEl) { typed = readSegs(draftEl); typedOffset = typeof caretOffset === 'function' ? caretOffset(draftEl) ?? 0 : 0; }
+    const draftEl = splitKey && textEl(splitKey);
+    if (draftEl) { typed = readSegs(draftEl); typedOffset = caretOffset(draftEl) ?? 0; }
   };
   const addSplitDraft = (list, index) => {
     // the kind the write will make it (siblingBlock), not the default one: a bullet flashing under the caret for
@@ -92,7 +92,7 @@ async function splitNode(item, el, off) {
   }
   render(true);
   if (newId) {
-    const key = docId + '/' + newId, real = typeof items !== 'undefined' && items.get(key);
+    const key = docId + '/' + newId, real = items.get(key);
     if (real && JSON.stringify(typed) !== JSON.stringify(after)) { renderSegs(textEl(key), typed); scheduleSave(real, typed); }
     placeCaret(key, typedOffset);
     lastEnter = { from: item.key, created: key, at: off }; // undoing this Enter belongs in the row it acted on, not in whatever sits above
@@ -107,7 +107,11 @@ async function shiftNode(item, el, op, arg) {
     const siblings = childrenOf(item.parent) || [], prev = siblings[siblings.indexOf(item.node) - 1];
     if (prev) open.set(keyFor(item.docId, prev), true);
   }
+  const leaving = op === 'outdent' ? item.parent : null; // the row it is about to leave: emptied, it closes with it
   await run(async () => { await tana[op](item.docId, item.node.id, arg); await reload(item.docId); });
+  // An outdent takes the row out of its parent, which is the same as a removal for the parent it leaves behind:
+  // without this the parent stayed expanded over nothing and drew a draft row where the child had been.
+  if (leaving) closeIfEmpty(leaving);
   render(true);
   placeCaret(item.key, off);
 }
@@ -119,7 +123,7 @@ async function shiftNode(item, el, op, arg) {
 function closeIfEmpty(parent) { if (parent && !hasKids(parent)) open.delete(parent.key); }
 async function removeNode(item, el) {
   if (!canEditStructure(item)) return;
-  const keys = texts().map(keyOfEl), i = keys.indexOf(item.key);
+  const keys = rowsBeside(el).map(keyOfEl), i = keys.indexOf(item.key);
   dropPending(item.key);
   await run(async () => { await tana.remove(item.docId, item.node.id); await reload(item.docId); });
   closeIfEmpty(item.parent);
@@ -133,7 +137,7 @@ async function removeNode(item, el) {
 // A row with children, an image, a divider, a reference, a draft or a row belonging to another document (the
 // rows an opened reference borrows) is not "an empty row above" and is left alone.
 function removeEmptyAbove(item, el) {
-  const all = texts(), prev = all[all.indexOf(el) - 1], above = prev && items.get(keyOfEl(prev));
+  const all = rowsBeside(el), prev = all[all.indexOf(el) - 1], above = prev && items.get(keyOfEl(prev));
   if (!above || above.docId !== item.docId || above.node.kind !== 'block' || above.node.draft) return false;
   if (isAtomic(above.node) || isReference(above.node) || hasKids(above) || above.node.hasChildren) return false;
   if (unanchored(prev.textContent).length || plainOf(above.node).length) return false;
@@ -172,13 +176,13 @@ async function history(op) {
     // whose rows loadRoots never touches. onChanged patches it too, but its render is deferred while the caret is
     // still in the row — which is exactly where it is after a Cmd+Z — so the undo would not show until you left.
     if (docId) await patchDoc(docId);
-    if (docId && kids.has(docId)) await reload(docId);
+    for (const id of docId ? outlinesOf(docId) : []) await reload(id); // its page and its fields: both are its rows
   });
   render(true);
   if (saved && !focused()) {
     // Undoing an Enter takes the row it created away. The caret belongs back where Enter ran — the row below when
     // the new row went in above it, the row above when the node was split — which is not what "nearest" would pick.
-    const undone = typeof lastEnter !== 'undefined' && lastEnter && lastEnter.created === saved.key && textEl(lastEnter.from) ? lastEnter : null;
+    const undone = lastEnter && lastEnter.created === saved.key && textEl(lastEnter.from) ? lastEnter : null;
     if (undone) { placeCaret(undone.from, undone.at); lastEnter = null; }
     else caretNear(keys, keys.indexOf(saved.key), saved.offset);
   }

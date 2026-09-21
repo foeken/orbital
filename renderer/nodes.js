@@ -102,12 +102,33 @@ const referenceLabel = (node) => referenceTarget(node)?.text || node.reference?.
 // outlives the problem it described.
 const showError = (e) => { const el = $('error'); el.textContent = e ? String(e.message || e) : ''; el.hidden = !e; };
 const run = (fn) => (queue = queue.then(fn).then((value) => { showError(null); return value; }, showError));
-const texts = () => [...outline.querySelectorAll('.node:not(.leaving) .text')]; // a row on its way out is not a keyboard stop
-const fieldValues = () => ($('fields').hidden ? [] : [...$('fields').querySelectorAll('.fvalue[contenteditable]')]); // the page's editable field values, in order: keyboard stops between the title and the outline
+// A row on its way out is not a keyboard stop.
+const rowsIn = (root) => [...root.querySelectorAll('.node:not(.leaving) .text')];
+// A field value's rows are addressed "<document>|<type>?attribute=<key>" (docs/OUTLINER.md): the outline's own
+// rows, drawn under the title, where a row is one line of a list rather than a page in its own right.
+const inField = (docId) => typeof docId === 'string' && docId.includes('|tana:type:');
+// `texts()` is the outline's own rows: what "the first node" means, and the list every structural step works in —
+// removing a row, merging into the one above, selecting a range. A field's rows are their own list for the same
+// reason: they are a different outline, and Backspace at the start of the page's first row must not reach into
+// the field above it.
+const texts = () => rowsIn(outline);
+const fieldValues = () => ($('fields').hidden ? [] : rowsIn($('fields')));
+const rowsBeside = (el) => (el && $('fields').contains(el) ? fieldValues() : texts()); // the rows this one lives among
+// Every stop the caret can reach on the page, in reading order: the title, the fields under it, then the outline.
+// Only vertical movement uses this — moving down out of a field into the page is a caret moving, not a row
+// changing what it belongs to.
+const caretRows = () => [...(titleEl.isContentEditable ? [titleEl] : []), ...fieldValues(), ...texts()];
 const titleEl = $('title');  // zoomed into a document: contenteditable with data-key = that document's key
 const keyOfEl = (el) => (el.closest('.node') || el).dataset.key;
-const textEl = (key) => outline.querySelector('.node[data-key="' + CSS.escape(key) + '"] > .line .text') || (titleEl.isContentEditable && titleEl.dataset.key === key ? titleEl : null);
-const nodeElOf = (key) => outline.querySelector('.node[data-key="' + CSS.escape(key) + '"]');
+// Rows are drawn in two places — the page's outline and the fields under the title — and everything that *finds* a
+// row has to know both, or a feature works in one and not the other. That was the pattern behind every "it does
+// not work in fields" bug: the editor is shared, these three lookups were not.
+const rowRoots = () => [outline, $('fields')];
+const queryRow = (selector) => { for (const root of rowRoots()) { const found = root.querySelector(selector); if (found) return found; } return null; };
+const eachRow = (selector) => rowRoots().flatMap((root) => [...root.querySelectorAll(selector)]);
+const inRows = (el) => !!el && rowRoots().some((root) => root.contains(el));
+const textEl = (key) => queryRow('.node[data-key="' + CSS.escape(key) + '"] > .line .text') || (titleEl.isContentEditable && titleEl.dataset.key === key ? titleEl : null);
+const nodeElOf = (key) => queryRow('.node[data-key="' + CSS.escape(key) + '"]');
 const titleCheck = $('titleCheck'); // zoomed into a task: its checkbox before the title
 const taskInfoEl = $('taskInfo');
 titleCheck.onmousedown = (e) => e.preventDefault();
@@ -297,6 +318,10 @@ async function loadRoots() {
   for (const d of drafts) { const s = views.find((x) => x.id === d.view); if (s) s.nodes.splice(d.i, 0, d.node); }
 }
 async function reload(docId) { kids.set(docId, await tana.children(docId)); }
+// A document's rows are not only the ones on its page: every field it has is an outline of that document too,
+// loaded under "<document>|<type>?attribute=<key>". Anything that re-reads a document's rows re-reads those with
+// it, or an undo, a live update or someone else's edit shows on the page and not in the field beside it.
+const outlinesOf = (docId) => [...kids.keys()].filter((id) => id === docId || id.startsWith(docId + '|'));
 function loadView(id = view) {
   // widenFilter (renderer/views.js): a view restored with Group by Responsibility asks for Anyone, so its sections
   // are never drawn from a list that cannot fill them. The map is updated too, or the pill would read the old value.

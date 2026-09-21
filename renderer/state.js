@@ -57,7 +57,9 @@ const filters = new Map();   // view id -> the persisted query filter
 const viewSeq = new Map();   // stale viewList responses never replace a newer filter result
 const truncated = new Set();
 let members = null;
-let sensitiveIds = null, sensitiveVisible = false, sensitiveLoading = null; // marks persist; every launch starts blurred
+// The marks live in Tana; whether they are shown is this machine's business, like the page you had open and the
+// sidebar width — revealing them on your own laptop should not unblur them on a shared one.
+let sensitiveIds = null, sensitiveVisible = localStorage.getItem('sensitiveVisible') === '1', sensitiveLoading = null;
 let mcpHidden = false; // the Cmd+K switch: MCP chats out of every list and search; main owns it, read once at boot
 const sensitiveEls = new Map(); // rendered surface -> document ids; lets a toggle update live DOM without rebuilding it
 const taskMetaById = new Map(), taskMetaLoading = new Set(), taskMetaFailed = new Map(); // docId -> { until, wait }: a failed metadata read backs off, it is never given up on

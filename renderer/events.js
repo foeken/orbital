@@ -3,14 +3,35 @@
 
 // ---- navigation ----
 function moveTo(el, dir, offset) {
-  const all = texts(), target = all[all.indexOf(el) + dir];
+  const all = caretRows(), target = all[all.indexOf(el) + dir];
   if (!target) { if (dir < 0) focusAbove(el); return; }
   flush(keyOfEl(el));
   setCaret(target, offset);
 }
 
+// Clicking the empty space under a list is a click on that list: there is nothing at that point, but there is an
+// obvious thing meant by it — carry on where its words end. Each zone answers for itself, so the space below a
+// field goes to that field's last row and the space below the page goes to the page's. A click level with a row
+// is that row's own (the row's line.onclick puts the caret where it was clicked), and a click in the gap between
+// two rows belongs to the one above it, which is where typing would continue.
+for (const [zone, rows] of [[$('fields'), () => fieldValues()], [outline.parentElement, () => texts()]]) {
+  zone.addEventListener('mousedown', (e) => {
+    if (!e.target.closest || e.target.closest('.node, .text, input, button, a, .pills, .crumbs')) return; // something better was clicked
+    const all = rows();
+    const target = all.filter((row) => row.getBoundingClientRect().top <= e.clientY).at(-1) || all[0];
+    if (!target) return;
+    e.preventDefault();
+    const box = target.getBoundingClientRect();
+    // beside the words: where it was clicked; below them: the end of the line, which is the end of the list
+    setCaret(target, e.clientY <= box.bottom ? caretAt(target, e.clientX, e.clientY) : target.textContent.length);
+  });
+}
 // ---- events ----
-outline.addEventListener('keydown', (e) => {
+// Rows live in two places: the outline, and the fields under the title, which are outlines too (docs/OUTLINER.md).
+// Every row listener is bound to both, because a field row *is* a row — the same keys, the same handlers, the same
+// behaviour, rather than a second editor that has to be taught each of them again.
+const onRows = (type, handler) => { for (const root of [outline, $('fields')]) root.addEventListener(type, handler); };
+onRows('keydown', (e) => {
   const el = e.target.closest && e.target.closest('.text');
   if (!el) return;
   const item = items.get(keyOfEl(el)), mod = e.metaKey || e.ctrlKey;
@@ -56,7 +77,7 @@ outline.addEventListener('keydown', (e) => {
   }
   if (item.node.draft) { // empty draft: Enter/Tab do nothing, Backspace drops it (caret to the node above); typing creates it (input handler)
     if (e.key === 'Enter' || e.key === 'Tab') return e.preventDefault();
-    if (e.key === 'Backspace' && len === 0) { e.preventDefault(); const all = texts(), prev = all[all.indexOf(el) - 1], k = prev && keyOfEl(prev); dropDraft(item); return k ? placeCaret(k) : focusAbove(); }
+    if (e.key === 'Backspace' && len === 0) { e.preventDefault(); const all = rowsBeside(el), prev = all[all.indexOf(el) - 1], k = prev && keyOfEl(prev); dropDraft(item); return k ? placeCaret(k) : focusAbove(); }
     if (e.key !== 'Escape' && !(e.key.startsWith('Arrow') && !mod)) return;
   }
   // a row that is only a mention chip deletes like an image: the caret beside the chip can remove nothing (chipOnly)
@@ -66,6 +87,13 @@ outline.addEventListener('keydown', (e) => {
   else if (e.key === 'Tab' && !e.shiftKey && !toolbarEl.hidden) { e.preventDefault(); focusToolbar(); }
   else if (mod && !e.shiftKey && MARK_KEYS[e.key.toLowerCase()]) { e.preventDefault(); toggleMarkKey(item, el, MARK_KEYS[e.key.toLowerCase()]); }
   else if (mod && e.shiftKey && e.key.toLowerCase() === 's') { e.preventDefault(); toggleMarkKey(item, el, 'strike'); }
+  // ⌘A selects the row's words; pressing it again, with them all selected, selects the rows themselves — every row
+  // of this editor, which for a field is that field's rows and for the page is the page's.
+  else if (mod && !e.shiftKey && e.key.toLowerCase() === 'a') {
+    e.preventDefault();
+    const range = selectionOffsets(el);
+    if (range && range[0] === 0 && range[1] === len) selectAllRows(el); else selectRange(item.key, 0, len);
+  }
   else if (e.key === 'Escape') { e.preventDefault(); flush(item.key); el.blur(); }
   else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && e.shiftKey && !mod) { e.preventDefault(); extendSel(item, e.key === 'ArrowUp' ? -1 : 1); } // multi-select over siblings
   else if (e.key === '@' && (!collapsed || !isDoc)) { const range = collapsed ? [off, off] : selectionOffsets(el); if (range) { e.preventDefault(); startLink(item, el, range); } } // a selection links it; a caret in a block inserts a reference there (a title cannot hold one, so "@" is typed)
@@ -74,6 +102,11 @@ outline.addEventListener('keydown', (e) => {
   else if (e.key === 'Enter' && isDoc && item.parent) e.preventDefault(); // document child (inside a space): nothing to split or draft yet
   else if (e.key === 'Enter' && isDoc && !zoom && !isOpen(item)) { e.preventDefault(); draftDoc(item); } // collapsed document in a view: draft sibling document
   else if (e.key === 'Enter') { e.preventDefault(); splitNode(item, el, off ?? len); }
+  // Tab at the start of a plain line starts a list there, the same gesture as typing "- " (renderer/toolbar.js
+  // rebullet), and ⇧Tab at the start of a bullet with nothing to outdent into takes the marker off again (unbullet
+  // refuses a nested row, so ⇧Tab there is still the outdent), which is what Backspace does. Anywhere else in the
+  // line, and on a row that is already in a list, Tab is the indent it has always been.
+  else if (e.key === 'Tab' && off === 0 && collapsed && !isDoc && (e.shiftKey ? unbullet(item) : bulletOrIndent(item, el))) e.preventDefault();
   else if (e.key === 'Tab') { e.preventDefault(); if (!isDoc) shiftNode(item, el, e.shiftKey ? 'outdent' : 'indent'); }
   // a document row is the document: the same shortcut deletes it (reversibly, like the zoomed title), not just blocks
   else if (e.key === 'Backspace' && mod && e.shiftKey) { e.preventDefault(); if (isDoc) removeDocument(item); else removeNode(item, el); }
@@ -92,7 +125,7 @@ outline.addEventListener('keydown', (e) => {
   else if (e.key === 'ArrowLeft' && off === 0 && collapsed) { e.preventDefault(); moveTo(el, -1, Infinity); }
   else if (e.key === 'ArrowRight' && off === len && collapsed) { e.preventDefault(); moveTo(el, 1, 0); }
 });
-outline.addEventListener('input', (e) => {
+onRows('input', (e) => {
   const el = e.target.closest && e.target.closest('.text');
   if (!el) return;
   const item = items.get(keyOfEl(el));
@@ -112,7 +145,7 @@ outline.addEventListener('input', (e) => {
   // the one keystroke until the composed character lands.
   if (row && !e.isComposing && !isReference(item.node) && referenceTarget(item.node) && row.classList.contains('fullref') !== chip) render(true);
   if (item.node.kind === 'block' && el.textContent === '/' && palette.hidden) openSlash(item); // "/" alone in a node is the command menu
-  else if (item.node.kind === 'block' && el.textContent === '- ') rebullet(item); // "- " alone in a plain row starts a list there
+  else if (item.node.kind === 'block' && startsList(el.textContent.slice(0, caretOffset(el) ?? 0))) rebullet(item, el); // "- " at the start of a row starts a list there
 });
 // A pasted Tana node link becomes the reference Tana itself inserts, not the url: the clipboard holds one node link,
 // the row is a real block, and the title is read before anything is written, so a link to something unreadable
@@ -120,7 +153,7 @@ outline.addEventListener('input', (e) => {
 // id, no clipboard text — pastes the browser's way. linkTo is the same path "@" uses, so the surrounding text,
 // the replaced selection and the caret behave exactly as they do there, and the url never lands as text beside it.
 // ponytail: a draft row pastes as text — it has no Tana id yet, so setText has nothing to write to
-outline.addEventListener('paste', (e) => {
+onRows('paste', (e) => {
   const el = e.target.closest && e.target.closest('.text');
   if (!el || !e.clipboardData || !tana.node) return;
   const item = items.get(keyOfEl(el));
@@ -146,7 +179,7 @@ outline.addEventListener('paste', (e) => {
     if (!item.node.draft) return linkTo(ctx, mention);
   }, showError).catch(showError);
 });
-outline.addEventListener('focusout', (e) => {
+onRows('focusout', (e) => {
   const el = e.target, item = el.classList && el.classList.contains('text') && items.get(keyOfEl(el));
   if (!item) return;
   if (!item.node.draft) flush(item.key);
@@ -156,7 +189,7 @@ outline.addEventListener('focusout', (e) => {
     if (!rendering && !el.textContent && !item.busy && el.isConnected && document.activeElement !== el) dropDraft(item);
   });
 });
-outline.addEventListener('mousedown', (e) => {
+onRows('mousedown', (e) => {
   if (!e.target.closest) return;
   if (e.target.closest('.mention')) e.preventDefault();
   const line = e.target.closest('.line');
@@ -171,13 +204,13 @@ outline.addEventListener('mousedown', (e) => {
     rangeSelTo(key, anchor);
   }
 });
-outline.addEventListener('focusin', () => { // the caret is back in a node
+onRows('focusin', () => { // the caret is back in a node
   if (!sel) return;
   sel = null; selectionFrozen = false;
-  for (const n of outline.querySelectorAll('.selected')) n.classList.remove('selected');
+  for (const n of eachRow('.selected')) n.classList.remove('selected');
   if (renderDeferred) queueMicrotask(() => { if (!editingRow()) render(); });
 });
-outline.addEventListener('click', (e) => {
+onRows('click', (e) => {
   if (!e.target.closest) return;
   const mention = e.target.closest('.mention');
   // a modifier means "select this row", handled on mousedown; and a chip on a full-reference row is that row's own

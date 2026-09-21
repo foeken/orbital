@@ -57,7 +57,7 @@ const chipOnly = (el) => {
 function focused() {
   const el = document.activeElement;
   if (el === titleEl && titleEl.isContentEditable) return { key: titleEl.dataset.key, offset: caretOffset(titleEl) };
-  return el && el.classList.contains('text') && outline.contains(el) ? { key: keyOfEl(el), offset: caretOffset(el) } : null;
+  return el && el.classList.contains('text') && inRows(el) ? { key: keyOfEl(el), offset: caretOffset(el) } : null;
 }
 // [node, offset] for a plain-text offset inside el (the DOM point the same character sits at)
 function textPoint(el, offset) {
@@ -108,6 +108,8 @@ function atEdge(el, dir) {
 // ---- render ----
 let rendering = false; // a focusout caused by swapping elements out during a render is not the user leaving a node
 let renderDeferred = false;
+// the same for the fields under the title, which are outside the outline and drawn even while a row is edited
+let fieldsDeferred = false;
 let caretOnOpen = false; // set when a node is opened: the first render with its children puts the caret where typing works
 let scrollOnType = false; // that caret is parked below the fold: the first character typed brings its row into view
 // An empty ordinary row is already somewhere to type; an image, divider or reference row is not.
@@ -117,12 +119,17 @@ const typableRow = (n) => !!n && n.kind === 'block' && !isAtomic(n) && !isRefere
 // A block with children appends through insertAfter(last); an empty block uses insertChild.
 function withDraftTail(list, parent) {
   if (!Array.isArray(childrenOf(parent)) || isSpace(parent.node) || isSearchDoc(parent.node) || !canEditItem(parent) || !canInsertChild(parent)) return list;
-  if (typableRow(list.at(-1))) return list;
+  // The row is there so that there is somewhere to type, not as a permanent blank line: a node with content ends
+  // at its last row, and Enter adds the next one. It comes back when there is nothing to type in — an empty node,
+  // or one holding only an image, a divider or a reference — because then there would be no way in at all.
+  if (list.some((n) => n && n.kind === 'block' && !isAtomic(n) && !isReference(n))) return list;
   return [...list, draftNode(parent, list.at(-1))];
 }
 function editingRow() {
   const el = document.activeElement;
-  return !!(el && el.isContentEditable && (el === titleEl || outline.contains(el)));
+  // The fields under the title are rows too now — the same editor, in another container — so a render defers for a
+  // caret in one of them exactly as it does for a row in the outline.
+  return !!(el && el.isContentEditable && (el === titleEl || inRows(el)));
 }
 // A row arriving in or dropping out of a view is shown, not swapped in silently: an arrival fades in over a green
 // tint, and a row that left is put back where it was over a red tint and fades away. Within one view only, since
@@ -278,7 +285,9 @@ if (typeof ResizeObserver === 'function') new ResizeObserver(() => {
   fitRowMeta();
 }).observe(outline);
 // Metadata and sync may finish between keystrokes. Apply their deferred render only after the caret leaves editable rows.
-document.addEventListener('focusout', () => queueMicrotask(() => { if (renderDeferred && !editingRow() && !selectionFrozen) render(); }));
+document.addEventListener('focusout', () => queueMicrotask(() => {
+  if ((renderDeferred || fieldsDeferred) && !editingRow() && !selectionFrozen) render();
+}));
 // Answers that arrive on their own — a row's metadata, pins, the rail, a crumb date, live updates — render once per
 // frame between them rather than once each: a view of N rows used to rebuild itself N times as its metadata came in.
 // A live update needs the forced render (it must not be deferred while the caret sits in a row), and those arrive in
@@ -385,7 +394,7 @@ function renderOutline() {
   taskInfoEl.hidden = !titleTags.length; taskInfoEl.replaceChildren();
   for (const tag of titleTags) taskInfoEl.append(chipEl(tag, parent.node.hue));
   blurSensitive(taskInfoEl, parent && parent.docId);
-  renderFields(parent);
+  renderFields(parent, true); // this render already got past the caret guard, so the fields are redrawn with it
   renderCrumbs(trail);
   renderRail(parent);
   // A saved search is a query you can edit, so it gets the pills too — every other zoomed page is content, not a query.
@@ -443,8 +452,18 @@ function resolveZoom() {
 }
 
 // The zoomed node's own fields (type attributes) under the title; the values come with api.related.
-function renderFields(parent) {
+function renderFields(parent, force = false) {
   const el = $('fields');
+  // The caret is in one of these values: rebuilding the block would take it out of the word being typed, and the
+  // values on screen *are* what is being typed. So the redraw waits, exactly as a render with the caret in an
+  // outline row does (renderDeferred), and the blur that ends the edit asks for it again. Without this, every
+  // render while a field has focus — a live update, the refresh loop, or the field's own save coming back as a
+  // metadata change — dropped the caret mid-sentence.
+  // A *forced* render is different: it is the answer to something the user just did in this field — a row split by
+  // Enter, a bullet indented by Tab — and the action puts the caret back itself (placeCaret). Holding those back
+  // is what left a new row invisible until the next click.
+  if (!force && el.contains(document.activeElement)) { fieldsDeferred = true; return; }
+  fieldsDeferred = false;
   const data = parent && parent.node.kind === 'document' ? relatedBy.get(parent.docId) : null;
   const fields = (data && data.fields) || [];
   el.hidden = !fields.length;
@@ -455,23 +474,27 @@ function renderFields(parent) {
     row.append(icon);
     // the type names its fields; an unreadable type leaves the value to speak for itself
     if (field.label) { const label = document.createElement('span'); label.className = 'flabel'; label.textContent = field.label; row.append(label); }
-    const value = document.createElement('span');
-    value.className = 'fvalue'; value.textContent = field.text || '';
-    if (tana.setField && canEditItem(parent)) { // a field value is ordinary text on this document
-      value.contentEditable = 'plaintext-only'; value.spellcheck = false;
-      value.onblur = () => { const next = value.textContent.trim(); if (next !== (field.text || '')) { field.text = next; run(() => tana.setField(parent.docId, field.key, next)); } };
-      value.onkeydown = (e) => {
-        if (e.key === 'Enter') { e.preventDefault(); value.blur(); }
-        else if (e.key === 'Escape') { e.preventDefault(); value.textContent = field.text || ''; value.blur(); }
-        // Up and Down walk the page: title, the fields in order, then the outline (the blur saves the value)
-        else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-          const all = fieldValues(), i = all.indexOf(value), up = e.key === 'ArrowUp';
-          const next = up ? (all[i - 1] || (titleEl.isContentEditable ? titleEl : null)) : (all[i + 1] || texts()[0]);
-          if (next) { e.preventDefault(); setCaret(next, up ? next.textContent.length : 0); }
-        }
-      };
+    // A field value is an outline of its own, so it is drawn by the outline’s own rows: the same items, the same
+    // keys, the same keyboard. Its id is the document and the field together ("<doc>|<type>?attribute=<key>", read
+    // by main/documents.js), which is all that tells the editor where the rows it writes belong — everything else
+    // about them, from "- " to Tab to a reference, is the page’s behaviour because it is the page’s code.
+    const values = document.createElement('div'); values.className = 'fvalues';
+    const hostId = parent.docId + '|' + field.key;
+    const host = mkItem(hostId, {
+      id: hostId, text: field.label || '', kind: 'document', hasChildren: true, editable: canEditItem(parent),
+    }, parent);
+    ensureLoaded(host);
+    const rows = kids.get(host.docId);
+    if (rows === null || rows === undefined) { // still being read: the value it was last seen holding, as words
+      const waiting = document.createElement('span'); waiting.className = 'fvalue'; renderSegs(waiting, field.segments || []); values.append(waiting);
+    } else {
+      // A page keeps an empty row at the bottom to type in; a field must not. Its rows are the value, and a blank
+      // one under them is a line that is not there — nothing in Tana carries it, and it makes every filled field
+      // look one value longer than it is. An empty field is the exception: without that row there would be
+      // nothing to click into to fill it.
+      values.replaceChildren(...withDraftTail(rows, host).map((n) => childEl(n, host)));
     }
-    row.append(value);
+    row.append(values);
     el.append(row);
   }
   blurSensitive(el, parent && parent.docId);
@@ -514,15 +537,27 @@ function renderCrumbs(trail) {
   nav.hidden = !trail && !homeEl;
   if (homeEl) nav.append(homeEl);
   if (!trail) return;
-  if (homeEl) { const dot = document.createElement('span'); dot.className = 'sep'; dot.textContent = '•'; nav.append(dot); }
   const back = () => { zoom = null; render(); };
   // location in Tana (owner chain from api.path, e.g. "Library" or "Automation Guild › Meeting"), loaded once per document.
   // A document reached through a space (zoom.via) starts at the space's location; the spaces follow as crumbs.
   const root = zoom.via ? zoom.via[0] : zoom, rootId = root.docId;
   const path = paths.get(rootId);
   if (!path && tana.path && isRealId(rootId)) { paths.set(rootId, []); tana.path(rootId).then((p) => { paths.set(rootId, p); if (zoom && (zoom.via ? zoom.via[0] : zoom).docId === rootId) renderSoon(); }).catch(() => {}); }
-  for (const [i, p] of (path && path.length ? path : [{ id: '', title: root.from || (viewOf() ? viewOf().title : 'Tana') }]).entries()) {
-    if (i) { const sep = document.createElement('span'); sep.className = 'sep'; sep.textContent = '›'; nav.append(sep); }
+  // Separators are decided as crumbs go in rather than by index: the first one after the Home anchor is the • that
+  // keeps the shortcut apart from the › chain, the rest are ›, and a location that filters down to nothing leaves
+  // no dangling separator behind.
+  let crumbs = 0;
+  const addCrumb = (a) => {
+    if (crumbs || homeEl) { const sep = document.createElement('span'); sep.className = 'sep'; sep.textContent = crumbs ? '›' : '•'; nav.append(sep); }
+    crumbs++;
+    nav.append(a);
+  };
+  // Once Home is a place of the user's own, the Library is one they do not use: it is left out of the location, so a
+  // document that sits in it starts at whatever comes next, or at the Home anchor alone.
+  const located = path && path.length
+    ? path.filter((p) => p.id !== 'library' || homeId() === 'library')
+    : [{ id: '', title: root.from || (viewOf() ? viewOf().title : 'Tana') }];
+  for (const p of located) {
     const a = document.createElement('a');
     // ancestors can share a title (a meeting named after its space), so each crumb shows its kind icon
     if (p.icon) { const ricon = document.createElement('span'); ricon.className = 'ricon ' + p.icon; ricon.innerHTML = iconSvg(p.icon); a.append(ricon); }
@@ -531,17 +566,15 @@ function renderCrumbs(trail) {
     if (when) { const date = document.createElement('span'); date.className = 'cdate'; date.textContent = when; a.append(date); }
     blurSensitive(a, p.id);
     a.onclick = p.id === 'library' ? () => setView('library') : p.id ? () => goTo(p.id) : back;
-    nav.append(a);
+    addCrumb(a);
   }
   for (const v of zoom.via || []) {
-    const sep = document.createElement('span'); sep.className = 'sep'; sep.textContent = '›';
     const a = document.createElement('a'); a.textContent = (docOf(v.docId) || {}).text || 'Untitled'; blurSensitive(a, v.docId); a.onclick = () => { zoom = v; render(); };
-    nav.append(sep, a);
+    addCrumb(a);
   }
   for (const item of trail.slice(0, -1)) { // ancestors only: the page title already shows the current node
-    const sep = document.createElement('span'); sep.className = 'sep'; sep.textContent = '›';
     const a = document.createElement('a'); a.textContent = item.node.text || 'Untitled'; blurSensitive(a, item.docId); a.onclick = () => zoomTo(item);
-    nav.append(sep, a);
+    addCrumb(a);
   }
 }
 
@@ -630,9 +663,14 @@ function nodeEl(node, docId, parent) {
   // row may still be holding the copy of it that was resolved before the deletion: drawing that copy put the node's
   // own glyph on the line beside the trash on the chip, as though it were both there and not.
   const gone = markGone(node.reference?.uri, node.reference?.deleted);
+  const field = inField(docId); // a row inside a field value: read below for both the target and the bullet
   // liveTarget, not referenceTarget: a full reference being typed into is already an ordinary line here, rather than
   // when the debounced save comes back (renderSegs draws the same pending segments).
-  const target = gone ? null : liveTarget(node, pending.get(item.key)), display = target || node;
+  // In a field, a row whose whole content is one reference stays a line with a link in it rather than becoming the
+  // node it points at: a field is a list of names, and a row that grows a glyph, a status and an "Updated 4 days
+  // ago" beneath it is twice the height of the line above it. The reference is live either way — the same chip,
+  // the same target, the same click.
+  const target = gone || field ? null : liveTarget(node, pending.get(item.key)), display = target || node;
   const fullref = !!target && !reference; // a line that is one mention: the row is the node, the text stays editable
   // Expanding a full reference opens the outline of the node it points at, not the block's own (a block with
   // children is never one): the rows below it belong to that document, so they are built against it.
@@ -653,7 +691,9 @@ function nodeEl(node, docId, parent) {
   chev.onmousedown = (e) => e.preventDefault();
   chev.classList.toggle('off', !expandable); // hidden glyph, kept in the layout so the row never shifts
   const bullet = document.createElement('span'); bullet.className = 'bullet';
-  const opens = reference || fullref || zoomable(node);
+  // A row in a field does not open as a page: a field is a list of values, and its rows are read and edited where
+  // they are. A reference in one still opens what it points at — that is the chip's own click, not the bullet's.
+  const opens = reference || fullref || (zoomable(node) && !field);
   if (opens) bullet.title = 'Zoom in'; else bullet.classList.add('still'); // a member or a type has no page: the bullet is only a glyph
   const bulletIcon = gone ? 'trash' : iconOf(display);
   if (bulletIcon) { bullet.classList.add('icon', bulletIcon); const svg = iconNode(bulletIcon); if (svg) bullet.append(svg); }
@@ -738,7 +778,9 @@ function nodeEl(node, docId, parent) {
     const c = childrenOf(childHost);
     if (c == null) { ensureLoaded(childHost); wrap.classList.add('loading'); wrap.textContent = 'Loading…'; }
     else if (c.length) wrap.append(...c.map((k) => childEl(k, childHost)));
-    else if (!fullref && !isSpace(node) && canEditItem(item) && (node.kind === 'document' || node.done != null || ['paragraph', 'bullet', 'numbered'].includes(node.block))) wrap.append(nodeEl(draftNode(item), docId, item));
+    // Expanding a row is asking it for sub-items, so the row it opens onto is a bullet whatever the parent is —
+    // a document's own page still starts as plain text (withDraftTail), which is a different question.
+    else if (!fullref && !isSpace(node) && canEditItem(item) && (node.kind === 'document' || node.done != null || ['paragraph', 'bullet', 'numbered'].includes(node.block))) wrap.append(nodeEl({ ...draftNode(item), block: 'bullet' }, docId, item));
     el.append(wrap);
   }
   return el;
@@ -758,7 +800,8 @@ async function materialise(item, el) {
       key = real.id;
     } else {
       const last = childrenOf(parent)?.at(-1);
-      const id = parent.node.kind === 'document' || last ? await tana.insertAfter(parent.docId, last?.id || null, text) : await tana.insertChild(parent.docId, parent.node.id, text);
+      // the kind the draft was drawn as is the kind that gets written: a row must not change shape under the caret
+      const id = parent.node.kind === 'document' || last ? await tana.insertAfter(parent.docId, last?.id || null, text, node.block) : await tana.insertChild(parent.docId, parent.node.id, text);
       await reload(parent.docId);
       await inheritCheckbox(parent, id); // old preload bridges lack native insert inheritance; current bridge already returns done: 0
       key = parent.docId + '/' + id;

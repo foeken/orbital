@@ -50,6 +50,17 @@ function readOutline(document) {
   const list = kids(document.content);
   return list ? nodes(list) : [];
 }
+// Blocks Tana's own agent writes can arrive with no blockId at all, and a row with no id cannot be edited, linked
+// or split: every write looks its block up by that id. Give each one an id, once, in one transaction — a no-op
+// (and no op) for a document that has them all. Lists and quotes are walked; the ids go on the blocks they hold.
+function assignBlockIds(document) {
+  const missing = [];
+  const walk = (list) => { if (!list) return; for (let i = 0; i < list.length; i++) { const b = list.get(i); if (b.kind && b.kind() !== 'Map') continue; if (isList(b) || isQuote(b) || isItem(b)) walk(kids(b)); else if (!blockId(b)) missing.push(b); } };
+  walk(kids(document.content));
+  if (!missing.length) return 0;
+  document.transact(() => { for (const b of missing) { const a = b.get('attributes') || b.setContainer('attributes', new LoroMap()); a.set('blockId', newId()); } });
+  return missing.length;
+}
 
 function nodes(list, from = 0) {
   const out = [];
@@ -212,6 +223,10 @@ function item(list, index, text, source) {
   return li;
 }
 
+// A bare paragraph turned into the first row of a bullet list, joining an adjacent one. Returns the paragraph, not
+// the listItem: the copy wrap makes keeps its blockId, which is the id the caller hands back.
+const bulletRow = (list, index, text) => kids(wrap(paragraph(list, index, text))).get(0);
+
 // Deep copy of a block map into list[index] (Loro lists cannot move containers); text runs keep their marks.
 function copy(list, index, src) {
   const m = list.insertContainer(index, new LoroMap());
@@ -269,6 +284,13 @@ function setText(document, id, value) {
   if (!kids(target)) throw new Error('Reference blocks cannot contain editable text');
   if (name(target) === 'embed') throw new Error('Reference blocks cannot contain editable text');
   const plain = name(target) === 'codeBlock'; // codeBlock content is text* with marks '' in Tana's schema
+  const { groups, marked } = inlineGroups(value, plain);
+  styleDoc(document);
+  document.transact(() => writeInline(kids(must(document, id).block), groups, marked));
+}
+// The two halves of setText, shared with a typed field's value (sdk/fields.js), which is the same inline layout
+// in a paragraph of its own: segments grouped the way Tana stores them, then written into one children list.
+function inlineGroups(value, plain = false) {
   const marked = typeof value !== 'string';
   const segs = (marked ? value : [{ text: value }]).filter((s) => s.mention || s.text);
   const groups = [];
@@ -280,23 +302,22 @@ function setText(document, id, value) {
     const last = groups.length ? groups[groups.length - 1] : null;
     if (last && last.delta) last.delta.push(run); else groups.push({ delta: [run] });
   }
-  styleDoc(document);
-  document.transact(() => {
-    const c = kids(must(document, id).block);
-    groups.forEach((g, i) => {
-      const cur = i < c.length ? c.get(i) : null;
-      if (cur && g.delta && cur.kind() === 'Text') return applyRuns(cur, g.delta, marked);
-      if (cur && g.mention && isMention(cur) && cur.get('attributes').get('tanaUri') === g.mention.uri) return;
-      if (cur) c.delete(i, 1);
-      if (g.delta) return applyRuns(c.insertContainer(i, new LoroText()), g.delta, marked);
-      const m = c.insertContainer(i, new LoroMap());
-      m.set('nodeName', 'mention');
-      const a = m.setContainer('attributes', new LoroMap());
-      a.set('label', g.mention.label);
-      a.set('tanaUri', g.mention.uri);
-    });
-    if (c.length > groups.length) c.delete(groups.length, c.length - groups.length);
+  return { groups, marked };
+}
+function writeInline(c, groups, marked) {
+  groups.forEach((g, i) => {
+    const cur = i < c.length ? c.get(i) : null;
+    if (cur && g.delta && cur.kind() === 'Text') return applyRuns(cur, g.delta, marked);
+    if (cur && g.mention && isMention(cur) && cur.get('attributes').get('tanaUri') === g.mention.uri) return;
+    if (cur) c.delete(i, 1);
+    if (g.delta) return applyRuns(c.insertContainer(i, new LoroText()), g.delta, marked);
+    const m = c.insertContainer(i, new LoroMap());
+    m.set('nodeName', 'mention');
+    const a = m.setContainer('attributes', new LoroMap());
+    a.set('label', g.mention.label);
+    a.set('tanaUri', g.mention.uri);
   });
+  if (c.length > groups.length) c.delete(groups.length, c.length - groups.length);
 }
 
 // Write one text container: the text first (diffed, so unchanged characters keep their identity and marks), then
@@ -322,18 +343,20 @@ function applyRuns(text, delta, marked) {
 // A new row follows the row it comes from: a listItem makes another listItem, so a quote stays inside its quote
 // and a numbered item stays numbered, and anything bare makes plain text — a heading and a code block each
 // continue as the plain text that follows one. A document's own first row, which has nothing to follow, is plain
-// text too.
-function insertAfter(document, id, text, before = false) {
+// text too, unless the caller says otherwise: `block: 'bullet'` is how a row asked to hold sub-items opens onto a
+// list row rather than onto prose.
+function insertAfter(document, id, text, before = false, block = null) {
+  const bare = (list, index) => (block === 'bullet' ? bulletRow(list, index, text) : paragraph(list, index, text));
   let out = null;
   document.transact(() => {
     const list = rootKids(document);
-    if (id == null) { out = blockId(paragraph(list, list.length, text)); return; }
+    if (id == null) { out = blockId(bare(list, list.length)); return; }
     const { block, item: li } = must(document, id);
     const unit = li || block, l = unit.parent(), i = indexOf(l, unit) + (before ? 0 : 1);
     // Either side of a row, the new one is the row's own kind: a listItem beside a listItem (which keeps a quote
     // inside its quote and a numbered item numbered), and plain text beside anything bare — a heading and a code
     // block each continue as the plain text under them rather than as whatever the default mode says.
-    out = blockId(li ? kids(item(l, i, text, li)).get(0) : paragraph(l, i, text));
+    out = blockId(li ? kids(item(l, i, text, li)).get(0) : bare(l, i));
   });
   return out;
 }
@@ -381,13 +404,14 @@ function unit(document, id) {
   return item || block;
 }
 
-function selectedUnits(document, ids) {
+function selectedUnits(document, ids, { siblings = true } = {}) {
   if (!Array.isArray(ids) || ids.length === 0) throw new Error('outline selection must contain at least one node');
   const seen = new Set(), units = ids.map((id) => {
     if (typeof id !== 'string' || seen.has(id)) throw new Error('outline selection contains duplicate or invalid node ids');
     seen.add(id);
     return unit(document, id);
   });
+  if (!siblings) return units;
   const parent = units[0].parent();
   if (!units.every((unit) => unit.parent().id === parent.id)) throw new Error('outline selection must be siblings');
   return units;
@@ -397,11 +421,33 @@ function remove(document, id) {
   document.transact(() => removeUnit(unit(document, id)));
 }
 
-// Multi-select is one user action: use one CRDT transaction so undo/redo restores the whole sibling range.
-// ids are in visual order; removal runs last-first to keep all positions valid.
+// Multi-select is one user action: one CRDT transaction, so undo restores the whole selection at once.
+//
+// Deleting is not moving. Moving, indenting and outdenting carry the rows as one block and so need siblings, but a
+// selection to delete is just a set of rows, whatever levels they sit on — selecting a row and something inside it
+// and pressing delete is an ordinary thing to do, and refusing it ("outline selection must be siblings") left the
+// rows on screen gone and the document unchanged. A row inside another selected row needs no delete of its own: it
+// goes with the row that holds it.
+const insideOf = (unit, ancestor) => {
+  for (let node = unit.parent && unit.parent(); node; node = node.parent && node.parent()) if (node.id === ancestor.id) return true;
+  return false;
+};
 function removeMany(document, ids) {
-  const units = selectedUnits(document, ids);
-  document.transact(() => { for (const unit of [...units].reverse()) removeUnit(unit); });
+  const units = selectedUnits(document, ids, { siblings: false });
+  const outermost = units.filter((unit) => !units.some((other) => other.id !== unit.id && insideOf(unit, other)));
+  // Within one list, last first, so the positions of the ones still to go do not move. Each list is finished
+  // before the next, so pruning an emptied list never strands a delete that was still to come.
+  const lists = new Map();
+  for (const unit of outermost) {
+    const list = unit.parent();
+    if (!lists.has(list.id)) lists.set(list.id, { list, units: [] });
+    lists.get(list.id).units.push(unit);
+  }
+  document.transact(() => {
+    for (const { list, units: group } of lists.values()) {
+      for (const unit of [...group].sort((a, b) => indexOf(list, b) - indexOf(list, a))) removeUnit(unit);
+    }
+  });
 }
 
 function indentUnit(document, id) {
@@ -593,4 +639,4 @@ function divider(list, index) {
   return id;
 }
 
-module.exports = { readOutline, setText, setBlockType, insertDivider, insertAfter, insertBefore, insertChild, split, remove, removeMany, indent, indentMany, outdent, outdentMany, move, moveMany, toggleCheckbox, BLOCK_TYPES };
+module.exports = { readOutline, assignBlockIds, setText, inlineGroups, writeInline, styleDoc, setBlockType, insertDivider, insertAfter, insertBefore, insertChild, split, remove, removeMany, indent, indentMany, outdent, outdentMany, move, moveMany, toggleCheckbox, BLOCK_TYPES };

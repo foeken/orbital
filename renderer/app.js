@@ -44,7 +44,7 @@ tana.onChanged((docId, info) => {
     // it themselves, because they do change a section.
     if (!info || info.meta !== false) refreshRelated(docId);
     const work = [patchDoc(docId)];
-    if (kids.has(docId)) work.push(reload(docId));
+    for (const id of outlinesOf(docId)) work.push(reload(id)); // its page and its fields: both are its rows
     // A zoom parks the caret in its blank tail, so an ordinary render defers until focus leaves and remote children
     // stay invisible. The forced render already preserves the caret and pending local text. Coalesced, because these
     // arrive in bursts — every document a view subscribes announces its first bootstrap — and one forced redraw of a

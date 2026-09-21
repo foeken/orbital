@@ -96,6 +96,9 @@ assert.strictEqual(db.setting('taskFilter'), undefined);
 new DatabaseSync(file).prepare("INSERT INTO settings (key, value) VALUES ('viewFilter:tasks', '{not json')").run();
 assert.strictEqual(db.setting('viewFilter:tasks'), undefined, 'a corrupt setting is unset, not a crash');
 db.setSetting('viewFilter:tasks', undefined);
+db.setSetting('openaiApiKey', 'sk-test-local');
+assert.strictEqual(db.setting('openaiApiKey'), 'sk-test-local', 'API keys persist in local SQLite settings');
+db.setSetting('openaiApiKey', undefined);
 
 // The views overlap: one document is in Inbox, Tasks and Library at once, and each view caches its own list.
 db.replaceSection('tasks', [{ id: 'tana:text:shared', title: 'Shared', done: 0, sortKey: '1', updatedAt: '1' }]);
@@ -117,6 +120,19 @@ assert.deepStrictEqual(db.list(), {}, 'the old cache is dropped, not carried ove
 db.replaceSection('tasks', [{ id: 'tana:text:shared', title: 'Shared', done: 0, sortKey: '1', updatedAt: '1' }]);
 db.replaceSection('inbox', [{ id: 'tana:text:shared', title: 'Shared', done: 0, sortKey: '1', updatedAt: '1' }]);
 assert.strictEqual((db.list().tasks || []).length + (db.list().inbox || []).length, 2, 'and the rebuilt cache holds one row per view');
+
+// Recently deleted (Cmd+K): a deleted document leaves the graph, so this list is the only way back to one.
+db.noteDeleted('tana:text:gone1', 'First');
+db.noteDeleted('tana:text:gone2', 'Second');
+db.noteDeleted('tana:text:gone2', 'Second, renamed before it went'); // deleting the same id again is one row, re-dated
+assert.deepStrictEqual(db.deletedList().map((d) => d.title), ['Second, renamed before it went', 'First'], 'newest first, one row per document');
+db.noteDeleted('tana:text:untitled', '');
+assert.strictEqual(db.deletedList()[0].title, 'Untitled', 'a document with no title is still offered');
+db.unnoteDeleted('tana:text:gone1');
+assert.strictEqual(db.deletedList().some((d) => d.id === 'tana:text:gone1'), false, 'a restore takes it off the list');
+new DatabaseSync(legacy).exec("INSERT INTO deleted_nodes (id, title, deletedAt) VALUES ('tana:text:ancient', 'Ancient', '2020-01-01T00:00:00.000Z')");
+assert.strictEqual(db.deletedList().some((d) => d.id === 'tana:text:ancient'), false, 'and nothing older than a month is "recently"');
+assert.strictEqual(db.deletedList(1).length, 1, 'the list is capped');
 
 // The callback a Codex task makes on itself (scripts/agent-link.js): it runs as a separate process while the app is
 // open, so it is checked the way the task runs it — as a command, against a database file of its own.

@@ -2,6 +2,7 @@
 const db = require('../db');
 const { editable, readNode, STATE_TYPES } = require('../sdk/node');
 const { typeIconName } = require('./icons');
+const settings = require('./settings');
 const { PLAIN_KINDS, S, TAG, docStates, editability, hueLoaded, idKind, isSpace, iso, memberTitle, nodeCreators, nodeHues, nodeMeta, now, typeHues, typeTitles } = require('./state');
 
 // The search index can trail a write by seconds, and every index result becomes a row through graphRow and records its
@@ -37,7 +38,12 @@ const ownHue = (n) => n && n.appearance && typeof n.appearance.hue === 'number' 
 // appearance lives on graph nodes only: a Loro data map never carries it (verified read-only for spaces and typed
 // documents), so a node without an appearance key says nothing about the hue and must not erase what the graph told us.
 // ponytail: a hue removed in Tana therefore stays cached until the next app start; the graph is the only source.
-const hueOf = (n) => { const hue = ownHue(n); return hue === undefined && n ? nodeHues.get(n.id) : hue; };
+const hueOf = (n) => { if (n && typeHueOverrides()[n.id] !== undefined) return typeHue(n.id); const hue = ownHue(n); return hue === undefined && n ? nodeHues.get(n.id) : hue; };
+// This app's own colour for a type, kept in the settings document (docs/SETTINGS.md) so it follows you between
+// machines without touching the hue Tana keeps on the type: a number is a hue of our own, 'grey' is no tint at all
+// (Tana has no grey: every hue it stores is a colour), and no entry means Tana's own hue shows through.
+const typeHueOverrides = () => { const v = settings.get('typeHues'); return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; };
+const typeHue = (uri) => { const own = typeHueOverrides()[uri]; return own === 'grey' ? undefined : typeof own === 'number' ? own : typeHues.get(uri); };
 function rememberNodeHue(n) {
   editability.set(n.id, editable(n, S.me && S.me.userUri));
   rememberMeta(n); // every graph node and every Loro read passes here, so it is the one place both are learned
@@ -82,10 +88,10 @@ async function resolveTypes(uris) {
 }
 // { label, hue, uri } when the type node has appearance.hue, else grey (docs/OUTLINER.md addendum 12).
 // uri lets a row find its type again through the cache, for the type's hue and its app-local icon.
-const typeTag = (uri) => (uri && typeTitles.get(uri) ? [typeHues.has(uri) ? { label: typeTitles.get(uri), hue: typeHues.get(uri), uri } : { label: typeTitles.get(uri), color: 'grey', uri }] : []);
+const typeTag = (uri) => (uri && typeTitles.get(uri) ? [typeHue(uri) !== undefined ? { label: typeTitles.get(uri), hue: typeHue(uri), uri } : { label: typeTitles.get(uri), color: 'grey', uri }] : []);
 const typeUriOf = (r) => (r.tags || []).map((t) => t && t.uri).find(Boolean); // the row's type, from its type tag
 // a node without its own appearance.hue inherits the hue of its type, so icon and tag match (docs/OUTLINER.md addendum 14)
-const hueWithType = (own, typeUri) => (own === undefined && typeUri !== undefined ? typeHues.get(typeUri) : own);
+const hueWithType = (own, typeUri) => (own === undefined && typeUri !== undefined ? typeHue(typeUri) : own);
 // A document opened straight from Loro (pins, zoom, spaces) has no appearance in its data map, so its colour needs
 // one graph lookup. Cached per id including "no hue", like resolveTypes caches titles.
 async function resolveHue(id) {
@@ -160,4 +166,4 @@ function members() {
   return S.membersLoaded;
 }
 
-module.exports = { rememberMeta, rememberType, ownHue, hueOf, rememberNodeHue, nodeTag, cachedNodeHue, WEEKDAY, MONTH, hm, eventMeta, resolveTypes, typeTag, typeUriOf, hueWithType, resolveHue, plainRow, memberRow, kindRow, typesByTitle, taskRow, meetingRow, toNode, graphRow, members };
+module.exports = { rememberMeta, rememberType, ownHue, hueOf, typeHue, rememberNodeHue, nodeTag, cachedNodeHue, WEEKDAY, MONTH, hm, eventMeta, resolveTypes, typeTag, typeUriOf, hueWithType, resolveHue, plainRow, memberRow, kindRow, typesByTitle, taskRow, meetingRow, toNode, graphRow, members };

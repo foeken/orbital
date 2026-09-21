@@ -41,6 +41,8 @@ function renderSegs(el, segs) {
     // dataset.icon is what readSegs carries back, so it stays the kind the target is: the trash glyph belongs to the
     // state the app found it in, not to the mention that was written.
     if (s.mention.icon) a.dataset.icon = s.mention.icon;
+    // its type's colour, the way its row and chip are; carried on the element like the icon so it survives an edit
+    if (!gone && s.mention.hue != null) { a.dataset.hue = String(s.mention.hue); a.classList.add('hue'); a.style.setProperty('--hue', String(s.mention.hue)); }
     if (icon) {
       const label = document.createElement('span'); label.className = 'mlabel'; label.textContent = s.mention.label;
       const svg = iconNode(icon);
@@ -105,7 +107,7 @@ function readSegs(el) {
   const walk = (parent, marks) => {
     for (const n of parent.childNodes) {
       // the icon travels with the mention, so typing beside one does not drop it until the next reload
-      if (n.nodeType === 1 && n.classList.contains('mention')) { segs.push({ mention: { label: n.textContent, uri: n.dataset.uri, ...(n.dataset.icon ? { icon: n.dataset.icon } : {}) } }); continue; }
+      if (n.nodeType === 1 && n.classList.contains('mention')) { segs.push({ mention: { label: n.textContent, uri: n.dataset.uri, ...(n.dataset.icon ? { icon: n.dataset.icon } : {}), ...(n.dataset.hue ? { hue: Number(n.dataset.hue) } : {}) } }); continue; }
       if (n.nodeName === 'BR') { add('\n', marks); continue; }
       if (n.nodeType === 1) { walk(n, marksOf(n, marks)); continue; }
       add(n.textContent, marks);
@@ -151,3 +153,11 @@ function hasMark(segs, start, end, mark) {
   return runs.length > 0 && runs.every((s) => s.marks && s.marks[mark]);
 }
 const saveValue = (segs) => (segs.some((s) => 'mention' in s || hasMarks(s.marks)) ? segs : plainOf(segs));
+// The "- " shortcut: a dash *and the space after it* at the very start of the line, with the caret just past them.
+// Asked with the words before the caret. The space is part of the gesture — a lone dash is a word someone may be
+// in the middle of typing, and turning it into a bullet the moment it is pressed takes the line away mid-thought.
+// A dash further into the line, a pasted list and a sentence containing one all fail it.
+// `listRest` is the other half: what the line still holds once the marker is dropped, so no caller decides for
+// itself how much to throw away.
+const startsList = (before) => before === '- ';
+const listRest = (segs, offset) => splitSegs(segs, offset || 0)[1];

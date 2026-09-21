@@ -1,8 +1,9 @@
 # SETTINGS.md — the app's own settings document
 
 Everything this app decides *about your content* lives in one document in Tana, so the choices you make on one
-machine are the choices the app opens with on the next. The document is created by the app, titled **Orbital**,
-and its first line says so. Deleting it in Tana puts every synced choice back to its default; nothing else breaks.
+machine are the choices the app opens with on the next. Machine-only secrets are the exception: they stay in the
+local SQLite settings table. The document is created by the app, titled **Orbital**, and its first line says so.
+Deleting it in Tana puts every synced choice back to its default; nothing else breaks.
 
 ## Why a document of our own
 
@@ -32,9 +33,9 @@ the third catches up on the next connect.
 | Follows you | Stays on the machine |
 |---|---|
 | View filters (`viewFilter:*`), hidden titles, the MCP switch | The window's size and position |
-| Type icons, sensitive marks, watch choices (`notify`) | Which page you had open, and where you were zoomed |
+| Type icons, sensitive marks, watch choices (`notify`), which model writes the "Discuss with" suggestion and how hard it thinks (`aiModel`, `aiEffort` — no UI yet, defaults in main/ai.js) | Which page you had open, where you were zoomed, whether sensitive items are unblurred (`sensitiveVisible`), and the OpenAI API key that pays for the suggestion |
 | Agent assignments, their prompts, the machines they can run on, and the tasks they became (`codexTask`) | The row cache, which is a mirror of Tana and is rebuilt by any refresh |
-| Renderer preferences (`pref:*`): Home, recorded hotkeys, theme, sort, grouping, which facts a row shows, folded sections, the sidebar's open/closed state | Recently viewed, the sidebar's width, the row cache |
+| Renderer preferences (`pref:*`): Home, recorded hotkeys, theme, sort, grouping, which facts a row shows, folded sections, the sidebar's open/closed state | Recently viewed, the sidebar's width, the row cache, and the OpenAI API key (`openaiApiKey`) |
 
 The rule is the purpose: a choice about your content is the same choice wherever you open the app; a choice about
 *this screen* is not. `notifySeen` — what has already been announced — stays local for a different reason: it changes

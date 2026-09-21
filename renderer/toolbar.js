@@ -11,6 +11,9 @@ function showNote(note) {
 }
 async function copyText(text, note) { await navigator.clipboard.writeText(text); showNote(note); }
 function startLink(item, el, [start, end]) {
+  // A row still being written into Tana has no block id yet (materialise), so there is nothing to link into: the "@"
+  // stays a character, which is what typing one into a brand-new row otherwise tried to save under no id at all.
+  if (item.node.kind === 'block' && (item.node.draft || item.busy || typeof item.node.id !== 'string' || !item.node.id)) { insertAtCaret(el, '@'); return; }
   flush(item.key);
   const segs = readSegs(el);
   // where the dropdown hangs: under the selection (or caret), at its left edge; an empty row has no text box, so the row's own box
@@ -28,7 +31,7 @@ async function linkTo(ctx, mention) {
   placeCaret(item.key, start + mention.label.length);
 }
 function createAndLink(ctx, title = ctx.text) {
-  tana.createDocument(title).then((n) => { extra.set(n.id, { ...n, text: n.title || '', hasChildren: true }); return linkTo(ctx, { label: n.title, uri: n.id }); }, showError);
+  tana.createDocument(title).then((n) => { extra.set(n.id, { ...n, text: n.title || '', hasChildren: true }); return linkTo(ctx, { label: n.title, uri: n.id, ...(n.icon ? { icon: n.icon } : {}) }); }, showError);
 }
 function cancelLink() { const c = linkCtx; linkCtx = null; if (c) placeCaret(c.item.key, c.end); }
 
@@ -48,7 +51,7 @@ function hideToolbar(dismiss) { toolbarEl.hidden = true; toolMenu = null; toolDi
 function updateToolbar() {
   if (!toolbarEl.hidden && toolbarEl.contains(document.activeElement)) return; // the toolbar has the keyboard: leave it alone
   const el = document.activeElement;
-  const item = el && el.classList && el.classList.contains('text') && outline.contains(el) ? items.get(keyOfEl(el)) : null;
+  const item = el && el.classList && el.classList.contains('text') && inRows(el) ? items.get(keyOfEl(el)) : null;
   const range = item && canEditText(item) && item.node.kind === 'block' && !isAtomic(item.node) ? selectionOffsets(el) : null;
   if (!range) return hideToolbar();
   const next = { key: item.key, start: range[0], end: range[1] };
@@ -197,20 +200,39 @@ function unbullet(item) {
   run(async () => { await tana.setBlockType(docId, node.id, 'paragraph'); await reload(docId); render(true); placeCaret(key, 0); });
   return true;
 }
-// The other direction, from the keyboard: "- " typed into a row with no marker starts a list there, the way Tana
-// starts one, so the two modes are reversible without leaving the row. The dash is the command, not text, so it
-// is dropped rather than saved — and like the "/" menu it is only the whole content of the row, so a line that
-// merely begins with a dash (a paste, a sentence) is left alone. A code block is content, not prose: "- " there
-// stays "- ".
-function rebullet(item) {
+// The other direction, from the keyboard: "- " typed at the start of a row with no marker starts a list there, the
+// way Tana starts one, so the two modes are reversible without leaving the row. The dash is the command, not text,
+// so it is dropped and whatever else the row holds stays — typing it in front of a line that is already written
+// bullets that line. It has to be typed there: a dash further in, a pasted list and a sentence containing one all
+// arrive without the caret sitting just past a leading dash (startsList, renderer/segments.js). A code block is
+// content, not prose: "- " there stays "- ".
+function rebullet(item, el, indent = false) {
   if (!item || item.node.kind !== 'block' || item.node.draft || !tana.setBlockType || !canEditItem(item)) return false;
   const type = blockTypeOf(item.node);
   if (type === 'code' || ['bullet', 'numbered'].includes(type)) return false;
   const { docId, node, key } = item;
   dropPending(key); // the "- " is never written: the pending save for it goes with it
-  node.text = ''; node.segments = [];
-  run(async () => { await tana.setText(docId, node.id, []); await tana.setBlockType(docId, node.id, 'bullet'); await reload(docId); render(true); placeCaret(key, 0); });
+  const rest = el ? listRest(readSegs(el), caretOffset(el)) : []; // everything but the marker just typed
+  node.segments = rest; node.text = plainOf(rest);
+  run(async () => {
+    await tana.setText(docId, node.id, rest.length ? saveValue(rest) : []);
+    await tana.setBlockType(docId, node.id, 'bullet');
+    if (indent) await tana.indent(docId, node.id); // under the list row above, which Tab means everywhere else
+    await reload(docId); render(true); placeCaret(key, 0);
+  });
   return true;
+}
+// Tab on a plain line: it becomes a bullet, and when the row above is already a list row the new bullet joins it
+// as its child, which is what Tab does to any other row. A plain line above owns nothing — a paragraph cannot
+// hold an outline in Tana's schema — so the line becomes a bullet and stays where it is rather than turning the
+// row above into a parent.
+function bulletOrIndent(item, el) {
+  if (!item || item.node.kind !== 'block') return false;
+  const siblings = childrenOf(item.parent) || [];
+  const above = siblings[siblings.indexOf(item.node) - 1];
+  const under = !!above && ['bullet', 'numbered'].includes(blockTypeOf(above));
+  if (under) open.set(keyFor(item.docId, above), true); // it is about to have a child: show it
+  return rebullet(item, el, under);
 }
 function linkSelection() { // the @ button runs the same linking flow as typing "@" over a selection
   const ctx = toolCtx, item = toolItem(), el = ctx && textEl(ctx.key);
