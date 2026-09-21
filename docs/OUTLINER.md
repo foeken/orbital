@@ -31,6 +31,7 @@ split(document, nodeId, before, after, asChild) // truncate nodeId to `before` a
 remove(document, nodeId)                      // removes the node and its children (unwrap empty lists/listItems left behind)
 indent(document, nodeId)                      // becomes the last child of its previous sibling (wrapping top-level paragraphs into bulletList/listItem as needed); no-op if no previous sibling
 outdent(document, nodeId)                     // becomes the next sibling of its parent; no-op at top level
+moveTo(document, nodeId, { parentId, afterId, from }) // a drag: behind afterId, else at the top of parentId, else at the top of the outline; `from` is the outline it comes from (a field of the same document)
 ```
 Keep the tree normalised: every listItem starts with a paragraph; empty bulletLists are removed. Keep helpers small; no general-purpose ProseMirror transform library.
 
@@ -632,3 +633,96 @@ longest name wins, so "Stan Engbers" is one person rather than a first name and 
 shared by two members is not a name at all — with two Stans in the workspace only the full name matches — and
 nobody is referenced twice in one answer, so a name repeated stays words the second time. When nobody matches, or
 the member list cannot be read, the value is written as the plain string it always was.
+
+## Addendum: dragging a row
+
+A row is picked up by the marker it already has and dropped where a line says it will land. Three things make that
+one feature rather than three, and they are the ones to keep.
+
+**A drag names the place; the keyboard names a direction.** ⇧⌘↑/↓, Tab and ⇧Tab each move a row one step, and a
+drop can reach anywhere at once, so it needed an operation of its own: `moveTo(document, id, { parentId, afterId,
+from })` (sdk/content.js). `afterId` is the row it lands behind, `parentId` the row it lands inside when there is
+nothing to land behind, and neither means the first row of the outline. The row travels whole — Loro cannot move a
+container, so it is copied and the original deleted, which keeps its children, its checkbox and its block ids, and
+the list or quote it leaves behind is pruned when it empties. `from` is the outline it came from, which is how a
+row crosses between a page and one of its fields: both are roots of the same Loro document (sdk/fields.js
+`fieldView`), so the whole move is one transaction and one undo step. Across two documents it is refused
+(`block:moveTo` → `moveBlock`, main/documents.js): a block belongs to the node that holds it, and moving one
+between documents is a different operation with a different audience question behind it.
+
+**A list holds listItems whose first block is a paragraph, so the shape is converted at the edge.** A paragraph
+dropped into a list becomes an item of it; a list row dropped among prose brings a list with it, joining the one
+already beside it rather than splitting one list into two. A heading, a code block or an image standing on its own
+cannot be a list row at all: beside one it splits the list and stands between the halves, which is exactly what a
+divider dropped into a list does (`insertDivider`), and *inside* one it is refused before anything is written, so a
+refused drag leaves the outline as it was. The renderer knows that last rule too (`dragListable`) and simply does
+not offer the drop, rather than drawing a line over a write that will fail.
+
+**One gap means several places, and the pointer's x chooses.** Between two rows, the levels that make sense run
+from the level of the row below the gap (nothing may sit shallower than the row it lands in front of) up to one
+level inside the row above it, offered only where that row can hold children (`canInsertChild`). `dropDepth`
+counts levels from the row above, one `.children` indent each, and clamps; `dropPlan` then turns the level into
+the parent and the row it lands behind by climbing the ancestors on screen. That is why the gap under a row with
+children can only mean "inside it" — its first child is the row below, and the two bounds meet.
+
+The line itself is drawn in the gap the pointer is in, indented to the level it chose and running to the right
+edge of the outline, with a dot on the end the row will start at (`#dropline`, fixed, measured from the rows on
+screen at every `dragover`). It is not drawn at all where nothing can land: the top level of a view (its rows are
+documents, and a block is not one), a read-only row, another document, or anywhere inside the row being dragged —
+which is excluded whole, subtree and all, from the rows a gap is measured against.
+Nor behind a draft row: the empty row a page or a field keeps to type in is not in the document yet, so the write
+could not name it (`must` would refuse an id like `draft:…`). It is left out of the rows a gap is measured
+against, which makes a drop aimed at it land behind the last row that is really there — the end of that outline,
+which is where it was aimed anyway. Found by dragging into an empty field in the running app.
+
+**What carries the drag.** `nodeEl` sets `draggable` on the bullet of every writable block row, and one delegated
+`dragstart` on the document picks it up, so nothing is bound per row. A row with a marker is grabbed by it. A row
+without one — text, a heading, a quote, code — keeps its 11px gutter (Addendum: bullets and plain text) and would
+have nothing to hold, so a small grip is drawn there while the pointer is on the row: inside the gutter it already
+has, so no row moves when it appears, and only on hover, so a page of prose is not a field of dots. A collapsed row
+is left alone, since its dot is back and that is the thing to grab. The dragged row dims, the drag carries our own
+dataTransfer flavour so a drop on a text field elsewhere pastes nothing, and a drag that is not ours — text out of
+a row, a file onto the window — is left to the browser.
+
+After the write both outlines are re-read, the row it landed in is opened (so the node is where it was put rather
+than hidden inside a closed row), and a parent left with no children closes. A drop back where the row already was
+writes nothing at all.
+
+Not covered: a multi-row selection is not dragged (⇧⌘↑/↓ and Tab still move a selection as one block), and a block
+is not *moved* between two documents (a document dropped into one leaves a reference instead, below).
+
+### What a drop writes, and where the line is drawn
+
+- **A marker that can be picked up says so.** `cursor: grab` is on every `.bullet[draggable="true"]`, so it reads
+  the same in a field as on a page; the grip a marker-less row shows on hover is the same affordance drawn where
+  there is no marker to grab.
+- **An empty line is nothing to pick up** (`dragEmpty`): no words, no children, nothing drawn in it, so it is not
+  made draggable and shows no grip. An image and a divider have no words either and are very much things you would
+  move, so neither counts as empty. A draft row was never draggable: it is not in the document yet.
+- **The line starts where that level's words start**: a row's own box plus the 16px its marker occupies (11px of
+  gutter and the body's 5px, the same three numbers the row-alignment rule adds up). The top level therefore lines
+  up with ordinary text instead of sitting left of it where a bullet's marker hangs, and one level in is the row's
+  own children box when it has one, or the indent those children would be given (33px, 23px under a list row).
+- **A row keeps its kind where Tana's schema allows one.** Text dropped between two bullets at a document's own
+  level stays text and the list splits around it, exactly as a divider does; only where the schema leaves no choice
+  is it converted — as somebody's child, and among somebody's children, where a bare paragraph is not a row Tana
+  reads back at all (it takes its bullet from the grandparent list, see `atRoot`). A heading, a code block or an
+  image of its own splits a list at any level and is refused only as a child, whose first block must be a paragraph.
+
+### Dragging a document, and why there is no modifier
+
+A row in a view or a saved search is a document, and a document cannot move into an outline — it lives in Tana, not
+inside another node. So a dragged document lands as a **reference** to itself: one block whose whole content is a
+mention, which is Tana's full-reference presentation and what the renderer already draws as the node itself
+(`insertMention`, sdk/content.js → `block:insertMention` → `referenceIn`). That is what makes a saved search's
+rows draggable onto other nodes: the rows themselves cannot be reordered (their order is the query's, so a drop
+*between* two of them is not offered), but each can be filed into another node as a link.
+
+What was picked up decides the write, and nothing else does. An Alt-drag existed briefly and was taken out again,
+because the data model leaves it almost nothing to say: a document can only ever be referenced, an ordinary block
+can only ever be moved — Tana's references are node-level and there is no block-level uri for a mention to point
+at (docs/sdk/02-data-model.md; no `blockUri`, no `tana:text:…#blockId` anchor anywhere in the descriptors) — so
+the modifier changed the outcome in one case out of three, on a row that already pointed at a document, where it
+duplicated the link. A modifier that is inert in most drags is a worse thing to learn than a rule you can read off
+what you grabbed, so the rule is the one sentence above. A reference never lands in the document it points at, and
+unlike a move it may cross documents, since linking is exactly what it is for.

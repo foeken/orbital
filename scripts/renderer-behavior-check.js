@@ -7080,8 +7080,161 @@ async function runRecentlyDeletedCheck() {
   console.log('ok  Recently deleted: the row is offered, the page reads main\u2019s list with its ages, restores and opens what is chosen, and is honest while loading or empty');
 }
 
+// Dragging a row (renderer/drag.js): what a pointer over a gap asks for, where it asks for nothing, and whether
+// what lands is the row itself or a reference to it. Geometry is all a real window would add here, so the rows are
+// laid out by hand — 24px lines, one level every 33px — and the plan is read back as the write it would make.
+function runDropPlanCheck() {
+  const api = vm.runInNewContext(`
+    const el = (cls) => {
+      const node = {
+        cls: new Set(cls), dataset: {}, children: [], parentElement: null, rect: { top: 0, bottom: 0, height: 0, left: 16, right: 600 },
+        classList: { contains: (name) => node.cls.has(name) },
+        getBoundingClientRect: () => node.rect,
+        append(...kids) { for (const kid of kids) { kid.parentElement = node; node.children.push(kid); } },
+        all() { return node.children.flatMap((kid) => [kid, ...kid.all()]); },
+        querySelectorAll(selector) { return node.all().filter((kid) => selector.slice(1).split('.').every((name) => kid.cls.has(name))); },
+        querySelector(selector) { const want = selector.includes('children') ? 'children' : 'line'; return node.children.find((kid) => kid.cls.has(want)) || null; },
+        contains(other) { for (let p = other; p; p = p.parentElement) if (p === node) return true; return false; },
+        closest(selector) { for (let p = node; p; p = p.parentElement) if (p.cls.has(selector.slice(1))) return p; return null; },
+      };
+      return node;
+    };
+    const FIELD = 'd1|tana:type:01j0typ0000000000000000000?attribute=n5e1hgxz';
+    const scroll = el(['scroll']), outline = el(['outline']), fieldEl = el(['fvalues']);
+    scroll.append(outline);
+    const items = new Map(), elByKey = new Map();
+    const host = (key, docId, node) => { const item = { key, docId, node: node || { id: docId, kind: 'document', editable: true, children: [] } }; items.set(key, item); return item; };
+    let dragKey = null;
+    // [key, level, block type, options] in reading order: one 24px line each, a level 33px in (23 under a list row,
+    // whose marker hangs in the space the level would otherwise use), exactly as styles.css draws them.
+    const build = (root, rows, rootItem, x0 = 16) => {
+      let y = 0;
+      const stack = [{ el: root, item: rootItem, left: x0 }];
+      for (const [key, depth, block, opts = {}] of rows) {
+        const owner = stack[depth], left = owner.left, listRow = block === 'bullet' || block === 'numbered';
+        const row = el(['node', opts.kind === 'document' ? 'document' : 'block', 't-' + block, ...(opts.draft ? ['draft'] : [])]);
+        row.dataset.key = key;
+        row.rect = { top: y, bottom: y + 24, height: 24, left, right: x0 + 584 };
+        const line = el(['line']);
+        line.rect = { ...row.rect, left: left - (listRow ? 10 : 0) };
+        row.append(line);
+        y += 24;
+        stack.length = depth + 1;
+        if (owner.el === root) root.append(row);
+        else {
+          let kids = owner.el.children.find((c) => c.cls.has('children'));
+          if (!kids) { kids = el(['children']); kids.rect = { top: y, bottom: y, height: 0, left, right: x0 + 584 }; owner.el.append(kids); }
+          kids.append(row);
+        }
+        const node = opts.kind === 'document'
+          ? { id: opts.id || 'tana:text:01docrow00000000000000000', kind: 'document', text: opts.text ?? key, editable: true, children: [] }
+          : { id: key, kind: 'block', block, text: opts.text ?? key, editable: opts.editable !== false, children: [], ...(opts.ref ? { reference: { uri: opts.ref } } : {}) };
+        const item = { key, docId: opts.docId || 'd1', node, parent: owner.item };
+        if (owner.item && owner.item.node.children) owner.item.node.children.push(node);
+        items.set(key, item); elByKey.set(key, row);
+        stack[depth + 1] = { el: row, item, left: left + (listRow ? 23 : 33) };
+      }
+      root.rect = { top: 0, bottom: y, height: y, left: x0, right: x0 + 584 };
+    };
+    outline.dataset.key = 'page'; fieldEl.dataset.key = 'field';
+    build(outline, [['a', 0, 'paragraph'], ['b', 0, 'bullet'], ['c', 1, 'bullet'], ['d', 0, 'paragraph'],
+      ['e', 0, 'bullet', { editable: false }], ['x', 0, 'bullet', { docId: 'd2' }], ['h', 0, 'heading2'],
+      ['blank', 0, 'paragraph', { text: '' }], ['link', 0, 'bullet', { ref: 'tana:text:01target000000000000000000' }],
+      ['row-doc', 0, 'bullet', { kind: 'document', id: 'tana:text:01docrow00000000000000000' }]], host('page', 'd1'));
+    // the fields sit beside the outline in this harness, so a point says which of the two outlines it is in
+    build(fieldEl, [['f', 0, 'paragraph', { docId: FIELD }], ['fdraft', 0, 'bullet', { docId: FIELD, draft: true }]], host('field', FIELD), 1016);
+    const document = { elementFromPoint: (x) => (x >= 1000 ? fieldEl : outline) };
+    const nodeElOf = (key) => elByKey.get(key) || null;
+    const canEditStructure = (item) => !!item && item.node.editable !== false, canEditItem = canEditStructure;
+    const hasKids = (item) => (item.node.children || []).length > 0;
+    const childrenOf = (item) => item.node.children || [];
+    const referenceTarget = (node) => (node.reference ? { id: node.reference.uri, text: 'Target' } : null);
+    const isSearchDoc = (node) => String((node || {}).id || '').startsWith('tana:search:');
+    const isSpace = (node) => String((node || {}).id || '').startsWith('tana:space:');
+    const isRealId = (id) => typeof id === 'string' && id.startsWith('tana:');
+    const isGone = () => false;
+    const tana = { moveTo: async () => {}, insertMention: async () => {} };
+    ${sourceLine('const DRAG_STEP =')}
+    ${sourceLine('const DRAG_STEP_LIST =')}
+    ${sourceLine('const DRAG_GUTTER =')}
+    ${sourceBetween('const BLOCK_TYPES = [', 'const BLOCK_GLYPH')}
+    ${sourceLine('const blockTypeOf =')}
+    ${sourceLine('const canInsertChild =')}
+    ${sourceLine('const dragBase =')}
+    ${sourceLine('const dragListable =')}
+    ${sourceLine('const dragEmpty =')}
+    ${sourceBetween('const canDragItem =', 'const dragLine =')}
+    ${sourceLine('const dragLine =')}
+    ${sourceLine('const rowDepth =')}
+    ${functionSource('dropHost')}
+    ${functionSource('dropDepth')}
+    ${functionSource('dropPlan')}
+    ({ plan: (key, x, y) => { dragKey = key; const plan = dropPlan(x, y); return plan && { docId: plan.docId, parentId: plan.parentId, afterId: plan.afterId, ref: plan.ref || null, left: plan.left, top: plan.top }; },
+       canDrag: (key) => canDragItem(items.get(key)),
+       inView: () => { outline.dataset.key = ''; } });
+  `);
+
+  // 1. One gap is several places, and the pointer's x says which: out to the level it was dragged to, behind the
+  //    row that sits there, or one level inside the row above it. The line starts where that level's words start —
+  //    the row's own column plus the gutter it keeps for a marker — so the top level lines up with ordinary text
+  //    rather than with a bullet hanging left of it.
+  assert.deepEqual(plain(api.plan('a', 6, 80)), { docId: 'd1', parentId: null, afterId: 'b', ref: null, left: 32, top: 72 }, 'far left: out of the list, behind the row that owns it');
+  assert.deepEqual(plain(api.plan('a', 30, 80)), { docId: 'd1', parentId: null, afterId: 'c', ref: null, left: 55, top: 72 }, 'one level in: behind the row it was dropped under');
+  assert.deepEqual(plain(api.plan('a', 60, 80)), { docId: 'd1', parentId: 'c', afterId: null, ref: null, left: 78, top: 72 }, 'further right: the first row inside it');
+
+  // 2. The gap between a row and its own first child can only mean one thing, whatever x says, and the line is
+  //    drawn against the children box that is already on screen.
+  assert.deepEqual(plain(api.plan('a', 6, 40)), { docId: 'd1', parentId: 'b', afterId: null, ref: null, left: 55, top: 48 }, 'above a row\u2019s first child there is one level to land on');
+  assert.equal(plain(api.plan('a', 400, 40)).parentId, 'b');
+
+  // 3. Above every row is the top of the outline it is drawn in — the page, or a field, which is an outline of the
+  //    same document. A view has no top to land on: its rows are documents, and a block is not one.
+  assert.deepEqual(plain(api.plan('a', 20, 5)), { docId: 'd1', parentId: null, afterId: null, ref: null, left: 32, top: 0 }, 'the top of the page');
+  assert.deepEqual(plain(api.plan('a', 1020, 5)).docId, 'd1|tana:type:01j0typ0000000000000000000?attribute=n5e1hgxz', 'and the top of a field, which is where a row dragged out of the page lands');
+  // The empty row a field keeps to type in is not in the document yet, so nothing can land behind it: a drop aimed
+  // at it lands behind the last row that is really there.
+  assert.equal(plain(api.plan('a', 1020, 60)).afterId, 'f', 'a draft row is not a place to land');
+
+  // 4. Nothing lands on a read-only row, in another document, or inside the row being dragged.
+  assert.equal(api.plan('a', 20, 112), null, 'a read-only row is nobody\u2019s neighbour');
+  assert.equal(api.plan('a', 20, 136), null, 'and a row of another document is not a place: a block belongs to the node that holds it');
+  assert.deepEqual(plain(api.plan('b', 6, 60)), { docId: 'd1', parentId: null, afterId: 'a', ref: null, left: 32, top: 24 }, 'the row being dragged, and everything under it, is not a target');
+
+  // 5. A heading cannot be a list row, so it is not offered a place inside one; beside one it is, and the write
+  //    splits the list there (sdk/content.js place).
+  assert.equal(api.plan('h', 60, 80), null, 'a heading is not offered as somebody\u2019s child');
+  assert.equal(plain(api.plan('h', 30, 80)).afterId, 'c', 'but beside a list row it is');
+
+  // 6. A view, where the top level is documents rather than rows of one.
+  api.inView();
+  assert.equal(api.plan('a', 20, 5), null, 'the top of a view is not a place for a block');
+
+  // 7. What can be picked up: a writable block with something in it, and any real document row — never a
+  //    read-only row, and never an empty line, which has nothing to take hold of.
+  assert.deepEqual([api.canDrag('a'), api.canDrag('h'), api.canDrag('row-doc'), api.canDrag('e'), api.canDrag('blank')], [true, true, true, false, false],
+    'a read-only row and an empty line are not dragged; a document row is');
+  assert.match(source, /if \(canDragItem\(item\)\) bullet\.draggable = true;/, 'and it is the row\u2019s own marker that carries it');
+  // Chromium begins a drag from the mousedown default, so the marker that can be dragged must not prevent it —
+  // this is the line that decides whether a drag starts at all.
+  assert.match(source, /bullet\.onmousedown = \(e\) => \{ if \(!bullet\.draggable\) e\.preventDefault\(\); \};/, 'a draggable marker lets the press through');
+
+  // 8. A document row never moves into an outline — it lives in Tana, not inside this node — so what lands is a
+  //    reference to it, and it may land in another document, which a move may not.
+  const linked = plain(api.plan('row-doc', 30, 80));
+  assert.deepEqual(linked.ref, { uri: 'tana:text:01docrow00000000000000000', label: 'row-doc' }, 'a dragged document lands as a reference to itself');
+  assert.equal(linked.afterId, 'c');
+  assert.equal(plain(api.plan('row-doc', 20, 136)).docId, 'd2', 'and a reference may land in another document');
+
+  // 9. What was picked up decides the write, and nothing else does: a block moves even when it is a row that
+  //    points at a document, because the row is the thing being dragged.
+  assert.equal(plain(api.plan('link', 30, 80)).ref, null, 'a row that points at a document still moves: it is a block like any other');
+  assert.equal(plain(api.plan('link', 30, 80)).afterId, 'c');
+  console.log('ok  drag and drop: one gap reads as several places, x chooses the level and the line marks it, documents land as references, blocks move, and nothing lands read-only, empty, in another document, in a view or inside itself');
+}
+
 // Red until the checks actually settle: an async check left awaiting something that never resolves empties the event
 // loop, and node would exit 0 without a word — a silent pass for a check that never finished.
+checks.push(runDropPlanCheck);
 process.exitCode = 1;
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);
