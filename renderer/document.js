@@ -49,6 +49,12 @@ function editPinRows(q) {
   // and the other direction from the same page: the sidebar pin is asked for nowhere else, and today's is the one ⌘K offers
   if (!pinInfo.sidebar) rows.push({ group: 'Pin it', icon: 'pinned', label: 'Pin to sidebar', keepOpen: true, run: () => pinAction('pin', 'sidebar') });
   if (!pinInfo.dates.includes(localDate())) rows.push({ group: 'Pin it', icon: 'pinDate', label: 'Pin to today', keepOpen: true, run: () => pinAction('pin', 'today') });
+  // and onto a meeting, which is a pin on that meeting's own document (docs/PINNING.md §4) rather than one of these
+  // two: the same picker ⌘K opens, told to come back here when Escape leaves it.
+  if (tana.searchPreview && tana.pinTo && isRealId(palDoc.id)) {
+    const doc = palDoc;
+    rows.push({ group: 'Pin it', icon: 'pin', label: 'Pin to meeting', hint: 'Choose a meeting', keepOpen: true, run: () => openMeetingPicker(doc, () => openPinsPalette(doc)) });
+  }
   return rows;
 }
 function openPinsPalette(doc) {

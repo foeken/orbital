@@ -3488,7 +3488,11 @@ async function runEditPinsCheck() {
       pinIds: async () => { calls.push(['pinIds']); return [...ids]; },
       pin: async (id, target, date) => { calls.push(['pin', id, target, date]); },
       unpin: async (id, target, date) => { calls.push(['unpin', id, target, date]); },
+      searchPreview: async () => [], pinTo: async () => {}, // enough for the meeting row to be offered
     };
+    const isRealId = (id) => typeof id === 'string';
+    let picker = null; // the meeting picker is its own page with its own check; here what matters is what opens it
+    const openMeetingPicker = (doc, back) => { picker = { doc: doc.id, back }; };
     ${sourceLine('const localDate =')}
     ${functionSource('fuzzyMatch')}
     ${functionSource('loadPins')}
@@ -3502,6 +3506,8 @@ async function runEditPinsCheck() {
       press: async (q, index) => { calls.length = 0; editPinRows(q || '')[index].run(); await new Promise(setImmediate); await new Promise(setImmediate); return [...calls]; },
       marks: () => (pinnedIds ? [...pinnedIds] : null),
       today: () => localDate(),
+      picker: () => (picker ? { doc: picker.doc, back: typeof picker.back } : null),
+      escape: () => { picker.back(); return palMode; },
     });
   `, { setImmediate, Date, Promise });
 
@@ -3511,22 +3517,27 @@ async function runEditPinsCheck() {
   assert.deepEqual(opened.calls, [['pinIds'], ['pinState', 'doc']], 'it re-reads the marks and asks where this one is pinned');
   assert.deepEqual(plain(api.marks()), ['doc', 'other'], 'the marks every row draws come from that one list');
   assert.deepEqual(plain(api.page().map((r) => [r.icon, r.label, !!r.keepOpen])),
-    [['pinned', 'Sidebar', true], ['pinDate', 'Today · ' + today, true], ['pinDate', '2099-01-01', true]],
-    'every pin is a row, dates in order and today named');
-  assert.deepEqual(plain(api.page().map((r) => r.group)).filter((g, i, all) => all.indexOf(g) === i), ['Pinned · ↩ unpins'], 'one header, which says what Enter does');
-  assert.deepEqual(plain(api.page('side').map((r) => r.label)), ['Sidebar'], 'typing narrows the list');
+    [['pinned', 'Sidebar', true], ['pinDate', 'Today · ' + today, true], ['pinDate', '2099-01-01', true], ['pin', 'Pin to meeting', true]],
+    'every pin is a row, dates in order and today named, with the meeting pin offered whatever else is pinned');
+  assert.deepEqual(plain(api.page().map((r) => r.group)).filter((g, i, all) => all.indexOf(g) === i), ['Pinned · ↩ unpins', 'Pin it'], 'the pins under one header that says what Enter does, what can still be pinned under another');
+  assert.deepEqual(plain(api.page('side').map((r) => r.label)), ['Sidebar', 'Pin to meeting'], 'typing narrows the pins it lists; what can still be pinned stays offered');
   assert.deepEqual(plain(await api.press('', 0)), [['unpin', 'doc', 'sidebar', null], ['pinIds'], ['pinState', 'doc']], 'the sidebar row unpins and the page re-reads itself');
   assert.deepEqual(plain(await api.press('', 2)), [['unpin', 'doc', 'today', '2099-01-01'], ['pinIds'], ['pinState', 'doc']], 'and a date row unpins that date, not today');
 
   const none = plain(await api.open({ sidebar: false, dates: [] }, []));
   assert.equal(none.palMode, 'pins');
   assert.deepEqual(plain(api.page().map((r) => [r.label, !!r.disabled])),
-    [['Not pinned anywhere', true], ['Pin to sidebar', false], ['Pin to today', false]], 'a node pinned nowhere says so, and the two pins can be made from here');
+    [['Not pinned anywhere', true], ['Pin to sidebar', false], ['Pin to today', false], ['Pin to meeting', false]], 'a node pinned nowhere says so, and the pins that can be made are offered');
   assert.deepEqual(plain(await api.press('', 1)), [['pin', 'doc', 'sidebar', null], ['pinIds'], ['pinState', 'doc']], 'the sidebar pin is written from this page');
-  assert.deepEqual(plain(api.page('nothing here').map((r) => r.label)), ['Not pinned anywhere', 'Pin to sidebar', 'Pin to today'], 'a query that matches nothing still leaves the page usable');
+  assert.deepEqual(plain(api.page('nothing here').map((r) => r.label)), ['Not pinned anywhere', 'Pin to sidebar', 'Pin to today', 'Pin to meeting'], 'a query that matches nothing still leaves the page usable');
+  // A meeting pin lives on the meeting's own document, so the page hands that one to the picker ⌘K already opens —
+  // and tells it to come back here, rather than to the command page, when Escape leaves it.
+  api.page().find((r) => r.label === 'Pin to meeting').run();
+  assert.deepEqual(plain(api.picker()), { doc: 'doc', back: 'function' }, 'the meeting row opens the picker for this document');
+  assert.equal(api.escape(), 'pins', 'and escaping the picker comes back to Edit pins');
   assert.match(source, /id: 'editPins'[^}]*'Edit pins'/, 'Cmd+K carries the command that opens it');
   assert.match(source, /palMode === 'pins'/, 'and the palette renders and types in that mode like any other');
-  console.log('ok  Edit pins: the page opens with this document\u2019s pins, names today, unpins each of them, offers the two that can be made, and the row marks come from one list');
+  console.log('ok  Edit pins: the page opens with this document\u2019s pins, names today, unpins each of them, offers the sidebar, date and meeting pins that can be made, and the row marks come from one list');
 }
 
 // A view that gains and loses rows between two renders: arrivals flash, departures go back where they were.

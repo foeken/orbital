@@ -6,7 +6,7 @@ const palette = $('palette'), palInput = $('paletteInput'), palText = $('palette
 let palMode = 'cmd', palRows = [], palIndex = 0, palBusy = false, palSeq = 0, palTimer, creationChoices = [];
 let palEnter = null; // an Enter pressed while a search was still running: 'pick' or 'create', applied when the rows land
 let meetingNow; // the active meeting as last read: undefined = not asked this open, { meeting } or { error } after
-let meetingList = null, meetingListError = null, pinMeetingDoc = null; // the meeting picker: rows, why it has none, and the node being pinned
+let meetingList = null, meetingListError = null, pinMeetingDoc = null, pinMeetingBack = null; // the meeting picker: rows, why it has none, the node being pinned, and the page escape returns it to
 // Enter chooses: the highlighted row, or for an @ selection ⌘↩ always creates. While the search is still out, the
 // choice is kept and made the moment the rows arrive, so the first Enter after "@" is never lost.
 function chooseRow(create) {
@@ -338,12 +338,15 @@ function openCommandPalette() {
   palInput.placeholder = 'Run a command'; palInput.value = ''; renderPalette(); palInput.focus();
 }
 function backPalette() {
-  const SECOND_LEVEL = new Set(['pinMeeting', 'setType', 'trash', 'discuss', 'setIcon', 'setHue', 'openaiKey', 'pins']); // pages opened from the command page
+  const SECOND_LEVEL = new Set(['setType', 'trash', 'discuss', 'setIcon', 'setHue', 'openaiKey', 'pins']); // pages opened from the command page
   if (palMode === 'pill') openCommandPalette();
   // Escape on the prompt page cancels the whole thing rather than stepping back a level: the page was opened to
   // answer one question, and abandoning that question is abandoning the assignment. Nothing is written either way.
   else if (palMode === 'agentPrompt') closePalette();
   else if (palMode === 'visibilityPeople') openVisibilityPalette(palDoc);
+  // The meeting picker is opened from two places — the command page and Edit pins — so it steps back to whichever
+  // one asked for it rather than to a fixed one (openMeetingPicker's second argument, the command page by default).
+  else if (palMode === 'pinMeeting') pinMeetingBack();
   // These pickers were opened from the command page and step back to it, like every other second level here.
   else if (SECOND_LEVEL.has(palMode)) openCommandPalette();
   else closePalette();
@@ -643,8 +646,8 @@ function meetingPickRows(q) {
   if (!rows.length && !q) rows.push({ group: MEETING_GROUP, label: 'No meetings in the last week or the week ahead', disabled: true });
   return rows;
 }
-function openMeetingPicker(doc) {
-  pinMeetingDoc = doc; palMode = 'pinMeeting'; palRows = []; palIndex = 0; palette.hidden = false;
+function openMeetingPicker(doc, back) {
+  pinMeetingDoc = doc; pinMeetingBack = back || openCommandPalette; palMode = 'pinMeeting'; palRows = []; palIndex = 0; palette.hidden = false;
   palInput.placeholder = 'Pin to which meeting?'; palInput.value = '';
   loadMeetingList(); renderPalette(); palInput.focus();
 }
