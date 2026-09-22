@@ -143,10 +143,9 @@ A field value is a ProseMirror-style tree in the document's own `data.attributes
 | `readFields(document)` | `[{ key, typeUri, attribute, text, segments, lines }]` for every field the document carries; `lines` is the value as `[{ segments, block }]` in stored order, `text` joins those lines with newlines (mentions rendered as their label) and `segments` is the first line's. `[]` when there are none. |
 | `templateTitles(typeDocument)` | `{ key: title }` for that type's fields (falls back to the key). |
 | `setFieldText(document, key, text)` | Writes the field's value, creating the doc/paragraph shell when the field is empty. `text` is a string, one line's segments, or an array of lines — each a string, segments, or `{ segments, block }`. The runs are written by the same code a row's are, so a mention stays a mention. Words changing are patched into the blocks already there, which keeps a value's bullets, headings and block ids; a line changing shape writes the value again from the top. |
-| `valueLines(value)` | `[{ segments, block }]` for a value's JSON: every block that carries words is one line, `block` being `bullet` inside a list and otherwise the block's own name, which is what lets a write put it back as it was. |
 | `fieldView(document, key, { create = false })` | The field's value as a Document, so every operation in `content.js` works on it and the field editor is the page's editor rather than a second one. `create` decides what an absent value does: a write needs the shell to exist, a read must not write one. |
 | `addField(typeDocument, { title, type, cardinality })` → key | Defines a field on a type: one more entry in its `template.attributes`, the MovableList of `{ key, title, type?, cardinality? }` maps a real type carries. Types seen on the wire: member, date, link; a plain text field has no type at all. |
-| `valueText(value)`, `parseKey(key)` | The helpers behind those. |
+| `parseKey(key)` | The helper behind those. `valueLines` and `valueText` (a value's lines and its flat text) stay inside the module: `readFields` already hands out `lines` and `text`, and nothing outside it needs them raw. |
 
 ## App mutation and history boundary
 
