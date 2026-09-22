@@ -820,3 +820,11 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .recorder button { background: #303436; color: #c9c9c9; }
 [data-theme="dark"] .recorder button:hover { background: #3b4144; }
 [data-theme="dark"] .recorder button:disabled { color: #777d80; background: #303436; }
+
+/* Presence (renderer/presence.js): others' carets in the page on screen, one colour per person (--hue from their user hash). */
+.node > .line:has(> .pcaret) { position: relative; } /* only lines that carry a marker */
+.pcaret { position: absolute; left: -6px; top: 4px; bottom: 4px; width: 2px; border-radius: 1px; background: oklch(0.82 0.13 var(--hue)); z-index: 2; }
+.pcaret::after { content: attr(data-name); position: absolute; left: 0; bottom: 100%; font-size: 12.5px; line-height: 18px; padding: 0 7px; border-radius: 5px 5px 5px 0;
+  background: oklch(0.82 0.13 var(--hue)); color: #1c2024; font-weight: 600; white-space: nowrap; pointer-events: none; } /* on the caret, as Tana labels one */
+.pcaret.below::after { bottom: auto; top: 100%; border-radius: 0 5px 5px 5px; }
+.pcaret.at { bottom: auto; width: 2px; border-radius: 0; pointer-events: none; } /* between the characters, as Tana draws it */

@@ -200,6 +200,100 @@ function must(document, id) {
   return r;
 }
 
+// A Loro Cursor at a character offset in a block's text: how Tana's editor shares a caret (sdk/presence.js). Offsets
+// count characters the way the outline shows them: a mention counts as its label, an inline line break as one. Inside
+// a text run the cursor is on that LoroText (as loro-prosemirror places one); at or inside a mention it is on the
+// block's children list before it. null when the block is unknown or holds no inline content.
+// ponytail: offsets are taken as Loro's unicode positions, so text with astral characters (emoji) before the caret is
+// off by one per character; count code points in the caller when that matters.
+function cursorAt(document, id, offset) {
+  const found = locate(kids(document.content), id), list = found && kids(found.block);
+  if (!list) return null;
+  let left = Math.max(0, Number(offset) || 0);
+  for (let i = 0; i < list.length; i++) {
+    const x = list.get(i);
+    if (x.kind() === 'Text') { if (left <= x.length) return x.getCursor(left) || null; left -= x.length; continue; }
+    const len = isMention(x) ? String(x.get('attributes').get('label') || '').length : name(x) === 'hardBreak' ? 1 : 0;
+    if (left < len) return list.getCursor(i) || null;
+    left -= len;
+  }
+  return list.getCursor(list.length) || null; // past the end: after the last inline item
+}
+
+// Tana's editor counts a caret in ProseMirror positions from the start of its block (presence anchorBlock/focusBlock
+// offset): a mention or a line break is one position, text one per character. The outline counts a mention as its
+// label. These convert between the two over the block's own inline items; null for an unknown block.
+function inlineItems(document, id) {
+  const found = locate(kids(document.content), id), list = found && kids(found.block);
+  if (!list) return null;
+  const out = [];
+  for (let i = 0; i < list.length; i++) {
+    const x = list.get(i);
+    if (x.kind() === 'Text') out.push({ text: true, chars: x.length });
+    else out.push({ text: false, chars: isMention(x) ? String(x.get('attributes').get('label') || '').length : name(x) === 'hardBreak' ? 1 : 0 });
+  }
+  return out;
+}
+function charOffset(document, id, position) { // Tana's position -> the outline's character offset
+  const items = inlineItems(document, id);
+  if (!items) return null;
+  let left = Math.max(0, Number(position) || 0), chars = 0;
+  for (const it of items) {
+    if (it.text) { if (left <= it.chars) return chars + left; left -= it.chars; chars += it.chars; continue; }
+    if (left < 1) return chars;
+    left -= 1; chars += it.chars;
+  }
+  return chars;
+}
+function blockOffset(document, id, offset) { // the outline's character offset -> Tana's position
+  const items = inlineItems(document, id);
+  if (!items) return null;
+  let left = Math.max(0, Number(offset) || 0), position = 0;
+  for (const it of items) {
+    if (it.text) { if (left <= it.chars) return position + left; left -= it.chars; position += it.chars; continue; }
+    if (left < it.chars) return position; // inside a mention: before it
+    left -= it.chars; position += 1;
+  }
+  return position;
+}
+
+// The other way round: where a Loro Cursor (or its bytes, as presence carries them) is now, as { blockId, offset } in
+// the outline's character count. A cursor is anchored to a character, so it follows edits: text typed before it moves
+// it, which a block offset taken when it was set does not. null when its container is not in this document (yet).
+function cursorOffset(document, cursor) {
+  const { Cursor } = require('loro-crdt');
+  let c = cursor, pos;
+  try { if (c instanceof Uint8Array) c = Cursor.decode(c); pos = c && document.loro.getCursorPos(c); } catch { return null; }
+  if (!pos) return null;
+  const cid = c.containerId();
+  let found = null;
+  const walk = (list) => {
+    for (let i = 0; list && i < list.length && !found; i++) {
+      const b = list.get(i);
+      if (!b || !b.kind || b.kind() !== 'Map') continue;
+      const inl = kids(b), id = blockId(b);
+      if (inl && id) {
+        let chars = 0;
+        if (inl.id === cid) { for (let j = 0; j < pos.offset && j < inl.length; j++) chars += width(inl.get(j)); found = { blockId: id, offset: chars }; break; }
+        for (let j = 0; j < inl.length; j++) {
+          const x = inl.get(j);
+          if (x.kind() === 'Text' && x.id === cid) { found = { blockId: id, offset: chars + pos.offset }; break; }
+          chars += width(x);
+        }
+        if (found) break;
+      }
+      walk(inl);
+    }
+  };
+  walk(kids(document.content));
+  return found;
+}
+// how many characters an inline item is in the outline: text its length, a mention its label, a line break one
+function width(x) {
+  if (x.kind() === 'Text') return x.length;
+  return isMention(x) ? String(x.get('attributes').get('label') || '').length : name(x) === 'hardBreak' ? 1 : 0;
+}
+
 // ---- build / copy
 
 function create(list, index, nodeName) {
@@ -729,4 +823,4 @@ function insertMention(document, { uri, label } = {}, { parentId = null, afterId
   return out;
 }
 
-module.exports = { readOutline, assignBlockIds, setText, inlineGroups, writeInline, styleDoc, setBlockType, insertDivider, insertAfter, insertBefore, insertChild, insertMention, split, remove, removeMany, indent, indentMany, outdent, outdentMany, move, moveMany, moveTo, toggleCheckbox, newId, BLOCK_TYPES };
+module.exports = { cursorAt, cursorOffset, charOffset, blockOffset, readOutline, assignBlockIds, setText, inlineGroups, writeInline, styleDoc, setBlockType, insertDivider, insertAfter, insertBefore, insertChild, insertMention, split, remove, removeMany, indent, indentMany, outdent, outdentMany, move, moveMany, moveTo, toggleCheckbox, newId, BLOCK_TYPES };

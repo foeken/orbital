@@ -732,3 +732,24 @@ unlike a move it may cross documents, since linking is exactly what it is for.
 ⌘K → **Export to PDF…** is available for the current text document, including read-only documents. Pending edits are queued before export. The native Save dialog defaults to the document title; cancellation writes nothing. Export reads the complete main outline, including collapsed children, without expanding references into other documents or including app controls, sidebar or typed metadata fields. Electron prints a separate sandboxed page as A4 with fixed light typography, lists, headings, inline marks, images and page margins. Image loading and PDF failures surface through the normal command error path. `node scripts/pdf-check.js` checks escaping and structure; an unsandboxed `electron scripts/pdf-check.js --render` generates three synthetic visual samples under `/tmp/orbital-pdf-examples`.
 
 Expanded documents show their type fields above their body children, using the same field renderer and editors as a zoomed page. Field rows keep their document-and-field address and write permissions. Vertical caret movement includes inline fields in reading order; structural edits stay inside the current field or body outline.
+
+
+### Presence: who else is here (issue #14)
+
+The page on screen has its presence room open (renderer/presence.js
+follows the zoom after every render; main/presence.js keeps one counted room per document over sdk/presence.js), with the
+viewing heartbeat. Lists show no presence. Each person has a colour of their own (from their user hash). Their caret is drawn where Tana draws it: a thin line in that colour between the characters it is on, with their full name on it,
+as Tana labels one, below the caret instead when the row is too near the top of the scroll area to fit it above. The position is read from the entry's Loro cursor (content.cursorOffset), which is anchored to a character and so stays right as
+text is typed: Tana only re-sends an entry when that cursor changes, so its block offset stays where the caret entered a node
+(0 in a new one), and an edit to the document redraws the carets without any presence message. The block offset (ProseMirror
+units, a mention is one; content.charOffset) is the fallback, and your own caret goes out in those units too (blockOffset).
+In an empty row, or before its position is known, the caret stands where the row's text begins. This Orbital is never shown; your own other tabs and devices are, under your name, which is also how to try presence alone: open
+the same node in Tana.
+
+Where your caret is goes the other way: while it is in a block of this page, your presence entry says so under your name
+(`user.name`, no colour, so Tana picks one as it does for anyone): the block id with the caret's anchor and focus offsets, and
+the same positions as Loro cursors (content.cursorAt, on the text run the caret is in), which is what Tana draws an exact caret or
+selection from. It follows every caret move, at most one message per 150 ms, and is cleared when the caret leaves the outline, the
+window loses focus or the page changes. Only a block counts: the title and a draft row are not blocks yet.
+The viewing heartbeat goes to the page on screen only while the window is visible and you were active (a key, the mouse, a
+scroll) in the last minute, as Tana sends it.

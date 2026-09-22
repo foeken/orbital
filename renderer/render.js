@@ -245,7 +245,8 @@ function playTicks() {
 function render(force = false) {
   if (force !== true && (editingRow() || selectionFrozen)) { renderDeferred = true; markFalling(); refreshRowChrome(); if (pillsDrawn) renderPills(true); return; }
   renderDeferred = false; rendering = true;
-  try { renderOutline(); } finally { rendering = false; playTicks(); }
+  // presence (renderer/presence.js) follows the page and redraws who is here; the check harnesses load render.js without it
+  try { renderOutline(); if (typeof syncPresence === 'function') syncPresence(); } finally { rendering = false; playTicks(); }
   fitRowMeta();
 }
 // A task row carries its grey facts — who it is for, who can see it, whether it notifies — after the title. When the

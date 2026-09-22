@@ -71,7 +71,7 @@ Outbound: local ops are batched 5 ms, one in-flight `liveDocumentUpdate` per doc
 - `handle.peers({ exceptUserHash }?)` → `[{ peer, userHash, user: { name, color } | null, scope, hasCursor, anchorBlock, focusBlock, anchor, focus }]` for everyone in the document except this connection. `anchorBlock`/`focusBlock` are `{ blockId, offset }` or null; `anchor`/`focus` are Loro `Cursor` bytes (`Cursor.decode` + `doc.getCursorPos`) or null. `exceptUserHash` also leaves out your own other tabs and devices.
 - `handle.editing(opts?)` → the peers with a caret in the document, i.e. someone is editing it right now.
 - `handle.on('change', { added, updated, removed, by })`: peer ids; `by` is `import` (a peer sent something, leaving included) or `timeout` (an entry nobody refreshed expired).
-- `handle.setLocal({ user, anchorBlock, focusBlock = anchorBlock, scope })`: be seen, in Tana's entry shape, refreshed at half the timeout so it does not expire; `handle.clearLocal()` takes it away. Re-sent after a reconnect.
+- `handle.setLocal({ user, anchorBlock, focusBlock = anchorBlock, anchor, focus = anchor, scope })`: be seen, in Tana's entry shape (`anchor`/`focus` are Loro cursor bytes, `content.cursorAt(...).encode()`, which Tana draws an exact caret from), refreshed at half the timeout so it does not expire; `handle.clearLocal()` takes it away. Re-sent after a reconnect.
 - `{ viewing: true }`: also sends the viewing heartbeat every 10 s (and after a reconnect), as Tana does for the document on screen.
 - `handle.close()`: clears our entry, unsubscribes, forgets everyone.
 - `userHashOf(peerId)`: the user part of a peer id (its top bits, `sync.derivePeerId`), so an entry says which user it is without a lookup; two tabs of one person share it.
@@ -160,6 +160,12 @@ Outline node: `{ id: blockId, text, kind: 'block', block?: type, heading?: level
 | `BLOCK_TYPES` | `['paragraph', 'heading1', 'heading2', 'heading3', 'bullet', 'numbered', 'code', 'quote']` — what `setBlockType` accepts. |
 
 All operations run inside `document.transact`, so each is one undo step and one live update. Containers are copied and deleted (Loro cannot move containers); text runs keep their marks via `toDelta/applyDelta`. A direction other than `'up'`/`'down'` throws rather than defaulting to down.
+
+`cursorAt(document, blockId, offset)` → a Loro `Cursor` at that character offset in the block's text, counted as the outline shows it (a mention as its label, a line break as one): on the text run it falls in, or on the children list at a mention; past the end, after the last item; null for an unknown block. How presence shares an exact caret (`sdk/presence.js` `setLocal`). Offsets are Loro unicode positions, so astral characters before the caret shift it by one each.
+
+`cursorOffset(document, cursorOrBytes)` → `{ blockId, offset }`: where a Loro cursor (or the bytes presence carries) is now, in the outline's character count. A cursor is anchored to a character, so this follows text typed since it was set, which a block offset does not; null when its container is not in this document yet.
+
+`charOffset(document, blockId, position)` / `blockOffset(document, blockId, offset)`: convert a caret between Tana's ProseMirror position from the start of the block (presence `anchorBlock`/`focusBlock` offsets: a mention or a line break is one position) and the outline's character offset (a mention is its label). A caret inside a mention's label maps to just before it; null for an unknown block.
 
 ## `sdk/fields.js` — typed fields ("attributes")
 
