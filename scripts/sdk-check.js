@@ -1695,12 +1695,15 @@ async function main() {
     const COLLEAGUE = 'tana:user-profile:01examplew0000000000000000';
     docs.set(watched.id, watched);
     creators.set(watched.id, ME); // who made it is the graph's answer, not the document's
+    // What Tana's own Changes panel would say about each node, by uri: the banner reads the same service.
+    const summaries = new Map();
     backend.testRuntime({ me: { userUri: ME }, win: { isDestroyed: () => false, webContents: { send: () => {} } },
       client: {
         sync: { getDocument: (id) => docs.get(id), subscribe: async (id) => docs.get(id) },
         // A Loro document carries no creator, so the rule asks the graph. A node nobody made is a node nobody
         // created: the lookup answers with nothing rather than throwing.
         graph: { listNodes: async ({ nodeIds }) => ({ nodes: (nodeIds || []).filter((id) => creators.has(id)).map((id) => ({ id, createdBy: creators.get(id) })) }) },
+        history: { listChanges: async ({ uri }) => ({ summaries: summaries.get(uri) || [] }) },
       } });
     backend.S.notify = (id, title, body) => notified.push([id, title, body]);
 
@@ -1718,31 +1721,55 @@ async function main() {
     backend.onChange(watched.id, { origin: 'remote' });
     await settle();
     assert.deepEqual(notified.map((n) => [n[0], n[2]]), [[watched.id, 'Edited']], 'a remote edit to a watched node is announced');
+    assert.equal(notified.length, 1, 'and with nothing written about it, "Edited" is all there is to say');
     // The whole feature rests on this: onChange fires for your own typing too, and being told about your own edits
     // would make it unusable. sdk/document.js marks every change local or remote; this is what reads that mark.
     setTitle(watched, 'Contract v3');
     backend.onChange(watched.id, { origin: 'local' });
     await settle();
     assert.equal(notified.length, 1, 'your own edits are never announced back to you');
+    // From here the change-summary service has something to say about this node, the way it does in the sidebar.
+    const RECENT = (ms) => new Date(Date.now() - ms).toISOString();
+    summaries.set(watched.id, [
+      { title: 'Renamed to Contract v3', endTime: RECENT(4 * 60 * 1000) },
+      { title: 'Added dependency on Finish reply document', endTime: RECENT(1000) }, // newest, whatever order it arrives in
+    ]);
     setState(watched, 'closed', ME);
     backend.onChange(watched.id, { origin: 'remote' });
     await settle();
-    assert.equal(notified.at(-1)[2], 'Now Completed', 'a status change says what the status became, not just that something moved');
+    assert.equal(notified.at(-1)[2], 'Now Completed', 'a status change says what the status became, not the sentence a summary wrote about it');
     // An edit is an edit: a body rewritten elsewhere moves neither title nor state, and a watched node nobody ever
     // hears from is the same as an unwatched one. The document's own ops are what says something happened.
     watched.transact((l) => l.getMap('content').set('rev', 1));
     backend.onChange(watched.id, { origin: 'remote' });
     await settle();
     assert.equal(notified.length, 3, 'a change to the body alone is announced too');
-    assert.equal(notified.at(-1)[2], 'Edited', 'as an edit, because no status moved');
+    assert.equal(notified.at(-1)[2], 'Added dependency on Finish reply document',
+      'and it says what the edit was, in the same words the sidebar\'s Changes section uses');
     watched.transact((l) => l.getMap('content').set('rev', 2));
     backend.onChange(watched.id, { origin: 'remote' });
     await settle();
     assert.equal(notified.length, 3, 'and the rest of that burst is quiet: remote typing arrives op by op');
+    // A summary is written server-side, so the newest one the service has can still be an older window of edits;
+    // describing this change with last week's sentence would be worse than not describing it at all.
+    const stale = new Document('tana:text:' + ulid());
+    stale.transact((l) => initDocument(l, 'Old news', ME, { kind: 'task' }));
+    setAssignees(stale, [], ME);
+    docs.set(stale.id, stale); creators.set(stale.id, ME);
+    summaries.set(stale.id, [{ title: 'Added a heading', endTime: RECENT(60 * 60 * 1000) }]);
+    backend.onChange(stale.id, { origin: 'remote' }); // baseline
+    await settle();
+    stale.transact((l) => l.getMap('content').set('rev', 1));
+    backend.onChange(stale.id, { origin: 'remote' });
+    await settle();
+    assert.deepEqual(notified.at(-1), [stale.id, 'Old news', 'Edited'],
+      'a summary too old to be this change is left out rather than announced as it');
+    // A second node is announced from here on, so what this one said is counted rather than the whole list.
+    const aboutWatched = () => notified.filter((n) => n[0] === watched.id).length;
     // Nothing moved at all — a re-imported snapshot after a resync — is not an edit either.
     backend.onChange(watched.id, { origin: 'remote' });
     await settle();
-    assert.equal(notified.length, 3, 'and re-seeing ops already seen announces nothing');
+    assert.equal(aboutWatched(), 3, 'and re-seeing ops already seen announces nothing');
     // An explicit no beats a default yes, and clearing it returns to the rule rather than to off.
     await backend.handlers.get('notify:set')(null, watched.id, false);
     // Field by field: these objects are built inside the main-process vm, so a whole-object compare under
@@ -1754,7 +1781,7 @@ async function main() {
     setTitle(watched, 'Contract v4');
     backend.onChange(watched.id, { origin: 'remote' });
     await settle();
-    assert.equal(notified.length, 3, 'and nothing is announced while it is off');
+    assert.equal(aboutWatched(), 3, 'and nothing is announced while it is off');
     await backend.handlers.get('notify:set')(null, watched.id, null);
     const cleared = await backend.handlers.get('notify:state')(null, watched.id);
     assert.equal(cleared.explicit, false, 'clearing the choice forgets it');
