@@ -11,44 +11,60 @@ thing from a browser tab, and because the round trip through a web view makes a 
 
 ## What it does
 
-**Six views that are one screen.** Inbox, Tasks, Meetings, Library, Chats and People are the same
-list with a different filter on it: a kind, a status, an assignee, a text query. The Library picks
-its own kinds; the other five are what their name says. Each view keeps its own filter, sort and
-grouping, and each caches its rows, so any of them opens instantly and stays readable while auth or
-sync reconnect. The contract is in [docs/VIEWS.md](docs/VIEWS.md).
+**One screen, three presets, your own searches.** Inbox, Library and Types are the same list with a
+different filter on it: a kind, a status, an assignee, a text query, a window. The pills that edit
+the filter also save it: Tasks, Meetings, Chats and People are saved searches in Tana, listed under
+Searches in Cmd+K beside any you make yourself, and re-aimed from the same pills. Every list has
+Sort and Group, remembers its choices, and caches its rows, so any page opens instantly and stays
+readable while auth or sync reconnect. Home is whichever page you set. The contract is in
+[docs/VIEWS.md](docs/VIEWS.md).
 
 **An outliner, not a form.** Type anywhere. Enter splits or creates a node, Tab and Shift+Tab nest
 and unnest, Backspace on an empty node removes it, Cmd+Up/Down collapse and expand, Cmd+Shift+Up/Down
-move a node among its siblings, and clicking a bullet zooms in. `/` at the start of a node opens the
-block menu (headings, lists, code, quote, divider, tables, new documents); `@` links to another node;
-selecting text opens the formatting bar. Undo and redo are CRDT-aware and local-only: Cmd+Z never
-rolls back someone else's edit. The full keyboard contract is [docs/OUTLINER.md](docs/OUTLINER.md).
+move a node among its siblings, and clicking a bullet zooms in. Drag a row by its bullet to move it,
+with a drop line at the level it will land on, into the page or into one of the typed fields under
+the title; drag a document from a list into a page and it lands as a reference. A line that is only
+a reference reads as the node it points at, with its checkbox and tags, and opens into it. `/` at
+the start of a node opens the block menu (headings, lists, code, quote, divider, tables, new
+documents); `@` links to another node; selecting text opens the formatting bar. Undo and redo are
+CRDT-aware and local-only: Cmd+Z never rolls back someone else's edit. The full keyboard contract is
+[docs/OUTLINER.md](docs/OUTLINER.md).
 
-**Cmd+K for everything else.** Switch views, run an action on the current node (copy link, show
-in Tana, pin it to the sidebar or to today or tomorrow, set an icon, make it a discussion task with someone, change
-visibility, move to a space), or act on a multi-selection: Cmd+click
-rows, then mark them sensitive, add them to today's, tomorrow's or the week's node, set a status, assign them or
-delete them; with nothing selected the same actions apply to the node you are on. "Today"
-and "This week" (both under Views) open (and create) the date-titled and the "Week 38 (2026)" documents.
-Cmd+Shift+K on any palette row records a hotkey for it, and refuses one the app already uses. Cmd+S
-searches Tana itself, with `#task`, `#meeting`, `#space`, `#member` and `#<Type>` filters; Cmd+F
-filters the rows already on screen.
+**Cmd+K for everything else.** Switch pages, run an action on the current node (copy link, show
+in Tana, pin it to the sidebar, to today, tomorrow or a meeting, set its type, give a type an icon
+and a colour, change visibility, move to a space, notify you when it changes), or act on a
+multi-selection: Cmd+click rows, then mark them sensitive, add them to today's, tomorrow's or the
+week's node, set a status, assign them or delete them; with nothing selected the same actions apply
+to the node you are on. Cmd+Shift+K on any palette row records a hotkey for it, and refuses one the
+app already uses. Cmd+S searches Tana itself, with `#task`, `#meeting`, `#space`, `#member` and
+`#<Type>` filters; Cmd+F filters the rows already on screen.
+
+**Hand a task to an agent.** Assign a node to the Agent with a prompt and it becomes a Codex task
+on this Mac or on another machine you have registered over SSH; the row wears a badge that reads
+the task's state and opens it, and says where the work is when it is elsewhere. "Discuss with…"
+makes a node a discussion task with someone, and a model can read its title to suggest who (bring
+your own OpenAI key; only the title is sent, and the key stays on the machine).
 
 **Quick add from anywhere.** Cmd+Shift+Space opens a small panel over whatever app you are in: type a
 task and press Enter. If you are in a meeting right now it says so and pins the new task to that
 meeting; if you are not, it says that instead and creates a plain task. Tab picks an assignee from
-your workspace members without leaving the keyboard. The panel is described in
-[docs/QUICK-ADD.md](docs/QUICK-ADD.md).
+your workspace members, or the Agent with its prompt and model, without leaving the keyboard. The
+panel is described in [docs/QUICK-ADD.md](docs/QUICK-ADD.md).
 
-**The things a day needs.** Meetings carry their times and mark today; a meeting's sidebar shows its
-call link, its notes and its pins. Tasks carry state, assignee and audience. Sensitive nodes are
-redacted for screen-sharing and toggled back with one command, and titles you never want to see
-("Lunch", "Block*") can be hidden from every list and search. None of that leaves the machine: the
-sensitive marks, the hidden list and the row cache are local.
+**The things a day needs.** Meetings carry their times; a meeting's sidebar shows its call link,
+its write-up, its pins, its outcomes and its notes, and a page's sidebar shows its fields, what
+links to it and what changed. Tasks carry state, assignee and audience, and a node you watch
+announces its changes in a macOS notification that says what changed, the way Tana's own Changes
+panel does. Sensitive nodes are blurred for screen-sharing and toggled back with one command, and
+titles you never want to see ("Lunch", "Block*") can be hidden from every list and search. What
+follows you between machines and what stays local is spelled out in
+[docs/SETTINGS.md](docs/SETTINGS.md): the app keeps its own settings document in Tana, mirrored in
+SQLite, so a choice about your content is the same choice everywhere, while the row cache, the
+window and the API key stay on the machine.
 
 ## Running it
 
-macOS on Apple Silicon, Node 24, and a Tana account.
+macOS on Apple Silicon, Node 22.5 or later, and a Tana account.
 
 ```sh
 npm install
@@ -98,11 +114,14 @@ is a dozen lines ([updater.js](updater.js)).
 
 ## Development
 
-`npm run check` runs everything offline: the SQLite cache, the SDK against a fake sync service and a
-real task snapshot, and the renderer's auth and behaviour checks. It must pass before a commit, and
-every non-trivial change is expected to leave a check behind that fails when the logic breaks.
+`npm run lint` and `npm run check` must both pass before a commit, and CI runs the same two on every
+pull request and every push to main. The linter is ESLint's recommended set and nothing else, no
+formatter; the checks run everything offline: the SQLite cache, the SDK against a fake sync service
+and a synthetic task snapshot, and the renderer's auth and behaviour checks. Every non-trivial
+change is expected to leave a check behind that fails when the logic breaks.
 
 ```sh
+npm run lint                        # ESLint over main, sdk, scripts and the renderer
 npm run check                       # all offline checks
 npm run package                     # dist/Orbital-darwin-arm64/Orbital.app
 npm run tana -- whoami              # the platform, without the UI
@@ -113,23 +132,36 @@ node scripts/build-nucleo.js        # rebuild build/nucleo-ui.json.gz (the Set i
 
 `npm run tana` is an Electron-run CLI over the same SDK: `login`, `whoami`, `search`, `get`,
 `outline`, `watch`, `create`, `delete`, `set-title`, `set-state`, `fields`, `graphnode`, `edges`,
-`caps`, `rows` and more — useful for checking what Tana actually returns before changing code.
+`changes`, `incall`, `caps`, `rows` and more — useful for checking what Tana actually returns before
+changing code. It re-execs Electron itself and refuses inside an agent sandbox, where GUI Electron
+cannot start ([docs/ELECTRON-SANDBOX.md](docs/ELECTRON-SANDBOX.md)).
+
+A second worktree needs no second install: `scripts/modules.sh` clones the main checkout's
+`node_modules` with a copy-on-write copy (a third of a second, no disk), and `check`, `start` and
+`package` run it first. A fresh clone is the other case: `npm install` there also downloads the
+Electron binary and renames its bundle to Orbital. The login lives in the shared
+`~/Library/Application Support/Orbital`, so one sign-in serves every checkout.
+
+Requests and their state are tracked in [TASKS.md](TASKS.md); everything finished before the
+current release is in [docs/TASKS-HISTORY.md](docs/TASKS-HISTORY.md).
 
 ## How it is put together
 
-`main.js` is the Electron process boundary (window, menu, the IPC table, boot) and `main/` is what
+`main.js` is the Electron process boundary (windows, menu, the IPC table, boot) and `main/` is what
 it delegates to: shared state, rows, documents and their undo stack, the meeting hub, the views
-and their refresh loop, pins, images. `renderer/` with `index.html` and `styles.css` is the whole UI:
-eighteen plain scripts sharing one global scope, loaded in the order `index.html` lists them, no
-framework and no bundler. `sdk/` is a generic, Electron-independent Tana client (graph
-queries, the sync stream, Loro documents, outline operations, access rules); `tana-session.js` is the
-login and token layer; `db.js` is the local SQLite cache.
+and their refresh loop, pins, the quick-add panel, the agent handoff, the settings document.
+`renderer/` with `index.html` and `styles.css` is the whole UI: twenty plain scripts sharing one
+global scope, loaded in the order `index.html` lists them, no framework and no bundler. `sdk/` is a
+generic, Electron-independent Tana client (graph queries, the sync stream, Loro documents, outline
+operations, typed fields, chats, pins, access rules, who is in a call, change summaries);
+`tana-session.js` is the login and token layer; `db.js` is the local SQLite cache and settings mirror.
 
 Start with [AGENTS.md](AGENTS.md) for the map and the working rules, then the docs:
-[VIEWS.md](docs/VIEWS.md) (the views), [OUTLINER.md](docs/OUTLINER.md) (the UI and keyboard
-contract), [PLATFORM-PROTOCOL.md](docs/PLATFORM-PROTOCOL.md) (the wire protocol, the source of
-truth), [sdk/01–05](docs/sdk) (overview, data model, API reference, recipes, gotchas),
-[MEETINGS.md](docs/MEETINGS.md), [CHATS.md](docs/CHATS.md), [PINNING.md](docs/PINNING.md) and
+[VIEWS.md](docs/VIEWS.md) (the views and saved searches), [OUTLINER.md](docs/OUTLINER.md) (the UI
+and keyboard contract), [PLATFORM-PROTOCOL.md](docs/PLATFORM-PROTOCOL.md) (the wire protocol, the
+source of truth), [sdk/01–05](docs/sdk) (overview, data model, API reference, recipes, gotchas),
+[MEETINGS.md](docs/MEETINGS.md), [CHATS.md](docs/CHATS.md), [PINNING.md](docs/PINNING.md),
+[SETTINGS.md](docs/SETTINGS.md), [QUICK-ADD.md](docs/QUICK-ADD.md) and
 [VERIFICATION.md](docs/VERIFICATION.md) (what was checked against real data, and how).
 
 ## The caveat
