@@ -5,6 +5,10 @@
   "description": "Orbital: an outliner over your Tana documents, kept live over Tana's platform sync",
   "main": "main.js",
   "scripts": {
+    "modules": "sh scripts/modules.sh",
+    "prestart": "sh scripts/modules.sh",
+    "precheck": "sh scripts/modules.sh",
+    "prepackage": "sh scripts/modules.sh",
     "start": "electron .",
     "tana": "electron scripts/platform-cli.js",
     "check": "node scripts/db-check.js && node scripts/sdk-check.js && node scripts/renderer-check.js && node scripts/renderer-behavior-check.js && node scripts/updater-check.js",
