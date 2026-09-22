@@ -832,4 +832,9 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .pcaret { position: absolute; left: -6px; top: 4px; bottom: 4px; width: 2px; border-radius: 1px; background: oklch(0.65 0.15 var(--hue)); }
 .pcaret::after { content: attr(data-name); position: absolute; left: -2px; top: -12px; font-size: 9px; line-height: 11px; padding: 0 3px; border-radius: 3px;
   background: oklch(0.65 0.15 var(--hue)); color: #fff; font-weight: 600; }
+.prow { flex: none; display: inline-flex; align-items: center; gap: 2px; margin: 3px 0 0 8px; font-size: 11px; color: #999; } /* people in a listed document */
+.pmini { width: 18px; height: 18px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 600;
+  background: oklch(0.92 0.06 var(--hue)); color: oklch(0.4 0.12 var(--hue)); opacity: .55; user-select: none; }
+.pmini.editing { opacity: 1; box-shadow: 0 0 0 1.5px oklch(0.7 0.12 var(--hue)); }
+[data-theme="dark"] .pmini { background: oklch(0.35 0.07 var(--hue)); color: oklch(0.88 0.08 var(--hue)); }
 [data-theme="dark"] .pavatar { background: oklch(0.35 0.07 var(--hue)); color: oklch(0.88 0.08 var(--hue)); }

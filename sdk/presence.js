@@ -47,10 +47,12 @@ async function openPresence(sync, documentId, { timeout = TIMEOUT_MS, viewing = 
     .map(([peer, s]) => readEntry(peer, s));
   // The ones with a caret in it: someone is editing, which is what "wait until they are done" asks.
   handle.editing = (opts) => handle.peers(opts).filter((p) => p.hasCursor);
-  // Be seen: a caret at a block (and a selection when focus differs), labelled with user { name, color }. Refreshed
-  // at half the timeout so it does not expire while it stands. clearLocal (or close) takes it away.
-  handle.setLocal = ({ user = null, anchorBlock = null, focusBlock = anchorBlock, scope = null } = {}) => {
-    local = { anchor: null, focus: null, user, scope,
+  // Be seen: a caret at a block (and a selection when focus differs), labelled with user { name, color }. anchor and
+  // focus are Loro Cursor bytes (content.cursorAt(...).encode()), which is what Tana draws an exact caret from; the
+  // block and offset alone still say where. Refreshed at half the timeout so it does not expire while it stands.
+  // clearLocal (or close) takes it away.
+  handle.setLocal = ({ user = null, anchorBlock = null, focusBlock = anchorBlock, anchor = null, focus = anchor, scope = null } = {}) => {
+    local = { anchor, focus, user, scope,
       anchorBlockId: anchorBlock ? anchorBlock.blockId : null, anchorBlockOffset: anchorBlock ? anchorBlock.offset : null,
       focusBlockId: focusBlock ? focusBlock.blockId : null, focusBlockOffset: focusBlock ? focusBlock.offset : null };
     store.set(me, local);

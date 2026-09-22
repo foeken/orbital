@@ -1,11 +1,12 @@
 'use strict';
-// Presence in the app (issue #14), over sdk/presence.js: who else is in the document on screen and on which block, and
-// being seen there ourselves. One room per document the renderer has open (refcounted), closed when it leaves.
-// Your own other tabs and devices are left out of what is shown: they are you.
-const { openPresence, userHashOf } = require('../sdk/presence');
+// Presence in the app (issue #14), over sdk/presence.js: who else is in the documents on screen (the page you have
+// open and the document rows listed on it) and on which block, and being seen there ourselves. One room per document,
+// counted per holder, closed when the last one lets go. Your own other tabs and devices are left out: they are you.
+const { openPresence, userHashOf, HEARTBEAT_MS } = require('../sdk/presence');
+const { cursorAt } = require('../sdk/content');
 const { S, send, report } = require('./state');
 
-const rooms = new Map(); // docId -> { count, client, handle: Promise<handle>, block }
+const rooms = new Map(); // docId -> { count, client, handle: Promise<handle>, sent }
 const myName = () => { const u = (S.me && S.me.user) || {}; return [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email || 'Orbital'; };
 // What the renderer draws: one entry per person, on the block their caret is in (null: in the document, no caret).
 function peersOf(handle) {
@@ -18,9 +19,8 @@ function open(docId) {
   let room = rooms.get(docId);
   if (room && room.client !== S.client) { close(docId, true); room = null; } // a new login: the old connection's room is gone
   if (room) { room.count++; return true; }
-  room = { count: 1, client: S.client, block: undefined };
-  // ponytail: the heartbeat runs while the page is open, not only while the window is visible and you are active (Tana's rule)
-  room.handle = openPresence(S.client.sync, docId, { viewing: true }).then((handle) => {
+  room = { count: 1, client: S.client, sent: '' };
+  room.handle = openPresence(S.client.sync, docId).then((handle) => {
     const tell = () => send('presence:changed', docId, peersOf(handle));
     handle.on('change', tell);
     tell();
@@ -36,12 +36,30 @@ function close(docId, all = false) {
   rooms.delete(docId);
   room.handle.then((h) => h.close(), () => {});
 }
-// Where your caret is in that document: a block id, or null for "not editing in it" (blurred, window left).
-function set(docId, blockId) {
-  const room = rooms.get(docId);
-  if (!room || room.block === blockId) return;
-  room.block = blockId;
-  room.handle.then((h) => (blockId ? h.setLocal({ user: { name: myName() }, anchorBlock: { blockId, offset: 0 } }) : h.clearLocal()), () => {});
+// The page on screen gets Tana's viewing heartbeat, and only that one.
+// ponytail: it runs while the page is open, not only while the window is visible and you are active (Tana's rule)
+let viewed = null, beat = null;
+function view(docId) {
+  if (docId === viewed) return;
+  viewed = typeof docId === 'string' ? docId : null;
+  clearInterval(beat); beat = null;
+  if (!viewed || !S.client) return;
+  const once = () => S.client && S.client.sync.viewingHeartbeat(viewed);
+  once(); beat = setInterval(once, HEARTBEAT_MS);
+}
+// Where your caret is in that document: { blockId, anchor, focus } (character offsets as the outline counts them), or
+// null for "not editing in it". Sent with Loro cursors when the document is loaded here, so Tana draws an exact caret.
+function set(docId, at) {
+  const room = rooms.get(docId), key = JSON.stringify(at || null);
+  if (!room || room.sent === key) return;
+  room.sent = key;
+  room.handle.then((h) => {
+    if (!at) return h.clearLocal();
+    const doc = S.client && S.client.sync.getDocument(docId);
+    const bytes = (offset) => { try { const c = doc && cursorAt(doc, at.blockId, offset); return c ? c.encode() : null; } catch { return null; } };
+    h.setLocal({ user: { name: myName() }, anchorBlock: { blockId: at.blockId, offset: at.anchor }, focusBlock: { blockId: at.blockId, offset: at.focus },
+      anchor: bytes(at.anchor), focus: bytes(at.focus) });
+  }, () => {});
 }
 
-module.exports = { open, close, set, peersOf };
+module.exports = { open, close, view, set, peersOf };

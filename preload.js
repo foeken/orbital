@@ -34,11 +34,13 @@ contextBridge.exposeInMainWorld('api', {
   // What the title says that name is, from the model (main/ai.js): a string to offer, or null when there is no key
   // on this machine or the title names nobody. Rejects when the call itself failed.
   suggestDiscussWith: (title) => ipcRenderer.invoke('ai:discussWith', title),
-  // Presence (main/presence.js): open the room of the document on screen, say which block the caret is in (null: none),
-  // and hear who else is there: [{ peer, userHash, name, blockId, editing }], your own tabs left out.
+  // Presence (main/presence.js): open and close the room of a document on screen (the page, and the rows listed on it),
+  // name the page being viewed (it alone gets the viewing heartbeat), say where the caret is ({ blockId, anchor, focus }
+  // or null), and hear who else is in each: [{ peer, userHash, name, blockId, editing }], your own tabs left out.
   presenceOpen: (docId) => ipcRenderer.invoke('presence:open', docId),
   presenceClose: (docId) => ipcRenderer.invoke('presence:close', docId),
-  presenceSet: (docId, blockId) => ipcRenderer.invoke('presence:set', docId, blockId),
+  presenceView: (docId) => ipcRenderer.invoke('presence:view', docId),
+  presenceSet: (docId, at) => ipcRenderer.invoke('presence:set', docId, at),
   onPresence: (cb) => ipcRenderer.on('presence:changed', (_e, docId, peers) => cb(docId, peers)),
   viewList: (id, filter) => ipcRenderer.invoke('view:list', id, filter), // { nodes, truncated }
   viewFilter: (id) => ipcRenderer.invoke('view:filter', id),

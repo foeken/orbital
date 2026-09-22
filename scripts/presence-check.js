@@ -79,8 +79,12 @@ const ME = peer(1234567, 1), MY_OTHER_TAB = peer(1234567, 2), OTHER = peer(76543
   {
     const state = require('../main/state'), presence = require('../main/presence');
     const sent = [], wire = new EventEmitter();
+    // a real document holding the block the caret is in, so the caret can go out as Loro cursors
+    const { Document } = require('../sdk/document'), content = require('../sdk/content');
+    const page = new Document(DOC), b3 = content.insertAfter(page, null, 'x');
+    content.setText(page, b3, [{ text: 'Hi ' }, { mention: { label: 'Rob', uri: 'tana:user-profile:rob' } }, { text: ' there' }]);
     Object.assign(wire, { peerId: ME, subscribeEphemeralChannel: async () => {}, unsubscribeEphemeralChannel: async (id) => sent.push(['unsub', id]),
-      sendEphemeral: async (id, data) => { sent.push(['send', id, data]); return true; }, viewingHeartbeat: async () => true });
+      sendEphemeral: async (id, data) => { sent.push(['send', id, data]); return true; }, viewingHeartbeat: async (id) => { sent.push(['view', id]); return true; }, getDocument: (id) => (id === DOC ? page : undefined) });
     state.S.client = { sync: wire }; state.S.me = { user: { firstName: 'Andre', lastName: 'Foeken' } };
     const told = []; state.S.win = { isDestroyed: () => false, webContents: { send: (...a) => told.push(a) } };
     assert.equal(presence.open(DOC), true); presence.open(DOC);
@@ -89,11 +93,25 @@ const ME = peer(1234567, 1), MY_OTHER_TAB = peer(1234567, 2), OTHER = peer(76543
     wire.emit('ephemeral', DOC, remote(MY_OTHER_TAB, { user: { name: 'Andre' }, anchorBlockId: 'b2', anchorBlockOffset: 0 }).out[0]);
     const last = told.filter((t) => t[0] === 'presence:changed').at(-1);
     assert.deepEqual(last[2].map((p) => [p.name, p.blockId, p.editing]), [['Stan', 'b1', true]], 'others, on their block; my other tab left out');
-    presence.set(DOC, 'b3'); presence.set(DOC, 'b3'); await tick();
+    presence.set(DOC, { blockId: b3, anchor: 8, focus: 8 }); presence.set(DOC, { blockId: b3, anchor: 8, focus: 8 }); await tick();
     const mine = sent.filter((s) => s[0] === 'send');
     assert.equal(mine.length, 1, 'one send per caret move');
     const them = new EphemeralStore(30000); them.apply(mine[0][2]);
-    assert.deepEqual([them.getAllStates()[ME].user, them.getAllStates()[ME].anchorBlockId], [{ name: 'Andre Foeken' }, 'b3'], 'seen under your name, on your block');
+    const entry = them.getAllStates()[ME];
+    assert.deepEqual([entry.user, entry.anchorBlockId, entry.anchorBlockOffset, entry.focusBlockOffset], [{ name: 'Andre Foeken' }, b3, 8, 8], 'seen under your name, on your block and offset');
+    // the exact caret: a Loro cursor Tana can resolve, in the second text run ('Hi ' + 'Rob' + ' t|here')
+    const pos = page.loro.getCursorPos(require('loro-crdt').Cursor.decode(entry.anchor));
+    assert.equal(pos.offset, 2, 'offset 8 is two characters into the text after the mention');
+    presence.set(DOC, null); await tick();
+    them.apply(sent.filter((s) => s[0] === 'send').at(-1)[2]);
+    assert.equal(them.getAllStates()[ME], undefined, 'leaving the outline takes the caret away');
+    presence.view(DOC); presence.view(DOC);
+    assert.equal(sent.filter((s) => s[0] === 'view').length, 1, 'the page on screen gets the heartbeat, once per change of page');
+    presence.view(null);
+    // content.cursorAt: text runs, a mention counted as its label, and past the end
+    const at = (o) => { const c = content.cursorAt(page, b3, o); return c && page.loro.getCursorPos(c).offset; };
+    assert.deepEqual([at(0), at(3), at(4), at(6), at(12), at(99)], [0, 3, 1, 0, 6, 3], 'text run, end of run, inside the mention (list index), right after it, end, past the end');
+    assert.equal(content.cursorAt(page, 'nope', 1), null);
     presence.close(DOC); await tick();
     assert.equal(sent.some((s) => s[0] === 'unsub'), false, 'still held once');
     presence.close(DOC); await tick();

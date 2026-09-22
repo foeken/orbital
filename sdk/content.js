@@ -200,6 +200,26 @@ function must(document, id) {
   return r;
 }
 
+// A Loro Cursor at a character offset in a block's text: how Tana's editor shares a caret (sdk/presence.js). Offsets
+// count characters the way the outline shows them: a mention counts as its label, an inline line break as one. Inside
+// a text run the cursor is on that LoroText (as loro-prosemirror places one); at or inside a mention it is on the
+// block's children list before it. null when the block is unknown or holds no inline content.
+// ponytail: offsets are taken as Loro's unicode positions, so text with astral characters (emoji) before the caret is
+// off by one per character; count code points in the caller when that matters.
+function cursorAt(document, id, offset) {
+  const found = locate(kids(document.content), id), list = found && kids(found.block);
+  if (!list) return null;
+  let left = Math.max(0, Number(offset) || 0);
+  for (let i = 0; i < list.length; i++) {
+    const x = list.get(i);
+    if (x.kind() === 'Text') { if (left <= x.length) return x.getCursor(left) || null; left -= x.length; continue; }
+    const len = isMention(x) ? String(x.get('attributes').get('label') || '').length : name(x) === 'hardBreak' ? 1 : 0;
+    if (left < len) return list.getCursor(i) || null;
+    left -= len;
+  }
+  return list.getCursor(list.length) || null; // past the end: after the last inline item
+}
+
 // ---- build / copy
 
 function create(list, index, nodeName) {
@@ -729,4 +749,4 @@ function insertMention(document, { uri, label } = {}, { parentId = null, afterId
   return out;
 }
 
-module.exports = { readOutline, assignBlockIds, setText, inlineGroups, writeInline, styleDoc, setBlockType, insertDivider, insertAfter, insertBefore, insertChild, insertMention, split, remove, removeMany, indent, indentMany, outdent, outdentMany, move, moveMany, moveTo, toggleCheckbox, newId, BLOCK_TYPES };
+module.exports = { cursorAt, readOutline, assignBlockIds, setText, inlineGroups, writeInline, styleDoc, setBlockType, insertDivider, insertAfter, insertBefore, insertChild, insertMention, split, remove, removeMany, indent, indentMany, outdent, outdentMany, move, moveMany, moveTo, toggleCheckbox, newId, BLOCK_TYPES };

@@ -736,14 +736,16 @@ Expanded documents show their type fields above their body children, using the s
 
 ### Presence: who else is here (issue #14)
 
-The zoomed document's presence room is open while it is on screen (renderer/presence.js follows the zoom after every render;
-main/presence.js keeps one room per document, over sdk/presence.js, with the viewing heartbeat). Everyone else in it is an
+Every document on screen has its presence room open: the zoomed page, and the first 40 document rows listed (renderer/presence.js
+follows both after every render; main/presence.js keeps one counted room per document over sdk/presence.js). Only the page gets
+the viewing heartbeat. A listed document someone is in shows their small avatars at the end of its row (three, then +N). Everyone else in the page is an
 avatar beside the title: initials in a colour of their own (from their user hash), full strength while they have a caret in
 the document, dimmed while they only have it open. The row their caret is in carries a thin bar in that colour on its left with
 their initials above it. Your own other tabs and devices are not shown: they are you.
 
-Where your caret is goes the other way: while it is in a block of this document, that block id is set as your presence entry
-under your name (`user.name`, no colour, so Tana picks one as it does for anyone), and it is cleared when the caret leaves the
-outline, the window loses focus or the page changes. Only a block counts: the title and a draft row are not blocks yet.
-Not yet: markers on list rows for documents someone is in (one room per visible row), Loro cursor bytes for Tana to draw an exact
-caret (it gets the block and offset 0), and sending the heartbeat only while the window is visible and you are active.
+Where your caret is goes the other way: while it is in a block of this page, your presence entry says so under your name
+(`user.name`, no colour, so Tana picks one as it does for anyone): the block id with the caret's anchor and focus offsets, and
+the same positions as Loro cursors (content.cursorAt, on the text run the caret is in), which is what Tana draws an exact caret or
+selection from. It follows every caret move, at most one message per 150 ms, and is cleared when the caret leaves the outline, the
+window loses focus or the page changes. Only a block counts: the title and a draft row are not blocks yet.
+Not yet: sending the heartbeat only while the window is visible and you are active, and rooms for rows scrolled past the first 40.
