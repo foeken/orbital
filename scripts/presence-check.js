@@ -75,6 +75,30 @@ const ME = peer(1234567, 1), MY_OTHER_TAB = peer(1234567, 2), OTHER = peer(76543
   assert.equal(await conn.viewingHeartbeat(DOC), false, 'presence is best effort: a refusal is false, never a throw');
   conn.connected = false;
   assert.equal(await conn.sendEphemeral(DOC, new Uint8Array([1])), false, 'nothing is sent while disconnected');
+  // main/presence.js: rooms are counted per document, a caret is told once per move, and your own other tabs are not shown
+  {
+    const state = require('../main/state'), presence = require('../main/presence');
+    const sent = [], wire = new EventEmitter();
+    Object.assign(wire, { peerId: ME, subscribeEphemeralChannel: async () => {}, unsubscribeEphemeralChannel: async (id) => sent.push(['unsub', id]),
+      sendEphemeral: async (id, data) => { sent.push(['send', id, data]); return true; }, viewingHeartbeat: async () => true });
+    state.S.client = { sync: wire }; state.S.me = { user: { firstName: 'Andre', lastName: 'Foeken' } };
+    const told = []; state.S.win = { isDestroyed: () => false, webContents: { send: (...a) => told.push(a) } };
+    assert.equal(presence.open(DOC), true); presence.open(DOC);
+    await tick();
+    wire.emit('ephemeral', DOC, remote(OTHER, { user: { name: 'Stan' }, anchorBlockId: 'b1', anchorBlockOffset: 0 }).out[0]);
+    wire.emit('ephemeral', DOC, remote(MY_OTHER_TAB, { user: { name: 'Andre' }, anchorBlockId: 'b2', anchorBlockOffset: 0 }).out[0]);
+    const last = told.filter((t) => t[0] === 'presence:changed').at(-1);
+    assert.deepEqual(last[2].map((p) => [p.name, p.blockId, p.editing]), [['Stan', 'b1', true]], 'others, on their block; my other tab left out');
+    presence.set(DOC, 'b3'); presence.set(DOC, 'b3'); await tick();
+    const mine = sent.filter((s) => s[0] === 'send');
+    assert.equal(mine.length, 1, 'one send per caret move');
+    const them = new EphemeralStore(30000); them.apply(mine[0][2]);
+    assert.deepEqual([them.getAllStates()[ME].user, them.getAllStates()[ME].anchorBlockId], [{ name: 'Andre Foeken' }, 'b3'], 'seen under your name, on your block');
+    presence.close(DOC); await tick();
+    assert.equal(sent.some((s) => s[0] === 'unsub'), false, 'still held once');
+    presence.close(DOC); await tick();
+    assert.deepEqual(sent.at(-1), ['unsub', DOC], 'closed with the last holder');
+  }
   console.log('presence-check ok');
   process.exit(0);
 })().catch((e) => { console.error(e); process.exit(1); });

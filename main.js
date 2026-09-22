@@ -343,6 +343,11 @@ ipcMain.handle('doc:summaryUri', (_e, id) => summaryUri(id)); // where a meeting
 ipcMain.handle('doc:discussWith', (_e, id, who) => discussWith(id, who));
 // and what the title suggests that name is (main/ai.js). No key on this machine means no suggestion, not an error.
 ipcMain.handle('ai:discussWith', (_e, title) => ai.suggestDiscussWith(title));
+// Presence (main/presence.js): the renderer opens the room of the document on screen and says where its caret is.
+const presence = require('./main/presence');
+ipcMain.handle('presence:open', (_e, id) => presence.open(id));
+ipcMain.handle('presence:close', (_e, id) => presence.close(id));
+ipcMain.handle('presence:set', (_e, id, blockId) => presence.set(id, typeof blockId === 'string' ? blockId : null));
 ipcMain.handle('doc:exportPdf', (_e, id) => require('./main/pdf').exportPdf(id, S.win));
 // The web link for a node, the same url home.tana.inc opens: /o/<org>/l/<encoded node uri>
 ipcMain.handle('doc:link', (_e, id) => {

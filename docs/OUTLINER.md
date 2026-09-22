@@ -732,3 +732,18 @@ unlike a move it may cross documents, since linking is exactly what it is for.
 ⌘K → **Export to PDF…** is available for the current text document, including read-only documents. Pending edits are queued before export. The native Save dialog defaults to the document title; cancellation writes nothing. Export reads the complete main outline, including collapsed children, without expanding references into other documents or including app controls, sidebar or typed metadata fields. Electron prints a separate sandboxed page as A4 with fixed light typography, lists, headings, inline marks, images and page margins. Image loading and PDF failures surface through the normal command error path. `node scripts/pdf-check.js` checks escaping and structure; an unsandboxed `electron scripts/pdf-check.js --render` generates three synthetic visual samples under `/tmp/orbital-pdf-examples`.
 
 Expanded documents show their type fields above their body children, using the same field renderer and editors as a zoomed page. Field rows keep their document-and-field address and write permissions. Vertical caret movement includes inline fields in reading order; structural edits stay inside the current field or body outline.
+
+
+### Presence: who else is here (issue #14)
+
+The zoomed document's presence room is open while it is on screen (renderer/presence.js follows the zoom after every render;
+main/presence.js keeps one room per document, over sdk/presence.js, with the viewing heartbeat). Everyone else in it is an
+avatar beside the title: initials in a colour of their own (from their user hash), full strength while they have a caret in
+the document, dimmed while they only have it open. The row their caret is in carries a thin bar in that colour on its left with
+their initials above it. Your own other tabs and devices are not shown: they are you.
+
+Where your caret is goes the other way: while it is in a block of this document, that block id is set as your presence entry
+under your name (`user.name`, no colour, so Tana picks one as it does for anyone), and it is cleared when the caret leaves the
+outline, the window loses focus or the page changes. Only a block counts: the title and a draft row are not blocks yet.
+Not yet: markers on list rows for documents someone is in (one room per visible row), Loro cursor bytes for Tana to draw an exact
+caret (it gets the block and offset 0), and sending the heartbeat only while the window is visible and you are active.
