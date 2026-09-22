@@ -1,6 +1,6 @@
 'use strict';
-const db = require('../db');
 const { editable, readNode, STATE_TYPES } = require('../sdk/node');
+const { hm } = require('../sdk/chat'); // the same H:MM a chat message is stamped with; it takes a Date too
 const { typeIconName } = require('./icons');
 const settings = require('./settings');
 const { PLAIN_KINDS, S, TAG, docStates, editability, hueLoaded, idKind, isSpace, iso, memberTitle, nodeCreators, nodeHues, nodeMeta, now, typeHues, typeTitles } = require('./state');
@@ -62,7 +62,6 @@ const cachedNodeHue = (r) => {
 // Ancestors can share a title (a meeting named after its space), so each crumb carries its kind icon to stay distinguishable.
 const WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTH = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const hm = (d) => d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
 // "Mon 9:00–9:30" in local time; all-day events come as UTC (or local) midnight with a whole-day span: "Mon, all day".
 // withDate (search results, any week or year): "Fri 11 Sep 9:00–10:00", with the year added outside the current one.
 function eventMeta(start, end, withDate) {

@@ -1,12 +1,9 @@
 'use strict';
-const { KIND_VIEWS } = require('../sdk/query');
-
 
 // Order is the Cmd+K Views order: what is waiting on you, then your work, then knowledge.
 // Meetings, Chats and People were fixed views over one kind each — which is exactly what a saved search is, only
 // without being editable or nameable. They are gone; the kinds remain, so the same lists are a search away.
-const VIEWS = [{ id: 'inbox', title: 'Inbox', icon: 'inbox' }, { id: 'library', title: 'Library', icon: 'library' }, { id: 'types', title: 'Types', icon: 'type' }]
-  .map((view) => ({ ...view, kind: KIND_VIEWS.has(view.id) })); // a kind page lists one kind and does not offer the type picker
+const VIEWS = [{ id: 'inbox', title: 'Inbox', icon: 'inbox' }, { id: 'library', title: 'Library', icon: 'library' }, { id: 'types', title: 'Types', icon: 'type' }];
 const TAG = { task: { label: 'task', color: 'grey' }, meeting: { label: 'meeting', color: 'gold' }, space: { label: 'space', color: 'grey' }, doc: { label: 'doc', color: 'grey' }, member: { label: 'member', color: 'grey' } };
 const KINDS = { doc: 'tana:text:', task: 'tana:text:', meeting: 'tana:event:', chat: 'tana:chat:', search: 'tana:search:', type: 'tana:type:' };
 const PLAIN_KINDS = new Set(['chat', 'canvas', 'agent', 'skill', 'type', 'search']); // tana:<kind>: ids listed read-only: kind icon + kind tag

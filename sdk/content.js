@@ -281,8 +281,7 @@ function prevSibling(unit) {
 function setText(document, id, value) {
   if (typeof id !== 'string' || !id) throw new Error('outline node id must be a string');
   const target = must(document, id).block;
-  if (!kids(target)) throw new Error('Reference blocks cannot contain editable text');
-  if (name(target) === 'embed') throw new Error('Reference blocks cannot contain editable text');
+  if (!kids(target) || name(target) === 'embed') throw new Error('Reference blocks cannot contain editable text');
   const plain = name(target) === 'codeBlock'; // codeBlock content is text* with marks '' in Tana's schema
   const { groups, marked } = inlineGroups(value, plain);
   styleDoc(document);
@@ -345,8 +344,8 @@ function applyRuns(text, delta, marked) {
 // continue as the plain text that follows one. A document's own first row, which has nothing to follow, is plain
 // text too, unless the caller says otherwise: `block: 'bullet'` is how a row asked to hold sub-items opens onto a
 // list row rather than onto prose.
-function insertAfter(document, id, text, before = false, block = null) {
-  const bare = (list, index) => (block === 'bullet' ? bulletRow(list, index, text) : paragraph(list, index, text));
+function insertAfter(document, id, text, before = false, asBlock = null) {
+  const bare = (list, index) => (asBlock === 'bullet' ? bulletRow(list, index, text) : paragraph(list, index, text));
   let out = null;
   document.transact(() => {
     const list = rootKids(document);
@@ -538,8 +537,13 @@ function moveTo(document, id, { parentId = null, afterId = null, from = document
   // indentUnit already follows from the other side. Beside one, nothing is refused: the list splits (place).
   if (parentId != null && !isItem(src) && name(src) !== 'paragraph') throw new Error('This block cannot become a list item');
   document.transact(() => {
+    // The row is copied out and removed before the destination is opened up: place can split the list it lands in
+    // (splitHolder), and a row dropped out of somebody's children lives inside one of the items that split moves,
+    // so a place-then-remove left the row deleted under its old parent and copied twice into the outline.
+    const root = rootKids(document);
+    const moving = copy(root, root.length, src);
+    removeUnit(src);
     const { list, index } = dropSlot(document, parentId, afterId);
-    const moving = unit(from, id); // after dropSlot: wrapping a bare parent replaces its container
     place(list, index, moving, parentId != null);
     removeUnit(moving);
   });
@@ -616,7 +620,12 @@ function setBlockType(document, id, type) {
 function rehome(document, id, wanted) {
   const { block, item } = must(document, id);
   const holder = holderOf(block);
-  if (holder && name(holder) === wanted) return;
+  // A bare block among somebody's children takes its holder from the grandparent list (holderOf, which is what
+  // draws it as a list row), but it is not one of that holder's items: an index in its own list means nothing to
+  // splitHolder, which moved the wrong row and left the block at the document root. It is left where it is and
+  // only enclosed below, which is how it becomes a list row among its siblings.
+  const inHolder = !!holder && (item || block).parent().id === kids(holder).id;
+  if (inHolder && name(holder) === wanted) return;
   // Between the two list kinds a listItem moves whole, so its children and its checkbox stay with it.
   if (holder && item && isList(holder) && LISTS.includes(wanted)) {
     const inner = item.parent(), i = indexOf(inner, item);
@@ -627,7 +636,7 @@ function rehome(document, id, wanted) {
     prune(inner);
     return;
   }
-  if (holder) {
+  if (inHolder) {
     const unit = item || block, inner = unit.parent(), i = indexOf(inner, unit);
     const outer = holder.parent(), at = splitHolder(holder, i);
     if (item) { const c = kids(item); for (let j = 0; j < c.length; j++) copy(outer, at + j, c.get(j)); } // the node, then its children
@@ -684,9 +693,12 @@ function insertDivider(document, id) {
     if (id == null) { out = divider(list, list.length); return; }
     const { block, item } = must(document, id);
     const holder = holderOf(block);
+    const unit = item || block;
     // A list holds listItems only, so a rule between two items splits the list instead of joining it.
-    if (holder && isList(holder)) { const unit = item || block; out = divider(holder.parent(), splitHolder(holder, indexOf(unit.parent(), unit))); return; }
-    const unit = item || block, l = unit.parent();
+    // Only where this row is an item of that list: a bare block among somebody's children is not, and splitting by
+    // its index put the rule outside the list altogether instead of beside the row it was asked for.
+    if (holder && isList(holder) && unit.parent().id === kids(holder).id) { out = divider(holder.parent(), splitHolder(holder, indexOf(unit.parent(), unit))); return; }
+    const l = unit.parent();
     out = divider(l, indexOf(l, unit) + 1);
   });
   return out;
@@ -717,4 +729,4 @@ function insertMention(document, { uri, label } = {}, { parentId = null, afterId
   return out;
 }
 
-module.exports = { readOutline, assignBlockIds, setText, inlineGroups, writeInline, styleDoc, setBlockType, insertDivider, insertAfter, insertBefore, insertChild, insertMention, split, remove, removeMany, indent, indentMany, outdent, outdentMany, move, moveMany, moveTo, toggleCheckbox, BLOCK_TYPES };
+module.exports = { readOutline, assignBlockIds, setText, inlineGroups, writeInline, styleDoc, setBlockType, insertDivider, insertAfter, insertBefore, insertChild, insertMention, split, remove, removeMany, indent, indentMany, outdent, outdentMany, move, moveMany, moveTo, toggleCheckbox, newId, BLOCK_TYPES };

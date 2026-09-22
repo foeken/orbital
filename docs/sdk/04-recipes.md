@@ -1,9 +1,9 @@
 # SDK recipes
 
-Every recipe has a CLI twin: `./node_modules/.bin/electron scripts/platform-cli.js <cmd>` (runs under Electron for the cookie session, shares userData with the app). Run it with no command for the grouped usage line, which marks the writing commands.
+Every recipe has a CLI twin: `node scripts/platform-cli.js <cmd>` — run it with node, never with `./node_modules/.bin/electron`, which aborts in AppKit inside an agent sandbox instead of refusing cleanly (docs/ELECTRON-SANDBOX.md); the file re-execs Electron itself for the cookie session and shares userData with the app. Run it with no command for the grouped usage line, which marks the writing commands.
 
-Reads: `login | whoami | list [--state open|all] | search <q> | types | fields [<type uri>] | meetings [--days n] | get <id> | outline <id> | graphnode <id> | edges <id> | image <uri> | pins [--dates] | watch <id…>`.
-Writes (never against data you were not asked to change): `create <title> [--kind doc|task|meeting] | delete <id> | set-title <id> <title> | set-state <id> <state> | pin/unpin <id> <sidebar|today>`.
+Reads: `login | whoami | list [--state open|all] | search <q> | types | fields [<type uri>] | meetings [--days n] | chatlist [--limit n] | get <id> | outline <id> | rawdoc <id> [--containers 1] | graphnode <id> | edges <id> | listkind <nodeType> | changes <id> | image <uri> | pins [--dates] | watch <id…>`.
+Writes (never against data you were not asked to change): `create <title> [--kind doc|task|meeting] | delete <id> | restore <id> | set-title <id> <title> | set-state <id> <state> | addfield <type uri> <title> | settype <id> <type uri|none> | pin/unpin <id> <sidebar|today> | pinto/unpinfrom <event|space id> <id>`.
 
 Read-only diagnostics for questions about what the app shows, all safe against real data:
 
@@ -40,7 +40,7 @@ const { nodes: events } = await client.graph.listNodes({ nodeTypes: ['event'], h
   eventStartTimeMin: startISO, eventStartTimeMax: endISO, limit: 300,
   sortOptions: [{ field: 'SORT_FIELD_EVENT_START_TIME', direction: 'SORT_DIRECTION_ASCENDING' }] });
 ```
-Or via the view builder: `viewParams({ types: ['tasks'], states: ['proposed', 'open'], assignee: 'me' }, me)` is the Tasks view, `viewParams({ types: ['meetings'], participant: 'me', window: 'recent' }, me)` the Meetings view (docs/VIEWS.md).
+Or via the view builder: `viewParams({ types: ['tasks'], states: ['proposed', 'open'], assignee: 'me' }, me)` is the filter the Library preset carries, and `viewParams({ types: ['meetings'], participant: 'me', window: 'recent' }, me)` the one a meetings search stores (docs/VIEWS.md).
 
 ## Read and edit a document live
 

@@ -56,7 +56,7 @@ async function pinHubs(id) {
   const hubs = [...new Set(edges.map((e) => e.fromNodeId).filter((uri) => uri && !deletedNodes.has(uri)))];
   if (!hubs.length) return [];
   const { nodes = [] } = await S.client.graph.listNodes({ nodeIds: hubs, limit: hubs.length }).catch(() => ({ nodes: [] }));
-  return hubs.map((uri) => ({ id: uri, title: (nodes.find((n) => n.id === uri) || {}).title || '', kind: idKind(uri) }));
+  return hubs.map((uri) => ({ id: uri, title: (nodes.find((n) => n.id === uri) || {}).title || uri, kind: idKind(uri) }));
 }
 // Everywhere one document is pinned: your sidebar, your dates, and the meetings and spaces it hangs on. The first
 // two are private per-user state, the third is the hub's own list and visible to everyone who can see the hub.

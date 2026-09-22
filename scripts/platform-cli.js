@@ -730,8 +730,9 @@ const USAGE = [
   'usage: node scripts/platform-cli.js <command>   (not ./node_modules/.bin/electron: docs/ELECTRON-SANDBOX.md)',
   '  session    login | whoami',
   '  read       list [--state open|all] | search <query> [#task|#meeting|#member|#Type] | types | fields [<type uri>] |',
-  '             meetings [--days 7] | chatlist [--limit 200] | get <id> | outline <id> | rawdoc <id> [--containers 1] |',
-  '             graphnode <id> | edges <id> | listkind <nodeType> [--limit 50] | image <tana:image:uri> | pins [--dates]',
+  '             meetings [--days 7] | chatlist [--limit 200] | get <id> [--raw] | outline <id> | rawdoc <id> [--containers 1] |',
+  '             graphnode <id> | edges <id> | listkind <nodeType> [--limit 50] | image <tana:image:uri> | pins [--dates] |',
+  '             changes <id> [--within <summary id>] [--limit 20] | settings   (with a key and a JSON value it writes)',
   '  diagnose   inspect <id...> | audiences [--limit 80] [--mine 0] [--kind text] | refs <id> | rows <query> | pinrows |',
   '             settype <id>   (listing only; with a target it writes)',
   '             caps <id...> | related <id> | incall [--limit 5] | pageprobe | libraryprobe | boot [--settle ms]',
@@ -739,7 +740,8 @@ const USAGE = [
   '  WRITES     create <title> [--kind doc|task|meeting] | delete <id> | restore <id> | set-title <id> <title> |',
   '             addfield <type uri> <title> [--type member|date|link] [--multiple] |',
   '             set-state <id> <proposed|open|closed|not_now> | pin <id> <sidebar|today> | unpin <id> <sidebar|today> |',
-  '             pinto <event|space id> <id> | unpinfrom <event|space id> <id> | settype <id> <tana:type:...|none>',
+  '             pinto <event|space id> <id> | unpinfrom <event|space id> <id> | settype <id> <tana:type:...|none> |',
+  '             set-hue <type uri> <0-360|none> | discusswith <id> <who…> | setfield <id> <type uri?attribute=key> <line…>',
 ].join('\n');
 
 app.whenReady().then(async () => {

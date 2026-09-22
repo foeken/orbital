@@ -19,7 +19,8 @@ const content = require('../sdk/content');
 const { initDocument, ulid } = require('../sdk/node');
 const { S, report, send } = require('./state');
 
-const TITLE = 'Orbital'; // how a machine that has never seen the document finds it (the node was renamed by hand from "Tana Companion")
+const TITLE = 'Orbital'; // how a machine that has never seen the document finds it
+const OLD_TITLE = 'Tana Companion'; // what it was called before the rename: a workspace whose node was never renamed by hand is still found, rather than given a second document
 const POINTER = 'settingsDoc'; // local, never synced: this machine's note of which document that is
 const ROOT = 'settings'; // the root container the keys live in
 
@@ -37,7 +38,6 @@ let cache = null; // key -> value, the answer every read gets
 let pending = Promise.resolve(); // writes in order, so two changes to one key cannot land the other way round
 let cacheGen = -1; // which database the cache was filled from (db.generation): a new one is a new set of answers
 let docId = null; // the settings document, once it is known
-let hydrated = false;
 
 // SQLite is the mirror the app opens with: every synced key is written to it as well, so a launch with no network
 // still knows what you chose, and so a first run on a new machine has something to push up.
@@ -45,7 +45,7 @@ function load() {
   if (cache && cacheGen === db.generation()) return cache;
   // A *different* database knows a different document — but the first fill is not a different one, and dropping the
   // pointer there would throw away the document the open that is still running has just found.
-  if (cache && cacheGen !== db.generation()) { docId = null; hydrated = false; }
+  if (cache && cacheGen !== db.generation()) { docId = null; }
   cache = {};
   cacheGen = db.generation();
   Object.assign(cache, db.settings());
@@ -94,12 +94,15 @@ async function open() {
 }
 async function discover() {
   try {
-    const { nodes } = await S.client.graph.listNodes({ nodeTypes: ['text'], textQuery: TITLE, createdBy: [S.me.userUri], limit: 20 });
-    const mine = nodes.filter((n) => (n.title || '').trim().toLowerCase() === TITLE.toLowerCase())
-      .sort((a, b) => String(a.createTime || '').localeCompare(String(b.createTime || '')));
-    for (const node of mine) {
-      const doc = await S.client.sync.subscribe(node.id).catch(() => null);
-      if (doc) return doc;
+    // The current name first, so a workspace carrying both settles on the one this app writes.
+    for (const title of [TITLE, OLD_TITLE]) {
+      const { nodes } = await S.client.graph.listNodes({ nodeTypes: ['text'], textQuery: title, createdBy: [S.me.userUri], limit: 20 });
+      const mine = nodes.filter((n) => (n.title || '').trim().toLowerCase() === title.toLowerCase())
+        .sort((a, b) => String(a.createTime || '').localeCompare(String(b.createTime || '')));
+      for (const node of mine) {
+        const doc = await S.client.sync.subscribe(node.id).catch(() => null);
+        if (doc) return doc;
+      }
     }
   } catch (e) { report(e); }
   return null;
@@ -144,7 +147,6 @@ async function hydrate() {
   }
   const missing = Object.keys(cache).filter((key) => isSynced(key) && !Object.hasOwn(remote || {}, key));
   if (missing.length) doc.transact((loro) => { const map = loro.getMap(ROOT); for (const key of missing) map.set(key, encode(cache[key])); });
-  hydrated = true;
   return changed.length > 0;
 }
 // A change to the document, wherever it came from: the other machine's, or our own write coming back.
@@ -160,6 +162,6 @@ const PREF = 'pref:';
 const prefs = () => Object.fromEntries(Object.entries(load()).filter(([key]) => key.startsWith(PREF)).map(([key, value]) => [key.slice(PREF.length), value]));
 const setPref = (key, value) => { if (typeof key !== 'string' || !key || key.includes(':')) throw new Error('Not a preference name'); return set(PREF + key, value); };
 const settingsDocId = () => docId;
-const reset = () => { cache = null; docId = null; hydrated = false; opening = null; }; // tests, and a second login
+const reset = () => { cache = null; docId = null; opening = null; }; // tests, and a second login
 
 module.exports = { get, set, prefs, setPref, flush, hydrate, applyRemote, synced, settingsDocId, isSynced, reset, TITLE, ROOT, POINTER, PREF };

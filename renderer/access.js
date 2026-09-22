@@ -1,17 +1,6 @@
 'use strict';
 // Sharing and location: visibility palette, selected people, and moving a document to a space.
 
-// Whether this node's changes are announced. Read the same way access is: once per document, and the palette redraws
-// when the answer lands if it is still showing that node. The default depends on participants and assignment, so the
-// answer is main's to give rather than the renderer's to guess.
-function loadNotify(docId) {
-  if (!connected || !tana.notifyState || notifyById.has(docId) || notifyLoading.has(docId)) return; // same readiness rule as loadAccess below
-  notifyLoading.add(docId);
-  tana.notifyState(docId).then((state) => {
-    notifyLoading.delete(docId); notifyById.set(docId, state);
-    if (!palette.hidden && palDoc?.id === docId) renderPalette();
-  }, () => { notifyLoading.delete(docId); });
-}
 function loadAccess(docId) {
   // The readiness rule loadTaskMeta already uses: a local draft id and a client that is not up yet both come back as
   // "not connected to Tana" (main/documents.js: document()), which is a startup state rather than something to put in

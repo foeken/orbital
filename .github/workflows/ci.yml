@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22' # node:sqlite in db.js needs >= 22.5
+          cache: npm
+      # --ignore-scripts skips the postinstall: it downloads the 360 MB Electron binary (electron 44's install.js
+      # ignores ELECTRON_SKIP_BINARY_DOWNLOAD) and then brands the bundle with plutil and codesign, macOS-only tools.
+      # Neither the linter nor the checks touch the binary.
+      - run: npm ci --ignore-scripts
+      - run: npm run lint
+      - run: npm run check

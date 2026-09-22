@@ -39,16 +39,15 @@ async function quickContext() {
 // submit again, so a failed assignment or pin is reported beside a created node rather than thrown over it.
 // `agent` is `{ prompt, model }` and is not an assignee: the local Codex agent is an app-local mark, never a Tana
 // user, so it can never be spelled as a user uri and the two are refused together.
-async function quickCreate({ title, assigneeUri, meetingId, agent } = {}, { assignToAgent, hostReady } = {}) {
+async function quickCreate({ title, assigneeUri, meetingId, agent } = {}, { assignToAgent } = {}) {
   if (typeof title !== 'string' || !title.trim()) throw new Error('A task needs a title');
   if (assigneeUri != null && !USER_URI.test(assigneeUri)) throw new Error('Pick an assignee from the member list');
   if (meetingId != null && !(DOC_URI.test(meetingId) && idKind(meetingId) === 'event')) throw new Error('Not a meeting');
   if (agent && assigneeUri) throw new Error('A task goes to the agent or to a person, not both');
   if (agent && !(agent.prompt || '').trim()) throw new Error('Tell the agent what to do');
   if (agent && typeof assignToAgent !== 'function') throw new Error('The agent is unavailable from here');
-  // A machine that is not there is found out before anything is created, so the panel keeps the title, the prompt,
-  // the model, the host and the meeting, and the press can simply be repeated once it wakes up.
-  if (agent && typeof hostReady === 'function' && !(await hostReady(agent.host))) throw new Error('That machine cannot be reached right now');
+  // Whether the machine is there is assignToAgent's own question, asked once there (main.js): a second probe here
+  // opened a second ssh app-server for the same answer.
   const node = await createDocument(title.trim(), { kind: 'task' });
   const result = { node, assigned: null, linked: null, agent: false };
   // createDocument assigns a new task to its creator; an explicit choice replaces that, through the same write the

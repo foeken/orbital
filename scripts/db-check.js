@@ -140,7 +140,7 @@ assert.strictEqual(db.deletedList(1).length, 1, 'the list is capped');
   const link = path.join(__dirname, 'agent-link.js');
   const store = path.join(path.dirname(file), 'link.sqlite');
   const run = (args) => {
-    const r = require('node:child_process').spawnSync(process.execPath, [link, ...args], { encoding: 'utf8', env: { ...process.env, TANA_TASKS_DB: store } });
+    const r = require('node:child_process').spawnSync(process.execPath, [link, ...args], { encoding: 'utf8', env: { ...process.env, ORBITAL_DB: store } });
     return { code: r.status, out: (r.stdout || '').trim(), err: (r.stderr || '').trim() };
   };
   const NODE = 'tana:text:01examplea0000000000000000', THREAD = '01a0b355-2197-7311-b576-ff4bd9c8901e';

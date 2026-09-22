@@ -25,7 +25,6 @@ const labelOf = (name) => (String(name || '').startsWith(PREFIX) ? name.slice(PR
 // Nucleo's index stores inner markup; the app's glyphs are whole 18x18 documents, so it is wrapped to match.
 const wrap = (svg) => '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18">' + svg + '</svg>';
 const row = (icon) => ({ name: iconName(icon.n), label: icon.n, svg: wrap(icon.s) });
-const svgFor = (name) => { const label = labelOf(name); const icon = label && icons().find((i) => i.n === label); return icon ? wrap(icon.s) : null; };
 
 // Label first, then tags, the way the palette ranks its own rows: an exact name, a name that starts with the query,
 // a name that contains it, then a tag that matches. Ranked here rather than in the renderer because the set that is
@@ -76,4 +75,4 @@ function setTypeIcon(typeUri, name) {
   return name == null ? null : { uri: typeUri, ...row(icons().find((i) => i.n === (labelOf(name) || name))) };
 }
 
-module.exports = { searchIcons, typeIcons, typeIconName, setTypeIcon, svgFor, iconName, labelOf, forgetTypeIcons };
+module.exports = { searchIcons, typeIcons, typeIconName, setTypeIcon, iconName, labelOf, forgetTypeIcons };

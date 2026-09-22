@@ -138,7 +138,6 @@ function handoff(nodeUri, context, repo, title) {
 //   broken   system error, failed or interrupted turn, an id the app no longer knows, or no answer at all -> red
 // `unavailable` is the machine, not the task: a Donut that is asleep or off the network says nothing about the work
 // it holds, so it is neither red nor animated.
-const AGENT_STATES = ['pending', 'working', 'waiting', 'done', 'broken', 'unavailable'];
 const QUIET = ['idle', 'notLoaded'];
 // The turns are the authority, not the thread's loaded flag. `notLoaded` only means "this reader has not loaded the
 // thread" — every thread reads that way from a short-lived child — so it can neither prove nor disprove anything.
@@ -250,13 +249,14 @@ async function readAgentStatuses(links) {
   }
   const out = {};
   for (const [host, hostLinks] of byHost) {
-    const rpc = appServerRpc(20000, host);
+    let rpc = null;
     try {
+      rpc = appServerRpc(20000, host); // a host nobody knows refuses here, and that refusal is this host's alone
       await rpc.ready;
       Object.assign(out, await agentStatuses(hostLinks, rpc.call));
     } catch {
       for (const nodeId of Object.keys(hostLinks)) out[nodeId] = 'unavailable'; // the machine is away, not the task broken
-    } finally { rpc.stop(); }
+    } finally { if (rpc) rpc.stop(); }
   }
   return out;
 }
@@ -265,7 +265,6 @@ async function readAgentStatuses(links) {
 // the "no rollout found" the earlier attempt hit. Start the turn and it becomes a first-class thread: it lists, the
 // app reads it, and `codex://threads/<id>` opens it with no browser hop. That is why creation happens here rather
 // than through the public https route, and it is what makes the workspace and the model ours to choose.
-const MODEL_DEFAULT = ''; // "Codex default": send no model and let Codex pick
 // A blank workspace per node, not the last project and not this repo: its own directory under the app's data, made
 // on demand. The node's own id keeps it stable across reassignment.
 function agentWorkspace(userData, nodeUri) {
@@ -339,4 +338,4 @@ async function hostReady(host, timeoutMs = 12000) {
   const rpc = appServerRpc(timeoutMs, host);
   try { await rpc.ready; return true; } catch { return false; } finally { rpc.stop(); }
 }
-module.exports = { codexTasks, codexTaskFor, taskLink, setCodexTask, clearCodexTask, agentPrompt, handoff, agentState, agentStatuses, readAgentStatuses, appServerRpc, createTask, releaseTask, stopOwnedTasks, listModels, hostReady, agentWorkspace, hostId, hosts, hostRecord, addHost, removeHost, validHost, MODEL_DEFAULT, AGENT_STATES, NEW_TASK, TASK, THREAD_ID };
+module.exports = { codexTasks, codexTaskFor, taskLink, setCodexTask, clearCodexTask, agentPrompt, handoff, agentState, agentStatuses, readAgentStatuses, appServerRpc, createTask, releaseTask, stopOwnedTasks, listModels, hostReady, agentWorkspace, hostId, hosts, hostRecord, addHost, removeHost, validHost, NEW_TASK, TASK, THREAD_ID };

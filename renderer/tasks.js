@@ -45,8 +45,11 @@ function loadTaskMeta(docId) {
     taskMetaLoading.delete(docId);
     if (noteGone(docId, e)) return; // gone, not settling: nothing to wait for
     const wait = Math.min(META_RETRY_MAX, backoff ? backoff.wait * 2 : META_RETRY_MS);
-    taskMetaFailed.set(docId, { until: Date.now() + wait, wait });
-    setTimeout(() => { if (!taskMetaById.has(docId)) renderSoon(); }, wait);
+    const entry = { until: Date.now() + wait, wait };
+    taskMetaFailed.set(docId, entry);
+    // The timer is the retry, so it opens the gate itself: a timer is due by the loop's clock, which lags the wall
+    // clock on a long tick, and a render arriving a millisecond "early" by Date.now() used to be refused and lost.
+    setTimeout(() => { if (taskMetaById.has(docId)) return; entry.until = 0; renderSoon(); }, wait);
   });
 }
 // A metadata answer lands in the rows that show that document — the placeholder swapped for the real icons, the
@@ -65,9 +68,10 @@ function patchMeta(docId) {
     const old = body.querySelector('.meta.tmeta'), sep = body.querySelector('.metasep');
     if (old) old.remove();
     if (sep) sep.remove();
-    // the same line a full render would build, so a row does not change shape when its metadata arrives late
+    // the same line a full render would build, so a row does not change shape when its metadata arrives late: the
+    // facts go before the type chips, where nodeEl appends them, not after them
     const subText = subtextOf(item.node, summary), had = body.querySelector(':scope > .subtext');
-    if (summary && displayOn('assigned')) body.insertBefore(taskMetaEl(summary, docId, item.node), had || null);
+    if (summary && displayOn('assigned')) body.insertBefore(taskMetaEl(summary, docId, item.node), body.querySelector(':scope > .chip') || had || null);
     if (subText && had) had.textContent = subText;
     else if (subText) { const sub = document.createElement('div'); sub.className = 'subtext'; sub.textContent = subText; body.append(sub); }
     else if (had) had.remove();
@@ -170,6 +174,17 @@ function taskMetaEl(summary, docId, node) {
   }
   return el;
 }
+// Whether this node's changes are announced. Read once per document, on the same readiness rule loadTaskMeta uses,
+// and the palette redraws when the answer lands if it is still showing that node. The default depends on
+// participants and assignment, so the answer is main's to give rather than the renderer's to guess.
+function loadNotify(docId) {
+  if (!connected || !tana.notifyState || notifyById.has(docId) || notifyLoading.has(docId)) return;
+  notifyLoading.add(docId);
+  tana.notifyState(docId).then((state) => {
+    notifyLoading.delete(docId); notifyById.set(docId, state);
+    if (!palette.hidden && palDoc?.id === docId) renderPalette();
+  }, () => { notifyLoading.delete(docId); });
+}
 async function setNodeNotify(id, on) {
   const state = await tana.setNotify(id, on);
   notifyById.set(id, state);
@@ -197,15 +212,23 @@ function setTaskAssignees(doc, assignees) {
     }
   });
 }
+// The list both assignee pages are: Unassigned, then every member, matched the way the palette matches anything
+// else. Unassigned narrows with the rest — it used to stay at the top whatever was typed, so typing a name and
+// pressing Enter ran the highlighted first row and cleared the assignee instead of setting the one that was typed.
+// `pick` is given the uri the row names, or null for Unassigned; `ticked` says which of them the document already
+// carries, and is left out where there is no single answer to tick (a selection of several tasks).
+function memberRows(q, pick, ticked) {
+  const tick = (uri) => (ticked && ticked(uri) ? '✓' : '');
+  const rows = fuzzyMatch('Unassigned', q) ? [{ group: 'Assignees', icon: 'unassigned', label: 'Unassigned', hint: tick(null), keepOpen: true, run: () => pick(null) }] : [];
+  for (const member of members || []) if (fuzzyMatch(memberName(member.id), q)) rows.push({ group: 'Assignees', icon: 'member', label: memberName(member.id), hint: tick(member.id), keepOpen: true, run: () => pick(member.id) });
+  return rows;
+}
 function assigneeRows(q, doc = palDoc) {
   if (!doc || !isTask(doc)) return [];
   loadMembers(); loadTaskMeta(doc.id);
   const meta = taskMetaById.get(doc.id), ids = meta ? meta.assignees : [];
   const toggle = (uri) => ids.includes(uri) ? ids.filter((id) => id !== uri) : [...ids, uri];
-  // Unassigned narrows with the rest: it used to stay at the top whatever was typed, so typing a name and pressing
-  // Enter ran the highlighted first row and cleared the assignee instead of setting the one that was typed.
-  const rows = fuzzyMatch('Unassigned', q) ? [{ group: 'Assignees', icon: 'unassigned', label: 'Unassigned', hint: ids.length ? '' : '✓', keepOpen: true, run: () => setTaskAssignees(doc, []) }] : [];
-  for (const member of members || []) if (fuzzyMatch(memberName(member.id), q)) rows.push({ group: 'Assignees', icon: 'member', label: memberName(member.id), hint: ids.includes(member.id) ? '✓' : '', keepOpen: true, run: () => setTaskAssignees(doc, toggle(member.id)) });
+  const rows = memberRows(q, (uri) => setTaskAssignees(doc, uri ? toggle(uri) : []), (uri) => (uri ? ids.includes(uri) : !ids.length));
   // The agent belongs in the same list a person is chosen from — it is the same question. It is not a Tana assignee
   // though (those are user profiles), so choosing it goes into the one Agent flow: the prompt page and its model
   // chooser, which owns the writing. Nothing is stored here.
@@ -275,9 +298,8 @@ function manyAssigneeRows(q, ctx = palTaskCtx) {
   if (!ctx?.docs.length) return [];
   loadMembers();
   const apply = (uris) => applyTaskChange(ctx, () => tana.setAssigneesMany(ctx.docs.map((doc) => doc.id), uris));
-  const rows = fuzzyMatch('Unassigned', q) ? [{ group: 'Assignees', icon: 'unassigned', label: 'Unassigned', keepOpen: true, run: () => apply([]) }] : [];
-  for (const member of members || []) if (fuzzyMatch(memberName(member.id), q)) rows.push({ group: 'Assignees', icon: 'member', label: memberName(member.id), keepOpen: true, run: () => apply([member.id]) });
-  return rows;
+  // no tick: the page acts on several tasks at once, which need not agree on an answer to show one
+  return memberRows(q, (uri) => apply(uri ? [uri] : []));
 }
 function openManyAssigneePalette(ctx) {
   palTaskCtx = ctx; palMode = 'assigneesMany'; palRows = []; palIndex = 0; palBusy = false;

@@ -61,7 +61,6 @@ function mockApi() {
   const chats = ['Draft the Studio memo', 'MCP: list open tasks', 'Summarise the leadership notes', 'MCP: create meeting note', 'Rewrite the agreement clause']
     .map((text, i) => ({ id: 'tana:chat:mockchat' + i, text, kind: 'document', hasChildren: true, tags: [{ label: 'chat', color: 'grey' }], meta: /^MCP:/.test(text) ? 'MCP' : undefined }));
   let mcpOff = false; // the app-local switch, off every launch of the mock
-  let openAIKey = '';
   // meetings over the past and next 7 days (day offset from today, start hour or null = all day); roots meta = weekday + time, search meta = weekday + day of month + time
   const dateMeta = {};
   const meetings = [['Last week retro', -6, 10], ['Board prep', -2, 14], ['Leadership sync', 0, 9], ['Platform Guild', 0, 13], ['1-1 with Sam', 1, 11], ['Offsite', 3, null]].map(([text, off, h], i) => {
@@ -102,6 +101,7 @@ function mockApi() {
   const settling = new Set(); // a brand-new document: the first taskMeta read fails while main is still subscribing it
   const unlisted = [];  // created tasks/meetings the roots "query" has not caught up with yet: listed after the next refresh()
   const sidebar = ['mockdoc2', 'mockmeeting2', space.id], datePins = { mockdoc2: [localDate()] }; // pins: sidebar order, personal date pins per doc
+  const hubPins = {}; // hub id -> the documents pinned on that meeting or space, which is where the real list lives too
   // Typed fields, so the page under the title can be tried without the main process: one holds two lines, because
   // a field holds what a node holds and the second line is the part that used to be invisible.
   // A field value is an outline like any other, kept under the id the page asks for it by ("<doc>|<field>"), so the
@@ -266,7 +266,7 @@ function mockApi() {
     },
     mcpHidden: async () => mcpOff,
     setMcpHidden: async (on) => { mcpOff = !!on; emit(null); return mcpOff; },
-    setOpenAIKey: async (key) => { if (!String(key || '').trim()) throw new Error('OpenAI API key cannot be empty'); openAIKey = String(key).trim(); return true; },
+    setOpenAIKey: async (key) => { if (!String(key || '').trim()) throw new Error('OpenAI API key cannot be empty'); return true; },
     // Set type: the mock keeps main's two rules so the page behaves the same without the main process — a type that
     // lives in a space fits only a document in that space, a Library type fits anything (main/documents.js).
     docTypes: async (docId) => {
@@ -354,7 +354,17 @@ function mockApi() {
       return info(n);
     },
     pins: async () => sidebar.map((id) => info(all.find((d) => d.id === id))),
-    pinState: async (docId) => ({ sidebar: sidebar.includes(docId), dates: datePins[docId] || [] }),
+    // the third kind of pin: the meetings and spaces this document hangs on, which are pins on those documents
+    pinState: async (docId) => ({
+      sidebar: sidebar.includes(docId), dates: datePins[docId] || [],
+      hubs: Object.keys(hubPins).filter((hub) => hubPins[hub].includes(docId))
+        .map((hub) => { const n = all.find((d) => d.id === hub); return { id: hub, title: (n && n.text) || hub, kind: n && n.icon === 'space' ? 'space' : 'meeting' }; }),
+    }),
+    // both answer with the hub's own pinned ids, as main's nodePin does
+    pinTo: async (hubId, docId) => { const on = (hubPins[hubId] ||= []); if (!on.includes(docId)) on.push(docId); emit(null); return [...on]; },
+    unpinFrom: async (hubId, docId) => { hubPins[hubId] = (hubPins[hubId] || []).filter((id) => id !== docId); emit(null); return [...hubPins[hubId]]; },
+    // the meeting this user has joined right now: the mock is always in the first one, so the row has something to name
+    currentMeeting: async () => { const m = all.find((d) => d.icon === 'meeting'); return m ? { id: m.id, title: m.text, joinedAt: Date.now() - 600000, callUri: 'tana:call:mock' } : null; },
     pinIds: async () => [...new Set([...sidebar, ...Object.keys(datePins).filter((id) => datePins[id].length)])],
     pin: async (docId, target, date = localDate()) => { if (target === 'sidebar') { if (!sidebar.includes(docId)) sidebar.push(docId); } else (datePins[docId] ||= []).push(date); emit(null); },
     unpin: async (docId, target, date = localDate()) => { if (target === 'sidebar') sidebar.splice(sidebar.indexOf(docId) >>> 0, 1); else datePins[docId] = (datePins[docId] || []).filter((d) => d !== date); emit(null); },

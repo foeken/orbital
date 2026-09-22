@@ -87,11 +87,7 @@ function removeStale(id) {
   invalidateNode(id); loadPins();
   loadRoots().then(render, showError);
 }
-function unpinStale(id) {
-  invalidatePinCaches(id, false); loadPins(); render();
-}
 if (tana.onRemoved) tana.onRemoved(removeStale);
-if (tana.onUnpinned) tana.onUnpinned(unpinStale);
 tana.onStatus(showStatus);
 // Another machine changed a preference: take the new set and apply it where it is already on screen. Everything a
 // preference feeds is visible from here, which is why the applying lives in this file and not beside the store.

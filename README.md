@@ -118,7 +118,7 @@ node scripts/build-nucleo.js        # rebuild build/nucleo-ui.json.gz (the Set i
 ## How it is put together
 
 `main.js` is the Electron process boundary (window, menu, the IPC table, boot) and `main/` is what
-it delegates to: shared state, rows, documents and their undo stack, the meeting hub, the six views
+it delegates to: shared state, rows, documents and their undo stack, the meeting hub, the views
 and their refresh loop, pins, images. `renderer/` with `index.html` and `styles.css` is the whole UI:
 eighteen plain scripts sharing one global scope, loaded in the order `index.html` lists them, no
 framework and no bundler. `sdk/` is a generic, Electron-independent Tana client (graph
@@ -126,7 +126,7 @@ queries, the sync stream, Loro documents, outline operations, access rules); `ta
 login and token layer; `db.js` is the local SQLite cache.
 
 Start with [AGENTS.md](AGENTS.md) for the map and the working rules, then the docs:
-[VIEWS.md](docs/VIEWS.md) (the six views), [OUTLINER.md](docs/OUTLINER.md) (the UI and keyboard
+[VIEWS.md](docs/VIEWS.md) (the views), [OUTLINER.md](docs/OUTLINER.md) (the UI and keyboard
 contract), [PLATFORM-PROTOCOL.md](docs/PLATFORM-PROTOCOL.md) (the wire protocol, the source of
 truth), [sdk/01–05](docs/sdk) (overview, data model, API reference, recipes, gotchas),
 [MEETINGS.md](docs/MEETINGS.md), [CHATS.md](docs/CHATS.md), [PINNING.md](docs/PINNING.md) and

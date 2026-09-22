@@ -3,7 +3,7 @@ const db = require('../db');
 const path = require('node:path');
 const { peerIdentity } = require('../tana-session');
 const { createTanaClient } = require('../sdk');
-const { parseQuery, searchParams, needsTypes, viewParams, completedInWindow, filterToSearchQuery, validViewFilter, viewTypes, VIEW_PRESETS, hideRules, isHidden } = require('../sdk/query');
+const { parseQuery, searchParams, needsTypes, viewParams, completedInWindow, filterToSearchQuery, validViewFilter, VIEW_PRESETS, hideRules, isHidden } = require('../sdk/query');
 const { LIVE_ROWS, NOT_CONNECTED, S, deletedNodes, docStates, errText, idKind, isDeleted, isMcp, memberTitle, now, reading, truncatedViews, typeTitles, redoStack, report, send, setStatus, subscribed, undoStack, visibleGraphNodes } = require('./state');
 const { graphRow, rememberNodeHue, resolveTypes, toNode, typesByTitle } = require('./rows');
 const { codexIds, createDocument, inHistory, notifySilencedIds, notifyWatchedIds, onChange, subscribe } = require('./documents');
@@ -17,10 +17,10 @@ const preset = (id) => {
 };
 const viewFilter = (id) => {
   const saved = settings.get('viewFilter:' + id);
-  return viewTypes(id, validViewFilter(saved) ? { ...preset(id), ...saved } : preset(id));
+  return validViewFilter(saved) ? { ...preset(id), ...saved } : preset(id);
 };
 const setViewFilter = (id, filter) => {
-  const next = viewTypes(id, validViewFilter(filter) ? { ...preset(id), ...filter } : preset(id));
+  const next = validViewFilter(filter) ? { ...preset(id), ...filter } : preset(id);
   settings.set('viewFilter:' + id, next);
   return next;
 };
@@ -34,7 +34,7 @@ const mcpHidden = () => settings.get('hideMcp') === true;
 async function viewRows(id, filter) {
   if (!S.client) return { nodes: [], truncated: false };
   const base = viewFilter(id);
-  const f = viewTypes(id, filter === undefined ? base : validViewFilter(filter) ? { ...base, ...filter } : preset(id));
+  const f = filter === undefined ? base : validViewFilter(filter) ? { ...base, ...filter } : preset(id);
   if (!validViewFilter(f)) throw new Error('invalid view filter');
   const result = await S.client.graph.listNodes(viewParams(f, S.me.userUri));
   const docsWithoutTasks = Array.isArray(f.types) && f.types.includes('docs') && !f.types.includes('tasks');

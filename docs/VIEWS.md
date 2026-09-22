@@ -1,8 +1,10 @@
-# VIEWS.md — one screen, one query, six presets
+# VIEWS.md — one screen, one query, three presets
 
-Inbox, Tasks, Meetings, Library, Chats and People are **the same view**: one list of graph rows
-with a filter on it. A view is a preset filter plus a persisted copy of whatever the user changed.
-There is one query builder, one fetch path, one cache, one loader and one set of pills.
+Inbox, Library and Types are **the same view**: one list of graph rows with a filter on it. A view
+is a preset filter plus a persisted copy of whatever the user changed. There is one query builder,
+one fetch path, one cache, one loader and one set of pills. Tasks, Meetings, Chats and People were
+views too until each turned out to be what a saved search already is — a fixed query over one kind —
+and moved there (section 6).
 
 On a **saved search** that one set of pills folds away behind a button beside back and forward
 (`pillsOpen`, a preference; renderer/pills.js): its query is already its title, and the pills are
@@ -36,17 +38,13 @@ renderer. It replaces the per-view paths: `taskParams`/`libraryQueries`/`MEETING
 
 ```js
 inbox:    { types: null,          states: ['proposed'],          assignee: 'anyone' }
-tasks:    { types: ['tasks'],     states: ['proposed', 'open', 'not_now'],  assignee: 'me' }   // grouped by Status unless the user picks another grouping
-meetings: { types: ['meetings'],  participant: 'me', window: 'recent' }
 library:  { types: ['tasks'],     states: ['proposed', 'open'],  assignee: 'me', text: '' }
-chats:    { types: ['chats'] }
-people:   { types: ['people'] }
 types:    { types: ['types'] }                                                                    // the workspace's schema, each row showing its space
 ```
 
 Each view persists its own filter under the setting key `viewFilter:<id>`; a stored filter that is not
-a valid query falls back to the preset, like the stored task/library filters do today. The People view
-is titled "People" (the id is `people`; it was `members`).
+a valid query falls back to the preset. The kinds those retired views listed are still in `VIEW_KINDS`,
+so each of them remains one search away rather than being lost with the page.
 
 ## 3. One query
 
@@ -85,7 +83,7 @@ truncation note the Library already shows still tells the user when there is mor
 - Every view caches its rows in SQLite under its own id (`db.replaceSection(viewId, rows)`), so any
   view opens instantly from cache and stays readable while auth or sync reconnect. Today only tasks
   and meetings do.
-- `outline:roots` returns `[{ id, title, icon, nodes }]` for the six views from that cache.
+- `outline:roots` returns `[{ id, title, icon, nodes }]` for the views from that cache.
 - The refresh loop refreshes the **active** view (the last one listed) and subscribes the first
   `LIVE_ROWS` (100, main/state.js) of its rows, with the undo-history retention from #178 unchanged.
   Not the whole list: a subscription is a bootstrap RPC and a LoroDoc each, and every bootstrap reaches
@@ -110,13 +108,15 @@ implements the new surface too.
 
 ## 6. Saved searches are not a view
 
-A saved search (`tana:search:…`) is a document, not a seventh preset: it has no filter, no `viewFilter`/
+A saved search (`tana:search:…`) is a document, not a fourth preset: it has no filter, no `viewFilter`/
 `setViewFilter`, and no row cache (`search:list` never calls `db.replaceSection`, so it does not touch
 `S.activeView` or the refresh loop). `search:list` (`tana.searches()`) lists them read-only, newest first,
 for Cmd+K's `Searches` group; opening one goes through `outline:children` → `searchChildren(id)`, which
 reads the document's own stored `query` container and runs it through `graph.listNodes` directly —
-bypassing `viewParams`, the presets and the cache entirely. Phase 1 is read-only: creating, editing or
-saving a search is out of scope (see `TASKS.md` #247).
+bypassing `viewParams`, the presets and the cache entirely. Saving one is an explicit press rather than
+a write per keystroke: the pills' filter goes through `filterToSearchQuery` into `setSearchQuery`, and
+the arrangement — sort, grouping, the facts a row shows and the completed window — into `setSearchView`
+in the same action (`main.js`).
 
 ## 7. Renderer
 

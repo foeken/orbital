@@ -15,4 +15,4 @@ function createTanaClient({ baseUrl, getAccessToken, orgId, peerId, storageId, l
   return { transport, graph, history, sync, close: () => sync.close() };
 }
 
-module.exports = { createTanaClient, createTransport, GraphClient, HistoryClient, SyncConnection, Document, derivePeerId, ...node, access: require('./access'), calls: require('./calls') };
+module.exports = { createTanaClient, createTransport, GraphClient, HistoryClient, SyncConnection, Document, derivePeerId, ...node };

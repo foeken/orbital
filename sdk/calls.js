@@ -48,8 +48,12 @@ async function currentCalls(client, userUri, { limit = 5 } = {}) {
   });
   const live = [];
   for (const n of nodes) {
+    const held = !!client.sync.getDocument(n.id); // somebody else's live subscription is not this scan's to drop
     const doc = await client.sync.subscribe(n.id);
-    if (!inCall(doc, userUri)) continue;
+    // A candidate that turns out to be somebody else's call is let go again: this is a read, and the scan would
+    // otherwise leave a subscription behind for every recently-touched call in the workspace. Only what this scan
+    // opened is closed: unsubscribe has no reference count, so it would take a caller's document down with it.
+    if (!inCall(doc, userUri)) { if (!held) await client.sync.unsubscribe(n.id).catch(() => {}); continue; }
     const call = callSessions(doc);
     live.push({
       callUri: n.id, eventUri: call.eventUri, title: null, joinedAt: joinedAt(doc, userUri),

@@ -6,9 +6,9 @@ All modules are CommonJS. "Node" below means the plain graph JSON node; "Documen
 
 ```js
 createTanaClient({ baseUrl?, getAccessToken, orgId, peerId, storageId?, logger?, clientName? })
-  → { transport, graph: GraphClient, sync: SyncConnection, close(): Promise }
+  → { transport, graph: GraphClient, history: HistoryClient, sync: SyncConnection, close(): Promise }
 ```
-Also re-exports `createTransport`, `GraphClient`, `SyncConnection`, `Document`, `derivePeerId`, everything in `node.js`, `access` (`capabilities`, `setSharing`, `previewMove`, `moveToSpace`, `canWrite`, `canDelete`, `audienceOf`) and `calls` (`callSessions`, `inCall`, `joinedAt`, `attended`, `currentCalls`).
+Also re-exports `createTransport`, `GraphClient`, `HistoryClient`, `SyncConnection`, `Document`, `derivePeerId` and everything in `node.js`. `access` (`capabilities`, `setSharing`, `previewMove`, `moveToSpace`, `canWrite`, `canDelete`, `audienceOf`) and `calls` (`callSessions`, `inCall`, `joinedAt`, `attended`, `currentCalls`) are required from their own modules (`sdk/access`, `sdk/calls`), which is what every caller does.
 
 ## `sdk/transport.js`
 
@@ -25,6 +25,10 @@ Also re-exports `createTransport`, `GraphClient`, `SyncConnection`, `Document`, 
 | `traverse(params)` | `{ startNodeId, maxDepth, edgeTypes, nodeTypes, direction, includeProposals, includeArchived }` | async iterator of `{ node, edge, depth }` |
 
 Enums are passed by name (`'SORT_FIELD_UPDATE_TIME'`, `'LIST_NODES_MODE_WITH_COUNT'`). Timestamps are RFC 3339 strings.
+
+## `sdk/history.js` — `class HistoryClient(transport)`
+
+`listChanges({ uri, withinId?, limit? })` → `{ parent?, summaries: [{ id, level, title, description, authors, sources, startTime, endTime, expandable, changeType }] }`: the change summaries Tana's own Changes panel shows for a node, `summaries` always an array. `withinId` asks for the summaries inside an expandable one; nothing here writes.
 
 ## `sdk/sync.js` — `class SyncConnection extends EventEmitter`
 
@@ -91,7 +95,9 @@ These helpers are the app's verified native capability boundary. Ownership is an
 | `audienceMetadata(document, userUri, graph, sync)` | `{ audience: 'only-me' | 'people' | 'space' | 'everyone' | 'unknown', audienceSpace?: { uri, title? } }`. Direct `restricted` first, then the nearest restricted owner-chain boundary (a space names itself, the org root means everyone), then `effectivelyRestricted === false`. Guest profiles count as people; groups, empty participant sets and inaccessible boundaries stay unknown. See docs/sdk/05-gotchas.md. |
 | `audience(...)` | `audienceMetadata(...).audience`, the label on its own. |
 | `ulid(now?)` | 26-char lowercase Crockford ULID. |
-| `initDocument(loro, title, byUri, { kind, now, entityTypeUri, ownerUri })` | Seeds a new document's data map like the web client (participants { byUri: admin }, restricted, sharedPinDates, attributes) plus the empty content skeleton. `kind`: `doc` (default), `task` (open state assigned to `byUri`), `meeting` (a `tana:event:` laid out like a Tana-created event: next half hour, 30 min, local timezone, origin 'tana', no content), `chat` (native `participantUris`/`messages`, no outline), `type` (a `tana:type:` document: `data{type,title,sharedPinDates,template}` and an empty content map only — a real type carries no createdAt, restricted or participants, and one with no `ownerUri` is a Library type that fits a document in any space; give it its fields with `fields.addField`). `entityTypeUri` sets the document's type (not on a chat), `ownerUri` its home space; both are validated. Use inside `sync.subscribe(id, init)`. |
+| `initDocument(loro, title, byUri, { kind, now, entityTypeUri, ownerUri, query })` | Seeds a new document's data map like the web client (participants { byUri: admin }, restricted, sharedPinDates, attributes) plus the empty content skeleton. `kind`: `doc` (default), `task` (open state assigned to `byUri`), `meeting` (a `tana:event:` laid out like a Tana-created event: next half hour, 30 min, local timezone, origin 'tana', no content), `chat` (native `participantUris`/`messages`, no outline), `search` (a `tana:search:` document: `data{type,createdAt,title,restricted,participants}`, the `query` option written into its query root there and then — an empty query map reads as an unreadable search — and an empty `view` root, with no sharedPinDates and no content), `type` (a `tana:type:` document: `data{type,title,sharedPinDates,template}` and an empty content map only — a real type carries no createdAt, restricted or participants, and one with no `ownerUri` is a Library type that fits a document in any space; give it its fields with `fields.addField`). `entityTypeUri` sets the document's type (not on a chat), `ownerUri` its home space; both are validated. Use inside `sync.subscribe(id, init)`. |
+| `setSearchQuery(document, query)` | Rewrites a saved search's `query` root container. Every key is assigned rather than patched — lists replaced whole, flags set or deleted — so a filter dropped from a save cannot linger. Throws unless the document's `type` is `search`. |
+| `setSearchView(document, view)` | The same for the `view` root beside it: `sortBy`, `groupBy`, `display` (the row's facts, comma-joined, since a Loro map holds scalars) and `completedWithin`. It says how the rows are arranged, not which rows the search finds. |
 | `STATE_TYPES` | `['proposed', 'open', 'closed', 'not_now']`. |
 
 The native title contract is a plain metadata string. `setTitle` cannot store mention nodes; profiles and unsupported kinds are read-only, and events currently remain read-only because the organizer/calendar write capability is outside the graph contract.
@@ -110,16 +116,21 @@ Outline node: `{ id: blockId, text, kind: 'block', block?: type, heading?: level
 | `setText(document, id, value)` | `value`: a string or segments. A **string** replaces the words and leaves the existing annotations alone; **segments** state the marks exactly. Consecutive text segments share one LoroText, the way Tana stores them, and every mention is its own map. Containers are matched by position: a text container is updated in place (a diffing update keeps concurrent edits and the marks of untouched characters, then only the spans whose annotation differs are marked or unmarked), a same-uri mention is kept, anything else is replaced, trailing containers are dropped. Inside a `codeBlock` marks and mentions flatten to text, because its schema content is `text*` with `marks: ''`. |
 | `setBlockType(document, id, type)` | `paragraph`, `heading1-3`, `bullet`, `numbered`, `code`, `quote`. A type is a container plus a leaf node name, and the types stay mutually exclusive the way Tana's style menu presents them: bullet/numbered live in a `listItem`, quote in a `blockquote`, the rest are bare blocks. The blockId and the inline content survive. Between the two list kinds the whole `listItem` moves, so its children and its checkbox stay with it; a conversion to heading, quote or code outdents the node's children instead of losing them, because those blocks cannot own children. Splitting a list or quote around the node keeps outline order. Rejects an unknown type and the atoms (divider, image, embed). |
 | `insertDivider(document, id \| null)` → newId | Inserts Tana's `horizontalRule` after `id` (`null` appends at the end). A list holds `listItem`s only, so a rule between two items splits the list rather than landing inside it. |
-| `insertAfter(document, id | null, text)` → newId | Sibling after `id` (inside a listItem: a new listItem); `null` appends at the end of the doc; creates the doc skeleton if missing. |
+| `insertMention(document, { uri, label }, { parentId, afterId })` → newId | A document dropped into an outline cannot move there, so what lands is a reference to it: one block whose whole content is a mention. The place is named the way a drag names it (`afterId` the row it lands behind, `parentId` the row it lands inside, neither means the first row), and the row is written as a list row or as prose, whichever the destination keeps. |
+| `insertAfter(document, id | null, text, before = false, asBlock = null)` → newId | Sibling after `id` (inside a listItem: a new listItem); `null` appends at the end of the doc; creates the doc skeleton if missing. A new row follows the row it comes from, so a document's own first row is plain text unless the caller says otherwise: `asBlock: 'bullet'` is how a row asked to hold sub-items opens onto a list row. |
 | `insertChild(document, id, text)` → newId or null | First child (creates the nested bulletList/listItem; wraps a bare paragraph into a listItem). Null for headings/quotes/code. |
 | `insertBefore(document, id, text)` → newId | Sibling before `id` (same level, same listItem rules as `insertAfter`). What Enter at the very start of a node does: the node keeps its text and children. |
 | `split(document, id, before, after, asChild)` → newId | Enter inside a node: `setText(id, before)` plus the insert of `after` as the next sibling (or the first child when `asChild`) in **one** transaction, so one undo puts the node back whole. `before`/`after` are strings or segments; segments with mentions or marks are written back over the plain insert. |
 | `remove(document, id)` | Removes the node and its children; prunes emptied lists. |
 | `indent(document, id)` / `outdent(document, id)` | Under the previous sibling / after the parent. No-ops at the edges; only paragraphs and listItems can be moved. |
 | `move(document, id, 'up' | 'down')` | Swap with the neighbouring sibling (lists move as a whole). |
-| `moveMany(document, ids, 'up' | 'down')` / `removeMany(document, ids)` | The same for a sibling range in visual order, in **one** transaction, so a multi-select is one undo step. Both reject duplicates, unknown ids and non-siblings before mutating. |
+| `moveMany(document, ids, 'up' | 'down')` | The same for a sibling range in visual order, in **one** transaction, so a multi-select is one undo step. It rejects duplicates, unknown ids and non-siblings before mutating. |
+| `removeMany(document, ids)` | One transaction for the whole selection, whatever levels its rows sit on: deleting is not moving, so siblings are not required. Duplicates and unknown ids are still rejected, and a row inside another selected row needs no delete of its own — it goes with the row that holds it. |
+| `moveTo(document, id, { parentId, afterId, from })` | A drag, which names the place outright: the row lands behind `afterId`, inside `parentId` when there is nothing to land behind, and at the first row of the outline when neither is given. It travels whole (children, checkbox, block ids), and `from` may be another outline of the same Loro document — a field value — so a row dragged between a page and one of its fields is one transaction. A move into itself, and a block that cannot become a list item, are refused before anything is written. |
 | `indentMany(document, ids)` / `outdentMany(document, ids)` | The same for indent/outdent: one transaction, ids in visual order (indent runs first to last so each row follows the one above it, outdent last to first). The sibling checks run first; each id is then resolved inside the transaction because the previous row's move already changed the tree. |
 | `toggleCheckbox(document, id)` | Paragraph or heading only. `checked` lives on the `listItem`, so a bare paragraph is wrapped first (keeping its blockId, marks and mentions); it never touches the document's own task state. |
+| `assignBlockIds(document)` | Gives every block that arrived without a `blockId` one, in a single transaction and with no op at all for a document that has them all. Blocks Tana's own agent writes can have none, and a row with no id cannot be edited, split or linked. |
+| `BLOCK_TYPES` | `['paragraph', 'heading1', 'heading2', 'heading3', 'bullet', 'numbered', 'code', 'quote']` — what `setBlockType` accepts. |
 
 All operations run inside `document.transact`, so each is one undo step and one live update. Containers are copied and deleted (Loro cannot move containers); text runs keep their marks via `toDelta/applyDelta`. A direction other than `'up'`/`'down'` throws rather than defaulting to down.
 
@@ -129,10 +140,12 @@ A field value is a ProseMirror-style tree in the document's own `data.attributes
 
 | Function | Behaviour |
 |---|---|
-| `readFields(document)` | `[{ key, typeUri, attribute, text }]` for every field the document carries; `text` is the flattened value with mentions rendered as their label. `[]` when there are none. |
+| `readFields(document)` | `[{ key, typeUri, attribute, text, segments, lines }]` for every field the document carries; `lines` is the value as `[{ segments, block }]` in stored order, `text` joins those lines with newlines (mentions rendered as their label) and `segments` is the first line's. `[]` when there are none. |
 | `templateTitles(typeDocument)` | `{ key: title }` for that type's fields (falls back to the key). |
-| `setFieldText(document, key, text)` | Replaces the field's text in place, creating the doc/paragraph shell when the field is empty and dropping any extra runs. One plain text run: it cannot write a mention, so editing a reference field flattens it to text. |
-| `valueText(value)`, `parseKey(key)` | The helpers behind those two. |
+| `setFieldText(document, key, text)` | Writes the field's value, creating the doc/paragraph shell when the field is empty. `text` is a string, one line's segments, or an array of lines — each a string, segments, or `{ segments, block }`. The runs are written by the same code a row's are, so a mention stays a mention. Words changing are patched into the blocks already there, which keeps a value's bullets, headings and block ids; a line changing shape writes the value again from the top. |
+| `fieldView(document, key, { create = false })` | The field's value as a Document, so every operation in `content.js` works on it and the field editor is the page's editor rather than a second one. `create` decides what an absent value does: a write needs the shell to exist, a read must not write one. |
+| `addField(typeDocument, { title, type, cardinality })` → key | Defines a field on a type: one more entry in its `template.attributes`, the MovableList of `{ key, title, type?, cardinality? }` maps a real type carries. Types seen on the wire: member, date, link; a plain text field has no type at all. |
+| `parseKey(key)` | The helper behind those. `valueLines` and `valueText` (a value's lines and its flat text) stay inside the module: `readFields` already hands out `lines` and `text`, and nothing outside it needs them raw. |
 
 ## App mutation and history boundary
 
@@ -143,17 +156,16 @@ The SDK's `Document.undo()`/`redo()` only undo local CRDT transactions for that 
 | Function | Behaviour |
 |---|---|
 | `parseQuery(query)` → `{ text, tags }` | Extracts `#word` tokens. |
-| `searchParams(parsed, typesByLowerTitle, limit = 20)` → ListNodes params or null | Default nodeTypes `['text', 'event', 'user-profile']`, `textQuery`, TEXT_RANK sort; `#task` → text + all four states, `#meeting` → event, `#member` → user-profile, `#space` → space, `#<Type>` → `entityTypes`; unknown type or empty query → null. |
+| `searchParams(parsed, typesByLowerTitle, limit = 20)` → ListNodes params or null | Default nodeTypes `['text', 'event', 'user-profile', 'space', 'search']`, `textQuery`, TEXT_RANK sort; `#task` → text + all four states, `#meeting` → event, `#member` → user-profile, `#space` → space, `#<Type>` → `entityTypes`; unknown type or empty query → null. |
 | `needsTypes(parsed)` | True when a non-kind tag needs the type map. |
-| `viewParams(filter, me, limit = 1000)` → ListNodes params | The one query behind every view (docs/VIEWS.md). A filter is `{ types, states, assignee, text, participant, window, mcp }`, all optional; `types` null or empty means every listable kind (never an unconstrained query: `nodeTypes: []` is no filter to the graph). `states` and `assignee` are applied only while `tasks` is among the kinds, which is exactly when those pills are shown. Meetings alone sort by event start, everything else by update time; `participant: 'me'` and `window: 'recent'` (last 7 days, next 7) are what the Meetings preset uses. Throws on an invalid filter. |
+| `viewParams(filter, me, limit = 1000)` → ListNodes params | The one query behind every view (docs/VIEWS.md). A filter is `{ types, states, assignee, text, participant, window, completedWithin }`, all optional; `types` null or empty means every listable kind (never an unconstrained query: `nodeTypes: []` is no filter to the graph). `states` and `assignee` are applied only while `tasks` is among the kinds, which is exactly when those pills are shown. Meetings alone sort by event start, everything else by update time; `participant: 'me'` and `window: 'recent'` are events the user is in, from 7 days ago to 7 days ahead. `completedWithin` (7, 30 or `'all'`) is asked for nowhere — the request has no field for the age of a state — so it is applied to the answer instead, by `completedInWindow`. Throws on an invalid filter. |
 | `validViewFilter(f)` | Shape check for a stored filter: known keys only, kinds from `VIEW_KINDS`, states from `STATE_TYPES`, assignee one of `me | anyone | unassigned | <user-profile uri>`. |
-| `viewTypes(id, f)` | A kind page (`KIND_VIEWS`: tasks, meetings, chats, people) keeps its own `types` whatever the stored filter says; Library and Inbox choose theirs. |
-| `VIEW_PRESETS`, `VIEW_KINDS`, `KIND_VIEWS` | The six presets, the nine kinds (`meetings tasks docs chats canvases agents skills spaces people`), and the kind pages. |
-| `hideRules(patterns)` / `isHidden(rules, title)` | Hidden titles: case-insensitive whole-title match, or a prefix when the pattern ends in `*`; a bare `*` is dropped; at most 200 patterns of 200 characters. Applied to every list and search in main.js. |
+| `VIEW_PRESETS`, `VIEW_KINDS` | The three presets (`inbox`, `library`, `types`) and the eleven kinds (`meetings tasks docs chats canvases agents skills searches spaces people types`). No view is a kind page any more — each one chooses what it lists, and a stored filter is used exactly as it is given — and the pages that were a fixed query over one kind are saved searches instead. |
+| `hideRules(patterns)` / `isHidden(title, rules)` | Hidden titles: case-insensitive whole-title match, or a prefix when the pattern ends in `*`; a bare `*` is dropped; at most 200 patterns of 200 characters. Applied to every list and search in main.js. |
 
 ## `sdk/pins.js` (all `async (sync, userUri, …)`)
 
-`listSidebar` → uris in tree order · `sidebarTree` → the collection's tree with its section labels · `pinSidebar(docUri)` (dedup) · `unpinSidebar(docUri)` · `dates(docUri)` → `['YYYY-MM-DD']` · `pinDate(docUri, date)` (dedup, unmutes) · `unpinDate(docUri, date)`. They subscribe the profile, then the collection / pin-map it points to; throw if the profile has no `pinnedCollectionUri` / `pinMapUri` yet (the web client creates those lazily on first pin; we don't).
+`listSidebar` → uris in tree order · `sidebarTree` → the collection's tree with its section labels · `pinSidebar(docUri)` (dedup) · `unpinSidebar(docUri)` · `dates(docUri)` → `['YYYY-MM-DD']` · `datePinned` → the doc uris that still hold a plain date pin, for "is this row pinned at all" over a whole list · `pinDate(docUri, date)` (dedup, unmutes) · `unpinDate(docUri, date)`. They subscribe the profile, then the collection / pin-map it points to; throw if the profile has no `pinnedCollectionUri` / `pinMapUri` yet (the web client creates those lazily on first pin; we don't).
 
 Items pinned *on* an event or a space are a different thing (docs/PINNING.md section 4) and take the document itself, synchronously: `items(doc)` → `[{ uri, mode? }]` · `pinItem(doc, uri, mode?)` (dedup on uri) · `unpinItem(doc, uri)`.
 
@@ -171,8 +183,8 @@ This is the only way to tell *joined* from *invited*: see [02-data-model.md](02-
 
 ## `sdk/assets.js`
 
-`fetchImage(uri, { getAccessToken, baseUrl = 'https://home.tana.inc/api/general', fetch })` → `{ mime, bytes: Buffer }`; validates `tana:image:<ulid>`, follows the 302 manually carrying the `Cloud-CDN-Cookie`, retries once on 401. `IMAGE_URI` regex exported.
+`fetchImage(uri, { getAccessToken, baseUrl = 'https://home.tana.inc/api/general', fetch })` → `{ mime, bytes: Buffer }`; validates `tana:image:<ulid>`, follows the 302 manually carrying the `Cloud-CDN-Cookie`, retries once on 401.
 
 ## `sdk/proto/descriptors.js`
 
-`files.{sync, graph, search, history}` (protobuf-es file descriptors), `message(file, name)`, `SyncService`, `GraphService`, `SearchService`. Regenerate by extracting the `Mr(` base64 blobs from the current `shared-*.js` bundle (see gotchas).
+`files.{sync, graph, search, history}` (protobuf-es file descriptors), `message(file, name)`, `SyncService`, `GraphService`, `SearchService`, `ChangeSummaryService`. Regenerate by extracting the `Mr(` base64 blobs from the current `shared-*.js` bundle (see gotchas).

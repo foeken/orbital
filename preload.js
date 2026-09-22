@@ -113,7 +113,7 @@ contextBridge.exposeInMainWorld('api', {
   // Quick add (docs/QUICK-ADD.md), used by quick-add.html only: what the panel shows when it opens, the one write it
   // makes, and the two ends of its lifecycle.
   quickContext: () => ipcRenderer.invoke('quick:context'), // { meeting:{id,title,joinedAt}|null, meetingError?, members[], membersError?, me }
-  quickCreate: (input) => ipcRenderer.invoke('quick:create', input), // { title, assigneeUri?, meetingId? } -> { node, assigned, linked, assignedError?, linkError? }
+  quickCreate: (input) => ipcRenderer.invoke('quick:create', input), // { title, assigneeUri?, meetingId?, agent?:{prompt,model?,host?} } -> { node, assigned, linked, agent, assignedError?, linkError?, agentError? }
   quickClose: () => ipcRenderer.invoke('quick:close'),
   onQuickOpen: (fn) => ipcRenderer.on('quick:open', () => fn()), // the shortcut showed the panel again: re-read the meeting
   // Hidden titles: patterns that keep matching nodes out of every list and search (a node opened directly still opens).

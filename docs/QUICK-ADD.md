@@ -51,20 +51,24 @@ from `icons.js` the way `iconNode` does it in the outliner.
 never a Tana user (`main/documents.js`), so it is held apart from the assignee and the two are refused together.
 Choosing it reveals the prompt the agent is handed with the task and puts the caret there; ⇥ then offers the model for
 this one assignment — Codex's own list (`codex:models`), with `Codex default` meaning no model is sent — plus a row
-back to the people. Choosing a person takes the task off the agent, prompt and all.
+back to the people, and a **Run on…** row into the machines a task can run on (`codex:hosts`; this Mac unless one is
+chosen). Choosing a person takes the task off the agent, prompt and all.
 
 The handoff itself is `main.js:assignToAgent`, lifted unchanged out of the `codex:set` handler so ⌘K and this panel
 share one path: the same context write, the same task creation with its blank workspace, the same opening of the
 Codex task. `main/quickadd.js` is injected with it rather than requiring anything of the Agent integration, so no
-Agent state or launch logic is duplicated here. A task with no instruction is refused before anything is created.
+Agent state or launch logic is duplicated here. A task with no instruction is refused before anything is created, and
+whether the chosen machine is awake is `assignToAgent`'s own question, asked once there rather than a second time here.
 
 ## What gets written
 
-`quick:create` composes three operations that already existed, in this order:
+`quick:create` composes four operations that already existed, in this order:
 
 1. `createDocument(title, { kind: ’task’ })` — the same creation path the outliner’s ⌘K Create Task uses.
 2. the assignee, if one was chosen: `setAssignees` through `mut`, the same write as the assignee picker.
 3. the meeting link, if a meeting is live: `pins.nodePin(eventId, taskId, true)`.
+4. the agent handoff, if the agent has the task: the injected `main.js:assignToAgent`, which writes the context,
+   creates the Codex task on the chosen machine and opens it.
 
 **Why a pin.** A meeting hub carries two kinds of documents (docs/MEETINGS.md): things *owned* by the event —
 `data.ownerUri` — which are its notes and outcomes, and things *pinned* on it, the event’s own `pinnedItems` list that

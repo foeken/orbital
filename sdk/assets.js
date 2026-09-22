@@ -18,4 +18,4 @@ async function fetchImage(uri, { getAccessToken, baseUrl = 'https://home.tana.in
   return { mime: res.headers.get('content-type') || 'application/octet-stream', bytes: Buffer.from(await res.arrayBuffer()) };
 }
 
-module.exports = { fetchImage, IMAGE_URI };
+module.exports = { fetchImage };

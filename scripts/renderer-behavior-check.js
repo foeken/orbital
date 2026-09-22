@@ -699,7 +699,7 @@ async function runMultiTaskPaletteCheck() {
   assert.deepEqual(plain(await context.remove(['locked', 't1'])), [['error', 'Only writable documents and blocks can be deleted']],
     'a read-only row stops the delete and says so, instead of deleting what it can');
 
-  const applyFns = [functionSource('taskResult'), functionSource('applyTaskChange'), functionSource('statusRows'), functionSource('manyAssigneeRows')].join('\n');
+  const applyFns = [functionSource('taskResult'), functionSource('applyTaskChange'), functionSource('statusRows'), functionSource('memberRows'), functionSource('manyAssigneeRows')].join('\n');
   const apply = vm.runInNewContext(`
     const docs = [{ id: 't1', stateType: 'open' }, { id: 't2', stateType: 'open' }];
     let sel = { keys: new Set(['t1', 'meeting', 't2']), anchor: 't2', focus: 't2' };
@@ -983,7 +983,7 @@ async function runStalePaletteInvalidationCheck() {
     const goneId = 'tana:text:01j0stale0000000000000000';
     const keptId = 'tana:text:01j0keep00000000000000000';
     const searchId = 'tana:search:01j0search000000000000000';
-    let listener, removeListener, unpinListener;
+    let listener, removeListener;
     let pinTree = [
       { node: { id: goneId, title: 'alpha' }, children: [] },
       { node: { id: keptId, title: 'beta' }, children: [] },
@@ -1018,7 +1018,6 @@ async function runStalePaletteInvalidationCheck() {
     const tana = {
       onChanged: (callback) => { listener = callback; },
       onRemoved: (callback) => { removeListener = callback; },
-      onUnpinned: (callback) => { unpinListener = callback; },
       node: async () => tanaNode,
     };
     ${helpers}
@@ -1028,7 +1027,6 @@ async function runStalePaletteInvalidationCheck() {
       edit: (id) => listener(id, { meta: false }),
       refreshed: () => refreshed,
       removed: (id) => removeListener(id),
-      unpinned: (id) => unpinListener(id),
       searchIds: () => searches.map((s) => s.id),
       state: () => ({ recent: recent().map((node) => node.id), zoom: zoom && zoom.docId }),
     });
@@ -1055,13 +1053,6 @@ async function runStalePaletteInvalidationCheck() {
     recent: ['tana:text:01j0stale0000000000000000', 'tana:text:01j0keep00000000000000000'],
     zoom: 'tana:text:01j0keep00000000000000000',
   }, 'a general null update refreshes data without evicting Cmd+K state');
-
-  context.unpinned('tana:text:01j0stale0000000000000000');
-  await new Promise(setImmediate);
-  assert.deepEqual(plain(context.state()), {
-    recent: ['tana:text:01j0stale0000000000000000', 'tana:text:01j0keep00000000000000000'],
-    zoom: 'tana:text:01j0keep00000000000000000',
-  }, 'an unpin is not a deletion: it evicts nothing');
 
   context.removed('tana:text:01j0stale0000000000000000');
   await new Promise(setImmediate);
@@ -2540,8 +2531,9 @@ async function runUnifiedViewsCheck() {
     'the widened filter is what the view now holds, so the Assigned to pill agrees with the rows — and the status, type and text filters are untouched');
   assert.doesNotMatch(source, /\b(taskF|libF|loadLibrary|loadChats|loadInbox)\b/, 'the renderer no longer carries a per-view filter or loader');
   // Tasks was the last view with a native draft kind. With it gone, Enter drafts a plain doc on every view — asserted
-  // as the empty map rather than as the absence of the old one, so a half-restored version cannot pass.
-  assert.match(source, /const DRAFT_KIND = \{\};/, 'no view drafts a task any more: Enter makes a doc everywhere');
+  // as the literal kind rather than as the absence of the old map, so a half-restored version cannot pass.
+  assert.match(source, /const node = draftDocNode\('doc'\);/, 'no view drafts a task any more: Enter makes a doc everywhere');
+  assert.doesNotMatch(source, /DRAFT_KIND/, 'and the per-view kind map is gone with it');
   // The Meetings view is gone, and the today marker went with it: every page now opens at its top.
   // the call form, not the bare word: the note left where it was removed should not read as the thing still existing
   assert.doesNotMatch(source, /todayIndex\(/, 'the today marker was removed with the view that was its only caller');
@@ -3192,7 +3184,6 @@ function runDraftTailCheck() {
     const isSpace = (n) => n.id.startsWith('tana:space:');
     const isSearchDoc = (n) => n.id.startsWith('tana:search:');
     ${sourceBetween('const canInsertChild =', 'const canExpand =')}
-    ${sourceBetween('const typableRow =', '// Opening a node leaves a row')}
     ${functionSource('withDraftTail')}
     ({ tail: (list, parent) => withDraftTail(list, parent), set: (e, l) => { editable = e; loaded = l; } });
   `);
@@ -4563,7 +4554,7 @@ function runPillsFoldCheck() {
     fill(3);
     const stored = {};
     const pref = (k, fb) => (k in stored ? stored[k] : fb), setPref = (k, v) => { stored[k] = v; };
-    const \$ = (id) => (id === 'pills' ? box : id === 'navCleanup' ? cleanupEl : toggleEl);
+    const $ = (id) => (id === 'pills' ? box : id === 'navCleanup' ? cleanupEl : toggleEl);
     const renderPills = () => { redrawn++; };
     const iconNode = () => mkEl('svg');
     const searchDirty = () => dirty;
@@ -4644,7 +4635,7 @@ function runPillsFoldCheck() {
   // a pop and shrinks away again. Hiding it on the way out is what the animation is waiting for; a button that
   // becomes wanted again while it is leaving has to stay, and the animation still running must not take it away.
   api.setReduced(false);
-  cleanupEl_start: {
+  { // cleanupEl
     const up = plain(api.cleanup(true));
     assert.deepEqual([up.hidden, up.in, up.glyphs, up.label], [false, true, 1, 'Clean up'], 'a row kept in place brings the button in with a pop');
     const staying = plain(api.cleanup(true));
@@ -4683,7 +4674,7 @@ function runRefreshSpinCheck() {
         get firstChild() { return this.childNodes[0] || null; } };
     };
     const button = mkEl('button');
-    const \$ = () => button;
+    const $ = () => button;
     const iconNode = () => mkEl('svg');
     const zoom = { docId: DOC };
     const releaseHeld = () => asked.push('release');
@@ -4745,7 +4736,7 @@ async function runCreateTaskFlowCheck() {
       let palReturn = { key: rowEl.dataset.key, offset: 8 }; // ⌘K was opened with the caret in that row
       let renderDeferred = false, rendering = false, selectionFrozen = false, renders = 0, draftSeq = 0, slashCtx = null;
       const clearTimeout = () => {}, cancelLink = () => {}, promptEditor = () => {}, loadView = () => {};
-      const markFalling = () => {}, refreshRowChrome = () => {}, renderPills = () => {}, \$ = () => ({ hidden: true });
+      const markFalling = () => {}, refreshRowChrome = () => {}, renderPills = () => {}, $ = () => ({ hidden: true });
       const showError = () => {}, flush = () => {};
       const run = (fn) => fn();
       const tana = { createDocument: async (title, opts) => { created.push([title, opts.kind]); return { id: 'tana:text:01j0made00000000000000000', title, icon: 'task', done: 0 }; } };

@@ -24,4 +24,4 @@ client.sync.on('change', (id, { origin }) => { /* remote or local */ });
 await client.close();
 ```
 
-Checks: `npm run check` (offline, fake SyncService). Live: `./node_modules/.bin/electron scripts/platform-cli.js <cmd>`.
+Checks: `npm run check` (offline, fake SyncService). Live: `node scripts/platform-cli.js <cmd>` — with node, not `./node_modules/.bin/electron`, which aborts in AppKit inside an agent sandbox (docs/ELECTRON-SANDBOX.md); the CLI re-execs Electron itself for the cookie session.
