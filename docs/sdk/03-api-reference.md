@@ -54,6 +54,7 @@ Constructed by `createTanaClient`; `{ transport, orgId, peerId, storageId, logge
 | `unsubscribe(id): Promise` | Sends `unsubscribeDocument` when live; detaches listeners. |
 | `softDelete(id): Promise` | `documentAction.softDelete`; the doc disappears from graph queries. Needs the stream open. |
 | `restore(id): Promise` | `documentAction.restore`, the inverse of `softDelete`. Needs the stream open. |
+| `subscribeEphemeralChannel(channelId)`, `unsubscribeEphemeralChannel(channelId)`, `sendEphemeral(documentId, bytes)`, `viewingHeartbeat(documentId)` | Presence plumbing: channels are counted per id (two holders, one subscription) and resent after every reconnect; sends are best effort, resolve to whether they went and send nothing while disconnected. Incoming frames are the `ephemeral` event. Use `sdk/presence.js` rather than these directly. |
 | `close(): Promise` | Unsubscribes everything, aborts the stream, stops reconnecting. |
 | `connected`, `docs` | State; `docs` maps id → session entry (`state`: new / bootstrapping / retrying / live / resyncing / disconnected / closed). |
 
@@ -62,6 +63,20 @@ Events: `connected` `({ heartbeatIntervalMs })`, `disconnected`, `heartbeat`, `c
 Outbound: local ops are batched 5 ms, one in-flight `liveDocumentUpdate` per document, 256 KiB budget (overflow → re-bootstrap). Inbound frames for a stale `sessionId` are dropped. `resync_required` re-bootstraps; `DISCARD_LOCAL` resets the Document first. After a reconnect every document is re-bootstrapped with the same Document object. Per-document resync backoff is 500 ms→5 s, fixed at 30 s after six consecutive resyncs, and the counter is reset by 15 s of healthy live (checked when the next resync starts, so a document nobody edits is counted too).
 
 `derivePeerId(userExternalId)` → decimal u64 string: `(sha256(lowercased id)[0..8] >> 16) << 16 | nonce`, where the nonce is 15 random bits (only the top 48 bits matter: the server records them as `peerUserHash`). New nonce per process; keep `storageId` (a UUID you persist) for a non-ephemeral peer.
+
+## `sdk/presence.js` — who is in a document, and where
+
+`openPresence(sync, documentId, { timeout = 30000, viewing = false })` → handle, once the document's presence channel is subscribed. Tana's editor shares carets over an ephemeral channel named by the document uri: every peer keeps one entry in a Loro `EphemeralStore` keyed by its peer id, and changes travel as that store's own update bytes. Nothing is stored anywhere.
+
+- `handle.peers({ exceptUserHash }?)` → `[{ peer, userHash, user: { name, color } | null, scope, hasCursor, anchorBlock, focusBlock, anchor, focus }]` for everyone in the document except this connection. `anchorBlock`/`focusBlock` are `{ blockId, offset }` or null; `anchor`/`focus` are Loro `Cursor` bytes (`Cursor.decode` + `doc.getCursorPos`) or null. `exceptUserHash` also leaves out your own other tabs and devices.
+- `handle.editing(opts?)` → the peers with a caret in the document, i.e. someone is editing it right now.
+- `handle.on('change', { added, updated, removed, by })`: peer ids; `by` is `import` (a peer sent something, leaving included) or `timeout` (an entry nobody refreshed expired).
+- `handle.setLocal({ user, anchorBlock, focusBlock = anchorBlock, scope })`: be seen, in Tana's entry shape, refreshed at half the timeout so it does not expire; `handle.clearLocal()` takes it away. Re-sent after a reconnect.
+- `{ viewing: true }`: also sends the viewing heartbeat every 10 s (and after a reconnect), as Tana does for the document on screen.
+- `handle.close()`: clears our entry, unsubscribes, forgets everyone.
+- `userHashOf(peerId)`: the user part of a peer id (its top bits, `sync.derivePeerId`), so an entry says which user it is without a lookup; two tabs of one person share it.
+
+Verified live 2026-09-22 (`platform-cli presence`, two sessions on a scratch document): the watcher saw the other session arrive with its label and caret block, and leave when it closed.
 
 ## `sdk/access.js`
 

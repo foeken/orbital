@@ -219,7 +219,7 @@ updates carry no version vector: the blobs are exactly what Loro emitted, and th
   grace period after the last UI reference goes away (`gracePeriodMs: 500`, 0 for `tana:liveQuery:`); `tana:user-inbox:` docs are never released.
 * Viewing heartbeat: `{"viewingHeartbeat":{"documentId"}}` every 10 s (`HDe=1e4`) for the document open on screen, only while the tab
   is visible and the user was active in the last 60 s (`UDe=6e4`). Presence only; failures ignored. A background client can skip it.
-* Ephemeral presence: `subscribeEphemeralChannel{channelId}`, `ephemeral{documentId,data}` (opaque bytes), `unsubscribeEphemeralChannel`. Optional.
+* Ephemeral presence: `subscribeEphemeralChannel{channelId}`, `ephemeral{documentId,data}`, `unsubscribeEphemeralChannel`. Optional; what the bytes are is 2.8.
 * Document actions: `documentAction{documentId, softDelete:{}}` (or `restore`/`archive`/`unarchive`) returns `documentActionResponse`.
 
 ### 2.6 GetDocumentSnapshot
@@ -228,7 +228,7 @@ updates carry no version vector: the blobs are exactly what Loro emitted, and th
 `{"snapshot":"<b64 Loro snapshot>","versionVector":"<b64>"}`; 15 s client timeout; Connect `NotFound` for unknown ids. Needs no peer
 stream, so it is the cheapest way to poll a task.
 
-### 2.6 Live queries (`tana:liveQuery:`)
+### 2.7 Live queries (`tana:liveQuery:`)
 
 How Tana's own client lists things (NodeQueryResource/EdgeQueryResource in `shared-*.js`, read 2026-09-22): not ListNodes, but a
 query the server keeps running. The client mints `tana:liveQuery:<ulid>`, writes the query into a new document, and subscribes it
@@ -244,6 +244,27 @@ stateTypes, stateEnteredAtMin/Max, createdAtMin/Max, assignedTo, createdBy, orde
 docs/sdk/03-api-reference.md). The answer is current when `resultForVersion === queryVersion`; the client bumps `queryVersion` to
 change a query in place. Rows carry times as epoch ms. Verified live: a task created in another session arrived in an open query
 within seconds, and left it when soft-deleted.
+
+### 2.8 Presence (ephemeral channels)
+
+How Tana's editor shows who else is in a document (read from `shared-*.js` 2026-09-22: the `loro-ephemeral-cursor` plugin, `Hf extends`
+Loro `EphemeralStore`, the `sc(documentUri)` hook). The channel id is the **document uri**. A client sends
+`subscribeEphemeralChannel{channelId}` (refcounted locally, resent on reconnect), then every change to its own entry as
+`ephemeral{documentId, data}` where `data` is exactly the bytes `EphemeralStore.subscribeLocalUpdates` produced; the server relays
+them to every other subscriber of that channel as the `ephemeral` response frame, unchanged. Everything is best effort (failures are
+only traced).
+
+```
+store key = the peer id (decimal string; user hash in the top bits, tab in the low 16, sync.derivePeerId)
+entry     = { anchor, focus,                     Loro Cursor.encode() bytes or null
+              anchorBlockId, anchorBlockOffset, focusBlockId, focusBlockOffset,
+              user: { name, color },             the caret's label
+              scope }                            which editor on the page; null for the document's own
+```
+Leaving the editor deletes the entry (Tana deletes it when anchor, focus and user are all empty); an entry that is not refreshed
+expires after the store's timeout (Loro's default, 30 s), which is how a closed tab disappears. Canvases use the same channel with
+their own shape (`presenceScope`, `<userId>:<random>` keys), not read by the SDK. Verified live between two SDK sessions: an announced
+entry arrived at the watcher with its label and block, and its removal on close.
 
 ## 3. How the UI mutates a task document
 
