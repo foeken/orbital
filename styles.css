@@ -821,14 +821,9 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .recorder button:hover { background: #3b4144; }
 [data-theme="dark"] .recorder button:disabled { color: #777d80; background: #303436; }
 
-/* Presence (renderer/presence.js): who else is in this document, beside the title, and the row their caret is in.
-   One colour per person (--hue from their user hash); a dimmer avatar is someone here without a caret. */
-.presence { display: flex; gap: 4px; margin: 10px 0 0 12px; flex: none; }
-.presence:empty { display: none; }
-.pavatar { width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600;
-  background: oklch(0.92 0.06 var(--hue)); color: oklch(0.4 0.12 var(--hue)); opacity: .55; user-select: none; }
-.pavatar.me, .pmini.me { outline: 1px dashed oklch(0.6 0.1 var(--hue)); outline-offset: 1px; } /* you, in another tab */
-.pavatar.editing { opacity: 1; box-shadow: 0 0 0 2px oklch(0.7 0.12 var(--hue)); }
+/* Presence (renderer/presence.js): others' carets in this document, and on list rows who is in a document.
+   One colour per person (--hue from their user hash); a dimmer avatar is someone there without a caret. */
+.pmini.me { outline: 1px dashed oklch(0.6 0.1 var(--hue)); outline-offset: 1px; } /* you, in another tab */
 .node > .line:has(> .pcaret) { position: relative; } /* only lines that carry a marker */
 .pcaret { position: absolute; left: -6px; top: 4px; bottom: 4px; width: 2px; border-radius: 1px; background: oklch(0.65 0.15 var(--hue)); }
 .pcaret::after { content: attr(data-name); position: absolute; left: -2px; bottom: 100%; margin-bottom: 1px; font-size: 11px; line-height: 16px; padding: 0 6px; border-radius: 4px 4px 4px 0;
@@ -839,4 +834,3 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
   background: oklch(0.92 0.06 var(--hue)); color: oklch(0.4 0.12 var(--hue)); opacity: .55; user-select: none; }
 .pmini.editing { opacity: 1; box-shadow: 0 0 0 1.5px oklch(0.7 0.12 var(--hue)); }
 [data-theme="dark"] .pmini { background: oklch(0.35 0.07 var(--hue)); color: oklch(0.88 0.08 var(--hue)); }
-[data-theme="dark"] .pavatar { background: oklch(0.35 0.07 var(--hue)); color: oklch(0.88 0.08 var(--hue)); }

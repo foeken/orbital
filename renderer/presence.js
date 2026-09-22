@@ -1,6 +1,6 @@
 'use strict';
-// Presence (issue #14; main/presence.js). Show: everyone else in the document on screen, as avatars beside the title and
-// a coloured marker on the row their caret is in; and on a list, small avatars on every document row someone is in.
+// Presence (issue #14; main/presence.js). Show: everyone else's caret in the document on screen, on the row and at the
+// character it is on; and on a list, small avatars on every document row someone is in.
 // Tell: where your caret is while you edit here, as the block and the exact position, so Tana draws it.
 let presenceDoc = null;           // the page on screen: it gets the heartbeat and your caret
 const presenceRooms = new Set();  // every document whose room is open: the page and the document rows on screen
@@ -92,10 +92,7 @@ function rangeRect(node, i) {
   return box && (box.height || box.top) ? box : null;
 }
 function paintPresence() {
-  let strip = document.getElementById('presence');
-  if (!strip) { strip = document.createElement('div'); strip.id = 'presence'; strip.className = 'presence'; titleEl.parentElement.append(strip); }
   const here = presenceByDoc.get(presenceDoc) || [];
-  strip.replaceChildren(...here.map((p) => avatarEl(p, 'pavatar')));
   for (const el of document.querySelectorAll('.pcaret, .prow')) el.remove();
   for (const line of eachRow('.node > .line')) {
     const item = items.get(line.parentElement.dataset.key);
