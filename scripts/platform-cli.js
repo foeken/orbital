@@ -22,8 +22,8 @@ const { app } = require('electron');
 const { createTanaSession, peerIdentity } = require('../tana-session');
 let createTanaClient, readNode, setTitle, setState, contentText, readOutline, ulid, initDocument, query, pins, audienceMetadata; // loaded lazily: login/whoami work without the SDK
 
-// Share the cookie partition and peer.json with the real app.
-app.setPath('userData', path.join(app.getPath('appData'), 'tana-tasks'));
+// Share the cookie partition and peer.json with the real app, including the move to the app's current name.
+app.setPath('userData', require('../userdata').userDataDir(app.getPath('appData'), { migrate: true }));
 if (app.dock) app.dock.hide();
 
 const [cmd, ...args] = process.argv.slice(2);

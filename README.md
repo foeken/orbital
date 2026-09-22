@@ -61,9 +61,10 @@ background: the access token is refreshed before it expires, every listed docume
 live updates, and the active view is re-queried every 30 seconds and whenever the window regains
 focus.
 
-Local state lives in `~/Library/Application Support/tana-tasks`: the SQLite row cache, cached images,
+Local state lives in `~/Library/Application Support/Orbital`: the SQLite row cache, cached images,
 the sync peer identity and the login partition. Deleting that folder resets the app without touching
-anything in Tana.
+anything in Tana. An install from before the rename keeps its data: the older `tana-tasks` folder is
+moved to the new name the first time the app or the CLI starts (`userdata.js`).
 
 ## Releasing
 
