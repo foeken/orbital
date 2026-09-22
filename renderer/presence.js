@@ -6,14 +6,18 @@ let presenceDoc = null;           // the page on screen: it gets the heartbeat a
 const presenceRooms = new Set();  // every document whose room is open: the page and the document rows on screen
 const presenceByDoc = new Map();  // docId -> [{ peer, userHash, me, name, blockId, editing }] from main (me: your other tab)
 let presenceSent = null;          // the caret last told, as JSON
-const ROW_ROOMS = 40; // ponytail: the first 40 document rows in page order get a room; follow the scroll if lists grow past that
+// Rooms follow the scroll: the document rows on screen and one screen above and below, re-checked as you scroll, and
+// never more than this many at once however tall the window.
+const ROW_ROOMS = 60;
 const presenceHue = (p) => Number(BigInt(p.userHash || 0) % 360n); // one colour per person, the same everywhere
 const initials = (name) => String(name).split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('') || '?';
 
-// the documents drawn as rows right now, in page order
+// the documents drawn as rows on screen or within a screen of it, in page order
 function presenceRowDocs() {
-  const out = [];
+  const out = [], view = outline.parentElement.getBoundingClientRect(), reach = view.height;
   for (const el of outline.querySelectorAll('.node')) {
+    const box = el.getBoundingClientRect();
+    if (box.bottom < view.top - reach || box.top > view.bottom + reach) continue;
     const item = items.get(el.dataset.key), node = item && (referenceTarget(item.node) || item.node);
     if (node && node.kind === 'document' && isRealId(node.id) && !out.includes(node.id)) out.push(node.id);
   }
@@ -26,13 +30,34 @@ function syncPresence() {
   if (page !== presenceDoc) {
     if (presenceDoc) tana.presenceSet(presenceDoc, null);
     presenceDoc = page; presenceSent = null;
-    tana.presenceView(page);
+    viewPresence();
   }
+  syncRooms();
+  paintPresence();
+}
+function syncRooms() {
+  const page = presenceDoc;
   const want = new Set([...(page ? [page] : []), ...presenceRowDocs().filter((id) => id !== page).slice(0, ROW_ROOMS)]);
   for (const id of presenceRooms) if (!want.has(id)) { tana.presenceClose(id); presenceRooms.delete(id); presenceByDoc.delete(id); }
   for (const id of want) if (!presenceRooms.has(id)) { tana.presenceOpen(id); presenceRooms.add(id); }
-  paintPresence();
 }
+// Scrolling brings other rows into reach: their rooms open, the ones scrolled far away close.
+let presenceScroll = null;
+outline.parentElement.addEventListener('scroll', () => { if (!presenceScroll) presenceScroll = setTimeout(() => { presenceScroll = null; if (tana.presenceOpen) { syncRooms(); paintPresence(); } }, 200); }, { passive: true });
+// The viewing heartbeat, as Tana sends it: for the page on screen, only while the window is visible and you were active
+// (a key, the mouse, a scroll) in the last minute. Main sends it every 10 s while a page is named, and stops at null.
+const ACTIVE_MS = 60000;
+let lastActive = Date.now(), presenceViewed;
+function viewPresence() {
+  if (!tana.presenceView) return;
+  const page = document.visibilityState === 'visible' && Date.now() - lastActive < ACTIVE_MS ? presenceDoc : null;
+  if (page === presenceViewed) return;
+  presenceViewed = page;
+  tana.presenceView(page);
+}
+for (const type of ['keydown', 'mousedown', 'mousemove', 'wheel']) document.addEventListener(type, () => { const idle = Date.now() - lastActive >= ACTIVE_MS; lastActive = Date.now(); if (idle) viewPresence(); }, { passive: true, capture: true });
+document.addEventListener('visibilitychange', viewPresence);
+setInterval(viewPresence, 10000); // notices the minute of inactivity running out
 function avatarEl(p, cls) {
   const a = document.createElement('span');
   a.className = cls + (p.editing ? ' editing' : '') + (p.me ? ' me' : '');

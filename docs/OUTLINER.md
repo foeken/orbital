@@ -736,7 +736,7 @@ Expanded documents show their type fields above their body children, using the s
 
 ### Presence: who else is here (issue #14)
 
-Every document on screen has its presence room open: the zoomed page, and the first 40 document rows listed (renderer/presence.js
+Every document on screen has its presence room open: the zoomed page, and the document rows in reach of the scroll (renderer/presence.js
 follows both after every render; main/presence.js keeps one counted room per document over sdk/presence.js). Only the page gets
 the viewing heartbeat. A listed document someone is in shows their small avatars at the end of its row (three, then +N). Everyone else in the page is an
 avatar beside the title: initials in a colour of their own (from their user hash), full strength while they have a caret in
@@ -748,4 +748,6 @@ Where your caret is goes the other way: while it is in a block of this page, you
 the same positions as Loro cursors (content.cursorAt, on the text run the caret is in), which is what Tana draws an exact caret or
 selection from. It follows every caret move, at most one message per 150 ms, and is cleared when the caret leaves the outline, the
 window loses focus or the page changes. Only a block counts: the title and a draft row are not blocks yet.
-Not yet: sending the heartbeat only while the window is visible and you are active, and rooms for rows scrolled past the first 40.
+The viewing heartbeat goes to the page on screen only while the window is visible and you were active (a key, the mouse, a
+scroll) in the last minute, as Tana sends it. Rooms for document rows follow the scroll: the rows on screen and one screen above
+and below, re-checked 200 ms after scrolling, at most 60 at once.
