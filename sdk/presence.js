@@ -24,18 +24,32 @@ function readEntry(peer, s) {
     anchor: s.anchor || null, focus: s.focus || null };
 }
 
+// One listener per connection, routing each ephemeral frame to the rooms of its document: a room per listener would pass
+// Node's 10-listener warning as soon as a list has a room per row, and costs every room every frame.
+const routes = new WeakMap(); // sync -> Map(documentId -> Set(room))
+function route(sync) {
+  let byDoc = routes.get(sync);
+  if (byDoc) return byDoc;
+  byDoc = new Map();
+  routes.set(sync, byDoc);
+  sync.on('ephemeral', (id, data) => { for (const room of byDoc.get(id) || []) room.onMessage(data); });
+  sync.on('connected', () => { for (const rooms of byDoc.values()) for (const room of rooms) room.onConnected(); });
+  return byDoc;
+}
+
 // Opens a document's presence channel. Emits 'change' { added, updated, removed } (peer ids) whenever someone else's
 // entry arrives, moves, leaves or expires. { viewing: true } also sends the viewing heartbeat while open.
 async function openPresence(sync, documentId, { timeout = TIMEOUT_MS, viewing = false } = {}) {
   const store = new EphemeralStore(timeout), handle = new EventEmitter(), me = String(sync.peerId);
   let local = null, refresh = null, beat = null;
-  const onMessage = (id, data) => { if (id === documentId && data && data.length) store.apply(data); };
+  const room = { onMessage: (data) => { if (data && data.length) store.apply(data); }, onConnected: () => {} };
   const unsubscribe = store.subscribe((e) => { if (e.by !== 'local') handle.emit('change', { added: e.added, updated: e.updated, removed: e.removed, by: e.by }); });
   const offLocal = store.subscribeLocalUpdates((bytes) => { sync.sendEphemeral(documentId, bytes); });
   // after a reconnect the others no longer have our entry: set it again, which sends it
-  const onConnected = () => { if (local) store.set(me, local); if (viewing) sync.viewingHeartbeat(documentId); };
-  sync.on('ephemeral', onMessage);
-  sync.on('connected', onConnected);
+  room.onConnected = () => { if (local) store.set(me, local); if (viewing) sync.viewingHeartbeat(documentId); };
+  const byDoc = route(sync);
+  if (!byDoc.has(documentId)) byDoc.set(documentId, new Set());
+  byDoc.get(documentId).add(room);
   await sync.subscribeEphemeralChannel(documentId);
   if (viewing) { sync.viewingHeartbeat(documentId); beat = setInterval(() => sync.viewingHeartbeat(documentId), HEARTBEAT_MS); }
 
@@ -63,7 +77,7 @@ async function openPresence(sync, documentId, { timeout = TIMEOUT_MS, viewing = 
   handle.close = async () => {
     handle.clearLocal();
     clearInterval(beat);
-    sync.off('ephemeral', onMessage); sync.off('connected', onConnected);
+    const rooms = byDoc.get(documentId); rooms.delete(room); if (!rooms.size) byDoc.delete(documentId);
     unsubscribe(); offLocal();
     await sync.unsubscribeEphemeralChannel(documentId);
     store.destroy();

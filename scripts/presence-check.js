@@ -58,6 +58,10 @@ const ME = peer(1234567, 1), MY_OTHER_TAB = peer(1234567, 2), OTHER = peer(76543
   them.apply(sync.sent.at(-1)[1]);
   assert.equal(them.getAllStates()[ME], undefined, 'closing takes our entry away');
   assert.deepEqual(sync.calls.at(-1), ['unsub', DOC]);
+  // one listener per connection however many rooms are open (a list opens one per row)
+  const many = await Promise.all(Array.from({ length: 25 }, (_, i) => openPresence(sync, 'tana:text:01row' + String(i).padStart(22, '0'))));
+  assert.deepEqual([sync.listenerCount('ephemeral'), sync.listenerCount('connected')], [1, 1], 'rooms share the connection listeners');
+  await Promise.all(many.map((r) => r.close()));
   const after = sync.sent.length; sync.emit('ephemeral', DOC, remote(OTHER, { user: { name: 'Late' } }).out[0]); sync.emit('connected');
   assert.equal(sync.sent.length, after, 'a closed handle hears and sends nothing');
 
