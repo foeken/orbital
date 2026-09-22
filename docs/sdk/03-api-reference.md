@@ -163,6 +163,8 @@ All operations run inside `document.transact`, so each is one undo step and one 
 
 `cursorAt(document, blockId, offset)` → a Loro `Cursor` at that character offset in the block's text, counted as the outline shows it (a mention as its label, a line break as one): on the text run it falls in, or on the children list at a mention; past the end, after the last item; null for an unknown block. How presence shares an exact caret (`sdk/presence.js` `setLocal`). Offsets are Loro unicode positions, so astral characters before the caret shift it by one each.
 
+`cursorOffset(document, cursorOrBytes)` → `{ blockId, offset }`: where a Loro cursor (or the bytes presence carries) is now, in the outline's character count. A cursor is anchored to a character, so this follows text typed since it was set, which a block offset does not; null when its container is not in this document yet.
+
 `charOffset(document, blockId, position)` / `blockOffset(document, blockId, offset)`: convert a caret between Tana's ProseMirror position from the start of the block (presence `anchorBlock`/`focusBlock` offsets: a mention or a line break is one position) and the outline's character offset (a mention is its label). A caret inside a mention's label maps to just before it; null for an unknown block.
 
 ## `sdk/fields.js` — typed fields ("attributes")

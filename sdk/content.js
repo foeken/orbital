@@ -257,6 +257,43 @@ function blockOffset(document, id, offset) { // the outline's character offset -
   return position;
 }
 
+// The other way round: where a Loro Cursor (or its bytes, as presence carries them) is now, as { blockId, offset } in
+// the outline's character count. A cursor is anchored to a character, so it follows edits: text typed before it moves
+// it, which a block offset taken when it was set does not. null when its container is not in this document (yet).
+function cursorOffset(document, cursor) {
+  const { Cursor } = require('loro-crdt');
+  let c = cursor, pos;
+  try { if (c instanceof Uint8Array) c = Cursor.decode(c); pos = c && document.loro.getCursorPos(c); } catch { return null; }
+  if (!pos) return null;
+  const cid = c.containerId();
+  let found = null;
+  const walk = (list) => {
+    for (let i = 0; list && i < list.length && !found; i++) {
+      const b = list.get(i);
+      if (!b || !b.kind || b.kind() !== 'Map') continue;
+      const inl = kids(b), id = blockId(b);
+      if (inl && id) {
+        let chars = 0;
+        if (inl.id === cid) { for (let j = 0; j < pos.offset && j < inl.length; j++) chars += width(inl.get(j)); found = { blockId: id, offset: chars }; break; }
+        for (let j = 0; j < inl.length; j++) {
+          const x = inl.get(j);
+          if (x.kind() === 'Text' && x.id === cid) { found = { blockId: id, offset: chars + pos.offset }; break; }
+          chars += width(x);
+        }
+        if (found) break;
+      }
+      walk(inl);
+    }
+  };
+  walk(kids(document.content));
+  return found;
+}
+// how many characters an inline item is in the outline: text its length, a mention its label, a line break one
+function width(x) {
+  if (x.kind() === 'Text') return x.length;
+  return isMention(x) ? String(x.get('attributes').get('label') || '').length : name(x) === 'hardBreak' ? 1 : 0;
+}
+
 // ---- build / copy
 
 function create(list, index, nodeName) {
@@ -786,4 +823,4 @@ function insertMention(document, { uri, label } = {}, { parentId = null, afterId
   return out;
 }
 
-module.exports = { cursorAt, charOffset, blockOffset, readOutline, assignBlockIds, setText, inlineGroups, writeInline, styleDoc, setBlockType, insertDivider, insertAfter, insertBefore, insertChild, insertMention, split, remove, removeMany, indent, indentMany, outdent, outdentMany, move, moveMany, moveTo, toggleCheckbox, newId, BLOCK_TYPES };
+module.exports = { cursorAt, cursorOffset, charOffset, blockOffset, readOutline, assignBlockIds, setText, inlineGroups, writeInline, styleDoc, setBlockType, insertDivider, insertAfter, insertBefore, insertChild, insertMention, split, remove, removeMany, indent, indentMany, outdent, outdentMany, move, moveMany, moveTo, toggleCheckbox, newId, BLOCK_TYPES };

@@ -123,6 +123,18 @@ const ME = peer(1234567, 1), MY_OTHER_TAB = peer(1234567, 2), OTHER = peer(76543
     assert.deepEqual([0, 3, 4, 5, 10, 99].map((p) => content.charOffset(page, b3, p)), [0, 3, 6, 7, 12, 12], 'Tana position -> character');
     assert.deepEqual([0, 3, 4, 6, 8, 12].map((o) => content.blockOffset(page, b3, o)), [0, 3, 3, 4, 6, 10], 'character -> Tana position (inside a mention: before it)');
     assert.equal(content.charOffset(page, 'nope', 1), null);
+    // Tana does not re-send while you type on (its cursor is anchored to a character), so its block offset goes stale;
+    // the cursor bytes are read instead, and an edit to the document redraws without any presence message
+    const typing = remote(OTHER, { user: { name: 'Stan' }, anchor: content.cursorAt(page, b3, 8).encode(), anchorBlockId: b3, anchorBlockOffset: 0, focusBlockId: b3, focusBlockOffset: 0 });
+    wire.emit('ephemeral', DOC, typing.out[0]);
+    const heard = () => told.filter((x) => x[0] === 'presence:changed').at(-1)[2].find((p) => p.name === 'Stan');
+    assert.deepEqual([heard().blockId, heard().offset], [b3, 8], 'the cursor, not the stale offset 0');
+    const run = page.content.get('children').get(0).get('children').get(2);
+    page.transact(() => run.insert(1, 'XX'));
+    wire.emit('change', DOC, { origin: 'remote' });
+    assert.equal(heard().offset, 10, 'text typed before it moves it, on the edit alone');
+    assert.deepEqual(content.cursorOffset(page, content.cursorAt(page, b3, 4).encode()), { blockId: b3, offset: 3 }, 'a cursor at a mention reads as just before it');
+    assert.equal(content.cursorOffset(page, new Uint8Array([1, 2, 3])), null, 'bytes that are no cursor here: null');
     presence.set(DOC, null); await tick();
     them.apply(sent.filter((s) => s[0] === 'send').at(-1)[2]);
     assert.equal(them.getAllStates()[ME], undefined, 'leaving the outline takes the caret away');

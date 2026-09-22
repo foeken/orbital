@@ -739,8 +739,10 @@ Expanded documents show their type fields above their body children, using the s
 The page on screen has its presence room open (renderer/presence.js
 follows the zoom after every render; main/presence.js keeps one counted room per document over sdk/presence.js), with the
 viewing heartbeat. Lists show no presence. Each person has a colour of their own (from their user hash). Their caret is drawn where Tana draws it: a thin line in that colour between the characters it is on, with their full name on it,
-as Tana labels one, below the caret instead when the row is too near the top of the scroll area to fit it above. Tana sends the position in ProseMirror units, where a mention is one; main converts it to the
-outline's count, where a mention is its label (content.charOffset), and your own caret goes out the other way (blockOffset).
+as Tana labels one, below the caret instead when the row is too near the top of the scroll area to fit it above. The position is read from the entry's Loro cursor (content.cursorOffset), which is anchored to a character and so stays right as
+text is typed: Tana only re-sends an entry when that cursor changes, so its block offset stays where the caret entered a node
+(0 in a new one), and an edit to the document redraws the carets without any presence message. The block offset (ProseMirror
+units, a mention is one; content.charOffset) is the fallback, and your own caret goes out in those units too (blockOffset).
 Without a position yet, the row gets the thin bar on its left instead. This Orbital is never shown; your own other tabs and devices are, under your name, which is also how to try presence alone: open
 the same node in Tana.
 

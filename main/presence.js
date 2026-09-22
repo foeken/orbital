@@ -4,7 +4,7 @@
 // counted per holder, closed when the last one lets go. This connection is never shown (it is you, here); your own
 // other tabs and devices are, marked as you, which is also how presence can be tried alone: open the node in Tana.
 const { openPresence, userHashOf, HEARTBEAT_MS } = require('../sdk/presence');
-const { cursorAt, charOffset, blockOffset } = require('../sdk/content');
+const { cursorAt, cursorOffset, charOffset, blockOffset } = require('../sdk/content');
 const { S, send, report } = require('./state');
 
 const rooms = new Map(); // docId -> { count, client, handle: Promise<handle>, sent }
@@ -15,11 +15,15 @@ const myName = () => { const u = (S.me && S.me.user) || {}; return [u.firstName,
 function peersOf(handle, docId) {
   const mine = S.client ? userHashOf(S.client.sync.peerId) : null, doc = S.client && S.client.sync.getDocument(docId);
   return handle.peers().map((p) => {
+    // The Loro cursor first: it is anchored to a character, so it is right after text typed since it was set. Tana only
+    // re-sends an entry when that cursor changes, so its block offset stays where the caret entered a node (0 in a new
+    // one) while you type on. The block offset is the fallback: no cursor, or its container not synced here yet.
     const at = p.focusBlock || p.anchorBlock;
-    let offset = null;
-    try { offset = at && doc ? charOffset(doc, at.blockId, at.offset) : null; } catch { offset = null; }
+    let where = null;
+    try { where = doc && (p.focus || p.anchor) ? cursorOffset(doc, p.focus || p.anchor) : null; } catch { where = null; }
+    if (!where && at && doc) { try { const offset = charOffset(doc, at.blockId, at.offset); where = offset == null ? null : { blockId: at.blockId, offset }; } catch { where = null; } }
     return { peer: p.peer, userHash: p.userHash, me: p.userHash === mine, name: (p.user && p.user.name) || 'Someone',
-      blockId: at ? at.blockId : null, offset, editing: p.hasCursor };
+      blockId: where ? where.blockId : at ? at.blockId : null, offset: where ? where.offset : null, editing: p.hasCursor };
   });
 }
 // Resolves to whether the room is open, so the renderer can ask again: before the connection exists (a launch that
@@ -30,15 +34,26 @@ function open(docId) {
   if (room && room.client !== S.client) { close(docId, true); room = null; } // a new login: the old connection's room is gone
   if (room) { room.count++; return room.handle.then(() => true, () => false); }
   room = { count: 1, client: S.client, sent: '' };
+  hookEdits(S.client);
   room.handle = openPresence(S.client.sync, docId).then((handle) => {
-    const tell = () => send('presence:changed', docId, peersOf(handle, docId));
-    handle.on('change', tell);
-    tell();
+    let empty = false;
+    // said on every presence change, and on every edit of the document while anyone is in it (hookEdits)
+    room.tell = () => { const peers = peersOf(handle, docId); if (!peers.length && empty) return; empty = !peers.length; send('presence:changed', docId, peers); };
+    handle.on('change', room.tell);
+    room.tell();
     return handle;
   });
   room.handle.catch((e) => { if (rooms.get(docId) === room) rooms.delete(docId); report(e); });
   rooms.set(docId, room);
   return room.handle.then(() => true, () => false);
+}
+// Typing moves a caret without a presence message (its cursor is anchored to a character), and a new node's caret can
+// arrive before the node does: so an edit to a document with a room redraws its carets. One listener per connection.
+const hooked = new WeakSet();
+function hookEdits(client) {
+  if (hooked.has(client)) return;
+  hooked.add(client);
+  client.sync.on('change', (id) => { const room = rooms.get(id); if (room && room.tell) room.tell(); });
 }
 function close(docId, all = false) {
   const room = rooms.get(docId);
