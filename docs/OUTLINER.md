@@ -383,6 +383,24 @@ screen; the set of sections shown whole is session state (`trackingShown`), like
 section is work with your name on it, where a row that has not moved in weeks is precisely the one to see, so none of
 them is trimmed.
 
+### The Pinned section
+
+**Pinned** sits under My inbox and above Mine in Group by Responsibility and holds every task you pinned to a date,
+whoever has it and whatever its state. Like Agent it decides the section on its own (Agent still wins), so a pinned
+task is never listed a second time elsewhere. The dates come from one `api.pinDates()` read (main `pinnedDates` over
+`sdk/pins.js datePins`, the pin-map), fetched beside `api.pinIds()` in `loadPinned` and kept as `datePinsById`. A row
+in this section starts its grey line with the days it is pinned to ("Pinned to Today · 2026-09-22", `pinnedOn`), which
+`rowSig` carries so a reused row picks the day up or drops it.
+
+### Pin to date
+
+⌘K **Pin to date…** (`id: pinToDate`) opens a one-field page (`palMode = 'pinDate'`) that reads the typed words as a
+day with `parseDay` (renderer/document.js) and shows the day it read before Enter: today/tomorrow, weekdays (the next
+one after today), "in 3 days"/2w/1 month, next week (the coming Monday), ISO dates, day-first numbers and day + month
+names, a date without a year being the next time it comes round. A fixed parser rather than a model, so the answer
+is instant, needs no key and never changes between two reads of the same words. Enter is the same `api.pin(id,
+'today', date)` the today and tomorrow rows write.
+
 ## Addendum: pasting a Tana node link
 
 - **Pasting a Tana node link**: clipboard text that is exactly one Tana node link — a bare `tana:<kind>:<ulid>` or a https home.tana.inc url ending in the url-encoded uri, the link Copy link produces — is inserted into a block as a mention segment instead of as text, through the same `linkTo` path "@" uses (selection replaced, surrounding text kept, caret after the chip, one `api.setText`). `tanaNodeUri` (renderer/segments.js) is the only parser for it and rejects anything else, including prose that merely contains a link, so every other paste stays the browser's. The title is read before anything is written, so an unreadable link leaves the row untouched and shows the error. A draft row is created first, by the same `materialise` the first typed character uses, and the reference is written into the row it became: the title is read before the create, so an unresolvable link creates nothing, a failed create leaves the row a draft with nothing written, and a draft already being created is left to the ordinary paste. One create, one write, and no url text in between. Titles (plain strings in Tana), native `embed` reference rows (`setText` refuses them), images and dividers paste as text.

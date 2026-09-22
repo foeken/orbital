@@ -267,10 +267,10 @@ function loadSensitive() {
 const isPinned = (id) => !!pinnedIds && pinnedIds.has(id);
 function loadPinned(force) {
   if (!tana.pinIds || (pinnedLoading && !force)) return;
-  pinnedLoading = tana.pinIds().then((ids) => {
-    const next = new Set(ids);
-    if (pinnedIds && next.size === pinnedIds.size && [...next].every((id) => pinnedIds.has(id))) return;
-    pinnedIds = next;
+  pinnedLoading = Promise.all([tana.pinIds(), tana.pinDates ? tana.pinDates() : {}]).then(([ids, dates]) => {
+    const next = new Set(ids), nextDates = new Map(Object.entries(dates || {}));
+    if (pinnedIds && next.size === pinnedIds.size && [...next].every((id) => pinnedIds.has(id)) && JSON.stringify([...nextDates]) === JSON.stringify([...datePinsById])) return;
+    pinnedIds = next; datePinsById = nextDates;
     renderSoon();
   }, () => {}); // not connected yet: the next read asks again, and until then a row simply carries no mark
 }

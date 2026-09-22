@@ -90,7 +90,8 @@ const withShims = (src) => {
   // stub returning '' would quietly answer for it. The last guard stops the recursion its own source would cause.
   if (/\b(displayOn|displayKeys|subtextOf)\b/.test(src) && !/const displayKeys =/.test(src) && !/function subtextOf\(/.test(src)) {
     src = functionSource('agoText') + '\n' + functionSource('subtextOf') + '\n' + src;
-    src = "globalThis.displayKeys ??= () => ['status', 'assigned', 'updated']; globalThis.displayOn ??= (id) => globalThis.displayKeys().includes(id);\n" + src;
+    // pinnedOn needs the grouping (views.js) and the date pins (state.js); no row here is in a Pinned section
+    src = "globalThis.displayKeys ??= () => ['status', 'assigned', 'updated']; globalThis.displayOn ??= (id) => globalThis.displayKeys().includes(id); globalThis.pinnedOn ??= () => '';\n" + src;
   }
   // The watch-state cache lives in state.js, which most slices do not take. A slice that only clears it — a sharing
   // change can flip whether a node is watched — should not fail for want of the map itself.
@@ -2627,6 +2628,8 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     const taskMetaById = new Map([['t1', { assignees: ['sam'], watched: true }], ['t2', { assignees: ['me'] }], ['t4', { assignees: ['tana:user-profile:ghost'], watched: false }], ['t5', { assignees: ['me'] }], ['t6', { assignees: [] }], ['t7', { assignees: [] }], ['t8', { assignees: ['me'] }], ['t9', { assignees: ['me'] }], ['t10', { assignees: ['me'] }], ['t11', { assignees: ['sam'], watched: false }], ['ta1', { assignees: ['tana:user-profile:ghost'] }], ['ta2', { assignees: ['me'] }], ['tr1', { assignees: ['sam'], watched: true }], ['tr2', { assignees: ['sam'], watched: true }], ['tr3', { assignees: ['sam'], watched: true }], ['tr4', { assignees: ['sam'], watched: true }]]);
     // the app-local agent marks the badge is drawn from (renderer/state.js), not Tana assignees
     const codexIds = new Set(['ta1', 'ta2', 'ta3']);
+    // your date pins (renderer/state.js, api.pinDates): tp1 is Sam's task on a third person, pinned to a day
+    const datePinsById = new Map([['tp1', ['2026-09-23']]]);
     // loadTaskMeta is the real one (renderer/tasks.js): Responsibility asks for the metadata it is missing, since a
     // row it filters out never reaches the screen to ask for itself
     const asked = [], taskMetaFailed = new Map(), taskMetaLoading = new Set(), connected = true, isRealId = () => true;
@@ -2703,6 +2706,10 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     'Responsibility runs Unassigned, Tracking, Agent, then your own work by its state — My inbox, Mine, My completed, My later — and ends with what somebody else handed you');
   assert.deepEqual(titles(agents, 'responsibility'), [['Agent', ['ta1', 'ta2', 'ta3']]],
     'a node handed to the local agent is in the Agent section and in no other: whoever Tana has it assigned to, and even with no metadata read yet — asking for it by name is enough to list it');
+  const pinnedTask = { id: 'tp1', icon: 'task', tags: [], createdBy: 'sam' };
+  assert.deepEqual(titles([...responsibility, pinnedTask], 'responsibility').map(([title, ids]) => title + ':' + ids.join()).slice(2, 5),
+    ['My inbox:t8', 'Pinned:tp1', 'Mine:t10'],
+    'a task pinned to a day sits in Pinned, under My inbox and above Mine, whoever has it and with no metadata read');
   assert.deepEqual(titles(responsibility, 'responsibility'),
     [['Unassigned', ['t6']], ['Tracking', ['t1']], ['My inbox', ['t8']], ['Mine', ['t10']], ['My completed', ['t2']], ['My later', ['t9']], ['Assigned by others', ['t5']]],
     'and with nothing handed to the agent the other sections are exactly as they were');
@@ -2715,7 +2722,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     'a task you made and hold sits in exactly one of the four state sections, in the order the Status menu lists them');
   assert.deepEqual([owned({ done: 1 }), owned({ done: 0 }), owned({})], ['My completed', 'Mine', 'Mine'],
     'and a row carrying only the older done flag reads the same way, while one with no state at all is under way');
-  assert.deepEqual(titles([...responsibility, ...agents], 'responsibility').map(([title]) => title), plain(api.RESPONSIBILITY),
+  assert.deepEqual(titles([...responsibility, ...agents, pinnedTask], 'responsibility').map(([title]) => title), plain(api.RESPONSIBILITY),
     'and nothing else is filed: a row you neither made nor hold, and one whose assignees have not arrived, are left out rather than collected under a heading');
   // Every section holds rows: the grouping's leftovers are not listed at all, under no heading and with no note.
   api.set('tasks', 'responsibility', 'default');
@@ -2950,6 +2957,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     const taskMetaById = new Map(), taskMetaLoading = new Set(), open = new Map(), pending = new Map(), members = null;
     const sensitiveHidden = () => false;
     const isPinned = () => false;
+    const pinnedOn = () => '';
     ${functionSource('rowSig')}
     // what a row shows is one of the things it is built from, so changing that must change the signature
     ({ sig: rowSig, display: (keys) => { globalThis.displayKeys = () => keys; } });
@@ -3541,6 +3549,18 @@ async function runHiddenItemsCheck() {
 // Edit pins: the page that says where this document is pinned and takes those pins off again, and the marks every
 // row draws from one api.pinIds read (renderer/document.js, renderer/nodes.js).
 async function runEditPinsCheck() {
+  // Pin to date reads the typed words with parseDay (renderer/document.js), from a fixed Tuesday 22 September 2026
+  const parseDay = vm.runInNewContext(sourceBetween('const WEEKDAYS =', 'const PIN_DATE_GROUP') + '; parseDay');
+  const tuesday = new Date(2026, 8, 22, 12);
+  const read = (text) => parseDay(text, tuesday);
+  assert.deepEqual(['today', 'Tomorrow', 'sunday', 'next Sunday', 'sun', 'tuesday', 'in 3 days', '2w', 'next week'].map(read),
+    ['2026-09-22', '2026-09-23', '2026-09-27', '2026-09-27', '2026-09-27', '2026-09-29', '2026-09-25', '2026-10-06', '2026-09-28'],
+    'a weekday is the next one after today, so the day it is today reads as a week on; next week is the coming Monday');
+  assert.deepEqual(['12 oct', 'oct 12th', '12/10', '12-10-2027', '22 sep', '15 sep', '1 jan', '2026-12-01'].map(read),
+    ['2026-10-12', '2026-10-12', '2026-10-12', '2027-10-12', '2026-09-22', '2027-09-15', '2027-01-01', '2026-12-01'],
+    'a day and month are read day first, and without a year it is the next time that day comes round');
+  assert.deepEqual(['', 'blah', '31/2', '13/13', 'tu'].map(read), [null, null, null, null, null], 'anything that is not a day reads as none');
+  assert.equal(parseDay('in 1 month', new Date(2027, 0, 31, 12)), '2027-02-28', 'a month on from the 31st lands on the last day of a shorter month');
   const api = vm.runInNewContext(`
     const calls = [];
     let state = { sidebar: false, dates: [] }, ids = ['doc'];

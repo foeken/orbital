@@ -19,7 +19,7 @@ const { cachedNodeHue, graphRow, members, rememberNodeHue, rememberType, toNode 
 const { accessContext, chatOutline, codexIds, createDocument, creationOptions, creatorOf, discussWith, documentAction, history, info, linkShared, metaSig, moveBlock, moveTarget, mut, mutTasks, notifyOn, notifyState, referenceIn, setCodex, setNotify, onChange, op, outlineWithReferences, sensitiveIds, setSensitive, setType, setTypeHue, typeChoices } = require('./main/documents');
 const { callOf, changesOf, pathOf, related, searchChildren, searchPreview, spaceChildren, summaryChanges, summaryUri } = require('./main/related');
 const { hiddenRules, inboxCount, listFilter, mcpHidden, preset, refresh, search, searchCreate, searchList, searchTitle, setHidden, setMcpHidden, setViewFilter, start, viewFilter, viewRows } = require('./main/views');
-const { nodePin, pinState, pinTree, pinned, pinnedUris, setPin, todayNode, weekNode, weekTitle } = require('./main/pins');
+const { nodePin, pinState, pinTree, pinned, pinnedDates, pinnedUris, setPin, todayNode, weekNode, weekTitle } = require('./main/pins');
 const { image } = require('./main/images');
 const icons = require('./main/icons');
 const settings = require('./main/settings');
@@ -331,6 +331,7 @@ ipcMain.handle('block:toggleCheckbox', (_e, id, nodeId) => mut(id, (doc) => { co
 ipcMain.handle('pins:list', () => pinned());
 ipcMain.handle('pins:state', (_e, id) => pinState(id));
 ipcMain.handle('pins:ids', () => pinnedUris()); // which documents carry a pin at all, for the mark on a row
+ipcMain.handle('pins:dates', () => pinnedDates()); // { uri: ['YYYY-MM-DD'] }, for the Pinned section
 ipcMain.handle('pins:pin', (_e, id, target, date) => setPin(id, target, true, date));
 ipcMain.handle('pins:unpin', (_e, id, target, date) => setPin(id, target, false, date));
 ipcMain.handle('pins:pinTo', (_e, hubId, uri) => nodePin(hubId, uri, true)); // pin a document on a meeting/space

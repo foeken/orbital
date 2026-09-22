@@ -20,7 +20,7 @@ const docRow = (n, hint, run) => ({ node: n, icon: n.icon, label: n.text ?? n.ti
 // The order of the rows about the node you are on: where it goes (open it, unfold it), what it is (done, status,
 // assignee), where it lives (pins, the date nodes, its space), what it looks like (image, visibility, sensitivity),
 // its link, and last the one destructive row. Rows without an id carry a `rank` from this list instead.
-const NODE_ROW_ORDER = ['zoomIn', 'expand', 'collapse', 'toggleDone', 'status', 'setType', 'discussWith', 'setIcon', 'setHue', 'assign', 'assignTo', 'codex', 'codexOpen', 'pinToday', 'pinTomorrow', 'pinToMeeting', 'pinToSelectedMeeting', 'editPins', 'addToday', 'addTomorrow', 'addWeek', 'move', 'moveLibrary', 'visibility', 'notify', 'sensitive', 'copyLink', 'exportPdf', 'delete'];
+const NODE_ROW_ORDER = ['zoomIn', 'expand', 'collapse', 'toggleDone', 'status', 'setType', 'discussWith', 'setIcon', 'setHue', 'assign', 'assignTo', 'codex', 'codexOpen', 'pinToday', 'pinTomorrow', 'pinToDate', 'pinToMeeting', 'pinToSelectedMeeting', 'editPins', 'addToday', 'addTomorrow', 'addWeek', 'move', 'moveLibrary', 'visibility', 'notify', 'sensitive', 'copyLink', 'exportPdf', 'delete'];
 const DOC_KIND = /^tana:text:/; // the Discussion Task type applies to documents, so a meeting is not offered that row
 const nodeRank = (r) => { const i = NODE_ROW_ORDER.indexOf(r.rank || r.id); return i < 0 ? NODE_ROW_ORDER.length : i; };
 const VIEW_ORDER = ['inbox', 'today', 'week', 'library'];
@@ -118,6 +118,12 @@ function paletteRows(q, typed = q) {
     // pinned, and pinInfo.dates is what answers that; main defaults to today when no date comes with the call.
     const tm = localDate(1), tmPinned = pinInfo.dates.includes(tm);
     rows.push({ rank: 'pinTomorrow', group: docGroup, icon: 'pinDate', label: tmPinned ? 'Unpin from tomorrow' : 'Pin to tomorrow', run: () => pinAction(tmPinned ? 'unpin' : 'pin', 'today', tm) });
+  }
+  // Any other day, typed in words on a page of its own (renderer/document.js parseDay). Listed whenever a real node
+  // is on screen, so ⇧⌘K can record a key against it.
+  if (palDoc && tana.pin && isRealId(palDoc.id)) {
+    const doc = palDoc;
+    rows.push({ id: 'pinToDate', group: docGroup, icon: 'pinDate', label: 'Pin to date\u2026', hint: 'sunday, in 3 days, 12 oct', keepOpen: true, run: () => openPinDatePalette(doc) });
   }
   // Pin this node onto the meeting I am in, through the same event pin the quick-add panel writes (docs/QUICK-ADD.md)
   // and the sidebar reads back under Pinned. The row is listed whenever a real node is on screen, so ⇧⌘K can record
@@ -345,7 +351,7 @@ function openCommandPalette() {
   palInput.placeholder = 'Run a command'; palInput.value = ''; renderPalette(); palInput.focus();
 }
 function backPalette() {
-  const SECOND_LEVEL = new Set(['setType', 'trash', 'discuss', 'setIcon', 'setHue', 'openaiKey', 'pins', 'create', 'hidden', 'hosts']); // pages opened from the command page
+  const SECOND_LEVEL = new Set(['setType', 'trash', 'discuss', 'setIcon', 'setHue', 'openaiKey', 'pins', 'pinDate', 'create', 'hidden', 'hosts']); // pages opened from the command page
   if (palMode === 'pill') openCommandPalette();
   // Escape on the prompt page cancels the whole thing rather than stepping back a level: the page was opened to
   // answer one question, and abandoning that question is abandoning the assignment. Nothing is written either way.
@@ -874,6 +880,7 @@ function renderPalette() {
   else if (palMode === 'visibilityPeople') palRows = visibilityPeopleRows(q.toLowerCase());
   else if (palMode === 'hidden') palRows = hiddenRows(q);
   else if (palMode === 'pins') palRows = editPinRows(q.toLowerCase());
+  else if (palMode === 'pinDate') palRows = pinDateRows(q);
   else if (palMode === 'pinMeeting') palRows = meetingPickRows(q.toLowerCase());
   else if (palMode === 'setType') palRows = typeRows(q.toLowerCase());
   else if (palMode === 'discuss') palRows = discussRows(q);

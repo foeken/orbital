@@ -43,9 +43,13 @@ const FALLBACK = { status: 'No status', assignee: 'Unassigned', updated: 'Older'
 // effective answer: an explicit Cmd+K choice, else the default rule). Silencing a task you handed over takes it out
 // of the section and out of the list, like every other row this grouping has no section for.
 const MINE_STATES = { proposed: 'My inbox', open: 'Mine', closed: 'My completed', not_now: 'My later' };
-const RESPONSIBILITY = ['Unassigned', 'Tracking', 'Agent', 'My inbox', 'Mine', 'My completed', 'My later', 'Assigned by others'];
+// Pinned: a task you pinned to a day is one you asked to see then, whoever has it and whatever its state, so like
+// Agent it decides the section on its own (after Agent, which stays first). Date pins are personal (the pin-map), so
+// nobody else's pins land here. It sits under My inbox and above Mine, and its rows say the day (pinnedOn below).
+const RESPONSIBILITY = ['Unassigned', 'Tracking', 'Agent', 'My inbox', 'Pinned', 'Mine', 'My completed', 'My later', 'Assigned by others'];
 function responsibilityOf(n) {
   if (codexIds.has(n.id)) return 'Agent'; // the local mark the badge is drawn from (renderer/nodes.js loadCodex)
+  if (isTask(n) && datePinsById.has(n.id)) return 'Pinned';
   const uri = me() && me().id, meta = taskMetaById.get(n.id);
   if (!uri) return null; // the member list has not landed, so "you" is not known yet
   if (!meta) { loadTaskMeta(n.id); return null; } // it takes its section once the answer arrives
@@ -240,10 +244,18 @@ function agoText(iso) {
   }
   return '';
 }
+// The days a row in the Pinned section is pinned to, first in its grey line: "Pinned to Today · 2026-09-22". Only in
+// that section, where the day is why the row is there; groupKey so a row held in place elsewhere does not claim it.
+function pinnedOn(n) {
+  const dates = datePinsById.get(n.id);
+  if (!dates || groupBy() !== 'responsibility' || groupKey(n, 'responsibility') !== 'Pinned') return '';
+  return 'Pinned to ' + [...dates].sort().map(pinDateLabel).join(', ');
+}
 // The grey line under a title: when it was made, when it last moved, where it lives — in that order, bullet separated.
 // "Lives in" only has an answer for a document shared with a space, which is the only place a row learns a space name.
 function subtextOf(node, taskInfo) {
   const bits = [];
+  const pinned = pinnedOn(node); if (pinned) bits.push(pinned);
   if (displayOn('space') && taskInfo && taskInfo.audience && taskInfo.audience.space) bits.push(taskInfo.audience.space);
   // Who made it joins when it was made rather than repeating the word: "Created 2 days ago by Robin Vega". The name
   // needs the member list, which loads once and re-renders when it lands; until then memberName answers with the uri.

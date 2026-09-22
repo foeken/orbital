@@ -368,6 +368,7 @@ function mockApi() {
     // the meeting this user has joined right now: the mock is always in the first one, so the row has something to name
     currentMeeting: async () => { const m = all.find((d) => d.icon === 'meeting'); return m ? { id: m.id, title: m.text, joinedAt: Date.now() - 600000, callUri: 'tana:call:mock' } : null; },
     pinIds: async () => [...new Set([...sidebar, ...Object.keys(datePins).filter((id) => datePins[id].length)])],
+    pinDates: async () => Object.fromEntries(Object.entries(datePins).filter(([, dates]) => dates.length)),
     pin: async (docId, target, date = localDate()) => { if (target === 'sidebar') { if (!sidebar.includes(docId)) sidebar.push(docId); } else (datePins[docId] ||= []).push(date); emit(null); },
     unpin: async (docId, target, date = localDate()) => { if (target === 'sidebar') sidebar.splice(sidebar.indexOf(docId) >>> 0, 1); else datePins[docId] = (datePins[docId] || []).filter((d) => d !== date); emit(null); },
     deleteDocument: async (docId) => { softDelete(docId); step(docId, 'restore'); },
