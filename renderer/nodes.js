@@ -239,7 +239,7 @@ const atHome = () => (zoom ? !zoom.nodeId && zoom.docId === homeId() : homeId() 
 const homeTarget = () => (onSearchPage() ? zoom.docId : !zoom && view === 'library' ? 'library' : null);
 function setHome(id) { home = id; setPref('home', id); render(true); }
 // Going Home: a saved search is a document you open, the Library is a view you switch to.
-function goHome() { const id = homeId(); if (id !== 'library') goTo(id); else if (view === 'library') { zoom = null; render(true); } else setView('library'); }
+function goHome() { automationsShown = false; const id = homeId(); if (id !== 'library') goTo(id); else if (view === 'library') { zoom = null; render(true); } else setView('library'); }
 function sensitiveHidden(id) {
   return !sensitiveVisible && typeof id === 'string' && (sensitiveIds === null || sensitiveIds.has(id));
 }

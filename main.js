@@ -16,7 +16,7 @@ const agent = require('./main/agent');
 const ai = require('./main/ai');
 const { NOT_CONNECTED, S, VIEWS, docStates, errText, idKind, isSearch, isSpace, metaSigs, pathCache, today, truncatedViews, redoStack, report, scheduleRefresh, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
 const { cachedNodeHue, graphRow, members, rememberNodeHue, rememberType, toNode } = require('./main/rows');
-const { accessContext, chatOutline, codexIds, createDocument, creationOptions, creatorOf, discussWith, documentAction, history, info, linkShared, metaSig, moveBlock, moveTarget, mut, mutTasks, notifyOn, notifyState, referenceIn, setCodex, setNotify, onChange, op, outlineWithReferences, sensitiveIds, setSensitive, setType, setTypeHue, typeChoices } = require('./main/documents');
+const { accessContext, chatOutline, codexIds, createDocument, creationOptions, creatorOf, discussWith, documentAction, history, info, linkShared, metaSig, moveBlock, moveTarget, mut, mutTasks, notifyOn, notifyState, referenceIn, setCodex, setNotify, onChange, op, outlineWithReferences, sensitiveIds, setSensitive, setType, setTypeHue, typeChoices, watchAutomations } = require('./main/documents');
 const { callOf, changesOf, pathOf, related, searchChildren, searchPreview, spaceChildren, summaryChanges, summaryUri } = require('./main/related');
 const { hiddenRules, inboxCount, listFilter, mcpHidden, preset, refresh, search, searchCreate, searchList, searchTitle, setHidden, setMcpHidden, setViewFilter, start, viewFilter, viewRows } = require('./main/views');
 const { nodePin, pinState, pinTree, pinned, pinnedUris, setPin, todayNode, weekNode, weekTitle } = require('./main/pins');
@@ -343,6 +343,15 @@ ipcMain.handle('doc:summaryUri', (_e, id) => summaryUri(id)); // where a meeting
 ipcMain.handle('doc:discussWith', (_e, id, who) => discussWith(id, who));
 // and what the title suggests that name is (main/ai.js). No key on this machine means no suggestion, not an error.
 ipcMain.handle('ai:discussWith', (_e, title) => ai.suggestDiscussWith(title));
+// Automations (main/automations.js): the page lists them and switches them; the AI alone writes or changes one.
+const automations = require('./main/automations');
+ipcMain.handle('automations:list', () => automations.list());
+// Every save re-syncs the live queries the automations listen through (documents.watchAutomations).
+const saved = (p) => Promise.resolve(p).finally(() => { send('automations:changed'); watchAutomations(); });
+ipcMain.handle('automations:create', (_e, description) => saved(automations.create(description)));
+ipcMain.handle('automations:change', (_e, id, request) => saved(automations.change(id, request)));
+ipcMain.handle('automations:setEnabled', (_e, id, on) => saved(automations.setEnabled(id, on)));
+ipcMain.handle('automations:remove', (_e, id) => saved(automations.remove(id)));
 ipcMain.handle('doc:exportPdf', (_e, id) => require('./main/pdf').exportPdf(id, S.win));
 // The web link for a node, the same url home.tana.inc opens: /o/<org>/l/<encoded node uri>
 ipcMain.handle('doc:link', (_e, id) => {

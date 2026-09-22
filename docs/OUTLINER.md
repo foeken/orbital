@@ -613,8 +613,9 @@ The call is main's, in `main/ai.js`, and it is the only place this app talks to 
 sends the title and nothing else — no content, no ids — to the Responses API, with the extraction rule as
 `instructions` so that a title cannot become one. It is asked once per open, never per keystroke. Nothing is sent
 without an API key, and that key stays on this machine (`openaiApiKey`, never synced to Tana); no key simply means
-no suggestion. Which model answers and how hard it thinks are the settings `aiModel` and `aiEffort`, defaulting to
-a small model that does no reasoning at all (`none`), because a page is waiting on it and thinking time is latency. They follow you between machines like the
+no suggestion. It is answered by the FAST model: the settings `aiModel` and `aiEffort`, defaulting to gpt-6-luna at
+low effort, because a page is waiting on it and thinking time is latency. (Writing an automation uses the SMART model,
+`aiSmartModel`/`aiSmartEffort`, gpt-6-sol at medium.) They follow you between machines like the
 other choices about your own content, and they have no UI yet: change them in the settings document.
 
 - **The Library is not shown in the breadcrumbs once Home is something else** (`renderCrumbs`): the location from `api.path` still begins at the Library, and the crumb for it is dropped whenever `homeId()` is not `library`. A document whose only location was the Library then shows the Home anchor alone; separators are appended with each crumb (`addCrumb`) rather than counted by index, so the • sits before the first crumb that is actually drawn and nothing dangles when there is none.

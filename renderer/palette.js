@@ -238,6 +238,7 @@ function paletteRows(q, typed = q) {
   // node (titled with the date, pinned to today) and the week's ("Week 38 (2026)") are documents created on demand,
   // but places to go all the same, so they sit here.
   const viewRows = views.map((s) => ({ id: 'view:' + s.id, group: 'Views', icon: s.icon, label: s.title, run: () => setView(s.id) }));
+  if (tana.automations) viewRows.push({ id: 'automations', group: 'Views', icon: 'automation', label: 'Automations', hint: automationsShown ? 'Current' : '', run: showAutomations });
   if (tana.todayNode) viewRows.push({ id: 'today', group: 'Views', icon: 'today', label: 'Today', run: () => run(async () => goTo(await tana.todayNode())) });
   if (tana.weekNode) viewRows.push({ id: 'week', group: 'Views', icon: 'week', label: 'This week', run: () => run(async () => goTo(await tana.weekNode())) });
   const viewRank = (r) => { const i = VIEW_ORDER.indexOf(r.id.replace(/^view:/, '')); return i < 0 ? VIEW_ORDER.length : i; };
@@ -252,6 +253,7 @@ function paletteRows(q, typed = q) {
   if (!zoom || onSearchPage()) rows.push({ id: 'filter', group: 'View options', icon: 'filter', label: 'Filter rows by text', run: () => { filterShown = true; filterRow.hidden = false; render(); filterEl.focus(); } });
   // Actions: getting in first, then making and finding things, moving around, undoing, and last the app's own settings
   if (signedOut) rows.push({ id: 'login', group: 'Actions', label: 'Log in to Tana', run: () => tana.login().catch(showError) });
+  if (tana.createAutomation) rows.push({ id: 'createAutomation', group: 'Actions', icon: 'automation', label: 'Create automation', keepOpen: true, run: () => openAutomationPrompt(null) });
   if (tana.creationOptions) rows.push({ id: 'create', group: 'Actions', icon: 'createNew', label: 'Create new…', keepOpen: true, run: openCreationPalette, sub: async () => { creationChoices = (await tana.creationOptions()).options || []; return creationRows(''); } });
   // the keys the outline answers to, as rows: each has a default combo in DEFAULT_HOTKEYS and can be re-recorded
   rows.push({ id: 'search', group: 'Actions', icon: 'search', label: 'Search Tana', keepOpen: true, run: () => togglePalette('search') });
@@ -349,7 +351,7 @@ function backPalette() {
   if (palMode === 'pill') openCommandPalette();
   // Escape on the prompt page cancels the whole thing rather than stepping back a level: the page was opened to
   // answer one question, and abandoning that question is abandoning the assignment. Nothing is written either way.
-  else if (palMode === 'agentPrompt') closePalette();
+  else if (palMode === 'agentPrompt' || palMode === 'automation') closePalette();
   else if (palMode === 'visibilityPeople') openVisibilityPalette(palDoc);
   // The meeting picker is opened from two places — the command page and Edit pins — so it steps back to whichever
   // one asked for it rather than to a fixed one (openMeetingPicker's second argument, the command page by default).
@@ -429,11 +431,12 @@ const MODEL_GROUP = 'Model for this task';
 const HOST_GROUP = 'Where it runs';
 function promptEditor(on) {
   palText.hidden = !on; palInput.hidden = !!on;
-  if (!on) { palText.value = ''; agentCtx = null; palInput.type = 'text'; }
+  if (!on) { palText.value = ''; agentCtx = null; automationCtx = null; automationError = ''; palInput.type = 'text'; }
 }
 function openAgentPrompt(doc) {
   palMode = 'agentPrompt'; palRows = []; palIndex = 0; palette.hidden = false;
   promptEditor(true); // shows the editor, empty; leaving the page clears it and the context with it
+  palText.placeholder = 'What should the agent do?'; // the automation page writes its own here
   palInput.value = ''; // the query that found "Assign to Agent" is not a query here, and would bold letters in the row
   agentCtx = { id: doc.id, doc }; // the row itself, so the assignment can hold it where it sits
   agentModel = ''; // every assignment chooses again; Codex's own default until it does
@@ -491,10 +494,10 @@ function submitAgentPrompt() {
 function agentPromptKey(e) {
   const mod = e.metaKey || e.ctrlKey;
   if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); backPalette(); return true; }
-  if (e.key === 'Enter' && mod) { e.preventDefault(); e.stopPropagation(); submitAgentPrompt(); return true; }
+  if (e.key === 'Enter' && mod) { e.preventDefault(); e.stopPropagation(); if (palMode === 'automation') submitAutomation(); else submitAgentPrompt(); return true; }
   // ⇥ crosses to the model list and back, so the picker is reachable without leaving the keyboard. The editor eats
   // Tab either way — a tab character in a prompt is not what anyone means by pressing it here.
-  if (e.key === 'Tab') { e.preventDefault(); e.stopPropagation(); focusModelRows(); return true; }
+  if (e.key === 'Tab' && palMode === 'agentPrompt') { e.preventDefault(); e.stopPropagation(); focusModelRows(); return true; }
   return false; // a plain ↩ is a newline, which the textarea does by itself
 }
 // The model rows take the keyboard as a group: the list itself holds the focus, and the highlighted row is the one
@@ -516,7 +519,7 @@ function agentRowsKey(e) {
   return false;
 }
 palList.addEventListener('keydown', agentRowsKey);
-palText.addEventListener('input', () => { if (palMode === 'agentPrompt') renderPalette(); });
+palText.addEventListener('input', () => { if (palMode === 'agentPrompt' || palMode === 'automation') renderPalette(); });
 palText.addEventListener('keydown', agentPromptKey);
 // The rule lives in the group header because that is the one line in the palette that wraps.
 const HIDDEN_GROUP = 'Hidden items · whole title, case-insensitive; end with * to match a prefix';
@@ -883,6 +886,7 @@ function renderPalette() {
   else if (palMode === 'trash') palRows = trashRows(q.toLowerCase());
   else if (palMode === 'agentPrompt') palRows = agentPromptRows();
   else if (palMode === 'openaiKey') palRows = openAIKeyRows();
+  else if (palMode === 'automation') palRows = automationPromptRows();
   else if (palMode === 'pill') palRows = pillRows(q.toLowerCase());
   palIndex = Math.max(0, Math.min(palIndex, palRows.length - 1));
   const els = [];
@@ -914,7 +918,7 @@ function renderPalette() {
   });
   // "No results" belongs under a list that was searched and found nothing. Two pages are not lists: the agent
   // prompt and "Discuss with …" turn what is typed into their one row, so there is nothing for them to not find.
-  if (!palRows.some((r) => palMode === 'cmd' || palMode === 'slash' || palMode === 'hidden' || r.node) && palMode !== 'agentPrompt' && palMode !== 'discuss' && (palMode === 'cmd' || palMode === 'slash' || (q && !palBusy))) { const n = document.createElement('div'); n.className = 'group'; n.textContent = 'No results'; els.push(n); }
+  if (!palRows.some((r) => palMode === 'cmd' || palMode === 'slash' || palMode === 'hidden' || r.node) && palMode !== 'agentPrompt' && palMode !== 'automation' && palMode !== 'discuss' && (palMode === 'cmd' || palMode === 'slash' || (q && !palBusy))) { const n = document.createElement('div'); n.className = 'group'; n.textContent = 'No results'; els.push(n); }
   palList.replaceChildren(...els);
   const active = palList.querySelector('.row.active');
   if (active) active.scrollIntoView({ block: 'nearest' });

@@ -8,6 +8,8 @@ const fields = require('../sdk/fields');
 const { DOC_URI, KINDS, NOT_CONNECTED, PLAIN_KINDS, S, TAG, deletedNodes, editability, errText, hueLoaded, idKind, isDeleted, metaSigs, nodeCreators, nodeHues, nodeMeta, now, pathCache, reading, redoStack, report, scheduleRefresh, send, subscribed, summaryCache, typeAttrTitles, typeHues, typeTitles, undoStack, visibleGraphNodes } = require('./state');
 const { eventMeta, graphRow, hueOf, hueWithType, kindRow, memberRow, members, nodeTag, plainRow, rememberNodeHue, rememberType, resolveHue, resolveTypes, toNode, typeTag, typeUriOf } = require('./rows');
 const settings = require('./settings');
+const automations = require('./automations');
+const { setState: writeState } = require('../sdk/node');
 
 // Resolve native embeds without replacing the containing block identity or loading target content recursively.
 async function outlineWithReferences(doc) {
@@ -202,7 +204,7 @@ function findWord(text, needle, taken, firstOnly) {
     const end = at + want.length;
     if (isWordChar(text[at - 1]) || isWordChar(text[end])) continue; // inside a longer word: not this name
     // A first name must fill a whole entry, never the first word of an unknown full name.
-    if (firstOnly && (!/(?:^|[,;&]|\b(?:and|en))\s*$/iu.test(text.slice(0, at)) || !/^\s*(?:$|[,;&]|(?:and|en)\b)/iu.test(text.slice(end)))) continue;
+    if (firstOnly && (!/(?:^|[,;&]|\b(?:and|en|with|met))\s*(?:(?:the|de|het)\s+)?$/iu.test(text.slice(0, at)) || !/^\s*(?:$|[,;&]|(?:and|en)\b)/iu.test(text.slice(end)))) continue;
     if (taken.some((hit) => at < hit.end && end > hit.start)) continue; // already part of a longer name
     return at;
   }
@@ -210,8 +212,13 @@ function findWord(text, needle, taken, firstOnly) {
 }
 // segments when anyone matched, the plain string when nobody did — the same write this made before there was any
 // matching at all, so a workspace whose members cannot be read still gets its answer.
-async function nameSegments(who) {
-  const people = await members().catch(() => []);
+// candidates = [{ id, title }] (members, or the nodes of a Tana type such as Team); match says how sure a match must be:
+//   exact:  the whole title only ("Rob Jansen", never "Rob")
+//   unique: the whole title, or a first word only one candidate has (Discuss with's rule, the default)
+//   loose:  a first word matches even when several candidates share it; the first listed wins ("Rob" is some Rob)
+const MATCHES = ['exact', 'unique', 'loose'];
+async function nameSegments(who) { return linkNames(who, await members().catch(() => []), 'unique'); }
+function linkNames(who, people, match = 'unique') {
   const firsts = new Map();
   for (const person of people) { const first = String(person.title || person.text || '').trim().split(/\s+/)[0].toLowerCase(); if (first) firsts.set(first, (firsts.get(first) || 0) + 1); }
   const names = [];
@@ -220,14 +227,15 @@ async function nameSegments(who) {
     if (!title) continue;
     names.push({ needle: title, uri: person.id, firstOnly: !/\s/.test(title) });
     const first = title.split(/\s+/)[0];
-    if (first && first !== title && firsts.get(first.toLowerCase()) === 1) names.push({ needle: first, uri: person.id, firstOnly: true });
+    if (first && first !== title && match !== 'exact' && (match === 'loose' || firsts.get(first.toLowerCase()) === 1)) names.push({ needle: first, uri: person.id, firstOnly: true });
   }
-  names.sort((a, b) => b.needle.length - a.needle.length);
+  names.sort((a, b) => b.needle.length - a.needle.length); // stable: among equal lengths the first listed wins
+  const linked = new Set(); // a first word shared by several (loose) links once, to the first of them
   const hits = [];
   for (const name of names) {
-    if (hits.some((hit) => hit.uri === name.uri)) continue;
+    if (hits.some((hit) => hit.uri === name.uri) || linked.has(name.needle.toLowerCase())) continue;
     const at = findWord(who, name.needle, hits, name.firstOnly);
-    if (at >= 0) hits.push({ start: at, end: at + name.needle.length, uri: name.uri });
+    if (at >= 0) { hits.push({ start: at, end: at + name.needle.length, uri: name.uri }); linked.add(name.needle.toLowerCase()); }
   }
   if (!hits.length) return who;
   hits.sort((a, b) => a.start - b.start);
@@ -251,6 +259,81 @@ async function discussWith(id, who) {
   const value = await nameSegments(who.trim());
   await mut(id, (doc) => fields.setFieldText(doc, key, value));
   return { typeUri: uri, key, who: who.trim(), mentions: typeof value === 'string' ? [] : value.filter((s) => s.mention).map((s) => s.mention.uri) };
+}
+
+// What an automation's nodes can do (main/automations.js), as the app's own writes: every one goes through setType,
+// nameSegments and mut, with the checks they already make. Types and fields arrive by title.
+async function typeByTitle(title) {
+  const { nodes = [] } = await S.client.graph.listNodes({ nodeTypes: ['type'], limit: 200 });
+  const found = nodes.filter((t) => sameTitle(t.title, title)).sort((a, b) => (a.ownerUri ? 1 : 0) - (b.ownerUri ? 1 : 0))[0];
+  if (!found) throw new Error('No type called ' + title);
+  return found.id;
+}
+// The candidates an automation links names to: "Person" is the workspace's people, any other title a Tana type
+// whose nodes are listed ("Team" -> every node of type Team). Unknown titles fail loudly rather than link nothing.
+async function candidatesFor(types) {
+  const lists = await Promise.all(types.map(async (title) => {
+    if (/^(persons?|people|members?)$/i.test(title.trim())) return members(); // "Person": the people here, not a type
+    const { nodes = [] } = await S.client.graph.listNodes({ entityTypes: [await typeByTitle(title)], limit: 500 });
+    return nodes.filter((n) => n.title).map((n) => ({ id: n.id, title: n.title }));
+  }));
+  return lists.flat();
+}
+async function setFieldByTitle(id, field, value) {
+  const typeUri = readNode(await document(id)).entityTypeUri;
+  if (!typeUri) throw new Error('This node has no type, so no field ' + field);
+  const titles = fields.templateTitles(await document(typeUri));
+  const attribute = Object.keys(titles).find((key) => sameTitle(titles[key], field));
+  if (!attribute) throw new Error('Its type has no field ' + field);
+  // written as given: plain words, or the segments an automation's text.link step made (names as references)
+  await mut(id, (doc) => fields.setFieldText(doc, typeUri + '?attribute=' + attribute, typeof value === 'string' ? value.trim() : value));
+  return value;
+}
+// What is running now, for the animated bolt on its row (renderer/automations.js). An execution stays visible for at
+// least RUN_MIN_MS, or a write-only automation would flash by unseen.
+const RUN_MIN_MS = 1200, runningItems = new Map(), runningAutos = new Map();
+const sendRuns = () => send('automations:running', { items: [...runningItems.keys()], automations: [...runningAutos.keys()] });
+const bump = (map, key, by) => { const n = (map.get(key) || 0) + by; if (n > 0) map.set(key, n); else map.delete(key); };
+function automationRunning(itemId, automationId, on) {
+  if (on) { bump(runningItems, itemId, 1); bump(runningAutos, automationId, 1); sendRuns(); return; }
+  setTimeout(() => { bump(runningItems, itemId, -1); bump(runningAutos, automationId, -1); sendRuns(); }, RUN_MIN_MS);
+}
+// One run per automation, item and trigger, kept in the synced settings: a restart, or a second machine that sees the
+// same new task a minute later, finds the key and leaves the task alone.
+// ponytail: two machines seeing the same change in the same second can still both run it; elect one runner if that bites.
+const firedKeys = () => { const list = settings.get('automationFired'); return Array.isArray(list) ? list : []; };
+const firedStore = { has: (key) => firedKeys().includes(key), add: (key) => settings.set('automationFired', [...firedKeys(), key].slice(-500)) };
+const automationIo = (list) => ({
+  settleMs: 4000,
+  report,
+  client: () => S.client,
+  me: () => S.me && S.me.userUri,
+  // a new node runs once nobody has a caret in it (main/automations.js schedule), at most 10 minutes after it was seen
+  openPresence: (uri) => require('../sdk/presence').openPresence(S.client.sync, uri),
+  maxWaitMs: 10 * 60000,
+  openLiveQuery: (query, label) => require('../sdk/livequery').openLiveQuery(S.client.sync, query, { label }),
+  typeUri: typeByTitle,
+  typeTitle: (uri) => typeTitles.get(uri),
+  fired: firedStore,
+  running: automationRunning,
+  automations: () => list,
+  extract: (ask, n, model) => require('./ai').extract(ask, n.title, undefined, model),
+  judge: (ask, n, model) => require('./ai').judge(ask, n.title, undefined, model),
+  setType: async (id, title) => setType(id, await typeByTitle(title)),
+  setField: setFieldByTitle,
+  link: async (text, types, match) => linkNames(text.trim(), await candidatesFor(types), match),
+  setState: (id, state) => mutTasks([id], (doc) => writeState(doc, state, S.me.userUri)),
+  addLine: (id, text) => mut(id, (doc) => content.insertAfter(doc, null, text)),
+  notify: (id, title, body) => S.notify && S.notify(id, title, body),
+  executed: () => send('automations:changed'),
+});
+
+// Every enabled automation listens through its own live query (main/automations.js watch). Run after anything that
+// may change the list or the connection: a save here, and the refresh loop for edits synced from another machine.
+function watchAutomations() {
+  if (!S.client || !S.me) return Promise.resolve();
+  const list = settings.get('automations');
+  return automations.watch(automationIo(Array.isArray(list) ? list : [])).catch(report);
 }
 
 async function createDocument(title, opts = {}) {
@@ -731,4 +814,4 @@ async function moveTarget(spaceId) {
   return document(spaceId);
 }
 
-module.exports = { outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, createDocument, typeChoices, setType, setTypeHue, discussWith, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, codexIds, setCodex, creatorOf, document, op, inHistory, mut, mutTasks, moveBlock, referenceIn, documentAction, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget };
+module.exports = { watchAutomations, linkNames, MATCHES, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, createDocument, typeChoices, setType, setTypeHue, discussWith, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, codexIds, setCodex, creatorOf, document, op, inHistory, mut, mutTasks, moveBlock, referenceIn, documentAction, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget };

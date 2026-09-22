@@ -465,7 +465,7 @@ assert.match(styleSheet, /\.palette\.anchored:not\(\[hidden\]\) \{/, 'the @ drop
 // query that found "Assign to Agent" is cleared on the way in, or its letters would show as bold in that row.
 // "Discuss with …" is the same shape — what is typed *is* the row — so it is skipped too, or every name typed
 // would be answered with "No results" under the row offering to write it.
-assert.match(source, /palMode !== 'agentPrompt' && palMode !== 'discuss' && \(palMode === 'cmd'/, 'the no-results line skips the two pages whose row is what was typed');
+assert.match(source, /palMode !== 'agentPrompt' && palMode !== 'automation' && palMode !== 'discuss' && \(palMode === 'cmd'/, 'the no-results line skips the three pages whose row is what was typed (Create automation is the third)');
 assert.match(source, /function openAgentPrompt\(doc\) \{[\s\S]{0,400}palInput\.value = '';/, 'opening the prompt page clears the query behind it');
 // The agent badge sits at the end of the row — after the body, which is the flexible part of the line — and its
 // sweep is opt-in: a reduced-motion setting leaves it still, like every other animation here.

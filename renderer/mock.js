@@ -165,6 +165,11 @@ function mockApi() {
     for (const { view, index } of saved.views) view.nodes.splice(index, 0, saved.doc);
     deleted.delete(docId); emit(null);
   }
+  const mockAutomations = [
+    { id: 'a1', name: 'New bugs go to the Inbox', description: 'New bugs go to the inbox with a repro line', enabled: true, runs: 12, when: 'a #[Bug] is added', steps: [{ depth: 0, icon: 'status', title: 'Move to', text: 'Inbox' }, { depth: 0, icon: 'doc', title: 'Add line', text: '“Repro steps:”' }], last: { ok: true, title: 'Crash on login' } },
+    { id: 'a2', name: 'Tell me when a decision is done', description: 'Notify me when a decision gets completed', enabled: true, runs: 3, when: 'a #[Decision] is moved to Done', steps: [{ depth: 0, icon: 'notify', title: 'Notify me', text: '“Decision made”' }], last: { ok: false, title: 'Move Foundry to Q4', error: 'No OpenAI key on this machine' } },
+    { id: 'a3', name: 'Meeting notes start with Actions', description: 'Every new doc starts with an Actions line', enabled: false, runs: 0, when: 'a document is added', steps: [{ depth: 0, icon: 'doc', title: 'Add line', text: '“Actions”' }], last: null },
+  ];
   return {
     roots: async () => structuredClone(views),
     viewFilter: async (id) => structuredClone(filters[id]),
@@ -291,6 +296,20 @@ function mockApi() {
       return typeUri || null;
     },
     // The model's read of a title, slow enough to show the page thinking: the last capitalised words of the title.
+    // Automations: the list main keeps, with a fake AI that writes the Discuss-with example from any description.
+    automations: async () => mockAutomations.map((a) => ({ ...a })),
+    createAutomation: async (description) => {
+      await new Promise((done) => setTimeout(done, 900));
+      if (/slack|mail/i.test(description)) throw new Error('Automations cannot send messages outside Orbital yet.');
+      const a = { id: 'auto' + Date.now(), name: 'Discussion points from new tasks', description, enabled: true, runs: 0, last: null,
+        when: 'a task is added', steps: [{ depth: 0, icon: 'branch', title: 'If', text: 'the title says it should be discussed with someone', model: 'fast' }, { depth: 1, icon: 'type', title: 'Set type', text: '#[Discussion Task]' }, { depth: 1, icon: 'sparkle', title: 'Extract', text: 'the people or teams to discuss it with', model: 'fast', output: 'Who' }, { depth: 1, icon: 'link', title: 'Link names', var: 'Who', after: 'to #[Person|member] or #[Team]', note: 'unique first names too', output: 'Linked' }, { depth: 1, icon: 'field', title: 'Set Discuss with', var: 'Linked' }] };
+      mockAutomations.push(a); return a.id;
+    },
+    changeAutomation: async (id, request) => { await new Promise((done) => setTimeout(done, 900)); const a = mockAutomations.find((x) => x.id === id); a.description = request; return id; },
+    setAutomationEnabled: async (id, on) => { mockAutomations.find((x) => x.id === id).enabled = on; return on; },
+    removeAutomation: async (id) => { mockAutomations.splice(mockAutomations.findIndex((x) => x.id === id), 1); return true; },
+    onAutomations: () => {},
+    onAutomationRuns: () => {},
     suggestDiscussWith: async (title) => {
       await new Promise((done) => setTimeout(done, 700));
       const names = String(title || '').match(/\b[A-Z][a-z]+(?: [A-Z][a-z]+)*/g) || [];
@@ -303,7 +322,7 @@ function mockApi() {
       if (!doc) throw new Error('unknown document');
       if (!String(who || '').trim()) throw new Error('Who should this be discussed with?');
       let type = types.find((t) => t.text === 'Discussion Task');
-      if (!type) { type = { id: 'mocktype' + types.length, text: 'Discussion Task', hue: 200 }; types.push(type); }
+      if (!type) { type = { id: 'mocktype' + types.length, text: '#[Discussion Task]', hue: 200 }; types.push(type); }
       doc.tags = [...(doc.tags || []).filter((t) => t && ['task', 'meeting'].includes(t.label)), { label: type.text, hue: type.hue, uri: type.id }];
       doc.hue = type.hue;
       emit(docId);

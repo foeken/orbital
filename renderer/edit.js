@@ -250,7 +250,7 @@ function toggleReference(node) {
   render(true);
   run(() => tana.setDone(target.id, done));
 }
-function setView(id) { dropDrafts(); releaseHeld(); view = id; localStorage.setItem('view', id); zoom = null; sel = null; menu = null; loadView(id); render(true); }
+function setView(id) { automationsShown = false; dropDrafts(); releaseHeld(); view = id; localStorage.setItem('view', id); zoom = null; sel = null; menu = null; loadView(id); render(true); }
 // zoom into a document, switching to its view first when it belongs to another one; from = breadcrumb root instead of the view
 function openDoc(docId, from) {
   // Every zoom of a document comes through here, whichever route asked for it — a row, a pin, the rail, a crumb, a
