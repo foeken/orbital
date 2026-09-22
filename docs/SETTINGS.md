@@ -33,7 +33,7 @@ the third catches up on the next connect.
 | Follows you | Stays on the machine |
 |---|---|
 | View filters (`viewFilter:*`), hidden titles, the MCP switch | The window's size and position |
-| Type icons, sensitive marks, watch choices (`notify`), which model writes the "Discuss with" suggestion and how hard it thinks (`aiModel`, `aiEffort` — no UI yet, defaults in main/ai.js) | Which page you had open, where you were zoomed, whether sensitive items are unblurred (`sensitiveVisible`), and the OpenAI API key that pays for the suggestion |
+| Type icons and the colour a type is drawn in (`typeIcons`, `typeHues`), sensitive marks, watch choices (`notify`), which model writes the "Discuss with" suggestion and how hard it thinks (`aiModel`, `aiEffort` — no UI yet, defaults in main/ai.js) | Which page you had open, where you were zoomed, whether sensitive items are unblurred (`sensitiveVisible`), and the OpenAI API key that pays for the suggestion |
 | Agent assignments, their prompts, the machines they can run on, and the tasks they became (`codexTask`) | The row cache, which is a mirror of Tana and is rebuilt by any refresh |
 | Renderer preferences (`pref:*`): Home, recorded hotkeys, theme, sort, grouping, which facts a row shows, folded sections, the sidebar's open/closed state | Recently viewed, the sidebar's width, the row cache, and the OpenAI API key (`openaiApiKey`) |
 

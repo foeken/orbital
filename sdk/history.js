@@ -4,10 +4,8 @@
 // written title ("Added dependency on …"), its authors, its start and end, and a type (created/updated/deleted).
 // `withinId` asks for the summaries *inside* an expandable one; nothing here writes.
 const { createClient } = require('@connectrpc/connect');
-const { fromJson, toJson } = require('@bufbuild/protobuf');
 const { ChangeSummaryService } = require('./proto/descriptors');
-
-const method = (name) => ChangeSummaryService.methods.find((m) => m.localName === name);
+const { unary } = require('./graph');
 
 class HistoryClient {
   constructor(transport) {
@@ -15,8 +13,7 @@ class HistoryClient {
   }
   // protobuf JSON omits empty repeated fields: always return a summaries array
   async listChanges(params) {
-    const m = method('listChanges');
-    const r = toJson(m.output, await this.client.listChanges(fromJson(m.input, params || {})));
+    const r = await unary(this.client, ChangeSummaryService, 'listChanges', params);
     r.summaries ||= [];
     return r;
   }

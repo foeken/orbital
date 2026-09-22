@@ -14,7 +14,7 @@ const db = require('../db');
 const arg = (name) => { const i = process.argv.indexOf('--' + name); return i >= 0 ? process.argv[i + 1] : undefined; };
 const has = (name) => process.argv.includes('--' + name);
 function dbPath() {
-  if (process.env.TANA_TASKS_DB) return process.env.TANA_TASKS_DB;
+  if (process.env.ORBITAL_DB) return process.env.ORBITAL_DB;
   return path.join(require('../userdata').userDataDir(), 'tasks.sqlite'); // appData/Orbital, or the older tana-tasks folder
 }
 function main() {

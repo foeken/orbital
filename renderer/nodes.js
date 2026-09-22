@@ -293,7 +293,8 @@ function loadAgentStates() {
     for (const [id, state] of Object.entries(states || {})) agentStates.set(id, state);
     renderSoon();
   }, () => {}); // a status read that fails leaves the badges as they were; it is not an error the user can act on
-  if (tana.codexTaskHosts) tana.codexTaskHosts().then((hosts) => { agentTaskHosts.clear(); for (const [id, host] of Object.entries(hosts || {})) agentTaskHosts.set(id, host); }, () => {});
+  // and where each of them runs: the badge says whether it can be opened from here, so a late answer redraws too
+  if (tana.codexTaskHosts) tana.codexTaskHosts().then((hosts) => { agentTaskHosts.clear(); for (const [id, host] of Object.entries(hosts || {})) agentTaskHosts.set(id, host); renderSoon(); }, () => {});
 }
 // recently viewed documents (localStorage "recent"), most recent first, max 20
 const recent = () => { try { return (JSON.parse(localStorage.getItem('recent')) || []).map((n) => asDoc(!n.icon && !n.tags?.length && n.id?.startsWith('tana:text:') ? { ...n, icon: 'doc', tags: [{ label: 'doc', color: 'grey' }] } : n)); } catch { return []; } };

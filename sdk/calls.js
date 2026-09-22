@@ -49,7 +49,9 @@ async function currentCalls(client, userUri, { limit = 5 } = {}) {
   const live = [];
   for (const n of nodes) {
     const doc = await client.sync.subscribe(n.id);
-    if (!inCall(doc, userUri)) continue;
+    // A candidate that turns out to be somebody else's call is let go again: this is a read, and the scan would
+    // otherwise leave a subscription behind for every recently-touched call in the workspace.
+    if (!inCall(doc, userUri)) { await client.sync.unsubscribe(n.id).catch(() => {}); continue; }
     const call = callSessions(doc);
     live.push({
       callUri: n.id, eventUri: call.eventUri, title: null, joinedAt: joinedAt(doc, userUri),

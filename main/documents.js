@@ -6,7 +6,7 @@ const chat = require('../sdk/chat');
 const { readNode, editable, setEntityType, ulid, initDocument, STATE_TYPES } = require('../sdk/node');
 const fields = require('../sdk/fields');
 const { DOC_URI, KINDS, NOT_CONNECTED, PLAIN_KINDS, S, TAG, deletedNodes, editability, errText, hueLoaded, idKind, isDeleted, metaSigs, nodeCreators, nodeHues, nodeMeta, now, pathCache, reading, redoStack, report, scheduleRefresh, send, subscribed, summaryCache, typeAttrTitles, typeHues, typeTitles, undoStack, visibleGraphNodes } = require('./state');
-const { eventMeta, graphRow, hueOf, hueWithType, kindRow, memberRow, members, nodeTag, ownHue, plainRow, rememberNodeHue, rememberType, resolveHue, resolveTypes, toNode, typeTag, typeUriOf } = require('./rows');
+const { eventMeta, graphRow, hueOf, hueWithType, kindRow, memberRow, members, nodeTag, plainRow, rememberNodeHue, rememberType, resolveHue, resolveTypes, toNode, typeTag, typeUriOf } = require('./rows');
 const settings = require('./settings');
 
 // Resolve native embeds without replacing the containing block identity or loading target content recursively.
@@ -388,7 +388,6 @@ const codexIds = () => { const stored = settings.get('codex'); return Array.isAr
 // is what everything else reads, and turning it into objects would rewrite every reader for a field only the prompt
 // page writes. A prompt exists only alongside the assignment it was given with, so unassigning drops both.
 const codexPrompts = () => { const stored = settings.get('codexPrompt'); return stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {}; };
-const codexPrompt = (id) => codexPrompts()[id] || '';
 // The prompt also goes into the node itself, where a person reading it in Tana can see what the agent was handed:
 // one "Agent context" block on the document with the prompt's lines nested under it. Reassigning rewrites that
 // block's children rather than adding a second one — the heading is found by its exact title among the document's
@@ -548,7 +547,7 @@ const metaSig = (n) => JSON.stringify([n.assignedToUris, n.restricted, n.partici
 // that edits an outline — every block: handler, undo, the children read — takes one of these without knowing it:
 // document() hands back the field view (sdk/fields.js) instead of the document, and the rest is the same code. It
 // is what keeps the page and the field editor from being two editors rather than one.
-const FIELD_ID = /^(tana:[a-z-]+:[0-9a-z]{26})\|(tana:type:[0-9a-z]{26}\?attribute=[0-9a-z]{8})$/;
+const { FIELD_ID } = fields; // the format fieldView builds (sdk/fields.js), so it is written in one place
 const baseOf = (id) => { const field = typeof id === 'string' ? FIELD_ID.exec(id) : null; return field ? field[1] : id; };
 async function document(id, opts = {}) {
   // A read must not create the value: opening a typed page would write an empty tree into every field it has.
@@ -631,10 +630,14 @@ async function mutTasks(ids, fn) {
 // it came from is read from the same document — a page and one of its fields are two roots of one Loro document
 // (sdk/fields.js), so the whole move is one transaction and one undo step. Across two documents it is refused:
 // a block belongs to the node that holds it.
-const moveBlock = (id, nodeId, toId, parentId, afterId) => mut(toId, async (dest) => {
+const moveBlock = async (id, nodeId, toId, parentId, afterId) => {
+  // Refused before the destination is opened: mut opens it with create, which would leave an empty value behind in
+  // the field a refused drop was aimed at.
   if (baseOf(id) !== baseOf(toId)) throw new Error('A block can only move within its own document');
-  content.moveTo(dest, nodeId, { parentId: parentId ?? null, afterId: afterId ?? null, from: id === toId ? dest : await document(id, { create: true }) });
-});
+  return mut(toId, async (dest) => {
+    content.moveTo(dest, nodeId, { parentId: parentId ?? null, afterId: afterId ?? null, from: id === toId ? dest : await document(id, { create: true }) });
+  });
+};
 // The other half of a drag: a document dropped into an outline leaves a reference where it landed rather than
 // moving (a document is not a block, and Alt asks for the same thing on a row that points at one). Written on the
 // outline it lands in, which may be one of that document's fields.
@@ -726,4 +729,4 @@ async function moveTarget(spaceId) {
   return document(spaceId);
 }
 
-module.exports = { outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, createDocument, typeChoices, setType, setTypeHue, discussWith, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, codexIds, codexPrompt, setCodex, creatorOf, document, op, inHistory, mut, mutTasks, moveBlock, referenceIn, documentAction, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget };
+module.exports = { outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, createDocument, typeChoices, setType, setTypeHue, discussWith, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, codexIds, setCodex, creatorOf, document, op, inHistory, mut, mutTasks, moveBlock, referenceIn, documentAction, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget };

@@ -7,6 +7,12 @@ const { GraphService } = require('./proto/descriptors');
 
 const method = (name) => GraphService.methods.find((m) => m.localName === name);
 
+// One unary call on any of Tana's services: protobuf JSON in, protobuf JSON out (sdk/history.js calls it too).
+const unary = async (client, service, name, params) => {
+  const m = service.methods.find((x) => x.localName === name);
+  return toJson(m.output, await client[name](fromJson(m.input, params || {})));
+};
+
 class GraphClient {
   constructor(transport) {
     this.client = createClient(GraphService, transport);
@@ -20,10 +26,9 @@ class GraphClient {
     const m = method('traverse');
     for await (const res of this.client.traverse(fromJson(m.input, params))) yield toJson(m.output, res);
   }
-  async _unary(name, params) {
-    const m = method(name);
-    return toJson(m.output, await this.client[name](fromJson(m.input, params || {})));
+  _unary(name, params) {
+    return unary(this.client, GraphService, name, params);
   }
 }
 
-module.exports = { GraphClient };
+module.exports = { GraphClient, unary };

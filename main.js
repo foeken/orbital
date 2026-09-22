@@ -47,7 +47,7 @@ function restoredBounds(saved, workAreas) {
 function createWindow() {
   const saved = db.setting('window');
   S.win = new BrowserWindow({
-    ...restoredBounds(saved, screen.getAllDisplays().map((d) => d.workArea)), title: 'Tana', titleBarStyle: 'hiddenInset',
+    ...restoredBounds(saved, screen.getAllDisplays().map((d) => d.workArea)), title: 'Orbital', titleBarStyle: 'hiddenInset',
     webPreferences: { preload: path.join(__dirname, 'preload.js') },
   });
   if (saved && saved.maximized) S.win.maximize();
@@ -258,6 +258,10 @@ async function assignToAgent(id, prompt, model, host) {
     }
     return result;
   }
+  // A task that lives on another machine cannot be opened or queued from here: the deep link and the Codex CLI both
+  // resolve against this app's own store, which is why the badge's codex:open refuses the same way.
+  const existing = agent.taskLink(id);
+  if (existing && existing.host !== 'local') return result;
   if (!shell || !shell.openExternal) throw new Error('Cannot open Codex from here'); // no silent success
   await shell.openExternal(plan.url);
   if (plan.queue) queueToTask(plan.threadId, plan.queue);
@@ -365,7 +369,7 @@ ipcMain.handle('members', () => members());
 ipcMain.handle('quick:context', () => quick.quickContext());
 // assignToAgent is injected rather than required: main/quickadd.js knows Tana, not electron's shell, and the Agent
 // handoff must stay the one above rather than a copy living in the panel's path.
-ipcMain.handle('quick:create', (_e, input) => quick.quickCreate(input || {}, { assignToAgent, hostReady: (host) => agent.hostReady(agent.hostId(host) || 'local') }));
+ipcMain.handle('quick:create', (_e, input) => quick.quickCreate(input || {}, { assignToAgent }));
 ipcMain.handle('quick:close', () => { hideQuickPanel(); return true; });
 // The meeting this user has joined right now, for the outliner's Pin to meeting row: the same read the panel makes,
 // so meeting detection lives in one place (main/quickadd.js) rather than once per window.
@@ -401,7 +405,9 @@ if (process.env.TANA_MAIN_TEST) {
 } else {
   app.setName('Orbital');
   // The About panel reads the bundle's plist, which in a dev run is Electron's own name and version; say it here instead.
-  app.setAboutPanelOptions({ applicationName: 'Orbital', applicationVersion: app.getVersion(), version: '', iconPath: path.join(__dirname, 'build', 'icon.png') });
+  // The icon is named only for a dev run: the packaged app leaves build/icon.png out (package.json --ignore) and
+  // carries its own, so naming that path there would point at a file the bundle does not have.
+  app.setAboutPanelOptions({ applicationName: 'Orbital', applicationVersion: app.getVersion(), version: '', ...(app.isPackaged ? {} : { iconPath: path.join(__dirname, 'build', 'icon.png') }) });
   // Before 'ready': the same session, cache and settings mirror for dev runs, the CLI and the packaged app. The
   // folder is named after the app, so an install still carrying the old name is moved here once (userdata.js).
   app.setPath('userData', userDataDir(app.getPath('appData'), { migrate: true }));

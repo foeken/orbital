@@ -12,7 +12,7 @@ const { createTransport, SyncConnection, Document, derivePeerId, readNode, setTi
 const outline = require('../sdk/content');
 const { fetchImage } = require('../sdk/assets');
 const { LoroMap, LoroList, LoroText } = require('loro-crdt');
-const { parseQuery, searchParams, needsTypes, viewParams, searchQueryParams, filterToSearchQuery, searchQueryToFilter, validViewFilter, viewTypes, VIEW_PRESETS, hideRules, isHidden, completedInWindow, completedWindow } = require('../sdk/query');
+const { parseQuery, searchParams, needsTypes, viewParams, searchQueryParams, filterToSearchQuery, searchQueryToFilter, validViewFilter, VIEW_PRESETS, hideRules, isHidden, completedInWindow, completedWindow } = require('../sdk/query');
 const pins = require('../sdk/pins');
 
 const ORG = 'org_01EXAMPLE00000000000000000', DOC = 'tana:text:01exampleh0000000000000000', ME = 'tana:user-profile:01examplei0000000000000000';
@@ -2121,6 +2121,13 @@ async function main() {
     // A thread whose turns cannot be read is pending: it is there, but nothing says the work is done.
     const halfDead = async (method) => { if (method === 'thread/list') return { data: [thread('t-quiet', 'idle')] }; throw new Error('no turns'); };
     assert.deepEqual(await agent.agentStatuses({ n2: 't-quiet' }, halfDead), { n2: 'pending' }, 'an unreadable turn is not a completed one');
+    // A link naming a machine the user has since forgotten is that machine's problem alone. Opening the connection
+    // to an unknown host refuses outright, and refusing used to happen outside the try that turns a machine that is
+    // away into 'unavailable' — so one forgotten host left every badge, on every machine, unanswered.
+    const GONE = 'tana:text:01examplen0000000000000000', GONE_THREAD = '01a0b355-2197-7311-b576-ff4bd9c8901e';
+    require('../main/settings').set('codexTask', { [GONE]: { host: 'h-forgotten', threadId: GONE_THREAD } });
+    assert.deepEqual(await agent.readAgentStatuses({ [GONE]: GONE_THREAD }), { [GONE]: 'unavailable' },
+      'a task on a machine the app no longer knows reads as unavailable, rather than taking every other badge down with it');
     console.log('ok  Agent badge state comes from the task: one read, quiet threads ask for their latest turn');
   }
 
@@ -2651,13 +2658,6 @@ async function main() {
     const rich = searchQueryToFilter({ types: ['text'], stateTypes: ['open'], attributes: { 'tana:type:x?attribute=y': ['z'] }, workflowStates: ['w'], visibility: 'private' }, ME);
     assert.ok(validViewFilter(rich), 'a query carrying things the pills cannot show still reads back as a valid filter');
     assert.deepEqual(Object.keys(rich).sort(), ['assignee', 'participant', 'states', 'text', 'types', 'window'], 'and carries none of them into the filter');
-    // A kind page is that kind, whatever a stored filter from an older build says.
-    // viewTypes forced a kind page's own kinds over anything stored. No view is a kind page now, so it hands every
-    // filter back exactly as it was given — including an empty one, which viewParams reads as "any kind we list".
-    assert.deepEqual(viewTypes('library', { types: ['meetings', 'tasks'], states: null }), { types: ['meetings', 'tasks'], states: null }, 'a view keeps the kinds it is given');
-    assert.deepEqual(viewTypes('inbox', { types: [] }).types, []);
-    assert.deepEqual(viewTypes('library', { types: ['meetings'] }).types, ['meetings'], 'the Library keeps the kinds it was given');
-    assert.deepEqual(viewTypes('inbox', { types: null }).types, null);
     const id = ulid();
     assert.match(id, /^[0-9a-hjkmnp-tv-z]{26}$/);
     assert.equal(ulid(0).slice(0, 10), '0000000000');
@@ -2990,6 +2990,29 @@ async function main() {
       assert.equal(typeOf(outliner, parent), 'paragraph', "a document's own row is still free to be plain text");
     }
 
+    // A child row that is a bare block — a heading among its parent's children rather than a listItem — takes its
+    // holder from the grandparent list, so an index in its own list means nothing to the code that splits that
+    // list: changing its kind used to move it out to the document root, a divider asked for beside it landed there
+    // too, and making it a bullet left it a bare paragraph, the one shape a child row may not be.
+    {
+      const bare = new Document('tana:text:01examplem0000000000000000', { peerId: '748' });
+      const parent = outline.insertAfter(bare, null, 'A');
+      const child = outline.insertChild(bare, parent, 'H');
+      outline.setBlockType(bare, child, 'heading1');
+      const childrenOf = () => (outline.readOutline(bare)[0].children || []).map((n) => n.id);
+      assert.deepEqual(childrenOf(), [child], 'a child made a heading is still a child');
+      for (const type of ['numbered', 'quote', 'code']) {
+        outline.setBlockType(bare, child, type);
+        assert.deepEqual(childrenOf(), [child], 'a bare child row stays its parent\'s child when it becomes ' + type);
+        assert.equal(outline.readOutline(bare)[0].children[0].block, type);
+      }
+      outline.setBlockType(bare, child, 'bullet');
+      assert.equal(bare.content.toJSON().children[0].children[0].children[1].nodeName, 'bulletList', 'and becomes a real list row rather than a bare paragraph beside its parent');
+      outline.setBlockType(bare, child, 'heading1');
+      const beside = outline.insertDivider(bare, child);
+      assert.deepEqual(childrenOf(), [child, beside], 'a divider beside a bare child row lands beside it, not at the document root');
+    }
+
     // divider: Tana's childless horizontalRule; a list holds listItems only, so it splits the list
     const second = outline.insertAfter(a, child, 'Second');
     const rule = step(() => outline.insertDivider(a, child));
@@ -3171,6 +3194,20 @@ async function main() {
     outline.moveTo(d, line, { parentId: b, from: field });
     assert.deepEqual(shape(outline.readOutline(d)).slice(0, 4), [['A', 0], ['B', 0], ['Stan Engbers', 1], ['C', 1]], 'and a field row can be dropped into the page');
     assert.deepEqual(outline.readOutline(field).map((n) => n.text), [], 'the field keeps only what is left of it');
+    // A row dropped out of somebody's children onto the level above: the list it lands in is split open to take it,
+    // and that split carries the very item the row is living inside, so a copy-then-remove left the row in the
+    // outline twice and threw on the container it had just deleted.
+    {
+      const nested = new Document('tana:text:01examplen0000000000000000', { peerId: '749' });
+      const y = outline.insertAfter(nested, null, 'Y');
+      outline.setBlockType(nested, y, 'bullet');
+      const x = outline.insertAfter(nested, y, 'X');
+      const p = outline.insertChild(nested, x, 'P');
+      outline.setBlockType(nested, p, 'heading1');
+      assert.deepEqual(shape(outline.readOutline(nested)), [['Y', 0], ['X', 0], ['P', 1]]);
+      outline.moveTo(nested, p, { afterId: y });
+      assert.deepEqual(shape(outline.readOutline(nested)), [['Y', 0], ['P', 0], ['X', 0]], 'a bare child row dropped beside its parent lands there once, and leaves its parent');
+    }
     console.log('ok  moveTo: a row lands where a drag says, with its children, across a page and its fields, in one undo step');
   }
   // What a row is decides what it stays. Text dropped among a document's own rows is still text — the list splits
@@ -3686,16 +3723,18 @@ async function main() {
     assert.equal(callsSdk.joinedAt(ended, ME), null);
     assert.deepEqual(callsSdk.attended(ended).sort(), [ME, OTHER].sort(), 'the log still proves who was there');
     const asked = [];
+    const letGo = [];
     const client = {
       graph: { listNodes: async (p) => { asked.push(p);
         return { nodes: p.nodeIds ? [{ id: EVENT, title: 'Bingo' }] : [{ id: CALL }, { id: 'tana:call:01exampled0000000000000000' }] }; } },
-      sync: { subscribe: async (id) => (id === CALL ? livedoc : ended) },
+      sync: { subscribe: async (id) => (id === CALL ? livedoc : ended), unsubscribe: async (id) => { letGo.push(id); } },
     };
     const mine = await callsSdk.currentCalls(client, ME, { limit: 5 });
     assert.deepEqual(mine.map((c) => [c.title, c.callUri, c.eventUri, c.joinedAt, c.otherUserUris]), [['Bingo', CALL, EVENT, 1000, [OTHER]]],
       'only the call I am in is reported, with its meeting title');
     assert.deepEqual(asked[0], { nodeTypes: ['call'], limit: 5, sortOptions: [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }] });
     assert.equal(asked.length, 2, 'one query for the candidate calls and one for every title');
+    assert.deepEqual(letGo, ['tana:call:01exampled0000000000000000'], 'a candidate I am not in is unsubscribed again, so a read leaves no subscription behind');
     console.log('ok  call attendance: live sessions, a finished call, multi-device joins and the current-call query');
   }
   // 4. Transport: headers and the 401 -> refresh -> retry-once rule, with a fake fetch

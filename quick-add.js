@@ -21,9 +21,10 @@ function qicon(name) {
   return template ? template.cloneNode(true) : null;
 }
 
-// same contract as the outliner (renderer/theme.js): the preference is in localStorage, dark is a data attribute
+// same contract as the outliner (renderer/theme.js): the preference travels with the rest of them, read from the
+// bridge's synchronous snapshot, and dark is a data attribute
 function qtheme() {
-  const pref = localStorage.getItem('theme');
+  const pref = (qapi && qapi.prefs && qapi.prefs.theme) || null;
   const dark = pref === 'dark' || (pref === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
   if (dark) document.documentElement.dataset.theme = 'dark';
   else delete document.documentElement.dataset.theme;

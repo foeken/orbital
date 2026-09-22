@@ -37,7 +37,6 @@ let linkCtx = null;          // @ linking in progress: { item, segs, start, end,
 let pinCtx = null;           // relationship pin picker: { pinHub, docId }
 let pillCtx = null;          // Cmd+K sublevel for one current view pill
 const hotkeys = { ...pref('hotkeys', {}) }; // palette row id -> combo ("⇧⌘M"), one of the preferences that follow you
-if (hotkeys.sync) { delete hotkeys.sync; setPref('hotkeys', hotkeys); }
 // The built-in keys are palette rows with a default combo, in the same map the recorder edits: a recorded combo
 // overrides the default, and Reset in the recorder restores it. What is not here is fixed on purpose (⌘K, ⇧⌘K,
 // the text-size keys, ⇧⌘⌫ and the ⇧⌘↑/↓ moves, which act on blocks the palette does not address).
@@ -51,7 +50,6 @@ let palTaskCtx = null;
 let palReturn = null; // { key, offset } of the node focused when a palette opened; focus goes back there on close
 const fresh = new Map();     // docId -> { section, after, node }: documents created here that roots does not list yet, kept in place until it does
 let draftSeq = 0;
-const DRAFT_KIND = {}; // what Enter drafts in a view; Tasks was the only one that drafted a task, so every view drafts a doc
 let sel = null;              // multi-select: { keys: Set, anchor: key, focus: key }; the caret leaves the text
 let selectionFrozen = false;
 const filters = new Map();   // view id -> the persisted query filter

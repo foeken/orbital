@@ -41,6 +41,20 @@ function unpinFromHub(hubId) {
   const docId = pinInfo.docId;
   run(async () => { await tana.unpinFrom(hubId, docId); refreshRelated(hubId); refreshRelated(docId); loadPins(); render(); });
 }
+// The other direction on a hub, and the last of the pin writes: putting a document on a meeting or a space. It is
+// deliberately not wrapped in run() — every caller already is, and run() chains on one queue, so a run() awaited
+// from inside another would wait for itself. One write, and the two sidebar payloads it sends for a re-read.
+async function pinDocToMeeting(meetingId, docId) {
+  await tana.pinTo(meetingId, docId);
+  refreshRelated(meetingId); refreshRelated(docId); render();
+}
+// The same write from the search palette's pin picker, which carries the hub and the document it was opened for.
+function pinResult(ctx, node) {
+  return run(async () => {
+    await tana.pinTo(ctx.pinHub, node.id);
+    refreshRelated(ctx.pinHub); refreshRelated(ctx.docId); render();
+  });
+}
 // ---- Edit pins: where this document is pinned, on a page of its own (⌘K, or the pin mark on the row) ----
 // Unpinning is what the page is for, so every pin it lists runs one, and the page stays open to show the rest.
 const PIN_GROUP = 'Pinned · ↩ unpins';
@@ -79,10 +93,9 @@ function openPinsPalette(doc) {
   palInput.placeholder = 'Edit pins'; palInput.value = '';
   pinInfo = null; loadPins(); renderPalette(); palInput.focus();
 }
-function invalidatePinCaches(id, includeRecent = true) {
+function invalidatePinCaches(id) {
   if (pinInfo && pinInfo.docId === id) pinInfo = null;
-  if (includeRecent) forgetRecent(id);
-  palRows = palRows.filter((row) => row.id !== 'pinned:' + id);
+  forgetRecent(id);
 }
 function invalidateNode(id) {
   invalidatePinCaches(id);

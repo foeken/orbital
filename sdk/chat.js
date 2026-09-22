@@ -94,4 +94,4 @@ function chatRows(messages, { authorName = () => undefined, aiName = 'Tana AI' }
   return rows;
 }
 
-module.exports = { chatRows, blocks, segments, plain };
+module.exports = { chatRows, blocks, segments, plain, hm };

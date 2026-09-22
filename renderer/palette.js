@@ -341,7 +341,7 @@ function openCommandPalette() {
   palInput.placeholder = 'Run a command'; palInput.value = ''; renderPalette(); palInput.focus();
 }
 function backPalette() {
-  const SECOND_LEVEL = new Set(['setType', 'trash', 'discuss', 'setIcon', 'setHue', 'openaiKey', 'pins']); // pages opened from the command page
+  const SECOND_LEVEL = new Set(['setType', 'trash', 'discuss', 'setIcon', 'setHue', 'openaiKey', 'pins', 'create', 'hidden', 'hosts']); // pages opened from the command page
   if (palMode === 'pill') openCommandPalette();
   // Escape on the prompt page cancels the whole thing rather than stepping back a level: the page was opened to
   // answer one question, and abandoning that question is abandoning the assignment. Nothing is written either way.
@@ -549,14 +549,13 @@ function loadCreationChoices() {
     creationChoices = result.options || []; palBusy = false; renderPalette();
   }, (e) => { if (seq === palSeq && palMode === mode) { palBusy = false; showError(e); renderPalette(); } });
 }
-function creationSection(choice) {
-  // Tasks has a page of its own; everything else — meetings, chats, saved searches, docs — is drafted in the Library,
-  // which is the one view that lists any kind. The kind pages those used to have are gone.
-  const id = choice.kind === 'task' ? 'tasks' : 'library';
-  return views.find((section) => section.id === id) || viewOf();
+function creationSection() {
+  // Everything — tasks, meetings, chats, saved searches, docs — is drafted in the Library, which is the one view
+  // that lists any kind. The kind pages those used to have are gone, Tasks with them.
+  return views.find((section) => section.id === 'library') || viewOf();
 }
 function startCreation(choice) {
-  const section = creationSection(choice), tags = choice.kind === 'custom' ? [{ label: choice.title, hue: choice.hue }] : undefined;
+  const section = creationSection(), tags = choice.kind === 'custom' ? [{ label: choice.title, hue: choice.hue }] : undefined;
   const node = draftDocNode(choice.kind, { typeUri: choice.typeUri, icon: choice.icon, tags });
   section.nodes.unshift(node); view = section.id; localStorage.setItem('view', view);
   // render(true), like every other action that changes the page: closePalette puts the caret back in the row ⌘K was
@@ -580,12 +579,6 @@ function resultRows(nodes, group) {
   if (!title) return rows;
   return [{ create: true, label: 'Create “' + title + '”', hint: '⌘↩', run: () => createAndLink(ctx, title) }, ...rows];
 }
-function pinResult(ctx, node) {
-  return run(async () => {
-    await tana.pinTo(ctx.pinHub, node.id);
-    refreshRelated(ctx.pinHub); refreshRelated(ctx.docId); render();
-  });
-}
 // The active meeting behind the Pin to meeting row. Asked once per palette open (togglePalette clears it), because a
 // lookup is a round trip and the row is rebuilt on every keystroke; a failure is kept as the reason the row shows.
 function loadMeeting() {
@@ -605,13 +598,6 @@ function pinToMeeting(doc) {
     if (!live) throw new Error('No active meeting to pin to');
     await pinDocToMeeting(live.id, doc.id);
   });
-}
-// The pin itself, shared by the meeting you are in and the meeting you pick: one write and the two sidebar payloads
-// it sends for a re-read. It is deliberately not wrapped in run() — both callers already are, and run() chains on
-// one queue, so a run() awaited from inside another would wait for itself.
-async function pinDocToMeeting(meetingId, docId) {
-  await tana.pinTo(meetingId, docId);
-  refreshRelated(meetingId); refreshRelated(docId); render();
 }
 // ---- the meeting picker: a page of meetings to pin the current node on ----
 // The list is the old Meetings view's query — the meetings I take part in from a week back to a week ahead (the
@@ -899,7 +885,8 @@ function renderPalette() {
   palRows.forEach((r, i) => {
     if (r.group && (!i || palRows[i - 1].group !== r.group)) { const h = document.createElement('div'); h.className = 'group'; h.textContent = r.group; els.push(h); }
     const row = document.createElement('div'); row.className = 'row' + (i === palIndex ? ' active' : '') + (r.disabled ? ' disabled' : '') + (r.arrive ? ' arrive' : ''); row.dataset.index = i;
-    const icon = document.createElement('span'); icon.className = 'ricon' + (r.node ? ' ' + (r.icon || 'dot') : ''); icon.innerHTML = r.icon ? iconSvg(r.icon) : '';
+    // a row names its glyph, or hands over the markup itself (the "/" menu's block glyphs, the refusal ban)
+    const icon = document.createElement('span'); icon.className = 'ricon' + (r.node ? ' ' + (r.icon || 'dot') : ''); icon.innerHTML = r.icon ? iconSvg(r.icon) : r.svg || '';
     if (r.spin) icon.classList.add('thinking'); // a row waiting on an answer: its glyph breathes while it waits
     const rowHue = r.node ? r.node.hue : r.hue; // documents and "Create new…" type choices both carry the type hue
     if (rowHue != null) { icon.classList.add('hue'); icon.style.setProperty('--hue', String(rowHue)); }

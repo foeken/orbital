@@ -72,11 +72,9 @@ const VIEW_PRESETS = {
   // The workspace's schema, with the space each type lives in (main/views.js puts the space title on the row).
   types: { types: ['types'] },
 };
-// A page that is a kind: its type was its identity, so it was not offered as a filter and a stored one could not
-// override it. Tasks was the last of them, so no view is a kind page now — every view chooses what it lists, and
-// viewTypes leaves each filter alone.
-const KIND_VIEWS = new Set();
-const viewTypes = (id, f) => (KIND_VIEWS.has(id) ? { ...f, types: VIEW_PRESETS[id].types } : f);
+// A page that is a kind — its type was its identity, so it was not offered as a filter and a stored one could not
+// override it — was the last thing KIND_VIEWS and viewTypes were for. Tasks was the last of them: no view is a
+// kind page now, every view chooses what it lists, and a filter is used exactly as it is given.
 
 // assignee: 'me' | 'anyone' | 'unassigned' | <user-profile uri>
 function assigneeParams(assignee, me) {
@@ -229,4 +227,4 @@ function searchQueryToFilter(query, me) {
   return f;
 }
 
-module.exports = { parseQuery, searchParams, needsTypes, viewParams, searchQueryParams, filterToSearchQuery, searchQueryToFilter, validViewFilter, viewTypes, VIEW_PRESETS, VIEW_KINDS, KIND_VIEWS, hideRules, isHidden, COMPLETED_WINDOWS, completedWindow, completedInWindow };
+module.exports = { parseQuery, searchParams, needsTypes, viewParams, searchQueryParams, filterToSearchQuery, searchQueryToFilter, validViewFilter, VIEW_PRESETS, VIEW_KINDS, hideRules, isHidden, completedWindow, completedInWindow };

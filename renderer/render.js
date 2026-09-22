@@ -112,8 +112,6 @@ let renderDeferred = false;
 let fieldsDeferred = false;
 let caretOnOpen = false; // set when a node is opened: the first render with its children puts the caret where typing works
 let scrollOnType = false; // that caret is parked below the fold: the first character typed brings its row into view
-// An empty ordinary row is already somewhere to type; an image, divider or reference row is not.
-const typableRow = (n) => !!n && n.kind === 'block' && !isAtomic(n) && !isReference(n) && !plainOf(n).length;
 // Opening a node leaves a row to type in: the local draft row the empty document case has always shown, which stays
 // out of Tana until its first typed character (materialise) and is discarded by anything else.
 // A block with children appends through insertAfter(last); an empty block uses insertChild.
@@ -309,7 +307,7 @@ function rowSig(n) {
   return JSON.stringify([n.text, n.done, n.stateType, n.icon, n.hue, n.meta, n.tags, n.editable, n.draft, n.hasChildren, n.kind, n.type,
     n.updatedAt, n.createdAt, n.createdBy, // the subtext's times and author: they arrive after the row and a reused row would still show none
     sensitiveHidden(n.id), isPinned(n.id), meta || (taskMetaLoading.has(n.id) ? 'loading' : null), members ? members.length : 0, open.get(n.id), pending.has(n.id),
-    displayKeys().join(','), codexIds.has(n.id), agentStateOf(n.id)]); // which facts the row shows: without this a reused row would keep the old ones
+    displayKeys().join(','), codexIds.has(n.id), agentStateOf(n.id), agentTaskHosts.get(n.id)]); // which facts the row shows: without this a reused row would keep the old ones
 }
 function renderOutline() {
   const saved = focused();
@@ -353,7 +351,7 @@ function renderOutline() {
     const before = new Map([...outline.children].filter((el) => el.classList.contains('node')).map((el) => [el.dataset.key, el]));
     const rowEl = (n) => { // an unchanged, collapsed row is reused; anything expanded or different is rebuilt
       const old = before.get(n.id), sig = rowSig(n);
-      if (old && old.dataset.sig === sig && !old.classList.contains('leaving') && !old.querySelector(':scope > .children')) { mkItem(n.id, n, null); delete old.dataset.today; return old; }
+      if (old && old.dataset.sig === sig && !old.classList.contains('leaving') && !old.querySelector(':scope > .children')) { mkItem(n.id, n, null); return old; }
       const el = nodeEl(n, n.id, null); el.dataset.sig = sig; return el;
     };
     outline.replaceChildren(...(groups
@@ -839,7 +837,7 @@ function draftDoc(after) {
   const s = viewOf();
   if (!s) return;
   if (after) flush(after.key);
-  const node = draftDocNode(DRAFT_KIND[s.id] || 'doc');
+  const node = draftDocNode('doc'); // every view drafts a doc: Tasks was the last one with a kind of its own, and it is gone
   s.nodes.splice(after ? s.nodes.indexOf(after.node) + 1 : 0, 0, node);
   render(true);
   placeCaret(node.id, 0);

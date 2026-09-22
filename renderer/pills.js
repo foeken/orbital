@@ -178,21 +178,12 @@ function afterSlide(box, done) {
   const end = (e) => { if (e && e.propertyName !== 'height') return; box.removeEventListener('transitionend', end); done(); };
   box.addEventListener('transitionend', end);
 }
-// Save: write the pills back to the saved search they came from. A view persists each change as it is made, but a
-// saved search is a document other people may be looking at, so its edits are held here until this is pressed —
-// which is also why this pill exists at all, and only while there is something to save.
-function savePill() {
-  const pill = document.createElement('div'); pill.className = 'pill save'; pill.tabIndex = 0; pill.dataset.id = 'saveQuery'; pill.setAttribute('role', 'button');
-  pill.title = 'Save these changes to this search';
-  pill.append('Save');
-  const go = () => run(async () => {
-    const id = zoom.docId, next = filters.get(id), sort = sortBy(), group = groupBy(), display = displayKeys();
-    await tana.setSearchFilter(id, next, sort, group, display);
-    searchFilters.set(id, { filter: next, sort, group, display });
-    searchRows.delete(id); // the stored query is what these rows answer now, so the preview stands down
-    await reload(id); // the rows are the query's answer, so saving the query re-asks it
-    render(true);
-  });
+// A pill that is a button rather than a menu: the two below are the same element, keys and all, and differ only in
+// what they are called and what the press runs. Like the last pill, Left moves back along the row.
+function actionPill(cls, id, title, label, go) {
+  const pill = document.createElement('div'); pill.className = 'pill ' + cls; pill.tabIndex = 0; pill.dataset.id = id; pill.setAttribute('role', 'button');
+  pill.title = title;
+  pill.append(label);
   pill.onclick = go;
   pill.onkeydown = (e) => {
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
@@ -200,26 +191,30 @@ function savePill() {
   };
   return pill;
 }
+// Save: write the pills back to the saved search they came from. A view persists each change as it is made, but a
+// saved search is a document other people may be looking at, so its edits are held here until this is pressed —
+// which is also why this pill exists at all, and only while there is something to save.
+function savePill() {
+  return actionPill('save', 'saveQuery', 'Save these changes to this search', 'Save', () => run(async () => {
+    const id = zoom.docId, next = filters.get(id), sort = sortBy(), group = groupBy(), display = displayKeys();
+    await tana.setSearchFilter(id, next, sort, group, display);
+    searchFilters.set(id, { filter: next, sort, group, display });
+    searchRows.delete(id); // the stored query is what these rows answer now, so the preview stands down
+    await reload(id); // the rows are the query's answer, so saving the query re-asks it
+    render(true);
+  }));
+}
 // "Save as search": keep what the pills are showing as a saved search document, so a query worth returning to
 // becomes somewhere to go. The renderer sends only the view id — the filter→query vocabulary lives in sdk/query,
 // which classic renderer scripts cannot require, and main already holds the canonical filter for every view.
 // The new search is opened straight away: saving something you cannot see saved reads as nothing happening.
 function saveSearchPill() {
-  const pill = document.createElement('div'); pill.className = 'pill savesearch'; pill.tabIndex = 0; pill.dataset.id = 'saveSearch'; pill.setAttribute('role', 'button');
-  pill.title = 'Keep this query as a saved search';
-  pill.append('Save as search');
-  const go = () => run(async () => {
+  return actionPill('savesearch', 'saveSearch', 'Keep this query as a saved search', 'Save as search', () => run(async () => {
     const node = await tana.createSearch(view);
     if (!node || !node.id) return;
     if (typeof loadSearches === 'function') loadSearches(); // the Cmd+K Searches group should list it without a relaunch
     goTo(node.id);
-  });
-  pill.onclick = go;
-  pill.onkeydown = (e) => {
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
-    else if (e.key === 'ArrowLeft' && pill.previousElementSibling) { e.preventDefault(); pill.previousElementSibling.focus(); }
-  };
-  return pill;
+  }));
 }
 // Clean up: let go of the rows a status change kept in place and draw the view the way it is now. Like the last pill,
 // Right moves on to the first row.

@@ -65,7 +65,7 @@ async function dates(sync, userUri, docUri) {
 // what counts is a pin still being in it, not the key being there.
 async function datePinned(sync, userUri) {
   const entries = (await pinMap(sync, userUri)).loro.getMap('entries').toJSON();
-  return Object.keys(entries).filter((uri) => (entries[uri].pins || []).some((p) => p.type === 'plain'));
+  return Object.keys(entries).filter((uri) => ((entries[uri] || {}).pins || []).some((p) => p.type === 'plain'));
 }
 
 async function pinDate(sync, userUri, docUri, date) {

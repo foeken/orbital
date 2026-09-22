@@ -2,10 +2,9 @@
 // Typed fields ("attributes"): each value is a ProseMirror-style tree stored in the document's own data map under
 // "<type uri>?attribute=<key>", exactly like 'content' but rooted per field. Field names live in the type
 // document's template.attributes ([{ key, title, type?, cardinality?, to? }]). Verified on a real typed node.
-const { LoroMap, LoroList, LoroMovableList, LoroText } = require('loro-crdt');
+const { LoroMap, LoroList, LoroMovableList } = require('loro-crdt');
 const content = require('./content');
 
-const newBlockId = () => { let s = ''; while (s.length < 8) s += Math.random().toString(36).slice(2); return s.slice(0, 8); };
 const parseKey = (key) => { const [typeUri, attribute] = String(key).split('?attribute='); return { typeUri, attribute }; };
 
 // plain text of a value tree, from its JSON form (children are strings, text runs or inline maps)
@@ -99,7 +98,7 @@ function pruneEmpty(list) {
 function addBlock(list, name = 'paragraph') {
   const block = list.insertContainer(list.length, new LoroMap());
   block.set('nodeName', name);
-  block.setContainer('attributes', new LoroMap()).set('blockId', newBlockId());
+  block.setContainer('attributes', new LoroMap()).set('blockId', content.newId());
   return { block, runs: block.setContainer('children', new LoroList()) };
 }
 // The whole value written again, which is what a line changing its kind needs: consecutive bullets share one list,
@@ -185,6 +184,9 @@ function setFieldText(document, key, text) {
 // `create` decides what an absent value does: a write needs the shell to exist, a read must not write one, or
 // opening a typed page would fill in every empty field it has.
 const EMPTY = { get: () => undefined, set: () => {}, setContainer: () => { throw new Error('field value is not open for writing'); } };
+// The id a field view answers to, built below: "<document uri>|<type uri>?attribute=<key>". It is parsed in
+// main/documents.js, which took the outline operations there, so the format is written once, here.
+const FIELD_ID = /^(tana:[a-z-]+:[0-9a-z]{26})\|(tana:type:[0-9a-z]{26}\?attribute=[0-9a-z]{8})$/;
 function fieldView(document, key, { create = false } = {}) {
   if (!key || typeof key !== 'string') throw new Error('field key required');
   const found = () => { const attrs = document.data.get('attributes'); const value = attrs && typeof attrs.get === 'function' ? attrs.get(key) : null; return value && typeof value.get === 'function' ? value : null; };
@@ -224,7 +226,7 @@ function addField(typeDocument, { title, type, cardinality } = {}) {
   if (typeof title !== 'string' || !title.trim()) throw new Error('field title required');
   if (type !== undefined && typeof type !== 'string') throw new Error('field type must be a string');
   if (cardinality !== undefined && cardinality !== 'single' && cardinality !== 'multiple') throw new Error('cardinality must be single or multiple');
-  const key = newBlockId();
+  const key = content.newId();
   typeDocument.transact((loro) => {
     const data = loro.getMap('data');
     let template = data.get('template');
@@ -239,4 +241,4 @@ function addField(typeDocument, { title, type, cardinality } = {}) {
   return key;
 }
 
-module.exports = { readFields, templateTitles, setFieldText, valueText, valueLines, parseKey, fieldView, addField };
+module.exports = { readFields, templateTitles, setFieldText, parseKey, fieldView, addField, FIELD_ID };
