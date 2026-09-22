@@ -77,6 +77,13 @@ const ME = peer(1234567, 1), MY_OTHER_TAB = peer(1234567, 2), OTHER = peer(76543
   assert.equal(await conn.sendEphemeral(DOC, new Uint8Array([1])), true);
   conn._command = async () => { throw new Error('refused'); };
   assert.equal(await conn.viewingHeartbeat(DOC), false, 'presence is best effort: a refusal is false, never a throw');
+  // presence commands queue behind four in flight, however many rooms open at once
+  let busy = 0, peak = 0; const release = [];
+  conn._command = () => { busy++; peak = Math.max(peak, busy); return new Promise((r) => release.push(() => { busy--; r({}); })); };
+  const burst = Array.from({ length: 12 }, (_, i) => conn.subscribeEphemeralChannel('tana:text:01burst' + String(i).padStart(20, '0')));
+  while (release.length || busy || conn._light.length || conn._lightBusy) { await tick(1); release.splice(0).forEach((f) => f()); }
+  await Promise.all(burst);
+  assert.equal(peak, 4, 'at most four presence commands in flight');
   conn.connected = false;
   assert.equal(await conn.sendEphemeral(DOC, new Uint8Array([1])), false, 'nothing is sent while disconnected');
   // main/presence.js: rooms are counted per document, a caret is told once per move, and your own other tabs are not shown
@@ -96,7 +103,7 @@ const ME = peer(1234567, 1), MY_OTHER_TAB = peer(1234567, 2), OTHER = peer(76543
     wire.emit('ephemeral', DOC, remote(OTHER, { user: { name: 'Stan' }, anchorBlockId: 'b1', anchorBlockOffset: 0 }).out[0]);
     wire.emit('ephemeral', DOC, remote(MY_OTHER_TAB, { user: { name: 'Andre' }, anchorBlockId: 'b2', anchorBlockOffset: 0 }).out[0]);
     const last = told.filter((t) => t[0] === 'presence:changed').at(-1);
-    assert.deepEqual(last[2].map((p) => [p.name, p.blockId, p.editing]), [['Stan', 'b1', true]], 'others, on their block; my other tab left out');
+    assert.deepEqual(last[2].map((p) => [p.name, p.blockId, p.editing, p.me]), [['Stan', 'b1', true, false], ['Andre', 'b2', true, true]], 'everyone on their block, your own other tab marked as you; this connection never');
     presence.set(DOC, { blockId: b3, anchor: 8, focus: 8 }); presence.set(DOC, { blockId: b3, anchor: 8, focus: 8 }); await tick();
     const mine = sent.filter((s) => s[0] === 'send');
     assert.equal(mine.length, 1, 'one send per caret move');

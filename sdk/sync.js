@@ -40,6 +40,12 @@ function derivePeerId(userExternalId) {
   return ((userHash << 16n) | BigInt(Math.floor(Math.random() * 32768))).toString(10);
 }
 
+// "fetch failed" says nothing on its own: the reason (ECONNRESET, a timeout, DNS) is the innermost cause.
+const causeOf = (e) => { let c = e && e.cause; while (c && c.cause) c = c.cause; const why = c && (c.code || c.message); return why ? ' (' + why + ')' : ''; };
+// Presence commands are many and small (a room per listed row, a caret move every 150 ms): at most this many in
+// flight, so a list opening 40 rooms does not open 40 requests beside the bootstraps.
+const LIGHT_IN_FLIGHT = 4;
+
 class SyncConnection extends EventEmitter {
   constructor({ transport, orgId, peerId, storageId, logger = console }) {
     super();
@@ -50,6 +56,7 @@ class SyncConnection extends EventEmitter {
     this.client = createClient(SyncService, transport);
     this.docs = new Map();
     this.channels = new Map(); // ephemeral channel id -> how many holders (subscribeEphemeralChannel)
+    this._light = []; this._lightBusy = 0; // queued presence commands (_lightCommand)
     this.connected = false;
     this.closed = true;
     this.abort = null;
@@ -70,23 +77,23 @@ class SyncConnection extends EventEmitter {
   async subscribeEphemeralChannel(channelId) {
     const n = (this.channels.get(channelId) || 0) + 1;
     this.channels.set(channelId, n);
-    if (n === 1 && this.connected) await this._command({ case: 'subscribeEphemeralChannel', value: { channelId } });
+    if (n === 1 && this.connected) await this._lightCommand({ case: 'subscribeEphemeralChannel', value: { channelId } });
   }
   async unsubscribeEphemeralChannel(channelId) {
     const n = (this.channels.get(channelId) || 0) - 1;
     if (n > 0) return void this.channels.set(channelId, n);
     this.channels.delete(channelId);
-    if (this.connected) await this._command({ case: 'unsubscribeEphemeralChannel', value: { channelId } }).catch(() => {});
+    if (this.connected) await this._lightCommand({ case: 'unsubscribeEphemeralChannel', value: { channelId } }).catch(() => {});
   }
   // Best effort, like Tana's: presence that fails to send is simply not seen, never an error. Resolves to whether it went.
   sendEphemeral(documentId, data) {
     if (!this.connected) return Promise.resolve(false);
-    return this._command({ case: 'ephemeral', value: { documentId, data } }).then(() => true, () => false);
+    return this._lightCommand({ case: 'ephemeral', value: { documentId, data } }).then(() => true, () => false);
   }
   // "I have this document open": Tana's client sends it every 10 s while the tab is visible and the user active.
   viewingHeartbeat(documentId) {
     if (!this.connected) return Promise.resolve(false);
-    return this._command({ case: 'viewingHeartbeat', value: { documentId } }).then(() => true, () => false);
+    return this._lightCommand({ case: 'viewingHeartbeat', value: { documentId } }).then(() => true, () => false);
   }
 
   getDocument(id) { const e = this.docs.get(id); return e && e.document; }
@@ -162,7 +169,7 @@ class SyncConnection extends EventEmitter {
         this._first.resolve();
         this._safe(() => this.emit('connected', { heartbeatIntervalMs: hb }));
         for (const entry of this.docs.values()) this._bootstrap(entry);
-        for (const channelId of this.channels.keys()) this._command({ case: 'subscribeEphemeralChannel', value: { channelId } }).catch(() => {});
+        for (const channelId of this.channels.keys()) this._lightCommand({ case: 'subscribeEphemeralChannel', value: { channelId } }).catch(() => {});
         for (;;) {
           const { done, value } = await it.next();
           if (done) throw new Error('sync stream closed by server');
@@ -274,7 +281,7 @@ class SyncConnection extends EventEmitter {
         // A single [unavailable] is Tana shedding load, and the retry below takes it: logging it looked like a
         // failure that needed acting on when nothing had gone wrong. It is said from the second attempt on, so a
         // real outage is still visible — and every other code is still said the first time.
-        if (attempt > 0 || c !== Code.Unavailable) this.logger.warn('sync: bootstrap ' + entry.id + ' failed (attempt ' + (attempt + 1) + '): ' + msg);
+        if (attempt > 0 || c !== Code.Unavailable) this.logger.warn('sync: bootstrap ' + entry.id + ' failed (attempt ' + (attempt + 1) + '): ' + msg + causeOf(e));
         entry.state = 'retrying';
       }
     }
@@ -341,6 +348,17 @@ class SyncConnection extends EventEmitter {
       entry.inflight = false;
     }
     if (entry.queue.length) this._flush(entry);
+  }
+
+  _lightCommand(commandUnion) {
+    return new Promise((ok, no) => { this._light.push({ commandUnion, ok, no }); this._pumpLight(); });
+  }
+  _pumpLight() {
+    while (this._lightBusy < LIGHT_IN_FLIGHT && this._light.length) {
+      const job = this._light.shift();
+      this._lightBusy++;
+      this._command(job.commandUnion).then(job.ok, job.no).finally(() => { this._lightBusy--; this._pumpLight(); });
+    }
   }
 
   _command(commandUnion, timeoutMs = 15000) {

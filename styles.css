@@ -827,6 +827,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .presence:empty { display: none; }
 .pavatar { width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600;
   background: oklch(0.92 0.06 var(--hue)); color: oklch(0.4 0.12 var(--hue)); opacity: .55; user-select: none; }
+.pavatar.me, .pmini.me { outline: 1px dashed oklch(0.6 0.1 var(--hue)); outline-offset: 1px; } /* you, in another tab */
 .pavatar.editing { opacity: 1; box-shadow: 0 0 0 2px oklch(0.7 0.12 var(--hue)); }
 .node > .line:has(> .pcaret) { position: relative; } /* only lines that carry a marker */
 .pcaret { position: absolute; left: -6px; top: 4px; bottom: 4px; width: 2px; border-radius: 1px; background: oklch(0.65 0.15 var(--hue)); }

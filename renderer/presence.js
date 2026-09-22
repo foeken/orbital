@@ -4,7 +4,7 @@
 // Tell: where your caret is while you edit here, as the block and the exact position, so Tana draws it.
 let presenceDoc = null;           // the page on screen: it gets the heartbeat and your caret
 const presenceRooms = new Set();  // every document whose room is open: the page and the document rows on screen
-const presenceByDoc = new Map();  // docId -> [{ peer, userHash, name, blockId, editing }] from main
+const presenceByDoc = new Map();  // docId -> [{ peer, userHash, me, name, blockId, editing }] from main (me: your other tab)
 let presenceSent = null;          // the caret last told, as JSON
 const ROW_ROOMS = 40; // ponytail: the first 40 document rows in page order get a room; follow the scroll if lists grow past that
 const presenceHue = (p) => Number(BigInt(p.userHash || 0) % 360n); // one colour per person, the same everywhere
@@ -35,10 +35,10 @@ function syncPresence() {
 }
 function avatarEl(p, cls) {
   const a = document.createElement('span');
-  a.className = cls + (p.editing ? ' editing' : '');
+  a.className = cls + (p.editing ? ' editing' : '') + (p.me ? ' me' : '');
   a.style.setProperty('--hue', String(presenceHue(p)));
   a.textContent = initials(p.name);
-  a.title = p.name + (p.editing ? ' is editing this' : ' is here');
+  a.title = p.me ? 'You, in another tab' + (p.editing ? ', editing this' : '') : p.name + (p.editing ? ' is editing this' : ' is here');
   return a;
 }
 function paintPresence() {
@@ -54,7 +54,7 @@ function paintPresence() {
     for (const p of here) {
       if (!p.blockId || item.docId !== presenceDoc || item.node.id !== p.blockId) continue;
       const mark = document.createElement('span');
-      mark.className = 'pcaret'; mark.style.setProperty('--hue', String(presenceHue(p))); mark.title = p.name; mark.dataset.name = initials(p.name);
+      mark.className = 'pcaret'; mark.style.setProperty('--hue', String(presenceHue(p))); mark.title = p.me ? 'You, in another tab' : p.name; mark.dataset.name = initials(p.name);
       line.append(mark);
     }
     // a document row someone is in: their avatars at the end of it

@@ -1,17 +1,19 @@
 'use strict';
 // Presence in the app (issue #14), over sdk/presence.js: who else is in the documents on screen (the page you have
 // open and the document rows listed on it) and on which block, and being seen there ourselves. One room per document,
-// counted per holder, closed when the last one lets go. Your own other tabs and devices are left out: they are you.
+// counted per holder, closed when the last one lets go. This connection is never shown (it is you, here); your own
+// other tabs and devices are, marked as you, which is also how presence can be tried alone: open the node in Tana.
 const { openPresence, userHashOf, HEARTBEAT_MS } = require('../sdk/presence');
 const { cursorAt } = require('../sdk/content');
 const { S, send, report } = require('./state');
 
 const rooms = new Map(); // docId -> { count, client, handle: Promise<handle>, sent }
 const myName = () => { const u = (S.me && S.me.user) || {}; return [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email || 'Orbital'; };
-// What the renderer draws: one entry per person, on the block their caret is in (null: in the document, no caret).
+// What the renderer draws: one entry per peer, on the block their caret is in (null: in the document, no caret); me =
+// your own other tab or device.
 function peersOf(handle) {
   const mine = S.client ? userHashOf(S.client.sync.peerId) : null;
-  return handle.peers({ exceptUserHash: mine }).map((p) => ({ peer: p.peer, userHash: p.userHash, name: (p.user && p.user.name) || 'Someone',
+  return handle.peers().map((p) => ({ peer: p.peer, userHash: p.userHash, me: p.userHash === mine, name: (p.user && p.user.name) || 'Someone',
     blockId: (p.focusBlock && p.focusBlock.blockId) || (p.anchorBlock && p.anchorBlock.blockId) || null, editing: p.hasCursor }));
 }
 function open(docId) {

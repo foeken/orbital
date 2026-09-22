@@ -741,7 +741,7 @@ follows both after every render; main/presence.js keeps one counted room per doc
 the viewing heartbeat. A listed document someone is in shows their small avatars at the end of its row (three, then +N). Everyone else in the page is an
 avatar beside the title: initials in a colour of their own (from their user hash), full strength while they have a caret in
 the document, dimmed while they only have it open. The row their caret is in carries a thin bar in that colour on its left with
-their initials above it. Your own other tabs and devices are not shown: they are you.
+their initials above it. This Orbital is never shown; your own other tabs and devices are, with a dashed ring and "You, in another tab", which is also how to try presence alone: open the same node in Tana.
 
 Where your caret is goes the other way: while it is in a block of this page, your presence entry says so under your name
 (`user.name`, no colour, so Tana picks one as it does for anyone): the block id with the caret's anchor and focus offsets, and
