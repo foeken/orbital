@@ -541,6 +541,12 @@ async function main() {
     assert.deepEqual(seg(plain.id),[{mention:{label:'Steven Rekk\u00e9',uri:uriOf('Steven Rekk\u00e9')}}],'a name ending in a letter \\b does not know still ends');
     await backend.discussWith(plain.id,'Peter');
     assert.deepEqual(seg(plain.id),[{mention:{label:'Peter',uri:uriOf('Peter Leppers')}}],'a first name alone is enough when only one person has it, and the words typed stay the label');
+    await backend.discussWith(plain.id,'Peter Schuurman');
+    assert.deepEqual(seg(plain.id),[{text:'Peter Schuurman'}],'an unknown full name must not link to a different person with the same first name');
+    await backend.discussWith(plain.id,'Peter Schuurman and Peter');
+    assert.deepEqual(seg(plain.id),[{text:'Peter Schuurman and '},{mention:{label:'Peter',uri:uriOf('Peter Leppers')}}],'only the standalone first name matches, even after an unknown full name');
+    await backend.discussWith(plain.id,'Peter en Martijn');
+    assert.deepEqual(seg(plain.id),[{mention:{label:'Peter',uri:uriOf('Peter Leppers')}},{text:' en '},{mention:{label:'Martijn',uri:uriOf('Martijn van de Wiel')}}],'separate first names still match');
     await backend.discussWith(plain.id,'Stan');
     assert.deepEqual(seg(plain.id),[{text:'Stan'}],'but not when two people share it: an ambiguous first name is words, not a guess at one of them');
     await backend.discussWith(plain.id,'Standard procedure with Peterson');

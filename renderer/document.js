@@ -2,7 +2,7 @@
 // The zoomed document: page title editing, pin state, sensitive marks.
 
 // ---- page title (zoomed into a document): edits go through the same debounce as node text; Enter -> first child, Esc restores ----
-titleEl.addEventListener('input', () => { const item = items.get(titleEl.dataset.key); if (!item) return; if (item.node.draft && !item.busy) { item.busy = true; materialise(item, titleEl); } else if (!item.node.draft) scheduleSave(item, [{ text: titleEl.textContent }]); });
+titleEl.addEventListener('input', () => { const item = items.get(titleEl.dataset.key); if (!item) return; if (item.node.draft) item.node.text = titleEl.textContent; if (item.node.draft && !item.busy) { item.busy = true; materialise(item, titleEl); } else if (!item.node.draft) scheduleSave(item, [{ text: titleEl.textContent }]); });
 titleEl.addEventListener('blur', () => { const item = items.get(titleEl.dataset.key); if (item?.node.draft && !item.busy && !titleEl.textContent) { zoom = null; return dropDraft(item); } flush(titleEl.dataset.key); });
 titleEl.addEventListener('keydown', (e) => {
   const item = items.get(titleEl.dataset.key);

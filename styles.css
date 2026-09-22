@@ -71,6 +71,8 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .fields .field > .fvalues { margin-left: 8px; } /* the label needs air after it: the value is a column of rows, not a word */
 .fields .field { display: contents; color: #1a1a1a; }
 .fields[hidden] { display: none; } /* the grid's own display would otherwise win over [hidden] and leave the two lines on a page with no fields */
+.inline-fields { margin-top: 0; margin-left: 17px; margin-bottom: 6px; border-top: 0; border-image: linear-gradient(to right, #8884, transparent 80%) 1; }
+.inline-fields .field > .ricon { transform: translateX(-1px); }
 /* The glyph belongs to the field, which begins at its first line: centred on the whole value it drifted to the
    middle as lines were added, level with nothing. The offset centres it on that first line (22px), the way the
    label beside it sits on the same baseline. */

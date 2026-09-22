@@ -111,13 +111,13 @@ const inField = (docId) => typeof docId === 'string' && docId.includes('|tana:ty
 // removing a row, merging into the one above, selecting a range. A field's rows are their own list for the same
 // reason: they are a different outline, and Backspace at the start of the page's first row must not reach into
 // the field above it.
-const texts = () => rowsIn(outline);
+const texts = () => rowsIn(outline).filter((el) => !el.closest('.fvalues'));
 const fieldValues = () => ($('fields').hidden ? [] : rowsIn($('fields')));
-const rowsBeside = (el) => (el && $('fields').contains(el) ? fieldValues() : texts()); // the rows this one lives among
+const rowsBeside = (el) => { const field = el && el.closest('.fvalues'); return field ? rowsIn(field) : texts(); };
 // Every stop the caret can reach on the page, in reading order: the title, the fields under it, then the outline.
 // Only vertical movement uses this — moving down out of a field into the page is a caret moving, not a row
 // changing what it belongs to.
-const caretRows = () => [...(titleEl.isContentEditable ? [titleEl] : []), ...fieldValues(), ...texts()];
+const caretRows = () => [...(titleEl.isContentEditable ? [titleEl] : []), ...fieldValues(), ...rowsIn(outline)];
 const titleEl = $('title');  // zoomed into a document: contenteditable with data-key = that document's key
 const keyOfEl = (el) => (el.closest('.node') || el).dataset.key;
 // Rows are drawn in two places — the page's outline and the fields under the title — and everything that *finds* a

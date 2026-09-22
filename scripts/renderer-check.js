@@ -583,8 +583,8 @@ assert.match(source, /const field = inField\(docId\);[\s\S]{0,1200}?const target
 assert.match(source, /const inField = \(docId\) => typeof docId === 'string' && docId\.includes\('\|tana:type:'\);/, 'and a field row is known by the id it is addressed with');
 // Two lists, deliberately: the caret walks the whole page, while anything that changes what a row belongs to stays
 // in the list that row lives in. Merging them made Backspace at the top of the page reach into the field above it.
-assert.match(source, /const texts = \(\) => rowsIn\(outline\);/, 'the outline\u2019s rows are their own list');
-assert.match(source, /const caretRows = \(\) => \[\.\.\.\(titleEl\.isContentEditable \? \[titleEl\] : \[\]\), \.\.\.fieldValues\(\), \.\.\.texts\(\)\];/,
+assert.match(source, /const texts = \(\) => rowsIn\(outline\)\.filter\(\(el\) => !el\.closest\('\.fvalues'\)\);/, 'the outline\u2019s rows are their own list');
+assert.match(source, /const caretRows = \(\) => \[\.\.\.\(titleEl\.isContentEditable \? \[titleEl\] : \[\]\), \.\.\.fieldValues\(\), \.\.\.rowsIn\(outline\)\];/,
   'and the caret walks title, fields, outline in reading order');
 assert.match(source, /const all = caretRows\(\), target = all\[all\.indexOf\(el\) \+ dir\];/, 'Up and Down move through every stop on the page');
 // ⌘A escalates: the row's words, then the rows of the editor the caret is in — the page's, or the field's.
@@ -629,7 +629,7 @@ assert.match(styleSheet, /\.fields \.fvalue:only-child:empty::before \{ content:
 assert.match(styleSheet, /\.fields \.fvalues \{ display: flex; flex-direction: column;/, 'the lines stack in the value column');
 // A render while the caret is in a field would rebuild the block and drop the caret mid-word, which every live
 // update, the refresh loop and the field's own save coming back all cause. The redraw waits for the blur instead.
-assert.match(source, /function renderFields\(parent, force = false\) \{\s*const el = \$\('fields'\);[\s\S]{0,900}?if \(!force && el\.contains\(document\.activeElement\)\) \{ fieldsDeferred = true; return; \}/,
+assert.match(source, /function renderFields\(parent, force = false, el = \$\('fields'\)\) \{[\s\S]{0,900}?if \(!force && el\.contains\(document\.activeElement\)\) \{ fieldsDeferred = true; return; \}/,
   'the fields block is not rebuilt while the caret is in it');
 assert.match(source, /if \(\(renderDeferred \|\| fieldsDeferred\) && !editingRow\(\) && !selectionFrozen\) render\(\);/, 'and the render it held back runs when the caret leaves');
 assert.match(source, /if \(!force && el\.contains\(document\.activeElement\)\) \{ fieldsDeferred = true; return; \}/,

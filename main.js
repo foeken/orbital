@@ -343,6 +343,7 @@ ipcMain.handle('doc:summaryUri', (_e, id) => summaryUri(id)); // where a meeting
 ipcMain.handle('doc:discussWith', (_e, id, who) => discussWith(id, who));
 // and what the title suggests that name is (main/ai.js). No key on this machine means no suggestion, not an error.
 ipcMain.handle('ai:discussWith', (_e, title) => ai.suggestDiscussWith(title));
+ipcMain.handle('doc:exportPdf', (_e, id) => require('./main/pdf').exportPdf(id, S.win));
 // The web link for a node, the same url home.tana.inc opens: /o/<org>/l/<encoded node uri>
 ipcMain.handle('doc:link', (_e, id) => {
   // the path segment is the org *document* ulid (tana:org:01ks7…), not the WorkOS org id in S.me.orgId

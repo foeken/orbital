@@ -46,6 +46,8 @@ const withShims = (src) => {
   src = src.replace(/onRows\('([a-z]+)', /g, "outline.addEventListener('$1', ");
   // a row knows whether it is drawn in a field from the id it is addressed with (renderer/nodes.js)
   if (/\binField\(/.test(src) && !/const inField =/.test(src)) src = sourceLine('const inField') + '\n' + src;
+  if (/\brenderFields\(/.test(src) && !/function renderFields\(|const renderFields =/.test(src)) src = 'globalThis.renderFields ??= () => {};\n' + src;
+  if (/\bloadRelated\(/.test(src) && !/function loadRelated\(|const loadRelated =/.test(src)) src = 'globalThis.loadRelated ??= () => {};\n' + src;
   // the rows a row lives among: its own container's, which in a harness with one container is texts()
   if (/\browsBeside\(/.test(src) && !/const rowsBeside =/.test(src)) src = 'globalThis.rowsBeside ??= (el) => texts();\n' + src;
   // the fields container, for the helpers that paint or leave a selection in both places rows live
@@ -1119,7 +1121,7 @@ function runReferenceEmbedRenderCheck() {
         checked: check ? !!check.checked : null, disabled: check ? !!check.disabled : null, toggles: check && check.onclick ? (check.onclick(), toggled) : null,
         selectsOnClick: typeof line.onmousedown === 'function', bullet: (line.children[1].onclick(), opened), loadedFrom: loaded,
         bulletIcon: [...line.children[1].classes].find((name) => name !== 'icon' && name !== 'hue') || null,
-        kidKeys: wrap ? wrap.children.map((kid) => kid.dataset.key) : null };
+        kidKeys: wrap ? wrap.children.filter((kid) => kid.dataset?.key).map((kid) => kid.dataset.key) : null };
     };
     ({ embed: (targetEditable) => {
       const embedded = {
@@ -1718,7 +1720,12 @@ function runHistoryCheck() {
     let view = 'tasks', zoom = null, caretOnOpen = false, rendered = 0;
     const localStorage = { setItem() {}, removeItem() {} };
     ${sourceBetween('const isRealId =', '\n')}
-    const flushAll = () => {}, dropDrafts = () => {};
+    const flushAll = () => {}, dropDrafts = () => {}, releaseHeld = () => {};
+    const kids = new Map(), searchRows = new Map(), refreshed = [], previews = [];
+    const isSearchDoc = (node) => node.id?.startsWith('tana:search:');
+    const run = (fn) => fn(), reload = async (id) => { refreshed.push(id); }, renderSoon = () => {};
+    const previewRows = (id) => { previews.push(id); searchRows.set(id, 'unsaved'); };
+
     const render = () => { rendered++; noteNavigation(); }; // what renderOutline does at its end
     ${sourceBetween('const navBack = [], navForward = [];', 'function noteNavigation')}
     ${functionSource('noteNavigation')}
@@ -1727,6 +1734,8 @@ function runHistoryCheck() {
       go: (v, z) => { view = v; zoom = z; render(); },
       hop: (v, z) => { navReplace = true; view = v; zoom = z; render(); }, // a meeting forwarding to its write-up
       back: () => navigate(-1), forward: () => navigate(1),
+      cache: (id, preview = false) => { kids.set(id, []); if (preview) searchRows.set(id, 'unsaved'); },
+      refreshes: () => [refreshed, previews],
       where: () => [view, zoom && zoom.docId, navBack.length, navForward.length],
     });
   `);
@@ -1746,6 +1755,25 @@ function runHistoryCheck() {
   assert.deepEqual(plain(api.where()), ['inbox', 'tana:text:writeup', 3, 0], 'a forwarded meeting is one place, not two');
   api.back();
   assert.deepEqual(plain(api.where()), ['inbox', null, 2, 1], 'so back skips the empty event page');
+  const search = 'tana:search:example';
+  api.go('library', { docId: search });
+  assert.deepEqual(plain(api.refreshes()), [[], []], 'an uncached search uses the normal initial loader');
+  api.cache(search);
+  api.go('library', { docId: 'tana:text:result' });
+  api.back();
+  assert.deepEqual(plain(api.refreshes()), [[search], []], 'Back reruns a cached saved search');
+  api.go('library', { docId: search });
+  assert.equal(api.refreshes()[0].length, 1, 'redrawing the same search does not rerun it');
+  api.back(); api.forward();
+  assert.equal(api.refreshes()[0].length, 2, 'Forward refreshes the saved search too');
+  api.go('library', { docId: 'tana:text:result' });
+  api.go('library', { docId: search });
+  assert.equal(api.refreshes()[0].length, 3, 'ordinary navigation such as a breadcrumb refreshes too');
+  api.cache(search, true);
+  api.go('library', { docId: 'tana:text:result' });
+  api.back();
+  assert.deepEqual(plain(api.refreshes()), [[search, search, search], [search]], 'returning to unsaved filters refreshes their preview instead of the stored query');
+
 }
 function runZoomShortcutCheck() {
   const anchor = source.indexOf("filterEl.addEventListener('keydown'");
@@ -1972,6 +2000,8 @@ function runRowAlignmentCheck() {
     const renderSegs = () => {}, segsOf = () => [], asDoc = (node) => ({ ...node, kind: 'document', text: node.text ?? node.title ?? '' });
     const isImage = () => false, taskSummary = () => null, chipEl = () => ({}), iconSvg = () => '';
     const childEl = () => document.createElement('div');
+    const renderFields = (parent, force, el) => { el.fieldDoc = parent.docId; };
+    const loadRelated = () => {};
     const isDivider = () => false;
     const documentSummary = () => null, observeMeta = () => {};
     ${sourceBetween('// Block types (api.setBlockType)', 'const images = new Map()')}
@@ -1988,7 +2018,7 @@ function runRowAlignmentCheck() {
     ${presentation}
     ${canExpand}
     ${functionSource('nodeEl')}
-    (node, children) => { kids = children || []; const el = nodeEl(node, 'doc', { node: { kind: 'document', editable: true } }); const chev = el.children[0].children[0]; return { first: chev.tagName, hidden: chev.hidden === true, off: chev.classList.contains('off') }; };
+    (node, children) => { kids = children || []; const el = nodeEl(node, 'doc', { node: { kind: 'document', editable: true } }); const chev = el.children[0].children[0]; return { first: chev.tagName, hidden: chev.hidden === true, off: chev.classList.contains('off'), fields: el.children[1]?.children[0]?.fieldDoc }; };
   `, { structuredClone });
   const states = {
     'collapsed with children': [{ id: 'a', kind: 'document', text: 'a', hasChildren: true, editable: true }, []],
@@ -2003,6 +2033,7 @@ function runRowAlignmentCheck() {
     assert.equal(row.first, 'button', state + ': the row still starts with the chevron button');
     assert.equal(row.hidden, false, state + ': the chevron keeps its gutter instead of being removed from the layout');
   }
+  assert.equal(rowChevron(states['expanded with children'][0], states['expanded with children'][1]).fields, 'doc', 'expanded documents draw their fields before body children');
   const styles = fs.readFileSync(require.resolve('../styles.css'), 'utf8');
   const chevRules = styles.split('\n').filter((line) => /(^|[\s,>])\.chev\b/.test(line) && !line.trim().startsWith('/*'));
   assert.ok(chevRules.length, 'styles.css styles the chevron');
@@ -2011,6 +2042,45 @@ function runRowAlignmentCheck() {
 }
 
 // A metadata read that fails while a brand-new document is still settling must be retried, not blacklisted for the session.
+function runInlineFieldsCheck() {
+  const api = vm.runInNewContext(`
+    ${FAKE_DOM}
+    const page = makeEl('div'), inline = makeEl('div'), $ = () => page;
+    const relatedBy = new Map([['doc', { fields: [{ key: 'tana:type:test?attribute=who', label: 'Discuss with', segments: [{ text: 'Rob Schuurman' }] }] }]]);
+    const kids = new Map(), loaded = [], built = [];
+    let fieldsDeferred = false;
+    const iconSvg = () => '', blurSensitive = () => {}, canEditItem = (item) => item.node.editable !== false;
+    const mkItem = (docId, node, parent) => ({ docId, node, parent });
+    const ensureLoaded = (host) => loaded.push(host.docId);
+    const renderSegs = (el, segments) => { el.textContent = segments.map(s => s.text).join(''); };
+    const withDraftTail = (rows) => rows;
+    const childEl = (node, host) => { built.push({ id: host.docId, editable: host.node.editable }); const el = makeEl('div'); el.textContent = node.text; return el; };
+    ${functionSource('renderFields')}
+    const parent = { docId: 'doc', node: { kind: 'document', editable: true } };
+    ({ draw: () => renderFields(parent, true, inline), state: () => ({ text: inline.textContent, page: page.textContent, loaded, built }),
+       ready: () => kids.set('doc|tana:type:test?attribute=who', [{ text: 'Updated value' }]),
+       readonly: () => { parent.node.editable = false; } });
+  `);
+  api.draw();
+  assert.equal(api.state().text, 'Discuss withRob Schuurman', 'inline fields show their labels and cached values while loading');
+  assert.equal(api.state().page, '', 'drawing inline fields leaves the zoomed page fields untouched');
+  assert.equal(api.state().loaded[0], 'doc|tana:type:test?attribute=who', 'field editing uses the existing document-field address');
+  api.ready(); api.readonly(); api.draw();
+  assert.equal(api.state().text, 'Discuss withUpdated value', 'loaded field rows replace the cached value');
+  assert.equal(api.state().built[0].editable, false, 'inline field editors inherit document write permission');
+  const navigation = vm.runInNewContext(`
+    const body = { closest: () => null }, fieldRow = { closest: () => field }, field = {};
+    const outline = {}, titleEl = { isContentEditable: false }, $ = () => ({ hidden: true });
+    const rowsIn = (el) => el === field ? [fieldRow] : [body, fieldRow];
+    ${sourceLine('const texts')}
+    ${sourceLine('const fieldValues')}
+    ${sourceLine('const rowsBeside')}
+    ${sourceLine('const caretRows')}
+    ({ structural: rowsBeside(body).length, field: rowsBeside(fieldRow).length, vertical: caretRows().length });
+  `);
+  assert.deepEqual(plain(navigation), { structural: 1, field: 1, vertical: 2 }, 'structural edits stay inside each outline while vertical movement includes inline fields');
+}
+
 async function runTaskMetaRetryCheck() {
   const context = vm.createContext({ setTimeout, clearTimeout, Date, Promise });
   vm.runInContext(`
@@ -2386,6 +2456,7 @@ async function runRailPinCheck() {
 
   const refresh = vm.runInNewContext(`
     const relatedBy = new Map([['event', {}], ['doc', {}]]), calls = [];
+    const queryRow = () => null, CSS = { escape: (id) => id }, selectionFrozen = false;
     const relatedStale = new Set(), connected = true, isRealId = () => true, renderSoon = () => {};
     const tana = { pinTo: async (...args) => calls.push(args), related: async () => ({ pinned: [] }) }, run = (fn) => fn();
     let renders = 0; const render = () => { renders++; };
@@ -2948,6 +3019,7 @@ async function runPinToMeetingCheck() {
     const run = (fn) => (queue = queue.then(fn).then((v) => { showError(null); return v; }, showError));
     const render = () => { renders++; };
     const relatedBy = new Map();
+    const queryRow = () => null, CSS = { escape: (id) => id }, selectionFrozen = false;
     const relatedStale = new Set(), connected = true, renderSoon = () => {};
     let answer = null, calls = 0, list = [], listFails = null, previews = [];
     const pins = [];
@@ -4719,8 +4791,9 @@ function runRefreshSpinCheck() {
 // never reached its title, the characters typed next went to the old row, and the local empty draft sat in the view
 // looking like a node that had been created. Nothing reached Tana, so nothing refreshed either.
 async function runCreateTaskFlowCheck() {
-  const makeHarness = () => {
-    const context = {};
+  const makeHarness = (delayed = false) => {
+    let release;
+    const context = { creationGate: delayed ? new Promise((resolve) => { release = resolve; }) : Promise.resolve() };
     vm.runInNewContext(`
       const listeners = {}, created = [], saved = [];
       const rowEl = { isContentEditable: true, dataset: { key: 'tana:text:01j0row000000000000000000' }, textContent: 'existing' };
@@ -4739,7 +4812,7 @@ async function runCreateTaskFlowCheck() {
       const markFalling = () => {}, refreshRowChrome = () => {}, renderPills = () => {}, $ = () => ({ hidden: true });
       const showError = () => {}, flush = () => {};
       const run = (fn) => fn();
-      const tana = { createDocument: async (title, opts) => { created.push([title, opts.kind]); return { id: 'tana:text:01j0made00000000000000000', title, icon: 'task', done: 0 }; } };
+      const tana = { createDocument: async (title, opts) => { created.push([title, opts.kind]); await creationGate; return { id: 'tana:text:01j0made00000000000000000', title, icon: 'task', done: 0 }; } };
       const sectionOf = (docId) => views.find((s) => s.nodes.some((n) => n.id === docId));
       const viewOf = () => views.find((s) => s.id === view) || views[0];
       const scheduleSave = (item, segs) => { saved.push([item.key, segs]); };
@@ -4769,14 +4842,16 @@ async function runCreateTaskFlowCheck() {
       ${functionSource('materialise')}
       ${sourceBetween("titleEl.addEventListener('input'", "titleEl.addEventListener('keydown'")}
       Object.assign(globalThis, {
+        redraw: () => render(true),
         create: () => startCreation({ id: 'task', kind: 'task', title: 'Task', icon: 'task', selectable: true }),
         type: (text) => { if (document.activeElement !== titleEl) return false; titleEl.textContent += text; listeners.input(); return true; },
         leave: () => { document.activeElement = null; listeners.blur(); },
-        state: () => ({ renders, deferred: renderDeferred, titleKey: titleEl.dataset.key, caretInTitle: document.activeElement === titleEl,
+        state: () => ({ title: titleEl.textContent, renders, deferred: renderDeferred, titleKey: titleEl.dataset.key, caretInTitle: document.activeElement === titleEl,
           created, saved, fresh: [...fresh.keys()],
           rows: views[0].nodes.map((n) => ({ id: n.id, text: n.text || '', draft: !!n.draft })) }),
       });
     `, context);
+    context.release = release;
     return context;
   };
 
@@ -4799,6 +4874,20 @@ async function runCreateTaskFlowCheck() {
   typed.type('hip it');
   assert.deepEqual(plain(typed.state()).saved, [['tana:text:01j0made00000000000000000', [{ text: 'Ship it' }]]],
     'the rest of the title is saved against the created document, not the draft');
+
+  const delayed = makeHarness(true);
+  delayed.create();
+  delayed.type('S');
+  delayed.redraw();
+  assert.equal(delayed.state().title, 'S', 'a forced live redraw preserves the first character while creation is pending');
+  delayed.type('hip');
+  delayed.redraw();
+  assert.equal(delayed.state().title, 'Ship', 'subsequent draft keystrokes survive another forced redraw');
+  delayed.release();
+  await new Promise(setImmediate);
+  assert.deepEqual(plain(delayed.state()).created, [['S', 'task']], 'redrawing the draft does not create it twice');
+  assert.deepEqual(plain(delayed.state()).saved, [['tana:text:01j0made00000000000000000', [{ text: 'Ship' }]]],
+    'all characters typed during creation are saved to the real document');
 
   const cancelled = makeHarness();
   cancelled.create();
@@ -4882,6 +4971,7 @@ async function runRailReadinessCheck() {
     const relatedStale = new Set();
     let connected = false;
     const renderSoon = () => {};
+    const queryRow = () => null, CSS = { escape: (id) => id }, selectionFrozen = false;
     const isRealId = (id) => typeof id === 'string' && id.startsWith('tana:');
     const tana = { related: async (id) => { asked.push(id); return { pinned: [] }; } };
     ${functionSource('loadRelated')}
@@ -6350,7 +6440,7 @@ function runCaretAtPointCheck() {
   assert.match(functionSource('materialise'), /tana\.insertAfter\(parent\.docId, last\?\.id \|\| null, text, node\.block\)/, 'and the draft is written as the kind it was drawn as');
 }
 
-const checks = [runCaretAtPointCheck, runPrefsStoreCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runSetIconCheck, runDiscussWithCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runAgentStatusBootCheck, runQuickAddPanelCheck, runRailChangesCheck, runPasteLinkCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck,runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck];
+const checks = [runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runSetIconCheck, runDiscussWithCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runAgentStatusBootCheck, runQuickAddPanelCheck, runRailChangesCheck, runPasteLinkCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck,runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck];
 // The chips under a zoomed title, driven through the shipped line itself: a typed document shows its type whatever
 // kind it is, and the kind chip (task, doc, meeting, space, chat…) stays out of the header, as it always did for a task.
 function runZoomTypeChipCheck() {
@@ -6895,6 +6985,7 @@ async function runSetHueCheck() {
 async function runDeletedNodeCheck() {
   const api = vm.runInNewContext(`
     const deletedIds = new Set();
+    const isSearchDoc = (node) => node.id?.startsWith('tana:search:');
     let zoom = null, view = 'library', caretOnOpen = false;
     let renders = 0;
     const errors = [], asked = [], opened = [];

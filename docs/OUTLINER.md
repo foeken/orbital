@@ -726,3 +726,9 @@ the modifier changed the outcome in one case out of three, on a row that already
 duplicated the link. A modifier that is inert in most drags is a worse thing to learn than a rule you can read off
 what you grabbed, so the rule is the one sentence above. A reference never lands in the document it points at, and
 unlike a move it may cross documents, since linking is exactly what it is for.
+
+## Export to PDF
+
+⌘K → **Export to PDF…** is available for the current text document, including read-only documents. Pending edits are queued before export. The native Save dialog defaults to the document title; cancellation writes nothing. Export reads the complete main outline, including collapsed children, without expanding references into other documents or including app controls, sidebar or typed metadata fields. Electron prints a separate sandboxed page as A4 with fixed light typography, lists, headings, inline marks, images and page margins. Image loading and PDF failures surface through the normal command error path. `node scripts/pdf-check.js` checks escaping and structure; an unsandboxed `electron scripts/pdf-check.js --render` generates three synthetic visual samples under `/tmp/orbital-pdf-examples`.
+
+Expanded documents show their type fields above their body children, using the same field renderer and editors as a zoomed page. Field rows keep their document-and-field address and write permissions. Vertical caret movement includes inline fields in reading order; structural edits stay inside the current field or body outline.
