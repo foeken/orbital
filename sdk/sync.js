@@ -258,7 +258,7 @@ class SyncConnection extends EventEmitter {
     const loro = document.loro;
     const vv = loro.oplogVersion();
     const cold = vv.length() === 0;
-    const res = await this._command({ case: 'beginDocumentSync', value: { documentId: id, clientVv: cold ? EMPTY : vv.encode(), ephemeral: false } }, BOOTSTRAP_MS);
+    const res = await this._command({ case: 'beginDocumentSync', value: { documentId: id, clientVv: cold ? EMPTY : vv.encode(), ephemeral: id.startsWith('tana:liveQuery:') } }, BOOTSTRAP_MS);
     if (gen !== entry.gen) return 'stale';
     if (res.responseUnion.case !== 'bootstrapResponse') throw new Error('unexpected ServerSyncCommand response: ' + res.responseUnion.case);
     const { sessionId, status, serverVv, serverUpdates } = res.responseUnion.value;
