@@ -16,11 +16,13 @@ function peersOf(handle) {
   return handle.peers().map((p) => ({ peer: p.peer, userHash: p.userHash, me: p.userHash === mine, name: (p.user && p.user.name) || 'Someone',
     blockId: (p.focusBlock && p.focusBlock.blockId) || (p.anchorBlock && p.anchorBlock.blockId) || null, editing: p.hasCursor }));
 }
+// Resolves to whether the room is open, so the renderer can ask again: before the connection exists (a launch that
+// restores a page renders it first) there is nothing to open it on, and a room that failed to open is not one.
 function open(docId) {
-  if (!S.client || typeof docId !== 'string') return false;
+  if (!S.client || typeof docId !== 'string') return Promise.resolve(false);
   let room = rooms.get(docId);
   if (room && room.client !== S.client) { close(docId, true); room = null; } // a new login: the old connection's room is gone
-  if (room) { room.count++; return true; }
+  if (room) { room.count++; return room.handle.then(() => true, () => false); }
   room = { count: 1, client: S.client, sent: '' };
   room.handle = openPresence(S.client.sync, docId).then((handle) => {
     const tell = () => send('presence:changed', docId, peersOf(handle));
@@ -28,9 +30,9 @@ function open(docId) {
     tell();
     return handle;
   });
-  room.handle.catch((e) => { rooms.delete(docId); report(e); });
+  room.handle.catch((e) => { if (rooms.get(docId) === room) rooms.delete(docId); report(e); });
   rooms.set(docId, room);
-  return true;
+  return room.handle.then(() => true, () => false);
 }
 function close(docId, all = false) {
   const room = rooms.get(docId);

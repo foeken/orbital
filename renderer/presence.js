@@ -39,7 +39,11 @@ function syncRooms() {
   const page = presenceDoc;
   const want = new Set([...(page ? [page] : []), ...presenceRowDocs().filter((id) => id !== page).slice(0, ROW_ROOMS)]);
   for (const id of presenceRooms) if (!want.has(id)) { tana.presenceClose(id); presenceRooms.delete(id); presenceByDoc.delete(id); }
-  for (const id of want) if (!presenceRooms.has(id)) { tana.presenceOpen(id); presenceRooms.add(id); }
+  // counted as open only once main says it is: one refused (no connection yet) or failed is asked for again next time
+  for (const id of want) if (!presenceRooms.has(id)) {
+    presenceRooms.add(id);
+    Promise.resolve(tana.presenceOpen(id)).then((ok) => { if (!ok) presenceRooms.delete(id); }, () => presenceRooms.delete(id));
+  }
 }
 // Scrolling brings other rows into reach: their rooms open, the ones scrolled far away close.
 let presenceScroll = null;
@@ -116,4 +120,6 @@ document.addEventListener('selectionchange', tellSoon);
 document.addEventListener('focusout', () => queueMicrotask(tellPresence));
 window.addEventListener('blur', tellPresence);
 window.addEventListener('focus', tellSoon);
+// the connection coming up is when a room refused before it can open: follow the page again
+if (tana.onStatus) tana.onStatus((s) => { if (s && s.connected) queueMicrotask(syncPresence); });
 if (tana.onPresence) tana.onPresence((docId, peers) => { if (presenceRooms.has(docId)) { presenceByDoc.set(docId, Array.isArray(peers) ? peers : []); paintPresence(); } });

@@ -98,7 +98,10 @@ const ME = peer(1234567, 1), MY_OTHER_TAB = peer(1234567, 2), OTHER = peer(76543
       sendEphemeral: async (id, data) => { sent.push(['send', id, data]); return true; }, viewingHeartbeat: async (id) => { sent.push(['view', id]); return true; }, getDocument: (id) => (id === DOC ? page : undefined) });
     state.S.client = { sync: wire }; state.S.me = { user: { firstName: 'Andre', lastName: 'Foeken' } };
     const told = []; state.S.win = { isDestroyed: () => false, webContents: { send: (...a) => told.push(a) } };
-    assert.equal(presence.open(DOC), true); presence.open(DOC);
+    const client = state.S.client; state.S.client = null;
+    assert.equal(await presence.open(DOC), false, 'no connection yet: refused, so the renderer asks again');
+    state.S.client = client;
+    assert.equal(await presence.open(DOC), true); assert.equal(await presence.open(DOC), true);
     await tick();
     wire.emit('ephemeral', DOC, remote(OTHER, { user: { name: 'Stan' }, anchorBlockId: 'b1', anchorBlockOffset: 0 }).out[0]);
     wire.emit('ephemeral', DOC, remote(MY_OTHER_TAB, { user: { name: 'Andre' }, anchorBlockId: 'b2', anchorBlockOffset: 0 }).out[0]);
