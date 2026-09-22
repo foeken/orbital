@@ -870,6 +870,13 @@ async function main() {
     assert.equal(String(fromPanel[0].prompt).split('\n')[0], 'Tana: Review the Q3 risk log',
       'a task made in the quick-add panel opens with its node title, so Codex names it after the work');
     assert.equal(backend.S.status.error, stuck.agentError, 'which the window shows too');
+    // A node whose task already runs on another machine is refused before anything is written: the context and the
+    // stored prompt used to be rewritten first, for a handoff that then never happened.
+    const elsewhere = 'tana:text:01j0elsewhere000000000000';
+    const attic = backend.agent.addHost({ title: 'Attic', ssh: 'attic.local', bin: '/opt/codex' });
+    backend.agent.setCodexTask(elsewhere, '01a0b3a3-c000-70b0-896e-08e86986ca0f', attic.id);
+    await assert.rejects(backend.assignToAgent(elsewhere, 'Do it', 'm', 'local'), /runs on Attic/, 'a remote task is refused by name');
+    assert.equal((backend.settings.get('codexPrompt') || {})[elsewhere], undefined, 'and its prompt was not rewritten on the way');
     // The shortcut: both ways registration can fail used to be silent.
     const ok = backend.registerShortcut({ register: () => true }, () => {});
     assert.deepEqual(plainJson(ok), { accelerator: backend.QUICK_ACCELERATOR, registered: true, error: null });

@@ -237,6 +237,11 @@ async function assignToAgent(id, prompt, model, host) {
   // A machine that is not there cannot take the task: say so before anything is written, so the page keeps the
   // prompt, the model and the choice of host and the press can simply be repeated.
   if (where !== 'local' && !(await agent.hostReady(where))) throw new Error((agent.hostRecord(where).title || where) + ' cannot be reached right now');
+  // A task that already lives on another machine cannot be opened or queued from here — the deep link and the Codex
+  // CLI both resolve against this app's own store, which is why the badge's codex:open refuses the same way — so it
+  // is refused before the context and the stored prompt are rewritten for a handoff that will not happen.
+  const existing = agent.taskLink(id);
+  if (existing && existing.host !== 'local') throw new Error('This task runs on ' + ((agent.hostRecord(existing.host) || {}).title || existing.host) + '; queue to it from that machine');
   const result = await setCodex(id, true, prompt);
   // The node's own title, taken off the document the assignment just wrote to, so the Codex task is named after the
   // work rather than after the prompt's opening sentence. Read here and not passed in by each window: one authority
@@ -258,10 +263,6 @@ async function assignToAgent(id, prompt, model, host) {
     }
     return result;
   }
-  // A task that lives on another machine cannot be opened or queued from here: the deep link and the Codex CLI both
-  // resolve against this app's own store, which is why the badge's codex:open refuses the same way.
-  const existing = agent.taskLink(id);
-  if (existing && existing.host !== 'local') return result;
   if (!shell || !shell.openExternal) throw new Error('Cannot open Codex from here'); // no silent success
   await shell.openExternal(plan.url);
   if (plan.queue) queueToTask(plan.threadId, plan.queue);
