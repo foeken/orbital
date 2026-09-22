@@ -163,6 +163,8 @@ All operations run inside `document.transact`, so each is one undo step and one 
 
 `cursorAt(document, blockId, offset)` → a Loro `Cursor` at that character offset in the block's text, counted as the outline shows it (a mention as its label, a line break as one): on the text run it falls in, or on the children list at a mention; past the end, after the last item; null for an unknown block. How presence shares an exact caret (`sdk/presence.js` `setLocal`). Offsets are Loro unicode positions, so astral characters before the caret shift it by one each.
 
+`charOffset(document, blockId, position)` / `blockOffset(document, blockId, offset)`: convert a caret between Tana's ProseMirror position from the start of the block (presence `anchorBlock`/`focusBlock` offsets: a mention or a line break is one position) and the outline's character offset (a mention is its label). A caret inside a mention's label maps to just before it; null for an unknown block.
+
 ## `sdk/fields.js` — typed fields ("attributes")
 
 A field value is a ProseMirror-style tree in the document's own `data.attributes` map under the key `"<type uri>?attribute=<key>"`: `{ nodeName: 'doc', attributes: {}, children: [{ nodeName: 'paragraph', attributes: { blockId }, children: [text] }] }`. The field's name lives in the *type* document's `data.template.attributes` (`[{ key, title, type?, cardinality?, to? }]`); the graph node's `typeDef` carries the same list but is not always readable, so read the type document.

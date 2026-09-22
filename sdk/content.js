@@ -220,6 +220,43 @@ function cursorAt(document, id, offset) {
   return list.getCursor(list.length) || null; // past the end: after the last inline item
 }
 
+// Tana's editor counts a caret in ProseMirror positions from the start of its block (presence anchorBlock/focusBlock
+// offset): a mention or a line break is one position, text one per character. The outline counts a mention as its
+// label. These convert between the two over the block's own inline items; null for an unknown block.
+function inlineItems(document, id) {
+  const found = locate(kids(document.content), id), list = found && kids(found.block);
+  if (!list) return null;
+  const out = [];
+  for (let i = 0; i < list.length; i++) {
+    const x = list.get(i);
+    if (x.kind() === 'Text') out.push({ text: true, chars: x.length });
+    else out.push({ text: false, chars: isMention(x) ? String(x.get('attributes').get('label') || '').length : name(x) === 'hardBreak' ? 1 : 0 });
+  }
+  return out;
+}
+function charOffset(document, id, position) { // Tana's position -> the outline's character offset
+  const items = inlineItems(document, id);
+  if (!items) return null;
+  let left = Math.max(0, Number(position) || 0), chars = 0;
+  for (const it of items) {
+    if (it.text) { if (left <= it.chars) return chars + left; left -= it.chars; chars += it.chars; continue; }
+    if (left < 1) return chars;
+    left -= 1; chars += it.chars;
+  }
+  return chars;
+}
+function blockOffset(document, id, offset) { // the outline's character offset -> Tana's position
+  const items = inlineItems(document, id);
+  if (!items) return null;
+  let left = Math.max(0, Number(offset) || 0), position = 0;
+  for (const it of items) {
+    if (it.text) { if (left <= it.chars) return position + left; left -= it.chars; position += it.chars; continue; }
+    if (left < it.chars) return position; // inside a mention: before it
+    left -= it.chars; position += 1;
+  }
+  return position;
+}
+
 // ---- build / copy
 
 function create(list, index, nodeName) {
@@ -749,4 +786,4 @@ function insertMention(document, { uri, label } = {}, { parentId = null, afterId
   return out;
 }
 
-module.exports = { cursorAt, readOutline, assignBlockIds, setText, inlineGroups, writeInline, styleDoc, setBlockType, insertDivider, insertAfter, insertBefore, insertChild, insertMention, split, remove, removeMany, indent, indentMany, outdent, outdentMany, move, moveMany, moveTo, toggleCheckbox, newId, BLOCK_TYPES };
+module.exports = { cursorAt, charOffset, blockOffset, readOutline, assignBlockIds, setText, inlineGroups, writeInline, styleDoc, setBlockType, insertDivider, insertAfter, insertBefore, insertChild, insertMention, split, remove, removeMany, indent, indentMany, outdent, outdentMany, move, moveMany, moveTo, toggleCheckbox, newId, BLOCK_TYPES };

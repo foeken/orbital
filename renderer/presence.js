@@ -70,6 +70,27 @@ function avatarEl(p, cls) {
   a.title = p.me ? 'You, in another tab' + (p.editing ? ', editing this' : '') : p.name + (p.editing ? ' is editing this' : ' is here');
   return a;
 }
+// Where a character offset is inside a row's text, as a screen rectangle: the text as the row shows it, mention labels
+// included and the caret anchors the editor keeps left out (segments.js CARET_ANCHOR). Past the end: the end.
+function caretRect(el, offset) {
+  const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  let left = offset, last = null;
+  for (let node = walk.nextNode(); node; node = walk.nextNode()) {
+    const s = node.data;
+    for (let i = 0; i < s.length; i++) {
+      if (s[i] === CARET_ANCHOR) continue;
+      if (left === 0) return rangeRect(node, i);
+      left--;
+    }
+    last = node;
+  }
+  return last ? rangeRect(last, last.data.length) : null;
+}
+function rangeRect(node, i) {
+  const r = document.createRange(); r.setStart(node, i); r.collapse(true);
+  const box = r.getClientRects()[0] || r.getBoundingClientRect();
+  return box && (box.height || box.top) ? box : null;
+}
 function paintPresence() {
   let strip = document.getElementById('presence');
   if (!strip) { strip = document.createElement('div'); strip.id = 'presence'; strip.className = 'presence'; titleEl.parentElement.append(strip); }
@@ -83,8 +104,16 @@ function paintPresence() {
     for (const p of here) {
       if (!p.blockId || item.docId !== presenceDoc || item.node.id !== p.blockId) continue;
       const mark = document.createElement('span');
-      mark.className = 'pcaret'; mark.style.setProperty('--hue', String(presenceHue(p))); mark.title = p.me ? 'You, in another tab' : p.name; mark.dataset.name = initials(p.name);
+      mark.className = 'pcaret'; mark.style.setProperty('--hue', String(presenceHue(p))); mark.title = p.me ? 'You, in another tab' : p.name;
+      mark.dataset.name = p.me ? 'You' : p.name;
       line.append(mark);
+      // at the character their caret is on, as Tana draws it; without an offset (not converted yet) at the row's start
+      const text = line.querySelector('.text'), box = text && p.offset != null ? caretRect(text, p.offset) : null;
+      if (box) {
+        const base = line.getBoundingClientRect();
+        mark.classList.add('at');
+        mark.style.left = (box.left - base.left) + 'px'; mark.style.top = (box.top - base.top) + 'px'; mark.style.height = box.height + 'px';
+      }
     }
     // a document row someone is in: their avatars at the end of it
     const node = referenceTarget(item.node) || item.node;

@@ -4,17 +4,23 @@
 // counted per holder, closed when the last one lets go. This connection is never shown (it is you, here); your own
 // other tabs and devices are, marked as you, which is also how presence can be tried alone: open the node in Tana.
 const { openPresence, userHashOf, HEARTBEAT_MS } = require('../sdk/presence');
-const { cursorAt } = require('../sdk/content');
+const { cursorAt, charOffset, blockOffset } = require('../sdk/content');
 const { S, send, report } = require('./state');
 
 const rooms = new Map(); // docId -> { count, client, handle: Promise<handle>, sent }
 const myName = () => { const u = (S.me && S.me.user) || {}; return [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email || 'Orbital'; };
-// What the renderer draws: one entry per peer, on the block their caret is in (null: in the document, no caret); me =
-// your own other tab or device.
-function peersOf(handle) {
-  const mine = S.client ? userHashOf(S.client.sync.peerId) : null;
-  return handle.peers().map((p) => ({ peer: p.peer, userHash: p.userHash, me: p.userHash === mine, name: (p.user && p.user.name) || 'Someone',
-    blockId: (p.focusBlock && p.focusBlock.blockId) || (p.anchorBlock && p.anchorBlock.blockId) || null, editing: p.hasCursor }));
+// What the renderer draws: one entry per peer, on the block their caret is in (null: in the document, no caret), at
+// offset (the head of their selection, as the outline counts characters; null when the document is not loaded here to
+// convert Tana's position with); me = your own other tab or device.
+function peersOf(handle, docId) {
+  const mine = S.client ? userHashOf(S.client.sync.peerId) : null, doc = S.client && S.client.sync.getDocument(docId);
+  return handle.peers().map((p) => {
+    const at = p.focusBlock || p.anchorBlock;
+    let offset = null;
+    try { offset = at && doc ? charOffset(doc, at.blockId, at.offset) : null; } catch { offset = null; }
+    return { peer: p.peer, userHash: p.userHash, me: p.userHash === mine, name: (p.user && p.user.name) || 'Someone',
+      blockId: at ? at.blockId : null, offset, editing: p.hasCursor };
+  });
 }
 // Resolves to whether the room is open, so the renderer can ask again: before the connection exists (a launch that
 // restores a page renders it first) there is nothing to open it on, and a room that failed to open is not one.
@@ -25,7 +31,7 @@ function open(docId) {
   if (room) { room.count++; return room.handle.then(() => true, () => false); }
   room = { count: 1, client: S.client, sent: '' };
   room.handle = openPresence(S.client.sync, docId).then((handle) => {
-    const tell = () => send('presence:changed', docId, peersOf(handle));
+    const tell = () => send('presence:changed', docId, peersOf(handle, docId));
     handle.on('change', tell);
     tell();
     return handle;
@@ -61,7 +67,9 @@ function set(docId, at) {
     if (!at) return h.clearLocal();
     const doc = S.client && S.client.sync.getDocument(docId);
     const bytes = (offset) => { try { const c = doc && cursorAt(doc, at.blockId, offset); return c ? c.encode() : null; } catch { return null; } };
-    h.setLocal({ user: { name: myName() }, anchorBlock: { blockId: at.blockId, offset: at.anchor }, focusBlock: { blockId: at.blockId, offset: at.focus },
+    // the block offsets in Tana's own units (a mention is one position), which is what its editor falls back to
+    const tanaAt = (offset) => { try { const p = doc && blockOffset(doc, at.blockId, offset); return p == null ? offset : p; } catch { return offset; } };
+    h.setLocal({ user: { name: myName() }, anchorBlock: { blockId: at.blockId, offset: tanaAt(at.anchor) }, focusBlock: { blockId: at.blockId, offset: tanaAt(at.focus) },
       anchor: bytes(at.anchor), focus: bytes(at.focus) });
   }, () => {});
 }

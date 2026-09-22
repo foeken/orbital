@@ -831,8 +831,9 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .pavatar.editing { opacity: 1; box-shadow: 0 0 0 2px oklch(0.7 0.12 var(--hue)); }
 .node > .line:has(> .pcaret) { position: relative; } /* only lines that carry a marker */
 .pcaret { position: absolute; left: -6px; top: 4px; bottom: 4px; width: 2px; border-radius: 1px; background: oklch(0.65 0.15 var(--hue)); }
-.pcaret::after { content: attr(data-name); position: absolute; left: -2px; top: -12px; font-size: 9px; line-height: 11px; padding: 0 3px; border-radius: 3px;
-  background: oklch(0.65 0.15 var(--hue)); color: #fff; font-weight: 600; }
+.pcaret::after { content: attr(data-name); position: absolute; left: -2px; bottom: 100%; margin-bottom: 1px; font-size: 11px; line-height: 16px; padding: 0 6px; border-radius: 4px 4px 4px 0;
+  background: oklch(0.65 0.15 var(--hue)); color: #fff; font-weight: 600; white-space: nowrap; pointer-events: none; }
+.pcaret.at { bottom: auto; width: 2px; border-radius: 0; pointer-events: none; } /* between the characters, as Tana draws it */
 .prow { flex: none; display: inline-flex; align-items: center; gap: 2px; margin: 3px 0 0 8px; font-size: 11px; color: #999; } /* people in a listed document */
 .pmini { width: 18px; height: 18px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 600;
   background: oklch(0.92 0.06 var(--hue)); color: oklch(0.4 0.12 var(--hue)); opacity: .55; user-select: none; }

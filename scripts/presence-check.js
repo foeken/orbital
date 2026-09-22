@@ -112,10 +112,17 @@ const ME = peer(1234567, 1), MY_OTHER_TAB = peer(1234567, 2), OTHER = peer(76543
     assert.equal(mine.length, 1, 'one send per caret move');
     const them = new EphemeralStore(30000); them.apply(mine[0][2]);
     const entry = them.getAllStates()[ME];
-    assert.deepEqual([entry.user, entry.anchorBlockId, entry.anchorBlockOffset, entry.focusBlockOffset], [{ name: 'Andre Foeken' }, b3, 8, 8], 'seen under your name, on your block and offset');
+    assert.deepEqual([entry.user, entry.anchorBlockId, entry.anchorBlockOffset, entry.focusBlockOffset], [{ name: 'Andre Foeken' }, b3, 6, 6], 'seen under your name, on your block, at Tana\'s position (the mention counts one)');
     // the exact caret: a Loro cursor Tana can resolve, in the second text run ('Hi ' + 'Rob' + ' t|here')
     const pos = page.loro.getCursorPos(require('loro-crdt').Cursor.decode(entry.anchor));
     assert.equal(pos.offset, 2, 'offset 8 is two characters into the text after the mention');
+    // a Tana caret arrives in its positions and is drawn at the outline's character: 4 (just after the mention) is 6
+    wire.emit('ephemeral', DOC, remote(OTHER, { user: { name: 'Stan' }, anchorBlockId: b3, anchorBlockOffset: 4, focusBlockId: b3, focusBlockOffset: 5 }).out[0]);
+    const stan = told.filter((x) => x[0] === 'presence:changed').at(-1)[2].find((p) => p.name === 'Stan');
+    assert.deepEqual([stan.blockId, stan.offset], [b3, 7], 'the head of the selection, converted to the outline\'s count');
+    assert.deepEqual([0, 3, 4, 5, 10, 99].map((p) => content.charOffset(page, b3, p)), [0, 3, 6, 7, 12, 12], 'Tana position -> character');
+    assert.deepEqual([0, 3, 4, 6, 8, 12].map((o) => content.blockOffset(page, b3, o)), [0, 3, 3, 4, 6, 10], 'character -> Tana position (inside a mention: before it)');
+    assert.equal(content.charOffset(page, 'nope', 1), null);
     presence.set(DOC, null); await tick();
     them.apply(sent.filter((s) => s[0] === 'send').at(-1)[2]);
     assert.equal(them.getAllStates()[ME], undefined, 'leaving the outline takes the caret away');
