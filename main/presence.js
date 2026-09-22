@@ -1,6 +1,6 @@
 'use strict';
-// Presence in the app (issue #14), over sdk/presence.js: who else is in the documents on screen (the page you have
-// open and the document rows listed on it) and on which block, and being seen there ourselves. One room per document,
+// Presence in the app (issue #14), over sdk/presence.js: who else is in the page on screen and
+// on which block, and being seen there ourselves. One room per document,
 // counted per holder, closed when the last one lets go. This connection is never shown (it is you, here); your own
 // other tabs and devices are, marked as you, which is also how presence can be tried alone: open the node in Tana.
 const { openPresence, userHashOf, HEARTBEAT_MS } = require('../sdk/presence');

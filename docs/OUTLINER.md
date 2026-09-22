@@ -736,12 +736,13 @@ Expanded documents show their type fields above their body children, using the s
 
 ### Presence: who else is here (issue #14)
 
-Every document on screen has its presence room open: the zoomed page, and the document rows in reach of the scroll (renderer/presence.js
-follows both after every render; main/presence.js keeps one counted room per document over sdk/presence.js). Only the page gets
-the viewing heartbeat. A listed document someone is in shows their small avatars at the end of its row (three, then +N). Each person has a colour of their own (from their user hash). Their caret is drawn where Tana draws it: a thin line in that colour between the characters it is on, with their name above
-it ("You" for your own other tab). Tana sends the position in ProseMirror units, where a mention is one; main converts it to the
+The page on screen has its presence room open (renderer/presence.js
+follows the zoom after every render; main/presence.js keeps one counted room per document over sdk/presence.js), with the
+viewing heartbeat. Lists show no presence. Each person has a colour of their own (from their user hash). Their caret is drawn where Tana draws it: a thin line in that colour between the characters it is on, with their full name on it,
+as Tana labels one, below the caret instead when the row is too near the top of the scroll area to fit it above. Tana sends the position in ProseMirror units, where a mention is one; main converts it to the
 outline's count, where a mention is its label (content.charOffset), and your own caret goes out the other way (blockOffset).
-Without a position yet, the row gets the thin bar on its left instead. This Orbital is never shown; your own other tabs and devices are, as "You" (and a dashed ring on list avatars), which is also how to try presence alone: open the same node in Tana.
+Without a position yet, the row gets the thin bar on its left instead. This Orbital is never shown; your own other tabs and devices are, under your name, which is also how to try presence alone: open
+the same node in Tana.
 
 Where your caret is goes the other way: while it is in a block of this page, your presence entry says so under your name
 (`user.name`, no colour, so Tana picks one as it does for anyone): the block id with the caret's anchor and focus offsets, and
@@ -749,5 +750,4 @@ the same positions as Loro cursors (content.cursorAt, on the text run the caret 
 selection from. It follows every caret move, at most one message per 150 ms, and is cleared when the caret leaves the outline, the
 window loses focus or the page changes. Only a block counts: the title and a draft row are not blocks yet.
 The viewing heartbeat goes to the page on screen only while the window is visible and you were active (a key, the mouse, a
-scroll) in the last minute, as Tana sends it. Rooms for document rows follow the scroll: the rows on screen and one screen above
-and below, re-checked 200 ms after scrolling, at most 60 at once.
+scroll) in the last minute, as Tana sends it.

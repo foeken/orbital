@@ -1,53 +1,29 @@
 'use strict';
-// Presence (issue #14; main/presence.js). Show: everyone else's caret in the document on screen, on the row and at the
-// character it is on; and on a list, small avatars on every document row someone is in.
-// Tell: where your caret is while you edit here, as the block and the exact position, so Tana draws it.
-let presenceDoc = null;           // the page on screen: it gets the heartbeat and your caret
-const presenceRooms = new Set();  // every document whose room is open: the page and the document rows on screen
-const presenceByDoc = new Map();  // docId -> [{ peer, userHash, me, name, blockId, editing }] from main (me: your other tab)
-let presenceSent = null;          // the caret last told, as JSON
-// Rooms follow the scroll: the document rows on screen and one screen above and below, re-checked as you scroll, and
-// never more than this many at once however tall the window.
-const ROW_ROOMS = 60;
+// Presence (issue #14; main/presence.js), for the page on screen only. Show: everyone else's caret in it, on the row and
+// at the character it is on, labelled with their name as Tana labels one. Tell: where your caret is while you edit
+// here, as the block and the exact position, so Tana draws it.
+let presenceDoc = null;   // the page on screen: its room is open, it gets the heartbeat and your caret
+let presenceOpen = false; // main has said the room is open
+let presencePeers = [];   // [{ peer, userHash, me, name, blockId, offset, editing }] from main (me: your other tab)
+let presenceSent = null;  // the caret last told, as JSON
 const presenceHue = (p) => Number(BigInt(p.userHash || 0) % 360n); // one colour per person, the same everywhere
-const initials = (name) => String(name).split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('') || '?';
 
-// the documents drawn as rows on screen or within a screen of it, in page order
-function presenceRowDocs() {
-  const out = [], view = outline.parentElement.getBoundingClientRect(), reach = view.height;
-  for (const el of outline.querySelectorAll('.node')) {
-    const box = el.getBoundingClientRect();
-    if (box.bottom < view.top - reach || box.top > view.bottom + reach) continue;
-    const item = items.get(el.dataset.key), node = item && (referenceTarget(item.node) || item.node);
-    if (node && node.kind === 'document' && isRealId(node.id) && !out.includes(node.id)) out.push(node.id);
-  }
-  return out;
-}
-// After every render: open the rooms of what is on screen now, close the rest, then draw who is where.
+// After every render: follow the page (open its room, close the last one's), then draw the carets.
 function syncPresence() {
   if (!tana.presenceOpen) return;
   const page = zoom ? zoom.docId : null;
   if (page !== presenceDoc) {
-    if (presenceDoc) tana.presenceSet(presenceDoc, null);
-    presenceDoc = page; presenceSent = null;
+    if (presenceDoc) { tana.presenceSet(presenceDoc, null); if (presenceOpen) tana.presenceClose(presenceDoc); }
+    presenceDoc = page; presenceOpen = false; presencePeers = []; presenceSent = null;
     viewPresence();
   }
-  syncRooms();
+  // counted as open only once main says it is: refused (no connection yet) or failed, it is asked for again next time
+  if (page && !presenceOpen) {
+    presenceOpen = true;
+    Promise.resolve(tana.presenceOpen(page)).then((ok) => { if (!ok && presenceDoc === page) presenceOpen = false; }, () => { if (presenceDoc === page) presenceOpen = false; });
+  }
   paintPresence();
 }
-function syncRooms() {
-  const page = presenceDoc;
-  const want = new Set([...(page ? [page] : []), ...presenceRowDocs().filter((id) => id !== page).slice(0, ROW_ROOMS)]);
-  for (const id of presenceRooms) if (!want.has(id)) { tana.presenceClose(id); presenceRooms.delete(id); presenceByDoc.delete(id); }
-  // counted as open only once main says it is: one refused (no connection yet) or failed is asked for again next time
-  for (const id of want) if (!presenceRooms.has(id)) {
-    presenceRooms.add(id);
-    Promise.resolve(tana.presenceOpen(id)).then((ok) => { if (!ok) presenceRooms.delete(id); }, () => presenceRooms.delete(id));
-  }
-}
-// Scrolling brings other rows into reach: their rooms open, the ones scrolled far away close.
-let presenceScroll = null;
-outline.parentElement.addEventListener('scroll', () => { if (!presenceScroll) presenceScroll = setTimeout(() => { presenceScroll = null; if (tana.presenceOpen) { syncRooms(); paintPresence(); } }, 200); }, { passive: true });
 // The viewing heartbeat, as Tana sends it: for the page on screen, only while the window is visible and you were active
 // (a key, the mouse, a scroll) in the last minute. Main sends it every 10 s while a page is named, and stops at null.
 const ACTIVE_MS = 60000;
@@ -62,14 +38,6 @@ function viewPresence() {
 for (const type of ['keydown', 'mousedown', 'mousemove', 'wheel']) document.addEventListener(type, () => { const idle = Date.now() - lastActive >= ACTIVE_MS; lastActive = Date.now(); if (idle) viewPresence(); }, { passive: true, capture: true });
 document.addEventListener('visibilitychange', viewPresence);
 setInterval(viewPresence, 10000); // notices the minute of inactivity running out
-function avatarEl(p, cls) {
-  const a = document.createElement('span');
-  a.className = cls + (p.editing ? ' editing' : '') + (p.me ? ' me' : '');
-  a.style.setProperty('--hue', String(presenceHue(p)));
-  a.textContent = initials(p.name);
-  a.title = p.me ? 'You, in another tab' + (p.editing ? ', editing this' : '') : p.name + (p.editing ? ' is editing this' : ' is here');
-  return a;
-}
 // Where a character offset is inside a row's text, as a screen rectangle: the text as the row shows it, mention labels
 // included and the caret anchors the editor keeps left out (segments.js CARET_ANCHOR). Past the end: the end.
 function caretRect(el, offset) {
@@ -92,38 +60,30 @@ function rangeRect(node, i) {
   return box && (box.height || box.top) ? box : null;
 }
 function paintPresence() {
-  const here = presenceByDoc.get(presenceDoc) || [];
-  for (const el of document.querySelectorAll('.pcaret, .prow')) el.remove();
+  for (const el of document.querySelectorAll('.pcaret')) el.remove();
+  if (!presencePeers.length) return;
   for (const line of eachRow('.node > .line')) {
     const item = items.get(line.parentElement.dataset.key);
-    if (!item) continue;
-    // a row of this page's outline that someone's caret is in
-    for (const p of here) {
-      if (!p.blockId || item.docId !== presenceDoc || item.node.id !== p.blockId) continue;
+    if (!item || item.docId !== presenceDoc) continue;
+    for (const p of presencePeers) {
+      if (!p.blockId || item.node.id !== p.blockId) continue;
       const mark = document.createElement('span');
       mark.className = 'pcaret'; mark.style.setProperty('--hue', String(presenceHue(p))); mark.title = p.me ? 'You, in another tab' : p.name;
-      mark.dataset.name = p.me ? 'You' : p.name;
+      mark.dataset.name = p.name; // the full name, yours too, as Tana labels a caret
       line.append(mark);
       // at the character their caret is on, as Tana draws it; without an offset (not converted yet) at the row's start
       const text = line.querySelector('.text'), box = text && p.offset != null ? caretRect(text, p.offset) : null;
-      if (box) {
-        const base = line.getBoundingClientRect();
-        mark.classList.add('at');
-        mark.style.left = (box.left - base.left) + 'px'; mark.style.top = (box.top - base.top) + 'px'; mark.style.height = box.height + 'px';
-      }
+      if (!box) continue;
+      const base = line.getBoundingClientRect();
+      mark.classList.add('at');
+      mark.style.left = (box.left - base.left) + 'px'; mark.style.top = (box.top - base.top) + 'px'; mark.style.height = box.height + 'px';
+      // the name sits on top of the caret; on a row too near the top of the scroll area it would be clipped, so below
+      if (box.top - outline.parentElement.getBoundingClientRect().top < 22) mark.classList.add('below');
     }
-    // a document row someone is in: their avatars at the end of it
-    const node = referenceTarget(item.node) || item.node;
-    const inside = node.kind === 'document' && node.id !== presenceDoc ? presenceByDoc.get(node.id) || [] : [];
-    if (!inside.length) continue;
-    const row = document.createElement('span'); row.className = 'prow';
-    row.append(...inside.slice(0, 3).map((p) => avatarEl(p, 'pmini')));
-    if (inside.length > 3) row.append('+' + (inside.length - 3));
-    line.append(row);
   }
 }
 // Tell: the block and the exact caret (or selection) while it is in this page's outline; nothing once it leaves it or
-// the window. Offsets count characters as the row shows them; main turns them into Loro cursors.
+// the window. Offsets count characters as the row shows them; main turns them into Loro cursors and Tana's positions.
 function caretIn(el) {
   const s = getSelection();
   if (!s.rangeCount || !el.contains(s.anchorNode) || !el.contains(s.focusNode)) return null;
@@ -148,4 +108,4 @@ window.addEventListener('blur', tellPresence);
 window.addEventListener('focus', tellSoon);
 // the connection coming up is when a room refused before it can open: follow the page again
 if (tana.onStatus) tana.onStatus((s) => { if (s && s.connected) queueMicrotask(syncPresence); });
-if (tana.onPresence) tana.onPresence((docId, peers) => { if (presenceRooms.has(docId)) { presenceByDoc.set(docId, Array.isArray(peers) ? peers : []); paintPresence(); } });
+if (tana.onPresence) tana.onPresence((docId, peers) => { if (docId === presenceDoc) { presencePeers = Array.isArray(peers) ? peers : []; paintPresence(); } });
