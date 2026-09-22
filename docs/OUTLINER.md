@@ -391,6 +391,8 @@ task is never listed a second time elsewhere. The dates come from one `api.pinDa
 `sdk/pins.js datePins`, the pin-map), fetched beside `api.pinIds()` in `loadPinned` and kept as `datePinsById`. A row
 in this section starts its grey line with the days it is pinned to ("Pinned to Today · 2026-09-22", `pinnedOn`), which
 `rowSig` carries so a reused row picks the day up or drops it.
+The section runs by the latest day each task is pinned to, latest on top (`latestPinFirst` in `groupsOf`); the sort is
+stable, so tasks pinned to the same day keep the order the page's Sort gave them.
 
 ### Pin to date
 

@@ -143,8 +143,12 @@ function groupsOf(list) {
   if (by === 'none') return null;
   if (by === 'assignee' || by === 'responsibility') loadMembers(); // the names for the headings, and who you are
   // every section holds rows: folded away (below) the heading stays and its rows are left out
-  return groupRows(list, by).map((g) => { const id = groupId(g, by); return { ...g, id, collapsed: groupCollapsed(id) }; }).map(trimTracking);
+  return groupRows(list, by).map((g) => { const id = groupId(g, by); return { ...g, id, collapsed: groupCollapsed(id) }; }).map(trimTracking).map((g) => (by === 'responsibility' ? latestPinFirst(g) : g));
 }
+// The Pinned section runs by the latest day each task is pinned to, latest on top; the sort is stable, so tasks
+// pinned to the same day keep the order the page's Sort gave them.
+const latestPin = (n) => [...(datePinsById.get(n.id) || [])].sort().at(-1) || '';
+const latestPinFirst = (g) => (g.id === 'Pinned' ? { ...g, nodes: [...g.nodes].sort((a, b) => latestPin(b).localeCompare(latestPin(a))) } : g);
 // ---- collapsing a section: the heading stays, its rows fold away, one heading at a time ----
 // Keyed by the page, its grouping and the section: Inbox folded away on Tasks says nothing about an Inbox heading on
 // another page, and each grouping of a page folds on its own. The page key is a view id or a saved search's document
