@@ -6,7 +6,7 @@ const { createTanaClient } = require('../sdk');
 const { parseQuery, searchParams, needsTypes, viewParams, completedInWindow, filterToSearchQuery, validViewFilter, VIEW_PRESETS, hideRules, isHidden } = require('../sdk/query');
 const { LIVE_ROWS, NOT_CONNECTED, S, deletedNodes, docStates, errText, idKind, isDeleted, isMcp, memberTitle, now, reading, truncatedViews, typeTitles, redoStack, report, send, setStatus, subscribed, undoStack, visibleGraphNodes } = require('./state');
 const { graphRow, rememberNodeHue, resolveTypes, toNode, typesByTitle } = require('./rows');
-const { codexIds, createDocument, inHistory, notifySilencedIds, notifyWatchedIds, onChange, subscribe } = require('./documents');
+const { codexIds, watchAutomations, createDocument, inHistory, notifySilencedIds, notifyWatchedIds, onChange, subscribe } = require('./documents');
 const settings = require('./settings');
 
 
@@ -207,6 +207,7 @@ async function doRefresh() {
   try {
     // before the view, so the sweep in viewRows sees the set this refresh found rather than the last one's
     try { await refreshWatched(); } catch { /* the watch set keeps what it had, like the badge keeps its number */ }
+    watchAutomations(); // opens, closes or reopens live queries only when an automation or the connection changed
     await viewRows(S.activeView, S.activeFilter);
     send('outline:changed', null);
     setStatus({ syncing: false, lastSync: now() });

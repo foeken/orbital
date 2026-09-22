@@ -25,6 +25,7 @@ const justDone = new Map();  // docId -> when it was completed by a click here: 
 const paths = new Map();     // docId -> [{ id, title }] location in Tana for the breadcrumb (api.path)
 const kids = new Map();      // docId -> Node[] | null (loading)
 const open = new Map();      // key -> bool; default: blocks open, documents closed
+let automationsShown = false, automationsView = null; // the Automations page (renderer/automations.js) is up, over this view
 let zoom = null;             // { docId, nodeId | null, from?: string } from = breadcrumb root label when not the view (e.g. 'Search')
 const items = new Map();     // key -> { key, node, docId, parent }, rebuilt on render
 const pending = new Map();   // key -> { item, segs, timer } debounced edits

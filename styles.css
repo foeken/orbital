@@ -528,6 +528,56 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .clearfilters { border: 0; background: none; color: #aaa; font: inherit; font-size: 16px; padding: 0; margin-left: 10px; text-decoration: underline; cursor: pointer; }
 .clearfilters:hover { color: #1a1a1a; }
 .clearfilters:focus { outline: none; box-shadow: 0 0 0 2px #b7d2f5; border-radius: 3px; }
+/* The Automations page (renderer/automations.js): outline rows; an unfolded one shows its flow, then the fields grid.
+   The switch is the size of a checkbox, and edit/delete are the header's own icon buttons, shown on hover. */
+.automations .line { cursor: default; }
+.automations .chev { visibility: visible; }
+.automations .node.off > .line .text { color: #999; }
+.automation-tools { flex: none; display: flex; gap: 2px; opacity: 0; transition: opacity .12s; }
+.automations .line:hover .automation-tools, .automations .node:not(.collapsed) > .line .automation-tools { opacity: 1; }
+.automation-tools .navbtn { width: 24px; height: 24px; padding: 3px; border: 0; background: none; color: #999; border-radius: 4px; cursor: pointer; }
+.automation-tools .navbtn:hover { background: #eee; color: #333; }
+.automation-tools .navbtn svg { width: 16px; height: 16px; }
+.automation-switch { flex: none; position: relative; width: 26px; height: 15px; margin: 5px 0 0 8px; padding: 0; border: 0; border-radius: 8px; background: #d6d6d6; cursor: pointer; transition: background .15s; }
+.automation-switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 11px; height: 11px; border-radius: 50%; background: #fff; box-shadow: 0 1px 1px rgba(0, 0, 0, .2); transition: left .15s; }
+.automation-switch.on { background: var(--check-on, #6fae82); }
+.automation-switch.on::after { left: 13px; }
+/* The flow: one step per line on a dot threaded by a vertical line. The row's glyph is 16px wide after a 24px chev,
+   so its centre is 32px in and its name starts at 47px; a 20px dot centred at 32px and a 5px gap put every depth-0
+   step on those same two columns. An if's branch is one step (25px) further in, under a small YES/NO. */
+.automation-flow { margin: 0 0 8px 22px; font-size: 15px; }
+.fstep { position: relative; display: flex; align-items: flex-start; gap: 5px; padding: 2px 0 2px calc(var(--depth) * 25px); }
+.fstep::before { content: ''; position: absolute; left: calc(var(--depth) * 25px + 10px); top: 0; bottom: 0; border-left: 1px solid #e2e2e2; }
+.automation-flow > .fstep:first-child::before { top: 12px; }
+.automation-flow > .fstep:last-child::before { bottom: auto; height: 12px; }
+/* ponytail: the outer line is carried for one level of nesting only; draw more levels when ifs nest deeper */
+.fstep:not([style*="--depth: 0"]) { background: linear-gradient(#e2e2e2, #e2e2e2) 10px 0 / 1px 100% no-repeat; }
+.fdot { position: relative; z-index: 1; flex: none; display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; margin-top: 1px; border-radius: 50%; background: #fff; border: 1px solid #e2e2e2; color: #8a8a8a; }
+.fdot svg { display: block; width: 12px; height: 12px; }
+.fwords { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 7px; line-height: 22px; }
+.ftitle { color: #1a1a1a; font-weight: 500; white-space: nowrap; }
+.fmodel { display: inline-block; padding: 0 6px; border-radius: 5px; font-size: 12px; line-height: 18px; font-weight: 600; letter-spacing: .02em; vertical-align: 1px;
+  background: #f1f1f1; color: #6b6b6b; } /* which model answers a step: Fast AI grey, Smart AI in its own colour */
+/* a Tana type (or the people) in a step: its own glyph and colour, the way the outline draws a typed node */
+.ftag { display: inline-flex; align-items: center; gap: 4px; padding: 0 7px 0 5px; border-radius: 5px; font-size: 14px; line-height: 20px; background: #f1f1f1; color: #555; white-space: nowrap; vertical-align: 1px; }
+.ftag svg { width: 13px; height: 13px; flex: none; }
+.ftag.hue { background: oklch(0.95 0.04 var(--hue)); color: oklch(0.45 0.12 var(--hue)); }
+[data-theme="dark"] .ftag { background: #303436; color: #c9c9c9; }
+[data-theme="dark"] .ftag.hue { background: oklch(0.33 0.06 var(--hue)); color: oklch(0.83 0.09 var(--hue)); }
+.fmodel.smart { background: oklch(0.94 0.045 300); color: oklch(0.45 0.13 300); }
+[data-theme="dark"] .fmodel { background: #303436; color: #b7bcbe; }
+[data-theme="dark"] .fmodel.smart { background: oklch(0.33 0.07 300); color: oklch(0.85 0.09 300); }
+.ftext { color: #6b6b6b; min-width: 0; }
+.fnote { flex-basis: 100%; color: #999; font-size: 13px; line-height: 18px; }
+/* a step's output, and every later step that reads it: the same pill, so a value can be followed by eye */
+.fvar { display: inline-flex; align-items: center; padding: 0 8px; border-radius: 6px; font-size: 14px; line-height: 22px; font-weight: 500; white-space: nowrap;
+  background: oklch(0.95 0.035 250); color: oklch(0.45 0.11 250); }
+.fout { flex-basis: 100%; display: flex; align-items: center; gap: 6px; margin-top: 3px; color: #999; font-size: 13px; }
+.fstep.fbranch { padding-left: calc((var(--depth) - 1) * 25px + 25px); font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; color: #aaa; }
+.fstep.fbranch::before { top: 8px; }
+.automations .fields { margin-top: 0; border: 0; border-image: none; } /* no divider under the flow */
+.automations .fields .fvalue.quiet { color: #888; }
+.automations .fields .fvalue.err { color: #c0453b; }
 /* loading skeleton: 6 shimmering bars while a view has no rows yet; .gone fades it out, then collapses it */
 .skeleton { padding-left: 24px; transition: opacity .35s; }
 .skeleton.gone { opacity: 0; height: 0; overflow: hidden; pointer-events: none; transition: opacity .35s, height 0s .35s; }
@@ -723,6 +773,14 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .chip.grey { background: #303436; color: #b7bcbe; }
 [data-theme="dark"] .chip.gold { background: #4b4024; color: #e4c968; }
 [data-theme="dark"] .chip.hue { background: oklch(0.33 0.06 var(--hue)); color: oklch(0.83 0.09 var(--hue)); }
+[data-theme="dark"] .automation-tools .navbtn:hover { background: #303436; color: #ddd; }
+[data-theme="dark"] .automation-switch { background: #4a4e50; }
+[data-theme="dark"] .fstep::before { border-color: #3a3e40; }
+[data-theme="dark"] .fstep:not([style*="--depth: 0"]) { background-image: linear-gradient(#3a3e40, #3a3e40); }
+[data-theme="dark"] .fdot { background: #1b1d1e; border-color: #3a3e40; }
+[data-theme="dark"] .ftitle { color: #d6d6d6; }
+[data-theme="dark"] .ftext { color: #9a9ea0; }
+[data-theme="dark"] .fvar { background: oklch(0.33 0.05 250); color: oklch(0.85 0.08 250); }
 [data-theme="dark"] .text.image.loading { background: #303436; }
 [data-theme="dark"] .text.image:focus img, [data-theme="dark"] .selected .text.image img { outline-color: #58768a; }
 [data-theme="dark"] .text.chiponly:focus .mention, [data-theme="dark"] .selected .text.chiponly .mention, [data-theme="dark"] .reference .text:not([contenteditable]):focus { outline-color: #58768a; }
@@ -820,3 +878,16 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .recorder button { background: #303436; color: #c9c9c9; }
 [data-theme="dark"] .recorder button:hover { background: #3b4144; }
 [data-theme="dark"] .recorder button:disabled { color: #777d80; background: #303436; }
+
+/* An automation at work (renderer/automations.js paintAutomationRuns): the bolt draws itself, over and over, in amber
+   on the node's row, and the automation's own bolt on its page does the same. Still and amber without motion. */
+.arun { flex: none; display: inline-flex; align-items: center; margin: 2px 0 0 8px; padding: 2px 5px; border-radius: 6px; background: oklch(0.95 0.06 85); color: oklch(0.58 0.14 70); }
+.arun svg { display: block; width: 14px; height: 14px; }
+.automations .node.running > .line > .bullet svg { color: oklch(0.62 0.15 70); }
+@media (prefers-reduced-motion: no-preference) {
+  .arun svg path, .automations .node.running > .line > .bullet svg path { stroke-dasharray: 1; animation: bolt-draw 1.1s ease-in-out infinite; }
+  .arun { animation: bolt-glow 1.1s ease-in-out infinite; }
+}
+@keyframes bolt-draw { 0% { stroke-dashoffset: 1; } 55% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: -1; } }
+@keyframes bolt-glow { 50% { box-shadow: 0 0 0 3px oklch(0.88 0.1 85 / .55); } }
+[data-theme="dark"] .arun { background: oklch(0.34 0.06 80); color: oklch(0.85 0.13 85); }

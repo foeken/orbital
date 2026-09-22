@@ -621,7 +621,9 @@ async function main() {
     assert.equal(await ai.suggestDiscussWith('Discuss this with Stan',fetchWith(answer('Stan'))),'Stan');
     assert.deepEqual([calls[0].url,calls[0].init.headers.authorization],[ai.ENDPOINT,'Bearer sk-local-only']);
     assert.deepEqual([calls[0].init.body.model,calls[0].init.body.reasoning.effort],[ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT]);
-    assert.deepEqual([ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT],['gpt-5.6-luna','none'],'a small model, not reasoning at all: a page is waiting on this, so thinking time is latency');
+    assert.deepEqual([ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT],['gpt-6-luna','low'],'the FAST model: small and quick, a page is waiting on this');
+    assert.deepEqual([ai.SMART.model,ai.SMART.effort],['gpt-6-sol','medium'],'the SMART model writes automations');
+    assert.equal(settings.isSynced('aiSmartModel')&&settings.isSynced('aiSmartEffort'),true,'SMART is a synced setting too');
     assert.deepEqual([calls[0].init.body.input,calls[0].init.body.instructions],['Discuss this with Stan',ai.INSTRUCTIONS],'the title is the input; the rule is the instructions, so a title cannot be one');
     assert.equal(Object.keys(calls[0].init.body).length,4,'the title and nothing else about the document goes out');
     settings.set('aiModel','gpt-5.6-sol'); settings.set('aiEffort','high');
@@ -630,6 +632,14 @@ async function main() {
     assert.equal(settings.isSynced('aiModel')&&settings.isSynced('aiEffort'),true,'and they follow you, unlike the key that pays for them');
     assert.equal(settings.isSynced('openaiApiKey'),false,'which never leaves this machine');
     settings.set('aiModel',undefined); settings.set('aiEffort',undefined);
+    // Writing an automation goes to the SMART model; the ai nodes it runs later stay on FAST.
+    const auto={v:1,name:'x',trigger:{type:'tana.nodeAdded',typeVersion:1,parameters:{filter:{types:['text']}}},nodes:[{type:'orbital',typeVersion:1,parameters:{resource:'user',operation:'notify',text:'hi'}}]};
+    await ai.draftAutomation('tell me about new tasks',[],null,fetchWith(answer(JSON.stringify(auto))));
+    assert.deepEqual([calls.at(-1).init.body.model,calls.at(-1).init.body.reasoning.effort],['gpt-6-sol','medium'],'automations are written by SMART');
+    await ai.judge('is it a bug?','Crash on login',fetchWith(answer('yes')));
+    assert.deepEqual([calls.at(-1).init.body.model,calls.at(-1).init.body.reasoning.effort],['gpt-6-luna','low'],'and classified by FAST');
+    await ai.judge('is it a bug?','Crash on login',fetchWith(answer('yes')),'smart');
+    assert.deepEqual([calls.at(-1).init.body.model,calls.at(-1).init.body.reasoning.effort],['gpt-6-sol','medium'],'unless the node asks for SMART');
     // What comes back, in the shapes the Responses API answers in, and the answers that are not a name.
     assert.equal(await ai.suggestDiscussWith('t',fetchWith({ok:true,status:200,json:async()=>({output_text:'Heads of Tech'})})),'Heads of Tech','the convenience field is read too');
     assert.equal(await ai.suggestDiscussWith('t',fetchWith(answer('  \u201CStan and Peter\u201D  '))),'Stan and Peter','trimmed, and the quotes a model likes to add are taken off');

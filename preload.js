@@ -34,6 +34,15 @@ contextBridge.exposeInMainWorld('api', {
   // What the title says that name is, from the model (main/ai.js): a string to offer, or null when there is no key
   // on this machine or the title names nobody. Rejects when the call itself failed.
   suggestDiscussWith: (title) => ipcRenderer.invoke('ai:discussWith', title),
+  // Automations (main/automations.js): [{ id, name, description, enabled, when, then: [line], runs, last }]. Create and
+  // change take a description and resolve once the AI has written it; they reject with its reason when it cannot.
+  automations: () => ipcRenderer.invoke('automations:list'),
+  createAutomation: (description) => ipcRenderer.invoke('automations:create', description),
+  changeAutomation: (id, request) => ipcRenderer.invoke('automations:change', id, request),
+  setAutomationEnabled: (id, on) => ipcRenderer.invoke('automations:setEnabled', id, on),
+  removeAutomation: (id) => ipcRenderer.invoke('automations:remove', id),
+  onAutomations: (cb) => ipcRenderer.on('automations:changed', () => cb()),
+  onAutomationRuns: (cb) => ipcRenderer.on('automations:running', (_e, runs) => cb(runs)), // { items, automations } running now
   viewList: (id, filter) => ipcRenderer.invoke('view:list', id, filter), // { nodes, truncated }
   viewFilter: (id) => ipcRenderer.invoke('view:filter', id),
   setViewFilter: (id, filter) => ipcRenderer.invoke('view:setFilter', id, filter),
