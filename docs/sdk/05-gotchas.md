@@ -7,6 +7,7 @@
 - `begin_document_sync` for an unknown id returns MISSING. Cold (no local ops) → not found after retries; warm (local ops present) → create. That is the only way to create documents.
 - Frames for a stale `sessionId` must be ignored; live updates arriving before `bootstrap_complete` too.
 - `subscribe()` resolves only after `bootstrap_complete` and the entry is `live`; `getDocument()` can return the Document handle earlier. Await `subscribe()` before reading. Reconnects keep that Document object but re-bootstrap it. A cold missing document is detached after five attempts over about 60 seconds; an unavailable document keeps retrying.
+- Presence is a courtesy, not a record: sends are best effort, entries expire after 30 s without a refresh (so a caret that stands still for longer must be re-set, which `setLocal` does), and a peer that never opened the editor has no entry at all. "Nobody has a caret in it" means nobody is editing it in a Tana editor right now, not that nobody will.
 - Tokens live 5 minutes; a 401 on any call means refresh and resend once, then sign out.
 - Graph: empty repeated fields are omitted in JSON (`nodes` may be missing → `GraphClient.listNodes` normalises); `totalCount` only with `mode: LIST_NODES_MODE_WITH_COUNT`; `textQuery` on events matches attendee names loosely; the 20-result default is too small when you rank title hits client-side (use 40).
 

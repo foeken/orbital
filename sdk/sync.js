@@ -49,6 +49,7 @@ class SyncConnection extends EventEmitter {
     this.logger = logger;
     this.client = createClient(SyncService, transport);
     this.docs = new Map();
+    this.channels = new Map(); // ephemeral channel id -> how many holders (subscribeEphemeralChannel)
     this.connected = false;
     this.closed = true;
     this.abort = null;
@@ -61,6 +62,31 @@ class SyncConnection extends EventEmitter {
     this._first = deferred();
     this._loop = this._run().finally(() => this._first.reject(new Error('sync connection closed')));
     return this._first.promise;
+  }
+
+  // ---- ephemeral channels (presence, docs/PLATFORM-PROTOCOL.md 2.8) ----
+  // A channel is named by a document uri. Counted per channel as Tana's client does, so two presence handles on one
+  // document share one subscription; resent after every reconnect (_run), since a subscription belongs to the stream.
+  async subscribeEphemeralChannel(channelId) {
+    const n = (this.channels.get(channelId) || 0) + 1;
+    this.channels.set(channelId, n);
+    if (n === 1 && this.connected) await this._command({ case: 'subscribeEphemeralChannel', value: { channelId } });
+  }
+  async unsubscribeEphemeralChannel(channelId) {
+    const n = (this.channels.get(channelId) || 0) - 1;
+    if (n > 0) return void this.channels.set(channelId, n);
+    this.channels.delete(channelId);
+    if (this.connected) await this._command({ case: 'unsubscribeEphemeralChannel', value: { channelId } }).catch(() => {});
+  }
+  // Best effort, like Tana's: presence that fails to send is simply not seen, never an error. Resolves to whether it went.
+  sendEphemeral(documentId, data) {
+    if (!this.connected) return Promise.resolve(false);
+    return this._command({ case: 'ephemeral', value: { documentId, data } }).then(() => true, () => false);
+  }
+  // "I have this document open": Tana's client sends it every 10 s while the tab is visible and the user active.
+  viewingHeartbeat(documentId) {
+    if (!this.connected) return Promise.resolve(false);
+    return this._command({ case: 'viewingHeartbeat', value: { documentId } }).then(() => true, () => false);
   }
 
   getDocument(id) { const e = this.docs.get(id); return e && e.document; }
@@ -136,6 +162,7 @@ class SyncConnection extends EventEmitter {
         this._first.resolve();
         this._safe(() => this.emit('connected', { heartbeatIntervalMs: hb }));
         for (const entry of this.docs.values()) this._bootstrap(entry);
+        for (const channelId of this.channels.keys()) this._command({ case: 'subscribeEphemeralChannel', value: { channelId } }).catch(() => {});
         for (;;) {
           const { done, value } = await it.next();
           if (done) throw new Error('sync stream closed by server');

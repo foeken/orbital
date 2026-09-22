@@ -99,6 +99,26 @@ const commands = {
     await new Promise((r) => setTimeout(r, Number(flag('seconds', 20)) * 1000));
     await live.close();
   },
+  // presence <document id> [--seconds 30] [--announce <name>] [--block <blockId>]: open the document's presence channel
+  // (sdk/presence.js), print everyone in it and every change, and with --announce be in it yourself under that name
+  // (a caret at --block when given). Read-only: presence is never stored.
+  async presence() {
+    const me = await connect();
+    await client.sync.connect();
+    const id = positional[0];
+    if (!id) throw new Error('usage: presence <document id> [--seconds 30] [--announce <name>] [--block <blockId>]');
+    const { openPresence } = require('../sdk/presence');
+    const room = await openPresence(client.sync, id, { viewing: true });
+    const mine = require('../sdk/presence').userHashOf(client.sync.peerId);
+    const who = (p) => p.peer + (p.userHash === mine ? '(me)' : '') + ':' + ((p.user && p.user.name) || '?') + (p.hasCursor ? '@' + ((p.anchorBlock && p.anchorBlock.blockId) || 'cursor') : '');
+    out('peer ' + room.peerId + '\t' + (me.displayName || me.userUri));
+    if (flag('announce')) room.setLocal({ user: { name: flag('announce'), color: 'blue' }, anchorBlock: flag('block') ? { blockId: flag('block'), offset: 0 } : null });
+    const show = (why) => out(why + '\t' + (room.peers().map(who).join(' ') || '(nobody else)'));
+    show('now');
+    room.on('change', ({ by }) => show('change/' + by));
+    await new Promise((r) => setTimeout(r, Number(flag('seconds', 30)) * 1000));
+    await room.close();
+  },
   // graphnode <id>: the raw graph Node JSON, including attributes and any typed links
   async graphnode() {
     await connect();
@@ -754,7 +774,7 @@ const USAGE = [
   '             settype <id>   (listing only; with a target it writes)',
   '             caps <id...> | related <id> | incall [--limit 5] | pageprobe | libraryprobe | boot [--settle ms]',
   '  live       watch <id...>',
-  '  LIVE       livequery [--minutes 60] [--seconds 20] [--state <stateType>]',
+  '  LIVE       livequery [--minutes 60] [--seconds 20] [--state <stateType>] | presence <id> [--seconds 30] [--announce <name>] [--block <blockId>]',
   '  WRITES     create <title> [--kind doc|task|meeting] | delete <id> | restore <id> | set-title <id> <title> |',
   '             addfield <type uri> <title> [--type member|date|link] [--multiple] |',
   '             set-state <id> <proposed|open|closed|not_now> | pin <id> <sidebar|today> | unpin <id> <sidebar|today> |',
