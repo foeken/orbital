@@ -3727,7 +3727,7 @@ async function main() {
     const client = {
       graph: { listNodes: async (p) => { asked.push(p);
         return { nodes: p.nodeIds ? [{ id: EVENT, title: 'Bingo' }] : [{ id: CALL }, { id: 'tana:call:01exampled0000000000000000' }] }; } },
-      sync: { subscribe: async (id) => (id === CALL ? livedoc : ended), unsubscribe: async (id) => { letGo.push(id); } },
+      sync: { getDocument: () => undefined, subscribe: async (id) => (id === CALL ? livedoc : ended), unsubscribe: async (id) => { letGo.push(id); } },
     };
     const mine = await callsSdk.currentCalls(client, ME, { limit: 5 });
     assert.deepEqual(mine.map((c) => [c.title, c.callUri, c.eventUri, c.joinedAt, c.otherUserUris]), [['Bingo', CALL, EVENT, 1000, [OTHER]]],
@@ -3735,6 +3735,9 @@ async function main() {
     assert.deepEqual(asked[0], { nodeTypes: ['call'], limit: 5, sortOptions: [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }] });
     assert.equal(asked.length, 2, 'one query for the candidate calls and one for every title');
     assert.deepEqual(letGo, ['tana:call:01exampled0000000000000000'], 'a candidate I am not in is unsubscribed again, so a read leaves no subscription behind');
+    client.sync.getDocument = () => ended; // now somebody else already holds that candidate
+    await callsSdk.currentCalls(client, ME, { limit: 5 });
+    assert.equal(letGo.length, 1, 'a candidate another caller already had subscribed is left in their hands');
     console.log('ok  call attendance: live sessions, a finished call, multi-device joins and the current-call query');
   }
   // 4. Transport: headers and the 401 -> refresh -> retry-once rule, with a fake fetch

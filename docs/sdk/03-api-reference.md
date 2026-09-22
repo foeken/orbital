@@ -8,7 +8,7 @@ All modules are CommonJS. "Node" below means the plain graph JSON node; "Documen
 createTanaClient({ baseUrl?, getAccessToken, orgId, peerId, storageId?, logger?, clientName? })
   → { transport, graph: GraphClient, history: HistoryClient, sync: SyncConnection, close(): Promise }
 ```
-Also re-exports `createTransport`, `GraphClient`, `HistoryClient`, `SyncConnection`, `Document`, `derivePeerId`, everything in `node.js`, `access` (`capabilities`, `setSharing`, `previewMove`, `moveToSpace`, `canWrite`, `canDelete`, `audienceOf`) and `calls` (`callSessions`, `inCall`, `joinedAt`, `attended`, `currentCalls`).
+Also re-exports `createTransport`, `GraphClient`, `HistoryClient`, `SyncConnection`, `Document`, `derivePeerId` and everything in `node.js`. `access` (`capabilities`, `setSharing`, `previewMove`, `moveToSpace`, `canWrite`, `canDelete`, `audienceOf`) and `calls` (`callSessions`, `inCall`, `joinedAt`, `attended`, `currentCalls`) are required from their own modules (`sdk/access`, `sdk/calls`), which is what every caller does.
 
 ## `sdk/transport.js`
 
@@ -184,7 +184,7 @@ This is the only way to tell *joined* from *invited*: see [02-data-model.md](02-
 
 ## `sdk/assets.js`
 
-`fetchImage(uri, { getAccessToken, baseUrl = 'https://home.tana.inc/api/general', fetch })` → `{ mime, bytes: Buffer }`; validates `tana:image:<ulid>`, follows the 302 manually carrying the `Cloud-CDN-Cookie`, retries once on 401. `IMAGE_URI` regex exported.
+`fetchImage(uri, { getAccessToken, baseUrl = 'https://home.tana.inc/api/general', fetch })` → `{ mime, bytes: Buffer }`; validates `tana:image:<ulid>`, follows the 302 manually carrying the `Cloud-CDN-Cookie`, retries once on 401.
 
 ## `sdk/proto/descriptors.js`
 
