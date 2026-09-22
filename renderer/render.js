@@ -451,8 +451,7 @@ function resolveZoom() {
 }
 
 // The zoomed node's own fields (type attributes) under the title; the values come with api.related.
-function renderFields(parent, force = false) {
-  const el = $('fields');
+function renderFields(parent, force = false, el = $('fields')) {
   // The caret is in one of these values: rebuilding the block would take it out of the word being typed, and the
   // values on screen *are* what is being typed. So the redraw waits, exactly as a render with the caret in an
   // outline row does (renderDeferred), and the blur that ends the edit asks for it again. Without this, every
@@ -779,8 +778,15 @@ function nodeEl(node, docId, parent) {
   chev.onclick = () => setOpen(item, !expanded);
   if (expanded) {
     const wrap = document.createElement('div'); wrap.className = 'children';
+    if (childHost.node.kind === 'document' && !inField(childHost.docId)) {
+      const fields = document.createElement('div'); fields.className = 'fields inline-fields';
+      fields.dataset.docId = childHost.docId;
+      renderFields(childHost, true, fields);
+      wrap.append(fields);
+      loadRelated(childHost.docId);
+    }
     const c = childrenOf(childHost);
-    if (c == null) { ensureLoaded(childHost); wrap.classList.add('loading'); wrap.textContent = 'Loading…'; }
+    if (c == null) { ensureLoaded(childHost); wrap.classList.add('loading'); wrap.append('Loading…'); }
     else if (c.length) wrap.append(...c.map((k) => childEl(k, childHost)));
     // Expanding a row is asking it for sub-items, so the row it opens onto is a bullet whatever the parent is —
     // a document's own page still starts as plain text (withDraftTail), which is a different question.

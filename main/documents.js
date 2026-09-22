@@ -196,11 +196,13 @@ async function discussionType() {
 // all here — with two Stans in the workspace, only "Stan Engbers" matches — and nobody is referenced twice, so a
 // name repeated in one answer leaves the second mention as words.
 const isWordChar = (ch) => !!ch && /[\p{L}\p{N}]/u.test(ch);
-function findWord(text, needle, taken) {
+function findWord(text, needle, taken, firstOnly) {
   const lower = text.toLowerCase(), want = needle.toLowerCase();
   for (let at = lower.indexOf(want); at >= 0; at = lower.indexOf(want, at + 1)) {
     const end = at + want.length;
     if (isWordChar(text[at - 1]) || isWordChar(text[end])) continue; // inside a longer word: not this name
+    // A first name must fill a whole entry, never the first word of an unknown full name.
+    if (firstOnly && (!/(?:^|[,;&]|\b(?:and|en))\s*$/iu.test(text.slice(0, at)) || !/^\s*(?:$|[,;&]|(?:and|en)\b)/iu.test(text.slice(end)))) continue;
     if (taken.some((hit) => at < hit.end && end > hit.start)) continue; // already part of a longer name
     return at;
   }
@@ -216,15 +218,15 @@ async function nameSegments(who) {
   for (const person of people) {
     const title = String(person.title || person.text || '').trim();
     if (!title) continue;
-    names.push({ needle: title, uri: person.id });
+    names.push({ needle: title, uri: person.id, firstOnly: !/\s/.test(title) });
     const first = title.split(/\s+/)[0];
-    if (first && first !== title && firsts.get(first.toLowerCase()) === 1) names.push({ needle: first, uri: person.id });
+    if (first && first !== title && firsts.get(first.toLowerCase()) === 1) names.push({ needle: first, uri: person.id, firstOnly: true });
   }
   names.sort((a, b) => b.needle.length - a.needle.length);
   const hits = [];
   for (const name of names) {
     if (hits.some((hit) => hit.uri === name.uri)) continue;
-    const at = findWord(who, name.needle, hits);
+    const at = findWord(who, name.needle, hits, name.firstOnly);
     if (at >= 0) hits.push({ start: at, end: at + name.needle.length, uri: name.uri });
   }
   if (!hits.length) return who;

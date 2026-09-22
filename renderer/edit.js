@@ -302,8 +302,16 @@ function noteNavigation() {
   if (navHere && navHere.key === here.key) return;
   if (navHere && !navigating && !navReplace) { navBack.push(navHere); navForward.length = 0; if (navBack.length > 100) navBack.shift(); }
   navReplace = false;
+  const previousDoc = navHere?.zoom?.docId;
   navHere = here;
   rememberPlace();
+  // Returning by history, a crumb or a pin must rerun the query, not reuse its old result set.
+  const id = here.zoom?.docId;
+  if (id !== previousDoc && isSearchDoc({ id }) && kids.get(id)) {
+    releaseHeld();
+    if (searchRows.delete(id)) previewRows(id); // keep unsaved filter edits and refresh their preview
+    else run(async () => { await reload(id); renderSoon(true); });
+  }
 }
 function navigate(dir) {
   const from = dir < 0 ? navBack : navForward, to = dir < 0 ? navForward : navBack;

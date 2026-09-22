@@ -68,7 +68,8 @@ function loadRelated(docId) {
     // outside the outline, are drawn now rather than at the next click.
     const page = zoom && zoom.docId === docId && !zoom.nodeId ? items.get(docId) : null;
     if (page && (editingRow() || selectionFrozen)) { renderFields(page); renderRail(page); }
-    renderSoon();
+    // Expansion can leave the caret on the parent row; show its newly loaded fields without waiting for blur.
+    renderSoon(!selectionFrozen && !!queryRow('.inline-fields[hidden][data-doc-id="' + CSS.escape(docId) + '"]'));
   }, () => { if (!relatedBy.get(docId)) relatedBy.delete(docId); });
 }
 // This document's relations have moved on (an edit, a pin): read them again without taking the sidebar down.
