@@ -9,7 +9,7 @@ const { createTanaSession } = require('./tana-session');
 const { userDataDir } = require('./userdata');
 const updater = require('./updater');
 const access = require('./sdk/access');
-const { readNode, setTitle, setState, taskMeta, audienceMetadata, setAssignees, setSearchQuery, setSearchView } = require('./sdk/node');
+const { readNode, setTitle, setState, taskMeta, audienceMetadata, setAssignees, setSearchQuery, setSearchView, searchDisplay, searchSort } = require('./sdk/node');
 const { completedWindow, filterToSearchQuery, isHidden, searchQueryToFilter, validViewFilter } = require('./sdk/query');
 const content = require('./sdk/content');
 const agent = require('./main/agent');
@@ -162,10 +162,10 @@ ipcMain.handle('search:filter', (_e, id) => op(id, (doc) => {
     // the completed window is the app's own, so it is stored beside the query and handed back as part of the filter
     // the pills edit; absent, it reads as the default the pill shows the first time Completed is asked for
     filter: { ...searchQueryToFilter(doc.loro.getMap('query').toJSON(), S.me && S.me.userUri), completedWithin: completedWindow(arrangement.completedWithin) },
-    sort: arrangement.sortBy,
+    sort: searchSort(arrangement.sortBy),
     group: arrangement.groupBy,
-    // stored as one string, since a Loro map holds scalars: '' is a real choice (a row showing nothing of itself)
-    display: typeof arrangement.display === 'string' ? arrangement.display.split(',').filter(Boolean) : undefined,
+    // Tana's record of key -> { shown, order } (or the comma-joined string earlier builds wrote)
+    display: searchDisplay(arrangement.display),
   };
 }));
 // What the pills would find if they were saved. A staged edit has to change the rows, or the pills read as broken.

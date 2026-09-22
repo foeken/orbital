@@ -128,6 +128,12 @@ class SyncConnection extends EventEmitter {
   async unsubscribe(id) {
     const entry = this.docs.get(id);
     if (!entry) return;
+    // Tana's release flushes the batch and waits for sends already on the wire before it unsubscribes: an unsubscribe
+    // racing a live update could otherwise reach the server first and the edit would be dropped.
+    clearTimeout(entry.timer);
+    entry.timer = null;
+    while (entry.state === 'live' && (entry.inflight || entry.queue.length)) await (entry.inflight || this._flush(entry));
+    if (this.docs.get(id) !== entry) return;
     const { sessionId } = entry;
     this._detach(entry, new Error('unsubscribed ' + id), false);
     if (sessionId && this.connected) {
@@ -214,7 +220,10 @@ class SyncConnection extends EventEmitter {
       if (entry.complete) entry.complete.resolve();
     } else if (kind === 'liveDocumentUpdate') {
       if (entry.state !== 'live') return;
-      if (entry.document.applyRemote(value.updates)) this._resync(entry, 'pending ops after live import');
+      // Tana re-bootstraps on any failed live import (e.g. 'not included in the shallow history'), not only on pending ops.
+      let pending;
+      try { pending = entry.document.applyRemote(value.updates); } catch (e) { return this._resync(entry, 'live import failed: ' + (e.message || e)); }
+      if (pending) this._resync(entry, 'pending ops after live import');
     } else if (kind === 'resyncRequired') {
       this.logger.warn('sync: resync required for ' + entry.id + ': ' + value.reason);
       if (value.recovery === DISCARD_LOCAL) entry.document.reset();
@@ -335,9 +344,10 @@ class SyncConnection extends EventEmitter {
     const updates = entry.queue.splice(0);
     if (updates.reduce((n, u) => n + u.length, 0) > OUTBOUND_BUDGET) return this._resync(entry, 'outbound buffer overflow');
     const { id, sessionId } = entry;
-    entry.inflight = true;
+    const send = this._command({ case: 'liveDocumentUpdate', value: { documentId: id, sessionId, updates } });
+    entry.inflight = send.then(() => {}, () => {}); // what unsubscribe waits on
     try {
-      await this._command({ case: 'liveDocumentUpdate', value: { documentId: id, sessionId, updates } });
+      await send;
     } catch (e) {
       if (entry.sessionId !== sessionId) return;
       const c = code(e);
@@ -345,7 +355,7 @@ class SyncConnection extends EventEmitter {
       if (c !== Code.Canceled) this._resync(entry, 'live update failed: ' + (e.message || e));
       return;
     } finally {
-      entry.inflight = false;
+      entry.inflight = null;
     }
     if (entry.queue.length) this._flush(entry);
   }

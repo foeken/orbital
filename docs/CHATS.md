@@ -107,6 +107,10 @@ A ? (N = S === null ? `Finished thinking` : `Thought for ${XHt(S)}`, P = `comple
 (`A` = not streaming and every tool call completed.) `usage.durationMs` is close but not identical
 (49663 vs 49710 ms on message `1j3cr829`); the label uses `completedAt - sentAt`.
 
+The line only exists on a message with tool calls, and the duration reads "50 seconds", "2 minutes" or "2m 5s"
+(`A0t` in the bundle of 2026-09-22); with no duration it is "Finished thinking". A message's `editedAt` adds
+"(edited)" to its time.
+
 A tool call with `subagentChatUri` points at a **separate chat document** (`invocationContext.intent: 'subagent'`,
 `data.isSubagentChat: true`, `parentChatUri`, `subagentId: 'extractOutcome'`, `ownerUri` = the parent chat). The
 web client renders it as a nested chat link.
@@ -150,7 +154,7 @@ Meetings link chats with `EDGE_TYPE_HAS_PIN` and `EDGE_TYPE_BELONGS_TO`, as `doc
   pagination, no separate transcript/message document kind: every message is inline in `data.messages` (`tana:call:`
   and `tana:transcript:` belong to meetings, not chats). Longest chat sampled: 8 messages. Cost is size, not paging —
   tool `output` strings and `aiContextRenderedSystemPrompt` dominate (2 MB for one 8-message chat).
-- **`listNodes({ nodeTypes: ['chat'] })` only returns chats with no owner.** All 26 rows the Chats view gets have
+- **`listNodes({ nodeTypes: ['chat'] })` only returns chats with no owner, unless the request sets `includeOwnedChats: true`** (Tana's AI tools do; its saved-search runner does not). All 26 rows the Chats view gets have
   `ownerUri` absent; the meeting chats and subagent chats found through event edges never appear, though
   `nodeIds: [<owned chat>]` resolves them fine. Chats inside a meeting are reachable only through edges.
 - MCP chats are a single AI message plus an "accepted N changes" status message; `invocationContext.intent: 'mcp'`
@@ -176,7 +180,7 @@ layer and no chat row is ever editable (`Node.editable === false` throughout).
 | `proposals` | `reference` rows to `proposedUri` (or `baseUri` for an update) with a chip: approved / awaiting approval |
 | `toolCalls` | one collapsed child row per AI message, "Thought for Ns" from `completedAt - sentAt`; expanding lists `name` + `status`; `subagentChatUri` becomes a `reference` row to that chat |
 | `hiddenFromChat: true` | skip |
-| "accepted N changes" | a muted status row plus its `attachmentUris` references |
+| "accepted N changes" | a muted status row plus its `attachmentUris` references; every other status update is hidden, as are human messages with `isAIInterviewRelay` |
 
 The laziest version that is already useful: author row + markdown-block child rows + mention segments + reference
 rows for attachments and proposals, with a single "Thought for Ns" summary row instead of tool-call detail.

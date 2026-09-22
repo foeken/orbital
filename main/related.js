@@ -151,8 +151,9 @@ function callOf(ev) {
 
 // The fallback history, from the graph node alone, used when the change-summary service has nothing to say.
 // It costs no extra request: `editors` is a map of user-profile uri -> { peerUserHash, editTime } (that person's
-// last edit), `createTime`/`createdBy` say who made it, and `archivedAt` when it was deleted. That is the whole
-// vocabulary the graph keeps — no per-edit log, no actor for a deletion, nothing about what changed — so an entry
+// last edit), `createTime`/`createdBy` say who made it, and `archivedAt` when it was archived (Tana's archive(), not its
+// softDelete(): the graph has no deletion field). That is the whole vocabulary the graph keeps — no per-edit log, no
+// actor for an archive, nothing about what changed — so an entry
 // carries only what is there and the renderer leaves out what is missing. `updateTime` stands in for an update
 // nobody is named for, and only when the node lists no editors at all, so it can never double-count one.
 // newest first; an entry with no time of its own (or an unreadable one) cannot claim a place among the dated ones,
@@ -167,7 +168,7 @@ function changesOf(node) {
   for (const [uri, editor] of Object.entries(n.editors || {})) out.push({ action: 'Updated', by: uri, at: iso(editor && editor.editTime) });
   if (!out.length && iso(n.updateTime) && n.updateTime !== n.createTime) out.push({ action: 'Updated', at: iso(n.updateTime) });
   if (iso(n.createTime) || iso(n.createdBy)) out.push({ action: 'Created', by: iso(n.createdBy), at: iso(n.createTime) });
-  if (iso(n.archivedAt)) out.push({ action: 'Deleted', at: iso(n.archivedAt) });
+  if (iso(n.archivedAt)) out.push({ action: 'Archived', at: iso(n.archivedAt) });
   return out.sort(byNewest);
 }
 

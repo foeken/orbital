@@ -7,11 +7,13 @@
 
 // One subscribed call document, flattened. Sessions are oldest join first; a user may hold more than one (one per
 // device or tab), which is why they are keyed `<user-profile uri>:<8 hex>` rather than by user.
+// A key starting with `federation:` is another organization's capture of the same meeting, not somebody in the call:
+// the web client leaves those out of activeParticipantUris (yl), and so does this.
 function callSessions(doc) {
   const json = doc.toJSON();
   const data = json.data || {};
   const sessions = Object.entries(json.sessions || {})
-    .filter(([, s]) => s && typeof s.userUri === 'string')
+    .filter(([key, s]) => !key.startsWith('federation:') && s && typeof s.userUri === 'string')
     .map(([key, s]) => ({ key, userUri: s.userUri, joinedAt: typeof s.joinedAt === 'number' ? s.joinedAt : null }))
     .sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
   const log = (Array.isArray(data.sessionLog) ? data.sessionLog : [])

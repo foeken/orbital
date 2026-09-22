@@ -140,30 +140,90 @@ function viewParams(f, me, limit = 1000) {
   return p;
 }
 
-// A saved search's stored `query` root container as graph.listNodes params (docs/…/2026-09-16-saved-searches-design.md).
-// Every field is guarded: a real search document omits optional keys rather than writing them empty.
-// `visibility`, `workflowStates` and `attributes` are deliberately not translated — see the spec's §4.
-function searchQueryParams(query, me, limit = 1000) {
+// A saved search's stored `query` root container as graph.listNodes params, the way Tana's own client runs one
+// (C$ in home.tana.inc/assets/shared-*.js, which also fixes the three the saved-searches spec left open: visibility,
+// workflowStates and attributes). Every field is guarded: a real search document omits optional keys rather than
+// writing them empty, and protobuf JSON refuses an undefined value, so nothing undefined is ever set.
+// ponytail: Tana also widens ownerUris to every sub-space of a scoped space; that needs the space tree, not the query.
+function searchQueryParams(query, me, limit = 1000, now = Date.now()) {
   const q = query || {};
   const list = (v) => (Array.isArray(v) && v.length ? v : undefined);
-  const p = { limit, sortOptions: UPDATE_DESC, mode: 'LIST_NODES_MODE_WITH_COUNT' };
+  const p = { limit, mode: 'LIST_NODES_MODE_WITH_COUNT' };
   // nodeTypes: [] is no filter at all to the graph, which answers with images, calls and transcripts no view can
   // render, so an unconstrained search falls back to the kinds a view lists — the same rule viewParams follows.
   p.nodeTypes = list(q.types) || [...new Set(ANY_KINDS.map((k) => KIND_NODE_TYPE[k]))];
+  const eventsOnly = Array.isArray(q.types) && q.types.length === 1 && q.types[0] === 'event';
   if (typeof q.textQuery === 'string' && q.textQuery.trim()) p.textQuery = q.textQuery.trim();
   if (list(q.entityTypeUris)) p.entityTypes = q.entityTypeUris;
   if (list(q.ownerUris)) p.ownerIds = q.ownerUris;
-  if (list(q.stateTypes)) p.stateTypes = q.stateTypes;
-  if (list(q.participantUris)) p.hasParticipantUris = q.participantUris;
+  // A workflow state is an open task in that workflow's state: Tana sends each as a selector beside the plain states.
+  const flows = [...new Map((list(q.workflowStates) || []).filter((w) => w && typeof w.workflowUri === 'string' && typeof w.workflowStateId === 'string')
+    .map((w) => [w.workflowUri + '#' + w.workflowStateId, { type: 'open', workflowUri: w.workflowUri, workflowStateId: w.workflowStateId }])).values()];
+  if (flows.length) p.stateSelectors = [...(list(q.stateTypes) || []).map((type) => ({ type })), ...flows];
+  const states = p.stateSelectors ? [...new Set(p.stateSelectors.map((s) => s.type))] : list(q.stateTypes);
+  if (states) p.stateTypes = states;
+  const seen = visibilityParams(q.visibility, me);
+  const participants = [...(list(q.participantUris) || []), ...(seen.hasParticipantUris || [])];
+  if (participants.length) p.hasParticipantUris = participants;
+  for (const key of ['restricted', 'exactParticipantUris', 'linkShared']) if (seen[key] !== undefined) p[key] = seen[key];
   const assigned = [...(list(q.assignedTo) || []), ...(q.assignedToViewer === true && me ? [me] : [])];
-  if (assigned.length) p.assignedTo = [...new Set(assigned)];
+  if (assigned.length && q.unassigned !== true) p.assignedTo = [...new Set(assigned)]; // unassigned wins, as in Tana
   const created = [...(list(q.createdBy) || []), ...(q.createdByViewer === true && me ? [me] : [])];
   if (created.length) p.createdBy = [...new Set(created)];
   if (q.unassigned === true) p.unassigned = true;
-  const t = q.eventTime;
-  if (t && t.min != null) p.eventStartTimeMin = new Date(t.min).toISOString();
-  if (t && t.max != null) p.eventStartTimeMax = new Date(t.max).toISOString();
+  // The event window only applies to a search for events alone; on anything else Tana ignores it.
+  const t = eventsOnly ? timeRange(q.eventTime, now) : {};
+  if (t.min != null) p.eventStartTimeMin = new Date(t.min).toISOString();
+  if (t.max != null) p.eventStartTimeMax = new Date(t.max).toISOString();
+  const attributes = attributeFilters(q.attributes, now);
+  if (attributes) p.attributeFilters = attributes;
+  // Tana's default order: none with text (the server ranks it), start time for events (newest first unless the window
+  // is "upcoming"), title for a list of types, last update otherwise. The stored view.sortBy is not read here: the
+  // renderer sorts the rows itself, and Orbital writes that key in its own vocabulary.
+  if (!p.textQuery) {
+    const types = list(q.types) || [], typed = !!list(q.entityTypeUris);
+    p.sortOptions = eventsOnly && !typed ? [{ field: 'SORT_FIELD_EVENT_START_TIME', direction: q.eventTime && q.eventTime.preset === 'upcoming' ? 'SORT_DIRECTION_ASCENDING' : 'SORT_DIRECTION_DESCENDING' }]
+      : types.length === 1 && types[0] === 'type' && !typed ? [{ field: 'SORT_FIELD_TITLE', direction: 'SORT_DIRECTION_ASCENDING' }] : UPDATE_DESC;
+  }
   return p;
+}
+// visibility (private | shared | restricted | open | link) as the graph's own filters, exactly as Tana maps it (y$).
+function visibilityParams(visibility, me) {
+  if (visibility === 'private') return me ? { restricted: true, exactParticipantUris: [me] } : {};
+  if (visibility === 'shared') return me ? { hasParticipantUris: [me] } : {};
+  if (visibility === 'restricted') return { restricted: true };
+  if (visibility === 'open') return { restricted: false };
+  if (visibility === 'link') return { linkShared: true };
+  return {};
+}
+// A stored { preset } or { min, max } (epoch ms) as a { min, max } window. The presets are Tana's (v$), on local days:
+// recent = up to the end of tomorrow, upcoming = from now, past = until now, today = today.
+function timeRange(range, now) {
+  if (!range || typeof range !== 'object') return {};
+  if (range.preset === undefined) return { min: range.min, max: range.max };
+  const day = (offset) => { const d = new Date(now); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + offset); return d.getTime(); };
+  return { recent: { max: day(2) - 1 }, upcoming: { min: now }, past: { max: now }, today: { min: day(0), max: day(1) - 1 } }[range.preset] || {};
+}
+const TEXT_MODES = { equals: 'MODE_EQUALS', prefix: 'MODE_PREFIX', listContains: 'MODE_LIST_CONTAINS' };
+const defined = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v != null));
+// The stored attributes ({ '<type uri>?attribute=<key>': { refs, date, textMatches, numberRanges } }) as the
+// request's attributeFilters, keeping only what Tana's client keeps (X2t).
+function attributeFilters(attributes, now) {
+  const out = {};
+  for (const [key, a] of Object.entries(attributes && typeof attributes === 'object' ? attributes : {})) {
+    if (!key.startsWith('tana:') || !a || typeof a !== 'object') continue;
+    const f = {}, arr = (v) => (Array.isArray(v) ? v.filter((x) => x && typeof x === 'object') : []);
+    const refs = (Array.isArray(a.refs) ? a.refs : []).filter((r) => typeof r === 'string' && r.startsWith('tana:'));
+    if (refs.length) f.refs = refs;
+    const date = defined(timeRange(a.date, now));
+    if (Object.keys(date).length) f.dateRanges = [date];
+    const texts = arr(a.textMatches).filter((m) => typeof m.value === 'string' && m.value.trim() && (m.mode === undefined || Object.hasOwn(TEXT_MODES, m.mode)));
+    if (texts.length) f.textMatches = texts.map((m) => ({ value: m.value, mode: TEXT_MODES[m.mode || 'equals'] }));
+    const numbers = arr(a.numberRanges).map((r) => defined({ min: r.min, max: r.max })).filter((r) => Object.keys(r).length);
+    if (numbers.length) f.numberRanges = numbers;
+    if (Object.keys(f).length) out[key] = f;
+  }
+  return Object.keys(out).length ? out : undefined;
 }
 
 // The inverse of searchQueryParams: a view's filter as a saved search's stored query, so "save this query as a

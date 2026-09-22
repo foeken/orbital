@@ -7,7 +7,7 @@ Everything below was read from live documents, the graph API and the web client'
 - **URIs**: `tana:<kind>:<ulid>` where the ULID is 26 lowercase Crockford-base32 chars (48-bit ms timestamp + 80 random bits; `node.js ulid()`). Kinds seen: `text`, `event`, `space`, `user-profile`, `type`, `chat`, `canvas`, `agent`, `skill`, `search`, `artifact`, `call`, `image`, `asset`, `collection`, `pin-map`, `org`, `calendar-subscription`. Provider-synced events may carry non-ULID ids (e.g. `tana:event:33q68…`, 26 chars but not time-ordered).
 - **Org**: the sync stream wants the WorkOS id (`org_…`, JWT claim `org_id`); the org *document* is `tana:org:<ulid>` (`orgDocUri` from the session).
 - **User**: `tana:user-profile:<ulid>`; the ULID equals the session's `userExternalId` (also JWT claim `urn:tana:user:id`).
-- **Blocks** inside content have an 8-char lowercase alphanumeric `blockId` in `attributes`.
+- **Blocks** inside content have an 8-char Crockford base32 `blockId` in `attributes` (`0123456789abcdefghjkmnpqrstvwxyz`, no i/l/o/u); field keys and chat message ids are validated against the same alphabet.
 
 ## 2. A document = one Loro doc with two root maps
 
@@ -35,13 +35,13 @@ Org (`tana:org:…`): only `name`, `language`, `workosOrgId`, `voicePresetId` an
 
 `{ nodeName: 'doc', attributes: LoroMap, children: LoroList }`. Empty map on fresh/event documents; `content.js rootKids()` creates the skeleton on first write.
 
-Block node: `LoroMap { nodeName, attributes: LoroMap, children: LoroList }`. Names: `paragraph`, `heading` (`attributes.level`), `bulletList` / `orderedList` → `listItem` (`attributes.checked`) → first child `paragraph` + optional nested list, `blockquote`, `codeBlock` (`attributes.language`), `horizontalRule` (the divider), `image` (`attributes.tanaUri` = `tana:image:…`, `displayWidth`/`displayHeight` optional, no alt), `video`, `audio`, `embed`, `table`/`tableRow`/`tableHeader`/`tableCell`, `unsupportedBlock`. Inline children of a paragraph: `LoroText` runs (marks live in the text delta), `LoroMap { nodeName: 'mention', attributes: { label, tanaUri } }` and `hardBreak`.
+Block node: `LoroMap { nodeName, attributes: LoroMap, children: LoroList }`. Names: `paragraph`, `heading` (`attributes.level`), `bulletList` / `orderedList` → `listItem` (`attributes.checked`) → first child `paragraph` + optional nested list, `blockquote`, `codeBlock` (`attributes.language`), `horizontalRule` (the divider), `image` (`attributes.tanaUri` = `tana:image:…`, `displayWidth`/`displayHeight` optional, no alt), `video`, `audio`, `embed`, `table`/`tableRow`/`tableHeader`/`tableCell`, `unsupportedBlock` (an atom: `originalType`, `originalAttrs`). `orderedList` carries `attributes.start` (default 1). Inline children of a paragraph: `LoroText` runs (marks live in the text delta), `LoroMap { nodeName: 'mention', attributes: { label, tanaUri } }` and `hardBreak`.
 
 The atoms (`horizontalRule`, `image`, `video`, `audio`, `embed`) are written with `nodeName` and `attributes` only — **no `children` list at all** — so a reader must tolerate a missing `children`.
 
 Content models that constrain conversions: `paragraph` and `heading` are `inline*`, `codeBlock` is `text*` with `marks: ''` (no marks, no mentions), `blockquote` and `listItem` are `block+`, and a list holds `listItem`s only.
 
-Marks: `bold`, `italic`, `code`, `strike` stored as `{}`, and `link` stored as its ProseMirror attrs `{ href, title, target }`. They live only in `LoroText.toDelta()` — `toJSON()` gives the plain string — so one text container can carry several mark runs. Tana configures Loro with `configTextStyle` built from these specs, and none declares `inclusive`, so every mark is `expand: 'none'`. Read from the web client's own bundle (`home.tana.inc/assets/shared-*.js`: the ProseMirror schema, its delta writer and the atom attribute table) on 2026-09-14.
+Marks: `bold`, `italic`, `code`, `strike`, `underline` stored as `{}`, and `link` stored as its ProseMirror attrs `{ href, title, target }`. They live only in `LoroText.toDelta()` — `toJSON()` gives the plain string — so one text container can carry several mark runs. Tana configures Loro with `configTextStyle` built from these specs, and none declares `inclusive`, so every mark is `expand: 'none'`. Read from the web client's own bundle (`home.tana.inc/assets/shared-*.js`: the ProseMirror schema, its delta writer and the atom attribute table) on 2026-09-14.
 
 Outline mapping used by `content.js`: a bare block is a node; a `listItem` is the node of its first paragraph, its remaining blocks are children; lists are transparent.
 
@@ -73,7 +73,8 @@ back to it and an `EDGE_TYPE_BELONGS_TO` edge the graph derives from that. Its r
 - `sessions` (root LoroMap) — the live participants, one entry per session keyed `<user-profile uri>:<8 hex>` with
   `{ joinedAt: ms, userUri }`. One user can hold several (a device or tab each). **It empties when the last
   participant leaves**, so a non-empty entry is the only server-side proof that somebody is in a meeting right now.
-- `data.sessionLog` — the history: `[{ userUri, timestamp, event }]`, `event` being `join` or `leave`.
+  Keys starting with `federation:` are another organization's capture of the meeting and are not a participant.
+- `data.sessionLog` — the history: `[{ userUri, timestamp, event, sessionId }]`, `event` being `join` or `leave`.
 - `data.videoProvider` / `videoRoomUrl` / `videoRoomName` / `videoRoomSecret` (LiveKit), `data.transcriptUri`,
   `data.screenShareUri`, `data.summaryUri` once Tana has written the meeting up, and a `wrapUp` root of timestamps
   for that summarising run.

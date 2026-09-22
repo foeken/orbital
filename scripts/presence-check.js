@@ -125,6 +125,7 @@ const ME = peer(1234567, 1), MY_OTHER_TAB = peer(1234567, 2), OTHER = peer(76543
     assert.equal(content.charOffset(page, 'nope', 1), null);
     // Tana does not re-send while you type on (its cursor is anchored to a character), so its block offset goes stale;
     // the cursor bytes are read instead, and an edit to the document redraws without any presence message
+    await tick(2); // a second store for the same peer: in the same millisecond EphemeralStore keeps the older entry
     const typing = remote(OTHER, { user: { name: 'Stan' }, anchor: content.cursorAt(page, b3, 8).encode(), anchorBlockId: b3, anchorBlockOffset: 0, focusBlockId: b3, focusBlockOffset: 0 });
     wire.emit('ephemeral', DOC, typing.out[0]);
     const heard = () => told.filter((x) => x[0] === 'presence:changed').at(-1)[2].find((p) => p.name === 'Stan');

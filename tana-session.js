@@ -28,7 +28,9 @@ function createTanaSession({ partition = 'persist:tana', origin = 'https://home.
       const res = await ses.fetch(origin + '/api/auth/session' + (key ? '?refresh=true' : ''), {
         credentials: 'include', headers: { accept: 'application/json' },
       });
-      if (!res.ok && res.status !== 401) throw new Error('GET /api/auth/session failed: HTTP ' + res.status);
+      // Tana's sessionGate reads 401 and 403 alike as signed out; anything else is a failure worth retrying.
+      const signedOut = res.status === 401 || res.status === 403;
+      if (!res.ok && !signedOut) throw new Error('GET /api/auth/session failed: HTTP ' + res.status);
       const json = await res.json().catch(() => ({}));
       last = res.ok && json.authenticated ? json : null;
       expiresAt = last && last.accessToken ? (jwtClaims(last.accessToken).exp || 0) * 1000 : 0;
@@ -72,7 +74,8 @@ function createTanaSession({ partition = 'persist:tana', origin = 'https://home.
   }
 
   async function getAccessToken({ refresh = false } = {}) {
-    if (refresh || !last || !last.accessToken || Date.now() > expiresAt - 30000) await fetchSession(refresh);
+    // A minute before expiry, as Tana's own client refreshes (sessionGate: exp - 60 s).
+    if (refresh || !last || !last.accessToken || Date.now() > expiresAt - 60000) await fetchSession(refresh);
     if (!last || !last.accessToken) throw new Error('not authenticated');
     return last.accessToken;
   }

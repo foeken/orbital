@@ -4,9 +4,9 @@
 // one author row per message, its markdown blocks as children, mentions as segments, attachments/proposals as
 // reference rows. Pure and Electron-free so scripts/sdk-check.js can run it offline.
 
-// Inline markdown of one line: a [label](uri) mention or link, **bold**, `code`. The text is plain markdown source
-// (no Loro marks at all), so this regex is the whole inline story.
-const INLINE = /\[([^\]\n]*)\]\((tana:[a-z-]+:[0-9a-z]{26}|https?:\/\/[^\s)]+)\)|\*\*([^*\n]+)\*\*|`([^`\n]+)`/g;
+// Inline markdown of one line: a [label](uri) mention or link, **bold**, `code`, *italic*, ~~strike~~. The text is
+// plain markdown source (no Loro marks at all), so this regex is the whole inline story.
+const INLINE = /\[([^\]\n]*)\]\((tana:[a-z-]+:[0-9a-z]{26}|https?:\/\/[^\s)]+)\)|\*\*([^*\n]+)\*\*|`([^`\n]+)`|\*([^*\s][^*\n]*)\*|~~([^~\n]+)~~/g;
 
 function segments(text) {
   const out = [];
@@ -17,7 +17,9 @@ function segments(text) {
     at = m.index + m[0].length;
     if (m[1] !== undefined) m[2].startsWith('tana:') ? out.push({ mention: { label: m[1], uri: m[2] } }) : push(m[1] || m[2], { link: m[2] });
     else if (m[3] !== undefined) push(m[3], { bold: true });
-    else push(m[4], { code: true });
+    else if (m[4] !== undefined) push(m[4], { code: true });
+    else if (m[5] !== undefined) push(m[5], { italic: true });
+    else push(m[6], { strike: true });
   }
   push(String(text).slice(at));
   return out;
@@ -37,10 +39,10 @@ function blocks(text) {
     const t = line.trim();
     if (!t) { flush(); continue; }
     if (/^(-{3,}|_{3,}|\*{3,})$/.test(t)) { flush(); out.push({ block: 'divider', text: '' }); continue; }
-    const heading = t.match(/^(#{1,3})\s+(.*)$/);
-    if (heading) { flush(); out.push({ block: 'heading' + heading[1].length, heading: heading[1].length, text: heading[2] }); continue; }
-    const item = t.match(/^(?:[-*+]|\d+[.)])\s+(.*)$/);
-    if (item) { flush(); out.push({ block: 'bullet', text: item[1] }); continue; }
+    const heading = t.match(/^(#{1,6})\s+(.*)$/); // the outliner draws three levels; deeper ones read as the third
+    if (heading) { const level = Math.min(heading[1].length, 3); flush(); out.push({ block: 'heading' + level, heading: level, text: heading[2] }); continue; }
+    const item = t.match(/^(?:([-*+])|\d+[.)])\s+(.*)$/);
+    if (item) { flush(); out.push({ block: item[1] ? 'bullet' : 'numbered', text: item[2] }); continue; }
     const quote = t.match(/^>\s?(.*)$/);
     if (quote) { flush(); out.push({ block: 'quote', text: quote[1] }); continue; }
     (para ||= []).push(t);
@@ -58,8 +60,15 @@ const row = (id, source, extra) => {
 };
 const reference = (id, uri, label) => ({ id, text: label || uri, kind: 'block', type: 'reference', editable: false, segments: [], reference: label ? { uri, label } : { uri }, hasChildren: false, children: [] });
 const hm = (ms) => { const d = new Date(ms); return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0'); };
-// the web client's label: completedAt - sentAt, not usage.durationMs (docs/CHATS.md §4)
-const took = (ms) => { const s = Math.round(ms / 1000); return s < 60 ? s + 's' : Math.floor(s / 60) + 'm ' + (s % 60) + 's'; };
+// the web client's label, word for word: completedAt - sentAt, not usage.durationMs (docs/CHATS.md §4)
+const plural = (n, word) => n + ' ' + word + (n === 1 ? '' : 's');
+const took = (ms) => { const s = Math.round(ms / 1000), m = Math.floor(s / 60); return s < 60 ? plural(s, 'second') : s % 60 ? m + 'm ' + (s % 60) + 's' : plural(m, 'minute'); };
+// Tana's progress line exists only for a message that called tools: "Thought for …" once every call has finished,
+// "Finished thinking" when there is no duration to show.
+// ponytail: a call still running reads "Thinking..." where Tana names the tool's own in-progress label.
+const thinking = (m, calls) => (calls.some((c) => c && c.status === 'running') ? 'Thinking...' : m.completedAt > m.sentAt ? 'Thought for ' + took(m.completedAt - m.sentAt) : 'Finished thinking');
+// "accepted N changes" is the one status update the web client shows in a conversation.
+const accepted = (m) => !!m.isStatusUpdate && String((m.content && m.content.text) || '').startsWith('accepted ');
 const list = (v) => (Array.isArray(v) ? v : []);
 
 // messages: data.messages as plain JSON, in list order (never sorted by sentAt: the preamble shares its millisecond
@@ -67,10 +76,12 @@ const list = (v) => (Array.isArray(v) ? v : []);
 function chatRows(messages, { authorName = () => undefined, aiName = 'Tana AI' } = {}) {
   const rows = [];
   list(messages).forEach((m, i) => {
-    // hiddenFromChat is the synthetic preamble the web client hides; a 'context' message is injected context, not speech.
-    if (!m || m.hiddenFromChat || m.type === 'context') return;
+    // What the web client hides: the synthetic preamble (hiddenFromChat), injected 'context', every status update
+    // other than "accepted N changes", and a human message relayed for an AI interview.
+    if (!m || m.hiddenFromChat || m.type === 'context' || (m.isStatusUpdate && !accepted(m))) return;
+    if (m.fromUserType === 'human' && m.isAIInterviewRelay) return;
     const ai = m.fromUserType === 'ai', id = 'm' + i, children = [];
-    if (ai && m.completedAt > m.sentAt) children.push(row(id + '.t', 'Thought for ' + took(m.completedAt - m.sentAt)));
+    if (list(m.toolCalls).length) children.push(row(id + '.t', thinking(m, list(m.toolCalls))));
     for (const [j, b] of blocks(m.content && m.content.text).entries()) {
       // code keeps its markdown characters; every other block renders its inline markdown as segments
       children.push(row(id + '.b' + j, b.text, { block: b.block, ...(b.heading ? { heading: b.heading } : {}), ...(b.verbatim ? { segments: b.text ? [{ text: b.text }] : [] } : {}) }));
@@ -87,7 +98,7 @@ function chatRows(messages, { authorName = () => undefined, aiName = 'Tana AI' }
     }
     rows.push(row(id, ai ? aiName : authorName(m.fromUserUri) || 'Someone', {
       icon: ai ? 'chat' : 'member', block: 'heading3', heading: 3,
-      meta: typeof m.sentAt === 'number' ? hm(m.sentAt) : undefined,
+      meta: typeof m.sentAt === 'number' ? hm(m.sentAt) + (m.editedAt !== undefined ? ' (edited)' : '') : undefined,
       hasChildren: children.length > 0, children,
     }));
   });

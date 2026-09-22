@@ -60,7 +60,7 @@ the same an hour before the meeting as an hour after. `calendarEvent.mode` was e
 Attendance lives one document further out. A call creates a `tana:call:` document with **the same ULID as its event**
 and `data.ownerUri` pointing back at it (the `EDGE_TYPE_BELONGS_TO` edge in the table above). It carries:
 
-- a `sessions` **root** map, one entry per live session, keyed `<user-profile uri>:<8 hex>` with `{ joinedAt, userUri }`.
+- a `sessions` **root** map, one entry per live session, keyed `<user-profile uri>:<8 hex>` with `{ joinedAt, userUri }`. Keys starting with `federation:` are another organization's capture of the meeting; the web client leaves them out of `activeParticipantUris`, and so does `calls.js`. `sessionLog` entries are `{ userUri, event, timestamp, sessionId }`.
   It empties when the last participant leaves — a finished call reads `sessions: {}`;
 - `data.sessionLog`, the append-only history: `{ userUri, timestamp, event: "join" | "leave" }`;
 - `data.activeSessions` and `data.callParticipantState`, empty in every call inspected, live or finished, so neither

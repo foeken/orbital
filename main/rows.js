@@ -64,11 +64,11 @@ const WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTH = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 // "Mon 9:00–9:30" in local time; all-day events come as UTC (or local) midnight with a whole-day span: "Mon, all day".
 // withDate (search results, any week or year): "Fri 11 Sep 9:00–10:00", with the year added outside the current one.
-function eventMeta(start, end, withDate) {
+function eventMeta(start, end, withDate, allDayFlag) {
   if (!start) return undefined;
   const s = new Date(start), e = end ? new Date(end) : null;
   const midnight = s.getUTCHours() + s.getUTCMinutes() === 0 || s.getHours() + s.getMinutes() === 0;
-  const allDay = e && midnight && (e - s) % 864e5 === 0;
+  const allDay = allDayFlag === true || (e && midnight && (e - s) % 864e5 === 0); // Tana now says so: calendarEvent.allDay
   const year = s.getFullYear() === new Date().getFullYear() ? '' : ' ' + s.getFullYear();
   // A bare weekday reads as "the week ahead", so last Friday must not show as "Fri": anything before today or more
   // than six days out carries its date, wherever it is listed.
@@ -130,7 +130,7 @@ const taskRow = (n) => ({
 const meetingRow = (n, withDate) => {
   const ev = n.calendarEvent || {};
   return {
-    id: n.id, title: n.title || '', done: 0, icon: 'meeting', meta: eventMeta(ev.startTime, ev.endTime, withDate), createdAt: n.createTime,
+    id: n.id, title: n.title || '', done: 0, icon: 'meeting', meta: eventMeta(ev.startTime, ev.endTime, withDate, ev.allDay), createdAt: n.createTime,
     hue: hueWithType(hueOf(n), n.entityType), tags: [nodeTag(TAG.meeting, n), ...typeTag(n.entityType)], sortKey: ev.startTime || now(), updatedAt: n.updateTime || now(),
     // the event window itself, beside the text that displays it: anything that orders meetings by time has to read
     // these rather than parse `meta`, which is a label and says "Fri 08:20" for six days either side of today

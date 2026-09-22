@@ -220,11 +220,13 @@ function fieldView(document, key, { create = false } = {}) {
 }
 
 // Define a field on a type: one more entry in the type document's template.attributes, in the layout a real type
-// carries (a MovableList of maps: { key, title, type?, cardinality? }). Types seen on the wire: member, date, link;
-// a plain text field has no type at all. Keys are 8 lowercase alphanumerics like Tana's own. Returns the key.
+// carries (a MovableList of maps: { key, title, type?, cardinality?, to?, options? }). Tana's schema allows the types
+// link, date, member and options; a plain text field has no type at all. Keys are Tana's own 8-character ids
+// (content.newId). Returns the key.
+const FIELD_TYPES = ['link', 'date', 'member', 'options'];
 function addField(typeDocument, { title, type, cardinality } = {}) {
   if (typeof title !== 'string' || !title.trim()) throw new Error('field title required');
-  if (type !== undefined && typeof type !== 'string') throw new Error('field type must be a string');
+  if (type !== undefined && !FIELD_TYPES.includes(type)) throw new Error('field type must be one of ' + FIELD_TYPES.join(', '));
   if (cardinality !== undefined && cardinality !== 'single' && cardinality !== 'multiple') throw new Error('cardinality must be single or multiple');
   const key = content.newId();
   typeDocument.transact((loro) => {
