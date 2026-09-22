@@ -743,7 +743,7 @@ as Tana labels one, below the caret instead when the row is too near the top of 
 text is typed: Tana only re-sends an entry when that cursor changes, so its block offset stays where the caret entered a node
 (0 in a new one), and an edit to the document redraws the carets without any presence message. The block offset (ProseMirror
 units, a mention is one; content.charOffset) is the fallback, and your own caret goes out in those units too (blockOffset).
-Without a position yet, the row gets the thin bar on its left instead. This Orbital is never shown; your own other tabs and devices are, under your name, which is also how to try presence alone: open
+In an empty row, or before its position is known, the caret stands where the row's text begins. This Orbital is never shown; your own other tabs and devices are, under your name, which is also how to try presence alone: open
 the same node in Tana.
 
 Where your caret is goes the other way: while it is in a block of this page, your presence entry says so under your name

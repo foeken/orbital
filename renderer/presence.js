@@ -54,6 +54,11 @@ function caretRect(el, offset) {
   }
   return last ? rangeRect(last, last.data.length) : null;
 }
+// the first line of a row's text, for a caret with no character to stand on
+function textStart(el) {
+  const r = el.getBoundingClientRect(), lh = parseFloat(getComputedStyle(el).lineHeight);
+  return { left: r.left, top: r.top, height: Number.isFinite(lh) ? Math.min(lh, r.height || lh) : r.height };
+}
 function rangeRect(node, i) {
   const r = document.createRange(); r.setStart(node, i); r.collapse(true);
   const box = r.getClientRects()[0] || r.getBoundingClientRect();
@@ -71,8 +76,10 @@ function paintPresence() {
       mark.className = 'pcaret'; mark.style.setProperty('--hue', String(presenceHue(p))); mark.title = p.me ? 'You, in another tab' : p.name;
       mark.dataset.name = p.name; // the full name, yours too, as Tana labels a caret
       line.append(mark);
-      // at the character their caret is on, as Tana draws it; without an offset (not converted yet) at the row's start
-      const text = line.querySelector('.text'), box = text && p.offset != null ? caretRect(text, p.offset) : null;
+      // at the character their caret is on, as Tana draws it; in an empty row, or before its position is known, where the
+      // row's text begins (never the line's own left edge, which is out over the bullet)
+      const text = line.querySelector('.text');
+      const box = text && ((p.offset != null && caretRect(text, p.offset)) || textStart(text));
       if (!box) continue;
       const base = line.getBoundingClientRect();
       mark.classList.add('at');
