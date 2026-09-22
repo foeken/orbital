@@ -129,7 +129,8 @@ assert.match(source, /if \(!connected \|\| !tana\.taskMeta \|\| !isRealId\(docId
 assert.match(source, /const isRealId = \(id\) => typeof id === 'string' && id\.startsWith\('tana:'\);/);
 // Tana titles are plain text: the @ picker must not open there, so the key types an ordinary character (#53)
 assert.doesNotMatch(source.slice(source.indexOf("titleEl.addEventListener('keydown'"), source.indexOf('// the document Cmd+K context actions')), /startLink/, 'the title keydown handler never opens the link picker');
-assert.match(source, /taskMetaFailed\.set\(docId, \{ until: Date\.now\(\) \+ wait, wait \}\);/);
+assert.match(source, /taskMetaFailed\.set\(docId, entry\);/);
+assert.match(source, /entry\.until = 0; renderSoon\(\);/, 'the retry timer opens the backoff gate itself rather than racing Date.now()');
 // a new connection clears the metadata backoff and refetches the active view and the saved-search list, both of
 // which can fetch before the client existed and neither of which is retried on its own (searchesReconnectCheck
 // in renderer-check.js exercises the searches half of this behaviorally)

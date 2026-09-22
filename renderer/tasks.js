@@ -45,8 +45,11 @@ function loadTaskMeta(docId) {
     taskMetaLoading.delete(docId);
     if (noteGone(docId, e)) return; // gone, not settling: nothing to wait for
     const wait = Math.min(META_RETRY_MAX, backoff ? backoff.wait * 2 : META_RETRY_MS);
-    taskMetaFailed.set(docId, { until: Date.now() + wait, wait });
-    setTimeout(() => { if (!taskMetaById.has(docId)) renderSoon(); }, wait);
+    const entry = { until: Date.now() + wait, wait };
+    taskMetaFailed.set(docId, entry);
+    // The timer is the retry, so it opens the gate itself: a timer is due by the loop's clock, which lags the wall
+    // clock on a long tick, and a render arriving a millisecond "early" by Date.now() used to be refused and lost.
+    setTimeout(() => { if (taskMetaById.has(docId)) return; entry.until = 0; renderSoon(); }, wait);
   });
 }
 // A metadata answer lands in the rows that show that document — the placeholder swapped for the real icons, the
