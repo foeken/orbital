@@ -158,5 +158,45 @@ assert.strictEqual(db.deletedList(1).length, 1, 'the list is capped');
   console.log('db-check: agent-link records nodeId -> threadId, validated and idempotent');
 }
 
+// userdata.js: the folder this app keeps its login, cache and settings mirror in is named after the app, and the
+// app is Orbital now. A new install starts there; an install carrying the old name is moved once, by whatever boots
+// the app, and never by a helper that only reads.
+{
+  const { userDataDir, DIR, OLD_DIR } = require('../userdata');
+  const appData = () => fs.mkdtempSync(path.join(os.tmpdir(), 'orbital-appdata-'));
+
+  const fresh = appData();
+  assert.strictEqual(userDataDir(fresh, { migrate: true }), path.join(fresh, DIR), 'a new install is told the app’s own name');
+  assert.strictEqual(fs.existsSync(path.join(fresh, DIR)), false, 'and the folder is left for Electron to create');
+
+  const older = appData();
+  fs.mkdirSync(path.join(older, OLD_DIR));
+  fs.writeFileSync(path.join(older, OLD_DIR, 'tasks.sqlite'), 'rows');
+  assert.strictEqual(userDataDir(older), path.join(older, OLD_DIR), 'a reader is sent to the old folder where it still is');
+  assert.ok(fs.existsSync(path.join(older, OLD_DIR)), 'and reading never moves it out from under a running app');
+  assert.strictEqual(userDataDir(older, { migrate: true }), path.join(older, DIR), 'booting the app moves it');
+  assert.strictEqual(fs.readFileSync(path.join(older, DIR, 'tasks.sqlite'), 'utf8'), 'rows', 'with everything that was in it');
+  assert.strictEqual(fs.existsSync(path.join(older, OLD_DIR)), false, 'leaving no second folder to drift from it');
+  assert.strictEqual(userDataDir(older, { migrate: true }), path.join(older, DIR), 'and the next boot has nothing left to do');
+
+  const both = appData();
+  fs.mkdirSync(path.join(both, OLD_DIR));
+  fs.mkdirSync(path.join(both, DIR));
+  assert.strictEqual(userDataDir(both, { migrate: true }), path.join(both, DIR), 'the current name wins when both exist');
+  assert.ok(fs.existsSync(path.join(both, OLD_DIR)), 'and the old one is left alone rather than merged or deleted');
+
+  // A move that cannot happen must not cost anybody their login: the old folder stays in use and is tried again.
+  const locked = appData();
+  fs.mkdirSync(path.join(locked, OLD_DIR));
+  fs.chmodSync(locked, 0o500);
+  try {
+    assert.strictEqual(userDataDir(locked, { migrate: true }), path.join(locked, OLD_DIR), 'a refused move keeps the old folder in use');
+  } finally {
+    fs.chmodSync(locked, 0o700);
+  }
+  for (const dir of [fresh, older, both, locked]) fs.rmSync(dir, { recursive: true, force: true });
+  console.log('db-check: the app data folder is the app’s name, and an older one is moved there once');
+}
+
 fs.rmSync(path.dirname(file), { recursive: true });
 console.log('db-check ok');

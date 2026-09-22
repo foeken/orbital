@@ -55,5 +55,5 @@ documents: every one now resolves, and the four boundary shapes that used to rea
 
 ## Tooling
 - Electron is required for the cookie session (`session.fromPartition('persist:tana').fetch`); plain Node has no cookies. `app.setPath('userData', …)` must run before `ready`.
-- The CLI and the app share one userData folder (`~/Library/Application Support/tana-tasks`); don't run write commands in the CLI while relying on the app's undo state.
+- The CLI and the app share one userData folder (`~/Library/Application Support/Orbital`, moved there from the older `tana-tasks` on the first start after the rename — `userdata.js`); don't run write commands in the CLI while relying on the app's undo state.
 - Sub-agent runs can hit model rate limits (HTTP 429); work is split by file ownership so a cut-off worker leaves a resumable diff.

@@ -6,6 +6,7 @@ const { app, BrowserWindow, Menu, Notification, globalShortcut, ipcMain, nativeT
 const path = require('node:path');
 const db = require('./db');
 const { createTanaSession } = require('./tana-session');
+const { userDataDir } = require('./userdata');
 const updater = require('./updater');
 const access = require('./sdk/access');
 const { readNode, setTitle, setState, taskMeta, audienceMetadata, setAssignees, setSearchQuery, setSearchView } = require('./sdk/node');
@@ -401,7 +402,9 @@ if (process.env.TANA_MAIN_TEST) {
   app.setName('Orbital');
   // The About panel reads the bundle's plist, which in a dev run is Electron's own name and version; say it here instead.
   app.setAboutPanelOptions({ applicationName: 'Orbital', applicationVersion: app.getVersion(), version: '', iconPath: path.join(__dirname, 'build', 'icon.png') });
-  app.setPath('userData', path.join(app.getPath('appData'), 'tana-tasks')); // before 'ready': same S.session/cache for dev runs, the CLI and the packaged app
+  // Before 'ready': the same session, cache and settings mirror for dev runs, the CLI and the packaged app. The
+  // folder is named after the app, so an install still carrying the old name is moved here once (userdata.js).
+  app.setPath('userData', userDataDir(app.getPath('appData'), { migrate: true }));
 
   app.whenReady().then(async () => {
     if (!app.isPackaged && app.dock) app.dock.setIcon(path.join(__dirname, 'build', 'icon.png')); // packaged builds carry the icon in the bundle

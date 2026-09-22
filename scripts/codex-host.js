@@ -15,9 +15,7 @@ const arg = (name) => { const i = process.argv.indexOf('--' + name); return i >=
 const has = (name) => process.argv.includes('--' + name);
 function dbPath() {
   if (process.env.TANA_TASKS_DB) return process.env.TANA_TASKS_DB;
-  const appData = process.platform === 'darwin' ? path.join(process.env.HOME || '', 'Library', 'Application Support')
-    : process.env.APPDATA || path.join(process.env.HOME || '', '.config');
-  return path.join(appData, 'tana-tasks', 'tasks.sqlite');
+  return path.join(require('../userdata').userDataDir(), 'tasks.sqlite'); // appData/Orbital, or the older tana-tasks folder
 }
 function main() {
   db.open(dbPath());

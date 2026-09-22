@@ -17,13 +17,11 @@ function arg(name) {
   const i = process.argv.indexOf('--' + name);
   return i >= 0 ? process.argv[i + 1] : undefined;
 }
-// The app keeps its database beside its Electron userData (main.js: appData/tana-tasks/tasks.sqlite). The env var is
-// for the checks, which run against a temporary file rather than the real one.
+// The app keeps its database in its Electron userData (userdata.js: appData/Orbital/tasks.sqlite, or the older
+// tana-tasks folder until the app moves it). The env var is for the checks, which run against a temporary file.
 function dbPath() {
   if (process.env.TANA_TASKS_DB) return process.env.TANA_TASKS_DB;
-  const appData = process.platform === 'darwin' ? path.join(process.env.HOME || '', 'Library', 'Application Support')
-    : process.env.APPDATA || path.join(process.env.HOME || '', '.config');
-  return path.join(appData, 'tana-tasks', 'tasks.sqlite');
+  return path.join(require('../userdata').userDataDir(), 'tasks.sqlite'); // reads where the app is; moving it is the app's job
 }
 const tasks = () => { const stored = db.setting('codexTask'); return stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {}; };
 
