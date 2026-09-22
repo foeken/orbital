@@ -30,6 +30,18 @@ Enums are passed by name (`'SORT_FIELD_UPDATE_TIME'`, `'LIST_NODES_MODE_WITH_COU
 
 `listChanges({ uri, withinId?, limit? })` → `{ parent?, summaries: [{ id, level, title, description, authors, sources, startTime, endTime, expandable, changeType }] }`: the change summaries Tana's own Changes panel shows for a node, `summaries` always an array. `withinId` asks for the summaries inside an expandable one; nothing here writes.
 
+## `sdk/livequery.js` — a query the server keeps answering
+
+`openLiveQuery(sync, query, { label })` → handle, once the server has taken the query. It creates a throwaway `tana:liveQuery:<ulid>` document holding the query, subscribes it as ephemeral (as Tana's own client does), and the server writes the answer into `data.result.nodes` and rewrites it whenever the answer changes, as ordinary live updates on the stream already open.
+
+- `query`: lists `uris types ownerUris entityTypeUris stateTypes chatInvocationIntents stateChangedBy stateWorkflowUris stateWorkflowStateIds assignedTo createdBy recurrenceIds occurrenceKeys orderBy exactParticipantUris hasParticipantUris useFields` and scalars `stateEnteredAtMin/Max createdAtMin/Max eventStartTimeMin/Max eventEndTimeMin/Max unassigned limit includeProposals includeArchived archivedOnly modifiedByUserHash uniqueByParticipants restricted linkShared`. Times are epoch ms; `orderBy` entries are field names, `-createdAt` for descending. Any other key throws before anything is subscribed. `externalIds` and `attributeFilters` are always written empty.
+- `handle.state()` → `{ status: 'pending' | 'ready' | 'stale' | 'error', nodes, error }`: pending while `resultForVersion` is 0, stale while it trails `queryVersion` (Tana's rule).
+- `handle.on('rows', { added, removed, changed, initial })`: every time the answer moves; `initial` marks the first answer, `removed` is uris, `changed` means a row's title, state, state entry time, type, assignees or archive changed.
+- `handle.on('error', e)`: the server refused the query (emitted only when something listens).
+- `handle.close()`: unsubscribes. `handle.id` is the query document's uri.
+
+A row: `{ uri, type, title, entityType, createdAt, updatedAt, ownerUri, state: { type, enteredAt, changedBy }, assignedTo, participants, calendarEvent, archivedAt, … }`. Verified live 2026-09-22 (`platform-cli livequery`): a task created elsewhere arrived as an `added` row within seconds, and left as `removed` when deleted.
+
 ## `sdk/sync.js` — `class SyncConnection extends EventEmitter`
 
 Constructed by `createTanaClient`; `{ transport, orgId, peerId, storageId, logger }`.

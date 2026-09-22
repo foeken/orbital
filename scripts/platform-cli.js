@@ -82,6 +82,23 @@ const commands = {
     }
     out(nodes.length + ' types scanned');
   },
+  // livequery [--minutes 60] [--seconds 20] [--state proposed|open|closed|not_now]: open a live query (sdk/livequery.js)
+  // for text nodes created in the last N minutes, or that entered a state in that window, and print every change the
+  // server pushes. Read-only: the only thing it writes is its own throwaway query document.
+  async livequery() {
+    await connect();
+    await client.sync.connect();
+    const { openLiveQuery } = require('../sdk/livequery');
+    const since = Date.now() - Number(flag('minutes', 60)) * 6e4, state = flag('state');
+    const q = state ? { types: ['text'], stateTypes: [state], stateEnteredAtMin: since, limit: 50 } : { types: ['text'], createdAtMin: since, orderBy: ['-createdAt'], limit: 50 };
+    const live = await openLiveQuery(client.sync, q, { label: 'orbital probe' });
+    const row = (r) => r.uri + ':' + ((r.state && r.state.type) || '-');
+    out(live.id + '\t' + live.state().status);
+    live.on('error', (e) => out('error\t' + e.message));
+    live.on('rows', ({ added, removed, changed, initial }) => out((initial ? 'initial' : 'update') + '\t+' + added.map(row).join(' +') + (changed.length ? '\t~' + changed.map(row).join(' ~') : '') + (removed.length ? '\t-' + removed.join(' -') : '')));
+    await new Promise((r) => setTimeout(r, Number(flag('seconds', 20)) * 1000));
+    await live.close();
+  },
   // graphnode <id>: the raw graph Node JSON, including attributes and any typed links
   async graphnode() {
     await connect();
@@ -737,6 +754,7 @@ const USAGE = [
   '             settype <id>   (listing only; with a target it writes)',
   '             caps <id...> | related <id> | incall [--limit 5] | pageprobe | libraryprobe | boot [--settle ms]',
   '  live       watch <id...>',
+  '  LIVE       livequery [--minutes 60] [--seconds 20] [--state <stateType>]',
   '  WRITES     create <title> [--kind doc|task|meeting] | delete <id> | restore <id> | set-title <id> <title> |',
   '             addfield <type uri> <title> [--type member|date|link] [--multiple] |',
   '             set-state <id> <proposed|open|closed|not_now> | pin <id> <sidebar|today> | unpin <id> <sidebar|today> |',

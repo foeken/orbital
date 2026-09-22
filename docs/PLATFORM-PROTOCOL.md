@@ -228,6 +228,23 @@ updates carry no version vector: the blobs are exactly what Loro emitted, and th
 `{"snapshot":"<b64 Loro snapshot>","versionVector":"<b64>"}`; 15 s client timeout; Connect `NotFound` for unknown ids. Needs no peer
 stream, so it is the cheapest way to poll a task.
 
+### 2.6 Live queries (`tana:liveQuery:`)
+
+How Tana's own client lists things (NodeQueryResource/EdgeQueryResource in `shared-*.js`, read 2026-09-22): not ListNodes, but a
+query the server keeps running. The client mints `tana:liveQuery:<ulid>`, writes the query into a new document, and subscribes it
+with `beginDocumentSync{ephemeral: true}` (the only kind that sets it); the server fills in the answer and pushes a live update each
+time it changes. The grace period on release is 0 (2.5). `sdk/livequery.js` implements the `nodes` form.
+
+```
+data = { type: 'liveQuery', queryType: 'nodes' | 'edges', label, query, queryVersion: 1, state: 'pending' | 'ready' | 'error',
+         resultForVersion: 0, result: { nodes: [row] } | { edges: [...] }, error?: { message, code } }
+```
+`query` is a LoroMap whose list fields are LoroLists, all written even when empty (`uris, types, ownerUris, entityTypeUris,
+stateTypes, stateEnteredAtMin/Max, createdAtMin/Max, assignedTo, createdBy, orderBy, limit, attributeFilters, …`, full list in
+docs/sdk/03-api-reference.md). The answer is current when `resultForVersion === queryVersion`; the client bumps `queryVersion` to
+change a query in place. Rows carry times as epoch ms. Verified live: a task created in another session arrived in an open query
+within seconds, and left it when soft-deleted.
+
 ## 3. How the UI mutates a task document
 
 Container layout, verified by decoding a real `tana:text:` task snapshot with loro-crdt 1.16:
