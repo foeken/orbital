@@ -125,7 +125,7 @@ async function suggestWithChatGPT(title, userData) {
   let threadId = null;
   try {
     const started = await rpc.call('thread/start', {
-      model: settings.get('aiModel') || DEFAULT_MODEL, allowProviderModelFallback: true,
+      model: settings.get('aiModel') || DEFAULT_MODEL,
       cwd: workspace, runtimeWorkspaceRoots: [workspace], ephemeral: true,
       approvalPolicy: 'never', sandbox: 'read-only', baseInstructions: CHATGPT_INSTRUCTIONS,
     });
