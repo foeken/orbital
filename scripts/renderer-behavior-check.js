@@ -7777,6 +7777,7 @@ function runProposalsCheck() {
     const collapsedGroups = new Set(), prefs = [], render = () => {};
     const setPref = (key, value) => prefs.push([key, value]);
     ${sourceLine('const PROPOSAL_GROUPS')}
+    ${sourceLine('const PROPOSAL_FOLDED')}
     ${sourceLine('const proposalFoldKey')}
     ${functionSource("proposalGroups")}
     ${functionSource("toggleProposalGroup")}
@@ -7809,15 +7810,17 @@ function runProposalsCheck() {
     const before = api.calls.length;
     await api.press(['p0', 'p2'], 'Approve proposal');
     assert.deepEqual(plain(api.calls.slice(before)), [['approve', 'p0']], 'approving a selection sends only the ones Orbital can approve');
-    // The page's sections (issue #104): fixed order, empty ones left out, folding kept under the page's own key.
-    const list = [api.filed('s1', 'From spaces'), api.filed('m1', 'From meetings'), api.filed('s2', 'From spaces')];
-    assert.deepEqual(plain(api.sections(list)), [['From meetings', ['m1'], false], ['From spaces', ['s1', 's2'], false]],
-      'From meetings comes first, each section keeps the page\'s order, and an empty From chats is not drawn');
-    api.fold('From spaces');
-    assert.deepEqual(plain(api.sections(list).map((g) => g[2])), [false, true], 'a section folds on its own');
-    assert.deepEqual(plain(api.prefs.at(-1)), ['collapsedGroups', ['orbital:proposals\nFrom spaces']], 'and is remembered under the Proposals page, whichever view is behind it');
-    api.fold('From spaces');
-    assert.deepEqual(plain(api.sections(list).map((g) => g[2])), [false, false]);
+    // The page's parts (issues #104, #107): yours first with no heading, then From others, folded until you open it
+    // and remembered under the page's own key.
+    const list = [api.filed('o1', 'others'), api.filed('m1', 'mine'), api.filed('o2', 'others')];
+    assert.deepEqual(plain(api.sections(list)), [['', ['m1'], false], ['From others', ['o1', 'o2'], true]],
+      'yours comes first without a heading, each part keeps the page\'s order, and From others starts folded');
+    assert.deepEqual(plain(api.sections([api.filed('o1', 'others')]).map((g) => g[0])), ['From others'], 'an empty part is not drawn');
+    api.fold('others');
+    assert.deepEqual(plain(api.sections(list).map((g) => g[2])), [false, false], 'From others opens');
+    assert.deepEqual(plain(api.prefs.at(-1)), ['collapsedGroups', ['orbital:proposals\nopen\nothers']], 'and is remembered under the Proposals page, whichever view is behind it');
+    api.fold('others');
+    assert.deepEqual(plain(api.sections(list).map((g) => g[2])), [false, true]);
     console.log('ok  proposals: approve and reject leave the page at once, a refusal reads it back with the reason, Cmd+K approves only what Orbital can, sections fold under the page');
   })();
 }

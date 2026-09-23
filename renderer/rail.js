@@ -214,6 +214,7 @@ function railGroups(data) {
   return data ? [
     ['Pinned', data.pinned || [], data.pinHub],
     ['Outcomes', data.outcomes],
+    ['Proposals', data.proposals],
     ['References', data.notes],
     // the documents that mention this one: one section per typed field, "Mentioned in" last, named by main the way
     // Tana's own Backlinks panel names them
@@ -257,7 +258,7 @@ function railPinAction(pinHub, docId) {
   row.dataset.id = 'action:pinNew';
   return row;
 }
-// Pinned / Outcomes / References for the zoomed document; a writable pin hub keeps Pinned available when empty.
+// Pinned, Outcomes, Proposals and References for the zoomed document; a writable pin hub keeps Pinned available when empty.
 function renderRail(parent) {
   const active = document.activeElement, keep = active && active.classList && active.classList.contains('rrow') ? active.dataset.id : null;
   railEl.replaceChildren();

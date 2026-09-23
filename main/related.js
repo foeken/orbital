@@ -7,6 +7,7 @@ const { completedInWindow, filterToSearchQuery, searchQueryParams, validViewFilt
 const { DOC_URI, LIVE_ROWS, NOT_CONNECTED, PIN_HUBS, PLAIN_KINDS, S, idKind, isSpace, send, summaryCache, typeAttrTitles, typeTitles } = require('./state');
 const { graphRow, rememberNodeHue, resolveTypes, toNode } = require('./rows');
 const { canWriteDoc, op, resolveReferences, subscribe } = require('./documents');
+const { rows: proposalRows } = require('./proposals');
 
 const crumbIcon = (id) => ({ space: 'space', event: 'meeting', 'user-profile': 'member', chat: 'chat', agent: 'agent' })[idKind(id)] || 'doc';
 async function pathOf(id) {
@@ -82,6 +83,7 @@ async function searchRows(query, completedWithin) {
 //   pinned             EDGE_TYPE_HAS_PIN edges from the event to documents and chats
 //   outcomes           documents owned by the event that carry a task state
 //   notes              documents owned by the event without a state (the meeting write-up)
+//   proposals          pending proposals from chats owned by the event, shown on its write-up only (issue #106)
 // Generic on purpose: any node with pins or owned documents answers the same way.
 // Fields are graph-node attributes keyed "<type uri>?attribute=<key>"; the label lives in that type's
 // typeDef.attributes. Values carry text, listItems and references (verified on a real typed node).
@@ -299,7 +301,9 @@ async function related(id) {
   // never list the open document itself, an untitled draft, or something already shown as a pin
   const pinnedIds = new Set(pinIds);
   const owns = (owned.nodes || []).filter((n) => !PLAIN_KINDS.has(idKind(n.id)) && n.id !== id && !pinnedIds.has(n.id) && (n.title || '').trim());
-  const writeUp = writeUpOf(event, owns); // one rule for the rail and for navigation
+  const writeUp = writeUpOf(event, owned.nodes || []); // one rule for the rail and for navigation
+  const proposals = idKind(hub) === 'event' && writeUp && id === writeUp.id ? proposalRows(hub).catch(() => []) : Promise.resolve([]);
+  const pendingProposals = await proposals;
   return {
     summary: ev.summary || undefined,
     tagline: ev.tagline || undefined,
@@ -312,6 +316,7 @@ async function related(id) {
     pinHub: canPin ? hub : undefined, // where a new pin would go, when this user may write it
     pinned: pinned.map(row),
     outcomes: owns.filter(stated).map(row),
+    proposals: pendingProposals,
     notes: owns.filter((n) => !stated(n) && (!writeUp || n.id !== writeUp.id)).map(row),
     // an untitled draft mentions nothing worth listing, and a document already shown as a pin is not listed twice
     backlinks: await backlinkGroups(mentionEdges, (uri) => mentioned.find((n) => n.id === uri && (n.title || '').trim() && !pinnedIds.has(n.id)), row),
