@@ -75,9 +75,9 @@ const groupBy = () => { const k = pillKey(); return GROUPS.some(([id]) => id ===
 // A saved search's arrangement belongs in its document, so its keys are kept out of the browser-local preference
 // blob: without this, changing any view's grouping would flush every search key it had accumulated to disk too.
 const persistPref = (key, chosen) => setPref(key, Object.fromEntries(Object.entries(chosen).filter(([k]) => !k.startsWith('tana:'))));
-// Stay put: once a task's box is clicked, that row keeps its group and every row keeps its place until the view is left,
-// so nothing jumps away from the pointer (an Inbox task moving to In Progress read as "gone" and got undone). holdRow
-// snapshots the order on screen and the row's group before its state changes; setView and a new Sort or Group let go.
+// Stay put: an action that could reorder a view keeps its current group and order until Clean up, so nothing jumps
+// away from the pointer. holdRow snapshots the order on screen and the row's group before the change; setView and a
+// new Sort or Group let go.
 // `view` here is the page key (a view id, or a saved search's document id), the same key the pills and the sort and
 // group preferences use: holding rows in place is about the list in front of you, whichever kind of page it is.
 let held = null, lastOrder = null; // held: { view, by, order: Map id -> index, groups: Map id -> title }; lastOrder: { view, ids }
@@ -143,10 +143,10 @@ function groupsOf(list) {
   if (by === 'none') return null;
   if (by === 'assignee' || by === 'responsibility') loadMembers(); // the names for the headings, and who you are
   // every section holds rows: folded away (below) the heading stays and its rows are left out
-  return groupRows(list, by).map((g) => { const id = groupId(g, by); return { ...g, id, collapsed: groupCollapsed(id) }; }).map(trimTracking).map((g) => (by === 'responsibility' ? latestPinFirst(g) : g));
+  return groupRows(list, by).map((g) => { const id = groupId(g, by); return { ...g, id, collapsed: groupCollapsed(id) }; }).map(trimTracking)
+    .map((g) => (by === 'responsibility' && !(held && held.view === pillKey() && held.by === by) ? latestPinFirst(g) : g));
 }
-// The Pinned section runs by the latest day each task is pinned to, latest on top; the sort is stable, so tasks
-// pinned to the same day keep the order the page's Sort gave them.
+// The Pinned section runs by latest pin date after Clean up; while held, the on-screen order wins like every group.
 const latestPin = (n) => [...(datePinsById.get(n.id) || [])].sort().at(-1) || '';
 const latestPinFirst = (g) => (g.id === 'Pinned' ? { ...g, nodes: [...g.nodes].sort((a, b) => latestPin(b).localeCompare(latestPin(a))) } : g);
 // ---- collapsing a section: the heading stays, its rows fold away, one heading at a time ----
