@@ -66,6 +66,7 @@ onRows('keydown', (e) => {
       return e.preventDefault();
     }
     if (e.key === 'Escape') { e.preventDefault(); el.blur(); }
+    else if (item.node.notification && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openNotification(item.node); } // renderer/inbox.js: read, and open what it is about
     else if (e.key === ' ') { e.preventDefault(); if (isReference(item.node)) openReference(item.node); else if (zoomable(item.node)) zoomTo(item); } // Space zooms into a read-only row, since typing into it is not an option; a member or type has no page
     else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && e.shiftKey && !mod) { e.preventDefault(); extendSel(item, e.key === 'ArrowUp' ? -1 : 1); }
     else if (e.key === 'ArrowUp' && !mod && atEdge(el, 'up')) { e.preventDefault(); moveTo(el, -1, off); }

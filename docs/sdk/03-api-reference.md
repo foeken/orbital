@@ -218,6 +218,14 @@ Items pinned *on* an event or a space are a different thing (docs/PINNING.md sec
 
 This is the only way to tell *joined* from *invited*: see [02-data-model.md](02-data-model.md) section 5 and [../MEETINGS.md](../MEETINGS.md). What it cannot answer is whether a participant is speaking or idle — that would have to come from the transcript document.
 
+## `sdk/inbox.js` — notifications
+
+Tana keeps each user's notifications in one `tana:user-inbox:<user-profile ULID>` document (`inboxUri(userUri)`, Tana's `gy()`): roots `data { type: 'user-inbox', updatedAt }` and `notifications`, a map of LoroMaps `{ id, notificationType, sourceUri, createdAt, actorUri?, title?, body?, readAt?, threadUri? }` (schema `npe`, wrapper `Ah`/`VSe` in the bundle of 2026-09-22; live: 80 items, keys as listed). Types seen in the bundle: `document-access event-access task-assignment comment-mention comment-reply incoming-call type-archived type-unarchived ai-usage-warning chat-message`.
+
+`open(sync, userUri)` subscribes it (never creates it: Tana's client does that when none exists) · `items(doc)` → newest first · `unreadCount(doc)` · `markAsRead(doc, id)` · `markAsUnread(doc, id)` (deletes `readAt`) · `markAsReadBySourceUri(doc, uri)` · `markAllAsRead(doc)`. Each write is one transaction, sets `readAt` to now on every item it reads, bumps `data.updatedAt` only when an item changed, and returns whether one did — Tana's own rules. Live: the document's `change` events carry every write, from anywhere.
+
+`phrase(n, actorName?, title?)` → Tana's sentence (`Wqt`) as `[{ text, emphasis? }]` ("Sam added you to **Plan**", "You were added to a meeting", anything unknown reads as a message); `title` overrides the stored one, which Tana does for `type-archived`/`type-unarchived` (`retitled(type)`) so a renamed type shows its current name. `detail(n)` → the line Tana writes after it (`Gqt`): the body (a task's title), markdown flattened, trailing punctuation dropped, `''` for calls and type changes. `scripts/platform-cli.js inbox` prints your inbox read-only.
+
 ## `sdk/chat.js`
 
 `chatRows(messages, { authorName, aiName = 'Tana AI' })` → read-only outline rows for a chat's `data.messages` (docs/CHATS.md): one author row per message with its markdown blocks as children, `[label](tana:…)` links as mention segments, attachments and proposals as reference rows, and "Thought for N seconds" from `completedAt - sentAt`. `blocks(text)`, `segments(text)` and `plain(segments)` are the markdown helpers behind it. Pure and Electron-free.

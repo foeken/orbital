@@ -337,7 +337,7 @@ async function membersLoaded() { if (!(members && members.length) && tana.member
 // Every row carries a stable id even though its label counts the selection, because Cmd+Shift+K records a hotkey per
 // id and a hotkey only fires with the palette closed — which is exactly when a selection is live.
 function selectionRows() {
-  const selected = selKeys(), keys = selected.length ? selected : palDoc && items.has(palDoc.id) ? [palDoc.id] : [];
+  const selected = selKeys(), keys = selected.length ? selected : palDoc && !palDoc.appPage && items.has(palDoc.id) ? [palDoc.id] : [];
   if (!keys.length) return [];
   const group = selected.length ? 'Selection' : 'Current node';
   const count = (n, noun) => (selected.length ? ` ${n} ${n === 1 ? noun : noun + 's'}` : '');

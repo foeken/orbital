@@ -129,6 +129,20 @@ function mockApi() {
   ]]));
   content['tana:user-profile:sam'] = [block('Sam is a colleague')];
   content[space.id] = spaceDocs;
+  // Tana's notifications inbox as main/inbox.js hands it over: the page's rows, already phrased, newest first. The three
+  // writes answer with the unread count and tell onInbox, which is what the inbox's live change does in main.
+  const INBOX = 'orbital:notifications', inboxCbs = [];
+  const note = (id, hours, segments, type, sourceUri, unread) => ({ id, text: segments.map((s) => s.text).join(''), kind: 'block', block: 'bullet', editable: false, unread, segments, hasChildren: false, children: [],
+    createdAt: new Date(Date.now() - hours * 36e5).toISOString(), notification: { type, sourceUri, threadUri: null } });
+  const strong = (text) => ({ text, marks: { bold: true } });
+  content[INBOX] = [
+    note('mocknote0', 0.3, [strong('Sam Okafor'), { text: ' assigned you to a task' }, { text: '. ' + docs[1].text.replace(/[.!?]+$/, '') + '.' }], 'task-assignment', docs[1].id, true),
+    note('mocknote1', 3, [strong('Priya Raman'), { text: ' added you to ' }, strong(meetings[2].text)], 'event-access', meetings[2].id, true),
+    note('mocknote2', 27, [{ text: 'You were added to ' }, strong(spaceDocs[0].text)], 'document-access', spaceDocs[0].id, false),
+    note('mocknote3', 50, [strong('Tomas Ilves'), { text: ' archived ' }, strong(types[2].text)], 'type-archived', types[2].id, false),
+  ];
+  const inboxUnread = () => content[INBOX].filter((n) => n.unread).length;
+  const tellInbox = () => { const n = inboxUnread(); setTimeout(() => inboxCbs.forEach((cb) => cb(n)), 0); return n; };
   // an image block (not editable; api.image resolves its uri to a data URL): a 2x2 PNG scaled by width/height
   content.mockdoc0.splice(2, 0, { id: 'img' + (++seq), kind: 'block', type: 'image', image: { uri: 'tana:image:mock', alt: 'Mock image', width: 160, height: 100 }, hasChildren: false, children: [] });
   // inline references (embeds): read-only nodes rendering the target's title/state, like sdk/content.js (editable: false) with main resolving reference.node
@@ -473,5 +487,9 @@ function mockApi() {
     onRemoved: (cb) => removed.push(cb),
     onChanged: (cb) => changed.push(cb),
     onStatus: (cb) => statusCbs.push(cb),
+    inboxUnread: async () => inboxUnread(),
+    inboxSetRead: async (id, read) => { const n = content[INBOX].find((x) => x.id === id); if (n) n.unread = !read; return tellInbox(); },
+    inboxMarkAll: async () => { for (const n of content[INBOX]) n.unread = false; return tellInbox(); },
+    onInbox: (cb) => inboxCbs.push(cb),
   };
 }

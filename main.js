@@ -20,6 +20,7 @@ const { accessContext, archivedTypes, chatOutline, codexIds, createDocument, cre
 const { callOf, changesOf, pathOf, related, searchChildren, searchPreview, spaceChildren, summaryChanges, summaryUri } = require('./main/related');
 const { hiddenRules, inboxCount, listFilter, mcpHidden, preset, refresh, search, searchCreate, searchList, searchTitle, setHidden, setMcpHidden, setViewFilter, start, viewFilter, viewRows } = require('./main/views');
 const { nodePin, pinState, pinTree, pinned, pinnedDates, pinnedUris, setPin, todayNode, weekNode, weekTitle } = require('./main/pins');
+const inbox = require('./main/inbox');
 const { image } = require('./main/images');
 const icons = require('./main/icons');
 const settings = require('./main/settings');
@@ -119,7 +120,11 @@ ipcMain.handle('view:setFilter', (_e, id, filter) => {
   return stored;
 });
 // events start with an empty content map (no doc node yet); readOutline needs the children list
-ipcMain.handle('outline:children', (_e, id) => (isSearch(id) ? searchChildren(id) : isSpace(id) ? spaceChildren(id) : op(id, (doc) => (idKind(id) === 'chat' ? chatOutline(doc) : doc.content.get('children') ? outlineWithReferences(doc) : []))));
+ipcMain.handle('outline:children', (_e, id) => (id === inbox.PAGE ? inbox.rows() : isSearch(id) ? searchChildren(id) : isSpace(id) ? spaceChildren(id) : op(id, (doc) => (idKind(id) === 'chat' ? chatOutline(doc) : doc.content.get('children') ? outlineWithReferences(doc) : []))));
+// Notifications (main/inbox.js): the page's rows come through outline:children above; these are its count and writes.
+ipcMain.handle('inbox:unread', () => inbox.unread());
+ipcMain.handle('inbox:setRead', (_e, id, read) => inbox.setRead(id, !!read));
+ipcMain.handle('inbox:markAll', () => inbox.markAll());
 ipcMain.handle('doc:info', (_e, id) => op(id, info));
 ipcMain.handle('doc:creationOptions', () => creationOptions());
 // A document's type: the choices it can be given (with the ones it cannot, and why), and the change itself.
