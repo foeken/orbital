@@ -53,16 +53,19 @@ const workflowOf = async (doc) => {
   return uri ? { uri, states: workflowStates(await client.sync.subscribe(uri)) } : null;
 };
 const today = () => new Date().toLocaleDateString('sv-SE');
-// pin <id> <sidebar|today> / unpin: mutate, let the live update go out, print the doc's pin state
+// pin <id> <sidebar|today|shared|mute> / unpin: mutate, let the live update go out, print the doc's pin state. shared is
+// the document's own sharedPinDates (everyone sees it); pin … mute hides today for you, unpin … mute shows it again.
 async function setPin(on) {
   const [id, target] = positional;
-  if (!id || !['sidebar', 'today'].includes(target)) throw new Error('usage: ' + (on ? 'pin' : 'unpin') + ' <id> <sidebar|today>');
+  if (!id || !['sidebar', 'today', 'shared', 'mute'].includes(target)) throw new Error('usage: ' + (on ? 'pin' : 'unpin') + ' <id> <sidebar|today|shared|mute>');
   const me = await connect();
   await client.sync.connect();
   if (target === 'sidebar') await (on ? pins.pinSidebar : pins.unpinSidebar)(client.sync, me.userUri, id);
-  else await (on ? pins.pinDate : pins.unpinDate)(client.sync, me.userUri, id, today());
+  else if (target === 'today') await (on ? pins.pinDate : pins.unpinDate)(client.sync, me.userUri, id, today());
+  else if (target === 'mute') await (on ? pins.muteDate : pins.unmuteDate)(client.sync, me.userUri, id, today());
+  else (on ? pins.pinSharedDate : pins.unpinSharedDate)(await client.sync.subscribe(id), today());
   await new Promise((r) => setTimeout(r, 1500));
-  out({ id, sidebar: (await pins.listSidebar(client.sync, me.userUri)).includes(id), dates: await pins.dates(client.sync, me.userUri, id) });
+  out({ id, sidebar: (await pins.listSidebar(client.sync, me.userUri)).includes(id), dates: await pins.dates(client.sync, me.userUri, id), shared: pins.sharedDates(await client.sync.subscribe(id)) });
 }
 
 const commands = {
@@ -946,7 +949,7 @@ const USAGE = [
   '             meetingedit   (a scratch meeting it creates, edits and deletes; the server puts it in your calendar meanwhile) |',
   '             datemention [--date YYYY-MM-DD]   (a scratch document mentioning the date, read back and deleted) |',
   '             addfield <type uri> <title> [--type member|date|link|options] [--options "A|B"] [--to <type uri>,…] [--multiple] |',
-  '             set-state <id> <proposed|open|closed|not_now|workflow state> | pin <id> <sidebar|today> | unpin <id> <sidebar|today> |',
+  '             set-state <id> <proposed|open|closed|not_now|workflow state> | pin <id> <sidebar|today|shared|mute> | unpin <id> <…same> |',
   '             pinto <event|space id> <id> | unpinfrom <event|space id> <id> | settype <id> <tana:type:...|none> |',
   '             set-hue <type uri> <0-360|none> | discusswith <id> <who…> | setfield <id> <type uri?attribute=key> <line…>',
 ].join('\n');

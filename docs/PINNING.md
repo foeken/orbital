@@ -109,10 +109,18 @@ Live pin-map of this account:
       t.data.sharedPinDates.some(t=>t.type==="plain"&&t.datetime===e)||t.data.sharedPinDates.push({type:"plain",datetime:e,pinnedAt:Date.now()})})}
     removePinDate(e){... findIndex(t=>t.type==="plain"&&t.datetime===e) ... splice ...}
 
-The Today view merges both (`getEffectivePins`): shared dates from the doc, personal dates from the pin-map, minus `mutedPins`
-(`l.set(e,{date:e,isShared:!0,isMuted:c.has(e)})` ... `{date:e,isShared:!1,...}`). The `pinItem` tool and the pin context menu (`sA`) write the personal layer;
-"Test Pin" has `sharedPinDates: []` live. Listing "what is pinned to day D" = `getEntitiesWithPinsInRange`: scan `entries` for plain pins whose `datetime` is in the range
-and not muted; there is no per-user daily document.
+For one document, the dates it is pinned to are `getEffectivePins`: shared dates from the doc, personal dates from the pin-map, minus `mutedPins`
+(`l.set(e,{date:e,isShared:!0,isMuted:c.has(e)})` ... `{date:e,isShared:!1,...}`). The `pinItem` tool writes the personal layer; the "Pin to date" sheet (`_k`,
+build `shared-DRyGVynx.js` of 2026-09-23) keeps three sets — personal, shared, muted — with a toggle each and a Hide/Unhide that writes `mutedPins`.
+"Test Pin" has `sharedPinDates: []` live. Listing "what is pinned to day D" (the Today list, `usePinnedNodes`) = `getEntitiesWithPinsInRange`: scan `entries` for plain
+pins whose `datetime` is in the range and not muted. Shared dates are **not** in that list: nothing in the bundle or the graph lists documents by their
+`sharedPinDates` (checked 2026-09-23). There is no per-user daily document.
+
+The SDK follows the same split (#30): `pins.dates` is `getEffectivePins` for one document (it subscribes the document for its shared dates; one it cannot
+read has none), `datePins`/`datePinned` are the Today list, `muteDate`/`unmuteDate` write `mutedPins`, and `pinSharedDate`/`unpinSharedDate` write the
+document's `sharedPinDates`. Orbital's "Unpin" of a date removes the personal pin and, when the document still shares that date, mutes it for you,
+so it leaves your view without unpinning it for everyone. Verified live on 2026-09-23 on a scratch document: shared pin, mute, unmute and shared unpin,
+each read back from the server in a fresh process (`platform-cli pin|unpin <id> shared|mute`), then deleted.
 
 ## 3. Listing the current sidebar pins
 
@@ -123,7 +131,7 @@ session and the collection via `useUserPinnedCollection`; the same for `pinMapUr
 
 The SDK's read-only `sidebarTree(sync, userUri)` preserves this as `[{ uri?, label?, children }]` in LoroTree order. A `label` is evidence of a folder node, not an access rule; the schema allows `uri` and `label` independently, so consumers must retain both if present. `listSidebar` is only the legacy depth-first URI projection. We have observed labelled root folders with child pins and unsectioned root pins, but not a nested-folder or combined URI/label node in a live collection.
 
-"Is this document pinned at all", for a whole list of rows, is the same two documents read once rather than a `pinState` per row: `listSidebar` plus `datePinned(sync, userUri)`, which walks the pin-map's `entries` and keeps the keys that still hold a `plain` pin — an entry survives its last unpin as an empty `pins` list, so the key being there is not a pin. Main exposes the union as `pinnedUris()` / `api.pinIds()` for the pin mark the outliner draws on a row.
+"Is this document pinned at all", for a whole list of rows, is the same two documents read once rather than a `pinState` per row: `listSidebar` plus `datePinned(sync, userUri)`, which walks the pin-map's `entries` and keeps the keys that still hold a `plain` pin that is not muted — an entry survives its last unpin as an empty `pins` list, so the key being there is not a pin. A document pinned only by a shared date is not in it, as it is not in Tana's Today list. Main exposes the union as `pinnedUris()` / `api.pinIds()` for the pin mark the outliner draws on a row.
 
 The other direction — "which meetings and spaces is *this* document pinned on" — is the derived edge read backwards: `ListEdges({ toNodeIds: [doc], edgeTypes: ['EDGE_TYPE_HAS_PIN'] })` answers with one edge per hub (verified live on 2026-09-21: `tana:event:…` → a task pinned on it), and one `ListNodes` over those ids gives their titles. `main/pins.js pinHubs` is that pair, and `pinState(id)` returns it as `hubs: [{ id, title, kind }]` beside `sidebar` and `dates`. It is a server-derived view of the hub's own `pinnedItems`, so a pin this app has just written is in the hub document before the edge exists — which is why `related()` reads the list itself as well (section 6).
 

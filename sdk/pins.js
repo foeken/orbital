@@ -1,6 +1,7 @@
 'use strict';
-// Sidebar and personal date pins (docs/PINNING.md): plain Loro mutations on the user's profile, collection and
-// pin-map documents, in the same shape as the web client (tree node meta {uri}; pin-map entries[doc].pins of LoroMaps).
+// Sidebar and date pins (docs/PINNING.md): plain Loro mutations on the user's profile, collection and pin-map
+// documents, in the same shape as the web client (tree node meta {uri}; pin-map entries[doc].pins/mutedPins of
+// LoroMaps), and a document's own data.sharedPinDates for the pins everyone with access sees.
 // Items pinned *on an event or a space* are a different thing entirely: they live in that document's own
 // pinnedItems list (docs/PINNING.md section 4) and are what the graph reports as EDGE_TYPE_HAS_PIN.
 const { LoroMap, LoroList } = require('loro-crdt');
@@ -28,6 +29,7 @@ const parseSidebarTree = (nodes) => nodes.map((n) => {
 });
 const walk = (nodes) => nodes.flatMap((n) => [...(n.uri ? [n.uri] : []), ...walk(n.children)]);
 const plain = (date) => (p) => p.type === 'plain' && p.datetime === date;
+const plainDates = (list) => (list || []).filter((p) => p && p.type === 'plain').map((p) => p.datetime);
 function checkDate(date) {
   if (!DATE.test(date) || Number.isNaN(Date.parse(date))) throw new Error('date must be YYYY-MM-DD: ' + date);
 }
@@ -56,19 +58,28 @@ async function unpinSidebar(sync, userUri, docUri) {
   });
 }
 
+// The days one document is pinned to for this user, as Tana's getEffectivePins answers it: the shared dates on the
+// document plus the personal ones in the pin-map, minus the ones this user muted, sorted. A document this user cannot
+// read contributes no shared dates.
 async function dates(sync, userUri, docUri) {
-  const entry = (await pinMap(sync, userUri)).loro.getMap('entries').get(docUri);
-  const pins = entry ? entry.toJSON().pins || [] : [];
-  return pins.filter((p) => p.type === 'plain').map((p) => p.datetime);
+  const [pm, shared] = await Promise.all([
+    pinMap(sync, userUri),
+    sync.subscribe(docUri).then(sharedDates, () => []),
+  ]);
+  const entry = pm.loro.getMap('entries').get(docUri), json = entry ? entry.toJSON() : {};
+  const muted = new Set(plainDates(json.mutedPins));
+  return [...new Set([...shared, ...plainDates(json.pins)])].filter((d) => !muted.has(d)).sort();
 }
 
-// Every document with at least one personal date pin, and its dates: { uri: ['YYYY-MM-DD'] }. An entry survives its
-// last unpin as an empty pins list, so what counts is a pin still being in it, not the key being there.
+// Every document with at least one personal date pin that is not muted, and its dates: { uri: ['YYYY-MM-DD'] }. This is
+// Tana's Today list (getEntitiesWithPinsInRange): shared dates are not in it, because nothing lists documents by their
+// sharedPinDates. An entry survives its last unpin as an empty pins list, so what counts is a pin still being in it.
 async function datePins(sync, userUri) {
   const entries = (await pinMap(sync, userUri)).loro.getMap('entries').toJSON();
   const out = {};
   for (const [uri, entry] of Object.entries(entries)) {
-    const dates = ((entry || {}).pins || []).filter((p) => p.type === 'plain').map((p) => p.datetime);
+    const muted = new Set(plainDates((entry || {}).mutedPins));
+    const dates = plainDates((entry || {}).pins).filter((d) => !muted.has(d));
     if (dates.length) out[uri] = dates;
   }
   return out;
@@ -99,6 +110,56 @@ async function unpinDate(sync, userUri, docUri, date) {
     const entry = loro.getMap('entries').get(docUri), pins = entry && entry.get('pins');
     const i = pins ? pins.toJSON().findIndex(plain(date)) : -1;
     if (i >= 0) pins.delete(i, 1);
+  });
+}
+
+// Mute = hide a date on this user's Today without touching the pin itself, which is how a shared pin goes away for one
+// person (web client mutePin/unmutePin on entries[doc].mutedPins). pinDate unmutes on its own.
+async function muteDate(sync, userUri, docUri, date) {
+  checkDate(date);
+  const pm = await pinMap(sync, userUri);
+  pm.transact((loro) => {
+    const entries = loro.getMap('entries');
+    const entry = entries.get(docUri) || entries.setContainer(docUri, new LoroMap());
+    if (!entry.get('pins')) entry.setContainer('pins', new LoroList());
+    const muted = entry.get('mutedPins') || entry.setContainer('mutedPins', new LoroList());
+    if (muted.toJSON().some(plain(date))) return;
+    const pin = muted.pushContainer(new LoroMap());
+    pin.set('type', 'plain'); pin.set('datetime', date); pin.set('pinnedAt', Date.now());
+  });
+}
+
+async function unmuteDate(sync, userUri, docUri, date) {
+  checkDate(date);
+  const pm = await pinMap(sync, userUri);
+  pm.transact((loro) => {
+    const entry = loro.getMap('entries').get(docUri), muted = entry && entry.get('mutedPins');
+    const i = muted ? muted.toJSON().findIndex(plain(date)) : -1;
+    if (i >= 0) muted.delete(i, 1);
+  });
+}
+
+// ---- shared date pins: the document's own data.sharedPinDates, seen by everyone who can see the document ----
+// Synchronous on the document, like pinItem: the caller subscribes it and checks write access (web addPinDate/removePinDate).
+const sharedDates = (doc) => plainDates(doc.loro.getMap('data').toJSON().sharedPinDates);
+
+function pinSharedDate(doc, date) {
+  checkDate(date);
+  doc.transact((loro) => {
+    const data = loro.getMap('data');
+    const list = data.get('sharedPinDates') || data.setContainer('sharedPinDates', new LoroList());
+    if (list.toJSON().some(plain(date))) return;
+    const pin = list.pushContainer(new LoroMap());
+    pin.set('type', 'plain'); pin.set('datetime', date); pin.set('pinnedAt', Date.now());
+  });
+}
+
+function unpinSharedDate(doc, date) {
+  checkDate(date);
+  doc.transact((loro) => {
+    const list = loro.getMap('data').get('sharedPinDates');
+    const i = list ? list.toJSON().findIndex(plain(date)) : -1;
+    if (i >= 0) list.delete(i, 1);
   });
 }
 
@@ -136,4 +197,4 @@ function unpinItem(doc, uri) {
   });
 }
 
-module.exports = { listSidebar, sidebarTree, pinSidebar, unpinSidebar, dates, datePins, datePinned, pinDate, unpinDate, items, pinItem, unpinItem };
+module.exports = { listSidebar, sidebarTree, pinSidebar, unpinSidebar, dates, datePins, datePinned, pinDate, unpinDate, muteDate, unmuteDate, sharedDates, pinSharedDate, unpinSharedDate, items, pinItem, unpinItem };
