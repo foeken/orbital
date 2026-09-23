@@ -3734,6 +3734,99 @@ async function main() {
     assert.deepEqual(pins.items(hub), [{ uri: otherId, mode: 'embed' }]);
     console.log('ok  pinned items on an event/space (dedup, converge, write-capability gate, not body editability)');
   }
+  // 3e. Editing a meeting (sdk/events.js): Tana's event-wrapper writes, its organizer gate (access.canEditEvent), the
+  // roster seeded from a calendar event's legacy attendees, GraphService.ListAttendeeSuggestions, and main's meeting:* IPC.
+  {
+    const access = require('../sdk/access'), events = require('../sdk/events');
+    const { GraphClient } = require('../sdk'), { GraphService } = require('../sdk/proto/descriptors');
+    const id = 'tana:event:' + ulid(), ev = new Document(id, { peerId: '41' }), mirror = new Document(id, { peerId: '42' });
+    ev.on('local-update', (u) => mirror.applyRemote([u]));
+    ev.transact((l) => {
+      initDocument(l, 'Calendar meeting', ME, { kind: 'meeting', now: 0 });
+      const d = l.getMap('data'); d.set('allDay', true); d.set('origin', 'provider');
+      // a calendar-synced event lists its people in data.attendees and data.organizer until a roster is written
+      const a = d.get('attendees').insertContainer(0, new LoroMap()); a.set('email', 'Sam@Example.com'); a.set('name', 'Sam'); a.set('partstat', 'accepted');
+      d.get('organizer').set('email', 'me@example.com');
+    });
+    events.setTime(ev, 36e5, 72e5);
+    assert.deepEqual([readNode(ev).startTime, readNode(ev).endTime, readNode(ev).allDay], [36e5, 72e5, undefined], 'a time write drops allDay, as Tana\'s setStartTime/setEndTime do');
+    assert.throws(() => events.setTime(ev, 72e5, 36e5), /start before its end/);
+    events.setLocation(ev, 'Room 4'); events.setTimezone(ev, 'Europe/Amsterdam'); events.setDescription(ev, 'agenda');
+    assert.deepEqual([readNode(mirror).location, readNode(mirror).timezone, readNode(mirror).description], ['Room 4', 'Europe/Amsterdam', 'agenda'], 'converges');
+    events.setLocation(ev, undefined);
+    assert.equal('location' in readNode(ev), false, 'no location is no key, not an empty one');
+    const other = 'tana:user-profile:' + ulid(), sam = 'tana:user-profile:' + ulid(), contact = 'tana:contact:' + ulid();
+    assert.throws(() => events.addAttendees(ev, [{ email: 'x@y.z' }, {}], ME), /email or a profile/);
+    assert.equal(ev.loro.getMap('attendees').size, 0, 'a refused list writes nobody, not the ones before the bad entry');
+    events.addAttendees(ev, [{ email: ' Dana@X.com ' }, { userUri: other }, { email: 'sam@example.com', userUri: sam }, { email: 'c@d.e', userUri: contact }, { userUri: ME }], ME);
+    const roster = ev.loro.getMap('attendees').toJSON();
+    assert.deepEqual(roster['email:sam@example.com'], { source: 'tana', providerConfirmed: true, email: 'sam@example.com', name: 'Sam', partstat: 'accepted' }, 'the calendar\'s own line is seeded first and then merged into');
+    assert.deepEqual(roster['email:me@example.com'], { source: 'provider', role: 'required', cutype: 'individual', email: 'me@example.com' }, 'the organizer is seeded too');
+    assert.deepEqual(roster['email:dana@x.com'], { role: 'required', cutype: 'individual', source: 'tana', email: 'Dana@X.com' }, 'a new line is a required individual keyed by its lowercased email');
+    const tanaLines = Object.entries(roster).filter(([k]) => k.startsWith('tana:'));
+    assert.deepEqual(tanaLines.map(([k, v]) => [/^tana:[0-9a-z]{26}$/.test(k), v.identityUri]).sort(), [[true, other], [true, ME]].sort(), 'someone without an email gets a tana: line naming their profile');
+    const grants = readNode(ev).participants;
+    assert.deepEqual([grants[other], grants[sam]], [{ type: 'user', role: 'attendee', changedBy: ME }, { type: 'user', role: 'attendee', changedBy: ME }], 'a member is also given access as an attendee');
+    assert.deepEqual([grants[ME], grants[contact]], [{ type: 'user', role: 'admin' }, undefined], 'an existing grant is kept, and a contact is on the roster only');
+    assert.equal(events.attendees(ev).length, 6);
+    assert.deepEqual(mirror.loro.getMap('attendees').toJSON(), roster);
+    // the gate: Tana's Dk — unrestricted, or an organizer (admin/editor) — on top of being allowed to write at all
+    const org = new Document('tana:org:' + ulid()); org.transact((l) => l.getMap('data').set('memberUserProfileDocUris', { me: ME }));
+    const ctx = { orgDocUri: org.id, sync: { subscribe: async (x) => { if (x === org.id) return org; throw new Error('unavailable'); } } };
+    assert.equal(await access.canEditEvent(ev, ME, ctx), true, 'the organizer may');
+    assert.equal(await access.canEditEvent(ev, other, ctx), false, 'an attendee of a restricted meeting may not');
+    assert.equal(await access.canEditEvent(ev, 'tana:user-profile:' + ulid(), ctx), false, 'nor may someone without a grant');
+    ev.transact((l) => l.getMap('data').delete('restricted'));
+    assert.equal(await access.canEditEvent(ev, other, ctx), true, 'an unrestricted meeting is open to anyone who may write it');
+    ev.transact((l) => l.getMap('data').set('restricted', true));
+    // Tana's updateEvent (Rwt): a synced event read from an attendee's calendar cannot take the change back
+    ev.transact((l) => l.getMap('data').set('externalId', 'AAMk-provider-id'));
+    assert.equal(await access.canEditEvent(ev, ME, ctx), false, 'a calendar copy that is not the organizer\u2019s is not changed here');
+    ev.transact((l) => l.getMap('data').set('ownerIsOrganizer', true));
+    assert.equal(await access.canEditEvent(ev, ME, ctx), true, 'the organizer\u2019s own calendar copy is');
+    ev.transact((l) => { l.getMap('data').delete('externalId'); l.getMap('data').delete('ownerIsOrganizer'); });
+    assert.deepEqual([events.lineKey(' Kim@X.nl\n'), events.lineKey('Élan@x.nl')], ['email:kim@x.nl', 'email:Élan@x.nl'], 'Tana lowercases A-Z only, so the keys match its own');
+    const text = new Document('tana:text:' + ulid()); text.transact((l) => initDocument(l, 'not a meeting', ME));
+    assert.equal(await access.canEditEvent(text, ME, ctx), false);
+    // GraphService.ListAttendeeSuggestions, mapped the way Tana's own client maps it
+    let asked;
+    const graph = new GraphClient(createRouterTransport(({ service }) => service(GraphService, {
+      listAttendeeSuggestions(req) { asked = req.limit; return { suggestions: [{ email: 'sam@example.com', displayName: 'Sam', lastSeenAt: 5n, eventCount: 3, nextMeetingAt: 0n, identityUri: sam }, { email: 'x@y.z' }] }; },
+    })));
+    assert.deepEqual(await graph.listAttendeeSuggestions({ limit: 2 }), [
+      { email: 'sam@example.com', displayName: 'Sam', lastSeenAt: 5, eventCount: 3, nextMeetingAt: 0, identityUri: sam },
+      { email: 'x@y.z', displayName: undefined, lastSeenAt: 0, eventCount: 0, nextMeetingAt: 0, identityUri: undefined }]);
+    assert.equal(asked, 2);
+    // main: meeting:info / meeting:edit / meeting:suggestions, gated by the same rule
+    const backend = mainHelpers(), stranger = 'tana:user-profile:' + ulid();
+    const closed = new Document('tana:event:' + ulid()); closed.transact((l) => initDocument(l, 'someone else\u2019s meeting', stranger, { kind: 'meeting' }));
+    const documents = new Map([[id, ev], [closed.id, closed], [org.id, org]]);
+    const claims = Buffer.from(JSON.stringify({ org_id: ORG, role: 'member' })).toString('base64url');
+    backend.testRuntime({
+      me: { userUri: ME, orgId: ORG, orgDocUri: org.id },
+      client: { sync: { getDocument: (x) => documents.get(x), subscribe: async (x) => { if (!documents.has(x)) throw new Error('not found'); return documents.get(x); } },
+        graph: { listNodes: async () => ({ nodes: [] }), listAttendeeSuggestions: async ({ limit }) => [{ email: 'sam@example.com', limit }] } },
+      session: { getAccessToken: async () => 'head.' + claims + '.sig' },
+      win: { isDestroyed: () => false, webContents: { send: () => {} } },
+    });
+    const call = (name, ...a) => backend.handlers.get(name)({}, ...a);
+    const info = await call('meeting:info', id);
+    assert.deepEqual([info.editable, info.start, info.end, info.allDay, info.location, info.attendees.length], [true, 36e5, 72e5, false, '', 6]);
+    assert.equal((await call('meeting:edit', id, { location: '  Room 4  ' })).location, 'Room 4', 'trimmed');
+    assert.equal((await call('meeting:edit', id, { location: '' })).location, '', 'and an empty one removes it');
+    assert.equal('location' in readNode(ev), false);
+    const moved = await call('meeting:edit', id, { start: 9e6, end: 108e5 });
+    assert.deepEqual([moved.start, moved.end], [9e6, 108e5]);
+    await assert.rejects(call('meeting:edit', closed.id, { location: 'x' }), /Only the event organizer/, 'someone else\'s meeting is refused in main too');
+    ev.transact((l) => l.getMap('data').set('allDay', true));
+    await assert.rejects(call('meeting:edit', id, { start: 9e6, end: 108e5 }), /all-day/, 'an all-day meeting is not rescheduled from here');
+    assert.equal((await call('meeting:edit', id, { location: 'Room 5' })).location, 'Room 5', 'though its place still is');
+    ev.transact((l) => l.getMap('data').delete('allDay'));
+    assert.equal((await call('meeting:info', closed.id)).editable, false);
+    await assert.rejects(call('meeting:edit', text.id, { location: 'x' }), /Not a meeting/);
+    assert.deepEqual(await call('meeting:suggestions'), [{ email: 'sam@example.com', limit: 20 }]);
+    console.log('ok  editing a meeting (time, place, roster, organizer gate, attendee suggestions, meeting:* IPC)');
+  }
   {
     const backend = mainHelpers(), cache = require('../db');
     cache.open(':memory:');

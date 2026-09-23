@@ -22,6 +22,12 @@ class GraphClient {
   listEdges(params) { return this._unary('listEdges', params); }
   getEdge(params) { return this._unary('getEdge', params); }
   getOwnerChain(nodeId) { return this._unary('getOwnerChain', { nodeId }); }
+  // People this user meets, for an attendee picker; the shape Tana's own client maps the response to (int64 as numbers).
+  async listAttendeeSuggestions({ limit } = {}) {
+    const { suggestions = [] } = await this._unary('listAttendeeSuggestions', limit == null ? {} : { limit });
+    return suggestions.map((s) => ({ email: s.email || '', displayName: s.displayName || undefined, lastSeenAt: Number(s.lastSeenAt || 0),
+      eventCount: s.eventCount || 0, nextMeetingAt: Number(s.nextMeetingAt || 0), identityUri: /^tana:[a-z-]+:[0-9a-z]{26}$/.test(s.identityUri || '') ? s.identityUri : undefined }));
+  }
   async *traverse(params) {
     const m = method('traverse');
     for await (const res of this.client.traverse(fromJson(m.input, params))) yield toJson(m.output, res);

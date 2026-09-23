@@ -22,6 +22,7 @@ Also re-exports `createTransport`, `GraphClient`, `HistoryClient`, `SyncConnecti
 | `listEdges({ fromNodeIds?, toNodeIds?, edgeTypes? })` | | `{ edges: [{ fromNodeId, toNodeId, type, properties }] }` |
 | `getEdge({ fromNodeId, toNodeId, type })` | | `{ edge, fromNode, toNode }` |
 | `getOwnerChain(nodeId)` | | `{ entries: [{ uri, restricted, accessible }], effectivelyRestricted }` nearest-first |
+| `listAttendeeSuggestions({ limit? })` | | `[{ email, displayName?, lastSeenAt, eventCount, nextMeetingAt, identityUri? }]` — people this user meets (int64s as numbers), mapped as Tana's own client maps them |
 | `traverse(params)` | `{ startNodeId, maxDepth, edgeTypes, nodeTypes, direction, includeProposals, includeArchived }` | async iterator of `{ node, edge, depth }` |
 
 Enums are passed by name (`'SORT_FIELD_UPDATE_TIME'`, `'LIST_NODES_MODE_WITH_COUNT'`). Timestamps are RFC 3339 strings.
@@ -101,6 +102,7 @@ These helpers are the app's verified native capability boundary. Ownership is an
 | `moveToSpace(document, targetSpace, userUri, ctx, confirmation)` | Re-runs the preview and requires its exact token when confirmation is required (or when a confirmation was supplied). |
 | `canDelete(document, userUri, ctx, restoring?)` | Checks supported, non-deleted kind, write access and calendar-event organizer rules. Restore checks a copy with `deletedAt` removed and never mutates the document. |
 | `canArchive(document, userUri, ctx)` | A type (Tana's archive set is `['type']`) with write access. The same check answers archive and unarchive. |
+| `canEditEvent(document, userUri, ctx)` | Whether a meeting's time, place or people may be changed: Tana's own gate (`Dk`), unrestricted or the user is an organizer (`admin`/`editor`), on top of `canWrite`; and, as Tana's `updateEvent` refuses, not a synced event whose calendar copy is not the organizer's (`externalId` with `origin` other than `'tana'` and no `ownerIsOrganizer`). |
 
 `main.js` calls these helpers for access mutations and for native document actions. The renderer's `editable` flag is only a companion UI capability and does not replace server authorization.
 
@@ -220,6 +222,10 @@ The SDK's `Document.undo()`/`redo()` only undo local CRDT transactions for that 
 `listSidebar` → uris in tree order · `sidebarTree` → the collection's tree with its section labels · `pinSidebar(docUri)` (dedup) · `unpinSidebar(docUri)` (every node with that uri) · `dates(docUri)` → `['YYYY-MM-DD']` · `datePinned` → the doc uris that still hold a plain date pin, for "is this row pinned at all" over a whole list · `pinDate(docUri, date)` (dedup, unmutes) · `unpinDate(docUri, date)`. They subscribe the profile, then the collection / pin-map it points to; throw if the profile has no `pinnedCollectionUri` / `pinMapUri` yet (the web client creates those lazily on first pin; we don't).
 
 Items pinned *on* an event or a space are a different thing (docs/PINNING.md section 4) and take the document itself, synchronously: `items(doc)` → `[{ uri, mode? }]` · `pinItem(doc, uri, mode?)` (dedup on uri; a re-pin with a mode updates it in place) · `unpinItem(doc, uri)` (every copy); `items` reads a duplicate as its first copy.
+
+## `sdk/events.js` — editing a meeting
+
+Tana's event wrapper, write for write (bundle of 2026-09-23); gate calls with `access.canEditEvent`. `setTime(doc, start, end)` writes both epoch-ms times and deletes `allDay` · `setTimezone` / `setLocation` / `setDescription(doc, text | undefined)` set or delete the key · `addAttendees(doc, [{ email?, userUri? }], byUri)` copies a calendar event's legacy `data.attendees`/`data.organizer` into the root `attendees` roster first (Tana's `seedRosterFromLegacyAttendees`), then writes one line per person — `email:<lowercased>` when there is an email, else `tana:<ulid>` with `identityUri` — as `{ role: 'required', cutype: 'individual', source: 'tana' }` merged into any existing line, and gives a `tana:user-profile:` an `attendee` participant grant stamped `changedBy` (an existing grant is kept); a bad entry throws before anything is written · `attendees(doc)` → roster lines plus legacy entries not already on it. `data.syncStatus` (`pending | synced | failed`) and `data.syncError` are the server's report of the calendar write-back; no client writes them.
 
 ## `sdk/calls.js` — who is in a meeting
 
