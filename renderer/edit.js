@@ -303,10 +303,11 @@ function noteNavigation() {
   if (navHere && !navigating && !navReplace) { navBack.push(navHere); navForward.length = 0; if (navBack.length > 100) navBack.shift(); }
   navReplace = false;
   const previousDoc = navHere?.zoom?.docId;
+  const id = here.zoom?.docId;
   navHere = here;
   rememberPlace();
+  if (previousDoc === INBOX_PAGE && id !== INBOX_PAGE) markAllNotificationsRead();
   // Returning by history, a crumb or a pin must rerun the query, not reuse its old result set.
-  const id = here.zoom?.docId;
   if (id !== previousDoc && isSearchDoc({ id }) && kids.get(id)) {
     releaseHeld();
     if (searchRows.delete(id)) previewRows(id); // keep unsaved filter edits and refresh their preview

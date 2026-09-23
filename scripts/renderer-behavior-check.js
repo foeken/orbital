@@ -1753,6 +1753,9 @@ async function runReservedComboCheck() {
 function runHistoryCheck() {
   const api = vm.runInNewContext(`
     let view = 'tasks', zoom = null, caretOnOpen = false, rendered = 0;
+    const INBOX_PAGE = 'orbital:notifications';
+    let notificationLeaves = 0;
+    const markAllNotificationsRead = () => { notificationLeaves++; };
     const localStorage = { setItem() {}, removeItem() {} };
     ${sourceBetween('const isRealId =', '\n')}
     const flushAll = () => {}, dropDrafts = () => {}, releaseHeld = () => {};
@@ -1772,6 +1775,7 @@ function runHistoryCheck() {
       cache: (id, preview = false) => { kids.set(id, []); if (preview) searchRows.set(id, 'unsaved'); },
       refreshes: () => [refreshed, previews],
       where: () => [view, zoom && zoom.docId, navBack.length, navForward.length],
+      notificationLeaves: () => notificationLeaves,
     });
   `);
   api.go('tasks', null); api.go('library', null); api.go('library', { docId: 'tana:text:a' }); api.go('library', { docId: 'tana:text:a' }); // a re-render of the same place is not a step
@@ -1808,6 +1812,14 @@ function runHistoryCheck() {
   api.go('library', { docId: 'tana:text:result' });
   api.back();
   assert.deepEqual(plain(api.refreshes()), [[search, search, search], [search]], 'returning to unsaved filters refreshes their preview instead of the stored query');
+  api.go('library', { docId: 'orbital:notifications' }); api.go('library', { docId: 'orbital:notifications' });
+  assert.equal(api.notificationLeaves(), 0, 'redrawing the Notifications page does not mark it read');
+  api.go('tasks', null);
+  assert.equal(api.notificationLeaves(), 1, 'switching views away from Notifications marks all as read');
+  api.back(); api.forward();
+  assert.equal(api.notificationLeaves(), 2, 'Forward away from Notifications marks all as read');
+  api.go('library', { docId: 'orbital:notifications' }); api.go('library', { docId: 'tana:text:outside' });
+  assert.equal(api.notificationLeaves(), 3, 'opening another document from Notifications marks all as read');
 
 }
 function runZoomShortcutCheck() {
@@ -7190,6 +7202,8 @@ async function runSetHueCheck() {
 async function runDeletedNodeCheck() {
   const api = vm.runInNewContext(`
     const deletedIds = new Set();
+    const INBOX_PAGE = 'orbital:notifications';
+    const markAllNotificationsRead = () => {};
     const isSearchDoc = (node) => node.id?.startsWith('tana:search:');
     let zoom = null, view = 'library', caretOnOpen = false;
     let renders = 0;
