@@ -822,6 +822,7 @@ async function main() {
     assert.equal(readNode(doc).type, 'text', 'and an ordinary kind, so Tana shows it like any other note');
     assert.match(require('../sdk/node').contentText(doc), /follow you between machines/, 'and it says what it is, for whoever opens it in Tana');
     const stored = () => doc.loro.getMap(settings.ROOT).toJSON();
+    assert.equal(settings.ROOT, 'ext:orbital', 'our keys sit under a root marked as an extension\u2019s, clear of any root Tana may add');
     assert.equal(JSON.parse(stored().hiddenTitles).join(), 'Lunch', 'the value lives in a container of its own, as JSON under its own key');
     assert.equal(cache.setting('hiddenTitles').join(), 'Lunch', 'and in SQLite, which is what the app opens with before the network is there');
     assert.equal(cache.setting(settings.POINTER), doc.id, 'this machine notes which document that is, so it costs one lookup per machine');
@@ -855,6 +856,13 @@ async function main() {
     await settings.hydrate();
     assert.equal(settings.get('hiddenTitles').join(), 'Standup', 'the document decides what a key means');
     assert.equal(cache.setting('hiddenTitles').join(), 'Standup', 'and the mirror follows it');
+    // A document an older build wrote keeps its keys under the old "settings" root: the next hydrate moves them.
+    doc.transact((loro) => { const old = loro.getMap('settings'); old.set('hiddenTitles', JSON.stringify(['Old'])); old.set('aiEffort', JSON.stringify('low')); });
+    await settings.hydrate();
+    assert.equal(settings.get('aiEffort'), 'low', 'a key only the old root had moves across');
+    assert.equal(settings.get('hiddenTitles').join(), 'Standup', 'the new root wins where both have the key');
+    assert.deepEqual(doc.loro.getMap('settings').toJSON(), {}, 'and the old root is left empty');
+    settings.set('aiEffort', undefined); await settings.flush();
     // A sensitive mark is one of these settings, and the list the renderer loads at startup has to read the same
     // place the mark is written: it once read db's legacy table, so every mark was gone after a restart.
     const marked = 'tana:text:' + ulid();

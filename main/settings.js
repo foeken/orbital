@@ -6,8 +6,10 @@
 // type someone else can see puts our vocabulary in their data for ever. A document the app creates is ours to
 // shape, is visible and deletable by the user like any other note, and carries nothing foreign anywhere else.
 //
-// The settings themselves live in a root container of their own ("settings"), one JSON string per key — the same
+// The settings themselves live in a root container of their own ("ext:orbital"), one JSON string per key — the same
 // shape the SQLite settings table has always had, which is what makes SQLite a mirror rather than a second design.
+// The `ext:` prefix marks the key as an extension's rather than Tana's: Tana may one day give documents a root of
+// its own called "settings", and ours must not be the one in the way (Eirik Hoem, 2026-09-23).
 // The document's content says what it is, for whoever opens it in Tana.
 //
 // Reads stay synchronous, because everything that reads a setting is on a hot path (every listed row asks for its
@@ -22,7 +24,8 @@ const { S, report, send } = require('./state');
 const TITLE = 'Orbital'; // how a machine that has never seen the document finds it
 const OLD_TITLE = 'Tana Companion'; // what it was called before the rename: a workspace whose node was never renamed by hand is still found, rather than given a second document
 const POINTER = 'settingsDoc'; // local, never synced: this machine's note of which document that is
-const ROOT = 'settings'; // the root container the keys live in
+const ROOT = 'ext:orbital'; // the root container the keys live in
+const OLD_ROOT = 'settings'; // where they lived before: moved into ROOT on the next hydrate
 
 // What follows you between machines, and what cannot. A window's size belongs to the screen it was sized on; the
 // agent's task ids belong to the machine that ran them; where you happened to be belongs to the machine you were at.
@@ -136,6 +139,7 @@ async function hydrate() {
   const doc = await settingsDoc();
   if (!doc) return false;
   load();
+  migrate(doc);
   const remote = doc.loro.getMap(ROOT).toJSON();
   const changed = [];
   for (const [key, text] of Object.entries(remote || {})) {
@@ -148,6 +152,17 @@ async function hydrate() {
   const missing = Object.keys(cache).filter((key) => isSynced(key) && !Object.hasOwn(remote || {}, key));
   if (missing.length) doc.transact((loro) => { const map = loro.getMap(ROOT); for (const key of missing) map.set(key, encode(cache[key])); });
   return changed.length > 0;
+}
+// A document an older build wrote keeps its keys in the old root: move them across once, the new root winning where
+// both have a key, and empty the old one so nothing reads it again.
+function migrate(doc) {
+  const old = doc.loro.getMap(OLD_ROOT).toJSON();
+  if (!old || !Object.keys(old).length) return;
+  doc.transact((loro) => {
+    const map = loro.getMap(ROOT);
+    for (const [key, text] of Object.entries(old)) if (map.get(key) === undefined) map.set(key, text);
+    loro.getMap(OLD_ROOT).clear();
+  });
 }
 // A change to the document, wherever it came from: the other machine's, or our own write coming back.
 function applyRemote(id) {
