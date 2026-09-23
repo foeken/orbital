@@ -16,12 +16,17 @@ leaves every other document alone.
 
 ## Where the values are
 
-A root container of its own (`settings`), one JSON string per key — the same shape the SQLite settings table has
+A root container of its own (`ext:orbital`), one JSON string per key — the same shape the SQLite settings table has
 always had, which is what lets SQLite stay a mirror rather than become a second design:
 
 ```
-settings: { "hiddenTitles": "[\"Lunch\"]", "typeIcons": "{\"tana:type:…\":\"rocket\"}", "pref:home": "\"library\"" }
+ext:orbital: { "hiddenTitles": "[\"Lunch\"]", "typeIcons": "{\"tana:type:…\":\"rocket\"}", "pref:home": "\"library\"" }
 ```
+
+The `ext:` prefix marks the root as an extension's rather than Tana's, on Eirik Hoem's advice (2026-09-23): Tana may
+give documents a root of its own called `settings` one day, and ours must not be the one in the way. Older builds
+wrote to a root named `settings`; the next hydrate moves those keys into `ext:orbital` (a key already there wins)
+and empties the old root.
 
 Reads are synchronous everywhere (every listed row asks for its type's glyph), so main keeps the values in memory:
 filled from SQLite the moment the app opens — the last known answer, before the network — and replaced by the
