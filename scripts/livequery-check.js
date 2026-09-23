@@ -3,7 +3,7 @@
 const assert = require('node:assert');
 const { LoroList } = require('loro-crdt');
 const { Document } = require('../sdk/document');
-const { openLiveQuery } = require('../sdk/livequery');
+const { openLiveQuery, openEdgeQuery, EDGE_TYPES } = require('../sdk/livequery');
 
 (async () => {
   let doc = null, unsubscribed = null;
@@ -46,5 +46,43 @@ const { openLiveQuery } = require('../sdk/livequery');
   assert.equal(failure, 'bad query');
   await live.close();
   assert.equal(unsubscribed, live.id);
+
+  // Edges: the same document with queryType 'edges', a subject/predicate/object query, and edges for rows.
+  const page = 'tana:text:01m22jrbja1xvgqp9zmnk8fk7c', field = 'tana:type:01m1kr1x38pzszdrgb7f2m2rqx?attribute=aya3gqzt';
+  const edges = await openEdgeQuery(sync, { object: { uris: [page] }, predicate: { edgeTypes: [EDGE_TYPES.LINKS_TO, EDGE_TYPES.ATTRIBUTE_LINKS_TO] } }, { label: 'backlinks' });
+  const e = doc.data.toJSON();
+  assert.deepEqual([e.type, e.queryType, e.label, e.state, e.queryVersion, e.resultForVersion], ['liveQuery', 'edges', 'backlinks', 'pending', 1, 0]);
+  assert.deepEqual(e.query.predicate, { edgeTypes: [1, 4] }, 'edge types by number, as Tana writes them');
+  assert.deepEqual(e.query.object.uris, [page]);
+  assert.deepEqual(e.query.object.assignedTo, [], 'every list of a side written, empty when not given');
+  assert.equal(e.query.subject, undefined, 'an absent side is left out');
+  assert.deepEqual(e.result, { edges: [] });
+  const before = subscribes;
+  await assert.rejects(openEdgeQuery(sync, { object: { title: 'x' } }), /unsupported edge query field object.title/);
+  await assert.rejects(openEdgeQuery(sync, { predicate: { edgeTypes: ['LINKS_TO'] }, object: { uris: [page] } }), /edgeTypes are numbers/);
+  await assert.rejects(openEdgeQuery(sync, { object: { uris: [] } }), /needs a uri/, 'a query that matches nothing is Tana\'s empty resource, never sent');
+  assert.equal(subscribes, before, 'a refused edge query is never subscribed');
+  const answerEdges = (rows, version = 1) => doc.transact((loro) => {
+    const data = loro.getMap('data'), list = data.get('result').setContainer('edges', new LoroList());
+    for (const row of rows) list.push(row);
+    data.set('state', 'ready'); data.set('resultForVersion', version);
+  });
+  const mention = (from, label = 'x') => ({ fromNode: from, toNode: page, type: 'EDGE_TYPE_LINKS_TO', properties: { label } });
+  const inField = (from) => ({ fromNode: from, toNode: page, type: 'EDGE_TYPE_ATTRIBUTE_LINKS_TO', properties: { attributeUri: field } });
+  const moves = [];
+  const show = (list) => list.map((x) => x.fromNode + ':' + x.type.slice(10));
+  edges.on('rows', (m) => moves.push({ initial: m.initial, added: show(m.added), changed: show(m.changed), removed: show(m.removed) }));
+  answerEdges([mention('a'), inField('a')]);
+  assert.equal(edges.state().status, 'ready');
+  assert.equal(edges.state().edges.length, 2);
+  answerEdges([mention('a', 'renamed'), inField('a'), mention('b')]);
+  answerEdges([mention('a', 'renamed'), mention('b')]);
+  assert.deepEqual(moves, [
+    { initial: true, added: ['a:LINKS_TO', 'a:ATTRIBUTE_LINKS_TO'], changed: [], removed: [] },
+    { initial: false, added: ['b:LINKS_TO'], changed: ['a:LINKS_TO'], removed: [] },
+    { initial: false, added: [], changed: [], removed: ['a:ATTRIBUTE_LINKS_TO'] },
+  ], 'an edge is its ends, its type and its field: a mention and a field reference from one document are two edges, removed ones come back whole');
+  await edges.close();
+  assert.equal(unsubscribed, edges.id);
   console.log('livequery-check ok');
 })().catch((e) => { console.error(e); process.exit(1); });

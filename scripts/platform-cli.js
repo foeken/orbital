@@ -85,10 +85,24 @@ const commands = {
   // livequery [--minutes 60] [--seconds 20] [--state proposed|open|closed|not_now]: open a live query (sdk/livequery.js)
   // for text nodes created in the last N minutes, or that entered a state in that window, and print every change the
   // server pushes. Read-only: the only thing it writes is its own throwaway query document.
+  // With --to <id> and/or --from <id> it is an edge query instead: the edges into / out of that node, of the types
+  // --edge-types names (default LINKS_TO,ATTRIBUTE_LINKS_TO, the backlinks), printed as from -type-> to {properties}.
   async livequery() {
     await connect();
     await client.sync.connect();
-    const { openLiveQuery } = require('../sdk/livequery');
+    const { openLiveQuery, openEdgeQuery, EDGE_TYPES } = require('../sdk/livequery');
+    const to = flag('to'), from = flag('from');
+    if (to || from) {
+      const edgeTypes = String(flag('edge-types', 'LINKS_TO,ATTRIBUTE_LINKS_TO')).split(',').map((t) => EDGE_TYPES[t.trim()]);
+      if (edgeTypes.some((t) => t === undefined)) throw new Error('--edge-types: one of ' + Object.keys(EDGE_TYPES).join(', '));
+      const live = await openEdgeQuery(client.sync, { ...(from ? { subject: { uris: [from] } } : {}), predicate: { edgeTypes }, ...(to ? { object: { uris: [to] } } : {}) }, { label: 'orbital probe' });
+      const edge = (e) => e.fromNode + ' -' + e.type + '-> ' + e.toNode + (e.properties ? ' ' + JSON.stringify(e.properties) : '');
+      out(live.id + '\t' + live.state().status);
+      live.on('error', (e) => out('error\t' + e.message));
+      live.on('rows', ({ added, removed, changed, initial }) => out((initial ? 'initial' : 'update') + [...added.map((e) => '\n  + ' + edge(e)), ...changed.map((e) => '\n  ~ ' + edge(e)), ...removed.map((e) => '\n  - ' + edge(e))].join('')));
+      await new Promise((r) => setTimeout(r, Number(flag('seconds', 20)) * 1000));
+      return live.close();
+    }
     const since = Date.now() - Number(flag('minutes', 60)) * 6e4, state = flag('state');
     const q = state ? { types: ['text'], stateTypes: [state], stateEnteredAtMin: since, limit: 50 } : { types: ['text'], createdAtMin: since, orderBy: ['-createdAt'], limit: 50 };
     const live = await openLiveQuery(client.sync, q, { label: 'orbital probe' });
@@ -835,7 +849,8 @@ const USAGE = [
   '             settype <id>   (listing only; with a target it writes)',
   '             caps <id...> | related <id> | incall [--limit 5] | pageprobe | libraryprobe | boot [--settle ms]',
   '  live       watch <id...>',
-  '  LIVE       livequery [--minutes 60] [--seconds 20] [--state <stateType>] | presence <id> [--seconds 30] [--announce <name>] [--block <blockId>]',
+  '  LIVE       livequery [--minutes 60] [--seconds 20] [--state <stateType>] | livequery --to <id> [--from <id>] [--edge-types LINKS_TO,…] |',
+  '             presence <id> [--seconds 30] [--announce <name>] [--block <blockId>]',
   '  WRITES     create <title> [--kind doc|task|meeting|type] | delete <id> | restore <id> | archive <id> | unarchive <id> |',
   '             set-title <id> <title> |',
   '             upload <image file> <doc id> [--after <block id>] |',

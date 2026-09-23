@@ -1,8 +1,9 @@
 'use strict';
 const fields = require('../sdk/fields');
 const pins = require('../sdk/pins');
+const { openEdgeQuery, EDGE_TYPES } = require('../sdk/livequery');
 const { completedInWindow, filterToSearchQuery, searchQueryParams, validViewFilter } = require('../sdk/query');
-const { LIVE_ROWS, NOT_CONNECTED, PIN_HUBS, PLAIN_KINDS, S, idKind, isSpace, summaryCache, typeAttrTitles, typeTitles } = require('./state');
+const { DOC_URI, LIVE_ROWS, NOT_CONNECTED, PIN_HUBS, PLAIN_KINDS, S, idKind, isSpace, send, summaryCache, typeAttrTitles, typeTitles } = require('./state');
 const { graphRow, rememberNodeHue, resolveTypes, toNode } = require('./rows');
 const { canWriteDoc, op, resolveReferences, subscribe } = require('./documents');
 
@@ -245,11 +246,12 @@ async function backlinkGroups(edges, node, row) {
   return [...groups].map(([label, targets]) => ({ label, rows: [...targets.values()].map(row) }));
 }
 
+// The meeting event is the hub: opening its notes document should still show the meeting's pins and outcomes.
+const hubOf = (id, self) => (idKind(id) === 'event' ? id : (self && typeof self.ownerUri === 'string' && idKind(self.ownerUri) === 'event' ? self.ownerUri : id));
 async function related(id) {
   if (!S.client) throw new Error(NOT_CONNECTED);
-  // The meeting event is the hub: opening its notes document should still show the meeting's pins and outcomes.
   const [self0] = (await S.client.graph.listNodes({ nodeIds: [id], limit: 1 }).catch(() => ({ nodes: [] }))).nodes || [];
-  const hub = idKind(id) === 'event' ? id : (self0 && typeof self0.ownerUri === 'string' && idKind(self0.ownerUri) === 'event' ? self0.ownerUri : id);
+  const hub = hubOf(id, self0);
   const [edges, owned, self] = await Promise.all([
     S.client.graph.listEdges({ fromNodeIds: [hub], edgeTypes: ['EDGE_TYPE_HAS_PIN'] }).catch(() => ({ edges: [] })),
     S.client.graph.listNodes({ ownerIds: [hub], limit: 200, sortOptions: [{ field: 'SORT_FIELD_CREATE_TIME', direction: 'SORT_DIRECTION_ASCENDING' }] }).catch(() => ({ nodes: [] })),
@@ -299,4 +301,35 @@ async function related(id) {
   };
 }
 
-module.exports = { crumbIcon, pathOf, spaceChildren, searchChildren, searchPreview, attributeTitles, fieldsOf, writeUpOf, summaryUri, callOf, changesOf, summaryChanges, historyOf, backlinkGroups, related };
+// The sidebar of the page on screen, kept live (issue #21) with Tana's own edge live queries (sdk/livequery.js): the
+// edges into the page that its backlink sections are made of (LINKS_TO + ATTRIBUTE_LINKS_TO, as Tana's "Mentioned in"
+// asks), and, when the page lives in a meeting or a space, the hub's HAS_PIN edges its Pinned section lists (as Tana's
+// EventPins asks). An edge added or taken away says 'related:changed' for the page, and the renderer reads related()
+// again. Only for one page at a time, like the presence room: a new page, or none, closes the last one's queries.
+// The first answer says nothing — related() has just read the same edges — and neither does a changed edge: a mention's
+// properties move with every edit of the text around it, and no section is drawn from them.
+let watching = null; // { id, client, ready: Promise<boolean>, handles: Promise<[handle|null]> }
+function unwatchRelated() {
+  const w = watching;
+  watching = null;
+  if (w) w.handles.then((hs) => hs.forEach((h) => h && h.close().catch(() => {})));
+}
+function watchRelated(id) {
+  if (watching && watching.id === id && watching.client === S.client) return watching.ready;
+  unwatchRelated();
+  if (!S.client || !DOC_URI.test(id || '')) return Promise.resolve(false);
+  const w = watching = { id, client: S.client };
+  const moved = ({ added, removed, initial }) => { if (!initial && (added.length || removed.length) && watching === w) send('related:changed', id); };
+  const open = (query, label) => openEdgeQuery(w.client.sync, query, { label }).then((h) => { h.on('rows', moved); return h; });
+  const backlinks = open({ object: { uris: [id] }, predicate: { edgeTypes: [EDGE_TYPES.LINKS_TO, EDGE_TYPES.ATTRIBUTE_LINKS_TO] } }, 'Orbital sidebar backlinks');
+  const pinned = w.client.graph.listNodes({ nodeIds: [id], limit: 1 }).then(({ nodes = [] }) => {
+    const hub = hubOf(id, nodes[0]);
+    return PIN_HUBS.has(idKind(hub)) ? open({ subject: { uris: [hub] }, predicate: { edgeTypes: [EDGE_TYPES.HAS_PIN] } }, 'Orbital sidebar pins') : null;
+  });
+  // each half on its own: one that fails must not leave the other open and unclosable
+  w.handles = Promise.all([backlinks, pinned].map((p) => p.catch(() => null)));
+  w.ready = backlinks.then(() => true, () => { if (watching === w) unwatchRelated(); return false; }); // refused: asked again at the next render
+  return w.ready;
+}
+
+module.exports = { crumbIcon, pathOf, spaceChildren, searchChildren, searchPreview, attributeTitles, fieldsOf, writeUpOf, summaryUri, callOf, changesOf, summaryChanges, historyOf, backlinkGroups, related, watchRelated, unwatchRelated };
