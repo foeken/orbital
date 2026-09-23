@@ -2884,7 +2884,7 @@ async function main() {
   const flat = (ns) => ns.map((n) => n.text.split('\n')[0].slice(0, 12) + (n.children.length ? '(' + flat(n.children) + ')' : '')).join(',');
   const wellFormed = (blocks) => { // listItem starts with a paragraph, lists only hold non-empty listItems, ids are 8 lowercase alphanumerics
     for (const b of blocks) {
-      if (typeof b === 'string' || b.nodeName === 'mention') continue;
+      if (typeof b === 'string' || b.nodeName === 'mention' || b.nodeName === 'hardBreak') continue; // inline nodes carry no blockId
       assert.match(b.attributes.blockId, /^[a-z0-9]{8}$/, 'blockId on ' + b.nodeName);
       if (['bulletList', 'orderedList'].includes(b.nodeName)) { assert.ok(b.children.length, 'empty list'); assert.ok(b.children.every((i) => i.nodeName === 'listItem')); }
       if (b.nodeName === 'listItem') assert.equal(b.children[0] && b.children[0].nodeName, 'paragraph', 'listItem must start with a paragraph');
@@ -3866,6 +3866,63 @@ async function main() {
     assert.throws(() => outline.setText(d, 't0000000', 'x'), /cannot contain editable text/);
     assert.throws(() => outline.setBlockType(d, 't0000000', 'paragraph'), /cannot change type/);
     console.log('ok  content schema: Crockford ids, underline mark, tables left alone');
+  }
+  // #35: a line break is Tana's inline hardBreak node, in the shape its editor writes (loro-prosemirror: a map with an
+  // attributes map and a children list, both empty), splitting the text into two runs; orderedList.start and
+  // codeBlock.language are kept, read and cleared where they stop meaning anything.
+  {
+    const d = new Document(DOC);
+    const HB = { nodeName: 'hardBreak', attributes: {}, children: [] };
+    const para = (list, i, id, words) => { const p = list.insertContainer(i, new LoroMap()); p.set('nodeName', 'paragraph'); p.setContainer('attributes', new LoroMap()).set('blockId', id); const c = p.setContainer('children', new LoroList()); if (words) c.insertContainer(0, new LoroText()).insert(0, words); return c; };
+    d.transact((l) => {
+      const c = l.getMap('content'); c.set('nodeName', 'doc'); c.setContainer('attributes', new LoroMap());
+      const kids = c.setContainer('children', new LoroList());
+      const pc = para(kids, 0, 'p1000000', 'ab');
+      const hb = pc.insertContainer(1, new LoroMap()); hb.set('nodeName', 'hardBreak'); hb.setContainer('attributes', new LoroMap()); hb.setContainer('children', new LoroList());
+      pc.insertContainer(2, new LoroText()).insert(0, 'cd');
+      const ol = kids.insertContainer(1, new LoroMap()); ol.set('nodeName', 'orderedList');
+      const oa = ol.setContainer('attributes', new LoroMap()); oa.set('blockId', 'o1000000'); oa.set('start', 3);
+      const items = ol.setContainer('children', new LoroList());
+      ['n1000000', 'n2000000'].forEach((id, i) => { const li = items.insertContainer(i, new LoroMap()); li.set('nodeName', 'listItem'); li.setContainer('attributes', new LoroMap()).set('blockId', 'l' + id.slice(1)); para(li.setContainer('children', new LoroList()), 0, id, 'item' + i); });
+      const code = kids.insertContainer(2, new LoroMap()); code.set('nodeName', 'codeBlock');
+      const ca = code.setContainer('attributes', new LoroMap()); ca.set('blockId', 'c1000000'); ca.set('language', 'js');
+      code.setContainer('children', new LoroList()).insertContainer(0, new LoroText()).insert(0, 'a\nb');
+    });
+    const raw = () => d.content.toJSON().children;
+    // read: one newline for the break, in text and segments alike
+    const [p1, n1, n2, c1] = outline.readOutline(d);
+    assert.equal(p1.text, 'ab\ncd', 'contentText reads a hardBreak as one newline, not a block boundary');
+    assert.deepEqual(p1.segments, [{ text: 'ab' }, { text: '\n' }, { text: 'cd' }]);
+    assert.deepEqual([n1.start, n2.start, c1.block], [3, undefined, 'code'], 'a numbered list that starts at 3 says so on its first row');
+    // offsets: the break is one character and one ProseMirror position; a caret after it is on the second run
+    assert.deepEqual([outline.charOffset(d, 'p1000000', 3), outline.blockOffset(d, 'p1000000', 3), outline.charOffset(d, 'p1000000', 2)], [3, 3, 2]);
+    assert.deepEqual(outline.cursorOffset(d, outline.cursorAt(d, 'p1000000', 3)), { blockId: 'p1000000', offset: 3 });
+    assert.deepEqual(outline.cursorOffset(d, outline.cursorAt(d, 'p1000000', 2)), { blockId: 'p1000000', offset: 2 });
+    // edit: the existing break stays the same container, with segments and with a plain string
+    const breakId = d.content.get('children').get(0).get('children').get(1).id;
+    outline.setText(d, 'p1000000', [{ text: 'abX' }, { text: '\n' }, { text: 'cd', marks: { bold: true } }]);
+    assert.deepEqual(raw()[0].children, ['abX', HB, 'cd']);
+    outline.setText(d, 'p1000000', 'abX\ncdY');
+    assert.equal(d.content.get('children').get(0).get('children').get(1).id, breakId, 'editing a line keeps its hardBreak');
+    assert.deepEqual(outline.readOutline(d)[0].segments, [{ text: 'abX' }, { text: '\n' }, { text: 'cd', marks: { bold: true } }, { text: 'Y' }], 'a string keeps the marks there were (bold does not expand)');
+    // write: a newline becomes a break, marks go on both runs, and a new row written with one gets one too
+    outline.setText(d, 'n2000000', [{ text: 'x\ny', marks: { bold: true } }]);
+    assert.deepEqual(outline.readOutline(d)[2].segments, [{ text: 'x', marks: { bold: true } }, { text: '\n' }, { text: 'y', marks: { bold: true } }]);
+    const fresh = outline.insertAfter(d, 'p1000000', 'one\ntwo');
+    assert.deepEqual(raw()[1].children, ['one', HB, 'two']);
+    assert.equal(raw()[1].attributes.blockId, fresh);
+    // a code block keeps newlines as text (content text*) and keeps its language while it is one
+    outline.setText(d, 'c1000000', 'x\ny');
+    assert.deepEqual([raw()[3].children, raw()[3].attributes.language], [['x\ny'], 'js']);
+    outline.setBlockType(d, 'c1000000', 'paragraph');
+    assert.deepEqual([raw()[3].nodeName, raw()[3].attributes.language, raw()[3].children], ['paragraph', undefined, ['x', HB, 'y']], 'out of a code block the language goes and newlines become breaks');
+    // start survives a text edit, and goes when the list stops being numbered
+    outline.setText(d, 'n1000000', 'first');
+    assert.equal(raw()[2].attributes.start, 3);
+    outline.setBlockType(d, 'n2000000', 'bullet');
+    outline.setBlockType(d, 'n1000000', 'bullet');
+    assert.deepEqual([raw()[2].nodeName, raw()[2].attributes.start], ['bulletList', undefined], 'a bullet list carries no start');
+    console.log('ok  line breaks as hardBreak nodes (read, kept, written, offsets) and orderedList start / codeBlock language');
   }
   // Attendance (docs/MEETINGS.md): an entry in the `sessions` root of a call document is the only proof that somebody
   // is in a meeting now; the event node only ever proves they were invited.

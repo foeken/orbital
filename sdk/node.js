@@ -346,8 +346,9 @@ function render(node) {
   if (typeof node === 'string') return node;
   if (!node || typeof node !== 'object') return '';
   if (node.nodeName === 'mention') return (node.attributes && node.attributes.label) || '';
+  if (node.nodeName === 'hardBreak') return '\n'; // an inline line break: inline like a mention, not a block to join around
   const kids = Array.isArray(node.children) ? node.children : [];
-  const block = kids.some((k) => k && typeof k === 'object' && k.nodeName !== 'mention');
+  const block = kids.some((k) => k && typeof k === 'object' && k.nodeName !== 'mention' && k.nodeName !== 'hardBreak');
   return kids.map(render).join(block ? '\n' : '');
 }
 
