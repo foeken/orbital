@@ -160,7 +160,12 @@ Status handling (`NTe`, `rTe` warm, `aTe` cold):
   otherwise the client treats MISSING as "server has nothing yet" and **continues**, sending its whole doc as catch-up (this is how
   new documents get created). Evidence:
   `o.status==='unavailable'||o.status==='missing'&&t.oplogVersion().length()===0&&!e.ephemeral)return{type:'unavailable'}`.
-* `UNAVAILABLE` (and UNSPECIFIED): "unavailable" -> retry with backoff (session state `retrying`, reason "document unavailable").
+* `UNAVAILABLE` (and UNSPECIFIED): "unavailable" -> retry with backoff (session state `retrying`, reason "document unavailable"),
+  under the same budget as the cold case: `#J` counts unavailable answers and allows a retry while `elapsed < 60 s || attempts < 5`,
+  then the warm session pauses as `unavailable` ("Warm bootstrap gave up after budget — document unavailable (recoverable)"). A
+  paused `unavailable` (or `disconnected`) session is restarted, budget reset, when the transport reports `connected` again
+  (`(e?.type==='disconnected'||e?.type==='unavailable')&&(this.#q(),this.#I())`); bootstrap-complete resets it too. The SDK
+  pauses the same way and also resumes on the next `subscribe(id)`, standing in for Tana's `repo.retryRequest`.
 * Connect `PermissionDenied` on this call -> `permission-denied`, no retry, doc evicted. `FailedPrecondition` containing
   `system-doc-discard-local` -> discard the local copy and re-request.
 
@@ -210,12 +215,23 @@ mode blobs are coalesced with a 5 ms trailing timer (`sTe={type:'timer',ms:5}`) 
 
 Only one send is in flight per document; blobs produced meanwhile are batched into the next call (`if(this.#u){this.#d.push(...e)…}`).
 In-flight bytes are capped at 256 KiB per document (`outboundBudget??262144`); exceeding it raises a local resync ("outbound buffer
-overflow"). Any send failure other than cancel/permission triggers a re-bootstrap; `PermissionDenied` -> `access-revoked`. Live
+overflow"). Any send failure other than cancel/permission triggers a re-bootstrap; `PermissionDenied` -> `access-revoked`, which
+is not an eviction: the session notes it (`#w=!0`), re-bootstraps to probe read access ("Live update rejected (access revoked),
+re-probing read access") and ends in the non-retrying state `error` / "write denied" with the document kept, either when the
+probe's bootstrap completes (`if(this.#w){…this.#Y('error',{…detail:'write denied'}),this.#l?.(this.#t)`, `#l` =
+`deliverWriteDenied`) or when its catch-up is refused (`write-permission-denied`, 2.2). Only a refused `begin_document_sync`
+evicts it. A reconnect does not revive an `error` session. The SDK keeps the Document, sets `document.writeDenied`, drops further
+local updates and emits `write-denied` (id); `editable()` then answers false. Live
 updates carry no version vector: the blobs are exactly what Loro emitted, and the server's `barrierVv`/`currentVv` are informational.
 
 ### 2.5 Unsubscribe, viewing heartbeat, ephemeral, actions
 
-* Release: `{"unsubscribeDocument":{"documentId","sessionId"}}`, best-effort, after in-flight sends finish. The browser waits a 500 ms
+* Release: `{"unsubscribeDocument":{"documentId","sessionId"}}`, best-effort, after in-flight sends finish. Released while
+  `bootstrapping`/`sending-local-catchup` with local updates still queued, the session enters drain mode ("Entering drain mode —
+  bootstrap continues in background"): the bootstrap runs on, and at bootstrap-complete it goes live, flushes, awaits in-flight sends
+  and only then tears down ("Drain completing — flushing and tearing down"). Any failure, resync, disconnect or the 30 s bootstrap
+  timeout ends the drain with no retry. The SDK's `unsubscribe` waits for such a drain, so a document created and released at once
+  still reaches the server. The browser waits a 500 ms
   grace period after the last UI reference goes away (`gracePeriodMs: 500`, 0 for `tana:liveQuery:`); `tana:user-inbox:` docs are never released.
 * Viewing heartbeat: `{"viewingHeartbeat":{"documentId"}}` every 10 s (`HDe=1e4`) for the document open on screen, only while the tab
   is visible and the user was active in the last 60 s (`UDe=6e4`). Presence only; failures ignored. A background client can skip it.
@@ -387,4 +403,3 @@ loro-crdt 1.x (the app's exact pin is not visible; 1.16 decodes its snapshots an
   (all unused by this client).
 * Whether `x-session-id` is required; the browser sends it only when it has one.
 * The internal schema of the `content` map beyond `{nodeName, attributes, children}` (editor-owned; edit bodies through the MCP API instead).
-

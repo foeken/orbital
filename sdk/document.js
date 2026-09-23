@@ -8,6 +8,7 @@ class Document extends EventEmitter {
     super();
     this.id = id;
     this.peerId = peerId;
+    this.writeDenied = false; // set by sync when Tana refuses this peer's edits but still lets it read
     this._init(new LoroDoc());
   }
 

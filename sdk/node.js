@@ -103,12 +103,13 @@ function initDocument(loro, title, byUri, { kind = 'doc', now = Date.now(), enti
 }
 
 function readNode(document) {
-  return Object.assign({ id: document.id }, document.data.toJSON());
+  return Object.assign({ id: document.id }, document.data.toJSON(), document.writeDenied ? { writeDenied: true } : null);
 }
 
 // Companion outline capability, not a replacement for server authorization. Unknown/inherited ACLs stay null.
 // Profiles expose name/displayName, not an editable document title. Other unsupported bodies stay read-only.
 function editable(n, userUri) {
+  if (n.writeDenied) return false; // Tana refused our edits to it (sdk/sync.js _denyWrites), whatever the ACL says
   const kind = (n.id || '').split(':')[1];
   // 'search' is here because a saved search is a document the user owns and renames: a real one carries
   // participants[user] = { type: 'user', role: 'admin' }, so it falls through to the role check below and
