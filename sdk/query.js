@@ -68,7 +68,8 @@ const ANY_KINDS = VIEW_KINDS.filter((k) => !['people', 'spaces', 'types'].includ
 // those lists remain one search away rather than being lost with the pages.
 const VIEW_PRESETS = {
   inbox: { types: null, states: ['proposed'], assignee: 'anyone' },
-  library: { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me', text: '' },
+  // The My Tasks saved search: every task in every state, whoever has it, completed ones for three days (#113).
+  library: { types: ['tasks'], states: ['proposed', 'open', 'closed', 'not_now'], assignee: 'anyone', text: '', completedWithin: 3 },
   // The workspace's schema, with the space each type lives in (main/views.js puts the space title on the row).
   types: { types: ['types'] },
 };

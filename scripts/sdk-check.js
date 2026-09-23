@@ -519,7 +519,9 @@ async function main() {
     assert.deepEqual(libQuery.workflowStates,[]);
     assert.deepEqual(libQuery.attributes,{});
     assert.deepEqual(libQuery.types,['text'],'and it is in the document vocabulary, not the UI one');
-    assert.equal(libQuery.assignedToViewer,true,'the Library preset is assigned to me, stored viewer-relative');
+    // The Library preset is the My Tasks saved search (#113), so saving it writes that query back: every state, anyone.
+    assert.deepEqual(libQuery.stateTypes,['proposed','open','closed','not_now'],'the Library preset saves every task state');
+    assert.notEqual(libQuery.assignedToViewer,true,'and nobody in particular as the assignee');
     // Named from the filter rather than "Untitled", and an explicit title wins.
     assert.equal(backend.searchTitle('library',{states:['open'],assignee:'me'}),'Library — open · mine');
     assert.equal(backend.searchTitle('library',{}),'Library','a bare filter still names its view');
@@ -2669,8 +2671,8 @@ async function main() {
     cache.setSetting('viewFilter:library', { types: ['tasks', 'wat'], states: [], assignee: 'anyone', text: 7 });
     const library = await backend.handlers.get('view:filter')(null, 'library');
     assert.equal(library.types.join(','), 'tasks', 'an unknown kind cannot keep the view throwing');
-    assert.equal(library.states.join(','), 'proposed,open');
-    assert.equal(library.assignee, 'me');
+    assert.equal(library.states.join(','), 'proposed,open,closed,not_now');
+    assert.equal(library.assignee, 'anyone');
     assert.equal(library.text, '');
     assert.equal(backend.statusSnapshot().error, null, 'none of this is an error to show');
     console.log('ok  refresh keeps on-demand subscriptions, survives a failing query, and caches only real answers');
@@ -2942,10 +2944,10 @@ async function main() {
     const UPD = [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }];
     const COUNT = 'LIST_NODES_MODE_WITH_COUNT';
     assert.deepEqual(viewParams(VIEW_PRESETS.inbox, ME), { nodeTypes: ['event', 'text', 'chat', 'canvas', 'agent', 'skill', 'search'], stateTypes: ['proposed'], limit: 1000, sortOptions: UPD, mode: COUNT });
-    // Tasks is no longer a preset, but the query it asked for is still one a filter can name — and the Library's own
-    // preset differs only by a state, so what that shape sends the graph still matters.
+    // Tasks is no longer a preset, but the query it asked for is still one a filter can name, so what that shape
+    // sends the graph still matters.
     assert.deepEqual(viewParams({ types: ['tasks'], states: ['proposed', 'open', 'not_now'], assignee: 'me' }, ME), { nodeTypes: ['text'], stateTypes: ['proposed', 'open', 'not_now'], assignedTo: [ME], limit: 1000, sortOptions: UPD, mode: COUNT });
-    assert.deepEqual(viewParams(VIEW_PRESETS.library, ME), { nodeTypes: ['text'], stateTypes: ['proposed', 'open'], assignedTo: [ME], limit: 1000, sortOptions: UPD, mode: COUNT });
+    assert.deepEqual(viewParams(VIEW_PRESETS.library, ME), { nodeTypes: ['text'], stateTypes: ['proposed', 'open', 'closed', 'not_now'], limit: 1000, sortOptions: UPD, mode: COUNT });
     // Meetings, Chats and People are no longer presets, but they are still kinds a filter can name, so what they ask
     // the graph for still matters: a saved search aimed at them must reach it the same way those pages used to.
     assert.deepEqual(viewParams({ types: ['chats'] }, ME), { nodeTypes: ['chat'], limit: 1000, sortOptions: UPD, mode: COUNT });
