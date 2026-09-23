@@ -61,7 +61,7 @@ function readOutline(document) {
 // (and no op) for a document that has them all. Lists and quotes are walked; the ids go on the blocks they hold.
 function assignBlockIds(document) {
   const missing = [];
-  const walk = (list) => { if (!list) return; for (let i = 0; i < list.length; i++) { const b = list.get(i); if (b.kind && b.kind() !== 'Map') continue; if (isList(b) || isQuote(b) || isItem(b)) walk(kids(b)); else if (!blockId(b)) missing.push(b); } };
+  const walk = (list) => { if (!list) return; for (let i = 0; i < list.length; i++) { const b = list.get(i); if (b.kind && b.kind() !== 'Map') continue; if (isList(b) || isQuote(b) || isItem(b)) walk(kids(b)); else { if (!blockId(b)) missing.push(b); if (TABLE_PARTS.includes(name(b))) walk(kids(b)); } } }; // a table's rows, cells and their blocks too: a cell is edited by its id
   walk(kids(document.content));
   if (!missing.length) return 0;
   document.transact(() => { for (const b of missing) { const a = b.get('attributes') || b.setContainer('attributes', new LoroMap()); a.set('blockId', newId()); } });
@@ -103,6 +103,7 @@ function node(block, children) {
   }
   if (name(block) === 'heading') n.heading = block.get('attributes').get('level');
   if (['horizontalRule', 'table', 'unsupportedBlock'].includes(name(block))) n.editable = false; // a divider, a table, an unknown block: nothing here edits them
+  if (name(block) === 'table') { n.type = 'table'; n.table = tableOf(block); } // read-only as a row; its cells edit through setCellText
   if (name(block) === 'image') { // { nodeName 'image', attributes { blockId, tanaUri, displayWidth?, displayHeight? }, children [] }; no alt stored
     const a = block.get('attributes');
     n.type = 'image';
@@ -452,6 +453,72 @@ function applyRuns(text, delta, marked) {
       if (markValue(a) === null) text.unmark({ start, end }, key); else text.mark({ start, end }, key, a);
     }
   }
+}
+
+// ---- tables
+// Tana's schema: table > tableRow > (tableHeader | tableCell) > block+. Tana writes blockId on all three and colspan and
+// rowspan on a cell; colwidth is a ProseMirror attribute (null by default) kept only once somebody resizes a column.
+// A cell's text is its first paragraph: that is what Tana's readTable shows and its updateCell rewrites, leaving the
+// cell's other blocks (an image, a second paragraph) where they are.
+const CELLS = ['tableHeader', 'tableCell'];
+const TABLE_PARTS = ['table', 'tableRow', ...CELLS];
+const isMap = (x) => !!x && typeof x.kind === 'function' && x.kind() === 'Map';
+function firstParagraph(cell) {
+  const c = kids(cell);
+  for (let i = 0; c && i < c.length; i++) if (isMap(c.get(i)) && name(c.get(i)) === 'paragraph') return c.get(i);
+  return null;
+}
+// -> { id, rows: [[{ id, header, colspan, rowspan, colwidth, paragraph, segments, text, blocks }]], rowCount, columnCount }
+// Rows and cells in stored order, the way Tana's own reader counts them (a spanned cell is one entry, not several).
+function tableOf(table) {
+  const rows = [], list = kids(table);
+  for (let i = 0; list && i < list.length; i++) {
+    const row = list.get(i);
+    if (!isMap(row) || name(row) !== 'tableRow' || !kids(row)) continue;
+    const cells = [];
+    for (let j = 0; j < kids(row).length; j++) {
+      const cell = kids(row).get(j);
+      if (!isMap(cell) || !CELLS.includes(name(cell))) continue;
+      const a = cell.get('attributes') ? cell.get('attributes').toJSON() : {}, p = firstParagraph(cell);
+      const segments = (p && inline(p)) || [];
+      cells.push({ id: a.blockId, header: name(cell) === 'tableHeader', colspan: a.colspan ?? 1, rowspan: a.rowspan ?? 1, colwidth: a.colwidth ?? null,
+        paragraph: p ? blockId(p) : undefined, segments, text: segments.map((s) => (s.mention ? s.mention.label : s.text)).join(''), blocks: kids(cell) ? nodes(kids(cell)) : [] });
+    }
+    rows.push(cells);
+  }
+  return { id: blockId(table), rows, rowCount: rows.length, columnCount: rows.reduce((n, r) => Math.max(n, r.length), 0) };
+}
+function readTable(document, id) {
+  const found = typeof id === 'string' && id && locate(kids(document.content) || [], id);
+  if (!found || name(found.block) !== 'table') throw new Error('no table ' + id);
+  return tableOf(found.block);
+}
+// Any block by id, wherever it sits: tables are not outline rows, so locate() does not look inside them.
+function findBlock(list, id, test) {
+  for (let i = 0; list && i < list.length; i++) {
+    const b = list.get(i);
+    if (!isMap(b)) continue;
+    if (blockId(b) === id && test(b)) return b;
+    const hit = findBlock(kids(b), id, test);
+    if (hit) return hit;
+  }
+  return null;
+}
+// One cell's text, the way Tana's updateCell writes it: into the cell's first paragraph, one made at the front when
+// it has none. value is what setText takes (a string, or segments). The table itself stays refused by setText.
+function setCellText(document, cellId, value) {
+  if (typeof cellId !== 'string' || !cellId) throw new Error('table cell id must be a string');
+  const cell = () => { const c = findBlock(kids(document.content), cellId, (b) => CELLS.includes(name(b))); if (!c) throw new Error('no table cell ' + cellId); return c; };
+  cell();
+  const { groups, marked } = inlineGroups(value);
+  styleDoc(document);
+  document.transact(() => {
+    const c = cell(), list = kids(c) || c.setContainer('children', new LoroList());
+    let p = firstParagraph(c);
+    if (!p) p = create(list, 0, 'paragraph');
+    else if (!blockId(p)) (p.get('attributes') || p.setContainer('attributes', new LoroMap())).set('blockId', newId());
+    writeInline(kids(p) || p.setContainer('children', new LoroList()), groups, marked);
+  });
 }
 
 // A new row follows the row it comes from: a listItem makes another listItem, so a quote stays inside its quote
@@ -870,4 +937,4 @@ function insertMention(document, { uri, label } = {}, { parentId = null, afterId
   return out;
 }
 
-module.exports = { cursorAt, cursorOffset, charOffset, blockOffset, readOutline, assignBlockIds, setText, inlineGroups, writeInline, styleDoc, setBlockType, insertDivider, insertImage, insertAfter, insertBefore, insertChild, insertMention, split, remove, removeMany, indent, indentMany, outdent, outdentMany, move, moveMany, moveTo, toggleCheckbox, newId, BLOCK_TYPES };
+module.exports = { cursorAt, cursorOffset, charOffset, blockOffset, readOutline, assignBlockIds, setText, readTable, setCellText, inlineGroups, writeInline, styleDoc, setBlockType, insertDivider, insertImage, insertAfter, insertBefore, insertChild, insertMention, split, remove, removeMany, indent, indentMany, outdent, outdentMany, move, moveMany, moveTo, toggleCheckbox, newId, BLOCK_TYPES };

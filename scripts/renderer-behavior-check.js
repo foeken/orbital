@@ -7473,6 +7473,85 @@ function runDropPlanCheck() {
   console.log('ok  drag and drop: one gap reads as several places, x chooses the level and the line marks it, documents land as references, blocks move, and nothing lands read-only, empty, in another document, in a view or inside itself');
 }
 
+// Tables (renderer/table.js): a table row draws Tana's grid — header cells, spans, a resized width — with each cell's
+// first paragraph editable only where the document is, written once over api.setCell, and keys that walk the cells.
+async function runTableCheck() {
+  const src = ['tableEl', 'cellInput', 'saveCell', 'cellAt', 'cellKey'].map(functionSource).join('\n') + '\n' + sourceLine('const cellPending');
+  const api = vm.runInNewContext(`
+    let focusedEl = null, caret = null, moved = null;
+    const writes = [], timers = [];
+    const mk = (tag) => ({
+      tagName: tag.toUpperCase(), childNodes: [], dataset: {}, listeners: {}, parentElement: null,
+      style: { props: {}, setProperty(k, v) { this.props[k] = v; } },
+      classList: { set: new Set(), add(...n) { n.forEach((x) => this.set.add(x)); }, contains(n) { return this.set.has(n); } },
+      get className() { return [...this.classList.set].join(' '); }, set className(v) { this.classList.set = new Set(String(v).split(' ').filter(Boolean)); },
+      get isContentEditable() { return this.contentEditable === 'plaintext-only'; },
+      get textContent() { return (this.segs || []).map((s) => s.text).join(''); }, set textContent(v) { this.segs = [{ text: v }]; },
+      append(...kids) { for (const c of kids) { c.parentElement = this; this.childNodes.push(c); } },
+      addEventListener(type, fn) { this.listeners[type] = fn; },
+      querySelectorAll(sel) { const out = [], walk = (e) => { for (const c of e.childNodes) { if (c.classList.contains('cell') && (sel === '.cell' || c.isContentEditable)) out.push(c); walk(c); } }; walk(this); return out; },
+      querySelector(sel) { return this.querySelectorAll(sel)[0] || null; },
+      closest(sel) { for (let e = this; e; e = e.parentElement) if (sel === '.cell' ? e.classList.contains('cell') : e.tagName === 'TABLE') return e; return null; },
+      get rows() { return this.childNodes; }, get cells() { return this.childNodes; },
+      get rowIndex() { return this.parentElement.childNodes.indexOf(this); }, get cellIndex() { return this.parentElement.childNodes.indexOf(this); },
+      focus() { focusedEl = this; },
+    });
+    const document = { createElement: mk };
+    const tana = { setCell: async (...a) => { writes.push(a); } };
+    const canEditStructure = (item) => item.writable;
+    const renderSegs = (el, segs) => { el.segs = segs; }, readSegs = (el) => el.segs, plainOf = (segs) => segs.map((s) => s.text).join(''), saveValue = plainOf;
+    const run = (fn) => fn(), reload = async () => {}, render = () => {}, unanchored = (s) => s;
+    const setTimeout = (fn) => timers.push(fn), clearTimeout = () => {};
+    const caretOffset = () => 0, getSelection = () => ({ isCollapsed: true }), atEdge = () => true;
+    const setCaret = (el, off) => { caret = [el, off]; }, moveTo = (el, dir, off) => { moved = [el, dir, off]; };
+    ${src}
+    const cell = (id, text, extra = {}) => ({ id, header: false, colspan: 1, rowspan: 1, colwidth: null, paragraph: id && id + 'p', segments: text ? [{ text }] : [], text, blocks: [{ id: id && id + 'p', text }], ...extra });
+    const item = (writable) => ({ docId: 'd1', key: 'd1/t', writable, node: { table: { rows: [
+      [cell('h1', 'Owner', { header: true, colwidth: [80, 40] }), cell('h2', 'Status', { header: true })],
+      [cell('c1', 'Robin', { colspan: 2, blocks: [{ id: 'c1p', text: 'Robin' }, { id: 'x', text: 'second paragraph' }] })],
+      [cell(undefined, 'no id'), cell('c3', '')],
+    ] } } });
+    const draw = (writable) => { const it = item(writable), row = mk('span'), table = tableEl(it); row.append(table); return { it, row, table }; };
+    const key = (table, target, k, mods = {}) => { let prevented = false; caret = moved = focusedEl = null; table.listeners.keydown({ key: k, shiftKey: false, metaKey: false, ctrlKey: false, altKey: false, ...mods, target, preventDefault: () => { prevented = true; } }); return { prevented, caret, moved, focused: focusedEl }; };
+    ({ draw, key, writes, timers, cellsOf: (table) => table.querySelectorAll('.cell') });
+  `);
+  const { table, row } = api.draw(true), cells = api.cellsOf(table);
+  const [h1, h2, c1, , c3] = cells;
+  assert.deepEqual(plain(table.childNodes.map((tr) => tr.childNodes.map((td) => td.tagName))), [['TH', 'TH'], ['TD'], ['TD', 'TD']], 'header cells are th, data cells td');
+  assert.equal(c1.parentElement.colSpan, 2, 'a colspan carries over');
+  assert.equal(h1.parentElement.style.props.width, '120px', 'a resized cell keeps its width: one per column it spans');
+  assert.deepEqual(plain(cells.map((c) => c.isContentEditable)), [true, true, true, false, true], 'every cell with an id is editable in a writable document');
+  assert.deepEqual(plain(c1.parentElement.childNodes.slice(1).map((n) => [n.className, n.textContent, n.isContentEditable])), [['more', 'second paragraph', false]], 'the rest of a cell shows, read-only');
+  assert.deepEqual(plain(api.cellsOf(api.draw(false).table).map((c) => c.isContentEditable)), [false, false, false, false, false], 'a read-only document draws a table with nothing to edit');
+
+  // typing is saved once, debounced, and only when it changed something
+  c1.segs = [{ text: 'Robin Vega' }];
+  table.listeners.input({ target: c1 });
+  assert.equal(api.writes.length, 0, 'nothing is written on the keystroke');
+  api.timers.shift()();
+  assert.deepEqual(plain(api.writes), [['d1', 'c1', 'Robin Vega']], 'the cell is written by its own id');
+  table.listeners.input({ target: c1 }); api.timers.shift()();
+  table.listeners.focusout({ target: c1 });
+  assert.equal(api.writes.length, 1, 'the same text is not written twice');
+
+  // keys: Tab walks the editable cells, arrows cross rows by column, the edges leave the table, Escape returns to the row
+  assert.equal(api.key(table, h1, 'Tab').caret[0], h2, 'Tab: the next cell');
+  assert.equal(api.key(table, h2, 'Tab').caret[0], c1, 'across the row end');
+  assert.equal(api.key(table, h1, 'Tab', { shiftKey: true }).focused, row, 'Shift+Tab before the first cell: back to the table row');
+  assert.equal(api.key(table, c3, 'Tab').focused, row, 'and Tab past the last one');
+  assert.equal(api.key(table, h2, 'ArrowDown').caret[0], c1, 'Down: the same column, clamped to a shorter row');
+  assert.deepEqual(plain(api.key(table, c3, 'ArrowDown').moved.slice(1)), [1, 0], 'Down from the last row: out to the outline row below');
+  assert.equal(api.key(table, c1, 'ArrowUp').caret[0], h1, 'Up: the row above');
+  const esc = api.key(table, c1, 'Escape');
+  assert.equal(esc.focused, row); assert.equal(esc.prevented, true, 'Escape: the table row, which moves and deletes like an image');
+  const enter = api.key(table, c1, 'Enter');
+  assert.deepEqual([enter.prevented, enter.caret, enter.moved], [true, null, null], 'Enter adds nothing: a cell is one paragraph');
+  assert.equal(api.key(table, c1, 'k', { metaKey: true }).prevented, false, '⌘ keys go on to the document handler');
+  assert.match(source, /if \(!el \|\| e\.target\.classList\?\.contains\('cell'\)\) return;/, 'the row handler leaves a cell\u2019s keys alone');
+  assert.match(source, /e\.key === 'Enter' && item\.node\.table\) enterTable\(el\)/, 'Enter on the table row goes into its first cell');
+  console.log('ok  tables: th/td, spans and widths, cells editable only where the document is, one debounced write per change, keys walk the cells');
+}
+
 // Red until the checks actually settle: an async check left awaiting something that never resolves empties the event
 // loop, and node would exit 0 without a word — a silent pass for a check that never finished.
 checks.push(runDropPlanCheck);
@@ -7629,6 +7708,7 @@ async function runMeetingEditCheck() {
   console.log('ok  meeting edits: rows only when editable, typed time and place, attendee suggestions and members');
 }
 checks.push(runMeetingEditCheck);
+checks.push(runTableCheck);
 process.exitCode = 1;
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);

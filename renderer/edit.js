@@ -282,7 +282,7 @@ async function goTo(uri) {
   }
   openDoc(uri);
 }
-function flushAll() { for (const key of [...pending.keys()]) flush(key); }
+function flushAll() { for (const key of [...pending.keys()]) flush(key); for (const id of [...cellPending.keys()]) saveCell(id); } // table cells too (renderer/table.js)
 // ---- history: Cmd+[ and Cmd+] walk the places you have been, like a browser ----
 // A place is the view plus the zoom. Every render that lands somewhere new records it, however it got there (a
 // view switch, a bullet, a mention, a crumb, search, a pin), so nothing that navigates needs to know about this.
