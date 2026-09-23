@@ -123,7 +123,7 @@ function paletteRows(q, typed = q) {
   // is on screen, so ⇧⌘K can record a key against it.
   if (palDoc && tana.pin && isRealId(palDoc.id)) {
     const doc = palDoc;
-    rows.push({ id: 'pinToDate', group: docGroup, icon: 'pinDate', label: 'Pin to date\u2026', hint: 'sunday, in 3 days, 12 oct', keepOpen: true, run: () => openPinDatePalette(doc) });
+    rows.push({ id: 'pinToDate', group: docGroup, icon: 'pinDate', label: 'Pin to date \u2026', hint: 'sunday, in 3 days, 12 oct', keepOpen: true, run: () => openPinDatePalette(doc) });
   }
   // Pin this node onto the meeting I am in, through the same event pin the quick-add panel writes (docs/QUICK-ADD.md)
   // and the sidebar reads back under Pinned. The row is listed whenever a real node is on screen, so ⇧⌘K can record

@@ -398,7 +398,7 @@ past, with a task pinned only further ahead than seven days behind the same "Sho
 
 ### Pin to date
 
-⌘K **Pin to date…** (`id: pinToDate`) opens a one-field page (`palMode = 'pinDate'`) that reads the typed words as a
+⌘K **Pin to date …** (`id: pinToDate`) opens a one-field page (`palMode = 'pinDate'`) that reads the typed words as a
 day with `parseDay` (renderer/document.js) and shows the day it read before Enter: today/tomorrow, weekdays (the next
 one after today), "in 3 days"/2w/1 month, next week (the coming Monday), ISO dates, day-first numbers and day + month
 names, a date without a year being the next time it comes round. A fixed parser rather than a model, so the answer
