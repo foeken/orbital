@@ -56,16 +56,18 @@ function dropDepth(host, above, below, x) {
 // The place a pointer is asking for: the row it lands behind, the row it lands inside, the outline that owns them
 // and the line to draw for it. null where nothing can land — the top level of a view (a block is not a document),
 // another document, a read-only row, or a list this row cannot join.
-function dropPlan(x, y) {
-  const src = items.get(dragKey), host = src ? dropHost(x, y) : null;
+// files: image files from the Finder rather than a row (renderer/upload.js). They land behind a row only, since an
+// image is never a row's first child and api.insertImage has no "first row" place.
+function dropPlan(x, y, files = false) {
+  const src = files ? null : items.get(dragKey), host = src || files ? dropHost(x, y) : null;
   if (!host) return null;
-  const ref = dragRef(src);
+  const ref = src && dragRef(src);
   const dragged = nodeElOf(dragKey);
   // A draft row is not in the document yet (nothing can land behind a row the write cannot name), and a row on its
   // way out is not a place either. The gap above a draft tail is the end of the outline, which is where a drop
   // aimed at it belongs anyway.
   const rows = [...host.querySelectorAll('.node')].filter((el) => items.has(el.dataset.key)
-    && !el.classList.contains('leaving') && !el.classList.contains('draft') && !(dragged && dragged.contains(el)));
+    && !el.classList.contains('leaving') && !el.classList.contains('draft') && !(dragged && dragged.contains(el))); // .draft covers an upload's placeholder too
   let above = null;
   for (const el of rows) { const box = dragLine(el).getBoundingClientRect(); if (y < box.top + box.height / 2) break; above = el; }
   const below = rows[above ? rows.indexOf(above) + 1 : 0] || null;
@@ -84,9 +86,10 @@ function dropPlan(x, y) {
   // A saved search lists what its query finds and a space lists the documents in it: neither has rows of its own
   // for something to land among.
   if (!after && (isSearchDoc(parent.node) || isSpace(parent.node))) return null;
+  if (files && !after) return null;
   const docId = after ? after.docId : parent.docId;
-  if (!ref && dragBase(docId) !== dragBase(src.docId)) return null; // a block belongs to the node that holds it
-  if (!ref && !after && parent.node.kind === 'block' && !dragListable(src.node)) return null;
+  if (src && !ref && dragBase(docId) !== dragBase(src.docId)) return null; // a block belongs to the node that holds it
+  if (src && !ref && !after && parent.node.kind === 'block' && !dragListable(src.node)) return null;
   if (ref && dragBase(docId) === ref.uri) return null; // a document does not hold a reference to itself
   const anchor = after ? nodeElOf(after.key) : above;
   // The line starts where the words of that level start: a row's own box plus the gutter it keeps for its marker,
@@ -149,6 +152,12 @@ document.addEventListener('dragstart', (e) => {
   row.classList.add('dragging');
 });
 document.addEventListener('dragover', (e) => {
+  if (!dragKey && e.dataTransfer.types.includes('Files')) { // files from the Finder: the same line, where an image can land
+    const plan = dropPlan(e.clientX, e.clientY, true);
+    showDrop(plan);
+    if (plan) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }
+    return;
+  }
   if (!dragKey) return; // somebody else's drag — text out of a row, a file onto the window — is left alone
   // ponytail: every dragover measures every row on screen; a page of a few hundred rows is one cheap layout read.
   // If a very long page ever drags heavily, take the rects at dragstart and add the scroll delta.
@@ -159,6 +168,14 @@ document.addEventListener('dragover', (e) => {
   e.dataTransfer.dropEffect = plan.ref ? 'link' : 'move';
 });
 document.addEventListener('drop', (e) => {
+  if (!dragKey && e.dataTransfer.types.includes('Files')) {
+    const plan = dropPlan(e.clientX, e.clientY, true), files = imageFiles(e.dataTransfer.files);
+    showDrop(null);
+    if (!plan) return;
+    e.preventDefault(); // anything but an image is ignored here, rather than opened by the window
+    if (files.length) uploadImages(plan.docId, plan.afterId, files).catch(showError);
+    return;
+  }
   if (!dragKey) return;
   e.preventDefault();
   const plan = dropPlan(e.clientX, e.clientY), key = dragKey;
@@ -166,3 +183,4 @@ document.addEventListener('drop', (e) => {
   if (plan) applyDrop(key, plan);
 });
 document.addEventListener('dragend', endDrag);
+document.addEventListener('dragleave', (e) => { if (!dragKey && !e.relatedTarget) showDrop(null); }); // files dragged back out of the window

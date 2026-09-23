@@ -2,7 +2,7 @@
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const { createHash } = require('node:crypto');
-const { fetchImage, uploadFile, initImage } = require('../sdk/assets');
+const { fetchImage, uploadFile, initImage, SIGNED_OUT } = require('../sdk/assets');
 const content = require('../sdk/content');
 const { ulid } = require('../sdk/node');
 const { mut, subscribe } = require('./documents');
@@ -25,17 +25,28 @@ async function loadImage(uri) {
   return url;
 }
 
-// A pasted image, in Tana's own order (useImageUpload): the bytes to its file store, a tana:image: document owned by
+// An added image, in Tana's own order (useImageUpload): the bytes to its file store, a tana:image: document owned by
 // the page, then the block naming it — so no block points at an image that does not exist. docId may be a field's
 // outline ("<doc>|<type>?attribute=<key>"); the image still belongs to the document. Returns the new block id.
+// uploadId names it for cancelUpload: Esc on its placeholder aborts the upload, and nothing is written after that.
 // ponytail: Tana also asks its AI service to title and describe the image (describeAndUpdateImage); add it if wanted
-async function insertImage(docId, nodeId, { bytes, filename, mimeType }) {
+const uploading = new Map(); // uploadId -> AbortController
+async function insertImage(docId, nodeId, { bytes, filename, mimeType }, uploadId) {
+  if (!S.session) throw new Error(SIGNED_OUT);
   const ownerUri = String(docId).split('|')[0];
-  const up = await uploadFile(bytes, { filename, mimeType, getAccessToken: (o) => S.session.getAccessToken(o) });
+  const ctrl = new AbortController();
+  if (uploadId) uploading.set(uploadId, ctrl);
+  let up;
+  try {
+    up = await uploadFile(bytes, { filename, mimeType, signal: ctrl.signal, getAccessToken: (o) => S.session.getAccessToken(o) });
+  } finally { uploading.delete(uploadId); }
+  if (ctrl.signal.aborted) throw new Error('upload cancelled');
   const uri = 'tana:image:' + ulid();
   const made = await subscribe(uri, (loro) => initImage(loro, { ownerUri, cid: up.cid, width: up.width, height: up.height, blurhash: up.blurhash, filename, mimeType, fileSize: bytes.length }));
   if (!made) throw new Error(S.status.error || 'could not create ' + uri);
   return mut(docId, (doc) => content.insertImage(doc, nodeId, uri));
 }
 
-module.exports = { image, loadImage, insertImage };
+const cancelUpload = (uploadId) => { uploading.get(uploadId)?.abort(); };
+
+module.exports = { image, loadImage, insertImage, cancelUpload };

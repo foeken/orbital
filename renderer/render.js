@@ -686,7 +686,7 @@ function nodeEl(node, docId, parent) {
   const heading = headingOf(node); // a heading arrives as node.heading or as the heading1-3 block type
   // an image draws a marker only where a list row would: on its own it is the picture and nothing else
   const blockClass = node.kind === 'block' ? ' t-' + (isDivider(node) ? 'divider' : isImage(node) ? (node.block || 'image') : blockTypeOf(node)) : '';
-  el.className = 'node ' + node.kind + (reference ? ' reference' : '') + (fullref ? ' fullref' : '') + (gone ? ' gone' : '') + blockClass + (heading ? ' h' + heading : '') + (display.done ? ' done' : '') + (has ? ' has' : '') + (has && !opened ? ' collapsed' : '') + (node.draft ? ' draft' : '') + (node.notification && node.unread ? ' unread' : '');
+  el.className = 'node ' + node.kind + (reference ? ' reference' : '') + (fullref ? ' fullref' : '') + (gone ? ' gone' : '') + blockClass + (heading ? ' h' + heading : '') + (display.done ? ' done' : '') + (has ? ' has' : '') + (has && !opened ? ' collapsed' : '') + (node.draft || node.upload ? ' draft' : '') + (node.notification && node.unread ? ' unread' : '');
   if (node.start != null) el.style.counterSet = 'ol ' + (node.start - 1); // a numbered list counting from its own start (sdk/content.js); the row's increment makes it start
   el.dataset.key = item.key;
   const line = document.createElement('div'); line.className = 'line';
@@ -728,6 +728,7 @@ function nodeEl(node, docId, parent) {
     text.classList.add('image'); text.tabIndex = -1;
     const img = document.createElement('img'), { uri, alt, width, height } = node.image;
     if (alt) img.alt = img.title = alt;
+    else imageTitle(uri).then((t) => { if (t) img.alt = img.title = t; }); // Tana's AI title, once it has written one
     if (width && height) { img.width = width; img.height = height; }
     const show = (url) => { images.set(uri, url); img.src = url; text.classList.remove('loading'); if (images.size > 200) images.delete(images.keys().next().value); }; // oldest out: main keeps the file cache
     const cached = images.get(uri);
@@ -735,6 +736,9 @@ function nodeEl(node, docId, parent) {
     else { text.classList.add('loading'); (cached || images.set(uri, tana.image(uri)).get(uri)).then(show, (e) => { images.delete(uri); showError(e); }); }
     img.onclick = (e) => { e.stopPropagation(); openImage(node); }; // the row is not text to put a caret in: a click is a look at the picture
     text.append(img);
+  } else if (node.upload) { // renderer/upload.js: a file on its way up; Esc cancels it
+    text.classList.add('upload'); text.tabIndex = -1;
+    text.textContent = node.text + ' — Uploading…';
   } else if (isDivider(node)) { // atomic like an image: focusable so Up/Down and Backspace still reach it
     text.classList.add('divider'); text.tabIndex = -1;
     text.append(document.createElement('hr'));

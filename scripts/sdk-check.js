@@ -3588,6 +3588,10 @@ async function main() {
     const before = sent.length;
     await assert.rejects(uploadFile({ length: UPLOAD_LIMIT + 1 }, { ...opts, filename: 'big.png' }), /max 50 MB/);
     assert.equal(sent.length, before, 'a file over the limit never leaves the machine');
+    await assert.rejects(uploadFile(Buffer.from([1]), { ...opts, filename: 'a.png', getAccessToken: async () => 'stale' }), /signed out/, 'a token refused twice is a signed-out session, in Tana\'s words');
+    const ctrl = new AbortController();
+    ctrl.abort();
+    await assert.rejects(uploadFile(Buffer.from([1]), { ...opts, filename: 'a.png', signal: ctrl.signal, fetch: (url, init) => fetch(url, init) }), /abort/i, 'the signal reaches the request, so Esc stops an upload in flight');
 
     const OWNER = 'tana:text:01examplew0000000000000000', img = new Document('tana:image:' + ulid());
     img.transact(() => initImage(img.loro, { ownerUri: OWNER, cid: 'c1d', width: 2, height: 2, blurhash: 'LEHV6n', filename: 'a.png', mimeType: 'image/png', fileSize: 4, now: 1 }));

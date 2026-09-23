@@ -37,6 +37,12 @@ onRows('keydown', (e) => {
   const item = items.get(keyOfEl(el)), mod = e.metaKey || e.ctrlKey;
   const off = caretOffset(el), len = unanchored(el.textContent).length, collapsed = getSelection().isCollapsed; // the caret anchor before a leading chip is no character
   const isDoc = item.node.kind === 'document', combo = comboOf(e);
+  if (item.node.upload) { // a placeholder: Esc cancels its upload, Up/Down step past it, nothing else
+    if (e.key === 'Escape') cancelUpload(item, el);
+    else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') moveTo(el, e.key === 'ArrowUp' ? -1 : 1, 0);
+    else if (mod) return;
+    return e.preventDefault();
+  }
   if (isAtomic(item.node)) { // image or divider, not editable: Backspace / ⌘⇧⌫ removes, Up/Down step past, Shift+Up/Down select, ⌘⇧Up/Down moves; everything else is swallowed
     const vert = e.key === 'ArrowUp' || e.key === 'ArrowDown', dir = e.key === 'ArrowUp' ? -1 : 1;
     if (e.key === 'Backspace') removeNode(item, el);
@@ -161,21 +167,15 @@ onRows('paste', (e) => {
   if (!item || item.node.kind !== 'block' || isAtomic(item.node) || isReference(item.node) || !canEditText(item)) return;
   if (item.node.draft && (item.busy || item.node.pendingSplit)) return; // already being created: the text lands in it like any other typing
   // A pasted image (#28) is uploaded and lands as an image row after this one — or, pasted into the empty draft row,
-  // after the last real row, which is where that draft stands. One after the other, so they keep clipboard order.
-  // Not through run(): an upload takes seconds and would hold every edit queued behind it.
-  // ponytail: no uploading placeholder; the row appears when the upload is done, a failure shows in the error line
-  const files = [...e.clipboardData.files].filter((f) => f.type.startsWith('image/'));
+  // after the last real row, which is where that draft stands (renderer/upload.js). Not through run(): an upload
+  // takes seconds and would hold every edit queued behind it.
+  const files = imageFiles(e.clipboardData.files);
   if (files.length) {
     const last = item.node.draft ? childrenOf(item.parent)?.at(-1) : null;
     if (item.node.draft && item.parent.node.kind !== 'document' && !last) return; // an empty child row has no row to follow
     e.preventDefault();
     flush(item.key);
-    (async () => {
-      let after = item.node.draft ? last?.id || null : item.node.id;
-      for (const f of files) after = await tana.insertImage(item.docId, after, { bytes: new Uint8Array(await f.arrayBuffer()), filename: f.name || 'image', mimeType: f.type });
-      await reload(item.docId);
-      render();
-    })().catch(showError);
+    uploadImages(item.docId, item.node.draft ? last?.id || null : item.node.id, files).catch(showError);
     return;
   }
   const uri = tanaNodeUri(e.clipboardData.getData('text/plain'));

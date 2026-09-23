@@ -254,7 +254,7 @@ Tana keeps each user's notifications in one `tana:user-inbox:<user-profile ULID>
 
 `fetchImage(uri, { getAccessToken, baseUrl = 'https://home.tana.inc/api/general', fetch })` → `{ mime, bytes: Buffer }`; validates `tana:image:<ulid>`, follows the 302 manually carrying the `Cloud-CDN-Cookie`, retries once on 401.
 
-`uploadFile(bytes, { filename, mimeType, getAccessToken, baseUrl, fetch })` → `{ cid, size, width, height, blurhash }`; `POST /files/upload` with the bytes as multipart field `file`, retries once on 401, refuses more than `UPLOAD_LIMIT` (50 MB) before sending, and throws the server's `message`/`error` otherwise.
+`uploadFile(bytes, { filename, mimeType, getAccessToken, baseUrl, fetch, signal })` → `{ cid, size, width, height, blurhash }`; `POST /files/upload` with the bytes as multipart field `file`, retries once on 401 (a second 401 throws `SIGNED_OUT`, Tana's "You're signed out — sign in and try again"), refuses more than `UPLOAD_LIMIT` (50 MB) before sending, passes `signal` to the request so it can be aborted, and throws the server's `message`/`error` otherwise.
 
 `initImage(loro, { ownerUri, cid, width, height, blurhash, filename, mimeType, fileSize, now })` — the data map of a new `tana:image:` document as Tana writes it (02-data-model.md §6); pass it as the init of `sync.subscribe('tana:image:' + ulid(), …)`. Throws without `ownerUri`.
 
