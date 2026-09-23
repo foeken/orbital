@@ -207,7 +207,9 @@ function setTaskAssignees(doc, assignees) {
   run(async () => {
     try {
       await tana.setAssignees(doc.id, assignees);
-      taskMetaById.set(doc.id, { ...meta, assignees });
+      // Read again rather than patched: who the audience leaves out (hiddenFrom) is main's to say, and a copy of the
+      // old metadata with new assignees kept the old warning — and overwrote the fresh read the change event started.
+      try { taskMetaById.set(doc.id, await tana.taskMeta(doc.id)); } catch { taskMetaById.delete(doc.id); } // the next render asks
       if (!palette.hidden && palMode === 'assignees' && palDoc?.id === doc.id) closePalette();
       render();
     } catch (e) {
