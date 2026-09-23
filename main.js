@@ -391,13 +391,16 @@ ipcMain.handle('presence:close', (_e, id) => presence.close(id));
 ipcMain.handle('presence:view', (_e, id) => presence.view(id));
 ipcMain.handle('presence:set', (_e, id, at) => presence.set(id, at && typeof at.blockId === 'string' ? { blockId: at.blockId, anchor: Number(at.anchor) || 0, focus: Number(at.focus) || 0 } : null));
 ipcMain.handle('doc:exportPdf', (_e, id) => require('./main/pdf').exportPdf(id, S.win));
-// The web link for a node, the same url home.tana.inc opens: /o/<org>/l/<encoded node uri>
+// The web link for a node, the same url home.tana.inc opens: /o/<org>/<route>/<encoded node uri>. The route is Tana's
+// per kind (its link resolver beside JP.type.url, shared bundle of 2026-09-23): a type, a person, a meeting and a space
+// have pages of their own, and /l/ — every other document — shows a type as raw JSON (issue #88).
+const LINK_ROUTES = { type: 't', 'user-profile': 'u', event: 'e', space: 's' };
 ipcMain.handle('doc:link', (_e, id) => {
   // the path segment is the org *document* ulid (tana:org:01ks7…), not the WorkOS org id in S.me.orgId
   const org = (S.me && S.me.orgDocUri || '').split(':').pop();
   if (!org) throw new Error(NOT_CONNECTED);
   if (!/^tana:[a-z-]+:[0-9a-z]{26}$/.test(id)) throw new Error('Not a Tana document id');
-  return 'https://home.tana.inc/o/' + org + '/l/' + encodeURIComponent(id);
+  return 'https://home.tana.inc/o/' + org + '/' + (LINK_ROUTES[id.split(':')[1]] || 'l') + '/' + encodeURIComponent(id);
 });
 // A link in node text opens in the user's browser; only http(s), never a file or custom scheme.
 ipcMain.handle('shell:open', (_e, url) => {

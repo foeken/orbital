@@ -927,6 +927,11 @@ async function main() {
     assert.equal((await backend.handlers.get('sensitive:list')(null)).join(), marked, 'the mark is read back from where it was written');
     assert.equal(await backend.handlers.get('sensitive:set')(null, marked, false), false);
     assert.equal((await backend.handlers.get('sensitive:list')(null)).join(), '', 'and unmarking takes it out again');
+    // A node's link opens it in Tana on the route Tana itself picks for its kind (issue #88).
+    backend.testRuntime({ me: { orgDocUri: 'tana:org:01ks7rqsrqjn7vwyjhx75r6jg0' } });
+    const link = (kind) => backend.handlers.get('doc:link')(null, 'tana:' + kind + ':01m2nrv0v6qj2brghq04t8wv87');
+    assert.deepEqual(['text', 'type', 'user-profile', 'event', 'space', 'chat'].map((k) => link(k).split('/')[5]), ['l', 't', 'u', 'e', 's', 'l'], 'a type opens its type page, not the document route');
+    assert.equal(link('type'), 'https://home.tana.inc/o/01ks7rqsrqjn7vwyjhx75r6jg0/t/tana%3Atype%3A01m2nrv0v6qj2brghq04t8wv87');
     // It is app plumbing rather than a note, so no list or search offers it.
     backend.testRuntime({ me: { userUri: ME }, win: null, client: { sync, graph: { listNodes: async (p) => (p.nodeIds ? { nodes: [] } : { nodes: [{ id: doc.id, title: settings.TITLE, updateTime: '2026-09-20T10:00:00Z' }, { id: 'tana:text:' + ulid(), title: 'A real note', updateTime: '2026-09-20T10:00:00Z' }] }) } } });
     const rows = await backend.handlers.get('view:list')(null, 'library', { types: ['docs'], states: null, assignee: 'anyone' });
