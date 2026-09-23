@@ -621,9 +621,9 @@ assert.match(styleSheet, /\.fields \.fvalues \.node > \.line \{ padding: 8px 0 0
   'every row of a field carries the same space above it, as padding, so no row can collapse it away');
 assert.match(styleSheet, /\.fields \.fvalues > \.node:first-child > \.line \{ padding-top: 0; \}/, 'except the first, which the block already spaces');
 assert.match(styleSheet, /\.fields \.fvalues \.node \{ margin-top: 0; margin-bottom: 0; \}/, 'and no margin decides the rhythm here');
-// a marker sits where words sit: the dot of a list row shares its left edge with the text of a plain row
-assert.match(styleSheet, /\.node\.block\.t-bullet > \.line, \.node\.block\.t-numbered > \.line \{ margin-left: -10px; \}/,
-  'a list row pulls its marker back to where a plain row starts its words');
+// a list marker shares the left edge of a plain row's words; full references carry document icons and keep their gutter
+assert.match(styleSheet, /\.node\.block\.t-bullet:not\(\.fullref\) > \.line, \.node\.block\.t-numbered:not\(\.fullref\) > \.line \{ margin-left: -10px; \}/,
+  'ordinary list rows pull back their markers, while full references keep the document gutter');
 assert.match(styleSheet, /\.node\.block\.t-bullet > \.children, \.node\.block\.t-numbered > \.children \{ margin-left: 23px; \}/,
   'and its guide line comes with it, 33px less the 10px the row moved, so it still runs under the bullet');
 assert.match(styleSheet, /\.fields \.fvalues \{ display: flex; flex-direction: column; row-gap: 0; min-width: 0; padding-left: 2px; \}/, 'the rows keep their gutter, so the expand caret is not drawn over the label');
