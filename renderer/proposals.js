@@ -10,6 +10,23 @@ const PROPOSALS_PAGE = 'orbital:proposals';
 extra.set(PROPOSALS_PAGE, { id: PROPOSALS_PAGE, text: 'Proposals', title: 'Proposals', kind: 'document', icon: 'proposals', editable: false, hasChildren: true, appPage: true });
 
 const proposalCount = () => (kids.get(PROPOSALS_PAGE) || []).length;
+
+// The page's sections (issue #104), in this order, each only when it has rows: proposals from meetings you were in,
+// from meetings you see through a space you are in, and from chats that belong to no meeting. main files each row
+// (proposal.group). Folding one is remembered like a view's sections, under this page's own key, so it does not
+// depend on which view is behind the page.
+const PROPOSAL_GROUPS = ['From meetings', 'From spaces', 'From chats'];
+const proposalFoldKey = (id) => PROPOSALS_PAGE + '\n' + id;
+function proposalGroups(list) {
+  return PROPOSAL_GROUPS.map((title) => ({ id: title, title, nodes: list.filter((n) => n.proposal && n.proposal.group === title) }))
+    .filter((g) => g.nodes.length)
+    .map((g) => ({ ...g, collapsed: collapsedGroups.has(proposalFoldKey(g.id)), toggle: () => toggleProposalGroup(g.id) }));
+}
+function toggleProposalGroup(id) {
+  if (!collapsedGroups.delete(proposalFoldKey(id))) collapsedGroups.add(proposalFoldKey(id));
+  setPref('collapsedGroups', [...collapsedGroups]);
+  render(true);
+}
 // Read once the connection is up, so Cmd+K can say how many are waiting before the page is opened, and again every time
 // the page is arrived at (renderer/edit.js noteNavigation): Tana is where proposals come from, and nothing pushes them.
 let proposalsConnected = false;

@@ -4426,37 +4426,53 @@ async function main() {
     assert.deepEqual(deleted, [draft.id], 'and its draft is deleted, the document it would have changed is not');
     assert.equal(proposals.entries(chat).length, 5, 'the other proposals stay');
 
-    // The page: the graph's pending proposals as the proposed documents, and an answered one kept off it until the graph agrees.
+    // The page: the graph's pending proposals as the proposed documents, filed by where they came from (issue #104), and an
+    // answered one kept off it until the graph agrees.
     const backend = mainHelpers();
-    const meeting = 'tana:event:' + ulid(), gone = 'tana:text:' + ulid(), meetingChat = 'tana:chat:' + ulid();
+    const myMeeting = 'tana:event:' + ulid(), meeting = 'tana:event:' + ulid(), gone = 'tana:text:' + ulid();
+    const meetingChat = 'tana:chat:' + ulid(), subChat = 'tana:chat:' + ulid(), looseChat = 'tana:chat:' + ulid();
     let listed = [
       { proposedUri: odd.id, operation: 'create', status: 'pending', proposedAt: '1788262392413' },
       { proposedUri: draft.id, baseUri: base.id, operation: 'update', status: 'pending', proposedAt: '1788262392414' },
       { proposedUri: note.id, operation: 'create', status: 'approved', proposedAt: '1788262392412' },
       { proposedUri: typed.id, operation: 'create', status: 'pending', proposedAt: '1788262392411' },
     ];
-    const graph = { listNodes: async (q) => (q.nodeTypes ? { nodes: [
-      { id: chat.id, title: 'Planning chat', chat: { proposals: listed } },
-      { id: meetingChat, title: '', ownerUri: meeting, chat: { proposals: [{ proposedUri: gone, operation: 'create', status: 'pending', proposedAt: '1788262392500' }] } },
-    ] } : { nodes: [...(q.nodeIds || [])].filter((id) => docs.has(id) || id === meeting).map((id) => (id === meeting ? { id, title: 'Studio Offsite ' }
-      : { id, title: docs.get(id).data.get('title'), entityType: docs.get(id).data.get('entityTypeUri'), ownerUri: docs.get(id).data.get('ownerUri') })) }) };
+    const pendingIn = (proposedUri, at) => ({ proposals: [{ proposedUri, operation: 'create', status: 'pending', proposedAt: at }] });
+    const chats = () => [
+      { id: chat.id, title: 'Planning chat', ownerUri: myMeeting, chat: { proposals: listed } }, // a meeting you were in
+      { id: meetingChat, title: '', ownerUri: meeting, chat: pendingIn(gone, '1788262392500') }, // one you see through its space
+      { id: subChat, title: 'extractOutcome', ownerUri: meetingChat, chat: pendingIn(pictured.id, '1788262392450') }, // a subagent of that meeting's chat
+      { id: looseChat, title: 'Routine', chat: pendingIn(note.id, '1788262392300') }, // no meeting at all
+    ];
+    const known = new Map([[myMeeting, { id: myMeeting, title: 'Weekly' }], [meeting, { id: meeting, title: 'Studio Offsite ' }], [meetingChat, { id: meetingChat, title: '', ownerUri: meeting }]]);
+    const node = (id) => known.get(id) || (docs.has(id) ? { id, title: docs.get(id).data.get('title'), entityType: docs.get(id).data.get('entityTypeUri'), ownerUri: docs.get(id).data.get('ownerUri') } : null);
+    const participantQueries = [];
+    const graph = { listNodes: async (q) => {
+      if (q.nodeTypes) return { nodes: chats() };
+      if (q.hasParticipantUris) { participantQueries.push(q); return { nodes: q.hasParticipantUris.includes(ME) ? [...q.nodeIds].filter((id) => id === myMeeting).map(node) : [] }; }
+      return { nodes: [...(q.nodeIds || [])].map(node).filter(Boolean) };
+    } };
     backend.testRuntime({ me: { userUri: ME }, client: { graph, sync } });
     const page = () => backend.handlers.get('outline:children')(null, 'orbital:proposals');
     const rows = await page();
-    assert.deepEqual(rows.map((r) => [r.id, r.text, r.editable, r.proposal.approvable, r.proposal.note]), [
-      [gone, 'Missing document', false, false, 'Proposed in Studio Offsite · its document is gone'],
-      [draft.id, 'Draft of base', false, false, 'Change proposed in Planning chat · approve in Tana'],
-      [odd.id, 'Odd intent', false, true, 'Proposed in Planning chat'],
-      [typed.id, 'Typed elsewhere', false, false, 'Proposed in Planning chat · approve in Tana'],
-    ], 'pending only, newest first, read-only, named by the chat or the meeting it sits in, approvable where Orbital can');
-    assert.match(rows[3].proposal.reason, /type's space/, 'and the reason says why not');
+    assert.deepEqual(rows.map((r) => [r.id, r.text, r.editable, r.proposal.approvable, r.proposal.group, r.proposal.note]), [
+      [gone, 'Missing document', false, false, 'From spaces', 'Proposed in Studio Offsite · its document is gone'],
+      [pictured.id, 'With a picture', false, true, 'From spaces', 'Proposed in extractOutcome'],
+      [draft.id, 'Draft of base', false, false, 'From meetings', 'Change proposed in Planning chat · approve in Tana'],
+      [odd.id, 'Odd intent', false, true, 'From meetings', 'Proposed in Planning chat'],
+      [typed.id, 'Typed elsewhere', false, false, 'From meetings', 'Proposed in Planning chat · approve in Tana'],
+      [note.id, 'Proposed note', false, true, 'From chats', 'Proposed in Routine'],
+    ], 'pending only, newest first, read-only, named by the chat or its meeting, filed by whether you were in that meeting, approvable where Orbital can');
+    assert.deepEqual(participantQueries.map((q) => [[...q.nodeIds].sort(), [...q.hasParticipantUris]]), [[[myMeeting, meeting].sort(), [ME]]],
+      'whether you were in a meeting is one graph question for all of them, a subagent chat answering for its parent\'s meeting');
+    assert.match(rows.find((r) => r.id === typed.id).proposal.reason, /type's space/, 'and the reason says why not');
     await assert.rejects(backend.handlers.get('proposals:answer')(null, 'tana:text:' + ulid(), odd.id, true), /Not a proposal/);
     await assert.rejects(backend.handlers.get('proposals:answer')(null, chat.id, odd.id, true), /only Tana can run/, 'the page hands the refusal back');
-    await backend.handlers.get('proposals:answer')(null, meetingChat, gone, false).catch(() => {});
     await backend.handlers.get('proposals:answer')(null, chat.id, odd.id, false);
-    assert.deepEqual((await page()).map((r) => r.id), [gone, draft.id, typed.id], 'a rejected proposal stays off the page while the graph still lists it');
+    const ids = [gone, pictured.id, draft.id, typed.id, note.id];
+    assert.deepEqual((await page()).map((r) => r.id), ids, 'a rejected proposal stays off the page while the graph still lists it');
     listed = listed.filter((p) => p.proposedUri !== odd.id);
-    assert.deepEqual((await page()).map((r) => r.id), [gone, draft.id, typed.id]);
+    assert.deepEqual((await page()).map((r) => r.id), ids);
     console.log('ok  proposals: the graph lists pending ones, approve and reject write what Tana writes, and what Tana would do more for is refused untouched');
   }
 

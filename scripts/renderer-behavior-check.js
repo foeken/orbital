@@ -7774,10 +7774,18 @@ function runProposalsCheck() {
     const selKeys = () => selected, focused = () => null;
     ${functionSource("answerProposal")}
     ${functionSource("proposalRows")}
+    const collapsedGroups = new Set(), prefs = [], render = () => {};
+    const setPref = (key, value) => prefs.push([key, value]);
+    ${sourceLine('const PROPOSAL_GROUPS')}
+    ${sourceLine('const proposalFoldKey')}
+    ${functionSource("proposalGroups")}
+    ${functionSource("toggleProposalGroup")}
+    const filed = (id, group) => ({ id, proposal: { group } });
+    const sections = (list) => proposalGroups(list).map((g) => [g.title, g.nodes.map((n) => n.id), g.collapsed]);
     const settle = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
     const page = () => (kids.get(PROPOSALS_PAGE) || []).map((n) => n.id);
     ({
-      calls, errors, page,
+      calls, errors, page, prefs, filed, sections, fold: (title) => proposalGroups([filed('x', title)])[0].toggle(),
       answer: async (i, approve, why) => { refuse = why || null; answerProposal(rows[i], approve); const shown = page(); await settle(); return shown; },
       palette: (keys, at) => { selected = keys; palReturn = at ? { key: at } : null; return proposalRows().map((r) => [r.group, r.label, !!r.disabled]); },
       press: async (keys, label) => { refuse = null; selected = keys; proposalRows().find((r) => r.label === label).run(); await settle(); },
@@ -7801,7 +7809,16 @@ function runProposalsCheck() {
     const before = api.calls.length;
     await api.press(['p0', 'p2'], 'Approve proposal');
     assert.deepEqual(plain(api.calls.slice(before)), [['approve', 'p0']], 'approving a selection sends only the ones Orbital can approve');
-    console.log('ok  proposals: approve and reject leave the page at once, a refusal reads it back with the reason, Cmd+K approves only what Orbital can');
+    // The page's sections (issue #104): fixed order, empty ones left out, folding kept under the page's own key.
+    const list = [api.filed('s1', 'From spaces'), api.filed('m1', 'From meetings'), api.filed('s2', 'From spaces')];
+    assert.deepEqual(plain(api.sections(list)), [['From meetings', ['m1'], false], ['From spaces', ['s1', 's2'], false]],
+      'From meetings comes first, each section keeps the page\'s order, and an empty From chats is not drawn');
+    api.fold('From spaces');
+    assert.deepEqual(plain(api.sections(list).map((g) => g[2])), [false, true], 'a section folds on its own');
+    assert.deepEqual(plain(api.prefs.at(-1)), ['collapsedGroups', ['orbital:proposals\nFrom spaces']], 'and is remembered under the Proposals page, whichever view is behind it');
+    api.fold('From spaces');
+    assert.deepEqual(plain(api.sections(list).map((g) => g[2])), [false, false]);
+    console.log('ok  proposals: approve and reject leave the page at once, a refusal reads it back with the reason, Cmd+K approves only what Orbital can, sections fold under the page');
   })();
 }
 checks.push(runProposalsCheck);

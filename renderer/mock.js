@@ -155,10 +155,11 @@ function mockApi() {
   // Tana's AI proposals as main/proposals.js hands them over: the proposed documents, read-only, each carrying where it
   // was proposed. Approving or rejecting one takes it off the page; the update is Tana's to approve, as in main.
   const PROPOSALS = 'orbital:proposals';
-  const proposed = (d, hours, operation, where) => ({ ...d, id: 'mockproposal' + (++seq), editable: false, proposal: { chatUri: 'tana:chat:mock', proposedUri: 'mockproposal' + seq, operation,
+  const proposed = (d, hours, operation, where, group) => ({ ...d, id: 'mockproposal' + (++seq), editable: false, proposal: { chatUri: 'tana:chat:mock', proposedUri: 'mockproposal' + seq, operation, group,
     approvable: operation === 'create', reason: operation === 'create' ? null : 'Tana merges this change itself: approve it in Tana',
     note: (operation === 'create' ? 'Proposed' : 'Change proposed') + ' in ' + where + (operation === 'create' ? '' : ' · approve in Tana'), proposedAt: new Date(Date.now() - hours * 36e5).toISOString() } });
-  content[PROPOSALS] = [proposed(docs[2], 1, 'create', meetings[1].text), proposed(docs[3], 5, 'create', 'Private AI chat'), proposed(spaceDocs[0], 30, 'update', 'Private AI chat')];
+  content[PROPOSALS] = [proposed(docs[2], 1, 'create', meetings[1].text, 'From meetings'), proposed(docs[3], 5, 'create', meetings[3].text, 'From spaces'),
+    proposed(spaceDocs[0], 30, 'update', 'Private AI chat', 'From meetings')];
   // an image block (not editable; api.image resolves its uri to a data URL): a 2x2 PNG scaled by width/height
   content.mockdoc0.splice(2, 0, { id: 'img' + (++seq), kind: 'block', type: 'image', image: { uri: 'tana:image:mock', alt: 'Mock image', width: 160, height: 100 }, hasChildren: false, children: [] });
   // inline references (embeds): read-only nodes rendering the target's title/state, like sdk/content.js (editable: false) with main resolving reference.node

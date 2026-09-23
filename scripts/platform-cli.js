@@ -741,7 +741,7 @@ commands.proposals = async () => {
     require('../db').open(path.join(app.getPath('temp'), 'tana-cli-proposals.sqlite'));
     require('../main').testRuntime({ session, client, me, win: null });
     const started = Date.now(), rows = await require('../main/proposals').rows();
-    for (const r of rows) out([r.proposal.approvable ? 'approve' : 'in Tana', r.icon, r.id, JSON.stringify(r.text), r.proposal.note].join('\t'));
+    for (const r of rows) out([r.proposal.group, r.proposal.approvable ? 'approve' : 'in Tana', r.icon, r.id, JSON.stringify(r.text), r.proposal.note].join('\t'));
     return out(rows.length + ' rows in ' + (Date.now() - started) + ' ms');
   }
   const proposals = require('../sdk/proposals');
