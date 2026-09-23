@@ -1,7 +1,7 @@
 'use strict';
 // Typed fields ("attributes"): each value is a ProseMirror-style tree stored in the document's own data map under
 // "<type uri>?attribute=<key>", exactly like 'content' but rooted per field. Field names live in the type
-// document's template.attributes ([{ key, title, type?, cardinality?, to? }]). Verified on a real typed node.
+// document's template.attributes ([{ key, title, type?, cardinality?, to?, options? }]). Verified on a real typed node.
 const { LoroMap, LoroList, LoroMovableList } = require('loro-crdt');
 const content = require('./content');
 
@@ -68,6 +68,124 @@ function templateTitles(typeDocument) {
   for (const def of defs.attributes || []) if (def && def.key) out[def.key] = def.title || def.key;
   return out;
 }
+// One field's definition as the type holds it — { key, title, type?, cardinality?, to?: [{ uri, title? }],
+// options?: [{ label }] } — or null. `attribute` is the template key (the part after "?attribute=").
+function fieldDefinition(typeDocument, attribute) {
+  const template = typeDocument.data.get('template');
+  const defs = (template && typeof template.toJSON === 'function' ? template.toJSON() : template) || {};
+  return (defs.attributes || []).find((def) => def && def.key === attribute) || null;
+}
+
+// ---- option labels and link targets, by Tana's rules (shared-*.js of 2026-09-22: ol/sl/cl/due, Ep/Ube) ----
+// A label is trimmed, and must then be non-empty, one line and at most 60 characters; labels that differ only in
+// case are one option, the first spelling kept. `labels` are strings or { label }.
+const labelKey = (label) => label.trim().toLowerCase();
+function optionLabels(labels) {
+  if (!Array.isArray(labels)) throw new Error('options must be a list of labels');
+  const seen = new Set();
+  return labels.map((o) => (o && typeof o === 'object' ? o.label : o)).filter((label) => {
+    if (typeof label !== 'string') throw new Error('option label must be a string');
+    const t = label.trim();
+    const problem = !t ? 'empty' : /[\n\r]/.test(t) ? 'contains-separator' : t.length > 60 ? 'too-long' : null;
+    if (problem) throw new Error(`Invalid option label (${problem}): ${JSON.stringify(label)}`);
+    if (seen.has(labelKey(t))) return false;
+    seen.add(labelKey(t));
+    return true;
+  }).map((label) => label.trim());
+}
+// Link targets are types: uri strings or { uri, title? }, one entry per type (Tana's addLinkTarget skips a repeat).
+const TYPE_URI = /^tana:type:[0-9a-z]{26}$/;
+function linkTargets(targets) {
+  if (!Array.isArray(targets)) throw new Error('link targets must be a list of type uris');
+  const out = [];
+  for (const t of targets) {
+    const target = typeof t === 'string' ? { uri: t } : t && typeof t === 'object' ? { uri: t.uri, ...(t.title ? { title: String(t.title) } : {}) } : {};
+    if (!TYPE_URI.test(target.uri || '')) throw new Error('link target must be a type uri: ' + JSON.stringify(t));
+    if (!out.some((o) => o.uri === target.uri)) out.push(target);
+  }
+  return out;
+}
+// A list of maps written again from the items — how `options` and `to` are held (Tana's schema: Fc.list, a LoroList).
+function writeList(def, name, items) {
+  let list = def.get(name);
+  if (!list || typeof list.insertContainer !== 'function') list = def.setContainer(name, new LoroList());
+  if (JSON.stringify(list.toJSON()) === JSON.stringify(items)) return; // unchanged: no ops
+  if (list.length) list.delete(0, list.length);
+  for (const item of items) { const map = list.insertContainer(list.length, new LoroMap()); for (const [k, v] of Object.entries(item)) map.set(k, v); }
+}
+// The map of one field definition in a type document, for the edits below.
+function definitionMap(loro, attribute) {
+  const template = loro.getMap('data').get('template');
+  const attrs = template && typeof template.get === 'function' ? template.get('attributes') : null;
+  for (let i = 0; attrs && i < attrs.length; i++) { const def = attrs.get(i); if (def && typeof def.get === 'function' && def.get('key') === attribute) return def; }
+  throw new Error('no field ' + attribute + ' on this type');
+}
+// Replace an options field's choices (Tana's configureAsOptions, which every add, rename, remove and reorder of an
+// option comes down to). Values already written keep their words: a renamed or removed label is simply no longer
+// offered, as in Tana. Returns the labels written.
+function setFieldOptions(typeDocument, attribute, labels) {
+  const clean = optionLabels(labels);
+  typeDocument.transact((loro) => {
+    const def = definitionMap(loro, attribute);
+    if (def.get('type') !== 'options') throw new Error('field ' + attribute + ' is not an options field');
+    writeList(def, 'options', clean.map((label) => ({ label })));
+  });
+  return clean;
+}
+// Replace a link field's target types (Tana's configureAsLink with targets); [] lets it link to anything again.
+function setFieldTargets(typeDocument, attribute, targets) {
+  const clean = linkTargets(targets);
+  typeDocument.transact((loro) => {
+    const def = definitionMap(loro, attribute);
+    if (def.get('type') !== 'link') throw new Error('field ' + attribute + ' is not a link field');
+    writeList(def, 'to', clean);
+  });
+  return clean;
+}
+
+// The checks Tana makes of a value against its field's definition, before it is written. Takes and returns the
+// lines setFieldText writes ({ words, block }); throws with Tana's own wording.
+// - options (XL/dl/fl): every non-empty line is a label, case-insensitive repeats dropped; each must be one the
+//   field declares, and is written as declared, one bullet each (Nye's layout); more than one needs cardinality
+//   multiple. A field with no options declared takes nothing.
+// - link and member (Ove.getValidationErrors): a line holds one reference and nothing else, and more than one
+//   reference needs cardinality multiple (Tana's rule is "not single"; unset allows several).
+// - link with `to` (validateTargetTypes): a reference whose type `typeOf(uri)` knows and the field does not list is
+//   refused; one whose type is unknown passes, as in Tana. typeOf is the caller's, since it takes a lookup.
+const wordsText = (words) => (typeof words === 'string' ? words : (words || []).map((s) => ('text' in s ? s.text : (s.mention && s.mention.label) || '')).join(''));
+function checkValue(field, lines, typeOf) {
+  if (field.type === 'options') {
+    const declared = [];
+    for (const o of field.options || []) if (o && typeof o.label === 'string' && !declared.some((d) => labelKey(d) === labelKey(o.label))) declared.push(o.label);
+    const given = [];
+    for (const line of lines) for (const l of wordsText(line.words).split('\n')) if (l.trim() && !given.some((g) => labelKey(g) === labelKey(l))) given.push(l.trim());
+    if (!given.length) return [{ words: '', block: 'paragraph' }]; // an empty value is one empty paragraph, as Nye writes it
+    const title = field.title || field.key;
+    if (!declared.length) throw new Error(`Field "${title}" is an options field with no values defined yet.`);
+    const undeclared = given.filter((g) => !declared.some((d) => labelKey(d) === labelKey(g)));
+    if (undeclared.length) throw new Error(`Field "${title}" only accepts its declared values. Rejected: ${undeclared.map((e) => `"${e}"`).join(', ')}. Available: ${declared.map((e) => `"${e}"`).join(' | ')}.`);
+    if (field.cardinality !== 'multiple' && given.length > 1) throw new Error(`Field "${title}" holds a single value, but ${given.length} were given: ${given.map((e) => `"${e}"`).join(', ')}.`);
+    return given.map((g) => ({ words: declared.find((d) => labelKey(d) === labelKey(g)), block: 'bullet' }));
+  }
+  if (field.type === 'link' || field.type === 'member') {
+    const links = [];
+    for (const line of lines) {
+      const segs = (typeof line.words === 'string' ? [{ text: line.words }] : line.words || []).filter((s) => !('text' in s) || s.text !== '');
+      if (!segs.length) continue;
+      if (segs.length > 1 || !segs[0].mention || !segs[0].mention.uri) throw new Error('Contains non-link content');
+      links.push(segs[0].mention);
+    }
+    if (field.cardinality === 'single' && links.length > 1) throw new Error(`Multiple values not allowed (found ${links.length})`);
+    const targets = field.type === 'link' ? (field.to || []).map((t) => t.uri).filter(Boolean) : [];
+    if (targets.length && typeOf) {
+      for (const link of links) {
+        const type = typeOf(link.uri);
+        if (type && !targets.includes(type)) throw new Error(`"${link.label}" has wrong type (expected one of: ${targets.join(', ')})`);
+      }
+    }
+  }
+  return lines;
+}
 
 // The blocks of a value that carry words, in reading order, as Loro containers — the write side of valueLines.
 // `kind` is the line kind valueLines reports for it: 'bullet' inside a list, else the block's own name.
@@ -123,17 +241,21 @@ function rebuild(children, lines) {
 // Creates the doc/paragraph shell when the field is empty. Mirrors the observed layout:
 // { nodeName: 'doc', attributes: {}, children: [{ nodeName: 'paragraph', attributes: { blockId }, children: [text | mention] }] }
 // The runs are written by the same code a line's are (sdk/content.js), so a mention is the map Tana expects.
-function setFieldText(document, key, text) {
+// With { field } — the definition, as fieldDefinition gives it — the value is checked the way Tana checks it first
+// (checkValue above), and nothing is written when it fails; `typeOf(uri)` answers a linked document's type.
+function setFieldText(document, key, text, { field, typeOf } = {}) {
   if (!key || typeof key !== 'string') throw new Error('field key required');
   if (typeof text !== 'string' && !Array.isArray(text)) throw new Error('field text must be a string or segments');
   // One value: a string, one line's segments, or an array of lines — each a string, segments, or { segments, block }.
   const isLine = (line) => typeof line === 'string' || Array.isArray(line) || (line && typeof line === 'object' && !('text' in line) && !('mention' in line));
   const isLines = Array.isArray(text) && text.length > 0 && text.every(isLine);
-  const lines = (isLines ? text : [text]).map((line) => {
+  let given = (isLines ? text : [text]).map((line) => {
     const words = line && !Array.isArray(line) && typeof line === 'object' && 'segments' in line ? line.segments : line;
     const block = line && !Array.isArray(line) && typeof line === 'object' && line.block ? line.block : 'paragraph';
-    return { ...content.inlineGroups(words === undefined || words === null ? '' : words), block };
+    return { words: words === undefined || words === null ? '' : words, block };
   });
+  if (field) given = checkValue(field, given, typeOf);
+  const lines = given.map(({ words, block }) => ({ ...content.inlineGroups(words), block }));
   content.styleDoc(document);
   document.transact((loro) => {
     const data = loro.getMap('data');
@@ -222,12 +344,17 @@ function fieldView(document, key, { create = false } = {}) {
 // Define a field on a type: one more entry in the type document's template.attributes, in the layout a real type
 // carries (a MovableList of maps: { key, title, type?, cardinality?, to?, options? }). Tana's schema allows the types
 // link, date, member and options; a plain text field has no type at all. Keys are Tana's own 8-character ids
-// (content.newId). Returns the key.
+// (content.newId). `options` (labels, by optionLabels' rules) belong to an options field, which always gets the list,
+// empty or not, as Tana's setAttributeType writes it; `to` (type uris or { uri, title }) to a link field. Returns the key.
 const FIELD_TYPES = ['link', 'date', 'member', 'options'];
-function addField(typeDocument, { title, type, cardinality } = {}) {
+function addField(typeDocument, { title, type, cardinality, options, to } = {}) {
   if (typeof title !== 'string' || !title.trim()) throw new Error('field title required');
   if (type !== undefined && !FIELD_TYPES.includes(type)) throw new Error('field type must be one of ' + FIELD_TYPES.join(', '));
   if (cardinality !== undefined && cardinality !== 'single' && cardinality !== 'multiple') throw new Error('cardinality must be single or multiple');
+  if (options !== undefined && type !== 'options') throw new Error(`field "${title.trim()}" has type "${type}", which takes no options`);
+  if (to !== undefined && type !== 'link') throw new Error(`field "${title.trim()}" has type "${type}", which takes no link targets`);
+  const labels = type === 'options' ? optionLabels(options || []) : null;
+  const targets = to !== undefined ? linkTargets(to) : null;
   const key = content.newId();
   typeDocument.transact((loro) => {
     const data = loro.getMap('data');
@@ -239,8 +366,10 @@ function addField(typeDocument, { title, type, cardinality } = {}) {
     def.set('key', key); def.set('title', title.trim());
     if (type) def.set('type', type);
     if (cardinality) def.set('cardinality', cardinality);
+    if (labels) writeList(def, 'options', labels.map((label) => ({ label })));
+    if (targets) writeList(def, 'to', targets);
   });
   return key;
 }
 
-module.exports = { readFields, templateTitles, setFieldText, parseKey, fieldView, addField, FIELD_ID };
+module.exports = { readFields, templateTitles, fieldDefinition, setFieldText, parseKey, fieldView, addField, setFieldOptions, setFieldTargets, FIELD_ID };
