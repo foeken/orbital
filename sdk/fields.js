@@ -4,6 +4,7 @@
 // document's template.attributes ([{ key, title, type?, cardinality?, to?, options? }]). Verified on a real typed node.
 const { LoroMap, LoroList, LoroMovableList } = require('loro-crdt');
 const content = require('./content');
+const { isDateUri } = require('./dates');
 
 const parseKey = (key) => { const [typeUri, attribute] = String(key).split('?attribute='); return { typeUri, attribute }; };
 
@@ -167,7 +168,8 @@ function checkValue(field, lines, typeOf) {
     if (field.cardinality !== 'multiple' && given.length > 1) throw new Error(`Field "${title}" holds a single value, but ${given.length} were given: ${given.map((e) => `"${e}"`).join(', ')}.`);
     return given.map((g) => ({ words: declared.find((d) => labelKey(d) === labelKey(g)), block: 'bullet' }));
   }
-  if (field.type === 'link' || field.type === 'member') {
+  // A date field is held the way a link field is (Tana edits it with the same link ops): one mention per line, of a date.
+  if (field.type === 'link' || field.type === 'member' || field.type === 'date') {
     const links = [];
     for (const line of lines) {
       const segs = (typeof line.words === 'string' ? [{ text: line.words }] : line.words || []).filter((s) => !('text' in s) || s.text !== '');
@@ -176,6 +178,8 @@ function checkValue(field, lines, typeOf) {
       links.push(segs[0].mention);
     }
     if (field.cardinality === 'single' && links.length > 1) throw new Error(`Multiple values not allowed (found ${links.length})`);
+    const notDate = field.type === 'date' && links.find((link) => !isDateUri(link.uri));
+    if (notDate) throw new Error(`"${notDate.label}" is not a date`);
     const targets = field.type === 'link' ? (field.to || []).map((t) => t.uri).filter(Boolean) : [];
     if (targets.length && typeOf) {
       for (const link of links) {

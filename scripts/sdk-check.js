@@ -1529,6 +1529,45 @@ async function main() {
     assert.deepEqual(JSON.parse(JSON.stringify(unnamed.backlinks.map((g) => g.label))), ['Mentioned in'], 'a field whose title cannot be read joins the mentions rather than naming a section after a key');
     console.log('ok  backlinks: mentions and field references, grouped by field with the mentions last');
   }
+  // Date mentions (sdk/dates.js, issue #22): Tana's two date uri kinds, a mention of one in text, chat and a date
+  // field, and a day page whose backlinks include whatever mentions its date.
+  {
+    const dates = require('../sdk/dates'), fields = require('../sdk/fields'), chat = require('../sdk/chat');
+    assert.deepEqual(dates.parseDateUri('tana:plaindate:2026-09-30'), { type: 'plaindate', date: '2026-09-30' });
+    assert.deepEqual(dates.parseDateUri('tana:zoneddate:2026-09-30T14:00[Europe/Amsterdam]'), { type: 'zoneddate', date: '2026-09-30', time: '14:00', timezone: 'Europe/Amsterdam' });
+    assert.deepEqual(dates.parseDateUri('tana:zoneddate:2026-09-30[America/Argentina/Buenos_Aires]'), { type: 'zoneddate', date: '2026-09-30', timezone: 'America/Argentina/Buenos_Aires' });
+    for (const bad of ['tana:plaindate:2026-13-01', 'tana:plaindate:2026-9-30', 'tana:zoneddate:2026-09-30T14:00', 'tana:text:' + ulid(), undefined]) assert.equal(dates.parseDateUri(bad), undefined, String(bad));
+    assert.equal(dates.dateUri('2026-09-30'), 'tana:plaindate:2026-09-30');
+    assert.throws(() => dates.dateUri('30-09-2026'), /not a YYYY-MM-DD date/);
+    assert.equal(dates.dateLabel('tana:plaindate:2026-09-30'), new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric' }).format(new Date(2026, 8, 30)), 'labelled as Tana labels one');
+    const day = { label: 'Sep 30, 2026', uri: 'tana:plaindate:2026-09-30' };
+    // in text: an ordinary mention map, so it is written and read back like any other
+    const page = new Document('tana:text:' + ulid());
+    outline.insertMention(page, day);
+    const [row] = outline.readOutline(page);
+    outline.setText(page, row.id, [{ text: 'due ' }, { mention: day }]);
+    assert.deepEqual(JSON.parse(JSON.stringify(outline.readOutline(page)[0].segments)), [{ text: 'due ' }, { mention: day }], 'a date mention round-trips through setText and readOutline');
+    // in a chat: [label](uri) like a document link
+    const zoned = 'tana:zoneddate:2026-09-30T14:00[Europe/Amsterdam]';
+    assert.deepEqual(chat.segments('by [Sep 30, 2026](tana:plaindate:2026-09-30) at [2 PM](' + zoned + ')').filter((s) => s.mention), [{ mention: day }, { mention: { label: '2 PM', uri: zoned } }], 'a chat mentions dates as it mentions documents');
+    // in a date field: one date per line, held the way a link field holds its links
+    const typed = new Document('tana:text:' + ulid()), key = 'tana:type:' + ulid() + '?attribute=d4tef1ld', dateField = { key: 'd4tef1ld', title: 'Due', type: 'date', cardinality: 'single' };
+    fields.setFieldText(typed, key, [[{ mention: day }]], { field: dateField });
+    assert.deepEqual(JSON.parse(JSON.stringify(fields.readFields(typed)[0].segments)), [{ mention: day }]);
+    assert.throws(() => fields.setFieldText(typed, key, [[{ mention: { label: 'Tuxis', uri: 'tana:text:' + ulid() } }]], { field: dateField }), /"Tuxis" is not a date/);
+    assert.throws(() => fields.setFieldText(typed, key, [[{ mention: day }], [{ mention: { ...day, uri: 'tana:plaindate:2026-10-01' } }]], { field: dateField }), /Multiple values not allowed/);
+    assert.throws(() => fields.setFieldText(typed, key, 'next friday', { field: dateField }), /Contains non-link content/);
+    // a day page: the document titled with the date also lists what mentions the date
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const dayPage = 'tana:text:' + ulid(), asked = [];
+    backend.testRuntime({ me: { userUri: ME }, win: null, client: {
+      sync: { subscribe: async () => ({ data: { get: () => undefined } }) },
+      graph: { listNodes: async (p) => ({ nodes: (p.nodeIds || []).includes(dayPage) ? [{ id: dayPage, title: '2026-09-30' }] : [] }), listEdges: async (p) => { asked.push(p); return { edges: [] }; }, getOwnerChain: async () => ({ entries: [] }) },
+    } });
+    await backend.related(dayPage);
+    assert.deepEqual(JSON.parse(JSON.stringify(asked.find((p) => p.toNodeIds).toNodeIds)), [dayPage, 'tana:plaindate:2026-09-30'], 'a day page asks for its own backlinks and its date\'s');
+    console.log('ok  date mentions: plaindate/zoneddate uris, in text, chats and date fields, and a day page listing what mentions its date');
+  }
   // The sidebar kept live (main/related.js watchRelated, issue #21): the page on screen gets Tana's edge live queries —
   // its backlinks, and its meeting's pins — and an edge added or taken away tells the renderer to read related() again.
   {

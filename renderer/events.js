@@ -234,7 +234,13 @@ onRows('click', (e) => {
   const mention = e.target.closest('.mention');
   // a modifier means "select this row", handled on mousedown; and a chip on a full-reference row is that row's own
   // title rather than a link out of it, so clicking it selects the row (its bullet is the way in)
-  if (mention && !mention.closest('.fullref')) { e.preventDefault(); if (!e.metaKey && !e.shiftKey) goTo(mention.dataset.uri); return; }
+  // a date is no document: its chip opens that day's page (the date-titled node, which lists what mentions the day)
+  if (mention && !mention.closest('.fullref')) {
+    e.preventDefault();
+    const day = dayOfUri(mention.dataset.uri);
+    if (!e.metaKey && !e.shiftKey) { if (day) run(async () => goTo(await tana.todayNode(day))); else goTo(mention.dataset.uri); }
+    return;
+  }
   const url = e.target.closest('a.url, a.link'); // a bare URL and a link mark both open in the browser, like Tana; a link mark to a node is a reference
   if (url && tana.openExternal) { e.preventDefault(); if (!e.metaKey && !e.shiftKey) run(() => (url.dataset.href.startsWith('tana:') ? goToLink(url.dataset.href) : tana.openExternal(url.dataset.href))); }
 });

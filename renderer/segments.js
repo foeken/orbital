@@ -5,6 +5,12 @@
 // marks = { bold, italic, strike, code, link: href } on one text run: exactly the shape api.setText takes back.
 const WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const localDate = (offset = 0) => { const d = new Date(); d.setDate(d.getDate() + offset); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }; // local YYYY-MM-DD, N days on (1 = tomorrow)
+// A date mention (sdk/dates.js): tana:plaindate:YYYY-MM-DD, or tana:zoneddate:… with a time and a zone. dayOfUri is
+// its day, the page its chip opens; dayUri and dayLabel are what "@" writes: a plaindate, labelled the way Tana does.
+const dayOfUri = (uri) => (/^tana:(?:plaindate|zoneddate):(\d{4}-\d{2}-\d{2})/.exec(uri || '') || [])[1];
+const dayUri = (day) => 'tana:plaindate:' + day;
+const DAY_LABEL = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+const dayLabel = (day) => DAY_LABEL.format(new Date(day + 'T00:00:00'));
 // accepts segments, a plain string, or a Node
 const segsOf = (v) => (Array.isArray(v) ? v : typeof v === 'string' ? (v ? [{ text: v }] : []) : v.segments || (v.text ? [{ text: v.text }] : []));
 const plainOf = (v) => segsOf(v).map((s) => ('text' in s ? s.text : s.mention.label)).join('');
@@ -36,7 +42,7 @@ function renderSegs(el, segs) {
     // A mention of a node that is gone keeps its words — that is what was written — but takes the trash glyph, the
     // strike and the plain text colour: it is no longer somewhere to go, and the click is refused as well.
     const gone = markGone(s.mention.uri, s.mention.deleted);
-    const icon = gone ? 'trash' : s.mention.icon;
+    const icon = gone ? 'trash' : s.mention.icon || (dayOfUri(s.mention.uri) ? 'today' : undefined);
     if (gone) a.classList.add('gone');
     // dataset.icon is what readSegs carries back, so it stays the kind the target is: the trash glyph belongs to the
     // state the app found it in, not to the mention that was written.

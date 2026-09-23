@@ -611,7 +611,11 @@ function resultRows(nodes, group) {
   if (!ctx) return rows;
   const title = ctx.text || palInput.value.trim(); // "@" at a caret has no selection: what is typed becomes the new document's title
   if (!title) return rows;
-  return [{ create: true, label: 'Create “' + title + '”', hint: '⌘↩', run: () => createAndLink(ctx, title) }, ...rows];
+  // words that read as a day ("friday", "12 oct", "tomorrow": parseDay) also offer that date, first, as Tana's "@" does
+  const day = parseDay(title);
+  const date = day ? [{ date: true, icon: 'today', label: dayLabel(day), hint: day === localDate() ? 'Today' : day === localDate(1) ? 'Tomorrow' : new Date(day + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'long' }),
+    run: () => linkTo(ctx, { label: dayLabel(day), uri: dayUri(day) }) }] : [];
+  return [...date, { create: true, label: 'Create “' + title + '”', hint: '⌘↩', run: () => createAndLink(ctx, title) }, ...rows];
 }
 // The active meeting behind the Pin to meeting row. Asked once per palette open (togglePalette clears it), because a
 // lookup is a round trip and the row is rebuilt on every keystroke; a failure is kept as the reason the row shows.
@@ -884,9 +888,10 @@ function searchNow() {
     const nodes = found.map((n, i) => ({ n, i })).sort((a, b) => score.get(b.n).hits - score.get(a.n).hits || score.get(b.n).starts - score.get(a.n).starts || a.i - b.i).map(({ n }) => n);
     palRows = resultRows(nodes).map((row) => (row.node ? { ...row, match: titleHits(row.label ?? '', q) } : row));
     // Linking: a result is only the obvious choice when its title starts with what was typed. A full-text hit
-    // that merely mentions the words is not, so "Create" stays selected and Enter creates.
+    // that merely mentions the words is not, so "Create" stays selected and Enter creates. Words that read as a
+    // day are that date before anything else.
     const starts = nodes.findIndex((n) => (n.title ?? n.text ?? '').toLowerCase().startsWith(q.toLowerCase()));
-    palIndex = linkCtx ? (starts < 0 ? 0 : starts + (palRows[0] && palRows[0].create ? 1 : 0)) : 0;
+    palIndex = linkCtx && starts >= 0 && !(palRows[0] && palRows[0].date) ? starts + palRows.filter((r) => r.create).length : 0;
     palBusy = false;
     renderPalette();
     settleEnter();

@@ -43,6 +43,8 @@ The atoms (`horizontalRule`, `image`, `video`, `audio`, `embed`) are written wit
 
 Content models that constrain conversions: `paragraph` and `heading` are `inline*`, `codeBlock` is `text*` with `marks: ''` (no marks, no mentions), `blockquote` and `listItem` are `block+`, and a list holds `listItem`s only.
 
+A **date** is mentioned like a document: the same mention map, with `tanaUri` `tana:plaindate:YYYY-MM-DD` or `tana:zoneddate:YYYY-MM-DD[THH:MM][Area/City]`. Neither is a document (nothing to subscribe or list). Tana's "@" menu only ever writes a plaindate, labelled like "Sep 30, 2026" in the writer's locale even when the words named a time, and a date field holds one such mention per line, stored the way a link field's values are. The graph derives a `LINKS_TO` edge to the date uri all the same (verified live 2026-09-23, `platform-cli datemention`), so "what mentions this day" is an ordinary backlink query. Helpers: `sdk/dates.js`.
+
 Marks: `bold`, `italic`, `code`, `strike`, `underline` stored as `{}`, and `link` stored as its ProseMirror attrs `{ href, title, target }`. They live only in `LoroText.toDelta()` — `toJSON()` gives the plain string — so one text container can carry several mark runs. Tana configures Loro with `configTextStyle` built from these specs, and none declares `inclusive`, so every mark is `expand: 'none'`. Read from the web client's own bundle (`home.tana.inc/assets/shared-*.js`: the ProseMirror schema, its delta writer and the atom attribute table) on 2026-09-14.
 
 Outline mapping used by `content.js`: a bare block is a node; a `listItem` is the node of its first paragraph, its remaining blocks are children; lists are transparent.

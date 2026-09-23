@@ -103,10 +103,10 @@ async function nodePin(hubId, uri, on) {
   send('outline:changed', hubId);
   return pins.items(doc).map((p) => p.uri);
 }
-// offset 0 is today, 1 tomorrow: the document titled with that date, pinned to it.
+// offset 0 is today, 1 tomorrow, or a 'YYYY-MM-DD' day (a date mention's): the document titled with that date, pinned to it.
 async function todayNode(offset = 0) {
   if (!S.client) throw new Error(NOT_CONNECTED);
-  const date = today(offset);
+  const date = typeof offset === 'string' ? offset : today(offset);
   const { nodes = [] } = await S.client.graph.listNodes({ textQuery: date, nodeTypes: ['text'], limit: 20 }).catch(() => ({ nodes: [] }));
   const existing = nodes.find((n) => (n.title || '').trim() === date);
   if (existing) {

@@ -46,6 +46,8 @@ const withShims = (src) => {
   src = src.replace(/onRows\('([a-z]+)', /g, "outline.addEventListener('$1', ");
   // a row knows whether it is drawn in a field from the id it is addressed with (renderer/nodes.js)
   if (/\binField\(/.test(src) && !/const inField =/.test(src)) src = sourceLine('const inField') + '\n' + src;
+  // a date mention's day (renderer/segments.js): the real one, since chips and clicks both ask it
+  if (/\bdayOfUri\(/.test(src) && !/const dayOfUri =/.test(src)) src = sourceLine('const dayOfUri').replace('const dayOfUri =', 'globalThis.dayOfUri ??=') + '\n' + src;
   if (/\brenderFields\(/.test(src) && !/function renderFields\(|const renderFields =/.test(src)) src = 'globalThis.renderFields ??= () => {};\n' + src;
   if (/\bloadRelated\(/.test(src) && !/function loadRelated\(|const loadRelated =/.test(src)) src = 'globalThis.loadRelated ??= () => {};\n' + src;
   // Cmd+K's meeting rows and pages (renderer/meeting.js): a palette harness without that file offers none
@@ -1315,6 +1317,7 @@ async function runLinkPaletteCheck() {
     const createAndLink = () => { actions.push('create'); };
     const linkTo = () => { actions.push('link'); };
     const openResult = () => { actions.push('open'); };
+    const parseDay = () => null; // no typed day here: the date row has its own case below
     const renderPalette = () => {};
     const showError = (error) => { throw error; };
     const runRow = (row) => row.run();
@@ -1343,20 +1346,24 @@ async function runLinkPaletteCheck() {
   context.press(event(false));
   context.press(event(true));
   // "@" at a caret: no selection, so nothing to create until something is typed, and the first result is selected
+  // "@" also offers a date when the words read as a day: the real day reader and the real date helpers
+  const DAY_SRC = sourceBetween('const WEEKDAYS =', 'const PIN_DATE_GROUP') + source.match(/const localDate = [^\n]*/)[0] + '\n' + source.match(/const dayOfUri = [^\n]*\nconst dayUri = [^\n]*\nconst DAY_LABEL = [^\n]*\nconst dayLabel = [^\n]*/)[0];
   const caret = vm.runInNewContext(`
+    ${DAY_SRC}
     let linkCtx = { text: '', item: {}, segs: [], start: 3, end: 3 }, pinCtx = null;
     let palRows = [], palIndex = 0, palBusy = false, palSeq = 0, palTimer = null, palMode = 'search';
-    let searchResolve, created = null;
+    let searchResolve, created = null, linked = null;
     const palInput = { value: '' };
     const tana = { search: () => new Promise((resolve) => { searchResolve = resolve; }) };
     const asDoc = (node) => ({ ...node, text: node.text || node.title, kind: 'document' });
     const docRow = (node, hint, run) => ({ label: node.text, node, hint, run });
-    const createAndLink = (ctx, title) => { created = title; }, linkTo = () => {}, openResult = () => {};
+    const createAndLink = (ctx, title) => { created = title; }, linkTo = (ctx, mention) => { linked = mention; }, openResult = () => {};
     const renderPalette = () => {}, showError = (error) => { throw error; }, recentRows = () => [{ id: 'r', title: 'Recent' }];
     ${resultRows}
     ${functionSource('titleHits')}
     ${searchNow}
-    ({ type: (q) => { palInput.value = q; searchNow(); }, resolve: (rows) => searchResolve(rows), state: () => ({ palIndex, rows: palRows.map((row) => row.label) }), bold: () => palRows.map((row) => (row.match ? row.match.map((i) => row.label[i]).join('') : null)), create: () => { palRows[0].run(); return created; } });
+    ({ type: (q) => { palInput.value = q; searchNow(); }, resolve: (rows) => searchResolve(rows), state: () => ({ palIndex, rows: palRows.map((row) => row.label) }), bold: () => palRows.map((row) => (row.match ? row.match.map((i) => row.label[i]).join('') : null)), create: () => { palRows[0].run(); return created; },
+      pick: () => { palRows[palIndex].run(); return linked; }, tomorrow: () => ({ label: dayLabel(localDate(1)), uri: dayUri(localDate(1)) }) });
   `);
   // Search hits: the titles holding the most typed words lead, whatever order Tana answered in, and only those words are bold
   caret.type('try 1');
@@ -1370,6 +1377,11 @@ async function runLinkPaletteCheck() {
   caret.type('Dan'); caret.resolve([{ id: 'x', title: 'Dana Brooks' }]); await Promise.resolve(); await Promise.resolve();
   assert.deepEqual(plain(caret.state()), { palIndex: 1, rows: ['Create “Dan”', 'Dana Brooks'] }, 'typing offers to create what was typed and still selects the matching result');
   assert.equal(caret.create(), 'Dan', 'and Create uses the typed title');
+  caret.type('tomorrow'); caret.resolve([{ id: 'p', title: 'Tomorrow plan' }]); await Promise.resolve(); await Promise.resolve();
+  const tomorrow = plain(caret.tomorrow());
+  assert.deepEqual(plain(caret.state()), { palIndex: 0, rows: [tomorrow.label, 'Create “tomorrow”', 'Tomorrow plan'] }, 'a typed day is offered first, and selected over a title that starts with the word');
+  assert.deepEqual(plain(caret.pick()), tomorrow, 'Enter links the day as Tana writes it: a tana:plaindate: mention with its short label');
+  assert.match(tomorrow.uri, /^tana:plaindate:\d{4}-\d{2}-\d{2}$/);
   assert.deepEqual(plain(context.state().actions), ['link', 'create'], 'Enter links the selected result and Cmd+Enter explicitly creates');
   // Enter pressed while the search is still out (the first Enter right after "@") is not dropped: the choice is
   // made the moment the rows land, with the result that matches, or Create when nothing does

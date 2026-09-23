@@ -1,6 +1,7 @@
 'use strict';
 const fields = require('../sdk/fields');
 const pins = require('../sdk/pins');
+const { dateUri, isDateUri } = require('../sdk/dates');
 const { openEdgeQuery, EDGE_TYPES } = require('../sdk/livequery');
 const { completedInWindow, filterToSearchQuery, searchQueryParams, validViewFilter } = require('../sdk/query');
 const { DOC_URI, LIVE_ROWS, NOT_CONNECTED, PIN_HUBS, PLAIN_KINDS, S, idKind, isSpace, send, summaryCache, typeAttrTitles, typeTitles } = require('./state');
@@ -222,6 +223,12 @@ async function historyOf(id, node) {
 // field groups first and "Mentioned in" last, which is the order kept here. A field whose title cannot be read is
 // not guessed at: that edge joins the mentions rather than inventing a section name.
 const MENTIONED_IN = 'Mentioned in';
+// A day page — the document todayNode keeps for a date, titled with it — answers for its date as well: whatever
+// mentions that day (tana:plaindate:, sdk/dates.js) is listed with its own backlinks, the way Tana's day view lists it.
+function backlinkUris(id, node) {
+  const title = ((node && node.title) || '').trim();
+  return isDateUri('tana:plaindate:' + title) ? [id, dateUri(title)] : [id];
+}
 async function backlinkLabel(attributeUri) {
   const { typeUri, attribute } = fields.parseKey(attributeUri || '');
   if (!attribute || !typeUri) return MENTIONED_IN;
@@ -261,7 +268,7 @@ async function related(id) {
   // whatever mentions the meeting. A mention is an incoming LINKS_TO edge (verified read-only on a real node: one per
   // mentioning document, carrying the label and the block ids); a field reference is an incoming ATTRIBUTE_LINKS_TO
   // edge, the pair Tana's own client names "@ mentions and inline references" and "field-level references".
-  const mentions = await S.client.graph.listEdges({ toNodeIds: [id], edgeTypes: ['EDGE_TYPE_LINKS_TO', 'EDGE_TYPE_ATTRIBUTE_LINKS_TO'] }).catch(() => ({ edges: [] }));
+  const mentions = await S.client.graph.listEdges({ toNodeIds: backlinkUris(id, self0), edgeTypes: ['EDGE_TYPE_LINKS_TO', 'EDGE_TYPE_ATTRIBUTE_LINKS_TO'] }).catch(() => ({ edges: [] }));
   const mentionEdges = (mentions.edges || []).filter((e) => e.fromNodeId && e.fromNodeId !== id);
   const mentionIds = [...new Set(mentionEdges.map((e) => e.fromNodeId))];
   // HAS_PIN is derived server-side from the hub's own pinnedItems, so read that list too: a pin this app just wrote
@@ -321,9 +328,11 @@ function watchRelated(id) {
   const w = watching = { id, client: S.client };
   const moved = ({ added, removed, initial }) => { if (!initial && (added.length || removed.length) && watching === w) send('related:changed', id); };
   const open = (query, label) => openEdgeQuery(w.client.sync, query, { label }).then((h) => { h.on('rows', moved); return h; });
-  const backlinks = open({ object: { uris: [id] }, predicate: { edgeTypes: [EDGE_TYPES.LINKS_TO, EDGE_TYPES.ATTRIBUTE_LINKS_TO] } }, 'Orbital sidebar backlinks');
-  const pinned = w.client.graph.listNodes({ nodeIds: [id], limit: 1 }).then(({ nodes = [] }) => {
-    const hub = hubOf(id, nodes[0]);
+  const self = w.client.graph.listNodes({ nodeIds: [id], limit: 1 }).then(({ nodes = [] }) => nodes[0]);
+  const openBacklinks = (node) => open({ object: { uris: backlinkUris(id, node) }, predicate: { edgeTypes: [EDGE_TYPES.LINKS_TO, EDGE_TYPES.ATTRIBUTE_LINKS_TO] } }, 'Orbital sidebar backlinks');
+  const backlinks = self.then(openBacklinks, () => openBacklinks(undefined));
+  const pinned = self.then((node) => {
+    const hub = hubOf(id, node);
     return PIN_HUBS.has(idKind(hub)) ? open({ subject: { uris: [hub] }, predicate: { edgeTypes: [EDGE_TYPES.HAS_PIN] } }, 'Orbital sidebar pins') : null;
   });
   // each half on its own: one that fails must not leave the other open and unclosable

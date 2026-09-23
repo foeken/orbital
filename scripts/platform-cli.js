@@ -487,6 +487,29 @@ commands.meetingedit = async () => {
   }
 };
 
+// datemention [--date 2099-12-31] [--settle ms]: WRITES, but only to a scratch document it creates and deletes in the
+// same run. Mentions the date in it (sdk/dates.js), then asks what mentions that date — listEdges and the edge live
+// query the sidebar keeps — and prints the outline read back, so the whole date-mention path is checked live.
+commands.datemention = async () => {
+  const me = await connect();
+  const dates = require('../sdk/dates'), { insertMention } = require('../sdk/content'), { openEdgeQuery, EDGE_TYPES } = require('../sdk/livequery');
+  await client.sync.connect();
+  const uri = dates.dateUri(flag('date', '2099-12-31')), id = 'tana:text:' + ulid();
+  const doc = await client.sync.subscribe(id, (loro) => initDocument(loro, 'Orbital scratch date mention (delete me)', me.userUri, { kind: 'doc' }));
+  try {
+    insertMention(doc, { uri, label: dates.dateLabel(uri) });
+    await new Promise((r) => setTimeout(r, Number(flag('settle', 6000))));
+    const { edges = [] } = await client.graph.listEdges({ toNodeIds: [uri], edgeTypes: ['EDGE_TYPE_LINKS_TO', 'EDGE_TYPE_ATTRIBUTE_LINKS_TO'] });
+    const live = await openEdgeQuery(client.sync, { object: { uris: [uri] }, predicate: { edgeTypes: [EDGE_TYPES.LINKS_TO, EDGE_TYPES.ATTRIBUTE_LINKS_TO] } }, { label: 'orbital probe' });
+    const initial = await new Promise((resolve) => { live.on('rows', (r) => resolve(r.added)); live.on('error', (e) => resolve('error: ' + e.message)); setTimeout(() => resolve('no answer in 15 s'), 15000); });
+    await live.close();
+    out({ id, uri, outline: readOutline(doc).map((n) => n.segments), listEdges: edges.map((e) => ({ from: e.fromNodeId, type: e.type, properties: e.properties })), liveQuery: Array.isArray(initial) ? initial.map((e) => ({ from: e.fromNode, type: e.type })) : initial });
+  } finally {
+    await client.sync.softDelete(id).catch((e) => out('delete failed: ' + e.message));
+    out('deleted ' + id);
+  }
+};
+
 // Real main-process code paths against real data, read-only: exactly what the renderer receives.
 function backend(me) {
   process.env.TANA_MAIN_TEST = '1';
@@ -889,6 +912,7 @@ const USAGE = [
   '             set-title <id> <title> |',
   '             upload <image file> <doc id> [--after <block id>] |',
   '             meetingedit   (a scratch meeting it creates, edits and deletes; the server puts it in your calendar meanwhile) |',
+  '             datemention [--date YYYY-MM-DD]   (a scratch document mentioning the date, read back and deleted) |',
   '             addfield <type uri> <title> [--type member|date|link|options] [--options "A|B"] [--to <type uri>,…] [--multiple] |',
   '             set-state <id> <proposed|open|closed|not_now> | pin <id> <sidebar|today> | unpin <id> <sidebar|today> |',
   '             pinto <event|space id> <id> | unpinfrom <event|space id> <id> | settype <id> <tana:type:...|none> |',
