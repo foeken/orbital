@@ -178,12 +178,13 @@ layer and no chat row is ever editable (`Node.editable === false` throughout).
 | `[label](tana:…)` in the text | `segments: [{ mention: { label, uri } }]` — already rendered as a clickable link that zooms |
 | `attachmentUris` | `type: 'reference'` rows (`reference: { uri }`), which `outlineWithReferences` already resolves to a title/icon card |
 | `proposals` | `reference` rows to `proposedUri` (or `baseUri` for an update) with a chip: approved / awaiting approval |
-| `toolCalls` | one collapsed child row per AI message, "Thought for Ns" from `completedAt - sentAt`; expanding lists `name` + `status`; `subagentChatUri` becomes a `reference` row to that chat |
+| `toolCalls` | one progress row per AI message: "Thinking...", "Waiting for your input", or "Thought for Ns" from `completedAt - sentAt`; `subagentChatUri` becomes a `reference` row to that chat |
+| status is cancelled, error, or limit_exceeded | a read-only status row; `errorMessage` follows the "Error" label |
+| pending `questionsData` while `askUserQuestion` awaits input | one read-only heading per question, with its options as child rows |
 | `hiddenFromChat: true` | skip |
 | "accepted N changes" | a muted status row plus its `attachmentUris` references; every other status update is hidden, as are human messages with `isAIInterviewRelay` |
 
-The laziest version that is already useful: author row + markdown-block child rows + mention segments + reference
-rows for attachments and proposals, with a single "Thought for Ns" summary row instead of tool-call detail.
+Chat status and pending-question rows use the same read-only outline model as the rest of the conversation.
 
 Main process work needed:
 
