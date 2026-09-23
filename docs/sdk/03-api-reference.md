@@ -261,7 +261,7 @@ Tana keeps each user's notifications in one `tana:user-inbox:<user-profile ULID>
 
 ## `sdk/chat.js`
 
-`chatRows(messages, { authorName, aiName = 'Tana AI' })` → read-only outline rows for a chat's `data.messages` (docs/CHATS.md): one author row per message with its markdown blocks as children, `[label](tana:…)` links as mention segments, attachments and proposals as reference rows, and "Thought for N seconds" from `completedAt - sentAt`. `blocks(text)`, `segments(text)` and `plain(segments)` are the markdown helpers behind it. Pure and Electron-free.
+`chatRows(messages, { authorName, aiName = 'Tana AI' })` → read-only outline rows for a chat's `data.messages` (docs/CHATS.md): one author row per message with its markdown blocks as children, `[label](tana:…)` links as mention segments, attachments and proposals as reference rows, progress text including "Waiting for your input", terminal status and error rows, and pending `askUserQuestion` prompts with their options. `blocks(text)`, `segments(text)` and `plain(segments)` are the markdown helpers behind it. Pure and Electron-free.
 
 ## `sdk/assets.js`
 

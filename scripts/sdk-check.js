@@ -4312,6 +4312,21 @@ async function main() {
     assert.deepEqual(rows[1].children.map((n) => n.block), ['numbered', 'heading3'], 'no thinking line without tool calls; deep headings read as the third level');
     assert.deepEqual(rows[1].children[1].segments, [{ text: 'deep ' }, { text: 'it', marks: { italic: true } }, { text: ' ' }, { text: 'gone', marks: { strike: true } }]);
     assert.equal(rows[2].children[0].text, 'Thought for 2 minutes');
+    const states = chat.chatRows([
+      { fromUserType: 'ai', status: 'cancelled' },
+      { fromUserType: 'ai', status: 'error', errorMessage: 'Provider failed' },
+      { fromUserType: 'ai', status: 'limit_exceeded' },
+      { fromUserType: 'ai', toolCalls: [{ name: 'askUserQuestion', status: 'awaiting_user_input' }], questionsData: {
+        answered: false, skipped: false, questions: [{ question: 'Choose a plan', multiSelect: true, options: [{ label: 'Basic', description: 'For a small team' }, { label: 'Pro' }] }],
+      } },
+    ]);
+    assert.deepEqual(states.slice(0, 3).map((r) => r.children[0].text), ['Cancelled', 'Error: Provider failed', 'Limit exceeded']);
+    const waiting = states[3], question = waiting.children[1];
+    assert.equal(waiting.children[0].text, 'Waiting for your input');
+    assert.equal(question.text, 'Choose a plan · Select all that apply');
+    assert.deepEqual(question.children.map((r) => r.text), ['Basic · For a small team', 'Pro']);
+    const readOnly = (nodes) => nodes.every((n) => n.editable === false && readOnly(n.children || []));
+    assert.ok(readOnly(states), 'status and pending-question rows are read-only');
     console.log('ok  chat visibility and the thinking line follow the web client');
   }
   // Tana's schema: 8-character ids are Crockford base32, underline is a mark, and a table holds no editable text.
