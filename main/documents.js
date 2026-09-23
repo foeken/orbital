@@ -510,6 +510,7 @@ function onChange(docId, info) {
   try {
     // The app's own settings document is not content: it is applied and nothing else hears about it.
     if (settings.applyRemote(docId) !== false) return;
+    if (idKind(docId) === 'user-inbox') return; // no row or page is this document; main/inbox.js tells the renderer
     const doc = S.client.sync.getDocument(docId);
     if (!doc) return;
     const n = readNode(doc), row = db.get(docId);

@@ -556,7 +556,7 @@ function renderCrumbs(trail) {
   // document that sits in it starts at whatever comes next, or at the Home anchor alone.
   const located = path && path.length
     ? path.filter((p) => p.id !== 'library' || homeId() === 'library')
-    : [{ id: '', title: root.from || (viewOf() ? viewOf().title : 'Tana') }];
+    : docOf(rootId)?.appPage ? [] : [{ id: '', title: root.from || (viewOf() ? viewOf().title : 'Tana') }]; // a page of the app's own is in no view
   for (const p of located) {
     const a = document.createElement('a');
     // ancestors can share a title (a meeting named after its space), so each crumb shows its kind icon
@@ -684,7 +684,7 @@ function nodeEl(node, docId, parent) {
   const heading = headingOf(node); // a heading arrives as node.heading or as the heading1-3 block type
   // an image draws a marker only where a list row would: on its own it is the picture and nothing else
   const blockClass = node.kind === 'block' ? ' t-' + (isDivider(node) ? 'divider' : isImage(node) ? (node.block || 'image') : blockTypeOf(node)) : '';
-  el.className = 'node ' + node.kind + (reference ? ' reference' : '') + (fullref ? ' fullref' : '') + (gone ? ' gone' : '') + blockClass + (heading ? ' h' + heading : '') + (display.done ? ' done' : '') + (has ? ' has' : '') + (has && !opened ? ' collapsed' : '') + (node.draft ? ' draft' : '');
+  el.className = 'node ' + node.kind + (reference ? ' reference' : '') + (fullref ? ' fullref' : '') + (gone ? ' gone' : '') + blockClass + (heading ? ' h' + heading : '') + (display.done ? ' done' : '') + (has ? ' has' : '') + (has && !opened ? ' collapsed' : '') + (node.draft ? ' draft' : '') + (node.notification && node.unread ? ' unread' : '');
   if (node.start != null) el.style.counterSet = 'ol ' + (node.start - 1); // a numbered list counting from its own start (sdk/content.js); the row's increment makes it start
   el.dataset.key = item.key;
   const line = document.createElement('div'); line.className = 'line';
@@ -705,6 +705,8 @@ function nodeEl(node, docId, parent) {
   // edit is what reaching for another row means anyway, and the row being left flushes as it blurs.
   bullet.onmousedown = (e) => { if (!bullet.draggable) e.preventDefault(); };
   if (!node.draft && opens) bullet.onclick = () => (reference || fullref ? openReference(node) : zoomTo(item));
+  // A notification's bullet is its read state, and the row action that flips it (renderer/inbox.js)
+  if (node.notification) { bullet.title = node.unread ? 'Mark as read' : 'Mark as unread'; bullet.onclick = () => setNotificationRead(node, !!node.unread); }
   line.append(chev, bullet);
   // a task's box is its status, so Display hides it with the rest of the status; a checkbox block is outline content
   // the user typed, not a fact about the row, so it is never hidden
@@ -742,7 +744,8 @@ function nodeEl(node, docId, parent) {
     text.classList.toggle('chiponly', chipOnly(text));
   }
   body.append(text);
-  if (display.meta) { const m = document.createElement('span'); m.className = 'meta'; m.textContent = display.meta; body.append(m); }
+  const metaText = node.notification ? agoText(node.createdAt) : display.meta; // a notification says when it came in
+  if (metaText) { const m = document.createElement('span'); m.className = 'meta'; m.textContent = metaText; body.append(m); }
   // every row describes who can see it, not only task rows; the fetch waits until the row is on screen
   const taskInfo = taskSummary(display, true) || documentSummary(display, true);
   if (displayOn('assigned')) {
@@ -765,6 +768,7 @@ function nodeEl(node, docId, parent) {
   // around it, and the blank line a soft break leaves inside it, are all places a caret can sit. It used to answer
   // with the end of the row, which walked the caret past everything written after the point that was clicked.
   line.onclick = (e) => { if (!e.metaKey && !e.shiftKey && !reference && !fullref && (e.target === line || e.target === body || e.target.parentElement === text)) setCaret(text, caretAt(text, e.clientX, e.clientY)); };
+  if (node.notification) line.onclick = (e) => { if (!e.metaKey && !e.shiftKey && !e.target.closest('.bullet, .chev')) openNotification(node); }; // a click on it opens it, as in Tana
   // a reference row: the bullet opens the target, a click selects the row, and a click on the selected row starts
   // editing it — a native embed takes the caret where it was clicked, while a full reference has nothing to click
   // into (its text is one chip), so the caret goes to the end, which is where Enter on the selection puts it too

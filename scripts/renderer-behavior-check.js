@@ -7370,6 +7370,73 @@ function runDropPlanCheck() {
 // Red until the checks actually settle: an async check left awaiting something that never resolves empties the event
 // loop, and node would exit 0 without a word — a silent pass for a check that never finished.
 checks.push(runDropPlanCheck);
+// Notifications (issue #18; renderer/inbox.js). A row is Tana's own: a click opens what it is about and marks it read,
+// the way Tana's list does; its bullet and Cmd+K flip read and unread for the rows you are on; Mark all as read
+// clears the page. Every change is drawn before main answers, and the count follows it. A source with no page here
+// (a type) opens in Tana instead of an empty page.
+function runNotificationsCheck() {
+  const api = vm.runInNewContext(`
+    const INBOX_PAGE = 'orbital:notifications';
+    const calls = [], went = [];
+    let inboxUnread = 2, rendered = 0;
+    const renderSoon = () => { rendered++; };
+    const run = (fn) => fn();
+    const goTo = (uri) => went.push(uri);
+    const zoomable = (node) => !/^tana:(user-profile|type):/.test(node.id || '');
+    const tana = {
+      inboxSetRead: async (id, read) => { calls.push(['setRead', id, read]); return 7; },
+      inboxMarkAll: async () => { calls.push(['markAll']); return 0; },
+      nodeLink: async (uri) => 'https://home.tana.inc/x/' + uri, openExternal: async (url) => { went.push(url); },
+    };
+    const note = (id, unread, type, sourceUri) => ({ id, kind: 'block', unread, notification: { type, sourceUri } });
+    const rows = [note('n0', true, 'task-assignment', 'tana:text:01task00000000000000000000'), note('n1', true, 'event-access', 'tana:event:01event0000000000000000000'),
+      note('n2', false, 'type-archived', 'tana:type:01type00000000000000000000')];
+    const kids = new Map([[INBOX_PAGE, rows]]);
+    const items = new Map(rows.map((n) => [n.id, { key: n.id, node: n }]));
+    let selected = [], palReturn = null;
+    const selKeys = () => selected, focused = () => null;
+    ${functionSource("setNotificationRead")}
+    ${functionSource("markAllNotificationsRead")}
+    ${functionSource("openNotification")}
+    ${functionSource("notificationRows")}
+    const settle = async () => { for (let i = 0; i < 5; i++) await Promise.resolve(); };
+    ({
+      rows, calls, went, count: () => inboxUnread, rendered: () => rendered,
+      open: async (i) => { openNotification(rows[i]); await settle(); },
+      bullet: async (i) => { setNotificationRead(rows[i], !!rows[i].unread); await settle(); },
+      palette: (keys, at) => { selected = keys; palReturn = at ? { key: at } : null; return notificationRows().map((r) => [r.group, r.label]); },
+      press: async (keys, label) => { selected = keys; notificationRows().find((r) => r.label === label).run(); await settle(); },
+      all: async () => { markAllNotificationsRead(); await settle(); },
+    });
+  `);
+  return (async () => {
+    await api.open(0);
+    assert.deepEqual(plain(api.calls), [['setRead', 'n0', true]], 'opening an unread notification marks it read, as Tana does');
+    assert.deepEqual(plain(api.went), ['tana:text:01task00000000000000000000'], 'and goes to what it is about');
+    assert.equal(api.rows[0].unread, false, 'the row is drawn read before main answers');
+    assert.equal(api.count(), 7, 'and the count is main\'s answer once it comes');
+    await api.open(2);
+    assert.equal(api.calls.length, 1, 'a read notification is opened without another write');
+    assert.equal(api.went.at(-1), 'https://home.tana.inc/x/tana:type:01type00000000000000000000', 'a type has no page here, so it opens in Tana');
+    await api.bullet(0);
+    assert.deepEqual(plain(api.calls.at(-1)), ['setRead', 'n0', false], 'the bullet of a read row marks it unread');
+    assert.equal(api.rows[0].unread, true);
+    assert.deepEqual(plain(api.palette([], 'n1')), [['Current node', 'Mark as read']], 'Cmd+K offers what the row the caret was on can become');
+    assert.deepEqual(plain(api.palette([], 'n2')), [['Current node', 'Mark as unread']]);
+    assert.deepEqual(plain(api.palette(['n1', 'n2'], null)), [['Selection', 'Mark as read'], ['Selection', 'Mark as unread']], 'a mixed selection is offered both');
+    assert.deepEqual(plain(api.palette([], null)), [], 'and nothing when no notification is under the caret');
+    const before = api.calls.length;
+    await api.press(['n0', 'n1', 'n2'], 'Mark as read');
+    assert.deepEqual(plain(api.calls.slice(before)), [['setRead', 'n0', true], ['setRead', 'n1', true]], 'Mark as read writes only the rows that were unread');
+    api.rows[1].unread = true;
+    await api.all();
+    assert.deepEqual(plain(api.calls.at(-1)), ['markAll'], 'Mark all as read is one write');
+    assert.deepEqual(plain(api.rows.map((n) => n.unread)), [false, false, false], 'and every row is drawn read at once');
+    assert.equal(api.count(), 0);
+    console.log('ok  notifications: opening reads and navigates, the bullet and Cmd+K flip read state, Mark all as read clears the page');
+  })();
+}
+checks.push(runNotificationsCheck);
 process.exitCode = 1;
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);

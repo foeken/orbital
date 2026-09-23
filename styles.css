@@ -287,6 +287,8 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 /* typed node without its own icon: the plain bullet takes the type hue (same colour as .bullet.icon.hue) */
 .bullet.hue::before, .bullet.hue:hover::before { background: oklch(0.7 0.1 var(--hue)); }
 .collapsed > .line > .bullet::before { box-shadow: 0 0 0 6px #e6e6e6; } /* collapsed with children: dot on an 18px halo */
+/* a notification not read yet: Tana's blue dot, in the bullet's place (renderer/inbox.js) */
+.node.unread > .line > .bullet::before, .node.unread > .line > .bullet:hover::before { background: #0090ff; }
 /* Only a list row carries a marker, the way Tana draws it: a bulletList/orderedList item has one, and text,
    headings, quotes and code have none — not on hover either, so a heading reads as a heading whatever the mouse
    is over. The dot is hidden rather than removed, so the gutter keeps its width in every row state. A collapsed

@@ -1785,6 +1785,76 @@ async function main() {
     console.log('ok  the Inbox badge counts through the graph and rides the view refresh');
   }
 
+  // The notifications inbox (issue #18): sdk/inbox.js against a document shaped like the live one (roots data and
+  // notifications, one LoroMap per item, keys as Tana's npe schema has them), then main's page and writes over it.
+  {
+    const inbox = require('../sdk/inbox');
+    assert.equal(inbox.inboxUri(ME), 'tana:user-inbox:01examplei0000000000000000', 'the inbox is named by the user-profile ULID (gy)');
+    const doc = new Document(inbox.inboxUri(ME));
+    const TASK = 'tana:text:01examplet0000000000000000', TYPE = 'tana:type:01exampley0000000000000000';
+    doc.transact((l) => {
+      l.getMap('data').set('type', 'user-inbox'); l.getMap('data').set('updatedAt', 1);
+      const add = (id, fields) => { const m = l.getMap('notifications').setContainer(id, new LoroMap()); m.set('id', id); for (const [k, v] of Object.entries(fields)) m.set(k, v); };
+      add('a', { notificationType: 'task-assignment', sourceUri: TASK, createdAt: 3000, actorUri: ME, title: 'Ship **it**!', body: 'ignored' });
+      add('b', { notificationType: 'document-access', sourceUri: TASK, createdAt: 2000, title: 'Plan' });
+      add('c', { notificationType: 'type-archived', sourceUri: TYPE, createdAt: 1000, actorUri: ME, title: 'Old name', readAt: 1500 });
+    });
+    const updated = () => doc.data.get('updatedAt');
+    assert.deepEqual(inbox.items(doc).map((n) => n.id), ['a', 'b', 'c'], 'newest first, as Tana lists them');
+    assert.equal(inbox.unreadCount(doc), 2);
+    assert.equal(inbox.markAsRead(doc, 'c'), false, 'reading a read one changes nothing');
+    assert.equal(updated(), 1, 'and leaves updatedAt alone, as Tana does');
+    assert.equal(inbox.markAsRead(doc, 'a'), true);
+    assert.ok(updated() > 1 && inbox.items(doc)[0].readAt === updated(), 'readAt and updatedAt are the same moment');
+    assert.equal(inbox.markAsUnread(doc, 'a'), true);
+    assert.equal(inbox.items(doc)[0].readAt, undefined, 'unread deletes readAt rather than clearing it');
+    assert.equal(inbox.markAsReadBySourceUri(doc, TASK), true, 'by source: every unread notification about that document');
+    assert.equal(inbox.unreadCount(doc), 0);
+    assert.equal(inbox.markAllAsRead(doc), false, 'nothing left to read is no write');
+    assert.equal(inbox.markAsUnread(doc, 'nope'), false, 'an unknown id is no write either');
+    // Tana's sentences (Wqt) and the line after them (Gqt)
+    const say = (n, actor, title) => inbox.phrase(n, actor, title).map((p) => (p.emphasis ? '*' + p.text + '*' : p.text)).join('');
+    assert.equal(say({ notificationType: 'document-access', title: 'Plan' }, 'Sam'), '*Sam* added you to *Plan*');
+    assert.equal(say({ notificationType: 'event-access' }), 'You were added to a meeting');
+    assert.equal(say({ notificationType: 'task-assignment', title: 'x' }, 'Sam'), '*Sam* assigned you to a task');
+    assert.equal(say({ notificationType: 'comment-mention', title: 'Plan' }), 'You were mentioned in *Plan*');
+    assert.equal(say({ notificationType: 'comment-reply' }, 'Sam'), '*Sam* replied to a comment');
+    assert.equal(say({ notificationType: 'incoming-call' }), 'Someone is waiting for you in a meeting');
+    assert.equal(say({ notificationType: 'type-archived', title: 'Old' }, null, 'New'), '*New* was archived', 'a type is named by its current title');
+    assert.equal(say({ notificationType: 'type-unarchived' }, 'Sam'), '*Sam* unarchived a type');
+    assert.equal(say({ notificationType: 'chat-message', title: 'Hello' }), 'Hello');
+    assert.equal(say({ notificationType: 'ai-usage-warning' }, 'Sam'), '*Sam* sent you a message', 'anything else reads as a message');
+    assert.equal(inbox.detail({ notificationType: 'task-assignment', title: 'Ship **it**!', body: 'b' }), 'Ship it', 'a task shows its title, markdown and end punctuation gone');
+    assert.equal(inbox.detail({ notificationType: 'comment-reply', body: '[Plan](tana:x) looks _good_.' }), 'Plan looks good');
+    assert.equal(inbox.detail({ notificationType: 'type-archived', body: 'x' }), '', 'a type change has no second line');
+
+    // main: the page is outline:children of its own id, the writes answer with the count, and a change to the inbox
+    // reaches the renderer as inbox:changed rather than as a document change
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const sent = [], listeners = [];
+    doc.transact((l) => { l.getMap('notifications').get('a').delete('readAt'); });
+    backend.testRuntime({ me: { userUri: ME }, win: { isDestroyed: () => false, webContents: { send: (...a) => sent.push(a) } },
+      client: {
+        sync: { on: (event, fn) => { if (event === 'change') listeners.push(fn); }, subscribe: async (id) => { assert.equal(id, doc.id); return doc; }, getDocument: (id) => (id === doc.id ? doc : null) },
+        graph: { listNodes: async ({ nodeTypes, nodeIds }) => ({ nodes: nodeTypes ? [{ id: ME, title: 'Robin Vega', userProfile: {} }] : (nodeIds || []).includes(TYPE) ? [{ id: TYPE, title: 'Renamed' }] : [] }) },
+      } });
+    const rows = await backend.handlers.get('outline:children')(null, 'orbital:notifications');
+    assert.deepEqual(JSON.parse(JSON.stringify(rows.map((r) => r.text))), ['Robin Vega assigned you to a task. Ship it.', 'You were added to Plan', 'Robin Vega archived Renamed'],
+      'each row is Tana\'s sentence, the actor named from the members and a type by its current title');
+    assert.deepEqual(JSON.parse(JSON.stringify(rows[0].segments[0])), { text: 'Robin Vega', marks: { bold: true } }, 'what Tana emphasises is bold');
+    assert.deepEqual(JSON.parse(JSON.stringify(rows.map((r) => r.unread))), [true, false, false]);
+    assert.ok(rows.every((r) => r.editable === false && r.notification.sourceUri), 'read-only rows that know what they are about');
+    assert.equal(await backend.handlers.get('inbox:unread')(), 1);
+    assert.equal(await backend.handlers.get('inbox:setRead')(null, 'b', false), 2, 'a write answers with the count after it');
+    assert.equal(await backend.handlers.get('inbox:markAll')(), 0);
+    listeners.forEach((fn) => fn(doc.id));
+    assert.deepEqual(JSON.parse(JSON.stringify(sent.at(-1))), ['inbox:changed', 0], 'a change to the inbox is told as its unread count');
+    const before = sent.length;
+    backend.onChange(doc.id, { origin: 'remote' });
+    assert.equal(sent.length, before, 'and it is no row\'s change');
+    console.log('ok  notifications inbox: Tana\'s reads, writes and sentences, and main\'s page over them');
+  }
+
   // Watching a node for changes: what is announced, what is deliberately not, and who decides.
   {
     const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');

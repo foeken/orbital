@@ -609,6 +609,25 @@ commands.chatlist = async () => {
 };
 // rawdoc <id>: the complete Loro document JSON — every root container, not just data + content. For learning an
 // undocumented schema (chats). Read-only: bootstrap carries no local ops.
+// inbox [--limit 20] [--watch seconds]: your notifications (sdk/inbox.js), newest first, as Tana phrases them, with the
+// unread count and how many of each kind; --watch prints the count again on every live change. Read-only.
+commands.inbox = async () => {
+  const me = await connect();
+  await client.sync.connect();
+  const inbox = require('../sdk/inbox');
+  const doc = await inbox.open(client.sync, me.userUri);
+  const all = inbox.items(doc), kinds = {};
+  for (const n of all) kinds[n.notificationType] = (kinds[n.notificationType] || 0) + 1;
+  out({ uri: doc.id, roots: Object.keys(doc.toJSON()), count: all.length, unread: inbox.unreadCount(doc), updatedAt: doc.data.get('updatedAt'), kinds,
+    keys: [...new Set(all.flatMap((n) => Object.keys(n)))].sort() });
+  for (const n of all.slice(0, Number(flag('limit', 20)))) {
+    const words = inbox.phrase(n, n.actorUri ? '@' + n.actorUri.slice(-6) : undefined).map((p) => p.text).join('') + (inbox.detail(n) ? '. ' + inbox.detail(n) + '.' : '');
+    out((n.readAt ? '  ' : '* ') + new Date(n.createdAt).toISOString().slice(0, 16) + '  ' + n.notificationType.padEnd(16) + words.slice(0, 110) + '  -> ' + n.sourceUri);
+  }
+  if (!flag('watch')) return;
+  doc.on('change', ({ origin }) => out('change/' + origin + '  unread ' + inbox.unreadCount(doc) + ' of ' + inbox.items(doc).length));
+  await new Promise((r) => setTimeout(r, Number(flag('watch')) * 1000));
+};
 commands.rawdoc = async () => {
   if (!positional[0]) throw new Error('usage: rawdoc <id>');
   await connect();
@@ -793,7 +812,8 @@ const USAGE = [
   '  read       list [--state open|all] | search <query> [#task|#meeting|#member|#Type] | types | fields [<type uri>] |',
   '             meetings [--days 7] | chatlist [--limit 200] | get <id> [--raw] | outline <id> | rawdoc <id> [--containers 1] |',
   '             graphnode <id> | edges <id> | listkind <nodeType> [--limit 50] | image <tana:image:uri> | pins [--dates] |',
-  '             changes <id> [--within <summary id>] [--limit 20] | settings   (with a key and a JSON value it writes)',
+  '             changes <id> [--within <summary id>] [--limit 20] | inbox [--limit 20] [--watch seconds] |',
+  '             settings   (with a key and a JSON value it writes)',
   '  diagnose   inspect <id...> | audiences [--limit 80] [--mine 0] [--kind text] | refs <id> | rows <query> | pinrows |',
   '             settype <id>   (listing only; with a target it writes)',
   '             caps <id...> | related <id> | incall [--limit 5] | pageprobe | libraryprobe | boot [--settle ms]',

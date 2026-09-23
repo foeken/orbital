@@ -18,6 +18,12 @@ contextBridge.exposeInMainWorld('api', {
   nodeLink: (docId) => ipcRenderer.invoke('doc:link', docId), // the home.tana.inc url for a node
   notifyState: (docId) => ipcRenderer.invoke('notify:state', docId), // { on, default, explicit }: is this node watched for changes
   setNotify: (docId, on) => ipcRenderer.invoke('notify:set', docId, on), // true/false to choose; null forgets the choice
+  // Tana's notifications inbox (main/inbox.js). Its rows are children('orbital:notifications'); each write resolves to
+  // the unread count after it, and onInbox hears the count again on every change to the inbox, from anywhere.
+  inboxUnread: () => ipcRenderer.invoke('inbox:unread'),
+  inboxSetRead: (id, read) => ipcRenderer.invoke('inbox:setRead', id, read),
+  inboxMarkAll: () => ipcRenderer.invoke('inbox:markAll'),
+  onInbox: (cb) => ipcRenderer.on('inbox:changed', (_e, unread) => cb(unread)),
   codexIds: () => ipcRenderer.invoke('codex:list'), // nodes handed to the local Codex agent; app-local, not a Tana assignee
   setCodex: (docId, on, prompt, model, host) => ipcRenderer.invoke('codex:set', docId, on, prompt, model, host), // prompt, model and the machine it runs on are per assignment
   codexModels: (host) => ipcRenderer.invoke('codex:models', host), // the models that host offers

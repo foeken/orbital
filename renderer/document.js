@@ -28,7 +28,7 @@ function currentDoc() {
 function loadPins() {
   const doc = palDoc;
   loadPinned(true); // a pin was just written, or something changed globally: the marks on the rows are re-read with it
-  if (!doc || !tana.pinState) { pinInfo = null; return; }
+  if (!doc || !tana.pinState || doc.appPage) { pinInfo = null; return; } // a page of the app's own (Notifications) has no pins
   tana.pinState(doc.id).then((s) => {
     pinInfo = s ? { docId: doc.id, ...s } : null;
     if (!palette.hidden && (palMode === 'cmd' || palMode === 'pins')) renderPalette();

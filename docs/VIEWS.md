@@ -129,3 +129,9 @@ in the same action (`main.js`).
 - Keep: the today marker and date meta in Meetings, `DRAFT_KIND` (Enter drafts a task in Tasks and a
   meeting in Meetings), read-only member rows, sensitive redaction, the row enter/leave animation,
   drafts surviving a refresh, and every keyboard rule in OUTLINER.md.
+
+## 8. Notifications is not a view either
+
+Notifications (issue #18, docs/OUTLINER.md) is listed with the views in Cmd+K but is a page, like a saved search: it has no
+filter, no pills and no row cache. Its rows are `outline:children('orbital:notifications')` — Tana's `tana:user-inbox`
+document read by main/inbox.js — and it never touches `S.activeView` or the refresh loop; the inbox is live by subscription.
