@@ -81,7 +81,7 @@ function glyphSvg(type) { return type === 'code' ? '<span class="glyph icon">' +
 const images = new Map(); // image uri -> data URL (or the pending api.image promise)
 const isImage = (node) => node.type === 'image';
 const isDivider = (node) => node.block === 'divider' || node.type === 'divider';
-const isAtomic = (node) => isImage(node) || isDivider(node); // shown, focusable, never editable
+const isAtomic = (node) => isImage(node) || isDivider(node) || !!node.table; // shown, focusable, never typed into (a table's cells edit on their own: renderer/table.js)
 const isReference = (node) => node.type === 'reference';
 // Tana's full-reference presentation: a block whose whole content is one mention stands in for the node it points at
 // — its box, its status, its tags — and becomes an ordinary line with a link again the moment anything else is typed.
@@ -194,7 +194,7 @@ function canEditItem(item) {
   return canEditNode(docOf(item.docId) || item.node);
 }
 // A reference and a divider are read-only rows, but they are still blocks of a writable document: they can be moved and removed.
-const canEditStructure = (item) => canEditItem(item) || ((item.node.type === 'reference' || isDivider(item.node)) && canEditNode(docOf(item.docId)));
+const canEditStructure = (item) => canEditItem(item) || ((item.node.type === 'reference' || isDivider(item.node) || !!item.node.table) && canEditNode(docOf(item.docId)));
 // an inline reference renders the referenced document's title: editing the row edits that document, and a read-only
 // target stays read-only. The containing document counts too: a chat's attachment row would otherwise offer to
 // rename the attached document (only a positively read-only container blocks, so ordinary embeds are unchanged).

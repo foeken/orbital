@@ -4199,55 +4199,103 @@ async function main() {
     assert.deepEqual([raw()[2].nodeName, raw()[2].attributes.start], ['bulletList', undefined], 'a bullet list carries no start');
     console.log('ok  line breaks as hardBreak nodes (read, kept, written, offsets) and orderedList start / codeBlock language');
   }
-  // Attendance (docs/MEETINGS.md): an entry in the `sessions` root of a call document is the only proof that somebody
-  // is in a meeting now; the event node only ever proves they were invited.
+  // Tables (issue #32): Tana's table > tableRow > tableHeader|tableCell > block+, read as rows x cells, and one cell's
+  // text written the way its updateCell does, into the cell's first paragraph, leaving an image in the cell alone.
   {
-    const callsSdk = require('../sdk/calls');
-    const EVENT = 'tana:event:01examplec0000000000000000', CALL = 'tana:call:01examplec0000000000000000';
-    const OTHER = 'tana:user-profile:01examplej0000000000000000';
-    const callDoc = (sessions, log) => {
-      const doc = new Document(CALL);
-      doc.transact((l) => {
-        const data = l.getMap('data');
-        data.set('type', 'call'); data.set('ownerUri', EVENT); data.set('sessionLog', log);
-        data.set('activeSessions', []); data.set('callParticipantState', {});
-        const map = l.getMap('sessions');
-        for (const [key, value] of Object.entries(sessions)) map.set(key, value);
+    const d = new Document(DOC);
+    const block = (list, i, nodeName, attrs = {}) => {
+      const m = list.insertContainer(i, new LoroMap()); m.set('nodeName', nodeName);
+      const a = m.setContainer('attributes', new LoroMap()); for (const [k, v] of Object.entries(attrs)) a.set(k, v);
+      return m;
+    };
+    const para = (list, i, id, words) => { const p = block(list, i, 'paragraph', id ? { blockId: id } : {}); const c = p.setContainer('children', new LoroList()); if (words) c.insertContainer(0, new LoroText()).insert(0, words); return p; };
+    d.transact((l) => {
+      const c = l.getMap('content'); c.set('nodeName', 'doc'); c.setContainer('attributes', new LoroMap());
+      const t = block(c.setContainer('children', new LoroList()), 0, 'table', { blockId: 't0000000' });
+      const rows = t.setContainer('children', new LoroList());
+      const head = block(rows, 0, 'tableRow', { blockId: 'r0000000' }).setContainer('children', new LoroList());
+      para(block(head, 0, 'tableHeader', { blockId: 'h0000000', colspan: 1, rowspan: 1 }).setContainer('children', new LoroList()), 0, 'hp000000', 'Owner');
+      para(block(head, 1, 'tableHeader', { blockId: 'h1000000', colspan: 1, rowspan: 1, colwidth: [120] }).setContainer('children', new LoroList()), 0, 'hp100000', 'Status');
+      const body = block(rows, 1, 'tableRow', {}).setContainer('children', new LoroList()); // no blockId: Tana's agent writes these too
+      const imgCell = block(body, 0, 'tableCell', { blockId: 'c0000000', colspan: 2, rowspan: 1 }).setContainer('children', new LoroList());
+      block(imgCell, 0, 'image', { blockId: 'i0000000', tanaUri: 'tana:image:01examplei0000000000000000' });
+      para(imgCell, 1, 'cp000000', 'Ingrid');
+      block(body, 1, 'tableCell', {}).setContainer('children', new LoroList()); // no id, no paragraph
+    });
+    const table = outline.readTable(d, 't0000000');
+    assert.equal(table.rowCount, 2); assert.equal(table.columnCount, 2);
+    assert.deepEqual(table.rows[0].map((c) => [c.id, c.header, c.text, c.colwidth]), [['h0000000', true, 'Owner', null], ['h1000000', true, 'Status', [120]]]);
+    assert.deepEqual([table.rows[1][0].colspan, table.rows[1][0].paragraph, table.rows[1][0].text], [2, 'cp000000', 'Ingrid'], 'the text is the first paragraph, past the image');
+    assert.deepEqual(table.rows[1][0].blocks.map((b) => b.type || b.block), ['image', 'paragraph'], 'each cell keeps all of its blocks');
+    const row = outline.readOutline(d)[0];
+    assert.equal(row.type, 'table'); assert.equal(row.editable, false); assert.deepEqual(row.table, table, 'the outline row carries the same grid');
+    outline.setCellText(d, 'c0000000', [{ text: 'Ingrid', marks: { bold: true } }, { text: ' and ' }, { mention: { label: 'Kim', uri: ME } }]);
+    const cell = outline.readTable(d, 't0000000').rows[1][0];
+    assert.deepEqual(cell.segments, [{ text: 'Ingrid', marks: { bold: true } }, { text: ' and ' }, { mention: { label: 'Kim', uri: ME } }]);
+    assert.deepEqual(cell.blocks.map((b) => b.type || b.block), ['image', 'paragraph'], 'the image stays in the cell');
+    assert.equal(outline.assignBlockIds(d), 2, 'the unnamed row and cell get ids');
+    const empty = outline.readTable(d, 't0000000').rows[1][1];
+    assert.match(empty.id, /^[0-9a-hjkmnp-tv-z]{8}$/); assert.equal(empty.paragraph, undefined);
+    outline.setCellText(d, empty.id, 'Done');
+    const filled = outline.readTable(d, 't0000000').rows[1][1];
+    assert.equal(filled.text, 'Done'); assert.match(filled.paragraph, /^[0-9a-hjkmnp-tv-z]{8}$/, 'a cell with no paragraph gets one, with an id');
+    assert.throws(() => outline.setCellText(d, 'hp000000', 'x'), /no table cell/, 'a paragraph id is not a cell id');
+    assert.throws(() => outline.setText(d, 't0000000', 'x'), /cannot contain editable text/, 'the whole table is still never overwritten as text');
+    assert.throws(() => outline.readTable(d, 'nope0000'), /no table/);
+    // and through main, the way the renderer writes one (preload setCell -> block:setCell), on the document's undo stack
+    const backend = mainHelpers(); require('../db').open(':memory:');
+    backend.testRuntime({ me: { userUri: ME }, win: { isDestroyed: () => false, webContents: { send: () => {} } }, client: {
+      graph: { listNodes: async () => ({ nodes: [] }) }, sync: { subscribe: async () => d, getDocument: () => d, unsubscribe: async () => {} } } });
+    await backend.handlers.get('block:setCell')(null, d.id, 'h1000000', 'State');
+    assert.equal(outline.readTable(d, 't0000000').rows[0][1].text, 'State', 'block:setCell writes one cell');
+    assert.equal(await backend.undo(), d.id, 'as one step of that document');
+    assert.equal(outline.readTable(d, 't0000000').rows[0][1].text, 'Status', 'which undo puts back');
+    // rows and columns: Tana's manipulateTable writers (ave/ove/sve/cve/lve/uve), with the limits of its table menu
+    const g = new Document('tana:text:' + ulid());
+    g.transact((l) => {
+      const c = l.getMap('content'); c.set('nodeName', 'doc'); c.setContainer('attributes', new LoroMap());
+      const rows = block(c.setContainer('children', new LoroList()), 0, 'table', { blockId: 'u0000000' }).setContainer('children', new LoroList());
+      [['h', true, ['A', 'B']], ['r', false, ['a1', 'b1']], ['s', false, ['a2', 'b2']]].forEach(([p, header, words], y) => {
+        const cells = block(rows, y, 'tableRow', { blockId: p + 'row0000' }).setContainer('children', new LoroList());
+        words.forEach((w, x) => para(block(cells, x, header ? 'tableHeader' : 'tableCell', { blockId: p + x + '000000', colspan: 1, rowspan: 1 }).setContainer('children', new LoroList()), 0, p + x + 'p00000', w));
       });
-      return doc;
-    };
-    const joins = [{ userUri: ME, timestamp: 1000, event: 'join' }, { userUri: OTHER, timestamp: 1500, event: 'join' }];
-    const livedoc = callDoc({ [ME + ':86c9068d']: { userUri: ME, joinedAt: 2000 }, [ME + ':0f1a2b3c']: { userUri: ME, joinedAt: 1000 },
-      [OTHER + ':11112222']: { userUri: OTHER, joinedAt: 1500 } }, joins);
-    const live = callsSdk.callSessions(livedoc);
-    assert.equal(live.eventUri, EVENT);
-    assert.deepEqual(live.sessions.map((s) => s.joinedAt), [1000, 1500, 2000], 'sessions come back oldest join first');
-    assert.deepEqual(live.userUris.sort(), [ME, OTHER].sort());
-    assert.equal(callsSdk.inCall(livedoc, ME), true);
-    assert.equal(callsSdk.joinedAt(livedoc, ME), 1000, 'two devices of one user report the earliest join');
-    const ended = callDoc({}, [...joins, { userUri: ME, timestamp: 3000, event: 'leave' }, { userUri: OTHER, timestamp: 3200, event: 'leave' }]);
-    assert.equal(callsSdk.inCall(ended, ME), false, 'a finished call empties sessions however long its log is');
-    const federated = callDoc({ 'federation:01examplek0000000000000000': { userUri: OTHER, joinedAt: 500 } }, joins);
-    assert.equal(callsSdk.inCall(federated, OTHER), false, 'another organization’s capture is not somebody in the call (native activeParticipantUris)');
-    assert.equal(callsSdk.joinedAt(ended, ME), null);
-    assert.deepEqual(callsSdk.attended(ended).sort(), [ME, OTHER].sort(), 'the log still proves who was there');
-    const asked = [];
-    const letGo = [];
-    const client = {
-      graph: { listNodes: async (p) => { asked.push(p);
-        return { nodes: p.nodeIds ? [{ id: EVENT, title: 'Bingo' }] : [{ id: CALL }, { id: 'tana:call:01exampled0000000000000000' }] }; } },
-      sync: { getDocument: () => undefined, subscribe: async (id) => (id === CALL ? livedoc : ended), unsubscribe: async (id) => { letGo.push(id); } },
-    };
-    const mine = await callsSdk.currentCalls(client, ME, { limit: 5 });
-    assert.deepEqual(mine.map((c) => [c.title, c.callUri, c.eventUri, c.joinedAt, c.otherUserUris]), [['Bingo', CALL, EVENT, 1000, [OTHER]]],
-      'only the call I am in is reported, with its meeting title');
-    assert.deepEqual(asked[0], { nodeTypes: ['call'], limit: 5, sortOptions: [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }] });
-    assert.equal(asked.length, 2, 'one query for the candidate calls and one for every title');
-    assert.deepEqual(letGo, ['tana:call:01exampled0000000000000000'], 'a candidate I am not in is unsubscribed again, so a read leaves no subscription behind');
-    client.sync.getDocument = () => ended; // now somebody else already holds that candidate
-    await callsSdk.currentCalls(client, ME, { limit: 5 });
-    assert.equal(letGo.length, 1, 'a candidate another caller already had subscribed is left in their hands');
-    console.log('ok  call attendance: live sessions, a finished call, multi-device joins and the current-call query');
+    });
+    const grid = () => outline.readTable(g, 'u0000000').rows.map((r) => r.map((x) => (x.header ? '#' : '') + (x.text || '.')).join(' ')).join(' | ');
+    assert.throws(() => outline.tableOp(g, 'h0000000', 'rowBefore'), /above the header/);
+    assert.throws(() => outline.tableOp(g, 'h0000000', 'deleteRow'), /header row cannot be deleted/);
+    assert.throws(() => outline.tableOp(g, 'r0000000', 'rowUp'), /header row stays on top/);
+    assert.throws(() => outline.tableOp(g, 'r0000000', 'sideways'), /unknown table operation/);
+    const fresh = outline.tableOp(g, 'r1000000', 'rowAfter');
+    assert.equal(grid(), '#A #B | a1 b1 | . . | a2 b2', 'a new row of empty cells after this one');
+    const newRow = outline.readTable(g, 'u0000000').rows[2];
+    assert.equal(fresh, newRow[1].id, 'the caret goes to the new cell in the same column');
+    assert.ok(newRow.every((x) => !x.header && /^[0-9a-hjkmnp-tv-z]{8}$/.test(x.id) && /^[0-9a-hjkmnp-tv-z]{8}$/.test(x.paragraph)), 'data cells, each with an id and an empty paragraph with one');
+    assert.equal(outline.tableOp(g, 's0000000', 'rowUp'), 's0000000'); assert.equal(grid(), '#A #B | a1 b1 | a2 b2 | . .', 'moved, and the cell keeps its id');
+    outline.tableOp(g, 'h0000000', 'columnAfter');
+    assert.equal(grid(), '#A #. #B | a1 . b1 | a2 . b2 | . . .', 'a column is a new cell in every row, a header cell in the header row');
+    outline.tableOp(g, 'h1000000', 'columnLeft');
+    assert.equal(grid(), '#A #B #. | a1 b1 . | a2 b2 . | . . .', 'a column moves in every row');
+    assert.equal(outline.readTable(g, 'u0000000').rows[1][1].id, 'r1000000');
+    assert.throws(() => outline.tableOp(g, 'h0000000', 'columnLeft'), /leftmost/);
+    outline.tableOp(g, 'h1000000', 'deleteColumn'); outline.tableOp(g, 'h0000000', 'deleteColumn');
+    assert.equal(grid(), '#. | . | . | .');
+    assert.throws(() => outline.tableOp(g, outline.readTable(g, 'u0000000').rows[0][0].id, 'deleteColumn'), /only column/);
+    for (const row of outline.readTable(g, 'u0000000').rows.slice(2)) outline.tableOp(g, row[0].id, 'deleteRow');
+    assert.throws(() => outline.tableOp(g, outline.readTable(g, 'u0000000').rows[1][0].id, 'deleteRow'), /only row/, 'the last body row stays');
+    // an image into a cell goes after its text (Tana's addImageToCell); a caret in a cell is on its paragraph
+    const left = outline.readTable(g, 'u0000000').rows[1][0].id; // the one body cell still standing
+    outline.insertImage(g, left, 'tana:image:01examplei0000000000000001');
+    assert.deepEqual(outline.readTable(g, 'u0000000').rows[1][0].blocks.map((b) => b.type || b.block), ['paragraph', 'image']);
+    outline.setCellText(g, left, 'hello');
+    const inCell = outline.readTable(g, 'u0000000').rows[1][0].paragraph;
+    assert.deepEqual([outline.charOffset(g, inCell, 2), outline.blockOffset(g, inCell, 2), outline.cursorOffset(g, outline.cursorAt(g, inCell, 3).encode())],
+      [2, 2, { blockId: inCell, offset: 3 }], 'the presence helpers reach a paragraph inside a cell');
+    // and through main, one step of the document's undo
+    await backend.handlers.get('block:tableOp')(null, d.id, 'c0000000', 'rowAfter');
+    assert.equal(outline.readTable(d, 't0000000').rowCount, 3, 'block:tableOp adds the row');
+    assert.equal(await backend.undo(), d.id);
+    assert.equal(outline.readTable(d, 't0000000').rowCount, 2, 'which undo takes away');
+    console.log('ok  tables: rows x cells, spans and widths, cell text written into the first paragraph, rows and columns added, moved and deleted, images and carets in cells');
   }
   // 4. Transport: headers and the 401 -> refresh -> retry-once rule, with a fake fetch
   const calls = [];

@@ -317,6 +317,8 @@ ipcMain.handle('doc:setAssignees', (_e, id, uris) => mut(id, (doc) => {
 }));
 ipcMain.handle('doc:setAssigneesMany', (_e, ids, uris) => mutTasks(ids, (doc) => setAssignees(doc, uris, S.me.userUri)).then((count) => { scheduleRefresh(2000); return count; }));
 ipcMain.handle('block:setText', (_e, id, nodeId, value) => mut(id, (doc) => { content.setText(doc, nodeId, value); })); // value: string or segments
+ipcMain.handle('block:setCell', (_e, id, cellId, value) => mut(id, (doc) => { content.setCellText(doc, cellId, value); })); // one table cell's text, same value as setText
+ipcMain.handle('block:tableOp', (_e, id, cellId, op) => mut(id, (doc) => content.tableOp(doc, cellId, op))); // a row or column around a cell (content.TABLE_OPS); returns the cell for the caret
 ipcMain.handle('block:setBlockType', (_e, id, nodeId, type) => mut(id, (doc) => { content.setBlockType(doc, nodeId, type); })); // type: one of content.BLOCK_TYPES
 ipcMain.handle('block:insertDivider', (_e, id, nodeId) => mut(id, (doc) => content.insertDivider(doc, nodeId))); // nodeId null appends at the end
 ipcMain.handle('block:insertImage', (_e, id, nodeId, file) => insertImage(id, nodeId, file)); // file { bytes, filename, mimeType }: upload, image document, block after nodeId

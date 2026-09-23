@@ -33,7 +33,7 @@ for (const [zone, rows] of [[$('fields'), () => fieldValues()], [outline.parentE
 const onRows = (type, handler) => { for (const root of [outline, $('fields')]) root.addEventListener(type, handler); };
 onRows('keydown', (e) => {
   const el = e.target.closest && e.target.closest('.text');
-  if (!el) return;
+  if (!el || e.target.classList?.contains('cell')) return; // a table cell answers its own keys (renderer/table.js cellKey)
   const item = items.get(keyOfEl(el)), mod = e.metaKey || e.ctrlKey;
   const off = caretOffset(el), len = unanchored(el.textContent).length, collapsed = getSelection().isCollapsed; // the caret anchor before a leading chip is no character
   const isDoc = item.node.kind === 'document', combo = comboOf(e);
@@ -41,7 +41,7 @@ onRows('keydown', (e) => {
     const vert = e.key === 'ArrowUp' || e.key === 'ArrowDown', dir = e.key === 'ArrowUp' ? -1 : 1;
     if (e.key === 'Backspace') removeNode(item, el);
     else if (e.key === ' ' && isImage(item.node)) openImage(item.node); // the row cannot be typed into: Space looks at the picture
-
+    else if (e.key === 'Enter' && item.node.table) enterTable(el); // a table's way in: its first cell
     else if (vert && e.shiftKey && mod) shiftNode(item, el, 'move', dir < 0 ? 'up' : 'down');
     else if (vert && e.shiftKey) extendSel(item, dir);
     else if (vert && !mod) moveTo(el, dir, 0);

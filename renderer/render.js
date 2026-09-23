@@ -57,6 +57,7 @@ const chipOnly = (el) => {
 function focused() {
   const el = document.activeElement;
   if (el === titleEl && titleEl.isContentEditable) return { key: titleEl.dataset.key, offset: caretOffset(titleEl) };
+  if (el && el.classList.contains('cell') && inRows(el)) return { key: keyOfEl(el), offset: caretOffset(el), cell: el.dataset.cell }; // a table cell: its row, and which cell
   return el && el.classList.contains('text') && inRows(el) ? { key: keyOfEl(el), offset: caretOffset(el) } : null;
 }
 // [node, offset] for a plain-text offset inside el (the DOM point the same character sits at)
@@ -308,7 +309,7 @@ function rowSig(n) {
   return JSON.stringify([n.text, n.done, n.stateType, n.icon, n.hue, n.meta, n.tags, n.editable, n.draft, n.hasChildren, n.kind, n.type, n.start,
     n.updatedAt, n.createdAt, n.createdBy, // the subtext's times and author: they arrive after the row and a reused row would still show none
     sensitiveHidden(n.id), isPinned(n.id), meta || (taskMetaLoading.has(n.id) ? 'loading' : null), members ? members.length : 0, open.get(n.id), pending.has(n.id),
-    displayKeys().join(','), codexIds.has(n.id), agentStateOf(n.id), agentTaskHosts.get(n.id), pinnedOn(n)]); // which facts the row shows: without this a reused row would keep the old ones
+    displayKeys().join(','), codexIds.has(n.id), agentStateOf(n.id), agentTaskHosts.get(n.id), pinnedOn(n), n.table]); // which facts the row shows: without this a reused row would keep the old ones
 }
 function renderOutline() {
   const saved = focused();
@@ -423,6 +424,7 @@ function renderOutline() {
   // the page to wherever the caret happens to be. Clicking a task's box while another row held the caret rebuilt the
   // outline and then jumped the view to that other row. Typing still scrolls to itself, through scrollOnType.
   if (saved && savedSel) selectRange(saved.key, savedSel[0], savedSel[1], true);
+  else if (saved && saved.cell) placeCell(saved.key, saved.cell, saved.offset);
   else if (saved) placeCaret(saved.key, saved.offset, true);
   // the caret lands in that typable row once per open: a later render (a live update, a refresh) must not pull it back
   if (caretOnOpen && parent && Array.isArray(childrenOf(parent))) {
@@ -736,6 +738,9 @@ function nodeEl(node, docId, parent) {
   } else if (isDivider(node)) { // atomic like an image: focusable so Up/Down and Backspace still reach it
     text.classList.add('divider'); text.tabIndex = -1;
     text.append(document.createElement('hr'));
+  } else if (node.table) { // atomic too: the row focuses, moves and deletes; its cells are the editable part (renderer/table.js)
+    text.classList.add('table'); text.tabIndex = -1;
+    text.append(tableEl(item));
   } else {
     if (canEditText(item)) text.contentEditable = 'plaintext-only'; else text.tabIndex = -1;
     text.spellcheck = false;

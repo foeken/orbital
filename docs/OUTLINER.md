@@ -802,3 +802,43 @@ confirms an archive in a dialog; here nothing is asked, since Cmd+Z and this pag
 Tana's notifications inbox as a page of its own: **Notifications** in Cmd+K's Views (after Inbox), with the unread count as its hint ("2 unread"), opens `orbital:notifications` — an id no Tana node can have, known to the renderer from boot (renderer/inbox.js puts it in `extra` with `appPage: true`), so `goTo`, Back and Recent reach it without asking main for a node. Its rows are `outline:children` of that id: main/inbox.js reads the user's `tana:user-inbox` document (sdk/inbox.js) and hands back one read-only row per notification, newest first, as Tana's Notifications widget lists them. A row is Tana's own sentence (`phrase`): the actor named from the member list and what Tana emphasises in bold ("**Sam Okafor** added you to **Leadership sync**"), then Tana's second line when it has one (". Review the budget."); the time it came in is the row's grey meta ("3 hours ago"). A notification without an actor reads the way Tana writes it for nobody ("You were added to …"); a type archived or restored is named by the type's current title when the graph still answers for it, and Tana's "archived a type" otherwise.
 Unread is Tana's blue dot, in the bullet's place (`.node.unread`). The bullet is the row action: clicking it marks the row read, or unread again. Opening a row — Enter or Space on it, or a click on its words — marks it read and goes to its source, which is what a click does in Tana (`sJt` in the bundle: `markAsRead(id)`, then navigate to `sourceUri`). A source with no page here (a type, a person) opens in Tana through the node link, as Show in Tana does; a comment notification opens its document, since there is no thread view to scroll to. Tana opens billing for an `ai-usage-warning` where it can; Orbital has no billing page, so it follows the source like any other row, which is what Tana does without billing access. Cmd+K on the rows you are on (the selection, or the row the caret was in) offers **Mark as read** and **Mark as unread**, each only when some of them are the other way, with fixed ids (`markRead`, `markUnread`) so either can be given a key; **Mark all as read** (`markAllRead`) sits in Actions with the count as its hint and greys out at zero, as Tana's button does.
 Everything is drawn before main answers; each write answers with the new count, and main subscribes the inbox once per connection and sends `inbox:changed` with the unread count on every change to it — a new notification, a read on another device — which re-reads the page when it is open. `onChange` leaves the inbox document alone: it is no row's document. The page has no pills, no filter, no draft row, no presence room and no pins, and Cmd+K offers nothing about the page as a document (`appPage`). Orbital has no navigation sidebar, so Cmd+K's Views row is where the entry and its count live.
+## Addendum: tables (issue #32)
+Tana's schema has `table > tableRow > (tableHeader | tableCell) > block+`. Its own writer (`shared-rlpSpfd9.js`
+`Mge`/`jge`/`Fge`) puts a `blockId` on the table, each row, each cell and the paragraph inside a cell, and `colspan`/`rowspan` on
+a cell; `colwidth` is a ProseMirror attribute (`null` until a column is resized, then one width per spanned column).
+- **The row.** A table arrives as one read-only outline node, `{ type: 'table', editable: false, text, table }`, where `text`
+  is the cells joined as before and `table` is `content.readTable`'s answer: `{ id, rows: [[{ id, header, colspan, rowspan,
+  colwidth, paragraph, segments, text, blocks }]], rowCount, columnCount }`, rows and cells in stored order the way Tana's
+  own `readTable` counts them. The row is atomic like an image or a divider (`isAtomic`): it focuses, moves (⌘⇧↑/↓, drag),
+  selects and deletes in a writable document (`canEditStructure`), and nothing types into the row itself.
+  `setText` and `setBlockType` still refuse the table, so it is never overwritten as text.
+- **Drawn as a table** (renderer/table.js `tableEl`): header cells are `th`, data cells `td`, spans carry over as
+  `colSpan`/`rowSpan`, and a resized column keeps its width (set through `style.setProperty`, which CSP allows). A cell's
+  text is its first paragraph, drawn with `renderSegs` so marks and mentions show; anything else in the cell (a second
+  paragraph, a list) shows below it in grey, read-only.
+- **Cell edits.** A cell with an id is `contenteditable` only where the document is writable; in a read-only document the
+  same table has no editable cell. Typing is debounced like a row (400 ms, on focus loss, and before undo/redo through
+  `flushAll`) and written with `api.setCell(docId, cellId, value)` → `block:setCell` → `content.setCellText`, one undo step of
+  that document. `setCellText` does what Tana's `updateCell` does: it rewrites the cell's first paragraph (one is made at
+  the front, with an id, when the cell has none) and leaves the cell's other blocks, an image for instance, where they are.
+  Same value as `setText` (a string, or segments with marks and mentions). A pending edit stays on screen through a
+  rebuild, and the caret goes back to the same cell after one.
+- **Keys** (renderer/table.js `cellKey`; the row's own keydown handler leaves cells alone): Tab/Shift+Tab walk the editable
+  cells in reading order, and past the last or before the first go back to the table row. ↑/↓ on a cell's first/last
+  line go to the cell above/below in the column you see, merged cells counted (`tableGrid`; a shorter row gives its last cell), or out of the table to the outline row
+  beyond. ←/→ at a cell's edge go to the previous/next cell, and past the ends out of the table. Escape returns to the
+  table row, where Backspace removes it and ↑/↓ step on as for an image. Enter on the table row puts the caret in its
+  first cell; Enter inside a cell adds nothing, because a cell's text is one paragraph. Every ⌘ key goes on to the document
+  handler.
+- **Rows and columns** (⌘K with the caret in a cell, group "Table"; each row has an id, so ⇧⌘K can give it a key): Add row
+  above/below, Move row up/down, Delete row, Add column left/right, Move column left/right, Delete column, written by
+  `content.tableOp` as Tana's `manipulateTable` writes them, one undo step each, with the caret put in the cell the
+  operation names. The limits are Tana's table menu's: no row above the header row, the header row is neither moved nor
+  deleted, the last body row and the last column stay; what cannot run where the caret is shows disabled. A new cell
+  is a `tableCell` (a `tableHeader` in a header row) with an empty paragraph, both with ids; a moved row or column keeps
+  its ids and text.
+- **Images in cells** are drawn after the cell's text (a click opens one, as on an image row). Pasting an image into a
+  cell uploads it and appends it to that cell, as Tana's `addImageToCell` does. Removing one from a cell is not offered.
+- **Presence:** a caret in a cell is sent as the cell's paragraph (the block Tana names for it), and one received on a
+  cell's paragraph is drawn in that cell. The SDK's position helpers find a paragraph inside a cell for this, while
+  `locate` still stops at tables, so no outline operation reaches into one.

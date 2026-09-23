@@ -151,6 +151,10 @@ function mockApi() {
   // inline references (embeds): read-only nodes rendering the target's title/state, like sdk/content.js (editable: false) with main resolving reference.node
   content.mockdoc0.unshift({ id: 'ref' + (++seq), kind: 'block', type: 'reference', editable: false, reference: { uri: 'mockdoc9' }, hasChildren: false, children: [] });
   content.mockdoc0.splice(1, 0, { id: 'ref' + (++seq), kind: 'block', type: 'reference', editable: false, reference: { uri: 'tana:user-profile:sam' }, hasChildren: false, children: [] });
+  // a table block, in the shape sdk/content.js reads one: the row is read-only, its cells edit through api.setCell
+  const cell = (text, header) => ({ id: 'cell' + (++seq), header: !!header, colspan: 1, rowspan: 1, colwidth: null, paragraph: 'cp' + seq, segments: text ? [{ text }] : [], text, blocks: [] });
+  const grid = [[cell('Owner', true), cell('Status', true)], [cell('Robin'), cell('Open')], [cell('Sam'), cell('')]];
+  content.mockdoc0.push({ id: 'tbl' + (++seq), kind: 'block', block: 'paragraph', type: 'table', editable: false, text: '', table: { id: 'tbl' + seq, rows: grid, rowCount: 3, columnCount: 2 }, hasChildren: false, children: [] });
   const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGPoyroWu7WKIX9dU1fWNQAuWQbA8sXmUwAAAABJRU5ErkJggg==';
   const changed = [], removed = [], statusCbs = [], deleted = new Map(), sensitive = new Set(), codexAssigned = new Set(), codexPrompts = new Map();
   let status = { authenticated: false, authChecking: false, connected: false, syncing: false, lastSync: null, error: null };
@@ -437,6 +441,22 @@ function mockApi() {
     setDone: async (docId, done) => mut(docId, () => { const d = all.find((x) => x.id === docId); d.done = done ? 1 : 0; d.state = done ? 'closed' : 'open'; emit(docId); }),
     toggleCheckbox: async (docId, id) => mut(docId, () => { const n = locate(content[docId], id).node; n.done = n.done == null ? 0 : n.done ? 0 : 1; emit(docId); }),
     setText: async (docId, id, text) => mut(docId, () => { const n = locate(content[docId], id).node; n.text = plainOf(text); n.segments = segsOf(text); emit(docId); }),
+    setCell: async (docId, cellId, text) => mut(docId, () => { const c = content[docId].flatMap((n) => (n.table ? n.table.rows.flat() : [])).find((x) => x.id === cellId); if (!c) throw new Error('no table cell ' + cellId); c.segments = segsOf(text); c.text = plainOf(text); emit(docId); }),
+    // the same operations as sdk/content.js tableOp, on the plain grid (no header or last-row guards: main is the rule)
+    tableOp: async (docId, cellId, op) => mut(docId, () => {
+      const t = content[docId].find((n) => n.table && n.table.rows.some((r) => r.some((c) => c.id === cellId))).table, rows = t.rows;
+      const r = rows.findIndex((row) => row.some((c) => c.id === cellId)), c = rows[r].findIndex((x) => x.id === cellId), blank = (h) => cell('', h);
+      const swap = (list, a, b) => { if (b >= 0 && b < list.length) [list[a], list[b]] = [list[b], list[a]]; };
+      let out = cellId;
+      if (op === 'rowBefore' || op === 'rowAfter') { const row = rows[0].map(() => blank(false)); rows.splice(op === 'rowBefore' ? r : r + 1, 0, row); out = row[c].id; }
+      else if (op === 'deleteRow') { rows.splice(r, 1); out = (rows[r] || rows[r - 1])[c]?.id; }
+      else if (op === 'columnBefore' || op === 'columnAfter') rows.forEach((row, y) => { const n = blank(row[0]?.header); row.splice(op === 'columnBefore' ? c : c + 1, 0, n); if (y === r) out = n.id; });
+      else if (op === 'deleteColumn') { rows.forEach((row) => row.splice(c, 1)); out = (rows[r][c] || rows[r][c - 1])?.id; }
+      else if (op === 'rowUp' || op === 'rowDown') swap(rows, r, r + (op === 'rowUp' ? -1 : 1));
+      else rows.forEach((row) => swap(row, c, c + (op === 'columnLeft' ? -1 : 1)));
+      t.rowCount = rows.length; t.columnCount = Math.max(...rows.map((row) => row.length));
+      emit(docId); return out;
+    }),
     // block types and dividers (the contract the renderer codes against): type in paragraph | heading1-3 | bullet | numbered | code | quote
     setBlockType: async (docId, id, type) => mut(docId, () => {
       const n = locate(content[docId], id).node;
@@ -444,7 +464,14 @@ function mockApi() {
       emit(docId);
     }),
     insertDivider: async (docId, id) => mut(docId, () => { const f = locate(content[docId], id); f.list.splice(f.index + 1, 0, divider()); emit(docId); }),
-    insertImage: async (docId, id) => mut(docId, () => { const f = id == null ? null : locate(content[docId], id), n = { id: 'img' + (++seq), kind: 'block', type: 'image', image: { uri: 'tana:image:mock', alt: null, width: null, height: null }, hasChildren: false, children: [] }; if (!f) content[docId].push(n); else f.list.splice(f.index + 1, 0, n); emit(docId); return n.id; }),
+    insertImage: async (docId, id) => mut(docId, () => {
+      const n = { id: 'img' + (++seq), kind: 'block', type: 'image', image: { uri: 'tana:image:mock', alt: null, width: null, height: null }, hasChildren: false, children: [] };
+      const inCell = content[docId].flatMap((b) => (b.table ? b.table.rows.flat() : [])).find((c) => c.id === id); // into a table cell, after its text
+      if (inCell) { inCell.blocks = [...(inCell.blocks || []), n]; emit(docId); return n.id; }
+      const f = id == null ? null : locate(content[docId], id);
+      if (!f) content[docId].push(n); else f.list.splice(f.index + 1, 0, n);
+      emit(docId); return n.id;
+    }),
     insertAfter: async (docId, id, text) => mut(docId, () => {
       const f = id == null ? null : locate(content[docId], id), n = block(text, [], undefined, f && f.node.kind === 'block' && f.node.done != null ? 0 : undefined);
       if (!f) content[docId].push(n); else f.list.splice(f.index + 1, 0, n);

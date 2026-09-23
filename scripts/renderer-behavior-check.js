@@ -7473,6 +7473,120 @@ function runDropPlanCheck() {
   console.log('ok  drag and drop: one gap reads as several places, x chooses the level and the line marks it, documents land as references, blocks move, and nothing lands read-only, empty, in another document, in a view or inside itself');
 }
 
+// Tables (renderer/table.js): a table row draws Tana's grid — header cells, spans, a resized width — with each cell's
+// first paragraph editable only where the document is, written once over api.setCell, and keys that walk the cells.
+async function runTableCheck() {
+  const src = ['tableEl', 'cellInput', 'saveCell', 'tableGrid', 'cellBeside', 'cellKey', 'cellImage', 'cellPaste', 'tableRows', 'tableAction'].map(functionSource).join('\n') + '\n' + sourceLine('const cellPending') + '\n' + sourceBetween('const TABLE_ROWS', 'function tableRows');
+  const api = vm.runInNewContext(`
+    let focusedEl = null, caret = null, moved = null;
+    const writes = [], timers = [];
+    const mk = (tag) => ({
+      tagName: tag.toUpperCase(), childNodes: [], dataset: {}, listeners: {}, parentElement: null,
+      style: { props: {}, setProperty(k, v) { this.props[k] = v; } },
+      classList: { set: new Set(), add(...n) { n.forEach((x) => this.set.add(x)); }, contains(n) { return this.set.has(n); } },
+      get className() { return [...this.classList.set].join(' '); }, set className(v) { this.classList.set = new Set(String(v).split(' ').filter(Boolean)); },
+      get isContentEditable() { return this.contentEditable === 'plaintext-only'; },
+      get textContent() { return (this.segs || []).map((s) => s.text).join(''); }, set textContent(v) { this.segs = [{ text: v }]; },
+      append(...kids) { for (const c of kids) { c.parentElement = this; this.childNodes.push(c); } },
+      addEventListener(type, fn) { this.listeners[type] = fn; },
+      querySelectorAll(sel) { const out = [], walk = (e) => { for (const c of e.childNodes) { if (c.classList.contains('cell') && (sel === '.cell' || c.isContentEditable)) out.push(c); walk(c); } }; walk(this); return out; },
+      querySelector(sel) { return this.querySelectorAll(sel)[0] || null; },
+      closest(sel) { for (let e = this; e; e = e.parentElement) if (sel === '.cell' ? e.classList.contains('cell') : e.tagName === 'TABLE') return e; return null; },
+      get rows() { return this.childNodes; }, get cells() { return this.childNodes; },
+      get rowIndex() { return this.parentElement.childNodes.indexOf(this); }, get cellIndex() { return this.parentElement.childNodes.indexOf(this); },
+      focus() { focusedEl = this; },
+    });
+    const document = { createElement: mk };
+    const ops = [], inserted = [], opened = [], placed = [], images = new Map();
+    let palReturn = null;
+    const items = new Map(), openImage = (n) => opened.push(n.id), showError = (e) => { throw e; }, placeCell = (...a) => placed.push(a);
+    const tana = { setCell: async (...a) => { writes.push(a); }, tableOp: async (...a) => { ops.push(a); return 'new1'; }, insertImage: async (...a) => { inserted.push([a[0], a[1], a[2].mimeType]); }, image: async (uri) => 'data:' + uri };
+    const canEditStructure = (item) => item.writable;
+    const renderSegs = (el, segs) => { el.segs = segs; }, readSegs = (el) => el.segs, plainOf = (segs) => segs.map((s) => s.text).join(''), saveValue = plainOf;
+    const run = (fn) => fn(), reload = async () => {}, render = () => {}, unanchored = (s) => s;
+    const setTimeout = (fn) => timers.push(fn), clearTimeout = () => {};
+    const caretOffset = () => 0, getSelection = () => ({ isCollapsed: true }), atEdge = () => true;
+    const setCaret = (el, off) => { caret = [el, off]; }, moveTo = (el, dir, off) => { moved = [el, dir, off]; };
+    ${src}
+    const cell = (id, text, extra = {}) => ({ id, header: false, colspan: 1, rowspan: 1, colwidth: null, paragraph: id && id + 'p', segments: text ? [{ text }] : [], text, blocks: [{ id: id && id + 'p', text }], ...extra });
+    const item = (writable) => ({ docId: 'd1', key: 'd1/t', writable, node: { table: { rows: [
+      [cell('h1', 'Owner', { header: true, colwidth: [80, 40] }), cell('h2', 'Status', { header: true })],
+      [cell('c1', 'Robin', { colspan: 2, blocks: [{ id: 'c1p', text: 'Robin' }, { id: 'x', text: 'second paragraph' }] })],
+      [cell(undefined, 'no id'), cell('c3', '')],
+    ] } } });
+    const draw = (writable) => { const it = item(writable), row = mk('span'), table = tableEl(it); row.append(table); return { it, row, table }; };
+    const key = (table, target, k, mods = {}) => { let prevented = false; caret = moved = focusedEl = null; table.listeners.keydown({ key: k, shiftKey: false, metaKey: false, ctrlKey: false, altKey: false, ...mods, target, preventDefault: () => { prevented = true; } }); return { prevented, caret, moved, focused: focusedEl }; };
+    const drawRows = (rows, writable = true) => { const it = { docId: 'd1', key: 'd1/t', writable, node: { table: { rows } } }, row = mk('span'), table = tableEl(it); row.append(table); items.set(it.key, it); return { it, row, table }; };
+    const rowsAt = (cellId) => { palReturn = { key: 'd1/t', cell: cellId }; return tableRows().map((r) => [r.id, r.disabled]); };
+    const tick = async () => { for (let i = 0; i < 10; i++) await null; };
+    ({ draw, drawRows, cell, key, writes, timers, ops, inserted, opened, placed, rowsAt, tick, run: (id) => { palReturn = { key: 'd1/t', cell: id }; return tableRows(); }, cellsOf: (table) => table.querySelectorAll('.cell') });
+  `);
+  const { table, row } = api.draw(true), cells = api.cellsOf(table);
+  const [h1, h2, c1, , c3] = cells;
+  assert.deepEqual(plain(table.childNodes.map((tr) => tr.childNodes.map((td) => td.tagName))), [['TH', 'TH'], ['TD'], ['TD', 'TD']], 'header cells are th, data cells td');
+  assert.equal(c1.parentElement.colSpan, 2, 'a colspan carries over');
+  assert.equal(h1.parentElement.style.props.width, '120px', 'a resized cell keeps its width: one per column it spans');
+  assert.deepEqual(plain(cells.map((c) => c.isContentEditable)), [true, true, true, false, true], 'every cell with an id is editable in a writable document');
+  assert.deepEqual(plain(c1.parentElement.childNodes.slice(1).map((n) => [n.className, n.textContent, n.isContentEditable])), [['more', 'second paragraph', false]], 'the rest of a cell shows, read-only');
+  assert.deepEqual(plain(api.cellsOf(api.draw(false).table).map((c) => c.isContentEditable)), [false, false, false, false, false], 'a read-only document draws a table with nothing to edit');
+
+  // typing is saved once, debounced, and only when it changed something
+  c1.segs = [{ text: 'Robin Vega' }];
+  table.listeners.input({ target: c1 });
+  assert.equal(api.writes.length, 0, 'nothing is written on the keystroke');
+  api.timers.shift()();
+  assert.deepEqual(plain(api.writes), [['d1', 'c1', 'Robin Vega']], 'the cell is written by its own id');
+  table.listeners.input({ target: c1 }); api.timers.shift()();
+  table.listeners.focusout({ target: c1 });
+  assert.equal(api.writes.length, 1, 'the same text is not written twice');
+
+  // keys: Tab walks the editable cells, arrows cross rows by column, the edges leave the table, Escape returns to the row
+  assert.equal(api.key(table, h1, 'Tab').caret[0], h2, 'Tab: the next cell');
+  assert.equal(api.key(table, h2, 'Tab').caret[0], c1, 'across the row end');
+  assert.equal(api.key(table, h1, 'Tab', { shiftKey: true }).focused, row, 'Shift+Tab before the first cell: back to the table row');
+  assert.equal(api.key(table, c3, 'Tab').focused, row, 'and Tab past the last one');
+  assert.equal(api.key(table, h2, 'ArrowDown').caret[0], c1, 'Down: the same column, clamped to a shorter row');
+  assert.deepEqual(plain(api.key(table, c3, 'ArrowDown').moved.slice(1)), [1, 0], 'Down from the last row: out to the outline row below');
+  assert.equal(api.key(table, c1, 'ArrowUp').caret[0], h1, 'Up: the row above');
+  const esc = api.key(table, c1, 'Escape');
+  assert.equal(esc.focused, row); assert.equal(esc.prevented, true, 'Escape: the table row, which moves and deletes like an image');
+  const enter = api.key(table, c1, 'Enter');
+  assert.deepEqual([enter.prevented, enter.caret, enter.moved], [true, null, null], 'Enter adds nothing: a cell is one paragraph');
+  assert.equal(api.key(table, c1, 'k', { metaKey: true }).prevented, false, '⌘ keys go on to the document handler');
+  assert.match(source, /if \(!el \|\| e\.target\.classList\?\.contains\('cell'\)\) return;/, 'the row handler leaves a cell\u2019s keys alone');
+  assert.match(source, /e\.key === 'Enter' && item\.node\.table\) enterTable\(el\)/, 'Enter on the table row goes into its first cell');
+  // merged cells: Up/Down follow the column you see, not the cell's place in its row (a rowspan above shifts it)
+  const merged = api.drawRows([[api.cell('a', 'A', { rowspan: 2 }), api.cell('b', 'B')], [api.cell('c', 'C')], [api.cell('d', 'D'), api.cell('e', 'E')]]);
+  const [ma, mb, mc, md, me] = api.cellsOf(merged.table);
+  assert.equal(api.key(merged.table, mb, 'ArrowDown').caret[0], mc, 'Down from the right column lands in the right column');
+  assert.equal(api.key(merged.table, mc, 'ArrowDown').caret[0], me, 'and stays there past the merged cell, where a count of cells would land left');
+  assert.equal(api.key(merged.table, ma, 'ArrowDown').caret[0], md, 'Down from a cell two rows tall: the row after both');
+  assert.equal(api.key(merged.table, me, 'ArrowUp').caret[0], mc, 'Up: the same column');
+  assert.equal(api.key(merged.table, md, 'ArrowUp').caret[0], ma, 'Up into a merged cell');
+  // an image in a cell is drawn after its text, and opens like an image row
+  const pic = api.drawRows([[api.cell('p', 'Pic', { blocks: [{ id: 'pp', text: 'Pic' }, { id: 'img1', type: 'image', image: { uri: 'tana:image:x' } }] })]]);
+  const img = pic.table.childNodes[0].childNodes[0].childNodes[1];
+  assert.equal(img.className, 'cellimg'); await api.tick(); assert.equal(img.src, 'data:tana:image:x', 'the picture, through api.image');
+  img.onclick({ stopPropagation() {} }); assert.deepEqual(plain(api.opened), ['img1'], 'a click opens it');
+  // pasting an image into a cell uploads it into that cell; a paste without one is left to the text
+  let prevented = false; const file = { type: 'image/png', name: 'a.png', arrayBuffer: async () => new ArrayBuffer(2) };
+  pic.table.listeners.paste({ target: api.cellsOf(pic.table)[0], clipboardData: { files: [file] }, preventDefault: () => { prevented = true; } });
+  await api.tick(); await api.tick();
+  assert.deepEqual([prevented, plain(api.inserted)], [true, [['d1', 'p', 'image/png']]], 'into the cell, by its id');
+  prevented = false; pic.table.listeners.paste({ target: api.cellsOf(pic.table)[0], clipboardData: { files: [] }, preventDefault: () => { prevented = true; } });
+  assert.equal(prevented, false, 'text pastes as text');
+  // Cmd+K in a cell: rows and columns around it, disabled where Tana's table menu would not offer them
+  api.drawRows([[api.cell('h', 'H', { header: true }), api.cell('h2', 'H2', { header: true })], [api.cell('r1', 'x'), api.cell('r2', 'y')]]);
+  const at = (id) => Object.fromEntries(api.rowsAt(id).map(([k, off]) => [k.replace('table:', ''), off]));
+  assert.deepEqual(at('h'), { rowBefore: true, rowAfter: false, rowUp: true, rowDown: true, deleteRow: true, columnBefore: false, columnAfter: false, columnLeft: true, columnRight: false, deleteColumn: false },
+    'the header row: no row above it, and it is not moved or deleted');
+  assert.deepEqual([at('r1').deleteRow, at('r1').rowUp, at('r2').columnRight, at('r2').columnLeft], [true, true, true, false], 'the last body row stays; a body row does not go above the header; edges');
+  api.run('r1').find((r) => r.id === 'table:columnAfter').run(); await api.tick();
+  assert.deepEqual(plain([api.ops, api.placed]), [[['d1', 'r1', 'columnAfter']], [['d1/t', 'new1', 0]]], 'one api.tableOp, and the caret goes to the cell it names');
+  assert.equal(api.drawRows([[api.cell('z', 'z')]], false) && api.run('z').length, 0, 'nothing is offered in a document you cannot write');
+  console.log('ok  tables: th/td, spans and widths, cells editable only where the document is, one debounced write per change, keys walk the cells by the grid, images and pasted images in cells, Cmd+K rows and columns');
+}
+
 // Red until the checks actually settle: an async check left awaiting something that never resolves empties the event
 // loop, and node would exit 0 without a word — a silent pass for a check that never finished.
 checks.push(runDropPlanCheck);
@@ -7629,6 +7743,7 @@ async function runMeetingEditCheck() {
   console.log('ok  meeting edits: rows only when editable, typed time and place, attendee suggestions and members');
 }
 checks.push(runMeetingEditCheck);
+checks.push(runTableCheck);
 process.exitCode = 1;
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);

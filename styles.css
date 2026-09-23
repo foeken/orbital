@@ -457,6 +457,16 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .text.divider { display: block; cursor: default; }
 .text.divider hr { border: 0; border-top: 1px solid #dcdcdc; margin: 10px 0; }
 .text.divider:focus hr, .selected .text.divider hr { border-top-color: #b5d0ee; }
+/* a table block (renderer/table.js): the row focuses like an image, the cells are where the caret goes */
+.text.table { display: block; cursor: default; overflow-x: auto; }
+.text.table table { border-collapse: collapse; margin: 4px 0; }
+.text.table th, .text.table td { border: 1px solid #dcdcdc; padding: 3px 8px; vertical-align: top; text-align: left; min-width: 48px; }
+.text.table .cellimg { display: block; max-width: 100%; max-height: 240px; margin-top: 4px; border-radius: 3px; cursor: zoom-in; }
+.text.table th { background: #f6f6f6; font-weight: 600; }
+.text.table .cell { outline: none; min-height: 1.4em; white-space: pre-wrap; cursor: text; }
+.text.table .more { color: #888; }
+.text.table th:focus-within, .text.table td:focus-within { box-shadow: inset 0 0 0 2px #b5d0ee; }
+.text.table:focus table, .selected .text.table table { outline: 2px solid #b5d0ee; outline-offset: 2px; }
 .h1 > .line .text { font-size: 24px; font-weight: 700; line-height: 30px; }
 .h2 > .line .text { font-size: 20px; font-weight: 700; line-height: 28px; }
 .h3 > .line .text { font-weight: 700; }
@@ -747,6 +757,10 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .node.t-quote > .line .text { border-left-color: #454b4e; color: #a8adaf; }
 [data-theme="dark"] .text.divider hr { border-top-color: #3a3f41; }
 [data-theme="dark"] .text.divider:focus hr, [data-theme="dark"] .selected .text.divider hr { border-top-color: #58768a; }
+[data-theme="dark"] .text.table th, [data-theme="dark"] .text.table td { border-color: #3a3f41; }
+[data-theme="dark"] .text.table th { background: #2a2e30; }
+[data-theme="dark"] .text.table th:focus-within, [data-theme="dark"] .text.table td:focus-within { box-shadow: inset 0 0 0 2px #58768a; }
+[data-theme="dark"] .text.table:focus table, [data-theme="dark"] .selected .text.table table { outline-color: #58768a; }
 [data-theme="dark"] .toolbar { background: #242729; box-shadow: 0 6px 24px rgba(0, 0, 0, .5), 0 0 0 1px rgba(255, 255, 255, .08); }
 [data-theme="dark"] .tbtn { color: #c9c9c9; }
 [data-theme="dark"] .tbtn:hover, [data-theme="dark"] .tbtn.style.open { background: #2f3436; }

@@ -71,15 +71,17 @@ function paintPresence() {
     const item = items.get(line.parentElement.dataset.key);
     if (!item || item.docId !== presenceDoc) continue;
     for (const p of presencePeers) {
-      if (!p.blockId || item.node.id !== p.blockId) continue;
+      // on the row itself, or in one of a table row's cells (their paragraphs are the blocks a caret in a cell names)
+      const text = !p.blockId ? null : item.node.id === p.blockId ? line.querySelector('.text')
+        : item.node.table ? line.querySelector('.cell[data-para="' + CSS.escape(p.blockId) + '"]') : null;
+      if (!text) continue;
       const mark = document.createElement('span');
       mark.className = 'pcaret'; mark.style.setProperty('--hue', String(presenceHue(p))); mark.title = p.me ? 'You, in another tab' : p.name;
       mark.dataset.name = p.name; // the full name, yours too, as Tana labels a caret
       line.append(mark);
       // at the character their caret is on, as Tana draws it; in an empty row, or before its position is known, where the
       // row's text begins (never the line's own left edge, which is out over the bullet)
-      const text = line.querySelector('.text');
-      const box = text && ((p.offset != null && caretRect(text, p.offset)) || textStart(text));
+      const box = (p.offset != null && caretRect(text, p.offset)) || textStart(text);
       if (!box) continue;
       const base = line.getBoundingClientRect();
       mark.classList.add('at');
@@ -100,9 +102,11 @@ function caretIn(el) {
 let presenceTimer = null;
 function tellPresence() {
   if (!presenceDoc || !tana.presenceSet) return;
-  const el = document.activeElement, item = el && el.classList && el.classList.contains('text') && document.hasFocus() ? items.get(keyOfEl(el)) : null;
+  // a caret in a table cell is on that cell's paragraph, which is the block Tana names for it
+  const el = document.activeElement, cellPara = el && el.classList && el.classList.contains('cell') ? el.dataset.para : '';
+  const item = el && el.classList && (el.classList.contains('text') || cellPara) && document.hasFocus() ? items.get(keyOfEl(el)) : null;
   const caret = item && item.docId === presenceDoc && item.node.kind === 'block' && !item.node.draft ? caretIn(el) : null;
-  const at = caret ? { blockId: item.node.id, ...caret } : null, key = JSON.stringify(at);
+  const at = caret ? { blockId: cellPara || item.node.id, ...caret } : null, key = JSON.stringify(at);
   if (key === presenceSent) return;
   presenceSent = key;
   tana.presenceSet(presenceDoc, at);
