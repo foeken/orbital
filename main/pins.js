@@ -87,7 +87,13 @@ async function setPin(id, target, on, date = today()) {
   if (!S.client) throw new Error(NOT_CONNECTED);
   const sync = S.client.sync, user = S.me.userUri;
   if (pinTarget(target) === 'sidebar') await (on ? pins.pinSidebar : pins.unpinSidebar)(sync, user, id);
-  else await (on ? pins.pinDate : pins.unpinDate)(sync, user, id, date);
+  else if (on) await pins.pinDate(sync, user, id, date);
+  else {
+    // A date the document carries as a shared pin stays after the personal one goes: hide it for this user (Tana's
+    // mute) rather than unpin it for everyone.
+    await pins.unpinDate(sync, user, id, date);
+    if ((await pins.dates(sync, user, id)).includes(date)) await pins.muteDate(sync, user, id, date);
+  }
 }
 // Items pinned *on* a meeting or a space: the hub document's own pinnedItems list (docs/PINNING.md section 4), which
 // is what the graph reports as EDGE_TYPE_HAS_PIN. Not the sidebar/date pins above, which are private per-user state.

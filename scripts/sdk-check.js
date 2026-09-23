@@ -3749,6 +3749,7 @@ async function main() {
   {
     const { LoroMap } = require('loro-crdt');
     const COL = 'tana:collection:c1', PM = 'tana:pin-map:p1', A = 'tana:text:a', B = 'tana:text:b';
+    const plainDatesOf = (pm, uri, key) => (pm.loro.getMap('entries').get(uri).toJSON()[key] || []).map((p) => p.datetime);
     const docs = {}, mirror = {};
     for (const id of [ME, COL, PM]) { docs[id] = new Document(id, { peerId: '21' }); mirror[id] = new Document(id, { peerId: '22' }); docs[id].on('local-update', (u) => mirror[id].applyRemote([u])); }
     const sync = { subscribed: [], subscribe: async (id) => { sync.subscribed.push(id); if (!docs[id]) throw new Error('document not found: ' + id); return docs[id]; } };
@@ -3790,8 +3791,49 @@ async function main() {
     assert.deepEqual(await pins.datePinned(sync, ME), [], 'an entry left behind by its last unpin is not a pin');
     await pins.pinDate(sync, ME, A, '2026-09-13');
     assert.deepEqual(mirror[PM].toJSON(), docs[PM].toJSON());
-    assert.deepEqual([...new Set(sync.subscribed)], [ME, COL, PM], 'only the profile and the two pointed documents are subscribed');
-    console.log('ok  pins (sidebar tree, personal date pins, converge)');
+    // Muted and shared dates (Tana's getEffectivePins): dates() is shared + personal - muted; datePins/datePinned are
+    // the Today list (getEntitiesWithPinsInRange): personal - muted, no shared.
+    docs[A] = new Document(A, { peerId: '23' }); mirror[A] = new Document(A, { peerId: '24' }); docs[A].on('local-update', (u) => mirror[A].applyRemote([u]));
+    docs[A].transact((l) => initDocument(l, 'shared', ME));
+    pins.pinSharedDate(docs[A], '2026-09-20');
+    pins.pinSharedDate(docs[A], '2026-09-20'); // dedup
+    assert.throws(() => pins.pinSharedDate(docs[A], 'today'), /YYYY-MM-DD/);
+    assert.ok(mirror[A].loro.getMap('data').get('sharedPinDates').get(0) instanceof LoroMap, 'a shared pin is a map container, like the web client');
+    assert.deepEqual(pins.sharedDates(mirror[A]), ['2026-09-20']);
+    assert.deepEqual(await pins.dates(sync, ME, A), ['2026-09-13', '2026-09-20'], 'shared and personal, sorted');
+    assert.deepEqual(await pins.datePins(sync, ME), { [A]: ['2026-09-13'] }, 'a shared date is not in the Today list');
+    await pins.muteDate(sync, ME, A, '2026-09-20');
+    await pins.muteDate(sync, ME, A, '2026-09-13');
+    await pins.muteDate(sync, ME, A, '2026-09-13'); // dedup
+    assert.deepEqual(mirror[PM].loro.getMap('entries').get(A).toJSON().mutedPins.map((p) => [p.type, p.datetime, typeof p.pinnedAt]), [['plain', '2026-09-20', 'number'], ['plain', '2026-09-13', 'number']]);
+    assert.deepEqual(await pins.dates(sync, ME, A), [], 'muted hides shared and personal alike');
+    assert.deepEqual(await pins.datePinned(sync, ME), [], 'a muted personal pin is off the Today list');
+    await pins.unmuteDate(sync, ME, A, '2026-09-20');
+    assert.deepEqual(await pins.dates(sync, ME, A), ['2026-09-20']);
+    await pins.muteDate(sync, ME, B, '2026-09-20'); // a mute on a document with no entry creates the entry, as mutePin does
+    assert.deepEqual(mirror[PM].loro.getMap('entries').get(B).toJSON().pins, []);
+    pins.unpinSharedDate(docs[A], '2026-09-20');
+    pins.unpinSharedDate(docs[A], '2026-09-21'); // no-op
+    assert.deepEqual(pins.sharedDates(mirror[A]), []);
+    // main's unpin: the personal pin goes, and a date the document still shares is muted for this user only
+    const backend = mainHelpers();
+    backend.testRuntime({ me: { userUri: ME }, client: { sync }, win: { isDestroyed: () => false, webContents: { send: () => {} } } });
+    pins.pinSharedDate(docs[A], '2026-09-22');
+    await pins.pinDate(sync, ME, A, '2026-09-22');
+    await pins.pinDate(sync, ME, A, '2026-09-23');
+    await backend.handlers.get('pins:unpin')(null, A, 'today', '2026-09-22');
+    await backend.handlers.get('pins:unpin')(null, A, 'today', '2026-09-23');
+    assert.deepEqual(await pins.dates(sync, ME, A), [], 'both unpinned days are gone from this user\'s view (the 13th is still muted)');
+    assert.deepEqual(pins.sharedDates(mirror[A]), ['2026-09-22'], 'the shared pin stays for everyone else');
+    assert.deepEqual(plainDatesOf(mirror[PM], A, 'mutedPins'), ['2026-09-13', '2026-09-22'], 'of the two, only the shared day is muted');
+    await backend.handlers.get('pins:pin')(null, A, 'today', '2026-09-22');
+    assert.deepEqual(plainDatesOf(mirror[PM], A, 'mutedPins'), ['2026-09-13'], 'pinning it again unmutes it');
+    await backend.handlers.get('pins:unpin')(null, A, 'today', '2026-09-22');
+    pins.unpinSharedDate(docs[A], '2026-09-22');
+    assert.deepEqual(await pins.dates(sync, ME, B), [], 'an unreadable document has no shared dates');
+    assert.deepEqual(mirror[PM].toJSON(), docs[PM].toJSON());
+    assert.deepEqual([...new Set(sync.subscribed)].sort(), [ME, COL, PM, A, B].sort(), 'the profile, the two pointed documents, and the documents whose shared dates were read');
+    console.log('ok  pins (sidebar tree, personal, muted and shared date pins, converge)');
   }
   // 3d. Items pinned *on* a meeting or a space: the hub's own pinnedItems MovableList (docs/PINNING.md section 4),
   // and main's nodePin gate around it. This is not the sidebar/date pins above.
