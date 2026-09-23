@@ -148,18 +148,13 @@ function taskMetaEl(summary, docId, node) {
     const svg = iconNode('unassigned'); if (svg) { svg.setAttribute('width', '14'); svg.setAttribute('height', '14'); icon.append(svg); }
     who.prepend(icon);
   }
-  // Assigned to someone who cannot see it: the warning sits right after the names it is about, and a click opens
-  // the visibility picker, where it is fixed. Its colour is the stylesheet's (.hiddenfrom), not the glyph's.
-  if (summary.hiddenFrom) {
-    const icon = iconEl('userAlert', 'Not visible to ' + summary.hiddenFrom);
-    icon.classList.add('hiddenfrom');
-    if (writable && tana.accessOptions) { icon.title += ' — click to edit visibility'; clickable(icon, () => openVisibility(node, summary.scope)); }
-    el.append(icon);
-  }
   if (summary.audience) {
-    const icon = iconEl(summary.audience.icon, summary.audience.label);
-    if (summary.hiddenFrom) icon.classList.add('hiddenfrom'); // the audience that shuts the assignee out, in the warning's colour
-    if (writable && tana.accessOptions) { icon.title = summary.audience.label + ' — click to edit visibility'; clickable(icon, () => openVisibility(node, summary.scope)); }
+    // Assigned to someone who cannot see it: the audience icon itself is the warning, in the stylesheet's colour
+    // (.hiddenfrom), and says who is shut out. hiddenFrom only comes with a known audience, so there is always one.
+    const label = summary.audience.label + (summary.hiddenFrom ? ' — not visible to ' + summary.hiddenFrom : '');
+    const icon = iconEl(summary.audience.icon, label);
+    if (summary.hiddenFrom) icon.classList.add('hiddenfrom');
+    if (writable && tana.accessOptions) { icon.title = label + ' — click to edit visibility'; clickable(icon, () => openVisibility(node, summary.scope)); }
     el.append(icon);
   }
   else if (summary.unknownAudience) el.append(' · Visibility unknown');
