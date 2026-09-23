@@ -153,6 +153,8 @@ async function start() {
   S.client.sync.on('disconnected', () => setStatus({ connected: false }));
   S.client.sync.on('error', (e) => setStatus({ error: errText(e) }));
   S.client.sync.on('change', onChange);
+  // Tana refused an edit but still lets us read it: say so, and redraw the row, which doc:info now reports read-only.
+  S.client.sync.on('write-denied', (id) => { setStatus({ error: 'Tana refused your edits to this node; it is read-only now' }); send('outline:changed', id, { meta: false }); });
   setStatus({ authenticated: true });
   await S.client.sync.connect();
   // The settings document decides before anything is listed: a view's filter, the hidden titles and the MCP switch

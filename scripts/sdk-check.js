@@ -3860,7 +3860,7 @@ async function main() {
 
   // 5. Sync lifecycle against an in-process fake SyncService (bootstrap -> live -> updates out/in -> resync -> unsubscribe)
   const Resp2 = message('sync', 'ServerSyncResponse');
-  const server = { frames: [], wake: null, commands: [], serverDoc: new Document(DOC, { peerId: '4242' }), session: 0, created: new Map() };
+  const server = { frames: [], wake: null, commands: [], serverDoc: new Document(DOC, { peerId: '4242' }), session: 0, created: new Map(), unavailable: new Set(), denied: new Set(), begins: [] };
   server.serverDoc.applyRemote([snapshot]);
   const push = (json) => { server.frames.push(fromJson(Resp2, json)); if (server.wake) server.wake(); };
   const router = createRouterTransport(({ service }) => service(SyncService, {
@@ -3880,26 +3880,31 @@ async function main() {
       assert.equal(req.peerId, peerId);
       if (kind === 'beginDocumentSync') {
         const sessionId = 's' + (++server.session);
+        server.begins.push(value.documentId);
         if (server.fail503 > 0) { server.fail503--; throw new ConnectError('HTTP 503', Code.Unavailable); } // Tana shedding load
+        if (server.unavailable.has(value.documentId)) { server.onUnavailable(); return fromJson(message('sync', 'ServerSyncCommandResponse'), { bootstrapResponse: { sessionId, status: 'BOOTSTRAP_STATUS_UNAVAILABLE' } }); }
         const cold = value.clientVv.length === 0;
         if (value.documentId !== DOC && !server.created.has(value.documentId)) { // unknown id: MISSING, nothing to send (§2.1)
           return fromJson(message('sync', 'ServerSyncCommandResponse'), { bootstrapResponse: { sessionId, status: 'BOOTSTRAP_STATUS_MISSING', serverVv: '', serverUpdates: '' } });
         }
+        const sdoc = server.created.get(value.documentId) || server.serverDoc;
         return fromJson(message('sync', 'ServerSyncCommandResponse'), { bootstrapResponse: { sessionId, status: 'BOOTSTRAP_STATUS_EXISTING',
-          serverVv: b64(server.serverDoc.loro.oplogVersion().encode()), serverUpdates: cold ? b64(server.serverDoc.loro.export({ mode: 'snapshot' })) : '' } });
+          serverVv: b64(sdoc.loro.oplogVersion().encode()), serverUpdates: cold ? b64(sdoc.loro.export({ mode: 'snapshot' })) : '' } });
       }
       if (kind === 'applyBootstrapUpdates') {
-        if (value.documentId !== DOC) { // a create: the catch-up must be a full snapshot of a doc the server never saw
+        if (server.denied.has(value.documentId) && value.updates.length) throw new ConnectError('write denied', Code.PermissionDenied);
+        if (value.documentId !== DOC && !server.created.has(value.documentId)) { // a create: the catch-up must be a full snapshot of a doc the server never saw
           assert.ok(value.updates.length, 'create sends a non-empty catch-up');
           const d = new Document(value.documentId, { peerId: '4242' });
           d.applyRemote([value.updates]);
           server.created.set(value.documentId, d);
-        } else if (value.updates.length) server.serverDoc.applyRemote([value.updates]);
+        } else if (value.updates.length) (server.created.get(value.documentId) || server.serverDoc).applyRemote([value.updates]);
         setTimeout(() => push({ bootstrapComplete: { documentId: value.documentId, sessionId: value.sessionId, barrierVv: '' } }), 5);
         return {};
       }
       if (kind === 'liveDocumentUpdate') {
         if (value.sessionId !== 's' + server.session) throw new ConnectError('stale session', Code.FailedPrecondition);
+        if (server.denied.has(value.documentId)) throw new ConnectError('write denied', Code.PermissionDenied);
         (server.created.get(value.documentId) || server.serverDoc).applyRemote(value.updates);
         return {};
       }
@@ -3986,11 +3991,60 @@ async function main() {
   const said = warns.filter((w) => w.startsWith('sync: bootstrap ' + FLAKY));
   assert.equal(said.length, 1, 'the first [unavailable] stays quiet, the second is reported: ' + JSON.stringify(said));
   assert.match(said[0], /failed \(attempt 2\): .*503/);
+  // Drain on release (Tana's "Entering drain mode"): a document created and let go while its bootstrap is still running
+  // finishes that bootstrap, so the catch-up carrying its content reaches the server, and only then is unsubscribed.
+  const DRAINED = 'tana:text:' + ulid();
+  const draining = sync.subscribe(DRAINED, (l) => initDocument(l, 'created and released at once', ME));
+  await sync.unsubscribe(DRAINED);
+  assert.equal(readNode(await draining).title, 'created and released at once', 'the subscribe still answers');
+  assert.equal(readNode(server.created.get(DRAINED)).title, 'created and released at once', 'the queued create reached the server');
+  assert.equal(server.commands.at(-1), 'unsubscribeDocument', 'and the document was released afterwards');
+  assert.equal(sync.getDocument(DRAINED), undefined);
+  // Write denied (Tana's access-revoked -> "write denied"): a refused live send re-bootstraps to probe read access; the
+  // probe's catch-up is refused too, so the document stays open and readable, marked, and sends nothing more.
+  const DENIED = 'tana:text:' + ulid();
+  const denied = await sync.subscribe(DENIED, (l) => initDocument(l, 'shared with me', ME));
+  const deniedIds = []; sync.on('write-denied', (id) => deniedIds.push(id));
+  server.denied.add(DENIED);
+  setTitle(denied, 'my edit');
+  for (let i = 0; i < 40 && !deniedIds.length; i++) await new Promise((r) => setTimeout(r, 50));
+  assert.deepEqual(deniedIds, [DENIED], 'the write-denied event names the document');
+  assert.equal(sync.getDocument(DENIED), denied, 'the document stays open (not detached, no error event)');
+  assert.equal(denied.writeDenied, true);
+  assert.equal(require('../sdk/node').editable(readNode(denied), ME), false, 'and reads as not editable');
+  const sentBefore = server.commands.length;
+  setTitle(denied, 'another edit');
+  await new Promise((r) => setTimeout(r, 30));
+  assert.equal(server.commands.length, sentBefore, 'no further sends');
+  assert.equal(readNode(server.created.get(DENIED)).title, 'shared with me');
+  // Warm-bootstrap budget (Tana's #J): unavailable is retried while under 60 s or 5 attempts, then the session pauses
+  // instead of retrying forever; asking for it again resumes it. The clock jumps 20 s per attempt and the retry sleeps
+  // are cut to nothing, so this takes milliseconds.
+  const UNAV = 'tana:text:' + ulid(), realNow = Date.now, realTimeout = setTimeout;
+  let skew = 0;
+  Date.now = () => realNow() + skew;
+  global.setTimeout = (fn, ms, ...a) => realTimeout(fn, ms >= 200 && ms < 6000 ? 0 : ms, ...a);
+  server.onUnavailable = () => { skew += 20000; };
+  server.unavailable.add(UNAV);
+  try {
+    const pending = sync.subscribe(UNAV, (l) => initDocument(l, 'waiting for the server', ME));
+    await new Promise((r) => realTimeout(r, 300));
+    const tries = () => server.begins.filter((id) => id === UNAV).length;
+    assert.equal(tries(), 5, 'five attempts over 60 s, then no more');
+    await new Promise((r) => realTimeout(r, 200));
+    assert.equal(tries(), 5, 'paused, not retrying');
+    assert.ok(warns.some((w) => w.includes(UNAV) && /paused/.test(w)));
+    server.unavailable.delete(UNAV);
+    sync.subscribe(UNAV);
+    assert.equal(readNode(await pending).title, 'waiting for the server', 'a subscribe resumes the paused document');
+  } finally {
+    Date.now = realNow; global.setTimeout = realTimeout;
+  }
   await sync.close();
   assert.equal(sync.connected, false);
   assert.ok(server.commands.includes('unsubscribeDocument'), 'unsubscribe sent on close');
   assert.ok(changes.includes('local') && changes.includes('remote'));
-  console.log('ok  sync lifecycle (connect, bootstrap, live out/in, session check, resync, close)');
+  console.log('ok  sync lifecycle (connect, bootstrap, live out/in, session check, resync, drain on release, write denied, unavailable budget, close)');
 }
 
 main().then(() => console.log('all checks passed'), (e) => { console.error(e); process.exit(1); });

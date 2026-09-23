@@ -15,6 +15,8 @@ const STATUS = { EXISTING: 1, MISSING: 2, UNAVAILABLE: 3 };
 const DISCARD_LOCAL = 2;
 const EMPTY = new Uint8Array();
 const HANDSHAKE_MS = 15000, BOOTSTRAP_MS = 30000, STABLE_MS = 15000, BATCH_MS = 5, OUTBOUND_BUDGET = 262144;
+// A bootstrap answering unavailable is retried while under 60 s or under 5 attempts, as Tana's (#J); then it stops.
+const UNAVAILABLE_MS = 60000, UNAVAILABLE_ATTEMPTS = 5;
 
 const code = (e) => ConnectError.from(e).code;
 const jitter = (initial, max, factor, attempt) => { const n = Math.min(initial * factor ** attempt, max); return n / 2 + (n / 2) * Math.random(); };
@@ -112,7 +114,7 @@ class SyncConnection extends EventEmitter {
       this.docs.set(id, entry);
       if (init) document.transact(init);
       if (this.connected) this._bootstrap(entry);
-    }
+    } else if (entry.state === 'paused' && this.connected) this._bootstrap(entry); // asking again resumes, like Tana's retryRequest
     return entry.ready.promise;
   }
 
@@ -132,6 +134,10 @@ class SyncConnection extends EventEmitter {
     // racing a live update could otherwise reach the server first and the edit would be dropped.
     clearTimeout(entry.timer);
     entry.timer = null;
+    // Tana's drain mode: released while bootstrapping with local edits queued, the document finishes that one bootstrap
+    // (whose catch-up carries the edits) and goes live before it is let go. A document created and released at once
+    // lost its content without this. The drain ends with the bootstrap, however it ends: a failure is not retried.
+    if (entry.state === 'bootstrapping' && entry.queue.length) { entry.drain = deferred(); await entry.drain.promise; }
     while (entry.state === 'live' && (entry.inflight || entry.queue.length)) await (entry.inflight || this._flush(entry));
     if (this.docs.get(id) !== entry) return;
     const { sessionId } = entry;
@@ -174,7 +180,7 @@ class SyncConnection extends EventEmitter {
         this.connected = true;
         this._first.resolve();
         this._safe(() => this.emit('connected', { heartbeatIntervalMs: hb }));
-        for (const entry of this.docs.values()) this._bootstrap(entry);
+        for (const entry of this.docs.values()) if (!entry.document.writeDenied) this._bootstrap(entry);
         for (const channelId of this.channels.keys()) this._lightCommand({ case: 'subscribeEphemeralChannel', value: { channelId } }).catch(() => {});
         for (;;) {
           const { done, value } = await it.next();
@@ -241,6 +247,7 @@ class SyncConnection extends EventEmitter {
     entry.timer = null;
     if (entry.complete) entry.complete.reject(new Error('session dropped'));
     entry.complete = null;
+    if (entry.drain) entry.drain.resolve();
   }
 
   _detach(entry, err, failure = true) {
@@ -250,6 +257,23 @@ class SyncConnection extends EventEmitter {
     entry.document.off('change', entry.onChange);
     entry.document.off('local-update', entry.onLocal);
     if (!entry.ready.settled) entry.ready.reject(err); else if (failure) this._error(err);
+  }
+
+  // Tana's write denied: the server refused this peer's edits (a live send, or the catch-up of the bootstrap that probes
+  // read access afterwards) but still lets it read. The document stays open with what it has, sends nothing more and is
+  // not re-bootstrapped; `document.writeDenied` and the 'write-denied' event let the app show it read-only. A document
+  // that was never live has nothing to read yet, so its subscribe fails as before.
+  _denyWrites(entry, err) {
+    if (!entry.ready.settled) return this._detach(entry, err);
+    const { id, sessionId } = entry;
+    this._dropSession(entry);
+    entry.state = 'write-denied';
+    entry.revoked = false;
+    entry.queue.length = 0;
+    entry.document.writeDenied = true;
+    this.logger.warn('sync: write denied for ' + id + ', keeping it read-only');
+    if (sessionId && this.connected) this._command({ case: 'unsubscribeDocument', value: { documentId: id, sessionId } }).catch(() => {});
+    this._safe(() => this.emit('write-denied', id));
   }
 
   _resync(entry, reason) {
@@ -267,32 +291,40 @@ class SyncConnection extends EventEmitter {
   async _bootstrap(entry, delayed = false) {
     const gen = ++entry.gen;
     const stale = () => gen !== entry.gen || this.closed || !this.connected;
-    const startedAt = Date.now();
-    for (let attempt = delayed ? 1 : 0; ; attempt++) {
-      if (attempt > 0) await sleep(entry.resyncs >= 6 ? 30000 : jitter(500, 5000, 2, attempt - 1));
-      if (stale()) return;
-      entry.state = 'bootstrapping';
-      entry.sessionId = null;
-      try {
-        const status = await this._bootstrapOnce(entry, gen);
-        if (status === 'live' || status === 'stale') return;
-        // 'missing' cold start: give up after 60 s and 5 attempts; 'unavailable': keep retrying
-        if (status === 'missing' && attempt >= 4 && Date.now() - startedAt >= 60000) {
-          return this._detach(entry, new Error('document not found: ' + entry.id));
-        }
-        entry.state = 'retrying';
-      } catch (e) {
+    let misses = 0, firstMiss = 0;
+    try {
+      for (let attempt = delayed ? 1 : 0; ; attempt++) {
+        if (attempt > 0 && entry.drain) return; // a draining document gets one bootstrap, no retry
+        if (attempt > 0) await sleep(entry.resyncs >= 6 ? 30000 : jitter(500, 5000, 2, attempt - 1));
         if (stale()) return;
-        const c = code(e), msg = String(e.message || e);
-        if (c === Code.PermissionDenied) return this._detach(entry, e);
-        if (c === Code.FailedPrecondition && /no active streams|is not assigned to this pod/.test(msg)) return this.abort.abort();
-        if (c === Code.FailedPrecondition && /system-doc-discard-local/.test(msg)) entry.document.reset();
-        // A single [unavailable] is Tana shedding load, and the retry below takes it: logging it looked like a
-        // failure that needed acting on when nothing had gone wrong. It is said from the second attempt on, so a
-        // real outage is still visible — and every other code is still said the first time.
-        if (attempt > 0 || c !== Code.Unavailable) this.logger.warn('sync: bootstrap ' + entry.id + ' failed (attempt ' + (attempt + 1) + '): ' + msg + causeOf(e));
-        entry.state = 'retrying';
+        entry.state = 'bootstrapping';
+        entry.sessionId = null;
+        try {
+          const status = await this._bootstrapOnce(entry, gen);
+          if (status !== 'missing' && status !== 'unavailable') return;
+          firstMiss = firstMiss || Date.now();
+          if (++misses >= UNAVAILABLE_ATTEMPTS && Date.now() - firstMiss >= UNAVAILABLE_MS) {
+            // Cold MISSING: the id does not exist. Warm: Tana pauses until the transport reconnects (or, here, a subscribe).
+            if (status === 'missing') return this._detach(entry, new Error('document not found: ' + entry.id));
+            entry.state = 'paused';
+            return this.logger.warn('sync: ' + entry.id + ' still unavailable after ' + misses + ' attempts, paused until the next connection');
+          }
+          entry.state = 'retrying';
+        } catch (e) {
+          if (stale()) return;
+          const c = code(e), msg = String(e.message || e);
+          if (c === Code.PermissionDenied) return this._detach(entry, e);
+          if (c === Code.FailedPrecondition && /no active streams|is not assigned to this pod/.test(msg)) return this.abort.abort();
+          if (c === Code.FailedPrecondition && /system-doc-discard-local/.test(msg)) entry.document.reset();
+          // A single [unavailable] is Tana shedding load, and the retry below takes it: logging it looked like a
+          // failure that needed acting on when nothing had gone wrong. It is said from the second attempt on, so a
+          // real outage is still visible — and every other code is still said the first time.
+          if (attempt > 0 || c !== Code.Unavailable) this.logger.warn('sync: bootstrap ' + entry.id + ' failed (attempt ' + (attempt + 1) + '): ' + msg + causeOf(e));
+          entry.state = 'retrying';
+        }
       }
+    } finally {
+      if (entry.drain && gen === entry.gen) entry.drain.resolve();
     }
   }
 
@@ -318,11 +350,18 @@ class SyncConnection extends EventEmitter {
       else document.exportSince(loro.oplogVersion());
     }
     entry.queue.length = 0; // the catch-up export already contains anything queued (§2.2)
-    await this._command({ case: 'applyBootstrapUpdates', value: { documentId: id, sessionId, baseServerVv: EMPTY, updates: catchup } }, BOOTSTRAP_MS);
+    try {
+      await this._command({ case: 'applyBootstrapUpdates', value: { documentId: id, sessionId, baseServerVv: EMPTY, updates: catchup } }, BOOTSTRAP_MS);
+    } catch (e) {
+      if (gen !== entry.gen || code(e) !== Code.PermissionDenied) throw e;
+      this._denyWrites(entry, e); // readable, but the catch-up was refused (§2.2 write-permission-denied)
+      return 'denied';
+    }
     if (gen !== entry.gen) return 'stale';
     await timeout(entry.complete.promise, BOOTSTRAP_MS, 'Bootstrap timeout exceeded');
     entry.complete = null;
     if (gen !== entry.gen) return 'stale';
+    if (entry.revoked) { this._denyWrites(entry, new Error('write denied: ' + id)); return 'denied'; } // the probe could read
     entry.state = 'live';
     entry.liveSince = Date.now();
     entry.ready.resolve(document);
@@ -333,6 +372,7 @@ class SyncConnection extends EventEmitter {
   // ---- outbound live updates: 5 ms trailing batch, one in-flight send per document (§2.4) ----
 
   _queue(entry, bytes) {
+    if (entry.document.writeDenied) return; // Tana would refuse it; the edit stays local
     entry.queue.push(bytes);
     if (entry.state === 'live' && !entry.timer) {
       entry.timer = setTimeout(() => { entry.timer = null; this._flush(entry); }, BATCH_MS);
@@ -351,7 +391,8 @@ class SyncConnection extends EventEmitter {
     } catch (e) {
       if (entry.sessionId !== sessionId) return;
       const c = code(e);
-      if (c === Code.PermissionDenied) return this._detach(entry, e);
+      // Tana's access-revoked: re-bootstrap to probe read access, ending read-only (_denyWrites) or evicted if not even that.
+      if (c === Code.PermissionDenied) { entry.revoked = true; return this._resync(entry, 'write permission denied'); }
       if (c !== Code.Canceled) this._resync(entry, 'live update failed: ' + (e.message || e));
       return;
     } finally {
