@@ -47,6 +47,9 @@ WANT.openaiKey = path.join(__dirname, '..', 'build', 'icons', 'key-4.svg');
 WANT.pinned = path.join(__dirname, '..', 'build', 'icons', 'pin-tack.svg');
 // What the model suggested, rather than what you typed or what Tana knows (Cmd+K "Discuss with …")
 WANT.sparkle = path.join(__dirname, '..', 'build', 'icons', 'orbit-sparkle.svg');
+// The "/" menu's Table and Image rows (renderer/nodes.js glyphSvg), from the Nucleo UI 18px outline set
+WANT.table = path.join(__dirname, '..', 'build', 'icons', 'table.svg');
+WANT.image = path.join(__dirname, '..', 'build', 'icons', 'image.svg');
 // Cmd+K rows for the keys the outline answers to
 for (const [name, file] of [['expand', 'v-shaped-arrow-down'], ['collapse', 'v-shaped-arrow-up'], ['undo', 'undo'], ['redo', 'redo'], ['textLarger', 'text-size-increase'], ['textSmaller', 'text-size-decrease'], ['textReset', 'text'], ['rail', 'sidebar-right-4'], ['railShow', 'sidebar-right-show'], ['railHide', 'sidebar-right-hide'], ['back', 'arrow-left'], ['forward', 'arrow-right'], ['zoomIn', 'magnifier-3'], ['search', 'file-search'], ['filter', 'filter-2']]) WANT[name] = path.join(__dirname, '..', 'build', 'icons', file + '.svg');
 const out = {};
