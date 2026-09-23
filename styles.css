@@ -260,6 +260,8 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .rail .rrow.rmeta .rtitle { color: #555; }
 .rail .rrow.rmeta.fixed { cursor: default; }
 .rail .rrow.rmeta.fixed:hover { background: none; }
+/* Assigned to someone who cannot see it (renderer/tasks.js, rail.js): the amber of the fields' warning mark */
+.meta .hiddenfrom, .rail .rrow.rmeta[data-id="meta:hiddenFrom"] .ricon { color: #c8841c; }
 /* a history entry: the kind of change as a glyph, then what it is about with "who · when" under it. It opens
    nothing, so it does not answer the pointer the way the rows that do. */
 .rail .rrow.rchange { align-items: flex-start; cursor: default; }
@@ -827,6 +829,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .rail .rrow .rsub { color: #858b8e; }
 [data-theme="dark"] .rail .rrow.done .rtitle { color: #858b8e; }
 [data-theme="dark"] .rail .rrow.rmeta .rtitle { color: #a8adaf; }
+[data-theme="dark"] .meta .hiddenfrom, [data-theme="dark"] .rail .rrow.rmeta[data-id="meta:hiddenFrom"] .ricon { color: #e3a44a; }
 [data-theme="dark"] .fields { border-color: #3a3f41; }
 [data-theme="dark"] .fields .field, [data-theme="dark"] .fields .fvalue { color: #e6e8e9; }
 [data-theme="dark"] .fields .flabel, [data-theme="dark"] .fields .ricon { color: #858b8e; }

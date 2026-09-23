@@ -1203,6 +1203,15 @@ async function main() {
       { audience: 'unknown' }, 'a boundary with no participants stays unknown');
     assert.deepEqual(await audienceMetadata(doc(undefined, {}), ME, boundaryOf(EVENT), { subscribe: async () => doc(true, { 'tana:group:x': { type: 'group' } }) }),
       { audience: 'unknown' }, 'an inherited group grant stays unknown');
+    // #100: an assignee outside a restricted audience is named, so the row can warn that they cannot see it
+    const SAM = 'tana:user-profile:01examplem0000000000000000', OTHER = 'tana:user-profile:01examplep0000000000000000';
+    const assigned = (restricted, participants) => ({ id: DOC, data: { toJSON: () => ({ restricted, participants, assignedToUris: [SAM] }) } });
+    assert.deepEqual(await audienceMetadata(assigned(true, meOnly), ME), { audience: 'only-me', hiddenFrom: [SAM] }, 'assigned to Sam, visible only to me');
+    assert.deepEqual(await audienceMetadata(assigned(true, shared), ME), { audience: 'people' }, 'Sam is among the people it is shared with');
+    assert.deepEqual(await audienceMetadata(assigned(undefined, {}), ME, boundaryOf(EVENT), { subscribe: async () => doc(true, { ...meOnly, [OTHER]: { type: 'user', role: 'attendee' } }) }),
+      { audience: 'people', hiddenFrom: [SAM] }, 'inside a meeting Sam is not invited to');
+    assert.deepEqual(await audienceMetadata(assigned(undefined, { [SAM]: { type: 'user', role: 'editor' } }), ME, boundaryOf(EVENT), { subscribe: async () => doc(true, shared) }),
+      { audience: 'people' }, 'a grant on the document itself counts beside the boundary');
     console.log('ok  audience: direct/inherited restrictions, everyone and unresolved groups');
   }
 

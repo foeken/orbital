@@ -2441,6 +2441,8 @@ async function runSidebarRowsCheck() {
   // link sharing is its own fact: a public document says so, even when it is not a task and has no assignee
   assert.deepEqual(plain(api.rows({ id: 'doc' }, { assignees: 'Sam', audience: { icon: 'lock', label: 'Visible only to you' }, linkShared: true }).map((row) => [row.id, row.icon])),
     [['assignees', 'member'], ['visibility', 'lock'], ['linkShared', 'globe'], ['showInTana', 'tana']], 'a link-shared node adds a globe row');
+  assert.deepEqual(plain(api.rows({ id: 'doc' }, { assignees: 'Sam', hiddenFrom: 'Sam', audience: { icon: 'lock', label: 'Visible only to you' } }).slice(0, 3).map((row) => [row.id, row.icon, row.label])),
+    [['assignees', 'member', 'Assigned to Sam'], ['hiddenFrom', 'userAlert', 'Not visible to Sam'], ['visibility', 'lock', 'Visible only to you']], 'an assignee who cannot see the node is warned about under the assignees');
   assert.deepEqual(plain(api.rows({ id: 'doc' }, { assignees: '', audience: null, linkShared: true }).map((row) => [row.id, row.label])),
     [['linkShared', 'Anyone with the link'], ['showInTana', 'Show in Tana']], 'a public document with no assignee still reports that anyone with the link can read it');
   // A pinned node says so in Details too, and that row opens the page its pins are taken off from

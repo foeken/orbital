@@ -103,7 +103,8 @@ function taskSummary(node, lazy) {
   if (!meta) { if (!lazy) loadTaskMeta(node.id); return null; }
   if (meta.assignees.length) loadMembers(); // names need the member list; loading it re-renders when it arrives
   const scope = typeof meta.audience === 'string' ? meta.audience : meta.audience?.scope;
-  return { assignees: meta.assignees.length ? meta.assignees.map(memberName).join(', ') : 'Unassigned', audience: audienceInfo(meta.audience, meta.audienceSpace), scope, unknownAudience: scope === 'unknown', linkShared: !!meta.linkShared, watched: !!meta.watched, pinned: isPinned(node.id) };
+  const hiddenFrom = (meta.hiddenFrom || []).map(memberName).join(', '); // assigned, but outside the audience (sdk/node.js)
+  return { assignees: meta.assignees.length ? meta.assignees.map(memberName).join(', ') : 'Unassigned', hiddenFrom, audience: audienceInfo(meta.audience, meta.audienceSpace), scope, unknownAudience: scope === 'unknown', linkShared: !!meta.linkShared, watched: !!meta.watched, pinned: isPinned(node.id) };
 }
 // the same facts for a document that is not a task: no assignee, but it can be shared or public
 function documentSummary(node, lazy) {
@@ -146,6 +147,14 @@ function taskMetaEl(summary, docId, node) {
     icon.style.cssText = 'display:inline-block;width:14px;height:14px;margin-right:4px;vertical-align:-2px';
     const svg = iconNode('unassigned'); if (svg) { svg.setAttribute('width', '14'); svg.setAttribute('height', '14'); icon.append(svg); }
     who.prepend(icon);
+  }
+  // Assigned to someone who cannot see it: the warning sits right after the names it is about, and a click opens
+  // the visibility picker, where it is fixed. Its colour is the stylesheet's (.hiddenfrom), not the glyph's.
+  if (summary.hiddenFrom) {
+    const icon = iconEl('userAlert', 'Not visible to ' + summary.hiddenFrom);
+    icon.classList.add('hiddenfrom');
+    if (writable && tana.accessOptions) { icon.title += ' — click to edit visibility'; clickable(icon, () => openVisibility(node, summary.scope)); }
+    el.append(icon);
   }
   if (summary.audience) {
     const icon = iconEl(summary.audience.icon, summary.audience.label);
