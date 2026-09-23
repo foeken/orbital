@@ -37,6 +37,11 @@ $('errorLogin').onclick = () => tana.login().catch(showError);
 if (tana.onNotifyOpen) tana.onNotifyOpen((docId) => { if (docId) goTo(docId); });
 tana.onChanged((docId, info) => {
   if (docId) {
+    // A newer update would reorder this row under Updated; keep the layout the user is looking at until Clean up.
+    if (typeof sortBy === 'function' && (sortBy() === 'updated' || (typeof groupBy === 'function' && groupBy() === 'updated'))) {
+      const row = shownDocs().find((n) => n.id === docId);
+      if (row) holdRow(row);
+    }
     if (!info || info.meta !== false) { taskMetaById.delete(docId); if (typeof taskMetaFailed !== 'undefined') taskMetaFailed.delete(docId); }
     // The sidebar is read once per page and left alone while the page is edited: its sections are relations, and
     // typing in a document changes none of them (a task row in it is patched by patchCopies, not re-fetched).

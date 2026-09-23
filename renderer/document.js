@@ -34,7 +34,8 @@ function loadPins() {
     if (!palette.hidden && (palMode === 'cmd' || palMode === 'pins')) renderPalette();
   }, showError);
 }
-function pinAction(op, target, date) { run(async () => { await tana[op](pinInfo.docId, target, date); loadPins(); }); } // date: a local YYYY-MM-DD for the 'today' target; omitted means today
+function holdDatePin(doc) { if (doc && groupBy() === 'responsibility' && isTask(doc)) holdRow(doc); }
+function pinAction(op, target, date) { if (target === 'today' && typeof holdDatePin === 'function') holdDatePin(palDoc); run(async () => { await tana[op](pinInfo.docId, target, date); loadPins(); }); } // date: a local YYYY-MM-DD for the 'today' target; omitted means today
 // A pin on a meeting or a space is a write to that hub's own pinnedItems rather than to your sidebar or pin-map, so
 // it goes through api.unpinFrom. Both sidebars are re-read: the item leaves a section of the hub's page as it goes.
 function unpinFromHub(hubId) {
@@ -140,7 +141,7 @@ function pinDateRows(typed) {
   const near = date === localDate() ? 'Today' : date === localDate(1) ? 'Tomorrow' : '';
   const pinned = !!pinInfo && pinInfo.docId === doc.id && pinInfo.dates.includes(date);
   return [{ group: PIN_DATE_GROUP, icon: 'pinDate', label: long, hint: pinned ? 'Already pinned' : near ? near + ' \u21A9' : '\u21A9', disabled: pinned,
-    run: () => run(async () => { await tana.pin(doc.id, 'today', date); loadPins(); }) }];
+    run: () => { if (typeof holdDatePin === 'function') holdDatePin(doc); return run(async () => { await tana.pin(doc.id, 'today', date); loadPins(); }); } }];
 }
 function openPinDatePalette(doc) {
   pinDateDoc = doc; palMode = 'pinDate'; palRows = []; palIndex = 0; palette.hidden = false;
