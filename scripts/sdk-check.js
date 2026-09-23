@@ -126,6 +126,17 @@ async function main() {
     assert.equal(readNode(source).ownerUri,target.id); assert.equal(readNode(source).restricted,true);
     assert.ok(outline.readOutline(source).some(n=>n.id===child));
     const stranger='tana:user-profile:'+ulid();
+    const publicDoc=make('text'), artifact=make('artifact');
+    assert.equal((await access.capabilities(publicDoc,ME,ctx)).linkSharing,true,'text links default on when org policy is absent');
+    await access.setLinkSharing(publicDoc,ME,true,ctx);
+    assert.deepEqual(publicDoc.loro.getMap('linkSharing').toJSON(),{mode:'view'});
+    assert.equal(readNode(publicDoc).hasBeenPublic,true);
+    await access.setLinkSharing(publicDoc,ME,false,ctx);
+    assert.deepEqual(publicDoc.loro.getMap('linkSharing').toJSON(),{});
+    assert.equal(readNode(publicDoc).hasBeenPublic,true,'revoking a link preserves the public-history flag');
+    assert.equal((await access.capabilities(artifact,ME,ctx)).linkSharing,true,'artifacts support public links');
+    await assert.rejects(access.setLinkSharing(target,ME,true,ctx),/unavailable/,'spaces cannot be publicly shared');
+    await assert.rejects(access.setLinkSharing(publicDoc,stranger,true,ctx),/unavailable/,'public links require write access');
     await assert.rejects(access.setSharing(source,stranger,{rule:'inherit'},ctx));
     await assert.rejects(access.setSharing(source,ME,{rule:'people',participants:[{uri:stranger,role:'viewer'}]},ctx));
     await access.setSharing(source,ME,{rule:'people',participants:[{uri:stranger,role:'editor'}]},ctx);
@@ -356,9 +367,11 @@ async function main() {
     await assert.rejects(access.setSharing(event,ME,{rule:'people',participants:[{uri:stranger,role:'attendee'}]},ctx),/at least one organizer/);
     assert.deepEqual(event.toJSON(),eventBefore,'rejected organizer removal leaves ACL untouched');
 
-    const agent=make('agent');org.transact(l=>l.getMap('featurePolicy').set('memberOrgWideCreation',false));
+    const agent=make('agent');org.transact(l=>{const p=l.getMap('featurePolicy');p.set('memberOrgWideCreation',false);p.set('linkSharing',false);});
     assert.equal((await access.capabilities(agent,ME,ctx)).rules.includes('inherit'),false,'org policy');
     assert.equal((await access.capabilities(agent,ME,{...ctx,orgAdmin:true})).rules.includes('inherit'),true);
+    assert.equal((await access.capabilities(publicDoc,ME,ctx)).linkSharing,false,'org policy disables public links');
+    await assert.rejects(access.setLinkSharing(publicDoc,ME,true,ctx),/unavailable/,'org policy blocks the write');
     // A saved search is created by this app and owned by its creator, so it must be writable and deletable
     // like any other document kind; leaving it out of the access kinds said "write permission unknown" instead.
     const search=make('search');

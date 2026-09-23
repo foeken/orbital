@@ -27,7 +27,7 @@ Type (`tana:type:…`): `name`, `description`, `instructions`, `workflowUri`, `a
 
 Workflow (`tana:workflow:…`, a type's `workflowUri`): `type: 'workflow'`, `ownerUri` (the type's space), `states` — a LoroList of `{ id, name }` maps in board order, ids are UUIDs (live, 2026-09-23: one workflow, one state "In Progress"). A task in a column is `stateType: 'open'` plus `stateWorkflowUri`/`stateWorkflowStateId`; Tana labels it with the state's name, falling back to the plain label when the id is gone.
 
-Org (`tana:org:…`): only `name`, `language`, `workosOrgId`, `voicePresetId` and `memberUserProfileDocUris` (WorkOS user id → `tana:user-profile:` uri) live in `data`. The rest of the workspace settings are **root containers beside `data`**: `featurePolicy`, `approvedMcpServers`, `integrations`, `brand` (verified read-only 2026-09-13 on `tana:org:01examplel0000000000000000`). `access.canWrite` reads membership from `data`, `access.orgWideAllowed` reads `featurePolicy.memberOrgWideCreation` from the root; a key absent from `featurePolicy` means the feature is enabled. Not a document index.
+Org (`tana:org:…`): only `name`, `language`, `workosOrgId`, `voicePresetId` and `memberUserProfileDocUris` (WorkOS user id → `tana:user-profile:` uri) live in `data`. The rest of the workspace settings are **root containers beside `data`**: `featurePolicy`, `approvedMcpServers`, `integrations`, `brand` (verified read-only 2026-09-13 on `tana:org:01examplel0000000000000000`). `access.canWrite` reads membership from `data`; `access.orgWideAllowed` and public link sharing read `featurePolicy` from the root, where an absent key means enabled. Not a document index.
 
 ### `appearance` (LoroMap, optional root)
 

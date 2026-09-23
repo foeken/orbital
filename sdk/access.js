@@ -14,6 +14,7 @@ const DELETABLE = new Set(['text', 'canvas', 'skill', 'chat', 'event', 'space', 
 // What Tana's own client offers archive for (TypeRoute's archive set, read 2026-09-23): types only, with no other
 // client-side gate; the server decides the rest, so this asks the same write access delete does.
 const ARCHIVABLE = new Set(['type']);
+const LINK_SHAREABLE = new Set(['text', 'artifact']);
 const WRITERS = new Set(['admin', 'editor', 'attendee']);
 // The Library is Tana's name for a document with no owner, so it is a move target without a document of its own.
 const LIBRARY = { id: null, title: 'Library' };
@@ -70,6 +71,13 @@ async function orgWideAllowed(n, user, ctx) {
     return org.loro.toJSON().featurePolicy?.memberOrgWideCreation !== false;
   } catch { return false; }
 }
+async function orgLinkSharingAllowed(ctx) {
+  try {
+    const org = await ctx.sync.subscribe(ctx.orgDocUri);
+    observe(ctx, org);
+    return readNode(org).type === 'org' && org.loro.toJSON().featurePolicy?.linkSharing !== false;
+  } catch { return false; }
+}
 function eventSharing(n, user) {
   // Native wYe: calendar-connected events require organizer (admin/editor), except
   // imported events with no organizer. Unrestricted events without a viewer role are open.
@@ -99,14 +107,29 @@ async function canEditEvent(doc, user, ctx = {}) {
 async function capabilities(doc, user, ctx = {}) {
   const n = readNode(doc), write = supported(n) && await canWrite(n, user, ctx);
   const sharing = write && eventSharing(n, user);
+  const linkSharing = write && LINK_SHAREABLE.has(n.type) && await orgLinkSharingAllowed(ctx);
   const inheritAudience = await audienceOf({ ...n, restricted: undefined }, user, ctx);
   const inherit = sharing && inheritAudience.scope !== 'unknown' && await orgWideAllowed(n, user, ctx);
   const currentAudience = await audienceOf(n, user, ctx);
   const sharingToken = createHash('sha256').update(JSON.stringify({ id: n.id, owner: n.ownerUri, participants: n.participants, restricted: n.restricted, currentAudience, inheritAudience, inherit })).digest('hex');
-  return { sharing, move: write, deletable: write && DELETABLE.has(n.type) && eventSharing(n, user), archivable: write && ARCHIVABLE.has(n.type), ownerUri: n.ownerUri || null, sharingToken,
+  return { sharing, linkSharing, move: write, deletable: write && DELETABLE.has(n.type) && eventSharing(n, user), archivable: write && ARCHIVABLE.has(n.type), ownerUri: n.ownerUri || null, sharingToken,
     rules: sharing ? ['me', 'people', ...(inherit ? ['inherit'] : [])] : [], roles: ['editor', 'admin', ...(n.type === 'event' ? ['attendee'] : [])],
     audience: currentAudience, inheritAudience,
     reason: write ? sharing ? null : 'Only the event organizer can change access' : 'Write permission is unknown or unavailable' };
+}
+async function setLinkSharing(doc, user, enabled, ctx = {}) {
+  if (typeof enabled !== 'boolean') throw new Error('Select whether to enable public link sharing');
+  ctx = { ...ctx, observed: new Map() }; observe(ctx, doc);
+  const options = await capabilities(doc, user, ctx);
+  if (!options.linkSharing) throw new Error('Public link sharing is unavailable');
+  if (!stable(ctx)) throw new Error('Access changed while checking; reload link-sharing options');
+  doc.transact(loro => {
+    const linkSharing = loro.getMap('linkSharing');
+    if (enabled) {
+      linkSharing.set('mode', 'view');
+      loro.getMap('data').set('hasBeenPublic', true);
+    } else linkSharing.delete('mode');
+  });
 }
 async function setSharing(doc, user, selection, ctx = {}) {
   ctx = { ...ctx, observed: new Map() }; observe(ctx, doc);
@@ -187,4 +210,4 @@ async function moveToSpace(doc, target, user, ctx = {}, confirmation) {
   doc.transact(loro => isLibrary(target) ? loro.getMap('data').delete('ownerUri'): loro.getMap('data').set('ownerUri', target.id));
   return preview;
 }
-module.exports = { capabilities, setSharing, moveToSpace, previewMove, canWrite, canDelete, canArchive, canEditEvent, audienceOf, LIBRARY };
+module.exports = { capabilities, setSharing, setLinkSharing, moveToSpace, previewMove, canWrite, canDelete, canArchive, canEditEvent, audienceOf, LIBRARY };
