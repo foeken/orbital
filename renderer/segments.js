@@ -67,7 +67,7 @@ function renderSegs(el, segs) {
 // Plain http(s) URLs inside a text run become clickable without leaving the text editable: readSegs reads the
 // anchor back as its own characters, so the stored text is unchanged.
 const URL_RE = /https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"]/g;
-// The node uri behind a link home.tana.inc opens, the reverse of main's doc:link (/o/<org>/l/<encoded node uri>),
+// The node uri behind a link home.tana.inc opens, the reverse of main's doc:link (/o/<org>/<route>/<encoded node uri>),
 // or a bare uri. One link and nothing else: prose that merely contains one, another host or an id that is not a
 // 26-character ULID all read as "not a node link". The one parser for this, used by the paste handler.
 const TANA_URI_RE = /^tana:[a-z-]+:[0-9a-z]{26}$/;
