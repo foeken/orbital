@@ -115,13 +115,13 @@ function paletteRows(q, typed = q) {
     const doc = palDoc;
     rows.push({ id: 'exportPdf', group: docGroup, icon: 'doc', label: 'Export to PDF', run: () => { flushAll(); run(() => tana.exportPdf(doc.id)); } });
   }
-  if (pinInfo && palDoc && pinInfo.docId === palDoc.id) { // no ids: their labels depend on state, so no hotkeys
+  if (pinInfo && palDoc && pinInfo.docId === palDoc.id) { // labels follow pin state; ids stay stable for shortcuts
     const td = pinInfo.dates.includes(localDate());
-    rows.push({ rank: 'pinToday', group: docGroup, icon: 'pinDate', label: td ? 'Unpin from today' : 'Pin to today', run: () => pinAction(td ? 'unpin' : 'pin', 'today') });
+    rows.push({ id: 'pinToday', rank: 'pinToday', group: docGroup, icon: 'pinDate', label: td ? 'Unpin from today' : 'Pin to today', run: () => pinAction(td ? 'unpin' : 'pin', 'today') });
     // The same date pin one day on. The date is computed here because the label has to know whether it is already
     // pinned, and pinInfo.dates is what answers that; main defaults to today when no date comes with the call.
     const tm = localDate(1), tmPinned = pinInfo.dates.includes(tm);
-    rows.push({ rank: 'pinTomorrow', group: docGroup, icon: 'pinDate', label: tmPinned ? 'Unpin from tomorrow' : 'Pin to tomorrow', run: () => pinAction(tmPinned ? 'unpin' : 'pin', 'today', tm) });
+    rows.push({ id: 'pinTomorrow', rank: 'pinTomorrow', group: docGroup, icon: 'pinDate', label: tmPinned ? 'Unpin from tomorrow' : 'Pin to tomorrow', run: () => pinAction(tmPinned ? 'unpin' : 'pin', 'today', tm) });
   }
   // Any other day, typed in words on a page of its own (renderer/document.js parseDay). Listed whenever a real node
   // is on screen, so ⇧⌘K can record a key against it.
