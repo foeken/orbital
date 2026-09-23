@@ -76,11 +76,12 @@ Translation to `ListNodesRequest` (all fields confirmed present on the request):
 | `participantUris` | `hasParticipantUris` |
 | `eventTime{min,max}` | `eventStartTimeMin`/`Max` |
 | `assignedToViewer` / `createdByViewer` | resolved to the signed-in user's URI |
-| `attributes` | `attributeFilters` — **correspondence unverified**: the request field exists, the mapping is inferred |
-| `workflowStates` | `stateSelectors` — **correspondence unverified**, same caveat |
-| `visibility` | **ignored on execute, preserved on write** |
+| `attributes` | `attributeFilters` — Tana-uri `refs`, `date` → `dateRanges`, `textMatches` modes → `MODE_*`, non-empty `numberRanges` (Tana's `C$`, verified 2026-09-22) |
+| `workflowStates` | `stateSelectors`: the plain states plus `{ type: 'open', workflowUri, workflowStateId }` per workflow state |
+| `visibility` | `private` → restricted + only me; `shared` → me among the participants; `restricted`; `open` → `restricted: false`; `link` → `linkShared` |
 
-`eventTime.preset` is resolved client-side to a window (`recent` = the existing ±7 days).
+`eventTime` applies only to a search for events alone, and its preset is resolved on local days as Tana does:
+`recent` runs to the end of tomorrow, `upcoming` from now (soonest first), `past` until now, `today` is today.
 
 ## 5. Cache
 

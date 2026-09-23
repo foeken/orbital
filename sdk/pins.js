@@ -46,12 +46,13 @@ async function pinSidebar(sync, userUri, docUri) {
   col.transact((loro) => { loro.getTree('tree').createNode().data.set('uri', docUri); });
 }
 
+// Every copy goes, as the web client's pinItem tool does (QSe collects all node ids with the uri): a pin that was added
+// twice would otherwise still be pinned after its unpin.
 async function unpinSidebar(sync, userUri, docUri) {
   const col = await collection(sync, userUri);
   col.transact((loro) => {
     const tree = loro.getTree('tree');
-    const node = tree.nodes().find((n) => !n.isDeleted() && n.data.get('uri') === docUri);
-    if (node) tree.delete(node.id);
+    for (const node of tree.nodes()) if (!node.isDeleted() && node.data.get('uri') === docUri) tree.delete(node.id);
   });
 }
 
@@ -105,12 +106,22 @@ async function unpinDate(sync, userUri, docUri, date) {
 // Verified live: tana:event:01exampled0000000000000000 holds [{ mode: 'embed', uri: 'tana:chat:...' }] and the graph
 // answers ListEdges(HAS_PIN) from it. The element is a map container, like every other schema'd element the web
 // client writes (the pin-map entries above); toJSON reads the same either way.
-const items = (doc) => doc.loro.getMovableList('pinnedItems').toJSON().filter((p) => p && typeof p.uri === 'string');
+// A duplicate uri reads as its first occurrence (native Tue); pinning a pinned uri with a mode updates the mode and keeps
+// its place (native jm); unpinning drops every copy (native Mm filters on uri).
+const items = (doc) => {
+  const seen = new Set();
+  return doc.loro.getMovableList('pinnedItems').toJSON().filter((p) => p && typeof p.uri === 'string' && !seen.has(p.uri) && seen.add(p.uri));
+};
 
 function pinItem(doc, uri, mode) {
   doc.transact((loro) => {
     const list = loro.getMovableList('pinnedItems');
-    if (list.toJSON().some((p) => p && p.uri === uri)) return; // native wm() dedups on uri and leaves the order alone
+    const i = list.toJSON().findIndex((p) => p && p.uri === uri);
+    if (i >= 0) {
+      const el = list.get(i);
+      if (mode) el instanceof LoroMap ? el.set('mode', mode) : list.set(i, { ...el, mode });
+      return;
+    }
     const item = list.pushContainer(new LoroMap());
     item.set('uri', uri);
     if (mode) item.set('mode', mode);
@@ -120,8 +131,8 @@ function pinItem(doc, uri, mode) {
 function unpinItem(doc, uri) {
   doc.transact((loro) => {
     const list = loro.getMovableList('pinnedItems');
-    const i = list.toJSON().findIndex((p) => p && p.uri === uri);
-    if (i >= 0) list.delete(i, 1);
+    const all = list.toJSON();
+    for (let i = all.length - 1; i >= 0; i--) if (all[i] && all[i].uri === uri) list.delete(i, 1);
   });
 }
 

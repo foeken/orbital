@@ -8,13 +8,16 @@ const { contentText } = require('./node');
 
 const LISTS = ['bulletList', 'orderedList'];
 // Blocks that hold no inline content of their own (Tana's writer gives them attributes but no children list).
-const ATOMS = ['horizontalRule', 'image', 'video', 'audio', 'embed'];
+const ATOMS = ['horizontalRule', 'image', 'video', 'audio', 'embed', 'unsupportedBlock'];
+// The blocks that hold words: a table (tableRow > tableCell > blocks) and the atoms keep theirs elsewhere, so nothing
+// here writes text into them or turns them into another type.
+const TEXT_BLOCKS = ['paragraph', 'heading', 'codeBlock'];
 const HOLDERS = [...LISTS, 'blockquote'];
 // The block types the outliner can switch between; each one is a container plus a leaf node name.
 const BLOCK_TYPES = ['paragraph', 'heading1', 'heading2', 'heading3', 'bullet', 'numbered', 'code', 'quote'];
 // Tana's schema marks. Its web bundle configures Loro from the ProseMirror mark specs, and none of them declares
 // `inclusive`, so every mark ends up with expand 'none'.
-const MARKS = ['bold', 'italic', 'strike', 'code', 'link'];
+const MARKS = ['bold', 'italic', 'strike', 'underline', 'code', 'link'];
 const TEXT_STYLE = Object.fromEntries(MARKS.map((m) => [m, { expand: 'none' }]));
 const styled = new WeakSet();
 const name = (m) => m.get('nodeName');
@@ -31,7 +34,10 @@ const isHolder = (m) => HOLDERS.includes(name(m));
 const isItem = (m) => name(m) === 'listItem';
 const isMention = (x) => x.kind() === 'Map' && name(x) === 'mention';
 const blockId = (m) => { const a = m.get('attributes'); return a ? a.get('blockId') : undefined; };
-const newId = () => { let s = ''; while (s.length < 8) s += Math.random().toString(36).slice(2); return s.slice(0, 8); };
+// Tana's 8-character id (block ids, field keys): Crockford base32, no i/l/o/u. Its schema refuses anything else as a
+// field key (`^[0-9a-hjkmnp-tv-z]{8}$`), so a base36 id would leave a field Tana cannot see.
+const ID_CHARS = '0123456789abcdefghjkmnpqrstvwxyz';
+const newId = () => { let s = ''; while (s.length < 8) s += ID_CHARS[Math.floor(Math.random() * 32)]; return s; };
 // Loro resolves a mark's expand behaviour from this config, so set it once per document before writing marks.
 const styleDoc = (document) => { if (!styled.has(document.loro)) { document.loro.configTextStyle(TEXT_STYLE); styled.add(document.loro); } };
 
@@ -93,7 +99,7 @@ function node(block, children) {
     n.reference = { uri: a.get('tanaUri'), ...(typeof a.get('label') === 'string' ? { label: a.get('label') } : {}) };
   }
   if (name(block) === 'heading') n.heading = block.get('attributes').get('level');
-  if (name(block) === 'horizontalRule') n.editable = false; // a divider has nothing to edit
+  if (['horizontalRule', 'table', 'unsupportedBlock'].includes(name(block))) n.editable = false; // a divider, a table, an unknown block: nothing here edits them
   if (name(block) === 'image') { // { nodeName 'image', attributes { blockId, tanaUri, displayWidth?, displayHeight? }, children [] }; no alt stored
     const a = block.get('attributes');
     n.type = 'image';
@@ -375,7 +381,7 @@ function prevSibling(unit) {
 function setText(document, id, value) {
   if (typeof id !== 'string' || !id) throw new Error('outline node id must be a string');
   const target = must(document, id).block;
-  if (!kids(target) || name(target) === 'embed') throw new Error('Reference blocks cannot contain editable text');
+  if (!kids(target) || !TEXT_BLOCKS.includes(name(target))) throw new Error('Reference blocks cannot contain editable text');
   const plain = name(target) === 'codeBlock'; // codeBlock content is text* with marks '' in Tana's schema
   const { groups, marked } = inlineGroups(value, plain);
   styleDoc(document);
@@ -699,7 +705,7 @@ function setBlockType(document, id, type) {
   if (typeof id !== 'string' || !id) throw new Error('outline node id must be a string');
   if (!BLOCK_TYPES.includes(type)) throw new Error('Unknown block type ' + type);
   document.transact(() => {
-    if (ATOMS.includes(name(must(document, id).block))) throw new Error('This block cannot change type');
+    if (!TEXT_BLOCKS.includes(name(must(document, id).block))) throw new Error('This block cannot change type');
     if (type === 'paragraph' && !atRoot(unit(document, id))) throw new Error('A child node cannot be plain text');
     // Only a document's own row can be plain text. A child is a block inside its parent's listItem, and a bare
     // paragraph there is not a row Tana can read back: the conversion takes it out of the list its parent keeps

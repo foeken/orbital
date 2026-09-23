@@ -132,9 +132,11 @@ The other direction — "which meetings and spaces is *this* document pinned on"
 Different container, same document-sync mechanism. Event (`ode`) and space (`Lle`) docs have a root **MovableList** `pinnedItems`:
 
     Nle=o(["document","embed"]), Ple=Nc.map({uri:Wi,mode:Nle.optional()}), Fle=()=>Nc.movableList(Ple,e=>e.$cid,{required:!1})
-    function wm(e,t,n,r){let i=Cm(e),a=i.find(e=>e.uri===t);if(a){r!==void 0&&(a.mode=r);return}let o=r===void 0?{uri:t}:{uri:t,mode:r};n===void 0?i.push(o):i.splice(n,0,o)}
-    function Tm(e,t){e.pinnedItems&&=e.pinnedItems.filter(e=>e.uri!==t)}
-    pinItem(e,t,n){this.mutate(r=>wm(r,e,t,n))}  unpinItem(e){this.mutate(t=>Tm(t,e))}  reorderPinnedItem(e,t){...Em...}
+    jm: a re-pin of a uri already there sets its mode (when one is given) and leaves it in place; otherwise push or splice at the index
+    Mm: pinnedItems.filter(e=>e.uri!==t)    (every copy goes)
+    Tue: reading dedups on uri, the first copy wins
+
+(Named `wm`/`Tm` in builds before 2026-09-22; the behaviour is the same.)
 
 `eK` (the MCP path for target event/space) calls `e.pinItem(uri)` / `e.unpinItem(uri)` and dedups on `pinnedItems.map(e=>e.uri)`. Live example
 (`tana:event:01exampled0000000000000000`): `pinnedItems:[{mode:"embed",uri:"tana:chat:01examplee0000000000000000"}]`, and `ListEdges({fromNodeIds:[event],edgeTypes:['EDGE_TYPE_HAS_PIN']})`

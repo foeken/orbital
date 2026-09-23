@@ -1,7 +1,7 @@
 'use strict';
 // Generic accessors for the common 'data' map and the ProseMirror-style 'content' map (protocol doc §3).
 const { randomBytes } = require('node:crypto');
-const { LoroMap, LoroList } = require('loro-crdt');
+const { LoroMap, LoroList, LoroMovableList } = require('loro-crdt');
 
 const STATE_TYPES = ['proposed', 'open', 'closed', 'not_now'];
 const COMPLETED_WINDOWS = [3, 7, 30, 'all']; // days a completed task stays listed (sdk/query.js completedInWindow)
@@ -36,11 +36,12 @@ function initDocument(loro, title, byUri, { kind = 'doc', now = Date.now(), enti
   // A type carries none of what a document carries: four real types (raw container dumps, 2026-09-20) hold exactly
   // data{type,title,sharedPinDates,template} — plus instructions and ownerUri when they have them — an empty
   // content map and their colour in the appearance root, with no createdAt, restricted or participants. A type
-  // with no ownerUri is a Library type and goes on documents anywhere. Its fields are added with fields.addField,
-  // which writes template.attributes as the MovableList a real one uses.
+  // with no ownerUri is a Library type and goes on documents anywhere. Tana's own create (read 2026-09-22) always
+  // writes template = { attributes: [] } (a MovableList, which fields.addField appends to) and a random hue.
   if (kind === 'type') {
     data.setContainer('sharedPinDates', new LoroList());
-    data.setContainer('template', new LoroMap());
+    data.setContainer('template', new LoroMap()).setContainer('attributes', new LoroMovableList());
+    loro.getMap('appearance').set('hue', Math.floor(Math.random() * 360));
     loro.getMap('content');
     return;
   }
@@ -260,27 +261,45 @@ function setSearchQuery(document, query) {
 // rather than inside it: it changes nothing about which rows the search finds, only how they are shown. Set or
 // delete for the same reason the query's flags are: an arrangement dropped from a save must not linger in the
 // document and come back the next time it is opened.
-// `display` is the list of facts each row shows, stored as one comma-joined string because a Loro map holds scalars,
-// not arrays. An empty list is a real choice — a row showing nothing of itself — so it is stored as an empty string
-// rather than deleted, which is what tells it apart from a search that has never been given a display at all.
+// `display` is the list of facts each row shows, stored in Tana's shape — a map of key -> { shown, order } — because
+// Tana's search page reads view.display as exactly that record and would choke on anything else. Tana ignores keys it
+// does not know, so Orbital's own keys can live there. searchDisplay reads it back (and the comma-joined string
+// earlier builds wrote).
+// ponytail: an empty list is stored as an empty map, which Tana also writes for "defaults", so "show nothing" reads
+// back as the default; write shown:false entries for the unchosen keys if that choice has to survive.
 // `completedWithin` (one of COMPLETED_WINDOWS) is here rather than in the query for the same reason the rest is: Tana's stored
 // query has no field for how old a completed task may be, and inventing one would put a key no other client
 // understands inside their vocabulary. It does decide which rows are shown, so main applies it to what the query
 // answers (sdk/query.js completedInWindow).
+// sortBy is Tana's "field" (ascending) or "-field" (descending) over updated, created, title and startTime; Orbital's
+// Updated and Created mean newest first, so they are stored with the minus and read back without it (searchSort).
+// Orbital's own sorts (status, default) are stored as they are, and Tana ignores a field it does not know.
+// ponytail: Tana's oldest-first "updated" reads back as Orbital's newest-first Updated; add a direction if Orbital grows one.
+const TANA_SORT = { updated: '-updated', created: '-created' };
+const searchSort = (sortBy) => (typeof sortBy === 'string' && sortBy ? sortBy.replace(/^-/, '') : undefined);
 function writeSearchView(loro, view = {}) {
   const v = loro.getMap('view');
   for (const key of ['sortBy', 'groupBy']) {
-    if (typeof view[key] === 'string' && view[key]) v.set(key, view[key]);
+    if (typeof view[key] === 'string' && view[key]) v.set(key, key === 'sortBy' ? TANA_SORT[view[key]] || view[key] : view[key]);
     else if (v.get(key) !== undefined) v.delete(key);
   }
-  if (Array.isArray(view.display)) v.set('display', view.display.join(','));
-  else if (v.get('display') !== undefined) v.delete('display');
+  if (Array.isArray(view.display)) {
+    const d = v.setContainer('display', new LoroMap());
+    view.display.forEach((key, order) => { const e = d.setContainer(key, new LoroMap()); e.set('shown', true); e.set('order', order); });
+  } else if (v.get('display') !== undefined) v.delete('display');
   if (COMPLETED_WINDOWS.includes(view.completedWithin)) v.set('completedWithin', view.completedWithin);
   else if (v.get('completedWithin') !== undefined) v.delete('completedWithin');
 }
 function setSearchView(document, view) {
   if ((document.data.get('type')) !== 'search') throw new Error('not a saved search');
   document.transact((loro) => { writeSearchView(loro, view); });
+}
+// The facts a saved search's rows show, from its view.display (JSON): the shown keys in order, or undefined for none.
+function searchDisplay(display) {
+  if (typeof display === 'string') return display.split(',').filter(Boolean);
+  if (!display || typeof display !== 'object') return undefined;
+  const shown = Object.entries(display).filter(([, e]) => e && e.shown).sort((a, b) => a[1].order - b[1].order).map(([k]) => k);
+  return shown.length ? shown : undefined;
 }
 
 // Rewrites the task's existing list container; empty is the supported "unassigned" value.
@@ -319,4 +338,4 @@ function render(node) {
   return kids.map(render).join(block ? '\n' : '');
 }
 
-module.exports = { readNode, editable, setTitle, setState, setEntityType, taskMeta, audience, audienceMetadata, setAssignees, setSearchQuery, setSearchView, contentText, ulid, initDocument, STATE_TYPES, COMPLETED_WINDOWS };
+module.exports = { readNode, editable, setTitle, setState, setEntityType, taskMeta, audience, audienceMetadata, setAssignees, setSearchQuery, setSearchView, searchDisplay, searchSort, contentText, ulid, initDocument, STATE_TYPES, COMPLETED_WINDOWS };

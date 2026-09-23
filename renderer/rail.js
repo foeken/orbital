@@ -210,7 +210,7 @@ function railGroups(data) {
 // "who · when". Only what is known is written: an entry with no actor or no time simply has fewer parts, since
 // neither may be guessed, extra authors are counted rather than dropped, and a kind with no glyph of its own falls
 // back to saying itself rather than going unsaid. These rows open nothing and change nothing.
-const CHANGE_ICON = { Updated: 'updated', Created: 'created', Deleted: 'trash' };
+const CHANGE_ICON = { Updated: 'updated', Created: 'created', Deleted: 'trash', Archived: 'trash' };
 function railChangeEl(change, title, docId) {
   const el = document.createElement('div');
   el.className = 'rrow rchange';

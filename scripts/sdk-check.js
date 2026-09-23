@@ -88,6 +88,15 @@ async function main() {
     assert.deepEqual(d.loro.getMap('query').toJSON().eventTime, { min: 1, max: 2 }, 'a date window is stored');
     setSearchQuery(d, { types: ['event'] });
     assert.equal(d.loro.getMap('query').toJSON().eventTime, undefined, 'and clearing it removes the window rather than leaving it filtering');
+    // view: Tana reads sortBy as field (ascending) or -field, and display as a record of key -> { shown, order }
+    const nodeSdk = require('../sdk/node');
+    nodeSdk.setSearchView(d, { sortBy: 'updated', groupBy: 'status', display: ['status', 'updated'] });
+    const view = d.loro.getMap('view').toJSON();
+    assert.equal(view.sortBy, '-updated', "Orbital's Updated is newest first, which Tana spells -updated");
+    assert.deepEqual(view.display, { status: { shown: true, order: 0 }, updated: { shown: true, order: 1 } });
+    assert.deepEqual([nodeSdk.searchSort(view.sortBy), nodeSdk.searchDisplay(view.display), nodeSdk.searchDisplay('type,space')], ['updated', ['status', 'updated'], ['type', 'space']]);
+    nodeSdk.setSearchView(d, { sortBy: 'title' });
+    assert.equal(d.loro.getMap('view').toJSON().sortBy, 'title', 'A to Z is Tana\'s ascending title');
     const notASearch = new Document(DOC);
     notASearch.transact((l) => initDocument(l, 'plain', ME));
     assert.throws(() => setSearchQuery(notASearch, { types: ['text'] }), /not a saved search/, 'the query container is only written on a search');
@@ -109,6 +118,7 @@ async function main() {
     await assert.rejects(access.setSharing(source,stranger,{rule:'inherit'},ctx));
     await assert.rejects(access.setSharing(source,ME,{rule:'people',participants:[{uri:stranger,role:'viewer'}]},ctx));
     await access.setSharing(source,ME,{rule:'people',participants:[{uri:stranger,role:'editor'}]},ctx);
+    assert.equal(source.loro.getMap('data').get('participants').get(stranger).get('changedBy'), ME, 'an invite records who made it (native addParticipant)');
     await access.setSharing(source,ME,{rule:'me'},ctx);
     assert.deepEqual(Object.keys(readNode(source).participants),[ME]);
     await assert.rejects(access.setSharing(source,ME,{rule:'inherit'},ctx),/audience disclosure/);
@@ -165,6 +175,7 @@ async function main() {
         assert.deepEqual(fields.templateTitles(real), { [key]: 'Discuss with', [plain]: 'Notes' });
         assert.throws(() => fields.addField(real, { title: ' ' }), /title required/);
         assert.throws(() => fields.addField(real, { title: 'x', cardinality: 'many' }), /single or multiple/);
+        assert.throws(() => fields.addField(real, { title: 'x', type: 'number' }), /field type must be one of/);
       }
       // a reference value is a mention node: its label is its text, not an empty string
       typed.transact((l) => {
@@ -1249,8 +1260,8 @@ async function main() {
       { action: 'Updated', by: ANA, at: '2026-09-18T06:32:55Z' },
       { action: 'Created', by: ANA, at: '2026-09-18T06:04:45.181Z' },
     ], 'every editor is an entry, newest first, and the creation is the oldest one');
-    assert.deepEqual(plainJson(changesOf({ ...node, archivedAt: '2026-09-18T10:00:00Z' })[0]), { action: 'Deleted', at: '2026-09-18T10:00:00Z' },
-      'a deleted node leads with its deletion, and claims no actor the graph does not name');
+    assert.deepEqual(plainJson(changesOf({ ...node, archivedAt: '2026-09-18T10:00:00Z' })[0]), { action: 'Archived', at: '2026-09-18T10:00:00Z' },
+      'an archived node leads with its archiving, and claims no actor the graph does not name');
     assert.deepEqual(plainJson(changesOf({ createTime: '2026-09-18T06:04:45.181Z', updateTime: '2026-09-18T09:32:55Z' })), [
       { action: 'Updated', at: '2026-09-18T09:32:55Z' },
       { action: 'Created', at: '2026-09-18T06:04:45.181Z' },
@@ -2616,8 +2627,30 @@ async function main() {
     assert.equal(searchQueryParams({ textQuery: '  dpa  ' }, ME).textQuery, 'dpa', 'text is trimmed');
     assert.equal(searchQueryParams({ textQuery: '   ' }, ME).textQuery, undefined, 'blank text is not a filter');
     assert.equal(searchQueryParams({ unassigned: true }, ME).unassigned, true);
-    assert.equal(searchQueryParams({ visibility: 'private' }, ME).visibility, undefined,
-      'visibility has no graph equivalent: preserved in the document, ignored on execute');
+    // visibility, workflowStates and attributes run the way Tana's own client runs a saved search (C$ in shared-*.js).
+    const pick = (p, ...keys) => Object.fromEntries(keys.filter((k) => p[k] !== undefined).map((k) => [k, p[k]]));
+    assert.deepEqual(pick(searchQueryParams({ visibility: 'private' }, ME), 'restricted', 'exactParticipantUris', 'visibility'), { restricted: true, exactParticipantUris: [ME] },
+      'private is restricted with the viewer as the only participant');
+    assert.deepEqual(searchQueryParams({ visibility: 'shared', participantUris: [OTHER] }, ME).hasParticipantUris, [OTHER, ME], 'shared adds the viewer to the participants');
+    assert.equal(searchQueryParams({ visibility: 'open' }, ME).restricted, false, 'open is an explicit restricted: false');
+    assert.equal(searchQueryParams({ visibility: 'link' }, ME).linkShared, true);
+    const flow = { workflowUri: 'tana:workflow:01examples0000000000000000', workflowStateId: 'review' };
+    const wf = searchQueryParams({ types: ['text'], stateTypes: ['closed'], workflowStates: [flow, flow] }, ME);
+    assert.deepEqual(wf.stateSelectors, [{ type: 'closed' }, { type: 'open', ...flow }], 'a workflow state is an open-state selector beside the plain states, once');
+    assert.deepEqual(wf.stateTypes, ['closed', 'open']);
+    assert.deepEqual(searchQueryParams({ attributes: { 'tana:type:x?attribute=y': { refs: ['tana:text:01examples0000000000000000', 'junk'], date: { min: 5 },
+      textMatches: [{ value: 'a' }, { value: 'b', mode: 'prefix' }, { value: ' ' }, { value: 'c', mode: 'constructor' }], numberRanges: [{ min: 1 }, {}] }, 'tana:type:x?attribute=z': 'high' } }, ME).attributeFilters,
+    { 'tana:type:x?attribute=y': { refs: ['tana:text:01examples0000000000000000'], dateRanges: [{ min: 5 }], textMatches: [{ value: 'a', mode: 'MODE_EQUALS' }, { value: 'b', mode: 'MODE_PREFIX' }], numberRanges: [{ min: 1 }] } },
+    'attributes become attributeFilters, dropping what Tana drops');
+    assert.equal(searchQueryParams({ unassigned: true, assignedToViewer: true }, ME).assignedTo, undefined, 'unassigned wins over an assignee');
+    assert.equal(searchQueryParams({ textQuery: 'dpa' }, ME).sortOptions, undefined, 'a text search is left to the server ranking');
+    const noon = new Date(2026, 8, 22, 12).getTime();
+    const upcoming = searchQueryParams({ types: ['event'], eventTime: { preset: 'upcoming' } }, ME, 200, noon);
+    assert.equal(upcoming.eventStartTimeMin, new Date(noon).toISOString(), 'upcoming starts now');
+    assert.equal(upcoming.sortOptions[0].direction, 'SORT_DIRECTION_ASCENDING', 'and lists the soonest first');
+    const recent = searchQueryParams({ types: ['event'], eventTime: { preset: 'recent' } }, ME, 200, noon);
+    assert.equal(recent.eventStartTimeMax, new Date(new Date(2026, 8, 24).getTime() - 1).toISOString(), 'recent runs to the end of tomorrow');
+    assert.deepEqual(recent.sortOptions, [{ field: 'SORT_FIELD_EVENT_START_TIME', direction: 'SORT_DIRECTION_DESCENDING' }], 'newest first');
     // "Save this query as a search" is the inverse of the above, so the pair round-trips: what the pills show
     // becomes a stored query, and that stored query asks the graph the same thing the view was asking.
     const libFilter = { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me', text: ' dpa ' };
@@ -2751,8 +2784,10 @@ async function main() {
     assert.deepEqual(params.stateTypes, ['proposed']);
     assert.deepEqual(params.entityTypes, ['tana:type:project'], 'entityTypeUris -> entityTypes (T3-a)');
     assert.deepEqual(params.assignedTo, [ME]);
-    assert.equal(params.eventStartTimeMin, new Date(Date.UTC(2026, 8, 1)).toISOString(), 'eventTime.min -> eventStartTimeMin (T3-a)');
-    assert.equal(params.eventStartTimeMax, new Date(Date.UTC(2026, 8, 15)).toISOString(), 'eventTime.max -> eventStartTimeMax (T3-a)');
+    assert.equal(params.eventStartTimeMin, undefined, 'Tana applies eventTime only to a search for events alone');
+    const events = searchQueryParams({ ...query, types: ['event'] }, ME);
+    assert.equal(events.eventStartTimeMin, new Date(Date.UTC(2026, 8, 1)).toISOString(), 'eventTime.min -> eventStartTimeMin (T3-a)');
+    assert.equal(events.eventStartTimeMax, new Date(Date.UTC(2026, 8, 15)).toISOString(), 'eventTime.max -> eventStartTimeMax (T3-a)');
     // Finding 2 (searchChildren, main/related.js): a document with no query container reads back as {}, not an
     // error, which is why searchChildren must treat an empty read as a failure rather than as an unconstrained search.
     const broken = new Document('tana:search:' + ulid(), { peerId: '23' });
@@ -3401,7 +3436,7 @@ async function main() {
     });
     assert.deepEqual(pins.items(hub), []);
     pins.pinItem(hub, docId);
-    pins.pinItem(hub, docId); // dedup on uri, like the web client's wm()
+    pins.pinItem(hub, docId); // dedup on uri, like the web client's jm()
     pins.pinItem(hub, otherId, 'embed');
     assert.deepEqual(pins.items(hub), [{ uri: docId }, { uri: otherId, mode: 'embed' }]);
     assert.ok(mirror.loro.getMovableList('pinnedItems').get(0) instanceof LoroMap, 'elements are map containers, like every schema element the web client writes');
@@ -3409,6 +3444,13 @@ async function main() {
     pins.unpinItem(hub, docId);
     pins.unpinItem(hub, 'tana:text:nope'); // no-op
     assert.deepEqual(pins.items(hub), [{ uri: otherId, mode: 'embed' }]);
+    pins.pinItem(hub, otherId, 'document'); // native jm: a re-pin with a mode updates it in place
+    assert.deepEqual(pins.items(hub), [{ uri: otherId, mode: 'document' }]);
+    hub.transact((l) => { l.getMovableList('pinnedItems').pushContainer(new LoroMap()).set('uri', otherId); });
+    assert.deepEqual(pins.items(hub), [{ uri: otherId, mode: 'document' }], 'a duplicate reads as its first copy (native Tue)');
+    pins.unpinItem(hub, otherId); // native Mm drops every copy
+    assert.deepEqual(pins.items(hub), []);
+    pins.pinItem(hub, otherId, 'embed');
     // An attendee may write the event even though its title is read-only: editable() answers for the body, access
     // answers for the document. That gap is exactly what made the sidebar visibility row inert on a meeting.
     const ctx = { orgDocUri: 'tana:org:' + ulid(), sync: { subscribe: async () => { throw new Error('unavailable'); } }, graph: {} };
@@ -3694,7 +3736,7 @@ async function main() {
     const attachment = human.children[1];
     assert.equal(attachment.type, 'reference'); assert.equal(attachment.reference.uri, fileUri);
     assert.equal(attachment.reference.node.id, fileUri, 'attachment titles resolve through the shared reference lookup');
-    assert.equal(ai.children[0].text, 'Thought for 50s');
+    assert.equal(ai.children[0].text, 'Thought for 50 seconds');
     assert.deepEqual(ai.children.slice(1, 5).map((n) => [n.block, n.text]), [['heading2', 'Goals'], ['bullet', 'short term'], ['bullet', 'long term'], ['code', 'let a = **1**']]);
     assert.deepEqual(ai.children[2].segments, [{ text: 'short', marks: { bold: true } }, { text: ' term' }], 'inline markdown becomes marks, and text is the plain rendering');
     assert.equal(ai.children[5].text, 'create · approved');
@@ -3706,6 +3748,45 @@ async function main() {
     assert.deepEqual(Array.from(graphed.at(-1).nodeIds).sort(), [fileUri, noteUri, proposedUri, subUri].sort());
     assert.deepEqual(doc.toJSON().content, {}, 'reading a chat never writes an outline into it');
     console.log('ok  chat rows: hidden/context skipped, list order, read-only rows, mentions, attachments, proposals and subagent links');
+  }
+  // What the web client shows of a conversation, and how it words the thinking line (docs/CHATS.md §4).
+  {
+    const chat = require('../sdk/chat');
+    const rows = chat.chatRows([
+      { type: 'message', fromUserType: 'human', fromUserUri: ME, isStatusUpdate: true, content: { text: 'renamed the chat' }, sentAt: 1 },
+      { type: 'message', fromUserType: 'human', fromUserUri: ME, isAIInterviewRelay: true, content: { text: 'relayed' }, sentAt: 1 },
+      { type: 'message', fromUserType: 'human', fromUserUri: ME, isStatusUpdate: true, content: { text: 'accepted 1 change' }, sentAt: 1, editedAt: 2 },
+      { type: 'message', fromUserType: 'ai', content: { text: '1. one\n#### deep *it* ~~gone~~' }, sentAt: 0, completedAt: 125000 },
+      { type: 'message', fromUserType: 'ai', content: { text: 'x' }, sentAt: 0, completedAt: 120000, toolCalls: [{ id: 'c', name: 'readItems', status: 'completed' }] },
+    ]);
+    assert.deepEqual(rows.map((r) => r.id), ['m2', 'm3', 'm4'], 'status updates other than "accepted" and interview relays are hidden');
+    assert.ok(rows[0].meta.endsWith(' (edited)'));
+    assert.deepEqual(rows[1].children.map((n) => n.block), ['numbered', 'heading3'], 'no thinking line without tool calls; deep headings read as the third level');
+    assert.deepEqual(rows[1].children[1].segments, [{ text: 'deep ' }, { text: 'it', marks: { italic: true } }, { text: ' ' }, { text: 'gone', marks: { strike: true } }]);
+    assert.equal(rows[2].children[0].text, 'Thought for 2 minutes');
+    console.log('ok  chat visibility and the thinking line follow the web client');
+  }
+  // Tana's schema: 8-character ids are Crockford base32, underline is a mark, and a table holds no editable text.
+  {
+    for (let i = 0; i < 200; i++) assert.match(outline.newId(), /^[0-9a-hjkmnp-tv-z]{8}$/);
+    const d = new Document(DOC);
+    d.transact((l) => {
+      const c = l.getMap('content'); c.set('nodeName', 'doc'); c.setContainer('attributes', new LoroMap());
+      const kids = c.setContainer('children', new LoroList());
+      const p = kids.insertContainer(0, new LoroMap()); p.set('nodeName', 'paragraph');
+      p.setContainer('attributes', new LoroMap()).set('blockId', 'p0000000');
+      p.setContainer('children', new LoroList()).insertContainer(0, new LoroText()).insert(0, 'under');
+      const t = kids.insertContainer(1, new LoroMap()); t.set('nodeName', 'table');
+      t.setContainer('attributes', new LoroMap()).set('blockId', 't0000000');
+      const row = t.setContainer('children', new LoroList()).insertContainer(0, new LoroMap()); row.set('nodeName', 'tableRow');
+      row.setContainer('attributes', new LoroMap()); row.setContainer('children', new LoroList());
+    });
+    outline.setText(d, 'p0000000', [{ text: 'under', marks: { underline: true } }]);
+    assert.deepEqual(outline.readOutline(d)[0].segments, [{ text: 'under', marks: { underline: true } }]);
+    assert.equal(outline.readOutline(d)[1].editable, false, 'a table is read-only here');
+    assert.throws(() => outline.setText(d, 't0000000', 'x'), /cannot contain editable text/);
+    assert.throws(() => outline.setBlockType(d, 't0000000', 'paragraph'), /cannot change type/);
+    console.log('ok  content schema: Crockford ids, underline mark, tables left alone');
   }
   // Attendance (docs/MEETINGS.md): an entry in the `sessions` root of a call document is the only proof that somebody
   // is in a meeting now; the event node only ever proves they were invited.
@@ -3735,6 +3816,8 @@ async function main() {
     assert.equal(callsSdk.joinedAt(livedoc, ME), 1000, 'two devices of one user report the earliest join');
     const ended = callDoc({}, [...joins, { userUri: ME, timestamp: 3000, event: 'leave' }, { userUri: OTHER, timestamp: 3200, event: 'leave' }]);
     assert.equal(callsSdk.inCall(ended, ME), false, 'a finished call empties sessions however long its log is');
+    const federated = callDoc({ 'federation:01examplek0000000000000000': { userUri: OTHER, joinedAt: 500 } }, joins);
+    assert.equal(callsSdk.inCall(federated, OTHER), false, 'another organization’s capture is not somebody in the call (native activeParticipantUris)');
     assert.equal(callsSdk.joinedAt(ended, ME), null);
     assert.deepEqual(callsSdk.attended(ended).sort(), [ME, OTHER].sort(), 'the log still proves who was there');
     const asked = [];

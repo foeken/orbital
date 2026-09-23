@@ -8,7 +8,7 @@ const localDate = (offset = 0) => { const d = new Date(); d.setDate(d.getDate() 
 // accepts segments, a plain string, or a Node
 const segsOf = (v) => (Array.isArray(v) ? v : typeof v === 'string' ? (v ? [{ text: v }] : []) : v.segments || (v.text ? [{ text: v.text }] : []));
 const plainOf = (v) => segsOf(v).map((s) => ('text' in s ? s.text : s.mention.label)).join('');
-const MARK_TAGS = { code: 'code', strike: 's', italic: 'em', bold: 'strong' }; // innermost first: the order a run is wrapped in
+const MARK_TAGS = { code: 'code', strike: 's', underline: 'u', italic: 'em', bold: 'strong' }; // innermost first: the order a run is wrapped in
 // The caret anchor is a placeholder, not content: readSegs strips it and every offset helper counts it as nothing,
 // so what is stored and what the caret reports are the same with it as without it.
 const CARET_ANCHOR = '\u200b';

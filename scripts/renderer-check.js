@@ -389,7 +389,7 @@ async function mockCreationPermissionCheck() {
 }
 
 // ---- formatting: marks, block types, the selection toolbar and the "/" menu ----
-assert.match(source, /const MARK_TAGS = \{ code: 'code', strike: 's', italic: 'em', bold: 'strong' \}/);
+assert.match(source, /const MARK_TAGS = \{ code: 'code', strike: 's', underline: 'u', italic: 'em', bold: 'strong' \}/);
 assert.match(source, /function markRange\(segs, start, end, mark, value\)/);
 assert.match(source, /const saveValue = \(segs\) => \(segs\.some\(\(s\) => 'mention' in s \|\| hasMarks\(s\.marks\)\)/); // a marked run is never flattened to a string
 assert.match(source, /const blockTypeOf = \(node\) => \(BLOCK_LABEL\.has\(node\.block\)/); // readOutline carries the type as node.block
