@@ -221,6 +221,14 @@ async function main() {
         fields.setFieldTargets(real, source, [typeB]);
         assert.deepEqual(fields.fieldDefinition(real, source).to, [{ uri: typeB }]);
         assert.throws(() => fields.setFieldTargets(real, level, [typeA]), /not a link field/);
+        { // changing a field's kind keeps only what that kind uses
+          const kind = fields.addField(real, { title: 'Kind', type: 'link', to: [typeA] });
+          assert.deepEqual(fields.setFieldKind(real, kind, { type: 'options', cardinality: 'multiple' }), { key: kind, title: 'Kind', type: 'options', cardinality: 'multiple', options: [] }, 'a link turned options loses its targets and gains its list');
+          fields.setFieldOptions(real, kind, ['A']);
+          assert.deepEqual(fields.setFieldKind(real, kind, { cardinality: 'single' }).options, [{ label: 'A' }], 'the number of values alone leaves the choices');
+          assert.deepEqual(fields.setFieldKind(real, kind, { type: null }), { key: kind, title: 'Kind', cardinality: 'single' }, 'plain text keeps neither');
+          assert.throws(() => fields.setFieldKind(real, kind, { type: 'number' }), /field type must be one of/);
+        }
         // a value checked against its definition before it is written (XL; Ove.getValidationErrors; validateTargetTypes)
         const item = make('text'), keyOf = (attr) => real.id + '?attribute=' + attr;
         const levelField = fields.fieldDefinition(real, level);

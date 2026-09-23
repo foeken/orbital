@@ -178,6 +178,14 @@ const commands = {
     out(nodes.length + ' nodes'); // totalCount needs mode LIST_NODES_MODE_WITH_COUNT
   },
   async search() {
+    // --link <type-uri,…> | --link members: main's search as a link field asks it (issue #33), narrowed to those types
+    if (flag('link')) {
+      const main = backend(await connect());
+      const scope = flag('link') === 'members' ? { members: true } : { types: flag('link').split(',').filter(Boolean) };
+      const found = await main.search(positional.join(' '), scope);
+      for (const n of found) out(n.id + '  ' + (n.title || n.text || '') + '  ' + JSON.stringify((n.tags || []).map((t) => t.label)));
+      return out(found.length + ' results');
+    }
     await connect();
     const parsed = query.parseQuery(positional.join(' '));
     let types = new Map();

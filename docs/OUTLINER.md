@@ -842,3 +842,28 @@ a cell; `colwidth` is a ProseMirror attribute (`null` until a column is resized,
 - **Presence:** a caret in a cell is sent as the cell's paragraph (the block Tana names for it), and one received on a
   cell's paragraph is drawn in that cell. The SDK's position helpers find a paragraph inside a cell for this, while
   `locate` still stops at tables, so no outline operation reaches into one.
+
+## Addendum: fields that hold choices or links (issue #33)
+
+- **Kinds reach the renderer.** `api.related(docId).fields` carries each field's `type`, `cardinality`, `options` and `to`
+  (each target with its type's `name`), read from the type document on every call (main/related.js `fieldDefs`). Text and
+  date fields stay the outline of addendum 16.
+- **Options, link and member fields are a closed list** (renderer/fields.js): one focusable `.fchoice` line of chips with no
+  editor, and a caret stop for ↑/↓ like any row. Enter, Space, a click or a typed letter opens the picker; Backspace takes
+  the last value off (an options field without `cardinality: multiple`, or a link field with `single`, is cleared); ⌘K
+  offers **Select value …** or **Link to …** for the focused field. A stored label the type no longer declares is struck
+  through ("No longer offered") and a link to a type the field does not list carries a ⚠.
+- **Options picker**: the declared labels with the current ones ticked, typing filters, **Clear value** empties. A single
+  field writes and closes; a multiple one toggles and stays open. A label no longer offered is listed to be removed and is
+  never written back, since Tana would refuse the whole value.
+- **Link picker**: the search palette, narrowed by `api.search(q, { types })` to the field's target types (all documents
+  when it has none) or `{ members: true }` for a member field, and listing what fits before anything is typed. A single
+  link is replaced, anything else gets one more line.
+- Every value is written by `api.setField(docId, key, lines)` → `setFieldText(…, { field, typeOf })`, so a value Tana would
+  refuse is refused before it is written.
+- **Defining fields.** A type has no page of its own, so its fields are listed where its row expands (the Types view): one
+  row per field, its kind as a grey chip. ⌘K there offers **Set field type …**, **Number of values …**, **Edit choices …**
+  (options only) and **Link to types …** (link only), and on a type or any of its fields **Add field …** (a name, then a
+  kind). Edit choices: typing and Enter adds a label, Enter on a label renames it, ⌘⌫ removes and ⇧⌘↑/↓ move the highlighted
+  one; at most 60 characters and no two the same, said on the row before anything is written. Writes go through
+  `api.defineField(typeUri, key, change)` and `api.addField(typeUri, def)` onto the type document, one undo step each.

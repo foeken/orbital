@@ -465,10 +465,14 @@ function renderFields(parent, force = false, el = $('fields')) {
   // is what left a new row invisible until the next click.
   if (!force && el.contains(document.activeElement)) { fieldsDeferred = true; return; }
   fieldsDeferred = false;
+  // a field that holds choices is no row, so the caret-keeping every render does cannot find it: it keeps its own focus
+  const active = document.activeElement, keep = active && active.classList && active.classList.contains('fchoice') && el.contains(active) ? active.dataset.key : null;
   const data = parent && parent.node.kind === 'document' ? relatedBy.get(parent.docId) : null;
   const fields = (data && data.fields) || [];
-  el.hidden = !fields.length;
+  const defs = (data && data.definitions) || []; // a type's page: the fields it defines (renderer/fields.js)
+  el.hidden = !fields.length && !defs.length;
   el.replaceChildren();
+  for (const def of defs) el.append(definitionEl(parent, def));
   for (const field of fields) {
     const row = document.createElement('div'); row.className = 'field';
     const icon = document.createElement('span'); icon.className = 'ricon'; icon.innerHTML = iconSvg('field');
@@ -487,7 +491,9 @@ function renderFields(parent, force = false, el = $('fields')) {
     values.dataset.key = hostId; // a field is an outline of its own, and a drop has to know which one (renderer/drag.js)
     ensureLoaded(host);
     const rows = kids.get(host.docId);
-    if (rows === null || rows === undefined) { // still being read: the value it was last seen holding, as words
+    // options, link and member fields hold a closed list: chips to pick, not an editor (renderer/fields.js)
+    if (field.type === 'options' || field.type === 'link' || field.type === 'member') values.append(choiceEl(parent, field, host));
+    else if (rows === null || rows === undefined) { // still being read: the value it was last seen holding, as words
       const waiting = document.createElement('span'); waiting.className = 'fvalue'; renderSegs(waiting, field.segments || []); values.append(waiting);
     } else {
       // A page keeps an empty row at the bottom to type in; a field must not. Its rows are the value, and a blank
@@ -500,6 +506,7 @@ function renderFields(parent, force = false, el = $('fields')) {
     el.append(row);
   }
   blurSensitive(el, parent && parent.docId);
+  if (keep) el.querySelector('.fchoice[data-key="' + CSS.escape(keep) + '"]')?.focus();
 }
 // The date of a meeting crumb, in the form the Meetings list and search already show (main.js eventMeta): read off
 // the event row when the app has it, else fetched once through api.node, which carries the same formatted string.

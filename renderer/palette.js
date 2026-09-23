@@ -20,7 +20,8 @@ const docRow = (n, hint, run) => ({ node: n, icon: n.icon, label: n.text ?? n.ti
 // The order of the rows about the node you are on: where it goes (open it, unfold it), what it is (done, status,
 // assignee), where it lives (pins, the date nodes, its space), what it looks like (image, visibility, sensitivity),
 // its link, and last the one destructive row. Rows without an id carry a `rank` from this list instead.
-const NODE_ROW_ORDER = ['zoomIn', 'expand', 'collapse', 'toggleDone', 'markRead', 'markUnread', 'status', 'setType', 'discussWith', 'setIcon', 'setHue', 'assign', 'assignTo', 'codex', 'codexOpen', 'pinToday', 'pinTomorrow', 'pinToDate', 'pinToMeeting', 'pinToSelectedMeeting', 'editPins', 'addToday', 'addTomorrow', 'addWeek', 'move', 'moveLibrary', 'visibility', 'notify', 'sensitive', 'copyLink', 'exportPdf', 'delete'];
+// The rows about a field the caret is on (renderer/fields.js) come before the node's own: they are about what is focused.
+const NODE_ROW_ORDER = ['fieldValue', 'fieldKind', 'fieldCount', 'fieldChoices', 'fieldTargets', 'zoomIn', 'expand', 'collapse', 'toggleDone', 'markRead', 'markUnread', 'status', 'setType', 'addField', 'discussWith', 'setIcon', 'setHue', 'assign', 'assignTo', 'codex', 'codexOpen', 'pinToday', 'pinTomorrow', 'pinToDate', 'pinToMeeting', 'pinToSelectedMeeting', 'editPins', 'addToday', 'addTomorrow', 'addWeek', 'move', 'moveLibrary', 'visibility', 'notify', 'sensitive', 'copyLink', 'exportPdf', 'delete'];
 const DOC_KIND = /^tana:text:/; // the Discussion Task type applies to documents, so a meeting is not offered that row
 const nodeRank = (r) => { const i = NODE_ROW_ORDER.indexOf(r.rank || r.id); return i < 0 ? NODE_ROW_ORDER.length : i; };
 const VIEW_ORDER = ['inbox', 'notifications', 'today', 'week', 'library'];
@@ -170,6 +171,7 @@ function paletteRows(q, typed = q) {
     rows.push({ id: 'setType', group: docGroup, icon: 'type', label: 'Set type', subBase: 'Set type to', hint: typeNameOf(doc) || 'No type',
       keepOpen: true, subAlways: true, run: () => openTypePalette(doc), sub: async () => { await typesLoaded(doc); return typeRows(''); } });
   }
+  rows.push(...fieldRows(docGroup)); // the focused field's value or definition, and Add field … on a type's page
   // One type a document is given by answering a question instead of picking it from a list: who it is to be
   // discussed with. A meeting is not offered it — the type applies to documents.
   if (palDoc && tana.discussWith && isRealId(palDoc.id) && DOC_KIND.test(palDoc.id)) {
@@ -325,7 +327,7 @@ function paletteRows(q, typed = q) {
 // but off (Clean up with nothing held, Go back with no history) answers the key by doing nothing: it is the same
 // command either way, so it must not mean one thing while it is live and something else while it is not.
 function runAction(id) {
-  if (palette.hidden) palDoc = currentDoc(); // a key fires with the palette closed, so the "current node" is whatever is focused now
+  if (palette.hidden) { palDoc = currentDoc(); palField = fieldAt(document.activeElement); } // a key fires with the palette closed, so the "current node" is whatever is focused now
   const row = paletteRows('').find((r) => r.id === id);
   if (row) { if (!row.disabled) row.run(); return true; }
   if (id.startsWith('doc:')) { goTo(id.slice(4)); return true; }
@@ -366,6 +368,7 @@ function backPalette() {
   // The meeting picker is opened from two places — the command page and Edit pins — so it steps back to whichever
   // one asked for it rather than to a fixed one (openMeetingPicker's second argument, the command page by default).
   else if (palMode === 'pinMeeting') pinMeetingBack();
+  else if (palMode === 'field') fieldBack(); // back to where the field page was opened from: the field, or the command page
   // These pickers were opened from the command page and step back to it, like every other second level here.
   else if (SECOND_LEVEL.has(palMode)) openCommandPalette();
   else closePalette();
@@ -606,8 +609,8 @@ function openResult(n, from) {
 // result rows pick a document: open it, or link it when the palette was opened with "@" on a selection (Create row first)
 function resultRows(nodes, group) {
   nodes = nodes.map(asDoc);
-  const ctx = linkCtx, pin = pinCtx;
-  const rows = nodes.map((n) => ({ ...docRow(n, n.meta, () => (ctx ? linkTo(ctx, { label: n.title ?? n.text, uri: n.id, ...(n.icon ? { icon: n.icon } : {}), ...(n.hue != null ? { hue: n.hue } : {}) }) : pin ? pinResult(pin, n) : openResult(n, 'Search'))), group }));
+  const ctx = linkCtx, pin = pinCtx, field = fieldLinkCtx; // field: a link field picking its value (renderer/fields.js)
+  const rows = nodes.map((n) => ({ ...docRow(n, n.meta, () => (field ? pickLink(field, n) : ctx ? linkTo(ctx, { label: n.title ?? n.text, uri: n.id, ...(n.icon ? { icon: n.icon } : {}), ...(n.hue != null ? { hue: n.hue } : {}) }) : pin ? pinResult(pin, n) : openResult(n, 'Search'))), group }));
   if (!ctx) return rows;
   const title = ctx.text || palInput.value.trim(); // "@" at a caret has no selection: what is typed becomes the new document's title
   if (!title) return rows;
@@ -878,8 +881,9 @@ function titleHits(title, q) {
 function searchNow() {
   const q = palInput.value.trim(), seq = ++palSeq;
   palTimer = null; palBusy = !!q;
-  if (!q) { palRows = resultRows(recentRows(), 'RECENTLY VIEWED'); return renderPalette(); }
-  tana.search(q).then((all) => {
+  const scope = fieldLinkCtx ? linkScope(fieldLinkCtx.field) : undefined; // a link field lists what it may link to, typed or not
+  if (!q && !scope) { palRows = resultRows(recentRows(), 'RECENTLY VIEWED'); return renderPalette(); }
+  tana.search(q, scope).then((all) => {
     if (seq !== palSeq || palMode !== 'search') return; // stale response
     // What only Tana's semantic search found (`related`, main/views.js) keeps its own order under its own heading.
     const found = all.filter((n) => !n.related), related = all.filter((n) => n.related);
@@ -925,6 +929,7 @@ function renderPalette() {
   else if (palMode === 'agentPrompt') palRows = agentPromptRows();
   else if (palMode === 'openaiKey') palRows = openAIKeyRows();
   else if (palMode === 'pill') palRows = pillRows(q.toLowerCase());
+  else if (palMode === 'field') palRows = fieldPage(q.toLowerCase(), q);
   palIndex = Math.max(0, Math.min(palIndex, palRows.length - 1));
   const els = [];
   palRows.forEach((r, i) => {
@@ -955,7 +960,7 @@ function renderPalette() {
   });
   // "No results" belongs under a list that was searched and found nothing. Two pages are not lists: the agent
   // prompt and "Discuss with …" turn what is typed into their one row, so there is nothing for them to not find.
-  if (!palRows.some((r) => palMode === 'cmd' || palMode === 'slash' || palMode === 'hidden' || r.node) && palMode !== 'agentPrompt' && palMode !== 'discuss' && (palMode === 'cmd' || palMode === 'slash' || (q && !palBusy && !Object.hasOwn(MEETING_PAGES, palMode)))) { const n = document.createElement('div'); n.className = 'group'; n.textContent = 'No results'; els.push(n); }
+  if (!palRows.some((r) => palMode === 'cmd' || palMode === 'slash' || palMode === 'hidden' || r.node) && palMode !== 'agentPrompt' && palMode !== 'discuss' && palMode !== 'field' && (palMode === 'cmd' || palMode === 'slash' || (q && !palBusy && !Object.hasOwn(MEETING_PAGES, palMode)))) { const n = document.createElement('div'); n.className = 'group'; n.textContent = 'No results'; els.push(n); }
   palList.replaceChildren(...els);
   const active = palList.querySelector('.row.active');
   if (active) active.scrollIntoView({ block: 'nearest' });
@@ -966,7 +971,7 @@ function togglePalette(mode, link, pin) {
   const show = palette.hidden || palMode !== mode || !!link || !!pin;
   cancelLink(); pinCtx = null; pillCtx = null;
   palette.hidden = !show;
-  if (!show) { clearTimeout(palTimer); palTimer = null; return returnFocus(); }
+  if (!show) return closePalette(); // closing the way every other close does, so a field that opened it gets its focus back
   if (!palReturn) palReturn = focused(); // switching modes keeps the original return target
   linkCtx = link || null;
   anchorPalette(link && link.rect);
@@ -975,7 +980,8 @@ function togglePalette(mode, link, pin) {
   promptEditor(false); // ⌘K over the prompt page leaves it, without assigning
   palMode = mode; palRows = []; palIndex = 0; palBusy = false; palEnter = null; clearTimeout(palTimer); palTimer = null;
   // meetingNow is cleared, not kept: every open re-reads the meeting, the same rule the quick-add panel follows.
-  if (mode === 'cmd') { palDoc = currentDoc(); palTaskCtx = null; meetingNow = undefined; meetingCtx = null; loadPins(); subCache.clear(); }
+  fieldLinkCtx = null;
+  if (mode === 'cmd') { palDoc = currentDoc(); palField = fieldAt(document.activeElement); fieldReturn = palField && palField.key; palTaskCtx = null; meetingNow = undefined; meetingCtx = null; loadPins(); subCache.clear(); }
   palInput.placeholder = mode === 'search' ? 'Search Tana' : mode === 'slash' ? 'Choose a block type or create' : 'Run a command';
   palInput.value = link ? link.text : '';
   if (mode === 'search') searchNow(); else renderPalette();
@@ -995,7 +1001,11 @@ function anchorPalette(rect) {
   card.style.maxHeight = Math.min(360, up ? above : below) + 'px';
   if (up) card.style.bottom = (innerHeight - rect.top + 6) + 'px'; else card.style.top = (rect.bottom + 6) + 'px';
 }
-function closePalette() { palette.hidden = true; clearTimeout(palTimer); palTimer = null; cancelLink(); pinCtx = null; pillCtx = null; promptEditor(false); returnFocus(); }
+function closePalette() {
+  palette.hidden = true; clearTimeout(palTimer); palTimer = null; cancelLink(); pinCtx = null; pillCtx = null; fieldLinkCtx = null; promptEditor(false); returnFocus();
+  const field = fieldReturn; fieldReturn = null;
+  if (field && !focused()) focusField(field); // a field that holds choices is no row: returnFocus cannot find it
+}
 // back to the node that had the caret when the palette opened (the @ link path places its own caret); with nothing to
 // return to (a row selection, the sidebar) the hidden input must not keep the keys, so it lets go of the focus
 function returnFocus() { const r = palReturn; palReturn = null; if (r && !focused()) (r.cell ? placeCell(r.key, r.cell, r.offset) : placeCaret(r.key, r.offset)); else if (document.activeElement === palInput) palInput.blur(); }
@@ -1009,7 +1019,7 @@ function nextPalIndex(rows, index, step) {
   return index;
 }
 // pages whose rows are built from what is typed, with nothing to fetch
-const LOCAL_MODES = new Set(['cmd', 'create', 'slash', 'assignees', 'assigneesMany', 'status', 'setType', 'discuss', 'setHue', 'visibility', 'visibilityPeople', 'hidden', 'pins', 'pill', 'pinMeeting', 'openaiKey', 'hosts', 'trash', 'archived', ...Object.keys(MEETING_PAGES)]);
+const LOCAL_MODES = new Set(['cmd', 'create', 'slash', 'assignees', 'assigneesMany', 'status', 'setType', 'discuss', 'setHue', 'visibility', 'visibilityPeople', 'hidden', 'pins', 'pill', 'pinMeeting', 'openaiKey', 'hosts', 'trash', 'archived', 'field', ...Object.keys(MEETING_PAGES)]);
 palInput.addEventListener('input', () => {
   palIndex = 0; palEnter = null; // typing on supersedes an Enter that was waiting for the previous query
   if (LOCAL_MODES.has(palMode)) return renderPalette();
@@ -1020,7 +1030,8 @@ palInput.addEventListener('input', () => {
 });
 palInput.addEventListener('keydown', (e) => {
   const mod = e.metaKey || e.ctrlKey;
-  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); backPalette(); }
+  if (palMode === 'field' && fieldKeys && fieldKeys(e)) { e.preventDefault(); e.stopPropagation(); } // a field page's own keys (Edit choices: ⌘⌫, ⇧⌘↑/↓)
+  else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); backPalette(); }
   else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && palRows.length) { e.preventDefault(); e.stopPropagation(); palIndex = nextPalIndex(palRows, palIndex, e.key === 'ArrowDown' ? 1 : -1); renderPalette(); }
   else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); chooseRow(mod); }
   else if (mod && e.shiftKey && e.key.toLowerCase() === 'k') { e.preventDefault(); e.stopPropagation(); const r = palRows[palIndex]; if (palMode === 'cmd' && r && r.id) openRecorder(r); }

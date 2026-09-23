@@ -56,6 +56,7 @@ async function resolveReferences(nodes) {
     const target = targets.get(m.uri);
     if (target && target.icon) m.icon = target.icon; else if (deleted(m.uri)) m.deleted = true;
     if (target && target.hue != null) m.hue = target.hue;
+    if (target && typeUriOf(target)) m.type = typeUriOf(target); // a link field says when it points at the wrong type
   }
   return nodes;
 }
@@ -129,6 +130,13 @@ async function typeChoices(id) {
     reason: !t.ownerUri || t.ownerUri === home ? undefined : 'Lives in ' + (typeTitles.get(t.ownerUri) || 'another space'),
   })).sort((a, b) => a.title.localeCompare(b.title));
   return { current: n.entityTypeUri || null, options };
+}
+// Every type in the workspace, for the types a link field may point at: the Set type list without the scoping.
+async function typeList() {
+  if (!S.client) throw new Error(NOT_CONNECTED);
+  const { nodes = [] } = await S.client.graph.listNodes({ nodeTypes: ['type'], limit: 200 });
+  nodes.forEach(rememberType);
+  return nodes.map((t) => ({ uri: t.id, title: t.title || '', hue: hueOf(t) })).sort((a, b) => a.title.localeCompare(b.title));
 }
 async function setType(id, typeUri) {
   if (!S.client) throw new Error(NOT_CONNECTED);
@@ -252,6 +260,44 @@ async function discussWith(id, who) {
   await mut(id, (doc) => fields.setFieldText(doc, key, value));
   return { typeUri: uri, key, who: who.trim(), mentions: typeof value === 'string' ? [] : value.filter((s) => s.mention).map((s) => s.mention.uri) };
 }
+
+// ---- fields that hold choices or links (issue #33) ----
+// A field value written the way Tana checks it (sdk/fields.js checkValue): its definition is read off the type, and
+// a link field with target types learns each linked document's type from the graph, so a value Tana would refuse
+// never reaches the document.
+async function setField(id, key, value) {
+  const { typeUri, attribute } = fields.parseKey(key);
+  const field = TYPE_URI.test(typeUri || '') ? fields.fieldDefinition(await document(typeUri), attribute) : null;
+  if (!field) throw new Error('That field is no longer on its type');
+  const uris = [...new Set((Array.isArray(value) ? value : []).flatMap((line) => (Array.isArray(line) ? line : (line && line.segments) || []))
+    .map((s) => s && s.mention && s.mention.uri).filter((uri) => typeof uri === 'string' && DOC_URI.test(uri)))];
+  const types = new Map();
+  if (field.type === 'link' && (field.to || []).length && uris.length) {
+    const { nodes = [] } = await S.client.graph.listNodes({ nodeIds: uris, limit: uris.length });
+    for (const n of nodes) types.set(n.id, n.entityType);
+  }
+  await mut(id, (doc) => fields.setFieldText(doc, key, value, { field, typeOf: (uri) => types.get(uri) }));
+}
+// A type's field definitions. editable() answers false for a type document (it is no outline), so the write goes
+// through op rather than mut, and onto the undo stack the way mut puts one there.
+async function mutType(typeUri, fn) {
+  if (typeof typeUri !== 'string' || !TYPE_URI.test(typeUri)) throw new Error('Fields are defined on a type');
+  if (S.historyBusy) throw new Error('History operation is still running');
+  const result = await op(typeUri, fn);
+  undoStack.push(typeUri); redoStack.length = 0;
+  typeAttrTitles.delete(typeUri); // the labels every page reads come from this template
+  return result;
+}
+// change: { type?, cardinality?, options?, to? } — what kind of field, how many values, its choices, its target types
+function defineField(typeUri, attribute, change = {}) {
+  return mutType(typeUri, (doc) => {
+    if ('type' in change || 'cardinality' in change) fields.setFieldKind(doc, attribute, { type: change.type, cardinality: change.cardinality });
+    if (change.options) fields.setFieldOptions(doc, attribute, change.options);
+    if (change.to) fields.setFieldTargets(doc, attribute, change.to);
+    return fields.fieldDefinition(doc, attribute);
+  });
+}
+const addTypeField = (typeUri, def) => mutType(typeUri, (doc) => fields.addField(doc, def || {}));
 
 async function createDocument(title, opts = {}) {
   if (typeof title !== 'string' || !title.trim()) throw new Error('Keep an empty draft local until it has a title');
@@ -752,4 +798,4 @@ async function moveTarget(spaceId) {
   return document(spaceId);
 }
 
-module.exports = { outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, createDocument, typeChoices, setType, setTypeHue, discussWith, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, codexIds, setCodex, creatorOf, document, op, inHistory, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget };
+module.exports = { outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, createDocument, typeChoices, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, codexIds, setCodex, creatorOf, document, op, inHistory, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget };

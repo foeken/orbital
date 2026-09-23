@@ -106,7 +106,8 @@ const referenceLabel = (node) => referenceTarget(node)?.text || node.reference?.
 const showError = (e) => { $('errorText').textContent = e ? String(e.message || e) : ''; $('error').hidden = !e; };
 const run = (fn) => (queue = queue.then(fn).then((value) => { showError(null); return value; }, showError));
 // A row on its way out is not a keyboard stop.
-const rowsIn = (root) => [...root.querySelectorAll('.node:not(.leaving) .text')];
+// A field that holds choices (renderer/fields.js) is one stop, and a caret stop all the same.
+const rowsIn = (root) => [...root.querySelectorAll('.node:not(.leaving) .text, .fchoice')];
 // A field value's rows are addressed "<document>|<type>?attribute=<key>" (docs/OUTLINER.md): the outline's own
 // rows, drawn under the title, where a row is one line of a list rather than a page in its own right.
 const inField = (docId) => typeof docId === 'string' && docId.includes('|tana:type:');
