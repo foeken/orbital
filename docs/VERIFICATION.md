@@ -1,6 +1,6 @@
 # Verification log
 
-> A dated log, kept as written. Items it lists as pending were settled later and are tracked in TASKS.md: multi-node
+> A dated log, kept as written. Items it lists as pending were settled later and are recorded in docs/TASKS-HISTORY.md: multi-node
 > removal, move, indent and outdent are one CRDT transaction each (`removeMany`/`moveMany`/`indentMany`/`outdentMany`),
 > and the native recheck of visibility labels is the 150-document sweep in the second entry below.
 
@@ -41,7 +41,7 @@ Failures found during visual checks:
   awaits readiness. Real tasks send and Testing have explicit private metadata;
   missing metadata is not evidence of private visibility. Native recheck pending.
 
-TASKS.md remains the requirement/status ledger. Passing mock or helper tests does
+GitHub issues are the requirement/status ledger (docs/TASKS-HISTORY.md before 2026-09-23). Passing mock or helper tests does
 not prove live mutation behavior, full native visual coverage, or all requirements.
 
 ## 2026-09-13 — backend read-only verification against real Tana data

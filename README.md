@@ -142,8 +142,8 @@ A second worktree needs no second install: `scripts/modules.sh` clones the main 
 Electron binary and renames its bundle to Orbital. The login lives in the shared
 `~/Library/Application Support/Orbital`, so one sign-in serves every checkout.
 
-Requests and their state are tracked in [TASKS.md](TASKS.md); everything finished before the
-current release is in [docs/TASKS-HISTORY.md](docs/TASKS-HISTORY.md).
+Requests and their state are tracked as GitHub issues; the tracker kept before 2026-09-23 is in
+[docs/TASKS-HISTORY.md](docs/TASKS-HISTORY.md).
 
 ## How it is put together
 
