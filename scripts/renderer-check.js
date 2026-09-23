@@ -104,7 +104,7 @@ assert.match(source, /isPinned\(n\.id\)/, 'a reused row is rebuilt when its pin 
 assert.match(source, /\{ create: true, label: 'Create “' \+ title/);
 // linking preselects a result only when its title starts with the typed text; otherwise "Create" stays selected
 assert.match(source, /const starts = nodes\.findIndex\(\(n\) => \(n\.title \?\? n\.text \?\? ''\)\.toLowerCase\(\)\.startsWith\(q\.toLowerCase\(\)\)\);/);
-assert.match(source, /palIndex = linkCtx \? \(starts < 0 \? 0 : starts \+ \(palRows\[0\] && palRows\[0\]\.create \? 1 : 0\)\) : 0;/);
+assert.match(source, /palIndex = linkCtx && starts >= 0 && !\(palRows\[0\] && palRows\[0\]\.date\) \? starts \+ palRows\.filter\(\(r\) => r\.create\)\.length : 0;/);
 assert.match(source, /palRows\.find\(\(row\) => row\.create\)/);
 assert.match(source, /tana\.toggleCheckbox\(item\.docId, item\.node\.id\)/);
 assert.match(source, /else toggleCheckbox\(item\)/);

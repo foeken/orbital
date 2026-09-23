@@ -12,6 +12,7 @@ const access = require('./sdk/access');
 const { readNode, setTitle, setState, taskMeta, audienceMetadata, setAssignees, setSearchQuery, setSearchView, searchDisplay, searchSort } = require('./sdk/node');
 const { completedWindow, filterToSearchQuery, isHidden, searchQueryToFilter, validViewFilter } = require('./sdk/query');
 const content = require('./sdk/content');
+const { isDateUri } = require('./sdk/dates');
 const agent = require('./main/agent');
 const ai = require('./main/ai');
 const { NOT_CONNECTED, S, VIEWS, docStates, errText, idKind, isSearch, isSpace, metaSigs, pathCache, today, truncatedViews, redoStack, report, scheduleRefresh, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
@@ -383,7 +384,8 @@ ipcMain.handle('shell:open', (_e, url) => {
 });
 // The node for today: a document titled with today's date, pinned to today. Created and pinned when missing,
 // so "Show today node" always lands somewhere. Matching is by exact title, the same string the pin uses.
-ipcMain.handle('doc:todayNode', (_e, offset) => todayNode(offset === 1 ? 1 : 0));
+// A 'YYYY-MM-DD' day instead of the offset is the page a date mention opens.
+ipcMain.handle('doc:todayNode', (_e, offset) => todayNode(isDateUri('tana:plaindate:' + offset) ? offset : offset === 1 ? 1 : 0));
 ipcMain.handle('doc:weekNode', async () => (await weekNode()).id);
 // macOS appearance, for the renderer's "follow the system" theme: current value on demand, plus live changes
 const systemTheme = () => (nativeTheme && nativeTheme.shouldUseDarkColors ? 'dark' : 'light');

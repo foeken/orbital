@@ -18,7 +18,7 @@ contextBridge.exposeInMainWorld('api', {
   editMeeting: (docId, change) => ipcRenderer.invoke('meeting:edit', docId, change), // { start, end } | { location } | { attendees: [{ email?, userUri? }] }
   attendeeSuggestions: () => ipcRenderer.invoke('meeting:suggestions'), // [{ email, displayName, eventCount, identityUri }]
   summaryUri: (docId) => ipcRenderer.invoke('doc:summaryUri', docId), // a meeting's write-up document, or null
-  todayNode: (offset) => ipcRenderer.invoke('doc:todayNode', offset), // the date-titled node pinned to that day (0 today, 1 tomorrow), created if missing
+  todayNode: (offset) => ipcRenderer.invoke('doc:todayNode', offset), // the date-titled node pinned to that day (0 today, 1 tomorrow, or 'YYYY-MM-DD'), created if missing
   weekNode: () => ipcRenderer.invoke('doc:weekNode'), // the "Week 38 (2026)" document (ISO week), created if missing; not linked to the day nodes
   openExternal: (url) => ipcRenderer.invoke('shell:open', url), // http(s) link from node text, in the default browser
   exportPdf: (docId) => ipcRenderer.invoke('doc:exportPdf', docId),

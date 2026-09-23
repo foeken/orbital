@@ -6,7 +6,8 @@
 
 // Inline markdown of one line: a [label](uri) mention or link, **bold**, `code`, *italic*, ~~strike~~. The text is
 // plain markdown source (no Loro marks at all), so this regex is the whole inline story.
-const INLINE = /\[([^\]\n]*)\]\((tana:[a-z-]+:[0-9a-z]{26}|https?:\/\/[^\s)]+)\)|\*\*([^*\n]+)\*\*|`([^`\n]+)`|\*([^*\s][^*\n]*)\*|~~([^~\n]+)~~/g;
+// A date is mentioned the same way, [Sep 30, 2026](tana:plaindate:2026-09-30) (sdk/dates.js).
+const INLINE = /\[([^\]\n]*)\]\((tana:[a-z-]+:[0-9a-z]{26}|tana:plaindate:[\d-]{10}|tana:zoneddate:[\dT:-]+\[[A-Za-z_/]+\]|https?:\/\/[^\s)]+)\)|\*\*([^*\n]+)\*\*|`([^`\n]+)`|\*([^*\s][^*\n]*)\*|~~([^~\n]+)~~/g;
 
 function segments(text) {
   const out = [];
