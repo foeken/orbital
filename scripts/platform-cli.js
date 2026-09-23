@@ -236,6 +236,23 @@ const commands = {
     const n = readNode(doc);
     out({ ...summary(doc), type: n.type, startTime: n.startTime, endTime: n.endTime });
   },
+  // upload <image file> <doc id> [--after <block id>]: WRITES. The bytes to Tana's file store, a tana:image: document
+  // owned by <doc id>, and an image block after --after (default: at the end) — what a paste does (main/images.js)
+  async upload() {
+    const [file, docId] = positional;
+    if (!file || !docId) throw new Error('usage: upload <image file> <doc id> [--after <block id>]');
+    const { uploadFile, initImage } = require('../sdk/assets');
+    const bytes = require('node:fs').readFileSync(file), filename = path.basename(file);
+    const mimeType = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' }[path.extname(file).toLowerCase()] || 'application/octet-stream';
+    await connect();
+    await client.sync.connect();
+    const up = await uploadFile(bytes, { filename, mimeType, getAccessToken: (o) => session.getAccessToken(o) });
+    const uri = 'tana:image:' + ulid();
+    const image = await client.sync.subscribe(uri, (loro) => initImage(loro, { ownerUri: docId, cid: up.cid, width: up.width, height: up.height, blurhash: up.blurhash, filename, mimeType, fileSize: bytes.length }));
+    const blockId = require('../sdk/content').insertImage(await client.sync.subscribe(docId), flag('after', null), uri);
+    await new Promise((r) => setTimeout(r, 1500)); // let the live updates go out
+    out({ upload: up, image: uri, data: image.data.toJSON(), blockId });
+  },
   async delete() {
     if (!positional[0]) throw new Error('usage: delete <id>  (document_action soft_delete)');
     await connect();
@@ -821,6 +838,7 @@ const USAGE = [
   '  LIVE       livequery [--minutes 60] [--seconds 20] [--state <stateType>] | presence <id> [--seconds 30] [--announce <name>] [--block <blockId>]',
   '  WRITES     create <title> [--kind doc|task|meeting|type] | delete <id> | restore <id> | archive <id> | unarchive <id> |',
   '             set-title <id> <title> |',
+  '             upload <image file> <doc id> [--after <block id>] |',
   '             addfield <type uri> <title> [--type member|date|link|options] [--options "A|B"] [--to <type uri>,…] [--multiple] |',
   '             set-state <id> <proposed|open|closed|not_now> | pin <id> <sidebar|today> | unpin <id> <sidebar|today> |',
   '             pinto <event|space id> <id> | unpinfrom <event|space id> <id> | settype <id> <tana:type:...|none> |',

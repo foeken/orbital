@@ -21,7 +21,7 @@ Read in this order: this file → [02-data-model.md](02-data-model.md) → [03-a
 | Live queries | `livequery.js` | A query the server keeps answering: new, changed and removed rows pushed as they happen, without polling or subscribing each node. |
 | Presence | `presence.js` | Who is in a document right now and where their caret is, from the document's ephemeral channel; and being seen there yourself. |
 | Meeting attendance | `calls.js` | Who is in a meeting *now*, from the live `sessions` of its `tana:call:` document, and who was in it earlier, from `data.sessionLog`. |
-| Assets | `assets.js` | Image bytes for a `tana:image:` uri (two-hop CDN fetch). |
+| Assets | `assets.js` | Image bytes for a `tana:image:` uri (two-hop CDN fetch); upload a file and seed the `tana:image:` document for it. |
 | Schemas | `proto/descriptors.js` | Protobuf descriptors extracted from Tana's bundle, loaded at runtime (no codegen). |
 
 ## Layering rules

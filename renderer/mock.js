@@ -418,6 +418,7 @@ function mockApi() {
       emit(docId);
     }),
     insertDivider: async (docId, id) => mut(docId, () => { const f = locate(content[docId], id); f.list.splice(f.index + 1, 0, divider()); emit(docId); }),
+    insertImage: async (docId, id) => mut(docId, () => { const f = id == null ? null : locate(content[docId], id), n = { id: 'img' + (++seq), kind: 'block', type: 'image', image: { uri: 'tana:image:mock', alt: null, width: null, height: null }, hasChildren: false, children: [] }; if (!f) content[docId].push(n); else f.list.splice(f.index + 1, 0, n); emit(docId); return n.id; }),
     insertAfter: async (docId, id, text) => mut(docId, () => {
       const f = id == null ? null : locate(content[docId], id), n = block(text, [], undefined, f && f.node.kind === 'block' && f.node.done != null ? 0 : undefined);
       if (!f) content[docId].push(n); else f.list.splice(f.index + 1, 0, n);

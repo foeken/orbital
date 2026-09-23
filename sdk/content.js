@@ -829,6 +829,29 @@ function divider(list, index) {
   return id;
 }
 
+// A pasted image lands where a new row typed after this one would (insertAfter): beside a list row it is a list row
+// of its own — a listItem holding just the image, which Tana's schema allows (listItem: block+) — and beside anything
+// bare it is a bare image block. Written as Tana's atom writer does (the(): blockId plus the attributes it has, no
+// children list); a paste, a drop and "/" Image all insert with displayWidth/displayHeight null, so neither is set.
+function insertImage(document, id, tanaUri) {
+  if (!/^tana:image:[0-9a-z]{26}$/.test(tanaUri)) throw new Error('not a tana:image uri: ' + tanaUri);
+  const image = (list, index) => {
+    const m = list.insertContainer(index, new LoroMap()), a = m.setContainer('attributes', new LoroMap()), bid = newId();
+    m.set('nodeName', 'image');
+    a.set('blockId', bid); a.set('tanaUri', tanaUri);
+    return bid;
+  };
+  let out = null;
+  document.transact(() => {
+    const list = rootKids(document);
+    if (id == null) { out = image(list, list.length); return; }
+    const { block, item: li } = must(document, id);
+    const unit = li || block, l = unit.parent(), i = indexOf(l, unit) + 1;
+    out = li ? image(kids(create(l, i, 'listItem')), 0) : image(l, i);
+  });
+  return out;
+}
+
 // A document dropped into an outline cannot move there — it lives in Tana, not inside this node — so what lands is
 // a reference to it: one block whose whole content is a mention, which is Tana's full-reference presentation and
 // exactly what the renderer draws as the node itself. The place is named the way a drag names it (dropSlot), and
@@ -847,4 +870,4 @@ function insertMention(document, { uri, label } = {}, { parentId = null, afterId
   return out;
 }
 
-module.exports = { cursorAt, cursorOffset, charOffset, blockOffset, readOutline, assignBlockIds, setText, inlineGroups, writeInline, styleDoc, setBlockType, insertDivider, insertAfter, insertBefore, insertChild, insertMention, split, remove, removeMany, indent, indentMany, outdent, outdentMany, move, moveMany, moveTo, toggleCheckbox, newId, BLOCK_TYPES };
+module.exports = { cursorAt, cursorOffset, charOffset, blockOffset, readOutline, assignBlockIds, setText, inlineGroups, writeInline, styleDoc, setBlockType, insertDivider, insertImage, insertAfter, insertBefore, insertChild, insertMention, split, remove, removeMany, indent, indentMany, outdent, outdentMany, move, moveMany, moveTo, toggleCheckbox, newId, BLOCK_TYPES };
