@@ -508,7 +508,7 @@ function crumbWhen(id) {
   if (typeof id !== 'string' || !id.startsWith('tana:event:')) return null;
   const known = docOf(id);
   if (known && known.meta) return known.meta;
-  if (!eventWhen.has(id) && tana.node) {
+  if (connected && !eventWhen.has(id) && tana.node) {
     eventWhen.set(id, null);
     tana.node(id).then((n) => { eventWhen.set(id, n.meta || ''); if (n.meta) renderSoon(); }, () => eventWhen.delete(id));
   }
@@ -544,7 +544,7 @@ function renderCrumbs(trail) {
   // A document reached through a space (zoom.via) starts at the space's location; the spaces follow as crumbs.
   const root = zoom.via ? zoom.via[0] : zoom, rootId = root.docId;
   const path = paths.get(rootId);
-  if (!path && tana.path && isRealId(rootId)) { paths.set(rootId, []); tana.path(rootId).then((p) => { paths.set(rootId, p); if (zoom && (zoom.via ? zoom.via[0] : zoom).docId === rootId) renderSoon(); }).catch(() => {}); }
+  if (connected && !path && tana.path && isRealId(rootId)) { paths.set(rootId, []); tana.path(rootId).then((p) => { paths.set(rootId, p); if (zoom && (zoom.via ? zoom.via[0] : zoom).docId === rootId) renderSoon(); }).catch(() => {}); }
   // Separators are decided as crumbs go in rather than by index: the first one after the Home anchor is the • that
   // keeps the shortcut apart from the › chain, the rest are ›, and a location that filters down to nothing leaves
   // no dangling separator behind.
