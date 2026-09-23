@@ -525,15 +525,29 @@ function rememberSeen(id, sig) {
   seenPairs = next;
   db.setSetting('notifySeen', next);
 }
-// Only changes from somewhere else. onChange fires for your own typing too, and being notified about your own edits
-// would make this unusable; sdk/document.js already marks every change local or remote, so the origin decides.
+// Peer ids keep the user's hash in their top bits, even across that user's tabs and devices. The version vector says
+// which peer counters advanced since the last change, so a remote echo of your own edit stays quiet too.
+function changedByMe(before, after) {
+  const peerId = S.client && S.client.sync && S.client.sync.peerId;
+  if (!before || !peerId) return false;
+  let me;
+  try { me = BigInt(peerId) >> 16n; } catch { return false; }
+  for (const [peer, counter] of after) {
+    if (counter <= (before.get(peer) || 0)) continue;
+    try { if ((BigInt(peer) >> 16n) === me) return true; } catch { /* malformed peer id: it cannot identify me */ }
+  }
+  return false;
+}
 async function notifyWatched(id, doc, n, info) {
   const sig = [n.title ?? '', n.stateType ?? '', JSON.stringify(doc.loro.oplogFrontiers())];
-  const before = notifySigs.get(id);
-  notifySigs.set(id, sig);
+  const version = doc.loro.oplogVersion().toJSON();
+  const previous = notifySigs.get(id);
+  const before = previous && previous.sig;
+  const ownEdit = previous && changedByMe(previous.version, version);
+  notifySigs.set(id, { sig, version });
   const away = before ? null : (seenPairs ||= storedPairs())[id]; // first sight this launch: what it was last time
   rememberSeen(id, sig);
-  if (!info || info.origin !== 'remote') return;
+  if (!info || info.origin !== 'remote' || ownEdit) return;
   if (before && JSON.stringify(before) === JSON.stringify(sig)) return; // nothing worth saying moved
   // First sight is a baseline, except where the stored pair says the status moved while the app was not running.
   // Only the status, and only somebody else's: a title differing after a week is noise, and stateChangedBy is the
