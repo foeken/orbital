@@ -307,6 +307,8 @@ function noteNavigation() {
   navHere = here;
   rememberPlace();
   if (previousDoc === INBOX_PAGE && id !== INBOX_PAGE) markAllNotificationsRead();
+  // Proposals are read afresh on every arrival: nothing pushes them, and one approved in Tana should not linger here.
+  if (id === PROPOSALS_PAGE && previousDoc !== id && kids.get(id)) run(async () => { await reload(id); renderSoon(true); });
   // Returning by history, a crumb or a pin must rerun the query, not reuse its old result set.
   if (id !== previousDoc && isSearchDoc({ id }) && kids.get(id)) {
     releaseHeld();

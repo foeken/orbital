@@ -730,6 +730,103 @@ commands.chatlist = async () => {
   for (const n of nodes) out(n.id + '\t' + JSON.stringify(n.title || '') + '\t' + JSON.stringify(n.invocationContext || {}) + '\towner=' + (n.ownerUri || '-'));
   out(nodes.length + ' chats');
 };
+// proposals [--limit 500] [--detail] [--rows]: the AI proposals waiting on someone (sdk/proposals.js), newest first, from
+// the chat graph nodes; --detail opens each chat and its proposed document and prints what approve would decide from,
+// --rows prints the Proposals page as main/proposals.js builds it. Read-only. approve / reject <chat id> <proposed id>
+// are the writes (below, under WRITES).
+commands.proposals = async () => {
+  const me = await connect();
+  if (args.includes('--rows')) {
+    process.env.TANA_MAIN_TEST = '1';
+    require('../db').open(path.join(app.getPath('temp'), 'tana-cli-proposals.sqlite'));
+    require('../main').testRuntime({ session, client, me, win: null });
+    const started = Date.now(), rows = await require('../main/proposals').rows();
+    for (const r of rows) out([r.proposal.approvable ? 'approve' : 'in Tana', r.icon, r.id, JSON.stringify(r.text), r.proposal.note].join('\t'));
+    return out(rows.length + ' rows in ' + (Date.now() - started) + ' ms');
+  }
+  const proposals = require('../sdk/proposals');
+  const list = await proposals.pending(client.graph, { limit: Number(flag('limit', 500)) });
+  const counts = {};
+  for (const p of list) counts[p.operation + '/' + p.kind] = (counts[p.operation + '/' + p.kind] || 0) + 1;
+  if (args.includes('--detail')) await client.sync.connect();
+  for (const p of list) {
+    out(new Date(p.proposedAt).toISOString().slice(0, 16) + '\t' + p.operation + '/' + p.kind + '\t' + p.proposedUri + (p.baseUri ? ' -> ' + p.baseUri : '') + '\tin ' + p.chatUri + ' ' + JSON.stringify(p.chatTitle));
+    if (!args.includes('--detail')) continue;
+    const chat = await client.sync.subscribe(p.chatUri);
+    const e = proposals.entries(chat).filter((x) => x.p.proposedUri === p.proposedUri).map((x) => x.p);
+    const doc = await client.sync.subscribe(p.proposedUri).catch((err) => ({ error: err.message }));
+    const d = doc.data ? doc.data.toJSON() : doc;
+    out('\t\tentries ' + JSON.stringify(e.map((x) => ({ op: x.operation, at: x.proposedAt, approvedAt: x.approvedAt, rejectedAt: x.rejectedAt, metadata: x.metadata, iteration: x.iterationChatUri }))));
+    out('\t\tdoc ' + JSON.stringify({ title: d.title, isProposal: d.isProposal, ownerUri: d.ownerUri, entityTypeUri: d.entityTypeUri, stateType: d.stateType, deletedAt: d.deletedAt, createdInUri: d.createdInUri, error: d.error })
+      + '\trefusal ' + JSON.stringify(e.length ? proposals.refusal(e.sort((a, b) => b.proposedAt - a.proposedAt)[0]) : 'no chat entry'));
+  }
+  out(list.length + ' pending ' + JSON.stringify(counts) + ' for ' + (me.displayName || me.userUri));
+};
+// approve / reject <chat id> <proposed id>: accept or turn down one pending proposal as Tana does (sdk/proposals.js).
+// WRITES: approve takes the document out of proposal and posts "accepted 1 change" in the chat; reject removes the
+// proposal from the chat and soft-deletes the document it proposed.
+for (const action of ['approve', 'reject']) {
+  commands[action] = async () => {
+    const me = await connect();
+    await client.sync.connect();
+    const [chatUri, proposedUri] = positional;
+    if (!chatUri || !proposedUri) throw new Error('usage: ' + action + ' <chat id> <proposed id>');
+    out(await require('../sdk/proposals')[action](client.sync, { chatUri, proposedUri, byUri: me.userUri }));
+    await new Promise((r) => setTimeout(r, 1500)); // let the live updates go out
+  };
+}
+// proposalcycle: a scratch chat proposing two new scratch documents, one approved and one rejected through
+// sdk/proposals.js, each step read back from the graph (what the Proposals page lists) and from a fresh bootstrap (what
+// Tana's own client will read), then all of it deleted. WRITES scratch documents only.
+commands.proposalcycle = async () => {
+  const me = await connect();
+  await client.sync.connect();
+  const proposals = require('../sdk/proposals');
+  const { LoroMap, LoroList, LoroText } = require('loro-crdt');
+  const chatUri = 'tana:chat:' + ulid(), keep = 'tana:text:' + ulid(), drop = 'tana:text:' + ulid();
+  for (const [uri, title, kind] of [[keep, 'Orbital scratch: approve me', 'task'], [drop, 'Orbital scratch: reject me', 'doc']]) {
+    await client.sync.subscribe(uri, (l) => { initDocument(l, title, me.userUri, { kind }); l.getMap('data').set('isProposal', true); });
+  }
+  await client.sync.subscribe(chatUri, (l) => {
+    initDocument(l, 'Orbital scratch proposals', me.userUri, { kind: 'chat' });
+    const m = l.getMap('data').get('messages').insertContainer(0, new LoroMap());
+    for (const [k, v] of Object.entries({ id: 'orbscr01', type: 'message', fromUserType: 'ai', sentAt: Date.now(), completedAt: Date.now() })) m.set(k, v);
+    m.setContainer('content', new LoroMap()).setContainer('text', new LoroText()).insert(0, 'Two scratch proposals from Orbital\'s proposalcycle.');
+    const list = m.setContainer('proposals', new LoroList());
+    for (const uri of [keep, drop]) {
+      const p = list.insertContainer(list.length, new LoroMap());
+      p.set('operation', 'create'); p.set('proposedUri', uri); p.set('proposedAt', Date.now());
+      p.setContainer('metadata', new LoroMap()).set('intents', '[{"type":"reown-embedded-media","family":"media"}]');
+    }
+  });
+  // what the chat's graph node says, polled until it says what is expected (the index trails the write by seconds)
+  const graph = async (want) => {
+    for (let i = 0; ; i++) {
+      const { nodes } = await client.graph.listNodes({ nodeIds: [chatUri], limit: 1 });
+      const seen = ((nodes[0] && nodes[0].chat && nodes[0].chat.proposals) || []).map((p) => p.proposedUri.slice(-6) + ':' + p.status).sort().join(' ');
+      if (seen === want || i >= 30) return seen + ' after ' + i + 's';
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+  };
+  const fresh = async (uri) => { await client.sync.unsubscribe(uri); return (await client.sync.subscribe(uri)).data.toJSON(); };
+  const listed = async () => (await proposals.pending(client.graph)).filter((p) => p.chatUri === chatUri).map((p) => p.proposedUri.slice(-6)).sort().join(' ');
+  try {
+    out({ step: 'proposed', graph: await graph([keep, drop].map((u) => u.slice(-6) + ':pending').sort().join(' ')), pendingLists: await listed() });
+    out({ step: 'approve', result: await proposals.approve(client.sync, { chatUri, proposedUri: keep, byUri: me.userUri }) });
+    out({ step: 'reject', result: await proposals.reject(client.sync, { chatUri, proposedUri: drop }) });
+    await new Promise((r) => setTimeout(r, 1500)); // let the live updates go out before reading back
+    out({ step: 'graph after', graph: await graph(keep.slice(-6) + ':approved'), pendingLists: await listed() });
+    const k = await fresh(keep), c = await fresh(chatUri), last = c.messages.at(-1);
+    out({ step: 'fresh read', approved: { isProposal: k.isProposal, createdInUri: k.createdInUri === chatUri },
+      chatEntries: c.messages[0].proposals.map((p) => ({ uri: p.proposedUri.slice(-6), approvedAt: !!p.approvedAt })),
+      status: { text: last.content.text, attachments: last.attachmentUris, by: last.fromUserUri === me.userUri, isStatusUpdate: last.isStatusUpdate } });
+    out({ step: 'rejected draft', read: await fresh(drop).then((d) => ({ deletedAt: d.deletedAt }), (e) => e.message) });
+  } finally {
+    for (const uri of [keep, chatUri]) await client.sync.softDelete(uri).then(() => out('deleted ' + uri), (e) => out('could not delete ' + uri + ': ' + e.message));
+  }
+};
+
+
 // rawdoc <id>: the complete Loro document JSON — every root container, not just data + content. For learning an
 // undocumented schema (chats). Read-only: bootstrap carries no local ops.
 // inbox [--limit 20] [--watch seconds]: your notifications (sdk/inbox.js), newest first, as Tana phrases them, with the
@@ -945,7 +1042,7 @@ const USAGE = [
   'usage: node scripts/platform-cli.js <command>   (not ./node_modules/.bin/electron: docs/ELECTRON-SANDBOX.md)',
   '  session    login | whoami',
   '  read       list [--state open|all] | search <query> [#task|#meeting|#member|#Type] | types | fields [<type uri>] |',
-  '             meetings [--days 7] | chatlist [--limit 200] | get <id> [--raw] | outline <id> | rawdoc <id> [--containers 1] | workflow <type|task id> |',
+  '             meetings [--days 7] | chatlist [--limit 200] | proposals [--limit 500] [--detail] | get <id> [--raw] | outline <id> | rawdoc <id> [--containers 1] | workflow <type|task id> |',
   '             graphnode <id> | edges <id> | listkind <nodeType> [--limit 50] | image <tana:image:uri> | pins [--dates] |',
   '             changes <id> [--within <summary id>] [--limit 20] | inbox [--limit 20] [--watch seconds] |',
   '             settings   (with a key and a JSON value it writes)',
@@ -960,6 +1057,8 @@ const USAGE = [
   '             upload <image file> <doc id> [--after <block id>] |',
   '             meetingedit   (a scratch meeting it creates, edits and deletes; the server puts it in your calendar meanwhile) |',
   '             datemention [--date YYYY-MM-DD]   (a scratch document mentioning the date, read back and deleted) |',
+  '             proposalcycle   (a scratch chat proposing two scratch documents, one approved and one rejected, read back and deleted) |',
+  '             approve <chat id> <proposed id> | reject <chat id> <proposed id>   (an AI proposal: accepted, or removed and its draft deleted) |',
   '             addfield <type uri> <title> [--type member|date|link|options] [--options "A|B"] [--to <type uri>,…] [--multiple] |',
   '             set-state <id> <proposed|open|closed|not_now|workflow state> | pin <id> <sidebar|today|shared|mute> | unpin <id> <…same> |',
   '             pinto <event|space id> <id> | unpinfrom <event|space id> <id> | settype <id> <tana:type:...|none> |',

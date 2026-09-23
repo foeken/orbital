@@ -54,6 +54,10 @@ WANT.table = path.join(__dirname, '..', 'build', 'icons', 'table.svg');
 WANT.image = path.join(__dirname, '..', 'build', 'icons', 'image.svg');
 // A node assigned to someone outside its audience (renderer/tasks.js); the warning colour is set in styles.css
 WANT.userAlert = path.join(__dirname, '..', 'build', 'icons', 'user-alert.svg');
+// The Proposals page (renderer/proposals.js): the page itself, and approving or rejecting what the AI proposed
+WANT.proposals = path.join(__dirname, '..', 'build', 'icons', 'file-sparkle.svg');
+WANT.approve = path.join(__dirname, '..', 'build', 'icons', 'circle-check.svg');
+WANT.reject = path.join(__dirname, '..', 'build', 'icons', 'circle-xmark.svg');
 // Cmd+K rows for the keys the outline answers to
 for (const [name, file] of [['expand', 'v-shaped-arrow-down'], ['collapse', 'v-shaped-arrow-up'], ['undo', 'undo'], ['redo', 'redo'], ['textLarger', 'text-size-increase'], ['textSmaller', 'text-size-decrease'], ['textReset', 'text'], ['rail', 'sidebar-right-4'], ['railShow', 'sidebar-right-show'], ['railHide', 'sidebar-right-hide'], ['back', 'arrow-left'], ['forward', 'arrow-right'], ['zoomIn', 'magnifier-3'], ['search', 'file-search'], ['filter', 'filter-2']]) WANT[name] = path.join(__dirname, '..', 'build', 'icons', file + '.svg');
 const out = {};

@@ -4362,6 +4362,104 @@ async function main() {
     assert.deepEqual(doc.toJSON().content, {}, 'reading a chat never writes an outline into it');
     console.log('ok  chat rows: hidden/context skipped, list order, read-only rows, mentions, attachments, proposals and subagent links');
   }
+  // AI proposals (issue #19; sdk/proposals.js, main/proposals.js): the graph lists the pending ones, approve takes a
+  // proposed document out of proposal the way Tana does, reject removes the proposal and deletes its draft, and every
+  // proposal Tana would do more for is refused without a write.
+  {
+    const proposals = require('../sdk/proposals'), { chatRows } = require('../sdk/chat');
+    const OTHER = 'tana:user-profile:01examplej0000000000000000', REOWN = '[{"type":"reown-embedded-media","family":"media"}]';
+    const docs = new Map(), deleted = [];
+    const sync = { subscribe: async (id) => { if (!docs.has(id)) throw new Error('document not found: ' + id); return docs.get(id); }, softDelete: async (id) => { deleted.push(id); } };
+    const make = (prefix, fn) => { const d = new Document(prefix + ulid()); d.transact(fn); docs.set(d.id, d); return d; };
+    const proposed = (title, extra = {}) => make('tana:text:', (l) => { initDocument(l, title, ME); const data = l.getMap('data'); data.set('isProposal', true); for (const [k, v] of Object.entries(extra)) data.set(k, v); });
+    const space = 'tana:space:' + ulid();
+    const task = make('tana:text:', (l) => { initDocument(l, 'Proposed task', ME, { kind: 'task' }); const data = l.getMap('data'); data.set('isProposal', true); data.delete('stateChangedBy'); data.delete('assignedToUrisChangedBy'); });
+    const note = proposed('Proposed note'), odd = proposed('Odd intent'), base = proposed('Base'), draft = proposed('Draft of base');
+    const type = make('tana:type:', (l) => { initDocument(l, 'Project', ME, { kind: 'type', ownerUri: space }); });
+    const typed = proposed('Typed elsewhere', { entityTypeUri: type.id, ownerUri: 'tana:event:' + ulid() });
+    const pictured = proposed('With a picture');
+    pictured.transact((l) => { const img = l.getMap('content').get('children').insertContainer(0, new LoroMap()); img.set('nodeName', 'image'); img.setContainer('attributes', new LoroMap()).set('tanaUri', 'tana:image:' + ulid()); });
+    const chat = make('tana:chat:', (l) => {
+      initDocument(l, 'Planning chat', ME, { kind: 'chat' });
+      const m = l.getMap('data').get('messages').insertContainer(0, new LoroMap());
+      m.set('id', 'ai000001'); m.set('type', 'message'); m.set('fromUserType', 'ai'); m.set('sentAt', 1788262342702);
+      m.setContainer('content', new LoroMap()).setContainer('text', new LoroText()).insert(0, 'Here are the tasks.');
+      const list = m.setContainer('proposals', new LoroList());
+      const add = (operation, proposedUri, intents, baseUri) => {
+        const p = list.insertContainer(list.length, new LoroMap());
+        p.set('operation', operation); p.set('proposedUri', proposedUri); p.set('proposedAt', 1788262392412 + list.length);
+        if (baseUri) p.set('baseUri', baseUri);
+        const meta = p.setContainer('metadata', new LoroMap());
+        if (intents) meta.set('intents', intents);
+      };
+      add('create', task.id, REOWN); add('create', note.id); add('create', odd.id, '[{"type":"place-at-owner","targetOwnerUri":"' + space + '"}]');
+      add('update', draft.id, REOWN, base.id); add('create', typed.id, REOWN); add('create', pictured.id, REOWN);
+    });
+    const before = JSON.stringify(chat.toJSON());
+    await assert.rejects(proposals.approve(sync, { chatUri: chat.id, proposedUri: draft.id, byUri: OTHER }), /merges a change/, 'an update is Tana\'s to merge');
+    await assert.rejects(proposals.approve(sync, { chatUri: chat.id, proposedUri: odd.id, byUri: OTHER }), /only Tana can run/, 'an intent other than re-owning media is refused');
+    await assert.rejects(proposals.approve(sync, { chatUri: chat.id, proposedUri: pictured.id, byUri: OTHER }), /images/, 're-owning media that is there to re-own is refused');
+    await assert.rejects(proposals.approve(sync, { chatUri: chat.id, proposedUri: typed.id, byUri: OTHER }), /type's space/, 'a document Tana would move into its type\'s space is refused');
+    await assert.rejects(proposals.approve(sync, { chatUri: chat.id, proposedUri: task.id, byUri: 'someone' }), /user-profile/);
+    assert.equal(JSON.stringify(chat.toJSON()), before, 'a refusal writes nothing to the chat');
+    assert.equal(pictured.data.get('isProposal'), true, 'nor to the document');
+
+    await proposals.approve(sync, { chatUri: chat.id, proposedUri: task.id, byUri: OTHER });
+    const entry = (uri) => proposals.entries(chat).find((e) => e.p.proposedUri === uri);
+    assert.equal(typeof entry(task.id).p.approvedAt, 'number', 'the chat\'s entry is stamped approved');
+    assert.equal(entry(note.id).p.approvedAt, undefined, 'and no other');
+    const t = task.data.toJSON();
+    assert.deepEqual([t.isProposal, t.createdInUri, t.stateChangedBy, t.assignedToUrisChangedBy, typeof t.assignedToUrisChangedAt], [false, chat.id, OTHER, OTHER, 'number'],
+      'the document leaves proposal, was created in the chat, and a task names who accepted its state and assignment');
+    const messages = chat.data.get('messages').toJSON(), status = messages.at(-1);
+    assert.deepEqual([status.fromUserType, status.fromUserUri, status.content.text, status.attachmentUris, status.isStatusUpdate, status.excludeFromAIContext],
+      ['human', OTHER, 'accepted 1 change', [task.id], true, true], 'the chat says who accepted what, as Tana does');
+    assert.match(status.id, /^[0-9a-hjkmnp-tv-z]{8}$/, 'with a message id in Tana\'s alphabet');
+    assert.equal(chatRows(messages).at(-1).children.at(-1).reference.uri, task.id, 'and the conversation shows it like Tana\'s own');
+    await assert.rejects(proposals.approve(sync, { chatUri: chat.id, proposedUri: task.id, byUri: OTHER }), /no longer pending/, 'an answered proposal is not answered twice');
+    await proposals.approve(sync, { chatUri: chat.id, proposedUri: note.id, byUri: OTHER });
+    assert.equal(note.data.get('stateChangedBy'), undefined, 'a plain document gets no task attribution');
+
+    const { warnings } = await proposals.reject(sync, { chatUri: chat.id, proposedUri: draft.id });
+    assert.deepEqual(warnings, []);
+    assert.equal(entry(draft.id), undefined, 'a rejected proposal leaves the chat');
+    assert.deepEqual(deleted, [draft.id], 'and its draft is deleted, the document it would have changed is not');
+    assert.equal(proposals.entries(chat).length, 5, 'the other proposals stay');
+
+    // The page: the graph's pending proposals as the proposed documents, and an answered one kept off it until the graph agrees.
+    const backend = mainHelpers();
+    const meeting = 'tana:event:' + ulid(), gone = 'tana:text:' + ulid(), meetingChat = 'tana:chat:' + ulid();
+    let listed = [
+      { proposedUri: odd.id, operation: 'create', status: 'pending', proposedAt: '1788262392413' },
+      { proposedUri: draft.id, baseUri: base.id, operation: 'update', status: 'pending', proposedAt: '1788262392414' },
+      { proposedUri: note.id, operation: 'create', status: 'approved', proposedAt: '1788262392412' },
+      { proposedUri: typed.id, operation: 'create', status: 'pending', proposedAt: '1788262392411' },
+    ];
+    const graph = { listNodes: async (q) => (q.nodeTypes ? { nodes: [
+      { id: chat.id, title: 'Planning chat', chat: { proposals: listed } },
+      { id: meetingChat, title: '', ownerUri: meeting, chat: { proposals: [{ proposedUri: gone, operation: 'create', status: 'pending', proposedAt: '1788262392500' }] } },
+    ] } : { nodes: [...(q.nodeIds || [])].filter((id) => docs.has(id) || id === meeting).map((id) => (id === meeting ? { id, title: 'Studio Offsite ' }
+      : { id, title: docs.get(id).data.get('title'), entityType: docs.get(id).data.get('entityTypeUri'), ownerUri: docs.get(id).data.get('ownerUri') })) }) };
+    backend.testRuntime({ me: { userUri: ME }, client: { graph, sync } });
+    const page = () => backend.handlers.get('outline:children')(null, 'orbital:proposals');
+    const rows = await page();
+    assert.deepEqual(rows.map((r) => [r.id, r.text, r.editable, r.proposal.approvable, r.proposal.note]), [
+      [gone, 'Missing document', false, false, 'Proposed in Studio Offsite · its document is gone'],
+      [draft.id, 'Draft of base', false, false, 'Change proposed in Planning chat · approve in Tana'],
+      [odd.id, 'Odd intent', false, true, 'Proposed in Planning chat'],
+      [typed.id, 'Typed elsewhere', false, false, 'Proposed in Planning chat · approve in Tana'],
+    ], 'pending only, newest first, read-only, named by the chat or the meeting it sits in, approvable where Orbital can');
+    assert.match(rows[3].proposal.reason, /type's space/, 'and the reason says why not');
+    await assert.rejects(backend.handlers.get('proposals:answer')(null, 'tana:text:' + ulid(), odd.id, true), /Not a proposal/);
+    await assert.rejects(backend.handlers.get('proposals:answer')(null, chat.id, odd.id, true), /only Tana can run/, 'the page hands the refusal back');
+    await backend.handlers.get('proposals:answer')(null, meetingChat, gone, false).catch(() => {});
+    await backend.handlers.get('proposals:answer')(null, chat.id, odd.id, false);
+    assert.deepEqual((await page()).map((r) => r.id), [gone, draft.id, typed.id], 'a rejected proposal stays off the page while the graph still lists it');
+    listed = listed.filter((p) => p.proposedUri !== odd.id);
+    assert.deepEqual((await page()).map((r) => r.id), [gone, draft.id, typed.id]);
+    console.log('ok  proposals: the graph lists pending ones, approve and reject write what Tana writes, and what Tana would do more for is refused untouched');
+  }
+
   // What the web client shows of a conversation, and how it words the thinking line (docs/CHATS.md §4).
   {
     const chat = require('../sdk/chat');

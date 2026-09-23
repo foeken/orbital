@@ -135,3 +135,6 @@ in the same action (`main.js`).
 Notifications (issue #18, docs/OUTLINER.md) is listed with the views in Cmd+K but is a page, like a saved search: it has no
 filter, no pills and no row cache. Its rows are `outline:children('orbital:notifications')` — Tana's `tana:user-inbox`
 document read by main/inbox.js — and it never touches `S.activeView` or the refresh loop; the inbox is live by subscription.
+
+Proposals (issue #19) is the same kind of page: `outline:children('orbital:proposals')` is the AI proposals still pending,
+read from the chat graph nodes by main/proposals.js on every arrival, with no filter, pills or row cache.
