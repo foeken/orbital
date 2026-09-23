@@ -709,8 +709,9 @@ commands.libraryprobe = async () => {
   out({ ms: Date.now() - started, bytes: Buffer.byteLength(JSON.stringify(payload)), nodes: nodes.length,
     truncated: Array.isArray(payload) ? undefined : payload.truncated, calls });
 };
-// chatlist [--limit 200]: every chat newest first with its invocationContext. search() has no chat kind (query.js
-// searchParams lists text/event/user-profile only), so this is how a chat is found by title.
+// chatlist [--limit 200] [--owned]: every chat newest first with its invocationContext. search() has no chat kind
+// (query.js searchParams lists text/event/user-profile only), so this is how a chat is found by title. --owned adds the
+// chats that live on something (a meeting, a chat, an action), which the graph leaves out unless asked (docs/CHATS.md).
 // listkind <nodeType> [--limit 50]: does the graph answer for a kind we have never listed? nodeTypes is a free-form
 // string list on the wire (scalar, not an enum — fromJson accepts any string, including nonsense), so asking the
 // server is the only way to learn what a kind string actually returns. Read-only.
@@ -726,7 +727,7 @@ commands.listkind = async () => {
 };
 commands.chatlist = async () => {
   await connect();
-  const { nodes } = await client.graph.listNodes({ nodeTypes: ['chat'], limit: Number(flag('limit', 200)), sortOptions: [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }] });
+  const { nodes } = await client.graph.listNodes({ nodeTypes: ['chat'], includeOwnedChats: args.includes('--owned'), limit: Number(flag('limit', 200)), sortOptions: [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }] });
   for (const n of nodes) out(n.id + '\t' + JSON.stringify(n.title || '') + '\t' + JSON.stringify(n.invocationContext || {}) + '\towner=' + (n.ownerUri || '-'));
   out(nodes.length + ' chats');
 };

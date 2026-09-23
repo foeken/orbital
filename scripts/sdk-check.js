@@ -1766,21 +1766,26 @@ async function main() {
     const doc = { id: 'tana:text:' + ulid(), title: 'Doc', updateTime: '2026-09-13T11:00:00Z' };
     const task = { id: 'tana:text:' + ulid(), title: 'Task disguised as doc', state: { type: 'open' }, updateTime: '2026-09-13T12:00:00Z' };
     const mcp = { id: 'tana:chat:' + ulid(), title: 'MCP: helper', invocationContext: { intent: 'mcp' } };
+    const meetingChat = { id: 'tana:chat:' + ulid(), title: 'Private AI chat for Meeting', ownerUri: event.id, invocationContext: { intent: 'meeting' }, updateTime: '2026-09-13T11:30:00Z' };
     const requests = [];
     let totalCount = 6;
     cache.setSetting('hiddenTitles', ['Hidden doc']);
     backend.testRuntime({ me: { userUri: ME }, win: null, client: { graph: { listNodes: async (p) => {
       requests.push(p);
       if (p.nodeIds) return { nodes: [] };
+      if (p.includeOwnedChats) return { nodes: [meetingChat], totalCount: 1 };
       return totalCount == null ? { nodes: [event, hidden, doc, task, mcp], truncated: true } : { nodes: [event, hidden, doc, task, mcp], totalCount };
     } }, search: { semanticSearch: async () => [] }, sync: { subscribe: async () => null, unsubscribe: async () => {} } } });
     const payload = await backend.handlers.get('view:list')(null, 'library', { types: ['meetings', 'docs', 'chats'], states: null, assignee: 'anyone' });
-    assert.equal(requests.length, 1, 'one view fetch makes one graph query');
-    assert.deepEqual(payload.nodes.map((n) => n.title).sort(), ['Doc', 'MCP: helper', 'Meeting'], 'docs without tasks and hidden titles are post-filtered, MCP chats only when the switch is on');
+    assert.equal(requests.length, 2, 'one view fetch makes one graph query, and one more for the meeting chats when it lists chats');
+    // as JSON: main/ runs in the check's vm context, so the request it builds has that context's Object prototype
+    assert.deepEqual(JSON.parse(JSON.stringify(requests[1])), { ...requests[0], nodeTypes: ['chat'], includeOwnedChats: true, chatInvocationIntents: ['meeting'] }, 'asked under the view\'s own filters');
+    assert.deepEqual(payload.nodes.map((n) => n.title).sort(), ['Doc', 'MCP: helper', 'Meeting', 'Private AI chat for Meeting'], 'docs without tasks and hidden titles are post-filtered, MCP chats only when the switch is on');
+    assert.deepEqual(payload.nodes.slice(0, 2).map((n) => n.title), ['Private AI chat for Meeting', 'Doc'], 'meeting chats are merged in by update time, the order the view asked for');
     await backend.handlers.get('mcp:setHidden')(null, true);
     assert.equal(await backend.handlers.get('mcp:hidden')(), true, 'the MCP switch is remembered like any other setting');
     assert.deepEqual((await backend.handlers.get('view:list')(null, 'library', { types: ['meetings', 'docs', 'chats'], states: null, assignee: 'anyone' })).nodes.map((n) => n.title).sort(),
-      ['Doc', 'Meeting'], 'with it on, MCP chats leave every list and search');
+      ['Doc', 'Meeting', 'Private AI chat for Meeting'], 'with it on, MCP chats leave every list and search');
     assert.equal((await backend.handlers.get('search')(null, 'helper')).some((n) => n.title === 'MCP: helper'), false, 'search is filtered by the same switch, not only the views');
     await backend.handlers.get('mcp:setHidden')(null, false);
     assert.equal((await backend.handlers.get('search')(null, 'helper')).some((n) => n.title === 'MCP: helper'), true, 'and they come back when it is off');
@@ -1792,6 +1797,9 @@ async function main() {
     totalCount = 5;
     assert.equal((await backend.handlers.get('view:list')(null, 'library', { types: ['meetings', 'docs'], states: null, assignee: 'anyone' })).truncated, false,
       'local post-filters do not create a false truncation warning');
+    requests.length = 0;
+    await backend.handlers.get('view:list')(null, 'inbox');
+    assert.equal(requests.length, 1, 'a state filter rules chats out, so the Inbox asks nothing more');
     console.log('ok  one view fetch queries, post-filters, maps and caches rows');
   }
 
