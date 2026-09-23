@@ -84,8 +84,25 @@ back to it and an `EDGE_TYPE_BELONGS_TO` edge the graph derives from that. Its r
 - `data.videoProvider` / `videoRoomUrl` / `videoRoomName` / `videoRoomSecret` (LiveKit), `data.transcriptUri`,
   `data.screenShareUri`, `data.summaryUri` once Tana has written the meeting up, and a `wrapUp` root of timestamps
   for that summarising run.
-- `data.activeSessions`, `data.callParticipantState`, the `recordings`, `guestProfiles`, `documentPresentations` and
-  `federation` roots — empty in every call inspected, live or finished, so none of them is a usable signal.
+- the rest, shaped by the call schema (`Vue` in the bundle of 2026-09-23): `recordings` (by recording id: `{ recordingId,
+  provider: daily | livekit, status: recording | processing | ready | failed, startedAt, startedByUri, endedAt?, videoUri?,
+  durationSec?, error? }`), `documentPresentations` (`{ presentationId, documentUri, startedAt, startedByUri, endedAt? }`;
+  starting one ends any still open), `guestProfiles` (`tana:guest-profile:` uri → `{ displayName, verified?,
+  homeOrgExternalId?, homeOrgName?, avatarCid? }`), `reactions` (`<writer>:<emoji>:<bucketStart>` → `{ emoji, senderUri,
+  bucketStart, count }`), raised hands in `data.callParticipantState` (user uri → `{ handRaisedAt, handRaiseSeq }`, the
+  sequence from `data.handRaiseSeqCounter`, the entry deleted when the hand goes down) and `data.transcriptionPaused`,
+  which Tana labels "Off the Record". Live on 2026-09-23, across six recent calls, `guestProfiles` held a meeting room
+  joined from Teams (twice, as two guest uris); `recordings`, `documentPresentations`, `reactions`, raised hands and
+  `data.activeSessions` were empty. `calls.callState` reads them.
+
+The transcript is a document of its own: `tana:transcript:` with the call's ULID, the call's `data.transcriptUri` (schema
+`Aue`). `data.segments` is a list of maps `{ id, start_sec, end_sec, speaker?, speakerUri?, text, confidence?, words:
+[{ w, start, end, conf? }], alternatives: [{ text, confidence? }], channel?, federatedFrom? }` in arrival order,
+`data.summary` is plain text, `data.audioUri` is optional, and the root `sections` is a LoroTree whose node meta is
+`{ title, recap?, recapTitle?, start_sec, end_sec }`, `recap` being a JSON string `{ line, start, end }` on the top-level
+sections. Live on 2026-09-23, two transcripts (578 and 1,486 segments, 261 kB and 657 kB): ids unique, 57 of the 578
+segments stored out of time order, `words` and `alternatives` empty lists, sections two levels deep. Tana reads the
+segments deduplicated by id and sorted by `start_sec`, and so does `calls.readTranscript`.
 
 The event node says nothing about attendance: `calendarEvent.attendees` and `calendarEvent.roster` (`lineKey`, `email`,
 `displayName`, `identityUri`, `source`, `role`, `responseStatus`) are the calendar guest list and read the same before,
