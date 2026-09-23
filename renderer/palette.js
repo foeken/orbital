@@ -5,6 +5,7 @@
 const palette = $('palette'), palInput = $('paletteInput'), palText = $('paletteText'), palList = $('paletteList');
 let palMode = 'cmd', palRows = [], palIndex = 0, palBusy = false, palSeq = 0, palTimer, creationChoices = [];
 let palEnter = null; // an Enter pressed while a search was still running: 'pick' or 'create', applied when the rows land
+let chatgptAuth = null, chatgptAuthLoading = null;
 let meetingNow; // the active meeting as last read: undefined = not asked this open, { meeting } or { error } after
 let meetingList = null, meetingListError = null, pinMeetingDoc = null, pinMeetingBack = null; // the meeting picker: rows, why it has none, the node being pinned, and the page escape returns it to
 // Enter chooses: the highlighted row, or for an @ selection ⌘↩ always creates. While the search is still out, the
@@ -292,6 +293,9 @@ function paletteRows(q, typed = q) {
   if (tana.filters) rows.push({ id: 'hidden', group: 'Actions', icon: 'hiddenItems', label: 'Edit hidden items', keepOpen: true, run: openHiddenPalette });
   if (tana.codexHosts) rows.push({ id: 'codexHosts', group: 'Actions', icon: 'host', label: 'Manage Codex hosts', keepOpen: true, run: openHostsPalette });
   if (tana.sensitiveIds) rows.push({ id: 'sensitiveVisibility', group: 'Actions', icon: 'hidden', label: 'Toggle sensitive visibility', hint: sensitiveVisible ? 'Shown' : 'Hidden', run: toggleSensitiveVisibility });
+  if (tana.chatgptStatus) rows.push({ id: 'chatgpt', group: 'Actions', icon: 'openaiKey', label: chatgptAuth?.signedIn ? 'Sign out of ChatGPT' : 'Sign in with ChatGPT',
+    hint: chatgptAuth?.signedIn ? (chatgptAuth.email || 'Signed in') : chatgptAuth?.available === false ? 'Status unavailable' : chatgptAuth ? 'Not signed in · preferred over API key' : 'Checking sign-in',
+    keepOpen: true, run: chatgptCommand });
   if (tana.setOpenAIKey) rows.push({ id: 'openaiKey', group: 'Actions', icon: 'openaiKey', label: 'Set OpenAI API key', hint: 'Stored locally', keepOpen: true, run: openOpenAIKeyPalette });
   // Every list and every search, not this page: the switch lives in main (main/views.js listFilter), so the Library
   // and Cmd+S stop offering MCP chats too. Stable label + hint, like the row above, so a recorded key keeps meaning.
@@ -356,10 +360,10 @@ function openPillPalette(id) {
 }
 function openCommandPalette() {
   pillCtx = null; promptEditor(false); palMode = 'cmd'; palRows = []; palIndex = 0;
-  palInput.placeholder = 'Run a command'; palInput.value = ''; renderPalette(); palInput.focus();
+  palInput.placeholder = 'Run a command'; palInput.value = ''; refreshChatGPTStatus(); renderPalette(); palInput.focus();
 }
 function backPalette() {
-  const SECOND_LEVEL = new Set(['setType', 'trash', 'archived', 'discuss', 'setIcon', 'setHue', 'openaiKey', 'pins', 'pinDate', 'create', 'hidden', 'hosts', ...Object.keys(MEETING_PAGES)]); // pages opened from the command page
+  const SECOND_LEVEL = new Set(['setType', 'trash', 'archived', 'discuss', 'setIcon', 'setHue', 'openaiKey', 'chatgpt', 'pins', 'pinDate', 'create', 'hidden', 'hosts', ...Object.keys(MEETING_PAGES)]); // pages opened from the command page
   if (palMode === 'pill') openCommandPalette();
   // Escape on the prompt page cancels the whole thing rather than stepping back a level: the page was opened to
   // answer one question, and abandoning that question is abandoning the assignment. Nothing is written either way.
@@ -378,6 +382,47 @@ function openOpenAIKeyPalette() {
   promptEditor(false); palInput.type = 'password'; palInput.placeholder = 'Paste OpenAI API key'; palInput.value = '';
   renderPalette(); palInput.focus();
 }
+function refreshChatGPTStatus() {
+  if (!tana.chatgptStatus || chatgptAuthLoading) return;
+  chatgptAuthLoading = Promise.resolve(tana.chatgptStatus()).then((status) => { chatgptAuth = status; }, (error) => { chatgptAuth = { available: false, signedIn: false, error: error.message }; })
+    .then(() => { chatgptAuthLoading = null; if (!palette.hidden && (palMode === 'cmd' || palMode === 'chatgpt')) renderPalette(); });
+}
+function startChatGPTLogin() {
+  palMode = 'chatgpt'; palRows = []; palIndex = 0; palette.hidden = false;
+  promptEditor(false); palInput.type = 'text'; palInput.placeholder = 'ChatGPT account'; palInput.value = '';
+  renderPalette(); palInput.focus();
+  run(async () => {
+    const result = await tana.chatgptLogin();
+    if (result.userCode) chatgptAuth = { ...(chatgptAuth || {}), available: true, signedIn: false, loggingIn: true, userCode: result.userCode, error: null };
+    else { chatgptAuth = result; palMode = 'cmd'; }
+    renderPalette();
+  });
+}
+function chatgptCommand() {
+  if (!chatgptAuth?.signedIn) return startChatGPTLogin();
+  run(async () => { chatgptAuth = await tana.chatgptLogout(); renderPalette(); });
+}
+function chatgptRows(q) {
+  let rows;
+  if (!chatgptAuth) rows = [{ group: 'ChatGPT', icon: 'openaiKey', label: 'Checking sign-in status…', disabled: true }];
+  else if (chatgptAuth.loggingIn) rows = [
+    { group: 'ChatGPT', icon: 'openaiKey', label: 'Enter ' + chatgptAuth.userCode + ' in your browser', hint: 'Waiting for sign-in', disabled: true },
+    { group: 'Actions', icon: 'openaiKey', label: 'Cancel ChatGPT sign-in', run: () => run(async () => { chatgptAuth = await tana.chatgptCancel(); renderPalette(); }) },
+  ];
+  else if (chatgptAuth.signedIn) rows = [
+    { group: 'ChatGPT', icon: 'openaiKey', label: 'Signed in as ' + (chatgptAuth.email || 'ChatGPT'), hint: 'Preferred over API key', disabled: true },
+    { group: 'Actions', icon: 'openaiKey', label: 'Sign out of ChatGPT', run: () => run(async () => { chatgptAuth = await tana.chatgptLogout(); renderPalette(); }) },
+  ];
+  else rows = [
+    { group: 'ChatGPT', icon: 'openaiKey', label: chatgptAuth.available === false ? 'Sign-in unavailable' : 'Not signed in', hint: chatgptAuth.available === false ? (chatgptAuth.error || 'Codex CLI unavailable') : 'Preferred over API key', disabled: true },
+    { group: 'Actions', icon: 'openaiKey', label: 'Sign in with ChatGPT', run: startChatGPTLogin },
+  ];
+  return q ? rows.filter((row) => fuzzyMatch(row.label.toLowerCase(), q)) : rows;
+}
+if (tana.onChatGPTStatus) tana.onChatGPTStatus((status) => {
+  chatgptAuth = status;
+  if (!palette.hidden && (palMode === 'cmd' || palMode === 'chatgpt')) renderPalette();
+});
 function openAIKeyRows() {
   const key = palInput.value.trim();
   return [{ group: 'OpenAI API key', icon: 'openaiKey', label: key ? 'Save OpenAI API key' : 'Enter OpenAI API key',
@@ -928,6 +973,7 @@ function renderPalette() {
   else if (palMode === 'archived') palRows = archivedRows(q.toLowerCase());
   else if (palMode === 'agentPrompt') palRows = agentPromptRows();
   else if (palMode === 'openaiKey') palRows = openAIKeyRows();
+  else if (palMode === 'chatgpt') palRows = chatgptRows(q.toLowerCase());
   else if (palMode === 'pill') palRows = pillRows(q.toLowerCase());
   else if (palMode === 'field') palRows = fieldPage(q.toLowerCase(), q);
   palIndex = Math.max(0, Math.min(palIndex, palRows.length - 1));
@@ -1019,7 +1065,7 @@ function nextPalIndex(rows, index, step) {
   return index;
 }
 // pages whose rows are built from what is typed, with nothing to fetch
-const LOCAL_MODES = new Set(['cmd', 'create', 'slash', 'assignees', 'assigneesMany', 'status', 'setType', 'discuss', 'setHue', 'visibility', 'visibilityPeople', 'hidden', 'pins', 'pill', 'pinMeeting', 'openaiKey', 'hosts', 'trash', 'archived', 'field', ...Object.keys(MEETING_PAGES)]);
+const LOCAL_MODES = new Set(['cmd', 'create', 'slash', 'assignees', 'assigneesMany', 'status', 'setType', 'discuss', 'setHue', 'visibility', 'visibilityPeople', 'hidden', 'pins', 'pill', 'pinMeeting', 'openaiKey', 'chatgpt', 'hosts', 'trash', 'archived', 'field', ...Object.keys(MEETING_PAGES)]);
 palInput.addEventListener('input', () => {
   palIndex = 0; palEnter = null; // typing on supersedes an Enter that was waiting for the previous query
   if (LOCAL_MODES.has(palMode)) return renderPalette();

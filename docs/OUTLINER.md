@@ -642,12 +642,14 @@ is not offered twice, a title naming nobody adds no row at all, and a call that 
 than passing for a title that named nobody.
 
 The call is main's, in `main/ai.js`, and it is the only place this app talks to a model: `api.suggestDiscussWith(title)`
-sends the title and nothing else — no content, no ids — to the Responses API, with the extraction rule as
-`instructions` so that a title cannot become one. It is asked once per open, never per keystroke. Nothing is sent
-without an API key, and that key stays on this machine (`openaiApiKey`, never synced to Tana); no key simply means
-no suggestion. Which model answers and how hard it thinks are the settings `aiModel` and `aiEffort`, defaulting to
-a small model that does no reasoning at all (`none`), because a page is waiting on it and thinking time is latency. They follow you between machines like the
-other choices about your own content, and they have no UI yet: change them in the settings document.
+sends the title and nothing else — no content, no ids — to OpenAI, with the extraction rule as instructions so that a
+title cannot become one. It is asked once per open, never per keystroke. Cmd+K offers **Sign in with ChatGPT** and
+**Sign out of ChatGPT**, and shows the account status. A signed-in ChatGPT account takes priority; the local OpenAI
+API key is used when ChatGPT is signed out. Both credentials stay on this machine, never in Tana. ChatGPT sign-in
+uses the Codex CLI app-server in its own local auth directory, separate from the user's regular Codex login. It
+needs the `codex` command on PATH. Which model answers and how hard it thinks are the settings `aiModel` and
+`aiEffort`, defaulting to a small model that does no reasoning at all (`none`); they follow you between machines
+like the other choices about your own content, and have no UI yet: change them in the settings document.
 
 - **The Library is not shown in the breadcrumbs once Home is something else** (`renderCrumbs`): the location from `api.path` still begins at the Library, and the crumb for it is dropped whenever `homeId()` is not `library`. A document whose only location was the Library then shows the Home anchor alone; separators are appended with each crumb (`addCrumb`) rather than counted by index, so the • sits before the first crumb that is actually drawn and nothing dangles when there is none.
 

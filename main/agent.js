@@ -191,10 +191,9 @@ async function agentStatuses(links, rpc) {
   }
   return out;
 }
-// One short-lived app-server child per read: `codex app-server` speaks this protocol on stdio, so no daemon has to
-// be running and nothing is left behind. Bounded by a timeout, stderr ignored (it carries unrelated MCP warnings),
-// and any failure raises — agentStatuses turns that into red rather than into silence.
-function appServerRpc(timeoutMs = 20000, host, onNote) {
+// `codex app-server` speaks JSON-RPC on stdio. Read callers stop this child after one call; ChatGPT auth holds it
+// open while a device login or model turn is active. Bounded by a timeout; stderr carries unrelated CLI warnings.
+function appServerRpc(timeoutMs = 20000, host, onNote, options = {}) {
   const { spawn } = require('node:child_process');
   const where = hostRecord(host);
   if (!where) throw new Error('That machine is not configured any more'); // a removed host runs nothing
@@ -202,7 +201,9 @@ function appServerRpc(timeoutMs = 20000, host, onNote) {
   // is named absolutely because a non-interactive login has no PATH.
   const child = where.ssh
     ? spawn('ssh', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8', where.ssh, where.bin, 'app-server'], { stdio: ['pipe', 'pipe', 'ignore'] })
-    : spawn('codex', ['app-server'], { stdio: ['pipe', 'pipe', 'ignore'] });
+    : spawn('codex', options.codexHome ? ['-c', 'cli_auth_credentials_store="file"', 'app-server'] : ['app-server'], {
+      env: options.codexHome ? isolatedCodexEnv(options.codexHome) : process.env, stdio: ['pipe', 'pipe', 'ignore'],
+    });
   // Whose Codex is speaking. Both machines have the same home directory, so a remote error that quotes a path or a
   // config line reads as a local one unless the host says its own name first.
   const from = where.ssh ? (where.title || host) + ': ' : '';
@@ -235,6 +236,11 @@ function appServerRpc(timeoutMs = 20000, host, onNote) {
     child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   return { call, stop, ready: call('initialize', { clientInfo: { name: 'orbital', title: 'Orbital', version: '1' } }) };
+}
+function isolatedCodexEnv(home) {
+  const env = { ...process.env, CODEX_HOME: home };
+  delete env.OPENAI_API_KEY; delete env.CODEX_API_KEY; delete env.CODEX_ACCESS_TOKEN;
+  return env;
 }
 // The refresh asks this once for every linked node; it is one process, opened and closed around the read.
 // One child per machine that holds any of these tasks, not one per task. A machine that cannot be reached leaves its

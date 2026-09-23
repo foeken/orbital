@@ -30,7 +30,8 @@ const OLD_ROOT = 'settings'; // where they lived before: moved into ROOT on the 
 // What follows you between machines, and what cannot. A window's size belongs to the screen it was sized on; the
 // agent's task ids belong to the machine that ran them; where you happened to be belongs to the machine you were at.
 // Everything else is a choice about your own content, which is the same choice wherever you open the app.
-// openaiApiKey is deliberately absent: it must remain on this machine, never in Tana.
+// openaiApiKey is deliberately absent: it must remain on this machine, never in Tana. ChatGPT auth is in a separate
+// local Codex home under userData, not in these settings or in the user's regular Codex home.
 // aiModel/aiEffort are which model writes the "Discuss with" suggestion and how hard it thinks (main/ai.js): a
 // choice about your own content, so it follows you, while the key that pays for it stays put. Neither has UI yet —
 // unset means the defaults in main/ai.js.

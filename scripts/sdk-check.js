@@ -760,6 +760,41 @@ async function main() {
     assert.equal(await ai.suggestDiscussWith('t',fetchWith(answer('Stan\nPeter'))),null,'nor is a list of lines');
     await assert.rejects(ai.suggestDiscussWith('t',fetchWith({ok:false,status:401,json:async()=>({})})),/401: check the API key/,'a rejected key says so rather than looking like an empty title');
     await assert.rejects(ai.suggestDiscussWith('t',fetchWith({ok:false,status:500,json:async()=>({})})),/OpenAI answered 500/);
+    const agent=require('../main/agent'), originalRpc=agent.appServerRpc;
+    const userData=fs.mkdtempSync(require('node:path').join(require('node:os').tmpdir(),'orbital-ai-auth-'));
+    let signedIn=false, note, threadStart, turnStart;
+    agent.appServerRpc=(_timeout,_host,onNote)=>{
+      note=onNote;
+      return {ready:Promise.resolve(),stop(){},call:async(method,params)=>{
+        if(method==='account/read')return {account:signedIn?{type:'chatgpt',email:'person@example.com',planType:'plus'}:{type:'apiKey'}};
+        if(method==='account/login/start')return {type:params.type,loginId:'login-1',verificationUrl:'https://auth.openai.com/codex/device',userCode:'ABCD-EFGH'};
+        if(method==='account/logout'){signedIn=false;return {};}
+        if(method==='thread/start'){threadStart=params;return {thread:{id:'fake-thread'}};}
+        if(method==='turn/start'){
+          turnStart=params;
+          queueMicrotask(()=>note({method:'turn/completed',params:{threadId:'fake-thread',turn:{status:'completed',items:[{type:'agentMessage',phase:'final_answer',text:'ChatGPT person'}]}}}));
+          return {turn:{id:'fake-turn'}};
+        }
+        return {};
+      }};
+    };
+    try {
+      const login=await ai.startChatGPTLogin(userData);
+      assert.deepEqual([login.userCode,login.verificationUrl],['ABCD-EFGH','https://auth.openai.com/codex/device'],'sign-in starts the device flow and returns only its code and verification URL');
+      signedIn=true; note({method:'account/login/completed',params:{loginId:'login-1',success:true}});
+      const status=await ai.chatgptStatus(userData);
+      assert.deepEqual([status.signedIn,status.email,status.planType],[true,'person@example.com','plus'],'the app reads back the signed-in account status');
+      assert.equal(Object.hasOwn(status,'accessToken'),false,'credentials never enter the status sent to the renderer');
+      const before=calls.length, fallback=fetchWith(answer('API fallback'));
+      assert.equal(await ai.suggestDiscussWith('Discuss with ChatGPT person',fallback,userData),'ChatGPT person','ChatGPT is used while signed in even when an API key is set');
+      assert.equal(calls.length,before,'the API key fallback is not called while ChatGPT is signed in');
+      assert.deepEqual([threadStart.ephemeral,threadStart.approvalPolicy,threadStart.sandbox,turnStart.sandboxPolicy.networkAccess],[true,'never','read-only',false],'the temporary ChatGPT request is ephemeral, read-only, and has no network access');
+      assert.deepEqual([turnStart.input.length,turnStart.input[0].text],[1,'Discuss with ChatGPT person'],'only the title is sent');
+      const signedOut=await ai.logoutChatGPT(userData);
+      assert.equal(signedOut.signedIn,false,'sign-out clears ChatGPT account status');
+      assert.equal(await ai.suggestDiscussWith('Discuss with API fallback',fallback,userData),'API fallback','the local API key works again after sign-out');
+      assert.equal(calls.length,before+1,'only the signed-out request reaches the API-key endpoint');
+    } finally { ai.stop(); agent.appServerRpc=originalRpc; fs.rmSync(userData,{recursive:true,force:true}); }
     settings.set('openaiApiKey',undefined); settings.reset();
     console.log('ok  discuss suggestion: nothing sent without a key or a title, model and effort are settings, and only a name comes back');
   }
@@ -4113,8 +4148,8 @@ async function main() {
     const spawned = [];
     // Answers every request the moment it is written, the way a real app-server does, and hands back the thread id
     // this connection was given. Notifications are pushed in by the check itself.
-    const childProcess = { spawn(cmd, args) {
-      const child = { cmd, args, killed: 0, sent: [], onData: null, kill() { child.killed++; }, on() {},
+    const childProcess = { spawn(cmd, args, options) {
+      const child = { cmd, args, options, killed: 0, sent: [], onData: null, kill() { child.killed++; }, on() {},
         stdout: { on: (ev, fn) => { if (ev === 'data') child.onData = fn; } },
         stdin: { write(line) {
           const m = JSON.parse(line); child.sent.push(m);
@@ -4163,6 +4198,12 @@ async function main() {
     assert.equal(spawned[2].killed, 0, 'a task still running is still owned');
     agent.stopOwnedTasks();
     assert.equal(spawned[2].killed, 1, 'and is closed when the app goes away, so no writer outlives it');
+    const isolatedHome=nodePath.join(userData,'chatgpt-auth'), isolated=agent.appServerRpc(20000,undefined,undefined,{codexHome:isolatedHome});
+    await isolated.ready;
+    assert.equal(JSON.stringify(spawned[3].args),JSON.stringify(['-c','cli_auth_credentials_store="file"','app-server']),'ChatGPT uses file-backed credentials in its dedicated Codex home');
+    assert.equal(spawned[3].options.env.CODEX_HOME,isolatedHome,'the app-server cannot read the user\'s regular Codex home');
+    assert.equal(['OPENAI_API_KEY','CODEX_API_KEY','CODEX_ACCESS_TOKEN'].some((key)=>Object.hasOwn(spawned[3].options.env,key)),false,'API tokens from the app environment are not inherited');
+    isolated.stop();
     fs.rmSync(userData, { recursive: true, force: true });
     console.log('ok  agent writer lifecycle: released on the turn that ends it, scoped by thread and by machine, closed on quit');
   }
