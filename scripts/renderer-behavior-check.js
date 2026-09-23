@@ -2723,6 +2723,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
        setGroupBy, toggleGroup, groupHeadEl, groupMoreEl, widenFilter, savedPatch: () => savedPatch, filter: () => filters.get(view),
        RESPONSIBILITY,
        asked: () => asked,
+       meta: (id, m) => taskMetaById.set(id, m),
        stored: () => ({ ...store }),
        rename: (id, title) => { members = members.map((m) => (m.id === id ? { ...m, title } : m)); },
        stage: (f) => { savedPatch = null; filters.set(view, f); },
@@ -2885,6 +2886,20 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   api.releaseHeld();
   assert.deepEqual(onScreen([openTask, inboxTask]), [['In Progress', ['h2', 'h1']]], 'once the view is left, the row sits in its new group');
   assert.equal(api.needsCleanup([openTask, inboxTask]), false, 'and nothing is left to clean up');
+  // First boot: My Tasks sorts by Updated, so the bootstrap each subscribed row announces holds it — mostly before its
+  // metadata is back. That early answer (no Responsibility section, or Unassigned) is not a group to keep the row in.
+  api.set('tana:search:s1', 'responsibility', 'updated');
+  const early = { id: 'boot1', icon: 'task', stateType: 'open', createdBy: 'me', tags: [{ label: 'task' }] };
+  api.holdRow(early);
+  api.meta('boot1', { assignees: ['me'] });
+  assert.deepEqual(onScreen([early]), [['Mine', ['boot1']]], 'a row held before its metadata arrived takes its section once it does, without Clean up');
+  api.releaseHeld();
+  api.set('tana:search:s1', 'assignee', 'updated');
+  const unread = { id: 'boot2', icon: 'task', stateType: 'open', tags: [{ label: 'task' }] };
+  api.holdRow(unread);
+  api.meta('boot2', { assignees: ['sam'] });
+  assert.deepEqual(onScreen([unread]), [['Sam', ['boot2']]], 'and grouped by Assignee it leaves Unassigned for its assignee the same way');
+  api.releaseHeld();
   const order = (list) => plain(api.sortRows(list)).map((n) => n.id);
   api.set('tasks', 'none', 'title');
   assert.deepEqual(order(rows), ['t2', 't1', 't4', 't3', 'd1'], 'Title sorts the loaded rows by their own title, case-insensitively');
