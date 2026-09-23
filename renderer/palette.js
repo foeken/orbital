@@ -109,7 +109,7 @@ function paletteRows(q, typed = q) {
   const docGroup = selection.length && selection[0].group === 'Selection' ? 'Actions' : 'Current node';
   if (palDoc && tana.exportPdf && DOC_KIND.test(palDoc.id)) {
     const doc = palDoc;
-    rows.push({ id: 'exportPdf', group: docGroup, icon: 'doc', label: 'Export to PDF…', run: () => { flushAll(); run(() => tana.exportPdf(doc.id)); } });
+    rows.push({ id: 'exportPdf', group: docGroup, icon: 'doc', label: 'Export to PDF', run: () => { flushAll(); run(() => tana.exportPdf(doc.id)); } });
   }
   if (pinInfo && palDoc && pinInfo.docId === palDoc.id) { // no ids: their labels depend on state, so no hotkeys
     const td = pinInfo.dates.includes(localDate());
@@ -140,7 +140,7 @@ function paletteRows(q, typed = q) {
   // needs no live meeting, so it is never disabled — a workspace with no meetings at all says so on that page.
   if (palDoc && tana.searchPreview && tana.pinTo && isRealId(palDoc.id)) {
     const doc = palDoc;
-    rows.push({ id: 'pinToSelectedMeeting', group: docGroup, icon: 'pin', label: 'Pin to meeting', hint: 'Choose a meeting',
+    rows.push({ id: 'pinToSelectedMeeting', group: docGroup, icon: 'pin', label: 'Pin to meeting …', hint: 'Choose a meeting',
       keepOpen: true, run: () => openMeetingPicker(doc) });
   }
   // Everywhere this node is pinned, on one page, with each of them one press from being taken off. Offered whether
@@ -258,7 +258,7 @@ function paletteRows(q, typed = q) {
   if (!zoom || onSearchPage()) rows.push({ id: 'filter', group: 'View options', icon: 'filter', label: 'Filter rows by text', run: () => { filterShown = true; filterRow.hidden = false; render(); filterEl.focus(); } });
   // Actions: getting in first, then making and finding things, moving around, undoing, and last the app's own settings
   if (signedOut) rows.push({ id: 'login', group: 'Actions', label: 'Log in to Tana', run: () => tana.login().catch(showError) });
-  if (tana.creationOptions) rows.push({ id: 'create', group: 'Actions', icon: 'createNew', label: 'Create new…', keepOpen: true, run: openCreationPalette, sub: async () => { creationChoices = (await tana.creationOptions()).options || []; return creationRows(''); } });
+  if (tana.creationOptions) rows.push({ id: 'create', group: 'Actions', icon: 'createNew', label: 'Create new …', keepOpen: true, run: openCreationPalette, sub: async () => { creationChoices = (await tana.creationOptions()).options || []; return creationRows(''); } });
   // the keys the outline answers to, as rows: each has a default combo in DEFAULT_HOTKEYS and can be re-recorded
   rows.push({ id: 'search', group: 'Actions', icon: 'search', label: 'Search Tana', keepOpen: true, run: () => togglePalette('search') });
   // Go back with an empty stack is still a move while you are away from Home, which is where it lands (edit.js)
@@ -550,7 +550,7 @@ function openCreationPalette() {
   palInput.placeholder = 'Choose what to create'; palInput.value = ''; renderPalette(); palInput.focus();
   loadCreationChoices();
 }
-// the create choices feed both the Cmd+K "Create new…" list and the "/" menu
+// the create choices feed both the Cmd+K "Create new …" list and the "/" menu
 function loadCreationChoices() {
   if (!tana.creationOptions) return;
   const seq = ++palSeq, mode = palMode; palBusy = true;
@@ -899,7 +899,7 @@ function renderPalette() {
     // a row names its glyph, or hands over the markup itself (the "/" menu's block glyphs, the refusal ban)
     const icon = document.createElement('span'); icon.className = 'ricon' + (r.node ? ' ' + (r.icon || 'dot') : ''); icon.innerHTML = r.icon ? iconSvg(r.icon) : r.svg || '';
     if (r.spin) icon.classList.add('thinking'); // a row waiting on an answer: its glyph breathes while it waits
-    const rowHue = r.node ? r.node.hue : r.hue; // documents and "Create new…" type choices both carry the type hue
+    const rowHue = r.node ? r.node.hue : r.hue; // documents and "Create new …" type choices both carry the type hue
     if (rowHue != null) { icon.classList.add('hue'); icon.style.setProperty('--hue', String(rowHue)); }
     const label = document.createElement('span'); label.className = 'label';
     const match = r.match || (q ? fuzzyMatch(r.label, q.toLowerCase()) : null); // every level: the letters the query matched, in bold

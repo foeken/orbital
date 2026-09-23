@@ -1506,7 +1506,7 @@ async function runSyncShortcutCheck() {
     'Current node: Edit visibility', 'Current node: Mark as sensitive', 'Current node: Copy link', 'Current node: Delete',
     'Views: Inbox', 'Views: Today', 'Views: This week', 'Views: Library',
     'View options: Filter by type', 'View options: Filter rows by text',
-    'Actions: Log in to Tana', 'Actions: Create new…', 'Actions: Search Tana', 'Actions: Go back', 'Actions: Go forward', 'Actions: Go to Home', 'Actions: Focus the sidebar', 'Actions: Hide sidebar', 'Actions: Set as Home',
+    'Actions: Log in to Tana', 'Actions: Create new …', 'Actions: Search Tana', 'Actions: Go back', 'Actions: Go forward', 'Actions: Go to Home', 'Actions: Focus the sidebar', 'Actions: Hide sidebar', 'Actions: Set as Home',
     'Actions: Undo', 'Actions: Redo', 'Actions: Sync', 'Actions: Reload', 'Actions: Edit hidden items', 'Actions: Toggle sensitive visibility',
     'Actions: Larger text', 'Actions: Smaller text', 'Actions: Reset text size', 'Actions: Toggle dark mode',
   ], 'the palette lists its rows in one fixed, meaningful order');
@@ -3120,7 +3120,7 @@ async function runPinToMeetingCheck() {
     { id: EVENT, text: 'Bingo', icon: 'meeting', meta: 'Fri 08:20–08:30', ...at(-10, 30) },                          // started ten minutes ago, still on
     { id: 'tana:event:01j0event50000000000000000', text: 'Standup', icon: 'meeting', meta: 'Fri 09:00–09:15', ...at(-120, 60) }]);
   const picker = api.row('pinToSelectedMeeting');
-  assert.deepEqual(plain([picker.label, picker.hint, picker.keepOpen, picker.disabled]), ['Pin to meeting', 'Choose a meeting', true, null],
+  assert.deepEqual(plain([picker.label, picker.hint, picker.keepOpen, picker.disabled]), ['Pin to meeting …', 'Choose a meeting', true, null],
     'the second row is named for what it asks and needs no live meeting, so it is never disabled');
   picker.run();
   assert.deepEqual(plain([api.mode(), api.page().map((r) => [r.label, r.disabled])]), ['pinMeeting', [['Loading…', true]]], 'it opens a page of its own, which says it is loading until the list lands');
@@ -3617,7 +3617,7 @@ async function runEditPinsCheck() {
   assert.deepEqual(plain(api.marks()), ['doc', 'other'], 'the marks every row draws come from that one list');
   assert.deepEqual(plain(api.page().map((r) => [r.icon, r.label, !!r.keepOpen])),
     [['pinned', 'Sidebar', true], ['pinDate', 'Today · ' + today, true], ['pinDate', '2099-01-01', true],
-      ['meeting', 'Leadership sync', true], ['space', 'Studio', true], ['pinDate', 'Pin to tomorrow', true], ['pin', 'Pin to meeting', true]],
+      ['meeting', 'Leadership sync', true], ['space', 'Studio', true], ['pinDate', 'Pin to tomorrow', true], ['pin', 'Pin to meeting …', true]],
     'every pin is a row — sidebar, dates in order with today named, then the meetings and spaces it hangs on — and under them only the pins that can still be made: not today, which is already on, but tomorrow and another meeting');
   assert.deepEqual(plain(api.page().map((r) => r.hint)).slice(3, 5), ['Meeting', 'Space'], 'a hub pin says which kind it is, since its title alone does not');
   assert.deepEqual(plain(api.page().map((r) => r.group)).filter((g, i, all) => all.indexOf(g) === i), ['Pinned · ↩ unpins', 'Pin it'], 'the pins under one header that says what Enter does, what can still be pinned under another');
@@ -3633,13 +3633,13 @@ async function runEditPinsCheck() {
   const none = plain(await api.open({ sidebar: false, dates: [] }, []));
   assert.equal(none.palMode, 'pins');
   assert.deepEqual(plain(api.page().map((r) => [r.label, !!r.disabled])),
-    [['Not pinned anywhere', true], ['Pin to sidebar', false], ['Pin to today', false], ['Pin to tomorrow', false], ['Pin to meeting', false]], 'a node pinned nowhere says so, and every pin that can be made is offered');
+    [['Not pinned anywhere', true], ['Pin to sidebar', false], ['Pin to today', false], ['Pin to tomorrow', false], ['Pin to meeting …', false]], 'a node pinned nowhere says so, and every pin that can be made is offered');
   assert.deepEqual(plain(await api.press('', 1)), [['pin', 'doc', 'sidebar', null], ['pinIds'], ['pinState', 'doc']], 'the sidebar pin is written from this page');
   assert.deepEqual(plain(await api.press('', 3)), [['pin', 'doc', 'today', api.tomorrow()], ['pinIds'], ['pinState', 'doc']], 'and tomorrow is written as that date, the way the ⌘K row does it');
   assert.deepEqual(plain(api.page('nothing here').map((r) => r.label)), ['Not pinned anywhere'], 'a query that matches nothing says so rather than listing rows that do not match it');
   // A meeting pin lives on the meeting's own document, so the page hands that one to the picker ⌘K already opens —
   // and tells it to come back here, rather than to the command page, when Escape leaves it.
-  api.page().find((r) => r.label === 'Pin to meeting').run();
+  api.page().find((r) => r.label === 'Pin to meeting …').run();
   assert.deepEqual(plain(api.picker()), { doc: 'doc', back: 'function' }, 'the meeting row opens the picker for this document');
   assert.equal(api.escape(), 'pins', 'and escaping the picker comes back to Edit pins');
   assert.match(source, /id: 'editPins'[^}]*'Edit pins'/, 'Cmd+K carries the command that opens it');

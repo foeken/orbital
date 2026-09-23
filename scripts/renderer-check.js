@@ -168,7 +168,7 @@ assert.match(source, /tana\.moveMany\(its\[0\]\.docId, its\.map\(\(it\) => it\.n
 assert.match(source, /if \(palBusy && \(palMode === 'spaces' \|\| palMode === 'search'\)\) \{ palEnter = create \? 'create' : 'pick'; return; \}/, 'an Enter during a running search is kept, not dropped');
 assert.match(source, /else if \(e\.key === 'Enter'\) \{ e\.preventDefault\(\); e\.stopPropagation\(\);/);
 assert.match(source, /function openCreationPalette\(\)/);
-assert.match(source, /id: 'create', group: 'Actions', icon: 'createNew', label: 'Create new…'/);
+assert.match(source, /id: 'create', group: 'Actions', icon: 'createNew', label: 'Create new …'/);
 assert.match(source, /tana\.creationOptions\(\)/);
 assert.match(source, /function startCreation\(choice\)/);
 assert.match(source, /draftDocNode\(choice\.kind, \{ typeUri: choice\.typeUri, icon: choice\.icon, tags \}\)/);
