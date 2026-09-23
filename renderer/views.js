@@ -88,7 +88,13 @@ const persistPref = (key, chosen) => setPref(key, Object.fromEntries(Object.entr
 let held = null, lastOrder = null; // held: { view, by, order: Map id -> index, groups: Map id -> title }; lastOrder: { view, ids }
 function holdRow(n) {
   if (!held || held.view !== pillKey()) held = { view: pillKey(), by: groupBy(), order: new Map((lastOrder && lastOrder.view === pillKey() ? lastOrder.ids : []).map((id, i) => [id, i])), groups: new Map() };
-  if (!held.groups.has(n.id)) held.groups.set(n.id, groupKey(n, held.by));
+  if (held.groups.has(n.id)) return;
+  // Only a group the row has really been given. Before its metadata arrives Responsibility has no section for it and
+  // Assignee reads Unassigned, and holding that answer kept the row there — out of the list, for Responsibility —
+  // until Clean up. First boot is where it showed: My Tasks sorts by Updated, so the bootstrap each subscribed row
+  // announces holds it (renderer/app.js), mostly before its metadata is back, and a third of the page stayed missing.
+  const group = groupKey(n, held.by);
+  if (group && (held.by !== 'assignee' || taskMetaById.has(n.id))) held.groups.set(n.id, group);
 }
 const releaseHeld = () => { held = null; };
 // The rows as ids per group: once the held layout differs from the one the view would show now (a row that belongs in
