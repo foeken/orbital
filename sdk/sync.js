@@ -310,8 +310,12 @@ class SyncConnection extends EventEmitter {
           }
           firstMiss = firstMiss || Date.now();
           if (++misses >= UNAVAILABLE_ATTEMPTS && Date.now() - firstMiss >= UNAVAILABLE_MS) {
-            // Cold MISSING: the id does not exist. Warm: Tana pauses until the transport reconnects (or, here, a subscribe).
+            // Cold MISSING: the id does not exist. Warm UNAVAILABLE: Tana pauses until the transport reconnects (or, here, a subscribe).
             if (status === 'missing') return this._detach(entry, new Error('document not found: ' + entry.id));
+            if (!entry.document.loro.oplogVersion().length() && !entry.queue.length) {
+              firstMiss = 0; misses = 0; entry.state = 'retrying';
+              continue;
+            }
             entry.state = 'paused';
             return this.logger.warn('sync: ' + entry.id + ' still unavailable after ' + misses + ' attempts, paused until the next connection');
           }

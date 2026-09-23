@@ -4102,6 +4102,23 @@ async function main() {
       sync.connected = true;
       sync.docs.delete(WARM);
     }
+    // Cold unavailable is not the recoverable warm-session pause: without local state to protect, a subscribe keeps
+    // retrying instead of parking in paused until somebody asks again.
+    const COLD = 'tana:text:' + ulid();
+    const coldEntry = { id: COLD, document: new Document(COLD, { peerId: '4253' }), sessionId: null, state: 'new', gen: 0, queue: [], inflight: false, timer: null, resyncs: 0, liveSince: 0, ready: { resolve() {}, reject() {} }, complete: null };
+    let coldTries = 0;
+    sync.docs.set(COLD, coldEntry);
+    try {
+      sync.connected = true;
+      sync._bootstrapOnce = async () => { coldTries++; skew += 20000; if (coldTries >= 6) sync.connected = false; return 'unavailable'; };
+      await sync._bootstrap(coldEntry);
+      assert.equal(coldTries, 6, 'a cold unavailable keeps retrying past one budget window');
+      assert.equal(coldEntry.state, 'retrying', 'and never parks itself in paused');
+    } finally {
+      sync._bootstrapOnce = savedBootstrapOnce;
+      sync.connected = true;
+      sync.docs.delete(COLD);
+    }
   } finally {
     Date.now = realNow; global.setTimeout = realTimeout;
   }
