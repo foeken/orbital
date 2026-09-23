@@ -244,11 +244,23 @@ async function audience(...args) { return (await audienceMetadata(...args)).audi
 // map as an unreadable document and refuses to run it.
 const SEARCH_QUERY_LISTS = ['types', 'entityTypeUris', 'ownerUris', 'createdBy', 'assignedTo', 'participantUris', 'stateTypes', 'workflowStates'];
 const SEARCH_QUERY_FLAGS = ['textQuery', 'assignedToViewer', 'createdByViewer', 'unassigned', 'visibility'];
+// A plain value as Tana's schema stores it (cpe/ape in shared-*.js): every object and array under workflowStates and
+// attributes is a container there — a workflow state a map, an attribute a map of refs/textMatches/numberRanges lists
+// and a date map, each match and range a map — so a search Orbital rewrites keeps the shape Tana gave it. toJSON()
+// reads either shape back the same.
+function putValue(parent, key, v) {
+  if (v === undefined) return;
+  const inList = parent instanceof LoroList;
+  if (v === null || typeof v !== 'object') { if (inList) parent.push(v); else parent.set(key, v); return; }
+  const child = Array.isArray(v) ? new LoroList() : new LoroMap();
+  const attached = inList ? parent.insertContainer(parent.length, child) : parent.setContainer(key, child);
+  for (const [k, x] of Object.entries(v)) putValue(attached, k, x);
+}
 function writeSearchQuery(loro, query = {}) {
   const q = loro.getMap('query');
   for (const key of SEARCH_QUERY_LISTS) {
     const list = q.setContainer(key, new LoroList());
-    for (const v of Array.isArray(query[key]) ? query[key] : []) list.push(v);
+    for (const v of Array.isArray(query[key]) ? query[key] : []) putValue(list, null, v);
   }
   // Set or delete, never skip: a flag left alone would survive a rewrite that dropped it, so turning off
   // "assigned to me" and saving would silently keep it on — the lingering filter this whole function exists
@@ -258,7 +270,7 @@ function writeSearchQuery(loro, query = {}) {
     else if (q.get(key) !== undefined) q.delete(key);
   }
   const attrs = q.setContainer('attributes', new LoroMap());
-  for (const [k, v] of Object.entries(query.attributes || {})) attrs.set(k, v);
+  for (const [k, v] of Object.entries(query.attributes || {})) putValue(attrs, k, v);
   // eventTime is set or removed for the same reason the flags are: a cleared date window that lingered would
   // keep filtering a search the user thought they had widened.
   if (query.eventTime && typeof query.eventTime === 'object') {
