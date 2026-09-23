@@ -19,15 +19,18 @@ const collection = (sync, userUri) => pointed(sync, userUri, 'pinnedCollectionUr
 const pinMap = (sync, userUri) => pointed(sync, userUri, 'pinMapUri');
 
 // Keep the collection's tree shape: labels are folders/sections and URI nodes are pins. Schema permits either or both.
+// id is the Loro tree node id, what the section writes below take.
 const parseSidebarTree = (nodes) => nodes.map((n) => {
   const meta = n.meta || {};
   return {
+    id: n.id,
     ...(typeof meta.uri === 'string' ? { uri: meta.uri } : {}),
     ...(typeof meta.label === 'string' ? { label: meta.label } : {}),
     children: parseSidebarTree(n.children || []),
   };
 });
 const walk = (nodes) => nodes.flatMap((n) => [...(n.uri ? [n.uri] : []), ...walk(n.children)]);
+const find = (nodes, hit) => { for (const n of nodes) { if (hit(n)) return n; const deeper = find(n.children, hit); if (deeper) return deeper; } };
 const plain = (date) => (p) => p.type === 'plain' && p.datetime === date;
 const plainDates = (list) => (list || []).filter((p) => p && p.type === 'plain').map((p) => p.datetime);
 function checkDate(date) {
@@ -56,6 +59,66 @@ async function unpinSidebar(sync, userUri, docUri) {
     const tree = loro.getTree('tree');
     for (const node of tree.nodes()) if (!node.isDeleted() && node.data.get('uri') === docUri) tree.delete(node.id);
   });
+}
+
+// Sidebar sections (#29), as Tana writes them (J_ and the collection wrapper in the bundle of 2026-09-23): a section is
+// a node with a label and no uri, and its pins are its children. index is a position among the siblings after the move,
+// undefined meaning the end, and a position past the end is the end, as Tana's splice has it.
+async function sidebar(sync, userUri) {
+  const col = await collection(sync, userUri);
+  return { col, nodes: parseSidebarTree(col.loro.getTree('tree').toJSON()) };
+}
+function sectionOf(nodes, id) {
+  const section = find(nodes, (n) => n.id === id);
+  if (!section || section.uri) throw new Error('not a sidebar section: ' + id);
+  return section;
+}
+function position(index, count) {
+  if (index === undefined) return undefined;
+  if (!Number.isInteger(index) || index < 0) throw new Error('index must be a whole number from 0: ' + index);
+  return Math.min(index, count);
+}
+
+// Tana's placePin: a document already in the sidebar moves (its first copy, depth first, as Tana's Xh finds it) and
+// anything else is added; section null is the top level. Returns the pin's node id.
+async function placePin(sync, userUri, docUri, { section: sectionId = null, index } = {}) {
+  const { col, nodes } = await sidebar(sync, userUri);
+  const section = sectionId == null ? null : sectionOf(nodes, sectionId);
+  const pin = find(nodes, (n) => n.uri === docUri), parent = section ? section.id : undefined;
+  const at = position(index, (section ? section.children : nodes).filter((n) => !pin || n.id !== pin.id).length);
+  let id;
+  col.transact((loro) => {
+    const tree = loro.getTree('tree');
+    if (pin) { tree.move(pin.id, parent, at); id = pin.id; return; }
+    const node = tree.createNode(parent, at);
+    node.data.set('uri', docUri);
+    id = node.id;
+  });
+  return id;
+}
+
+// A new top-level section, Tana's addSection (addFolder with no parent). Returns its node id.
+async function addSection(sync, userUri, label, { index } = {}) {
+  if (typeof label !== 'string') throw new Error('a section needs a label');
+  const { col, nodes } = await sidebar(sync, userUri);
+  const at = position(index, nodes.length);
+  let id;
+  col.transact((loro) => { const node = loro.getTree('tree').createNode(undefined, at); node.data.set('label', label); id = node.id; });
+  return id;
+}
+
+async function renameSection(sync, userUri, sectionId, label) {
+  if (typeof label !== 'string') throw new Error('a section needs a label');
+  const { col, nodes } = await sidebar(sync, userUri);
+  sectionOf(nodes, sectionId);
+  col.transact((loro) => loro.getTree('tree').getNodeByID(sectionId).data.set('label', label));
+}
+
+// Tana's "Remove section": the section goes and every pin in it goes with it.
+async function removeSection(sync, userUri, sectionId) {
+  const { col, nodes } = await sidebar(sync, userUri);
+  sectionOf(nodes, sectionId);
+  col.transact((loro) => loro.getTree('tree').delete(sectionId));
 }
 
 // The days one document is pinned to for this user, as Tana's getEffectivePins answers it: the shared dates on the
@@ -197,4 +260,4 @@ function unpinItem(doc, uri) {
   });
 }
 
-module.exports = { listSidebar, sidebarTree, pinSidebar, unpinSidebar, dates, datePins, datePinned, pinDate, unpinDate, muteDate, unmuteDate, sharedDates, pinSharedDate, unpinSharedDate, items, pinItem, unpinItem };
+module.exports = { listSidebar, sidebarTree, pinSidebar, unpinSidebar, placePin, addSection, renameSection, removeSection, dates, datePins, datePinned, pinDate, unpinDate, muteDate, unmuteDate, sharedDates, pinSharedDate, unpinSharedDate, items, pinItem, unpinItem };

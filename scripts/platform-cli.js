@@ -789,6 +789,18 @@ commands.incall = async () => {
   out(live.length ? live.map((c) => ({ ...c, joinedAt: c.joinedAt && new Date(c.joinedAt).toLocaleString('sv-SE') }))
     : 'not in a call (checked the ' + limit + ' most recently updated call documents)');
 };
+// callstate <tana:call:…>: what the call left behind (sdk/calls.js callState) and its transcript as readTranscript reads
+// it — counts, whether the segments came back in time order, and the section labels Tana shows. Read-only.
+commands.callstate = async () => {
+  if (!positional[0]) throw new Error('usage: callstate <tana:call:…>');
+  await connect();
+  await client.sync.connect();
+  const calls = require('../sdk/calls');
+  const doc = await client.sync.subscribe(positional[0]), { transcriptUri } = calls.callSessions(doc);
+  const t = transcriptUri ? calls.readTranscript(await client.sync.subscribe(transcriptUri)) : null;
+  out({ ...calls.callState(doc), transcript: t && { uri: transcriptUri, segments: t.segments.length, inTimeOrder: t.segments.every((s, i) => !i || t.segments[i - 1].start_sec <= s.start_sec),
+    summary: t.summary.length + ' characters', sections: t.sections.map((s) => s.label + (s.children.length ? ' (' + s.children.length + ' parts)' : '')) } });
+};
 // Sidebar pins as the renderer receives them: the only path where spaces reach a row (#63).
 commands.pinrows = async () => {
   const main = backend(await connect());
@@ -939,7 +951,7 @@ const USAGE = [
   '             settings   (with a key and a JSON value it writes)',
   '  diagnose   inspect <id...> | audiences [--limit 80] [--mine 0] [--kind text] | refs <id> | rows <query> | pinrows |',
   '             settype <id>   (listing only; with a target it writes)',
-  '             caps <id...> | related <id> | incall [--limit 5] | suggestions [--limit 10] | pageprobe | libraryprobe | boot [--settle ms]',
+  '             caps <id...> | related <id> | incall [--limit 5] | callstate <call id> | suggestions [--limit 10] | pageprobe | libraryprobe | boot [--settle ms]',
   '  live       watch <id...>',
   '  LIVE       livequery [--minutes 60] [--seconds 20] [--state <stateType>] | livequery --to <id> [--from <id>] [--edge-types LINKS_TO,…] |',
   '             presence <id> [--seconds 30] [--announce <name>] [--block <blockId>]',

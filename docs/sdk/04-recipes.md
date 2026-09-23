@@ -91,6 +91,8 @@ const { nodes } = await client.graph.listNodes({ nodeIds: owners, limit: owners.
 const pins = require('./sdk/pins');
 await pins.listSidebar(client.sync, me);
 await pins.pinSidebar(client.sync, me, docUri); await pins.pinDate(client.sync, me, docUri, '2026-09-13');
+const section = await pins.addSection(client.sync, me, 'This week');          // a node id
+await pins.placePin(client.sync, me, docUri, { section, index: 0 });          // added, or moved when already pinned
 ```
 
 ## Which meeting am I in right now?
@@ -103,6 +105,16 @@ const [live] = await calls.currentCalls(client, me);   // [] when not in a call
 An event with `startTime` around now and me in `calendarEvent.roster` proves I was invited, never that I turned up.
 Attendance is the call document (02-data-model.md section 5): `calls.inCall(doc, me)` for one meeting I already have,
 `calls.attended(doc)` for who was there earlier. `node scripts/platform-cli.js incall` is the same call from the CLI.
+
+## What did a call leave behind?
+
+```js
+const call = await client.sync.subscribe(callUri);
+const { summaryUri, recordings, presentations, guests } = calls.callState(call);
+const { transcriptUri } = calls.callSessions(call);
+const { segments, sections } = calls.readTranscript(await client.sync.subscribe(transcriptUri));
+```
+`node scripts/platform-cli.js callstate <call id>` prints both, the transcript as counts and section labels.
 
 ## Images in content
 

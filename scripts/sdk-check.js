@@ -3835,7 +3835,8 @@ async function main() {
     docs[ME].transact((l) => { l.getMap('data').set('pinnedCollectionUri', COL); l.getMap('data').set('pinMapUri', PM); });
     // web-client layout: a pin, then a folder holding a pin
     docs[COL].transact((l) => { const t = l.getTree('tree'); t.createNode().data.set('uri', B); const f = t.createNode(); f.data.set('label', 'Folder'); t.createNode(f.id).data.set('uri', 'tana:space:s'); });
-    assert.deepEqual(await pins.sidebarTree(sync, ME), [{ uri: B, children: [] }, { label: 'Folder', children: [{ uri: 'tana:space:s', children: [] }] }]);
+    const withoutIds = (nodes) => nodes.map(({ id, children, ...n }) => (assert.equal(typeof id, 'string'), { ...n, children: withoutIds(children) }));
+    assert.deepEqual(withoutIds(await pins.sidebarTree(sync, ME)), [{ uri: B, children: [] }, { label: 'Folder', children: [{ uri: 'tana:space:s', children: [] }] }]);
     assert.deepEqual(await pins.listSidebar(sync, ME), [B, 'tana:space:s']);
     await pins.pinSidebar(sync, ME, A);
     await pins.pinSidebar(sync, ME, A); // dedup
@@ -3845,6 +3846,27 @@ async function main() {
     await pins.unpinSidebar(sync, ME, 'tana:text:nope'); // no-op
     assert.deepEqual(await pins.listSidebar(sync, ME), ['tana:space:s', A]);
     assert.equal(mirror[COL].loro.getTree('tree').toJSON().length, 2, 'deleted node gone from the mirror tree');
+    // Sections (#29), as Tana's placePin/addSection/renameSection/removeSection leave the tree the server sees.
+    const served = () => { const f = (ns) => ns.map((n) => (n.meta.label !== undefined ? n.meta.label + '[' + f(n.children).join(',') + ']' : n.meta.uri)); return f(mirror[COL].loro.getTree('tree').toJSON()); };
+    const [folder, pinA] = await pins.sidebarTree(sync, ME);
+    const later = await pins.addSection(sync, ME, 'Later', { index: 0 });
+    assert.deepEqual(served(), ['Later[]', 'Folder[tana:space:s]', A]);
+    assert.equal(await pins.placePin(sync, ME, A, { section: later }), pinA.id, 'a pinned document moves, and keeps its node');
+    await pins.placePin(sync, ME, B, { section: folder.id, index: 0 });
+    assert.deepEqual(served(), ['Later[' + A + ']', 'Folder[' + B + ',tana:space:s]'], 'a new pin goes in at its position');
+    await pins.placePin(sync, ME, B, { section: folder.id, index: 9 });
+    assert.deepEqual(served(), ['Later[' + A + ']', 'Folder[tana:space:s,' + B + ']'], 'past the end is the end');
+    await pins.placePin(sync, ME, B, { index: 0 });
+    assert.deepEqual(served(), [B, 'Later[' + A + ']', 'Folder[tana:space:s]'], 'no section is the top level');
+    await pins.renameSection(sync, ME, later, 'Soon');
+    assert.equal(served()[1], 'Soon[' + A + ']');
+    await assert.rejects(pins.renameSection(sync, ME, pinA.id, 'x'), /not a sidebar section/, 'a pin is not a section');
+    await assert.rejects(pins.removeSection(sync, ME, null), /not a sidebar section/);
+    await assert.rejects(pins.placePin(sync, ME, A, { section: '404@1' }), /not a sidebar section/);
+    await assert.rejects(pins.placePin(sync, ME, A, { index: -1 }), /whole number/);
+    await pins.removeSection(sync, ME, later);
+    assert.deepEqual(served(), [B, 'Folder[tana:space:s]'], 'a removed section takes its pins with it');
+    console.log('ok  sidebar sections: add, rename, remove, and pins placed or moved into them at a position');
     assert.deepEqual(await pins.dates(sync, ME, A), [], 'no entry yet');
     await assert.rejects(pins.pinDate(sync, ME, A, '2026-9-1'), /YYYY-MM-DD/);
     await pins.pinDate(sync, ME, A, '2026-09-13');
@@ -4371,6 +4393,63 @@ async function main() {
     const readOnly = (nodes) => nodes.every((n) => n.editable === false && readOnly(n.children || []));
     assert.ok(readOnly(states), 'status and pending-question rows are read-only');
     console.log('ok  chat visibility and the thinking line follow the web client');
+  }
+  // What a call left behind (#31) and its transcript (#24), in the shapes the live documents had on 2026-09-23.
+  {
+    const { callState, readTranscript } = require('../sdk/calls');
+    const OTHER = 'tana:user-profile:01examplej0000000000000000', GUEST = 'tana:guest-profile:01examplek0000000000000000';
+    const SUMMARY = 'tana:text:01examplem0000000000000000', PRESENTED = 'tana:text:01examplen0000000000000000';
+    const call = new Document('tana:call:01examplep0000000000000000');
+    const record = (root, key, fields) => { const m = root.setContainer(key, new LoroMap()); for (const [k, v] of Object.entries(fields)) m.set(k, v); };
+    call.transact((l) => {
+      const d = l.getMap('data');
+      d.set('summaryUri', SUMMARY); d.set('transcriptionPaused', true); d.set('videoRoomSecret', 'room-secret');
+      const hands = d.setContainer('callParticipantState', new LoroMap());
+      record(hands, OTHER, { handRaisedAt: 10, handRaiseSeq: 3 }); // an earlier clock, a later place in the queue
+      record(hands, ME, { handRaisedAt: 20, handRaiseSeq: 2 });
+      record(l.getMap('recordings'), 'r2', { recordingId: 'r2', provider: 'livekit', status: 'ready', startedAt: 200, startedByUri: ME });
+      record(l.getMap('recordings'), 'r1', { recordingId: 'r1', provider: 'livekit', status: 'failed', startedAt: 100, startedByUri: ME });
+      record(l.getMap('documentPresentations'), 'p1', { presentationId: 'p1', documentUri: PRESENTED, startedAt: 50, startedByUri: OTHER });
+      record(l.getMap('guestProfiles'), GUEST, { displayName: 'Boardroom - Teams' });
+      record(l.getMap('reactions'), ME + ':+1:0', { emoji: '+1', senderUri: ME, bucketStart: 0, count: 2 });
+      l.getMap('wrapUp').set('summaryCompletedAt', 5);
+    });
+    const state = callState(call);
+    assert.equal(state.summaryUri, SUMMARY); assert.deepEqual(state.wrapUp, { summaryCompletedAt: 5 }); assert.equal(state.offTheRecord, true);
+    assert.deepEqual(state.recordings.map((r) => [r.recordingId, r.status]), [['r1', 'failed'], ['r2', 'ready']], 'recordings oldest first');
+    assert.deepEqual(state.presentations.map((p) => [p.documentUri, p.endedAt]), [[PRESENTED, undefined]], 'still on screen');
+    assert.deepEqual(state.guests, [{ uri: GUEST, displayName: 'Boardroom - Teams' }]);
+    assert.deepEqual(state.raisedHands, [{ userUri: ME, handRaisedAt: 20 }, { userUri: OTHER, handRaisedAt: 10 }], 'the queue follows handRaiseSeq, not the clock');
+    assert.deepEqual(state.reactions, [{ emoji: '+1', senderUri: ME, bucketStart: 0, count: 2 }]);
+    assert.ok(!JSON.stringify(state).includes('room-secret'), 'the room secret is never returned');
+    assert.deepEqual(callState(new Document('tana:call:01exampleq0000000000000000')), { summaryUri: null, wrapUp: {}, offTheRecord: false, recordings: [], presentations: [], guests: [], raisedHands: [], reactions: [] });
+
+    const transcript = new Document('tana:transcript:01examplep0000000000000000');
+    transcript.transact((l) => {
+      const d = l.getMap('data'), segments = d.setContainer('segments', new LoroList());
+      d.set('summary', 'We agreed on the budget.');
+      for (const [id, start, text] of [['s2', 5.5, 'second'], ['s1', 1.25, 'first'], ['s2', 9, 'a later copy of s2']]) {
+        const m = segments.pushContainer(new LoroMap());
+        for (const [k, v] of Object.entries({ id, start_sec: start, end_sec: start + 1, text, speaker: 'Robin', speakerUri: ME, confidence: 1 })) m.set(k, v);
+        m.setContainer('words', new LoroList()); m.setContainer('alternatives', new LoroList());
+      }
+      const tree = l.getTree('sections'), node = (parent, meta) => { const n = tree.createNode(parent); for (const [k, v] of Object.entries(meta)) n.data.set(k, v); return n; };
+      const budget = node(undefined, { title: 'Budget', recap: JSON.stringify({ line: 'Budget agreed', start: 0, end: 60 }), start_sec: 0, end_sec: 60 });
+      node(budget.id, { title: 'Numbers', start_sec: 0, end_sec: 30 });
+      node(undefined, { title: 'Hiring', recap: 'not json', recapTitle: 'Hiring plan', start_sec: 60, end_sec: 120 });
+    });
+    // a transcript is read container by container: the whole document is never turned into JSON
+    transcript.toJSON = transcript.loro.toJSON = () => assert.fail('readTranscript serialised the whole transcript');
+    const read = readTranscript(transcript);
+    assert.deepEqual(read.segments.map((s) => s.text), ['first', 'second'], 'sorted by start_sec, the first copy of an id kept');
+    assert.deepEqual(Object.keys(read.segments[0]).sort(), ['alternatives', 'confidence', 'end_sec', 'id', 'speaker', 'speakerUri', 'start_sec', 'text', 'words']);
+    assert.equal(read.summary, 'We agreed on the budget.');
+    assert.deepEqual(read.sections.map((s) => s.label), ['Budget agreed', 'Hiring plan'], "Tana's label: the recap's line, else recapTitle, else title");
+    assert.deepEqual(read.sections[0].recap, { line: 'Budget agreed', start: 0, end: 60 });
+    assert.equal(read.sections[1].recap, undefined, 'a recap that is not JSON is left out');
+    assert.deepEqual(read.sections[0].children.map((s) => [s.label, s.start_sec, s.end_sec, s.children.length]), [['Numbers', 0, 30, 0]]);
+    assert.deepEqual(readTranscript(new Document('tana:transcript:01exampleq0000000000000000')), { summary: '', segments: [], sections: [] });
+    console.log('ok  call state (recordings, presentations, guests, raised hands, reactions, summary) and the transcript reader');
   }
   // Tana's schema: 8-character ids are Crockford base32, underline is a mark, and a table holds no editable text.
   {

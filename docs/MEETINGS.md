@@ -63,13 +63,15 @@ and `data.ownerUri` pointing back at it (the `EDGE_TYPE_BELONGS_TO` edge in the 
 - a `sessions` **root** map, one entry per live session, keyed `<user-profile uri>:<8 hex>` with `{ joinedAt, userUri }`. Keys starting with `federation:` are another organization's capture of the meeting; the web client leaves them out of `activeParticipantUris`, and so does `calls.js`. `sessionLog` entries are `{ userUri, event, timestamp, sessionId }`.
   It empties when the last participant leaves — a finished call reads `sessions: {}`;
 - `data.sessionLog`, the append-only history: `{ userUri, timestamp, event: "join" | "leave" }`;
-- `data.activeSessions` and `data.callParticipantState`, empty in every call inspected, live or finished, so neither
-  is a usable signal;
+- `data.activeSessions`, empty in every call inspected, live or finished, so not a usable signal, and
+  `data.callParticipantState`, which holds raised hands;
 - `data.transcriptUri` / `data.screenShareUri`, and `wrapUp` timestamps once Tana has summarised the call.
 
 So an entry in `sessions` whose `userUri` is mine is the only server-side proof that I am in a meeting *now*, and
 `sessionLog` is the proof that I was in one earlier. Only 48 call documents exist against far more events: no call,
-no attendance record. Guests would appear under the `guestProfiles` root, which was empty here.
+no attendance record. Guests are under the `guestProfiles` root (live on 2026-09-23: a meeting room joined from Teams). `calls.callState` reads
+them with the recordings, presented documents, raised hands, reactions and the write-up, and `calls.readTranscript` the
+transcript (docs/sdk/02-data-model.md section 5).
 
 `sdk/calls.js` is that read: `callSessions(doc)`, `inCall(doc, userUri)`, `joinedAt(doc, userUri)`, `attended(doc)` and
 `currentCalls(client, userUri, { limit = 5 })`, which lists `nodeTypes: ['call']` sorted by update time descending,
