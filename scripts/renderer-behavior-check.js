@@ -116,6 +116,7 @@ const withShims = (src) => {
   if (/\bcollapsedGroups\b/.test(src) && !/(const|let) collapsedGroups/.test(src)) src = 'globalThis.collapsedGroups ??= new Set();\n' + src;
   // The palette swaps its field for the agent prompt editor; a slice that only opens or closes a level does not care.
   if (/\bpromptEditor\b/.test(src) && !/function promptEditor\(/.test(src)) src = 'globalThis.promptEditor ??= () => {};\n' + src;
+  if (/\brefreshChatGPTStatus\(/.test(src) && !/function refreshChatGPTStatus\(/.test(src)) src = 'globalThis.refreshChatGPTStatus ??= () => {};\n' + src;
   // Anything that asks the backend checks the connection first: a launch draws the page it is reopening before the
   // sync client exists (renderer/edit.js). A slice that is not about that gets a connected app.
   if (/\bconnected\b/.test(src) && !/\bconnected =/.test(src)) src = 'globalThis.connected ??= true;\n' + src;

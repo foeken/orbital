@@ -154,6 +154,20 @@ ipcMain.handle('openai:setKey', (_e, key) => {
   settings.set('openaiApiKey', key.trim());
   return true;
 });
+ipcMain.handle('chatgpt:status', () => ai.chatgptStatus(app.getPath('userData'), true));
+ipcMain.handle('chatgpt:login', async () => {
+  const result = await ai.startChatGPTLogin(app.getPath('userData'));
+  if (!result.verificationUrl) return result;
+  try {
+    const loginUrl = new URL(result.verificationUrl);
+    if (loginUrl.protocol !== 'https:') throw new Error('Codex returned an invalid ChatGPT sign-in URL');
+    await shell.openExternal(loginUrl.toString());
+  }
+  catch (error) { await ai.cancelChatGPTLogin(app.getPath('userData')); throw error; }
+  return { loggingIn: true, userCode: result.userCode };
+});
+ipcMain.handle('chatgpt:cancel', () => ai.cancelChatGPTLogin(app.getPath('userData')));
+ipcMain.handle('chatgpt:logout', () => ai.logoutChatGPT(app.getPath('userData')));
 ipcMain.handle('icons:setType', async (_e, typeUri, name) => {
   const chosen = icons.setTypeIcon(typeUri, name ?? null);
   await refresh(); // the cached rows carry the icon name, so they are rebuilt before anything is told to redraw
@@ -367,8 +381,8 @@ ipcMain.handle('meeting:suggestions', () => meetings.attendeeSuggestions());
 ipcMain.handle('doc:summaryUri', (_e, id) => summaryUri(id)); // where a meeting should actually open, or null
 // "Discuss with …": one call for the type and the field, because both are the same decision (main/documents.js)
 ipcMain.handle('doc:discussWith', (_e, id, who) => discussWith(id, who));
-// and what the title suggests that name is (main/ai.js). No key on this machine means no suggestion, not an error.
-ipcMain.handle('ai:discussWith', (_e, title) => ai.suggestDiscussWith(title));
+// and what the title suggests that name is (main/ai.js). ChatGPT auth takes priority over the local API key.
+ipcMain.handle('ai:discussWith', (_e, title) => ai.suggestDiscussWith(title, globalThis.fetch, app.getPath('userData')));
 // Presence (main/presence.js): the renderer opens a room per document on screen, names the one being viewed, and says
 // where its caret is.
 const presence = require('./main/presence');
@@ -481,6 +495,6 @@ if (process.env.TANA_MAIN_TEST) {
   });
 
   app.on('window-all-closed', () => app.quit());
-  app.on('before-quit', () => { if (S.client) S.client.close().catch(() => {}); agent.stopOwnedTasks(); }); // no writer outlives the app that spawned it
+  app.on('before-quit', () => { if (S.client) S.client.close().catch(() => {}); agent.stopOwnedTasks(); ai.stop(); }); // no writer outlives the app that spawned it
   app.on('will-quit', () => globalShortcut.unregisterAll());
 }

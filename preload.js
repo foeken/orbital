@@ -82,6 +82,11 @@ contextBridge.exposeInMainWorld('api', {
   prefs: ipcRenderer.sendSync('prefs:snapshot'),
   setPref: (key, value) => ipcRenderer.invoke('prefs:set', key, value),
   setOpenAIKey: (key) => ipcRenderer.invoke('openai:setKey', key),
+  chatgptStatus: () => ipcRenderer.invoke('chatgpt:status'),
+  chatgptLogin: () => ipcRenderer.invoke('chatgpt:login'),
+  chatgptCancel: () => ipcRenderer.invoke('chatgpt:cancel'),
+  chatgptLogout: () => ipcRenderer.invoke('chatgpt:logout'),
+  onChatGPTStatus: (cb) => ipcRenderer.on('ai:chatgptChanged', (_e, status) => cb(status)),
   onSettings: (cb) => ipcRenderer.on('settings:changed', (_e, synced) => cb(synced)),
   createDocument: (title, opts) => ipcRenderer.invoke('doc:create', title, opts), // nonblank title; opts:{kind:doc|task|meeting|chat|custom|search,typeUri?,query?}; a search requires query and nothing else may carry one; returns Node to zoom
   search: (query, scope) => ipcRenderer.invoke('search', query, scope), // scope: { types } or { members } for a link field
