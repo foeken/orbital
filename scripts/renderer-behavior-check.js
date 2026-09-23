@@ -5101,7 +5101,7 @@ async function runPasteLinkCheck() {
         renderSegs(el, node.segments);
         prevented = false;
         collapsed = !range; sel = range || null; offset = range ? range[0] : 4;
-        handler({ target: { closest: () => el }, clipboardData: { getData: () => text }, preventDefault: () => { prevented = true; } });
+        handler({ target: { closest: () => el }, clipboardData: { getData: () => text, files: [] }, preventDefault: () => { prevented = true; } });
         return prevented;
       },
       draft: () => { node.draft = true; },
@@ -5164,6 +5164,81 @@ async function runPasteLinkCheck() {
   // A draft row converts too, through materialise: runPasteDraftCheck owns that path.
 }
 
+// A pasted image (#28): uploaded through the bridge and inserted after the row it was pasted into, several in
+// clipboard order; from the empty draft row after the last real row; never from an empty child row, and a
+// clipboard without an image pastes as before.
+async function runPasteImageCheck() {
+  const segments = sourceBetween('// accepts segments, a plain string, or a Node', 'const tana = window.api');
+  const context = {};
+  vm.runInNewContext(`
+    ${FAKE_DOM}
+    ${segments}
+    const DOC = 'tana:text:01j0doc000000000000000000';
+    const page = { key: DOC, docId: DOC, node: { id: DOC, kind: 'document' } };
+    const rows = [{ id: 'r1', kind: 'block' }, { id: 'r2', kind: 'block' }];
+    const real = { key: DOC + '/r1', docId: DOC, node: rows[0], parent: page };
+    const draft = { key: DOC + '/draft:1', docId: DOC, node: { id: 'draft:1', kind: 'block', text: '', draft: true }, parent: page };
+    const child = { key: DOC + '/draft:2', docId: DOC, node: { id: 'draft:2', kind: 'block', text: '', draft: true }, parent: real };
+    const items = new Map([real, draft, child].map((i) => [i.key, i]));
+    const calls = [], errors = [], flushed = [];
+    let target = real, prevented = false, renders = 0, fail = false, handler = null;
+    const outline = { addEventListener: (name, fn) => { if (name === 'paste') handler = fn; } };
+    const el = document.createElement('div');
+    const keyOfEl = () => target.key;
+    const canEditText = () => true, isAtomic = () => false, isReference = () => false;
+    const flush = (key) => flushed.push(key);
+    const render = () => { renders++; };
+    const reload = async (docId) => { calls.push(['reload', docId]); };
+    const showError = (e) => { errors.push(String(e && e.message || e)); };
+    const childrenOf = (i) => (i.node.kind === 'document' ? rows : i.node.children || []);
+    let n = 0;
+    const tana = {
+      node: async () => { throw new Error('no link here'); },
+      insertImage: async (docId, after, file) => {
+        calls.push(['insertImage', docId, after, { bytes: Array.from(file.bytes), filename: file.filename, mimeType: file.mimeType }]);
+        if (fail) throw new Error('File is too large (max 50 MB)');
+        return 'img' + (++n);
+      },
+    };
+    const file = (name, type) => ({ name, type, arrayBuffer: async () => new Uint8Array([1, 2]).buffer });
+    ${sourceBetween("onRows('paste'", "onRows('focusout'")}
+    Object.assign(globalThis, {
+      paste: (on, files, failing = false) => {
+        target = { real, draft, child }[on]; prevented = false; fail = failing; calls.length = 0; errors.length = 0;
+        handler({ target: { closest: () => el }, clipboardData: { getData: () => '', files: files.map(([a, b]) => file(a, b)) }, preventDefault: () => { prevented = true; } });
+        return prevented;
+      },
+      state: () => ({ calls, errors, renders, flushed }),
+    });
+  `, context);
+  const settle = async () => { for (let i = 0; i < 12; i++) await new Promise(setImmediate); };
+  const DOC = 'tana:text:01j0doc000000000000000000', png = { bytes: [1, 2], filename: 'a.png', mimeType: 'image/png' };
+
+  assert.equal(context.paste('real', [['a.png', 'image/png'], ['b.gif', 'image/gif']]), true, 'an image paste is taken over');
+  await settle();
+  let s = plain(context.state());
+  assert.deepEqual(s.calls, [
+    ['insertImage', DOC, 'r1', png],
+    ['insertImage', DOC, 'img1', { ...png, filename: 'b.gif', mimeType: 'image/gif' }],
+    ['reload', DOC],
+  ], 'each image goes after the row, the second after the first, then one reload');
+  assert.deepEqual([s.flushed, s.renders], [[DOC + '/r1'], 1], 'a pending edit of the row is saved first, and the outline redrawn once');
+
+  assert.equal(context.paste('draft', [['a.png', 'image/png']]), true);
+  await settle();
+  assert.deepEqual(plain(context.state()).calls[0], ['insertImage', DOC, 'r2', png], 'from the empty draft row it lands after the last real row, where the draft stands');
+
+  assert.equal(context.paste('child', [['a.png', 'image/png']]), false, 'an empty child row has no row to follow: nothing is taken over');
+  assert.equal(context.paste('real', [['a.pdf', 'application/pdf']]), false, 'a clipboard without an image pastes as before');
+  await settle();
+  assert.deepEqual(plain(context.state()).calls, [], 'and neither uploads anything');
+
+  assert.equal(context.paste('real', [['a.png', 'image/png']], true), true);
+  await settle();
+  s = plain(context.state());
+  assert.deepEqual([s.errors, s.calls.some((c) => c[0] === 'reload')], [['File is too large (max 50 MB)'], false], 'a refused upload shows its reason and changes nothing');
+}
+
 // A Tana node link pasted into a draft row (#272): the draft is created first, by the same materialise the first
 // typed character uses, and the reference is written into the row it became — one create, one write, no url text.
 async function runPasteDraftCheck() {
@@ -5221,7 +5296,7 @@ async function runPasteDraftCheck() {
       Object.assign(globalThis, {
         paste: (text) => {
           prevented = false;
-          handler({ target: { closest: () => el }, clipboardData: { getData: () => text }, preventDefault: () => { prevented = true; } });
+          handler({ target: { closest: () => el }, clipboardData: { getData: () => text, files: [] }, preventDefault: () => { prevented = true; } });
           return prevented;
         },
         busy: () => { item.busy = true; },
@@ -6477,7 +6552,7 @@ function runCaretAtPointCheck() {
   assert.match(functionSource('materialise'), /tana\.insertAfter\(parent\.docId, last\?\.id \|\| null, text, node\.block\)/, 'and the draft is written as the kind it was drawn as');
 }
 
-const checks = [runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runSetIconCheck, runDiscussWithCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runAgentStatusBootCheck, runQuickAddPanelCheck, runRailChangesCheck, runPasteLinkCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck,runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck];
+const checks = [runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runSetIconCheck, runDiscussWithCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runAgentStatusBootCheck, runQuickAddPanelCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck,runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck];
 // The chips under a zoomed title, driven through the shipped line itself: a typed document shows its type whatever
 // kind it is, and the kind chip (task, doc, meeting, space, chat…) stays out of the header, as it always did for a task.
 function runZoomTypeChipCheck() {

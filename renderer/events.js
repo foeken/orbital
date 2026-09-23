@@ -160,6 +160,24 @@ onRows('paste', (e) => {
   const item = items.get(keyOfEl(el));
   if (!item || item.node.kind !== 'block' || isAtomic(item.node) || isReference(item.node) || !canEditText(item)) return;
   if (item.node.draft && (item.busy || item.node.pendingSplit)) return; // already being created: the text lands in it like any other typing
+  // A pasted image (#28) is uploaded and lands as an image row after this one — or, pasted into the empty draft row,
+  // after the last real row, which is where that draft stands. One after the other, so they keep clipboard order.
+  // Not through run(): an upload takes seconds and would hold every edit queued behind it.
+  // ponytail: no uploading placeholder; the row appears when the upload is done, a failure shows in the error line
+  const files = [...e.clipboardData.files].filter((f) => f.type.startsWith('image/'));
+  if (files.length) {
+    const last = item.node.draft ? childrenOf(item.parent)?.at(-1) : null;
+    if (item.node.draft && item.parent.node.kind !== 'document' && !last) return; // an empty child row has no row to follow
+    e.preventDefault();
+    flush(item.key);
+    (async () => {
+      let after = item.node.draft ? last?.id || null : item.node.id;
+      for (const f of files) after = await tana.insertImage(item.docId, after, { bytes: new Uint8Array(await f.arrayBuffer()), filename: f.name || 'image', mimeType: f.type });
+      await reload(item.docId);
+      render();
+    })().catch(showError);
+    return;
+  }
   const uri = tanaNodeUri(e.clipboardData.getData('text/plain'));
   if (!uri) return;
   const off = caretOffset(el);

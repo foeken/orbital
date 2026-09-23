@@ -10,7 +10,7 @@ const { createRouterTransport, ConnectError, Code } = require('@connectrpc/conne
 const { message, SyncService } = require('../sdk/proto/descriptors');
 const { createTransport, SyncConnection, Document, derivePeerId, readNode, setTitle, setState, taskMeta, setAssignees, setSearchQuery, contentText, ulid, initDocument, STATE_TYPES } = require('../sdk');
 const outline = require('../sdk/content');
-const { fetchImage } = require('../sdk/assets');
+const { fetchImage, uploadFile, initImage, UPLOAD_LIMIT } = require('../sdk/assets');
 const { LoroMap, LoroList, LoroText } = require('loro-crdt');
 const { parseQuery, searchParams, needsTypes, viewParams, searchQueryParams, filterToSearchQuery, searchQueryToFilter, validViewFilter, VIEW_PRESETS, hideRules, isHidden, completedInWindow, completedWindow } = require('../sdk/query');
 const pins = require('../sdk/pins');
@@ -3514,6 +3514,47 @@ async function main() {
     assert.equal(calls[0][0], 'https://api.test/images/by-uri/tana%3Aimage%3A01examplev0000000000000000');
     await assert.rejects(fetchImage('tana:text:01examplew0000000000000000', { fetch: fakeFetch, getAccessToken: async () => 'x' }), /not a tana:image uri/);
     console.log('ok  image asset fetch (redirect + CDN cookie)');
+  }
+  // 3e. Upload (#28): multipart field `file` to /files/upload with the bearer token, one retry on 401, over 50 MB refused
+  //     before sending; the tana:image: data map as LoroImage.create writes it; the image block beside a row, as its kind.
+  {
+    const sent = [];
+    const fakeFetch = async (url, init) => {
+      const f = init.body.get('file');
+      sent.push([url, init.method, init.headers.authorization, f.name, f.type, Buffer.from(await f.arrayBuffer()).toString('hex')]);
+      if (init.headers.authorization === 'Bearer stale') return new Response(null, { status: 401 });
+      if (f.name === 'bad.png') return new Response(JSON.stringify({ error: 'Unsupported file' }), { status: 400 });
+      return Response.json({ cid: 'c1d', size: 4, width: 2, height: 2, blurhash: 'LEHV6n' });
+    };
+    const opts = { mimeType: 'image/png', baseUrl: 'https://api.test', fetch: fakeFetch, getAccessToken: async ({ refresh }) => (refresh ? 'fresh' : 'stale') };
+    assert.deepEqual(await uploadFile(Buffer.from('89504e47', 'hex'), { ...opts, filename: 'a.png' }), { cid: 'c1d', size: 4, width: 2, height: 2, blurhash: 'LEHV6n' });
+    assert.deepEqual(sent, [
+      ['https://api.test/files/upload', 'POST', 'Bearer stale', 'a.png', 'image/png', '89504e47'],
+      ['https://api.test/files/upload', 'POST', 'Bearer fresh', 'a.png', 'image/png', '89504e47'],
+    ], 'the bytes go as form field file with their name and type; a 401 is retried once with a refreshed token');
+    await assert.rejects(uploadFile(Buffer.from([1]), { ...opts, filename: 'bad.png', getAccessToken: async () => 'ok' }), /Unsupported file/, "the server's reason is the error");
+    const before = sent.length;
+    await assert.rejects(uploadFile({ length: UPLOAD_LIMIT + 1 }, { ...opts, filename: 'big.png' }), /max 50 MB/);
+    assert.equal(sent.length, before, 'a file over the limit never leaves the machine');
+
+    const OWNER = 'tana:text:01examplew0000000000000000', img = new Document('tana:image:' + ulid());
+    img.transact(() => initImage(img.loro, { ownerUri: OWNER, cid: 'c1d', width: 2, height: 2, blurhash: 'LEHV6n', filename: 'a.png', mimeType: 'image/png', fileSize: 4, now: 1 }));
+    assert.deepEqual(img.data.toJSON(), { type: 'image', createdAt: 1, ownerUri: OWNER, width: 2, height: 2, cid: 'c1d', filename: 'a.png', mimeType: 'image/png', blurhash: 'LEHV6n', fileSize: 4, createdInUri: OWNER });
+    assert.throws(() => initImage(new Document('tana:image:' + ulid()).loro, { cid: 'c1d' }), /belongs to/, 'no ownerless image: Tana refuses to mint one');
+
+    const IMG = 'tana:image:01examplev0000000000000000', d = new Document('tana:text:' + ulid());
+    const para = outline.insertAfter(d, null, 'Para');
+    const bare = outline.insertImage(d, para, IMG);
+    const row = outline.insertAfter(d, bare, 'Item');
+    outline.setBlockType(d, row, 'bullet');
+    const listed = outline.insertImage(d, row, IMG);
+    const last = outline.insertImage(d, null, IMG);
+    assert.deepEqual(outline.readOutline(d).map((n) => [n.id, n.type || n.block]), [[para, 'paragraph'], [bare, 'image'], [row, 'bullet'], [listed, 'image'], [last, 'image']]);
+    assert.equal(outline.readOutline(d)[3].block, 'bullet', 'after a list row the image is a list row of its own');
+    const raw = d.content.get('children').get(1).toJSON();
+    assert.deepEqual(raw, { nodeName: 'image', attributes: { blockId: bare, tanaUri: IMG } }, 'written as Tana writes an atom: no children, no display size');
+    assert.throws(() => outline.insertImage(d, para, 'tana:text:01examplew0000000000000000'), /not a tana:image uri/);
+    console.log('ok  image upload, image document and image block (#28)');
   }
   // ---- undo/redo: local-only, ops flow out like any local change, the other document converges ----
   {

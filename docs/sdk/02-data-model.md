@@ -89,7 +89,11 @@ during and after the meeting. `calendarEvent.mode` was empty everywhere. Read wi
 
 ## 6. Assets
 
-`GET https://home.tana.inc/api/general/images/by-uri/<encodeURIComponent(uri)>[?w=&h=&format=&quality=&fit=]` with the bearer token → 302 to a signed imgproxy URL on `images.tana.inc` plus a `Cloud-CDN-Cookie`; the signed URL is 403 without that cookie. `/images/<cid>` and `/files/<cid>/download` also exist (need the cid from the image document). Upload path not mapped.
+`GET https://home.tana.inc/api/general/images/by-uri/<encodeURIComponent(uri)>[?w=&h=&format=&quality=&fit=]` with the bearer token → 302 to a signed imgproxy URL on `images.tana.inc` plus a `Cloud-CDN-Cookie`; the signed URL is 403 without that cookie. `/images/<cid>` and `/files/<cid>/download` also exist (need the cid from the image document).
+
+**Upload** (web client `uploadFile`, `CNt`/`uK` in `shared-rlpSpfd9.js`): `POST <same base>/files/upload`, multipart form with the bytes as field `file`, bearer token → `{ cid, size, width, height, blurhash }` (the cid is content-addressed; live, 2026-09-23, a 2×2 PNG came back with all five). The client refuses anything over 50 MB before sending and maps 413 to the same message. `/files/<cid>/signed-url` and `/files/<cid>/describe-image` exist beside it; after an upload Tana asks the AI service (`describeAndUpdateImage`) to title and summarise the image, which this SDK does not do.
+
+**The image document** (`tana:image:`, `LoroImage.create`): `repo.create('image')` seeds nothing, then `data` gets `type: 'image'`, `createdAt`, `ownerUri` (required — Tana refuses an ownerless, org-visible image; it is the document the image was pasted into) and, when known, `width`/`height`, `cid`, `title`, `summary`, `details`, `filename`, `mimeType`, `fileSize`, `blurhash`, `createdInUri`. No participants and no content: access follows the owner, and a soft-deleted owner takes the image with it (live: graph null, `by-uri` 404; soft-deleting the image itself afterwards answered `permission_denied`). `uploadError` holds the message when an upload that started with a placeholder failed. A paste, a drop and "/" Image all insert the block with `displayWidth`/`displayHeight` null, so Tana writes neither.
 
 ## 7. Session and tokens
 

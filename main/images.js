@@ -2,7 +2,10 @@
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const { createHash } = require('node:crypto');
-const { fetchImage } = require('../sdk/assets');
+const { fetchImage, uploadFile, initImage } = require('../sdk/assets');
+const content = require('../sdk/content');
+const { ulid } = require('../sdk/node');
+const { mut, subscribe } = require('./documents');
 const { S, imageCache } = require('./state');
 
 // ---- images: tana:image: uri -> data URL, cached in memory and under userData/images/<sha1(uri)> (the data URL as text)
@@ -22,5 +25,17 @@ async function loadImage(uri) {
   return url;
 }
 
+// A pasted image, in Tana's own order (useImageUpload): the bytes to its file store, a tana:image: document owned by
+// the page, then the block naming it — so no block points at an image that does not exist. docId may be a field's
+// outline ("<doc>|<type>?attribute=<key>"); the image still belongs to the document. Returns the new block id.
+// ponytail: Tana also asks its AI service to title and describe the image (describeAndUpdateImage); add it if wanted
+async function insertImage(docId, nodeId, { bytes, filename, mimeType }) {
+  const ownerUri = String(docId).split('|')[0];
+  const up = await uploadFile(bytes, { filename, mimeType, getAccessToken: (o) => S.session.getAccessToken(o) });
+  const uri = 'tana:image:' + ulid();
+  const made = await subscribe(uri, (loro) => initImage(loro, { ownerUri, cid: up.cid, width: up.width, height: up.height, blurhash: up.blurhash, filename, mimeType, fileSize: bytes.length }));
+  if (!made) throw new Error(S.status.error || 'could not create ' + uri);
+  return mut(docId, (doc) => content.insertImage(doc, nodeId, uri));
+}
 
-module.exports = { image, loadImage };
+module.exports = { image, loadImage, insertImage };
