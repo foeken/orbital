@@ -75,8 +75,12 @@ function fuzzyMatch(label, q) {
 // Rows that open a second level carry `sub`, the rows of that level, and every choice is offered as one row of its
 // own: "Move to …" + "Foundry" → "Move to Foundry", so "mtf" reaches it without going down a level (paletteRows
 // decides when a level is loaded).
+// A folded row's id is its parent's plus its own label ("status>Later"), so ⇧⌘K records a key against it; with the
+// palette closed nothing is folded, so runAction asks the parent for its choices when that key is pressed. A choice
+// is found by label: a renamed space or type drops its key.
 const subCache = new Map();
 const subBase = (row) => row.subBase || row.label.replace(/\s*…$/, '');
+const foldId = (row, label) => (row.id || row.rank) && (row.id || row.rank) + '>' + label;
 function subRowsFor(row) {
   const key = row.id || row.rank || row.label;
   if (!subCache.has(key)) {
@@ -86,7 +90,7 @@ function subRowsFor(row) {
   const kids = subCache.get(key);
   if (!kids) return [];
   const base = subBase(row);
-  return kids.filter((k) => k.label && !k.disabled).map((k) => ({ ...k, id: undefined, sub: undefined, group: row.group, icon: k.icon || row.icon, label: base + ' ' + k.label }));
+  return kids.filter((k) => k.label && !k.disabled).map((k) => ({ ...k, id: foldId(row, k.label), folded: true, sub: undefined, group: row.group, icon: k.icon || row.icon, label: base + ' ' + k.label }));
 }
 // With a query the closest matches come first ("in": Inbox before Zoom in): rows sort by match tier, then the shorter
 // label ("tasks": My tasks before Set type to discussion tasks), then by where the match starts, else keep their
@@ -316,7 +320,7 @@ function paletteRows(q, typed = q) {
     const kids = subRowsFor(r);
     if (q) rows.splice(rows.indexOf(r) + 1, 0, ...kids);
   }
-  const seen = new Set(), key = (r) => r.id || r.group + '\n' + r.label; // a folded choice that reads like its parent, once
+  const seen = new Set(), key = (r) => (!r.folded && r.id) || r.group + '\n' + r.label; // a folded choice that reads like its parent, once
   let matched = rows.map((r) => ({ ...r, match: fuzzyMatch(r.label, q) })).filter((r) => r.match && !seen.has(key(r)) && seen.add(key(r)));
   if (q) matched = rankRows(matched);
   // Nothing here matches what was typed, so the words are probably a document's: offer the one thing that can still
@@ -334,6 +338,11 @@ function runAction(id) {
   if (palette.hidden) { palDoc = currentDoc(); palField = fieldAt(document.activeElement); } // a key fires with the palette closed, so the "current node" is whatever is focused now
   const row = paletteRows('').find((r) => r.id === id);
   if (row) { if (!row.disabled) row.run(); return true; }
+  const fold = id.indexOf('>'), parent = fold > 0 && paletteRows('').find((r) => r.sub && (r.id || r.rank) === id.slice(0, fold));
+  if (parent) {
+    if (!parent.disabled) run(async () => { const kid = (await parent.sub()).find((k) => k.label === id.slice(fold + 1) && !k.disabled); if (kid) kid.run(); });
+    return true;
+  }
   if (id.startsWith('doc:')) { goTo(id.slice(4)); return true; }
   return false;
 }
@@ -1105,7 +1114,9 @@ function comboTaken(combo, rowId) {
   const other = hotkeyIds().find((id) => hotkeyFor(id) === combo && id !== rowId);
   if (!other) return '';
   const row = paletteRows('').find((r) => r.id === other), node = other.startsWith('doc:') && views.flatMap((s) => s.nodes).find((n) => n.id === other.slice(4));
-  return combo + ' is already the shortcut for "' + (row ? row.label : node ? node.text : other.replace(/([A-Z])/g, ' $1').toLowerCase()) + '"'; // a row absent right now (Complete without a task) by its id, spelled out
+  const fold = row || node ? -1 : other.indexOf('>'), parent = fold > 0 && paletteRows('').find((r) => r.sub && (r.id || r.rank) === other.slice(0, fold));
+  const folded = fold > 0 && (parent ? subBase(parent) + ' ' : '') + other.slice(fold + 1); // "status>Later" while it is folded away: "Set status to Later"
+  return combo + ' is already the shortcut for "' + (row ? row.label : node ? node.text : folded || other.replace(/([A-Z])/g, ' $1').toLowerCase()) + '"'; // a row absent right now (Complete without a task) by its id, spelled out
 }
 const recorder = $('recorder');
 let rec = null; // { row, combo }

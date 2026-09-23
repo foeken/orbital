@@ -1464,8 +1464,9 @@ async function runSyncShortcutCheck() {
   const folded = vm.runInNewContext(`
     const views = [], searches = [], pinTree = [], pinRows = () => [], pillCommandRows = () => [], taskActionRows = () => [];
     let loads = 0;
-    const selectionRows = () => [{ id: 'status', group: 'Current node', label: 'Set status', subBase: 'Set status to', keepOpen: true, run: () => {}, sub: () => { loads++; return [{ label: 'Inbox', run: () => {} }, { label: 'In Progress', run: () => {} }, { label: 'Later', disabled: true, run: () => {} }]; } }];
-    const tana = { refresh: async () => {} }, run = () => {};
+    const ran = [], run = (fn) => fn(), goTo = () => {};
+    const selectionRows = () => [{ id: 'status', group: 'Current node', label: 'Set status', subBase: 'Set status to', keepOpen: true, run: () => {}, sub: () => { loads++; return [{ label: 'Inbox', run: () => ran.push('Inbox') }, { label: 'In Progress', run: () => ran.push('In Progress') }, { label: 'Later', disabled: true, run: () => {} }]; } }];
+    const tana = { refresh: async () => {} };
     const authed = true, authChecking = false, signedOut = false, theme = 'light', hotkeys = {}, themePref = 'light', pinInfo = null, palDoc = null;
     const localDate = () => '2026-09-13', setTheme = () => {}, docRow = () => ({}), sectionOf = () => null;
     const zoom = null, railEl = { hidden: true }, navBack = [], navForward = [], sensitiveVisible = false;
@@ -1475,7 +1476,9 @@ async function runSyncShortcutCheck() {
     const visibilityRows = () => [], moveTargets = async () => [], previewMoveToSpace = () => {};
     ${sourceBetween('const NODE_ROW_ORDER', 'function paletteRows')}
     ${functionSource('paletteRows')}
-    ({ rows: async (q) => { paletteRows(q); await Promise.resolve(); await Promise.resolve(); return paletteRows(q).map((r) => r.label); }, loads: () => loads });
+    ${functionSource('runAction')}
+    ({ rows: async (q) => { paletteRows(q); await Promise.resolve(); await Promise.resolve(); return paletteRows(q).map((r) => r.label); }, loads: () => loads,
+       ids: (q) => paletteRows(q).map((r) => r.id), press: async (id) => { const hit = runAction(id); await Promise.resolve(); return [hit, ran.splice(0)]; } });
   `);
   assert.deepEqual(plain(await folded.rows('s')), ['Sync', 'Search Tana', 'Smaller text', 'Hide sidebar', 'Reset text size', 'Set status', 'Filter rows by text'],
     'one letter: the first level only, the groups whose best row starts with it first (the shortest such row leading), a letter inside a word last');
@@ -1483,6 +1486,12 @@ async function runSyncShortcutCheck() {
   assert.deepEqual(plain(await folded.rows('seinb')), ['Set status to Inbox'], 'a disabled choice is left out, the others are single rows');
   assert.deepEqual(plain(await folded.rows('ssin')), ['Set status to Inbox', 'Set status to In Progress'], 'the initials of the row open its level too');
   assert.equal(folded.loads(), 1, 'the level is loaded once per palette');
+  // A folded choice has an id of its own (its parent's plus its label), so ⇧⌘K can record a key against it, and the key
+  // runs it with nothing folded: runAction asks the parent row for its choices.
+  assert.deepEqual(plain(folded.ids('ssin')), ['status>Inbox', 'status>In Progress'], 'folded choices carry recordable ids');
+  assert.deepEqual(plain(await folded.press('status>In Progress')), [true, ['In Progress']], 'a key on a folded choice runs that choice');
+  assert.deepEqual(plain(await folded.press('status>Later')), [true, []], 'a choice that is off right now does nothing, and still owns its key');
+  assert.deepEqual(plain(await folded.press('assign>Robin')), [false, []], 'a folded id whose parent is absent leaves the key alone');
 
   // Expanding a row loads its children while the caret is still in that row: the render that shows them must be the
   // forced kind (a plain one waits for the caret to leave, and "Loading…" stays). A failed load closes the row and
@@ -1731,7 +1740,7 @@ async function runReservedComboCheck() {
   assert.equal(dispatch.press('G'), false, 'a row that is not there right now leaves the key alone');
 
   const api = vm.runInNewContext(`
-    const hotkeys = { 'view:tasks': '⇧⌘T', 'doc:tana:text:abc': '⌃⌥N' };
+    const hotkeys = { 'view:tasks': '⇧⌘T', 'doc:tana:text:abc': '⌃⌥N', 'status>Later': '⌃⌥L' };
     const views = [{ nodes: [{ id: 'tana:text:abc', text: 'Principles' }] }];
     const paletteRows = () => [{ id: 'view:tasks', label: 'Tasks' }, { id: 'addToday', label: 'Add 2 items to Today' }, { id: 'undo', label: 'Undo' }, { id: 'back', label: 'Go back' }];
     ${sourceBetween('const RESERVED', 'function comboTaken')}
@@ -1745,6 +1754,7 @@ async function runReservedComboCheck() {
   assert.match(api.taken('⌃⌥K', 'addToday'), /command palette/, '⌃ counts as ⌘ and ⌥ is ignored, as the handler does');
   assert.match(api.taken('⇧⌘T', 'addToday'), /already the shortcut for "Tasks"/, 'a combo another row has names that row');
   assert.match(api.taken('⌃⌥N', 'addToday'), /"Principles"/, 'and a document binding names the document');
+  assert.match(api.taken('⌃⌥L', 'addToday'), /"Later"/, 'and a folded choice, absent right now, by its label');
   assert.equal(api.taken('⇧⌘T', 'view:tasks'), '', 'a row may keep its own combo');
   assert.equal(api.taken('⇧⌘U', 'addToday'), '', 'and a free combo passes');
 }
