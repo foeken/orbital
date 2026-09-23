@@ -2244,6 +2244,34 @@ async function main() {
     mine2.onChange(byMe.id, { origin: 'remote' });
     await settle();
     assert.deepEqual(afterMine, [], 'a task you completed yourself before quitting is not announced back to you');
+    // Another tab from the same user has a different nonce but the same user hash in its peer id.
+    const ownPeer = '65536', otherOwnPeer = '65537', colleaguePeer = '131072';
+    const remoteTask = new Document('tana:text:' + ulid(), { peerId: ownPeer });
+    remoteTask.transact((l) => initDocument(l, 'Remote edits', ME, { kind: 'task' }));
+    setAssignees(remoteTask, [], ME);
+    docs.set(remoteTask.id, remoteTask); creators.set(remoteTask.id, ME);
+    runtime.client.sync.peerId = ownPeer;
+    const peerWatch = mainHelpers(); peerWatch.testRuntime(runtime);
+    const peerNotified = []; peerWatch.S.notify = (id, title, body) => peerNotified.push([id, title, body]);
+    peerWatch.onChange(remoteTask.id, { origin: 'remote' }); // baseline
+    await settle();
+    const editFromMyOtherTab = new Document(remoteTask.id, { peerId: otherOwnPeer });
+    editFromMyOtherTab.loro.import(remoteTask.loro.export({ mode: 'snapshot' }));
+    const beforeOwnEdit = remoteTask.loro.oplogVersion();
+    setTitle(editFromMyOtherTab, 'My edit from another tab');
+    remoteTask.applyRemote([editFromMyOtherTab.exportSince(beforeOwnEdit)]);
+    peerWatch.onChange(remoteTask.id, { origin: 'remote' });
+    await settle();
+    assert.deepEqual(peerNotified, [], 'an edit from your other Tana tab stays quiet');
+    const editFromColleague = new Document(remoteTask.id, { peerId: colleaguePeer });
+    editFromColleague.loro.import(remoteTask.loro.export({ mode: 'snapshot' }));
+    const beforeColleagueEdit = remoteTask.loro.oplogVersion();
+    setTitle(editFromColleague, 'Sam’s edit');
+    remoteTask.applyRemote([editFromColleague.exportSince(beforeColleagueEdit)]);
+    peerWatch.onChange(remoteTask.id, { origin: 'remote' });
+    await settle();
+    assert.equal(peerNotified.length, 1, 'another user’s edit still announces');
+    console.log('ok  watched-node edits from another tab by the same user stay quiet');
     console.log('ok  watching a node: the default is a task you made and did not keep, only remote changes announce, an explicit choice wins');
     console.log('ok  a status that moved while the app was closed is announced once on the way back, not replayed');
   }
