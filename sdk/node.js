@@ -218,7 +218,16 @@ async function audienceMetadata(document, userUri, graph, sync) {
     if (!participants.length || participants.some(p => p.type !== 'user' || !PERSON_URI.test(p.uri))) return 'unknown';
     return participants.length === 1 && participants[0].uri === userUri ? 'only-me' : 'people';
   };
-  if (direct.restricted === true) return { audience: people(direct.participants) };
+  // hiddenFrom: the assignees outside a restricted audience, who were given work they cannot open. The document's own
+  // grants count beside the boundary's, as in access.js audienceOf; everyone and unknown audiences name nobody.
+  // ponytail: grants on owners between the document and its boundary are not read; add them if a false mark shows up.
+  const hidden = (result, participants = []) => {
+    if (!['only-me', 'people', 'space'].includes(result.audience)) return result;
+    const seen = new Set([...direct.participants, ...participants].map(p => p.uri));
+    const hiddenFrom = direct.assignees.filter(uri => !seen.has(uri));
+    return hiddenFrom.length ? { ...result, hiddenFrom } : result;
+  };
+  if (direct.restricted === true) return hidden({ audience: people(direct.participants) });
   // Native setAudienceRule('inherit') deletes restricted; absence also inherits.
   if (direct.restricted !== false && direct.restricted !== undefined) return { audience: 'unknown' };
   try {
@@ -236,12 +245,12 @@ async function audienceMetadata(document, userUri, graph, sync) {
       const meta = taskMeta(owner);
       if (meta.restricted !== true) return { audience: 'unknown' };
       const scope = people(meta.participants);
-      if (scope !== 'people') return { audience: scope }; // 'only-me' or 'unknown'
+      if (scope !== 'people') return hidden({ audience: scope }, meta.participants); // 'only-me' or 'unknown'
       // An inherited boundary with explicit user participants is as determinate as a direct one: the audience is
       // that participant set (access.js audienceOf agrees). Only a space boundary additionally names a space.
-      if (!boundary.uri.startsWith('tana:space:')) return { audience: 'people' };
+      if (!boundary.uri.startsWith('tana:space:')) return hidden({ audience: 'people' }, meta.participants);
       const title = readNode(owner).title;
-      return { audience: 'space', audienceSpace: { uri: boundary.uri, ...(typeof title === 'string' && title.trim() ? { title } : {}) } };
+      return hidden({ audience: 'space', audienceSpace: { uri: boundary.uri, ...(typeof title === 'string' && title.trim() ? { title } : {}) } }, meta.participants);
     }
     return { audience: chain.effectivelyRestricted === false ? 'everyone' : 'unknown' };
   } catch { return { audience: 'unknown' }; }

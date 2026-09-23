@@ -175,6 +175,10 @@ function railMetaRows(node, accessNode = node) {
     label: summary.assignees === 'Unassigned' ? 'Unassigned' : 'Assigned to ' + summary.assignees,
     run: writable && tana.taskMeta && tana.setAssignees ? () => openAssigneePalette(node) : null,
   }] : [];
+  if (summary?.hiddenFrom) rows.push({ // the same warning a list row carries, opening the same picker
+    id: 'hiddenFrom', icon: 'userAlert', label: 'Not visible to ' + summary.hiddenFrom,
+    run: tana.accessOptions ? () => openVisibility(accessNode, summary.scope) : null,
+  });
   if (summary?.audience) rows.push({ // an unverifiable audience is not a row: there is nothing to show or change
     id: 'visibility', icon: summary.audience.icon, label: summary.audience.label,
     run: tana.accessOptions ? () => openVisibility(accessNode, summary.scope) : null,

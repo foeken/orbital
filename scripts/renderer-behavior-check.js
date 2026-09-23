@@ -1895,28 +1895,29 @@ async function runAssigneeCloseCheck() {
       const doc = { id: 'tana:text:01j0task0000000000000000' };
       let palMode = 'assignees', palDoc = doc, palTaskCtx = null, sel = null, selectionFrozen = false, renderDeferred = false;
       const palette = { hidden: false };
-      const taskMetaById = new Map([[doc.id, { assignees: [] }]]);
-      const tana = { setAssignees: async (id, assignees) => { calls.push([id, assignees]); if (${JSON.stringify(fails)}) throw new Error('assignment denied'); } };
+      const taskMetaById = new Map([[doc.id, { assignees: [], hiddenFrom: ['tana:user-profile:01j0old00000000000000000'] }]]);
+      const tana = { setAssignees: async (id, assignees) => { calls.push([id, assignees]); if (${JSON.stringify(fails)}) throw new Error('assignment denied'); },
+        taskMeta: async () => ({ assignees: ['tana:user-profile:01j0member0000000000000'] }) }; // main's fresh answer: nobody left out
       const showError = (value) => { error = value.message; };
       const run = (fn) => Promise.resolve().then(fn).catch(showError);
       const render = () => {}, renderPalette = () => {}, closePalette = () => { closed++; palette.hidden = true; };
       ${setTaskAssignees}
-      Object.assign(globalThis, { choose: () => setTaskAssignees(doc, ['tana:user-profile:01j0member0000000000000']), state: () => ({ calls, closed, error }) });
+      Object.assign(globalThis, { choose: () => setTaskAssignees(doc, ['tana:user-profile:01j0member0000000000000']), state: () => ({ calls, closed, error }), meta: () => taskMetaById.get(doc.id) });
     `, context);
     return context;
   };
   const success = makeHarness(false);
   success.choose();
-  await Promise.resolve();
-  await Promise.resolve();
+  await new Promise((resolve) => setTimeout(resolve));
   assert.deepEqual(plain(success.state()), {
     calls: [['tana:text:01j0task0000000000000000', ['tana:user-profile:01j0member0000000000000']]], closed: 1, error: null,
   }, 'a successful assignee update closes the picker');
+  assert.deepEqual(plain(success.meta()), { assignees: ['tana:user-profile:01j0member0000000000000'] },
+    'and the metadata is read again, so a warning about the old assignee goes with them');
 
   const failure = makeHarness(true);
   failure.choose();
-  await Promise.resolve();
-  await Promise.resolve();
+  await new Promise((resolve) => setTimeout(resolve));
   assert.deepEqual(plain(failure.state()), {
     calls: [['tana:text:01j0task0000000000000000', ['tana:user-profile:01j0member0000000000000']]], closed: 0, error: 'assignment denied',
   }, 'a failed assignee update keeps the picker open and surfaces the error');
@@ -2441,6 +2442,8 @@ async function runSidebarRowsCheck() {
   // link sharing is its own fact: a public document says so, even when it is not a task and has no assignee
   assert.deepEqual(plain(api.rows({ id: 'doc' }, { assignees: 'Sam', audience: { icon: 'lock', label: 'Visible only to you' }, linkShared: true }).map((row) => [row.id, row.icon])),
     [['assignees', 'member'], ['visibility', 'lock'], ['linkShared', 'globe'], ['showInTana', 'tana']], 'a link-shared node adds a globe row');
+  assert.deepEqual(plain(api.rows({ id: 'doc' }, { assignees: 'Sam', hiddenFrom: 'Sam', audience: { icon: 'lock', label: 'Visible only to you' } }).slice(0, 3).map((row) => [row.id, row.icon, row.label])),
+    [['assignees', 'member', 'Assigned to Sam'], ['hiddenFrom', 'userAlert', 'Not visible to Sam'], ['visibility', 'lock', 'Visible only to you']], 'an assignee who cannot see the node is warned about under the assignees');
   assert.deepEqual(plain(api.rows({ id: 'doc' }, { assignees: '', audience: null, linkShared: true }).map((row) => [row.id, row.label])),
     [['linkShared', 'Anyone with the link'], ['showInTana', 'Show in Tana']], 'a public document with no assignee still reports that anyone with the link can read it');
   // A pinned node says so in Details too, and that row opens the page its pins are taken off from

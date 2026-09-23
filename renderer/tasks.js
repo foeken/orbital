@@ -103,7 +103,8 @@ function taskSummary(node, lazy) {
   if (!meta) { if (!lazy) loadTaskMeta(node.id); return null; }
   if (meta.assignees.length) loadMembers(); // names need the member list; loading it re-renders when it arrives
   const scope = typeof meta.audience === 'string' ? meta.audience : meta.audience?.scope;
-  return { assignees: meta.assignees.length ? meta.assignees.map(memberName).join(', ') : 'Unassigned', audience: audienceInfo(meta.audience, meta.audienceSpace), scope, unknownAudience: scope === 'unknown', linkShared: !!meta.linkShared, watched: !!meta.watched, pinned: isPinned(node.id) };
+  const hiddenFrom = (meta.hiddenFrom || []).map(memberName).join(', '); // assigned, but outside the audience (sdk/node.js)
+  return { assignees: meta.assignees.length ? meta.assignees.map(memberName).join(', ') : 'Unassigned', hiddenFrom, audience: audienceInfo(meta.audience, meta.audienceSpace), scope, unknownAudience: scope === 'unknown', linkShared: !!meta.linkShared, watched: !!meta.watched, pinned: isPinned(node.id) };
 }
 // the same facts for a document that is not a task: no assignee, but it can be shared or public
 function documentSummary(node, lazy) {
@@ -148,8 +149,12 @@ function taskMetaEl(summary, docId, node) {
     who.prepend(icon);
   }
   if (summary.audience) {
-    const icon = iconEl(summary.audience.icon, summary.audience.label);
-    if (writable && tana.accessOptions) { icon.title = summary.audience.label + ' — click to edit visibility'; clickable(icon, () => openVisibility(node, summary.scope)); }
+    // Assigned to someone who cannot see it: the audience icon itself is the warning, in the stylesheet's colour
+    // (.hiddenfrom), and says who is shut out. hiddenFrom only comes with a known audience, so there is always one.
+    const label = summary.audience.label + (summary.hiddenFrom ? ' — not visible to ' + summary.hiddenFrom : '');
+    const icon = iconEl(summary.audience.icon, label);
+    if (summary.hiddenFrom) icon.classList.add('hiddenfrom');
+    if (writable && tana.accessOptions) { icon.title = label + ' — click to edit visibility'; clickable(icon, () => openVisibility(node, summary.scope)); }
     el.append(icon);
   }
   else if (summary.unknownAudience) el.append(' · Visibility unknown');
@@ -202,7 +207,9 @@ function setTaskAssignees(doc, assignees) {
   run(async () => {
     try {
       await tana.setAssignees(doc.id, assignees);
-      taskMetaById.set(doc.id, { ...meta, assignees });
+      // Read again rather than patched: who the audience leaves out (hiddenFrom) is main's to say, and a copy of the
+      // old metadata with new assignees kept the old warning — and overwrote the fresh read the change event started.
+      try { taskMetaById.set(doc.id, await tana.taskMeta(doc.id)); } catch { taskMetaById.delete(doc.id); } // the next render asks
       if (!palette.hidden && palMode === 'assignees' && palDoc?.id === doc.id) closePalette();
       render();
     } catch (e) {
