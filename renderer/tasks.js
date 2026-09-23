@@ -158,6 +158,7 @@ function taskMetaEl(summary, docId, node) {
   }
   if (summary.audience) {
     const icon = iconEl(summary.audience.icon, summary.audience.label);
+    if (summary.hiddenFrom) icon.classList.add('hiddenfrom'); // the audience that shuts the assignee out, in the warning's colour
     if (writable && tana.accessOptions) { icon.title = summary.audience.label + ' — click to edit visibility'; clickable(icon, () => openVisibility(node, summary.scope)); }
     el.append(icon);
   }
