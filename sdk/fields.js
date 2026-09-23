@@ -143,6 +143,24 @@ function setFieldTargets(typeDocument, attribute, targets) {
   });
   return clean;
 }
+// Change what a field is (type; null makes it plain text) and how many values it holds. A kind keeps only the
+// settings it uses, as Tana's configureAs… calls leave it: choices go when it stops being an options field (and an
+// options field always has its list), targets when it stops being a link. Returns the definition written.
+function setFieldKind(typeDocument, attribute, { type, cardinality } = {}) {
+  if (type != null && !FIELD_TYPES.includes(type)) throw new Error('field type must be one of ' + FIELD_TYPES.join(', '));
+  if (cardinality !== undefined && cardinality !== 'single' && cardinality !== 'multiple') throw new Error('cardinality must be single or multiple');
+  typeDocument.transact((loro) => {
+    const def = definitionMap(loro, attribute);
+    const drop = (name) => { if (def.get(name) !== undefined) def.delete(name); };
+    if (type !== undefined && (type || undefined) !== def.get('type')) {
+      if (type) def.set('type', type); else drop('type');
+      if (type === 'options') writeList(def, 'options', []); else drop('options');
+      drop('to');
+    }
+    if (cardinality && cardinality !== def.get('cardinality')) def.set('cardinality', cardinality);
+  });
+  return fieldDefinition(typeDocument, attribute);
+}
 
 // The checks Tana makes of a value against its field's definition, before it is written. Takes and returns the
 // lines setFieldText writes ({ words, block }); throws with Tana's own wording.
@@ -376,4 +394,4 @@ function addField(typeDocument, { title, type, cardinality, options, to } = {}) 
   return key;
 }
 
-module.exports = { readFields, templateTitles, fieldDefinition, setFieldText, parseKey, fieldView, addField, setFieldOptions, setFieldTargets, FIELD_ID };
+module.exports = { readFields, templateTitles, fieldDefinition, setFieldText, parseKey, fieldView, addField, setFieldOptions, setFieldTargets, setFieldKind, FIELD_ID };

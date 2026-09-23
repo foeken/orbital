@@ -110,6 +110,16 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
    that exception has nowhere useful to show itself and read as a bullet appearing under the pointer. A plain line
    stays a plain line here whatever its state; the chevron is still how a row with children is opened. */
 .fields .fvalues .node.block:not(.t-bullet):not(.t-numbered) > .line > .bullet::before { visibility: hidden; }
+/* A field that holds choices or links (renderer/fields.js): one focusable line of chips, no editor. A label the type
+   no longer offers is greyed and struck, a link to the wrong type carries a small warning mark. */
+.fields .fchoice { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; min-height: 22px; border-radius: 4px; cursor: default; }
+.fields .fchoice:focus { outline: none; box-shadow: 0 0 0 2px rgba(80, 143, 187, 0.35); }
+.fields .fchip { padding: 0 6px; border-radius: 4px; background: rgba(0, 0, 0, 0.05); line-height: 20px; }
+.fields .fchip.gone { color: #999; text-decoration: line-through; }
+.fields .fchip.wrong::after { content: ' ⚠'; color: #c8841c; }
+.fields .fhint, .fields .fkind { color: #aaa; line-height: 22px; }
+.fields .fkind { color: #888; padding: 0 6px; border-radius: 4px; background: rgba(0, 0, 0, 0.05); }
+[data-theme="dark"] .fields .fchip, [data-theme="dark"] .fields .fkind { background: rgba(255, 255, 255, 0.08); }
 .tbtn.c svg { width: 13px; height: 13px; display: block; }
 .fields a { color: #508fbb; text-decoration: underline; cursor: pointer; }
 .error[hidden] { display: none; }

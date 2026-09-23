@@ -53,6 +53,9 @@ const withShims = (src) => {
   // Cmd+K's meeting rows and pages (renderer/meeting.js): a palette harness without that file offers none
   if (/\bmeetingRows\(/.test(src) && !/function meetingRows\(/.test(src)) src = 'globalThis.meetingRows ??= () => [];\n' + src;
   if (/\bMEETING_PAGES\b/.test(src) && !/const MEETING_PAGES =/.test(src)) src = 'globalThis.MEETING_PAGES ??= {};\n' + src;
+  // fields that hold choices or links (renderer/fields.js): a palette harness without that file has no field focused
+  if (/\bfieldRows\(/.test(src) && !/function fieldRows\(/.test(src)) src = 'globalThis.fieldRows ??= () => [];\n' + src;
+  if (/\b(fieldReturn|fieldLinkCtx|palField|fieldAt|focusField)\b/.test(src) && !/let fieldReturn\b/.test(src)) src = 'globalThis.fieldReturn ??= null; globalThis.fieldLinkCtx ??= null; globalThis.palField ??= null; globalThis.fieldAt ??= () => null; globalThis.focusField ??= () => {};\n' + src;
   // the rows a row lives among: its own container's, which in a harness with one container is texts()
   if (/\browsBeside\(/.test(src) && !/const rowsBeside =/.test(src)) src = 'globalThis.rowsBeside ??= (el) => texts();\n' + src;
   // the fields container, for the helpers that paint or leave a selection in both places rows live
@@ -7802,6 +7805,48 @@ async function runMeetingEditCheck() {
 }
 checks.push(runMeetingEditCheck);
 checks.push(runTableCheck);
+
+// Fields that hold choices or links (renderer/fields.js, issue #33): what a pick writes. An options field holds one
+// label unless it says multiple and a link field several unless it says single; a label the type no longer offers is
+// listed so it can be taken off, and never written back, since Tana would refuse the whole value.
+async function runFieldChoiceCheck() {
+  const api = vm.runInNewContext(`
+    const kids = new Map(), written = [];
+    const tana = { setField: async (docId, key, lines) => { written.push(lines); } };
+    const run = (fn) => fn(), reload = async () => {}, render = () => {}, palette = { hidden: true }, palMode = 'cmd', renderPalette = () => {};
+    const segsOf = (v) => (Array.isArray(v) ? v : [{ text: String(v ?? '') }]);
+    ${sourceLine('const plainOf')}
+    ${sourceLine('const sameLabel')}
+    ${sourceLine('const offered')}
+    ${sourceLine('const holdsMany')}
+    ${functionSource('choiceValues')}
+    ${functionSource('writeChoice')}
+    ${functionSource('optionRows')}
+    ${functionSource('pickLink')}
+    let fieldCtx = null;
+    const ctxOf = (field, values) => { kids.set('host', values.map((segments) => ({ segments }))); return { docId: 'doc', hostId: 'host', key: 'k', field: { key: 'tana:type:t?attribute=a', ...field } }; };
+    ({
+      rows: (field, values) => { fieldCtx = ctxOf(field, values); return optionRows('').map((r) => [r.label, r.hint || '', !!r.keepOpen]); },
+      pick: async (label) => { const row = optionRows('').find((r) => r.label === label); written.length = 0; await row.run(); return written[0]; },
+      link: async (field, values, n) => { written.length = 0; await pickLink(ctxOf(field, values), n); return written[0]; },
+    });
+  `);
+  const level = { type: 'options', label: 'Level', options: [{ label: 'High' }, { label: 'Low' }] };
+  assert.deepEqual(plain(api.rows(level, [[{ text: 'Gone' }]])), [['Clear value', '', false], ['High', '', false], ['Low', '', false], ['Gone', 'No longer offered · ↩ removes it', false]],
+    'the declared labels, then a stored one the type dropped');
+  assert.deepEqual(plain(await api.pick('High')), ['High'], 'a single pick replaces the value, and the dropped label goes with it');
+  api.rows({ ...level, cardinality: 'multiple' }, [[{ text: 'High' }]]);
+  assert.deepEqual(plain(await api.pick('Low')), ['High', 'Low'], 'multiple: a pick adds');
+  assert.deepEqual(plain(await api.pick('High')), [], 'and picking a ticked label takes it off');
+  assert.deepEqual(plain(await api.pick('Clear value')), [], 'Clear value empties it');
+  const a = [{ mention: { label: 'A', uri: 'tana:text:a', icon: 'doc', type: 'tana:type:x' } }], b = { id: 'tana:text:b', title: 'B' };
+  assert.deepEqual(plain(await api.link({ type: 'link', cardinality: 'single' }, [a], b)), [[{ mention: { label: 'B', uri: 'tana:text:b' } }]], 'a single link is replaced');
+  assert.deepEqual(plain(await api.link({ type: 'link' }, [a], b)), [[{ mention: { label: 'A', uri: 'tana:text:a' } }], [{ mention: { label: 'B', uri: 'tana:text:b' } }]],
+    'unset allows several: one more line, written as a bare reference');
+  assert.deepEqual(plain(await api.link({ type: 'member' }, [a], { id: 'tana:text:a', title: 'A' })), [[{ mention: { label: 'A', uri: 'tana:text:a' } }]], 'linking what is there already adds nothing');
+  console.log('ok  field choices: options pick one or toggle many, a dropped label is shown but never written, links replace or add');
+}
+checks.push(runFieldChoiceCheck);
 process.exitCode = 1;
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);

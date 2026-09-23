@@ -110,7 +110,13 @@ function mockApi() {
   // A field value is an outline like any other, kept under the id the page asks for it by ("<doc>|<field>"), so the
   // mock needs no field editor of its own either: children, setText, indent and the rest already work by id.
   const FIELD_KEY = 'tana:type:mock?attribute=n5e1hgxz';
-  const mockFields = (docId) => (docId === 'mockdoc1' ? [{ key: FIELD_KEY, label: 'Discuss with', text: 'Stan Engbers', segments: [{ text: 'Stan Engbers' }] }] : []);
+  // An options field and a link field too (renderer/fields.js), defined on the Project type so its page lists them.
+  const mockDefs = { 'tana:type:mock0': [
+    { key: 'lvl00001', title: 'Level', type: 'options', options: [{ label: 'High' }, { label: 'Medium' }, { label: 'Low' }] },
+    { key: 'src00001', title: 'Sources', type: 'link', cardinality: 'multiple', to: [{ uri: 'tana:type:mock1', name: 'Decision Record' }] },
+  ] };
+  const mockFields = (docId) => (docId === 'mockdoc1' ? [{ key: FIELD_KEY, label: 'Discuss with', text: 'Stan Engbers', segments: [{ text: 'Stan Engbers' }] },
+    ...mockDefs['tana:type:mock0'].map((d) => ({ key: 'tana:type:mock0?attribute=' + d.key, label: d.title, text: '', lines: [], type: d.type, cardinality: d.cardinality, options: d.options, to: d.to }))] : []);
   const content = Object.fromEntries(all.map((d, i) => [d.id, [
     block('Context', [], 2),
     block('First point about task ' + i, [block('Detail A'), block('Detail B', [block('Deeper detail')])]),
@@ -155,6 +161,9 @@ function mockApi() {
   const cell = (text, header) => ({ id: 'cell' + (++seq), header: !!header, colspan: 1, rowspan: 1, colwidth: null, paragraph: 'cp' + seq, segments: text ? [{ text }] : [], text, blocks: [] });
   const grid = [[cell('Owner', true), cell('Status', true)], [cell('Robin'), cell('Open')], [cell('Sam'), cell('')]];
   content.mockdoc0.push({ id: 'tbl' + (++seq), kind: 'block', block: 'paragraph', type: 'table', editable: false, text: '', table: { id: 'tbl' + seq, rows: grid, rowCount: 3, columnCount: 2 }, hasChildren: false, children: [] });
+  // the values of the mock's options and link fields, one line each; the second link points at a type the field does not list
+  content['mockdoc1|tana:type:mock0?attribute=lvl00001'] = [block('Medium'), block('Urgent')];
+  content['mockdoc1|tana:type:mock0?attribute=src00001'] = [block([{ mention: { label: 'Decision log', uri: 'mockdoc3', type: 'tana:type:mock1' } }]), block([{ mention: { label: 'Studio LT charter', uri: 'mockspacedoc0', type: 'tana:type:mock2' } }])];
   const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGPoyroWu7WKIX9dU1fWNQAuWQbA8sXmUwAAAABJRU5ErkJggg==';
   const changed = [], removed = [], statusCbs = [], deleted = new Map(), sensitive = new Set(), codexAssigned = new Set(), codexPrompts = new Map();
   let status = { authenticated: false, authChecking: false, connected: false, syncing: false, lastSync: null, error: null };
@@ -266,7 +275,7 @@ function mockApi() {
       const doc = all.find((d) => d.id === docId);
       // anything that is not a meeting still has backlinks: one mock document mentions it
       const mentions = all.filter((d) => d.icon === 'doc' && d.id !== docId).slice(0, 1).map(info);
-      if (!doc || doc.icon !== 'meeting') return { fields: mockFields(docId), pinned: [], outcomes: [], notes: [], backlinks: mentions.length ? [{ label: 'Mentioned in', rows: mentions }] : [] };
+      if (!doc || doc.icon !== 'meeting') return { fields: mockFields(docId), definitions: mockDefs[docId] && structuredClone(mockDefs[docId]), pinned: [], outcomes: [], notes: [], backlinks: mentions.length ? [{ label: 'Mentioned in', rows: mentions }] : [] };
       const pick = (n) => n && info(n);
       return {
         summary: 'Mock meeting summary for ' + doc.text,
@@ -311,6 +320,19 @@ function mockApi() {
     setOpenAIKey: async (key) => { if (!String(key || '').trim()) throw new Error('OpenAI API key cannot be empty'); return true; },
     // Set type: the mock keeps main's two rules so the page behaves the same without the main process — a type that
     // lives in a space fits only a document in that space, a Library type fits anything (main/documents.js).
+    // fields that hold choices or links (main/documents.js setField, defineField, addTypeField), without Tana's checks
+    setField: async (docId, key, lines) => mut(docId, () => { content[docId + '|' + key] = lines.map((line) => block(line)); emit(docId); }),
+    defineField: async (typeUri, attribute, change) => {
+      const d = (mockDefs[typeUri] || []).find((x) => x.key === attribute);
+      if (!d) throw new Error('no field ' + attribute + ' on this type');
+      if ('type' in change && (change.type || undefined) !== d.type) { if (change.type) d.type = change.type; else delete d.type; if (d.type === 'options') d.options = []; else delete d.options; delete d.to; }
+      if (change.cardinality) d.cardinality = change.cardinality;
+      if (change.options) d.options = change.options.map((label) => ({ label }));
+      if (change.to) d.to = change.to.map((t) => ({ ...t, name: (types.find((x) => x.id === t.uri) || {}).text }));
+      return structuredClone(d);
+    },
+    addField: async (typeUri, def) => { (mockDefs[typeUri] ||= []).push({ key: 'fld' + (++seq), ...def, ...(def.type === 'options' ? { options: [] } : {}) }); },
+    typeList: async () => types.map((t) => ({ uri: t.id, title: t.text, hue: t.hue })),
     docTypes: async (docId) => {
       const doc = all.find((d) => d.id === docId);
       if (!doc) throw new Error('unknown document');

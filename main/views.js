@@ -78,10 +78,17 @@ async function viewRows(id, filter) {
 // Live search over all top-level items (graph full-text search, relevance order) with #task/#meeting/#Type filters.
 // Tana's own search page adds the documents only a semantic search found, fetched by id under the same filters and
 // listed after the rest; here they come last and carry `related: true` (issue #20).
-async function search(query) {
+// scope narrows it for a link field (issue #33), the way Tana's link picker asks: { types } is the field's target
+// types (entityTypes), { members } a member field. With a scope an empty query lists what fits, newest first.
+async function search(query, scope) {
   if (!S.client) return [];
   const parsed = parseQuery(query);
-  const params = searchParams(parsed, needsTypes(parsed) ? await typesByTitle() : new Map());
+  let params = searchParams(parsed, needsTypes(parsed) ? await typesByTitle() : new Map());
+  if (scope && typeof scope === 'object') {
+    params = params || { nodeTypes: ['text', 'event', 'user-profile', 'space', 'search'], limit: 20, sortOptions: [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }] };
+    if (scope.members) { params.nodeTypes = ['user-profile']; delete params.entityTypes; }
+    else if (Array.isArray(scope.types) && scope.types.length) params.entityTypes = scope.types.filter((t) => typeof t === 'string');
+  }
   if (!params) return [];
   const text = parsed.text.trim();
   // The server ranks by full-text relevance, so a document titled exactly like the query can sit past the first

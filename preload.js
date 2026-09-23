@@ -67,6 +67,12 @@ contextBridge.exposeInMainWorld('api', {
   creationOptions: () => ipcRenderer.invoke('doc:creationOptions'), // {options:[{id,kind,title,icon?,typeUri?,appliesTo?,ownerUri?,selectable,reason?}],complete}
   docTypes: (id) => ipcRenderer.invoke('doc:types', id), // {current, options:[{uri,title,hue?,selectable,reason?}]} for one document
   setType: (id, typeUri) => ipcRenderer.invoke('doc:setType', id, typeUri ?? null), // null removes the type
+  // Fields (issue #33). value: lines as sdk/fields.js setFieldText takes them, refused as Tana would refuse them;
+  // change: { type?, cardinality?, options?, to? }; def: { title, type?, cardinality? }, resolves to the new key.
+  setField: (docId, key, value) => ipcRenderer.invoke('field:set', docId, key, value),
+  defineField: (typeUri, attribute, change) => ipcRenderer.invoke('field:define', typeUri, attribute, change),
+  addField: (typeUri, def) => ipcRenderer.invoke('field:add', typeUri, def),
+  typeList: () => ipcRenderer.invoke('types:list'), // [{ uri, title, hue }] every type, for a link field's targets
   searchIcons: (query) => ipcRenderer.invoke('icons:search', query), // [{name,label,svg}] from the built-in Nucleo UI set
   typeIcons: () => ipcRenderer.invoke('icons:types'), // [{uri,name,label,svg}] the glyphs types are drawn with now
   setTypeIcon: (typeUri, name) => ipcRenderer.invoke('icons:setType', typeUri, name ?? null), // null goes back to the generic glyph
@@ -78,7 +84,7 @@ contextBridge.exposeInMainWorld('api', {
   setOpenAIKey: (key) => ipcRenderer.invoke('openai:setKey', key),
   onSettings: (cb) => ipcRenderer.on('settings:changed', (_e, synced) => cb(synced)),
   createDocument: (title, opts) => ipcRenderer.invoke('doc:create', title, opts), // nonblank title; opts:{kind:doc|task|meeting|chat|custom|search,typeUri?,query?}; a search requires query and nothing else may carry one; returns Node to zoom
-  search: (query) => ipcRenderer.invoke('search', query),
+  search: (query, scope) => ipcRenderer.invoke('search', query, scope), // scope: { types } or { members } for a link field
   searches: () => ipcRenderer.invoke('search:list'), // saved search documents, newest first
   createSearch: (viewId, title) => ipcRenderer.invoke('search:create', viewId, title), // saves that view's current filter as a saved search; returns the Node to zoom
   searchFilter: (docId) => ipcRenderer.invoke('search:filter', docId), // { filter, sort, group }: the stored query as a filter, plus how its rows are arranged

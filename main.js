@@ -17,7 +17,7 @@ const agent = require('./main/agent');
 const ai = require('./main/ai');
 const { NOT_CONNECTED, S, VIEWS, docStates, errText, idKind, isSearch, isSpace, metaSigs, pathCache, today, truncatedViews, redoStack, report, scheduleRefresh, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
 const { cachedNodeHue, graphRow, members, rememberNodeHue, rememberType, toNode } = require('./main/rows');
-const { accessContext, archivedTypes, chatOutline, codexIds, createDocument, creationOptions, creatorOf, discussWith, documentAction, history, info, linkShared, metaSig, moveBlock, moveTarget, mut, mutTasks, notifyOn, notifyState, referenceIn, setCodex, setNotify, onChange, op, outlineWithReferences, sensitiveIds, setSensitive, setType, setTypeHue, typeChoices } = require('./main/documents');
+const { accessContext, addTypeField, archivedTypes, chatOutline, codexIds, createDocument, creationOptions, creatorOf, defineField, discussWith, documentAction, history, info, linkShared, metaSig, moveBlock, moveTarget, mut, mutTasks, notifyOn, notifyState, referenceIn, setCodex, setField, setNotify, onChange, op, outlineWithReferences, sensitiveIds, setSensitive, setType, setTypeHue, typeChoices, typeList } = require('./main/documents');
 const { callOf, changesOf, pathOf, related, searchChildren, searchPreview, spaceChildren, summaryChanges, summaryUri, watchRelated } = require('./main/related');
 const { hiddenRules, inboxCount, listFilter, mcpHidden, preset, refresh, search, searchCreate, searchList, searchTitle, setHidden, setMcpHidden, setViewFilter, start, viewFilter, viewRows } = require('./main/views');
 const { nodePin, pinState, pinTree, pinned, pinnedDates, pinnedUris, setPin, todayNode, weekNode, weekTitle } = require('./main/pins');
@@ -132,6 +132,12 @@ ipcMain.handle('doc:creationOptions', () => creationOptions());
 // A document's type: the choices it can be given (with the ones it cannot, and why), and the change itself.
 ipcMain.handle('doc:types', (_e, id) => typeChoices(id));
 ipcMain.handle('doc:setType', (_e, id, typeUri) => setType(id, typeUri ?? null));
+// Fields that hold choices or links (issue #33): a value checked the way Tana checks it, a field's definition on its
+// type, a new field, and every type a link field could point at.
+ipcMain.handle('field:set', (_e, id, key, value) => setField(id, key, value));
+ipcMain.handle('field:define', (_e, typeUri, attribute, change) => defineField(typeUri, attribute, change || {}));
+ipcMain.handle('field:add', (_e, typeUri, def) => addTypeField(typeUri, def));
+ipcMain.handle('types:list', () => typeList());
 // A type's colour: the one `appearance` field Tana keeps, written on the type itself, so every document wearing
 // it follows. setTypeHue rebuilds the rows and announces them itself, since no change event carries appearance.
 ipcMain.handle('doc:setTypeHue', (_e, typeUri, hue) => setTypeHue(typeUri, hue ?? null));
@@ -155,7 +161,7 @@ ipcMain.handle('icons:setType', async (_e, typeUri, name) => {
   return chosen;
 });
 ipcMain.handle('doc:create', (_e, title, opts) => createDocument(title, opts || {}));
-ipcMain.handle('search', (_e, query) => search(query));
+ipcMain.handle('search', (_e, query, scope) => search(query, scope));
 ipcMain.handle('search:list', () => searchList());
 // The renderer sends a view id, never a query: the filter→query vocabulary lives in sdk/query, which classic
 // renderer scripts cannot require, and main already holds the canonical filter for every view.

@@ -92,8 +92,19 @@ async function attributeTitles(typeUri) {
   try { const titles = fields.templateTitles(await S.client.sync.subscribe(typeUri)); typeAttrTitles.set(typeUri, titles); return titles; }
   catch { return {}; }
 }
+// A type's field definitions as its document holds them now ({ key, title, type?, cardinality?, options?, to? }), each
+// link target named after its type. The kind is what decides how a value is edited (issue #33), so it is read fresh
+// rather than cached with the titles: the subscribed type document is live.
+async function fieldDefs(typeUri) {
+  let defs;
+  try { const t = (await S.client.sync.subscribe(typeUri)).data.get('template'); defs = ((t && typeof t.toJSON === 'function' ? t.toJSON() : t) || {}).attributes || []; } catch { return []; }
+  defs = defs.filter((d) => d && d.key);
+  await resolveTypes(defs.flatMap((d) => (d.to || []).map((t) => t.uri)));
+  return defs.map((d) => (d.to ? { ...d, to: d.to.map((t) => ({ ...t, name: typeTitles.get(t.uri) || t.title || '' })) } : d));
+}
 // A document's fields: every field its type defines, empty or not, so one can be filled in — then any value it
 // carries under another type (a type it used to have). Values come from its data map, the same place an edit writes.
+// A field of its type carries its kind too: { type, cardinality, options, to }, as fieldDefs reads them.
 async function fieldsOf(id) {
   let document;
   try { document = await S.client.sync.subscribe(id); } catch { return []; }
@@ -101,10 +112,9 @@ async function fieldsOf(id) {
   const typeUri = document.data.get('entityTypeUri');
   const out = [];
   if (typeUri) {
-    const titles = await attributeTitles(typeUri);
-    for (const [attribute, label] of Object.entries(titles)) {
-      const key = typeUri + '?attribute=' + attribute, row = rows.find((r) => r.key === key);
-      out.push({ key, label, text: row ? row.text : '', lines: row ? row.lines : [] });
+    for (const def of await fieldDefs(typeUri)) {
+      const key = typeUri + '?attribute=' + def.key, row = rows.find((r) => r.key === key);
+      out.push({ key, label: def.title || def.key, text: row ? row.text : '', lines: row ? row.lines : [], type: def.type, cardinality: def.cardinality, options: def.options, to: def.to });
     }
   }
   for (const row of rows) {
@@ -298,6 +308,7 @@ async function related(id) {
     call: callOf((self0 && self0.calendarEvent) || {}),
     summaryUri: writeUp ? writeUp.id : undefined,
     fields: await fieldsOf(id), // the zoomed node's own fields, not the meeting hub's
+    definitions: idKind(id) === 'type' ? await fieldDefs(id) : undefined, // a type's page lists the fields it defines
     pinHub: canPin ? hub : undefined, // where a new pin would go, when this user may write it
     pinned: pinned.map(row),
     outcomes: owns.filter(stated).map(row),
