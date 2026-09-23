@@ -100,7 +100,7 @@ const liveTarget = (node, typing) => (typing && !isReference(node) && !oneMentio
 const referenceLabel = (node) => referenceTarget(node)?.text || node.reference?.label || node.text || node.reference?.uri || 'Unavailable reference';
 // An error from an action is transient: it clears when the next action succeeds, so a stale message never
 // outlives the problem it described.
-const showError = (e) => { const el = $('error'); el.textContent = e ? String(e.message || e) : ''; el.hidden = !e; };
+const showError = (e) => { $('errorText').textContent = e ? String(e.message || e) : ''; $('error').hidden = !e; };
 const run = (fn) => (queue = queue.then(fn).then((value) => { showError(null); return value; }, showError));
 // A row on its way out is not a keyboard stop.
 const rowsIn = (root) => [...root.querySelectorAll('.node:not(.leaving) .text')];
