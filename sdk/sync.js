@@ -127,6 +127,16 @@ class SyncConnection extends EventEmitter {
     return this._command({ case: 'documentAction', value: { documentId: id, action: { case: 'restore', value: {} } } });
   }
 
+  // document_action archive / unarchive (DocumentAction fields 4 and 5): what Tana's client sends for a document it
+  // does not have loaded; a loaded one gets node.setArchived instead (docs/PLATFORM-PROTOCOL.md §2.5).
+  archive(id) {
+    return this._command({ case: 'documentAction', value: { documentId: id, action: { case: 'archive', value: {} } } });
+  }
+
+  unarchive(id) {
+    return this._command({ case: 'documentAction', value: { documentId: id, action: { case: 'unarchive', value: {} } } });
+  }
+
   async unsubscribe(id) {
     const entry = this.docs.get(id);
     if (!entry) return;

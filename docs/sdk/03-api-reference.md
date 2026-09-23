@@ -8,7 +8,7 @@ All modules are CommonJS. "Node" below means the plain graph JSON node; "Documen
 createTanaClient({ baseUrl?, getAccessToken, orgId, peerId, storageId?, logger?, clientName? })
   → { transport, graph: GraphClient, history: HistoryClient, sync: SyncConnection, close(): Promise }
 ```
-Also re-exports `createTransport`, `GraphClient`, `HistoryClient`, `SyncConnection`, `Document`, `derivePeerId` and everything in `node.js`. `access` (`capabilities`, `setSharing`, `previewMove`, `moveToSpace`, `canWrite`, `canDelete`, `audienceOf`) and `calls` (`callSessions`, `inCall`, `joinedAt`, `attended`, `currentCalls`) are required from their own modules (`sdk/access`, `sdk/calls`), which is what every caller does.
+Also re-exports `createTransport`, `GraphClient`, `HistoryClient`, `SyncConnection`, `Document`, `derivePeerId` and everything in `node.js`. `access` (`capabilities`, `setSharing`, `previewMove`, `moveToSpace`, `canWrite`, `canDelete`, `canArchive`, `audienceOf`) and `calls` (`callSessions`, `inCall`, `joinedAt`, `attended`, `currentCalls`) are required from their own modules (`sdk/access`, `sdk/calls`), which is what every caller does.
 
 ## `sdk/transport.js`
 
@@ -54,6 +54,7 @@ Constructed by `createTanaClient`; `{ transport, orgId, peerId, storageId, logge
 | `unsubscribe(id): Promise` | Flushes and waits for in-flight sends, sends `unsubscribeDocument` when live, detaches listeners. Released mid-bootstrap with local edits queued, it first lets that bootstrap finish (Tana's drain mode). |
 | `softDelete(id): Promise` | `documentAction.softDelete`; the doc disappears from graph queries. Needs the stream open. |
 | `restore(id): Promise` | `documentAction.restore`, the inverse of `softDelete`. Needs the stream open. |
+| `archive(id)`, `unarchive(id): Promise` | `documentAction.archive` / `unarchive` (DocumentAction fields 4 and 5). The server writes `data.archivedAt` (epoch ms; 0 after unarchive) and `data.archivedBy` (the caller's profile) into the document, and the graph leaves an archived node out of every `listNodes` answer, `nodeIds` lookups included, unless the request sets `includeArchived`. Tana's client sends this for a document it does not have loaded; for a loaded one it writes the same keys itself (`setArchived`). Tana offers it for types only. Verified live 2026-09-23 on a scratch type. |
 | `subscribeEphemeralChannel(channelId)`, `unsubscribeEphemeralChannel(channelId)`, `sendEphemeral(documentId, bytes)`, `viewingHeartbeat(documentId)` | Presence plumbing: channels are counted per id (two holders, one subscription) and resent after every reconnect; sends are best effort, resolve to whether they went and send nothing while disconnected. Incoming frames are the `ephemeral` event. Use `sdk/presence.js` rather than these directly. |
 | `close(): Promise` | Unsubscribes everything, aborts the stream, stops reconnecting. |
 | `connected`, `docs` | State; `docs` maps id → session entry (`state`: new / bootstrapping / retrying / live / resyncing / disconnected / paused / write-denied / closed). |
@@ -86,11 +87,12 @@ These helpers are the app's verified native capability boundary. Ownership is an
 |---|---|
 | `canWrite(node, userUri, ctx)` | Accepts a direct `admin`/`editor`/`attendee` participant, or recursively checks an unrestricted owner chain and the organisation membership document. Restricted or unknown access is not guessed. |
 | `audienceOf(node, userUri, ctx)` | Returns a snapshot such as `only-me`, `people`, `space`, `everyone`, or `unknown`, including the boundary and sorted participants where known. |
-| `capabilities(document, userUri, ctx)` | Returns `sharing`, `move`, `deletable`, available `rules`/`roles`, current and inherited audience snapshots, and a `sharingToken` derived from the observed ACL/audience state. |
+| `capabilities(document, userUri, ctx)` | Returns `sharing`, `move`, `deletable`, `archivable` (a type with write access: Tana archives types instead of deleting them), available `rules`/`roles`, current and inherited audience snapshots, and a `sharingToken` derived from the observed ACL/audience state. |
 | `setSharing(document, userUri, selection, ctx)` | Supports `me`, `people`, and verified `inherit`. Inherit requires the current `sharingToken`; the helper checks that observed documents stayed stable before transacting. |
 | `previewMove(document, targetSpace, userUri, ctx)` | Checks source/target write access, space validity, cycles, type home/count constraints, audience before/after and observation stability. Returns `{ allowed, reason, audienceChanged, requiresConfirmation, token }`. |
 | `moveToSpace(document, targetSpace, userUri, ctx, confirmation)` | Re-runs the preview and requires its exact token when confirmation is required (or when a confirmation was supplied). |
 | `canDelete(document, userUri, ctx, restoring?)` | Checks supported, non-deleted kind, write access and calendar-event organizer rules. Restore checks a copy with `deletedAt` removed and never mutates the document. |
+| `canArchive(document, userUri, ctx)` | A type (Tana's archive set is `['type']`) with write access. The same check answers archive and unarchive. |
 
 `main.js` calls these helpers for access mutations and for native document actions. The renderer's `editable` flag is only a companion UI capability and does not replace server authorization.
 
@@ -114,6 +116,7 @@ These helpers are the app's verified native capability boundary. Ownership is an
 | `readNode(document)` → `{ id, ...data }` | The data map as JSON plus the id. |
 | `setTitle(document, title)` | Sets `title`, deletes `titleAutoGenerated` (what the web client does). |
 | `setState(document, stateType, byUri)` | `stateType` ∈ `STATE_TYPES`; sets `stateEnteredAt` (now) and `stateChangedBy`; deletes workflow keys. Throws on bad state or non-profile uri. |
+| `setArchived(document, archived, byUri, now?)` | Tana's `archive(actor)`/`unarchive(actor)` on a loaded document: `archivedAt` = now or 0 (archived means `archivedAt > 0`; the key is never removed) and `archivedBy` = `byUri`. Throws on a non-profile uri. The app uses `sync.archive`/`unarchive` instead. |
 | `contentText(document)` | Plain text of the content tree (blocks joined by \n, mentions as labels). |
 | `taskMeta(document)` | `{ assignees, restricted, participants }` straight from the data map. |
 | `setAssignees(document, uris, byUri)` | Rewrites `assignedToUris` (deduped; `[]` = unassigned) plus `assignedToUrisChangedAt/By`. Throws unless every uri is a `tana:user-profile:` and the document has a task state; a no-op change writes nothing. |
@@ -187,7 +190,7 @@ A link or member value is one paragraph per reference, each holding a lone menti
 
 ## App mutation and history boundary
 
-The SDK's `Document.undo()`/`redo()` only undo local CRDT transactions for that document. `main.js` adds a global stack across documents and routes renderer Cmd+Z, Cmd+Shift+Z and Cmd+Y through it. Native delete/restore is a separate `documentAction` command: the main process checks `access.canDelete`, requires a `documentActionResponse`, and records the action so undo of delete restores and undo of restore deletes. A failed action is not removed from history. Restore visibility and document state arrive through the server's live update.
+The SDK's `Document.undo()`/`redo()` only undo local CRDT transactions for that document. `main.js` adds a global stack across documents and routes renderer Cmd+Z, Cmd+Shift+Z and Cmd+Y through it. Native delete/restore is a separate `documentAction` command: the main process checks `access.canDelete`, requires a `documentActionResponse`, and records the action so undo of delete restores and undo of restore deletes. A failed action is not removed from history. Restore visibility and document state arrive through the server's live update. Archive/unarchive go the same way, checked with `access.canArchive`; undo of one runs the other.
 
 ## `sdk/query.js`
 

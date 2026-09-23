@@ -775,3 +775,16 @@ selection from. It follows every caret move, at most one message per 150 ms, and
 window loses focus or the page changes. Only a block counts: the title and a draft row are not blocks yet.
 The viewing heartbeat goes to the page on screen only while the window is visible and you were active (a key, the mouse, a
 scroll) in the last minute, as Tana sends it.
+
+## Addendum: Archiving a type (#36)
+
+A type is archived, never deleted: Tana's own type page offers Archive and nothing else, and the SDK leaves types out
+of soft delete (`sdk/access.js` DELETABLE). On a type — the row in the Types list, or the type's page zoomed in —
+Cmd+K offers **Archive type** (id `archive`) beside Delete, which reads "Read-only" there. It asks `doc:accessOptions`
+for `archivable` (a type you can write), then runs `doc:archive`, the same `documentAction` path a delete takes, so
+Cmd+Z unarchives it. The type then leaves the Types list and every picker, because the graph stops listing it.
+
+To bring one back, Cmd+K **Archived types** (id `archivedTypes`, beside Recently deleted) opens a page of the types
+the graph returns with `includeArchived`, newest first, each with how long ago it was archived; Enter unarchives it
+and opens it. Unlike Recently deleted it needs no local list, because an archived type stays in the graph. Tana
+confirms an archive in a dialog; here nothing is asked, since Cmd+Z and this page undo it.

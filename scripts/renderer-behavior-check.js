@@ -573,7 +573,7 @@ async function runSelectionChecks() {
 }
 
 async function runMultiTaskPaletteCheck() {
-  const contextFns = [functionSource('taskActionContext'), functionSource('taskActionRows'), functionSource('selectionRows'), functionSource('removeSelection'), functionSource('addToDateNode')].join('\n');
+  const contextFns = [functionSource('taskActionContext'), functionSource('taskActionRows'), functionSource('selectionRows'), functionSource('removeSelection'), functionSource('archiveType'), functionSource('addToDateNode')].join('\n');
   const context = vm.runInNewContext(`
     const task = (id, editable = true) => ({ id, kind: 'document', icon: 'task', editable, stateType: 'open' });
     const rows = [
@@ -584,6 +584,9 @@ async function runMultiTaskPaletteCheck() {
     ];
     const blocks = [{ key: 'doc/b1', docId: 'doc', node: { id: 'b1', kind: 'block' } }, { key: 'doc/b2', docId: 'doc', node: { id: 'b2', kind: 'block' } }];
     const items = new Map([...rows, ...blocks].map((item) => [item.key, item]));
+    // a type page (#36): archived, never deleted; kept out of rows so the selections above do not change
+    items.set('tana:type:01j0type000000000000000000', { key: 'tana:type:01j0type000000000000000000', docId: 'tana:type:01j0type000000000000000000', node: { id: 'tana:type:01j0type000000000000000000', kind: 'document', icon: 'type', editable: false } });
+    const TYPE_NODE = /^tana:type:[0-9a-z]{26}$/;
     let selected = rows.map((item) => item.key), palDoc = task('palette-task');
     const selKeys = () => selected;
     const isTask = (node) => node.kind === 'document' && node.icon === 'task';
@@ -593,7 +596,8 @@ async function runMultiTaskPaletteCheck() {
     const taskMetaById = new Map(), loadTaskMeta = () => {}, memberName = (id) => id;
     const calls = [];
     const tana = { setState() {}, setStateMany() {}, taskMeta() {}, setAssignees() {}, setAssigneesMany() {}, setSensitive() {},
-      deleteDocument: async (id) => { calls.push(['delete', id]); }, accessOptions: async () => ({ deletable: true }),
+      deleteDocument: async (id) => { calls.push(['delete', id]); }, accessOptions: async (id) => ({ deletable: !TYPE_NODE.test(id), archivable: TYPE_NODE.test(id) }),
+      archiveDocument: async (id) => { calls.push(['archive', id]); },
       todayNode: async (offset = 0) => { calls.push(['todayNode', offset]); return offset ? 'next-day' : 'day'; }, weekNode: async () => { calls.push(['weekNode']); return 'week'; },
       insertAfter: async (docId, nodeId, text) => { calls.push(['insertAfter', docId, nodeId, text]); return 'block'; },
       setText: async (docId, nodeId, segments) => { calls.push(['setText', docId, nodeId, JSON.stringify(segments)]); } };
@@ -628,6 +632,7 @@ async function runMultiTaskPaletteCheck() {
       toggleTask: (id) => { selected = []; palDoc = items.get(id).node; const before = selectionRows().find((row) => row.id === 'toggleDone'); before.run(); return [before.label, ticked, selectionRows().find((row) => row.id === 'toggleDone').label]; },
       kbdSelected: (keys, rowId) => { selected = keys; return selectionRows().find((row) => row.id === rowId).kbd; },
       zoomedCurrent: (id) => { selected = []; palDoc = items.get(id).node; zoom = { docId: id }; try { return selectionRows().map((row) => [row.group, row.label]); } finally { zoom = null; } },
+      archive: async (id) => { calls.length = 0; selected = []; palDoc = items.get(id).node; await selectionRows().find((row) => row.id === 'archive').run(); return calls; },
     });
   `);
   assert.deepEqual(plain(context.labels()), [
@@ -701,6 +706,10 @@ async function runMultiTaskPaletteCheck() {
   assert.deepEqual(plain(await context.remove(['doc/b1', 'doc/b2'])), [['blocks', 'doc/b1,doc/b2']], 'a selection of blocks takes the existing one-step path instead');
   assert.deepEqual(plain(await context.remove(['locked', 't1'])), [['error', 'Only writable documents and blocks can be deleted']],
     'a read-only row stops the delete and says so, instead of deleting what it can');
+  // #36: a type offers Archive (Tana's own type page offers nothing else); it asks main whether it may, then archives
+  assert.deepEqual(plain(context.current('tana:type:01j0type000000000000000000')).filter((row) => ['Archive type', 'Delete'].includes(row[1])),
+    [['Current node', 'Delete', 'Read-only', true], ['Current node', 'Archive type', '', false]], 'a type is archived, not deleted');
+  assert.deepEqual(plain(await context.archive('tana:type:01j0type000000000000000000')), [['archive', 'tana:type:01j0type000000000000000000']], 'Archive type archives that type');
 
   const applyFns = [functionSource('taskResult'), functionSource('applyTaskChange'), functionSource('statusRows'), functionSource('memberRows'), functionSource('manyAssigneeRows')].join('\n');
   const apply = vm.runInNewContext(`
@@ -7142,7 +7151,9 @@ async function runRecentlyDeletedCheck() {
       { id: 'tana:text:01j0gone100000000000000000', title: 'Scratch note', deletedAt: new Date(Date.now() - 3 * 864e5).toISOString() },
     ];
     const tana = { refresh: async () => {}, filters: {}, sensitiveIds: () => {},
-      deletedList: () => answer(), restoreDocument: async (id) => { restored.push(id); } };
+      deletedList: () => answer(), restoreDocument: async (id) => { restored.push(id); },
+      archivedTypes: async () => [{ id: 'tana:type:01j0arch000000000000000000', title: 'Old project', archivedAt: new Date(Date.now() - 864e5).toISOString() }],
+      unarchiveDocument: async (id) => { restored.push(id); } };
     ${functionSource('fuzzyMatch')}
     ${functionSource('agoText')}
     ${sourceBetween('const docRow =', 'const NODE_ROW_ORDER')}
@@ -7151,8 +7162,12 @@ async function runRecentlyDeletedCheck() {
     ${functionSource('paletteRows')}
     ${sourceBetween('const TRASH_GROUP', 'function openTrashPalette')}
     ${functionSource('openTrashPalette')}
+    ${sourceBetween('const ARCHIVED_GROUP', 'function openArchivedPalette')}
+    ${functionSource('openArchivedPalette')}
     ${functionSource('backPalette')}
     ({ row: () => paletteRows('').find((r) => r.id === 'recentlyDeleted'),
+       archivedRow: () => paletteRows('').find((r) => r.id === 'archivedTypes'),
+       archivedPage: (q) => archivedRows(q || ''),
        page: (q) => trashRows(q || ''),
        mode: () => palMode,
        escape: () => backPalette(),
@@ -7187,6 +7202,16 @@ async function runRecentlyDeletedCheck() {
   assert.deepEqual(plain(api.page().map((r) => [r.label, r.disabled])), [['Nothing deleted recently', true]], 'an empty list says so');
   api.escape();
   assert.equal(api.mode(), 'cmd', 'escape on the page goes back to the command page');
+  // #36 Cmd+K "Archived types": the same page shape over main's includeArchived query; Enter unarchives and opens it
+  api.archivedRow().run();
+  assert.deepEqual(plain([api.mode(), api.state().placeholder, api.archivedPage()[0].label]), ['archived', 'Unarchive a type', 'Loading…'], 'the archived page is honest while loading');
+  await api.settle();
+  assert.deepEqual(plain(api.archivedPage().map((r) => [r.label, r.hint])), [['Old project', '1 day ago']], 'archived types with their ages');
+  api.archivedPage()[0].run();
+  await api.settle();
+  assert.deepEqual(plain([api.state().restored.at(-1), api.state().opened.at(-1)]), ['tana:type:01j0arch000000000000000000', 'tana:type:01j0arch000000000000000000'], 'Enter unarchives the type and opens it');
+  api.escape(); api.archivedRow().run(); api.escape();
+  assert.equal(api.mode(), 'cmd', 'escape steps back from the archived page too');
   console.log('ok  Recently deleted: the row is offered, the page reads main\u2019s list with its ages, restores and opens what is chosen, and is honest while loading or empty');
 }
 

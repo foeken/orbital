@@ -278,6 +278,7 @@ function paletteRows(q, typed = q) {
   rows.push({ id: 'undo', group: 'Actions', icon: 'undo', label: 'Undo', run: () => history('undo') });
   rows.push({ id: 'redo', group: 'Actions', icon: 'redo', label: 'Redo', run: () => history('redo') });
   if (tana.deletedList) rows.push({ id: 'recentlyDeleted', group: 'Actions', icon: 'trash', label: 'Recently deleted', keepOpen: true, run: openTrashPalette });
+  if (tana.archivedTypes) rows.push({ id: 'archivedTypes', group: 'Actions', icon: 'type', label: 'Archived types', keepOpen: true, run: openArchivedPalette });
   rows.push({ id: 'sync', group: 'Actions', icon: 'sync', label: 'Sync', run: () => run(() => tana.refresh()) });
   rows.push({ id: 'reload', group: 'Actions', icon: 'reload', label: 'Reload', run: () => location.reload() });
   // the list of titles hidden from every view and from search, edited in the palette itself
@@ -351,7 +352,7 @@ function openCommandPalette() {
   palInput.placeholder = 'Run a command'; palInput.value = ''; renderPalette(); palInput.focus();
 }
 function backPalette() {
-  const SECOND_LEVEL = new Set(['setType', 'trash', 'discuss', 'setIcon', 'setHue', 'openaiKey', 'pins', 'pinDate', 'create', 'hidden', 'hosts']); // pages opened from the command page
+  const SECOND_LEVEL = new Set(['setType', 'trash', 'archived', 'discuss', 'setIcon', 'setHue', 'openaiKey', 'pins', 'pinDate', 'create', 'hidden', 'hosts']); // pages opened from the command page
   if (palMode === 'pill') openCommandPalette();
   // Escape on the prompt page cancels the whole thing rather than stepping back a level: the page was opened to
   // answer one question, and abandoning that question is abandoning the assignment. Nothing is written either way.
@@ -396,6 +397,24 @@ function openTrashPalette() {
   palInput.value = '';
   trashList = null; renderPalette(); palInput.focus();
   run(async () => { const list = await tana.deletedList(); trashList = Array.isArray(list) ? list : []; if (palMode === 'trash') renderPalette(); });
+}
+// ---- archived types: Tana archives a type instead of deleting it (it leaves every list and picker; its documents keep
+// it). An archived type is still in the graph behind includeArchived, so main answers from there, not from a local list.
+const ARCHIVED_GROUP = 'Archived types · ↩ unarchives it';
+let archivedList = null; // null while the list is in flight
+function archivedRows(q) {
+  const rows = (archivedList || []).filter((d) => fuzzyMatch(d.title, q)).map((d) => ({ group: ARCHIVED_GROUP, icon: 'type', label: d.title,
+    hint: agoText(d.archivedAt), keepOpen: true, run: () => run(async () => { await tana.unarchiveDocument(d.id); closePalette(); goTo(d.id); }) }));
+  if (!rows.length) rows.push({ group: ARCHIVED_GROUP, label: archivedList ? 'No archived types' : 'Loading…', disabled: true });
+  return rows;
+}
+function openArchivedPalette() {
+  palMode = 'archived'; palRows = []; palIndex = 0; palette.hidden = false;
+  promptEditor(false);
+  palInput.placeholder = 'Unarchive a type';
+  palInput.value = '';
+  archivedList = null; renderPalette(); palInput.focus();
+  run(async () => { const list = await tana.archivedTypes(); archivedList = Array.isArray(list) ? list : []; if (palMode === 'archived') renderPalette(); });
 }
 // ---- the machines a task can run on, managed from Cmd+K ----
 // One page: what is configured, and a line to add another. The form is the palette's own field — "Name, address,
@@ -888,6 +907,7 @@ function renderPalette() {
   else if (palMode === 'setHue') palRows = huePickRows(q.toLowerCase());
   else if (palMode === 'hosts') palRows = hostRows(q);
   else if (palMode === 'trash') palRows = trashRows(q.toLowerCase());
+  else if (palMode === 'archived') palRows = archivedRows(q.toLowerCase());
   else if (palMode === 'agentPrompt') palRows = agentPromptRows();
   else if (palMode === 'openaiKey') palRows = openAIKeyRows();
   else if (palMode === 'pill') palRows = pillRows(q.toLowerCase());
@@ -975,7 +995,7 @@ function nextPalIndex(rows, index, step) {
   return index;
 }
 // pages whose rows are built from what is typed, with nothing to fetch
-const LOCAL_MODES = new Set(['cmd', 'create', 'slash', 'assignees', 'assigneesMany', 'status', 'setType', 'discuss', 'setHue', 'visibility', 'visibilityPeople', 'hidden', 'pins', 'pill', 'pinMeeting', 'openaiKey', 'hosts', 'trash']);
+const LOCAL_MODES = new Set(['cmd', 'create', 'slash', 'assignees', 'assigneesMany', 'status', 'setType', 'discuss', 'setHue', 'visibility', 'visibilityPeople', 'hidden', 'pins', 'pill', 'pinMeeting', 'openaiKey', 'hosts', 'trash', 'archived']);
 palInput.addEventListener('input', () => {
   palIndex = 0; palEnter = null; // typing on supersedes an Enter that was waiting for the previous query
   if (LOCAL_MODES.has(palMode)) return renderPalette();

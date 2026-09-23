@@ -11,6 +11,9 @@ const ORGANIZED = new Set(['agent', 'skill', 'type', 'space']);
 // What Tana's own client offers soft delete for (useSoftDelete's kind set, read 2026-09-22); a type is archived
 // instead, and images, audio, video and workflows are not deleted on their own.
 const DELETABLE = new Set(['text', 'canvas', 'skill', 'chat', 'event', 'space', 'artifact', 'agent', 'search', 'widget-source', 'widget']);
+// What Tana's own client offers archive for (TypeRoute's archive set, read 2026-09-23): types only, with no other
+// client-side gate; the server decides the rest, so this asks the same write access delete does.
+const ARCHIVABLE = new Set(['type']);
 const WRITERS = new Set(['admin', 'editor', 'attendee']);
 // The Library is Tana's name for a document with no owner, so it is a move target without a document of its own.
 const LIBRARY = { id: null, title: 'Library' };
@@ -80,6 +83,10 @@ async function canDelete(doc, user, ctx = {}, restoring = false) {
   if (restoring) delete n.deletedAt; // permission check only; never modify the CRDT
   return DELETABLE.has(n.type) && supported(n) && await canWrite(n, user, ctx) && eventSharing(n, user);
 }
+async function canArchive(doc, user, ctx = {}) {
+  const n = readNode(doc);
+  return ARCHIVABLE.has(n.type) && supported(n) && await canWrite(n, user, ctx);
+}
 async function capabilities(doc, user, ctx = {}) {
   const n = readNode(doc), write = supported(n) && await canWrite(n, user, ctx);
   const sharing = write && eventSharing(n, user);
@@ -87,7 +94,7 @@ async function capabilities(doc, user, ctx = {}) {
   const inherit = sharing && inheritAudience.scope !== 'unknown' && await orgWideAllowed(n, user, ctx);
   const currentAudience = await audienceOf(n, user, ctx);
   const sharingToken = createHash('sha256').update(JSON.stringify({ id: n.id, owner: n.ownerUri, participants: n.participants, restricted: n.restricted, currentAudience, inheritAudience, inherit })).digest('hex');
-  return { sharing, move: write, deletable: write && DELETABLE.has(n.type) && eventSharing(n, user), ownerUri: n.ownerUri || null, sharingToken,
+  return { sharing, move: write, deletable: write && DELETABLE.has(n.type) && eventSharing(n, user), archivable: write && ARCHIVABLE.has(n.type), ownerUri: n.ownerUri || null, sharingToken,
     rules: sharing ? ['me', 'people', ...(inherit ? ['inherit'] : [])] : [], roles: ['editor', 'admin', ...(n.type === 'event' ? ['attendee'] : [])],
     audience: currentAudience, inheritAudience,
     reason: write ? sharing ? null : 'Only the event organizer can change access' : 'Write permission is unknown or unavailable' };
@@ -171,4 +178,4 @@ async function moveToSpace(doc, target, user, ctx = {}, confirmation) {
   doc.transact(loro => isLibrary(target) ? loro.getMap('data').delete('ownerUri'): loro.getMap('data').set('ownerUri', target.id));
   return preview;
 }
-module.exports = { capabilities, setSharing, moveToSpace, previewMove, canWrite, canDelete, audienceOf, LIBRARY };
+module.exports = { capabilities, setSharing, moveToSpace, previewMove, canWrite, canDelete, canArchive, audienceOf, LIBRARY };

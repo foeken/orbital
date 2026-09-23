@@ -74,13 +74,16 @@ function nodes(list, from = 0) {
     const b = list.get(i);
     if (isQuote(b)) { out.push(...nodes(kids(b))); continue; } // a blockquote is transparent: its blocks are the nodes
     if (!isList(b)) { out.push(node(b, [])); continue; }
-    const items = kids(b);
+    // A numbered list that does not count from 1 says so on its first row (Tana's orderedList.attributes.start)
+    const items = kids(b), start = name(b) === 'orderedList' ? b.get('attributes')?.get('start') : undefined;
+    let first = Number.isInteger(start) && start !== 1;
     for (let j = 0; j < items.length; j++) {
       const c = kids(items.get(j));
       if (c.length) {
         const n = node(c.get(0), nodes(c, 1));
         const checked = items.get(j).get('attributes')?.get('checked');
         if (typeof checked === 'boolean') n.done = checked ? 1 : 0;
+        if (first) { n.start = start; first = false; }
         out.push(n);
       }
     }
@@ -312,7 +315,7 @@ function create(list, index, nodeName) {
 
 function paragraph(list, index, text) {
   const p = create(list, index, 'paragraph');
-  if (text) kids(p).insertContainer(0, new LoroText()).insert(0, text);
+  if (text) writeInline(kids(p), inlineGroups(text).groups, false); // a line break in it becomes a hardBreak, as in setText
   return p;
 }
 
@@ -395,11 +398,18 @@ function inlineGroups(value, plain = false) {
   const groups = [];
   for (const s of segs) {
     if (s.mention && !plain) { groups.push(s); continue; }
-    const run = { insert: s.mention ? s.mention.label : s.text };
     const attributes = plain ? null : writeMarks(s.marks);
-    if (attributes) run.attributes = attributes;
-    const last = groups.length ? groups[groups.length - 1] : null;
-    if (last && last.delta) last.delta.push(run); else groups.push({ delta: [run] });
+    // A line break is Tana's inline hardBreak node, which is what its editor writes for Shift+Enter, and it splits the
+    // text into two runs. A code block keeps its newlines as text: its content is text* in Tana's schema.
+    const words = s.mention ? s.mention.label : s.text;
+    (plain ? [words] : words.split('\n')).forEach((part, i) => {
+      if (i) groups.push({ hardBreak: true });
+      if (!part) return;
+      const run = { insert: part };
+      if (attributes) run.attributes = attributes;
+      const last = groups.length ? groups[groups.length - 1] : null;
+      if (last && last.delta) last.delta.push(run); else groups.push({ delta: [run] });
+    });
   }
   return { groups, marked };
 }
@@ -408,9 +418,14 @@ function writeInline(c, groups, marked) {
     const cur = i < c.length ? c.get(i) : null;
     if (cur && g.delta && cur.kind() === 'Text') return applyRuns(cur, g.delta, marked);
     if (cur && g.mention && isMention(cur) && cur.get('attributes').get('tanaUri') === g.mention.uri) return;
+    if (cur && g.hardBreak && cur.kind() === 'Map' && name(cur) === 'hardBreak') return;
     if (cur) c.delete(i, 1);
     if (g.delta) return applyRuns(c.insertContainer(i, new LoroText()), g.delta, marked);
     const m = c.insertContainer(i, new LoroMap());
+    if (g.hardBreak) { // as Tana's editor writes it (its loro-prosemirror binding): empty attributes, empty children
+      m.set('nodeName', 'hardBreak'); m.setContainer('attributes', new LoroMap()); m.setContainer('children', new LoroList());
+      return;
+    }
     m.set('nodeName', 'mention');
     const a = m.setContainer('attributes', new LoroMap());
     a.set('label', g.mention.label);
@@ -729,7 +744,7 @@ function rehome(document, id, wanted) {
   // Between the two list kinds a listItem moves whole, so its children and its checkbox stay with it.
   if (holder && item && isList(holder) && LISTS.includes(wanted)) {
     const inner = item.parent(), i = indexOf(inner, item);
-    if (inner.length === 1) return holder.set('nodeName', wanted);
+    if (inner.length === 1) { holder.set('nodeName', wanted); if (wanted !== 'orderedList') holder.get('attributes')?.delete('start'); return; } // start is orderedList's own
     const outer = holder.parent(), at = splitHolder(holder, i);
     copy(kids(create(outer, at, wanted)), 0, item);
     inner.delete(i, 1);
@@ -772,6 +787,9 @@ function setLeaf(block, type) {
   const want = type === 'code' ? 'codeBlock' : type.startsWith('heading') ? 'heading' : 'paragraph';
   const attributes = block.get('attributes');
   if (want === 'codeBlock' && name(block) !== 'codeBlock') flatten(block);
+  // Out of a code block its language goes (Tana's codeBlock attribute, nothing else carries one) and its newlines
+  // become line breaks, the way text is written everywhere else.
+  if (want !== 'codeBlock' && name(block) === 'codeBlock') { attributes.delete('language'); writeInline(kids(block), inlineGroups(contentText({ content: block })).groups, false); }
   if (name(block) !== want) block.set('nodeName', want);
   if (want === 'heading') attributes.set('level', Number(type.slice(-1)));
   else if (attributes.get('level') !== undefined) attributes.delete('level');

@@ -388,6 +388,11 @@ function selectionRows() {
     // ⇧⌘⌫ deletes the node you are on (outline keydown; the zoomed title; a block selection) — say so on the row
     rows.push({ id: 'delete', group, icon: 'trash', label: `Delete${count(able.length, 'item')}`, hint: !skipped ? '' : selected.length ? `${skipped} skipped` : 'Read-only', kbd: selected.length ? undefined : '⇧⌘⌫', disabled: !able.length, run: () => removeSelection(able.map((it) => it.key)) });
   }
+  // A type is archived rather than deleted, one at a time, as Tana's own type page does it: it leaves the Types list
+  // and every picker, and Cmd+Z or Cmd+K "Archived types" brings it back.
+  if (its.length === 1 && tana.archiveDocument && its[0].node.kind === 'document' && TYPE_NODE.test(its[0].docId)) {
+    rows.push({ id: 'archive', group, icon: 'type', label: 'Archive type', run: () => archiveType(its[0]) });
+  }
   return rows;
 }
 // Every selected node lands as a mention at the end of the day's or the week's node — the reference Tana itself
@@ -417,6 +422,16 @@ async function removeSelection(keys) {
       if (!access?.deletable) throw new Error(access?.reason || 'This document cannot be deleted');
       await tana.deleteDocument(it.docId); invalidateNode(it.docId);
     }
+    await loadRoots();
+  });
+  render(true);
+}
+async function archiveType(it) {
+  sel = null;
+  await run(async () => {
+    const access = await tana.accessOptions(it.docId);
+    if (!access?.archivable) throw new Error(access?.reason || 'This type cannot be archived');
+    await tana.archiveDocument(it.docId); invalidateNode(it.docId);
     await loadRoots();
   });
   render(true);
