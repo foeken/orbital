@@ -47,6 +47,7 @@ assert.match(source, /if \(signedOut\) rows\.push\(\{ id: 'login'/);
 assert.match(source, /s\.authChecking === false && s\.authenticated === false/);
 assert.doesNotMatch(source, /id: 'sync', group: 'Actions', icon: 'sync', label: 'Sync', kbd:/);
 assert.match(source, /id: 'openaiKey', group: 'Actions', icon: 'openaiKey', label: 'Set OpenAI API key'/);
+assert.match(source, /id: 'chatgpt', group: 'Actions', icon: 'chatgpt', label: chatgptAuth/);
 assert.match(source, /function openOpenAIKeyPalette\(\)[\s\S]*palInput\.type = 'password'/);
 assert.match(source, /function openAIKeyRows\(\)[\s\S]*tana\.setOpenAIKey\(key\)/);
 assert.doesNotMatch(source, /mod && e\.key === 'r'/);
@@ -540,6 +541,7 @@ const icons = {};
 new Function('window', fs.readFileSync(require.resolve('../icons.js'), 'utf8'))(icons);
 assert.match(icons.ICONS.reload, /stroke-width="1"/, 'the generated glyph is untouched, so it is the icon set\'s weight everywhere else');
 assert.ok(icons.ICONS.openaiKey && icons.ICONS.openaiKey.includes('currentColor'), 'the OpenAI key row uses the supplied generated glyph');
+assert.ok(icons.ICONS.chatgpt && icons.ICONS.chatgpt.includes('currentColor'), 'the ChatGPT sign-in row uses its generated vector mark');
 // What a model suggested is drawn with its own glyph, so a row the app worked out is never mistaken for one you
 // typed or one Tana knows, and the glyph breathes only where motion is welcome.
 assert.ok(icons.ICONS.sparkle && icons.ICONS.sparkle.includes('currentColor'), 'the suggestion row uses the supplied sparkle glyph');
