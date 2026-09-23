@@ -8,7 +8,7 @@ const { createRequire } = require('node:module');
 const { create, toBinary, fromBinary, toJson, fromJson } = require('@bufbuild/protobuf');
 const { createRouterTransport, ConnectError, Code } = require('@connectrpc/connect');
 const { message, SyncService } = require('../sdk/proto/descriptors');
-const { createTransport, SyncConnection, Document, derivePeerId, readNode, setTitle, setState, taskMeta, setAssignees, setSearchQuery, contentText, ulid, initDocument, STATE_TYPES } = require('../sdk');
+const { createTransport, SyncConnection, Document, derivePeerId, readNode, setTitle, setState, workflowStates, taskMeta, setAssignees, setSearchQuery, contentText, ulid, initDocument, STATE_TYPES } = require('../sdk');
 const outline = require('../sdk/content');
 const { fetchImage, uploadFile, initImage, UPLOAD_LIMIT } = require('../sdk/assets');
 const { LoroMap, LoroList, LoroText } = require('loro-crdt');
@@ -2742,6 +2742,19 @@ async function main() {
   assert.equal(readNode(doc).stateType, 'closed');
   assert.equal(readNode(doc).stateChangedBy, ME);
   assert.throws(() => setState(doc, 'done', ME));
+  // A workflow state is In Progress plus the column (Tana's transitionTo); a plain state clears the column again.
+  const column = { workflowUri: 'tana:workflow:01examplew0000000000000000', workflowStateId: 'ab48c504-bebb-4e0c-a6c6-c066e91ce689' };
+  setState(doc, column, ME);
+  assert.deepEqual([readNode(doc).stateType, readNode(doc).stateWorkflowUri, readNode(doc).stateWorkflowStateId], ['open', column.workflowUri, column.workflowStateId]);
+  assert.throws(() => setState(doc, { workflowUri: 'tana:type:01examplew0000000000000000', workflowStateId: 'x' }, ME), /unknown stateType/);
+  setState(doc, 'closed', ME);
+  assert.deepEqual([readNode(doc).stateWorkflowUri, readNode(doc).stateWorkflowStateId], [undefined, undefined]);
+  {
+    const wf = new Document(column.workflowUri, { peerId: '9' });
+    wf.transact((l) => { const states = l.getMap('data').setContainer('states', new LoroList()); for (const [id, name] of [['a', 'Doing'], ['b', 'Review'], ['a', 'Doing again']]) { const m = states.insertContainer(states.length, new LoroMap()); m.set('id', id); m.set('name', name); } });
+    assert.deepEqual(workflowStates(wf), [{ id: 'a', name: 'Doing' }, { id: 'b', name: 'Review' }], 'board order, a duplicated id kept once as Tana does');
+    assert.deepEqual(workflowStates(new Document(column.workflowUri)), [], 'no states yet');
+  }
   const other = new Document(DOC, { peerId: '9' });
   other.applyRemote([snapshot]);
   other.applyRemote(sent);
