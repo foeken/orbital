@@ -64,15 +64,19 @@ function responsibilityOf(n) {
 // empty headings out of an incomplete list. Choosing it therefore widens that one filter to Anyone, and a page that
 // arrives with the grouping already chosen (a preference restored at launch, a saved search's own arrangement) is
 // widened before its rows are asked for. Status, type and text are left exactly as they are.
-const needsAnyone = (key, f) => groupPref[key] === 'responsibility' && !!f && (f.assignee || 'anyone') !== 'anyone';
+const needsAnyone = (key, f) => groupOf(key) === 'responsibility' && !!f && (f.assignee || 'anyone') !== 'anyone';
 const widenFilter = (key, f) => (needsAnyone(key, f) ? { ...f, assignee: 'anyone' } : f);
 // Group by Updated: how long ago the row last changed, newest first; past a month, or with no time to read, it is Older
 const UPDATED_BUCKETS = [[36e5, 'Last hour'], [864e5, 'Last day'], [7 * 864e5, 'Last week'], [30 * 864e5, 'Last month']];
-// Tasks reads as its states (Inbox, In Progress, Later) until the user picks another grouping; other views start ungrouped
+// Library starts arranged as the My Tasks saved search is (#113): by Responsibility, newest change first, showing each
+// row's status and assignee. A choice the user makes replaces it; other views start ungrouped, in query order.
+const VIEW_ARRANGEMENT = { library: { group: 'responsibility', sort: 'updated', display: ['status', 'assigned'] } };
+const arranged = (k, what) => (VIEW_ARRANGEMENT[k] || {})[what];
 // Keyed by the page, not the view: a saved search carries its own sort and grouping, stored in the document beside
 // its query, so opening one shows the arrangement it was saved with rather than whatever the last view was using.
 // A search's key is its document id, so the per-view defaults below simply do not match it.
-const groupBy = () => { const k = pillKey(); return GROUPS.some(([id]) => id === groupPref[k]) ? groupPref[k] : 'none'; };
+const groupOf = (k) => { const g = groupPref[k] ?? arranged(k, 'group'); return GROUPS.some(([id]) => id === g) ? g : 'none'; };
+const groupBy = () => groupOf(pillKey());
 // A saved search's arrangement belongs in its document, so its keys are kept out of the browser-local preference
 // blob: without this, changing any view's grouping would flush every search key it had accumulated to disk too.
 const persistPref = (key, chosen) => setPref(key, Object.fromEntries(Object.entries(chosen).filter(([k]) => !k.startsWith('tana:'))));
@@ -210,9 +214,9 @@ const SORTS = [['default', 'Default'], ['status', 'Status'], ['updated', 'Update
 const statusRank = (n) => { const i = STATES.findIndex(([id]) => id === stateOf(n)); return i < 0 ? undefined : String(i); };
 const SORT_KEY = { status: statusRank, updated: (n) => n.updatedAt, created: (n) => n.createdAt, title: (n) => (n.text || n.title || '').toLowerCase() };
 const NEWEST_FIRST = new Set(['updated', 'created']); // times read newest first; Title stays A→Z
-// Every page, saved searches included, keeps the order its query returned until the user says otherwise. Tasks was
-// the one exception (most recently moved first) and it is gone.
-const sortBy = () => { const k = pillKey(); return SORTS.some(([id]) => id === sortPref[k]) ? sortPref[k] : 'default'; };
+// Every page, saved searches included, keeps the order its query returned until the user says otherwise; Library's
+// starting arrangement above (newest change first) is the one exception.
+const sortBy = () => { const k = pillKey(), s = sortPref[k] ?? arranged(k, 'sort'); return SORTS.some(([id]) => id === s) ? s : 'default'; };
 function setSortBy(id) { sortPref[pillKey()] = id; held = null; persistPref('sortBy', sortPref); render(true); }
 function sortRows(list) {
   const id = sortBy(), key = SORT_KEY[id], desc = NEWEST_FIRST.has(id);
@@ -232,7 +236,7 @@ function sortRows(list) {
 // all answers to "what is this row"; the rest stay where they already are — the type chips, the assignee, the box.
 const DISPLAY = [['type', 'Type'], ['space', 'Lives in'], ['status', 'Status'], ['assigned', 'Assigned'], ['updated', 'Updated'], ['created', 'Created'], ['creator', 'Created by']];
 const DISPLAY_DEFAULT = ['status', 'assigned', 'updated'];
-const displayKeys = () => { const chosen = displayPref[pillKey()]; return Array.isArray(chosen) ? chosen : DISPLAY_DEFAULT; };
+const displayKeys = () => { const k = pillKey(), chosen = displayPref[k] ?? arranged(k, 'display'); return Array.isArray(chosen) ? chosen : DISPLAY_DEFAULT; };
 const displayOn = (id) => displayKeys().includes(id);
 function setDisplay(id) {
   const on = displayKeys(), next = on.includes(id) ? on.filter((x) => x !== id) : [...on, id];

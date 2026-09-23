@@ -89,7 +89,7 @@ function mockApi() {
   const filters = {
     inbox: { types: null, states: ['proposed'], assignee: 'anyone', text: '' },
     tasks: { types: ['tasks'], states: ['proposed', 'open', 'not_now'], assignee: 'me', text: '' },
-    library: { types: ['tasks'], states: ['proposed', 'open'], assignee: 'me', text: '' },
+    library: { types: ['tasks'], states: ['proposed', 'open', 'closed', 'not_now'], assignee: 'anyone', text: '', completedWithin: 3 },
     types: { types: ['types'], states: null, assignee: 'anyone', text: '' },
   };
   const stateOf = (d) => d.state || (d.done == null ? null : d.done ? 'closed' : 'open');

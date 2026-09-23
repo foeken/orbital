@@ -38,13 +38,17 @@ renderer. It replaces the per-view paths: `taskParams`/`libraryQueries`/`MEETING
 
 ```js
 inbox:    { types: null,          states: ['proposed'],          assignee: 'anyone' }
-library:  { types: ['tasks'],     states: ['proposed', 'open'],  assignee: 'me', text: '' }
+library:  { types: ['tasks'],     states: ['proposed', 'open', 'closed', 'not_now'], assignee: 'anyone', text: '', completedWithin: 3 }
 types:    { types: ['types'] }                                                                    // the workspace's schema, each row showing its space
 ```
 
 Each view persists its own filter under the setting key `viewFilter:<id>`; a stored filter that is not
 a valid query falls back to the preset. The kinds those retired views listed are still in `VIEW_KINDS`,
 so each of them remains one search away rather than being lost with the page.
+
+Library is the My Tasks saved search as a view (#113): besides the filter it starts grouped by Responsibility,
+sorted by Updated and showing Status and Assigned (`VIEW_ARRANGEMENT` in `renderer/views.js`), until the user
+picks another grouping, sort or set of facts for it.
 
 ## 3. One query
 

@@ -2622,6 +2622,7 @@ async function runUnifiedViewsCheck() {
     const render = () => {}, showError = (error) => { throw error; };
     // a view whose stored grouping is Responsibility: loadView widens its query through the real helper
     const groupPref = { grouped: 'responsibility', plain: 'assignee' };
+    ${sourceBetween('const GROUPS =', 'const FALLBACK =')}${sourceBetween('const VIEW_ARRANGEMENT =', 'const groupBy =')}
     ${sourceBetween('const needsAnyone =', '// Group by Updated')}
     for (const id of ['grouped', 'plain']) {
       views.push({ id, title: id, nodes: [] });
@@ -2907,9 +2908,9 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   // falls back the same way, saved searches included.
   assert.deepEqual(plain(api.prefs()), { group: 'none', sort: 'default' }, 'an unset page groups by nothing and keeps the order its query returned');
   api.set('library', undefined, undefined);
-  assert.deepEqual(plain(api.prefs()), { group: 'none', sort: 'default' }, 'and any other unset view falls back to None / Default');
-  api.set('library', undefined, 'updated');
-  assert.equal(plain(api.prefs()).sort, 'updated', 'a page\'s own choice still wins over the fallback');
+  assert.deepEqual(plain(api.prefs()), { group: 'responsibility', sort: 'updated' }, 'an unset Library starts as the My Tasks saved search: by Responsibility, newest change first (#113)');
+  api.set('library', 'none', 'title');
+  assert.deepEqual(plain(api.prefs()), { group: 'none', sort: 'title' }, 'a page\'s own choice still wins over its starting arrangement');
   // the guard that matters: an option may only sort on a field the row objects really carry
   for (const [id] of plain(api.SORTS).filter(([id]) => id !== 'default')) {
     const key = api.SORT_KEY[id];
