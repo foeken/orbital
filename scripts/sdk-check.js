@@ -4083,6 +4083,25 @@ async function main() {
     server.unavailable.delete(UNAV);
     sync.subscribe(UNAV);
     assert.equal(readNode(await pending).title, 'waiting for the server', 'a subscribe resumes the paused document');
+    // A warm create that still gets MISSING is not "document not found": queued local state means the create path
+    // still has something to send, so Tana keeps retrying instead of exhausting the cold-missing budget.
+    const WARM = 'tana:text:' + ulid();
+    const warmEntry = { id: WARM, document: new Document(WARM, { peerId: '4252' }), sessionId: null, state: 'new', gen: 0, queue: [new Uint8Array([1])], inflight: false, timer: null, resyncs: 0, liveSince: 0, ready: { resolve() {}, reject() {} }, complete: null };
+    const savedBootstrapOnce = sync._bootstrapOnce;
+    let warmTries = 0;
+    sync.docs.set(WARM, warmEntry);
+    try {
+      sync.connected = true;
+      sync._bootstrapOnce = async () => { warmTries++; skew += 20000; if (warmTries >= 6) sync.connected = false; return 'missing'; };
+      await sync._bootstrap(warmEntry);
+      assert.equal(warmTries, 6, 'a warm missing keeps retrying past the cold budget');
+      assert.equal(sync.docs.get(WARM), warmEntry, 'and is not detached as document not found');
+      assert.equal(warmEntry.state, 'retrying');
+    } finally {
+      sync._bootstrapOnce = savedBootstrapOnce;
+      sync.connected = true;
+      sync.docs.delete(WARM);
+    }
   } finally {
     Date.now = realNow; global.setTimeout = realTimeout;
   }
