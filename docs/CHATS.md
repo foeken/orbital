@@ -163,9 +163,19 @@ Meetings link chats with `EDGE_TYPE_HAS_PIN` and `EDGE_TYPE_BELONGS_TO`, as `doc
   pagination, no separate transcript/message document kind: every message is inline in `data.messages` (`tana:call:`
   and `tana:transcript:` belong to meetings, not chats). Longest chat sampled: 8 messages. Cost is size, not paging —
   tool `output` strings and `aiContextRenderedSystemPrompt` dominate (2 MB for one 8-message chat).
-- **`listNodes({ nodeTypes: ['chat'] })` only returns chats with no owner, unless the request sets `includeOwnedChats: true`** (Tana's AI tools do; its saved-search runner does not). All 26 rows the Chats view gets have
-  `ownerUri` absent; the meeting chats and subagent chats found through event edges never appear, though
-  `nodeIds: [<owned chat>]` resolves them fine. Chats inside a meeting are reachable only through edges.
+- **`listNodes({ nodeTypes: ['chat'] })` only returns chats with no owner, unless the request sets `includeOwnedChats: true`** (Tana's AI tools do; its saved-search runner does not), and then it returns every owned one. Live
+  on 2026-09-23: 48 without the flag, 417 with it. Of the 369 owned chats, 330 are Tana's background work
+  (`proposal-iteration` 124, `generate` 121, `agent-routine` 58, `subagent` 13, `rta-request` 9, and a few
+  `capture`, `action` and `voice-delegation`); the other 37 are `meeting` chats ("Private AI chat for …", owned by
+  the event). Tana's own chat search (`inspectChats`, bundle of 2026-09-23) keeps a chat whose intent is absent or
+  outside its background set `$c`, which is every intent but `meeting`. Orbital adds those meeting chats to every list
+  that includes chats and lists the unowned ones as before (MCP chats under their own switch, below):
+  `main/views.js` `listFilter` sends a second query, `includeOwnedChats: true` with
+  `chatInvocationIntents: ['meeting']` under the list's own filters, and merges it in by update time (after the rest
+  when the server ranked by text). It cannot be one query: `chatInvocationIntents` drops every node without that
+  intent, other kinds included, and no value matches a chat without one. Adding the flag and filtering afterwards
+  does not work either: at a limit of 200 the background chats pushed 26 of the 48 unowned chats and 11 of the 37
+  meeting chats out. A list with a state filter skips the second query, since a chat has no state.
 - MCP chats are a single AI message plus an "accepted N changes" status message; `invocationContext.intent: 'mcp'`
   and titles start with "MCP:". The Chats view's `includeMcp` filter is still gone (its key could never round-trip
   into a saved search, #247); what hides them now is one app-local switch, "Toggle MCP chats" in Cmd+K, stored as
@@ -208,10 +218,10 @@ Main process work needed:
 ## 9. How to check this yourself
 
 ```bash
-./node_modules/.bin/electron scripts/platform-cli.js chatlist
-./node_modules/.bin/electron scripts/platform-cli.js rawdoc tana:chat:01example10000000000000000
-./node_modules/.bin/electron scripts/platform-cli.js rawdoc tana:chat:01example10000000000000000 --containers 1
-./node_modules/.bin/electron scripts/platform-cli.js edges tana:chat:01example10000000000000000
+node scripts/platform-cli.js chatlist [--owned]
+node scripts/platform-cli.js rawdoc tana:chat:01example10000000000000000
+node scripts/platform-cli.js rawdoc tana:chat:01example10000000000000000 --containers 1
+node scripts/platform-cli.js edges tana:chat:01example10000000000000000
 ```
 
 `rawdoc` prints every root container (`--containers 1` names each container by kind and keeps text marks, which
