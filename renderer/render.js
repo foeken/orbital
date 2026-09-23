@@ -309,7 +309,8 @@ function rowSig(n) {
   return JSON.stringify([n.text, n.done, n.stateType, n.icon, n.hue, n.meta, n.tags, n.editable, n.draft, n.hasChildren, n.kind, n.type, n.start,
     n.updatedAt, n.createdAt, n.createdBy, // the subtext's times and author: they arrive after the row and a reused row would still show none
     sensitiveHidden(n.id), isPinned(n.id), meta || (taskMetaLoading.has(n.id) ? 'loading' : null), members ? members.length : 0, open.get(n.id), pending.has(n.id),
-    displayKeys().join(','), codexIds.has(n.id), agentStateOf(n.id), agentTaskHosts.get(n.id), pinnedOn(n), n.table]); // which facts the row shows: without this a reused row would keep the old ones
+    displayKeys().join(','), codexIds.has(n.id), agentStateOf(n.id), agentTaskHosts.get(n.id), pinnedOn(n), n.table,
+    n.proposal ? n.proposal.note : null]); // which facts the row shows: without this a reused row would keep the old ones, a proposal's buttons included
 }
 function renderOutline() {
   const saved = focused();
@@ -760,7 +761,7 @@ function nodeEl(node, docId, parent) {
     text.classList.toggle('chiponly', chipOnly(text));
   }
   body.append(text);
-  const metaText = node.notification ? agoText(node.createdAt) : display.meta; // a notification says when it came in
+  const metaText = node.notification ? agoText(node.createdAt) : node.proposal ? agoText(node.proposal.proposedAt) : display.meta; // a notification says when it came in, a proposal when it was made
   if (metaText) { const m = document.createElement('span'); m.className = 'meta'; m.textContent = metaText; body.append(m); }
   // every row describes who can see it, not only task rows; the fetch waits until the row is on screen
   const taskInfo = taskSummary(display, true) || documentSummary(display, true);
@@ -780,6 +781,7 @@ function nodeEl(node, docId, parent) {
   line.append(body);
   // handed to the local Codex agent: the robot badge at the end of the row, after everything the row says about itself
   if (codexIds.has(display.id)) line.append(codexBadgeEl(display.id, display.done));
+  if (node.proposal) line.append(proposalButtonsEl(node)); // approve and reject, at the end of a Proposals row (renderer/proposals.js)
   // A click that misses the words still belongs to the row, and the row is bigger than its text: the padding
   // around it, and the blank line a soft break leaves inside it, are all places a caret can sit. It used to answer
   // with the end of the row, which walked the caret past everything written after the point that was clicked.

@@ -23,6 +23,7 @@ const { hiddenRules, inboxCount, listFilter, mcpHidden, preset, refresh, search,
 const { nodePin, pinState, pinTree, pinned, pinnedDates, pinnedUris, setPin, todayNode, weekNode, weekTitle } = require('./main/pins');
 const { image, insertImage, cancelUpload } = require('./main/images');
 const inbox = require('./main/inbox');
+const proposalsPage = require('./main/proposals');
 const icons = require('./main/icons');
 const settings = require('./main/settings');
 const quick = require('./main/quickadd');
@@ -122,11 +123,13 @@ ipcMain.handle('view:setFilter', (_e, id, filter) => {
   return stored;
 });
 // events start with an empty content map (no doc node yet); readOutline needs the children list
-ipcMain.handle('outline:children', (_e, id) => (id === inbox.PAGE ? inbox.rows() : isSearch(id) ? searchChildren(id) : isSpace(id) ? spaceChildren(id) : op(id, (doc) => (idKind(id) === 'chat' ? chatOutline(doc) : doc.content.get('children') ? outlineWithReferences(doc) : []))));
+ipcMain.handle('outline:children', (_e, id) => (id === inbox.PAGE ? inbox.rows() : id === proposalsPage.PAGE ? proposalsPage.rows() : isSearch(id) ? searchChildren(id) : isSpace(id) ? spaceChildren(id) : op(id, (doc) => (idKind(id) === 'chat' ? chatOutline(doc) : doc.content.get('children') ? outlineWithReferences(doc) : []))));
 // Notifications (main/inbox.js): the page's rows come through outline:children above; these are its count and writes.
 ipcMain.handle('inbox:unread', () => inbox.unread());
 ipcMain.handle('inbox:setRead', (_e, id, read) => inbox.setRead(id, !!read));
 ipcMain.handle('inbox:markAll', () => inbox.markAll());
+// Proposals (main/proposals.js): its rows come through outline:children too; this is the one write, approve or reject.
+ipcMain.handle('proposals:answer', (_e, chatUri, proposedUri, approve) => proposalsPage.answer(chatUri, proposedUri, !!approve));
 ipcMain.handle('doc:info', (_e, id) => op(id, info));
 ipcMain.handle('doc:creationOptions', () => creationOptions());
 // A document's type: the choices it can be given (with the ones it cannot, and why), and the change itself.

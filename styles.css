@@ -528,6 +528,14 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .cbadge.unavailable { background: #ececec; color: #6a6a6a; } /* the machine is away, not the task broken: grey, still */
 /* the task is completed: whatever the agent did is over, so the badge drops to a grey outline and stops sweeping */
 .cbadge.closed { background: none; border: 1px solid #d5d5d5; color: #9a9a9a; padding: 1px 4px; }
+/* approve and reject at the end of a Proposals row (renderer/proposals.js): grey like every row glyph until pointed at,
+   then the green and red the Codex badge uses for done and broken, so the colour says which answer it is */
+.pbuttons { flex: none; display: inline-flex; gap: 2px; margin: 1px 0 0 8px; }
+.pbutton { display: inline-flex; align-items: center; padding: 2px; border: 0; border-radius: 6px; background: none; color: #8a8a8a; cursor: pointer; }
+.pbutton svg { display: block; width: 18px; height: 18px; }
+.pbutton.approve:hover:not(:disabled) { background: #d9f0de; color: #17652f; }
+.pbutton.reject:hover { background: #fbdede; color: #8f1b1b; }
+.pbutton:disabled { opacity: .35; cursor: default; }
 .cbadge.closed::after { content: none; }
 @keyframes cbadge-sweep { 0%, 18% { transform: translateX(-130%); } 72%, 100% { transform: translateX(130%); } }
 .selected .text { caret-color: transparent; }
@@ -844,6 +852,8 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .cbadge.broken { background: #45201f; color: #f0a3a0; }
 [data-theme="dark"] .cbadge.unavailable { background: #33383a; color: #a8adaf; }
 [data-theme="dark"] .cbadge.closed { background: none; border-color: #45494b; color: #8c9194; }
+[data-theme="dark"] .pbutton.approve:hover:not(:disabled) { background: #1d3c27; color: #7fd396; }
+[data-theme="dark"] .pbutton.reject:hover { background: #45201f; color: #f0a3a0; }
 [data-theme="dark"] .palette kbd { color: #b7bcbe; background: #303436; }
 [data-theme="dark"] .palette .row.active kbd { background: #42484a; }
 [data-theme="dark"] .recorder h2 { color: #c9c9c9; }

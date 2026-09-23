@@ -126,6 +126,15 @@ approvedAt?, rejectedAt?, iterationChatUri?, metadata: { type?, ownerUri?, paylo
 - `iterationChatUri` points at a `proposal-iteration` chat (`data.agentId`, `invocationContext.contextUris:
   [{ uri, mode: 'write-direct' }]`).
 - `metadata.intents` is a JSON string, e.g. `[{"type":"reown-embedded-media","family":"media"}]`.
+- Every entry, and `metadata` itself, is a real LoroMap in a LoroList (raw container dumps, 2026-09-23); `metadata` is
+  written even when empty.
+
+Answering one (Tana's ProposalManager, bundle of 2026-09-23; `sdk/proposals.js` does the create half): approving
+stamps `approvedAt` on every pending entry for that `proposedUri`, takes the document out of proposal
+(`data.isProposal: false`, `data.createdInUri` = the chat) and posts the "accepted 1 change" message below; rejecting
+removes the entries from `proposals` altogether and soft-deletes the proposed document or draft. The graph's chat node
+summarises the same list as `chat.proposals` (latest per document, with a `status`) and `pendingCount`, which is how
+Tana's own Proposals page and Orbital's list them without opening a chat.
 
 ## 6. Graph edges and owner chain
 

@@ -1763,7 +1763,7 @@ async function runReservedComboCheck() {
 function runHistoryCheck() {
   const api = vm.runInNewContext(`
     let view = 'tasks', zoom = null, caretOnOpen = false, rendered = 0;
-    const INBOX_PAGE = 'orbital:notifications';
+    const INBOX_PAGE = 'orbital:notifications', PROPOSALS_PAGE = 'orbital:proposals';
     let notificationLeaves = 0;
     const markAllNotificationsRead = () => { notificationLeaves++; };
     const localStorage = { setItem() {}, removeItem() {} };
@@ -7217,7 +7217,7 @@ async function runSetHueCheck() {
 async function runDeletedNodeCheck() {
   const api = vm.runInNewContext(`
     const deletedIds = new Set();
-    const INBOX_PAGE = 'orbital:notifications';
+    const INBOX_PAGE = 'orbital:notifications', PROPOSALS_PAGE = 'orbital:proposals';
     const markAllNotificationsRead = () => {};
     const isSearchDoc = (node) => node.id?.startsWith('tana:search:');
     let zoom = null, view = 'library', caretOnOpen = false;
@@ -7748,6 +7748,63 @@ function runNotificationsCheck() {
   })();
 }
 checks.push(runNotificationsCheck);
+
+// Proposals (issue #19; renderer/proposals.js): approving or rejecting takes the row off the page before main answers, a
+// refusal reads the page back and says why, a rejection's leftovers are reported, and Approve is only live where
+// Orbital can approve — elsewhere it stays listed, disabled, saying where to do it.
+function runProposalsCheck() {
+  const api = vm.runInNewContext(`
+    const PROPOSALS_PAGE = 'orbital:proposals';
+    const calls = [], errors = [];
+    let refuse = null;
+    const renderSoon = () => {};
+    const run = (fn) => fn().catch((e) => { errors.push(e.message); });
+    const showError = (e) => { if (e) errors.push(e.message); };
+    const row = (id, operation) => ({ id, kind: 'document', editable: false, proposal: { chatUri: 'tana:chat:c', proposedUri: id, operation, approvable: operation === 'create' } });
+    const rows = [row('p0', 'create'), row('p1', 'create'), row('p2', 'update')];
+    const kids = new Map([[PROPOSALS_PAGE, rows.slice()]]);
+    const reload = async (id) => { calls.push(['reload']); kids.set(id, rows.slice()); };
+    const tana = { proposalAnswer: async (chatUri, proposedUri, approve) => {
+      calls.push([approve ? 'approve' : 'reject', proposedUri]);
+      if (refuse) throw new Error(refuse);
+      return proposedUri === 'p1' ? ['Could not delete p1'] : [];
+    } };
+    const items = new Map(rows.map((n) => [n.id, { key: n.id, node: n }]));
+    let selected = [], palReturn = null;
+    const selKeys = () => selected, focused = () => null;
+    ${functionSource("answerProposal")}
+    ${functionSource("proposalRows")}
+    const settle = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
+    const page = () => (kids.get(PROPOSALS_PAGE) || []).map((n) => n.id);
+    ({
+      calls, errors, page,
+      answer: async (i, approve, why) => { refuse = why || null; answerProposal(rows[i], approve); const shown = page(); await settle(); return shown; },
+      palette: (keys, at) => { selected = keys; palReturn = at ? { key: at } : null; return proposalRows().map((r) => [r.group, r.label, !!r.disabled]); },
+      press: async (keys, label) => { refuse = null; selected = keys; proposalRows().find((r) => r.label === label).run(); await settle(); },
+    });
+  `);
+  return (async () => {
+    assert.deepEqual(plain(await api.answer(0, true)), ['p1', 'p2'], 'an approved row leaves the page before main answers');
+    assert.deepEqual(plain(api.calls), [['approve', 'p0']]);
+    await api.answer(2, true);
+    assert.equal(api.calls.length, 1, 'a proposal Orbital cannot approve is never sent');
+    assert.deepEqual(plain(await api.answer(1, false)), ['p2'], 'a rejected row leaves the page too');
+    assert.deepEqual(plain(api.errors), ['Could not delete p1'], 'and what could not be cleaned up is said');
+    assert.deepEqual(plain(await api.answer(2, false, 'That chat is gone')), [], 'the row leaves at once');
+    assert.deepEqual(plain(api.calls.slice(-2)), [['reject', 'p2'], ['reload']], 'and when main refuses, the page is read back');
+    assert.deepEqual(plain(api.page()), ['p0', 'p1', 'p2']);
+    assert.equal(api.errors.at(-1), 'That chat is gone', 'with the reason on screen');
+    assert.deepEqual(plain(api.palette([], 'p2')), [['Current node', 'Approve proposal', true], ['Current node', 'Reject proposal', false]],
+      'Cmd+K lists Approve disabled on a change Tana merges, so its key still has a row');
+    assert.deepEqual(plain(api.palette(['p0', 'p2'], null)), [['Selection', 'Approve proposal', false], ['Selection', 'Reject proposal', false]]);
+    assert.deepEqual(plain(api.palette([], null)), [], 'and nothing when no proposal is under the caret');
+    const before = api.calls.length;
+    await api.press(['p0', 'p2'], 'Approve proposal');
+    assert.deepEqual(plain(api.calls.slice(before)), [['approve', 'p0']], 'approving a selection sends only the ones Orbital can approve');
+    console.log('ok  proposals: approve and reject leave the page at once, a refusal reads it back with the reason, Cmd+K approves only what Orbital can');
+  })();
+}
+checks.push(runProposalsCheck);
 
 // Change time / Change location / Add attendee (renderer/meeting.js): offered on a meeting only once main says it
 // may be changed, and each page's one row is what Enter writes through api.editMeeting.

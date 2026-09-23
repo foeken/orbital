@@ -261,6 +261,19 @@ Tana keeps each user's notifications in one `tana:user-inbox:<user-profile ULID>
 
 `phrase(n, actorName?, title?)` → Tana's sentence (`Wqt`) as `[{ text, emphasis? }]` ("Sam added you to **Plan**", "You were added to a meeting", anything unknown reads as a message); `title` overrides the stored one, which Tana does for `type-archived`/`type-unarchived` (`retitled(type)`) so a renamed type shows its current name. `detail(n)` → the line Tana writes after it (`Gqt`): the body (a task's title), markdown flattened, trailing punctuation dropped, `''` for calls and type changes. `scripts/platform-cli.js inbox` prints your inbox read-only.
 
+## `sdk/proposals.js` — AI proposals
+
+A change Tana's AI suggests from a chat waits for someone to accept it. It lives in two places (bundle of 2026-09-23: ProposalManager, the chat's proposal mutations, RootProposalsRoute). The graph's chat node carries `chat.proposals`, the latest proposal per document: `{ proposedUri, baseUri?, operation: create | update | delete, status: pending | approved | rejected, proposedAt, resolvedAt, kind }`, plus `pendingCount`. The chat document keeps every version in `data.messages[].proposals[]` (docs/CHATS.md §5), which is where the answers are written. A `create` proposes a document that already exists with `data.isProposal: true`; an `update` proposes a draft copy (`proposedUri`, owned by the chat) of a real document (`baseUri`).
+
+`pending(graph, { limit = 500 })` → pending proposals newest first, from one `ListNodes` over every chat (`includeOwnedChats`, `includeArchived`): `{ chatUri, chatTitle, contextUri, operation, kind: regular | space | instructions | action, proposedUri, baseUri, subjectUri, proposedAt }`. `pendingOf(nodes)` is the pure half.
+
+`approve(sync, { chatUri, proposedUri, byUri })` approves a **create** the way Tana does: `approvedAt` on the chat's entries for it, then on the document `isProposal: false`, `createdInUri: chatUri` and, for a task without them, `stateChangedBy` and `assignedToUrisChangedBy`/`At` naming the approver, then an "accepted 1 change" message from the approver with the document attached (`isStatusUpdate`, `excludeFromAIContext`; the same containers as Tana's own). It refuses, writing nothing, where Tana would do more: an update or delete (Tana merges the draft and replays its intents), a space, instructions or action proposal, any intent other than `reown-embedded-media`, that intent on a document that embeds media (Tana copies the media into the document), and a typed document whose type keeps its documents in another space (Tana moves it there). Live, 27 of 29 pending creates carried `reown-embedded-media` and none embedded media.
+
+`reject(sync, { chatUri, proposedUri })` → `{ uri, warnings }` rejects any proposal as Tana does: its entries leave the chat, and the document it proposed (the new one, or the update's draft) is soft-deleted; a space proposal also deletes the space an earlier failed approval may have made. A cleanup that fails comes back as a warning and does not undo the rejection.
+
+`refusal(entry)`, `entries(chat)`, `kindOf(metadata.type)` and `subjectOf(p)` are the helpers behind them. `scripts/platform-cli.js proposals [--detail] [--rows]` lists them read-only; `approve`/`reject <chat> <proposed>` write; `proposalcycle` runs both on scratch documents and deletes them.
+
+
 ## `sdk/dates.js` — date mentions
 
 `parseDateUri(uri)` → `{ type: 'plaindate', date }` | `{ type: 'zoneddate', date, time?, timezone }` | undefined; `isDateUri(uri)`; `dateUri('YYYY-MM-DD')` → `tana:plaindate:…` (throws on anything else); `dateLabel(uri)` → the day in the locale's short form, Tana's label for a date mention. The documents mentioning a date: `graph.listEdges({ toNodeIds: [uri], edgeTypes: [LINKS_TO, ATTRIBUTE_LINKS_TO] })` or the same edge live query a page's backlinks use; main/related.js asks both for a day page (a document titled with its date).
