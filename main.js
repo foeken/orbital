@@ -16,7 +16,7 @@ const agent = require('./main/agent');
 const ai = require('./main/ai');
 const { NOT_CONNECTED, S, VIEWS, docStates, errText, idKind, isSearch, isSpace, metaSigs, pathCache, today, truncatedViews, redoStack, report, scheduleRefresh, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
 const { cachedNodeHue, graphRow, members, rememberNodeHue, rememberType, toNode } = require('./main/rows');
-const { accessContext, chatOutline, codexIds, createDocument, creationOptions, creatorOf, discussWith, documentAction, history, info, linkShared, metaSig, moveBlock, moveTarget, mut, mutTasks, notifyOn, notifyState, referenceIn, setCodex, setNotify, onChange, op, outlineWithReferences, sensitiveIds, setSensitive, setType, setTypeHue, typeChoices } = require('./main/documents');
+const { accessContext, archivedTypes, chatOutline, codexIds, createDocument, creationOptions, creatorOf, discussWith, documentAction, history, info, linkShared, metaSig, moveBlock, moveTarget, mut, mutTasks, notifyOn, notifyState, referenceIn, setCodex, setNotify, onChange, op, outlineWithReferences, sensitiveIds, setSensitive, setType, setTypeHue, typeChoices } = require('./main/documents');
 const { callOf, changesOf, pathOf, related, searchChildren, searchPreview, spaceChildren, summaryChanges, summaryUri } = require('./main/related');
 const { hiddenRules, inboxCount, listFilter, mcpHidden, preset, refresh, search, searchCreate, searchList, searchTitle, setHidden, setMcpHidden, setViewFilter, start, viewFilter, viewRows } = require('./main/views');
 const { nodePin, pinState, pinTree, pinned, pinnedDates, pinnedUris, setPin, todayNode, weekNode, weekTitle } = require('./main/pins');
@@ -181,6 +181,9 @@ ipcMain.handle('history:undo', () => history(undoStack, redoStack, 'undo', 'canU
 ipcMain.handle('history:redo', () => history(redoStack, undoStack, 'redo', 'canRedo'));
 ipcMain.handle('doc:delete', (_e, id) => documentAction(id, 'softDelete'));
 ipcMain.handle('doc:restore', (_e, id) => documentAction(id, 'restore'));
+ipcMain.handle('doc:archive', (_e, id) => documentAction(id, 'archive'));
+ipcMain.handle('doc:unarchive', (_e, id) => documentAction(id, 'unarchive'));
+ipcMain.handle('types:archived', () => archivedTypes());
 ipcMain.handle('deleted:list', () => db.deletedList()); // local: the graph does not list deleted documents
 ipcMain.handle('doc:setTitle', (_e, id, title) => mut(id, (doc) => { setTitle(doc, title); }));
 ipcMain.handle('doc:setDone', (_e, id, done) => mut(id, (doc) => {
@@ -404,7 +407,7 @@ ipcMain.handle('sync:login', async () => {
 });
 
 if (process.env.TANA_MAIN_TEST) {
-  module.exports = { resolveInitialAuth, graphRow, cachedNodeHue, rememberType, VIEWS, toNode, outlineWithReferences, chatOutline, op, onChange, documentAction, createDocument, creationOptions, typeChoices, setType, setTypeHue, discussWith, ai, icons, settings, search, viewFilter, searchCreate, searchTitle, viewRows, spaceChildren, start, refresh, related, callOf, weekTitle, weekNode,
+  module.exports = { resolveInitialAuth, graphRow, cachedNodeHue, rememberType, VIEWS, toNode, outlineWithReferences, chatOutline, op, onChange, documentAction, archivedTypes, createDocument, creationOptions, typeChoices, setType, setTypeHue, discussWith, ai, icons, settings, search, viewFilter, searchCreate, searchTitle, viewRows, spaceChildren, start, refresh, related, callOf, weekTitle, weekNode,
     statusSnapshot: () => ({ ...S.status }), rememberNodeHue, restoredBounds, today,
     undo: () => history(undoStack, redoStack, 'undo', 'canUndo'), redo: () => history(redoStack, undoStack, 'redo', 'canRedo'), visibleGraphNodes, pinTree, changesOf, summaryChanges,
     nodePin,

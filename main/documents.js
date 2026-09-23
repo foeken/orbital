@@ -647,13 +647,19 @@ const referenceIn = (toId, uri, label, parentId, afterId) => mut(toId, (dest) =>
   if (typeof uri !== 'string' || !DOC_URI.test(uri)) throw new Error('A reference points at a node');
   return content.insertMention(dest, { uri, label }, { parentId: parentId ?? null, afterId: afterId ?? null });
 });
+// A document action and the one that undoes it. Archive is Tana's for types (sdk/access.js ARCHIVABLE); it goes out as
+// the document_action command like a delete, where Tana's client writes the data keys itself when it has the type
+// open (node.setArchived) — one path here, the server stamps the rest, and Cmd+Z undoes it like a delete.
+const UNDO_ACTION = { softDelete: 'restore', restore: 'softDelete', archive: 'unarchive', unarchive: 'archive' };
 async function documentAction(id, action, record = true) {
   if (record && S.historyBusy) throw new Error('History operation is still running');
   if (record) S.historyBusy = true;
   try {
   if (typeof id !== 'string' || !DOC_URI.test(id)) throw new Error('Invalid document URI');
+  if (!UNDO_ACTION[action]) throw new Error('Unknown document action');
   const doc = await document(id), ctx = await accessContext();
-  if (!await access.canDelete(doc, S.me.userUri, ctx, action === 'restore')) throw new Error('Delete/restore permission is unknown or unavailable');
+  const archiving = action === 'archive' || action === 'unarchive';
+  if (archiving ? !await access.canArchive(doc, S.me.userUri, ctx) : !await access.canDelete(doc, S.me.userUri, ctx, action === 'restore')) throw new Error(archiving ? 'Archive permission is unknown or unavailable' : 'Delete/restore permission is unknown or unavailable');
   const response = await S.client.sync[action](id);
   if (response.responseUnion?.case !== 'documentActionResponse') throw new Error('Document action was not acknowledged');
   if (action === 'softDelete') invalidateDeleted(id);
@@ -662,6 +668,14 @@ async function documentAction(id, action, record = true) {
   scheduleRefresh(0);
   return id;
   } finally { if (record) S.historyBusy = false; }
+}
+// Cmd+K "Archived types". Unlike a deleted document an archived one stays in the graph, behind includeArchived, so
+// this is one query rather than a local list; graph times are ISO strings, so newest first is a string compare.
+async function archivedTypes() {
+  if (!S.client) throw new Error(NOT_CONNECTED);
+  const { nodes } = await S.client.graph.listNodes({ nodeTypes: ['type'], includeArchived: true, limit: 200 });
+  return nodes.filter((t) => t.archivedAt).map((t) => ({ id: t.id, title: t.title || 'Untitled', archivedAt: t.archivedAt }))
+    .sort((a, b) => b.archivedAt.localeCompare(a.archivedAt));
 }
 async function history(from, to, action, can) {
   if (S.historyBusy) throw new Error('History operation is still running');
@@ -681,7 +695,7 @@ async function history(from, to, action, can) {
         continue;
       }
       if (typeof step === 'object') {
-        const command = action === 'undo' ? (step.documentAction === 'softDelete' ? 'restore' : 'softDelete') : step.documentAction;
+        const command = action === 'undo' ? UNDO_ACTION[step.documentAction] : step.documentAction;
         await documentAction(step.id, command, false);
         from.pop(); to.push(step); return step.id;
       }
@@ -731,4 +745,4 @@ async function moveTarget(spaceId) {
   return document(spaceId);
 }
 
-module.exports = { outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, createDocument, typeChoices, setType, setTypeHue, discussWith, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, codexIds, setCodex, creatorOf, document, op, inHistory, mut, mutTasks, moveBlock, referenceIn, documentAction, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget };
+module.exports = { outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, createDocument, typeChoices, setType, setTypeHue, discussWith, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, codexIds, setCodex, creatorOf, document, op, inHistory, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget };

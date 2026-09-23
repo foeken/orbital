@@ -237,6 +237,12 @@ updates carry no version vector: the blobs are exactly what Loro emitted, and th
   is visible and the user was active in the last 60 s (`UDe=6e4`). Presence only; failures ignored. A background client can skip it.
 * Ephemeral presence: `subscribeEphemeralChannel{channelId}`, `ephemeral{documentId,data}`, `unsubscribeEphemeralChannel`. Optional; what the bytes are is 2.8.
 * Document actions: `documentAction{documentId, softDelete:{}}` (or `restore`/`archive`/`unarchive`) returns `documentActionResponse`.
+  Archive is Tana's for types only (TypeRoute's archive set is `['type']`, bundle of 2026-09-22). Its type page archives a
+  loaded type by writing `data.archivedAt = Date.now()` and `data.archivedBy = <user profile uri>` itself (unarchive:
+  `archivedAt = 0`, `archivedBy` again) and sends `documentAction{archive|unarchive}` only when the type is not loaded
+  (`sendArchiveDocument`). The command has the same effect: verified live 2026-09-23 on a scratch type, the server wrote
+  both keys into the document, and the graph dropped the type from `listNodes` (a `nodeIds` lookup included) until
+  `includeArchived: true` was set. Tana also posts `type-archived`/`type-unarchived` notifications.
 
 ### 2.6 GetDocumentSnapshot
 

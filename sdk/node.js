@@ -146,6 +146,18 @@ function setState(document, stateType, byUri) {
   });
 }
 
+// Tana's archive(actor) / unarchive(actor) on a loaded document (shared bundle, read 2026-09-23): archived means
+// archivedAt > 0, so unarchive writes 0 rather than removing the key, and both stamp archivedBy. A document that is
+// not loaded is archived with sync.archive/unarchive (document_action) instead, which is the path the app takes.
+function setArchived(document, archived, byUri, now = Date.now()) {
+  if (!USER_URI.test(byUri || '')) throw new Error('archivedBy must be a tana:user-profile: URI');
+  document.transact((loro) => {
+    const data = loro.getMap('data');
+    data.set('archivedAt', archived ? now : 0);
+    data.set('archivedBy', byUri);
+  });
+}
+
 function taskMeta(document) {
   const n = readNode(document);
   return {
@@ -339,4 +351,4 @@ function render(node) {
   return kids.map(render).join(block ? '\n' : '');
 }
 
-module.exports = { readNode, editable, setTitle, setState, setEntityType, taskMeta, audience, audienceMetadata, setAssignees, setSearchQuery, setSearchView, searchDisplay, searchSort, contentText, ulid, initDocument, STATE_TYPES, COMPLETED_WINDOWS };
+module.exports = { readNode, editable, setTitle, setState, setArchived, setEntityType, taskMeta, audience, audienceMetadata, setAssignees, setSearchQuery, setSearchView, searchDisplay, searchSort, contentText, ulid, initDocument, STATE_TYPES, COMPLETED_WINDOWS };

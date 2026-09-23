@@ -48,6 +48,9 @@ contextBridge.exposeInMainWorld('api', {
   deleteDocument: (id) => ipcRenderer.invoke('doc:delete', id), // native soft delete; undo restores
   restoreDocument: (id) => ipcRenderer.invoke('doc:restore', id), // native restore; undo deletes again
   deletedList: () => ipcRenderer.invoke('deleted:list'), // [{id,title,deletedAt}] newest first: the deletions this app saw
+  archiveDocument: (id) => ipcRenderer.invoke('doc:archive', id), // a type only (Tana archives types); undo unarchives
+  unarchiveDocument: (id) => ipcRenderer.invoke('doc:unarchive', id),
+  archivedTypes: () => ipcRenderer.invoke('types:archived'), // [{id,title,archivedAt}] newest first, from the graph
   creationOptions: () => ipcRenderer.invoke('doc:creationOptions'), // {options:[{id,kind,title,icon?,typeUri?,appliesTo?,ownerUri?,selectable,reason?}],complete}
   docTypes: (id) => ipcRenderer.invoke('doc:types', id), // {current, options:[{uri,title,hue?,selectable,reason?}]} for one document
   setType: (id, typeUri) => ipcRenderer.invoke('doc:setType', id, typeUri ?? null), // null removes the type
@@ -73,7 +76,7 @@ contextBridge.exposeInMainWorld('api', {
   setState: (docId, state) => ipcRenderer.invoke('doc:setState', docId, state),
   setStateMany: (docIds, state) => ipcRenderer.invoke('doc:setStateMany', docIds, state),
   toggleCheckbox: (docId, nodeId) => ipcRenderer.invoke('block:toggleCheckbox', docId, nodeId), // plain block -> unchecked; checkbox -> toggle; children returns done: 0|1
-  accessOptions: (id) => ipcRenderer.invoke('doc:accessOptions', id), // {sharing,move,deletable,ownerUri,rules,roles,audience,inheritAudience,sharingToken,reason}; unknown disabled
+  accessOptions: (id) => ipcRenderer.invoke('doc:accessOptions', id), // {sharing,move,deletable,archivable,ownerUri,rules,roles,audience,inheritAudience,sharingToken,reason}; unknown disabled
   setSharing: (id, selection) => ipcRenderer.invoke('doc:setSharing', id, selection), // explicit {rule,participants?:[{uri,role}],token?}; inherit requires current sharingToken
   searchSpaces: (query) => ipcRenderer.invoke('spaces:search', query), // Nodes with selectable; rechecked on move
   previewMove: (id, spaceId) => ipcRenderer.invoke('doc:previewMove', id, spaceId), // {allowed,reason,before,after,audienceChanged,requiresConfirmation,token}

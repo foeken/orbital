@@ -171,7 +171,9 @@ const commands = {
   },
   async types() {
     await connect();
-    for (const n of (await client.graph.listNodes({ nodeTypes: ['type'], limit: 200 })).nodes) out(n.id + '\t' + (n.title || '') + '\thue=' + (n.appearance && n.appearance.hue != null ? n.appearance.hue : '-'));
+    // --archived 1 asks with includeArchived, which is the only way an archived type comes back
+    const includeArchived = flag('archived', '0') === '1';
+    for (const n of (await client.graph.listNodes({ nodeTypes: ['type'], limit: 200, includeArchived })).nodes) out(n.id + '\t' + (n.title || '') + '\thue=' + (n.appearance && n.appearance.hue != null ? n.appearance.hue : '-') + (n.archivedAt ? '\tarchivedAt=' + n.archivedAt : ''));
   },
   // Read-only sweep: the audience label the app would show for every task/document, to find 'unknown' cases.
   async audiences() {
@@ -226,10 +228,10 @@ const commands = {
   },
   async create() {
     const kind = flag('kind', 'doc');
-    if (!positional[0] || !['doc', 'task', 'meeting'].includes(kind)) throw new Error('usage: create <title> [--kind task|meeting|doc]');
+    if (!positional[0] || !['doc', 'task', 'meeting', 'type'].includes(kind)) throw new Error('usage: create <title> [--kind task|meeting|doc|type]');
     const me = await connect();
     await client.sync.connect();
-    const id = (kind === 'meeting' ? 'tana:event:' : 'tana:text:') + ulid();
+    const id = (kind === 'meeting' ? 'tana:event:' : kind === 'type' ? 'tana:type:' : 'tana:text:') + ulid();
     const doc = await client.sync.subscribe(id, (loro) => initDocument(loro, positional[0], me.userUri, { kind }));
     const n = readNode(doc);
     out({ ...summary(doc), type: n.type, startTime: n.startTime, endTime: n.endTime });
@@ -247,6 +249,19 @@ const commands = {
     await connect();
     await client.sync.connect();
     out(await client.sync.restore(positional[0]));
+  },
+  // Tana archives types (docs/PLATFORM-PROTOCOL.md §2.5): the type leaves every list unless asked for with includeArchived.
+  async archive() {
+    if (!positional[0]) throw new Error('usage: archive <id>  (document_action archive)');
+    await connect();
+    await client.sync.connect();
+    out(await client.sync.archive(positional[0]));
+  },
+  async unarchive() {
+    if (!positional[0]) throw new Error('usage: unarchive <id>  (document_action unarchive)');
+    await connect();
+    await client.sync.connect();
+    out(await client.sync.unarchive(positional[0]));
   },
   async meetings() {
     const me = await connect();
@@ -784,7 +799,8 @@ const USAGE = [
   '             caps <id...> | related <id> | incall [--limit 5] | pageprobe | libraryprobe | boot [--settle ms]',
   '  live       watch <id...>',
   '  LIVE       livequery [--minutes 60] [--seconds 20] [--state <stateType>] | presence <id> [--seconds 30] [--announce <name>] [--block <blockId>]',
-  '  WRITES     create <title> [--kind doc|task|meeting] | delete <id> | restore <id> | set-title <id> <title> |',
+  '  WRITES     create <title> [--kind doc|task|meeting|type] | delete <id> | restore <id> | archive <id> | unarchive <id> |',
+  '             set-title <id> <title> |',
   '             addfield <type uri> <title> [--type member|date|link|options] [--options "A|B"] [--to <type uri>,…] [--multiple] |',
   '             set-state <id> <proposed|open|closed|not_now> | pin <id> <sidebar|today> | unpin <id> <sidebar|today> |',
   '             pinto <event|space id> <id> | unpinfrom <event|space id> <id> | settype <id> <tana:type:...|none> |',

@@ -400,6 +400,39 @@ async function main() {
     console.log('ok  document soft-delete/restore IPC, retryable undo/redo and remote cache invalidation');
   }
   {
+    // #36 archive: a type goes through the same document_action path as a delete, gated by Tana's archive kinds
+    // (types only) plus write access; undo unarchives, redo archives again, and the page lists what the graph
+    // returns behind includeArchived, newest first.
+    const backend=mainHelpers(), access=require('../sdk/access'), { setArchived }=require('../sdk/node');
+    const org=new Document('tana:org:'+ulid()), type=new Document('tana:type:'+ulid()), text=new Document(DOC,{peerId:'413'});
+    org.transact(l=>l.getMap('data').set('memberUserProfileDocUris',{test:ME}));
+    type.transact(l=>initDocument(l,'Project',ME,{kind:'type'})); text.transact(l=>initDocument(l,'not a type',ME));
+    const docs=new Map([[org.id,org],[type.id,type],[text.id,text]]), calls=[], listed=[];
+    const apply=async(action,id)=>{calls.push(action);docs.get(id).transact(l=>l.getMap('data').set('archivedAt',action==='archive'?123:0));return {responseUnion:{case:'documentActionResponse'}};};
+    const ctx={orgDocUri:org.id,sync:{subscribe:async id=>docs.get(id)}};
+    assert.deepEqual([(await access.capabilities(type,ME,ctx)).archivable,(await access.capabilities(type,ME,ctx)).deletable],[true,false],'a type is archived, never soft-deleted');
+    assert.equal((await access.capabilities(text,ME,ctx)).archivable,false,'Tana archives types only');
+    assert.equal(await access.canArchive(type,'tana:user-profile:'+ulid(),ctx),false,'no write access, no archive');
+    backend.testRuntime({me:{userUri:ME,orgId:ORG,orgDocUri:org.id},session:{getAccessToken:async()=> 'x.'+Buffer.from(JSON.stringify({org_id:ORG,role:'member'})).toString('base64url')+'.x'},
+      client:{sync:{getDocument:id=>docs.get(id),subscribe:async id=>docs.get(id),archive:id=>apply('archive',id),unarchive:id=>apply('unarchive',id)},
+        graph:{listNodes:async p=>{listed.push(p);return {nodes:[{id:'tana:type:a',title:'Old',archivedAt:'2026-09-01T00:00:00Z'},{id:'tana:type:b',title:'',archivedAt:'2026-09-20T00:00:00Z'},{id:'tana:type:c',title:'Live'}]};}}},
+      win:{isDestroyed:()=>false,webContents:{send:()=>{}}}});
+    assert.equal(await backend.documentAction(type.id,'archive'),type.id);assert.equal(readNode(type).archivedAt,123);
+    await backend.undo();assert.equal(readNode(type).archivedAt,0,'undo unarchives');
+    await backend.redo();assert.equal(readNode(type).archivedAt,123,'redo archives again');
+    await assert.rejects(backend.documentAction(text.id,'archive'),/Archive permission/);
+    await assert.rejects(backend.documentAction(type.id,'purge'),/Unknown document action/);
+    assert.deepEqual(calls,['archive','unarchive','archive']);
+    assert.deepEqual(JSON.parse(JSON.stringify(await backend.archivedTypes())),[{id:'tana:type:b',title:'Untitled',archivedAt:'2026-09-20T00:00:00Z'},{id:'tana:type:a',title:'Old',archivedAt:'2026-09-01T00:00:00Z'}]);
+    assert.equal(listed[0].includeArchived,true,'only includeArchived brings an archived type back');
+    // Tana's loaded-document path: archivedAt stamped with the time and the actor; unarchive writes 0, not a delete
+    const loaded=new Document('tana:type:'+ulid()); loaded.transact(l=>initDocument(l,'Loaded',ME,{kind:'type'}));
+    setArchived(loaded,true,ME,456); assert.deepEqual([readNode(loaded).archivedAt,readNode(loaded).archivedBy],[456,ME]);
+    setArchived(loaded,false,ME); assert.deepEqual([readNode(loaded).archivedAt,readNode(loaded).archivedBy],[0,ME]);
+    assert.throws(()=>setArchived(loaded,true,'tana:org:x'),/archivedBy/);
+    console.log('ok  archive: types only with write access, document_action with undo/redo, includeArchived listing, loaded-doc data write');
+  }
+  {
     const backend=mainHelpers(), cache=require('../db');cache.open(':memory:');
     const docs=new Map(), created=[];
     const make=(kind,title,extra={})=>{const d=new Document('tana:'+kind+':'+ulid());d.transact(l=>{initDocument(l,title,ME);const data=l.getMap('data');data.set('type',kind);for(const [k,v] of Object.entries(extra))data.set(k,v);});docs.set(d.id,d);return d;};
@@ -3954,7 +3987,7 @@ async function main() {
         (server.created.get(value.documentId) || server.serverDoc).applyRemote(value.updates);
         return {};
       }
-      if (kind === 'documentAction') { assert.ok(['softDelete','restore'].includes(value.action.case)); return fromJson(message('sync', 'ServerSyncCommandResponse'), { documentActionResponse: {} }); }
+      if (kind === 'documentAction') { assert.ok(['softDelete','restore','archive','unarchive'].includes(value.action.case)); server.lastAction = value.action.case; return fromJson(message('sync', 'ServerSyncCommandResponse'), { documentActionResponse: {} }); }
       return {};
     },
   }));
@@ -4028,6 +4061,11 @@ async function main() {
   assert.equal(server.commands.at(-1), 'documentAction');
   assert.equal((await sync.restore(NEW)).responseUnion.case, 'documentActionResponse');
   assert.equal(server.commands.at(-1), 'documentAction');
+  // #36: archive and unarchive are the same command, DocumentAction fields 4 and 5, decoded here off the wire
+  for (const action of ['archive', 'unarchive']) {
+    assert.equal((await sync[action](NEW)).responseUnion.case, 'documentActionResponse');
+    assert.deepEqual([server.commands.at(-1), server.lastAction], ['documentAction', action]);
+  }
   // [unavailable] on bootstrap is retried, so a single one is not worth saying: it reads as a failure that needs
   // acting on when the next attempt has already taken it. Two in a row is an outage, and that is still said.
   server.fail503 = 2;
