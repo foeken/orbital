@@ -21,11 +21,13 @@ function showStatus(s) {
   // go first. Any later reconnect finds the place already spent, so this is boot order only.
   if (connected && !wasConnected) { taskMetaFailed.clear(); loadSearches(); loadPinned(true); restorePlace().finally(() => loadView()); }
   $('loginBox').hidden = !state.showLogin;
+  $('errorLogin').hidden = !(state.error && !state.authenticated && !state.signedOut);
   outline.hidden = $('filtered').hidden = !state.showOutline;
   showError(state.error);
   render(); // auth/connection state drives the skeleton; a newly visible outline applies the view's opening scroll
 }
 $('login').onclick = () => tana.login().catch(showError);
+$('errorLogin').onclick = () => tana.login().catch(showError);
 
 // ---- live updates ----
 // One document changed (info.meta says whether its assignees, audience or sharing moved — main compares them, so a

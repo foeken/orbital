@@ -61,6 +61,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 /* a meeting crumb's date: a secondary detail beside the label, quieter than the crumb text itself */
 .crumbs .cdate { margin-left: 6px; color: #bbb; }
 .error { font-size: 13px; color: #c0392b; margin-top: 6px; }
+.error button { margin-left: 8px; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; }
 /* a zoomed node's fields (type attributes), under the title */
 /* The zoomed page's fields sit in a block of their own between two hairlines under the title and its tag, laid
    out as a property list: icon, label and value in three columns shared by every row, so the labels line up. */
