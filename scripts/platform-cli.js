@@ -20,7 +20,7 @@ if (!process.versions.electron || process.env.ELECTRON_RUN_AS_NODE) {
 }
 const { app } = require('electron');
 const { createTanaSession, peerIdentity } = require('../tana-session');
-let createTanaClient, readNode, setTitle, setState, contentText, readOutline, ulid, initDocument, query, pins, audienceMetadata; // loaded lazily: login/whoami work without the SDK
+let createTanaClient, readNode, setTitle, setState, workflowStates, STATE_TYPES, contentText, readOutline, ulid, initDocument, query, pins, audienceMetadata; // loaded lazily: login/whoami work without the SDK
 
 // Share the cookie partition and peer.json with the real app, including the move to the app's current name.
 app.setPath('userData', require('../userdata').userDataDir(app.getPath('appData'), { migrate: true }));
@@ -35,7 +35,7 @@ let session, client;
 
 async function connect() {
   ({ createTanaClient } = require('../sdk'));
-  ({ readNode, setTitle, setState, contentText, ulid, initDocument, audienceMetadata } = require('../sdk/node'));
+  ({ readNode, setTitle, setState, workflowStates, STATE_TYPES, contentText, ulid, initDocument, audienceMetadata } = require('../sdk/node'));
   ({ readOutline } = require('../sdk/content'));
   query = require('../sdk/query');
   pins = require('../sdk/pins');
@@ -46,6 +46,12 @@ async function connect() {
 }
 
 const summary = (doc) => { const n = readNode(doc); return { id: doc.id, title: n.title, stateType: n.stateType, assignedToUris: n.assignedToUris }; };
+// The workflow of a type, or of a task: its own stateWorkflowUri, else its type's workflowUri (Tana's A_ hook).
+const workflowOf = async (doc) => {
+  const n = readNode(doc);
+  const uri = n.type === 'type' ? n.workflowUri : n.stateWorkflowUri || (n.entityTypeUri && readNode(await client.sync.subscribe(n.entityTypeUri)).workflowUri);
+  return uri ? { uri, states: workflowStates(await client.sync.subscribe(uri)) } : null;
+};
 const today = () => new Date().toLocaleDateString('sv-SE');
 // pin <id> <sidebar|today> / unpin: mutate, let the live update go out, print the doc's pin state
 async function setPin(on) {
@@ -410,13 +416,31 @@ const commands = {
   },
   async 'set-state'() {
     const [id, stateType] = positional;
-    if (!id || !stateType) throw new Error('usage: set-state <id> <proposed|open|closed|not_now>');
+    if (!id || !stateType) throw new Error('usage: set-state <id> <proposed|open|closed|not_now|workflow state name or id>');
     const me = await connect();
     await client.sync.connect();
     const doc = await client.sync.subscribe(id);
-    setState(doc, stateType, me.userUri);
+    let state = stateType;
+    if (!STATE_TYPES.includes(stateType)) {
+      const wf = await workflowOf(doc);
+      const column = wf && wf.states.find((s) => s.id === stateType || s.name === stateType);
+      if (!column) throw new Error(`${stateType} is not a state of this task's workflow: ${wf ? wf.states.map((s) => s.name).join(', ') : 'it has none'}`);
+      state = { workflowUri: wf.uri, workflowStateId: column.id };
+    }
+    setState(doc, state, me.userUri);
     await new Promise((r) => setTimeout(r, 1500));
-    out(summary(doc));
+    const n = readNode(doc);
+    out({ ...summary(doc), stateWorkflowUri: n.stateWorkflowUri, stateWorkflowStateId: n.stateWorkflowStateId });
+  },
+  // workflow <type or task id>: the type's board columns (tana:workflow: data.states), and a task's column (read-only)
+  async workflow() {
+    const [id] = positional;
+    if (!id) throw new Error('usage: workflow <tana:type:...|task id>');
+    await connect();
+    await client.sync.connect();
+    const doc = await client.sync.subscribe(id);
+    const n = readNode(doc);
+    out({ ...(await workflowOf(doc)), ...(n.type === 'type' ? {} : { stateType: n.stateType, stateWorkflowStateId: n.stateWorkflowStateId }) });
   },
   // addfield <type uri> <title> [--type member|date|link|options] [--multiple] [--options "A|B"] [--to <type uri>,…]:
   // define a field on a type (sdk/fields.js)
@@ -898,7 +922,7 @@ const USAGE = [
   'usage: node scripts/platform-cli.js <command>   (not ./node_modules/.bin/electron: docs/ELECTRON-SANDBOX.md)',
   '  session    login | whoami',
   '  read       list [--state open|all] | search <query> [#task|#meeting|#member|#Type] | types | fields [<type uri>] |',
-  '             meetings [--days 7] | chatlist [--limit 200] | get <id> [--raw] | outline <id> | rawdoc <id> [--containers 1] |',
+  '             meetings [--days 7] | chatlist [--limit 200] | get <id> [--raw] | outline <id> | rawdoc <id> [--containers 1] | workflow <type|task id> |',
   '             graphnode <id> | edges <id> | listkind <nodeType> [--limit 50] | image <tana:image:uri> | pins [--dates] |',
   '             changes <id> [--within <summary id>] [--limit 20] | inbox [--limit 20] [--watch seconds] |',
   '             settings   (with a key and a JSON value it writes)',
@@ -914,7 +938,7 @@ const USAGE = [
   '             meetingedit   (a scratch meeting it creates, edits and deletes; the server puts it in your calendar meanwhile) |',
   '             datemention [--date YYYY-MM-DD]   (a scratch document mentioning the date, read back and deleted) |',
   '             addfield <type uri> <title> [--type member|date|link|options] [--options "A|B"] [--to <type uri>,…] [--multiple] |',
-  '             set-state <id> <proposed|open|closed|not_now> | pin <id> <sidebar|today> | unpin <id> <sidebar|today> |',
+  '             set-state <id> <proposed|open|closed|not_now|workflow state> | pin <id> <sidebar|today> | unpin <id> <sidebar|today> |',
   '             pinto <event|space id> <id> | unpinfrom <event|space id> <id> | settype <id> <tana:type:...|none> |',
   '             set-hue <type uri> <0-360|none> | discusswith <id> <who…> | setfield <id> <type uri?attribute=key> <line…>',
 ].join('\n');

@@ -133,17 +133,29 @@ function setTitle(document, title) {
 }
 
 // transitionTo(stateType, changedBy) for plain (non-workflow) states.
-function setState(document, stateType, byUri) {
-  if (!STATE_TYPES.includes(stateType)) throw new Error('unknown stateType ' + stateType);
+// Tana's transitionTo(state, changedBy) (shared bundle, read 2026-09-23): a plain state drops the workflow keys, a
+// workflow state { workflowUri, workflowStateId } (a column of the type's board, workflowStates below) is stateType
+// 'open' plus both keys. Clearing a workflow state is setting a plain one.
+function setState(document, state, byUri) {
+  const column = state && typeof state === 'object';
+  if (column ? !WORKFLOW_URI.test(state.workflowUri || '') || typeof state.workflowStateId !== 'string' || !state.workflowStateId : !STATE_TYPES.includes(state)) throw new Error('unknown stateType ' + JSON.stringify(state));
   if (!/^tana:user-profile:/.test(byUri || '')) throw new Error('stateChangedBy must be a tana:user-profile: URI');
   document.transact((loro) => {
     const data = loro.getMap('data');
-    data.set('stateType', stateType);
+    data.set('stateType', column ? 'open' : state);
     data.set('stateEnteredAt', Date.now());
     data.set('stateChangedBy', byUri);
-    data.delete('stateWorkflowUri');
-    data.delete('stateWorkflowStateId');
+    if (column) { data.set('stateWorkflowUri', state.workflowUri); data.set('stateWorkflowStateId', state.workflowStateId); }
+    else { data.delete('stateWorkflowUri'); data.delete('stateWorkflowStateId'); }
   });
+}
+
+// The states of a tana:workflow: document (a type's data.workflowUri) in board order: data.states, a list of
+// { id, name } maps, deduped by id as Tana's own workflow wrapper does before every edit. A task's workflow is its
+// own stateWorkflowUri, else its type's workflowUri (Tana's A_ hook).
+function workflowStates(document) {
+  const seen = new Set();
+  return (readNode(document).states || []).filter((s) => s && typeof s.id === 'string' && !seen.has(s.id) && seen.add(s.id)).map(({ id, name }) => ({ id, name }));
 }
 
 // Tana's archive(actor) / unarchive(actor) on a loaded document (shared bundle, read 2026-09-23): archived means
@@ -176,6 +188,7 @@ function taskMeta(document) {
 // `workflowUri`), and the scope rules — what a type applies to, and the space it keeps its documents in — belong
 // there too, beside the type node they are read from.
 const TYPE_URI = /^tana:type:[0-9a-z]{26}$/;
+const WORKFLOW_URI = /^tana:workflow:[0-9a-z]{26}$/;
 function setEntityType(document, typeUri, { workflow = false, byUri } = {}) {
   const uri = typeUri == null ? null : typeUri;
   if (uri !== null && !TYPE_URI.test(uri)) throw new Error('Select a workspace type');
@@ -364,4 +377,4 @@ function render(node) {
   return kids.map(render).join(block ? '\n' : '');
 }
 
-module.exports = { readNode, editable, setTitle, setState, setArchived, setEntityType, taskMeta, audience, audienceMetadata, setAssignees, setSearchQuery, setSearchView, searchDisplay, searchSort, contentText, ulid, initDocument, STATE_TYPES, COMPLETED_WINDOWS };
+module.exports = { readNode, editable, setTitle, setState, workflowStates, setArchived, setEntityType, taskMeta, audience, audienceMetadata, setAssignees, setSearchQuery, setSearchView, searchDisplay, searchSort, contentText, ulid, initDocument, STATE_TYPES, COMPLETED_WINDOWS };
