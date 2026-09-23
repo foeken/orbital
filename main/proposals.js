@@ -35,6 +35,15 @@ async function rows() {
   const found = new Map((await lookup([...new Set(list.flatMap((p) => [doc(p), p.contextUri]).filter(Boolean))])).map((n) => [n.id, n]));
   // and the space each typed document's type keeps its documents in, which Tana moves the document into on approval
   const homes = new Map((await lookup([...new Set(list.map((p) => (found.get(doc(p)) || {}).entityType).filter(Boolean))])).map((t) => [t.id, t.ownerUri]));
+  // The group a row is filed under (issue #104): the meeting it was proposed in when you were in that meeting, the
+  // meeting when you only see it through its space, and a chat that belongs to no meeting. "In it" is what the
+  // Meetings view calls your own calendar — you among the event's participants — asked of the graph for these meetings.
+  // A meeting is its chat's owner, or a subagent chat's parent's owner.
+  // ponytail: a meeting shared with you directly, outside any space, also files under From spaces
+  const meetingOf = (p) => { const c = p.contextUri, up = c && c.startsWith('tana:chat:') ? (found.get(c) || {}).ownerUri : c; return up && up.startsWith('tana:event:') ? up : null; };
+  const meetings = [...new Set(list.map(meetingOf).filter(Boolean))];
+  const mine = new Set(meetings.length ? (await S.client.graph.listNodes({ nodeIds: meetings, hasParticipantUris: [S.me.userUri], limit: meetings.length })).nodes.map((n) => n.id) : []);
+  const groupOf = (p) => { const m = meetingOf(p); return !m ? 'From chats' : mine.has(m) ? 'From meetings' : 'From spaces'; };
   return list.map((p) => {
     const n = found.get(doc(p));
     const where = (p.chatTitle || (found.get(p.contextUri) || {}).title || '').trim() || 'a chat';
@@ -43,6 +52,7 @@ async function rows() {
     // those, with its reason. Everything else that would is known here.
     const why = !n ? WHY.gone : p.operation !== 'create' ? WHY.merge : p.kind !== 'regular' ? WHY.kind : home && home !== n.ownerUri ? WHY.home : null;
     const proposal = { chatUri: p.chatUri, proposedUri: p.proposedUri, operation: p.operation, approvable: !why, reason: why ? why[1] : null,
+      group: groupOf(p),
       note: VERB[p.operation] + ' in ' + where + (why ? ' · ' + why[0] : ''), proposedAt: iso(p.proposedAt) };
     // A proposal whose document is gone (deleted, or never synced) can still be rejected, which clears it from the chat.
     if (!n) return { id: doc(p), title: 'Missing document', text: 'Missing document', kind: 'document', icon: 'doc', editable: false, hasChildren: false, proposal };

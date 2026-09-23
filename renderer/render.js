@@ -335,6 +335,9 @@ function renderOutline() {
       // with the arrangement its own document stores rather than the one this browser remembers for a view
       const shown = pageRows(list, filterEl.value.trim().toLowerCase());
       list = shown.list; groups = shown.groups; hidden = shown.hidden;
+    } else if (parent.docId === PROPOSALS_PAGE) { // its fixed sections, From meetings and From spaces (renderer/proposals.js)
+      groups = proposalGroups(list);
+      list = groups.flatMap((g) => (g.collapsed ? [] : g.nodes));
     }
     list = withDraftTail(list, parent); // an open node always has a row to type in; a read-only one (every chat) never does
     outline.replaceChildren(...(groups

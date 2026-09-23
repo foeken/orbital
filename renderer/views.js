@@ -299,7 +299,7 @@ function groupHeadEl(g) {
   el.setAttribute('aria-expanded', g.collapsed ? 'false' : 'true');
   el.title = g.collapsed ? 'Expand' : 'Collapse'; // the words the row chevrons already use
   el.onmousedown = (e) => e.preventDefault();
-  el.onclick = () => toggleGroup(g.id);
+  el.onclick = () => (g.toggle ? g.toggle() : toggleGroup(g.id)); // a page with sections of its own folds them itself (renderer/proposals.js)
   return el;
 }
 // The tail of a trimmed section, one click away. A button like the heading rather than a row: no key, no bullet, and
