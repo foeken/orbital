@@ -173,7 +173,7 @@ const groupCollapsed = (id) => collapsedGroups.has(collapseKey(id));
 function toggleGroup(id) {
   const key = collapseKey(id);
   if (!collapsedGroups.delete(key)) collapsedGroups.add(key);
-  trackingShown.delete(key); // an unfolded Tracking section opens on what moved lately again (trimTracking)
+  trackingShown.delete(key); // an unfolded Tracking or Pinned section opens short again (trimTracking)
   setPref('collapsedGroups', [...collapsedGroups]);
   render(true);
 }
@@ -182,14 +182,18 @@ function toggleGroup(id) {
 // updated in the last three days. The rest arrives on one click and stays for as long as the section stays open —
 // folding it forgets, so it opens short again, which is the whole point of opening short. A row with no update time
 // to read is part of the tail. Session state, like holding rows in place: it is about the list in front of you, so
-// there is nothing to store and nothing to clean up. Only Tracking: every other section is work with your name on
-// it, where a row that has not moved is exactly the one you need to see.
+// there is nothing to store and nothing to clean up. Pinned opens short the same way, on what is pinned to a day in
+// the coming week or already past; a task pinned only further ahead than that is the tail. Every other section is
+// work with your name on it, where a row that has not moved is exactly the one you need to see.
 const TRACKING_RECENT = 3 * 864e5;
-const trackingShown = new Set(); // collapseKey of a Tracking section that has been asked for whole
+const trackingShown = new Set(); // collapseKey of a Tracking or Pinned section that has been asked for whole
 const movedRecently = (n) => Date.now() - Date.parse(n.updatedAt) < TRACKING_RECENT;
+const pinnedSoon = (n) => (datePinsById.get(n.id) || []).some((date) => date <= localDate(7));
+const OPENS_ON = { Tracking: movedRecently, Pinned: pinnedSoon };
 function trimTracking(g) {
-  if (g.id !== 'Tracking' || g.collapsed || trackingShown.has(collapseKey(g.id))) return g;
-  const recent = g.nodes.filter(movedRecently);
+  const keep = OPENS_ON[g.id];
+  if (!keep || g.collapsed || trackingShown.has(collapseKey(g.id))) return g;
+  const recent = g.nodes.filter(keep);
   // "more" is what the link offers; without one the section is drawn exactly as any other
   return recent.length === g.nodes.length ? g : { ...g, nodes: recent, more: g.nodes.length - recent.length };
 }

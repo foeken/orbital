@@ -2629,7 +2629,10 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     // the app-local agent marks the badge is drawn from (renderer/state.js), not Tana assignees
     const codexIds = new Set(['ta1', 'ta2', 'ta3']);
     // your date pins (renderer/state.js, api.pinDates): tp1 is Sam's task on a third person, pinned to a day
-    const datePinsById = new Map([['tp1', ['2026-09-23']], ['tp2', ['2026-09-20', '2026-10-01']], ['tp3', ['2026-09-25']]]);
+    ${sourceLine('const localDate =')}
+    // tq*: pinned relative to today, for the Pinned section opening on the coming week
+    const datePinsById = new Map([['tp1', ['2026-09-23']], ['tp2', ['2026-09-20', '2026-10-01']], ['tp3', ['2026-09-25']],
+      ['tq1', [localDate(3)]], ['tq2', [localDate(10)]], ['tq3', [localDate(-1)]], ['tq4', [localDate(9), localDate(7)]], ['tq5', [localDate(8)]]]);
     // loadTaskMeta is the real one (renderer/tasks.js): Responsibility asks for the metadata it is missing, since a
     // row it filters out never reaches the screen to ask for itself
     const asked = [], taskMetaFailed = new Map(), taskMetaLoading = new Set(), connected = true, isRealId = () => true;
@@ -2729,6 +2732,9 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   const sections = plain(api.groupsOf(responsibility));
   const pinnedOrder = plain(api.groupsOf(['tp1', 'tp2', 'tp3'].map((id) => ({ id, icon: 'task', tags: [], createdBy: 'sam' })))).map((g) => [g.title, g.nodes.map((n) => n.id)]);
   assert.deepEqual(pinnedOrder, [['Pinned', ['tp2', 'tp3', 'tp1']]], 'Pinned runs by the latest day each task is pinned to, latest on top');
+  const soon = plain(api.groupsOf(['tq1', 'tq2', 'tq3', 'tq4', 'tq5'].map((id) => ({ id, icon: 'task', tags: [], createdBy: 'sam' }))))[0];
+  assert.deepEqual([soon.nodes.map((n) => n.id).sort(), soon.more], [['tq1', 'tq3', 'tq4'], 2],
+    'Pinned opens on what is pinned within the coming week or already past, and a task pinned only further ahead waits behind the link');
   assert.deepEqual(sections.map((g) => [g.title, g.nodes.map((n) => n.id)]),
     [['Unassigned', ['t6']], ['Tracking', ['t1']], ['My inbox', ['t8']], ['Mine', ['t10']], ['My completed', ['t2']], ['My later', ['t9']], ['Assigned by others', ['t5']]],
     'the sections run Unassigned, Tracking, My inbox, Mine, My completed, My later, Assigned by others, and end there');

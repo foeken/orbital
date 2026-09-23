@@ -393,6 +393,8 @@ in this section starts its grey line with the days it is pinned to ("Pinned to T
 `rowSig` carries so a reused row picks the day up or drops it.
 The section runs by the latest day each task is pinned to, latest on top (`latestPinFirst` in `groupsOf`); the sort is
 stable, so tasks pinned to the same day keep the order the page's Sort gave them.
+Like Tracking it opens short (`trimTracking`, `OPENS_ON`): on the tasks pinned to a day in the coming week or already
+past, with a task pinned only further ahead than seven days behind the same "Show N more tasks" link.
 
 ### Pin to date
 
