@@ -74,6 +74,19 @@ function loadRelated(docId) {
 }
 // This document's relations have moved on (an edit, a pin): read them again without taking the sidebar down.
 function refreshRelated(docId) { if (docId) { relatedStale.add(docId); loadRelated(docId); } }
+// Kept live (main/related.js watchRelated): main follows the page the sidebar is drawn for, and says so when a mention
+// or a pin of it is added or taken away anywhere; the sidebar is then read again the way a pin re-reads it. Asked again
+// at the next render until main has taken it: before the connection there is nothing to watch on.
+let railWatched = null, railWatching = false;
+function watchRail(docId) {
+  if (!tana.relatedWatch) return;
+  if (!isRealId(docId)) docId = null; // a local draft has nothing in Tana to watch: the last page's queries close as for none
+  if (docId !== railWatched) { railWatched = docId; railWatching = false; if (!docId) tana.relatedWatch(null); }
+  if (!docId || railWatching || !connected) return;
+  railWatching = true;
+  Promise.resolve(tana.relatedWatch(docId)).then((ok) => { if (!ok && railWatched === docId) railWatching = false; }, () => { if (railWatched === docId) railWatching = false; });
+}
+if (tana.onRelatedChanged) tana.onRelatedChanged((docId) => refreshRelated(docId));
 function railRow(node) {
   const row = document.createElement('div');
   row.className = 'rrow' + (node.done ? ' done' : '');
@@ -245,6 +258,7 @@ function renderRail(parent) {
   const active = document.activeElement, keep = active && active.classList && active.classList.contains('rrow') ? active.dataset.id : null;
   railEl.replaceChildren();
   const docId = parent && parent.node.kind === 'document' && !parent.node.draft ? parent.docId : null;
+  watchRail(docId);
   if (!docId) { railEl.hidden = railGrip.hidden = true; renderRailToggle(false); return; }
   loadRelated(docId);
   const data = relatedBy.get(docId);

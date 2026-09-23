@@ -255,7 +255,9 @@ stream, so it is the cheapest way to poll a task.
 How Tana's own client lists things (NodeQueryResource/EdgeQueryResource in `shared-*.js`, read 2026-09-22): not ListNodes, but a
 query the server keeps running. The client mints `tana:liveQuery:<ulid>`, writes the query into a new document, and subscribes it
 with `beginDocumentSync{ephemeral: true}` (the only kind that sets it); the server fills in the answer and pushes a live update each
-time it changes. The grace period on release is 0 (2.5). `sdk/livequery.js` implements the `nodes` form.
+time it changes. The grace period on release is 0 (2.5). `sdk/livequery.js` implements both forms: `openLiveQuery` (`nodes`) and
+`openEdgeQuery` (`edges`: `query = { subject?, predicate: { edgeTypes: [number] }, object? }`, `result.edges = [{ fromNode, toNode,
+type, properties }]`, EdgeQueryResource ~offset 333694 of `shared-rlpSpfd9.js`).
 
 ```
 data = { type: 'liveQuery', queryType: 'nodes' | 'edges', label, query, queryVersion: 1, state: 'pending' | 'ready' | 'error',

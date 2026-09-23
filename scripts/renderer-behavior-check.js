@@ -5018,6 +5018,34 @@ async function runRailReadinessCheck() {
   `, context);
   context.ask('tana:text:01j0task0000000000000000');
   assert.deepEqual(plain(context.state()), { asked: [], cached: [], payload: null }, 'the rail asks nothing before the sync client is up');
+
+  // The sidebar kept live (renderer/rail.js watchRail, issue #21): main is told which page the sidebar is for, once,
+  // after the connection, again when it refused, null when there is no page; and what it pushes re-reads that page.
+  const live = {};
+  vm.runInNewContext(`
+    const calls = [], refreshed = [];
+    let connected = false, answer = false, listener = null;
+    const isRealId = (id) => typeof id === 'string' && id.startsWith('tana:');
+    const refreshRelated = (id) => refreshed.push(id);
+    const tana = { relatedWatch: async (id) => { calls.push(id); return id ? answer : false; }, onRelatedChanged: (fn) => { listener = fn; } };
+    ${sourceBetween('let railWatched = null', 'function railRow(')}
+    Object.assign(globalThis, { watch: (id) => watchRail(id), connect: () => { connected = true; }, accept: () => { answer = true; }, push: (id) => listener(id),
+      state: () => ({ calls, refreshed }) });
+  `, live);
+  const P1 = 'tana:text:01j0page1000000000000000', P2 = 'tana:text:01j0page2000000000000000';
+  live.watch(P1);
+  assert.deepEqual(plain(live.state().calls), [], 'nothing is watched before the connection');
+  live.connect();
+  live.watch(P1); await new Promise(setImmediate);
+  live.watch(P1); await new Promise(setImmediate);
+  assert.deepEqual(plain(live.state().calls), [P1, P1], 'a refusal is asked again at the next render');
+  live.accept();
+  live.watch(P1); await new Promise(setImmediate);
+  live.watch(P1); live.watch('draftdoc:3'); live.watch(P2); await new Promise(setImmediate);
+  live.watch(P2); live.watch(null); live.watch(null);
+  assert.deepEqual(plain(live.state().calls), [P1, P1, P1, null, P2, null], 'once taken, once per page; a draft is no page; null once when the page goes');
+  live.push(P2);
+  assert.deepEqual(plain(live.state().refreshed), [P2], 'a push re-reads that page\'s sidebar');
   context.connect();
   context.ask('draftdoc:2');
   assert.deepEqual(plain(context.state().asked), [], 'and never about a local draft id');

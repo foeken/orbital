@@ -1521,6 +1521,49 @@ async function main() {
     assert.deepEqual(JSON.parse(JSON.stringify(unnamed.backlinks.map((g) => g.label))), ['Mentioned in'], 'a field whose title cannot be read joins the mentions rather than naming a section after a key');
     console.log('ok  backlinks: mentions and field references, grouped by field with the mentions last');
   }
+  // The sidebar kept live (main/related.js watchRelated, issue #21): the page on screen gets Tana's edge live queries —
+  // its backlinks, and its meeting's pins — and an edge added or taken away tells the renderer to read related() again.
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const page = 'tana:text:' + ulid(), event = 'tana:event:' + ulid(), other = 'tana:text:' + ulid();
+    const docs = new Map(), closed = [], sent = [];
+    const answer = (id, edges) => docs.get(id).transact((loro) => {
+      const data = loro.getMap('data'), list = data.get('result').setContainer('edges', new LoroList());
+      for (const e of edges) list.push(e);
+      data.set('state', 'ready'); data.set('resultForVersion', 1);
+    });
+    backend.testRuntime({ me: { userUri: ME }, win: { isDestroyed: () => false, webContents: { send: (...args) => sent.push(args) } }, client: {
+      sync: { subscribe: async (id, init) => { const d = new Document(id); d.transact(init); docs.set(id, d); return d; }, unsubscribe: async (id) => { closed.push(id); } },
+      graph: { listNodes: async (p) => ({ nodes: p.nodeIds[0] === page ? [{ id: page, ownerUri: event }] : [{ id: p.nodeIds[0] }] }) },
+    } });
+    assert.equal(await backend.watchRelated(page), true);
+    await new Promise(setImmediate);
+    const [backlinks, pinsQuery] = [...docs.keys()];
+    const plain = (id) => JSON.parse(JSON.stringify(docs.get(id).data.toJSON().query));
+    assert.deepEqual([plain(backlinks).object.uris, plain(backlinks).predicate], [[page], { edgeTypes: [1, 4] }], 'backlinks: LINKS_TO and ATTRIBUTE_LINKS_TO into the page');
+    assert.deepEqual([plain(pinsQuery).subject.uris, plain(pinsQuery).predicate], [[event], { edgeTypes: [14] }], 'pins: HAS_PIN out of the meeting the page lives in');
+    const mention = (from, label) => ({ fromNode: from, toNode: page, type: 'EDGE_TYPE_LINKS_TO', properties: { label } });
+    answer(backlinks, [mention('tana:text:a', 'x')]);
+    answer(pinsQuery, [{ fromNode: event, toNode: 'tana:text:p', type: 'EDGE_TYPE_HAS_PIN' }]);
+    answer(backlinks, [mention('tana:text:a', 'edited around')]);
+    assert.deepEqual(sent, [], 'the first answers are what related() just read, and a mention edited in place moves no section');
+    answer(backlinks, [mention('tana:text:a', 'edited around'), mention('tana:text:b', 'x')]);
+    answer(pinsQuery, []);
+    assert.deepEqual(sent, [['related:changed', page], ['related:changed', page]], 'a new mention and a pin taken off each re-read the page\'s sidebar');
+    assert.equal(await backend.watchRelated(page), true);
+    assert.equal(docs.size, 2, 'the same page again opens nothing new');
+    assert.equal(await backend.watchRelated(other), true);
+    await new Promise(setImmediate);
+    assert.deepEqual(closed, [backlinks, pinsQuery], 'a new page closes the last one\'s queries');
+    assert.equal(docs.size, 3, 'and a page outside a meeting or space has no pins to watch');
+    sent.length = 0;
+    answer(backlinks, []);
+    assert.deepEqual(sent, [], 'a closed query says nothing');
+    assert.equal(await backend.watchRelated(null), false);
+    await new Promise(setImmediate);
+    assert.deepEqual(closed.length, 3, 'no page, no queries');
+    console.log('ok  live sidebar: backlinks and meeting pins as edge live queries for the page on screen, one set at a time');
+  }
   // The fields a page shows (main/related.js fieldsOf): every field the type defines, empty or filled — an empty one
   // used to be left out, so there was nothing to fill in — then any value left under another type.
   {

@@ -42,6 +42,14 @@ Enums are passed by name (`'SORT_FIELD_UPDATE_TIME'`, `'LIST_NODES_MODE_WITH_COU
 
 A row: `{ uri, type, title, entityType, createdAt, updatedAt, ownerUri, state: { type, enteredAt, changedBy }, assignedTo, participants, calendarEvent, archivedAt, … }`. Verified live 2026-09-22 (`platform-cli livequery`): a task created elsewhere arrived as an `added` row within seconds, and left as `removed` when deleted.
 
+`openEdgeQuery(sync, query, { label })` → the same handle over edges (Tana's EdgeQueryResource): `queryType: 'edges'`, answer in `data.result.edges`.
+
+- `query`: `{ subject?, predicate?: { edgeTypes: [number] }, object? }`. A side (where the edge starts, where it ends) takes the lists `uris types ownerUris entityTypeUris stateTypes stateChangedBy stateWorkflowUris stateWorkflowStateIds assignedTo` and the scalars `stateEnteredAtMin/Max`; an absent side is left out. Edge types are numbers: `EDGE_TYPES.LINKS_TO` (1), `ATTRIBUTE_LINKS_TO` (4), `HAS_PIN` (14), … (Tana's EdgeType enum). Any other key throws, and so does a query whose every list is empty (Tana answers that one itself, without the server).
+- `handle.state()` → `{ status, edges, error }`. An edge: `{ fromNode, toNode, type: 'EDGE_TYPE_LINKS_TO', properties? }`; `properties` is `{ label }` for a mention, `{ attributeUri, label }` for a field reference, `{ messageId }` for a mention in a chat.
+- `rows` events as above, keyed by the edge's ends, type and field: `removed` carries the edges themselves, `changed` an edge whose properties moved.
+
+Tana's uses: `{ object: { uris: [page] } }` (the page's Backlinks section), `+ predicate [LINKS_TO, ATTRIBUTE_LINKS_TO]` ("Mentioned in"), `{ subject: { uris: events }, predicate: [HAS_PIN] }` (a meeting's pins), `{ object: { uris: [doc] }, predicate: [COMMENTS_ON] }` (comments). Verified live 2026-09-23 (`platform-cli livequery --to <id>` and scratch documents): a mention written into another document and a pin on a meeting each arrived within a fraction of a second, and left the same way.
+
 ## `sdk/sync.js` — `class SyncConnection extends EventEmitter`
 
 Constructed by `createTanaClient`; `{ transport, orgId, peerId, storageId, logger }`.

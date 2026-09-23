@@ -307,6 +307,8 @@ function mockApi() {
     // The model's read of a title, slow enough to show the page thinking: the last capitalised words of the title.
     // Presence: nobody else here in the mock, and nothing to tell
     presenceOpen: async () => true, presenceClose: async () => {}, presenceView: async () => {}, presenceSet: async () => {}, onPresence: () => {},
+    // The sidebar's live edges: nothing else writes to the mock, so nothing is ever pushed
+    relatedWatch: async () => true, onRelatedChanged: () => {},
     suggestDiscussWith: async (title) => {
       await new Promise((done) => setTimeout(done, 700));
       const names = String(title || '').match(/\b[A-Z][a-z]+(?: [A-Z][a-z]+)*/g) || [];

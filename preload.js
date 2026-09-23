@@ -10,6 +10,9 @@ contextBridge.exposeInMainWorld('api', {
   node: (docId) => ipcRenderer.invoke('doc:info', docId),
   path: (docId) => ipcRenderer.invoke('doc:path', docId),
   related: (docId) => ipcRenderer.invoke('doc:related', docId), // meeting context: {summary,tagline,call?:{url,label},pinned[],outcomes[],notes[],backlinks[]}
+  // The page on screen (null: none): main keeps its backlinks and its hub's pins live, and says 'related:changed' when one moves
+  relatedWatch: (docId) => ipcRenderer.invoke('doc:watchRelated', docId),
+  onRelatedChanged: (cb) => ipcRenderer.on('related:changed', (_e, docId) => cb(docId)),
   summaryUri: (docId) => ipcRenderer.invoke('doc:summaryUri', docId), // a meeting's write-up document, or null
   todayNode: (offset) => ipcRenderer.invoke('doc:todayNode', offset), // the date-titled node pinned to that day (0 today, 1 tomorrow), created if missing
   weekNode: () => ipcRenderer.invoke('doc:weekNode'), // the "Week 38 (2026)" document (ISO week), created if missing; not linked to the day nodes

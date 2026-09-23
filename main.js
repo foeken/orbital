@@ -17,7 +17,7 @@ const ai = require('./main/ai');
 const { NOT_CONNECTED, S, VIEWS, docStates, errText, idKind, isSearch, isSpace, metaSigs, pathCache, today, truncatedViews, redoStack, report, scheduleRefresh, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
 const { cachedNodeHue, graphRow, members, rememberNodeHue, rememberType, toNode } = require('./main/rows');
 const { accessContext, archivedTypes, chatOutline, codexIds, createDocument, creationOptions, creatorOf, discussWith, documentAction, history, info, linkShared, metaSig, moveBlock, moveTarget, mut, mutTasks, notifyOn, notifyState, referenceIn, setCodex, setNotify, onChange, op, outlineWithReferences, sensitiveIds, setSensitive, setType, setTypeHue, typeChoices } = require('./main/documents');
-const { callOf, changesOf, pathOf, related, searchChildren, searchPreview, spaceChildren, summaryChanges, summaryUri } = require('./main/related');
+const { callOf, changesOf, pathOf, related, searchChildren, searchPreview, spaceChildren, summaryChanges, summaryUri, watchRelated } = require('./main/related');
 const { hiddenRules, inboxCount, listFilter, mcpHidden, preset, refresh, search, searchCreate, searchList, searchTitle, setHidden, setMcpHidden, setViewFilter, start, viewFilter, viewRows } = require('./main/views');
 const { nodePin, pinState, pinTree, pinned, pinnedDates, pinnedUris, setPin, todayNode, weekNode, weekTitle } = require('./main/pins');
 const inbox = require('./main/inbox');
@@ -347,6 +347,7 @@ ipcMain.handle('pins:unpinFrom', (_e, hubId, uri) => nodePin(hubId, uri, false))
 ipcMain.handle('sensitive:list', () => sensitiveIds()); // the synced setting sensitive:set writes; db's table is only its migration source
 ipcMain.handle('sensitive:set', (_e, id, on) => setSensitive(id, on));
 ipcMain.handle('doc:related', (_e, id) => related(id)); // { summary, tagline, pinned[], outcomes[], notes[], backlinks[] }
+ipcMain.handle('doc:watchRelated', (_e, id) => watchRelated(id)); // the page on screen (null: none): its sidebar's edges pushed as 'related:changed'
 ipcMain.handle('doc:summaryUri', (_e, id) => summaryUri(id)); // where a meeting should actually open, or null
 // "Discuss with …": one call for the type and the field, because both are the same decision (main/documents.js)
 ipcMain.handle('doc:discussWith', (_e, id, who) => discussWith(id, who));
@@ -412,7 +413,7 @@ ipcMain.handle('sync:login', async () => {
 });
 
 if (process.env.TANA_MAIN_TEST) {
-  module.exports = { resolveInitialAuth, graphRow, cachedNodeHue, rememberType, VIEWS, toNode, outlineWithReferences, chatOutline, op, onChange, documentAction, archivedTypes, createDocument, creationOptions, typeChoices, setType, setTypeHue, discussWith, ai, icons, settings, search, viewFilter, searchCreate, searchTitle, viewRows, spaceChildren, start, refresh, related, callOf, weekTitle, weekNode,
+  module.exports = { resolveInitialAuth, graphRow, cachedNodeHue, rememberType, VIEWS, toNode, outlineWithReferences, chatOutline, op, onChange, documentAction, archivedTypes, createDocument, creationOptions, typeChoices, setType, setTypeHue, discussWith, ai, icons, settings, search, viewFilter, searchCreate, searchTitle, viewRows, spaceChildren, start, refresh, related, watchRelated, callOf, weekTitle, weekNode,
     statusSnapshot: () => ({ ...S.status }), rememberNodeHue, restoredBounds, today,
     undo: () => history(undoStack, redoStack, 'undo', 'canUndo'), redo: () => history(redoStack, undoStack, 'redo', 'canRedo'), visibleGraphNodes, pinTree, changesOf, summaryChanges,
     nodePin,
