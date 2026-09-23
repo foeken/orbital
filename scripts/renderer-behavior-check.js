@@ -2799,6 +2799,8 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   const sections = plain(api.groupsOf(responsibility));
   const pinnedOrder = plain(api.groupsOf(['tp1', 'tp2', 'tp3'].map((id) => ({ id, icon: 'task', tags: [], createdBy: 'sam' })))).map((g) => [g.title, g.nodes.map((n) => n.id)]);
   assert.deepEqual(pinnedOrder, [['Pinned', ['tp2', 'tp3', 'tp1']]], 'Pinned runs by the latest day each task is pinned to, latest on top');
+  assert.deepEqual(plain(api.groupsOf([{ id: 'tp1', icon: 'task', tags: [], createdBy: 'sam', stateType: 'closed' }])).map((g) => [g.title, g.nodes.map((n) => n.id)]),
+    [['My completed', ['tp1']]], 'a completed pinned task leaves Pinned for My completed, pin and all');
   const soon = plain(api.groupsOf(['tq1', 'tq2', 'tq3', 'tq4', 'tq5'].map((id) => ({ id, icon: 'task', tags: [], createdBy: 'sam' }))))[0];
   assert.deepEqual([soon.nodes.map((n) => n.id).sort(), soon.more], [['tq1', 'tq3', 'tq4'], 2],
     'Pinned opens on what is pinned within the coming week or already past, and a task pinned only further ahead waits behind the link');

@@ -46,10 +46,11 @@ const MINE_STATES = { proposed: 'My inbox', open: 'Mine', closed: 'My completed'
 // Pinned: a task you pinned to a day is one you asked to see then, whoever has it and whatever its state, so like
 // Agent it decides the section on its own (after Agent, which stays first). Date pins are personal (the pin-map), so
 // nobody else's pins land here. It sits under My inbox and above Mine, and its rows say the day (pinnedOn below).
+// Once completed it is done asking for attention, so it goes to My completed (yours, like the pin) and keeps its pin.
 const RESPONSIBILITY = ['Unassigned', 'Tracking', 'Agent', 'My inbox', 'Pinned', 'Mine', 'My completed', 'My later', 'Assigned by others'];
 function responsibilityOf(n) {
   if (codexIds.has(n.id)) return 'Agent'; // the local mark the badge is drawn from (renderer/nodes.js loadCodex)
-  if (isTask(n) && datePinsById.has(n.id)) return 'Pinned';
+  if (isTask(n) && datePinsById.has(n.id)) return stateOf(n) === 'closed' ? 'My completed' : 'Pinned';
   const uri = me() && me().id, meta = taskMetaById.get(n.id);
   if (!uri) return null; // the member list has not landed, so "you" is not known yet
   if (!meta) { loadTaskMeta(n.id); return null; } // it takes its section once the answer arrives
