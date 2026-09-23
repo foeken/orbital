@@ -8,7 +8,7 @@ const STATES = [['proposed', 'Inbox'], ['open', 'In Progress'], ['closed', 'Comp
 // Status, and why its value is kept when Completed is taken out — putting Completed back reads the same as before.
 // The rule itself is sdk/query.js (the task's own state.enteredAt, applied to what the query answers); here it is
 // only the vocabulary the pill speaks.
-const COMPLETED = [[7, '7 days'], [30, '30 days'], ['all', 'All']];
+const COMPLETED = [[3, '3 days'], [7, '7 days'], [30, '30 days'], ['all', 'All']];
 const completedWindow = (f) => (COMPLETED.some(([v]) => v === (f || {}).completedWithin) ? f.completedWithin : 7);
 const showsCompleted = (f) => !!f && (!f.states || f.states.includes('closed'));
 const TYPES = [['meetings', 'Meetings', 'meeting'], ['tasks', 'Tasks', 'task'], ['docs', 'Docs', 'doc'], null, ['chats', 'Chats', 'chat'], ['canvases', 'Canvases', 'canvas'], ['agents', 'Agents', 'agent'], ['skills', 'Skills', 'skill'], ['searches', 'Searches', 'search'], ['spaces', 'Spaces', 'space'], ['people', 'People', 'member'], ['types', 'Types', 'type']];
