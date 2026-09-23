@@ -302,10 +302,20 @@ class SyncConnection extends EventEmitter {
         try {
           const status = await this._bootstrapOnce(entry, gen);
           if (status !== 'missing' && status !== 'unavailable') return;
+          // A MISSING document with local state is a warm create path: keep retrying until the server accepts it,
+          // rather than concluding that the id will never exist. Only a truly empty document becomes not found.
+          if (status === 'missing' && (entry.queue.length || entry.document.loro.oplogVersion().length())) {
+            entry.state = 'retrying';
+            continue;
+          }
           firstMiss = firstMiss || Date.now();
           if (++misses >= UNAVAILABLE_ATTEMPTS && Date.now() - firstMiss >= UNAVAILABLE_MS) {
-            // Cold MISSING: the id does not exist. Warm: Tana pauses until the transport reconnects (or, here, a subscribe).
+            // Cold MISSING: the id does not exist. Warm UNAVAILABLE: Tana pauses until the transport reconnects (or, here, a subscribe).
             if (status === 'missing') return this._detach(entry, new Error('document not found: ' + entry.id));
+            if (!entry.document.loro.oplogVersion().length() && !entry.queue.length) {
+              firstMiss = 0; misses = 0; entry.state = 'retrying';
+              continue;
+            }
             entry.state = 'paused';
             return this.logger.warn('sync: ' + entry.id + ' still unavailable after ' + misses + ' attempts, paused until the next connection');
           }

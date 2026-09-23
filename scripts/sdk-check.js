@@ -176,6 +176,52 @@ async function main() {
         assert.throws(() => fields.addField(real, { title: ' ' }), /title required/);
         assert.throws(() => fields.addField(real, { title: 'x', cardinality: 'many' }), /single or multiple/);
         assert.throws(() => fields.addField(real, { title: 'x', type: 'number' }), /field type must be one of/);
+        // options and link targets, by Tana's rules (sl/cl/due; configureAsOptions/configureAsLink)
+        const level = fields.addField(real, { title: 'Level', type: 'options', options: [' Low ', { label: 'High' }, 'low'] });
+        const levelDef = tpl.get('attributes').get(2);
+        assert.equal(levelDef.get('options').kind(), 'List', 'options are a plain list of maps, as Tana\'s schema has them');
+        assert.deepEqual(fields.fieldDefinition(real, level), { key: level, title: 'Level', type: 'options', options: [{ label: 'Low' }, { label: 'High' }] }, 'trimmed, and a label differing only in case is dropped');
+        assert.deepEqual(fields.fieldDefinition(real, fields.addField(real, { title: 'Empty', type: 'options' })).options, [], 'an options field always has its list');
+        assert.throws(() => fields.addField(real, { title: 'x', type: 'options', options: [' '] }), /Invalid option label \(empty\)/);
+        assert.throws(() => fields.addField(real, { title: 'x', type: 'options', options: ['a\nb'] }), /contains-separator/);
+        assert.throws(() => fields.addField(real, { title: 'x', type: 'options', options: ['x'.repeat(61)] }), /too-long/);
+        fields.addField(real, { title: 'Sixty', type: 'options', options: ['x'.repeat(60)] }); // 60 is allowed
+        assert.throws(() => fields.addField(real, { title: 'x', type: 'link', options: ['a'] }), /takes no options/);
+        const typeA = 'tana:type:' + ulid(), typeB = 'tana:type:' + ulid();
+        const source = fields.addField(real, { title: 'Source', type: 'link', cardinality: 'single', to: [typeA, { uri: typeA }, { uri: typeB, title: 'Backlink' }] });
+        assert.deepEqual(fields.fieldDefinition(real, source).to, [{ uri: typeA }, { uri: typeB, title: 'Backlink' }], 'one entry per type');
+        assert.throws(() => fields.addField(real, { title: 'x', type: 'member', to: [typeA] }), /takes no link targets/);
+        assert.throws(() => fields.addField(real, { title: 'x', type: 'link', to: ['tana:text:' + ulid()] }), /must be a type uri/);
+        assert.deepEqual(fields.setFieldOptions(real, level, ['High', 'Medium', 'HIGH']), ['High', 'Medium'], 'an edit replaces the choices');
+        assert.deepEqual(fields.fieldDefinition(real, level).options, [{ label: 'High' }, { label: 'Medium' }]);
+        assert.throws(() => fields.setFieldOptions(real, source, ['a']), /not an options field/);
+        assert.throws(() => fields.setFieldOptions(real, 'zzzzzzzz', ['a']), /no field/);
+        fields.setFieldTargets(real, source, [typeB]);
+        assert.deepEqual(fields.fieldDefinition(real, source).to, [{ uri: typeB }]);
+        assert.throws(() => fields.setFieldTargets(real, level, [typeA]), /not a link field/);
+        // a value checked against its definition before it is written (XL; Ove.getValidationErrors; validateTargetTypes)
+        const item = make('text'), keyOf = (attr) => real.id + '?attribute=' + attr;
+        const levelField = fields.fieldDefinition(real, level);
+        fields.setFieldText(item, keyOf(level), ['medium'], { field: levelField });
+        assert.deepEqual(fields.readFields(item)[0].lines, [{ segments: [{ text: 'Medium' }], block: 'bullet' }], 'written as declared, one bullet per label');
+        assert.throws(() => fields.setFieldText(item, keyOf(level), ['High', 'Medium'], { field: levelField }), /holds a single value, but 2 were given/);
+        assert.throws(() => fields.setFieldText(item, keyOf(level), ['Urgent'], { field: levelField }), /only accepts its declared values. Rejected: "Urgent". Available: "High" \| "Medium"/);
+        assert.equal(fields.readFields(item)[0].text, 'Medium', 'a refused value writes nothing');
+        fields.setFieldText(item, keyOf(level), ['High', 'high', 'Medium'], { field: { ...levelField, cardinality: 'multiple' } });
+        assert.deepEqual(fields.readFields(item)[0].lines.map((l) => l.segments[0].text), ['High', 'Medium'], 'multiple: every label, repeats dropped');
+        fields.setFieldText(item, keyOf(level), '', { field: levelField });
+        assert.deepEqual(fields.readFields(item)[0].lines, [{ segments: [], block: 'paragraph' }], 'emptied: one empty paragraph');
+        assert.throws(() => fields.setFieldText(item, keyOf(level), 'x', { field: { key: level, type: 'options', options: [] } }), /no values defined yet/);
+        const sourceField = fields.fieldDefinition(real, source), a = 'tana:text:' + ulid(), b = 'tana:text:' + ulid();
+        const link = (uri, label) => [{ mention: { uri, label } }];
+        const typeOf = (uri) => ({ [a]: typeB, [b]: typeA })[uri];
+        fields.setFieldText(item, keyOf(source), [link(a, 'Brief')], { field: sourceField, typeOf });
+        assert.deepEqual(fields.readFields(item).find((f) => f.attribute === source).segments, [{ mention: { uri: a, label: 'Brief' } }]);
+        assert.throws(() => fields.setFieldText(item, keyOf(source), [link(a, 'Brief'), link(b, 'Other')], { field: sourceField, typeOf }), /Multiple values not allowed \(found 2\)/);
+        assert.throws(() => fields.setFieldText(item, keyOf(source), [[{ text: 'see ' }, ...link(a, 'Brief')]], { field: sourceField }), /Contains non-link content/);
+        assert.throws(() => fields.setFieldText(item, keyOf(source), [link(b, 'Other')], { field: sourceField, typeOf }), new RegExp('"Other" has wrong type \\(expected one of: ' + typeB + '\\)'));
+        fields.setFieldText(item, keyOf(source), [link(b + 'x', 'Unknown')], { field: sourceField, typeOf }); // a type nobody knows passes, as in Tana
+        fields.setFieldText(item, keyOf(source), [link(a, 'Brief'), link(b, 'Other')], { field: { ...sourceField, cardinality: undefined, to: [] } }); // unset cardinality allows several
       }
       // a reference value is a mention node: its label is its text, not an empty string
       typed.transact((l) => {
@@ -4037,6 +4083,42 @@ async function main() {
     server.unavailable.delete(UNAV);
     sync.subscribe(UNAV);
     assert.equal(readNode(await pending).title, 'waiting for the server', 'a subscribe resumes the paused document');
+    // A warm create that still gets MISSING is not "document not found": queued local state means the create path
+    // still has something to send, so Tana keeps retrying instead of exhausting the cold-missing budget.
+    const WARM = 'tana:text:' + ulid();
+    const warmEntry = { id: WARM, document: new Document(WARM, { peerId: '4252' }), sessionId: null, state: 'new', gen: 0, queue: [new Uint8Array([1])], inflight: false, timer: null, resyncs: 0, liveSince: 0, ready: { resolve() {}, reject() {} }, complete: null };
+    const savedBootstrapOnce = sync._bootstrapOnce;
+    let warmTries = 0;
+    sync.docs.set(WARM, warmEntry);
+    try {
+      sync.connected = true;
+      sync._bootstrapOnce = async () => { warmTries++; skew += 20000; if (warmTries >= 6) sync.connected = false; return 'missing'; };
+      await sync._bootstrap(warmEntry);
+      assert.equal(warmTries, 6, 'a warm missing keeps retrying past the cold budget');
+      assert.equal(sync.docs.get(WARM), warmEntry, 'and is not detached as document not found');
+      assert.equal(warmEntry.state, 'retrying');
+    } finally {
+      sync._bootstrapOnce = savedBootstrapOnce;
+      sync.connected = true;
+      sync.docs.delete(WARM);
+    }
+    // Cold unavailable is not the recoverable warm-session pause: without local state to protect, a subscribe keeps
+    // retrying instead of parking in paused until somebody asks again.
+    const COLD = 'tana:text:' + ulid();
+    const coldEntry = { id: COLD, document: new Document(COLD, { peerId: '4253' }), sessionId: null, state: 'new', gen: 0, queue: [], inflight: false, timer: null, resyncs: 0, liveSince: 0, ready: { resolve() {}, reject() {} }, complete: null };
+    let coldTries = 0;
+    sync.docs.set(COLD, coldEntry);
+    try {
+      sync.connected = true;
+      sync._bootstrapOnce = async () => { coldTries++; skew += 20000; if (coldTries >= 6) sync.connected = false; return 'unavailable'; };
+      await sync._bootstrap(coldEntry);
+      assert.equal(coldTries, 6, 'a cold unavailable keeps retrying past one budget window');
+      assert.equal(coldEntry.state, 'retrying', 'and never parks itself in paused');
+    } finally {
+      sync._bootstrapOnce = savedBootstrapOnce;
+      sync.connected = true;
+      sync.docs.delete(COLD);
+    }
   } finally {
     Date.now = realNow; global.setTimeout = realTimeout;
   }

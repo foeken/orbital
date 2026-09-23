@@ -372,15 +372,17 @@ const commands = {
     await new Promise((r) => setTimeout(r, 1500));
     out(summary(doc));
   },
-  // addfield <type uri> <title> [--type member|date|link|...] [--multiple]: define a field on a type (sdk/fields.js)
+  // addfield <type uri> <title> [--type member|date|link|options] [--multiple] [--options "A|B"] [--to <type uri>,…]:
+  // define a field on a type (sdk/fields.js)
   async addfield() {
     const [typeUri, title] = positional;
-    if (!typeUri || !title) throw new Error('usage: addfield <tana:type:...> <title> [--type member|date|link] [--multiple]');
+    if (!typeUri || !title) throw new Error('usage: addfield <tana:type:...> <title> [--type member|date|link|options] [--multiple] [--options "A|B"] [--to tana:type:...,...]');
     await connect();
     await client.sync.connect();
     const doc = await client.sync.subscribe(typeUri);
     if (doc.data.get('type') !== 'type') throw new Error(typeUri + ' is not a type');
-    const key = require('../sdk/fields').addField(doc, { title, type: flag('type') || undefined, cardinality: args.includes('--multiple') ? 'multiple' : 'single' });
+    const key = require('../sdk/fields').addField(doc, { title, type: flag('type') || undefined, cardinality: args.includes('--multiple') ? 'multiple' : 'single',
+      options: flag('options') !== undefined ? flag('options').split('|') : undefined, to: flag('to') !== undefined ? flag('to').split(',') : undefined });
     await new Promise((r) => setTimeout(r, 1500)); // let the live update go out
     out(key + ' ' + JSON.stringify(doc.data.get('template').toJSON().attributes));
   },
@@ -532,14 +534,21 @@ commands.discusswith = async () => {
 };
 // setfield <id> <type-uri?attribute=key> <line…>: write a field value, one argument per line, the way the page's
 // field editor does (sdk/fields.js). A line written as "- words" is a bullet, as typing "- " in the page makes one.
-// WRITES.
+// A line written as "[label](tana:…)" is a reference. The value is checked against the field's definition first, as
+// Tana does (options, cardinality, link targets), and a refusal writes nothing. WRITES.
 commands.setfield = async () => {
   const [id, key, ...lines] = positional;
   if (!id || !key || !lines.length) throw new Error('usage: setfield <id> <tana:type:...?attribute=key> <line> [<line>...]  (WRITES)');
   const main = backend(await connect());
   await client.sync.connect();
   const sdkFields = require('../sdk/fields');
-  await main.op(id, (doc) => sdkFields.setFieldText(doc, key, lines.map((line) => (line.startsWith('- ') ? { segments: line.slice(2), block: 'bullet' } : { segments: line, block: 'paragraph' }))));
+  const { typeUri, attribute } = sdkFields.parseKey(key);
+  const field = sdkFields.fieldDefinition(await client.sync.subscribe(typeUri), attribute);
+  const ref = (line) => { const m = /^\[(.*)\]\((tana:[^)]+)\)$/.exec(line); return m ? [{ mention: { label: m[1], uri: m[2] } }] : line; };
+  const value = lines.map((line) => (line.startsWith('- ') ? { segments: ref(line.slice(2)), block: 'bullet' } : { segments: ref(line), block: 'paragraph' }));
+  const types = {}; // what each referenced document is typed as, for the link-target check
+  for (const line of value) for (const s of Array.isArray(line.segments) ? line.segments : []) types[s.mention.uri] = (await client.sync.subscribe(s.mention.uri)).data.get('entityTypeUri');
+  await main.op(id, (doc) => sdkFields.setFieldText(doc, key, value, { field, typeOf: (uri) => types[uri] }));
   await new Promise((r) => setTimeout(r, 1500)); // the local update leaves with the stream, like the other write commands
   out(sdkFields.readFields(await client.sync.subscribe(id)));
 };
@@ -776,7 +785,7 @@ const USAGE = [
   '  live       watch <id...>',
   '  LIVE       livequery [--minutes 60] [--seconds 20] [--state <stateType>] | presence <id> [--seconds 30] [--announce <name>] [--block <blockId>]',
   '  WRITES     create <title> [--kind doc|task|meeting] | delete <id> | restore <id> | set-title <id> <title> |',
-  '             addfield <type uri> <title> [--type member|date|link] [--multiple] |',
+  '             addfield <type uri> <title> [--type member|date|link|options] [--options "A|B"] [--to <type uri>,…] [--multiple] |',
   '             set-state <id> <proposed|open|closed|not_now> | pin <id> <sidebar|today> | unpin <id> <sidebar|today> |',
   '             pinto <event|space id> <id> | unpinfrom <event|space id> <id> | settype <id> <tana:type:...|none> |',
   '             set-hue <type uri> <0-360|none> | discusswith <id> <who…> | setfield <id> <type uri?attribute=key> <line…>',
