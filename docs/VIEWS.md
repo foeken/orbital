@@ -32,7 +32,7 @@ renderer. It replaces the per-view paths: `taskParams`/`libraryQueries`/`MEETING
 | `text` | string | server-side `textQuery`. |
 | `participant` | `me` or null | events the user is a participant of (`hasParticipantUris`). |
 | `window` | `recent` or null | events from 7 days ago to 7 days ahead. |
-| `completedWithin` | `7` | `30` | `'all'` | how old a **completed** task may be and still be listed. Not a way to hide them — `states` alone decides whether they are asked for — so it has no "off", and its value is kept while Completed is out of `states`. Unset reads as `7`. |
+| `completedWithin` | `3` | `7` | `30` | `'all'` | how old a **completed** task may be and still be listed. Not a way to hide them — `states` alone decides whether they are asked for — so it has no "off", and its value is kept while Completed is out of `states`. Unset reads as `7`. |
 
 ## 2. Presets
 

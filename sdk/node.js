@@ -4,6 +4,7 @@ const { randomBytes } = require('node:crypto');
 const { LoroMap, LoroList } = require('loro-crdt');
 
 const STATE_TYPES = ['proposed', 'open', 'closed', 'not_now'];
+const COMPLETED_WINDOWS = [3, 7, 30, 'all']; // days a completed task stays listed (sdk/query.js completedInWindow)
 const B32 = '0123456789abcdefghjkmnpqrstvwxyz'; // Crockford base32, lowercase as in Tana ids
 const USER_URI = /^tana:user-profile:[0-9a-z]{26}$/;
 // Audience classification only: a guest profile is an external person with an explicit participant grant, never me.
@@ -262,7 +263,7 @@ function setSearchQuery(document, query) {
 // `display` is the list of facts each row shows, stored as one comma-joined string because a Loro map holds scalars,
 // not arrays. An empty list is a real choice — a row showing nothing of itself — so it is stored as an empty string
 // rather than deleted, which is what tells it apart from a search that has never been given a display at all.
-// `completedWithin` (7, 30 or 'all') is here rather than in the query for the same reason the rest is: Tana's stored
+// `completedWithin` (one of COMPLETED_WINDOWS) is here rather than in the query for the same reason the rest is: Tana's stored
 // query has no field for how old a completed task may be, and inventing one would put a key no other client
 // understands inside their vocabulary. It does decide which rows are shown, so main applies it to what the query
 // answers (sdk/query.js completedInWindow).
@@ -274,7 +275,7 @@ function writeSearchView(loro, view = {}) {
   }
   if (Array.isArray(view.display)) v.set('display', view.display.join(','));
   else if (v.get('display') !== undefined) v.delete('display');
-  if (view.completedWithin === 7 || view.completedWithin === 30 || view.completedWithin === 'all') v.set('completedWithin', view.completedWithin);
+  if (COMPLETED_WINDOWS.includes(view.completedWithin)) v.set('completedWithin', view.completedWithin);
   else if (v.get('completedWithin') !== undefined) v.delete('completedWithin');
 }
 function setSearchView(document, view) {
@@ -318,4 +319,4 @@ function render(node) {
   return kids.map(render).join(block ? '\n' : '');
 }
 
-module.exports = { readNode, editable, setTitle, setState, setEntityType, taskMeta, audience, audienceMetadata, setAssignees, setSearchQuery, setSearchView, contentText, ulid, initDocument, STATE_TYPES };
+module.exports = { readNode, editable, setTitle, setState, setEntityType, taskMeta, audience, audienceMetadata, setAssignees, setSearchQuery, setSearchView, contentText, ulid, initDocument, STATE_TYPES, COMPLETED_WINDOWS };

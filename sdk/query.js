@@ -2,7 +2,7 @@
 // Search queries with #filters (docs/OUTLINER.md Addendum 6/10): "sam #task" -> text 'sam', tags ['task'].
 // #task = documents with a task state, #meeting = events, #member = user profiles, #<Type> = documents of that type
 // (title match, case-insensitive).
-const { STATE_TYPES } = require('./node');
+const { STATE_TYPES, COMPLETED_WINDOWS } = require('./node');
 
 const SORT = [{ field: 'SORT_FIELD_TEXT_RANK', direction: 'SORT_DIRECTION_DESCENDING' }];
 const UPDATE_DESC = [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }];
@@ -85,8 +85,8 @@ function assigneeParams(assignee, me) {
 
 const FILTER_KEYS = new Set(['types', 'states', 'assignee', 'text', 'participant', 'window', 'completedWithin']);
 const USER = /^tana:user-profile:[0-9a-z]{26}$/;
-// Completed tasks are the one thing a list drowns in, so a window says how far back they still count: 7 days, 30
-// days, or All. Whether they appear at all is the Status filter's business and only its — this never hides them,
+// Completed tasks are the one thing a list drowns in, so a window says how far back they still count: 3 days, 7
+// days, 30 days, or All. Whether they appear at all is the Status filter's business and only its — this never hides them,
 // it only ages them out, which is why it has no "off" and why its value is kept while Completed is out of Status.
 // The clock is the task's own `state.enteredAt`: when it entered the state it is in, which for a closed task is
 // when it was completed. Not update time, which moves for an edit or a re-sync long after the work was done. The
@@ -95,7 +95,6 @@ const USER = /^tana:user-profile:[0-9a-z]{26}$/;
 // Rolling and absolute: exactly N×24h back from now, so "does today count" has no answer to get wrong at a
 // boundary. A closed task whose enteredAt is missing or unreadable cannot be shown to be recent, so a window
 // leaves it out; All has no clock and keeps every one of them.
-const COMPLETED_WINDOWS = [7, 30, 'all'];
 const completedWindow = (within) => (COMPLETED_WINDOWS.includes(within) ? within : 7); // unset, or a stale value, is the default
 function completedInWindow(n, within, now = Date.now()) {
   const days = completedWindow(within);

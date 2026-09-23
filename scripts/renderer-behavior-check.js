@@ -2882,8 +2882,8 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   api.stage({ types: ['tasks'], states: ['proposed', 'closed'], assignee: 'me', text: '' });
   assert.deepEqual(plain([completedPill().label, completedPill().value]), ['Completed', '7 days'],
     'letting Completed in offers the window, defaulting to 7 days the first time it is asked for');
-  assert.deepEqual(plain(completedPill().rows().map((r) => [r.label, !!r.checked])), [['7 days', true], ['30 days', false], ['All', false]],
-    'the choices are the three the rule knows, with the active one ticked and no way to turn completed tasks off here');
+  assert.deepEqual(plain(completedPill().rows().map((r) => [r.label, !!r.checked])), [['3 days', false], ['7 days', true], ['30 days', false], ['All', false]],
+    'the choices are the four the rule knows, with the active one ticked and no way to turn completed tasks off here');
   assert.deepEqual(plain(api.pillDefs().map((d) => d.id)), ['status', 'completed', 'assigned', 'sort', 'group', 'display'],
     'and it sits with the filters, right after the Status pill it belongs to');
   completedPill().rows().find((r) => r.label === '30 days').run();

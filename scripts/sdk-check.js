@@ -1467,6 +1467,8 @@ async function main() {
     assert.equal((await backend.handlers.get('search:filter')(null, searchId)).filter.completedWithin, 30, 'which is what the pills read back, so the pill shows what the rows are');
     await backend.handlers.get('search:setFilter')(null, searchId, { types: ['tasks'], states: ['proposed', 'open'], assignee: 'anyone', completedWithin: 30 }, 'updated', 'status', ['status']);
     assert.equal(searchDoc.loro.getMap('view').toJSON().completedWithin, 30, 'taking Completed out of the Status filter keeps the window, so putting it back reads the same as before');
+    await backend.handlers.get('search:setFilter')(null, searchId, { types: ['tasks'], states: ['closed'], assignee: 'anyone', completedWithin: 3 }, 'updated', 'status', ['status']);
+    assert.equal((await backend.handlers.get('search:filter')(null, searchId)).filter.completedWithin, 3, 'every window the pill offers survives a save, 3 days included');
     console.log('ok  a saved search stores and reapplies its own completed window, beside the query rather than inside it');
   }
 
@@ -2576,8 +2578,8 @@ async function main() {
     assert.equal(completedInWindow({ id: 'tana:event:x', updateTime: new Date(now - 400 * DAY).toISOString() }, 7, now), true, 'and a node with no task state at all is not a completed task');
     assert.equal(completedInWindow({ state: { type: 'closed' } }, 7, now), false, 'a completed task with no completion time cannot be shown to be recent, so a window leaves it out');
     assert.equal(completedInWindow({ state: { type: 'closed' } }, 'all', now), true, 'while All has no clock to fail: it keeps every completed task');
-    assert.deepEqual([7, 30, 'all', 14, '7', true, null].map((w) => validViewFilter({ completedWithin: w })), [true, true, true, false, false, false, false],
-      'only the three the pill offers are a valid filter value');
+    assert.deepEqual([3, 7, 30, 'all', 14, '7', true, null].map((w) => validViewFilter({ completedWithin: w })), [true, true, true, true, false, false, false, false],
+      'only the four the pill offers are a valid filter value');
     assert.equal(viewParams({ types: ['tasks'], states: ['closed'], completedWithin: 7 }, ME).limit, 1000, 'and the window asks the graph for nothing: there is no request field for it');
     assert.throws(() => viewParams({ types: ['nope'] }, ME), /invalid view filter/);
     // Unticking the last kind must not become an unconstrained query: the graph would answer with images, calls and
