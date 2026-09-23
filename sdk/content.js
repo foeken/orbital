@@ -217,7 +217,7 @@ function must(document, id) {
 // ponytail: offsets are taken as Loro's unicode positions, so text with astral characters (emoji) before the caret is
 // off by one per character; count code points in the caller when that matters.
 function cursorAt(document, id, offset) {
-  const found = locate(kids(document.content), id), list = found && kids(found.block);
+  const found = locate(kids(document.content), id) || cellParagraph(document, id), list = found && kids(found.block);
   if (!list) return null;
   let left = Math.max(0, Number(offset) || 0);
   for (let i = 0; i < list.length; i++) {
@@ -234,7 +234,7 @@ function cursorAt(document, id, offset) {
 // offset): a mention or a line break is one position, text one per character. The outline counts a mention as its
 // label. These convert between the two over the block's own inline items; null for an unknown block.
 function inlineItems(document, id) {
-  const found = locate(kids(document.content), id), list = found && kids(found.block);
+  const found = locate(kids(document.content), id) || cellParagraph(document, id), list = found && kids(found.block);
   if (!list) return null;
   const out = [];
   for (let i = 0; i < list.length; i++) {
@@ -521,6 +521,76 @@ function setCellText(document, cellId, value) {
   });
 }
 
+// A paragraph inside a table cell, for the presence helpers: locate() stops at a table on purpose, so no outline
+// operation reaches into one, but a caret in a cell is on that cell's paragraph.
+function cellParagraph(document, id) {
+  const p = findBlock(kids(document.content), id, (b) => name(b) === 'paragraph');
+  return p && { block: p, item: null };
+}
+// Rows and columns, the way Tana writes them (ave/ove/sve/cve/lve/uve in shared-*.js of 2026-09-22), with the limits its
+// editor's table menu keeps (fet/pet/met): no row above the header row, the header row and the last body row are not
+// deleted, nor the last column. A new cell is a tableCell, or a tableHeader in a header row, with its own id and an
+// empty paragraph; a row or column is moved as a copy (ids and text kept) and the original deleted. Columns count
+// cells as stored, as Tana's own do. Returns the id of the cell the caret belongs in afterwards.
+const TABLE_OPS = ['rowBefore', 'rowAfter', 'deleteRow', 'columnBefore', 'columnAfter', 'deleteColumn', 'rowUp', 'rowDown', 'columnLeft', 'columnRight'];
+const headerRow = (row) => { const c = kids(row); return !!c && c.length > 0 && name(c.get(0)) === 'tableHeader'; };
+function newCell(list, index, header) {
+  const m = list.insertContainer(index, new LoroMap()), a = m.setContainer('attributes', new LoroMap());
+  m.set('nodeName', header ? 'tableHeader' : 'tableCell');
+  a.set('blockId', newId()); a.set('colspan', 1); a.set('rowspan', 1);
+  create(m.setContainer('children', new LoroList()), 0, 'paragraph');
+  return blockId(m);
+}
+function tableOp(document, cellId, op) {
+  if (!TABLE_OPS.includes(op)) throw new Error('unknown table operation ' + op);
+  let out = cellId;
+  document.transact(() => {
+    let rows = null, r = -1, c = -1;
+    const walk = (list) => { for (let i = 0; list && i < list.length && !rows; i++) { const b = list.get(i); if (!isMap(b)) continue; if (name(b) !== 'table') { walk(kids(b)); continue; }
+      const rl = kids(b); for (let y = 0; rl && y < rl.length && !rows; y++) { const cl = kids(rl.get(y)); for (let x = 0; cl && x < cl.length; x++) if (blockId(cl.get(x)) === cellId) { rows = rl; r = y; c = x; break; } } } };
+    walk(kids(document.content));
+    if (!rows) throw new Error('no table cell ' + cellId);
+    const row = (y) => kids(rows.get(y)), width = Math.max(...Array.from({ length: rows.length }, (_, y) => (row(y) || { length: 0 }).length));
+    const header = headerRow(rows.get(r)), bodyRows = rows.length - (headerRow(rows.get(0)) ? 1 : 0);
+    const refuse = (why) => { throw new Error(why); };
+    if (op === 'rowBefore' || op === 'rowAfter') {
+      if (op === 'rowBefore' && header) refuse('A row cannot go above the header row');
+      const m = rows.insertContainer(op === 'rowBefore' ? r : r + 1, new LoroMap());
+      m.set('nodeName', 'tableRow'); m.setContainer('attributes', new LoroMap()).set('blockId', newId());
+      const cells = m.setContainer('children', new LoroList());
+      for (let x = 0; x < width; x++) { const id = newCell(cells, x, false); if (x === Math.min(c, width - 1)) out = id; }
+    } else if (op === 'deleteRow') {
+      if (header) refuse('The header row cannot be deleted');
+      if (bodyRows <= 1) refuse('Cannot delete the only row in a table');
+      const next = rows.get(r + 1 < rows.length ? r + 1 : r - 1), nc = kids(next);
+      out = nc && nc.length ? blockId(nc.get(Math.min(c, nc.length - 1))) : null;
+      rows.delete(r, 1);
+    } else if (op === 'columnBefore' || op === 'columnAfter') {
+      const at = op === 'columnBefore' ? c : c + 1;
+      for (let y = 0; y < rows.length; y++) { const cl = row(y); if (!cl) continue; const id = newCell(cl, Math.min(at, cl.length), headerRow(rows.get(y))); if (y === r) out = id; }
+    } else if (op === 'deleteColumn') {
+      if (width <= 1) refuse('Cannot delete the only column in a table');
+      const cl = row(r), keep = cl.get(c + 1 < cl.length ? c + 1 : c - 1);
+      out = keep ? blockId(keep) : null;
+      for (let y = 0; y < rows.length; y++) { const l = row(y); if (l && l.length > c) l.delete(c, 1); }
+    } else if (op === 'rowUp' || op === 'rowDown') {
+      const to = op === 'rowUp' ? r - 1 : r + 1;
+      if (to < 0 || to >= rows.length) refuse('The row is already at the ' + (op === 'rowUp' ? 'top' : 'bottom'));
+      if (header || headerRow(rows.get(to))) refuse('The header row stays on top');
+      const src = rows.get(r);
+      if (to < r) { copy(rows, to, src); rows.delete(r + 1, 1); } else { copy(rows, to + 1, src); rows.delete(r, 1); }
+    } else {
+      const to = op === 'columnLeft' ? c - 1 : c + 1;
+      if (to < 0 || to >= width) refuse('The column is already the ' + (op === 'columnLeft' ? 'leftmost' : 'rightmost'));
+      for (let y = 0; y < rows.length; y++) {
+        const l = row(y); if (!l || l.length <= Math.max(c, to)) continue;
+        const src = l.get(c);
+        if (to < c) { copy(l, to, src); l.delete(c + 1, 1); } else { copy(l, to + 1, src); l.delete(c, 1); }
+      }
+    }
+  });
+  return out;
+}
 // A new row follows the row it comes from: a listItem makes another listItem, so a quote stays inside its quote
 // and a numbered item stays numbered, and anything bare makes plain text — a heading and a code block each
 // continue as the plain text that follows one. A document's own first row, which has nothing to follow, is plain
@@ -912,6 +982,9 @@ function insertImage(document, id, tanaUri) {
   document.transact(() => {
     const list = rootKids(document);
     if (id == null) { out = image(list, list.length); return; }
+    // a table cell holds its images after its text, as Tana's addImageToCell appends them (rve)
+    const cell = findBlock(list, id, (b) => CELLS.includes(name(b)));
+    if (cell) { const c = kids(cell) || cell.setContainer('children', new LoroList()); out = image(c, c.length); return; }
     const { block, item: li } = must(document, id);
     const unit = li || block, l = unit.parent(), i = indexOf(l, unit) + 1;
     out = li ? image(kids(create(l, i, 'listItem')), 0) : image(l, i);
@@ -937,4 +1010,4 @@ function insertMention(document, { uri, label } = {}, { parentId = null, afterId
   return out;
 }
 
-module.exports = { cursorAt, cursorOffset, charOffset, blockOffset, readOutline, assignBlockIds, setText, readTable, setCellText, inlineGroups, writeInline, styleDoc, setBlockType, insertDivider, insertImage, insertAfter, insertBefore, insertChild, insertMention, split, remove, removeMany, indent, indentMany, outdent, outdentMany, move, moveMany, moveTo, toggleCheckbox, newId, BLOCK_TYPES };
+module.exports = { cursorAt, cursorOffset, charOffset, blockOffset, readOutline, assignBlockIds, setText, readTable, setCellText, tableOp, TABLE_OPS, inlineGroups, writeInline, styleDoc, setBlockType, insertDivider, insertImage, insertAfter, insertBefore, insertChild, insertMention, split, remove, removeMany, indent, indentMany, outdent, outdentMany, move, moveMany, moveTo, toggleCheckbox, newId, BLOCK_TYPES };

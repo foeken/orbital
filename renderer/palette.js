@@ -104,6 +104,7 @@ function rankRows(rows) {
 function paletteRows(q, typed = q) {
   const selection = selectionRows();
   const rows = [...selection];
+  if (tana.tableOp) rows.push(...tableRows()); // with the caret in a table cell: its rows and columns (renderer/table.js)
   if (tana.inboxSetRead) rows.push(...notificationRows()); // a notification row's own two (renderer/inbox.js)
   // What acts on the current document (pins, link, icon, visibility, location) sits with the rest of its rows under
   // "Current node"; while a multi-selection owns the top of the palette these fall back among the app actions.
@@ -989,7 +990,7 @@ function anchorPalette(rect) {
 function closePalette() { palette.hidden = true; clearTimeout(palTimer); palTimer = null; cancelLink(); pinCtx = null; pillCtx = null; promptEditor(false); returnFocus(); }
 // back to the node that had the caret when the palette opened (the @ link path places its own caret); with nothing to
 // return to (a row selection, the sidebar) the hidden input must not keep the keys, so it lets go of the focus
-function returnFocus() { const r = palReturn; palReturn = null; if (r && !focused()) placeCaret(r.key, r.offset); else if (document.activeElement === palInput) palInput.blur(); }
+function returnFocus() { const r = palReturn; palReturn = null; if (r && !focused()) (r.cell ? placeCell(r.key, r.cell, r.offset) : placeCaret(r.key, r.offset)); else if (document.activeElement === palInput) palInput.blur(); }
 function runRow(r) { if (!r || r.disabled) return; if (!r.keepOpen) closePalette(); r.run(); }
 // Up/Down step over rows that cannot run (info lines, unavailable choices) so the keyboard never lands on a dead row.
 // A disabled row with a stable id is not dead: Cmd+Shift+K records a shortcut against it, which is how Clean up gets

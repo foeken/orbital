@@ -4250,7 +4250,52 @@ async function main() {
     assert.equal(outline.readTable(d, 't0000000').rows[0][1].text, 'State', 'block:setCell writes one cell');
     assert.equal(await backend.undo(), d.id, 'as one step of that document');
     assert.equal(outline.readTable(d, 't0000000').rows[0][1].text, 'Status', 'which undo puts back');
-    console.log('ok  tables: rows x cells, spans and widths, cell text written into the first paragraph');
+    // rows and columns: Tana's manipulateTable writers (ave/ove/sve/cve/lve/uve), with the limits of its table menu
+    const g = new Document('tana:text:' + ulid());
+    g.transact((l) => {
+      const c = l.getMap('content'); c.set('nodeName', 'doc'); c.setContainer('attributes', new LoroMap());
+      const rows = block(c.setContainer('children', new LoroList()), 0, 'table', { blockId: 'u0000000' }).setContainer('children', new LoroList());
+      [['h', true, ['A', 'B']], ['r', false, ['a1', 'b1']], ['s', false, ['a2', 'b2']]].forEach(([p, header, words], y) => {
+        const cells = block(rows, y, 'tableRow', { blockId: p + 'row0000' }).setContainer('children', new LoroList());
+        words.forEach((w, x) => para(block(cells, x, header ? 'tableHeader' : 'tableCell', { blockId: p + x + '000000', colspan: 1, rowspan: 1 }).setContainer('children', new LoroList()), 0, p + x + 'p00000', w));
+      });
+    });
+    const grid = () => outline.readTable(g, 'u0000000').rows.map((r) => r.map((x) => (x.header ? '#' : '') + (x.text || '.')).join(' ')).join(' | ');
+    assert.throws(() => outline.tableOp(g, 'h0000000', 'rowBefore'), /above the header/);
+    assert.throws(() => outline.tableOp(g, 'h0000000', 'deleteRow'), /header row cannot be deleted/);
+    assert.throws(() => outline.tableOp(g, 'r0000000', 'rowUp'), /header row stays on top/);
+    assert.throws(() => outline.tableOp(g, 'r0000000', 'sideways'), /unknown table operation/);
+    const fresh = outline.tableOp(g, 'r1000000', 'rowAfter');
+    assert.equal(grid(), '#A #B | a1 b1 | . . | a2 b2', 'a new row of empty cells after this one');
+    const newRow = outline.readTable(g, 'u0000000').rows[2];
+    assert.equal(fresh, newRow[1].id, 'the caret goes to the new cell in the same column');
+    assert.ok(newRow.every((x) => !x.header && /^[0-9a-hjkmnp-tv-z]{8}$/.test(x.id) && /^[0-9a-hjkmnp-tv-z]{8}$/.test(x.paragraph)), 'data cells, each with an id and an empty paragraph with one');
+    assert.equal(outline.tableOp(g, 's0000000', 'rowUp'), 's0000000'); assert.equal(grid(), '#A #B | a1 b1 | a2 b2 | . .', 'moved, and the cell keeps its id');
+    outline.tableOp(g, 'h0000000', 'columnAfter');
+    assert.equal(grid(), '#A #. #B | a1 . b1 | a2 . b2 | . . .', 'a column is a new cell in every row, a header cell in the header row');
+    outline.tableOp(g, 'h1000000', 'columnLeft');
+    assert.equal(grid(), '#A #B #. | a1 b1 . | a2 b2 . | . . .', 'a column moves in every row');
+    assert.equal(outline.readTable(g, 'u0000000').rows[1][1].id, 'r1000000');
+    assert.throws(() => outline.tableOp(g, 'h0000000', 'columnLeft'), /leftmost/);
+    outline.tableOp(g, 'h1000000', 'deleteColumn'); outline.tableOp(g, 'h0000000', 'deleteColumn');
+    assert.equal(grid(), '#. | . | . | .');
+    assert.throws(() => outline.tableOp(g, outline.readTable(g, 'u0000000').rows[0][0].id, 'deleteColumn'), /only column/);
+    for (const row of outline.readTable(g, 'u0000000').rows.slice(2)) outline.tableOp(g, row[0].id, 'deleteRow');
+    assert.throws(() => outline.tableOp(g, outline.readTable(g, 'u0000000').rows[1][0].id, 'deleteRow'), /only row/, 'the last body row stays');
+    // an image into a cell goes after its text (Tana's addImageToCell); a caret in a cell is on its paragraph
+    const left = outline.readTable(g, 'u0000000').rows[1][0].id; // the one body cell still standing
+    outline.insertImage(g, left, 'tana:image:01examplei0000000000000001');
+    assert.deepEqual(outline.readTable(g, 'u0000000').rows[1][0].blocks.map((b) => b.type || b.block), ['paragraph', 'image']);
+    outline.setCellText(g, left, 'hello');
+    const inCell = outline.readTable(g, 'u0000000').rows[1][0].paragraph;
+    assert.deepEqual([outline.charOffset(g, inCell, 2), outline.blockOffset(g, inCell, 2), outline.cursorOffset(g, outline.cursorAt(g, inCell, 3).encode())],
+      [2, 2, { blockId: inCell, offset: 3 }], 'the presence helpers reach a paragraph inside a cell');
+    // and through main, one step of the document's undo
+    await backend.handlers.get('block:tableOp')(null, d.id, 'c0000000', 'rowAfter');
+    assert.equal(outline.readTable(d, 't0000000').rowCount, 3, 'block:tableOp adds the row');
+    assert.equal(await backend.undo(), d.id);
+    assert.equal(outline.readTable(d, 't0000000').rowCount, 2, 'which undo takes away');
+    console.log('ok  tables: rows x cells, spans and widths, cell text written into the first paragraph, rows and columns added, moved and deleted, images and carets in cells');
   }
   // 4. Transport: headers and the 401 -> refresh -> retry-once rule, with a fake fetch
   const calls = [];

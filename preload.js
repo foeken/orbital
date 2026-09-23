@@ -99,6 +99,7 @@ contextBridge.exposeInMainWorld('api', {
   setAssigneesMany: (docIds, uris) => ipcRenderer.invoke('doc:setAssigneesMany', docIds, uris),
   setText: (docId, nodeId, textOrSegments) => ipcRenderer.invoke('block:setText', docId, nodeId, textOrSegments),
   setCell: (docId, cellId, textOrSegments) => ipcRenderer.invoke('block:setCell', docId, cellId, textOrSegments), // a table cell's text (its first paragraph); the table row itself stays read-only
+  tableOp: (docId, cellId, op) => ipcRenderer.invoke('block:tableOp', docId, cellId, op), // rowBefore|rowAfter|deleteRow|columnBefore|columnAfter|deleteColumn|rowUp|rowDown|columnLeft|columnRight; returns the cell for the caret
   // segments carry marks: { text, marks?: { bold, italic, strike, code, link: href } } | { mention: { uri, label } }
   setBlockType: (docId, nodeId, type) => ipcRenderer.invoke('block:setBlockType', docId, nodeId, type), // paragraph|heading1..3|bullet|numbered|code|quote
   insertDivider: (docId, nodeId) => ipcRenderer.invoke('block:insertDivider', docId, nodeId), // horizontal rule after nodeId; returns its block id

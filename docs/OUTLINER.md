@@ -825,12 +825,20 @@ a cell; `colwidth` is a ProseMirror attribute (`null` until a column is resized,
   rebuild, and the caret goes back to the same cell after one.
 - **Keys** (renderer/table.js `cellKey`; the row's own keydown handler leaves cells alone): Tab/Shift+Tab walk the editable
   cells in reading order, and past the last or before the first go back to the table row. ↑/↓ on a cell's first/last
-  line go to the cell above/below in the same column (clamped to a shorter row), or out of the table to the outline row
+  line go to the cell above/below in the column you see, merged cells counted (`tableGrid`; a shorter row gives its last cell), or out of the table to the outline row
   beyond. ←/→ at a cell's edge go to the previous/next cell, and past the ends out of the table. Escape returns to the
   table row, where Backspace removes it and ↑/↓ step on as for an image. Enter on the table row puts the caret in its
   first cell; Enter inside a cell adds nothing, because a cell's text is one paragraph. Every ⌘ key goes on to the document
   handler.
-- **Left out:** adding, removing and moving rows and columns. Tana's `manipulateTable` does each in a few lines, but the
-  UI for it (where the controls sit, how they work from the keyboard, what happens to spanned cells) is a feature of its
-  own. Presence does not share a caret inside a cell (only `.text` rows send one), a rowspan above shifts the column ↑/↓
-  lands in, and images in cells are not drawn.
+- **Rows and columns** (⌘K with the caret in a cell, group "Table"; each row has an id, so ⇧⌘K can give it a key): Add row
+  above/below, Move row up/down, Delete row, Add column left/right, Move column left/right, Delete column, written by
+  `content.tableOp` as Tana's `manipulateTable` writes them, one undo step each, with the caret put in the cell the
+  operation names. The limits are Tana's table menu's: no row above the header row, the header row is neither moved nor
+  deleted, the last body row and the last column stay; what cannot run where the caret is shows disabled. A new cell
+  is a `tableCell` (a `tableHeader` in a header row) with an empty paragraph, both with ids; a moved row or column keeps
+  its ids and text.
+- **Images in cells** are drawn after the cell's text (a click opens one, as on an image row). Pasting an image into a
+  cell uploads it and appends it to that cell, as Tana's `addImageToCell` does. Removing one from a cell is not offered.
+- **Presence:** a caret in a cell is sent as the cell's paragraph (the block Tana names for it), and one received on a
+  cell's paragraph is drawn in that cell. The SDK's position helpers find a paragraph inside a cell for this, while
+  `locate` still stops at tables, so no outline operation reaches into one.
