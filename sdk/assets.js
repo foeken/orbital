@@ -23,16 +23,18 @@ async function fetchImage(uri, { getAccessToken, baseUrl = 'https://home.tana.in
 // client refuses anything over 50 MB before sending (LK) and says the same on a 413 (IK).
 const UPLOAD_LIMIT = 52428800;
 const TOO_LARGE = 'File is too large (max 50 MB)';
+const SIGNED_OUT = "You're signed out — sign in and try again"; // Tana's own wording for a refused token
 
-async function uploadFile(bytes, { filename = 'file', mimeType = 'application/octet-stream', getAccessToken, baseUrl = 'https://home.tana.inc/api/general', fetch = globalThis.fetch }) {
+async function uploadFile(bytes, { filename = 'file', mimeType = 'application/octet-stream', getAccessToken, baseUrl = 'https://home.tana.inc/api/general', fetch = globalThis.fetch, signal }) {
   if (bytes.length > UPLOAD_LIMIT) throw new Error(TOO_LARGE);
   const post = async (refresh) => {
     const body = new FormData();
     body.append('file', new Blob([bytes], { type: mimeType }), filename);
-    return fetch(baseUrl + '/files/upload', { method: 'POST', body, headers: { authorization: 'Bearer ' + await getAccessToken({ refresh }) } });
+    return fetch(baseUrl + '/files/upload', { method: 'POST', body, signal, headers: { authorization: 'Bearer ' + await getAccessToken({ refresh }) } });
   };
   let r = await post(false);
   if (r.status === 401) r = await post(true);
+  if (r.status === 401) throw new Error(SIGNED_OUT);
   if (r.status === 413) throw new Error(TOO_LARGE);
   if (!r.ok) {
     const t = await r.text(), j = (() => { try { return JSON.parse(t); } catch { return null; } })();
@@ -57,4 +59,4 @@ function initImage(loro, { ownerUri, cid, width, height, blurhash, filename, mim
   data.set('createdInUri', ownerUri);
 }
 
-module.exports = { fetchImage, uploadFile, initImage, UPLOAD_LIMIT };
+module.exports = { fetchImage, uploadFile, initImage, UPLOAD_LIMIT, SIGNED_OUT };

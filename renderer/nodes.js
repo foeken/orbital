@@ -62,7 +62,7 @@ function chipEl(t, nodeHue) {
 const BLOCK_TYPES = [['paragraph', 'Text'], ['heading1', 'Heading 1'], ['heading2', 'Heading 2'], ['heading3', 'Heading 3'],
   ['bullet', 'Bullet List'], ['numbered', 'Numbered List'], ['code', 'Code Block'], ['quote', 'Quote']];
 const BLOCK_LABEL = new Map(BLOCK_TYPES);
-const BLOCK_GLYPH = { paragraph: 'T', heading1: 'H1', heading2: 'H2', heading3: 'H3', bullet: '•', numbered: '1.', code: '</>', quote: '❝', divider: '—' };
+const BLOCK_GLYPH = { paragraph: 'T', heading1: 'H1', heading2: 'H2', heading3: 'H3', bullet: '•', numbered: '1.', code: '</>', quote: '❝', divider: '—', image: '▣' };
 // A row with no type of its own is an outline row: every row readOutline returns carries one, so this is the
 // mock's rows and anything built by hand. The draft tail states the mode it will be written in (draftNode).
 const blockTypeOf = (node) => (BLOCK_LABEL.has(node.block) ? node.block : node.heading ? 'heading' + node.heading : 'bullet');
@@ -79,9 +79,12 @@ const nestedRow = (item) => item?.parent?.node?.kind === 'block';
 // same slot so it matches the weight of H1/•/1. beside it.
 function glyphSvg(type) { return type === 'code' ? '<span class="glyph icon">' + iconSvg('code') + '</span>' : '<span class="glyph">' + (BLOCK_GLYPH[type] || '') + '</span>'; }
 const images = new Map(); // image uri -> data URL (or the pending api.image promise)
+// image uri -> Promise<title | ''>: the title Tana's AI gives an image document after its upload, read once
+const imageTitles = new Map();
+const imageTitle = (uri) => { if (!imageTitles.has(uri)) imageTitles.set(uri, Promise.resolve(tana.node ? tana.node(uri) : null).then((n) => n?.title || '', () => '')); return imageTitles.get(uri); };
 const isImage = (node) => node.type === 'image';
 const isDivider = (node) => node.block === 'divider' || node.type === 'divider';
-const isAtomic = (node) => isImage(node) || isDivider(node) || !!node.table; // shown, focusable, never typed into (a table's cells edit on their own: renderer/table.js)
+const isAtomic = (node) => isImage(node) || isDivider(node) || !!node.table || !!node.upload; // shown, focusable, never typed into (a table's cells edit on their own: renderer/table.js; an upload is its placeholder: renderer/upload.js)
 const isReference = (node) => node.type === 'reference';
 // Tana's full-reference presentation: a block whose whole content is one mention stands in for the node it points at
 // — its box, its status, its tags — and becomes an ordinary line with a link again the moment anything else is typed.
@@ -332,7 +335,7 @@ async function loadRoots() {
   }
   for (const d of drafts) { const s = views.find((x) => x.id === d.view); if (s) s.nodes.splice(d.i, 0, d.node); }
 }
-async function reload(docId) { kids.set(docId, await tana.children(docId)); }
+async function reload(docId) { kids.set(docId, syncUploads(docId, await tana.children(docId))); } // uploads still running keep their placeholders
 // A document's rows are not only the ones on its page: every field it has is an outline of that document too,
 // loaded under "<document>|<type>?attribute=<key>". Anything that re-reads a document's rows re-reads those with
 // it, or an undo, a live update or someone else's edit shows on the page and not in the field beside it.

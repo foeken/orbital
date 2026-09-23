@@ -249,10 +249,10 @@ function openSlash(item) {
   loadCreationChoices();
 }
 function slashRows(q) {
-  const rows = [...BLOCK_TYPES.filter(([type]) => type !== 'paragraph'), ['divider', 'Divider']].map(([type, label]) => ({
+  const rows = [...BLOCK_TYPES.filter(([type]) => type !== 'paragraph'), ['divider', 'Divider'], ['image', 'Image']].map(([type, label]) => ({
     group: 'Blocks', svg: glyphSvg(type), label,
-    disabled: type === 'divider' ? !tana.insertDivider : !tana.setBlockType,
-    run: () => runSlashBlock(type),
+    disabled: type === 'divider' ? !tana.insertDivider : type === 'image' ? !tana.insertImage : !tana.setBlockType,
+    run: () => (type === 'image' ? pickImages() : runSlashBlock(type)),
   }));
   // Doc and Task are always offered; the workspace types come from the same source as the Cmd+K "Create new …" list
   const choices = creationChoices.some((c) => c.kind === 'doc') ? creationChoices : [{ kind: 'doc', title: 'Doc', icon: 'doc', selectable: true }, ...creationChoices];
@@ -262,7 +262,23 @@ function slashRows(q) {
     run: () => createFromSlash(choice),
   });
   if (palBusy) rows.push({ group: 'Create', label: 'Loading choices…', disabled: true });
-  return rows.filter((r) => fuzzyMatch(r.label, q));
+  return rows.filter((r) => fuzzyMatch(r.label, q) || (r.label === 'Image' && /^(pic|pho|upl)/.test(q))); // Image: also picture, photo, upload
+}
+// "/" Image: the native file dialog, images only, several at once. The "/" row is left as it was until files are
+// picked (Esc in the dialog changes nothing), then it empties and the images land behind it, as Divider does.
+function pickImages() {
+  const item = slashTarget();
+  if (!item || item.node.kind !== 'block') return;
+  const input = document.createElement('input');
+  input.type = 'file'; input.multiple = true; input.accept = 'image/*,.heic,.heif';
+  input.onchange = () => {
+    const files = imageFiles(input.files);
+    if (!files.length) return;
+    dropPending(item.key);
+    item.node.text = ''; item.node.segments = [];
+    run(() => tana.setText(item.docId, item.node.id, [])).then(() => uploadImages(item.docId, item.node.id, files)).catch(showError);
+  };
+  input.click();
 }
 async function runSlashBlock(type) {
   const item = slashTarget();

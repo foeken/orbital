@@ -20,7 +20,7 @@ const { accessContext, archivedTypes, chatOutline, codexIds, createDocument, cre
 const { callOf, changesOf, pathOf, related, searchChildren, searchPreview, spaceChildren, summaryChanges, summaryUri, watchRelated } = require('./main/related');
 const { hiddenRules, inboxCount, listFilter, mcpHidden, preset, refresh, search, searchCreate, searchList, searchTitle, setHidden, setMcpHidden, setViewFilter, start, viewFilter, viewRows } = require('./main/views');
 const { nodePin, pinState, pinTree, pinned, pinnedDates, pinnedUris, setPin, todayNode, weekNode, weekTitle } = require('./main/pins');
-const { image, insertImage } = require('./main/images');
+const { image, insertImage, cancelUpload } = require('./main/images');
 const inbox = require('./main/inbox');
 const icons = require('./main/icons');
 const settings = require('./main/settings');
@@ -321,7 +321,8 @@ ipcMain.handle('block:setCell', (_e, id, cellId, value) => mut(id, (doc) => { co
 ipcMain.handle('block:tableOp', (_e, id, cellId, op) => mut(id, (doc) => content.tableOp(doc, cellId, op))); // a row or column around a cell (content.TABLE_OPS); returns the cell for the caret
 ipcMain.handle('block:setBlockType', (_e, id, nodeId, type) => mut(id, (doc) => { content.setBlockType(doc, nodeId, type); })); // type: one of content.BLOCK_TYPES
 ipcMain.handle('block:insertDivider', (_e, id, nodeId) => mut(id, (doc) => content.insertDivider(doc, nodeId))); // nodeId null appends at the end
-ipcMain.handle('block:insertImage', (_e, id, nodeId, file) => insertImage(id, nodeId, file)); // file { bytes, filename, mimeType }: upload, image document, block after nodeId
+ipcMain.handle('block:insertImage', (_e, id, nodeId, file, uploadId) => insertImage(id, nodeId, file, uploadId)); // file { bytes, filename, mimeType }: upload, image document, block after nodeId
+ipcMain.handle('block:cancelUpload', (_e, uploadId) => cancelUpload(uploadId));
 ipcMain.handle('block:insertAfter', (_e, id, nodeId, text, block) => mut(id, (doc) => content.insertAfter(doc, nodeId, text, false, block)));
 ipcMain.handle('block:insertBefore', (_e, id, nodeId, text) => mut(id, (doc) => content.insertBefore(doc, nodeId, text)));
 ipcMain.handle('block:split', (_e, id, nodeId, before, after, asChild) => mut(id, (doc) => content.split(doc, nodeId, before, after, asChild))); // one undo step for both halves

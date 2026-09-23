@@ -386,6 +386,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .text.image.loading img { visibility: hidden; }
 .text.image.loading { min-height: 120px; max-height: 360px; background: #f1f1f1; border-radius: 6px; width: min(100%, 360px); }
 .text.image:focus img, .selected .text.image img { outline: 2px solid #b5d0ee; outline-offset: 2px; }
+.text.upload { display: inline-block; padding: 6px 10px; border-radius: 6px; background: #f1f1f1; color: #8a8a8a; cursor: default; } /* renderer/upload.js: a file on its way up */
 /* no caret shows beside a lone mention chip or in a read-only reference row, so the focus is drawn around them instead */
 /* A lone chip (Tana's full-reference presentation) keeps its caret: renderSegs anchors a position before it, so the
    caret can be put there and typing prepends text, which is what turns the block into an inline reference. */
@@ -736,6 +737,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .chip.gold { background: #4b4024; color: #e4c968; }
 [data-theme="dark"] .chip.hue { background: oklch(0.33 0.06 var(--hue)); color: oklch(0.83 0.09 var(--hue)); }
 [data-theme="dark"] .text.image.loading { background: #303436; }
+[data-theme="dark"] .text.upload { background: #303436; color: #8d9396; }
 [data-theme="dark"] .text.image:focus img, [data-theme="dark"] .selected .text.image img { outline-color: #58768a; }
 [data-theme="dark"] .text.chiponly:focus .mention, [data-theme="dark"] .selected .text.chiponly .mention, [data-theme="dark"] .reference .text:not([contenteditable]):focus { outline-color: #58768a; }
 [data-theme="dark"] .node.fullref > .line:focus-within, [data-theme="dark"] .selected.node.fullref > .line { outline-color: #58768a; }

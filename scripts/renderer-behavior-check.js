@@ -2255,7 +2255,7 @@ function makeSlashHarness() {
 async function runSlashMenuCheck() {
   const listing = makeSlashHarness();
   assert.deepEqual(plain(listing.rows('').map((row) => row.label)),
-    ['Heading 1', 'Heading 2', 'Heading 3', 'Bullet List', 'Numbered List', 'Code Block', 'Quote', 'Divider', 'Create Doc', 'Create Task', 'Create Project'],
+    ['Heading 1', 'Heading 2', 'Heading 3', 'Bullet List', 'Numbered List', 'Code Block', 'Quote', 'Divider', 'Image', 'Create Doc', 'Create Task', 'Create Project'],
     'the "/" menu offers every block type, a divider, and the create choices');
   assert.deepEqual(plain(listing.rows('head').map((row) => row.label)), ['Heading 1', 'Heading 2', 'Heading 3'], 'typing filters the menu');
 
@@ -3332,7 +3332,7 @@ function runCaretOnOpenScrollCheck() {
     const chipOnly = () => false;
     const item = { key: 'doc/b', busy: false, node: { kind: 'block', draft: false } };
     const items = new Map([[item.key, item]]);
-    const keyOfEl = () => item.key;
+    const keyOfEl = () => item.key, imageFiles = () => [];
     let editable = true;
     const canEditText = () => editable;
     const scheduleSave = () => {}, readSegs = () => [], materialise = () => {}, openSlash = () => {};
@@ -5108,7 +5108,7 @@ async function runPasteLinkCheck() {
     let handler = null;
     const outline = { addEventListener: (name, fn) => { if (name === 'paste') handler = fn; } };
     const el = document.createElement('div');
-    const keyOfEl = () => item.key;
+    const keyOfEl = () => item.key, imageFiles = () => [];
     const canEditText = () => true, isAtomic = () => false, isReference = () => false;
     const getSelection = () => ({ isCollapsed: collapsed });
     const caretOffset = () => offset;
@@ -5200,74 +5200,106 @@ async function runPasteLinkCheck() {
 // clipboard without an image pastes as before.
 async function runPasteImageCheck() {
   const segments = sourceBetween('// accepts segments, a plain string, or a Node', 'const tana = window.api');
-  const context = {};
+  const upload = fs.readFileSync(require.resolve('../renderer/upload.js'), 'utf8');
+  const context = { setImmediate };
   vm.runInNewContext(`
     ${FAKE_DOM}
     ${segments}
     const DOC = 'tana:text:01j0doc000000000000000000';
     const page = { key: DOC, docId: DOC, node: { id: DOC, kind: 'document' } };
     const rows = [{ id: 'r1', kind: 'block' }, { id: 'r2', kind: 'block' }];
+    const kids = new Map([[DOC, rows]]);
     const real = { key: DOC + '/r1', docId: DOC, node: rows[0], parent: page };
     const draft = { key: DOC + '/draft:1', docId: DOC, node: { id: 'draft:1', kind: 'block', text: '', draft: true }, parent: page };
     const child = { key: DOC + '/draft:2', docId: DOC, node: { id: 'draft:2', kind: 'block', text: '', draft: true }, parent: real };
     const items = new Map([real, draft, child].map((i) => [i.key, i]));
-    const calls = [], errors = [], flushed = [];
-    let target = real, prevented = false, renders = 0, fail = false, handler = null;
+    const calls = [], errors = [], flushed = [], carets = [], cancelled = [], read = [];
+    let target = real, prevented = false, renders = 0, fail = null, handler = null;
     const outline = { addEventListener: (name, fn) => { if (name === 'paste') handler = fn; } };
     const el = document.createElement('div');
-    const keyOfEl = () => target.key;
+    document.activeElement = null;
+    const keyOfEl = () => target.key, inRows = () => false, keyFor = (d, n) => d + '/' + n.id;
     const canEditText = () => true, isAtomic = () => false, isReference = () => false;
     const flush = (key) => flushed.push(key);
     const render = () => { renders++; };
-    const reload = async (docId) => { calls.push(['reload', docId]); };
+    const moveTo = () => {};
+    const placeCaret = (key) => carets.push(key);
+    const reload = async (docId) => { calls.push(['reload', docId]); syncUploads(docId); };
     const showError = (e) => { errors.push(String(e && e.message || e)); };
     const childrenOf = (i) => (i.node.kind === 'document' ? rows : i.node.children || []);
     let n = 0;
     const tana = {
       node: async () => { throw new Error('no link here'); },
-      insertImage: async (docId, after, file) => {
+      insertImage: async (docId, after, file, uploadId) => {
         calls.push(['insertImage', docId, after, { bytes: Array.from(file.bytes), filename: file.filename, mimeType: file.mimeType }]);
-        if (fail) throw new Error('File is too large (max 50 MB)');
+        await new Promise(setImmediate);
+        if (cancelled.includes(uploadId)) throw new Error('upload cancelled');
+        if (fail === file.filename) throw new Error('upload ' + fail + ': Unsupported file');
         return 'img' + (++n);
       },
+      cancelUpload: (id) => { cancelled.push(id); },
     };
-    const file = (name, type) => ({ name, type, arrayBuffer: async () => new Uint8Array([1, 2]).buffer });
+    const file = (name, type, size = 2) => ({ name, type, size, arrayBuffer: async () => { read.push(name); return new Uint8Array([1, 2]).buffer; } });
+    ${upload}
     ${sourceBetween("onRows('paste'", "onRows('focusout'")}
     Object.assign(globalThis, {
-      paste: (on, files, failing = false) => {
-        target = { real, draft, child }[on]; prevented = false; fail = failing; calls.length = 0; errors.length = 0;
-        handler({ target: { closest: () => el }, clipboardData: { getData: () => '', files: files.map(([a, b]) => file(a, b)) }, preventDefault: () => { prevented = true; } });
+      paste: (on, files, failing = null) => {
+        target = { real, draft, child }[on]; prevented = false; fail = failing;
+        for (const a of [calls, errors, carets, read]) a.length = 0;
+        handler({ target: { closest: () => el }, clipboardData: { getData: () => '', files: files.map((f) => file(...f)) }, preventDefault: () => { prevented = true; } });
         return prevented;
       },
-      state: () => ({ calls, errors, renders, flushed }),
+      cancel: (i) => { const node = rows.filter((r) => r.upload)[i]; cancelUpload({ node, docId: DOC }, el); },
+      state: () => ({ calls, errors, renders, flushed, carets, cancelled, read, rows: rows.map((r) => (r.upload ? 'up:' + r.text : r.id)) }),
     });
   `, context);
-  const settle = async () => { for (let i = 0; i < 12; i++) await new Promise(setImmediate); };
+  const settle = async () => { for (let i = 0; i < 20; i++) await new Promise(setImmediate); };
   const DOC = 'tana:text:01j0doc000000000000000000', png = { bytes: [1, 2], filename: 'a.png', mimeType: 'image/png' };
+  const uploaded = () => plain(context.state()).calls.filter((c) => c[0] === 'insertImage');
 
   assert.equal(context.paste('real', [['a.png', 'image/png'], ['b.gif', 'image/gif']]), true, 'an image paste is taken over');
+  assert.deepEqual(plain(context.state()).rows, ['r1', 'up:a.png', 'up:b.gif', 'r2'], 'a placeholder for each file shows at once, behind the row, in clipboard order');
   await settle();
   let s = plain(context.state());
   assert.deepEqual(s.calls, [
-    ['insertImage', DOC, 'r1', png],
-    ['insertImage', DOC, 'img1', { ...png, filename: 'b.gif', mimeType: 'image/gif' }],
-    ['reload', DOC],
-  ], 'each image goes after the row, the second after the first, then one reload');
-  assert.deepEqual([s.flushed, s.renders], [[DOC + '/r1'], 1], 'a pending edit of the row is saved first, and the outline redrawn once');
+    ['insertImage', DOC, 'r1', png], ['reload', DOC],
+    ['insertImage', DOC, 'img1', { ...png, filename: 'b.gif', mimeType: 'image/gif' }], ['reload', DOC],
+  ], 'one at a time: each image after the row, the second after the first, each swapped in as it lands');
+  assert.deepEqual([s.rows, s.flushed, s.carets], [['r1', 'r2'], [DOC + '/r1'], [DOC + '/img2']], 'the placeholders are gone, a pending edit was saved first, and the caret is on the last image');
 
   assert.equal(context.paste('draft', [['a.png', 'image/png']]), true);
   await settle();
-  assert.deepEqual(plain(context.state()).calls[0], ['insertImage', DOC, 'r2', png], 'from the empty draft row it lands after the last real row, where the draft stands');
+  assert.deepEqual(uploaded()[0], ['insertImage', DOC, 'r2', png], 'from the empty draft row it lands after the last real row, where the draft stands');
 
   assert.equal(context.paste('child', [['a.png', 'image/png']]), false, 'an empty child row has no row to follow: nothing is taken over');
   assert.equal(context.paste('real', [['a.pdf', 'application/pdf']]), false, 'a clipboard without an image pastes as before');
+  assert.equal(context.paste('real', [['shot.HEIC', '']]), true, 'a Tana image extension counts without a type');
   await settle();
-  assert.deepEqual(plain(context.state()).calls, [], 'and neither uploads anything');
+  assert.equal(uploaded()[0][3].filename, 'shot.HEIC');
 
-  assert.equal(context.paste('real', [['a.png', 'image/png']], true), true);
+  context.paste('real', [['a.png', 'image/png'], ['b.png', 'image/png']], 'a.png');
   await settle();
   s = plain(context.state());
-  assert.deepEqual([s.errors, s.calls.some((c) => c[0] === 'reload')], [['File is too large (max 50 MB)'], false], 'a refused upload shows its reason and changes nothing');
+  assert.deepEqual([s.errors, uploaded().map((c) => c[2]), s.rows], [['upload a.png: Unsupported file'], ['r1', 'r1'], ['r1', 'r2']],
+    'a refused upload shows its reason, writes nothing, and the next file still goes, behind the same row');
+
+  context.paste('real', [['big.png', 'image/png', 52428801], ['a.png', 'image/png']]);
+  await settle();
+  s = plain(context.state());
+  assert.deepEqual([s.errors, s.read, uploaded().length], [['File is too large (max 50 MB)'], ['a.png'], 1], 'over 50 MB is refused before its bytes are read');
+
+  context.paste('real', [['a.png', 'image/png'], ['b.png', 'image/png']]);
+  context.cancel(1);
+  assert.deepEqual(plain(context.state()).rows, ['r1', 'up:a.png', 'r2'], 'Esc takes its placeholder away at once');
+  await settle();
+  assert.deepEqual([uploaded().length, plain(context.state()).errors], [1, []], 'a file cancelled before its turn is never sent');
+
+  context.paste('real', [['a.png', 'image/png']]);
+  for (let i = 0; i < 6 && !uploaded().length; i++) await new Promise(setImmediate);
+  context.cancel(0);
+  await settle();
+  s = plain(context.state());
+  assert.deepEqual([s.cancelled.length, s.errors, s.carets, s.rows], [2, [], [], ['r1', 'r2']], 'a running upload is aborted in main, quietly, and the caret stays put');
 }
 
 // A Tana node link pasted into a draft row (#272): the draft is created first, by the same materialise the first
@@ -5293,7 +5325,7 @@ async function runPasteDraftCheck() {
       const row = { dataset: { key: item.key }, classList: { remove: () => {} } };
       const el = document.createElement('div');
       el.closest = () => row;
-      const keyOfEl = () => item.key;
+      const keyOfEl = () => item.key, imageFiles = () => [];
       const canEditText = () => true, isAtomic = () => false, isReference = () => false;
       const getSelection = () => ({ isCollapsed: true });
       const caretOffset = () => 0;
