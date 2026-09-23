@@ -105,6 +105,7 @@ contextBridge.exposeInMainWorld('api', {
   insertDivider: (docId, nodeId) => ipcRenderer.invoke('block:insertDivider', docId, nodeId), // horizontal rule after nodeId; returns its block id
   insertImage: (docId, nodeId, file, uploadId) => ipcRenderer.invoke('block:insertImage', docId, nodeId, file, uploadId), // file { bytes: Uint8Array, filename, mimeType }; uploads, then an image row after nodeId; returns its block id
   cancelUpload: (uploadId) => ipcRenderer.invoke('block:cancelUpload', uploadId), // aborts that insertImage's upload; it rejects and writes nothing
+  insertTable: (docId, nodeId) => ipcRenderer.invoke('block:insertTable', docId, nodeId), // Tana's "/" Table: 3x3 with a header row, after nodeId; returns its first cell id
   insertAfter: (docId, nodeId, text, block) => ipcRenderer.invoke('block:insertAfter', docId, nodeId, text, block), // block: 'bullet' where the row that has nothing to inherit should still be a list row
   insertBefore: (docId, nodeId, text) => ipcRenderer.invoke('block:insertBefore', docId, nodeId, text),
   split: (docId, nodeId, before, after, asChild) => ipcRenderer.invoke('block:split', docId, nodeId, before, after, asChild), // truncate + insert the rest in one undo step

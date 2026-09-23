@@ -472,6 +472,11 @@ function mockApi() {
       if (!f) content[docId].push(n); else f.list.splice(f.index + 1, 0, n);
       emit(docId); return n.id;
     }),
+    insertTable: async (docId, id) => mut(docId, () => { // 3x3 with a header row, like sdk/content.js insertTable
+      const rows = [0, 1, 2].map((y) => [0, 1, 2].map(() => ({ id: 'cell' + (++seq), header: y === 0, colspan: 1, rowspan: 1, colwidth: null, paragraph: 'cp' + seq, segments: [], text: '', blocks: [] })));
+      const f = locate(content[docId], id), n = { id: 'tbl' + (++seq), kind: 'block', block: 'paragraph', type: 'table', editable: false, text: '', table: { id: 'tbl' + seq, rows, rowCount: 3, columnCount: 3 }, hasChildren: false, children: [] };
+      f.list.splice(f.index + 1, 0, n); emit(docId); return rows[0][0].id;
+    }),
     insertAfter: async (docId, id, text) => mut(docId, () => {
       const f = id == null ? null : locate(content[docId], id), n = block(text, [], undefined, f && f.node.kind === 'block' && f.node.done != null ? 0 : undefined);
       if (!f) content[docId].push(n); else f.list.splice(f.index + 1, 0, n);

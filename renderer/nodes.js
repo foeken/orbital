@@ -62,7 +62,7 @@ function chipEl(t, nodeHue) {
 const BLOCK_TYPES = [['paragraph', 'Text'], ['heading1', 'Heading 1'], ['heading2', 'Heading 2'], ['heading3', 'Heading 3'],
   ['bullet', 'Bullet List'], ['numbered', 'Numbered List'], ['code', 'Code Block'], ['quote', 'Quote']];
 const BLOCK_LABEL = new Map(BLOCK_TYPES);
-const BLOCK_GLYPH = { paragraph: 'T', heading1: 'H1', heading2: 'H2', heading3: 'H3', bullet: '•', numbered: '1.', code: '</>', quote: '❝', divider: '—', image: '▣' };
+const BLOCK_GLYPH = { paragraph: 'T', heading1: 'H1', heading2: 'H2', heading3: 'H3', bullet: '•', numbered: '1.', code: '</>', quote: '❝', divider: '—', table: '▦', image: '▣' };
 // A row with no type of its own is an outline row: every row readOutline returns carries one, so this is the
 // mock's rows and anything built by hand. The draft tail states the mode it will be written in (draftNode).
 const blockTypeOf = (node) => (BLOCK_LABEL.has(node.block) ? node.block : node.heading ? 'heading' + node.heading : 'bullet');

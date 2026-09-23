@@ -2236,6 +2236,7 @@ function makeSlashHarness() {
     const dropPending = () => {}, render = () => {};
     const iconSvg = () => '<svg></svg>'; // the real icon set is generated; the menu only needs a slot here
     const placeCaret = (key, offset) => calls.push(['caret', key, offset]);
+    const CSS = { escape: (s) => s }, queryRow = (sel) => ({ sel }), setCaret = (el, offset) => calls.push(['cell', el.sel, offset]);
     const reload = async () => { calls.push(['reload']); };
     const run = async (fn) => fn();
     const startCreation = (choice) => calls.push(['startCreation', choice.kind, choice.title]);
@@ -2243,6 +2244,8 @@ function makeSlashHarness() {
       setText: async (docId, id, value) => calls.push(['setText', docId, id, value]),
       setBlockType: async (docId, id, type) => calls.push(['setBlockType', docId, id, type]),
       insertDivider: async (docId, id) => calls.push(['insertDivider', docId, id]),
+      insertTable: async (docId, id) => { calls.push(['insertTable', docId, id]); return 'c1'; },
+      remove: async (docId, id) => calls.push(['remove', docId, id]),
     };
     ${functionSource('slashTarget')}
     ${functionSource('slashRows')}
@@ -2255,8 +2258,8 @@ function makeSlashHarness() {
 async function runSlashMenuCheck() {
   const listing = makeSlashHarness();
   assert.deepEqual(plain(listing.rows('').map((row) => row.label)),
-    ['Heading 1', 'Heading 2', 'Heading 3', 'Bullet List', 'Numbered List', 'Code Block', 'Quote', 'Divider', 'Image', 'Create Doc', 'Create Task', 'Create Project'],
-    'the "/" menu offers every block type, a divider, and the create choices');
+    ['Heading 1', 'Heading 2', 'Heading 3', 'Bullet List', 'Numbered List', 'Code Block', 'Quote', 'Divider', 'Table', 'Image', 'Create Doc', 'Create Task', 'Create Project'],
+    'the "/" menu offers every block type, a divider, a table, an image and the create choices');
   assert.deepEqual(plain(listing.rows('head').map((row) => row.label)), ['Heading 1', 'Heading 2', 'Heading 3'], 'typing filters the menu');
 
   const quote = makeSlashHarness();
@@ -2269,6 +2272,11 @@ async function runSlashMenuCheck() {
   await divider.rows('').find((row) => row.label === 'Divider').run();
   assert.deepEqual(plain(divider.calls()), [['setText', 'doc', 'block', []], ['insertDivider', 'doc', 'block'], ['reload'], ['caret', 'doc/block', 0]],
     'Divider inserts a divider after the node instead of retyping it');
+
+  const table = makeSlashHarness();
+  await table.rows('').find((row) => row.label === 'Table').run();
+  assert.deepEqual(plain(table.calls()), [['setText', 'doc', 'block', []], ['insertTable', 'doc', 'block'], ['remove', 'doc', 'block'], ['reload'], ['cell', '.cell[data-cell="c1"]', 0]],
+    'Table takes the place of the empty "/" row and puts the caret in its first cell');
 
   const create = makeSlashHarness();
   create.rows('').find((row) => row.label === 'Create Project').run();

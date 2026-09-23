@@ -966,10 +966,19 @@ function divider(list, index) {
   return id;
 }
 
-// A pasted image lands where a new row typed after this one would (insertAfter): beside a list row it is a list row
-// of its own — a listItem holding just the image, which Tana's schema allows (listItem: block+) — and beside anything
-// bare it is a bare image block. Written as Tana's atom writer does (the(): blockId plus the attributes it has, no
-// children list); a paste, a drop and "/" Image all insert with displayWidth/displayHeight null, so neither is set.
+// A block that is not a line of text (an image, a table) lands where a new row typed after this one would
+// (insertAfter): beside a list row it is a list row of its own — a listItem holding just that block, which Tana's
+// schema allows (listItem: block+) — and beside anything bare it is a bare block. make(list, index) writes it.
+function blockAfter(document, id, make) {
+  const list = rootKids(document);
+  if (id == null) return make(list, list.length);
+  const { block, item: li } = must(document, id);
+  const unit = li || block, l = unit.parent(), i = indexOf(l, unit) + 1;
+  return li ? make(kids(create(l, i, 'listItem')), 0) : make(l, i);
+}
+
+// An image is written as Tana's atom writer does (the(): blockId plus the attributes it has, no children list); a
+// paste, a drop and "/" Image all insert with displayWidth/displayHeight null, so neither is set.
 function insertImage(document, id, tanaUri) {
   if (!/^tana:image:[0-9a-z]{26}$/.test(tanaUri)) throw new Error('not a tana:image uri: ' + tanaUri);
   const image = (list, index) => {
@@ -985,10 +994,27 @@ function insertImage(document, id, tanaUri) {
     // a table cell holds its images after its text, as Tana's addImageToCell appends them (rve)
     const cell = findBlock(list, id, (b) => CELLS.includes(name(b)));
     if (cell) { const c = kids(cell) || cell.setContainer('children', new LoroList()); out = image(c, c.length); return; }
-    const { block, item: li } = must(document, id);
-    const unit = li || block, l = unit.parent(), i = indexOf(l, unit) + 1;
-    out = li ? image(kids(create(l, i, 'listItem')), 0) : image(l, i);
+    out = blockAfter(document, id, image);
   });
+  return out;
+}
+
+// "/" Table, as Tana's slash menu makes one (pet() in shared-*.js of 2026-09-23): insertTable({ rows: 3, cols: 3,
+// withHeaderRow: true }), so a header row and two body rows of three cells, each cell written as tableOp writes one.
+// Returns the first header cell, where the caret goes.
+function insertTable(document, id) {
+  let out = null;
+  document.transact(() => blockAfter(document, id, (list, index) => {
+    const t = list.insertContainer(index, new LoroMap());
+    t.set('nodeName', 'table'); t.setContainer('attributes', new LoroMap()).set('blockId', newId());
+    const rows = t.setContainer('children', new LoroList());
+    for (let y = 0; y < 3; y++) {
+      const r = rows.insertContainer(y, new LoroMap());
+      r.set('nodeName', 'tableRow'); r.setContainer('attributes', new LoroMap()).set('blockId', newId());
+      const cells = r.setContainer('children', new LoroList());
+      for (let x = 0; x < 3; x++) { const c = newCell(cells, x, y === 0); out = out || c; }
+    }
+  }));
   return out;
 }
 
@@ -1010,4 +1036,4 @@ function insertMention(document, { uri, label } = {}, { parentId = null, afterId
   return out;
 }
 
-module.exports = { cursorAt, cursorOffset, charOffset, blockOffset, readOutline, assignBlockIds, setText, readTable, setCellText, tableOp, TABLE_OPS, inlineGroups, writeInline, styleDoc, setBlockType, insertDivider, insertImage, insertAfter, insertBefore, insertChild, insertMention, split, remove, removeMany, indent, indentMany, outdent, outdentMany, move, moveMany, moveTo, toggleCheckbox, newId, BLOCK_TYPES };
+module.exports = { cursorAt, cursorOffset, charOffset, blockOffset, readOutline, assignBlockIds, setText, readTable, setCellText, tableOp, TABLE_OPS, inlineGroups, writeInline, styleDoc, setBlockType, insertDivider, insertImage, insertTable, insertAfter, insertBefore, insertChild, insertMention, split, remove, removeMany, indent, indentMany, outdent, outdentMany, move, moveMany, moveTo, toggleCheckbox, newId, BLOCK_TYPES };

@@ -240,7 +240,7 @@ function linkSelection() { // the @ button runs the same linking flow as typing 
   if (item && el) startLink(item, el, [ctx.start, ctx.end]);
 }
 
-// ---- "/" at the start of an empty node: block types, a divider, then what api.creationOptions offers ----
+// ---- "/" at the start of an empty node: block types, a divider, a table, an image, then what api.creationOptions offers ----
 let slashCtx = null; // { key } the node holding the "/"; kept until another palette mode opens
 function slashTarget() { return slashCtx ? items.get(slashCtx.key) : null; }
 function openSlash(item) {
@@ -249,9 +249,9 @@ function openSlash(item) {
   loadCreationChoices();
 }
 function slashRows(q) {
-  const rows = [...BLOCK_TYPES.filter(([type]) => type !== 'paragraph'), ['divider', 'Divider'], ['image', 'Image']].map(([type, label]) => ({
+  const rows = [...BLOCK_TYPES.filter(([type]) => type !== 'paragraph'), ['divider', 'Divider'], ['table', 'Table'], ['image', 'Image']].map(([type, label]) => ({
     group: 'Blocks', svg: glyphSvg(type), label,
-    disabled: type === 'divider' ? !tana.insertDivider : type === 'image' ? !tana.insertImage : !tana.setBlockType,
+    disabled: type === 'divider' ? !tana.insertDivider : type === 'image' ? !tana.insertImage : type === 'table' ? !tana.insertTable : !tana.setBlockType,
     run: () => (type === 'image' ? pickImages() : runSlashBlock(type)),
   }));
   // Doc and Task are always offered; the workspace types come from the same source as the Cmd+K "Create new …" list
@@ -285,15 +285,20 @@ async function runSlashBlock(type) {
   if (!item || item.node.kind !== 'block') return;
   dropPending(item.key);
   const { docId, node } = item;
+  // A table takes the place of the "/" row, as Tana's does, unless that row holds rows of its own
+  const bare = !node.hasChildren && !node.children?.length;
+  let cell = null;
   await run(async () => {
     await tana.setText(docId, node.id, []); // the "/" was the command, not text
     if (type === 'divider') await tana.insertDivider(docId, node.id);
+    else if (type === 'table') { cell = await tana.insertTable(docId, node.id); if (bare) await tana.remove(docId, node.id); }
     else await tana.setBlockType(docId, node.id, type);
     await reload(docId);
   });
   node.text = ''; node.segments = [];
   render();
-  placeCaret(item.key, 0);
+  const el = cell && queryRow('.cell[data-cell="' + CSS.escape(cell) + '"]');
+  if (el) setCaret(el, 0); else placeCaret(item.key, 0);
 }
 function createFromSlash(choice) {
   const item = slashTarget();
