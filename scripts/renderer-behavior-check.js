@@ -1362,7 +1362,7 @@ async function runLinkPaletteCheck() {
     ${resultRows}
     ${functionSource('titleHits')}
     ${searchNow}
-    ({ type: (q) => { palInput.value = q; searchNow(); }, resolve: (rows) => searchResolve(rows), state: () => ({ palIndex, rows: palRows.map((row) => row.label) }), bold: () => palRows.map((row) => (row.match ? row.match.map((i) => row.label[i]).join('') : null)), create: () => { palRows[0].run(); return created; },
+    ({ type: (q) => { palInput.value = q; searchNow(); }, resolve: (rows) => searchResolve(rows), state: () => ({ palIndex, rows: palRows.map((row) => row.label) }), groups: () => palRows.map((row) => row.group || null), bold: () => palRows.map((row) => (row.match ? row.match.map((i) => row.label[i]).join('') : null)), create: () => { palRows[0].run(); return created; },
       pick: () => { palRows[palIndex].run(); return linked; }, tomorrow: () => ({ label: dayLabel(localDate(1)), uri: dayUri(localDate(1)) }) });
   `);
   // Search hits: the titles holding the most typed words lead, whatever order Tana answered in, and only those words are bold
@@ -1372,6 +1372,12 @@ async function runLinkPaletteCheck() {
   assert.deepEqual(plain(caret.state().rows), ['Create “try 1”', 'Try the 1-day framework', 'Entry 12', 'Test OmniCharge and reply on Tue 1 Sep', 'Finding the Balance'],
     'both words, both starting a word, first; both words inside words next; one word after; the body-only hit last');
   assert.deepEqual(plain(caret.bold()).slice(1), ['Try1', 'try1', '1', ''], 'the typed words are bold, nothing else');
+  // Related results (#20) keep their place after the text hits, under their own heading, with no second Create row
+  caret.type('try 1');
+  caret.resolve([{ id: 'r', title: 'Try 1 thing', related: true }, { id: 'e', title: 'Entry 12' }]);
+  await Promise.resolve(); await Promise.resolve();
+  assert.deepEqual(plain(caret.state().rows), ['Create “try 1”', 'Entry 12', 'Try 1 thing'], 'a related hit stays last however well its title matches');
+  assert.deepEqual(plain(caret.groups()), [null, null, 'RELATED'], 'and sits under its own heading');
   caret.type('');
   assert.deepEqual(plain(caret.state()), { palIndex: 0, rows: ['Recent'] }, 'an empty caret palette lists recent nodes with no Create row');
   caret.type('Dan'); caret.resolve([{ id: 'x', title: 'Dana Brooks' }]); await Promise.resolve(); await Promise.resolve();

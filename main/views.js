@@ -76,32 +76,48 @@ async function viewRows(id, filter) {
 }
 
 // Live search over all top-level items (graph full-text search, relevance order) with #task/#meeting/#Type filters.
+// Tana's own search page adds the documents only a semantic search found, fetched by id under the same filters and
+// listed after the rest; here they come last and carry `related: true` (issue #20).
 async function search(query) {
   if (!S.client) return [];
   const parsed = parseQuery(query);
   const params = searchParams(parsed, needsTypes(parsed) ? await typesByTitle() : new Map());
   if (!params) return [];
+  const text = parsed.text.trim();
   // The server ranks by full-text relevance, so a document titled exactly like the query can sit past the first
   // page: fetch wide, rank here, and hand back a page's worth.
   // Members ride in a query of their own: a profile's title is a name, which loses the relevance race to every
   // document that mentions it, so a plain search's 200 never held one and "@" could not find a person.
-  const [{ nodes: found }, { nodes: people }] = await Promise.all([
+  const [{ nodes: found }, { nodes: people }, semantic] = await Promise.all([
     S.client.graph.listNodes({ ...params, limit: 200 }),
     params.textQuery && params.nodeTypes.includes('user-profile') && params.nodeTypes.length > 1
       ? S.client.graph.listNodes({ ...params, nodeTypes: ['user-profile'], limit: 50 }).catch(() => ({ nodes: [] })) : { nodes: [] },
+    // Tana asks from four characters on, and reads a failure (FailedPrecondition: not enabled) as no related results.
+    text.length >= 4 ? S.client.search.semanticSearch({ query: text, limit: 20 }).catch(() => []) : [],
   ]);
   const seen = new Set(found.map((n) => n.id)), nodes = [...found, ...people.filter((n) => !seen.has(n.id))];
-  nodes.forEach(rememberNodeHue);
-  await resolveTypes(nodes.map((n) => n.entityType));
+  nodes.forEach((n) => seen.add(n.id));
+  const ids = [...new Set(semantic.map((r) => r.documentId))].filter((id) => /^tana:[a-z-]+:[0-9a-z]{26}$/.test(id) && !seen.has(id));
+  let related = [];
+  if (ids.length) {
+    // by id, but under the search's own filters, so "#task budget" relates only tasks; no text left to rank by
+    const byId = { ...params, nodeIds: ids, limit: ids.length };
+    delete byId.textQuery; delete byId.sortOptions;
+    const got = new Map((await S.client.graph.listNodes(byId).catch(() => ({ nodes: [] }))).nodes.filter(listed()).map((n) => [n.id, n]));
+    related = ids.map((id) => got.get(id)).filter(Boolean);
+  }
+  [...nodes, ...related].forEach(rememberNodeHue);
+  await resolveTypes([...nodes, ...related].map((n) => n.entityType));
   // Title matches first (exact, then prefix, then contains), and within a class the title the query covers most:
   // "Tana" beats "The one where Tana meets the team". Full-text hits keep the server's relevance order.
-  const q = parsed.text.trim().toLowerCase();
+  const q = text.toLowerCase();
   const rank = (n) => { const t = (n.title || '').toLowerCase(); return t === q ? 0 : t.startsWith(q) ? 1 : t.includes(q) ? 2 : 3; };
   const cover = (n) => { const t = (n.title || '').toLowerCase(); return t.includes(q) && t.length ? q.length / t.length : 0; };
   return nodes.map((n, i) => [rank(n), cover(n), i, n])
     .sort((a, b) => a[0] - b[0] || b[1] - a[1] || a[2] - b[2])
     .slice(0, 40)
-    .map(([, , , n]) => toNode(graphRow(n, true)));
+    .map(([, , , n]) => toNode(graphRow(n, true)))
+    .concat(related.map((n) => ({ ...toNode(graphRow(n, true)), related: true })));
 }
 
 // Saved searches, newest first. Read-only and view-independent: this does not touch S.activeView or the row cache.
@@ -223,7 +239,14 @@ async function doRefresh() {
 
 // Every list and every search asks the graph, so S.client.graph.listNodes is the one place deleted and hidden nodes
 // are dropped. A by-id lookup (nodeIds) resolves a named node — a mention, an owner chain, a pin, a zoomed
-// document — and keeps answering: hiding is about lists, not about access.
+// document — and keeps answering: hiding is about lists, not about access. A by-id lookup that fills a list (the
+// related search results) applies listed() itself.
+// The app's own settings document is app plumbing, not a note: it is kept out of every list and search the way
+// a hidden title is, and stays reachable by id like everything else that is filtered here.
+function listed() {
+  const rules = hiddenRules(), hideMcp = mcpHidden(), settingsDoc = settings.settingsDocId();
+  return (n) => n.id !== settingsDoc && !isHidden(memberTitle(n), rules) && !(hideMcp && isMcp(n));
+}
 function listFilter(c) {
   if (!c || !c.graph) return;
   const listNodes = c.graph.listNodes.bind(c.graph);
@@ -237,11 +260,7 @@ function listFilter(c) {
     for (const n of result.nodes) if (isDeleted(n)) deletedNodes.add(n.id);
     const nodes = visibleGraphNodes(result.nodes);
     if (params && params.nodeIds) return { ...result, nodes, truncated };
-    const rules = hiddenRules(), hideMcp = mcpHidden();
-    // The app's own settings document is app plumbing, not a note: it is kept out of every list and search the way
-    // a hidden title is, and stays reachable by id like everything else that is filtered here.
-    const settingsDoc = settings.settingsDocId();
-    return { ...result, nodes: nodes.filter(n => n.id !== settingsDoc && !isHidden(memberTitle(n), rules) && !(hideMcp && isMcp(n))), truncated };
+    return { ...result, nodes: nodes.filter(listed()), truncated };
   };
 }
 // Changing the list refreshes like any other filter change: replaceSection drops the rows that are now hidden, so

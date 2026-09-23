@@ -6,9 +6,9 @@ All modules are CommonJS. "Node" below means the plain graph JSON node; "Documen
 
 ```js
 createTanaClient({ baseUrl?, getAccessToken, orgId, peerId, storageId?, logger?, clientName? })
-  → { transport, graph: GraphClient, history: HistoryClient, sync: SyncConnection, close(): Promise }
+  → { transport, graph: GraphClient, history: HistoryClient, search: SearchClient, sync: SyncConnection, close(): Promise }
 ```
-Also re-exports `createTransport`, `GraphClient`, `HistoryClient`, `SyncConnection`, `Document`, `derivePeerId` and everything in `node.js`. `access` (`capabilities`, `setSharing`, `previewMove`, `moveToSpace`, `canWrite`, `canDelete`, `canArchive`, `audienceOf`) and `calls` (`callSessions`, `inCall`, `joinedAt`, `attended`, `currentCalls`) are required from their own modules (`sdk/access`, `sdk/calls`), which is what every caller does.
+Also re-exports `createTransport`, `GraphClient`, `HistoryClient`, `SearchClient`, `SyncConnection`, `Document`, `derivePeerId` and everything in `node.js`. `access` (`capabilities`, `setSharing`, `previewMove`, `moveToSpace`, `canWrite`, `canDelete`, `canArchive`, `audienceOf`) and `calls` (`callSessions`, `inCall`, `joinedAt`, `attended`, `currentCalls`) are required from their own modules (`sdk/access`, `sdk/calls`), which is what every caller does.
 
 ## `sdk/transport.js`
 
@@ -30,6 +30,10 @@ Enums are passed by name (`'SORT_FIELD_UPDATE_TIME'`, `'LIST_NODES_MODE_WITH_COU
 ## `sdk/history.js` — `class HistoryClient(transport)`
 
 `listChanges({ uri, withinId?, limit? })` → `{ parent?, summaries: [{ id, level, title, description, authors, sources, startTime, endTime, expandable, changeType }] }`: the change summaries Tana's own Changes panel shows for a node, `summaries` always an array. `withinId` asks for the summaries inside an expandable one; nothing here writes.
+
+## `sdk/search.js` — `class SearchClient(transport)`
+
+`semanticSearch({ query, limit?, spaceUris?, entityTypeUris? })` → `[{ documentId, title, snippet, score, vectorDistance }]`, best first, always an array: `tana.search.v1alpha1.SearchService.SemanticSearch`, the one method of that service Tana's UI calls (`Search` is unused, `HybridSearch` serves its AI agent only; issue #20). Tana's search page runs it beside the `listNodes` text search from four characters on, fetches the ids the text search did not return by `nodeIds` under the same filters, and lists them as related results; `FailedPrecondition` means not enabled for the org. `main/views.js` `search` does the same.
 
 ## `sdk/livequery.js` — a query the server keeps answering
 

@@ -879,14 +879,17 @@ function searchNow() {
   const q = palInput.value.trim(), seq = ++palSeq;
   palTimer = null; palBusy = !!q;
   if (!q) { palRows = resultRows(recentRows(), 'RECENTLY VIEWED'); return renderPalette(); }
-  tana.search(q).then((found) => {
+  tana.search(q).then((all) => {
     if (seq !== palSeq || palMode !== 'search') return; // stale response
+    // What only Tana's semantic search found (`related`, main/views.js) keeps its own order under its own heading.
+    const found = all.filter((n) => !n.related), related = all.filter((n) => n.related);
     // Tana's order does not weigh the title: a document that only mentions the words in its body can lead one titled
     // with them. The titles holding the most typed words come first, then those where more of them begin a word, and
     // Tana's order among equals. Only those words are bold, not the looser Cmd+K letter match.
     const score = new Map(found.map((n) => [n, titleHits(n.title ?? n.text ?? '', q)]));
     const nodes = found.map((n, i) => ({ n, i })).sort((a, b) => score.get(b.n).hits - score.get(a.n).hits || score.get(b.n).starts - score.get(a.n).starts || a.i - b.i).map(({ n }) => n);
-    palRows = resultRows(nodes).map((row) => (row.node ? { ...row, match: titleHits(row.label ?? '', q) } : row));
+    palRows = [...resultRows(nodes), ...resultRows(related, 'RELATED').filter((row) => row.node)] // its documents only: the date and Create rows lead once
+      .map((row) => (row.node ? { ...row, match: titleHits(row.label ?? '', q) } : row));
     // Linking: a result is only the obvious choice when its title starts with what was typed. A full-text hit
     // that merely mentions the words is not, so "Create" stays selected and Enter creates. Words that read as a
     // day are that date before anything else.

@@ -249,7 +249,7 @@ onRows('click', (e) => {
 // falls back to the old Tana when nothing here carries it.
 async function goToLink(href) {
   if (/^tana:[a-z-]+:[0-9a-z]{26}$/.test(href)) return goTo(href);
-  const old = href.slice(5), hits = tana.search ? await tana.search(old) : [];
+  const old = href.slice(5), hits = tana.search ? (await tana.search(old)).filter((n) => !n.related) : [];
   if (hits.length === 1) return goTo(hits[0].id);
   if (hits.length) showNote(`${hits.length} imported nodes mention ${old}`);
   else return tana.openExternal('https://app.tana.inc?nodeid=' + encodeURIComponent(old));
