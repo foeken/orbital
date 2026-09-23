@@ -513,7 +513,10 @@ function onChange(docId, info) {
   try {
     // The app's own settings document is not content: it is applied and nothing else hears about it.
     if (settings.applyRemote(docId) !== false) return;
-    if (idKind(docId) === 'user-inbox') return; // no row or page is this document; main/inbox.js tells the renderer
+    // No row or page is either of these: main/inbox.js tells the renderer about the inbox, and a live query
+    // (sdk/livequery.js) answers its own listener. Passed on, every live-query update made the renderer ask doc:info
+    // for a tana:liveQuery: id, which fails DOC_URI and logged "not connected to Tana" once per update.
+    if (['user-inbox', 'liveQuery'].includes(idKind(docId))) return;
     const doc = S.client.sync.getDocument(docId);
     if (!doc) return;
     const n = readNode(doc), row = db.get(docId);

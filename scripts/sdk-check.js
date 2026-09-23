@@ -1957,10 +1957,11 @@ async function main() {
     // reaches the renderer as inbox:changed rather than as a document change
     const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
     const sent = [], listeners = [];
+    const LIVE_QUERY = 'tana:liveQuery:' + ulid();
     doc.transact((l) => { l.getMap('notifications').get('a').delete('readAt'); });
     backend.testRuntime({ me: { userUri: ME }, win: { isDestroyed: () => false, webContents: { send: (...a) => sent.push(a) } },
       client: {
-        sync: { on: (event, fn) => { if (event === 'change') listeners.push(fn); }, subscribe: async (id) => { assert.equal(id, doc.id); return doc; }, getDocument: (id) => (id === doc.id ? doc : null) },
+        sync: { on: (event, fn) => { if (event === 'change') listeners.push(fn); }, subscribe: async (id) => { assert.equal(id, doc.id); return doc; }, getDocument: (id) => (id === doc.id || id === LIVE_QUERY ? doc : null) },
         graph: { listNodes: async ({ nodeTypes, nodeIds }) => ({ nodes: nodeTypes ? [{ id: ME, title: 'Robin Vega', userProfile: {} }] : (nodeIds || []).includes(TYPE) ? [{ id: TYPE, title: 'Renamed' }] : [] }) },
       } });
     const rows = await backend.handlers.get('outline:children')(null, 'orbital:notifications');
@@ -1977,6 +1978,8 @@ async function main() {
     const before = sent.length;
     backend.onChange(doc.id, { origin: 'remote' });
     assert.equal(sent.length, before, 'and it is no row\'s change');
+    backend.onChange(LIVE_QUERY, { origin: 'remote' });
+    assert.equal(sent.length, before, 'nor is a live query\'s update: the renderer would ask doc:info for an id that is no document');
     console.log('ok  notifications inbox: Tana\'s reads, writes and sentences, and main\'s page over them');
   }
 
