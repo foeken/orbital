@@ -144,8 +144,8 @@ function viewParams(f, me, limit = 1000) {
 // (C$ in home.tana.inc/assets/shared-*.js, which also fixes the three the saved-searches spec left open: visibility,
 // workflowStates and attributes). Every field is guarded: a real search document omits optional keys rather than
 // writing them empty, and protobuf JSON refuses an undefined value, so nothing undefined is ever set.
-// ponytail: Tana also widens ownerUris to every sub-space of a scoped space; that needs the space tree, not the query.
-function searchQueryParams(query, me, limit = 1000, now = Date.now()) {
+// `spaces` is the org's space list, for widening a scoped space to its sub-spaces (searchOwners); the caller lists it.
+function searchQueryParams(query, me, limit = 1000, now = Date.now(), spaces = []) {
   const q = query || {};
   const list = (v) => (Array.isArray(v) && v.length ? v : undefined);
   const p = { limit, mode: 'LIST_NODES_MODE_WITH_COUNT' };
@@ -155,7 +155,8 @@ function searchQueryParams(query, me, limit = 1000, now = Date.now()) {
   const eventsOnly = Array.isArray(q.types) && q.types.length === 1 && q.types[0] === 'event';
   if (typeof q.textQuery === 'string' && q.textQuery.trim()) p.textQuery = q.textQuery.trim();
   if (list(q.entityTypeUris)) p.entityTypes = q.entityTypeUris;
-  if (list(q.ownerUris)) p.ownerIds = q.ownerUris;
+  const owners = searchOwners(list(q.ownerUris) || [], spaces);
+  if (owners.length) p.ownerIds = owners;
   // A workflow state is an open task in that workflow's state: Tana sends each as a selector beside the plain states.
   const flows = [...new Map((list(q.workflowStates) || []).filter((w) => w && typeof w.workflowUri === 'string' && typeof w.workflowStateId === 'string')
     .map((w) => [w.workflowUri + '#' + w.workflowStateId, { type: 'open', workflowUri: w.workflowUri, workflowStateId: w.workflowStateId }])).values()];
@@ -186,6 +187,22 @@ function searchQueryParams(query, me, limit = 1000, now = Date.now()) {
       : types.length === 1 && types[0] === 'type' && !typed ? [{ field: 'SORT_FIELD_TITLE', direction: 'SORT_DIRECTION_ASCENDING' }] : UPDATE_DESC;
   }
   return p;
+}
+// The owners a saved search is scoped to, widened the way Tana's runner widens them (C$e and oy in shared-*.js): a
+// space stands for itself and every space beneath it, at any depth, so a search scoped to a parent space finds what
+// its sub-spaces hold. `spaces` are graph space nodes ({ id, ownerUri, archivedAt }). Archived ones are left out of
+// the tree as Tana leaves them out of its own (Mv), which also cuts off what sits under them; a scoped space itself
+// always stays. Anything that is not a Tana uri is dropped, and nothing is listed twice.
+function searchOwners(ownerUris, spaces = []) {
+  // archived = archivedAt after 1970 (Tana's Mv: > 0); unarchive writes 0, which the graph may send as the epoch
+  const live = spaces.filter((s) => s && !(Date.parse(s.archivedAt) > 0)), ids = new Set(live.map((s) => s.id)), children = new Map();
+  for (const s of live) if (ids.has(s.ownerUri)) children.set(s.ownerUri, [...(children.get(s.ownerUri) || []), s.id]);
+  const out = new Set(), stack = ownerUris.filter((u) => typeof u === 'string' && u.startsWith('tana:')).reverse();
+  while (stack.length) {
+    const uri = stack.pop();
+    if (!out.has(uri)) { out.add(uri); stack.push(...(children.get(uri) || [])); }
+  }
+  return [...out];
 }
 // visibility (private | shared | restricted | open | link) as the graph's own filters, exactly as Tana maps it (y$).
 function visibilityParams(visibility, me) {
@@ -286,4 +303,4 @@ function searchQueryToFilter(query, me) {
   return f;
 }
 
-module.exports = { parseQuery, searchParams, needsTypes, viewParams, searchQueryParams, filterToSearchQuery, searchQueryToFilter, validViewFilter, VIEW_PRESETS, VIEW_KINDS, hideRules, isHidden, completedWindow, completedInWindow };
+module.exports = { parseQuery, searchParams, needsTypes, viewParams, searchQueryParams, searchOwners, filterToSearchQuery, searchQueryToFilter, validViewFilter, VIEW_PRESETS, VIEW_KINDS, hideRules, isHidden, completedWindow, completedInWindow };

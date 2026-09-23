@@ -41,10 +41,7 @@ async function searchChildren(id) {
   // unreadable, not that the user saved an unconstrained search — and searchQueryParams({}) would otherwise fall
   // back to "every listable kind", silently showing the wrong rows as if they were this search's results.
   if (!query || !Object.keys(query).length) throw new Error('this saved search has no readable query');
-  const answered = await S.client.graph.listNodes(searchQueryParams(query, S.me && S.me.userUri, 200));
-  const nodes = answered.nodes.filter((n) => completedInWindow(n, view.completedWithin));
-  nodes.forEach(rememberNodeHue);
-  await resolveTypes(nodes.map((n) => n.entityType));
+  const nodes = await searchRows(query, view.completedWithin);
   // A view keeps the head of its list live (views.js), which is what makes a change someone else makes show up in
   // it. These rows are listed the same way and were not subscribed at all, so a saved search only ever showed what
   // its query answered when the page opened. The same cap applies here, and for the same reason: a search answers
@@ -62,11 +59,21 @@ async function searchChildren(id) {
 async function searchPreview(filter) {
   if (!S.client) throw new Error(NOT_CONNECTED);
   if (!validViewFilter(filter)) throw new Error('invalid view filter');
-  const answered = await S.client.graph.listNodes(searchQueryParams(filterToSearchQuery(filter, S.me && S.me.userUri), S.me && S.me.userUri, 200));
-  const nodes = answered.nodes.filter((n) => completedInWindow(n, filter.completedWithin)); // as the saved page will show it
+  const nodes = await searchRows(filterToSearchQuery(filter, S.me && S.me.userUri), filter.completedWithin); // as the saved page will show it
+  return nodes.map((n) => toNode(graphRow(n)));
+}
+// The one runner behind both: a stored query's rows, completed ones outside the window dropped. A search scoped to a
+// space also covers every space beneath it, as in Tana (searchOwners), so the org's spaces are listed first — only
+// when a space is in scope, which leaves every other search at one graph call.
+// ponytail: spaces are listed on each run, not cached; cache them when a scoped search's latency shows.
+async function searchRows(query, completedWithin) {
+  const scoped = Array.isArray(query.ownerUris) && query.ownerUris.some((u) => typeof u === 'string' && isSpace(u));
+  const spaces = scoped ? (await S.client.graph.listNodes({ nodeTypes: ['space'], limit: 1000 })).nodes : [];
+  const answered = await S.client.graph.listNodes(searchQueryParams(query, S.me && S.me.userUri, 200, undefined, spaces));
+  const nodes = answered.nodes.filter((n) => completedInWindow(n, completedWithin));
   nodes.forEach(rememberNodeHue);
   await resolveTypes(nodes.map((n) => n.entityType));
-  return nodes.map((n) => toNode(graphRow(n)));
+  return nodes;
 }
 // What a meeting carries besides its notes (verified read-only on a real meeting, docs/MEETINGS.md):
 //   summary / tagline  the event's own AI summary, on the graph node

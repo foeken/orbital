@@ -72,7 +72,7 @@ Translation to `ListNodesRequest` (all fields confirmed present on the request):
 | stored | request |
 |---|---|
 | `textQuery`, `types`, `entityTypeUris`, `stateTypes`, `assignedTo`, `createdBy`, `unassigned` | `textQuery`, `nodeTypes`, `entityTypes`, `stateTypes`, `assignedTo`, `createdBy`, `unassigned` |
-| `ownerUris` | `ownerIds` |
+| `ownerUris` | `ownerIds`, each scoped space widened to itself plus every space beneath it at any depth, archived spaces (and what sits under them) left out — Tana's `C$e`/`oy`; the caller passes the org's spaces in (`searchOwners`, verified 2026-09-23) |
 | `participantUris` | `hasParticipantUris` |
 | `eventTime{min,max}` | `eventStartTimeMin`/`Max` |
 | `assignedToViewer` / `createdByViewer` | resolved to the signed-in user's URI |

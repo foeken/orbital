@@ -88,6 +88,17 @@ async function main() {
     assert.deepEqual(d.loro.getMap('query').toJSON().eventTime, { min: 1, max: 2 }, 'a date window is stored');
     setSearchQuery(d, { types: ['event'] });
     assert.equal(d.loro.getMap('query').toJSON().eventTime, undefined, 'and clearing it removes the window rather than leaving it filtering');
+    // Tana declares workflow states and attribute values as Loro maps (Fc.list(Fc.map), Fc.record(Fc.map)), their
+    // lists and date as containers too: a rewrite must keep that shape, and read back through toJSON() unchanged.
+    const shaped = { types: ['text'], workflowStates: [{ workflowUri: 'tana:workflow:01examples0000000000000000', workflowStateId: 'review' }],
+      attributes: { 'tana:type:x?attribute=y': { refs: ['tana:text:01examples0000000000000000'], date: { preset: 'past' }, textMatches: [{ value: 'a', mode: 'prefix' }], numberRanges: [{ min: 1 }] } } };
+    setSearchQuery(d, shaped);
+    const qm = d.loro.getMap('query'), attr = qm.get('attributes').get('tana:type:x?attribute=y');
+    assert.equal(qm.get('workflowStates').get(0).kind(), 'Map', 'a workflow state is a map, as Tana writes it');
+    assert.deepEqual([attr.kind(), attr.get('refs').kind(), attr.get('date').kind(), attr.get('textMatches').get(0).kind(), attr.get('numberRanges').get(0).kind()],
+      ['Map', 'List', 'Map', 'Map', 'Map'], 'an attribute is a map of containers, down to each match and range');
+    const back = qm.toJSON();
+    assert.deepEqual([back.workflowStates, back.attributes], [shaped.workflowStates, shaped.attributes], 'and toJSON() reads it back exactly as given');
     // view: Tana reads sortBy as field (ascending) or -field, and display as a record of key -> { shown, order }
     const nodeSdk = require('../sdk/node');
     nodeSdk.setSearchView(d, { sortBy: 'updated', groupBy: 'status', display: ['status', 'updated'] });
@@ -2772,6 +2783,15 @@ async function main() {
       ['tana:user-profile:01examples0000000000000000'], 'participantUris is the graph\'s hasParticipantUris');
     assert.deepEqual(searchQueryParams({ ownerUris: ['tana:space:01examples0000000000000000'] }, ME).ownerIds,
       ['tana:space:01examples0000000000000000'], 'ownerUris scopes by owner');
+    // A scoped space covers every space beneath it, at any depth, as in Tana (C$e/oy): the org's spaces are passed in.
+    const sp = (n) => 'tana:space:01examplesp' + String(n).padStart(15, '0'), doc1 = 'tana:text:01examples0000000000000000';
+    const tree = [{ id: sp(1) }, { id: sp(2), ownerUri: sp(1) }, { id: sp(3), ownerUri: sp(2) }, { id: sp(4), ownerUri: sp(1), archivedAt: '2026-09-01T00:00:00Z' },
+      { id: sp(5), ownerUri: sp(4) }, { id: sp(6) }, { id: sp(7), ownerUri: sp(6) }];
+    assert.deepEqual(searchQueryParams({ ownerUris: [sp(1)] }, ME, 200, undefined, tree).ownerIds, [sp(1), sp(2), sp(3)],
+      'a parent space widens to its sub-spaces and theirs; an archived one is cut off with what sits under it');
+    assert.deepEqual(searchQueryParams({ ownerUris: [sp(2), sp(1), doc1, sp(6), sp(2), 'junk'] }, ME, 200, undefined, tree).ownerIds, [sp(2), sp(3), sp(1), doc1, sp(6), sp(7)],
+      'every owner once: an overlapping scope adds nothing twice, a non-space owner stays as itself, a non-uri is dropped');
+    assert.deepEqual(searchQueryParams({ ownerUris: [sp(4)] }, ME, 200, undefined, tree).ownerIds, [sp(4)], 'a scoped archived space still stays itself');
     assert.equal(searchQueryParams({ createdByViewer: true }, ME).createdBy[0], ME, 'createdByViewer resolves to the signed-in user');
     assert.equal(searchQueryParams({ textQuery: '  dpa  ' }, ME).textQuery, 'dpa', 'text is trimmed');
     assert.equal(searchQueryParams({ textQuery: '   ' }, ME).textQuery, undefined, 'blank text is not a filter');
