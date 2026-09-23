@@ -9,7 +9,7 @@ contextBridge.exposeInMainWorld('api', {
   children: (docId) => ipcRenderer.invoke('outline:children', docId),
   node: (docId) => ipcRenderer.invoke('doc:info', docId),
   path: (docId) => ipcRenderer.invoke('doc:path', docId),
-  related: (docId) => ipcRenderer.invoke('doc:related', docId), // meeting context: {summary,tagline,call?:{url,label},pinned[],outcomes[],notes[],backlinks[]}
+  related: (docId) => ipcRenderer.invoke('doc:related', docId), // meeting context: {summary,tagline,call?,pinned[],outcomes[],proposals[],notes[],backlinks[]}
   // The page on screen (null: none): main keeps its backlinks and its hub's pins live, and says 'related:changed' when one moves
   relatedWatch: (docId) => ipcRenderer.invoke('doc:watchRelated', docId),
   onRelatedChanged: (cb) => ipcRenderer.on('related:changed', (_e, docId) => cb(docId)),

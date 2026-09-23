@@ -11,16 +11,17 @@ extra.set(PROPOSALS_PAGE, { id: PROPOSALS_PAGE, text: 'Proposals', title: 'Propo
 
 const proposalCount = () => (kids.get(PROPOSALS_PAGE) || []).length;
 
-// The page's sections (issue #104), in this order, each only when it has rows: proposals from meetings you were in,
-// from meetings you see through a space you are in, and from chats that belong to no meeting. main files each row
-// (proposal.group). Folding one is remembered like a view's sections, under this page's own key, so it does not
-// depend on which view is behind the page.
-const PROPOSAL_GROUPS = ['From meetings', 'From spaces', 'From chats'];
-const proposalFoldKey = (id) => PROPOSALS_PAGE + '\n' + id;
+// The page's two parts (issues #104, #107), each only when it has rows: yours at the top with no heading (meetings you
+// were in, your own chats), then From others (meetings and chats you see through a space, other people's chats), a
+// section that starts folded. main files each row (proposal.group). Opening it is remembered like a view's sections,
+// under this page's own key, so it does not depend on which view is behind the page.
+const PROPOSAL_GROUPS = [['mine', ''], ['others', 'From others']];
+const PROPOSAL_FOLDED = new Set(['others']);
+const proposalFoldKey = (id) => PROPOSALS_PAGE + '\n' + (PROPOSAL_FOLDED.has(id) ? 'open\n' : '') + id;
 function proposalGroups(list) {
-  return PROPOSAL_GROUPS.map((title) => ({ id: title, title, nodes: list.filter((n) => n.proposal && n.proposal.group === title) }))
+  return PROPOSAL_GROUPS.map(([id, title]) => ({ id, title, nodes: list.filter((n) => n.proposal && n.proposal.group === id) }))
     .filter((g) => g.nodes.length)
-    .map((g) => ({ ...g, collapsed: collapsedGroups.has(proposalFoldKey(g.id)), toggle: () => toggleProposalGroup(g.id) }));
+    .map((g) => ({ ...g, collapsed: PROPOSAL_FOLDED.has(g.id) !== collapsedGroups.has(proposalFoldKey(g.id)), toggle: () => toggleProposalGroup(g.id) }));
 }
 function toggleProposalGroup(id) {
   if (!collapsedGroups.delete(proposalFoldKey(id))) collapsedGroups.add(proposalFoldKey(id));

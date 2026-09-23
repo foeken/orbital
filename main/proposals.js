@@ -21,7 +21,8 @@ const WHY = {
   gone: ['its document is gone', 'Its document is gone: reject it to clear it'],
 };
 
-async function rows() {
+// A meeting id scopes the same pending rows for that meeting's sidebar; no id lists the whole page.
+async function rows(meetingId) {
   if (!S.client) throw new Error(NOT_CONNECTED);
   const all = await proposals.pending(S.client.graph);
   const live = new Set(all.map(key));
@@ -33,18 +34,24 @@ async function rows() {
   const doc = (p) => (p.operation === 'delete' ? p.subjectUri : p.proposedUri);
   const lookup = async (ids) => (ids.length ? (await S.client.graph.listNodes({ nodeIds: ids, includeProposals: true, limit: ids.length })).nodes : []);
   const found = new Map((await lookup([...new Set(list.flatMap((p) => [doc(p), p.contextUri]).filter(Boolean))])).map((n) => [n.id, n]));
+  // The group a row is filed under (issues #104, #107), by where its chat lives — the chat's owner, or a subagent
+  // chat's parent's owner. Yours: a meeting you were in, or a chat owned by you or by nobody. Others': a meeting you
+  // only see through its space, a chat a space owns, and another person's chat (a colleague's agent routine). "In it"
+  // is what the Meetings view calls your own calendar — you among the event's participants — asked of the graph.
+  // ponytail: a meeting shared with you directly, outside any space, also files under others
+  const placeOf = (p) => { const c = p.contextUri; return (c && c.startsWith('tana:chat:') ? (found.get(c) || {}).ownerUri : c) || ''; };
+  const meetingOf = (p) => { const up = placeOf(p); return up.startsWith('tana:event:') ? up : null; };
+  const relevant = meetingId ? list.filter((p) => meetingOf(p) === meetingId) : list;
   // and the space each typed document's type keeps its documents in, which Tana moves the document into on approval
-  const homes = new Map((await lookup([...new Set(list.map((p) => (found.get(doc(p)) || {}).entityType).filter(Boolean))])).map((t) => [t.id, t.ownerUri]));
-  // The group a row is filed under (issue #104): the meeting it was proposed in when you were in that meeting, the
-  // meeting when you only see it through its space, and a chat that belongs to no meeting. "In it" is what the
-  // Meetings view calls your own calendar — you among the event's participants — asked of the graph for these meetings.
-  // A meeting is its chat's owner, or a subagent chat's parent's owner.
-  // ponytail: a meeting shared with you directly, outside any space, also files under From spaces
-  const meetingOf = (p) => { const c = p.contextUri, up = c && c.startsWith('tana:chat:') ? (found.get(c) || {}).ownerUri : c; return up && up.startsWith('tana:event:') ? up : null; };
-  const meetings = [...new Set(list.map(meetingOf).filter(Boolean))];
-  const mine = new Set(meetings.length ? (await S.client.graph.listNodes({ nodeIds: meetings, hasParticipantUris: [S.me.userUri], limit: meetings.length })).nodes.map((n) => n.id) : []);
-  const groupOf = (p) => { const m = meetingOf(p); return !m ? 'From chats' : mine.has(m) ? 'From meetings' : 'From spaces'; };
-  return list.map((p) => {
+  const homes = new Map((await lookup([...new Set(relevant.map((p) => (found.get(doc(p)) || {}).entityType).filter(Boolean))])).map((t) => [t.id, t.ownerUri]));
+  const meetings = [...new Set(relevant.map(meetingOf).filter(Boolean))];
+  const mine = new Set(meetingId ? [meetingId] : meetings.length ? (await S.client.graph.listNodes({ nodeIds: meetings, hasParticipantUris: [S.me.userUri], limit: meetings.length })).nodes.map((n) => n.id) : []);
+  const groupOf = (p) => {
+    const up = placeOf(p);
+    const yours = up.startsWith('tana:event:') ? mine.has(up) : !up.startsWith('tana:space:') && !(up.startsWith('tana:user-profile:') && up !== S.me.userUri);
+    return yours ? 'mine' : 'others';
+  };
+  return relevant.map((p) => {
     const n = found.get(doc(p));
     const where = (p.chatTitle || (found.get(p.contextUri) || {}).title || '').trim() || 'a chat';
     const home = n && n.entityType && homes.get(n.entityType);

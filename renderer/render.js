@@ -335,13 +335,13 @@ function renderOutline() {
       // with the arrangement its own document stores rather than the one this browser remembers for a view
       const shown = pageRows(list, filterEl.value.trim().toLowerCase());
       list = shown.list; groups = shown.groups; hidden = shown.hidden;
-    } else if (parent.docId === PROPOSALS_PAGE) { // its fixed sections, From meetings and From spaces (renderer/proposals.js)
+    } else if (parent.docId === PROPOSALS_PAGE) { // yours without a heading, then From others (renderer/proposals.js)
       groups = proposalGroups(list);
       list = groups.flatMap((g) => (g.collapsed ? [] : g.nodes));
     }
     list = withDraftTail(list, parent); // an open node always has a row to type in; a read-only one (every chat) never does
     outline.replaceChildren(...(groups
-      ? groups.flatMap((g) => [groupHeadEl(g), ...(g.collapsed ? [] : g.nodes.map((n) => childEl(n, parent))), ...(g.more ? [groupMoreEl(g)] : [])])
+      ? groups.flatMap((g) => [...(g.title ? [groupHeadEl(g)] : []), ...(g.collapsed ? [] : g.nodes.map((n) => childEl(n, parent))), ...(g.more ? [groupMoreEl(g)] : [])])
       : list.map((n) => childEl(n, parent))));
     animView = null; // a zoom replaced every row, and a zoomed row is keyed docId/nodeId while a view row is keyed by
     // its document id, so on the way back nothing would match and the whole view would flash as if it had just arrived
