@@ -43,7 +43,7 @@ This repo is **Orbital** (formerly Tana Companion): a macOS Electron outliner ov
 
 - Releasing (`npm run release`) signs with the Developer ID in the Keychain and notarizes through the `notarytool` profile, the same pair Meeting Notes uses; `@electron/osx-sign` and `@electron/notarize` come with the packager, so no new dependency and no secret in the repo. Signing every nested file with `--timestamp` takes minutes — let it finish. Never run two packager builds at once: the packager `rm -rf`s the shared `$TMPDIR/electron-packager` root at startup, so a second run deletes the first one's tree and the failure surfaces as `codesign: … locale.pak: No such file or directory` on a random file, which looks like a signing bug and is not one. A run killed part-way can also finish later and silently overwrite `dist/` with an unsigned build, so run `spctl --assess` on the bundle right before shipping it. The zip is published to the public `foeken/orbital-releases` repo; this source repo stays private.
 
-- The packaged app ships the repo source, and `--ignore` in the `package` script — not `.gitignore` — decides what lands inside it: `dist`, `docs`, `.git`, `.tana-log` and `AGENTS.md` are excluded and everything else in the working directory is copied in, including untracked files. Keep private files out of the tree before packaging.
+- The packaged app ships the repo source, and `--ignore` in the `package` script — not `.gitignore` — decides what lands inside it: `dist`, `docs`, `.git`, `.tana-log`, `.superpowers` and `AGENTS.md` are excluded and everything else in the working directory is copied in, including untracked files. Keep private files out of the tree before packaging.
 
 ## Integration checks and newer contracts
 
