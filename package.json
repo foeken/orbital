@@ -14,7 +14,7 @@
     "lint": "eslint .",
     "check": "node scripts/db-check.js && node scripts/sdk-check.js && node scripts/renderer-check.js && node scripts/renderer-behavior-check.js && node scripts/updater-check.js && node scripts/pdf-check.js && node scripts/livequery-check.js && node scripts/presence-check.js",
     "icon": "electron scripts/build-icon.js",
-    "package": "electron-packager . 'Orbital' --platform=darwin --arch=arm64 --icon=build/icon.icns --out=dist --overwrite --ignore='^/(dist|docs|build/icon\\.png|\\.git|TASKS\\.md|AGENTS\\.md)' --app-bundle-id=com.dreetje.orbital",
+    "package": "electron-packager . 'Orbital' --platform=darwin --arch=arm64 --icon=build/icon.icns --out=dist --overwrite --ignore='^/(dist|docs|build/icon\\.png|\\.git|AGENTS\\.md)' --app-bundle-id=com.dreetje.orbital",
     "release": "sh scripts/release.sh",
     "postinstall": "node node_modules/electron/install.js && (sh -c \"plutil -replace CFBundleName -string Orbital node_modules/electron/dist/Electron.app/Contents/Info.plist && plutil -replace CFBundleDisplayName -string Orbital node_modules/electron/dist/Electron.app/Contents/Info.plist && plutil -replace CFBundleIdentifier -string com.dreetje.orbital.dev node_modules/electron/dist/Electron.app/Contents/Info.plist && cp build/icon.icns node_modules/electron/dist/Electron.app/Contents/Resources/electron.icns && codesign --force --deep --sign - node_modules/electron/dist/Electron.app\" || true)"
   },
