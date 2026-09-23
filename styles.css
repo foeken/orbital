@@ -318,7 +318,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
    plus the body's 5px), so the dot — 6px into an 18px bullet box, behind an 18px chevron — has to come back the
    difference for the two left edges to agree. Without it a bulleted row reads as indented from the lines around
    it when it is only carrying a marker. The chevron travels with it into the padding it is drawn over anyway. */
-.node.block.t-bullet > .line, .node.block.t-numbered > .line { margin-left: -10px; }
+.node.block.t-bullet:not(.fullref) > .line, .node.block.t-numbered:not(.fullref) > .line { margin-left: -10px; }
 /* The guide line under a list row hangs off the row's box, not off its line, so it stayed where it was when the
    line moved: the same 8px, or it no longer runs under the bullet it belongs to. */
 .node.block.t-bullet > .children, .node.block.t-numbered > .children { margin-left: 23px; }
