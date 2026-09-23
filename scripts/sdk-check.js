@@ -1472,6 +1472,30 @@ async function main() {
     assert.deepEqual(calls.map((p) => p.nodeTypes.join()), ['user-profile'], 'a #member search is the people query alone');
     console.log('ok  search: members are fetched beside the full-text hits, so "@" finds a person by name');
   }
+  // Related results (#20): Tana's search page adds what only a semantic search found, fetched by id under the
+  // search's own filters and listed after the text hits. A failure is no related results, not a failed search.
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const hit = { id: 'tana:text:' + ulid(), title: 'Budget 2027' }, near = { id: 'tana:text:' + ulid(), title: 'Cost forecast' };
+    const hidden = { id: 'tana:text:' + ulid(), title: 'Lunch' }, semanticCalls = [], byId = [];
+    let answer = [hit, near, hidden, { id: 'not-a-uri' }, near].map((n) => ({ documentId: n.id }));
+    backend.testRuntime({ me: { userUri: ME }, win: null, client: {
+      graph: { listNodes: async (p) => { if (p.nodeIds) { byId.push(p); return { nodes: [hidden, near].filter((n) => p.nodeIds.includes(n.id)) }; } return { nodes: p.nodeTypes.join() === 'user-profile' ? [] : [hit] }; } },
+      search: { semanticSearch: async (p) => { semanticCalls.push(p); if (answer instanceof Error) throw answer; return answer; } },
+    } });
+    const settings = require('../main/settings'); settings.set('hiddenTitles', ['Lunch']);
+    const rows = JSON.parse(JSON.stringify(await backend.search('budget #task')));
+    assert.deepEqual(rows.map((n) => [n.id, !!n.related]), [[hit.id, false], [near.id, true]], 'the semantic-only hit comes last, marked related; a text hit, a hidden title and a bad id do not');
+    assert.deepEqual(JSON.parse(JSON.stringify(semanticCalls)), [{ query: 'budget', limit: 20 }], 'the words are asked, not the #filter');
+    assert.deepEqual(JSON.parse(JSON.stringify([byId[0].nodeIds, byId[0].nodeTypes, !!byId[0].stateTypes, 'textQuery' in byId[0], 'sortOptions' in byId[0]])), [[near.id, hidden.id], ['text'], true, false, false], 'fetched by id, once each, under the #task filter');
+    semanticCalls.length = 0;
+    await backend.search('bud');
+    assert.equal(semanticCalls.length, 0, 'under four characters there is no semantic search, as in Tana');
+    answer = new Error('FailedPrecondition');
+    assert.deepEqual(JSON.parse(JSON.stringify(await backend.search('budget'))).map((n) => n.id), [hit.id], 'a refused semantic search leaves the text results');
+    settings.set('hiddenTitles', []);
+    console.log('ok  search: related results are the semantic-only hits, under the same filters, after the rest');
+  }
 
   // Backlinks (main/related.js): the sidebar's "Mentioned in" and the typed fields this node sits in, grouped the way
   // Tana's own Backlinks panel groups them — a field section per attribute, the plain mentions last.
@@ -1678,7 +1702,7 @@ async function main() {
       requests.push(p);
       if (p.nodeIds) return { nodes: [] };
       return totalCount == null ? { nodes: [event, hidden, doc, task, mcp], truncated: true } : { nodes: [event, hidden, doc, task, mcp], totalCount };
-    } }, sync: { subscribe: async () => null, unsubscribe: async () => {} } } });
+    } }, search: { semanticSearch: async () => [] }, sync: { subscribe: async () => null, unsubscribe: async () => {} } } });
     const payload = await backend.handlers.get('view:list')(null, 'library', { types: ['meetings', 'docs', 'chats'], states: null, assignee: 'anyone' });
     assert.equal(requests.length, 1, 'one view fetch makes one graph query');
     assert.deepEqual(payload.nodes.map((n) => n.title).sort(), ['Doc', 'MCP: helper', 'Meeting'], 'docs without tasks and hidden titles are post-filtered, MCP chats only when the switch is on');
@@ -2661,7 +2685,7 @@ async function main() {
     const open = new Document(lunch); open.transact((l) => initDocument(l, 'Lunch', ME));
     backend.testRuntime({ me: { userUri: ME }, win: { isDestroyed: () => false, webContents: { send: () => {} } }, client: {
       sync: { subscribe: async (id) => (id === lunch ? open : null), getDocument: (id) => (id === lunch ? open : null), unsubscribe: async () => {} },
-      graph: { listNodes },
+      graph: { listNodes }, search: { semanticSearch: async () => [] },
     } });
     // strings, not arrays: an array built inside the main.js vm realm is never reference-equal to one built here
     const listed = async () => [...(await backend.handlers.get('outline:roots')())].flatMap((s) => s.nodes.map((n) => n.title)).sort().join(' | ');
