@@ -530,6 +530,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 @keyframes cbadge-sweep { 0%, 18% { transform: translateX(-130%); } 72%, 100% { transform: translateX(130%); } }
 .selected .text { caret-color: transparent; }
 .children { margin-left: 33px; padding-left: 0; border-left: 1px solid #ececec; }
+.children > .node.fullref > .line > .bullet { margin-right: 4px; } /* give the full-reference icon more room before its status or title */
 .children.loading { color: #aaa; font-style: italic; padding: 3px 0 3px 22px; }
 .empty-note { color: #aaa; font-size: 16px; padding: 8px 40px; }
 /* group headings (Group pill): the quiet uppercase the sidebar sections use, over the rows of one group. A button:
