@@ -2093,6 +2093,7 @@ async function main() {
     runtime.client.graph.listNodes = async (p) => {
       if (p.createdBy) { discovery.push(p); return { nodes: [{ id: away.id, assignedTo: [COLLEAGUE], state: { type: 'closed' } }, { id: hushed.id, assignedTo: [COLLEAGUE], state: { type: 'open' } }] }; }
       if (p.nodeIds) return { nodes: p.nodeIds.filter((id) => creators.has(id)).map((id) => ({ id, createdBy: creators.get(id) })) };
+      if ((p.nodeTypes || []).includes('user-profile')) return { nodes: [{ id: COLLEAGUE, title: 'Sam Rivera', userProfile: {} }, { id: ME, title: 'Robin Vega', userProfile: {} }] };
       return { nodes: [], totalCount: 0 };
     };
     const restarted = mainHelpers(); restarted.testRuntime(runtime);
@@ -2103,8 +2104,8 @@ async function main() {
     assert.ok(!subscribedAfterRestart.includes(hushed.id), 'a task you silenced is not picked up by the watch rule, however exactly it fits it');
     restarted.onChange(away.id, { origin: 'remote' }); // the bootstrap, which used to be a silent baseline
     await settle();
-    assert.deepEqual(afterRestart.map((n) => [n[0], n[2]]), [[away.id, 'Now Completed']],
-      'a task somebody else completed while the app was closed is announced on the way back');
+    assert.deepEqual(afterRestart.map((n) => [n[0], n[2]]), [[away.id, 'Now Completed by Sam Rivera']],
+      'a task somebody else completed while the app was closed is announced on the way back, with who completed it');
     restarted.onChange(away.id, { origin: 'remote' });
     await settle();
     assert.equal(afterRestart.length, 1, 'once: the stored pair is caught up the moment it is read');

@@ -502,7 +502,10 @@ async function notifyWatched(id, doc, n, info) {
   if (!moved) { const last = notifyQuiet.get(id) || 0; if (Date.now() - last < EDIT_QUIET_MS) return; notifyQuiet.set(id, Date.now()); }
   if (catchUp) caughtUp++;
   // A status move already says the one thing that matters about it; everything else asks what the change was.
-  const state = was[1] !== sig[1] ? (NOTIFY_STATE[sig[1]] ? 'Now ' + NOTIFY_STATE[sig[1]] : 'Status changed') : null;
+  let state = was[1] !== sig[1] ? (NOTIFY_STATE[sig[1]] ? 'Now ' + NOTIFY_STATE[sig[1]] : 'Status changed') : null;
+  // ...and who moved it, when that is somebody else and an org member: a guest or a failed lookup keeps the plain wording.
+  const who = state && n.stateChangedBy ? (await members().catch(() => [])).find((m) => m.id === n.stateChangedBy) : null;
+  if (who && !who.me && who.title) state += ' by ' + who.title;
   const body = state || await changeSummary(id, n.title) || 'Edited';
   if (S.notify) S.notify(id, n.title || 'Untitled', body);
 }
