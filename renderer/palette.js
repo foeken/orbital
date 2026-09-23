@@ -126,6 +126,7 @@ function paletteRows(q, typed = q) {
     const doc = palDoc;
     rows.push({ id: 'pinToDate', group: docGroup, icon: 'pinDate', label: 'Pin to date \u2026', hint: 'sunday, in 3 days, 12 oct', keepOpen: true, run: () => openPinDatePalette(doc) });
   }
+  rows.push(...meetingRows(palDoc, docGroup)); // Change time / location, Add attendee: on a meeting this user may change (renderer/meeting.js)
   // Pin this node onto the meeting I am in, through the same event pin the quick-add panel writes (docs/QUICK-ADD.md)
   // and the sidebar reads back under Pinned. The row is listed whenever a real node is on screen, so ⇧⌘K can record
   // a key against it, and says why instead of disappearing when there is no meeting to pin to. Its id is unchanged
@@ -355,7 +356,7 @@ function openCommandPalette() {
   palInput.placeholder = 'Run a command'; palInput.value = ''; renderPalette(); palInput.focus();
 }
 function backPalette() {
-  const SECOND_LEVEL = new Set(['setType', 'trash', 'archived', 'discuss', 'setIcon', 'setHue', 'openaiKey', 'pins', 'pinDate', 'create', 'hidden', 'hosts']); // pages opened from the command page
+  const SECOND_LEVEL = new Set(['setType', 'trash', 'archived', 'discuss', 'setIcon', 'setHue', 'openaiKey', 'pins', 'pinDate', 'create', 'hidden', 'hosts', ...Object.keys(MEETING_PAGES)]); // pages opened from the command page
   if (palMode === 'pill') openCommandPalette();
   // Escape on the prompt page cancels the whole thing rather than stepping back a level: the page was opened to
   // answer one question, and abandoning that question is abandoning the assignment. Nothing is written either way.
@@ -903,6 +904,7 @@ function renderPalette() {
   else if (palMode === 'hidden') palRows = hiddenRows(q);
   else if (palMode === 'pins') palRows = editPinRows(q.toLowerCase());
   else if (palMode === 'pinDate') palRows = pinDateRows(q);
+  else if (Object.hasOwn(MEETING_PAGES, palMode)) palRows = MEETING_PAGES[palMode](q);
   else if (palMode === 'pinMeeting') palRows = meetingPickRows(q.toLowerCase());
   else if (palMode === 'setType') palRows = typeRows(q.toLowerCase());
   else if (palMode === 'discuss') palRows = discussRows(q);
@@ -944,7 +946,7 @@ function renderPalette() {
   });
   // "No results" belongs under a list that was searched and found nothing. Two pages are not lists: the agent
   // prompt and "Discuss with …" turn what is typed into their one row, so there is nothing for them to not find.
-  if (!palRows.some((r) => palMode === 'cmd' || palMode === 'slash' || palMode === 'hidden' || r.node) && palMode !== 'agentPrompt' && palMode !== 'discuss' && (palMode === 'cmd' || palMode === 'slash' || (q && !palBusy))) { const n = document.createElement('div'); n.className = 'group'; n.textContent = 'No results'; els.push(n); }
+  if (!palRows.some((r) => palMode === 'cmd' || palMode === 'slash' || palMode === 'hidden' || r.node) && palMode !== 'agentPrompt' && palMode !== 'discuss' && (palMode === 'cmd' || palMode === 'slash' || (q && !palBusy && !Object.hasOwn(MEETING_PAGES, palMode)))) { const n = document.createElement('div'); n.className = 'group'; n.textContent = 'No results'; els.push(n); }
   palList.replaceChildren(...els);
   const active = palList.querySelector('.row.active');
   if (active) active.scrollIntoView({ block: 'nearest' });
@@ -964,7 +966,7 @@ function togglePalette(mode, link, pin) {
   promptEditor(false); // ⌘K over the prompt page leaves it, without assigning
   palMode = mode; palRows = []; palIndex = 0; palBusy = false; palEnter = null; clearTimeout(palTimer); palTimer = null;
   // meetingNow is cleared, not kept: every open re-reads the meeting, the same rule the quick-add panel follows.
-  if (mode === 'cmd') { palDoc = currentDoc(); palTaskCtx = null; meetingNow = undefined; loadPins(); subCache.clear(); }
+  if (mode === 'cmd') { palDoc = currentDoc(); palTaskCtx = null; meetingNow = undefined; meetingCtx = null; loadPins(); subCache.clear(); }
   palInput.placeholder = mode === 'search' ? 'Search Tana' : mode === 'slash' ? 'Choose a block type or create' : 'Run a command';
   palInput.value = link ? link.text : '';
   if (mode === 'search') searchNow(); else renderPalette();
@@ -998,7 +1000,7 @@ function nextPalIndex(rows, index, step) {
   return index;
 }
 // pages whose rows are built from what is typed, with nothing to fetch
-const LOCAL_MODES = new Set(['cmd', 'create', 'slash', 'assignees', 'assigneesMany', 'status', 'setType', 'discuss', 'setHue', 'visibility', 'visibilityPeople', 'hidden', 'pins', 'pill', 'pinMeeting', 'openaiKey', 'hosts', 'trash', 'archived']);
+const LOCAL_MODES = new Set(['cmd', 'create', 'slash', 'assignees', 'assigneesMany', 'status', 'setType', 'discuss', 'setHue', 'visibility', 'visibilityPeople', 'hidden', 'pins', 'pill', 'pinMeeting', 'openaiKey', 'hosts', 'trash', 'archived', ...Object.keys(MEETING_PAGES)]);
 palInput.addEventListener('input', () => {
   palIndex = 0; palEnter = null; // typing on supersedes an Enter that was waiting for the previous query
   if (LOCAL_MODES.has(palMode)) return renderPalette();

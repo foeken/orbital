@@ -25,6 +25,7 @@ const inbox = require('./main/inbox');
 const icons = require('./main/icons');
 const settings = require('./main/settings');
 const quick = require('./main/quickadd');
+const meetings = require('./main/meetings');
 
 ipcMain.handle('doc:path', async (_e, id) => { try { const p = await pathOf(id); pathCache.set(id, p); return p; } catch (e) { report(e); return pathCache.get(id) || []; } });
 
@@ -349,6 +350,9 @@ ipcMain.handle('sensitive:list', () => sensitiveIds()); // the synced setting se
 ipcMain.handle('sensitive:set', (_e, id, on) => setSensitive(id, on));
 ipcMain.handle('doc:related', (_e, id) => related(id)); // { summary, tagline, pinned[], outcomes[], notes[], backlinks[] }
 ipcMain.handle('doc:watchRelated', (_e, id) => watchRelated(id)); // the page on screen (null: none): its sidebar's edges pushed as 'related:changed'
+ipcMain.handle('meeting:info', (_e, id) => meetings.meetingInfo(id));
+ipcMain.handle('meeting:edit', (_e, id, change) => meetings.editMeeting(id, change));
+ipcMain.handle('meeting:suggestions', () => meetings.attendeeSuggestions());
 ipcMain.handle('doc:summaryUri', (_e, id) => summaryUri(id)); // where a meeting should actually open, or null
 // "Discuss with …": one call for the type and the field, because both are the same decision (main/documents.js)
 ipcMain.handle('doc:discussWith', (_e, id, who) => discussWith(id, who));

@@ -78,3 +78,38 @@ event title in one further query. `scripts/platform-cli.js incall [--limit 5]` i
 scripts/sdk-check.js covers it offline. Proven on a live Tana Meet call: joined 08:20:54, reported at 08:25:49.
 What it cannot show is whether someone is *participating* rather than idle in the room — speaking would have to come
 from the transcript document, and mute or camera state is not in the graph at all.
+
+## Editing a meeting (bundle of 2026-09-23, verified live on a scratch meeting)
+
+Tana's event wrapper writes a meeting's time as `data.startTime`/`data.endTime` (epoch ms, deleting `allDay`), and
+its `timezone`, `location` and `description` as plain keys. Its people are the root `attendees` roster, one line per
+person keyed `email:<lowercased address>` or `tana:<ulid>` (with `identityUri`), plus an `attendee` participant grant
+for an org member. `sdk/events.js` makes those writes. Tana's web client applies one gate to all of them (`Dk`): the
+event is unrestricted, or you are an organizer (`admin`/`editor`). Its refusal reads "Only the event organizer can
+change this meeting". `Dk` does not look at `origin`: a calendar-synced event (`origin: 'provider'`) is edited like a
+Tana-made one (`'tana'`), and the server writes the change back to the calendar and reports it in `data.syncStatus`
+(`pending | synced | failed`) and `data.syncError`. Tana's own `updateEvent` tool (`Rwt`) adds two refusals that
+Orbital follows as well: a synced event whose calendar copy is not the organizer's (`externalId`, `origin` not
+`'tana'`, no `ownerIsOrganizer`) cannot take a change back to the provider, and an all-day event's time cannot be
+changed because there is no date-only write path. `access.canEditEvent` is `Dk` plus the first; main/meetings.js
+refuses the second.
+
+Live read of six real events (2026-09-23): on a meeting someone else organises I am `attendee` (so `Dk` refuses), on
+my own I am `editor` with `ownerIsOrganizer: true`. `ListAttendeeSuggestions` answered 8 people, 7 with a
+`tana:user-profile:` `identityUri` and one with an empty one.
+
+Live (`platform-cli meetingedit`, a scratch meeting created and soft-deleted in one run): the gate answered true. The
+time, timezone, description and a `tana:` roster line for me came back through the graph. The server also put the
+meeting in the Outlook calendar (`externalId`, `calendarSubscriptionUri`, `syncStatus: synced`), so creating a meeting
+creates a calendar event. It also replaced a location written right after creation with its Tana Meet link
+(`tanaMeetingLinkAppliedAt` 2.4 s after `createdAt`), a race only an edit made in the first seconds can hit. After the
+soft delete the document still read `syncStatus: synced`, so whether the Outlook copy is removed was not observed.
+
+In the app, ⌘K on a meeting offers "Change time …", "Change location …" and "Add attendee …" only when
+`meeting:info` says it is editable (main/meetings.js, renderer/meeting.js), and on its write-up page too: a zoomed
+meeting opens there, and the sidebar's hub (`related().pinHub`) names the meeting. "Change time …" is left out on an
+all-day meeting. The time page reads a day in Pin to date's
+words and/or a clock time ("tomorrow 9:30", "fri 10:00-11:30"; a start alone keeps the length). The attendee page lists
+`GraphService.ListAttendeeSuggestions` first, then org members, leaving out whoever is already on the meeting, and
+takes a typed email address. Tana's web client says new attendees get a calendar invite when the organizer's calendar
+can write, so the page warns that one may go out.

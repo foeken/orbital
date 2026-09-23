@@ -87,6 +87,15 @@ async function canArchive(doc, user, ctx = {}) {
   const n = readNode(doc);
   return ARCHIVABLE.has(n.type) && supported(n) && await canWrite(n, user, ctx);
 }
+// Changing a meeting's time, place or people: Tana's Dk gate (every event edit in its web client goes through it) is
+// "not restricted, or I am an organizer (admin/editor)", on top of being allowed to write it at all. Its updateEvent
+// tool (Rwt) adds the calendar rule: a synced event whose calendar in Tana is not the organizer's (origin 'provider'
+// without ownerIsOrganizer) cannot take the change back, so the two copies would diverge.
+async function canEditEvent(doc, user, ctx = {}) {
+  const n = readNode(doc);
+  if (n.externalId && n.origin !== 'tana' && n.ownerIsOrganizer !== true) return false;
+  return n.type === 'event' && supported(n) && (n.restricted !== true || ['admin', 'editor'].includes(n.participants?.[user]?.role)) && await canWrite(n, user, ctx);
+}
 async function capabilities(doc, user, ctx = {}) {
   const n = readNode(doc), write = supported(n) && await canWrite(n, user, ctx);
   const sharing = write && eventSharing(n, user);
@@ -178,4 +187,4 @@ async function moveToSpace(doc, target, user, ctx = {}, confirmation) {
   doc.transact(loro => isLibrary(target) ? loro.getMap('data').delete('ownerUri'): loro.getMap('data').set('ownerUri', target.id));
   return preview;
 }
-module.exports = { capabilities, setSharing, moveToSpace, previewMove, canWrite, canDelete, canArchive, audienceOf, LIBRARY };
+module.exports = { capabilities, setSharing, moveToSpace, previewMove, canWrite, canDelete, canArchive, canEditEvent, audienceOf, LIBRARY };

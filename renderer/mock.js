@@ -63,10 +63,13 @@ function mockApi() {
   let mcpOff = false; // the app-local switch, off every launch of the mock
   // meetings over the past and next 7 days (day offset from today, start hour or null = all day); roots meta = weekday + time, search meta = weekday + day of month + time
   const dateMeta = {};
+  const meetingEdits = {}; // id -> { start, end, allDay, location, participants, attendees }: what Change time / location / Add attendee edit
   const meetings = [['Last week retro', -6, 10], ['Board prep', -2, 14], ['Leadership sync', 0, 9], ['Platform Guild', 0, 13], ['1-1 with Sam', 1, 11], ['Offsite', 3, null]].map(([text, off, h], i) => {
     const d = new Date(); d.setDate(d.getDate() + off);
     const time = h == null ? ', all day' : ' ' + h + ':00–' + (h + 1) + ':00';
     dateMeta['mockmeeting' + i] = WD[d.getDay()] + ' ' + d.getDate() + time;
+    const start = new Date(d.getFullYear(), d.getMonth(), d.getDate(), h ?? 0).getTime();
+    meetingEdits['mockmeeting' + i] = { start, end: start + (h == null ? 864e5 : 36e5), allDay: h == null, location: i === 2 ? 'Room 4.12' : '', participants: ['tana:user-profile:robin'], attendees: [] };
     return { id: 'mockmeeting' + i, text, meta: WD[d.getDay()] + time, kind: 'document', hasChildren: true, icon: 'meeting', tags: [meeting] };
   });
   // Meetings, Chats and People are no longer views. Their documents remain — the Library lists every kind, and a
@@ -233,6 +236,27 @@ function mockApi() {
       throw new Error('unknown document ' + docId);
     },
     members: async () => members.map(info),
+    // a meeting's time, place and people (main/meetings.js): every mock meeting is one the mock user organises
+    meetingInfo: async (docId) => {
+      if (!meetingEdits[docId]) throw new Error('Not a meeting');
+      return structuredClone({ id: docId, editable: true, ...meetingEdits[docId] });
+    },
+    editMeeting: async (docId, change) => {
+      const m = meetingEdits[docId], d = all.find((x) => x.id === docId);
+      if (!m) throw new Error('Not a meeting');
+      if ('start' in change) { Object.assign(m, { start: change.start, end: change.end, allDay: false }); const s = new Date(change.start), hm = (t) => new Date(t).toTimeString().slice(0, 5); d.meta = WD[s.getDay()] + ' ' + hm(change.start) + '–' + hm(change.end); }
+      if ('location' in change) m.location = change.location;
+      for (const p of change.attendees || []) {
+        m.attendees.push({ key: p.email ? 'email:' + p.email.toLowerCase() : 'tana:mock' + (++seq), email: p.email, identityUri: p.email ? undefined : p.userUri });
+        if (p.userUri && !m.participants.includes(p.userUri)) m.participants.push(p.userUri);
+      }
+      emit(docId);
+      return structuredClone({ id: docId, editable: true, ...m });
+    },
+    attendeeSuggestions: async () => [
+      { email: 'sam@example.com', displayName: 'Sam Okafor', eventCount: 31, identityUri: 'tana:user-profile:sam' },
+      { email: 'dana@partner.example', displayName: 'Dana Brooks', eventCount: 4 },
+    ],
     // relationships of a node (main.js related): pinned edges, task outcomes and note documents
     related: async (docId) => {
       const doc = all.find((d) => d.id === docId);

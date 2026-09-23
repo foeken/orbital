@@ -48,6 +48,9 @@ const withShims = (src) => {
   if (/\binField\(/.test(src) && !/const inField =/.test(src)) src = sourceLine('const inField') + '\n' + src;
   if (/\brenderFields\(/.test(src) && !/function renderFields\(|const renderFields =/.test(src)) src = 'globalThis.renderFields ??= () => {};\n' + src;
   if (/\bloadRelated\(/.test(src) && !/function loadRelated\(|const loadRelated =/.test(src)) src = 'globalThis.loadRelated ??= () => {};\n' + src;
+  // Cmd+K's meeting rows and pages (renderer/meeting.js): a palette harness without that file offers none
+  if (/\bmeetingRows\(/.test(src) && !/function meetingRows\(/.test(src)) src = 'globalThis.meetingRows ??= () => [];\n' + src;
+  if (/\bMEETING_PAGES\b/.test(src) && !/const MEETING_PAGES =/.test(src)) src = 'globalThis.MEETING_PAGES ??= {};\n' + src;
   // the rows a row lives among: its own container's, which in a harness with one container is texts()
   if (/\browsBeside\(/.test(src) && !/const rowsBeside =/.test(src)) src = 'globalThis.rowsBeside ??= (el) => texts();\n' + src;
   // the fields container, for the helpers that paint or leave a selection in both places rows live
@@ -7540,6 +7543,92 @@ function runNotificationsCheck() {
   })();
 }
 checks.push(runNotificationsCheck);
+
+// Change time / Change location / Add attendee (renderer/meeting.js): offered on a meeting only once main says it
+// may be changed, and each page's one row is what Enter writes through api.editMeeting.
+async function runMeetingEditCheck() {
+  const api = vm.runInNewContext(`
+    const calls = [];
+    let palMode = 'cmd', palRows = [], palIndex = 0, palBusy = false, members = null, closed = 0, renders = 0;
+    const palette = { hidden: false }, palInput = { value: '', placeholder: '', focus() {} };
+    const renderPalette = () => { renders++; }, closePalette = () => { closed++; palette.hidden = true; }, run = (fn) => fn();
+    const MEET = 'tana:event:m';
+    const start = new Date(2026, 8, 22, 10).getTime();
+    // a write-up page names its meeting through the sidebar's hub; a space hub is not a meeting
+    const relatedBy = new Map([['tana:text:w', { pinHub: MEET }], ['tana:text:s', { pinHub: 'tana:space:s' }]]);
+    let editable = true, allDay = false, info = () => ({ id: MEET, editable, start, end: start + 18e5, allDay, location: 'Room 4',
+      participants: ['tana:user-profile:me', 'tana:user-profile:sam'], attendees: [{ key: 'email:kim@x.nl', email: 'kim@x.nl' }] });
+    const tana = {
+      meetingInfo: async (id) => { calls.push(['info', id]); return info(); },
+      editMeeting: async (id, change) => { calls.push(['edit', id, change]); const now = info(); return { ...now, participants: [...now.participants, ...(change.attendees || []).map((p) => p.userUri).filter(Boolean)] }; },
+      attendeeSuggestions: async () => [{ email: 'sam@x.nl', displayName: 'Sam', identityUri: 'tana:user-profile:sam' }, { email: 'KIM@x.nl', displayName: 'Kim' },
+        { email: 'dana@partner.nl', displayName: 'Dana' }, { email: 'priya@x.nl', displayName: 'Priya', identityUri: 'tana:user-profile:priya' }],
+    };
+    const membersLoaded = async () => { members = [{ id: 'tana:user-profile:me', title: 'Me', me: true }, { id: 'tana:user-profile:priya', title: 'Priya' }, { id: 'tana:user-profile:tomas', title: 'Tomas' }]; };
+    const localDate = () => '2026-09-22', WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    ${functionSource('fuzzyMatch')}
+    ${sourceBetween('const WEEKDAYS =', 'const PIN_DATE_GROUP')}
+    ${fs.readFileSync(require.resolve('../renderer/meeting.js'), 'utf8').replace("'use strict';", '')}
+    const tick = () => new Promise(setImmediate);
+    ({
+      cmd: async (doc, canEdit = true, wholeDay = false) => { editable = canEdit; allDay = wholeDay; meetingCtx = null; calls.length = 0; meetingRows(doc, 'Current node'); await tick(); await tick(); return meetingRows(doc, 'Current node').map((r) => [r.id, r.label, r.hint]); },
+      asked: () => JSON.parse(JSON.stringify(calls)),
+      parse: (text) => { const t = parseMeetingTime(text, start, 18e5, new Date(2026, 8, 22, 12)); return t && [new Date(t.start).toString().slice(0, 21), (t.end - t.start) / 6e4]; },
+      open: async (mode) => { openMeetingPage(mode, 'x'); await tick(); await tick(); return palMode; },
+      rows: (typed) => MEETING_PAGES[palMode](typed).map((r) => [r.label, r.hint || '', !!r.disabled]),
+      press: async (typed, i) => { calls.length = 0; closed = 0; palette.hidden = false; const r = MEETING_PAGES[palMode](typed)[i]; if (!r.keepOpen) closePalette(); r.run(); await tick(); await tick(); return { calls: JSON.parse(JSON.stringify(calls)), closed }; },
+    });
+  `, { setImmediate, Date, Promise });
+
+  assert.deepEqual(plain(await api.cmd({ id: 'tana:text:t', icon: 'task' })), [], 'nothing on a document that is not a meeting');
+  assert.deepEqual(plain(await api.cmd({ id: 'tana:event:m', icon: 'meeting' }, false)), [], 'nor on a meeting this user may not change');
+  const rows = plain(await api.cmd({ id: 'tana:event:m', icon: 'meeting' }));
+  assert.deepEqual(rows.map((r) => r[0]), ['meetingTime', 'meetingLocation', 'meetingAttendee'], 'three rows, each with an id so ⇧⌘K can give it a key');
+  assert.deepEqual(rows.map((r) => r[2]), ['Tue 22 Sep 10:00\u201310:30', 'Room 4', '1 attendee'], 'each says what the meeting has now');
+  assert.deepEqual(plain(await api.cmd({ id: 'tana:text:w', icon: 'doc' })).map((r) => r[0]), ['meetingTime', 'meetingLocation', 'meetingAttendee'],
+    'a meeting opens at its write-up, and the rows follow it there');
+  assert.deepEqual(plain(api.asked()), [['info', 'tana:event:m']], 'asking about the meeting the write-up lives in, not the write-up');
+  assert.deepEqual(plain(await api.cmd({ id: 'tana:text:s', icon: 'doc' })), [], 'a document in a space is not in a meeting');
+  assert.deepEqual(plain(await api.cmd({ id: 'tana:event:m', icon: 'meeting' }, true, true)).map((r) => r[0]), ['meetingLocation', 'meetingAttendee'],
+    'an all-day meeting keeps its place and people, but its time is changed in its calendar');
+  await api.cmd({ id: 'tana:event:m', icon: 'meeting' });
+
+  // Tuesday 22 September 2026, 10:00–10:30: a day in Pin to date's words and/or a clock time
+  assert.deepEqual(plain(['14:00', 'tomorrow 9:30', 'fri 10:00-11:30', 'tomorrow', '12 oct 8.15 to 9'].map(api.parse)), [
+    ['Tue Sep 22 2026 14:00', 30], ['Wed Sep 23 2026 09:30', 30], ['Fri Sep 25 2026 10:00', 90], ['Wed Sep 23 2026 10:00', 30], ['Mon Oct 12 2026 08:15', 45]],
+    'a start alone keeps the length, a day alone keeps the time of day');
+  assert.deepEqual(plain(['', 'blah', '25:00', '14:00-13:00', 'blah 14:00'].map(api.parse)), [null, null, null, null, null], 'anything else reads as no time');
+
+  assert.equal(await api.open('meetingTime'), 'meetingTime');
+  assert.deepEqual(plain(api.rows('')), [['Type a day and/or a time: 14:00, tomorrow 9:30, fri 10:00-11:30', '', true]]);
+  assert.deepEqual(plain(api.rows('xyz')), [['No time in \u201Cxyz\u201D', '', true]]);
+  assert.deepEqual(plain(api.rows('14:00')), [['Tue 22 Sep 14:00\u201314:30', '\u21A9', false]], 'the row shows what Enter will write');
+  const moved = plain(await api.press('14:00', 0));
+  assert.deepEqual(moved.calls, [['edit', 'tana:event:m', { start: new Date(2026, 8, 22, 14).getTime(), end: new Date(2026, 8, 22, 14, 30).getTime() }]]);
+  assert.equal(moved.closed, 1, 'and the palette closes');
+
+  await api.open('meetingLocation');
+  assert.deepEqual(plain(api.rows('')), [['Room 4', 'Current', true], ['Remove location', '', false]]);
+  assert.deepEqual(plain((await api.press('Zoom', 0)).calls), [['edit', 'tana:event:m', { location: 'Zoom' }]]);
+  assert.deepEqual(plain((await api.press('', 1)).calls), [['edit', 'tana:event:m', { location: '' }]], 'Remove location writes an empty one');
+
+  await api.open('meetingAttendee');
+  assert.deepEqual(plain(api.rows('')), [['Dana', 'dana@partner.nl', false], ['Priya', 'priya@x.nl', false], ['Tomas', 'Member', false]],
+    'suggestions first, then members they do not name; nobody already there (by grant or by email), and not me');
+  assert.deepEqual(plain(api.rows('partner')), [['Dana', 'dana@partner.nl', false]], 'an email matches too');
+  assert.deepEqual(plain(api.rows('new@x.nl')), [['Add new@x.nl', '\u21A9', false]], 'a typed address is offered as itself');
+  assert.deepEqual(plain(api.rows('zzz')), [['No one matches \u2014 type an email address to add it', '', true]]);
+  const added = plain(await api.press('', 1));
+  assert.deepEqual(added.calls, [['edit', 'tana:event:m', { attendees: [{ email: 'priya@x.nl', userUri: 'tana:user-profile:priya' }] }]]);
+  assert.equal(added.closed, 0, 'the page stays open for the next person');
+  assert.deepEqual(plain(api.rows('')).map((r) => r[0]), ['Dana', 'Tomas'], 'and whoever was just added leaves the list');
+
+  assert.match(source, /rows\.push\(\.\.\.meetingRows\(palDoc, docGroup\)\)/, 'Cmd+K lists the rows');
+  assert.match(source, /else if \(Object\.hasOwn\(MEETING_PAGES, palMode\)\) palRows = MEETING_PAGES\[palMode\]\(q\);/, 'renders the pages');
+  assert.match(source, /meetingCtx = null; loadPins\(\)/, 'and asks again each time it opens');
+  console.log('ok  meeting edits: rows only when editable, typed time and place, attendee suggestions and members');
+}
+checks.push(runMeetingEditCheck);
 process.exitCode = 1;
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);

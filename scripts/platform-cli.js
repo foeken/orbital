@@ -453,6 +453,40 @@ const commands = {
   unpin: () => setPin(false),
 };
 
+// suggestions [--limit 10]: read-only, the people GraphService.ListAttendeeSuggestions offers for a meeting.
+commands.suggestions = async () => {
+  await connect();
+  out(await client.graph.listAttendeeSuggestions({ limit: Number(flag('limit', 10)) }));
+};
+// meetingedit: WRITES, but only to a scratch meeting it creates and deletes in the same run. Creates it, checks
+// canEditEvent, moves it an hour on, sets timezone/location/description, adds this user by profile (no email, so
+// nobody is invited), waits for the server, prints what it kept (syncStatus included) and soft-deletes it.
+commands.meetingedit = async () => {
+  const me = await connect();
+  const events = require('../sdk/events'), access = require('../sdk/access');
+  await client.sync.connect();
+  const id = 'tana:event:' + ulid();
+  const doc = await client.sync.subscribe(id, (loro) => initDocument(loro, 'Orbital scratch meeting (delete me)', me.userUri, { kind: 'meeting' }));
+  try {
+    const ctx = { sync: client.sync, orgDocUri: me.orgDocUri };
+    const editable = await access.canEditEvent(doc, me.userUri, ctx);
+    const { startTime } = readNode(doc);
+    events.setTime(doc, startTime + 36e5, startTime + 54e5);
+    events.setTimezone(doc, 'Europe/Amsterdam');
+    events.setLocation(doc, 'Scratch room');
+    events.setDescription(doc, 'written by platform-cli meetingedit');
+    events.addAttendees(doc, [{ userUri: me.userUri }], me.userUri);
+    await new Promise((r) => setTimeout(r, Number(flag('settle', 6000))));
+    const n = readNode(doc);
+    const { nodes: [graph] = [] } = await client.graph.listNodes({ nodeIds: [id], limit: 1 });
+    out({ id, editable, data: { startTime: n.startTime, endTime: n.endTime, allDay: n.allDay, timezone: n.timezone, location: n.location, description: n.description, origin: n.origin, syncStatus: n.syncStatus, syncError: n.syncError, participants: n.participants },
+      roster: events.attendees(doc), graph: graph && { title: graph.title, calendarEvent: graph.calendarEvent } });
+  } finally {
+    await client.sync.softDelete(id).catch((e) => out('delete failed: ' + e.message));
+    out('deleted ' + id);
+  }
+};
+
 // Real main-process code paths against real data, read-only: exactly what the renderer receives.
 function backend(me) {
   process.env.TANA_MAIN_TEST = '1';
@@ -847,13 +881,14 @@ const USAGE = [
   '             settings   (with a key and a JSON value it writes)',
   '  diagnose   inspect <id...> | audiences [--limit 80] [--mine 0] [--kind text] | refs <id> | rows <query> | pinrows |',
   '             settype <id>   (listing only; with a target it writes)',
-  '             caps <id...> | related <id> | incall [--limit 5] | pageprobe | libraryprobe | boot [--settle ms]',
+  '             caps <id...> | related <id> | incall [--limit 5] | suggestions [--limit 10] | pageprobe | libraryprobe | boot [--settle ms]',
   '  live       watch <id...>',
   '  LIVE       livequery [--minutes 60] [--seconds 20] [--state <stateType>] | livequery --to <id> [--from <id>] [--edge-types LINKS_TO,…] |',
   '             presence <id> [--seconds 30] [--announce <name>] [--block <blockId>]',
   '  WRITES     create <title> [--kind doc|task|meeting|type] | delete <id> | restore <id> | archive <id> | unarchive <id> |',
   '             set-title <id> <title> |',
   '             upload <image file> <doc id> [--after <block id>] |',
+  '             meetingedit   (a scratch meeting it creates, edits and deletes; the server puts it in your calendar meanwhile) |',
   '             addfield <type uri> <title> [--type member|date|link|options] [--options "A|B"] [--to <type uri>,…] [--multiple] |',
   '             set-state <id> <proposed|open|closed|not_now> | pin <id> <sidebar|today> | unpin <id> <sidebar|today> |',
   '             pinto <event|space id> <id> | unpinfrom <event|space id> <id> | settype <id> <tana:type:...|none> |',
