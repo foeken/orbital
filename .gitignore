@@ -10,3 +10,6 @@ tana-auth.json
 
 # SDD workspaces: ledgers, briefs and review packages are scratch, not source
 .superpowers/
+
+# Tana's web client builds, logged by scripts/tana-log.js
+.tana-log/
