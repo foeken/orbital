@@ -310,25 +310,25 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
    gutter is narrowed, never taken out of the layout (no display: none on a chevron — that is what used to move
    rows between states): .scroll's 16px + 11px of gutter + the body's 5px is the 32px .titlebar reserves for the
    title, so a heading and the title share a left edge. A row with children keeps the full gutter: it has a
-   chevron to show, and in Tana's schema it is a list row anyway. */
-.node.block:not(.t-bullet):not(.t-numbered):not(.has) > .line > .chev,
-.node.block:not(.t-bullet):not(.t-numbered):not(.has) > .line:hover > .chev { width: 0; visibility: hidden; }
-.node.block:not(.t-bullet):not(.t-numbered):not(.has) > .line > .bullet { width: 11px; }
-/* A list row's marker starts where a plain row's words start: the plain row gives up its gutter (11px of bullet
-   plus the body's 5px), so the dot — 6px into an 18px bullet box, behind an 18px chevron — has to come back the
+   chevron to show, and in Tana's schema it is a list row anyway. A full reference is laid out as a list row
+   whatever block holds it, so its icon sits where the bullets beside it sit. */
+.node.block:not(.t-bullet):not(.t-numbered):not(.fullref):not(.has) > .line > .chev,
+.node.block:not(.t-bullet):not(.t-numbered):not(.fullref):not(.has) > .line:hover > .chev { width: 0; visibility: hidden; }
+.node.block:not(.t-bullet):not(.t-numbered):not(.fullref):not(.has) > .line > .bullet { width: 11px; }
+/* A list marker or full-reference icon sits where a plain row's words sit: the plain row gives up its gutter (11px of
+   bullet plus the body's 5px), so the marker — 6px into an 18px bullet box, behind an 18px chevron — has to come back the
    difference for the two left edges to agree. Without it a bulleted row reads as indented from the lines around
    it when it is only carrying a marker. The chevron travels with it into the padding it is drawn over anyway. */
-.node.block.t-bullet:not(.fullref) > .line, .node.block.t-numbered:not(.fullref) > .line { margin-left: -10px; }
+.node.block.t-bullet > .line, .node.block.t-numbered > .line, .node.block.fullref > .line { margin-left: -10px; }
 /* The guide line under a list row hangs off the row's box, not off its line, so it stayed where it was when the
    line moved: the same 8px, or it no longer runs under the bullet it belongs to. */
-.node.block.t-bullet > .children, .node.block.t-numbered > .children { margin-left: 23px; }
-/* Dragging a row (renderer/drag.js). A row with a marker is picked up by it. A row without one keeps the 11px
-   gutter and nothing to grab, so a grip is drawn there while the pointer is on the row — inside the gutter it
-   already has, so nothing moves when it appears, and only while the row is hovered, so a page of prose is not a
-   field of dots. A collapsed row is left alone: its dot is back, and that is the thing to grab. */
+.node.block.t-bullet > .children, .node.block.t-numbered > .children, .node.block.fullref > .children { margin-left: 23px; }
+/* Dragging a row (renderer/drag.js). A marker or icon is the handle. A marker-less row keeps the 11px gutter and
+   nothing to grab, so the dotted grip appears there on hover — inside the gutter it already has, so nothing moves.
+   A collapsed row is left alone: its dot is back, and that is the thing to grab. */
 .bullet[draggable="true"] { cursor: grab; } /* a marker that can be picked up says so, wherever it is drawn */
 .bullet[draggable="true"]:active { cursor: grabbing; }
-.node.block:not(.t-bullet):not(.t-numbered):not(.collapsed) > .line:hover > .bullet[draggable="true"]::after {
+.node.block:not(.t-bullet):not(.t-numbered):not(.collapsed) > .line:hover > .bullet[draggable="true"]:not(.icon)::after {
   content: ''; position: absolute; left: 0; top: 7px; width: 9px; height: 11px;
   background-image: radial-gradient(circle at center, #b9bbbe 1.1px, transparent 1.3px); background-size: 4.5px 4px;
 }
@@ -735,7 +735,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .bullet.icon:hover svg { color: #d0d2d2; }
 [data-theme="dark"] .bullet.meeting svg { color: #d7b54d; }
 [data-theme="dark"] .bullet.icon.hue svg, [data-theme="dark"] .bullet.icon.hue:hover svg { color: oklch(0.8 0.1 var(--hue)); }
-[data-theme="dark"] .node.block:not(.t-bullet):not(.t-numbered):not(.collapsed) > .line:hover > .bullet[draggable="true"]::after { background-image: radial-gradient(circle at center, #6f7679 1.1px, transparent 1.3px); }
+[data-theme="dark"] .node.block:not(.t-bullet):not(.t-numbered):not(.collapsed) > .line:hover > .bullet[draggable="true"]:not(.icon)::after { background-image: radial-gradient(circle at center, #6f7679 1.1px, transparent 1.3px); }
 [data-theme="dark"] #dropline { background: #6ea8dc; }
 [data-theme="dark"] .check { background: #3a3e40; --check-on: #5b976c; }
 [data-theme="dark"] .check:hover:not(:checked) { background: #474c4e; }
