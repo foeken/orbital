@@ -3610,6 +3610,12 @@ async function main() {
     const raw = d.content.get('children').get(1).toJSON();
     assert.deepEqual(raw, { nodeName: 'image', attributes: { blockId: bare, tanaUri: IMG } }, 'written as Tana writes an atom: no children, no display size');
     assert.throws(() => outline.insertImage(d, para, 'tana:text:01examplew0000000000000000'), /not a tana:image uri/);
+    const first = outline.insertTable(d, para), t = outline.readOutline(d)[1];
+    assert.equal(t.type, 'table', '"/" Table lands after its row');
+    assert.deepEqual(t.table.rows.map((r) => r.map((c) => c.header)), [[true, true, true], [false, false, false], [false, false, false]], "Tana's 3x3 with a header row");
+    assert.equal(first, t.table.rows[0][0].id, 'the caret goes to the first header cell');
+    outline.insertTable(d, row);
+    assert.equal(outline.readOutline(d)[5].block, 'bullet', 'after a list row the table is a list row of its own');
     console.log('ok  image upload, image document and image block (#28)');
   }
   // ---- undo/redo: local-only, ops flow out like any local change, the other document converges ----

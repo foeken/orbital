@@ -323,6 +323,7 @@ ipcMain.handle('block:setBlockType', (_e, id, nodeId, type) => mut(id, (doc) => 
 ipcMain.handle('block:insertDivider', (_e, id, nodeId) => mut(id, (doc) => content.insertDivider(doc, nodeId))); // nodeId null appends at the end
 ipcMain.handle('block:insertImage', (_e, id, nodeId, file, uploadId) => insertImage(id, nodeId, file, uploadId)); // file { bytes, filename, mimeType }: upload, image document, block after nodeId
 ipcMain.handle('block:cancelUpload', (_e, uploadId) => cancelUpload(uploadId));
+ipcMain.handle('block:insertTable', (_e, id, nodeId) => mut(id, (doc) => content.insertTable(doc, nodeId))); // "/" Table: 3x3 with a header row after nodeId; returns its first cell
 ipcMain.handle('block:insertAfter', (_e, id, nodeId, text, block) => mut(id, (doc) => content.insertAfter(doc, nodeId, text, false, block)));
 ipcMain.handle('block:insertBefore', (_e, id, nodeId, text) => mut(id, (doc) => content.insertBefore(doc, nodeId, text)));
 ipcMain.handle('block:split', (_e, id, nodeId, before, after, asChild) => mut(id, (doc) => content.split(doc, nodeId, before, after, asChild))); // one undo step for both halves
