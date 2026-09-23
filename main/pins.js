@@ -80,6 +80,9 @@ async function pinnedUris() {
   ]);
   return [...new Set([...sidebar, ...dated])];
 }
+// The days each date-pinned document is pinned to, { uri: ['YYYY-MM-DD'] }: the Pinned section of Group by
+// Responsibility lists those tasks and says the day under each.
+const pinnedDates = () => (S.client ? pins.datePins(S.client.sync, S.me.userUri).catch(() => ({})) : {});
 async function setPin(id, target, on, date = today()) {
   if (!S.client) throw new Error(NOT_CONNECTED);
   const sync = S.client.sync, user = S.me.userUri;
@@ -117,4 +120,4 @@ async function todayNode(offset = 0) {
   return created.id;
 }
 
-module.exports = { weekTitle, weekNode, pinTarget, pinnedNode, pinned, pinnedUris, pinHubs, pinTree, pinState, setPin, nodePin, todayNode };
+module.exports = { weekTitle, weekNode, pinTarget, pinnedNode, pinned, pinnedUris, pinnedDates, pinHubs, pinTree, pinState, setPin, nodePin, todayNode };

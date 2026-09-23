@@ -236,7 +236,7 @@ function railChangeEl(change, title, docId) {
   return el;
 }
 function railPinAction(pinHub, docId) {
-  const row = railMetaEl({ id: 'pinNew', icon: 'pin', label: 'Pin something…', run: () => togglePalette('search', null, { pinHub, docId }) });
+  const row = railMetaEl({ id: 'pinNew', icon: 'pin', label: 'Pin something …', run: () => togglePalette('search', null, { pinHub, docId }) });
   row.dataset.id = 'action:pinNew';
   return row;
 }

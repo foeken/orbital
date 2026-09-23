@@ -61,12 +61,18 @@ async function dates(sync, userUri, docUri) {
   return pins.filter((p) => p.type === 'plain').map((p) => p.datetime);
 }
 
-// Every document with at least one personal date pin. An entry survives its last unpin as an empty pins list, so
-// what counts is a pin still being in it, not the key being there.
-async function datePinned(sync, userUri) {
+// Every document with at least one personal date pin, and its dates: { uri: ['YYYY-MM-DD'] }. An entry survives its
+// last unpin as an empty pins list, so what counts is a pin still being in it, not the key being there.
+async function datePins(sync, userUri) {
   const entries = (await pinMap(sync, userUri)).loro.getMap('entries').toJSON();
-  return Object.keys(entries).filter((uri) => ((entries[uri] || {}).pins || []).some((p) => p.type === 'plain'));
+  const out = {};
+  for (const [uri, entry] of Object.entries(entries)) {
+    const dates = ((entry || {}).pins || []).filter((p) => p.type === 'plain').map((p) => p.datetime);
+    if (dates.length) out[uri] = dates;
+  }
+  return out;
 }
+const datePinned = async (sync, userUri) => Object.keys(await datePins(sync, userUri));
 
 async function pinDate(sync, userUri, docUri, date) {
   checkDate(date);
@@ -119,4 +125,4 @@ function unpinItem(doc, uri) {
   });
 }
 
-module.exports = { listSidebar, sidebarTree, pinSidebar, unpinSidebar, dates, datePinned, pinDate, unpinDate, items, pinItem, unpinItem };
+module.exports = { listSidebar, sidebarTree, pinSidebar, unpinSidebar, dates, datePins, datePinned, pinDate, unpinDate, items, pinItem, unpinItem };

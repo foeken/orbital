@@ -20,7 +20,7 @@ const docRow = (n, hint, run) => ({ node: n, icon: n.icon, label: n.text ?? n.ti
 // The order of the rows about the node you are on: where it goes (open it, unfold it), what it is (done, status,
 // assignee), where it lives (pins, the date nodes, its space), what it looks like (image, visibility, sensitivity),
 // its link, and last the one destructive row. Rows without an id carry a `rank` from this list instead.
-const NODE_ROW_ORDER = ['zoomIn', 'expand', 'collapse', 'toggleDone', 'status', 'setType', 'discussWith', 'setIcon', 'setHue', 'assign', 'assignTo', 'codex', 'codexOpen', 'pinToday', 'pinTomorrow', 'pinToMeeting', 'pinToSelectedMeeting', 'editPins', 'addToday', 'addTomorrow', 'addWeek', 'move', 'moveLibrary', 'visibility', 'notify', 'sensitive', 'copyLink', 'exportPdf', 'delete'];
+const NODE_ROW_ORDER = ['zoomIn', 'expand', 'collapse', 'toggleDone', 'status', 'setType', 'discussWith', 'setIcon', 'setHue', 'assign', 'assignTo', 'codex', 'codexOpen', 'pinToday', 'pinTomorrow', 'pinToDate', 'pinToMeeting', 'pinToSelectedMeeting', 'editPins', 'addToday', 'addTomorrow', 'addWeek', 'move', 'moveLibrary', 'visibility', 'notify', 'sensitive', 'copyLink', 'exportPdf', 'delete'];
 const DOC_KIND = /^tana:text:/; // the Discussion Task type applies to documents, so a meeting is not offered that row
 const nodeRank = (r) => { const i = NODE_ROW_ORDER.indexOf(r.rank || r.id); return i < 0 ? NODE_ROW_ORDER.length : i; };
 const VIEW_ORDER = ['inbox', 'today', 'week', 'library'];
@@ -109,7 +109,7 @@ function paletteRows(q, typed = q) {
   const docGroup = selection.length && selection[0].group === 'Selection' ? 'Actions' : 'Current node';
   if (palDoc && tana.exportPdf && DOC_KIND.test(palDoc.id)) {
     const doc = palDoc;
-    rows.push({ id: 'exportPdf', group: docGroup, icon: 'doc', label: 'Export to PDF…', run: () => { flushAll(); run(() => tana.exportPdf(doc.id)); } });
+    rows.push({ id: 'exportPdf', group: docGroup, icon: 'doc', label: 'Export to PDF', run: () => { flushAll(); run(() => tana.exportPdf(doc.id)); } });
   }
   if (pinInfo && palDoc && pinInfo.docId === palDoc.id) { // no ids: their labels depend on state, so no hotkeys
     const td = pinInfo.dates.includes(localDate());
@@ -118,6 +118,12 @@ function paletteRows(q, typed = q) {
     // pinned, and pinInfo.dates is what answers that; main defaults to today when no date comes with the call.
     const tm = localDate(1), tmPinned = pinInfo.dates.includes(tm);
     rows.push({ rank: 'pinTomorrow', group: docGroup, icon: 'pinDate', label: tmPinned ? 'Unpin from tomorrow' : 'Pin to tomorrow', run: () => pinAction(tmPinned ? 'unpin' : 'pin', 'today', tm) });
+  }
+  // Any other day, typed in words on a page of its own (renderer/document.js parseDay). Listed whenever a real node
+  // is on screen, so ⇧⌘K can record a key against it.
+  if (palDoc && tana.pin && isRealId(palDoc.id)) {
+    const doc = palDoc;
+    rows.push({ id: 'pinToDate', group: docGroup, icon: 'pinDate', label: 'Pin to date \u2026', hint: 'sunday, in 3 days, 12 oct', keepOpen: true, run: () => openPinDatePalette(doc) });
   }
   // Pin this node onto the meeting I am in, through the same event pin the quick-add panel writes (docs/QUICK-ADD.md)
   // and the sidebar reads back under Pinned. The row is listed whenever a real node is on screen, so ⇧⌘K can record
@@ -134,7 +140,7 @@ function paletteRows(q, typed = q) {
   // needs no live meeting, so it is never disabled — a workspace with no meetings at all says so on that page.
   if (palDoc && tana.searchPreview && tana.pinTo && isRealId(palDoc.id)) {
     const doc = palDoc;
-    rows.push({ id: 'pinToSelectedMeeting', group: docGroup, icon: 'pin', label: 'Pin to meeting', hint: 'Choose a meeting',
+    rows.push({ id: 'pinToSelectedMeeting', group: docGroup, icon: 'pin', label: 'Pin to meeting …', hint: 'Choose a meeting',
       keepOpen: true, run: () => openMeetingPicker(doc) });
   }
   // Everywhere this node is pinned, on one page, with each of them one press from being taken off. Offered whether
@@ -252,7 +258,7 @@ function paletteRows(q, typed = q) {
   if (!zoom || onSearchPage()) rows.push({ id: 'filter', group: 'View options', icon: 'filter', label: 'Filter rows by text', run: () => { filterShown = true; filterRow.hidden = false; render(); filterEl.focus(); } });
   // Actions: getting in first, then making and finding things, moving around, undoing, and last the app's own settings
   if (signedOut) rows.push({ id: 'login', group: 'Actions', label: 'Log in to Tana', run: () => tana.login().catch(showError) });
-  if (tana.creationOptions) rows.push({ id: 'create', group: 'Actions', icon: 'createNew', label: 'Create new…', keepOpen: true, run: openCreationPalette, sub: async () => { creationChoices = (await tana.creationOptions()).options || []; return creationRows(''); } });
+  if (tana.creationOptions) rows.push({ id: 'create', group: 'Actions', icon: 'createNew', label: 'Create new …', keepOpen: true, run: openCreationPalette, sub: async () => { creationChoices = (await tana.creationOptions()).options || []; return creationRows(''); } });
   // the keys the outline answers to, as rows: each has a default combo in DEFAULT_HOTKEYS and can be re-recorded
   rows.push({ id: 'search', group: 'Actions', icon: 'search', label: 'Search Tana', keepOpen: true, run: () => togglePalette('search') });
   // Go back with an empty stack is still a move while you are away from Home, which is where it lands (edit.js)
@@ -345,7 +351,7 @@ function openCommandPalette() {
   palInput.placeholder = 'Run a command'; palInput.value = ''; renderPalette(); palInput.focus();
 }
 function backPalette() {
-  const SECOND_LEVEL = new Set(['setType', 'trash', 'discuss', 'setIcon', 'setHue', 'openaiKey', 'pins', 'create', 'hidden', 'hosts']); // pages opened from the command page
+  const SECOND_LEVEL = new Set(['setType', 'trash', 'discuss', 'setIcon', 'setHue', 'openaiKey', 'pins', 'pinDate', 'create', 'hidden', 'hosts']); // pages opened from the command page
   if (palMode === 'pill') openCommandPalette();
   // Escape on the prompt page cancels the whole thing rather than stepping back a level: the page was opened to
   // answer one question, and abandoning that question is abandoning the assignment. Nothing is written either way.
@@ -544,7 +550,7 @@ function openCreationPalette() {
   palInput.placeholder = 'Choose what to create'; palInput.value = ''; renderPalette(); palInput.focus();
   loadCreationChoices();
 }
-// the create choices feed both the Cmd+K "Create new…" list and the "/" menu
+// the create choices feed both the Cmd+K "Create new …" list and the "/" menu
 function loadCreationChoices() {
   if (!tana.creationOptions) return;
   const seq = ++palSeq, mode = palMode; palBusy = true;
@@ -874,6 +880,7 @@ function renderPalette() {
   else if (palMode === 'visibilityPeople') palRows = visibilityPeopleRows(q.toLowerCase());
   else if (palMode === 'hidden') palRows = hiddenRows(q);
   else if (palMode === 'pins') palRows = editPinRows(q.toLowerCase());
+  else if (palMode === 'pinDate') palRows = pinDateRows(q);
   else if (palMode === 'pinMeeting') palRows = meetingPickRows(q.toLowerCase());
   else if (palMode === 'setType') palRows = typeRows(q.toLowerCase());
   else if (palMode === 'discuss') palRows = discussRows(q);
@@ -892,7 +899,7 @@ function renderPalette() {
     // a row names its glyph, or hands over the markup itself (the "/" menu's block glyphs, the refusal ban)
     const icon = document.createElement('span'); icon.className = 'ricon' + (r.node ? ' ' + (r.icon || 'dot') : ''); icon.innerHTML = r.icon ? iconSvg(r.icon) : r.svg || '';
     if (r.spin) icon.classList.add('thinking'); // a row waiting on an answer: its glyph breathes while it waits
-    const rowHue = r.node ? r.node.hue : r.hue; // documents and "Create new…" type choices both carry the type hue
+    const rowHue = r.node ? r.node.hue : r.hue; // documents and "Create new …" type choices both carry the type hue
     if (rowHue != null) { icon.classList.add('hue'); icon.style.setProperty('--hue', String(rowHue)); }
     const label = document.createElement('span'); label.className = 'label';
     const match = r.match || (q ? fuzzyMatch(r.label, q.toLowerCase()) : null); // every level: the letters the query matched, in bold

@@ -34,7 +34,7 @@ function visibilityRows(q) {
   const rules = new Set(access.rules || []), inherit = audienceInfo(access.inheritAudience);
   return [
     rules.has('me') && { group: 'Visibility', icon: 'lock', label: 'Only me', keepOpen: true, run: () => applySharing(palDoc, { rule: 'me' }) },
-    rules.has('people') && { group: 'Visibility', icon: 'userLock', label: 'Selected people…', disabled: !hasParticipants, keepOpen: true, run: () => openVisibilityPeople(palDoc) },
+    rules.has('people') && { group: 'Visibility', icon: 'userLock', label: 'Selected people …', disabled: !hasParticipants, keepOpen: true, run: () => openVisibilityPeople(palDoc) },
     rules.has('inherit') && { group: 'Visibility', icon: 'houseLock', label: inherit ? 'Inherit: ' + inherit.label : 'Inherit location audience', keepOpen: true, run: () => applySharing(palDoc, { rule: 'inherit', token: access.sharingToken }) },
   ].filter(Boolean).filter((row) => fuzzyMatch(row.label, q));
 }

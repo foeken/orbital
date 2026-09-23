@@ -43,9 +43,13 @@ const FALLBACK = { status: 'No status', assignee: 'Unassigned', updated: 'Older'
 // effective answer: an explicit Cmd+K choice, else the default rule). Silencing a task you handed over takes it out
 // of the section and out of the list, like every other row this grouping has no section for.
 const MINE_STATES = { proposed: 'My inbox', open: 'Mine', closed: 'My completed', not_now: 'My later' };
-const RESPONSIBILITY = ['Unassigned', 'Tracking', 'Agent', 'My inbox', 'Mine', 'My completed', 'My later', 'Assigned by others'];
+// Pinned: a task you pinned to a day is one you asked to see then, whoever has it and whatever its state, so like
+// Agent it decides the section on its own (after Agent, which stays first). Date pins are personal (the pin-map), so
+// nobody else's pins land here. It sits under My inbox and above Mine, and its rows say the day (pinnedOn below).
+const RESPONSIBILITY = ['Unassigned', 'Tracking', 'Agent', 'My inbox', 'Pinned', 'Mine', 'My completed', 'My later', 'Assigned by others'];
 function responsibilityOf(n) {
   if (codexIds.has(n.id)) return 'Agent'; // the local mark the badge is drawn from (renderer/nodes.js loadCodex)
+  if (isTask(n) && datePinsById.has(n.id)) return 'Pinned';
   const uri = me() && me().id, meta = taskMetaById.get(n.id);
   if (!uri) return null; // the member list has not landed, so "you" is not known yet
   if (!meta) { loadTaskMeta(n.id); return null; } // it takes its section once the answer arrives
@@ -139,8 +143,12 @@ function groupsOf(list) {
   if (by === 'none') return null;
   if (by === 'assignee' || by === 'responsibility') loadMembers(); // the names for the headings, and who you are
   // every section holds rows: folded away (below) the heading stays and its rows are left out
-  return groupRows(list, by).map((g) => { const id = groupId(g, by); return { ...g, id, collapsed: groupCollapsed(id) }; }).map(trimTracking);
+  return groupRows(list, by).map((g) => { const id = groupId(g, by); return { ...g, id, collapsed: groupCollapsed(id) }; }).map(trimTracking).map((g) => (by === 'responsibility' ? latestPinFirst(g) : g));
 }
+// The Pinned section runs by the latest day each task is pinned to, latest on top; the sort is stable, so tasks
+// pinned to the same day keep the order the page's Sort gave them.
+const latestPin = (n) => [...(datePinsById.get(n.id) || [])].sort().at(-1) || '';
+const latestPinFirst = (g) => (g.id === 'Pinned' ? { ...g, nodes: [...g.nodes].sort((a, b) => latestPin(b).localeCompare(latestPin(a))) } : g);
 // ---- collapsing a section: the heading stays, its rows fold away, one heading at a time ----
 // Keyed by the page, its grouping and the section: Inbox folded away on Tasks says nothing about an Inbox heading on
 // another page, and each grouping of a page folds on its own. The page key is a view id or a saved search's document
@@ -165,7 +173,7 @@ const groupCollapsed = (id) => collapsedGroups.has(collapseKey(id));
 function toggleGroup(id) {
   const key = collapseKey(id);
   if (!collapsedGroups.delete(key)) collapsedGroups.add(key);
-  trackingShown.delete(key); // an unfolded Tracking section opens on what moved lately again (trimTracking)
+  trackingShown.delete(key); // an unfolded Tracking or Pinned section opens short again (trimTracking)
   setPref('collapsedGroups', [...collapsedGroups]);
   render(true);
 }
@@ -174,14 +182,18 @@ function toggleGroup(id) {
 // updated in the last three days. The rest arrives on one click and stays for as long as the section stays open —
 // folding it forgets, so it opens short again, which is the whole point of opening short. A row with no update time
 // to read is part of the tail. Session state, like holding rows in place: it is about the list in front of you, so
-// there is nothing to store and nothing to clean up. Only Tracking: every other section is work with your name on
-// it, where a row that has not moved is exactly the one you need to see.
+// there is nothing to store and nothing to clean up. Pinned opens short the same way, on what is pinned to a day in
+// the coming week or already past; a task pinned only further ahead than that is the tail. Every other section is
+// work with your name on it, where a row that has not moved is exactly the one you need to see.
 const TRACKING_RECENT = 3 * 864e5;
-const trackingShown = new Set(); // collapseKey of a Tracking section that has been asked for whole
+const trackingShown = new Set(); // collapseKey of a Tracking or Pinned section that has been asked for whole
 const movedRecently = (n) => Date.now() - Date.parse(n.updatedAt) < TRACKING_RECENT;
+const pinnedSoon = (n) => (datePinsById.get(n.id) || []).some((date) => date <= localDate(7));
+const OPENS_ON = { Tracking: movedRecently, Pinned: pinnedSoon };
 function trimTracking(g) {
-  if (g.id !== 'Tracking' || g.collapsed || trackingShown.has(collapseKey(g.id))) return g;
-  const recent = g.nodes.filter(movedRecently);
+  const keep = OPENS_ON[g.id];
+  if (!keep || g.collapsed || trackingShown.has(collapseKey(g.id))) return g;
+  const recent = g.nodes.filter(keep);
   // "more" is what the link offers; without one the section is drawn exactly as any other
   return recent.length === g.nodes.length ? g : { ...g, nodes: recent, more: g.nodes.length - recent.length };
 }
@@ -240,10 +252,18 @@ function agoText(iso) {
   }
   return '';
 }
+// The days a row in the Pinned section is pinned to, first in its grey line: "Pinned to Today · 2026-09-22". Only in
+// that section, where the day is why the row is there; groupKey so a row held in place elsewhere does not claim it.
+function pinnedOn(n) {
+  const dates = datePinsById.get(n.id);
+  if (!dates || groupBy() !== 'responsibility' || groupKey(n, 'responsibility') !== 'Pinned') return '';
+  return 'Pinned to ' + [...dates].sort().map(pinDateLabel).join(', ');
+}
 // The grey line under a title: when it was made, when it last moved, where it lives — in that order, bullet separated.
 // "Lives in" only has an answer for a document shared with a space, which is the only place a row learns a space name.
 function subtextOf(node, taskInfo) {
   const bits = [];
+  const pinned = pinnedOn(node); if (pinned) bits.push(pinned);
   if (displayOn('space') && taskInfo && taskInfo.audience && taskInfo.audience.space) bits.push(taskInfo.audience.space);
   // Who made it joins when it was made rather than repeating the word: "Created 2 days ago by Robin Vega". The name
   // needs the member list, which loads once and re-renders when it lands; until then memberName answers with the uri.

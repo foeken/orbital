@@ -80,7 +80,7 @@ function editPinRows(q) {
   // pinned, because a document can hang on more than one meeting.
   if (tana.searchPreview && tana.pinTo && isRealId(palDoc.id)) {
     const doc = palDoc;
-    adds.push({ group: 'Pin it', icon: 'pin', label: 'Pin to meeting', hint: 'Choose a meeting', keepOpen: true, run: () => openMeetingPicker(doc, () => openPinsPalette(doc)) });
+    adds.push({ group: 'Pin it', icon: 'pin', label: 'Pin to meeting …', hint: 'Choose a meeting', keepOpen: true, run: () => openMeetingPicker(doc, () => openPinsPalette(doc)) });
   }
   // one query over both halves, so typing narrows what can be pinned as well as what is; with no pin left on screen
   // the page says which of the two silences that is — none match what was typed, or there are none at all
@@ -92,6 +92,60 @@ function openPinsPalette(doc) {
   palDoc = doc; palMode = 'pins'; palRows = []; palIndex = 0; palette.hidden = false;
   palInput.placeholder = 'Edit pins'; palInput.value = '';
   pinInfo = null; loadPins(); renderPalette(); palInput.focus();
+}
+// ---- Pin to date: a day typed in words, read by a fixed set of rules rather than a model ----
+// The page shows the day it read before Enter, so what gets pinned is always what was on screen, with no key, no
+// network and no latency. A weekday is the next one after today ("sunday" on a Sunday is a week on), a day and month
+// without a year is the next time it comes round, and numbers are read day first (12/10 is 12 October).
+const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+const MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+const isoDay = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+const namedIn = (list, word) => (word && word.length >= 3 ? list.findIndex((name) => name.startsWith(word)) : -1);
+function parseDay(text, now = new Date()) {
+  const s = String(text || '').trim().toLowerCase().replace(/,/g, ' ').replace(/\s+/g, ' ');
+  const y = now.getFullYear(), mo = now.getMonth(), d = now.getDate(), at = (days) => isoDay(new Date(y, mo, d + days));
+  const near = { today: 0, tod: 0, tonight: 0, tomorrow: 1, tmr: 1, tom: 1, yesterday: -1 }[s];
+  if (near !== undefined) return at(near);
+  if (s === 'next week') return at(((8 - now.getDay()) % 7) || 7); // the coming Monday
+  let m = s.match(/^(?:in )?(\d+) ?(d|days?|w|wks?|weeks?|m|months?)$/);
+  if (m) {
+    const n = +m[1];
+    if (m[2][0] === 'd') return at(n);
+    if (m[2][0] === 'w') return at(7 * n);
+    return isoDay(new Date(y, mo + n, Math.min(d, new Date(y, mo + n + 1, 0).getDate()))); // 31 Jan + 1 month is 28/29 Feb
+  }
+  const wd = namedIn(WEEKDAYS, s.replace(/^(?:next|this|on) /, ''));
+  if (wd >= 0) return at(((wd - now.getDay() + 6) % 7) + 1);
+  // a calendar day: its year if one was given, else the next time it comes round
+  const day = (yy, mm, dd) => {
+    if (mm < 0) return null;
+    const year = yy == null ? y : yy < 100 ? 2000 + yy : yy, date = new Date(year, mm, dd);
+    if (date.getMonth() !== mm || date.getDate() !== dd) return null; // 31/2 is not a day
+    return yy == null && isoDay(date) < at(0) ? isoDay(new Date(year + 1, mm, dd)) : isoDay(date);
+  };
+  if ((m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/))) return day(+m[1], m[2] - 1, +m[3]);
+  if ((m = s.match(/^(\d{1,2})[/.-](\d{1,2})(?:[/.-](\d{2}|\d{4}))?$/))) return day(m[3] ? +m[3] : null, m[2] - 1, +m[1]);
+  if ((m = s.match(/^(\d{1,2})(?:st|nd|rd|th)? (?:of )?([a-z]+)(?: (\d{4}))?$/))) return day(m[3] ? +m[3] : null, namedIn(MONTHS, m[2]), +m[1]);
+  if ((m = s.match(/^([a-z]+) (\d{1,2})(?:st|nd|rd|th)?(?: (\d{4}))?$/))) return day(m[3] ? +m[3] : null, namedIn(MONTHS, m[1]), +m[2]);
+  return null;
+}
+const PIN_DATE_GROUP = 'Pin to date';
+let pinDateDoc = null;
+function pinDateRows(typed) {
+  const doc = pinDateDoc, words = (typed || '').trim(), date = parseDay(words);
+  if (!doc) return [];
+  if (!words) return [{ group: PIN_DATE_GROUP, icon: 'pinDate', label: 'Type a day: sunday, in 3 days, 12 oct, 12/10', disabled: true }];
+  if (!date) return [{ group: PIN_DATE_GROUP, icon: 'pinDate', label: 'No day in \u201C' + words + '\u201D', disabled: true }];
+  const long = new Date(date + 'T00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const near = date === localDate() ? 'Today' : date === localDate(1) ? 'Tomorrow' : '';
+  const pinned = !!pinInfo && pinInfo.docId === doc.id && pinInfo.dates.includes(date);
+  return [{ group: PIN_DATE_GROUP, icon: 'pinDate', label: long, hint: pinned ? 'Already pinned' : near ? near + ' \u21A9' : '\u21A9', disabled: pinned,
+    run: () => run(async () => { await tana.pin(doc.id, 'today', date); loadPins(); }) }];
+}
+function openPinDatePalette(doc) {
+  pinDateDoc = doc; palMode = 'pinDate'; palRows = []; palIndex = 0; palette.hidden = false;
+  palInput.placeholder = 'Pin to date\u2026'; palInput.value = '';
+  renderPalette(); palInput.focus();
 }
 function invalidatePinCaches(id) {
   if (pinInfo && pinInfo.docId === id) pinInfo = null;
