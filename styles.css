@@ -607,6 +607,13 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 /* command palette (Cmd+K) */
 .palette { position: fixed; inset: 0; z-index: 10; background: rgba(0, 0, 0, .12); display: flex; justify-content: center; align-items: flex-start; padding: 12vh 24px 0; }
 .palette[hidden] { display: none; }
+/* A notice (showNote, renderer/toolbar.js): a toast at the foot of the window, above the palette, fading on its own */
+.toast { position: fixed; left: 50%; bottom: 24px; z-index: 12; max-width: min(480px, calc(100vw - 48px)); padding: 8px 14px; border-radius: 8px;
+  background: #1f2328; color: #fff; font-size: 13px; line-height: 1.4; box-shadow: 0 6px 24px rgba(0, 0, 0, .18);
+  opacity: 0; visibility: hidden; transform: translate(-50%, 6px); pointer-events: none;
+  transition: opacity .18s ease, transform .18s ease, visibility 0s linear .18s; }
+.toast.show { opacity: 1; visibility: visible; transform: translate(-50%, 0); transition: opacity .18s ease, transform .18s ease; }
+@media (prefers-reduced-motion: reduce) { .toast, .toast.show { transition: none; } }
 .palette .card {
   width: 100%; max-width: 620px; max-height: min(70vh, 440px); display: flex; flex-direction: column; overflow: hidden;
   background: #fff; border-radius: 12px; box-shadow: 0 12px 40px rgba(0, 0, 0, .18), 0 0 0 1px rgba(0, 0, 0, .05);
@@ -724,6 +731,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .pill.save:hover, [data-theme="dark"] .pill.savesearch:hover { background: #2c4736; }
 [data-theme="dark"] .pill.save:focus, [data-theme="dark"] .pill.savesearch:focus { box-shadow: 0 0 0 2px #46705a; }
 [data-theme="dark"] .menu { background: #242729; color: #c9c9c9; box-shadow: 0 8px 30px rgba(0, 0, 0, .45), 0 0 0 1px rgba(255, 255, 255, .08); }
+[data-theme="dark"] .toast { background: #e8eaeb; color: #1a1a1a; box-shadow: 0 6px 24px rgba(0, 0, 0, .45); }
 [data-theme="dark"] .menu .mrow.active { background: #344047; }
 [data-theme="dark"] .menu .mrow.disabled { color: #6a7073; }
 [data-theme="dark"] .menu .mrow.disabled .micon { color: #5b6164; }
