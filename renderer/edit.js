@@ -146,6 +146,20 @@ function removeEmptyAbove(item, el) {
   run(async () => { await tana.remove(above.docId, above.node.id); await reload(above.docId); closeIfEmpty(above.parent); render(true); placeCaret(item.key, 0); });
   return true;
 }
+// Backspace at the start of a row with words in it: they join the row above, and the caret lands where the two meet.
+// The reverse of Enter mid-text (splitNode), written as one change in main (sdk/content.js join), so one ⌘Z brings
+// the row back. Only words join words: a row with children, an image, a divider, a table, a reference, a draft or a
+// row of another document stays where it is.
+function joinAbove(item, el) {
+  const all = rowsBeside(el), prev = all[all.indexOf(el) - 1], above = prev && items.get(keyOfEl(prev));
+  if (!above || above.docId !== item.docId || above.node.kind !== 'block' || above.node.draft || item.node.draft) return false;
+  if (isAtomic(above.node) || isReference(above.node) || hasKids(item) || item.node.hasChildren) return false;
+  if (!canEditItem(above) || !canEditItem(item)) return false;
+  const top = readSegs(prev), joined = saveValue([...top, ...readSegs(el)]), at = plainOf(top).length;
+  dropPending(item.key); dropPending(above.key); // the words on screen are what gets written, both rows at once
+  run(async () => { await tana.join(item.docId, item.node.id, above.node.id, joined); await reload(item.docId); render(true); placeCaret(above.key, at); });
+  return true;
+}
 async function removeDocument(item) {
   if (!canEditItem(item) || !tana.deleteDocument || !tana.accessOptions) return;
   // A draft has no Tana id yet: main reads a local one as "not connected to Tana", so asking it whether the node may

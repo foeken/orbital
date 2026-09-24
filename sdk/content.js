@@ -631,6 +631,15 @@ function split(document, id, before, after, asChild) {
   return out;
 }
 
+// Backspace at the start of a row: the row above takes its words and the row goes. The reverse of split, and one
+// transaction like it, so one undo step brings the row back whole. A row that holds children is refused: removing it
+// would take them along, and moving them somewhere is not what Backspace asks for.
+function join(document, id, intoId, value) {
+  const { item } = must(document, id);
+  if (item && kids(item).length > 1) throw new Error('A row with children cannot join the row above');
+  document.transact(() => { setText(document, intoId, value); remove(document, id); });
+}
+
 function insertChild(document, id, text) {
   let out = null;
   document.transact(() => {
@@ -1036,4 +1045,4 @@ function insertMention(document, { uri, label } = {}, { parentId = null, afterId
   return out;
 }
 
-module.exports = { cursorAt, cursorOffset, charOffset, blockOffset, readOutline, assignBlockIds, setText, readTable, setCellText, tableOp, TABLE_OPS, inlineGroups, writeInline, styleDoc, setBlockType, insertDivider, insertImage, insertTable, insertAfter, insertBefore, insertChild, insertMention, split, remove, removeMany, indent, indentMany, outdent, outdentMany, move, moveMany, moveTo, toggleCheckbox, newId, BLOCK_TYPES };
+module.exports = { cursorAt, cursorOffset, charOffset, blockOffset, readOutline, assignBlockIds, setText, readTable, setCellText, tableOp, TABLE_OPS, inlineGroups, writeInline, styleDoc, setBlockType, insertDivider, insertImage, insertTable, insertAfter, insertBefore, insertChild, insertMention, split, join, remove, removeMany, indent, indentMany, outdent, outdentMany, move, moveMany, moveTo, toggleCheckbox, newId, BLOCK_TYPES };
