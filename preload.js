@@ -50,6 +50,7 @@ contextBridge.exposeInMainWorld('api', {
   // What the title says that name is, from the model (main/ai.js): a string to offer, or null when there is no key
   // on this machine or the title names nobody. Rejects when the call itself failed.
   suggestDiscussWith: (title) => ipcRenderer.invoke('ai:discussWith', title),
+  classifyType: (id) => ipcRenderer.invoke('ai:classifyType', id), // {current, choices:[{uri|null,title,hue?,p}]}, most likely first
   // Presence (main/presence.js): open and close the room of a document on screen (the page, and the rows listed on it),
   // name the page being viewed (it alone gets the viewing heartbeat), say where the caret is ({ blockId, anchor, focus }
   // or null), and hear who else is in each: [{ peer, userHash, name, blockId, editing }], your own tabs left out.

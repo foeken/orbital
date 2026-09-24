@@ -680,6 +680,13 @@ async function main() {
     assert.equal(twice.mentions.length,1);
     await backend.discussWith(plain.id,'Heads of Technology');
     assert.deepEqual(seg(plain.id),[{text:'Heads of Technology'}],'a team nobody here is named after is written as it was typed');
+    // What Classify type sends (main/documents.js typeCandidates): each type the document may have, with the
+    // description and AI instructions read off the type's own document, since the graph carries neither.
+    const described=make('type','Decision Record',{description:'One decision',instructions:'Return exactly one decision'});
+    make('type','Space only',{ownerUri:'tana:space:'+ulid()});
+    assert.deepEqual(JSON.parse(JSON.stringify(await backend.typeCandidates(plain.id))),{title:'Handmade workspace',text:'',current:handmade.id,types:[
+      {uri:described.id,title:'Decision Record',description:'One decision',instructions:'Return exactly one decision'},{uri:handmade.id,title:'discussion task'}]},
+      'the types Set type would offer, each with its own words, and none that lives in another space');
     // Undo is not only the write going back: the page has to hear about it, or it keeps showing the name that was
     // undone until something else refreshes it. The field's value is part of what doc:taskMeta compares, so both
     // directions announce a metadata change and the zoomed page re-reads its fields.
@@ -739,6 +746,8 @@ async function main() {
     const fetchWith=(result)=>async(url,init)=>{calls.push({url,init:{...init,body:JSON.parse(init.body)}});return typeof result==='function'?result():result;};
     assert.equal(await ai.suggestDiscussWith('Discuss this with Stan',fetchWith(answer('Stan'))),null,'no key on this machine means no suggestion, and nothing sent');
     assert.equal(calls.length,0);
+    await assert.rejects(ai.classifyType({title:'t',text:'',types:[{uri:'tana:type:a',title:'A'}]},fetchWith(answer('{"1":1}'))),/OpenAI API key/,'classifying without one says how to get one');
+    assert.equal(calls.length,0,'and sends nothing either');
     settings.set('openaiApiKey','sk-local-only');
     assert.equal(await ai.suggestDiscussWith('   ',fetchWith(answer('Stan'))),null,'an untitled document has nothing to read');
     assert.equal(calls.length,0,'and still nothing is sent');
@@ -762,6 +771,23 @@ async function main() {
     assert.equal(await ai.suggestDiscussWith('t',fetchWith(answer('Stan\nPeter'))),null,'nor is a list of lines');
     await assert.rejects(ai.suggestDiscussWith('t',fetchWith({ok:false,status:401,json:async()=>({})})),/401: check the API key/,'a rejected key says so rather than looking like an empty title');
     await assert.rejects(ai.suggestDiscussWith('t',fetchWith({ok:false,status:500,json:async()=>({})})),/OpenAI answered 500/);
+    // Classify type: the same call, the types described by their own words beside the document, every option back with odds.
+    const types=[{uri:'tana:type:a',title:'Decision Record',hue:143,description:'',instructions:'Return exactly one decision'},{uri:'tana:type:b',title:'Project',description:'A piece of work with an end'}];
+    const typed={title:'Postgres over Mongo',text:'Agreed: we use Postgres',current:'tana:type:b',types};
+    const classified=await ai.classifyType(typed,fetchWith(answer('\u0060\u0060\u0060json\n{"1": 0.85, "2": 0.05, "none": 0.1}\n\u0060\u0060\u0060')));
+    assert.deepEqual(classified.choices.map((c)=>[c.uri,c.title,Math.round(c.p*100)]),[['tana:type:a','Decision Record',85],[null,'No type',10],['tana:type:b','Project',5]],
+      'every option comes back with its odds, "No type" among them, most likely first, even from inside a code fence');
+    assert.equal(classified.current,'tana:type:b','beside the type the document has now');
+    const sent=calls.at(-1).init.body;
+    assert.ok(['Type 1: Decision Record','AI instructions: Return exactly one decision','Type 2: Project','Description: A piece of work with an end','Postgres over Mongo','Agreed: we use Postgres'].every((s)=>sent.input.includes(s)),
+      'each type is described by its own description and AI instructions, beside the document title and text');
+    assert.deepEqual([sent.instructions,sent.model,sent.reasoning.effort],[ai.CLASSIFY_INSTRUCTIONS,ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT],'the rules go as instructions, to the same fast model the suggestion uses');
+    assert.deepEqual((await ai.classifyType(typed,fetchWith(answer('{"2": 60, "none": 20, "7": 99}')))).choices.map((c)=>c.p),[0.75,0.25,0],
+      'percentages are scaled to odds, and a type the list does not have is ignored');
+    await assert.rejects(ai.classifyType(typed,fetchWith(answer('Decision Record'))),/probabilities/,'an answer without odds is an error, not a guess');
+    const sentSoFar=calls.length;
+    await assert.rejects(ai.classifyType({...typed,types:[]},fetchWith(answer('{}'))),/No types/,'a document no type can go on asks nothing');
+    assert.equal(calls.length,sentSoFar);
     const agent=require('../main/agent'), originalRpc=agent.appServerRpc;
     const userData=fs.mkdtempSync(require('node:path').join(require('node:os').tmpdir(),'orbital-ai-auth-'));
     let signedIn=false, note, threadStart, turnStart;

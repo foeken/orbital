@@ -22,7 +22,7 @@ const docRow = (n, hint, run) => ({ node: n, icon: n.icon, label: n.text ?? n.ti
 // assignee), where it lives (pins, the date nodes, its space), what it looks like (image, visibility, sensitivity),
 // its link, and last the one destructive row. Rows without an id carry a `rank` from this list instead.
 // The rows about a field the caret is on (renderer/fields.js) come before the node's own: they are about what is focused.
-const NODE_ROW_ORDER = ['fieldValue', 'fieldKind', 'fieldCount', 'fieldChoices', 'fieldTargets', 'zoomIn', 'expand', 'collapse', 'toggleDone', 'markRead', 'markUnread', 'approveProposal', 'rejectProposal', 'status', 'setType', 'addField', 'discussWith', 'setIcon', 'setHue', 'assign', 'assignTo', 'codex', 'codexOpen', 'pinToday', 'pinTomorrow', 'pinToDate', 'pinToMeeting', 'pinToSelectedMeeting', 'editPins', 'addToday', 'addTomorrow', 'addWeek', 'move', 'moveLibrary', 'visibility', 'notify', 'sensitive', 'copyLink', 'exportPdf', 'delete'];
+const NODE_ROW_ORDER = ['fieldValue', 'fieldKind', 'fieldCount', 'fieldChoices', 'fieldTargets', 'zoomIn', 'expand', 'collapse', 'toggleDone', 'markRead', 'markUnread', 'approveProposal', 'rejectProposal', 'status', 'setType', 'classifyType', 'addField', 'discussWith', 'setIcon', 'setHue', 'assign', 'assignTo', 'codex', 'codexOpen', 'pinToday', 'pinTomorrow', 'pinToDate', 'pinToMeeting', 'pinToSelectedMeeting', 'editPins', 'addToday', 'addTomorrow', 'addWeek', 'move', 'moveLibrary', 'visibility', 'notify', 'sensitive', 'copyLink', 'exportPdf', 'delete'];
 const DOC_KIND = /^tana:text:/; // the Discussion Task type applies to documents, so a meeting is not offered that row
 const nodeRank = (r) => { const i = NODE_ROW_ORDER.indexOf(r.rank || r.id); return i < 0 ? NODE_ROW_ORDER.length : i; };
 const VIEW_ORDER = ['inbox', 'notifications', 'proposals', 'today', 'week', 'library'];
@@ -176,6 +176,11 @@ function paletteRows(q, typed = q) {
     const doc = palDoc;
     rows.push({ id: 'setType', group: docGroup, icon: 'type', label: 'Set type', subBase: 'Set type to', hint: typeNameOf(doc) || 'No type',
       keepOpen: true, subAlways: true, run: () => openTypePalette(doc), sub: async () => { await typesLoaded(doc); return typeRows(''); } });
+  }
+  // Or have the model choose from the same list, reading each type's description and AI instructions (main/ai.js).
+  if (palDoc && tana.classifyType && tana.setType && isRealId(palDoc.id) && TYPED_KIND.test(palDoc.id)) {
+    const doc = palDoc;
+    rows.push({ id: 'classifyType', group: docGroup, icon: 'sparkle', label: 'Classify type', hint: 'AI picks the type', keepOpen: true, run: () => openClassifyPalette(doc) });
   }
   rows.push(...fieldRows(docGroup)); // the focused field's value or definition, and Add field … on a type's page
   // One type a document is given by answering a question instead of picking it from a list: who it is to be
@@ -374,7 +379,7 @@ function openCommandPalette() {
   palInput.placeholder = 'Run a command'; palInput.value = ''; refreshChatGPTStatus(); renderPalette(); palInput.focus();
 }
 function backPalette() {
-  const SECOND_LEVEL = new Set(['setType', 'trash', 'archived', 'discuss', 'setIcon', 'setHue', 'openaiKey', 'chatgpt', 'pins', 'pinDate', 'create', 'hidden', 'hosts', ...Object.keys(MEETING_PAGES)]); // pages opened from the command page
+  const SECOND_LEVEL = new Set(['setType', 'classify', 'trash', 'archived', 'discuss', 'setIcon', 'setHue', 'openaiKey', 'chatgpt', 'pins', 'pinDate', 'create', 'hidden', 'hosts', ...Object.keys(MEETING_PAGES)]); // pages opened from the command page
   if (palMode === 'pill') openCommandPalette();
   // Escape on the prompt page cancels the whole thing rather than stepping back a level: the page was opened to
   // answer one question, and abandoning that question is abandoning the assignment. Nothing is written either way.
@@ -778,6 +783,46 @@ function openTypePalette(doc) {
   palInput.placeholder = 'Set type to…'; palInput.value = '';
   loadTypeList(doc); renderPalette(); palInput.focus();
 }
+// ---- Classify type: the model weighs the types Set type would offer, "No type" among them ----
+// One call per open (main/ai.js classifyType). A type it is sure of is applied at once, as choosing it on Set type
+// would; anything less sure is the list, most likely first, with the odds beside each, and the choice is yours.
+// "No type" is only ever applied by choosing it: a model sure that nothing fits takes no type off on its own.
+const CLASSIFY_GROUP = 'Classify type';
+const CLASSIFY_SURE = 0.8; // ponytail: the model's own odds, uncalibrated; raise it if it applies types you would not
+let classifyCtx = null, classifyAI = null; // the document, and { state: 'thinking'|'ready'|'failed', current, choices, error }
+function openClassifyPalette(doc) {
+  classifyCtx = doc; palMode = 'classify'; palRows = []; palIndex = 0; palBusy = false; palette.hidden = false;
+  palInput.placeholder = 'Classify type…'; palInput.value = '';
+  const mine = classifyAI = { state: 'thinking' };
+  tana.classifyType(doc.id).then(
+    (answer) => { mine.state = 'ready'; mine.current = (answer && answer.current) || null; mine.choices = (answer && answer.choices) || []; },
+    (e) => { mine.state = 'failed'; mine.error = (e && e.message) || String(e); },
+  ).then(() => {
+    if (classifyAI !== mine || palMode !== 'classify') return; // a page left in the meantime is neither redrawn nor written
+    const best = mine.state === 'ready' && mine.choices[0];
+    if (!best || !best.uri || best.p < CLASSIFY_SURE) return renderPalette();
+    const sure = best.title + ' (' + Math.round(best.p * 100) + '%)';
+    if (best.uri === mine.current) { closePalette(); showNote('Already ' + sure); return; }
+    renderPalette(); // the list is up while the type is written, so a refused write leaves it there to choose from
+    run(async () => { await tana.setType(doc.id, best.uri); closePalette(); showNote('Classified as ' + sure); });
+  });
+  renderPalette(); palInput.focus();
+}
+function classifyRows(q) {
+  const doc = classifyCtx, ai = classifyAI;
+  if (!doc || !ai) return [];
+  if (ai.state === 'thinking') return [{ group: CLASSIFY_GROUP, icon: 'sparkle', spin: true, label: 'Reading the document\u2026', disabled: true }];
+  if (ai.state === 'failed') return [{ group: CLASSIFY_GROUP, icon: 'sparkle', label: ai.error, disabled: true }];
+  const rows = [];
+  for (const c of ai.choices) {
+    if (!fuzzyMatch(c.title || '', q)) continue;
+    const odds = Math.round(c.p * 100) + '%', current = (c.uri || null) === ai.current;
+    rows.push({ group: CLASSIFY_GROUP, icon: c.uri ? 'type' : 'none', hue: c.hue, label: c.title, hint: current ? odds + ' \u2713' : odds,
+      disabled: current, keepOpen: true, run: () => applyType(doc, c.uri) });
+  }
+  if (!rows.length) rows.push({ group: CLASSIFY_GROUP, label: 'No type matches', disabled: true });
+  return rows;
+}
 
 // ---- Discuss with …: the Discussion Task type and the one field it exists for, in a single answer ----
 // Main owns both writes (main/documents.js discussWith): it finds the type by title, creates it in the Library with
@@ -976,6 +1021,7 @@ function renderPalette() {
   else if (Object.hasOwn(MEETING_PAGES, palMode)) palRows = MEETING_PAGES[palMode](q);
   else if (palMode === 'pinMeeting') palRows = meetingPickRows(q.toLowerCase());
   else if (palMode === 'setType') palRows = typeRows(q.toLowerCase());
+  else if (palMode === 'classify') palRows = classifyRows(q.toLowerCase());
   else if (palMode === 'discuss') palRows = discussRows(q);
   else if (palMode === 'setIcon') palRows = iconPickRows();
   else if (palMode === 'setHue') palRows = huePickRows(q.toLowerCase());
@@ -1076,7 +1122,7 @@ function nextPalIndex(rows, index, step) {
   return index;
 }
 // pages whose rows are built from what is typed, with nothing to fetch
-const LOCAL_MODES = new Set(['cmd', 'create', 'slash', 'assignees', 'assigneesMany', 'status', 'setType', 'discuss', 'setHue', 'visibility', 'visibilityPeople', 'hidden', 'pins', 'pill', 'pinMeeting', 'openaiKey', 'chatgpt', 'hosts', 'trash', 'archived', 'field', ...Object.keys(MEETING_PAGES)]);
+const LOCAL_MODES = new Set(['cmd', 'create', 'slash', 'assignees', 'assigneesMany', 'status', 'setType', 'classify', 'discuss', 'setHue', 'visibility', 'visibilityPeople', 'hidden', 'pins', 'pill', 'pinMeeting', 'openaiKey', 'chatgpt', 'hosts', 'trash', 'archived', 'field', ...Object.keys(MEETING_PAGES)]);
 palInput.addEventListener('input', () => {
   palIndex = 0; palEnter = null; // typing on supersedes an Enter that was waiting for the previous query
   if (LOCAL_MODES.has(palMode)) return renderPalette();

@@ -43,7 +43,9 @@ app already uses. Cmd+S searches Tana itself, with `#task`, `#meeting`, `#space`
 on this Mac or on another machine you have registered over SSH; the row wears a badge that reads
 the task's state and opens it, and says where the work is when it is elsewhere. "Discuss with…"
 makes a node a discussion task with someone, and a model can read its title to suggest who (bring
-your own OpenAI key; only the title is sent, and the key stays on the machine).
+your own OpenAI key or sign in with ChatGPT; only the title is sent, and the key stays on the machine).
+"Classify type" has the same model pick a node's type from each type's description and AI
+instructions: a sure answer is applied, otherwise you choose from the odds.
 
 **Quick add from anywhere.** Cmd+Shift+Space opens a small panel over whatever app you are in: type a
 task and press Enter. If you are in a meeting right now it says so and pins the new task to that

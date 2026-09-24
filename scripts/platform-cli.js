@@ -656,6 +656,19 @@ commands.settype = async () => {
   await new Promise((r) => setTimeout(r, 1500)); // the local update leaves with the stream, like the other write commands
   out('now: ' + JSON.stringify(readNode(await client.sync.subscribe(id)).entityTypeUri ?? null));
 };
+// classify <id>: the Cmd+K "Classify type" answer for a document — what the model is sent (the types with their
+// description and AI instructions) and the odds it gives each. Read-only in Tana; the document's text goes to the model.
+commands.classify = async () => {
+  const [id] = positional;
+  if (!id) throw new Error('usage: classify <id>  (read-only; sends the document and its candidate types to the model)');
+  const main = backend(await connect());
+  await client.sync.connect();
+  const input = await main.typeCandidates(id);
+  for (const t of input.types) out(t.uri + '\t' + t.title + '\tdescription ' + (t.description || '').length + ' chars, instructions ' + (t.instructions || '').length + ' chars');
+  const { current, choices } = await main.ai.classifyType(input, globalThis.fetch, app.getPath('userData'));
+  out('current: ' + (current || 'no type'));
+  for (const c of choices) out((Math.round(c.p * 100) + '%').padStart(5) + '  ' + c.title);
+};
 // discusswith <id> <who…>: the Cmd+K "Discuss with …" command through main — the Discussion Task type (found by
 // title, or created in the Library with its field when the workspace has none) and the name in that field. WRITES.
 commands.discusswith = async () => {
@@ -1048,7 +1061,7 @@ const USAGE = [
   '             changes <id> [--within <summary id>] [--limit 20] | inbox [--limit 20] [--watch seconds] |',
   '             settings   (with a key and a JSON value it writes)',
   '  diagnose   inspect <id...> | audiences [--limit 80] [--mine 0] [--kind text] | refs <id> | rows <query> | pinrows |',
-  '             settype <id>   (listing only; with a target it writes)',
+  '             settype <id>   (listing only; with a target it writes) | classify <id>   (the document goes to the model)',
   '             caps <id...> | related <id> | incall [--limit 5] | callstate <call id> | suggestions [--limit 10] | pageprobe | libraryprobe | boot [--settle ms]',
   '  live       watch <id...>',
   '  LIVE       livequery [--minutes 60] [--seconds 20] [--state <stateType>] | livequery --to <id> [--from <id>] [--edge-types LINKS_TO,…] |',

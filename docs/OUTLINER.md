@@ -564,6 +564,27 @@ than left out, so the page can answer "why is my type not here?". Choosing one i
 `selectable` are Tana's own and are documented in docs/sdk/05-gotchas.md: a type applies to documents or to meetings,
 and a space's type only goes on a document already in that space, while a Library type goes on anything.
 
+### Classify type
+
+Beside it, **Classify type** (id `classifyType`) lets the model choose from the same list. Every type document keeps
+a `description` and `instructions` (the AI instructions Tana's own AI follows when it writes one of that type) in
+its `data`. The graph's `typeDef` carries neither, so main reads each selectable type's own document
+(`typeCandidates`, main/documents.js) and sends the types, numbered, with those words, together with the document's
+title and text (a meeting's calendar description in place of its empty content) to the same fast model as the
+Discuss with suggestion (`api.classifyType(id)` → `ai.classifyType`, main/ai.js). The model answers with the odds
+of every option, **No type** among them, and they come back most likely first:
+`{ current, choices: [{ uri | null, title, hue, p }] }`.
+
+While the model reads, the page shows "Reading the document…" under the breathing sparkle. If the most likely
+option is a type at 80% or more (`CLASSIFY_SURE`, renderer/palette.js), it is set at once through `api.setType`,
+the palette closes, and a note says "Classified as Decision Record (91%)". If the document already has that type,
+the note says "Already …" and nothing is written. Otherwise the page lists every option with its odds, the current
+one ticked, and choosing one is the same write Set type makes. No type is never applied on its own: a model sure
+that nothing fits still leaves the choice to you. Checked live on 2026-09-24 against the workspace's own types with
+`node scripts/platform-cli.js classify <id>`, which prints the candidates and the odds and writes nothing: a typed
+decision, a project and a discussion task each came back at 93–98% for the type they have or should have, and a
+meeting write-up at 85% for No type.
+
 ## Addendum: Set icon (a type's own glyph)
 
 A type can be given a glyph, and every document of that type is then drawn with it: its bullet, its row in the
@@ -646,9 +667,10 @@ page does not look finished; the answer then replaces that row in place. A sugge
 is not offered twice, a title naming nobody adds no row at all, and a call that failed shows its message rather
 than passing for a title that named nobody.
 
-The call is main's, in `main/ai.js`, and it is the only place this app talks to a model: `api.suggestDiscussWith(title)`
+The call is main's, in `main/ai.js`, the only place this app talks to a model: `api.suggestDiscussWith(title)`
 sends the title and nothing else — no content, no ids — to OpenAI, with the extraction rule as instructions so that a
-title cannot become one. It is asked once per open, never per keystroke. Cmd+K offers **Sign in with ChatGPT** and
+title cannot become one. (Classify type, under Set type above, is the one call that also sends a document's text.)
+It is asked once per open, never per keystroke. Cmd+K offers **Sign in with ChatGPT** and
 **Sign out of ChatGPT**, and shows the account status. A signed-in ChatGPT account takes priority; the local OpenAI
 API key is used when ChatGPT is signed out. Both credentials stay on this machine, never in Tana. ChatGPT sign-in
 uses the Codex CLI app-server in its own local auth directory, separate from the user's regular Codex login. It
