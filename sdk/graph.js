@@ -7,10 +7,19 @@ const { GraphService } = require('./proto/descriptors');
 
 const method = (name) => GraphService.methods.find((m) => m.localName === name);
 
-// One unary call on any of Tana's services: protobuf JSON in, protobuf JSON out (sdk/history.js calls it too).
+// One unary read on Tana's services: protobuf JSON in, protobuf JSON out (sdk/history.js and search.js too).
 const unary = async (client, service, name, params) => {
   const m = service.methods.find((x) => x.localName === name);
-  return toJson(m.output, await client[name](fromJson(m.input, params || {})));
+  const call = () => client[name](fromJson(m.input, params || {}));
+  let response;
+  try { response = await call(); }
+  catch (e) {
+    if (e.rawMessage !== 'fetch failed') throw e;
+    // ponytail: one 250 ms retry handles short resets; add backoff only if unary reads show longer outages.
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    response = await call();
+  }
+  return toJson(m.output, response);
 };
 
 class GraphClient {
