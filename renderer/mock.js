@@ -372,6 +372,16 @@ function mockApi() {
       const names = String(title || '').match(/\b[A-Z][a-z]+(?: [A-Z][a-z]+)*/g) || [];
       return names.length ? names.slice(-2).join(' and ') : null;
     },
+    // The model behind Classify type: sure of a type whose name the title says, unsure (and leaning to none) otherwise.
+    classifyType: async (docId) => {
+      await new Promise((done) => setTimeout(done, 700));
+      const doc = all.find((d) => d.id === docId);
+      if (!doc) throw new Error('unknown document');
+      const title = String(doc.text || '').toLowerCase(), named = types.find((t) => title.includes(t.text.toLowerCase()));
+      const choices = [...types.map((t) => ({ uri: t.id, title: t.text, hue: t.hue, p: named ? (t === named ? 0.9 : 0.05 / types.length) : 0.6 / types.length })),
+        { uri: null, title: 'No type', p: named ? 0.05 : 0.4 }];
+      return { current: (doc.tags || []).map((t) => t.uri).find(Boolean) || null, choices: choices.sort((a, b) => b.p - a.p) };
+    },
     // "Discuss with …": the Discussion Task type, invented the first time it is asked for the way main creates it
     // in the Library, and worn by the document. The mock keeps no field values, so only the type shows here.
     discussWith: async (docId, who) => {

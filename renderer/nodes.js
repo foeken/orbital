@@ -153,6 +153,7 @@ const LIB_ICONS = {
 // that name them are drawn (loadRoots below), so a bullet never renders empty and waits for a second render.
 const customIcons = new Map(); // 'nc-<label>' -> svg markup
 const typeGlyphs = new Map(); // type uri -> the icon name it is drawn with, so the picker knows what it has now
+const typeGlyph = (uri) => typeGlyphs.get(uri) || 'type'; // how a type is drawn wherever it is listed: its own icon, else the generic one
 function registerIcons(list) {
   for (const icon of Array.isArray(list) ? list : []) {
     if (!icon || typeof icon.name !== 'string' || typeof icon.svg !== 'string') continue;

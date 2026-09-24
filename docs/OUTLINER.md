@@ -563,6 +563,35 @@ than left out, so the page can answer "why is my type not here?". Choosing one i
 (`null` for No type) and the row redraws from the live change, like every other mutation. The rules behind
 `selectable` are Tana's own and are documented in docs/sdk/05-gotchas.md: a type applies to documents or to meetings,
 and a space's type only goes on a document already in that space, while a Library type goes on anything.
+**Remove type** (id `removeType`) is the same removal without the page: offered only on a typed document or meeting,
+hinted with the type it takes off, one `api.setType(id, null)`.
+
+### Classify type
+
+Beside it, **Classify type** (id `classifyType`) lets the model choose from the same list. Every type document keeps
+a `description` and `instructions` (the AI instructions Tana's own AI follows when it writes one of that type) in
+its `data`. The graph's `typeDef` carries neither, so main reads each selectable type's own document
+(`typeCandidates`, main/documents.js) and sends the types, numbered, with those words, together with the document's
+title and text (a meeting's calendar description in place of its empty content) to the model (`api.classifyType(id)` →
+`ai.classifyType`, main/ai.js). It first says in a few words what the document is and asks to be done, then gives the
+odds of every option, **No type** among them, and they come back most likely first:
+`{ current, choices: [{ uri | null, title, hue, p }] }`.
+
+While the model reads, the page shows "Reading the document…" under the breathing sparkle. If the most likely
+option is a type at 80% or more (`CLASSIFY_SURE`, renderer/palette.js), it is set at once through `api.setType`,
+the palette closes, and a note says "Classified as Decision Record (91%)". If the document already has that type,
+the note says "Already …" and nothing is written. Otherwise the page lists every option with its odds, the current
+one ticked, and choosing one is the same write Set type makes. No type is never applied on its own: a model sure
+that nothing fits still leaves the choice to you.
+
+The model is the fast AI both AI rows share, `gpt-5.6-terra` with low reasoning (`aiModel`/`aiEffort`, defaults in
+main/ai.js), chosen on 2026-09-24 against twelve of the workspace's own documents with
+`node scripts/platform-cli.js classify <id...>`, which prints the odds and writes nothing. Luna, the earlier default,
+gave one or two of the twelve a wrong type at 80% or more in every run, whatever the wording, and which ones moved with the wording ("Read Nadia's document" came out
+a Discussion Task at 80–99%). Terra took the same time, since the wait is the round trip rather than the model, and
+kept every clear case right: Nadia's at 95% No type in both runs. One borderline task ("Ask Foundry teams for
+risks") moved between No type 78% and Discussion Task 85%. A type's own description and AI instructions are what
+the model reads, so sharpening them in Tana is how its answers improve.
 
 ## Addendum: Set icon (a type's own glyph)
 
@@ -646,14 +675,17 @@ page does not look finished; the answer then replaces that row in place. A sugge
 is not offered twice, a title naming nobody adds no row at all, and a call that failed shows its message rather
 than passing for a title that named nobody.
 
-The call is main's, in `main/ai.js`, and it is the only place this app talks to a model: `api.suggestDiscussWith(title)`
+The call is main's, in `main/ai.js`, the only place this app talks to a model: `api.suggestDiscussWith(title)`
 sends the title and nothing else — no content, no ids — to OpenAI, with the extraction rule as instructions so that a
-title cannot become one. It is asked once per open, never per keystroke. Cmd+K offers **Sign in with ChatGPT** and
+title cannot become one. (Classify type, under Set type above, is the one call that also sends a document's text.)
+It is asked once per open, never per keystroke. Cmd+K offers **Sign in with ChatGPT** and
 **Sign out of ChatGPT**, and shows the account status. A signed-in ChatGPT account takes priority; the local OpenAI
 API key is used when ChatGPT is signed out. Both credentials stay on this machine, never in Tana. ChatGPT sign-in
 uses the Codex CLI app-server in its own local auth directory, separate from the user's regular Codex login. It
 needs the `codex` command on PATH. Which model answers and how hard it thinks are the settings `aiModel` and
-`aiEffort`, defaulting to a small model that does no reasoning at all (`none`); they follow you between machines
+`aiEffort`, defaulting to the fast AI both AI rows share: `gpt-5.6-terra` with low reasoning, which answered a
+suggestion in the same time as Luna with none (5.8 s against 5.7 s, median of six) and left the subject of the
+task out of who to discuss it with where Luna put him in; they follow you between machines
 like the other choices about your own content, and have no UI yet: change them in the settings document.
 
 - **The Library is not shown in the breadcrumbs once Home is something else** (`renderCrumbs`): the location from `api.path` still begins at the Library, and the crumb for it is dropped whenever `homeId()` is not `library`. A document whose only location was the Library then shows the Home anchor alone; separators are appended with each crumb (`addCrumb`) rather than counted by index, so the • sits before the first crumb that is actually drawn and nothing dangles when there is none.

@@ -227,7 +227,7 @@ function targetRows(q) {
   if (!typeListCache) return [{ group, label: 'Loading…', disabled: true }];
   const rows = typeListCache.filter((t) => fuzzyMatch(t.title || '', q)).map((t) => {
     const on = to.some((x) => x.uri === t.uri);
-    return { group, icon: 'type', hue: t.hue, label: t.title || 'Untitled type', hint: on ? '✓' : '', keepOpen: true,
+    return { group, icon: typeGlyph(t.uri), hue: t.hue, label: t.title || 'Untitled type', hint: on ? '✓' : '', keepOpen: true,
       run: () => saveDefinition(ctx, { to: on ? to.filter((x) => x.uri !== t.uri) : [...to, { uri: t.uri }] }) };
   });
   return rows.length ? rows : [{ group, label: 'No types match', disabled: true }];

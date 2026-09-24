@@ -74,6 +74,9 @@ const withShims = (src) => {
   // "this page has pills" (renderer/pills.js), which a folded row no longer answers for: a harness that is not about
   // folding gets the page it always had, so the calls guarded by it still run.
   if (/\bpillsDrawn\b/.test(src) && !/let pillsDrawn =/.test(src)) src = 'globalThis.pillsDrawn ??= true;\n' + src;
+  // how a type is drawn in a list (renderer/nodes.js): the glyph it was given, else the generic one. Added before the
+  // typeGlyphs line below, which then supplies the map to a harness that does not declare its own.
+  if (/\btypeGlyph\(/.test(src) && !/const typeGlyph =/.test(src)) src = "globalThis.typeGlyph ??= (uri) => typeGlyphs.get(uri) || 'type';\n" + src;
   // the glyphs types were given (renderer/nodes.js): a harness that is not about type icons draws every task with its box
   if (/\btypeGlyphs\b/.test(src) && !/const typeGlyphs =/.test(src)) src = 'globalThis.typeGlyphs ??= new Map();\n' + src;
   // what has a page of its own (renderer/nodes.js): a harness that is not about members or types keeps every document zoomable
@@ -6778,7 +6781,7 @@ async function runToastCheck() {
   console.log('ok  toast: notices fade at the foot of the window and leave the error line and its login button alone');
 }
 
-const checks = [runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runSetIconCheck, runDiscussWithCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runAgentStatusBootCheck, runQuickAddPanelCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck,runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck];
+const checks = [runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runAgentStatusBootCheck, runQuickAddPanelCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck,runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck];
 // The chips under a zoomed title, driven through the shipped line itself: a typed document shows its type whatever
 // kind it is, and the kind chip (task, doc, meeting, space, chat…) stays out of the header, as it always did for a task.
 function runZoomTypeChipCheck() {
@@ -6841,7 +6844,7 @@ async function runSetTypeCheck() {
     ${functionSource('openTypePalette')}
     ${functionSource('applyType')}
     ${functionSource('backPalette')}
-    ({ row: () => paletteRows('').find((r) => r.id === 'setType'),
+    ({ row: () => paletteRows('').find((r) => r.id === 'setType'), removeRow: () => paletteRows('').find((r) => r.id === 'removeType'),
        node: (next) => { palDoc = next; },
        list: (next, fails) => { answer = next; listFails = fails || null; },
        page: (q) => typeRows(q || ''),
@@ -6908,6 +6911,17 @@ async function runSetTypeCheck() {
   api.row().run();
   await api.settle();
   assert.deepEqual(plain(api.page().map((r) => [r.label, r.disabled])), [['No types for this kind of document', true]], 'and an empty answer says that rather than showing an empty page');
+  // 5. Remove type: one row, only where there is a type to take off, and the same one write as "No type".
+  api.node({ id: DOC, tags: [{ label: 'task', color: 'grey' }] });
+  assert.equal(api.removeRow(), undefined, 'an untyped document has nothing to remove');
+  api.node({ id: DOC, tags: [{ label: 'task', color: 'grey' }, { label: 'Discussion Task', uri: TYPE_B, hue: 200 }] });
+  assert.deepEqual(plain([api.removeRow().label, api.removeRow().hint, api.removeRow().icon]), ['Remove type', 'Discussion Task', 'none'], 'a typed one is offered it, named after the type it takes off');
+  const closedBefore = api.state().closed;
+  api.removeRow().run();
+  await api.settle();
+  assert.deepEqual(plain([api.state().written.slice(-1), api.state().closed]), [[[DOC, null]], closedBefore + 1], 'one write of no type, and the palette closes');
+  api.node({ id: BLOCK, tags: [{ label: 'Discussion Task', uri: TYPE_B }] });
+  assert.equal(api.removeRow(), undefined, 'a block carries no type to remove');
   console.log('ok  Set type: offered to documents and meetings only, the page shows main\u2019s answer, "No type" removes, and each choice is one call');
 }
 
@@ -7094,6 +7108,114 @@ async function runDiscussWithCheck() {
   assert.deepEqual(plain(api.page('')), [['Type who this is for', '', 'member', true], ['OpenAI answered 401: check the API key', '', 'sparkle', true]],
     'a refused key is said out loud, and the page still takes a name typed by hand');
   console.log('ok  Discuss with: offered to documents only, the page writes the words as typed, the model reads the title beside it, and refusals keep it open');
+}
+
+// Cmd+K "Classify type": the model weighs the types Set type would offer. A type it is sure of is applied at once; a
+// less sure answer is the list, every option with its odds and "No type" among them, and the choice is yours.
+async function runClassifyTypeCheck() {
+  const DOC = 'tana:text:01j0doc000000000000000000', TYPE_A = 'tana:type:01j0typea00000000000000000', TYPE_B = 'tana:type:01j0typeb00000000000000000';
+  const api = vm.runInNewContext(`
+    const views = [], pinTree = [], pinRows = () => [], searches = [], searchesLoaded = true;
+    let home = 'library', view = 'library';
+    const localStorage = { setItem() {} }, onSearchPage = () => false;
+    const selectionRows = () => [], pillCommandRows = () => [], taskActionRows = () => [];
+    let palDoc = { id: '${DOC}', text: 'Postgres over Mongo', tags: [] };
+    const pinInfo = null, isRealId = () => true;
+    const accessById = new Map(), loadAccess = () => {}, localDate = () => '2026-09-24', setTheme = () => {};
+    const sectionOf = () => null, visibleTags = () => [], docRow = () => ({});
+    const palette = { hidden: false }; let palMode = 'cmd', palRows = [], palIndex = 0, palBusy = false, palSeq = 0, palTimer = null;
+    const palInput = { placeholder: '', value: '', focus() {} };
+    const zoom = null, railEl = { hidden: false }, navBack = [], navForward = [], sensitiveVisible = false;
+    const railToggle = { hidden: false }, railHidden = false;
+    const authed = true, authChecking = false, signedOut = false, theme = 'light', hotkeys = {}, themePref = 'light';
+    const openCreationPalette = () => {}, openHiddenPalette = () => {}, toggleSensitiveVisibility = () => {}, followSystem = () => {};
+    const openVisibilityPalette = () => {}, openMovePalette = () => {}, pinAction = () => {}, copyText = () => {};
+    const togglePalette = () => {}, navigate = () => {}, history = () => {}, focusRail = () => {}, setZoom = () => {};
+    const goTo = () => {}, setView = () => {}, openDoc = () => {}, filterEl = {}, zoomFactor = 1, BASE_ZOOM = 1;
+    const visibilityRows = () => [], moveTargets = async () => [], previewMoveToSpace = () => {}, openTypePalette = () => {};
+    const typeGlyphs = new Map([['${TYPE_A}', 'nc-gavel']]); // the one type here that was given an icon
+    let renders = 0; const renderPalette = () => { renders++; };
+    let closed = 0; const closePalette = () => { closed++; }, promptEditor = () => {};
+    const openCommandPalette = () => { palMode = 'cmd'; palRows = []; palIndex = 0; };
+    const errors = [], notes = []; let queue = Promise.resolve();
+    const showError = (e) => { if (e) errors.push((e && e.message) || String(e)); }, showNote = (n) => notes.push(n);
+    const run = (fn) => (queue = queue.then(fn).then((v) => { showError(null); return v; }, showError));
+    const render = () => {};
+    // the model behind the page: which documents it was asked about, and an answer this check settles when it chooses
+    const written = [], asked = []; let settle = null;
+    const tana = { refresh: async () => {}, filters: {}, sensitiveIds: () => {},
+      setType: async (id, uri) => { written.push([id, uri]); return uri; },
+      classifyType: (id) => new Promise((resolve, reject) => { asked.push(id); settle = (answer, fails) => (fails ? reject(new Error(fails)) : resolve(answer)); }) };
+    ${sourceBetween('const NODE_ROW_ORDER', 'function paletteRows')}
+    ${sourceBetween('const homeSearch =', 'function sensitiveHidden')}
+    ${functionSource('paletteRows')}
+    ${sourceBetween('const TYPE_GROUP', 'function openTypePalette')}
+    ${sourceBetween('const CLASSIFY_GROUP', '// ---- Discuss with')}
+    ${functionSource('applyType')}
+    ${functionSource('backPalette')}
+    ({ row: () => { const r = paletteRows('').find((x) => x.id === 'classifyType'); return r && { label: r.label, icon: r.icon, keepOpen: r.keepOpen }; },
+       open: () => paletteRows('').find((x) => x.id === 'classifyType').run(),
+       node: (next) => { palDoc = next; },
+       page: (q) => classifyRows(q || '').map((r) => [r.label, r.hint || '', r.icon || '', !!r.disabled]),
+       choose: (label) => classifyRows('').find((r) => r.label === label).run(),
+       answer: async (value, fails) => { settle(value, fails); for (let i = 0; i < 6; i++) await Promise.resolve(); await queue; },
+       asked: () => [...asked],
+       mode: () => palMode,
+       escape: () => backPalette(),
+       settle: async () => { await queue; await Promise.resolve(); },
+       state: () => ({ written: [...written], notes: [...notes], errors: [...errors], closed, renders, placeholder: palInput.placeholder }) });
+  `);
+  const sure = { current: null, choices: [{ uri: TYPE_A, title: 'Decision Record', hue: 143, p: 0.91 }, { uri: null, title: 'No type', p: 0.06 }, { uri: TYPE_B, title: 'Project', hue: 268, p: 0.03 }] };
+
+  // 1. Offered where a type can go — a document or a meeting — and nowhere else.
+  assert.deepEqual(plain(api.row()), { label: 'Classify type', icon: 'sparkle', keepOpen: true }, 'the row wears the glyph of what the model works out');
+  api.node({ id: 'tana:event:01j0event00000000000000000', tags: [] });
+  assert.ok(api.row(), 'a meeting carries a type too');
+  for (const id of ['b12', 'tana:space:01j0space00000000000000000', TYPE_A]) {
+    api.node({ id, tags: [] });
+    assert.equal(api.row(), undefined, (id.split(':')[1] || 'a block') + ' is not offered it');
+  }
+
+  // 2. Opening asks once and says it is reading; a sure answer is applied, closed and said.
+  api.node({ id: DOC, tags: [] });
+  api.open();
+  assert.deepEqual(plain([api.mode(), api.state().placeholder, api.asked()]), ['classify', 'Classify type\u2026', [DOC]], 'a page of its own, and one question about this document');
+  assert.deepEqual(plain(api.page()), [['Reading the document\u2026', '', 'sparkle', true]], 'which says it is working rather than looking finished');
+  await api.answer(sure);
+  assert.deepEqual(plain([api.state().written, api.state().closed, api.state().notes]), [[[DOC, TYPE_A]], 1, ['Classified as Decision Record (91%)']],
+    'a type the model is sure of is set at once, the palette closes, and the note says what and how sure');
+
+  // 3. Sure of the type it already has: nothing to write.
+  api.open();
+  await api.answer({ ...sure, current: TYPE_A });
+  assert.deepEqual(plain([api.state().written.length, api.state().closed, api.state().notes.at(-1)]), [1, 2, 'Already Decision Record (91%)'], 'the same type is not written again');
+
+  // 4. Less sure: every option with its odds, the current one ticked, and the choice is yours — "No type" included.
+  api.open();
+  await api.answer({ current: TYPE_B, choices: [{ uri: TYPE_A, title: 'Decision Record', hue: 143, p: 0.55 }, { uri: TYPE_B, title: 'Project', hue: 268, p: 0.3 }, { uri: null, title: 'No type', p: 0.15 }] });
+  assert.deepEqual(plain([api.state().written.length, api.state().closed, api.mode()]), [1, 2, 'classify'], 'nothing is applied and the page stays up');
+  assert.deepEqual(plain(api.page()), [['Decision Record', '55%', 'nc-gavel', false], ['Project', '30% \u2713', 'type', true], ['No type', '15%', 'none', false]],
+    'most likely first, with the odds beside each, each type in its own icon (the generic one when it has none); the type it has is ticked and not offered again');
+  assert.deepEqual(plain(api.page('proj')), [['Project', '30% \u2713', 'type', true]], 'typing narrows the list');
+  api.choose('No type');
+  await api.settle();
+  assert.deepEqual(plain([api.state().written.at(-1), api.state().closed]), [[DOC, null], 3], '"No type" takes the type off, like it does on Set type');
+
+  // 5. Sure that nothing fits: said, never applied — a model does not take a type off on its own.
+  api.open();
+  await api.answer({ current: TYPE_B, choices: [{ uri: null, title: 'No type', p: 0.9 }, { uri: TYPE_B, title: 'Project', hue: 268, p: 0.1 }] });
+  assert.deepEqual(plain([api.state().written.length, api.page()[0]]), [2, ['No type', '90%', 'none', false]], '"No type" leads the list and waits to be chosen');
+
+  // 6. A failed call says why; an answer to a page already left writes nothing and draws nothing.
+  api.open();
+  await api.answer(null, 'Sign in with ChatGPT or add an OpenAI API key to classify');
+  assert.deepEqual(plain(api.page()), [['Sign in with ChatGPT or add an OpenAI API key to classify', '', 'sparkle', true]], 'the reason is on the page');
+  api.open();
+  api.escape();
+  const renders = api.state().renders;
+  await api.answer(sure);
+  assert.deepEqual(plain([api.mode(), api.state().written.length, api.state().renders]), ['cmd', 2, renders], 'Escape steps back, and the late answer is dropped');
+  console.log('ok  Classify type: offered where a type goes, a sure answer applied and said, otherwise every option with its odds, "No type" never applied on its own');
 }
 
 // Cmd+K "Set icon": the row on a type, and the page that searches the Nucleo set built into the app. The set itself

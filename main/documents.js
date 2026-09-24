@@ -3,7 +3,7 @@ const db = require('../db');
 const access = require('../sdk/access');
 const content = require('../sdk/content');
 const chat = require('../sdk/chat');
-const { readNode, editable, setEntityType, ulid, initDocument, STATE_TYPES } = require('../sdk/node');
+const { readNode, editable, setEntityType, contentText, ulid, initDocument, STATE_TYPES } = require('../sdk/node');
 const fields = require('../sdk/fields');
 const { DOC_URI, KINDS, NOT_CONNECTED, PLAIN_KINDS, S, TAG, deletedNodes, editability, errText, hueLoaded, idKind, isDeleted, metaSigs, nodeCreators, nodeHues, nodeMeta, now, pathCache, reading, redoStack, report, scheduleRefresh, send, subscribed, summaryCache, typeAttrTitles, typeHues, typeTitles, undoStack, visibleGraphNodes } = require('./state');
 const { eventMeta, graphRow, hueOf, hueWithType, kindRow, memberRow, members, nodeTag, plainRow, rememberNodeHue, rememberType, resolveHue, resolveTypes, toNode, typeTag, typeUriOf } = require('./rows');
@@ -157,6 +157,20 @@ async function setType(id, typeUri) {
   await mut(id, (doc) => setEntityType(doc, uri, { workflow, byUri: S.me.userUri }));
   scheduleRefresh(2000); // the row updates from the change event; this is the index catching up for the next list
   return uri;
+}
+// What Classify type weighs (main/ai.js classifyType): the document's own words, and the types Set type would let it
+// have, each with the description and AI instructions kept on the type's document. The graph's typeDef carries
+// neither, so every candidate is read; the sync client keeps them, so the next classify costs no more calls.
+async function typeCandidates(id) {
+  const { current, options } = await typeChoices(id);
+  const doc = await document(id), n = readNode(doc);
+  const types = await Promise.all(options.filter((t) => t.selectable).map(async (t) => {
+    const type = readNode(await document(t.uri));
+    return { uri: t.uri, title: t.title, hue: t.hue, description: type.description, instructions: type.instructions };
+  }));
+  // a meeting's content is empty; what it is about is in the calendar description, when there is one
+  const text = [typeof n.description === 'string' ? n.description : '', contentText(doc)].filter((s) => s.trim()).join('\n\n');
+  return { title: n.title || '', text, current, types };
 }
 // A type's colour, as this app draws it: our own hue (0-360) or 'grey', kept in the settings document under the
 // type (main/rows.js typeHue), so Tana's own hue on the type is left alone and the choice still follows you between
@@ -812,4 +826,4 @@ async function moveTarget(spaceId) {
   return document(spaceId);
 }
 
-module.exports = { outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, createDocument, typeChoices, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, codexIds, setCodex, creatorOf, document, op, inHistory, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget };
+module.exports = { outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, codexIds, setCodex, creatorOf, document, op, inHistory, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget };
