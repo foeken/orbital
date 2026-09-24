@@ -194,14 +194,14 @@ function paletteRows(q, typed = q) {
   // bullet, its row in the sidebar, a breadcrumb, and the chip an inline mention of it draws.
   if (palDoc && tana.searchIcons && tana.setTypeIcon && TYPE_NODE.test(palDoc.id)) {
     const doc = palDoc;
-    rows.push({ id: 'setIcon', group: docGroup, icon: typeGlyphs.get(doc.id) || 'type', label: 'Set icon',
+    rows.push({ id: 'setIcon', group: docGroup, icon: typeGlyph(doc.id), label: 'Set icon',
       hint: typeGlyphs.has(doc.id) ? 'Chosen' : 'The generic glyph', keepOpen: true, run: () => openIconPalette(doc) });
   }
   // And what colour it is here: our own hue or grey for the type, kept with the glyph in the settings document, so
   // Tana's colour on the type is left alone (docs/SETTINGS.md).
   if (palDoc && tana.setTypeHue && TYPE_NODE.test(palDoc.id)) {
     const doc = palDoc;
-    rows.push({ id: 'setHue', group: docGroup, icon: typeGlyphs.get(doc.id) || 'type', hue: doc.hue, label: 'Set colour',
+    rows.push({ id: 'setHue', group: docGroup, icon: typeGlyph(doc.id), hue: doc.hue, label: 'Set colour',
       hint: doc.hue == null ? 'Grey' : 'Hue ' + doc.hue, keepOpen: true, run: () => openHuePalette(doc) });
   }
   // Watching this node: the label says what pressing it does, so it carries no id — a hotkey whose meaning flips
@@ -472,7 +472,7 @@ function openTrashPalette() {
 const ARCHIVED_GROUP = 'Archived types · ↩ unarchives it';
 let archivedList = null; // null while the list is in flight
 function archivedRows(q) {
-  const rows = (archivedList || []).filter((d) => fuzzyMatch(d.title, q)).map((d) => ({ group: ARCHIVED_GROUP, icon: 'type', label: d.title,
+  const rows = (archivedList || []).filter((d) => fuzzyMatch(d.title, q)).map((d) => ({ group: ARCHIVED_GROUP, icon: typeGlyph(d.id), label: d.title,
     hint: agoText(d.archivedAt), keepOpen: true, run: () => run(async () => { await tana.unarchiveDocument(d.id); closePalette(); goTo(d.id); }) }));
   if (!rows.length) rows.push({ group: ARCHIVED_GROUP, label: archivedList ? 'No archived types' : 'Loading…', disabled: true });
   return rows;
@@ -771,7 +771,7 @@ function typeRows(q) {
   for (const t of typeList.options) {
     if (!fuzzyMatch(t.title || '', q)) continue;
     const current = t.uri === typeList.current;
-    rows.push({ group: TYPE_GROUP, icon: 'type', hue: t.hue, label: t.title || 'Untitled type',
+    rows.push({ group: TYPE_GROUP, icon: typeGlyph(t.uri), hue: t.hue, label: t.title || 'Untitled type',
       hint: current ? '✓' : t.selectable ? '' : t.reason || 'Lives in another space',
       disabled: !t.selectable || current, keepOpen: true, run: () => applyType(doc, t.uri) });
   }
@@ -817,7 +817,7 @@ function classifyRows(q) {
   for (const c of ai.choices) {
     if (!fuzzyMatch(c.title || '', q)) continue;
     const odds = Math.round(c.p * 100) + '%', current = (c.uri || null) === ai.current;
-    rows.push({ group: CLASSIFY_GROUP, icon: c.uri ? 'type' : 'none', hue: c.hue, label: c.title, hint: current ? odds + ' \u2713' : odds,
+    rows.push({ group: CLASSIFY_GROUP, icon: c.uri ? typeGlyph(c.uri) : 'none', hue: c.hue, label: c.title, hint: current ? odds + ' \u2713' : odds,
       disabled: current, keepOpen: true, run: () => applyType(doc, c.uri) });
   }
   if (!rows.length) rows.push({ group: CLASSIFY_GROUP, label: 'No type matches', disabled: true });
@@ -928,7 +928,7 @@ let hueCtx = null;
 function huePickRows(q) {
   const doc = hueCtx;
   if (!doc) return [];
-  const glyph = typeGlyphs.get(doc.id) || 'type';
+  const glyph = typeGlyph(doc.id);
   const rows = [];
   const typed = Number(q);
   if (q && Number.isInteger(typed) && typed >= 0 && typed <= 360 && !HUES.some(([, h]) => h === typed)) {

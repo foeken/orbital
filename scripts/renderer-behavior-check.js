@@ -74,6 +74,9 @@ const withShims = (src) => {
   // "this page has pills" (renderer/pills.js), which a folded row no longer answers for: a harness that is not about
   // folding gets the page it always had, so the calls guarded by it still run.
   if (/\bpillsDrawn\b/.test(src) && !/let pillsDrawn =/.test(src)) src = 'globalThis.pillsDrawn ??= true;\n' + src;
+  // how a type is drawn in a list (renderer/nodes.js): the glyph it was given, else the generic one. Added before the
+  // typeGlyphs line below, which then supplies the map to a harness that does not declare its own.
+  if (/\btypeGlyph\(/.test(src) && !/const typeGlyph =/.test(src)) src = "globalThis.typeGlyph ??= (uri) => typeGlyphs.get(uri) || 'type';\n" + src;
   // the glyphs types were given (renderer/nodes.js): a harness that is not about type icons draws every task with its box
   if (/\btypeGlyphs\b/.test(src) && !/const typeGlyphs =/.test(src)) src = 'globalThis.typeGlyphs ??= new Map();\n' + src;
   // what has a page of its own (renderer/nodes.js): a harness that is not about members or types keeps every document zoomable
@@ -7119,6 +7122,7 @@ async function runClassifyTypeCheck() {
     const togglePalette = () => {}, navigate = () => {}, history = () => {}, focusRail = () => {}, setZoom = () => {};
     const goTo = () => {}, setView = () => {}, openDoc = () => {}, filterEl = {}, zoomFactor = 1, BASE_ZOOM = 1;
     const visibilityRows = () => [], moveTargets = async () => [], previewMoveToSpace = () => {}, openTypePalette = () => {};
+    const typeGlyphs = new Map([['${TYPE_A}', 'nc-gavel']]); // the one type here that was given an icon
     let renders = 0; const renderPalette = () => { renders++; };
     let closed = 0; const closePalette = () => { closed++; }, promptEditor = () => {};
     const openCommandPalette = () => { palMode = 'cmd'; palRows = []; palIndex = 0; };
@@ -7179,8 +7183,8 @@ async function runClassifyTypeCheck() {
   api.open();
   await api.answer({ current: TYPE_B, choices: [{ uri: TYPE_A, title: 'Decision Record', hue: 143, p: 0.55 }, { uri: TYPE_B, title: 'Project', hue: 268, p: 0.3 }, { uri: null, title: 'No type', p: 0.15 }] });
   assert.deepEqual(plain([api.state().written.length, api.state().closed, api.mode()]), [1, 2, 'classify'], 'nothing is applied and the page stays up');
-  assert.deepEqual(plain(api.page()), [['Decision Record', '55%', 'type', false], ['Project', '30% \u2713', 'type', true], ['No type', '15%', 'none', false]],
-    'most likely first, with the odds beside each; the type it has is ticked and not offered again');
+  assert.deepEqual(plain(api.page()), [['Decision Record', '55%', 'nc-gavel', false], ['Project', '30% \u2713', 'type', true], ['No type', '15%', 'none', false]],
+    'most likely first, with the odds beside each, each type in its own icon (the generic one when it has none); the type it has is ticked and not offered again');
   assert.deepEqual(plain(api.page('proj')), [['Project', '30% \u2713', 'type', true]], 'typing narrows the list');
   api.choose('No type');
   await api.settle();
