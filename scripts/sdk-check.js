@@ -792,6 +792,7 @@ async function main() {
       assert.equal(calls.length,before,'the API key fallback is not called while ChatGPT is signed in');
       assert.deepEqual([threadStart.ephemeral,threadStart.approvalPolicy,threadStart.sandbox,turnStart.sandboxPolicy.networkAccess],[true,'never','read-only',false],'the temporary ChatGPT request is ephemeral, read-only, and has no network access');
       assert.equal(Object.hasOwn(threadStart,'allowProviderModelFallback'),false,'thread/start uses fields accepted by older Codex CLI app-servers too');
+      assert.equal(Object.hasOwn(threadStart,'runtimeWorkspaceRoots'),false,'and none the app-server gates behind the experimentalApi capability, which Orbital does not ask for');
       assert.deepEqual([turnStart.input.length,turnStart.input[0].text],[1,'Discuss with ChatGPT person'],'only the title is sent');
       const signedOut=await ai.logoutChatGPT(userData);
       assert.equal(signedOut.signedIn,false,'sign-out clears ChatGPT account status');
