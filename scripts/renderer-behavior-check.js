@@ -6844,7 +6844,7 @@ async function runSetTypeCheck() {
     ${functionSource('openTypePalette')}
     ${functionSource('applyType')}
     ${functionSource('backPalette')}
-    ({ row: () => paletteRows('').find((r) => r.id === 'setType'),
+    ({ row: () => paletteRows('').find((r) => r.id === 'setType'), removeRow: () => paletteRows('').find((r) => r.id === 'removeType'),
        node: (next) => { palDoc = next; },
        list: (next, fails) => { answer = next; listFails = fails || null; },
        page: (q) => typeRows(q || ''),
@@ -6911,6 +6911,17 @@ async function runSetTypeCheck() {
   api.row().run();
   await api.settle();
   assert.deepEqual(plain(api.page().map((r) => [r.label, r.disabled])), [['No types for this kind of document', true]], 'and an empty answer says that rather than showing an empty page');
+  // 5. Remove type: one row, only where there is a type to take off, and the same one write as "No type".
+  api.node({ id: DOC, tags: [{ label: 'task', color: 'grey' }] });
+  assert.equal(api.removeRow(), undefined, 'an untyped document has nothing to remove');
+  api.node({ id: DOC, tags: [{ label: 'task', color: 'grey' }, { label: 'Discussion Task', uri: TYPE_B, hue: 200 }] });
+  assert.deepEqual(plain([api.removeRow().label, api.removeRow().hint, api.removeRow().icon]), ['Remove type', 'Discussion Task', 'none'], 'a typed one is offered it, named after the type it takes off');
+  const closedBefore = api.state().closed;
+  api.removeRow().run();
+  await api.settle();
+  assert.deepEqual(plain([api.state().written.slice(-1), api.state().closed]), [[[DOC, null]], closedBefore + 1], 'one write of no type, and the palette closes');
+  api.node({ id: BLOCK, tags: [{ label: 'Discussion Task', uri: TYPE_B }] });
+  assert.equal(api.removeRow(), undefined, 'a block carries no type to remove');
   console.log('ok  Set type: offered to documents and meetings only, the page shows main\u2019s answer, "No type" removes, and each choice is one call');
 }
 

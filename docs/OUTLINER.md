@@ -563,6 +563,8 @@ than left out, so the page can answer "why is my type not here?". Choosing one i
 (`null` for No type) and the row redraws from the live change, like every other mutation. The rules behind
 `selectable` are Tana's own and are documented in docs/sdk/05-gotchas.md: a type applies to documents or to meetings,
 and a space's type only goes on a document already in that space, while a Library type goes on anything.
+**Remove type** (id `removeType`) is the same removal without the page: offered only on a typed document or meeting,
+hinted with the type it takes off, one `api.setType(id, null)`.
 
 ### Classify type
 

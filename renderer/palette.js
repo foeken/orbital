@@ -22,7 +22,7 @@ const docRow = (n, hint, run) => ({ node: n, icon: n.icon, label: n.text ?? n.ti
 // assignee), where it lives (pins, the date nodes, its space), what it looks like (image, visibility, sensitivity),
 // its link, and last the one destructive row. Rows without an id carry a `rank` from this list instead.
 // The rows about a field the caret is on (renderer/fields.js) come before the node's own: they are about what is focused.
-const NODE_ROW_ORDER = ['fieldValue', 'fieldKind', 'fieldCount', 'fieldChoices', 'fieldTargets', 'zoomIn', 'expand', 'collapse', 'toggleDone', 'markRead', 'markUnread', 'approveProposal', 'rejectProposal', 'status', 'setType', 'classifyType', 'addField', 'discussWith', 'setIcon', 'setHue', 'assign', 'assignTo', 'codex', 'codexOpen', 'pinToday', 'pinTomorrow', 'pinToDate', 'pinToMeeting', 'pinToSelectedMeeting', 'editPins', 'addToday', 'addTomorrow', 'addWeek', 'move', 'moveLibrary', 'visibility', 'notify', 'sensitive', 'copyLink', 'exportPdf', 'delete'];
+const NODE_ROW_ORDER = ['fieldValue', 'fieldKind', 'fieldCount', 'fieldChoices', 'fieldTargets', 'zoomIn', 'expand', 'collapse', 'toggleDone', 'markRead', 'markUnread', 'approveProposal', 'rejectProposal', 'status', 'setType', 'classifyType', 'removeType', 'addField', 'discussWith', 'setIcon', 'setHue', 'assign', 'assignTo', 'codex', 'codexOpen', 'pinToday', 'pinTomorrow', 'pinToDate', 'pinToMeeting', 'pinToSelectedMeeting', 'editPins', 'addToday', 'addTomorrow', 'addWeek', 'move', 'moveLibrary', 'visibility', 'notify', 'sensitive', 'copyLink', 'exportPdf', 'delete'];
 const DOC_KIND = /^tana:text:/; // the Discussion Task type applies to documents, so a meeting is not offered that row
 const nodeRank = (r) => { const i = NODE_ROW_ORDER.indexOf(r.rank || r.id); return i < 0 ? NODE_ROW_ORDER.length : i; };
 const VIEW_ORDER = ['inbox', 'notifications', 'proposals', 'today', 'week', 'library'];
@@ -181,6 +181,12 @@ function paletteRows(q, typed = q) {
   if (palDoc && tana.classifyType && tana.setType && isRealId(palDoc.id) && TYPED_KIND.test(palDoc.id)) {
     const doc = palDoc;
     rows.push({ id: 'classifyType', group: docGroup, icon: 'sparkle', label: 'Classify type', hint: 'AI picks the type', keepOpen: true, run: () => openClassifyPalette(doc) });
+  }
+  // And straight out of one: a typed document or meeting only, named after the type it takes off. The same one write
+  // as "No type" on Set type, one key instead of a page.
+  if (palDoc && tana.setType && isRealId(palDoc.id) && TYPED_KIND.test(palDoc.id) && typeNameOf(palDoc)) {
+    const doc = palDoc;
+    rows.push({ id: 'removeType', group: docGroup, icon: 'none', label: 'Remove type', hint: typeNameOf(doc), keepOpen: true, run: () => applyType(doc, null) });
   }
   rows.push(...fieldRows(docGroup)); // the focused field's value or definition, and Add field … on a type's page
   // One type a document is given by answering a question instead of picking it from a list: who it is to be
