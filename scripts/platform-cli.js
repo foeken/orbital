@@ -656,18 +656,18 @@ commands.settype = async () => {
   await new Promise((r) => setTimeout(r, 1500)); // the local update leaves with the stream, like the other write commands
   out('now: ' + JSON.stringify(readNode(await client.sync.subscribe(id)).entityTypeUri ?? null));
 };
-// classify <id>: the Cmd+K "Classify type" answer for a document — what the model is sent (the types with their
-// description and AI instructions) and the odds it gives each. Read-only in Tana; the document's text goes to the model.
+// classify <id...>: the Cmd+K "Classify type" answer for each document — what the model is sent (the types with their
+// description and AI instructions) and the odds it gives each. Read-only in Tana; the documents' text goes to the model.
 commands.classify = async () => {
-  const [id] = positional;
-  if (!id) throw new Error('usage: classify <id>  (read-only; sends the document and its candidate types to the model)');
+  if (!positional.length) throw new Error('usage: classify <id...>  (read-only; sends each document and its candidate types to the model)');
   const main = backend(await connect());
   await client.sync.connect();
-  const input = await main.typeCandidates(id);
-  for (const t of input.types) out(t.uri + '\t' + t.title + '\tdescription ' + (t.description || '').length + ' chars, instructions ' + (t.instructions || '').length + ' chars');
-  const { current, choices } = await main.ai.classifyType(input, globalThis.fetch, app.getPath('userData'));
-  out('current: ' + (current || 'no type'));
-  for (const c of choices) out((Math.round(c.p * 100) + '%').padStart(5) + '  ' + c.title);
+  for (const id of positional) {
+    const input = await main.typeCandidates(id);
+    const { current, choices } = await main.ai.classifyType(input, globalThis.fetch, app.getPath('userData'));
+    out(id + '  ' + input.title + '  (now: ' + (input.types.find((t) => t.uri === current)?.title || (current ? current : 'no type')) + ')');
+    out('   ' + choices.map((c) => c.title + ' ' + Math.round(c.p * 100) + '%').join(', '));
+  }
 };
 // discusswith <id> <who…>: the Cmd+K "Discuss with …" command through main — the Discussion Task type (found by
 // title, or created in the Library with its field when the workspace has none) and the name in that field. WRITES.

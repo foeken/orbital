@@ -572,9 +572,9 @@ Beside it, **Classify type** (id `classifyType`) lets the model choose from the 
 a `description` and `instructions` (the AI instructions Tana's own AI follows when it writes one of that type) in
 its `data`. The graph's `typeDef` carries neither, so main reads each selectable type's own document
 (`typeCandidates`, main/documents.js) and sends the types, numbered, with those words, together with the document's
-title and text (a meeting's calendar description in place of its empty content) to the same fast model as the
-Discuss with suggestion (`api.classifyType(id)` → `ai.classifyType`, main/ai.js). The model answers with the odds
-of every option, **No type** among them, and they come back most likely first:
+title and text (a meeting's calendar description in place of its empty content) to the model (`api.classifyType(id)` →
+`ai.classifyType`, main/ai.js). It first says in a few words what the document is and asks to be done, then gives the
+odds of every option, **No type** among them, and they come back most likely first:
 `{ current, choices: [{ uri | null, title, hue, p }] }`.
 
 While the model reads, the page shows "Reading the document…" under the breathing sparkle. If the most likely
@@ -582,10 +582,16 @@ option is a type at 80% or more (`CLASSIFY_SURE`, renderer/palette.js), it is se
 the palette closes, and a note says "Classified as Decision Record (91%)". If the document already has that type,
 the note says "Already …" and nothing is written. Otherwise the page lists every option with its odds, the current
 one ticked, and choosing one is the same write Set type makes. No type is never applied on its own: a model sure
-that nothing fits still leaves the choice to you. Checked live on 2026-09-24 against the workspace's own types with
-`node scripts/platform-cli.js classify <id>`, which prints the candidates and the odds and writes nothing: a typed
-decision, a project and a discussion task each came back at 93–98% for the type they have or should have, and a
-meeting write-up at 85% for No type.
+that nothing fits still leaves the choice to you.
+
+The model is `gpt-5.6-terra` with low reasoning (`CLASSIFY_MODEL`, main/ai.js), measured on 2026-09-24 against twelve of
+the workspace's own documents with `node scripts/platform-cli.js classify <id...>`, which prints the odds and writes
+nothing. Luna, the fast model the Discuss with suggestion uses, gave one or two of the twelve a wrong type at 80% or
+more in every run, whatever the wording, and which ones moved with the wording ("Read Nadia's document" came out
+a Discussion Task at 80–99%). Terra took the same time, since the wait is the round trip rather than the model, and
+kept every clear case right: Nadia's at 95% No type in both runs. One borderline task ("Ask Foundry teams for
+risks") moved between No type 78% and Discussion Task 85%. A type's own description and AI instructions are what
+the model reads, so sharpening them in Tana is how its answers improve.
 
 ## Addendum: Set icon (a type's own glyph)
 

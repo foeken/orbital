@@ -781,7 +781,8 @@ async function main() {
     const sent=calls.at(-1).init.body;
     assert.ok(['Type 1: Decision Record','AI instructions: Return exactly one decision','Type 2: Project','Description: A piece of work with an end','Postgres over Mongo','Agreed: we use Postgres'].every((s)=>sent.input.includes(s)),
       'each type is described by its own description and AI instructions, beside the document title and text');
-    assert.deepEqual([sent.instructions,sent.model,sent.reasoning.effort],[ai.CLASSIFY_INSTRUCTIONS,ai.DEFAULT_MODEL,ai.DEFAULT_EFFORT],'the rules go as instructions, to the same fast model the suggestion uses');
+    assert.deepEqual([sent.instructions,sent.model,sent.reasoning.effort],[ai.CLASSIFY_INSTRUCTIONS,'gpt-5.6-terra','low'],'the rules go as instructions, to the model measured to be right when it is sure');
+    assert.deepEqual((await ai.classifyType(typed,fetchWith(answer('{"is": "a decision already taken", "odds": {"1": 0.9, "none": 0.1}}')))).choices.map((c)=>[c.title,c.p]),[['Decision Record',0.9],['No type',0.1],['Project',0]],'the odds are read after what the model says the document is');
     assert.deepEqual((await ai.classifyType(typed,fetchWith(answer('{"2": 60, "none": 20, "7": 99}')))).choices.map((c)=>c.p),[0.75,0.25,0],
       'percentages are scaled to odds, and a type the list does not have is ignored');
     await assert.rejects(ai.classifyType(typed,fetchWith(answer('Decision Record'))),/probabilities/,'an answer without odds is an error, not a guess');
