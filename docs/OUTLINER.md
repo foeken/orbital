@@ -66,7 +66,7 @@ Keyboard (exactly the Outliner model):
 - Enter: split at caret (one mutation, `api.split`, so one undo restores the node whole); if the node is expanded with children, the new node becomes the first child, else the next sibling; caret moves to it. Enter at the very start of a node that has text inserts an empty sibling in front instead (`api.insertBefore`): the node keeps its text and its children, and the caret moves to the new row. Undoing an Enter returns the caret to the row Enter ran on, at the offset it ran at, rather than to the nearest surviving row. Enter on an editable document node inserts a first content child; read-only nodes ignore edit keys. View-level draft document creation is defined in Addendum 8.
 - Shift+Enter: newline inside the node (soft break).
 - Tab / Shift+Tab: indent / outdent the node (block nodes only; document nodes ignore Tab).
-- Backspace at the start of an empty block node: remove it and move the caret to the end of the previous visible node. Backspace at start of a non-empty node: no-op.
+- Backspace at the start of an empty block node: remove it and move the caret to the end of the previous visible node. Backspace at start of a non-empty node: its words join the previous visible row (#125, below).
 - Up/Down: move caret to the previous/next visible node (keeping the horizontal offset if possible); Left/Right at node edges move across nodes.
 - Cmd+Up / Cmd+Down: collapse / expand the current node. Cmd+Shift+Up/Down: move node up/down among siblings (optional; skip if it needs new ops).
 - Space when the caret is in a document node and the node text is not being edited is not needed; the checkbox is clicked with the mouse or toggled with Cmd+Enter.
@@ -546,6 +546,11 @@ is instant, needs no key and never changes between two reads of the same words. 
   The caret does not move — it stays at the start of the row being typed in, so the text does not jump. A row with
   children, an image, a divider, a reference, a draft, or a row belonging to another document (the rows an opened
   reference borrows) is not "an empty row above" and is left alone.
+- **Otherwise its words join the row above** (`joinAbove`, #125), which undoes an Enter mid-text: the row above takes
+  them, marks and mentions included, the row goes, and the caret lands where the two meet. It is one change in main
+  (`api.join(docId, id, intoId, value)` → `sdk/content.js join`), so one ⌘Z brings the row back. Only words join
+  words: a row that holds children stays (joining would have to move them), and so does a row under an image, a
+  divider, a table, a reference, a draft or a row of another document.
 
 ## Addendum: Set type
 

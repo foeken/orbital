@@ -6376,8 +6376,8 @@ async function runDefaultModeCheck() {
 
   // the keydown branch that reaches it: the bullet comes off first and the row goes on the next press
   const keydown = sourceBetween("onRows('keydown'", "onRows('input'");
-  assert.match(keydown, /e\.key === 'Backspace' && off === 0 && collapsed\) \{\s*e\.preventDefault\(\);\s*if \(isDoc \|\| unbullet\(item\)\) return;\s*if \(len === 0\) removeNode\(item, el\); else removeEmptyAbove\(item, el\);/,
-    'Backspace at the start of a row unbullets it, then removes the row when it is empty, then the empty row above it');
+  assert.match(keydown, /e\.key === 'Backspace' && off === 0 && collapsed\) \{\s*e\.preventDefault\(\);\s*if \(isDoc \|\| unbullet\(item\)\) return;\s*if \(len === 0\) removeNode\(item, el\); else removeEmptyAbove\(item, el\) \|\| joinAbove\(item, el\);/,
+    'Backspace at the start of a row unbullets it, then removes the row when it is empty, then the empty row above it, and otherwise joins its words to the row above');
   // three harnesses inject this one by line, so a reformat would reach them as a SyntaxError rather than a message
   assert.match(source, /\nconst siblingBlock = .*;\n/, 'siblingBlock stays on one line');
   const typing = sourceBetween("onRows('input'", "onRows('paste'");
@@ -6441,6 +6441,66 @@ async function runDefaultModeCheck() {
 
 }
 
+
+// Backspace at the start of a row with words in it joins them to the row above (#125): the reverse of Enter
+// mid-text, one write in main, and the caret where the two meet.
+async function runJoinAboveCheck() {
+  const api = vm.runInNewContext(`
+    const calls = [];
+    let rows = [], editable = true;
+    const items = new Map();
+    const rowsBeside = () => rows.slice();
+    const keyOfEl = (el) => el.key;
+    const isAtomic = (n) => n.type === 'image' || n.block === 'divider' || !!n.table;
+    const isReference = (n) => n.type === 'reference';
+    const hasKids = (item) => !!(item.node.children && item.node.children.length);
+    const canEditItem = () => editable;
+    const readSegs = (el) => el.segs;
+    const plainOf = (segs) => segs.map((s) => ('text' in s ? s.text : s.mention.label)).join('');
+    const saveValue = (segs) => segs;
+    const dropPending = (key) => calls.push(['dropPending', key]);
+    const render = () => calls.push(['render']);
+    const reload = async (docId) => { calls.push(['reload', docId]); };
+    const placeCaret = (key, offset) => calls.push(['caret', key, offset]);
+    const run = async (fn) => fn();
+    const tana = { join: async (docId, id, intoId, value) => calls.push(['join', docId, id, intoId, value]) };
+    ${functionSource('joinAbove')}
+    ({
+      press: async (above, cur = {}, canEdit = true) => {
+        calls.length = 0; editable = canEdit; rows = []; items.clear();
+        if (above) {
+          const item = { key: 'doc/a', docId: above.docId || 'doc', node: { id: 'a', kind: 'block', ...above.node } };
+          items.set('doc/a', item); rows.push({ key: 'doc/a', segs: [{ text: 'Discuss with ' }] });
+        }
+        const item = { key: 'doc/b', docId: 'doc', node: { id: 'b', kind: 'block', ...cur } };
+        const el = { key: 'doc/b', segs: [{ mention: { uri: 'tana:user-profile:stan', label: 'Stan' } }, { text: ' and Peter' }] };
+        items.set('doc/b', item); rows.push(el);
+        const took = joinAbove(item, el);
+        await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+        return { took, calls: calls.slice() };
+      },
+    });
+  `);
+  assert.deepEqual(plain(await api.press({})), { took: true, calls: [['dropPending', 'doc/b'], ['dropPending', 'doc/a'],
+    ['join', 'doc', 'b', 'a', [{ text: 'Discuss with ' }, { mention: { uri: 'tana:user-profile:stan', label: 'Stan' } }, { text: ' and Peter' }]],
+    ['reload', 'doc'], ['render'], ['caret', 'doc/a', 13]] },
+    'the words join the row above in one write, the mention with them, and the caret lands where the two meet');
+  for (const [above, cur, why] of [
+    [null, {}, 'the first row has nothing above it'],
+    [{}, { children: [{ id: 'c' }] }, 'a row with children stays: joining would have to move them'],
+    [{}, { hasChildren: true }, 'children that are not loaded yet count too'],
+    [{ node: { type: 'image' } }, {}, 'an image takes no words'],
+    [{ node: { block: 'divider' } }, {}, 'nor does a divider'],
+    [{ node: { table: {} } }, {}, 'nor a table'],
+    [{ node: { type: 'reference' } }, {}, 'a reference stands for another node'],
+    [{ node: { draft: true } }, {}, 'a draft row above is not in Tana yet'],
+    [{}, { draft: true }, 'and neither is a draft row being typed in'],
+    [{ node: { kind: 'document' } }, {}, 'a document row is not a block'],
+    [{ docId: 'tana:text:other' }, {}, 'a row an opened reference borrows belongs to another document'],
+  ]) assert.deepEqual(plain(await api.press(above, cur)), { took: false, calls: [] }, why);
+  assert.deepEqual(plain(await api.press({}, {}, false)), { took: false, calls: [] }, 'a read-only row is left alone');
+  console.log('ok  Backspace join: a row\u2019s words join the row above in one write, the caret at the seam; rows with children, atomic rows, drafts and borrowed rows stay');
+}
 
 // Backspace at the start of a row takes the empty row above it away. A plain empty row draws nothing now, so it
 // cannot be clicked into: the row below is the only way to reach one.
@@ -6688,7 +6748,7 @@ function runCaretAtPointCheck() {
   assert.match(functionSource('materialise'), /tana\.insertAfter\(parent\.docId, last\?\.id \|\| null, text, node\.block\)/, 'and the draft is written as the kind it was drawn as');
 }
 
-const checks = [runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runSetIconCheck, runDiscussWithCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runAgentStatusBootCheck, runQuickAddPanelCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck,runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck];
+const checks = [runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runSetIconCheck, runDiscussWithCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runAgentStatusBootCheck, runQuickAddPanelCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck,runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck];
 // The chips under a zoomed title, driven through the shipped line itself: a typed document shows its type whatever
 // kind it is, and the kind chip (task, doc, meeting, space, chat…) stays out of the header, as it always did for a task.
 function runZoomTypeChipCheck() {

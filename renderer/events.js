@@ -118,11 +118,11 @@ onRows('keydown', (e) => {
   // a document row is the document: the same shortcut deletes it (reversibly, like the zoomed title), not just blocks
   else if (e.key === 'Backspace' && mod && e.shiftKey) { e.preventDefault(); if (isDoc) removeDocument(item); else removeNode(item, el); }
   // at the start of a row: the bullet comes off first (unbullet), then the row itself when it is empty, and
-  // otherwise the empty row above it — the one a plain empty row leaves invisible
+  // otherwise the empty row above it — the one a plain empty row leaves invisible — or else its words join the row above
   else if (e.key === 'Backspace' && off === 0 && collapsed) {
     e.preventDefault();
     if (isDoc || unbullet(item)) return;
-    if (len === 0) removeNode(item, el); else removeEmptyAbove(item, el);
+    if (len === 0) removeNode(item, el); else removeEmptyAbove(item, el) || joinAbove(item, el);
   }
   else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && mod && e.shiftKey) { e.preventDefault(); if (!isDoc) shiftNode(item, el, 'move', e.key === 'ArrowUp' ? 'up' : 'down'); }
   else if (combo === hotkeyFor('collapse')) { e.preventDefault(); setOpen(item, false); }

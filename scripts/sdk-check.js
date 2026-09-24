@@ -3582,6 +3582,17 @@ async function main() {
     assert.equal(d.undo(), true);
     assert.deepEqual(outline.readOutline(d).at(-1).children, [], 'and undoes in one step as well');
     assert.ok(child);
+    // Backspace at the start of a row reverses it: the row above takes the words, and one undo brings the row back.
+    outline.join(d, rest, a, [{ text: 'left-right' }, { mention: { uri: 'tana:text:x', label: 'Ref' } }]);
+    assert.deepEqual(outline.readOutline(d).map((n) => n.text), ['left-rightRef'], 'join puts the words back in the row above and the row goes');
+    assert.equal(outline.readOutline(d)[0].segments.at(-1).mention.uri, 'tana:text:x', 'mentions and all');
+    assert.equal(d.undo(), true);
+    assert.deepEqual(outline.readOutline(d).map((n) => n.text), ['left', '-rightRef'], 'one undo brings the row back whole');
+    const parent = outline.insertAfter(d, rest, 'parent');
+    outline.insertChild(d, parent, 'kept');
+    assert.throws(() => outline.join(d, parent, rest, '-rightRefparent'), /children/, 'a row with children is not joined: its children would go with it');
+    assert.deepEqual(outline.readOutline(d).map((n) => n.text), ['left', '-rightRef', 'parent'], 'and nothing is written');
+    d.undo(); d.undo();
 
     outline.insertBefore(d, a, '');
     const rows = outline.readOutline(d);

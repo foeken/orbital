@@ -527,6 +527,10 @@ function mockApi() {
       emit(docId); return n.id;
     }),
     remove: async (docId, id) => mut(docId, () => { const f = locate(content[docId], id); f.list.splice(f.index, 1); const p = f.trail.at(-1); if (p) fix(p.node); emit(docId); }),
+    join: async (docId, id, intoId, value) => mut(docId, () => {
+      const into = locate(content[docId], intoId).node; into.text = plainOf(value); into.segments = segsOf(value);
+      const f = locate(content[docId], id); f.list.splice(f.index, 1); const p = f.trail.at(-1); if (p) fix(p.node); emit(docId);
+    }),
     removeMany: async (docId, ids) => mut(docId, () => { for (const id of [...ids].reverse()) { const f = locate(content[docId], id); f.list.splice(f.index, 1); const p = f.trail.at(-1); if (p) fix(p.node); } emit(docId); }),
     indent: async (docId, id) => mut(docId, () => {
       const f = locate(content[docId], id); if (f.index === 0) return;

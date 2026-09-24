@@ -123,6 +123,7 @@ contextBridge.exposeInMainWorld('api', {
   insertAfter: (docId, nodeId, text, block) => ipcRenderer.invoke('block:insertAfter', docId, nodeId, text, block), // block: 'bullet' where the row that has nothing to inherit should still be a list row
   insertBefore: (docId, nodeId, text) => ipcRenderer.invoke('block:insertBefore', docId, nodeId, text),
   split: (docId, nodeId, before, after, asChild) => ipcRenderer.invoke('block:split', docId, nodeId, before, after, asChild), // truncate + insert the rest in one undo step
+  join: (docId, nodeId, intoId, value) => ipcRenderer.invoke('block:join', docId, nodeId, intoId, value), // Backspace at a row's start: its words onto the row above, one undo step
   insertChild: (docId, nodeId, text) => ipcRenderer.invoke('block:insertChild', docId, nodeId, text),
   removeMany: (docId, nodeIds) => ipcRenderer.invoke('block:removeMany', docId, nodeIds),
   moveMany: (docId, nodeIds, direction) => ipcRenderer.invoke('block:moveMany', docId, nodeIds, direction),
