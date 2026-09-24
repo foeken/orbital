@@ -879,3 +879,12 @@ a cell; `colwidth` is a ProseMirror attribute (`null` until a column is resized,
   kind). Edit choices: typing and Enter adds a label, Enter on a label renames it, ⌘⌫ removes and ⇧⌘↑/↓ move the highlighted
   one; at most 60 characters and no two the same, said on the row before anything is written. Writes go through
   `api.defineField(typeUri, key, change)` and `api.addField(typeUri, def)` onto the type document, one undo step each.
+
+## Addendum: notices are a toast (#123)
+
+A notice that reports something done ("Link copied", "Added 3 items to Today", "Classified as Project (91%)") is a
+toast at the foot of the window (`showNote`, renderer/toolbar.js; `#toast`, `role="status"`). It fades after
+2.5 s, a newer notice restarts that clock, and it sits above the palette. The red line under the title is for errors
+only (`showError`); they stay until the next action clears them. A notice must never write into `#error`: that line
+holds `#errorText` and the relogin button, and replacing them made the next `showError` throw, which stopped the
+write queue behind `run()`.
