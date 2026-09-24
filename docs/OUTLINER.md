@@ -584,10 +584,10 @@ the note says "Already …" and nothing is written. Otherwise the page lists eve
 one ticked, and choosing one is the same write Set type makes. No type is never applied on its own: a model sure
 that nothing fits still leaves the choice to you.
 
-The model is `gpt-5.6-terra` with low reasoning (`CLASSIFY_MODEL`, main/ai.js), measured on 2026-09-24 against twelve of
-the workspace's own documents with `node scripts/platform-cli.js classify <id...>`, which prints the odds and writes
-nothing. Luna, the fast model the Discuss with suggestion uses, gave one or two of the twelve a wrong type at 80% or
-more in every run, whatever the wording, and which ones moved with the wording ("Read Nadia's document" came out
+The model is the fast AI both AI rows share, `gpt-5.6-terra` with low reasoning (`aiModel`/`aiEffort`, defaults in
+main/ai.js), chosen on 2026-09-24 against twelve of the workspace's own documents with
+`node scripts/platform-cli.js classify <id...>`, which prints the odds and writes nothing. Luna, the earlier default,
+gave one or two of the twelve a wrong type at 80% or more in every run, whatever the wording, and which ones moved with the wording ("Read Nadia's document" came out
 a Discussion Task at 80–99%). Terra took the same time, since the wait is the round trip rather than the model, and
 kept every clear case right: Nadia's at 95% No type in both runs. One borderline task ("Ask Foundry teams for
 risks") moved between No type 78% and Discussion Task 85%. A type's own description and AI instructions are what
@@ -683,7 +683,9 @@ It is asked once per open, never per keystroke. Cmd+K offers **Sign in with Chat
 API key is used when ChatGPT is signed out. Both credentials stay on this machine, never in Tana. ChatGPT sign-in
 uses the Codex CLI app-server in its own local auth directory, separate from the user's regular Codex login. It
 needs the `codex` command on PATH. Which model answers and how hard it thinks are the settings `aiModel` and
-`aiEffort`, defaulting to a small model that does no reasoning at all (`none`); they follow you between machines
+`aiEffort`, defaulting to the fast AI both AI rows share: `gpt-5.6-terra` with low reasoning, which answered a
+suggestion in the same time as Luna with none (5.8 s against 5.7 s, median of six) and left the subject of the
+task out of who to discuss it with where Luna put him in; they follow you between machines
 like the other choices about your own content, and have no UI yet: change them in the settings document.
 
 - **The Library is not shown in the breadcrumbs once Home is something else** (`renderCrumbs`): the location from `api.path` still begins at the Library, and the crumb for it is dropped whenever `homeId()` is not `library`. A document whose only location was the Library then shows the Home anchor alone; separators are appended with each crumb (`addCrumb`) rather than counted by index, so the • sits before the first crumb that is actually drawn and nothing dangles when there is none.
