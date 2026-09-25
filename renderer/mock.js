@@ -493,6 +493,7 @@ function mockApi() {
     },
     newWindow: async () => {},
     splitWindow: async () => {},
+    otherPane: async () => {},
     openExternal: async (url) => { if (!/^https?:\/\//i.test(url)) throw new Error('Only http(s) links can be opened'); return url; },
     todayNode: async (offset = 0) => { const d = new Date(); d.setDate(d.getDate() + (typeof offset === 'number' ? offset : 0)); const date = typeof offset === 'string' ? offset : d.toLocaleDateString('sv-SE'); const found = all.find((d2) => d2.text === date); if (found) return found.id; const n = { id: 'mockday' + date, text: date, kind: 'document', hasChildren: true, editable: true, icon: 'doc', tags: [{ label: 'doc', color: 'grey' }] }; content[n.id] = []; all.push(n); views[0].nodes.unshift(n); datePins[n.id] = [date]; emit(null); return n.id; },
     weekNode: async () => { const t = new Date(); t.setDate(t.getDate() + 4 - (t.getDay() || 7)); const title = 'Week ' + Math.ceil(((t - new Date(t.getFullYear(), 0, 1)) / 864e5 + 1) / 7) + ' (' + t.getFullYear() + ')'; const found = all.find((d) => d.text === title); if (found) return found.id; const n = { id: 'mockweek', text: title, kind: 'document', hasChildren: true, editable: true, icon: 'doc', tags: [{ label: 'doc', color: 'grey' }] }; content[n.id] = []; all.push(n); views[0].nodes.unshift(n); emit(null); return n.id; },

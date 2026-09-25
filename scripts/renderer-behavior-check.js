@@ -1557,7 +1557,7 @@ async function runSyncShortcutCheck() {
     'Views: Inbox', 'Views: Today', 'Views: This week', 'Views: Library',
     'View options: Filter by type', 'View options: Filter rows by text',
     'Actions: Log in to Tana', 'Actions: Create new …', 'Actions: Search Tana', 'Actions: Go back', 'Actions: Go forward', 'Actions: Go to Home', 'Actions: Focus the sidebar', 'Actions: Hide sidebar', 'Actions: Set as Home',
-    'Actions: Undo', 'Actions: Redo', 'Actions: Sync', 'Actions: Reload', 'Actions: New window', 'Actions: Toggle split view', 'Actions: Edit hidden items', 'Actions: Toggle sensitive visibility', 'Actions: Toggle demo mode',
+    'Actions: Undo', 'Actions: Redo', 'Actions: Sync', 'Actions: Reload', 'Actions: New window', 'Actions: Toggle split view', 'Actions: Go to the other half', 'Actions: Edit hidden items', 'Actions: Toggle sensitive visibility', 'Actions: Toggle demo mode',
     'Actions: Larger text', 'Actions: Smaller text', 'Actions: Reset text size', 'Actions: Toggle dark mode',
   ], 'the palette lists its rows in one fixed, meaningful order');
   // The two date pins differ only in the day they name: today's row passes no date (main defaults to today), the

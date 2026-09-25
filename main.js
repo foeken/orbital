@@ -58,6 +58,8 @@ function restoredBounds(saved, workAreas) {
 S.windows = new Set();
 S.windowViews = new Map(); // webContents id -> { id, filter }: the view that page shows
 const SPLIT_GAP = 1; // the hairline between two pages: the window's own background showing through
+const SPLIT_LINE = { light: '#ececec', dark: '#2b2f31' }; // the sidebar's border (styles.css .rail), in the page's theme
+const paneWindow = (wc) => [...S.windows].find((w) => w.panes.some((p) => p.webContents === wc));
 function layout(win) {
   const { width, height } = win.getContentBounds(), n = win.panes.length, w = Math.floor((width - SPLIT_GAP * (n - 1)) / n);
   win.panes.forEach((p, i) => { const x = i * (w + SPLIT_GAP); p.setBounds({ x, y: 0, width: i === n - 1 ? width - x : w, height }); });
@@ -82,7 +84,7 @@ const frontPane = () => S.win && !S.win.isDestroyed() ? (S.win.panes.find((p) =>
 function createWindow() {
   const saved = db.setting('window'), front = S.windows.size ? S.win : null;
   const bounds = front && !front.isDestroyed() ? { ...front.getNormalBounds(), x: front.getNormalBounds().x + 24, y: front.getNormalBounds().y + 24 } : restoredBounds(saved, screen.getAllDisplays().map((d) => d.workArea));
-  const win = new BaseWindow({ ...bounds, title: 'Orbital', titleBarStyle: 'hiddenInset', backgroundColor: '#8e8e93' });
+  const win = new BaseWindow({ ...bounds, title: 'Orbital', titleBarStyle: 'hiddenInset', backgroundColor: SPLIT_LINE.light });
   win.panes = [];
   S.windows.add(win); S.win = win; S.pane = addPane(win).webContents;
   if (!front && saved && saved.maximized) win.maximize();
@@ -106,7 +108,7 @@ function createWindow() {
 // ⌥⌘N (issue #159): a second page beside the one that asked, opening where it was (the renderer stores its place
 // first), or back to one page, the one that asked.
 function toggleSplit(wc) {
-  const win = [...S.windows].find((w) => w.panes.some((p) => p.webContents === wc));
+  const win = paneWindow(wc);
   if (!win) return;
   if (win.panes.length > 1) { for (const p of win.panes) if (p.webContents !== wc) removePane(win, p); return; }
   const pane = addPane(win);
@@ -208,6 +210,10 @@ ipcMain.handle('icons:types', () => icons.typeIcons());
 // the menu shows ⌘N but leaves the key to the renderer's New window row (DEFAULT_HOTKEYS), so it can be re-recorded
 ipcMain.handle('window:new', () => { createWindow(); });
 ipcMain.handle('window:split', (e) => { toggleSplit(e.sender); });
+// ⌘\: the keys go to the other half of a split (nothing to do in a window with one page)
+ipcMain.handle('window:otherPane', (e) => { const other = paneWindow(e.sender)?.panes.find((p) => p.webContents !== e.sender); if (other) other.webContents.focus(); });
+// a page says which theme it drew itself in (renderer/theme.js), and the line between split pages follows it
+ipcMain.on('window:theme', (e, theme) => { const win = paneWindow(e.sender); if (win) win.setBackgroundColor(SPLIT_LINE[theme] || SPLIT_LINE.light); });
 // Demo mode lives in the outliner (renderer/state.js); main only needs to know it is on, so no banner shows a real title.
 ipcMain.on('app:demoMode', (_e, on) => { S.demo = on === true; });
 ipcMain.on('prefs:snapshot', (e) => { e.returnValue = settings.prefs(); });
