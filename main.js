@@ -113,7 +113,7 @@ function createMenu() {
       { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' },
       { type: 'separator' }, { role: 'quit' },
     ] },
-    { label: 'File', submenu: [{ label: 'New Window', accelerator: 'CmdOrCtrl+N', click: () => createWindow() }, { type: 'separator' }, { role: 'close' }] },
+    { label: 'File', submenu: [{ label: 'New Window', accelerator: 'CmdOrCtrl+N', registerAccelerator: false, click: () => createWindow() }, { type: 'separator' }, { role: 'close' }] },
     { role: 'editMenu' },
     { role: 'windowMenu' },
   ]));
@@ -169,6 +169,8 @@ ipcMain.handle('icons:search', (_e, query) => icons.searchIcons(query));
 ipcMain.handle('icons:types', () => icons.typeIcons());
 // The renderer's preferences, from the same store: a synchronous snapshot at load (preload reads it before the
 // first paint) and one write per change.
+// the menu shows ⌘N but leaves the key to the renderer's New window row (DEFAULT_HOTKEYS), so it can be re-recorded
+ipcMain.handle('window:new', () => { createWindow(); });
 ipcMain.on('prefs:snapshot', (e) => { e.returnValue = settings.prefs(); });
 ipcMain.handle('prefs:set', (_e, key, value) => settings.setPref(key, value));
 ipcMain.handle('openai:setKey', (_e, key) => {
