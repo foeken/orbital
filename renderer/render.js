@@ -732,8 +732,10 @@ function nodeEl(node, docId, parent) {
     check.type = 'checkbox'; check.className = 'check'; check.checked = !!display.done; check.tabIndex = -1;
     if (isTask(display) && display.stateType === 'proposed') check.classList.add('inbox'); // not accepted yet: a dashed box
     check.onmousedown = (e) => e.preventDefault();
-    check.disabled = target ? !canEditNode(display) : !canEditItem(item);
-    check.onclick = target && canEditNode(display) ? () => toggleReference(node) : canEditItem(item) ? () => (isTask(node) ? toggleDone(item) : toggleCheckbox(item)) : null;
+    // a read-only row can still carry a box that ticks (node.checkable: a task listed on the Timeline)
+    const ticks = canEditItem(item) || (!!node.checkable && isTask(node));
+    check.disabled = target ? !canEditNode(display) : !ticks;
+    check.onclick = target && canEditNode(display) ? () => toggleReference(node) : ticks ? () => (isTask(node) ? toggleDone(item) : toggleCheckbox(item)) : null;
     line.append(check);
   }
   const body = document.createElement('div'); body.className = 'body'; // text + meta + chips; only .text is editable

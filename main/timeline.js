@@ -135,7 +135,8 @@ async function rows() {
     else {
       const n = e.tasks.length;
       segments = [{ text: e.actor + ' added ' + (n === 1 ? 'a task' : n + ' tasks') + ' to your Inbox' }];
-      children = e.tasks.map((t) => ({ ...toNode(graphRow(t.node)), editable: false })); // each a task row, opening as one
+      // each a task row, opening as one: its words read-only here, its box ticking the task where you may tick it anywhere
+      children = e.tasks.map((t) => { const row = toNode(graphRow(t.node)); return { ...row, editable: false, checkable: row.editable !== false }; });
     }
     return { id: PAGE + ':' + e.kind + ':' + e.uri + ':' + e.at, text: segments.map((x) => x.text).join(''), segments,
       kind: 'block', block: 'bullet', icon: e.icon, editable: false, hasChildren: children.length > 0, children,
