@@ -17,7 +17,7 @@ const agent = require('./main/agent');
 const ai = require('./main/ai');
 const { NOT_CONNECTED, S, VIEWS, docStates, errText, idKind, isSearch, isSpace, metaSigs, pathCache, today, truncatedViews, redoStack, report, scheduleRefresh, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
 const { cachedNodeHue, graphRow, members, rememberNodeHue, rememberType, toNode } = require('./main/rows');
-const { accessContext, addTypeField, archivedTypes, chatOutline, codexIds, createDocument, creationOptions, creatorOf, defineField, discussWith, documentAction, history, info, linkShared, metaSig, moveBlock, moveTarget, mut, mutTasks, notifyOn, notifyState, referenceIn, setCodex, setField, setNotify, onChange, op, outlineWithReferences, sensitiveIds, setSensitive, setType, setTypeHue, typeCandidates, typeChoices, typeList } = require('./main/documents');
+const { accessContext, addTypeField, archivedTypes, chatOutline, codexIds, createDocument, creationOptions, creatorOf, defineField, discussWith, documentAction, followSummary, history, info, linkShared, metaSig, moveBlock, moveTarget, mut, mutTasks, notifyOn, notifyState, referenceIn, setCodex, setField, setNotify, onChange, op, outlineWithReferences, sensitiveIds, setSensitive, setType, setTypeHue, typeCandidates, typeChoices, typeList } = require('./main/documents');
 const { callOf, changesOf, pathOf, related, searchChildren, searchPreview, spaceChildren, summaryChanges, summaryUri, watchRelated } = require('./main/related');
 const { hiddenRules, inboxCount, listFilter, mcpHidden, preset, refresh, search, searchCreate, searchList, searchTitle, setHidden, setMcpHidden, setViewFilter, start, viewFilter, viewRows } = require('./main/views');
 const { nodePin, pinState, pinTree, pinned, pinnedDates, pinnedUris, setPin, todayNode, weekNode, weekTitle } = require('./main/pins');
@@ -455,7 +455,7 @@ ipcMain.handle('sync:login', async () => {
 if (process.env.TANA_MAIN_TEST) {
   module.exports = { resolveInitialAuth, graphRow, cachedNodeHue, rememberType, VIEWS, toNode, outlineWithReferences, chatOutline, op, onChange, documentAction, archivedTypes, createDocument, creationOptions, typeChoices, typeCandidates, setType, setTypeHue, discussWith, ai, icons, settings, search, viewFilter, searchCreate, searchTitle, viewRows, spaceChildren, start, refresh, related, watchRelated, callOf, weekTitle, weekNode,
     statusSnapshot: () => ({ ...S.status }), rememberNodeHue, restoredBounds, today,
-    undo: () => history(undoStack, redoStack, 'undo', 'canUndo'), redo: () => history(redoStack, undoStack, 'redo', 'canRedo'), visibleGraphNodes, pinTree, changesOf, summaryChanges,
+    undo: () => history(undoStack, redoStack, 'undo', 'canUndo'), redo: () => history(redoStack, undoStack, 'redo', 'canRedo'), visibleGraphNodes, pinTree, changesOf, summaryChanges, followSummary,
     nodePin,
     quickContext: quick.quickContext, quickCreate: quick.quickCreate, togglePanel: quick.togglePanel, registerShortcut: quick.registerShortcut, QUICK_ACCELERATOR: quick.ACCELERATOR,
     assignToAgent, // the one handoff both entry points use, so a check can drive the panel through the real path
@@ -476,10 +476,16 @@ if (process.env.TANA_MAIN_TEST) {
     // The dock belongs to main, the counting to main/views: the same split refresh already uses through S.refresh.
     S.badge = (count) => { try { app.setBadgeCount(Number(count) || 0); } catch { /* no badge on this platform */ } };
     // Showing a notification is electron's; deciding there should be one is main/documents'. Clicking it opens the node.
-    S.notify = (docId, title, body) => {
+    // An edit banner has one macOS identifier per node, so the 'summary' that follows it (Tana's sentence for the edit,
+    // main/documents.js followSummary) replaces it in place, silently — unless it was clicked, and so already seen.
+    const clickedEdits = new Set();
+    S.notify = (docId, title, body, kind) => {
       if (!Notification.isSupported || !Notification.isSupported()) return;
-      const note = new Notification({ title, body });
-      note.on('click', () => { if (S.win && !S.win.isDestroyed()) { S.win.show(); S.win.focus(); send('notify:open', docId); } });
+      const id = kind ? 'edit:' + docId : undefined; // undefined: a fresh random id, as before
+      if (kind === 'summary' && clickedEdits.has(id)) return;
+      if (kind === 'edit') clickedEdits.delete(id);
+      const note = new Notification({ id, title, body, silent: kind === 'summary' });
+      note.on('click', () => { if (id) clickedEdits.add(id); if (S.win && !S.win.isDestroyed()) { S.win.show(); S.win.focus(); send('notify:open', docId); } });
       note.show();
     };
     S.userData = app.getPath('userData');

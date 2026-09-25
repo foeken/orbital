@@ -2117,7 +2117,7 @@ async function main() {
         graph: { listNodes: async ({ nodeIds }) => ({ nodes: (nodeIds || []).filter((id) => creators.has(id)).map((id) => ({ id, createdBy: creators.get(id) })) }) },
         history: { listChanges: async ({ uri }) => ({ summaries: summaries.get(uri) || [] }) },
       } });
-    backend.S.notify = (id, title, body) => notified.push([id, title, body]);
+    backend.S.notify = (id, title, body, kind) => notified.push([id, title, body, kind]);
 
     // A task you made that nobody is assigned to: the case the rule is for.
     assert.equal((await backend.handlers.get('notify:state')(null, watched.id)).default, true,
@@ -2156,26 +2156,51 @@ async function main() {
     backend.onChange(watched.id, { origin: 'remote' });
     await settle();
     assert.equal(notified.length, 3, 'a change to the body alone is announced too');
-    assert.equal(notified.at(-1)[2], 'Added dependency on Finish reply document',
-      'and it says what the edit was, in the same words the sidebar\'s Changes section uses');
+    assert.deepEqual([notified.at(-1)[2], notified.at(-1)[3]], ['Edited', 'edit'],
+      'as an edit banner at once: Tana writes its sentence about an edit minutes later, and followSummary brings it in then');
     watched.transact((l) => l.getMap('content').set('rev', 2));
     backend.onChange(watched.id, { origin: 'remote' });
     await settle();
     assert.equal(notified.length, 3, 'and the rest of that burst is quiet: remote typing arrives op by op');
-    // A summary is written server-side, so the newest one the service has can still be an older window of edits;
-    // describing this change with last week's sentence would be worse than not describing it at all.
+    // What the edit was arrives later (issue #131): followSummary waits for a sentence Changes did not have at the
+    // time of the edit and replaces the banner with it. The waits are driven by hand here; the app waits 30 s each.
     const stale = new Document('tana:text:' + ulid());
     stale.transact((l) => initDocument(l, 'Old news', ME, { kind: 'task' }));
     setAssignees(stale, [], ME);
     docs.set(stale.id, stale); creators.set(stale.id, ME);
-    summaries.set(stale.id, [{ title: 'Added a heading', endTime: RECENT(60 * 60 * 1000) }]);
+    const older = { id: 's1', title: 'Added a heading', endTime: RECENT(60 * 60 * 1000) };
+    summaries.set(stale.id, [older]);
     backend.onChange(stale.id, { origin: 'remote' }); // baseline
     await settle();
     stale.transact((l) => l.getMap('content').set('rev', 1));
     backend.onChange(stale.id, { origin: 'remote' });
     await settle();
-    assert.deepEqual(notified.at(-1), [stale.id, 'Old news', 'Edited'],
-      'a summary too old to be this change is left out rather than announced as it');
+    assert.deepEqual(notified.at(-1), [stale.id, 'Old news', 'Edited', 'edit'],
+      'a summary already there before the edit is not announced as it');
+    const summaryFor = (id) => notified.filter((n) => n[0] === id && n[3] === 'summary');
+    let polls = 0;
+    await backend.followSummary(stale.id, 'Old news', async () => { polls++; });
+    assert.equal(summaryFor(stale.id).length, 0, 'with nothing new written, the banner keeps saying "Edited"');
+    assert.equal(polls, 16, 'and the follow-up gives up after its eight minutes');
+    polls = 0;
+    await backend.followSummary(stale.id, 'Old news', async () => {
+      if (++polls === 2) summaries.set(stale.id, [older,
+        { id: 's3', title: 'Renamed a heading', endTime: RECENT(5000) },
+        { id: 's2', title: 'news', description: 'Added the Q4 numbers from Rob', endTime: RECENT(1000) }]);
+    });
+    assert.deepEqual(summaryFor(stale.id).map((n) => n[2]), ['Added the Q4 numbers from Rob'],
+      'the newest new summary replaces it, in its description when its title only repeats the node\'s');
+    assert.equal(polls, 2, 'as soon as it is there');
+    // A newer edit banner takes the follow-up over: the older one never replaces what the newer one says.
+    let release;
+    const first = backend.followSummary(stale.id, 'Old news', () => new Promise((resolve) => { release = resolve; }));
+    await settle();
+    backend.followSummary(stale.id, 'Old news', () => new Promise(() => {})); // never waits out: it only takes over
+    await settle();
+    summaries.set(stale.id, [older, { id: 's4', title: 'Removed the budget line', endTime: RECENT(0) }]);
+    release();
+    await first;
+    assert.equal(summaryFor(stale.id).length, 1, 'a follow-up that was taken over says nothing');
     // A second node is announced from here on, so what this one said is counted rather than the whole list.
     const aboutWatched = () => notified.filter((n) => n[0] === watched.id).length;
     // Nothing moved at all — a re-imported snapshot after a resync — is not an edit either.
