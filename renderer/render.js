@@ -480,7 +480,8 @@ function renderFields(parent, force = false, el = $('fields')) {
   const active = document.activeElement, keep = active && active.classList && active.classList.contains('fchoice') && el.contains(active) ? active.dataset.key : null;
   const data = parent && parent.node.kind === 'document' ? relatedBy.get(parent.docId) : null;
   const fields = (data && data.fields) || [];
-  const defs = (data && data.definitions) || []; // a type's page: the fields it defines (renderer/fields.js)
+  // A type's page is the list of its instances; the fields it defines are shown only while ⌘K Edit fields is on (renderer/fields.js).
+  const defs = (data && editingType === parent.docId && data.definitions) || [];
   el.hidden = !fields.length && !defs.length;
   el.replaceChildren();
   for (const def of defs) el.append(definitionEl(parent, def));

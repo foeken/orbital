@@ -19,6 +19,7 @@ let palField = null;     // the field ⌘K was opened on
 let fieldReturn = null;  // the field to give the focus back to when the palette closes (it is no row: returnFocus cannot)
 let fieldLinkCtx = null; // the link field the search palette is picking for
 let fieldCtx = null, fieldPage = () => [], fieldBack = () => closePalette(), fieldKeys = null; // the open field page
+let editingType = null; // the type page whose field definitions are drawn under its title (renderer/render.js renderFields)
 function focusField(key) { const el = queryRow('.fchoice[data-key="' + CSS.escape(key) + '"]'); if (el) el.focus(); }
 
 // ---- the value: chips ----
@@ -170,6 +171,7 @@ function fieldRows(group) {
   // on a type (its row, or one of the fields it defines): one more field
   const typeUri = ctx && ctx.def ? ctx.typeUri : palDoc && /^tana:type:/.test(palDoc.id) ? palDoc.id : null;
   if (typeUri && tana.addField) rows.push({ id: 'addField', group, icon: 'createNew', label: 'Add field …', keepOpen: true, run: () => openFieldPage({ typeUri }, addFieldRows, 'Name the field', openCommandPalette) });
+  if (onTypePage() && typeUri === zoom.docId) rows.push({ id: 'editFields', group, icon: 'field', label: editingType === typeUri ? 'Done editing fields' : 'Edit fields', run: () => { editingType = editingType === typeUri ? null : typeUri; render(true); } });
   return rows;
 }
 function kindRows(q) {
