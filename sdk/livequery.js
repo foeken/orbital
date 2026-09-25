@@ -46,8 +46,10 @@ function statusOf(data) {
   if (!data.resultForVersion) return 'pending';
   return data.resultForVersion < data.queryVersion ? 'stale' : 'ready';
 }
-// What a row is for "did it change": the parts a trigger or a list redraw cares about.
-const rowSig = (row) => JSON.stringify([row.title, row.state && row.state.type, row.state && row.state.enteredAt, row.entityType, row.assignedTo, row.archivedAt]);
+// What a row is for "did it change": the parts a trigger or a list redraw cares about. updatedAt and the owner too:
+// a query used as a trigger (sdk/query.js liveTrigger) cannot say everything its list filters on, so an edit that
+// moves a row in or out of the list may change nothing else the row carries (PR #152 review).
+const rowSig = (row) => JSON.stringify([row.title, row.state && row.state.type, row.state && row.state.enteredAt, row.entityType, row.assignedTo, row.archivedAt, row.updatedAt, row.ownerUri]);
 
 // The edge types Tana's client knows (the EdgeType enum in shared-*.js); an edge query names them by number.
 const EDGE_TYPES = { LINKS_TO: 1, CREATED_IN: 2, BELONGS_TO: 3, ATTRIBUTE_LINKS_TO: 4, INSTANCE_OF: 5, ASSIGNED_TO: 6, SUBTASK_OF: 7, PART_OF_WORKFLOW: 8,
@@ -89,18 +91,21 @@ const edgeSig = (e) => JSON.stringify(e.properties || null);
 // Opens a live query and resolves once the server has taken it (subscribed; the result may still be pending).
 // The handle emits 'rows' with { added, removed, changed, initial } every time the answer moves — initial is the
 // first answer — and 'error' with an Error when the server refuses the query. state() reads it at any moment.
-async function openLiveQuery(sync, query = {}, { label = 'orbital' } = {}) {
+// onRows is attached before anything is read: a warm server answers inside the bootstrap, so the initial answer is
+// emitted before this resolves, and a listener added afterwards never heard it (PR #152 review).
+async function openLiveQuery(sync, query = {}, { label = 'orbital', onRows } = {}) {
   checkQuery(query); // before subscribing: a refused query must not leave a half-made document on the connection
-  return open(sync, 'nodes', (q) => writeQuery(q, query), { key: (row) => row.uri, sig: rowSig, gone: (uri) => uri }, label);
+  return open(sync, 'nodes', (q) => writeQuery(q, query), { key: (row) => row.uri, sig: rowSig, gone: (uri) => uri }, label, onRows);
 }
 // The same for edges: rows are edges, and removed carries the edges themselves (they have no uri to name them by).
-async function openEdgeQuery(sync, query = {}, { label = 'orbital' } = {}) {
+async function openEdgeQuery(sync, query = {}, { label = 'orbital', onRows } = {}) {
   checkEdgeQuery(query);
-  return open(sync, 'edges', (q) => writeEdgeQuery(q, query), { key: edgeKey, sig: edgeSig, gone: (key, row) => row }, label);
+  return open(sync, 'edges', (q) => writeEdgeQuery(q, query), { key: edgeKey, sig: edgeSig, gone: (key, row) => row }, label, onRows);
 }
-async function open(sync, queryType, write, { key, sig, gone }, label) {
+async function open(sync, queryType, write, { key, sig, gone }, label, onRows) {
   const id = 'tana:liveQuery:' + ulid();
   const handle = new EventEmitter();
+  if (onRows) handle.on('rows', onRows);
   let seen = null, failed = false; // key -> { sig, row }, null until the first answer
   const doc = await sync.subscribe(id, (loro) => {
     const data = loro.getMap('data');

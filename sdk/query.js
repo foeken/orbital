@@ -317,4 +317,15 @@ function searchQueryToFilter(query, me) {
   return f;
 }
 
-module.exports = { parseQuery, searchParams, needsTypes, viewParams, searchQueryParams, searchOwners, filterToSearchQuery, searchQueryToFilter, validViewFilter, VIEW_PRESETS, VIEW_KINDS, hideRules, isHidden, completedWindow, completedInWindow };
+// The live query that says when a saved search's answer may have moved (#148): its ListNodes params cut down to what
+// a live query can say (sdk/livequery.js LISTS), so it is a superset of the search. Text, owners, attributes, event
+// windows and visibility are left out, which costs a re-read that finds nothing new, never a change that is missed.
+// Newest change first, so whatever moves in scope reaches its head and is reported as added or changed.
+function liveTrigger(p) {
+  const q = { types: p.nodeTypes || [], orderBy: ['-updatedAt'], limit: 100 };
+  for (const [from, to] of [['entityTypes', 'entityTypeUris'], ['stateTypes', 'stateTypes'], ['assignedTo', 'assignedTo'], ['createdBy', 'createdBy'], ['hasParticipantUris', 'hasParticipantUris']]) if (p[from] && p[from].length) q[to] = p[from];
+  if (p.unassigned) q.unassigned = true;
+  return q;
+}
+
+module.exports = { liveTrigger, parseQuery, searchParams, needsTypes, viewParams, searchQueryParams, searchOwners, filterToSearchQuery, searchQueryToFilter, validViewFilter, VIEW_PRESETS, VIEW_KINDS, hideRules, isHidden, completedWindow, completedInWindow };

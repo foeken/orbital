@@ -47,6 +47,15 @@ const { openLiveQuery, openEdgeQuery, EDGE_TYPES } = require('../sdk/livequery')
   await live.close();
   assert.equal(unsubscribed, live.id);
 
+  // A warm server answers inside the bootstrap, before openLiveQuery resolves: onRows hears that first answer, and an
+  // edit that only moves updatedAt is a change, since a trigger query cannot see what else the edit touched.
+  const warmSync = { subscribe: async (id, init) => { doc = new Document(id); doc.transact(init); answer([{ ...task('w', 'open'), updatedAt: 1 }]); return doc; }, unsubscribe: async () => {} };
+  const heard = [];
+  const warm = await openLiveQuery(warmSync, { types: ['text'] }, { onRows: (e) => heard.push([e.initial, e.added.length, e.changed.length]) });
+  answer([{ ...task('w', 'open'), updatedAt: 2 }], 2);
+  assert.deepEqual(heard, [[true, 1, 0], [false, 0, 1]], 'the warm first answer is heard, and an updatedAt move is a change');
+  await warm.close();
+
   // Edges: the same document with queryType 'edges', a subject/predicate/object query, and edges for rows.
   const page = 'tana:text:01m22jrbja1xvgqp9zmnk8fk7c', field = 'tana:type:01m1kr1x38pzszdrgb7f2m2rqx?attribute=aya3gqzt';
   const edges = await openEdgeQuery(sync, { object: { uris: [page] }, predicate: { edgeTypes: [EDGE_TYPES.LINKS_TO, EDGE_TYPES.ATTRIBUTE_LINKS_TO] } }, { label: 'backlinks' });

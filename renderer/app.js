@@ -124,5 +124,8 @@ loadRoots().then(render, showError).then(restorePlace).then(loadFilters);
 // as "the saved search you chose is gone" and wrote the Library over the stored choice on every launch.
 function loadSearches() { if (tana.searches) tana.searches().then((answer) => { const list = answer || [], ids = new Set(list.map((s) => s.id)); searches = [...searches.filter((s) => s.added && !ids.has(s.id)), ...list]; searchesLoaded = connected; repairHome(); renderSoon(); }, () => {}); }
 loadSearches();
+// What a Codex task is doing is Codex's, not Tana's, so no live query carries it: read every 30 s, as it was when the
+// refresh loop still ran that often (main.js), and only while something is handed to the agent at all.
+setInterval(() => { if (codexIds.size) loadAgentStates(); }, 30000);
 if (tana.mcpHidden) tana.mcpHidden().then((on) => { mcpHidden = !!on; }, () => {}); // Cmd+K only: the rows themselves are filtered in main
 tana.status().then(showStatus, showError);

@@ -12,7 +12,7 @@ const { createTransport, SyncConnection, Document, derivePeerId, readNode, setTi
 const outline = require('../sdk/content');
 const { fetchImage, uploadFile, initImage, UPLOAD_LIMIT } = require('../sdk/assets');
 const { LoroMap, LoroList, LoroText } = require('loro-crdt');
-const { parseQuery, searchParams, needsTypes, viewParams, searchQueryParams, filterToSearchQuery, searchQueryToFilter, validViewFilter, VIEW_PRESETS, hideRules, isHidden, completedInWindow, completedWindow } = require('../sdk/query');
+const { liveTrigger, parseQuery, searchParams, needsTypes, viewParams, searchQueryParams, filterToSearchQuery, searchQueryToFilter, validViewFilter, VIEW_PRESETS, hideRules, isHidden, completedInWindow, completedWindow } = require('../sdk/query');
 const pins = require('../sdk/pins');
 
 const ORG = 'org_01EXAMPLE00000000000000000', DOC = 'tana:text:01exampleh0000000000000000', ME = 'tana:user-profile:01examplei0000000000000000';
@@ -2907,9 +2907,11 @@ async function main() {
     } });
     const listed = await backend.handlers.get('view:list')(null, 'library', { types: ['tasks', 'docs'], states: null, assignee: 'anyone' });
     assert.equal(listed.nodes.length, rows.length, 'every row is still listed, cached and drawn');
-    assert.equal(subscribedIds.length, LIVE_ROWS, 'but only the head of the list is subscribed');
+    // the view's own live query is a subscription too (watchViews, #148); the rows are what this counts
+    assert.equal(subscribedIds.filter((id) => !id.startsWith('tana:liveQuery:')).length, LIVE_ROWS, 'but only the head of the list is subscribed');
+    assert.equal(subscribedIds.filter((id) => id.startsWith('tana:liveQuery:')).length, 1, 'and the view gets its live query as it is read');
     assert.deepEqual([subscribedIds.includes(rows[0].id), subscribedIds.includes(rows.at(-1).id)], [true, false],
-      'the rows at the top are the live ones; the tail rides the 30 s refresh like the rest of the list');
+      'the rows at the top are the live ones; the tail rides the next refresh like the rest of the list');
     // And the cap is a set the sweep agrees with: a row that drops out of the head is let go on the next list.
     rows.unshift({ id: 'tana:text:' + ulid(), title: 'Newest', updateTime: '2026-09-14T10:00:00Z' });
     const pushedOut = rows[LIVE_ROWS].id;
@@ -3190,6 +3192,10 @@ async function main() {
     assert.equal(validViewFilter({ types: ['tana:type:nope'] }), false, 'only a real type uri joins the kinds');
     assert.deepEqual(filterToSearchQuery({ ...VIEW_PRESETS.library, types: [RISK] }, ME), { entityTypeUris: [RISK] }, 'a saved search stores it the way Tana does, without the task filters');
     assert.deepEqual(searchQueryToFilter({ entityTypeUris: [RISK] }, ME).types, [RISK], 'and reads it back into the pill');
+    // #148: the live query that re-reads an open saved search covers what it lists: kinds, type, state and assignee
+    // carried over, text and owners dropped (a live query cannot say them), newest change first.
+    assert.deepEqual(liveTrigger(searchQueryParams({ types: ['text'], entityTypeUris: [RISK], stateTypes: ['open'], assignedToViewer: true, textQuery: 'db', ownerUris: ['tana:space:01jspace000000000000000000'] }, ME)),
+      { types: ['text'], orderBy: ['-updatedAt'], limit: 100, entityTypeUris: [RISK], stateTypes: ['open'], assignedTo: [ME] });
     assert.equal(viewParams({ types: ['docs'], text: ' dpa ' }, ME, 25).textQuery, 'dpa');
     assert.equal(viewParams({ types: ['docs'], text: ' dpa ' }, ME, 25).limit, 25);
     assert.equal(validViewFilter({ types: ['docs'], states: null, assignee: 'anyone', text: '', participant: null, window: null }), true);
