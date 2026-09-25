@@ -5,7 +5,7 @@
 // while it is newer than your last visit. Opening a row (a click, Enter, Space) goes to the node it is about. The page
 // is read afresh on every arrival (renderer/edit.js): main rebuilds it from Tana rather than keeping a history.
 const TIMELINE_PAGE = 'orbital:timeline';
-extra.set(TIMELINE_PAGE, { id: TIMELINE_PAGE, text: 'Timeline', title: 'Timeline', kind: 'document', icon: 'updated', editable: false, hasChildren: true, appPage: true });
+extra.set(TIMELINE_PAGE, { id: TIMELINE_PAGE, text: 'Timeline', title: 'Timeline', kind: 'document', icon: 'timeline', editable: false, hasChildren: true, appPage: true });
 function openTimeline(node) {
   const uri = node.timeline && node.timeline.uri;
   if (!uri) return;
@@ -13,7 +13,7 @@ function openTimeline(node) {
   else if (tana.nodeLink && tana.openExternal) run(async () => tana.openExternal(await tana.nodeLink(uri)));
 }
 function timelineViewRow() {
-  return { id: 'timeline', group: 'Views', icon: 'updated', label: 'Timeline', run: () => goTo(TIMELINE_PAGE) };
+  return { id: 'timeline', group: 'Views', icon: 'timeline', label: 'Timeline', run: () => goTo(TIMELINE_PAGE) };
 }
 // Sections by local day: Today, Yesterday, then the date. Folded for as long as the window is open, like a group.
 const timelineFolded = new Set();

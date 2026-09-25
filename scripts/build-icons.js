@@ -58,6 +58,8 @@ WANT.userAlert = path.join(__dirname, '..', 'build', 'icons', 'user-alert.svg');
 WANT.proposals = path.join(__dirname, '..', 'build', 'icons', 'file-sparkle.svg');
 WANT.approve = path.join(__dirname, '..', 'build', 'icons', 'circle-check.svg');
 WANT.reject = path.join(__dirname, '..', 'build', 'icons', 'circle-xmark.svg');
+// The Timeline page (renderer/timeline.js), Nucleo UI 18px outline
+WANT.timeline = path.join(__dirname, '..', 'build', 'icons', 'timeline-vertical.svg');
 // Cmd+K rows for the keys the outline answers to
 for (const [name, file] of [['expand', 'v-shaped-arrow-down'], ['collapse', 'v-shaped-arrow-up'], ['undo', 'undo'], ['redo', 'redo'], ['textLarger', 'text-size-increase'], ['textSmaller', 'text-size-decrease'], ['textReset', 'text'], ['rail', 'sidebar-right-4'], ['railShow', 'sidebar-right-show'], ['railHide', 'sidebar-right-hide'], ['back', 'arrow-left'], ['forward', 'arrow-right'], ['zoomIn', 'magnifier-3'], ['search', 'file-search'], ['filter', 'filter-2']]) WANT[name] = path.join(__dirname, '..', 'build', 'icons', file + '.svg');
 const out = {};
