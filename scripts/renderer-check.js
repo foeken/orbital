@@ -187,6 +187,7 @@ assert.match(source, /blockSelection\(keys, true, 'Move'\)/, 'while moving it st
 assert.match(source, /tana\.setStateMany\(ctx\.docs\.map\(\(doc\) => doc\.id\), state\)/);
 assert.match(source, /tana\.setAssigneesMany\(ctx\.docs\.map\(\(doc\) => doc\.id\), uris\)/);
 assert.match(source, /const rows = \[\.\.\.selection\];/, 'what acts on the selection comes before everything else in Cmd+K');
+assert.match(source, /id: 'sendToAgent'[\s\S]*?tana\.openExternal\('https:\/\/chatgpt\.com\/codex\/open-app\?q=' \+ encodeURIComponent\(link \+ '\\n'\)\)/, 'Send to agent opens a new Codex thread with the current node link and a trailing newline');
 // the current document's own actions (pins, link, icon, visibility, location) follow under the same heading, before the views
 assert.ok(source.indexOf("const docGroup = selection.length && selection[0].group === 'Selection' ? 'Actions' : 'Current node';") < source.indexOf("const viewRows = views.map((s) => ({ id: 'view:'"), 'the document actions join the Current node group ahead of the views');
 assert.match(source, /if \(tana\.onRemoved\) tana\.onRemoved\(removeStale\);/);
