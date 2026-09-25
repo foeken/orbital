@@ -480,12 +480,12 @@ if (process.env.TANA_MAIN_TEST) {
     // An edit banner has one macOS identifier per node, so the 'summary' that follows it (Tana's sentence for the edit,
     // main/documents.js followSummary) replaces it in place, silently — unless it was clicked, and so already seen.
     const clickedEdits = new Set();
-    S.notify = (docId, title, body, kind) => {
+    S.notify = (docId, title, body, kind, subtitle) => { // subtitle: macOS's line between title and body (what an edit changed)
       if (!Notification.isSupported || !Notification.isSupported()) return;
       const id = kind ? 'edit:' + docId : undefined; // undefined: a fresh random id, as before
       if (kind === 'summary' && clickedEdits.has(id)) return;
       if (kind === 'edit') clickedEdits.delete(id);
-      const note = new Notification({ id, title, body, silent: kind === 'summary' });
+      const note = new Notification({ id, title, subtitle, body, silent: kind === 'summary' });
       note.on('click', () => { if (id) clickedEdits.add(id); if (S.win && !S.win.isDestroyed()) { S.win.show(); S.win.focus(); send('notify:open', docId); } });
       note.show();
     };

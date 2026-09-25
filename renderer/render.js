@@ -777,6 +777,8 @@ function nodeEl(node, docId, parent) {
   } else if (!taskInfo) observeMeta(el, display); // "Lives in" reads the same answer, so the fetch still goes out
   if (displayOn('type')) appendTags(body, display);
   // when it was made, when it last moved and where it lives, as one grey line under the title (renderer/views.js)
+  // what a Timeline edit put there (renderer/timeline.js): Tana's longer words, quoted between the headline and who did it
+  if (node.timeline && node.timeline.detail) { const q = document.createElement('div'); q.className = 'tl-detail'; q.textContent = node.timeline.detail; body.append(q); }
   const subText = subtextOf(display, taskInfo);
   if (subText) {
     const sub = document.createElement('div');

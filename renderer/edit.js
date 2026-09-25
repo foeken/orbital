@@ -306,9 +306,12 @@ const navPlace = () => ({ view, zoom: zoom && { ...zoom }, key: JSON.stringify([
 // The place to reopen at the next launch: the document, the node, and the document's own title and glyph — enough
 // for the next launch to draw the page before anything is fetched. The crumb trail (zoom.via) rebuilds itself from
 // tana.path, and naming its documents would mean fetching each one. A draft id means nothing after a restart.
+// A page of the app's own (Notifications, Proposals, Timeline) is a place too: its id is orbital:…, never a Tana id,
+// and a reload has to land back on it rather than on whatever was stored before it.
+const isPlaceId = (id) => isRealId(id) || String(id || '').startsWith('orbital:');
 function rememberPlace() {
   const doc = zoom ? docOf(zoom.docId) : null; // a row the app does not have simply stores no title: the next launch opens on the view, as before
-  if (zoom && isRealId(zoom.docId)) localStorage.setItem('place', JSON.stringify({ docId: zoom.docId, nodeId: zoom.nodeId || null, from: zoom.from, title: doc ? doc.text : undefined, icon: doc ? doc.icon : undefined }));
+  if (zoom && isPlaceId(zoom.docId)) localStorage.setItem('place', JSON.stringify({ docId: zoom.docId, nodeId: zoom.nodeId || null, from: zoom.from, title: doc ? doc.text : undefined, icon: doc ? doc.icon : undefined }));
   else localStorage.removeItem('place');
 }
 function noteNavigation() {
@@ -386,14 +389,14 @@ if (!savedPlace && isRealId(home)) savedPlace = { docId: home, nodeId: null };
 // title and glyph are enough for the header, and the rows say Loading… until there is a connection to ask. Only
 // with a title: a Home search that has never been drawn has no name to show, so that one still opens on the view.
 // restorePlace reads the real node over this stub the moment it can.
-if (savedPlace && isRealId(savedPlace.docId) && savedPlace.title != null) {
+if (savedPlace && isPlaceId(savedPlace.docId) && savedPlace.title != null) {
   extra.set(savedPlace.docId, asDoc({ id: savedPlace.docId, title: savedPlace.title, icon: savedPlace.icon }));
   zoom = { docId: savedPlace.docId, nodeId: savedPlace.nodeId || null, from: savedPlace.from };
 }
 async function restorePlace() {
   const saved = savedPlace;
   // Somewhere else already — a link, a notification — wins. The page seeded above is this same place, so it does not.
-  if (!saved || !isRealId(saved.docId) || (zoom && zoom.docId !== saved.docId)) { savedPlace = null; return; }
+  if (!saved || !isPlaceId(saved.docId) || (zoom && zoom.docId !== saved.docId)) { savedPlace = null; return; }
   // Boot draws the cached roots before the sync client exists, so reopening the page now would ask for its children
   // with nothing to ask — "not connected to Tana" from outline:children. The place is kept rather than spent, and
   // app.js runs this again the moment the connection comes up.
@@ -401,7 +404,7 @@ async function restorePlace() {
   savedPlace = null; // one restore per launch
   // extra is not proof any more: the seeded page is a stub with a title and nothing else — no state, no tags, no
   // editability — so a document no view lists is read for real here whether or not the stub is sitting in it.
-  if (!allDocs().some((d) => d.id === saved.docId)) {
+  if (!allDocs().some((d) => d.id === saved.docId) && !extra.get(saved.docId)?.appPage) { // an app page is known from load: nothing to fetch
     const before = navPlace().key;
     try { const n = await tana.node(saved.docId); extra.set(saved.docId, { ...n, text: n.title || '', hasChildren: true }); }
     // Deleted, or no longer yours: the stub is taken down again and the launch lands on the view, as it used to.

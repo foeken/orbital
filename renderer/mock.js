@@ -170,7 +170,7 @@ function mockApi() {
     event('group1', 0.1, 'new', undefined, [{ text: 'An AI agent added 3 tasks to your Inbox' }], null, true, null, [tlTask(docs[1]), tlTask(docs[3]), tlTask(docs[4])]),
     event('done1', 1, 'done', 'apply', [bold('Completed: '), { text: docs[2].text, marks: { strike: true } }], 'Priya Raman', true, docs[2].id),
     event('start1', 1.1, 'started', 'status', [bold('Started: '), { text: docs[5].text }], 'Tomas Ilves', false, docs[5].id),
-    event('edit1', 1.3, 'edit', 'updated', [bold('Added a description with the Christmas activities Nadia proposed')], 'Sam Okafor · ' + docs[0].text, false, docs[0].id),
+    { ...event('edit1', 1.3, 'edit', 'updated', [bold('Description added for Christmas activities proposed by Nadia')], 'Sam Okafor · ' + docs[0].text, false, docs[0].id), timeline: { uri: docs[0].id, note: 'Sam Okafor · ' + docs[0].text, tone: 'edit', detail: 'Nadia proposed extending Healthcare\'s Christmas activities, such as karaoke and games, across Nedap to replace separate business unit programmes.' } },
     event('edit2', 2, 'edit', 'updated', [bold('Changed the deadline from Friday to Wednesday')], 'Priya Raman · ' + docs[6].text, false, docs[6].id),
     event('group2', 2.4, 'new', undefined, [{ text: 'Tomas Ilves added a task to your Inbox' }], null, false, docs[7].id, [tlTask(docs[7])]),
     event('done2', 26, 'done', 'apply', [bold('Completed: '), { text: docs[0].text, marks: { strike: true } }], 'Sam Okafor · Task completed and a note added about the deadline', false, docs[0].id),

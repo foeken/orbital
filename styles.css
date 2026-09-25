@@ -361,10 +361,13 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .node.tl > .line > .chev { width: 0; }
 .node.tl > .line > .body > .meta { position: absolute; left: 34px; top: 9px; margin: 0; line-height: 24px; font-variant-numeric: tabular-nums; }
 .node.tl > .line > .bullet { position: relative; z-index: 1; }
+.node.tl > .line > .body { margin-left: 11px; } /* room between the rail and what happened: 16px with the body padding */
+.tl-detail { margin: 6px 0 4px; padding: 6px 12px; max-width: 640px; border-left: 3px solid #dcdcdc; border-radius: 0 6px 6px 0; background: #f6f6f6; color: #555; font-size: 15px; line-height: 21px; }
+[data-theme="dark"] .tl-detail { border-left-color: #45484b; background: #242628; color: #b4b6b8; }
 .node.tl-done > .line > .bullet, .node.tl-edit > .line > .bullet { width: 20px; height: 20px; margin: 2px 0 0 -1px; border-radius: 50%; background: #5a9670; }
 .node.tl-edit > .line > .bullet { background: #5d6166; }
 .node.tl-done > .line > .bullet.icon svg, .node.tl-edit > .line > .bullet.icon svg { color: #fff; width: 12px; height: 12px; left: 4px; top: 4px; }
-.node.tl-started > .line > .bullet, .node.tl-quiet > .line > .bullet { width: 14px; height: 14px; margin: 5px 2px 0 2px; border-radius: 50%; border: 1.5px solid #5b83b8; background: #fff; box-sizing: border-box; }
+.node.tl-started > .line > .bullet, .node.tl-quiet > .line > .bullet { width: 14px; height: 14px; margin: 5px 3px 0 2px; border-radius: 50%; border: 1.5px solid #5b83b8; background: #fff; box-sizing: border-box; }
 .node.tl-quiet > .line > .bullet { border-color: #b5b5b5; }
 .node.tl-started > .line > .bullet svg, .node.tl-quiet > .line > .bullet svg { display: none; }
 .node.tl-new > .line > .bullet::before, .node.tl-new > .line > .bullet:hover::before { background: #fff; border: 1.5px solid #c4c4c4; box-sizing: border-box; width: 9px; height: 9px; left: 5px; top: 8px; box-shadow: none; }
@@ -372,11 +375,12 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .node.tl-done > .line .text s, .node.tl-done > .line .text del { color: #8a8a8a; }
 .node.tl > .line > .body > .subtext { margin-top: 2px; }
 /* a group's tasks hang under its words, box first; their type glyph adds nothing here (block + t-bullet: the list rule it overrides) */
-.node.block.t-bullet.tl > .children { margin-left: 113px; border-left: 0; }
+.node.block.t-bullet.tl > .children { margin-left: 148px; border-left: 0; } /* a step in from the entry's words */
 .node.tl > .children .node > .line { padding: 1px 0; }
 .node.tl > .children .node > .line > .chev { width: 0; }
 .node.tl > .children .node > .line > .bullet { display: none; }
 .node.tl > .children .text { color: #8a8a8a; font-size: 15px; }
+.node.tl > .children .meta { display: none; } /* assigned to you and private: true of every one, so said by none */
 .node.tl.unread > .line::after { content: ''; position: absolute; left: 88px; top: 19px; width: 6px; height: 6px; border-radius: 50%; background: #0090ff; }
 [data-theme="dark"] .node.tl::before { border-left-color: #34373a; }
 [data-theme="dark"] .node.tl-started > .line > .bullet, [data-theme="dark"] .node.tl-quiet > .line > .bullet { background: #1b1d1e; }

@@ -4083,7 +4083,7 @@ function runSearchPillsCheck() {
 // a bullet, a mention, a crumb, a search, a pin — is remembered the same way; boot puts it back once the views load.
 async function runRestorePlaceCheck() {
   // The boot seed (renderer/edit.js), driven as it ships: the page drawn from the stored title before the first paint.
-  const seed = source.match(/if \(savedPlace && isRealId\(savedPlace\.docId\)[\s\S]*?\n\}/);
+  const seed = source.match(/if \(savedPlace && isPlaceId\(savedPlace\.docId\)[\s\S]*?\n\}/);
   assert.ok(seed, 'a launch draws the page it is reopening before anything is fetched');
   const api = vm.runInNewContext(`
     let view = 'inbox', zoom = null, rendered = 0, fetches = 0, nodeResolve = null, nodeMode = 'auto', docs = [], savedPlace = null, connected = true;
@@ -4120,6 +4120,7 @@ async function runRestorePlaceCheck() {
       fail: () => { nodeMode = 'fail'; },
       park: () => { nodeMode = 'park'; },
       offline: () => { connected = false; }, online: () => { connected = true; },
+      appPage: (id, title) => { extra.set(id, { id, text: title, title, kind: 'document', hasChildren: true, appPage: true }); }, // renderer/timeline.js and friends, at load
       start: () => restorePlace(),
       settle: () => nodeResolve && nodeResolve(),
       goto: (v, z) => { view = v; zoom = z; },
@@ -4151,6 +4152,16 @@ async function runRestorePlaceCheck() {
   await api.start();
   assert.deepEqual(plain(api.page()), { docId: 'tana:text:far', title: 'Fetched', icon: null },
     'then the real node is read over the stub — the stub is a title, not a document, so extra holding one proves nothing');
+
+  // A page of the app's own (Timeline, Notifications, Proposals) is a place too: Cmd+R on it used to land somewhere else,
+  // because only a tana: id was remembered. It is known from load, so it reopens without asking Tana for anything.
+  api.reset(); api.seed([]); api.appPage('orbital:timeline', 'Timeline');
+  assert.equal(JSON.parse(api.remember({ docId: 'orbital:timeline', nodeId: null })).docId, 'orbital:timeline', 'an app page is remembered as the place to reopen');
+  api.store(api.remember({ docId: 'orbital:timeline', nodeId: null }));
+  api.seedPlace();
+  api.appPage('orbital:timeline', 'Timeline'); // in load order: edit.js seeds the stub, renderer/timeline.js then puts its page in its place
+  await api.start();
+  assert.deepEqual(plain([api.state().docId, api.state().fetches]), ['orbital:timeline', 0], 'and a reload lands back on it, with nothing fetched for a page Tana does not have');
 
   api.reset(); api.seed([]); api.fail();
   api.store(JSON.stringify({ docId: 'tana:text:gone', nodeId: null, title: 'Deleted since' }));

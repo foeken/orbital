@@ -2117,7 +2117,7 @@ async function main() {
         graph: { listNodes: async ({ nodeIds }) => ({ nodes: (nodeIds || []).filter((id) => creators.has(id)).map((id) => ({ id, createdBy: creators.get(id) })) }) },
         history: { listChanges: async ({ uri }) => ({ summaries: summaries.get(uri) || [] }) },
       } });
-    backend.S.notify = (id, title, body, kind) => notified.push([id, title, body, kind]);
+    backend.S.notify = (id, title, body, kind, subtitle) => notified.push([id, title, body, kind, subtitle]);
 
     // A task you made that nobody is assigned to: the case the rule is for.
     assert.equal((await backend.handlers.get('notify:state')(null, watched.id)).default, true,
@@ -2175,7 +2175,7 @@ async function main() {
     stale.transact((l) => l.getMap('content').set('rev', 1));
     backend.onChange(stale.id, { origin: 'remote' });
     await settle();
-    assert.deepEqual(notified.at(-1), [stale.id, 'Old news', 'Edited', 'edit'],
+    assert.deepEqual(notified.at(-1).slice(0, 4), [stale.id, 'Old news', 'Edited', 'edit'],
       'a summary already there before the edit is not announced as it');
     const summaryFor = (id) => notified.filter((n) => n[0] === id && n[3] === 'summary');
     let polls = 0;
@@ -2201,6 +2201,12 @@ async function main() {
     release();
     await first;
     assert.equal(summaryFor(stale.id).length, 1, 'a follow-up that was taken over says nothing');
+    // A summary with a title and a longer description: what changed as the subtitle, Tana's words for it as the body
+    await backend.followSummary(stale.id, 'Old news', async () => {
+      summaries.set(stale.id, [older, { id: 's5', title: 'Added a document link', description: 'A link to the Risk Register document on Slite was appended to the task.', endTime: RECENT(0) }]);
+    });
+    assert.deepEqual(summaryFor(stale.id).at(-1).slice(2), ['A link to the Risk Register document on Slite was appended to the task.', 'summary', 'Added a document link'],
+      'the banner says what changed and then what it was, as the Timeline does');
     // A second node is announced from here on, so what this one said is counted rather than the whole list.
     const aboutWatched = () => notified.filter((n) => n[0] === watched.id).length;
     // Nothing moved at all — a re-imported snapshot after a resync — is not an edit either.

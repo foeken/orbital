@@ -39,6 +39,9 @@ function statusOf(text) {
 }
 // A status summary's own words, when they say more than the move ("Task completed and assessment details added")
 const beyondStatus = (text) => (/ and /i.test(text) ? text : null);
+// What an edit put there, in Tana's longer words ("Nadia proposed extending Healthcare's Christmas activities, such as
+// karaoke and games, across Nedap …"): the summary's description, when it says more than its title
+const detailOf = (s, headline) => { const d = typeof s.description === 'string' ? s.description.trim() : ''; return d && d !== headline ? d : null; };
 const andList = (xs) => (xs.length > 1 ? xs.slice(0, -1).join(', ') + ' and ' + xs.at(-1) : xs[0]);
 const DAYS = 14, AT_ONCE = 12, TASKS = 50;
 // A summary's title only repeating the node's says nothing (followSummary makes the same call): its description then.
@@ -81,7 +84,7 @@ async function rows() {
       if (state && latest && latest.state === state && Math.abs(latest.at - at) < 15 * 6e4) continue; // the same move, already told from the node
       events.push(state
         ? { kind: 'status', uri: n.id, title: n.title, at, actor: who(others), verb: VERB[state], icon: ICON[state], tone: TONE[state], note: beyondStatus(text) }
-        : { kind: 'edit', uri: n.id, title: n.title, at, actor: who(others), icon: 'updated', tone: 'edit', change: text });
+        : { kind: 'edit', uri: n.id, title: n.title, at, actor: who(others), icon: 'updated', tone: 'edit', change: text, detail: detailOf(s, text) });
     }
   });
   // Inbox: the newest tasks assigned to you, whatever state they are in now, and the chat each was created in
@@ -111,8 +114,8 @@ async function rows() {
   }
   return merged.map((e) => {
     const title = e.title || 'Untitled';
-    let segments, note = null, children = [];
-    if (e.kind === 'edit') { segments = [{ text: e.change, marks: { bold: true } }]; note = e.actor + ' · ' + title; }
+    let segments, note = null, detail = null, children = [];
+    if (e.kind === 'edit') { segments = [{ text: e.change, marks: { bold: true } }]; note = e.actor + ' · ' + title; detail = e.detail || null; }
     else if (e.kind === 'status') { segments = [{ text: e.verb + ': ', marks: { bold: true } }, { text: title, marks: e.tone === 'done' ? { strike: true } : {} }]; note = e.actor + (e.note ? ' · ' + e.note : ''); }
     else {
       const n = e.tasks.length;
@@ -123,7 +126,7 @@ async function rows() {
       kind: 'block', block: 'bullet', icon: e.icon, editable: false, hasChildren: children.length > 0, children,
       createdAt: iso(e.at), unread: (e.tasks || [e]).some((t) => t.at > seen),
       // a group has no one node to open: its tasks open themselves
-      timeline: { uri: e.kind === 'inbox' && e.tasks.length > 1 ? null : e.uri, note, tone: e.tone } };
+      timeline: { uri: e.kind === 'inbox' && e.tasks.length > 1 ? null : e.uri, note, detail, tone: e.tone } };
   });
 }
 
