@@ -659,7 +659,7 @@ function codexHeader() {
 // so there is nothing to keep in step while it is not showing, and the focus goes back to the row it came from.
 // The picture is whatever the row already has (the same cache), so opening one costs no fetch.
 function openImage(node) {
-  if (document.querySelector('.lightbox')) return;
+  if (demoMode || document.querySelector('.lightbox')) return; // demo mode shows no picture, and the cache may still hold one
   const uri = node.image.uri, from = document.activeElement;
   const box = document.createElement('div'); box.className = 'lightbox'; box.tabIndex = -1;
   const img = document.createElement('img');
@@ -746,12 +746,13 @@ function nodeEl(node, docId, parent) {
   if (isImage(node)) { // focusable, not editable: keeps its place in texts() so Up/Down/Backspace work like any block
     text.classList.add('image'); text.tabIndex = -1;
     const img = document.createElement('img'), { uri, alt, width, height } = node.image;
-    if (alt) img.alt = img.title = demoText(alt, display.id);
-    else imageTitle(uri).then((t) => { if (t) img.alt = img.title = demoText(t, display.id); }); // Tana's AI title, once it has written one
+    if (demoMode) text.classList.add('loading', 'demo'); // demo mode: the picture's place as the grey box a loading one shows, never its pixels or its words
+    else if (alt) img.alt = img.title = alt;
+    else imageTitle(uri).then((t) => { if (t) img.alt = img.title = t; }); // Tana's AI title, once it has written one
     if (width && height) { img.width = width; img.height = height; }
     const show = (url) => { images.set(uri, url); img.src = url; text.classList.remove('loading'); if (images.size > 200) images.delete(images.keys().next().value); }; // oldest out: main keeps the file cache
     const cached = images.get(uri);
-    if (typeof cached === 'string') img.src = cached;
+    if (demoMode) { /* nothing fetched, nothing shown */ } else if (typeof cached === 'string') img.src = cached;
     else { text.classList.add('loading'); (cached || images.set(uri, tana.image(uri)).get(uri)).then(show, (e) => { images.delete(uri); showError(e); }); }
     img.onclick = (e) => { e.stopPropagation(); openImage(node); }; // the row is not text to put a caret in: a click is a look at the picture
     text.append(img);
@@ -772,7 +773,7 @@ function nodeEl(node, docId, parent) {
     text.classList.toggle('chiponly', chipOnly(text));
   }
   body.append(text);
-  const metaText = node.notification ? agoText(node.createdAt) : node.timeline ? node.timeline.time || timelineTime(node.createdAt) : node.proposal ? agoText(node.proposal.proposedAt) : display.meta; // a notification says when it came in, a proposal when it was made
+  const metaText = node.notification ? agoText(node.createdAt) : node.timeline ? node.timeline.time || timelineTime(node.createdAt) : node.proposal ? agoText(node.proposal.proposedAt) : demoMeta(display, display.meta); // a notification says when it came in, a proposal when it was made
   if (metaText) { const m = document.createElement('span'); m.className = 'meta'; m.textContent = metaText; body.append(m); }
   // every row describes who can see it, not only task rows; the fetch waits until the row is on screen
   const taskInfo = taskSummary(display, true) || documentSummary(display, true);

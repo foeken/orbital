@@ -83,11 +83,12 @@ function chatRows(messages, { authorName = () => undefined, aiName = 'Tana AI' }
     if (!m || m.hiddenFromChat || m.type === 'context' || (m.isStatusUpdate && !accepted(m))) return;
     if (m.fromUserType === 'human' && m.isAIInterviewRelay) return;
     const ai = m.fromUserType === 'ai', id = 'm' + i, children = [];
-    if (list(m.toolCalls).length) children.push(row(id + '.t', thinking(m, list(m.toolCalls))));
+    // keep/person mark the app's own words and a name for demo mode (renderer/segments.js); the conversation is content
+    if (list(m.toolCalls).length) { const line = thinking(m, list(m.toolCalls)); children.push(row(id + '.t', line, { segments: [{ text: line, keep: true }] })); }
     const status = Object.hasOwn(MESSAGE_STATUS, m.status) ? MESSAGE_STATUS[m.status] : undefined;
     if (status) {
-      const text = status + (typeof m.errorMessage === 'string' && m.errorMessage.trim() ? ': ' + m.errorMessage : '');
-      children.push(row(id + '.status', text, { segments: [{ text }] }));
+      const error = typeof m.errorMessage === 'string' && m.errorMessage.trim() ? ': ' + m.errorMessage : '';
+      children.push(row(id + '.status', status + error, { segments: [{ text: status, keep: true }, ...(error ? [{ text: error }] : [])] }));
     }
     for (const [j, b] of blocks(m.content && m.content.text).entries()) {
       // code keeps its markdown characters; every other block renders its inline markdown as segments
@@ -98,7 +99,8 @@ function chatRows(messages, { authorName = () => undefined, aiName = 'Tana AI' }
       if (!p || typeof p.proposedUri !== 'string') continue;
       const state = p.approvedAt ? 'approved' : p.rejectedAt ? 'rejected' : 'awaiting approval';
       const target = p.operation === 'update' && typeof p.baseUri === 'string' ? p.baseUri : p.proposedUri;
-      children.push(row(id + '.p' + j, (p.operation || 'change') + ' · ' + state, { hasChildren: true, children: [reference(id + '.p' + j + '.r', target)] }));
+      const label = (p.operation || 'change') + ' · ' + state;
+      children.push(row(id + '.p' + j, label, { segments: [{ text: label, keep: true }], hasChildren: true, children: [reference(id + '.p' + j + '.r', target)] }));
     }
     const waitingForAnswer = list(m.toolCalls).some((call) => call && call.name === 'askUserQuestion' && call.status === 'awaiting_user_input');
     if (waitingForAnswer && m.questionsData && !m.questionsData.answered && !m.questionsData.skipped) {
@@ -110,13 +112,15 @@ function chatRows(messages, { authorName = () => undefined, aiName = 'Tana AI' }
           return row(qid + '.o' + k, text, { block: 'bullet', segments: [{ text }] });
         });
         const text = question.question + (question.multiSelect ? ' · Select all that apply' : '');
-        children.push(row(qid, text, { block: 'heading3', segments: [{ text }], hasChildren: options.length > 0, children: options }));
+        children.push(row(qid, text, { block: 'heading3', segments: [{ text: question.question }, ...(question.multiSelect ? [{ text: ' · Select all that apply', keep: true }] : [])], hasChildren: options.length > 0, children: options }));
       }
     }
     for (const [j, call] of list(m.toolCalls).entries()) {
       if (call && typeof call.subagentChatUri === 'string') children.push(reference(id + '.s' + j, call.subagentChatUri, call.name));
     }
-    rows.push(row(id, ai ? aiName : authorName(m.fromUserUri) || 'Someone', {
+    const author = ai ? aiName : authorName(m.fromUserUri) || 'Someone';
+    rows.push(row(id, author, {
+      segments: [ai ? { text: author, keep: true } : { text: author, person: true }],
       icon: ai ? 'chat' : 'member', block: 'heading3', heading: 3,
       meta: typeof m.sentAt === 'number' ? hm(m.sentAt) + (m.editedAt !== undefined ? ' (edited)' : '') : undefined,
       hasChildren: children.length > 0, children,

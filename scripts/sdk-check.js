@@ -2098,6 +2098,11 @@ async function main() {
     assert.equal(say({ notificationType: 'type-archived', title: 'Old' }, null, 'New'), '*New* was archived', 'a type is named by its current title');
     assert.equal(say({ notificationType: 'type-unarchived' }, 'Sam'), '*Sam* unarchived a type');
     assert.equal(say({ notificationType: 'chat-message', title: 'Hello' }), 'Hello');
+    // which parts are the notification's own words (demo mode masks those and keeps Tana's sentence)
+    const titled = (n, actor) => inbox.phrase(n, actor).filter((p) => p.title).map((p) => p.text);
+    assert.deepEqual([titled({ notificationType: 'document-access', title: 'Plan' }, 'Sam'), titled({ notificationType: 'incoming-call', title: 'Board sync' }),
+      titled({ notificationType: 'chat-message', title: 'Hello' }), titled({ notificationType: 'chat-message' }), titled({ notificationType: 'comment-reply' }, 'Sam')],
+    [['Plan'], ['Board sync'], ['Hello'], [], []], 'a title standing in for the sentence is marked as the notification\'s own words, the fallback sentence is not');
     assert.equal(say({ notificationType: 'ai-usage-warning' }, 'Sam'), '*Sam* sent you a message', 'anything else reads as a message');
     assert.equal(inbox.detail({ notificationType: 'task-assignment', title: 'Ship **it**!', body: 'b' }), 'Ship it', 'a task shows its title, markdown and end punctuation gone');
     assert.equal(inbox.detail({ notificationType: 'comment-reply', body: '[Plan](tana:x) looks _good_.' }), 'Plan looks good');

@@ -161,7 +161,7 @@ function railKey(e, node, row) {
 function railCallRow(data) {
   const call = data && data.call;
   if (!call || !call.url || !tana.openExternal) return null; // no call, no row
-  return { id: 'call', icon: 'video', label: call.label || call.url, run: () => run(() => tana.openExternal(call.url)) };
+  return { id: 'call', icon: 'video', label: demoText(call.label || call.url, 'call'), run: () => run(() => tana.openExternal(call.url)) }; // a call link names the meeting: masked in demo mode
 }
 // The zoomed task's own metadata, at the top of the sidebar: who it is assigned to and who can see it. Both open the
 // pickers the palette already uses (api.setAssignees / api.setSharing). Nothing known, nothing shown.

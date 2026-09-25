@@ -40,7 +40,8 @@ function tableEl(item) {
 function cellImage(b) {
   const img = document.createElement('img'), uri = b.image.uri, cached = images.get(uri);
   img.className = 'cellimg';
-  if (b.image.alt) img.alt = img.title = demoText(b.image.alt, b.id);
+  if (demoMode) { img.classList.add('demo'); return img; } // demo mode: a grey block where the picture is, nothing fetched
+  if (b.image.alt) img.alt = img.title = b.image.alt;
   if (typeof cached === 'string') img.src = cached;
   else (cached || images.set(uri, tana.image(uri)).get(uri)).then((url) => { images.set(uri, url); img.src = url; }, (e) => { images.delete(uri); showError(e); });
   img.onclick = (e) => { e.stopPropagation(); openImage(b); };

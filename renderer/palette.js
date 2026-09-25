@@ -904,7 +904,7 @@ function discussRows(typed) {
   if (guess) guess.arriving = false;
   if (guess && guess.state === 'thinking') rows.push({ group: DISCUSS_GROUP, icon: 'sparkle', spin: true, label: 'Reading the title\u2026', disabled: true });
   else if (guess && guess.state === 'failed') rows.push({ group: DISCUSS_GROUP, icon: 'sparkle', arrive, label: guess.error, disabled: true });
-  else if (guess && guess.value && guess.value !== words) rows.push({ group: DISCUSS_GROUP, icon: 'sparkle', arrive, label: '\u201C' + guess.value + '\u201D', hint: 'From the title', run: () => applyDiscussWith(doc, guess.value) });
+  else if (guess && guess.value && guess.value !== words) rows.push({ group: DISCUSS_GROUP, icon: 'sparkle', arrive, label: '\u201C' + (demoMode ? demoPersonName(guess.value, demoWordCount(guess.value)) : guess.value) + '\u201D', hint: 'From the title', run: () => applyDiscussWith(doc, guess.value) });
   return rows;
 }
 function applyDiscussWith(doc, who) {
@@ -1131,7 +1131,7 @@ function renderPalette() {
     row.append(icon, label);
     if (r.right) { const s = document.createElement('span'); s.className = 'ricon right'; s.innerHTML = iconSvg(r.right); row.append(s); }
     if (r.kbd) { const k = document.createElement('kbd'); k.textContent = r.kbd; row.append(k); }
-    if (r.hint) { const h = document.createElement('span'); h.className = 'hint'; h.textContent = r.hint; blurSensitive(h, r.node && r.node.id); row.append(h); }
+    if (r.hint) { const h = document.createElement('span'); h.className = 'hint'; h.textContent = demoMeta(r.node, r.hint); blurSensitive(h, r.node && r.node.id); row.append(h); }
     row.onmousedown = (e) => e.preventDefault();
     row.onclick = () => runRow(r);
     els.push(row);

@@ -45,7 +45,7 @@ const withShims = (src) => {
   // outlines too). A harness exercises one root, so the binding becomes the plain listener it was.
   src = src.replace(/onRows\('([a-z]+)', /g, "outline.addEventListener('$1', ");
   // demo mode (renderer/segments.js) is off in every harness: the helpers hand text back as it is
-  if (/\bdemo(Mode|Text|Segments|PersonName|WordCount)\b/.test(src) && !/let demoMode =/.test(src)) src = 'globalThis.demoMode ??= false; globalThis.demoText ??= (value) => value; globalThis.demoSegments ??= (segs) => segs; globalThis.demoPersonName ??= (id) => id; globalThis.demoWordCount ??= () => 2;\n' + src;
+  if (/\bdemo(Mode|Text|Segments|PersonName|WordCount|Meta)\b/.test(src) && !/let demoMode =/.test(src)) src = 'globalThis.demoMode ??= false; globalThis.demoText ??= (value) => value; globalThis.demoSegments ??= (segs) => segs; globalThis.demoPersonName ??= (id) => id; globalThis.demoWordCount ??= () => 2; globalThis.demoMeta ??= (node, meta) => meta;\n' + src;
   // a row knows whether it is drawn in a field from the id it is addressed with (renderer/nodes.js)
   if (/\binField\(/.test(src) && !/const inField =/.test(src)) src = sourceLine('const inField') + '\n' + src;
   // a date mention's day (renderer/segments.js): the real one, since chips and clicks both ask it

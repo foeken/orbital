@@ -136,13 +136,19 @@ function setZoom(f) {
 if (zoomFactor !== 1 && tana.zoom) tana.zoom(zoomFactor);
 
 const $ = (id) => document.getElementById(id);
-// Demo mode is remembered on this machine, like sensitive visibility: a reload opens the way you left it.
-demoMode = localStorage.getItem('demoMode') === '1';
+// Demo mode is remembered on this machine, like sensitive visibility: a reload opens the way you left it. Every
+// outliner window follows a switch made in another (the storage event), and main is told so it posts no banners.
+function applyDemoMode(on) {
+  if (on && typeof flushAll === 'function') flushAll(); // finish any real edit before masking the text on screen
+  if (on && document.activeElement?.isContentEditable) document.activeElement.blur();
+  demoMode = on;
+  if (tana.setDemoMode) tana.setDemoMode(on);
+}
+applyDemoMode(localStorage.getItem('demoMode') === '1');
 function toggleDemoMode() {
-  flushAll(); // finish any real edit before masking the text currently on screen
-  if (document.activeElement?.isContentEditable) document.activeElement.blur();
-  demoMode = !demoMode;
+  applyDemoMode(!demoMode);
   localStorage.setItem('demoMode', demoMode ? '1' : '0');
   render(true);
 }
+window.addEventListener('storage', (e) => { if (e.key === 'demoMode' && (e.newValue === '1') !== demoMode) { applyDemoMode(e.newValue === '1'); render(true); } });
 const outline = $('outline'), filterEl = $('filter'), filterRow = $('filterRow');

@@ -171,6 +171,8 @@ ipcMain.handle('icons:types', () => icons.typeIcons());
 // first paint) and one write per change.
 // the menu shows ⌘N but leaves the key to the renderer's New window row (DEFAULT_HOTKEYS), so it can be re-recorded
 ipcMain.handle('window:new', () => { createWindow(); });
+// Demo mode lives in the outliner (renderer/state.js); main only needs to know it is on, so no banner shows a real title.
+ipcMain.on('app:demoMode', (_e, on) => { S.demo = on === true; });
 ipcMain.on('prefs:snapshot', (e) => { e.returnValue = settings.prefs(); });
 ipcMain.handle('prefs:set', (_e, key, value) => settings.setPref(key, value));
 ipcMain.handle('openai:setKey', (_e, key) => {
@@ -512,7 +514,7 @@ if (process.env.TANA_MAIN_TEST) {
     // main/documents.js followSummary) replaces it in place, silently — unless it was clicked, and so already seen.
     const clickedEdits = new Set();
     S.notify = (docId, title, body, kind, subtitle) => { // subtitle: macOS's line between title and body (what an edit changed)
-      if (!Notification.isSupported || !Notification.isSupported()) return;
+      if (S.demo || !Notification.isSupported || !Notification.isSupported()) return; // demo mode: nothing real on screen, banners included
       const id = kind ? 'edit:' + docId : undefined; // undefined: a fresh random id, as before
       if (kind === 'summary' && clickedEdits.has(id)) return;
       if (kind === 'edit') clickedEdits.delete(id);

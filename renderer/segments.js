@@ -58,6 +58,8 @@ function demoWords(value, identity) {
 // A saved search's title is a place in the app ("My Tasks"), so it reads as itself, like the app's own pages.
 const appOwned = (identity) => /^(orbital|tana:search):/.test(String(identity || ''));
 const demoText = (value, identity) => !demoMode || appOwned(identity) ? value : String(identity || '').startsWith('tana:user-profile:') ? demoPersonName(identity, demoWordCount(value)) : demoWords(value, identity);
+// A row's grey meta is a date, "MCP" or, for a type, the space it lives in: only that last one is Tana's words.
+const demoMeta = (node, meta) => (demoMode && meta && /^tana:type:/.test((node && node.id) || '') ? demoText(meta, 'space') : meta);
 function demoSegments(segs, identity) {
   if (!demoMode) return segs;
   if (String(identity || '').startsWith('tana:user-profile:')) return [{ text: demoPersonName(identity, demoWordCount(plainOf(segs))) }];

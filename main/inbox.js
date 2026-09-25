@@ -32,9 +32,11 @@ async function rows() {
   return list.map((n) => {
     const words = inbox.phrase(n, names.get(n.actorUri), inbox.retitled(n.notificationType) ? typeTitles.get(n.sourceUri) : undefined);
     const more = inbox.detail(n);
-    // keep/person tell demo mode which words are Tana's fixed sentence and which the actor's name (renderer/segments.js)
-    const actor = names.get(n.actorUri);
-    const segments = [...words.map((p) => (p.emphasis ? { text: p.text, marks: { bold: true }, ...(p.text === actor ? { person: true } : {}) } : { text: p.text, keep: true })), ...(more ? [{ text: '. ' + more + '.' }] : [])];
+    // For demo mode (renderer/segments.js): Tana's fixed sentence is kept, the actor is a name, and the notification's
+    // own title is masked like any content — except a type's, which is the workspace's vocabulary like a type chip.
+    const typeTitle = inbox.retitled(n.notificationType);
+    const demo = (p) => (p.title ? (typeTitle ? { keep: true } : {}) : p.emphasis ? { person: true } : { keep: true });
+    const segments = [...words.map((p) => ({ text: p.text, ...(p.emphasis ? { marks: { bold: true } } : {}), ...demo(p) })), ...(more ? [{ text: '. ' + more + '.' }] : [])];
     return {
       id: n.id, text: segments.map((s) => s.text).join(''), kind: 'block', block: 'bullet', editable: false, segments, hasChildren: false, children: [],
       unread: !n.readAt, createdAt: iso(n.createdAt),
