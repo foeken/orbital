@@ -344,7 +344,7 @@ function renderOutline() {
     }
     list = withDraftTail(list, parent); // an open node always has a row to type in; a read-only one (every chat) never does
     outline.replaceChildren(...(groups
-      ? groups.flatMap((g) => [...(g.title ? [groupHeadEl(g)] : []), ...(g.collapsed ? [] : g.nodes.map((n) => childEl(n, parent))), ...(g.more ? [groupMoreEl(g)] : [])])
+      ? groups.flatMap((g) => [...(g.title ? [groupHeadEl(g)] : []), ...(g.collapsed ? [] : g.nodes.flatMap((n) => [childEl(n, parent), ...(n.timeline?.today ? [timelineDividerEl()] : [])])), ...(g.more ? [groupMoreEl(g)] : [])])
       : list.map((n) => childEl(n, parent))));
     if (parent.docId === TIMELINE_PAGE && tana.timelineWeeks && kids.get(TIMELINE_PAGE)) outline.append(timelineOlderEl()); // a week a page: one more, at the end
     animView = null; // a zoom replaced every row, and a zoomed row is keyed docId/nodeId while a view row is keyed by
@@ -836,7 +836,11 @@ function nodeEl(node, docId, parent) {
     // Expanding a row is asking it for sub-items, so the row it opens onto is a bullet whatever the parent is —
     // a document's own page still starts as plain text (withDraftTail), which is a different question.
     else if (!fullref && !isSpace(node) && canEditItem(item) && (node.kind === 'document' || node.done != null || ['paragraph', 'bullet', 'numbered'].includes(node.block))) wrap.append(nodeEl({ ...draftNode(item), block: 'bullet' }, docId, item));
-    if (node.timeline?.today) wrap.append(timelineAddMoreEl(node));
+    if (node.timeline?.today) {
+      const emptyToday = Array.isArray(c) && c.length === 0;
+      if (emptyToday) { const empty = document.createElement('span'); empty.className = 'tl-empty'; empty.textContent = 'All done - '; wrap.append(empty); }
+      wrap.append(timelineAddMoreEl(node, emptyToday));
+    }
     el.append(wrap);
   }
   return el;

@@ -1,5 +1,5 @@
 'use strict';
-// The Timeline page (issue #135): today's pinned tasks, then what happened to the nodes you watch and what landed in
+// The Timeline page (issue #135): tasks pinned through today, then what happened to the nodes you watch and what landed in
 // your Inbox — the same two things the banners announce (main/documents.js notifyWatched, main/views.js
 // announceNewInbox), read back from Tana rather than kept here. Nothing is stored but the time of the last visit: the
 // page is rebuilt on every arrival, which measured 0.2 s for 53 watched nodes (ListChanges, twelve at a time), so it
@@ -116,16 +116,21 @@ async function rows() {
     events.push({ kind: 'inbox', uri: n.id, title: n.title, at: Date.parse(n.createTime), actor, icon, tone: 'new', node: n });
   }
   const now = Date.now(), date = new Date(now).toLocaleDateString('sv-SE');
-  const todayIds = Object.entries(await pinnedDates()).filter(([, dates]) => dates.includes(date)).map(([id]) => id);
-  const { nodes: pinned = [] } = todayIds.length ? await graph.listNodes({ nodeIds: todayIds, nodeTypes: ['text'], stateTypes: STATE_TYPES, limit: todayIds.length }) : {};
+  const pinDatesById = new Map(Object.entries(await pinnedDates()));
+  const pinnedIds = [...pinDatesById].filter(([, dates]) => dates.some((pinnedDate) => pinnedDate <= date)).map(([id]) => id);
+  const { nodes: pinned = [] } = pinnedIds.length ? await graph.listNodes({ nodeIds: pinnedIds, nodeTypes: ['text'], stateTypes: STATE_TYPES, limit: pinnedIds.length }) : {};
   const byId = new Map(pinned.map((n) => [n.id, n]));
-  const children = todayIds.map((id) => byId.get(id)).filter(Boolean).map((n) => {
+  // Completed tasks age out after their pinned day; a pin for today still keeps them here.
+  const children = pinnedIds.map((id) => byId.get(id)).filter((n) => {
+    if (!n) return false;
+    return (n.state?.type || n.stateType) !== 'closed' || pinDatesById.get(n.id).includes(date);
+  }).map((n) => {
     rememberNodeHue(n); // graphRow drops participants, so seed the verified editability before toNode builds the row
     const row = toNode(graphRow(n));
     return { ...row, editable: false, checkable: row.editable === true };
   });
-  const todayText = children.length ? 'Tasks pinned to today' : 'All done for today';
-  const todayRow = { id: PAGE + ':today:' + date, text: todayText, segments: [{ text: todayText }], kind: 'block', block: 'bullet', icon: 'pinDate',
+  const todayText = "Today's Tasks";
+  const todayRow = { id: PAGE + ':today:' + date, text: todayText, segments: [{ text: todayText }], kind: 'block', block: 'bullet', icon: 'todayTasks',
     editable: false, hasChildren: true, children, createdAt: iso(now), unread: false, timeline: { uri: null, time: 'Now', tone: 'new', today: true } };
   // What is new is what came after your last visit, which this visit then becomes. The first visit marks nothing.
   if (weeks === 1 || markFrom === null) { markFrom = Number(db.setting('timelineSeen')) || Infinity; db.setSetting('timelineSeen', Date.now()); }

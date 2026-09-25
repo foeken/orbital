@@ -2490,7 +2490,7 @@ async function main() {
     // through JSON: rows are built in the main-process vm, whose arrays fail a deep compare on their prototype alone
     const read = async () => JSON.parse(JSON.stringify((await backend.timelinePage.rows()).map((r) => [r.text, r.timeline.change || r.timeline.note, r.icon || null, r.timeline.tone, r.unread, r.children.map((c) => c.text)])));
     assert.deepEqual(await read(), [
-      ['Tasks pinned to today', null, 'pinDate', 'new', false, ['Pinned and editable', 'Pinned but read-only']],
+      ["Today's Tasks", null, 'todayTasks', 'new', false, ['Pinned and editable', 'Pinned but read-only']],
       ['Rob Jansen completed Contract renewal', null, 'apply', 'done', false, []],
       ['Rob Jansen edited Contract renewal', 'Added the Q4 numbers from Rob', 'updated', 'edit', false, []],
       ['An AI agent added 2 tasks to your Inbox', null, 'robot', 'new', false, ['Answer Jules', 'Plan the pilot']],
