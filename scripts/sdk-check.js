@@ -2394,6 +2394,70 @@ async function main() {
     console.log('ok  new Inbox tasks: announced when someone else, an MCP agent or Tana\'s AI made them; yours by hand stay quiet');
   }
 
+  // The Timeline (issue #135): watched-node summaries others wrote and tasks others (or an MCP client, or Tana's AI)
+  // put in your Inbox, one list, newest first, rebuilt from Tana on every read.
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const COLLEAGUE = 'tana:user-profile:01exampley0000000000000000';
+    const ago = (ms) => new Date(Date.now() - ms).toISOString(), H = 36e5;
+    const id = () => 'tana:text:' + ulid();
+    const watched = { id: id(), title: 'Contract renewal', createdBy: ME, assignedTo: [COLLEAGUE], state: { type: 'closed', enteredAt: ago(0.1 * H), changedBy: COLLEAGUE } };
+    const kept = { id: id(), title: 'Mine to do', createdBy: ME, assignedTo: [ME], state: { type: 'open' } }; // assigned to you: not watched
+    const MCP_CHAT = 'tana:chat:' + ulid(), AI_CHAT = 'tana:chat:' + ulid();
+    const fromRob = { id: id(), title: 'Review the vendor contract', createdBy: COLLEAGUE, createTime: ago(2 * H) };
+    const viaMcp = { id: id(), title: 'Answer Jules', createdBy: ME, createTime: ago(1 * H) };
+    const viaAi = { id: id(), title: 'Share the transcript', createdBy: ME, createTime: ago(30 * H) };
+    const byHand = { id: id(), title: 'Typed it myself', createdBy: ME, createTime: ago(0.5 * H) };
+    const old = { id: id(), title: 'Last month', createdBy: COLLEAGUE, createTime: ago(40 * 24 * H) };
+    const summaries = new Map([[watched.id, [
+      { title: 'Task status changed to Completed', authors: [COLLEAGUE], endTime: ago(0.05 * H) }, // the same move the node's state already tells
+      { title: 'Added the Q4 numbers from Rob', authors: [COLLEAGUE], endTime: ago(0.2 * H) },
+      { title: 'Task status updated from Inbox to In Progress', authors: [COLLEAGUE], endTime: ago(4 * H) },
+      { title: 'Renamed a heading', authors: [ME], endTime: ago(3 * H) }, // yours alone: not news
+      { title: 'Contract renewal', description: 'Moved the deadline to Friday', authors: [ME, COLLEAGUE], endTime: ago(5 * H) }, // title repeats the node's
+      { title: 'Ancient change', authors: [COLLEAGUE], endTime: ago(30 * 24 * H) },
+    ]]]);
+    backend.testRuntime({ me: { userUri: ME }, win: { isDestroyed: () => false, webContents: { send: () => {} } },
+      client: {
+        graph: {
+          listNodes: async (p) => {
+            if ((p.nodeTypes || []).includes('user-profile')) return { nodes: [{ id: COLLEAGUE, title: 'Rob Jansen', userProfile: {} }] };
+            if (p.nodeIds && (p.nodeTypes || []).includes('chat')) return { nodes: [{ id: MCP_CHAT, title: 'MCP: Nedap Compliance', invocationContext: { intent: 'mcp' } }, { id: AI_CHAT, title: 'Chat for Weekly', invocationContext: { intent: 'meeting' } }].filter((c) => p.nodeIds.includes(c.id)) };
+            if (p.nodeIds) return { nodes: [] };
+            if ((p.createdBy || []).includes(ME)) return { nodes: [watched, kept] };
+            if ((p.assignedTo || []).includes(ME)) return { nodes: [byHand, viaMcp, fromRob, viaAi, old] };
+            return { nodes: [] };
+          },
+          listEdges: async ({ fromNodeIds }) => ({ edges: [[viaMcp.id, MCP_CHAT], [viaAi.id, AI_CHAT]].filter(([f]) => fromNodeIds.includes(f)).map(([fromNodeId, toNodeId]) => ({ fromNodeId, toNodeId, type: 'EDGE_TYPE_CREATED_IN' })) }),
+        },
+        history: { listChanges: async ({ uri }) => ({ summaries: summaries.get(uri) || [] }) },
+        sync: { getDocument: () => null, subscribe: async () => null },
+      } });
+    // through JSON: rows are built in the main-process vm, whose arrays fail a deep compare on their prototype alone
+    const read = async () => JSON.parse(JSON.stringify((await backend.timelinePage.rows()).map((r) => [r.text, r.timeline.note, r.icon, r.timeline.tone, r.unread])));
+    assert.deepEqual(await read(), [
+      ['Rob Jansen completed Contract renewal', null, 'apply', 'done', false],
+      ['Rob Jansen edited Contract renewal', 'Added the Q4 numbers from Rob', 'updated', 'quiet', false],
+      ['MCP added Answer Jules to your Inbox', 'Nedap Compliance', 'inbox', 'new', false],
+      ['Rob Jansen added Review the vendor contract to your Inbox', null, 'inbox', 'new', false],
+      ['Rob Jansen started Contract renewal', null, 'status', 'started', false],
+      ['Rob Jansen edited Contract renewal', 'Moved the deadline to Friday', 'updated', 'quiet', false],
+      ["Tana's AI added Share the transcript to your Inbox", 'Weekly', 'inbox', 'new', false],
+    ], 'a log, newest first: who did what to which node; a completion told once, from the node\'s own state; yours alone, by hand, or weeks old stay out');
+    assert.deepEqual(JSON.parse(JSON.stringify((await backend.timelinePage.rows())[0].segments)), [{ text: 'Rob Jansen', marks: { bold: true } }, { text: ' completed ' }, { text: 'Contract renewal', marks: { bold: true, strike: true } }],
+      'and a finished node is struck through');
+    const rows = await backend.timelinePage.rows();
+    for (const [text, state] of [['Task status changed from In Progress to Inbox', 'proposed'], ['Task marked as completed and a note added', 'closed'], ['Task status updated to In Progress', 'open'], ['Added a document link', undefined]])
+      assert.equal(backend.timelinePage.statusOf(text) || undefined, state, 'a summary says which state it went to: ' + text);
+    assert.equal(new Set(rows.map((r) => r.id)).size, rows.length, 'a node changed twice is two rows with ids of their own');
+    assert.equal(rows[0].timeline.uri, watched.id, 'and each row opens the node it is about');
+    summaries.get(watched.id).push({ title: 'Signed by both parties', authors: [COLLEAGUE], endTime: ago(-1000) });
+    const next = await read();
+    assert.deepEqual(next.filter((r) => r[4]).map((r) => r[0]), ['Rob Jansen edited Contract renewal'], 'what came after your last visit is marked new, and only that');
+    console.log('ok  timeline: watched changes by others and new Inbox tasks from others, MCP and Tana\'s AI, newest first, new since the last visit');
+  }
+
+
 
   // Handing a node to the local Codex agent: an app-local mark in the settings table, never a Tana assignee, and one
   // the view refresh's unsubscribe sweep is not allowed to drop.

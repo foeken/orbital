@@ -338,6 +338,9 @@ function renderOutline() {
     } else if (parent.docId === PROPOSALS_PAGE) { // yours without a heading, then From others (renderer/proposals.js)
       groups = proposalGroups(list);
       list = groups.flatMap((g) => (g.collapsed ? [] : g.nodes));
+    } else if (parent.docId === TIMELINE_PAGE) { // a section per day (renderer/timeline.js)
+      groups = timelineGroups(list);
+      list = groups.flatMap((g) => (g.collapsed ? [] : g.nodes));
     }
     list = withDraftTail(list, parent); // an open node always has a row to type in; a read-only one (every chat) never does
     outline.replaceChildren(...(groups
@@ -697,7 +700,7 @@ function nodeEl(node, docId, parent) {
   const heading = headingOf(node); // a heading arrives as node.heading or as the heading1-3 block type
   // an image draws a marker only where a list row would: on its own it is the picture and nothing else
   const blockClass = node.kind === 'block' ? ' t-' + (isDivider(node) ? 'divider' : isImage(node) ? (node.block || 'image') : blockTypeOf(node)) : '';
-  el.className = 'node ' + node.kind + (reference ? ' reference' : '') + (fullref ? ' fullref' : '') + (gone ? ' gone' : '') + blockClass + (heading ? ' h' + heading : '') + (display.done ? ' done' : '') + (has ? ' has' : '') + (has && !opened ? ' collapsed' : '') + (node.draft || node.upload ? ' draft' : '') + (node.notification && node.unread ? ' unread' : '');
+  el.className = 'node ' + node.kind + (reference ? ' reference' : '') + (fullref ? ' fullref' : '') + (gone ? ' gone' : '') + blockClass + (heading ? ' h' + heading : '') + (display.done ? ' done' : '') + (has ? ' has' : '') + (has && !opened ? ' collapsed' : '') + (node.draft || node.upload ? ' draft' : '') + ((node.notification || node.timeline) && node.unread ? ' unread' : '') + (node.timeline ? ' tl tl-' + node.timeline.tone : '');
   if (node.start != null) el.style.counterSet = 'ol ' + (node.start - 1); // a numbered list counting from its own start (sdk/content.js); the row's increment makes it start
   el.dataset.key = item.key;
   const line = document.createElement('div'); line.className = 'line';
@@ -764,7 +767,7 @@ function nodeEl(node, docId, parent) {
     text.classList.toggle('chiponly', chipOnly(text));
   }
   body.append(text);
-  const metaText = node.notification ? agoText(node.createdAt) : node.proposal ? agoText(node.proposal.proposedAt) : display.meta; // a notification says when it came in, a proposal when it was made
+  const metaText = node.notification ? agoText(node.createdAt) : node.timeline ? timelineTime(node.createdAt) : node.proposal ? agoText(node.proposal.proposedAt) : display.meta; // a notification says when it came in, a proposal when it was made
   if (metaText) { const m = document.createElement('span'); m.className = 'meta'; m.textContent = metaText; body.append(m); }
   // every row describes who can see it, not only task rows; the fetch waits until the row is on screen
   const taskInfo = taskSummary(display, true) || documentSummary(display, true);
@@ -790,6 +793,7 @@ function nodeEl(node, docId, parent) {
   // with the end of the row, which walked the caret past everything written after the point that was clicked.
   line.onclick = (e) => { if (!e.metaKey && !e.shiftKey && !reference && !fullref && (e.target === line || e.target === body || e.target.parentElement === text)) setCaret(text, caretAt(text, e.clientX, e.clientY)); };
   if (node.notification) line.onclick = (e) => { if (!e.metaKey && !e.shiftKey && !e.target.closest('.bullet, .chev')) openNotification(node); }; // a click on it opens it, as in Tana
+  if (node.timeline) line.onclick = (e) => { if (!e.metaKey && !e.shiftKey && !e.target.closest('.chev')) openTimeline(node); }; // and a Timeline row opens the node it is about
   // a reference row: the bullet opens the target, a click selects the row, and a click on the selected row starts
   // editing it — a native embed takes the caret where it was clicked, while a full reference has nothing to click
   // into (its text is one chip), so the caret goes to the end, which is where Enter on the selection puts it too

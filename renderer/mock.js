@@ -160,6 +160,16 @@ function mockApi() {
     note: (operation === 'create' ? 'Proposed' : 'Change proposed') + ' in ' + where + (operation === 'create' ? '' : ' · approve in Tana'), proposedAt: new Date(Date.now() - hours * 36e5).toISOString() } });
   content[PROPOSALS] = [proposed(docs[2], 1, 'create', meetings[1].text, 'mine'), proposed(docs[3], 5, 'create', meetings[3].text, 'others'),
     proposed(spaceDocs[0], 30, 'update', 'Private AI chat', 'mine')];
+  // The Timeline as main/timeline.js hands it over: one row per event, newest first, the node it is about in timeline.uri
+  const event = (d, hours, actor, verb, icon, tone, note, unread, after) => {
+    const segments = [strong(actor), { text: ' ' + verb + ' ' }, { text: d.text, marks: tone === 'done' ? { bold: true, strike: true } : { bold: true } }, ...(after ? [{ text: after }] : [])];
+    return { id: 'orbital:timeline:' + verb + ':' + d.id + ':' + hours, text: segments.map((x) => x.text).join(''), segments, kind: 'block', block: 'bullet', icon, editable: false, hasChildren: false, children: [],
+      unread, createdAt: new Date(Date.now() - hours * 36e5).toISOString(), timeline: { uri: d.id, note, tone } };
+  };
+  content['orbital:timeline'] = [event(docs[2], 0.2, 'Priya Raman', 'completed', 'apply', 'done', null, true), event(docs[1], 1.4, 'MCP', 'added', 'inbox', 'new', 'Nedap Compliance, API Keys, and Task Actions', true, ' to your Inbox'),
+    event(docs[0], 2, 'Sam Okafor', 'edited', 'updated', 'quiet', 'Added the Q4 numbers from Rob', false), event(docs[5], 2.5, 'Tomas Ilves', 'started', 'status', 'started', null, false),
+    event(docs[3], 3, 'Tomas Ilves', 'added', 'inbox', 'new', null, false, ' to your Inbox'), event(docs[0], 26, 'Sam Okafor', 'completed', 'apply', 'done', 'Task completed and a note added about the deadline', false),
+    event(docs[4], 28, "Tana's AI", 'added', 'inbox', 'new', 'Heads of Technology: Weekly', false, ' to your Inbox')];
   // an image block (not editable; api.image resolves its uri to a data URL): a 2x2 PNG scaled by width/height
   content.mockdoc0.splice(2, 0, { id: 'img' + (++seq), kind: 'block', type: 'image', image: { uri: 'tana:image:mock', alt: 'Mock image', width: 160, height: 100 }, hasChildren: false, children: [] });
   // inline references (embeds): read-only nodes rendering the target's title/state, like sdk/content.js (editable: false) with main resolving reference.node

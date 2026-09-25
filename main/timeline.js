@@ -1,0 +1,112 @@
+'use strict';
+// The Timeline page (issue #135): one list, newest first, of what happened to the nodes you watch and what landed in
+// your Inbox — the same two things the banners announce (main/documents.js notifyWatched, main/views.js
+// announceNewInbox), read back from Tana rather than kept here. Nothing is stored but the time of the last visit: the
+// page is rebuilt on every arrival, which measured 0.2 s for 53 watched nodes (ListChanges, twelve at a time), so it
+// holds what happened before this page existed and while the app was closed, and reads the same on every machine.
+// Like Notifications the page is not a Tana document and has an id of its own.
+//   watched: a written change summary (the sidebar's Changes, sdk/history.js) somebody other than you had a hand in
+//   inbox:   a task assigned to you that someone else, an MCP client or Tana's AI created (views.js inboxFrom)
+// A row is one event, not a node: a node changed three times is three rows, so a row's id is its own and the node it
+// is about rides along in row.timeline.uri, which is what opening it goes to.
+// A row reads as a log line — who, did what, to which node — because a title with the change in grey under it had to
+// be read twice to see that something was finished. A status move is a verb of its own (completed, started, moved to
+// Later, moved back to Inbox): the latest one comes from the node's own state (type, enteredAt, changedBy — exact,
+// and there before Tana has written a word about it), older ones from summaries that say which state they went to.
+// Tana's summary is what the grey line under an edit says; a status line has none unless its summary says more.
+const db = require('../db');
+const { NOT_CONNECTED, S, iso, isMcp } = require('./state');
+const { members } = require('./rows');
+const { notifySilencedIds, notifyWatchedIds } = require('./documents');
+const { inboxFrom } = require('./views');
+
+const PAGE = 'orbital:timeline';
+const VERB = { closed: 'completed', open: 'started', not_now: 'moved to Later', proposed: 'moved back to Inbox' };
+const ICON = { closed: 'apply', open: 'status', not_now: 'later', proposed: 'inbox' };
+// The colour a row is drawn in (styles.css .tl-*): finished green, started blue, new in your Inbox amber, the rest grey
+const TONE = { closed: 'done', open: 'started', not_now: 'quiet', proposed: 'quiet' };
+// The state a status summary went to, in the words Tana's AI uses for it ("Task status changed from In Progress to
+// Inbox", "Task marked as completed and a note added …"); null for any other summary.
+// ponytail: reads English wording; the latest move per node does not depend on it (the node's state does)
+function statusOf(text) {
+  const t = text.toLowerCase();
+  const to = /\bto (completed|done|in progress|inbox|later)\b/.exec(t);
+  const word = to ? to[1] : /\b(completed|marked (as )?(done|complete))\b/.test(t) ? 'completed' : null;
+  return word && { completed: 'closed', done: 'closed', 'in progress': 'open', inbox: 'proposed', later: 'not_now' }[word];
+}
+// A status summary's own words, when they say more than the move ("Task completed and assessment details added")
+const beyondStatus = (text) => (/ and /i.test(text) ? text : null);
+const andList = (xs) => (xs.length > 1 ? xs.slice(0, -1).join(', ') + ' and ' + xs.at(-1) : xs[0]);
+const DAYS = 14, AT_ONCE = 12, TASKS = 50;
+// A summary's title only repeating the node's says nothing (followSummary makes the same call): its description then.
+function said(s, title) {
+  const own = (title || '').trim().toLowerCase();
+  const repeats = (t) => !!own && (own.includes(t.toLowerCase()) || t.toLowerCase().includes(own));
+  return [s.title, s.description].map((t) => (typeof t === 'string' ? t.trim() : '')).find((t) => t && !repeats(t)) || null;
+}
+async function pool(list, fn) {
+  const out = []; let i = 0;
+  await Promise.all(Array.from({ length: Math.min(AT_ONCE, list.length) }, async () => { while (i < list.length) { const x = list[i++]; out.push(await fn(x)); } }));
+  return out;
+}
+
+async function rows() {
+  if (!S.client || !S.me) throw new Error(NOT_CONNECTED);
+  const me = S.me.userUri, since = Date.now() - DAYS * 864e5, graph = S.client.graph;
+  const names = new Map((await members().catch(() => [])).map((m) => [m.id, m.title]));
+  // Watched: what the watch rule follows (made by you, not assigned to you; closed ones too, since finishing one is
+  // news) and what you switched on, less what you switched off. Titles come with the rule's own answer.
+  const silenced = notifySilencedIds();
+  const { nodes: made } = await graph.listNodes({ nodeTypes: ['text'], createdBy: [me], stateTypes: ['proposed', 'open', 'closed', 'not_now'], limit: 200 });
+  const nodes = new Map(made.filter((n) => !(n.assignedTo || []).includes(me)).map((n) => [n.id, n]));
+  const chosen = [...notifyWatchedIds()].filter((id) => !nodes.has(id));
+  if (chosen.length) for (const n of (await graph.listNodes({ nodeIds: chosen, limit: chosen.length })).nodes) nodes.set(n.id, n);
+  for (const id of silenced) nodes.delete(id);
+  const events = [];
+  const who = (uris) => andList(uris.map((a) => names.get(a) || 'Someone'));
+  await pool([...nodes.values()], async (n) => {
+    const st = n.state || {}, moved = Date.parse(st.enteredAt || '');
+    const latest = st.changedBy && st.changedBy !== me && moved > since && VERB[st.type] ? { state: st.type, at: moved } : null;
+    if (latest) events.push({ kind: 'status', uri: n.id, title: n.title, at: moved, actor: who([st.changedBy]), verb: VERB[st.type], icon: ICON[st.type], tone: TONE[st.type] });
+    let summaries = [];
+    try { summaries = (await S.client.history.listChanges({ uri: n.id, limit: 10 })).summaries || []; } catch { return; } // one refusal costs that node only
+    for (const s of summaries) {
+      const at = Date.parse(s.endTime || s.startTime || ''), others = (s.authors || []).filter((a) => a !== me);
+      const text = said(s, n.title);
+      if (!(at > since) || !others.length || !text) continue; // yours alone is not news, as with a banner
+      const state = statusOf(text);
+      if (state && latest && latest.state === state && Math.abs(latest.at - at) < 15 * 6e4) continue; // the same move, already told from the node
+      events.push(state
+        ? { kind: 'status', uri: n.id, title: n.title, at, actor: who(others), verb: VERB[state], icon: ICON[state], tone: TONE[state], note: beyondStatus(text) }
+        : { kind: 'edit', uri: n.id, title: n.title, at, actor: who(others), verb: 'edited', icon: 'updated', tone: 'quiet', note: text });
+    }
+  });
+  // Inbox: the newest tasks assigned to you, whatever state they are in now, and the chat each was created in
+  const { nodes: tasks } = await graph.listNodes({ nodeTypes: ['text'], assignedTo: [me], sortOptions: [{ field: 'SORT_FIELD_CREATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }], limit: TASKS });
+  const recent = tasks.filter((n) => Date.parse(n.createTime || '') > since);
+  const mine = recent.filter((n) => !n.createdBy || n.createdBy === me).map((n) => n.id);
+  const createdIn = new Map(mine.length ? ((await graph.listEdges({ fromNodeIds: mine, edgeTypes: ['EDGE_TYPE_CREATED_IN'] }).catch(() => ({}))).edges || []).map((e) => [e.fromNodeId, e.toNodeId]) : []);
+  const chatIds = [...new Set(createdIn.values())];
+  const chats = new Map(chatIds.length ? (await graph.listNodes({ nodeIds: chatIds, nodeTypes: ['chat'], includeOwnedChats: true, limit: chatIds.length })).nodes.map((c) => [c.id, c]) : []);
+  for (const n of recent) {
+    const chat = createdIn.has(n.id) ? chats.get(createdIn.get(n.id)) || {} : null;
+    if (!inboxFrom(me, n.createdBy, chat, names)) continue; // yours, by hand
+    // who put it there: the person, or for a chat the kind of writer, with the chat's topic on the grey line
+    const actor = n.createdBy && n.createdBy !== me ? who([n.createdBy]) : isMcp(chat) ? 'MCP' : "Tana's AI";
+    const topic = chat && (chat.title || '').replace(/^(MCP:|Chat for)\s*/i, '').trim();
+    events.push({ kind: 'inbox', uri: n.id, title: n.title, at: Date.parse(n.createTime), actor, verb: 'added', after: ' to your Inbox', icon: 'inbox', tone: 'new', note: topic || null });
+  }
+  // What is new is what came after your last visit, which this visit then becomes. The first visit marks nothing.
+  const seen = Number(db.setting('timelineSeen')) || Infinity;
+  db.setSetting('timelineSeen', Date.now());
+  // who, did what, to which node; a finished node struck through, the way a done task reads everywhere else
+  return events.sort((a, b) => b.at - a.at).map((e) => {
+    const segments = [{ text: e.actor, marks: { bold: true } }, { text: ' ' + e.verb + ' ' }, { text: e.title || 'Untitled', marks: e.tone === 'done' ? { bold: true, strike: true } : { bold: true } }, ...(e.after ? [{ text: e.after }] : [])];
+    return { id: PAGE + ':' + e.kind + ':' + e.uri + ':' + e.at, text: segments.map((x) => x.text).join(''), segments,
+      kind: 'block', block: 'bullet', icon: e.icon, editable: false, hasChildren: false, children: [],
+      createdAt: iso(e.at), unread: e.at > seen, timeline: { uri: e.uri, note: e.note || null, tone: e.tone } };
+  });
+}
+
+module.exports = { PAGE, rows, said, statusOf };
+

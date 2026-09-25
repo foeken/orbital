@@ -239,6 +239,14 @@ async function refreshWatched() {
 // ponytail: seen = the newest 50 Inbox ids of the last answer; a task leaving and re-entering the Inbox within its
 // first day is announced twice. Keep a dated set if that ever happens in practice.
 const NEW_TASK_MS = 24 * 60 * 60 * 1000, NEW_TASK_MAX = 3;
+// Where a new Inbox task came from, in the words a banner and the Timeline (main/timeline.js) both use; null when it is
+// yours by hand. chat: the node the task was created in, {} when that chat cannot be read, null when there is none.
+function inboxFrom(me, creator, chat, names) {
+  if (creator && creator !== me) return 'From ' + (names.get(creator) || 'someone else');
+  if (!chat) return null;
+  const topic = /^MCP:\s*(.+)/i.exec(chat.title || '')?.[1]; // the chat's title names what the agent was doing
+  return isMcp(chat) ? 'Via MCP' + (topic ? ': ' + topic : '') : "From Tana's AI";
+}
 const INBOX_QUERY = (me) => ({ types: ['text'], stateTypes: ['proposed'], assignedTo: [me], orderBy: ['-createdAt'], limit: 50 });
 async function watchInbox() {
   const client = S.client, me = S.me && S.me.userUri;
@@ -260,17 +268,12 @@ async function announceNewInbox(rows) {
   let shown = 0; // counts banners, not candidates: your own quiet tasks do not use up the cap
   for (const n of fresh) try {
     if (shown >= NEW_TASK_MAX) break;
-    let from;
     const creator = await creatorOf(n.id);
-    if (creator && creator !== me) {
-      from = 'From ' + ((await members().catch(() => [])).find((m) => m.id === creator)?.title || 'someone else');
-    } else {
-      const chatUri = (await document(n.id)).data.get('createdInUri');
-      if (!chatUri) continue; // yours, by hand
-      const chat = (await S.client.graph.listNodes({ nodeIds: [chatUri], nodeTypes: ['chat'], includeOwnedChats: true, limit: 1 })).nodes[0];
-      const topic = /^MCP:\s*(.+)/i.exec((chat && chat.title) || '')?.[1]; // the chat's title names what the agent was doing
-      from = chat && isMcp(chat) ? 'Via MCP' + (topic ? ': ' + topic : '') : "From Tana's AI";
-    }
+    const names = new Map((await members().catch(() => [])).map((m) => [m.id, m.title]));
+    const chatUri = creator && creator !== me ? null : (await document(n.id)).data.get('createdInUri');
+    const chat = chatUri ? (await S.client.graph.listNodes({ nodeIds: [chatUri], nodeTypes: ['chat'], includeOwnedChats: true, limit: 1 })).nodes[0] || {} : null;
+    const from = inboxFrom(me, creator, chat, names);
+    if (!from) continue; // yours, by hand
     S.notify(n.id, n.title || 'Untitled', 'New in Inbox · ' + from);
     shown++;
   } catch { /* one unreadable task costs its own banner, not the ones after it */ }
@@ -364,4 +367,4 @@ async function setMcpHidden(on) {
 // ponytail: on-demand subscriptions last for the S.session; drop the oldest if a long S.session ever holds too many.
 
 
-module.exports = { announceNewInbox, watchInbox, preset, viewFilter, setViewFilter, hiddenRules, mcpHidden, viewRows, inboxCount, search, searchList, searchCreate, searchTitle, start, refresh, doRefresh, listFilter, setHidden, setMcpHidden };
+module.exports = { announceNewInbox, inboxFrom, watchInbox, preset, viewFilter, setViewFilter, hiddenRules, mcpHidden, viewRows, inboxCount, search, searchList, searchCreate, searchTitle, start, refresh, doRefresh, listFilter, setHidden, setMcpHidden };

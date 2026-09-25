@@ -350,6 +350,14 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .bullet.meeting:hover svg { color: #8a6a17; }
 /* Renderer contract: appearance-driven icons add .hue and set --hue, including 0. */
 .bullet.icon.hue svg, .bullet.icon.hue:hover svg { color: oklch(0.7 0.1 var(--hue)); }
+/* Timeline rows (renderer/timeline.js): the icon's colour says what happened, and what is new since the last visit gets
+   its own blue dot in the gutter, since blue no longer means only that */
+.node.tl > .line { position: relative; }
+.node.tl.unread > .line::after { content: ''; position: absolute; left: 4px; top: 11px; width: 6px; height: 6px; border-radius: 50%; background: #0090ff; }
+.node.tl-done > .line > .bullet.icon svg { color: #2f9e44; }
+.node.tl-started > .line > .bullet.icon svg { color: #0090ff; }
+.node.tl-new > .line > .bullet.icon svg { color: #e8890c; }
+.node.tl-done > .line .text s, .node.tl-done > .line .text del { color: #8a8a8a; }
 .check {
   flex: none; width: 18px; height: 18px; margin: 3px 8px 0 2px; border-radius: 5px; background: #e4e4e4;
   border: 0; padding: 0; cursor: pointer; -webkit-appearance: none; appearance: none; position: relative;

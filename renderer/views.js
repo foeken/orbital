@@ -275,6 +275,7 @@ function pinnedOn(n) {
 function subtextOf(node, taskInfo) {
   const bits = [];
   if (node.proposal) bits.push(node.proposal.note); // where it was proposed, first: it is why the row is on the Proposals page
+  if (node.timeline && node.timeline.note) bits.push(node.timeline.note); // Tana's words for an edit, or where a new task came from
   const pinned = pinnedOn(node); if (pinned) bits.push(pinned);
   if (displayOn('space') && taskInfo && taskInfo.audience && taskInfo.audience.space) bits.push(taskInfo.audience.space);
   // Who made it joins when it was made rather than repeating the word: "Created 2 days ago by Robin Vega". The name

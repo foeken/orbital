@@ -1766,7 +1766,7 @@ async function runReservedComboCheck() {
 function runHistoryCheck() {
   const api = vm.runInNewContext(`
     let view = 'tasks', zoom = null, caretOnOpen = false, rendered = 0;
-    const INBOX_PAGE = 'orbital:notifications', PROPOSALS_PAGE = 'orbital:proposals';
+    const INBOX_PAGE = 'orbital:notifications', PROPOSALS_PAGE = 'orbital:proposals', TIMELINE_PAGE = 'orbital:timeline';
     let notificationLeaves = 0;
     const markAllNotificationsRead = () => { notificationLeaves++; };
     const localStorage = { setItem() {}, removeItem() {} };
@@ -7445,7 +7445,7 @@ async function runSetHueCheck() {
 async function runDeletedNodeCheck() {
   const api = vm.runInNewContext(`
     const deletedIds = new Set();
-    const INBOX_PAGE = 'orbital:notifications', PROPOSALS_PAGE = 'orbital:proposals';
+    const INBOX_PAGE = 'orbital:notifications', PROPOSALS_PAGE = 'orbital:proposals', TIMELINE_PAGE = 'orbital:timeline';
     const markAllNotificationsRead = () => {};
     const isSearchDoc = (node) => node.id?.startsWith('tana:search:');
     let zoom = null, view = 'library', caretOnOpen = false;
