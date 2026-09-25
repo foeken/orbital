@@ -76,7 +76,11 @@ const arranged = (k, what) => (VIEW_ARRANGEMENT[k] || {})[what];
 // its query, so opening one shows the arrangement it was saved with rather than whatever the last view was using.
 // A search's key is its document id, so the per-view defaults below simply do not match it.
 const groupOf = (k) => { const g = groupPref[k] ?? arranged(k, 'group'); return GROUPS.some(([id]) => id === g) ? g : 'none'; };
-const groupBy = () => groupOf(pillKey());
+// Responsibility is about your tasks, and leaves out every row that is not yours: with no tasks in the filter (only
+// Risk picked in the Type pill, #139) it would hide the other people's risks, so such a list is not sectioned and the
+// Group menu does not offer it. The choice is kept: ticking Tasks again brings the sections back.
+const tasksInFilter = (f) => !f || !f.types || f.types.includes('tasks');
+const groupBy = () => { const g = groupOf(pillKey()); return g === 'responsibility' && !tasksInFilter(filters.get(pillKey())) ? 'none' : g; };
 // A saved search's arrangement belongs in its document, so its keys are kept out of the browser-local preference
 // blob: without this, changing any view's grouping would flush every search key it had accumulated to disk too.
 const persistPref = (key, chosen) => setPref(key, Object.fromEntries(Object.entries(chosen).filter(([k]) => !k.startsWith('tana:'))));

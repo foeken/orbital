@@ -3183,6 +3183,13 @@ async function main() {
     assert.equal(viewParams({ types: ['people'], states: ['proposed', 'open'], assignee: 'me' }, ME).stateTypes, undefined, 'a state means nothing without tasks, so it is not asked for');
     assert.deepEqual(viewParams({ types: ['tasks', 'meetings'], states: ['closed'] }, ME).stateTypes, ['closed'], 'and still applies as soon as tasks are in the selection');
     assert.deepEqual(viewParams({ types: ['tasks', 'docs'] }, ME).nodeTypes, ['text'], 'duplicate graph kinds collapse into one query');
+    // #139: a workspace type in the Type pill. Every kind it can be, its uri as entityTypes, and none of the Library's
+    // saved task filters: a risk has no state, so "every state" would have listed none of them.
+    const RISK = 'tana:type:01m1e3nthqj48b8drqb1fmma9d';
+    assert.deepEqual(viewParams({ ...VIEW_PRESETS.library, types: [RISK], assignee: 'me' }, ME), { nodeTypes: ['event', 'text', 'chat', 'canvas', 'agent', 'skill', 'search'], entityTypes: [RISK], limit: 1000, sortOptions: UPD, mode: COUNT });
+    assert.equal(validViewFilter({ types: ['tana:type:nope'] }), false, 'only a real type uri joins the kinds');
+    assert.deepEqual(filterToSearchQuery({ ...VIEW_PRESETS.library, types: [RISK] }, ME), { entityTypeUris: [RISK] }, 'a saved search stores it the way Tana does, without the task filters');
+    assert.deepEqual(searchQueryToFilter({ entityTypeUris: [RISK] }, ME).types, [RISK], 'and reads it back into the pill');
     assert.equal(viewParams({ types: ['docs'], text: ' dpa ' }, ME, 25).textQuery, 'dpa');
     assert.equal(viewParams({ types: ['docs'], text: ' dpa ' }, ME, 25).limit, 25);
     assert.equal(validViewFilter({ types: ['docs'], states: null, assignee: 'anyone', text: '', participant: null, window: null }), true);

@@ -217,7 +217,7 @@ function choiceKeys(e) {
   return true;
 }
 // Link to types: every type in the workspace, the current targets ticked; each Enter adds or removes one.
-let typeListCache = null;
+// (typeListCache is declared in renderer/pills.js, whose Type pill lists the same types)
 function openTargetsPage(ctx) {
   openFieldPage(ctx, targetRows, 'Link to types…', openCommandPalette);
   run(async () => { typeListCache = await tana.typeList(); if (palMode === 'field' && fieldPage === targetRows) renderPalette(); });

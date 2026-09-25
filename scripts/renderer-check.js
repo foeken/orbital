@@ -70,7 +70,7 @@ assert.match(source, /scrollIntoView\(\{ block: 'nearest', inline: 'nearest', co
 assert.doesNotMatch(source, /id: 'meetings', title: 'Meetings'|id: 'chats', title: 'Chats'|id: 'people', title: 'People'|id: 'tasks', title: 'Tasks'/,
   'the removed views are not served as roots any more');
 assert.match(source, /id: 'library', title: 'Library', icon: 'library'/);
-assert.match(source, /value: names\(TYPES, f\.types\) \|\| 'Any type', icon: one \? one\[2\] : 'any'/);
+assert.match(source, /value: \[names\(TYPES, kinds\), \.\.\.typed\.map\(typeName\)\]\.filter\(Boolean\)\.join\(', '\) \|\| 'Any type', icon: one \? one\[2\] : /);
 assert.match(source, /icon: s\.id === 'library' \? 'library' : s\.icon/);
 // every view is the same screen: one loader, one filter per view id (docs/VIEWS.md)
 // widenFilter: a view restored with Group by Responsibility asks for Anyone, so the grouping never sections a list

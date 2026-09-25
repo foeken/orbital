@@ -226,8 +226,8 @@ function mockApi() {
     viewList: async (_id, filter) => {
       await new Promise((r) => setTimeout(r, 30));
       const text = String(filter.text || '').trim().toLowerCase();
-      return { nodes: [...all, ...members].filter((d) => (!filter.types ? !['people', 'types'].includes(kindOf(d)) : filter.types.includes(kindOf(d)))
-        && (!filter.states || listed(d, filter))
+      return { nodes: [...all, ...members].filter((d) => (!filter.types ? !['people', 'types'].includes(kindOf(d)) : filter.types.includes(kindOf(d)) || (d.tags || []).some((t) => t && filter.types.includes(t.uri)))
+        && (!filter.states || (filter.types && !filter.types.includes('tasks')) || listed(d, filter)) // a state only filters tasks (sdk/query.js)
         && d.text.toLowerCase().includes(text)).map(info), truncated: false };
     },
     searches: async () => structuredClone(all.filter((d) => d.id.startsWith('tana:search:')).map(info)),
@@ -254,7 +254,7 @@ function mockApi() {
     // the rows a staged filter would find: the same selection viewList makes, so editing the pills moves the list
     searchPreview: async (filter) => {
       const text = String(filter.text || '').trim().toLowerCase();
-      return structuredClone([...all, ...members].filter((d) => (!filter.types ? kindOf(d) !== 'people' : filter.types.includes(kindOf(d)))
+      return structuredClone([...all, ...members].filter((d) => (!filter.types ? kindOf(d) !== 'people' : filter.types.includes(kindOf(d)) || (d.tags || []).some((t) => t && filter.types.includes(t.uri)))
         && (!filter.states || listed(d, filter))
         && d.text.toLowerCase().includes(text)).map(info));
     },

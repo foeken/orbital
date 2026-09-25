@@ -1,17 +1,32 @@
 'use strict';
 // The filter pills above a view and their menus; Cmd+K renders the same rows.
 
+// Every type in the workspace ({ uri, title, hue }), for the Type pill and a link field's targets (renderer/fields.js).
+// The pill asks once per session; Link to types reads it afresh each time it opens.
+let typeListCache = null, typeListAsked = false;
+function loadWorkspaceTypes() {
+  if (typeListCache || typeListAsked || !tana.typeList) return;
+  typeListAsked = true;
+  tana.typeList().then((list) => { typeListCache = list; if (pillsDrawn) renderPills(true); if (!palette.hidden) renderPalette(); }, () => { typeListAsked = false; });
+}
+
 function pillDefs() {
   const f = filters.get(pillKey());
   if (!f) return [];
   const defs = [], save = onSearchPage() ? setSearchF : setViewF, one = f.types && f.types.length === 1 && TYPES.find((t) => t && t[0] === f.types[0]);
+  // The kinds, then the workspace's own types (#139). The two sets do not mix: ticking one clears the other, since
+  // Tasks and Risk together would mean tasks that are risks (sdk/query.js), never what somebody ticking both meant.
+  const kindIds = TYPES.filter(Boolean).map((x) => x[0]), kinds = (f.types || []).filter((x) => kindIds.includes(x)), typed = (f.types || []).filter((x) => !kindIds.includes(x));
+  if (typed.length) loadWorkspaceTypes(); // the pill names them
+  const typeName = (uri) => ((typeListCache || []).find((t) => t.uri === uri) || {}).title || '…';
   // A kind page (Tasks, Meetings, Chats, People) is that kind: only the Library and the Inbox pick their kinds.
   // A saved search is never a kind page — choosing what it lists is the whole point of it.
-  if (onSearchPage() || !(views.find((v) => v.id === view) || {}).kind) defs.push({ id: 'type', command: 'Filter by type', value: names(TYPES, f.types) || 'Any type', icon: one ? one[2] : 'any', rows: () => [
+  if (onSearchPage() || !(views.find((v) => v.id === view) || {}).kind) defs.push({ id: 'type', command: 'Filter by type', value: [names(TYPES, kinds), ...typed.map(typeName)].filter(Boolean).join(', ') || 'Any type', icon: one ? one[2] : typed.length === 1 && !kinds.length ? typeGlyph(typed[0]) : 'any', rows: () => (loadWorkspaceTypes(), [
     { label: 'Any type', icon: 'any', checked: !f.types, run: () => save({ types: null }) },
-    ...TYPES.map((t) => (t ? { label: t[1], icon: t[2], keepOpen: true, checked: !!f.types && f.types.includes(t[0]), run: () => save({ types: toggleIn(TYPES.filter(Boolean).map((x) => x[0]), f.types, t[0]) }) } : { div: true })), // multi-select: the menu stays open to tick more
-  ] });
-  if (!f.types || f.types.includes('tasks')) {
+    ...TYPES.map((t) => (t ? { label: t[1], icon: t[2], keepOpen: true, checked: kinds.includes(t[0]), run: () => save({ types: toggleIn(kindIds, kinds.length ? kinds : null, t[0]) }) } : { div: true })), // multi-select: the menu stays open to tick more
+    ...(typeListCache && typeListCache.length ? [{ head: 'Workspace types' }, ...typeListCache.map((t) => ({ label: t.title || 'Untitled type', icon: typeGlyph(t.uri), keepOpen: true, checked: typed.includes(t.uri), run: () => save({ types: toggleIn(typeListCache.map((x) => x.uri), typed.length ? typed : null, t.uri) }) }))] : []),
+  ]) });
+  if (tasksInFilter(f)) {
     defs.push({ id: 'status', label: 'Status', command: 'Filter by status', icon: 'status', value: names(STATES, f.states) || 'Any', rows: () => [
       { label: 'Any status', checked: !f.states, run: () => save({ states: null }) },
       ...STATES.map(([v, l]) => ({ label: l, keepOpen: true, checked: !!f.states && f.states.includes(v), run: () => save({ states: toggleIn(STATES.map((s) => s[0]), f.states, v) }) })), // multi-select, like the type list
@@ -35,7 +50,7 @@ function pillDefs() {
   // A view keeps them in the browser; a saved search stores them in its document, so the arrangement travels with
   // the search and is what it opens on next time.
   defs.push({ id: 'sort', label: 'Sort', command: 'Sort by', icon: 'sort', value: SORTS.find(([id]) => id === sortBy())[1], rows: () => SORTS.map(([id, label]) => ({ label, checked: sortBy() === id, run: () => setSortBy(id) })) });
-  defs.push({ id: 'group', label: 'Group', command: 'Group by', icon: 'group', value: GROUPS.find(([id]) => id === groupBy())[1], rows: () => GROUPS.map(([id, label]) => ({ label, checked: groupBy() === id, run: () => setGroupBy(id) })) });
+  defs.push({ id: 'group', label: 'Group', command: 'Group by', icon: 'group', value: GROUPS.find(([id]) => id === groupBy())[1], rows: () => GROUPS.filter(([id]) => id !== 'responsibility' || tasksInFilter(f)).map(([id, label]) => ({ label, checked: groupBy() === id, run: () => setGroupBy(id) })) });
   // what each row shows of itself; multi-select, so the menu stays open to tick more, like the type and status lists
   defs.push({ id: 'display', label: 'Display', command: 'Display', icon: 'field', value: names(DISPLAY, displayKeys()) || 'Nothing', rows: () => DISPLAY.map(([id, label]) => ({ label, keepOpen: true, checked: displayOn(id), run: () => setDisplay(id) })) });
   return defs;
