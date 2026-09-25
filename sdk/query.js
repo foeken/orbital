@@ -86,6 +86,13 @@ function assigneeParams(assignee, me) {
 
 const FILTER_KEYS = new Set(['types', 'states', 'assignee', 'text', 'participant', 'window', 'completedWithin']);
 const USER = /^tana:user-profile:[0-9a-z]{26}$/;
+// A filter's types may also name the workspace's own types (`tana:type:` uris, #139): every Risk, say. They are sent as
+// entityTypes, which the graph ORs among themselves and ANDs with the kinds (verified live 2026-09-25: Risk 18 +
+// Project 5 = 23 together). Only types chosen means what they are, whatever kind, so the task-only filters stay off:
+// a risk has no state, and the Library's "every state" would otherwise have emptied the list.
+const TYPE_URI = /^tana:type:[0-9a-z]{26}$/;
+const splitTypes = (types) => { const all = Array.isArray(types) ? types : []; return { kinds: all.filter((t) => !TYPE_URI.test(t)), typeUris: all.filter((t) => TYPE_URI.test(t)) }; };
+const tasksInScope = (types) => { const { kinds, typeUris } = splitTypes(types); return kinds.length ? kinds.includes('tasks') : !typeUris.length; };
 // Completed tasks are the one thing a list drowns in, so a window says how far back they still count: 3 days, 7
 // days, 30 days, or All. Whether they appear at all is the Status filter's business and only its — this never hides them,
 // it only ages them out, which is why it has no "off" and why its value is kept while Completed is out of Status.
@@ -104,7 +111,7 @@ function completedInWindow(n, within, now = Date.now()) {
 }
 function validViewFilter(f) {
   return !!f && !Array.isArray(f) && typeof f === 'object' && Object.keys(f).every((k) => FILTER_KEYS.has(k))
-    && (f.types === undefined || f.types === null || Array.isArray(f.types) && f.types.every((x) => VIEW_KINDS.includes(x)))
+    && (f.types === undefined || f.types === null || Array.isArray(f.types) && f.types.every((x) => VIEW_KINDS.includes(x) || TYPE_URI.test(x)))
     && (f.states === undefined || f.states === null || Array.isArray(f.states) && f.states.every((x) => STATE_TYPES.includes(x)))
     && (f.assignee === undefined || ['me', 'anyone', 'unassigned'].includes(f.assignee) || USER.test(f.assignee))
     && (f.text === undefined || typeof f.text === 'string')
@@ -117,17 +124,18 @@ function viewParams(f, me, limit = 1000) {
   if (!validViewFilter(f)) throw new Error('invalid view filter');
   // No kinds selected is "any kind we list", never an unconstrained query: nodeTypes: [] is no filter at all to the
   // graph, which answers with images, calls and transcripts that no view can render.
-  const kinds = f.types && f.types.length ? f.types : ANY_KINDS;
+  const { kinds: chosen, typeUris } = splitTypes(f.types), kinds = chosen.length ? chosen : ANY_KINDS;
   const p = {
     nodeTypes: [...new Set(kinds.map((k) => KIND_NODE_TYPE[k]))], limit,
     sortOptions: f.types && f.types.length === 1 && f.types[0] === 'meetings'
       ? [{ field: 'SORT_FIELD_EVENT_START_TIME', direction: 'SORT_DIRECTION_ASCENDING' }] : UPDATE_DESC,
     mode: 'LIST_NODES_MODE_WITH_COUNT',
   };
+  if (typeUris.length) p.entityTypes = typeUris;
   // A state and an assignee only mean something while tasks are in the selection, which is exactly when those two
   // pills are shown. Applying a hidden filter is how picking People in the Library returned nothing: no person has
   // a task state, so the saved "Inbox, In Progress" quietly emptied the list.
-  if (kinds.includes('tasks')) {
+  if (tasksInScope(f.types)) {
     if (f.states !== undefined && f.states !== null) p.stateTypes = f.states;
     Object.assign(p, assigneeParams(f.assignee, me));
   }
@@ -255,10 +263,14 @@ function attributeFilters(attributes, now) {
 function filterToSearchQuery(filter = {}, me) {
   const q = {};
   const kinds = Array.isArray(filter.types) && filter.types.length ? filter.types : null;
-  if (kinds) q.types = [...new Set(kinds.map((k) => KIND_NODE_TYPE[k]).filter(Boolean))];
-  if (Array.isArray(filter.states) && filter.states.length) q.stateTypes = [...filter.states];
+  const { kinds: chosen, typeUris } = splitTypes(kinds);
+  if (chosen.length) q.types = [...new Set(chosen.map((k) => KIND_NODE_TYPE[k]).filter(Boolean))];
+  if (typeUris.length) q.entityTypeUris = typeUris;
+  // the view's rule (viewParams): a state or an assignee is only stored while tasks are in scope
+  const tasks = tasksInScope(filter.types);
+  if (tasks && Array.isArray(filter.states) && filter.states.length) q.stateTypes = [...filter.states];
   if (typeof filter.text === 'string' && filter.text.trim()) q.textQuery = filter.text.trim();
-  const a = filter.assignee;
+  const a = tasks ? filter.assignee : 'anyone';
   // 'me' without a signed-in user stores nothing: falling through to the uri branch would write the literal
   // string 'me' as a user-profile uri, which matches nobody and reads as a real filter for ever after.
   if (a === 'me') { if (me) q.assignedToViewer = true; }
@@ -289,8 +301,9 @@ function searchQueryToFilter(query, me) {
   const types = list(q.types);
   const kinds = types ? [...new Set(types.map((t) => (t === 'text' ? (states.length ? 'tasks' : 'docs') : NODE_TYPE_KIND[t])).filter((k) => VIEW_KINDS.includes(k)))] : [];
   const assigned = list(q.assignedTo) || [];
+  const typed = (list(q.entityTypeUris) || []).filter((u) => TYPE_URI.test(u));
   const f = {
-    types: kinds.length ? kinds : null,
+    types: kinds.length || typed.length ? [...kinds, ...typed] : null,
     states: states.length ? states : null,
     text: typeof q.textQuery === 'string' ? q.textQuery : '',
     participant: me && (list(q.participantUris) || []).includes(me) ? 'me' : null,
