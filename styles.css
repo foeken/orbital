@@ -352,8 +352,8 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .bullet.icon.hue svg, .bullet.icon.hue:hover svg { color: oklch(0.7 0.1 var(--hue)); }
 /* Timeline (renderer/timeline.js): a time column, a rail down the page, a marker on it for each entry, then what
    happened. The rail is each entry's own left line, so a group's tasks sit along it too. Every marker is a 20px circle
-   over the rail: finished a filled green one with a white check, an edit a grey pen, accepted a grey plus, put off or sent back to the Inbox a grey arrow (Nucleo's solid circles, drawn at 22.5px because the
-   glyph's circle is 16 of its 18), and a new task a light dotted ring, since it matters least. */
+   over the rail: finished a filled green one with a white check, an edit a grey pen, accepted a grey plus, put off or sent back to the Inbox a grey arrow (Nucleo's outline circles, drawn at 22.5px because the
+   glyph's circle is 16 of its 18). Only finished work is a filled marker: every other one is a grey outline with no fill, and a new task a light dotted ring, since it matters least. */
 .node.tl { position: relative; }
 /* a row's line starts 10px left of its node (the gutter's negative margin), so the rail is placed on the marker's centre */
 .node.tl::before { content: ''; position: absolute; left: 101px; top: 0; bottom: 0; border-left: 1px solid #e6e6e6; }
