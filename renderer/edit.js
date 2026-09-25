@@ -264,7 +264,7 @@ function toggleReference(node) {
   render(true);
   run(() => tana.setDone(target.id, done));
 }
-function setView(id) { dropDrafts(); releaseHeld(); view = id; localStorage.setItem('view', id); zoom = null; sel = null; menu = null; loadView(id); render(true); }
+function setView(id) { dropDrafts(); releaseHeld(); view = id; localStorage.setItem('view' + SIDE, id); zoom = null; sel = null; menu = null; loadView(id); render(true); }
 // zoom into a document, switching to its view first when it belongs to another one; from = breadcrumb root instead of the view
 function openDoc(docId, from) {
   // Every zoom of a document comes through here, whichever route asked for it — a row, a pin, the rail, a crumb, a
@@ -273,7 +273,7 @@ function openDoc(docId, from) {
   if (isGone(docId)) return showError(new Error('That node has been deleted'));
   flushAll(); dropDrafts(); caretOnOpen = true;
   const s = from ? null : sectionOf(docId);
-  if (s && s.id !== view) { releaseHeld(); view = s.id; localStorage.setItem('view', view); }
+  if (s && s.id !== view) { releaseHeld(); view = s.id; localStorage.setItem('view' + SIDE, view); }
   const doc = allDocs().find((d) => d.id === docId) || extra.get(docId);
   if (doc) recordRecent(doc);
   zoom = { docId, nodeId: null, from };
@@ -309,10 +309,10 @@ const navPlace = () => ({ view, zoom: zoom && { ...zoom }, key: JSON.stringify([
 // A page of the app's own (Notifications, Proposals, Timeline) is a place too: its id is orbital:…, never a Tana id,
 // and a reload has to land back on it rather than on whatever was stored before it.
 const isPlaceId = (id) => isRealId(id) || String(id || '').startsWith('orbital:');
-function rememberPlace() {
+function rememberPlace(key = 'place' + SIDE) {
   const doc = zoom ? docOf(zoom.docId) : null; // a row the app does not have simply stores no title: the next launch opens on the view, as before
-  if (zoom && isPlaceId(zoom.docId)) localStorage.setItem('place', JSON.stringify({ docId: zoom.docId, nodeId: zoom.nodeId || null, from: zoom.from, title: doc ? doc.text : undefined, icon: doc ? doc.icon : undefined }));
-  else localStorage.removeItem('place');
+  if (zoom && isPlaceId(zoom.docId)) localStorage.setItem(key, JSON.stringify({ docId: zoom.docId, nodeId: zoom.nodeId || null, from: zoom.from, title: doc ? doc.text : undefined, icon: doc ? doc.icon : undefined }));
+  else localStorage.removeItem(key);
 }
 function noteNavigation() {
   const here = navPlace();
@@ -348,7 +348,7 @@ function navigate(dir) {
   navigating = true;
   try {
     flushAll(); dropDrafts();
-    if (place.view !== view) { view = place.view; localStorage.setItem('view', view); }
+    if (place.view !== view) { view = place.view; localStorage.setItem('view' + SIDE, view); }
     zoom = place.zoom && { ...place.zoom };
     caretOnOpen = !!zoom;
     render(true);
@@ -375,7 +375,7 @@ function renderNav() {
 // fine, an error banner on every launch is not. renderOutline drops a zoom it cannot resolve, so a node that was
 // deleted or is no longer readable ends up on the view too.
 function readStoredPlace() {
-  try { return JSON.parse(localStorage.getItem('place') || 'null'); } catch { return null; } // a corrupt entry is simply not a place
+  try { return JSON.parse(localStorage.getItem('place' + SIDE) || 'null'); } catch { return null; } // a corrupt entry is simply not a place
 }
 // Read at load, before the first paint: renderOutline records the place it drew, and on boot that is the view with no
 // zoom, which clears the stored place. Reading it here means the first render can no longer erase what we reopen.

@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('api', {
   newWindow: () => ipcRenderer.invoke('window:new'), // another outliner window (File › New Window)
   splitWindow: () => ipcRenderer.invoke('window:split'), // a second page beside this one in the same window, or back to this one alone
   otherPane: () => ipcRenderer.invoke('window:otherPane'), // the keyboard to the other half of a split
+  onSide: (cb) => ipcRenderer.on('window:side', (_e, side) => cb(side)), // '' once this page, the right half, is left alone in its window
   windowTheme: (theme) => ipcRenderer.send('window:theme', theme), // 'light' | 'dark': the line between split pages matches the page
   openExternal: (url) => ipcRenderer.invoke('shell:open', url), // http(s) link from node text, in the default browser
   exportPdf: (docId) => ipcRenderer.invoke('doc:exportPdf', docId),

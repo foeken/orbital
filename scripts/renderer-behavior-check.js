@@ -1769,6 +1769,7 @@ async function runReservedComboCheck() {
 // way of navigating counts; going back then somewhere new drops the forward places, like a browser.
 function runHistoryCheck() {
   const api = vm.runInNewContext(`
+    const SIDE = ''; // renderer/state.js: a page on its own, not the right half of a split
     let view = 'tasks', zoom = null, caretOnOpen = false, rendered = 0;
     const INBOX_PAGE = 'orbital:notifications', PROPOSALS_PAGE = 'orbital:proposals', TIMELINE_PAGE = 'orbital:timeline';
     let notificationLeaves = 0;
@@ -4090,6 +4091,7 @@ async function runRestorePlaceCheck() {
   const seed = source.match(/if \(savedPlace && isPlaceId\(savedPlace\.docId\)[\s\S]*?\n\}/);
   assert.ok(seed, 'a launch draws the page it is reopening before anything is fetched');
   const api = vm.runInNewContext(`
+    const SIDE = ''; // renderer/state.js: a page on its own, not the right half of a split
     let view = 'inbox', zoom = null, rendered = 0, fetches = 0, nodeResolve = null, nodeMode = 'auto', docs = [], savedPlace = null, connected = true;
     const storage = new Map();
     const localStorage = {
@@ -4926,6 +4928,7 @@ async function runCreateTaskFlowCheck() {
     let release;
     const context = { creationGate: delayed ? new Promise((resolve) => { release = resolve; }) : Promise.resolve() };
     vm.runInNewContext(`
+    const SIDE = ''; // renderer/state.js: a page on its own, not the right half of a split
       const listeners = {}, created = [], saved = [];
       const rowEl = { isContentEditable: true, dataset: { key: 'tana:text:01j0row000000000000000000' }, textContent: 'existing' };
       const titleEl = { isContentEditable: false, dataset: { key: '' }, textContent: '', classList: { remove: () => {} },
@@ -5682,6 +5685,7 @@ async function runHomeCheck() {
   const homeInit = source.match(/let home = pref\('home', 'library'\);/)[0];
   const seed = source.match(/if \(!savedPlace && isRealId\(home\)\) savedPlace = [^\n]*/)[0];
   const api = vm.runInNewContext(FAKE_DOM + `
+    const SIDE = ''; // renderer/state.js: a page on its own, not the right half of a split
     const stored = {};
     const localStorage = { getItem: (k) => (k in stored ? stored[k] : null), setItem: (k, v) => { stored[k] = v; }, removeItem: (k) => { delete stored[k]; } };
     const prefs = {}; const pref = (k, fb) => (k in prefs ? prefs[k] : fb); const setPref = (k, v) => { prefs[k] = v; stored[k] = v; };
@@ -7484,6 +7488,7 @@ async function runSetHueCheck() {
 // this, a deleted page opened as an empty outline whose metadata read failed on every backoff, for the whole session.
 async function runDeletedNodeCheck() {
   const api = vm.runInNewContext(`
+    const SIDE = ''; // renderer/state.js: a page on its own, not the right half of a split
     const deletedIds = new Set();
     const INBOX_PAGE = 'orbital:notifications', PROPOSALS_PAGE = 'orbital:proposals', TIMELINE_PAGE = 'orbital:timeline';
     const markAllNotificationsRead = () => {};

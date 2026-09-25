@@ -37,7 +37,10 @@ let searchesLoaded = false;  // whether that list has answered once: until it ha
 // what it reads. It is the anchor crumb on every zoomed page, where Back lands with nothing to go back to, and the
 // page a launch opens with no place to restore. The Library is the default and the fallback (nodes.js).
 let home = pref('home', 'library');
-let view = localStorage.getItem('view') || 'library'; // active view id; the outline shows one view at a time
+// The right half of a split (main.js addPane, ?side=2) keeps its own view and place, so a restart reopens both halves
+// where they were; main says '' when it becomes the only page (onSide in renderer/app.js).
+let SIDE = typeof location !== 'undefined' && new URLSearchParams(location.search).get('side') === '2' ? ':2' : '';
+let view = localStorage.getItem('view' + SIDE) || 'library'; // active view id; the outline shows one view at a time
 // Views that no longer exist. A stored one would leave the app on a page with no filter, no rows and no way back,
 // so it lands in the Library, which lists every kind those pages used to list one of.
 // Tasks lands in the Library rather than the Inbox: the two listed almost the same thing (your tasks, proposed and

@@ -64,11 +64,13 @@ function layout(win) {
   const { width, height } = win.getContentBounds(), n = win.panes.length, w = Math.floor((width - SPLIT_GAP * (n - 1)) / n);
   win.panes.forEach((p, i) => { const x = i * (w + SPLIT_GAP); p.setBounds({ x, y: 0, width: i === n - 1 ? width - x : w, height }); });
 }
-function addPane(win) {
+function addPane(win, side) {
   const pane = new WebContentsView({ webPreferences: { preload: path.join(__dirname, 'preload.js') } });
+  pane.side = side; // '2': the right half, which keeps its own view and place (renderer/state.js SIDE)
   pane.webContents.on('focus', () => { S.win = win; S.pane = pane.webContents; });
   win.panes.push(pane); win.contentView.addChildView(pane); layout(win);
-  pane.webContents.loadFile(path.join(__dirname, 'index.html'));
+  pane.webContents.loadFile(path.join(__dirname, 'index.html'), side ? { query: { side } } : undefined);
+  if (win.saveBounds) win.saveBounds();
   return pane;
 }
 // A WebContentsView's page outlives its window unless it is closed by hand.
@@ -76,6 +78,9 @@ function removePane(win, pane) {
   const wc = pane.webContents, key = wc.id;
   win.panes = win.panes.filter((p) => p !== pane);
   if (!win.isDestroyed()) { win.contentView.removeChildView(pane); layout(win); }
+  const left = win.panes.length === 1 && win.panes[0];
+  if (left && left.side) { left.side = ''; left.webContents.send('window:side', ''); } // the right half, alone now, is the window's page
+  if (win.saveBounds && !win.isDestroyed()) win.saveBounds();
   S.windowViews.delete(key); unwatchRelated(key);
   if (S.pane === wc) S.pane = win.panes[0]?.webContents || null;
   if (!wc.isDestroyed()) wc.close();
@@ -86,11 +91,13 @@ function createWindow() {
   const bounds = front && !front.isDestroyed() ? { ...front.getNormalBounds(), x: front.getNormalBounds().x + 24, y: front.getNormalBounds().y + 24 } : restoredBounds(saved, screen.getAllDisplays().map((d) => d.workArea));
   const win = new BaseWindow({ ...bounds, title: 'Orbital', titleBarStyle: 'hiddenInset', backgroundColor: SPLIT_LINE.light });
   win.panes = [];
-  S.windows.add(win); S.win = win; S.pane = addPane(win).webContents;
-  if (!front && saved && saved.maximized) win.maximize();
   // saved shortly after a move or resize settles, and once more on close, so a quit or an update relaunch keeps it
   let boundsTimer = null;
-  const saveBounds = () => { clearTimeout(boundsTimer); boundsTimer = null; if (!win.isDestroyed()) db.setSetting('window', { ...win.getNormalBounds(), maximized: win.isMaximized() }); };
+  const saveBounds = () => { clearTimeout(boundsTimer); boundsTimer = null; if (!win.isDestroyed()) db.setSetting('window', { ...win.getNormalBounds(), maximized: win.isMaximized(), split: win.panes.length > 1 }); };
+  S.windows.add(win); S.win = win; S.pane = addPane(win, '').webContents;
+  if (!front && saved && saved.split) addPane(win, '2'); // the split comes back with the frame it was saved with
+  win.saveBounds = saveBounds; // a split opened or closed is saved too (addPane, removePane)
+  if (!front && saved && saved.maximized) win.maximize();
   for (const name of ['resize', 'move', 'maximize', 'unmaximize']) win.on(name, () => { clearTimeout(boundsTimer); boundsTimer = setTimeout(saveBounds, 500); });
   win.on('resize', () => layout(win));
   win.on('close', saveBounds);
@@ -111,7 +118,7 @@ function toggleSplit(wc) {
   const win = paneWindow(wc);
   if (!win) return;
   if (win.panes.length > 1) { for (const p of win.panes) if (p.webContents !== wc) removePane(win, p); return; }
-  const pane = addPane(win);
+  const pane = addPane(win, '2');
   pane.webContents.once('did-finish-load', () => pane.webContents.focus()); // keyboard first: the new page takes the keys
 }
 // Cmd+W closes the page you are in when there are two, and the window otherwise.
