@@ -347,7 +347,12 @@ async function loadRoots() {
   }
   for (const d of drafts) { const s = views.find((x) => x.id === d.view); if (s) s.nodes.splice(d.i, 0, d.node); }
 }
-async function reload(docId) { kids.set(docId, syncUploads(docId, await (isTypeId(docId) ? tana.searchPreview(typeFilter(docId)) : tana.children(docId)))); } // uploads still running keep their placeholders
+async function reload(docId) {
+  // A type page asks its filter; an answer to a filter the pills have since moved on from is dropped, or clicking
+  // through a menu quickly could leave the page on an older choice than the pills show.
+  if (isTypeId(docId)) { const asked = typeFilter(docId), rows = await tana.searchPreview(asked); if (filters.get(docId) === asked) kids.set(docId, rows); return; }
+  kids.set(docId, syncUploads(docId, await tana.children(docId))); // uploads still running keep their placeholders
+}
 // A document's rows are not only the ones on its page: every field it has is an outline of that document too,
 // loaded under "<document>|<type>?attribute=<key>". Anything that re-reads a document's rows re-reads those with
 // it, or an undo, a live update or someone else's edit shows on the page and not in the field beside it.
