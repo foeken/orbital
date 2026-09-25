@@ -849,6 +849,7 @@ async function materialise(item, el) {
     if (node.kind === 'document') {
       const n = await tana.createDocument(text, node.createOptions || { kind: node.draft });
       real = { ...n, text: n.title ?? n.text ?? '', hasChildren: true };
+      addSearch(real); // a saved search drafted here is in Cmd+K at once (#141); anything else is left alone
       const s = sectionOf(node.id), i = s ? s.nodes.indexOf(node) : -1;
       if (i >= 0) { s.nodes.splice(i, 1, real); fresh.set(real.id, { section: s.id, after: i ? s.nodes[i - 1].id : null, node: real }); }
       if (zoom?.docId === node.id) zoom = { ...zoom, docId: real.id };

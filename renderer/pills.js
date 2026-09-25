@@ -227,7 +227,7 @@ function saveSearchPill() {
   return actionPill('savesearch', 'saveSearch', 'Keep this query as a saved search', 'Save as search', () => run(async () => {
     const node = await tana.createSearch(view);
     if (!node || !node.id) return;
-    if (typeof loadSearches === 'function') loadSearches(); // the Cmd+K Searches group should list it without a relaunch
+    addSearch(node); // the Cmd+K Searches group lists it straight away (#141)
     goTo(node.id);
   }));
 }
