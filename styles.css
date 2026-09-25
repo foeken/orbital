@@ -358,9 +358,9 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 /* a row's line starts 10px left of its node (the gutter's negative margin), so the rail is placed on the marker's centre */
 .node.tl::before { content: ''; position: absolute; left: 101px; top: 0; bottom: 0; border-left: 1px solid #e6e6e6; }
 .ghead + .node.tl { margin-top: 10px; } /* room under a day's heading */
-.node.tl > .line { position: relative; padding: 9px 0 9px 102px; }
+.node.tl > .line { position: relative; padding: 14px 0 14px 102px; } /* room around each entry: inside it, so the rail runs on */
 .node.tl > .line > .chev { width: 0; }
-.node.tl > .line > .body > .meta { position: absolute; left: 34px; top: 9px; margin: 0; line-height: 24px; font-variant-numeric: tabular-nums; }
+.node.tl > .line > .body > .meta { position: absolute; left: 34px; top: 14px; margin: 0; line-height: 24px; font-variant-numeric: tabular-nums; }
 .node.tl > .line > .bullet { position: relative; z-index: 1; }
 .node.tl > .line > .bullet::before { display: none; }
 .node.tl > .line > .bullet.icon svg, .node.tl > .line > .bullet.icon:hover svg { width: 22.5px; height: 22.5px; left: -2.25px; top: 0.75px; color: #8e9297; background: #fff; border-radius: 50%; }
@@ -378,7 +378,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .node.tl > .line > .body > .subtext { margin-top: 2px; }
 /* a group's rows hang under its words (block + t-bullet: the list rule it overrides): a task by its box, which makes its
    type glyph redundant, anything else by its type's glyph */
-.node.block.t-bullet.tl > .children { margin-left: 132px; border-left: 0; }
+.node.block.t-bullet.tl > .children { margin-left: 132px; padding-bottom: 8px; border-left: 0; }
 .node.tl > .children .node > .line { padding: 1px 0; }
 .node.tl > .children .node > .line > .chev { width: 0; }
 .node.tl > .children .node > .line:has(> .check) > .bullet { display: none; }
@@ -387,7 +387,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .node.tl > .children .meta { display: none; } /* assigned to you and private: true of every one, so said by none */
 .node.tl .cbadge { display: none; } /* the local agent's badge is a fact about the task, not about what happened to it */
 .node.tl .line, .node.tl .line .text { cursor: pointer; } /* every row here opens something: a click is not a place for a caret */
-.node.tl.unread > .line::after { content: ''; position: absolute; left: 88px; top: 19px; width: 6px; height: 6px; border-radius: 50%; background: #0090ff; }
+.node.tl.unread > .line::after { content: ''; position: absolute; left: 88px; top: 24px; width: 6px; height: 6px; border-radius: 50%; background: #0090ff; }
 [data-theme="dark"] .node.tl::before { border-left-color: #34373a; }
 [data-theme="dark"] .node.tl > .line > .bullet.icon svg { background: #1b1d1e; color: #8a8f95; }
 [data-theme="dark"] .node.tl-done > .line > .bullet.icon svg { color: #fff; background: none; }
