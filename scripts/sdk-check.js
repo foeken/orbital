@@ -862,6 +862,8 @@ async function main() {
     const typed = backend.graphRow({ id: 'tana:text:' + ulid(), title: 'Tuxis', entityType: TYPE, updateTime: '2026-09-20T10:00:00Z' });
     assert.equal(typed.icon, 'nc-rocket', 'a document of that type is drawn with it');
     assert.equal(backend.graphRow({ id: 'tana:text:' + ulid(), title: 'Other', entityType: OTHER, updateTime: '2026-09-20T10:00:00Z' }).icon, 'type', 'and a type with no glyph keeps the generic one');
+    assert.equal(JSON.stringify(backend.toNode(backend.graphRow({ id: 'tana:text:' + ulid(), title: 'Goal', entityType: OTHER, attributes: { [OTHER + '?attribute=a']: { text: 'On track', listItems: ['On track'] }, [OTHER + '?attribute=b']: { text: '' } } })).fields),
+      JSON.stringify({ [OTHER + "?attribute=a"]: ["On track"] }), 'a row carries the field values the graph lists with it, and no empty ones');
     assert.equal(backend.toNode({ id: TYPE, title: 'Organization', icon: 'type', tags: [] }).icon, 'nc-rocket', 'the type itself wears it too, which is where it is chosen');
     assert.equal(backend.toNode({ id: 'tana:chat:' + ulid(), title: 'Chat', icon: 'chat', tags: [] }).icon, 'chat', 'no other kind is touched');
     assert.equal(icons.setTypeIcon(TYPE, null), null, 'clearing answers with nothing to draw');
@@ -3241,6 +3243,12 @@ async function main() {
     assert.deepEqual(viewParams({ ...VIEW_PRESETS.library, types: [RISK], assignee: 'me' }, ME), { nodeTypes: ['event', 'text', 'chat', 'canvas', 'agent', 'skill', 'search'], entityTypes: [RISK], limit: 1000, sortOptions: UPD, mode: COUNT });
     assert.equal(validViewFilter({ types: ['tana:type:nope'] }), false, 'only a real type uri joins the kinds');
     assert.deepEqual(filterToSearchQuery({ ...VIEW_PRESETS.library, types: [RISK] }, ME), { entityTypeUris: [RISK] }, 'a saved search stores it the way Tana does, without the task filters');
+    // A type page's field pills (#type-page): Tana's stored attributes, run as the attributeFilters verified live on Goal.
+    const STATUS = RISK + '?attribute=hpgqd4jv', fielded = { types: [RISK], fields: { [STATUS]: { textMatches: [{ value: 'On track' }, { value: 'Unknown' }] } } };
+    assert.equal(validViewFilter(fielded), true);
+    assert.equal(validViewFilter({ types: [RISK], fields: { 'tana:type:nope?attribute=x': {} } }), false, 'a field key is a real type uri and attribute');
+    assert.deepEqual(searchQueryParams(filterToSearchQuery(fielded, ME), ME).attributeFilters, { [STATUS]: { textMatches: [{ value: 'On track', mode: 'MODE_EQUALS' }, { value: 'Unknown', mode: 'MODE_EQUALS' }] } },
+      'the pills reach the graph as one field with its labels ORed');
     assert.deepEqual(searchQueryToFilter({ entityTypeUris: [RISK] }, ME).types, [RISK], 'and reads it back into the pill');
     // #148: the live query that re-reads an open saved search covers what it lists: kinds, type, state and assignee
     // carried over, text and owners dropped (a live query cannot say them), newest change first.

@@ -13,7 +13,7 @@ function loadWorkspaceTypes() {
 function pillDefs() {
   const f = filters.get(pillKey());
   if (!f) return [];
-  const defs = [], save = onSearchPage() ? setSearchF : setViewF, one = f.types && f.types.length === 1 && TYPES.find((t) => t && t[0] === f.types[0]);
+  const defs = [], save = onSearchPage() ? setSearchF : onTypePage() ? setTypeF : setViewF, one = f.types && f.types.length === 1 && TYPES.find((t) => t && t[0] === f.types[0]);
   // The kinds, then the workspace's own types (#139). The two sets do not mix: ticking one clears the other, since
   // Tasks and Risk together would mean tasks that are risks (sdk/query.js), never what somebody ticking both meant.
   const kindIds = TYPES.filter(Boolean).map((x) => x[0]), kinds = (f.types || []).filter((x) => kindIds.includes(x)), typed = (f.types || []).filter((x) => !kindIds.includes(x));
@@ -21,7 +21,9 @@ function pillDefs() {
   const typeName = (uri) => ((typeListCache || []).find((t) => t.uri === uri) || {}).title || '…';
   // A kind page (Tasks, Meetings, Chats, People) is that kind: only the Library and the Inbox pick their kinds.
   // A saved search is never a kind page — choosing what it lists is the whole point of it.
-  if (onSearchPage() || !(views.find((v) => v.id === view) || {}).kind) defs.push({ id: 'type', command: 'Filter by type', value: [names(TYPES, kinds), ...typed.map(typeName)].filter(Boolean).join(', ') || 'Any type', icon: one ? one[2] : typed.length === 1 && !kinds.length ? typeGlyph(typed[0]) : 'any', rows: () => (loadWorkspaceTypes(), [
+  // A type's page is that type, so its pills are its fields instead (fieldPill below).
+  if (onTypePage()) defs.push(...typeDefs().map((def) => fieldPill(def, f, save)).filter(Boolean));
+  else if (onSearchPage() || !(views.find((v) => v.id === view) || {}).kind) defs.push({ id: 'type', command: 'Filter by type', value: [names(TYPES, kinds), ...typed.map(typeName)].filter(Boolean).join(', ') || 'Any type', icon: one ? one[2] : typed.length === 1 && !kinds.length ? typeGlyph(typed[0]) : 'any', rows: () => (loadWorkspaceTypes(), [
     { label: 'Any type', icon: 'any', checked: !f.types, run: () => save({ types: null }) },
     ...TYPES.map((t) => (t ? { label: t[1], icon: t[2], keepOpen: true, checked: kinds.includes(t[0]), run: () => save({ types: toggleIn(kindIds, kinds.length ? kinds : null, t[0]) }) } : { div: true })), // multi-select: the menu stays open to tick more
     ...(typeListCache && typeListCache.length ? [{ head: 'Workspace types' }, ...typeListCache.map((t) => ({ label: t.title || 'Untitled type', icon: typeGlyph(t.uri), keepOpen: true, checked: typed.includes(t.uri), run: () => save({ types: toggleIn(typeListCache.map((x) => x.uri), typed.length ? typed : null, t.uri) }) }))] : []),
@@ -52,8 +54,47 @@ function pillDefs() {
   defs.push({ id: 'sort', label: 'Sort', command: 'Sort by', icon: 'sort', value: SORTS.find(([id]) => id === sortBy())[1], rows: () => SORTS.map(([id, label]) => ({ label, checked: sortBy() === id, run: () => setSortBy(id) })) });
   defs.push({ id: 'group', label: 'Group', command: 'Group by', icon: 'group', value: GROUPS.find(([id]) => id === groupBy())[1], rows: () => GROUPS.filter(([id]) => id !== 'responsibility' || tasksInFilter(f)).map(([id, label]) => ({ label, checked: groupBy() === id, run: () => setGroupBy(id) })) });
   // what each row shows of itself; multi-select, so the menu stays open to tick more, like the type and status lists
-  defs.push({ id: 'display', label: 'Display', command: 'Display', icon: 'field', value: names(DISPLAY, displayKeys()) || 'Nothing', rows: () => DISPLAY.map(([id, label]) => ({ label, keepOpen: true, checked: displayOn(id), run: () => setDisplay(id) })) });
+  defs.push({ id: 'display', label: 'Display', command: 'Display', icon: 'field', value: names(displayList(), displayKeys()) || 'Nothing', rows: () => displayList().map(([id, label]) => ({ label, keepOpen: true, checked: displayOn(id), run: () => setDisplay(id) })) });
   return defs;
+}
+// One pill per field with a closed set of values, filtering in Tana's own terms (sdk/query.js attributeFilters,
+// verified live 2026-09-25): an options field by its labels (several are ORed), a link or member field by the nodes it
+// points at, a date field by Tana's day presets. A text field has no set of values to offer, so it gets no pill.
+const DATE_PRESETS = [['today', 'Today'], ['upcoming', 'Upcoming'], ['past', 'Past']];
+const linkChoices = new Map(); // the target types of a link field, joined -> their instances ({ id, text }), once per session
+function fieldChoices(def) {
+  if (def.type === 'options') return (def.options || []).map((o) => [o.label, o.label]);
+  if (def.type === 'member') { loadMembers(); return (members || []).map((m) => [m.id, memberName(m.id)]); }
+  const to = (def.to || []).map((t) => t.uri), key = to.join(',');
+  if (!to.length) return [];
+  if (!linkChoices.has(key)) {
+    linkChoices.set(key, null);
+    tana.searchPreview({ types: to }).then((rows) => { linkChoices.set(key, rows); if (pillsDrawn) renderPills(true); }, () => linkChoices.delete(key));
+  }
+  return (linkChoices.get(key) || []).map((n) => [n.id, n.text || 'Untitled']);
+}
+function fieldPill(def, f, save) {
+  if (!PILL_FIELDS.includes(def.type) || (def.type === 'link' && !(def.to || []).length)) return null; // a link to anything has no list to pick from
+  const key = fieldKey(def), now = (f.fields || {})[key] || {}, title = def.title || 'Untitled field';
+  const put = (value) => { const fields = { ...f.fields }; if (value) fields[key] = value; else delete fields[key]; save({ fields: Object.keys(fields).length ? fields : null }); };
+  const pill = { id: 'field:' + def.key, label: title, command: 'Filter by ' + title, icon: 'field' };
+  if (def.type === 'date') {
+    const preset = now.date && now.date.preset;
+    return { ...pill, value: (DATE_PRESETS.find(([p]) => p === preset) || [])[1] || 'Any', rows: () => [
+      { label: 'Any', checked: !preset, run: () => put(null) },
+      ...DATE_PRESETS.map(([p, label]) => ({ label, checked: preset === p, run: () => put({ date: { preset: p } }) })),
+    ] };
+  }
+  // options match their label, links and members the uri they point at; either way a multi-select, like Status
+  const byLabel = def.type === 'options', on = byLabel ? (now.textMatches || []).map((m) => m.value) : now.refs || [];
+  const choices = fieldChoices(def), ids = choices.map(([id]) => id), nameOf = (id) => (choices.find(([x]) => x === id) || [id, '…'])[1];
+  return { ...pill, value: on.map(nameOf).join(', ') || 'Any', rows: () => [
+    { label: 'Any', checked: !on.length, run: () => put(null) },
+    ...choices.map(([id, label]) => ({ label, keepOpen: true, checked: on.includes(id), run: () => {
+      const next = toggleIn(ids, on.length ? on : null, id);
+      put(next && (byLabel ? { textMatches: next.map((value) => ({ value })) } : { refs: next }));
+    } })),
+  ] };
 }
 const pillsApply = () => filters.has(pillKey());
 const pillName = (def) => def.label || def.id[0].toUpperCase() + def.id.slice(1);
@@ -83,7 +124,7 @@ function pillCommandRows() {
 // it is opened, so a row that no longer answers its query would sit there until the page is left: ask again.
 function cleanupNow() {
   releaseHeld();
-  if (onSearchPage() && !searchRows.has(zoom.docId)) { const id = zoom.docId; return run(async () => { await reload(id); render(true); }); }
+  if ((onSearchPage() && !searchRows.has(zoom.docId)) || onTypePage()) { const id = zoom.docId; return run(async () => { await reload(id); render(true); }); }
   render(true);
 }
 function renderPills(show) {
@@ -121,7 +162,7 @@ function renderPills(show) {
   // a saved search's edits are held back until they are saved, so there has to be something to press
   if (searchDirty()) box.append(savePill());
   // a query worth coming back to becomes a place: keep it as a saved search (a saved search already is one)
-  if (defs.length && tana.createSearch && !onSearchPage()) box.append(saveSearchPill());
+  if (defs.length && tana.createSearch && !onSearchPage() && !onTypePage()) box.append(saveSearchPill());
   // The order each pill arrives and leaves in: its place in the row, whatever it is (a filter, Save, Refresh).
   // Arriving is marked on the pills rather than on the row, because every render builds them again: with the mark
   // on the row, a redraw landing while they were still coming in handed it straight back to the new ones and the
@@ -321,7 +362,7 @@ function menuEl(d) {
     row.className = 'mrow' + (pick.indexOf(r) === menu.index ? ' active' : '');
     if (rows.some((x) => x.icon)) { const i = document.createElement('span'); i.className = 'micon'; i.innerHTML = r.icon ? iconSvg(r.icon) : ''; row.append(i); }
     const l = document.createElement('span'); l.className = 'mlabel'; l.textContent = r.label; row.append(l);
-    if (r.checked && r.label !== 'Any status' && r.label !== 'Any type' && r.label !== 'Anyone') { const t = document.createElement('span'); t.className = 'tick'; t.textContent = '✓'; row.append(t); }
+    if (r.checked && !['Any status', 'Any type', 'Anyone', 'Any'].includes(r.label)) { const t = document.createElement('span'); t.className = 'tick'; t.textContent = '✓'; row.append(t); }
     row.onclick = () => pickMenuRow(r, pick);
     el.append(row);
   }

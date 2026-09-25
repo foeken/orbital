@@ -83,7 +83,7 @@ const tasksInFilter = (f) => !f || !f.types || f.types.includes('tasks');
 const groupBy = () => { const g = groupOf(pillKey()); return g === 'responsibility' && !tasksInFilter(filters.get(pillKey())) ? 'none' : g; };
 // A saved search's arrangement belongs in its document, so its keys are kept out of the browser-local preference
 // blob: without this, changing any view's grouping would flush every search key it had accumulated to disk too.
-const persistPref = (key, chosen) => setPref(key, Object.fromEntries(Object.entries(chosen).filter(([k]) => !k.startsWith('tana:'))));
+const persistPref = (key, chosen) => setPref(key, Object.fromEntries(Object.entries(chosen).filter(([k]) => !k.startsWith(SEARCH_ID))));
 // Stay put: an action that could reorder a view keeps its current group and order until Clean up, so nothing jumps
 // away from the pointer. holdRow snapshots the order on screen and the row's group before the change; setView and a
 // new Sort or Group let go.
@@ -115,7 +115,7 @@ function needsCleanup(list) {
 // The rows the page in front of you shows before sorting and grouping, as renderOutline lists them (the text filter
 // applied): a view's own rows, or the ones a saved search's query returned. Clean up is about the list on screen, so
 // on a search page this must not answer with the view waiting behind it.
-const shownDocs = () => { const docs = (onSearchPage() ? kids.get(zoom.docId) : (viewOf() || {}).nodes) || [], q = filterEl.value.trim().toLowerCase(); return q ? docs.filter((n) => n.text.toLowerCase().includes(q)) : docs; };
+const shownDocs = () => { const docs = (onSearchPage() || onTypePage() ? kids.get(zoom.docId) : (viewOf() || {}).nodes) || [], q = filterEl.value.trim().toLowerCase(); return q ? docs.filter((n) => n.text.toLowerCase().includes(q)) : docs; };
 // Forced, like setDisplay: choosing an arrangement is an explicit action whose whole point is to redraw, so it must
 // not be deferred because a caret happens to sit in an editable title — which on a saved search page it often does,
 // since the title is renameable and there is no draft row to take the focus.
@@ -246,13 +246,35 @@ function sortRows(list) {
 // all answers to "what is this row"; the rest stay where they already are — the type chips, the assignee, the box.
 const DISPLAY = [['type', 'Type'], ['space', 'Lives in'], ['status', 'Status'], ['assigned', 'Assigned'], ['updated', 'Updated'], ['created', 'Created'], ['creator', 'Created by']];
 const DISPLAY_DEFAULT = ['status', 'assigned', 'updated'];
-const displayKeys = () => { const k = pillKey(), chosen = displayPref[k] ?? arranged(k, 'display'); return Array.isArray(chosen) ? chosen : DISPLAY_DEFAULT; };
+// On a type's page every field it defines can be shown too, keyed by its attribute key; the ones with a closed set of
+// values (the ones that get a pill) and the last change are shown until you choose otherwise, as Tana's type page does.
+const typeDefs = () => (onTypePage() && (relatedBy.get(zoom.docId) || {}).definitions) || [];
+const fieldKey = (def) => zoom.docId + '?attribute=' + def.key;
+const PILL_FIELDS = ['options', 'link', 'member', 'date'];
+const displayList = () => [...typeDefs().map((d) => [fieldKey(d), d.title || 'Untitled field']), ...DISPLAY];
+const displayKeys = () => {
+  const k = pillKey(), chosen = displayPref[k] ?? arranged(k, 'display');
+  if (Array.isArray(chosen)) return chosen;
+  return onTypePage() ? [...typeDefs().filter((d) => PILL_FIELDS.includes(d.type)).map(fieldKey), 'updated'] : DISPLAY_DEFAULT;
+};
 const displayOn = (id) => displayKeys().includes(id);
 function setDisplay(id) {
   const on = displayKeys(), next = on.includes(id) ? on.filter((x) => x !== id) : [...on, id];
-  displayPref[pillKey()] = DISPLAY.map(([key]) => key).filter((key) => next.includes(key)); // stored in the menu's order
+  displayPref[pillKey()] = displayList().map(([key]) => key).filter((key) => next.includes(key)); // stored in the menu's order
   persistPref('display', displayPref);
   render(true); // every row is built differently now, and rowSig carries the choice so none is reused
+}
+// The values of the fields Display shows, in the menu's order: the row carries them from the graph (main/rows.js).
+const shownFieldValues = (node) => (node.fields ? displayKeys().flatMap((k) => node.fields[k] || []) : []);
+// The grey line under a title: those values as chips, then subtextOf's words. A render and a late metadata patch
+// (renderer/tasks.js) both build it here, so the row keeps its shape when its metadata lands. `sub` is refilled in place.
+function subtextEl(node, taskInfo, sub = document.createElement('div')) {
+  const words = subtextOf(node, taskInfo), values = shownFieldValues(node);
+  if (!words && !values.length) return null;
+  sub.className = 'subtext';
+  sub.textContent = values.length ? '' : words; // a row without fields is the plain line it always was
+  if (values.length) sub.append(...values.map((v) => { const chip = document.createElement('span'); chip.className = 'fchip'; chip.textContent = demoText(v, node.id); return chip; }), ...(words ? [words] : []));
+  return sub;
 }
 // "4 hours ago". Nothing else in the app says an age in words, so this is the one place that turns a time into one.
 function agoText(iso) {

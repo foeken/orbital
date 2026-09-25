@@ -27,6 +27,11 @@ const isSpace = (node) => node.id.startsWith('tana:space:'); // its children are
 const SEARCH_ID = 'tana:search:';
 const isSearchDoc = (node) => !!node && String(node.id || '').startsWith(SEARCH_ID);
 const onSearchPage = () => !!zoom && !zoom.nodeId && String(zoom.docId || '').startsWith(SEARCH_ID);
+// A type's page is the list of its instances, filtered by its fields: a result page like a saved search, whose filter
+// lives in your preferences rather than in a document (typeFilter below). The type's own document has no outline.
+const isTypeId = (id) => /^tana:type:[^|?]+$/.test(String(id || ''));
+const isTypeDoc = (node) => !!node && isTypeId(node.id);
+const onTypePage = () => !!zoom && !zoom.nodeId && isTypeId(zoom.docId);
 const childrenOf = (item) => (item.node.kind === 'document' ? kids.get(item.docId) : item.node.children || []);
 const hasKids = (item) => {
   if (item.node.timeline?.today) return true;
@@ -341,7 +346,7 @@ async function loadRoots() {
   }
   for (const d of drafts) { const s = views.find((x) => x.id === d.view); if (s) s.nodes.splice(d.i, 0, d.node); }
 }
-async function reload(docId) { kids.set(docId, syncUploads(docId, await tana.children(docId))); } // uploads still running keep their placeholders
+async function reload(docId) { kids.set(docId, syncUploads(docId, await (isTypeId(docId) ? tana.searchPreview(typeFilter(docId)) : tana.children(docId)))); } // uploads still running keep their placeholders
 // A document's rows are not only the ones on its page: every field it has is an outline of that document too,
 // loaded under "<document>|<type>?attribute=<key>". Anything that re-reads a document's rows re-reads those with
 // it, or an undo, a live update or someone else's edit shows on the page and not in the field beside it.
@@ -379,7 +384,20 @@ function setViewF(patch) {
 }
 // The pills edit whatever page is in front of you: a view's persisted filter, or a saved search's stored query. One
 // key decides which, so pillDefs, pillsApply and every menu stay exactly as they were for both.
-const pillKey = () => (onSearchPage() ? zoom.docId : view);
+const pillKey = () => (onSearchPage() || onTypePage() ? zoom.docId : view);
+// A type page's filter: its instances, narrowed by the field pills you last chose for it (kept per type, synced).
+function typeFilter(id) {
+  if (!filters.has(id)) filters.set(id, { types: [id], fields: pref('typeFields', {})[id] || null });
+  return filters.get(id);
+}
+// Like a view, a change applies at once and is kept: nobody else reads this filter, so there is nothing to Save.
+function setTypeF(patch) {
+  const id = pillKey(), next = { ...typeFilter(id), ...patch };
+  filters.set(id, next);
+  setPref('typeFields', { ...pref('typeFields', {}), [id]: next.fields || undefined });
+  render();
+  run(async () => { await reload(id); render(true); });
+}
 const searchFilters = new Map(); // saved search id -> { filter, sort, group } as its document stores them, at the last load or save
 const searchRows = new Map();    // saved search id -> the staged filter, as JSON, that produced the rows now in kids
 // A view persists every pill change as it is made; a saved search is a document other people may be looking at, so

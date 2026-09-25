@@ -383,7 +383,10 @@ function watchRelated(id, key = 'main') {
   // search can list, and every answer it pushes re-reads the page through searchChildren, which stays the one that
   // decides the rows. Without it the page only knew what its query answered when it was opened.
   // ponytail: scoped by the query stored when the page opened; a Save while it is open narrows the rows, not this.
-  const search = idKind(id) === 'search' ? searchTrigger(id, w, key) : null;
+  // A type's page is the list of its instances (renderer/render.js), kept current the same way.
+  const search = idKind(id) === 'search' ? searchTrigger(id, w, key)
+    : idKind(id) === 'type' ? openLiveQuery(w.client.sync, liveTrigger(searchQueryParams({ entityTypeUris: [id] }, S.me && S.me.userUri)), { label: 'Orbital type page', onRows: () => { if (watching.get(key) === w) send('outline:changed', id); } })
+      .then((h) => { h.on('error', () => {}); return h; }) : null;
   // each on its own: one that fails must not leave the others open and unclosable
   w.handles = Promise.all([backlinks, pinned, search].map((p) => p && p.catch(() => null)));
   w.ready = backlinks.then(() => true, () => { if (watching.get(key) === w) unwatchRelated(key); return false; }); // refused: asked again at the next render

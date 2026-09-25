@@ -101,6 +101,12 @@ const withShims = (src) => {
   // that does slice the real definitions declares displayKeys itself and is left alone.
   // The real subtextOf, not a stub: a harness that renders rows is usually testing what ends up under the title, and a
   // stub returning '' would quietly answer for it. The last guard stops the recursion its own source would cause.
+  // subtextEl (renderer/views.js) builds that line with the row's field values ahead of it; sliced in before the
+  // subtextOf guard below, which then supplies what it calls.
+  if (/\bsubtextEl\(/.test(src) && !/function subtextEl\(/.test(src)) src = functionSource('subtextEl') + '\nglobalThis.shownFieldValues ??= (node) => (node.fields ? displayKeys().flatMap((k) => node.fields[k] || []) : []);\n' + src;
+  // a type's page (renderer/nodes.js): a harness that is not about one is never on one
+  if (/\b(isTypeDoc|onTypePage|isTypeId)\b/.test(src) && !/const isTypeId =/.test(src)) src = "globalThis.isTypeId ??= (id) => /^tana:type:[^|?]+$/.test(String(id || '')); globalThis.isTypeDoc ??= (node) => !!node && isTypeId(node.id); globalThis.onTypePage ??= () => false;\n" + src;
+  if (/\bSEARCH_ID\b/.test(src) && !/const SEARCH_ID =/.test(src)) src = "globalThis.SEARCH_ID ??= 'tana:search:';\n" + src;
   if (/\b(displayOn|displayKeys|subtextOf)\b/.test(src) && !/const displayKeys =/.test(src) && !/function subtextOf\(/.test(src)) {
     src = functionSource('agoText') + '\n' + functionSource('subtextOf') + '\n' + src;
     // pinnedOn needs the grouping (views.js) and the date pins (state.js); no row here is in a Pinned section
@@ -2347,9 +2353,9 @@ function runFilterShortcutFocusCheck() {
     const rows = [], zoom = null;
     const filterRow = { hidden: true, classList: { toggle: () => {} } };
     const filterEl = { value: '', focus: () => { if (!filterRow.hidden) focused++; } };
-    const onSearchPage = () => false;
+    const onSearchPage = () => false, onTypePage = () => false;
     const render = () => { if (deferred) return; filterRow.hidden = !(filterShown || filterEl.value); }; // render.js: deferred while a row is being edited
-    ${sourceBetween("if (!zoom || onSearchPage()) rows.push({ id: 'filter'", '\n')}
+    ${sourceBetween("if (!zoom || onSearchPage() || onTypePage()) rows.push({ id: 'filter'", '\n')}
     ({ press: () => rows.find((r) => r.id === 'filter').run(), settle: () => { deferred = false; render(); }, state: () => ({ focused, hidden: filterRow.hidden }) });
   `);
   api.press();

@@ -132,7 +132,10 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .fields .fchip.wrong::after { content: ' ⚠'; color: #c8841c; }
 .fields .fhint, .fields .fkind { color: #aaa; line-height: 22px; }
 .fields .fkind { color: #888; padding: 0 6px; border-radius: 4px; background: rgba(0, 0, 0, 0.05); }
-[data-theme="dark"] .fields .fchip, [data-theme="dark"] .fields .fkind { background: rgba(255, 255, 255, 0.08); }
+/* a row's field values on its grey line (renderer/views.js subtextEl): the same chip, a step quieter */
+.subtext .fchip { padding: 0 5px; margin-right: 6px; border-radius: 4px; background: rgba(0, 0, 0, 0.05); color: #777; line-height: 18px; display: inline-block; }
+[data-theme="dark"] .fields .fchip, [data-theme="dark"] .fields .fkind, [data-theme="dark"] .subtext .fchip { background: rgba(255, 255, 255, 0.08); }
+[data-theme="dark"] .subtext .fchip { color: #aaa; }
 .tbtn.c svg { width: 13px; height: 13px; display: block; }
 .fields a { color: #508fbb; text-decoration: underline; cursor: pointer; }
 .error[hidden] { display: none; }
