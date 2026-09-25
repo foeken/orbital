@@ -72,6 +72,7 @@ contextBridge.exposeInMainWorld('api', {
   presenceView: (docId) => ipcRenderer.invoke('presence:view', docId),
   presenceSet: (docId, at) => ipcRenderer.invoke('presence:set', docId, at),
   onPresence: (cb) => ipcRenderer.on('presence:changed', (_e, docId, peers) => cb(docId, peers)),
+  onPresenceAsk: (cb) => ipcRenderer.on('presence:ask', () => cb()), // the viewing heartbeat stopped: say again which page this one views
   viewList: (id, filter) => ipcRenderer.invoke('view:list', id, filter), // { nodes, truncated }
   viewFilter: (id) => ipcRenderer.invoke('view:filter', id),
   setViewFilter: (id, filter) => ipcRenderer.invoke('view:setFilter', id, filter),
