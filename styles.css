@@ -370,6 +370,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .node.tl { position: relative; }
 /* a row's line starts 10px left of its node (the gutter's negative margin), so the rail is placed on the marker's centre */
 .node.tl::before { content: ''; position: absolute; left: 101px; top: 0; bottom: 0; border-left: 1px solid #e6e6e6; }
+.node.tl-today::before { top: 26px; }
 .tl-divider { position: relative; height: 17px; }
 .tl-divider::before { content: ''; position: absolute; inset: 8px 0 auto; border-top: 1px solid #e6e6e6; }
 .ghead + .node.tl { margin-top: 10px; } /* room under a day's heading */

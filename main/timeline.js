@@ -121,14 +121,11 @@ async function rows() {
   const { nodes: pinned = [] } = pinnedIds.length ? await graph.listNodes({ nodeIds: pinnedIds, nodeTypes: ['text'], stateTypes: STATE_TYPES, limit: pinnedIds.length }) : {};
   const byId = new Map(pinned.map((n) => [n.id, n]));
   // Completed tasks age out after their pinned day; a pin for today still keeps them here.
-  const children = pinnedIds.map((id) => byId.get(id)).filter((n) => {
-    if (!n) return false;
-    return (n.state?.type || n.stateType) !== 'closed' || pinDatesById.get(n.id).includes(date);
-  }).map((n) => {
+  const children = pinnedIds.map((id) => byId.get(id)).filter(Boolean).map((n) => {
     rememberNodeHue(n); // graphRow drops participants, so seed the verified editability before toNode builds the row
     const row = toNode(graphRow(n));
-    return { ...row, editable: false, checkable: row.editable === true };
-  });
+    return row.done && !pinDatesById.get(n.id).includes(date) ? null : { ...row, editable: false, checkable: row.editable === true };
+  }).filter(Boolean);
   const todayText = "Today's Tasks";
   const todayRow = { id: PAGE + ':today:' + date, text: todayText, segments: [{ text: todayText }], kind: 'block', block: 'bullet', icon: 'todayTasks',
     editable: false, hasChildren: true, children, createdAt: iso(now), unread: false, timeline: { uri: null, time: 'Now', tone: 'new', today: true } };
