@@ -86,7 +86,7 @@ function dropPlan(x, y, files = false) {
   if (after ? after.node.kind !== 'block' || !canEditStructure(after) : !parent || !canEditItem(parent) || (parent.node.kind === 'block' && !canInsertChild(parent))) return null;
   // A saved search lists what its query finds and a space lists the documents in it: neither has rows of its own
   // for something to land among.
-  if (!after && (isSearchDoc(parent.node) || isSpace(parent.node))) return null;
+  if (!after && (isSearchDoc(parent.node) || isTypeDoc(parent.node) || isSpace(parent.node))) return null;
   if (files && !after) return null;
   const docId = after ? after.docId : parent.docId;
   if (src && !ref && dragBase(docId) !== dragBase(src.docId)) return null; // a block belongs to the node that holds it

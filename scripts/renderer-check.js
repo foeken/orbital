@@ -180,7 +180,8 @@ assert.match(source, /draftDocNode\(choice\.kind, \{ typeUri: choice\.typeUri, i
 assert.match(source, /tana\.createDocument\(text, node\.createOptions \|\| \{ kind: node\.draft \}\)/);
 // one fetch path for every view: its rows replace that view's list, and its truncation is remembered per view
 assert.match(source, /if \(result\.truncated\) truncated\.add\(id\); else truncated\.delete\(id\);/);
-assert.match(source, /truncated\.has\(view\) \? 'Showing the first 1,000 results' : ''/);
+assert.match(source, /const cut = parent \? onTypePage\(\) && \(kids\.get\(zoom\.docId\) \|\| \[\]\)\.length >= 1000 : truncated\.has\(view\);/, 'a view says when it was cut, and so does a full type page');
+assert.match(source, /cut \? 'Showing the first 1,000 results' : ''/);
 assert.match(source, /function blockSelection\(keys, contiguous, action, siblings = true\)/);
 // Removing a selection does not need siblings: a set of rows across levels is an ordinary thing to delete, and
 // the write takes it (sdk/content.js removeMany). Moving, indenting and outdenting still do.
@@ -422,16 +423,16 @@ assert.match(source, /const titleTags = parent \? visibleTags\(parent\.node\)\.f
 assert.match(source, /if \(viewFiltered\(\)\) \{/);
 // ⌘F on a saved search page: the key arrives as runAction('filter'), which only fires for a row that exists right
 // now, so the row has to be offered there — and the row it opens has to stay on screen and actually narrow the list.
-assert.match(source, /if \(!zoom \|\| onSearchPage\(\)\) rows\.push\(\{ id: 'filter'/, 'a saved search page offers the filter row, so ⌘F reaches it');
+assert.match(source, /if \(!zoom \|\| onSearchPage\(\) \|\| onTypePage\(\)\) rows\.push\(\{ id: 'filter'/, 'a saved search page and a type page offer the filter row, so ⌘F reaches them');
 // A key recorded for a row that is listed but off (Clean up with nothing held, Go back with no history) is answered
 // by doing nothing, rather than falling through to whatever else the combo might mean: one command, one meaning.
 assert.match(source, /if \(row\) \{ if \(!row\.disabled\) row\.run\(\); return true; \}/, 'a hotkey for a disabled row is a no-op the app still owns');
 // and the palette's own arrows land on such a row, which is the only way Cmd+Shift+K can record a shortcut for it
 assert.match(source, /if \(!rows\[next\]\.disabled \|\| rows\[next\]\.id\) return next;/, 'Up/Down reach a disabled row that has a stable id, so it can be given a key before it goes live');
-assert.match(source, /filterRow\.hidden = \(!!parent && !isSearchDoc\(parent\.node\)\)/, 'the filter row stays on screen on a saved search page');
-assert.match(source, /if \(isSearchDoc\(parent\.node\)\) \{/, 'the zoomed branch narrows a saved search the way a view narrows its rows');
+assert.match(source, /filterRow\.hidden = \(!!parent && !isSearchDoc\(parent\.node\) && !isTypeDoc\(parent\.node\)\)/, 'the filter row stays on screen on a saved search page and a type page');
+assert.match(source, /if \(isSearchDoc\(parent\.node\) \|\| isTypeDoc\(parent\.node\)\) \{/, 'the zoomed branch narrows a saved search and a type page the way a view narrows its rows');
 // the Library keeps the query it is showing as a saved search; main owns the filter→query translation
-assert.match(source, /if \(defs\.length && tana\.createSearch && !onSearchPage\(\)\) box\.append\(saveSearchPill\(\)\)/, 'a view with pills offers to save its query as a search, and a saved search does not: it already is one');
+assert.match(source, /if \(defs\.length && tana\.createSearch && !onSearchPage\(\) && !onTypePage\(\)\) box\.append\(saveSearchPill\(\)\)/, 'a view with pills offers to save its query as a search, and a saved search does not: it already is one');
 // Clean up is a header button beside the fold one, offered wherever the pills are — folded or not, on a view as
 // well — because a row kept in place is exactly when it is wanted.
 assert.match(source, /renderCleanupBtn\(!!show && needsCleanup\(shownDocs\(\)\)\)/, 'Clean up is decided while the pills render, whether or not the row is on screen');

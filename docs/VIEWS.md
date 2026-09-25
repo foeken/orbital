@@ -145,6 +145,19 @@ in the same action (`main.js`).
 
 ## 8. Notifications is not a view either
 
+A **type's page** (`tana:type:…`, opened from the Types view or anywhere else) is the list of that type's instances,
+drawn like a saved search: the same pills, sort, grouping, Display and ⌘F. Its rows are `searchPreview({ types: [type],
+fields })`, and `fields` is Tana's stored `attributes` shape (`{ '<type>?attribute=<key>': { textMatches | refs | date } }`),
+which `filterToSearchQuery` passes on as `attributes` and `searchQueryParams` sends as `attributeFilters`. Every options,
+link (with target types), member and date field gets a pill: options by label (several ORed), links and members by the
+node they point at, dates by Tana's presets (today, upcoming, past); verified live 2026-09-25 on Goal (Status "On track"
+3 of 6, "On track" or "Unknown" 4). A change applies at once and is kept per type in the `typeFields` preference; nothing
+is written to Tana. Display lists every field the type defines and starts on the ones with pills plus Updated; the values
+come on the row itself (`fields`, from the graph node's `attributes`), drawn as chips on its grey line. The field
+definitions are not drawn there (a list, not the type's edit view): ⌘K Edit fields shows them under the title. ⌘K Show as table lays the same rows out as a table, a column per field Display shows plus the times (kept per type in the `typeTables` preference). An open type page is kept current by a live query over its instances
+(`watchRelated`), as a saved search is.
+
+
 Notifications (issue #18, docs/OUTLINER.md) is listed with the views in Cmd+K but is a page, like a saved search: it has no
 filter, no pills and no row cache. Its rows are `outline:children('orbital:notifications')` — Tana's `tana:user-inbox`
 document read by main/inbox.js — and it never touches `S.activeView` or the refresh loop; the inbox is live by subscription.

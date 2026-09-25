@@ -62,17 +62,18 @@ async function searchChildren(id) {
 async function searchPreview(filter) {
   if (!S.client) throw new Error(NOT_CONNECTED);
   if (!validViewFilter(filter)) throw new Error('invalid view filter');
-  const nodes = await searchRows(filterToSearchQuery(filter, S.me && S.me.userUri), filter.completedWithin); // as the saved page will show it
+  // A type page is this too (renderer/nodes.js reload), a whole list rather than a preview: it gets a view's 1000 rows.
+  const nodes = await searchRows(filterToSearchQuery(filter, S.me && S.me.userUri), filter.completedWithin, 1000); // as the saved page will show it
   return nodes.map((n) => toNode(graphRow(n)));
 }
 // The one runner behind both: a stored query's rows, completed ones outside the window dropped. A search scoped to a
 // space also covers every space beneath it, as in Tana (searchOwners), so the org's spaces are listed first — only
 // when a space is in scope, which leaves every other search at one graph call.
 // ponytail: spaces are listed on each run, not cached; cache them when a scoped search's latency shows.
-async function searchRows(query, completedWithin) {
+async function searchRows(query, completedWithin, limit = 200) {
   const scoped = Array.isArray(query.ownerUris) && query.ownerUris.some((u) => typeof u === 'string' && isSpace(u));
   const spaces = scoped ? (await S.client.graph.listNodes({ nodeTypes: ['space'], limit: 1000 })).nodes : [];
-  const answered = await S.client.graph.listNodes(searchQueryParams(query, S.me && S.me.userUri, 200, undefined, spaces));
+  const answered = await S.client.graph.listNodes(searchQueryParams(query, S.me && S.me.userUri, limit, undefined, spaces));
   const nodes = answered.nodes.filter((n) => completedInWindow(n, completedWithin));
   nodes.forEach(rememberNodeHue);
   await resolveTypes(nodes.map((n) => n.entityType));
@@ -383,7 +384,13 @@ function watchRelated(id, key = 'main') {
   // search can list, and every answer it pushes re-reads the page through searchChildren, which stays the one that
   // decides the rows. Without it the page only knew what its query answered when it was opened.
   // ponytail: scoped by the query stored when the page opened; a Save while it is open narrows the rows, not this.
-  const search = idKind(id) === 'search' ? searchTrigger(id, w, key) : null;
+  // A type's page is the list of its instances (renderer/render.js), kept current the same way.
+  const search = idKind(id) === 'search' ? searchTrigger(id, w, key)
+    // watching as many rows as the page shows (searchPreview), so a change or deletion anywhere in it is heard
+    // ponytail: the newest 1,000 of the type, unfiltered; a type past that with a field filter on can miss a change to
+    // an older matching row until the page is reopened. Watch the filtered query instead if a type ever gets that big.
+    : idKind(id) === 'type' ? openLiveQuery(w.client.sync, { ...liveTrigger(searchQueryParams({ entityTypeUris: [id] }, S.me && S.me.userUri)), limit: 1000 }, { label: 'Orbital type page', onRows: () => { if (watching.get(key) === w) send('outline:changed', id); } })
+      .then((h) => { h.on('error', () => {}); return h; }) : null;
   // each on its own: one that fails must not leave the others open and unclosable
   w.handles = Promise.all([backlinks, pinned, search].map((p) => p && p.catch(() => null)));
   w.ready = backlinks.then(() => true, () => { if (watching.get(key) === w) unwatchRelated(key); return false; }); // refused: asked again at the next render

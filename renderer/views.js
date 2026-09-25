@@ -75,7 +75,18 @@ const arranged = (k, what) => (VIEW_ARRANGEMENT[k] || {})[what];
 // Keyed by the page, not the view: a saved search carries its own sort and grouping, stored in the document beside
 // its query, so opening one shows the arrangement it was saved with rather than whatever the last view was using.
 // A search's key is its document id, so the per-view defaults below simply do not match it.
-const groupOf = (k) => { const g = groupPref[k] ?? arranged(k, 'group'); return GROUPS.some(([id]) => id === g) ? g : 'none'; };
+const groupOf = (k) => { const g = groupPref[k] ?? arranged(k, 'group'); return groupList().some(([id]) => id === g) ? g : 'none'; };
+// On a type page the menu speaks the type: its options, link and member fields join it (sections per value, an
+// options field's in the order of its choices), Type goes (every row is one), and so do the task-only choices unless
+// the rows are tasks. Everywhere else it is GROUPS as it was.
+const noTasks = () => onTypePage() && !(kids.get(zoom.docId) || []).some(isTask);
+const TASK_ONLY = ['status', 'assignee'];
+const isFieldKey = (key) => String(key).includes('?attribute=');
+const groupList = () => (onTypePage()
+  ? [...GROUPS.filter(([id]) => id !== 'type' && !(noTasks() && TASK_ONLY.includes(id))), ...typeDefs().filter((d) => ['options', 'link', 'member'].includes(d.type)).map((d) => [fieldKey(d), d.title || 'Untitled field'])]
+  : GROUPS);
+const fieldOrder = (key) => ((typeDefs().find((d) => fieldKey(d) === key) || {}).options || []).map((o) => o.label);
+const fieldFallback = (key) => 'No ' + ((groupList().find(([k]) => k === key) || [])[1] || 'value');
 // Responsibility is about your tasks, and leaves out every row that is not yours: with no tasks in the filter (only
 // Risk picked in the Type pill, #139) it would hide the other people's risks, so such a list is not sectioned and the
 // Group menu does not offer it. The choice is kept: ticking Tasks again brings the sections back.
@@ -83,7 +94,7 @@ const tasksInFilter = (f) => !f || !f.types || f.types.includes('tasks');
 const groupBy = () => { const g = groupOf(pillKey()); return g === 'responsibility' && !tasksInFilter(filters.get(pillKey())) ? 'none' : g; };
 // A saved search's arrangement belongs in its document, so its keys are kept out of the browser-local preference
 // blob: without this, changing any view's grouping would flush every search key it had accumulated to disk too.
-const persistPref = (key, chosen) => setPref(key, Object.fromEntries(Object.entries(chosen).filter(([k]) => !k.startsWith('tana:'))));
+const persistPref = (key, chosen) => setPref(key, Object.fromEntries(Object.entries(chosen).filter(([k]) => !k.startsWith(SEARCH_ID))));
 // Stay put: an action that could reorder a view keeps its current group and order until Clean up, so nothing jumps
 // away from the pointer. holdRow snapshots the order on screen and the row's group before the change; setView and a
 // new Sort or Group let go.
@@ -115,7 +126,7 @@ function needsCleanup(list) {
 // The rows the page in front of you shows before sorting and grouping, as renderOutline lists them (the text filter
 // applied): a view's own rows, or the ones a saved search's query returned. Clean up is about the list on screen, so
 // on a search page this must not answer with the view waiting behind it.
-const shownDocs = () => { const docs = (onSearchPage() ? kids.get(zoom.docId) : (viewOf() || {}).nodes) || [], q = filterEl.value.trim().toLowerCase(); return q ? docs.filter((n) => n.text.toLowerCase().includes(q)) : docs; };
+const shownDocs = () => { const docs = (onSearchPage() || onTypePage() ? kids.get(zoom.docId) : (viewOf() || {}).nodes) || [], q = filterEl.value.trim().toLowerCase(); return q ? docs.filter((n) => n.text.toLowerCase().includes(q)) : docs; };
 // Forced, like setDisplay: choosing an arrangement is an explicit action whose whole point is to redraw, so it must
 // not be deferred because a caret happens to sit in an editable title — which on a saved search page it often does,
 // since the title is renameable and there is no draft row to take the focus.
@@ -138,6 +149,8 @@ function groupKey(n, by) {
   if (by === 'assignee') { const meta = taskMetaById.get(n.id), uri = meta && meta.assignees[0]; return uri ? memberName(uri) : FALLBACK.assignee; }
   // The same lazily read metadata grouping by assignee uses; null means the row has no section here and is left out.
   if (by === 'responsibility') return responsibilityOf(n);
+  // ponytail: a field with several values is filed under the first, like the assignee grouping above
+  if (isFieldKey(by)) return ((n.fields || {})[by] || [])[0] || fieldFallback(by);
   return (visibleTags(n)[0] || {}).label || FALLBACK.type;
 }
 // [{ title, nodes }] in a fixed order: the status sequence as the Status menu lists it, names alphabetically,
@@ -147,7 +160,8 @@ function groupRows(list, by) {
   // no key means this grouping has no section for the row (Responsibility, above): it is left out, and since a
   // grouped page takes its flat list from the sections, it leaves the keyboard order too.
   for (const n of list) { const k = groupKey(n, by); if (!k) continue; if (!buckets.has(k)) buckets.set(k, []); buckets.get(k).push(n); }
-  const fixed = by === 'status' ? STATES.map((s) => s[1]) : by === 'updated' ? UPDATED_BUCKETS.map((b) => b[1]) : by === 'responsibility' ? RESPONSIBILITY : [], last = FALLBACK[by]; // Updated: newest first
+  const fixed = by === 'status' ? STATES.map((s) => s[1]) : by === 'updated' ? UPDATED_BUCKETS.map((b) => b[1]) : by === 'responsibility' ? RESPONSIBILITY : isFieldKey(by) ? fieldOrder(by) : []; // Updated: newest first
+  const last = isFieldKey(by) ? fieldFallback(by) : FALLBACK[by];
   const rank = (t) => (t === last ? 2 : fixed.includes(t) ? 0 : 1);
   return [...buckets.keys()]
     .sort((a, b) => rank(a) - rank(b) || (rank(a) === 0 ? fixed.indexOf(a) - fixed.indexOf(b) : a.localeCompare(b)))
@@ -218,6 +232,7 @@ function showAllTracking(id) { trackingShown.add(collapseKey(id)); render(true);
 // Only what a row actually carries can be sorted on. main.js toNode passes updatedAt and createdAt as ISO 8601
 // strings, so they compare as strings; a row that carries neither (an older cached row) keeps its place at the end.
 const SORTS = [['default', 'Default'], ['status', 'Status'], ['updated', 'Updated'], ['created', 'Created'], ['title', 'Title']];
+const sortList = () => SORTS.filter(([id]) => id !== 'status' || !noTasks());
 // Status sorts by the workflow rather than by the word: Inbox, In Progress, Completed, Later — the order the Status
 // menu and the Status grouping already run in, so the rank is that table's own index. A row with no task state has
 // nothing to rank and keeps its place at the end, like any other row missing the field it is sorted on.
@@ -246,13 +261,65 @@ function sortRows(list) {
 // all answers to "what is this row"; the rest stay where they already are — the type chips, the assignee, the box.
 const DISPLAY = [['type', 'Type'], ['space', 'Lives in'], ['status', 'Status'], ['assigned', 'Assigned'], ['updated', 'Updated'], ['created', 'Created'], ['creator', 'Created by']];
 const DISPLAY_DEFAULT = ['status', 'assigned', 'updated'];
-const displayKeys = () => { const k = pillKey(), chosen = displayPref[k] ?? arranged(k, 'display'); return Array.isArray(chosen) ? chosen : DISPLAY_DEFAULT; };
+// On a type's page every field it defines can be shown too, keyed by its attribute key; the ones with a closed set of
+// values (the ones that get a pill) and the last change are shown until you choose otherwise, as Tana's type page does.
+const typeDefs = () => (onTypePage() && (relatedBy.get(zoom.docId) || {}).definitions) || [];
+const fieldKey = (def) => zoom.docId + '?attribute=' + def.key;
+const PILL_FIELDS = ['options', 'link', 'member', 'date'];
+const displayList = () => [...typeDefs().map((d) => [fieldKey(d), d.title || 'Untitled field']), ...DISPLAY.filter(([id]) => !(noTasks() && ['status', 'assigned'].includes(id)))];
+const displayKeys = () => {
+  const k = pillKey(), chosen = displayPref[k] ?? arranged(k, 'display');
+  // a field the type no longer defines is dropped: the menu cannot offer it, so nothing could turn it off
+  if (Array.isArray(chosen)) return onTypePage() ? chosen.filter((k) => !isFieldKey(k) || typeDefs().some((d) => fieldKey(d) === k)) : chosen;
+  return onTypePage() ? [...typeDefs().filter((d) => PILL_FIELDS.includes(d.type)).map(fieldKey), 'updated'] : DISPLAY_DEFAULT;
+};
 const displayOn = (id) => displayKeys().includes(id);
 function setDisplay(id) {
   const on = displayKeys(), next = on.includes(id) ? on.filter((x) => x !== id) : [...on, id];
-  displayPref[pillKey()] = DISPLAY.map(([key]) => key).filter((key) => next.includes(key)); // stored in the menu's order
+  displayPref[pillKey()] = displayList().map(([key]) => key).filter((key) => next.includes(key)); // stored in the menu's order
   persistPref('display', displayPref);
   render(true); // every row is built differently now, and rowSig carries the choice so none is reused
+}
+// The values of the fields Display shows, in the menu's order: the row carries them from the graph (main/rows.js).
+const shownFieldValues = (node) => (node.fields ? displayKeys().flatMap((k) => node.fields[k] || []) : []);
+// The grey line under a title: those values as chips, then subtextOf's words. A render and a late metadata patch
+// (renderer/tasks.js) both build it here, so the row keeps its shape when its metadata lands. `sub` is refilled in place.
+function subtextEl(node, taskInfo, sub = document.createElement('div')) {
+  if (tableView()) return tableCells(node, sub);
+  const words = subtextOf(node, taskInfo), values = shownFieldValues(node);
+  if (!words && !values.length) return null;
+  sub.className = 'subtext';
+  sub.textContent = values.length ? '' : words; // a row without fields is the plain line it always was
+  if (values.length) sub.append(...values.map((v) => { const chip = document.createElement('span'); chip.className = 'fchip'; chip.textContent = demoText(v, node.id); return chip; }), ...(words ? [words] : []));
+  return sub;
+}
+// ---- a type page as a table (⌘K Show as table): a column per field Display shows, plus the times ----
+// The rows stay the outline's own rows: the grey line becomes one cell per column and CSS lays the row out as a grid
+// (styles.css .table-view), so the keys, the caret and the pills work as they do on the list. Kept per type, synced.
+const TABLE_FACTS = { updated: (n) => agoText(n.updatedAt), created: (n) => agoText(n.createdAt), creator: (n) => (n.createdBy ? (loadMembers(), memberName(n.createdBy)) : '') }; // names load once and re-render, as subtextOf's do
+const tableView = () => onTypePage() && pref('typeTables', []).includes(zoom.docId);
+const tableKeys = () => displayKeys().filter((k) => k.includes('?attribute=') || TABLE_FACTS[k]);
+function setTableView(on) {
+  const rest = pref('typeTables', []).filter((id) => id !== zoom.docId);
+  setPref('typeTables', on ? [...rest, zoom.docId] : rest);
+  render(true);
+}
+function tableCells(node, sub) {
+  sub.className = 'subtext'; sub.textContent = '';
+  for (const k of tableKeys()) {
+    const cell = document.createElement('span'); cell.className = 'cell';
+    if (TABLE_FACTS[k]) cell.textContent = TABLE_FACTS[k](node);
+    else for (const v of (node.fields && node.fields[k]) || []) { const chip = document.createElement('span'); chip.className = 'fchip'; chip.textContent = demoText(v, node.id); cell.append(chip); }
+    sub.append(cell);
+  }
+  return sub;
+}
+// The column titles, over the gutter a row keeps for its chevron and marker. Not a row: no key, nothing to land on.
+function tableHeadEl() {
+  const names = new Map(displayList()), el = document.createElement('div');
+  el.className = 'thead';
+  for (const label of ['Title', ...tableKeys().map((k) => names.get(k))]) { const c = document.createElement('span'); c.textContent = label; el.append(c); }
+  return el;
 }
 // "4 hours ago". Nothing else in the app says an age in words, so this is the one place that turns a time into one.
 function agoText(iso) {
@@ -310,7 +377,8 @@ function groupHeadEl(g) {
   const el = document.createElement('button');
   el.type = 'button'; el.className = 'ghead';
   const chev = iconNode('chevronRight'); // the icon set's own chevron, turned a quarter down by CSS while the section is open
-  el.append(...(chev ? [chev] : []), document.createTextNode(g.title));
+  // a field's heading is one of its values, which demo mode masks on the rows too (subtextEl)
+  el.append(...(chev ? [chev] : []), document.createTextNode(isFieldKey(groupBy()) ? demoText(g.title, g.id) : g.title));
   el.setAttribute('aria-expanded', g.collapsed ? 'false' : 'true');
   el.title = g.collapsed ? 'Expand' : 'Collapse'; // the words the row chevrons already use
   el.onmousedown = (e) => e.preventDefault();

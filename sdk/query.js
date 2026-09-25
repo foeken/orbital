@@ -84,7 +84,7 @@ function assigneeParams(assignee, me) {
   return { assignedTo: [assignee === 'me' || !assignee ? me : assignee] };
 }
 
-const FILTER_KEYS = new Set(['types', 'states', 'assignee', 'text', 'participant', 'window', 'completedWithin']);
+const FILTER_KEYS = new Set(['types', 'states', 'assignee', 'text', 'participant', 'window', 'completedWithin', 'fields']);
 const USER = /^tana:user-profile:[0-9a-z]{26}$/;
 // A filter's types may also name the workspace's own types (`tana:type:` uris, #139): every Risk, say. They are sent as
 // entityTypes, which the graph ORs among themselves and ANDs with the kinds (verified live 2026-09-25: Risk 18 +
@@ -117,8 +117,13 @@ function validViewFilter(f) {
     && (f.text === undefined || typeof f.text === 'string')
     && (f.participant === undefined || f.participant === null || f.participant === 'me')
     && (f.window === undefined || f.window === null || f.window === 'recent')
-    && (f.completedWithin === undefined || COMPLETED_WINDOWS.includes(f.completedWithin));
+    && (f.completedWithin === undefined || COMPLETED_WINDOWS.includes(f.completedWithin))
+    // a type page's field pills: Tana's own stored attributes ({ refs, textMatches, date } per field key), which
+    // filterToSearchQuery passes on and attributeFilters cleans the way Tana does
+    && (f.fields === undefined || f.fields === null || (typeof f.fields === 'object' && !Array.isArray(f.fields)
+      && Object.entries(f.fields).every(([k, v]) => FIELD_KEY.test(k) && !!v && typeof v === 'object' && !Array.isArray(v))));
 }
+const FIELD_KEY = /^tana:type:[0-9a-z]{26}\?attribute=[0-9a-z]+$/;
 
 function viewParams(f, me, limit = 1000) {
   if (!validViewFilter(f)) throw new Error('invalid view filter');
@@ -270,6 +275,7 @@ function filterToSearchQuery(filter = {}, me) {
   const tasks = tasksInScope(filter.types);
   if (tasks && Array.isArray(filter.states) && filter.states.length) q.stateTypes = [...filter.states];
   if (typeof filter.text === 'string' && filter.text.trim()) q.textQuery = filter.text.trim();
+  if (filter.fields && Object.keys(filter.fields).length) q.attributes = filter.fields;
   const a = tasks ? filter.assignee : 'anyone';
   // 'me' without a signed-in user stores nothing: falling through to the uri branch would write the literal
   // string 'me' as a user-profile uri, which matches nobody and reads as a real filter for ever after.

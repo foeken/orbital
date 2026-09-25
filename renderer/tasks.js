@@ -75,11 +75,10 @@ function patchMeta(docId) {
     if (sep) sep.remove();
     // the same line a full render would build, so a row does not change shape when its metadata arrives late: the
     // facts go before the type chips, where nodeEl appends them, not after them
-    const subText = subtextOf(item.node, summary), had = body.querySelector(':scope > .subtext');
+    const had = body.querySelector(':scope > .subtext'), sub = subtextEl(item.node, summary, had || undefined);
     if (summary && displayOn('assigned')) body.insertBefore(taskMetaEl(summary, docId, item.node), body.querySelector(':scope > .chip') || had || null);
-    if (subText && had) had.textContent = subText;
-    else if (subText) { const sub = document.createElement('div'); sub.className = 'subtext'; sub.textContent = subText; body.append(sub); }
-    else if (had) had.remove();
+    if (sub && !had) body.append(sub);
+    else if (!sub && had) had.remove();
     row.dataset.sig = rowSig(item.node); // the row now matches what a fresh render would build
     patched = true;
   }

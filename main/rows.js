@@ -143,10 +143,24 @@ const meetingRow = (n, withDate) => {
 // An event also carries its own window (`start`/`end`), and only an event does: the keys are added rather than always
 // present, so every other kind of node keeps the shape it had. A row restored from the SQLite cache has no window —
 // the cache stores the label, not the times — so a consumer that needs one asks the graph, as the meeting picker does.
-const toNode = (r) => ({ id: r.id, title: r.title, text: r.title, kind: 'document', editable: editability.has(r.id) ? editability.get(r.id) : editable(r, S.me && S.me.userUri), done: r.icon === 'task' ? r.done : undefined, hasChildren: true, icon: PLAIN_KINDS.has(idKind(r.id)) ? (typeIconName(r.id) || idKind(r.id)) : r.icon || undefined, hue: r.hue === undefined ? (nodeHues.has(r.id) ? nodeHues.get(r.id) : cachedNodeHue(r)) : r.hue, tags: r.tags, meta: r.meta || undefined, updatedAt: r.updatedAt || (nodeMeta.get(r.id) || {}).updatedAt, createdAt: r.createdAt || (nodeMeta.get(r.id) || {}).createdAt, createdBy: nodeCreators.get(r.id), stateType: r.stateType || (nodeMeta.get(r.id) || {}).stateType, ...(r.start ? { start: r.start, end: r.end } : {}) });
+const toNode = (r) => ({ id: r.id, title: r.title, text: r.title, kind: 'document', editable: editability.has(r.id) ? editability.get(r.id) : editable(r, S.me && S.me.userUri), done: r.icon === 'task' ? r.done : undefined, hasChildren: true, icon: PLAIN_KINDS.has(idKind(r.id)) ? (typeIconName(r.id) || idKind(r.id)) : r.icon || undefined, hue: r.hue === undefined ? (nodeHues.has(r.id) ? nodeHues.get(r.id) : cachedNodeHue(r)) : r.hue, tags: r.tags, meta: r.meta || undefined, updatedAt: r.updatedAt || (nodeMeta.get(r.id) || {}).updatedAt, createdAt: r.createdAt || (nodeMeta.get(r.id) || {}).createdAt, createdBy: nodeCreators.get(r.id), stateType: r.stateType || (nodeMeta.get(r.id) || {}).stateType, ...(r.start ? { start: r.start, end: r.end } : {}), ...(r.fields ? { fields: r.fields } : {}) });
+// A typed node's field values as the graph lists them (`attributes`, keyed "<type uri>?attribute=<key>"): one string
+// per value, which is what a row shows of a field (renderer/views.js fieldValues). Verified live on Goal 2026-09-25.
+function fieldValues(n) {
+  const out = {};
+  for (const [key, a] of Object.entries(n.attributes || {})) {
+    const items = (a && Array.isArray(a.listItems) && a.listItems.length ? a.listItems : [a && a.text]).filter((v) => typeof v === 'string' && v.trim());
+    if (items.length) out[key] = items;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
 
 // Node shape from any graph Node JSON (search results): events, tasks, typed and plain documents.
 function graphRow(n, withDate) {
+  const row = kindedRow(n, withDate), fields = fieldValues(n);
+  return fields ? { ...row, fields } : row;
+}
+function kindedRow(n, withDate) {
   // every listed node passes through here, so the watch rule's creator lookup is usually already answered
   if (typeof n.createdBy === 'string') nodeCreators.set(n.id, n.createdBy);
   n = liveState(n);

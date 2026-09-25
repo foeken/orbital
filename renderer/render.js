@@ -117,7 +117,7 @@ let scrollOnType = false; // that caret is parked below the fold: the first char
 // out of Tana until its first typed character (materialise) and is discarded by anything else.
 // A block with children appends through insertAfter(last); an empty block uses insertChild.
 function withDraftTail(list, parent) {
-  if (!Array.isArray(childrenOf(parent)) || isSpace(parent.node) || isSearchDoc(parent.node) || !canEditItem(parent) || !canInsertChild(parent)) return list;
+  if (!Array.isArray(childrenOf(parent)) || isSpace(parent.node) || isSearchDoc(parent.node) || isTypeDoc(parent.node) || !canEditItem(parent) || !canInsertChild(parent)) return list;
   // The row is there so that there is somewhere to type, not as a permanent blank line: a node with content ends
   // at its last row, and Enter adds the next one. It comes back when there is nothing to type in — an empty node,
   // or one holding only an image, a divider or a reference — because then there would be no way in at all.
@@ -307,7 +307,7 @@ function rowSig(n) {
   const meta = taskMetaById.get(n.id);
   // stateType too: accepting an Inbox task changes only the state, and a reused row would keep the tick the click put in its box
   return JSON.stringify([n.text, n.done, n.stateType, n.icon, n.hue, n.meta, n.tags, n.editable, n.draft, n.hasChildren, n.kind, n.type, n.start,
-    n.updatedAt, n.createdAt, n.createdBy, // the subtext's times and author: they arrive after the row and a reused row would still show none
+    n.updatedAt, n.createdAt, n.createdBy, n.fields, // the subtext's times, author and field values: they arrive after the row and a reused row would still show none
     sensitiveHidden(n.id), isPinned(n.id), meta || (taskMetaLoading.has(n.id) ? 'loading' : null), members ? members.length : 0, open.get(n.id), pending.has(n.id),
     displayKeys().join(','), codexIds.has(n.id), agentStateOf(n.id), agentTaskHosts.get(n.id), pinnedOn(n), n.table,
     n.proposal ? n.proposal.note : null]); // which facts the row shows: without this a reused row would keep the old ones, a proposal's buttons included
@@ -328,9 +328,11 @@ function renderOutline() {
     // A saved search page is a result list, like a view, so ⌘F narrows it the same way. No other zoomed page
     // filters: an outline's rows are content you are editing, not a result set you are searching through.
     let groups = null;
-    if (isSearchDoc(parent.node)) {
-      loadSearchFilter(parent.docId); // its stored query, as the filter the pills above it show
-      previewRows(parent.docId);      // and the rows that filter finds, so editing a pill moves the list
+    if (isSearchDoc(parent.node) || isTypeDoc(parent.node)) {
+      if (isSearchDoc(parent.node)) {
+        loadSearchFilter(parent.docId); // its stored query, as the filter the pills above it show
+        previewRows(parent.docId);      // and the rows that filter finds, so editing a pill moves the list
+      }
       // a saved search is a list of results, so it narrows, sorts and groups exactly as a view does — same helper,
       // with the arrangement its own document stores rather than the one this browser remembers for a view
       const shown = pageRows(list, filterEl.value.trim().toLowerCase());
@@ -346,6 +348,7 @@ function renderOutline() {
     outline.replaceChildren(...(groups
       ? groups.flatMap((g) => [...(g.title ? [groupHeadEl(g)] : []), ...(g.collapsed ? [] : g.nodes.flatMap((n) => [childEl(n, parent), ...(n.timeline?.today ? [timelineDividerEl()] : [])])), ...(g.more ? [groupMoreEl(g)] : [])])
       : list.map((n) => childEl(n, parent))));
+    if (tableView() && list.length) { outline.style.setProperty('--cols', tableKeys().length); outline.prepend(tableHeadEl()); } // a type page shown as a table (renderer/views.js)
     if (parent.docId === TIMELINE_PAGE && tana.timelineWeeks && kids.get(TIMELINE_PAGE)) outline.append(timelineOlderEl()); // a week a page: one more, at the end
     animView = null; // a zoom replaced every row, and a zoomed row is keyed docId/nodeId while a view row is keyed by
     // its document id, so on the way back nothing would match and the whole view would flash as if it had just arrived
@@ -373,6 +376,7 @@ function renderOutline() {
       outline.parentElement.scrollTop = 0;
     }
   }
+  outline.classList.toggle('table-view', !!parent && tableView());
   // "No content" is about a page with nothing on it, so it goes by what was just drawn rather than by the row count:
   // a grouped page with every section folded away has no rows and is not empty — its headings are right there.
   if (parent && !list.length && !outline.children.length) {
@@ -408,11 +412,13 @@ function renderOutline() {
   renderCrumbs(trail);
   renderRail(parent);
   // A saved search is a query you can edit, so it gets the pills too — every other zoomed page is content, not a query.
-  const showPills = authed && pillsApply() && (!parent || isSearchDoc(parent.node));
+  const showPills = authed && pillsApply() && (!parent || isSearchDoc(parent.node) || isTypeDoc(parent.node));
   renderPills(showPills);
-  filterRow.hidden = (!!parent && !isSearchDoc(parent.node)) || !(filterShown || filterEl.value);
+  filterRow.hidden = (!!parent && !isSearchDoc(parent.node) && !isTypeDoc(parent.node)) || !(filterShown || filterEl.value);
   filterRow.classList.toggle('empty', !filterEl.value);
-  $('filtered').textContent = [hidden ? hidden + ' items filtered out' : '', truncated.has(view) ? 'Showing the first 1,000 results' : ''].filter(Boolean).join(' · ');
+  // a type page asks for 1,000 rows (main/related.js searchPreview), so a full answer is one that may have been cut
+  const cut = parent ? onTypePage() && (kids.get(zoom.docId) || []).length >= 1000 : truncated.has(view);
+  $('filtered').textContent = [hidden ? hidden + ' items filtered out' : '', cut ? 'Showing the first 1,000 results' : ''].filter(Boolean).join(' · ');
   // Cached rows remain usable while auth and sync reconnect; reserve the skeleton for an empty outline.
   const loading = !parent && !outline.children.length && (authChecking || !rootsLoaded || !filters.has(view) || (authed && !connected));
   $('skeleton').classList.toggle('gone', !loading);
@@ -478,7 +484,8 @@ function renderFields(parent, force = false, el = $('fields')) {
   const active = document.activeElement, keep = active && active.classList && active.classList.contains('fchoice') && el.contains(active) ? active.dataset.key : null;
   const data = parent && parent.node.kind === 'document' ? relatedBy.get(parent.docId) : null;
   const fields = (data && data.fields) || [];
-  const defs = (data && data.definitions) || []; // a type's page: the fields it defines (renderer/fields.js)
+  // A type's page is the list of its instances; the fields it defines are shown only while ⌘K Edit fields is on (renderer/fields.js).
+  const defs = (data && editingType === parent.docId && data.definitions) || [];
   el.hidden = !fields.length && !defs.length;
   el.replaceChildren();
   for (const def of defs) el.append(definitionEl(parent, def));
@@ -790,12 +797,8 @@ function nodeEl(node, docId, parent) {
     if (node.timeline.detail) { const d = document.createElement('div'); d.textContent = demoText(node.timeline.detail, node.timeline.uri); q.append(d); } // and its longer words for it
     body.append(q);
   }
-  const subText = subtextOf(display, taskInfo);
-  if (subText) {
-    const sub = document.createElement('div');
-    sub.className = 'subtext'; sub.textContent = subText;
-    body.append(sub);
-  }
+  const sub = subtextEl(display, taskInfo);
+  if (sub) body.append(sub);
   blurSensitive(body, docId, target && target.id);
   line.append(body);
   // handed to the local Codex agent: the robot badge at the end of the row, after everything the row says about itself

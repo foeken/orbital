@@ -726,6 +726,13 @@ commands.libraryprobe = async () => {
 // (query.js searchParams lists text/event/user-profile only), so this is how a chat is found by title. --owned adds the
 // chats that live on something (a meeting, a chat, an action), which the graph leaves out unless asked (docs/CHATS.md).
 // listkind <nodeType> [--limit 50]: does the graph answer for a kind we have never listed? nodeTypes is a free-form
+// listnodes '<ListNodesRequest json>': the graph's raw answer, one node per line (id, title, attributes). Read-only.
+commands.listnodes = async () => {
+  await connect();
+  const { nodes, totalCount } = await client.graph.listNodes({ limit: 50, mode: 'LIST_NODES_MODE_WITH_COUNT', ...JSON.parse(positional[0] || '{}') });
+  for (const n of nodes) out(n.id + '\t' + JSON.stringify(n.title || '') + '\t' + JSON.stringify(n.attributes || {}));
+  out(nodes.length + ' nodes (totalCount ' + totalCount + ')');
+};
 // string list on the wire (scalar, not an enum — fromJson accepts any string, including nonsense), so asking the
 // server is the only way to learn what a kind string actually returns. Read-only.
 commands.listkind = async () => {
