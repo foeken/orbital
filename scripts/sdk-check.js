@@ -2486,7 +2486,7 @@ async function main() {
     assert.deepEqual(await read(), [
       ['Rob Jansen completed Contract renewal', null, 'apply', 'done', false, []],
       ['Rob Jansen edited Contract renewal', 'Added the Q4 numbers from Rob', 'updated', 'edit', false, []],
-      ['An AI agent added 2 tasks to your Inbox', null, 'sparkle', 'new', false, ['Answer Jules', 'Plan the pilot']],
+      ['An AI agent added 2 tasks to your Inbox', null, 'robot', 'new', false, ['Answer Jules', 'Plan the pilot']],
       ['Rob Jansen added a task to your Inbox', null, 'tlNew', 'new', false, ['Review the vendor contract']],
       ['Rob Jansen accepted Contract renewal', null, 'tlAccepted', 'accepted', false, []],
       ['Rob Jansen edited Contract renewal', 'Moved the deadline to Friday', 'updated', 'edit', false, []],
