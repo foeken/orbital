@@ -37,7 +37,19 @@ $('errorLogin').onclick = () => tana.login().catch(showError);
 if (tana.onNotifyOpen) tana.onNotifyOpen((docId) => { if (docId) goTo(docId); });
 // This page changed sides (swapped, or the right half left alone): it saves its view and place under its new side's
 // keys from now on. A Reload asks main again (api.side), so it reads the same ones.
-if (tana.onSide) tana.onSide((side) => { SIDE = side ? ':' + side : ''; localStorage.setItem('view' + SIDE, view); rememberPlace(); });
+if (tana.onSide) tana.onSide((side) => { SIDE = side ? ':' + side : ''; splitGrip.hidden = SIDE !== ':2'; localStorage.setItem('view' + SIDE, view); rememberPlace(); });
+// The line between the halves is dragged from a grip on the right half's left edge; main reads the cursor and moves
+// the line (main.js window:splitDrag), and a double click evens the halves out again.
+const splitGrip = $('splitGrip');
+splitGrip.hidden = SIDE !== ':2';
+splitGrip.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  splitGrip.classList.add('dragging'); splitGrip.setPointerCapture(e.pointerId); tana.splitDrag('start');
+  const move = () => tana.splitDrag('move');
+  const up = () => { splitGrip.classList.remove('dragging'); splitGrip.removeEventListener('pointermove', move); splitGrip.removeEventListener('pointerup', up); };
+  splitGrip.addEventListener('pointermove', move); splitGrip.addEventListener('pointerup', up);
+});
+splitGrip.addEventListener('dblclick', () => tana.splitDrag('even'));
 tana.onChanged((docId, info) => {
   if (docId) {
     // A newer update would reorder this row under Updated; keep the layout the user is looking at until Clean up.

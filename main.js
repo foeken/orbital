@@ -58,11 +58,17 @@ function restoredBounds(saved, workAreas) {
 S.windows = new Set();
 S.windowViews = new Map(); // webContents id -> { id, filter }: the view that page shows
 const SPLIT_GAP = 1; // the hairline between two pages: the window's own background showing through
+const MIN_PANE = 320; // neither half is dragged narrower than this (renderer/app.js splitGrip)
 const SPLIT_LINE = { light: '#ececec', dark: '#2b2f31' }; // the sidebar's border (styles.css .rail), in the page's theme
 const paneWindow = (wc) => [...S.windows].find((w) => w.panes.some((p) => p.webContents === wc));
+// win.splitAt: the left half's share of the width, dragged by the grip and saved with the window (even by default)
 function layout(win) {
-  const { width, height } = win.getContentBounds(), n = win.panes.length, w = Math.floor((width - SPLIT_GAP * (n - 1)) / n);
-  win.panes.forEach((p, i) => { const x = i * (w + SPLIT_GAP); p.setBounds({ x, y: 0, width: i === n - 1 ? width - x : w, height }); });
+  const { width, height } = win.getContentBounds(), [left, right] = win.panes;
+  if (!right) return left && left.setBounds({ x: 0, y: 0, width, height });
+  const min = Math.min(MIN_PANE, Math.floor((width - SPLIT_GAP) / 2));
+  const w = Math.max(min, Math.min(width - SPLIT_GAP - min, Math.round((width - SPLIT_GAP) * (win.splitAt ?? 0.5))));
+  left.setBounds({ x: 0, y: 0, width: w, height });
+  right.setBounds({ x: w + SPLIT_GAP, y: 0, width: width - w - SPLIT_GAP, height });
 }
 function addPane(win, side) {
   const pane = new WebContentsView({ webPreferences: { preload: path.join(__dirname, 'preload.js') } });
@@ -93,12 +99,14 @@ function createWindow() {
   win.panes = [];
   // saved shortly after a move or resize settles, and once more on close, so a quit or an update relaunch keeps it
   let boundsTimer = null;
-  const saveBounds = () => { clearTimeout(boundsTimer); boundsTimer = null; if (!win.isDestroyed()) db.setSetting('window', { ...win.getNormalBounds(), maximized: win.isMaximized(), split: win.panes.length > 1 }); };
+  const saveBounds = () => { clearTimeout(boundsTimer); boundsTimer = null; if (!win.isDestroyed()) db.setSetting('window', { ...win.getNormalBounds(), maximized: win.isMaximized(), split: win.panes.length > 1, splitAt: win.splitAt }); };
+  const saveSoon = () => { clearTimeout(boundsTimer); boundsTimer = setTimeout(saveBounds, 500); };
+  if (!front && saved && Number.isFinite(saved.splitAt)) win.splitAt = saved.splitAt;
   S.windows.add(win); S.win = win; S.pane = addPane(win, '').webContents;
   if (!front && saved && saved.split) addPane(win, '2'); // the split comes back with the frame it was saved with
-  win.saveBounds = saveBounds; // a split opened or closed is saved too (addPane, removePane)
+  win.saveBounds = saveBounds; win.saveSoon = saveSoon; // a split opened, closed or dragged is saved too
   if (!front && saved && saved.maximized) win.maximize();
-  for (const name of ['resize', 'move', 'maximize', 'unmaximize']) win.on(name, () => { clearTimeout(boundsTimer); boundsTimer = setTimeout(saveBounds, 500); });
+  for (const name of ['resize', 'move', 'maximize', 'unmaximize']) win.on(name, saveSoon);
   win.on('resize', () => layout(win));
   win.on('close', saveBounds);
   win.on('focus', () => { S.win = win; refresh(); });
@@ -226,8 +234,22 @@ ipcMain.handle('window:swapPanes', (e) => {
   const win = paneWindow(e.sender);
   if (!win || win.panes.length < 2) return;
   win.panes.reverse();
+  if (win.splitAt != null) win.splitAt = 1 - win.splitAt; // each half keeps its width
   win.panes.forEach((p, i) => { p.side = i ? '2' : ''; p.webContents.send('window:side', p.side); });
   layout(win);
+  win.saveSoon();
+});
+// The grip on the right half's left edge (renderer/app.js splitGrip): 'start', 'move' or 'even'. The cursor is read
+// here, from the screen, rather than from the page: the page moves under the pointer as it is dragged, so its own
+// coordinates run ahead of the drag. The share kept is the one on screen, clamped, so a restart draws the same line.
+ipcMain.on('window:splitDrag', (e, phase) => {
+  const win = paneWindow(e.sender);
+  if (!win || win.panes.length < 2) return;
+  const b = win.getContentBounds(), room = b.width - SPLIT_GAP, x = screen.getCursorScreenPoint().x - b.x;
+  if (phase === 'start') { win.dragOffset = x - win.panes[0].getBounds().width; return; }
+  if (phase === 'even') win.splitAt = undefined;
+  else { const min = Math.min(MIN_PANE, Math.floor(room / 2)); win.splitAt = Math.max(min, Math.min(room - min, x - (win.dragOffset || 0))) / room; }
+  layout(win); win.saveSoon();
 });
 // a page says which theme it drew itself in (renderer/theme.js), and the line between split pages follows it
 ipcMain.on('window:theme', (e, theme) => { const win = paneWindow(e.sender); if (win) win.setBackgroundColor(SPLIT_LINE[theme] || SPLIT_LINE.light); });

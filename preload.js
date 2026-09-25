@@ -26,6 +26,7 @@ contextBridge.exposeInMainWorld('api', {
   splitWindow: () => ipcRenderer.invoke('window:split'), // a second page beside this one in the same window, or back to this one alone
   otherPane: () => ipcRenderer.invoke('window:otherPane'), // the keyboard to the other half of a split
   swapPanes: () => ipcRenderer.invoke('window:swapPanes'), // the two halves of a split change sides
+  splitDrag: (phase) => ipcRenderer.send('window:splitDrag', phase), // the split grip: 'start', 'move' (main reads the cursor) or 'even'
   onSide: (cb) => ipcRenderer.on('window:side', (_e, side) => cb(side)), // this page's side changed: '' the left or only page, '2' the right half
   windowTheme: (theme) => ipcRenderer.send('window:theme', theme), // 'light' | 'dark': the line between split pages matches the page
   openExternal: (url) => ipcRenderer.invoke('shell:open', url), // http(s) link from node text, in the default browser
