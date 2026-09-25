@@ -167,7 +167,7 @@ function mockApi() {
   const bold = (text) => ({ text, marks: { bold: true } });
   const tlTask = (d) => ({ ...d, editable: false, checkable: true });
   content['orbital:timeline'] = [
-    event('group1', 0.1, 'new', 'sparkle', [{ text: 'An AI agent added 4 tasks to your Inbox' }], null, true, null, [tlTask(docs[1]), tlTask(docs[3]), tlTask(spaceDocs[0]), tlTask(docs[4])]),
+    event('group1', 0.1, 'new', 'robot', [{ text: 'An AI agent added 4 tasks to your Inbox' }], null, true, null, [tlTask(docs[1]), tlTask(docs[3]), tlTask(spaceDocs[0]), tlTask(docs[4])]),
     event('done1', 1, 'done', 'apply', [{ text: 'Priya Raman ' }, bold('completed'), { text: ' ' }, { text: docs[2].text, marks: { strike: true } }], null, true, docs[2].id),
     event('start1', 1.1, 'accepted', 'tlAccepted', [{ text: 'Tomas Ilves ' }, bold('accepted'), { text: ' ' + docs[5].text }], null, false, docs[5].id),
     { ...event('edit1', 1.3, 'edit', 'updated', [{ text: 'Sam Okafor ' }, bold('edited'), { text: ' ' + docs[0].text }], null, false, docs[0].id), timeline: { uri: docs[0].id, note: null, tone: 'edit', change: 'Description added for Christmas activities proposed by Nadia', detail: 'Nadia proposed extending Healthcare\'s Christmas activities, such as karaoke and games, across Nedap to replace separate business unit programmes.' } },

@@ -109,8 +109,8 @@ async function rows() {
     if (!inboxFrom(me, n.createdBy, chat, names)) continue; // yours, by hand
     // who put it there: the person, or for a chat the kind of writer (an MCP client is somebody's agent)
     const actor = n.createdBy && n.createdBy !== me ? who([n.createdBy]) : isMcp(chat) ? 'An AI agent' : "Tana's AI";
-    // the marker says who: the AI sparkle for an agent, Tana's prism for Tana's own AI, a dotted ring for a person
-    const icon = actor === 'An AI agent' ? 'sparkle' : actor === "Tana's AI" ? 'tana' : 'tlNew';
+    // the marker says who: a robot for an agent, Tana's prism for Tana's own AI, a dotted ring for a person
+    const icon = actor === 'An AI agent' ? 'robot' : actor === "Tana's AI" ? 'tana' : 'tlNew';
     events.push({ kind: 'inbox', uri: n.id, title: n.title, at: Date.parse(n.createTime), actor, icon, tone: 'new', node: n });
   }
   // What is new is what came after your last visit, which this visit then becomes. The first visit marks nothing.
