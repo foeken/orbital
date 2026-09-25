@@ -525,7 +525,12 @@ async function followSummary(id, title, wait = () => pause(SUMMARY_EVERY_MS)) {
     if (!fresh.length) continue;
     const at = (s) => Date.parse(s.endTime || s.startTime || '') || 0; // the service's order has gone both ways
     following.delete(id);
-    if (S.notify) S.notify(id, title || 'Untitled', said(fresh.reduce((a, b) => (at(b) >= at(a) ? b : a))), 'summary');
+    // What changed as the banner's subtitle and Tana's longer words for it as the body ("Added a document link" /
+    // "A link to the Risk Register document on Slite was appended"), as the Timeline shows it; the one line alone
+    // when the description says nothing more, or when it is all there is.
+    const best = fresh.reduce((a, b) => (at(b) >= at(a) ? b : a)), headline = said(best);
+    const detail = typeof best.description === 'string' && best.description.trim() && best.description.trim() !== headline ? best.description.trim() : null;
+    if (S.notify) S.notify(id, title || 'Untitled', detail || headline, 'summary', detail ? headline : undefined);
     return;
   }
   if (following.get(id) === token) following.delete(id);

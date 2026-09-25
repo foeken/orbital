@@ -338,11 +338,15 @@ function renderOutline() {
     } else if (parent.docId === PROPOSALS_PAGE) { // yours without a heading, then From others (renderer/proposals.js)
       groups = proposalGroups(list);
       list = groups.flatMap((g) => (g.collapsed ? [] : g.nodes));
+    } else if (parent.docId === TIMELINE_PAGE) { // a section per day (renderer/timeline.js)
+      groups = timelineGroups(list);
+      list = groups.flatMap((g) => (g.collapsed ? [] : g.nodes));
     }
     list = withDraftTail(list, parent); // an open node always has a row to type in; a read-only one (every chat) never does
     outline.replaceChildren(...(groups
       ? groups.flatMap((g) => [...(g.title ? [groupHeadEl(g)] : []), ...(g.collapsed ? [] : g.nodes.map((n) => childEl(n, parent))), ...(g.more ? [groupMoreEl(g)] : [])])
       : list.map((n) => childEl(n, parent))));
+    if (parent.docId === TIMELINE_PAGE && tana.timelineWeeks && kids.get(TIMELINE_PAGE)) outline.append(timelineOlderEl()); // a week a page: one more, at the end
     animView = null; // a zoom replaced every row, and a zoomed row is keyed docId/nodeId while a view row is keyed by
     // its document id, so on the way back nothing would match and the whole view would flash as if it had just arrived
     // A node opens at its top, however far down the draft tail the caret goes (the caretOnOpen block below parks it
@@ -697,7 +701,7 @@ function nodeEl(node, docId, parent) {
   const heading = headingOf(node); // a heading arrives as node.heading or as the heading1-3 block type
   // an image draws a marker only where a list row would: on its own it is the picture and nothing else
   const blockClass = node.kind === 'block' ? ' t-' + (isDivider(node) ? 'divider' : isImage(node) ? (node.block || 'image') : blockTypeOf(node)) : '';
-  el.className = 'node ' + node.kind + (reference ? ' reference' : '') + (fullref ? ' fullref' : '') + (gone ? ' gone' : '') + blockClass + (heading ? ' h' + heading : '') + (display.done ? ' done' : '') + (has ? ' has' : '') + (has && !opened ? ' collapsed' : '') + (node.draft || node.upload ? ' draft' : '') + (node.notification && node.unread ? ' unread' : '');
+  el.className = 'node ' + node.kind + (reference ? ' reference' : '') + (fullref ? ' fullref' : '') + (gone ? ' gone' : '') + blockClass + (heading ? ' h' + heading : '') + (display.done ? ' done' : '') + (has ? ' has' : '') + (has && !opened ? ' collapsed' : '') + (node.draft || node.upload ? ' draft' : '') + ((node.notification || node.timeline) && node.unread ? ' unread' : '') + (node.timeline ? ' tl tl-' + node.timeline.tone : '');
   if (node.start != null) el.style.counterSet = 'ol ' + (node.start - 1); // a numbered list counting from its own start (sdk/content.js); the row's increment makes it start
   el.dataset.key = item.key;
   const line = document.createElement('div'); line.className = 'line';
@@ -728,8 +732,10 @@ function nodeEl(node, docId, parent) {
     check.type = 'checkbox'; check.className = 'check'; check.checked = !!display.done; check.tabIndex = -1;
     if (isTask(display) && display.stateType === 'proposed') check.classList.add('inbox'); // not accepted yet: a dashed box
     check.onmousedown = (e) => e.preventDefault();
-    check.disabled = target ? !canEditNode(display) : !canEditItem(item);
-    check.onclick = target && canEditNode(display) ? () => toggleReference(node) : canEditItem(item) ? () => (isTask(node) ? toggleDone(item) : toggleCheckbox(item)) : null;
+    // a read-only row can still carry a box that ticks (node.checkable: a task listed on the Timeline)
+    const ticks = canEditItem(item) || (!!node.checkable && isTask(node));
+    check.disabled = target ? !canEditNode(display) : !ticks;
+    check.onclick = target && canEditNode(display) ? () => toggleReference(node) : ticks ? () => (isTask(node) ? toggleDone(item) : toggleCheckbox(item)) : null;
     line.append(check);
   }
   const body = document.createElement('div'); body.className = 'body'; // text + meta + chips; only .text is editable
@@ -764,7 +770,7 @@ function nodeEl(node, docId, parent) {
     text.classList.toggle('chiponly', chipOnly(text));
   }
   body.append(text);
-  const metaText = node.notification ? agoText(node.createdAt) : node.proposal ? agoText(node.proposal.proposedAt) : display.meta; // a notification says when it came in, a proposal when it was made
+  const metaText = node.notification ? agoText(node.createdAt) : node.timeline ? timelineTime(node.createdAt) : node.proposal ? agoText(node.proposal.proposedAt) : display.meta; // a notification says when it came in, a proposal when it was made
   if (metaText) { const m = document.createElement('span'); m.className = 'meta'; m.textContent = metaText; body.append(m); }
   // every row describes who can see it, not only task rows; the fetch waits until the row is on screen
   const taskInfo = taskSummary(display, true) || documentSummary(display, true);
@@ -774,6 +780,13 @@ function nodeEl(node, docId, parent) {
   } else if (!taskInfo) observeMeta(el, display); // "Lives in" reads the same answer, so the fetch still goes out
   if (displayOn('type')) appendTags(body, display);
   // when it was made, when it last moved and where it lives, as one grey line under the title (renderer/views.js)
+  // what a Timeline edit put there (renderer/timeline.js): Tana's longer words, quoted between the headline and who did it
+  if (node.timeline && (node.timeline.change || node.timeline.detail)) {
+    const q = document.createElement('div'); q.className = 'tl-detail';
+    if (node.timeline.change) { const h = document.createElement('strong'); h.textContent = node.timeline.change; q.append(h); } // what changed, in Tana's one line
+    if (node.timeline.detail) { const d = document.createElement('div'); d.textContent = node.timeline.detail; q.append(d); } // and its longer words for it
+    body.append(q);
+  }
   const subText = subtextOf(display, taskInfo);
   if (subText) {
     const sub = document.createElement('div');
@@ -790,6 +803,11 @@ function nodeEl(node, docId, parent) {
   // with the end of the row, which walked the caret past everything written after the point that was clicked.
   line.onclick = (e) => { if (!e.metaKey && !e.shiftKey && !reference && !fullref && (e.target === line || e.target === body || e.target.parentElement === text)) setCaret(text, caretAt(text, e.clientX, e.clientY)); };
   if (node.notification) line.onclick = (e) => { if (!e.metaKey && !e.shiftKey && !e.target.closest('.bullet, .chev')) openNotification(node); }; // a click on it opens it, as in Tana
+  if (node.timeline?.uri) line.onclick = (e) => { if (!e.metaKey && !e.shiftKey && !e.target.closest('.chev')) openTimeline(node); }; // and a Timeline row opens the node it is about
+  else if (node.timeline) line.onmousedown = (e) => e.preventDefault(); // one about nothing (an "added to your Inbox" line) takes no click and no caret
+  // as does a task listed under one, as itself: goTo reads the real node, where zoomTo would open the read-only copy the
+  // Timeline lists, filed under the Timeline in the crumb — a page that looked like the task and could not be edited
+  else if (parent?.node?.timeline) line.onclick = (e) => { if (!e.metaKey && !e.shiftKey && !e.target.closest('.chev, .check, .bullet')) goTo(node.id); };
   // a reference row: the bullet opens the target, a click selects the row, and a click on the selected row starts
   // editing it — a native embed takes the caret where it was clicked, while a full reference has nothing to click
   // into (its text is one chip), so the caret goes to the end, which is where Enter on the selection puts it too

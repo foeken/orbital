@@ -25,7 +25,8 @@ const dragListable = (n) => ['bullet', 'numbered'].includes(n.block) || (!isAtom
 // words either and are very much things you would move, so they are not "empty".
 const dragEmpty = (item) => !isAtomic(item.node) && !String(item.node.text || '').trim() && !hasKids(item);
 // A document row can be dragged too, but it never moves: what lands is a reference to it (dragRef).
-const canDragItem = (item) => !!item && !item.node.draft
+// Not on the Timeline (renderer/timeline.js): a record of what happened, not an outline, so nothing on it is picked up
+const canDragItem = (item) => !!item && !item.node.draft && !item.node.timeline && !item.parent?.node?.timeline
   && (item.node.kind === 'document' ? !!tana.insertMention && isRealId(item.node.id) && !isGone(item.node.id)
     : !!tana.moveTo && item.node.kind === 'block' && canEditStructure(item) && !dragEmpty(item));
 // What a drop writes, decided by what was picked up rather than by a modifier: a document cannot move into an

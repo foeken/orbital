@@ -24,6 +24,7 @@ const { nodePin, pinState, pinTree, pinned, pinnedDates, pinnedUris, setPin, tod
 const { image, insertImage, cancelUpload } = require('./main/images');
 const inbox = require('./main/inbox');
 const proposalsPage = require('./main/proposals');
+const timelinePage = require('./main/timeline');
 const icons = require('./main/icons');
 const settings = require('./main/settings');
 const quick = require('./main/quickadd');
@@ -123,12 +124,13 @@ ipcMain.handle('view:setFilter', (_e, id, filter) => {
   return stored;
 });
 // events start with an empty content map (no doc node yet); readOutline needs the children list
-ipcMain.handle('outline:children', (_e, id) => (id === inbox.PAGE ? inbox.rows() : id === proposalsPage.PAGE ? proposalsPage.rows() : isSearch(id) ? searchChildren(id) : isSpace(id) ? spaceChildren(id) : op(id, (doc) => (idKind(id) === 'chat' ? chatOutline(doc) : doc.content.get('children') ? outlineWithReferences(doc) : []))));
+ipcMain.handle('outline:children', (_e, id) => (id === inbox.PAGE ? inbox.rows() : id === proposalsPage.PAGE ? proposalsPage.rows() : id === timelinePage.PAGE ? timelinePage.rows() : isSearch(id) ? searchChildren(id) : isSpace(id) ? spaceChildren(id) : op(id, (doc) => (idKind(id) === 'chat' ? chatOutline(doc) : doc.content.get('children') ? outlineWithReferences(doc) : []))));
 // Notifications (main/inbox.js): the page's rows come through outline:children above; these are its count and writes.
 ipcMain.handle('inbox:unread', () => inbox.unread());
 ipcMain.handle('inbox:setRead', (_e, id, read) => inbox.setRead(id, !!read));
 ipcMain.handle('inbox:markAll', () => inbox.markAll());
 // Proposals (main/proposals.js): its rows come through outline:children too; this is the one write, approve or reject.
+ipcMain.handle('timeline:weeks', (_e, n) => timelinePage.setWeeks(n)); // how many weeks back the Timeline reads (main/timeline.js)
 ipcMain.handle('proposals:answer', (_e, chatUri, proposedUri, approve) => proposalsPage.answer(chatUri, proposedUri, !!approve));
 ipcMain.handle('doc:info', (_e, id) => op(id, info));
 ipcMain.handle('doc:creationOptions', () => creationOptions());
@@ -455,7 +457,7 @@ ipcMain.handle('sync:login', async () => {
 if (process.env.TANA_MAIN_TEST) {
   module.exports = { resolveInitialAuth, graphRow, cachedNodeHue, rememberType, VIEWS, toNode, outlineWithReferences, chatOutline, op, onChange, documentAction, archivedTypes, createDocument, creationOptions, typeChoices, typeCandidates, setType, setTypeHue, discussWith, ai, icons, settings, search, viewFilter, searchCreate, searchTitle, viewRows, spaceChildren, start, refresh, related, watchRelated, callOf, weekTitle, weekNode,
     statusSnapshot: () => ({ ...S.status }), rememberNodeHue, restoredBounds, today,
-    undo: () => history(undoStack, redoStack, 'undo', 'canUndo'), redo: () => history(redoStack, undoStack, 'redo', 'canRedo'), visibleGraphNodes, pinTree, changesOf, summaryChanges, followSummary, announceNewInbox, watchInbox,
+    undo: () => history(undoStack, redoStack, 'undo', 'canUndo'), redo: () => history(redoStack, undoStack, 'redo', 'canRedo'), visibleGraphNodes, pinTree, changesOf, summaryChanges, followSummary, announceNewInbox, watchInbox, timelinePage,
     nodePin,
     quickContext: quick.quickContext, quickCreate: quick.quickCreate, togglePanel: quick.togglePanel, registerShortcut: quick.registerShortcut, QUICK_ACCELERATOR: quick.ACCELERATOR,
     assignToAgent, // the one handoff both entry points use, so a check can drive the panel through the real path
@@ -479,12 +481,12 @@ if (process.env.TANA_MAIN_TEST) {
     // An edit banner has one macOS identifier per node, so the 'summary' that follows it (Tana's sentence for the edit,
     // main/documents.js followSummary) replaces it in place, silently — unless it was clicked, and so already seen.
     const clickedEdits = new Set();
-    S.notify = (docId, title, body, kind) => {
+    S.notify = (docId, title, body, kind, subtitle) => { // subtitle: macOS's line between title and body (what an edit changed)
       if (!Notification.isSupported || !Notification.isSupported()) return;
       const id = kind ? 'edit:' + docId : undefined; // undefined: a fresh random id, as before
       if (kind === 'summary' && clickedEdits.has(id)) return;
       if (kind === 'edit') clickedEdits.delete(id);
-      const note = new Notification({ id, title, body, silent: kind === 'summary' });
+      const note = new Notification({ id, title, subtitle, body, silent: kind === 'summary' });
       note.on('click', () => { if (id) clickedEdits.add(id); if (S.win && !S.win.isDestroyed()) { S.win.show(); S.win.focus(); send('notify:open', docId); } });
       note.show();
     };

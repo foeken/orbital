@@ -160,6 +160,22 @@ function mockApi() {
     note: (operation === 'create' ? 'Proposed' : 'Change proposed') + ' in ' + where + (operation === 'create' ? '' : ' · approve in Tana'), proposedAt: new Date(Date.now() - hours * 36e5).toISOString() } });
   content[PROPOSALS] = [proposed(docs[2], 1, 'create', meetings[1].text, 'mine'), proposed(docs[3], 5, 'create', meetings[3].text, 'others'),
     proposed(spaceDocs[0], 30, 'update', 'Private AI chat', 'mine')];
+  // The Timeline as main/timeline.js hands it over: one row per event, newest first, the node it is about in timeline.uri
+  const at = (hours) => new Date(Date.now() - hours * 36e5).toISOString();
+  const event = (key, hours, tone, icon, segments, note, unread, uri, children = []) => ({ id: 'orbital:timeline:' + key, text: segments.map((x) => x.text).join(''), segments, kind: 'block', block: 'bullet', icon, editable: false,
+    hasChildren: children.length > 0, children, unread, createdAt: at(hours), timeline: { uri, note, tone } });
+  const bold = (text) => ({ text, marks: { bold: true } });
+  const tlTask = (d) => ({ ...d, editable: false, checkable: true });
+  content['orbital:timeline'] = [
+    event('group1', 0.1, 'new', 'robot', [{ text: 'An AI agent added 4 tasks to your Inbox' }], null, true, null, [tlTask(docs[1]), tlTask(docs[3]), tlTask(spaceDocs[0]), tlTask(docs[4])]),
+    event('done1', 1, 'done', 'apply', [{ text: 'Priya Raman ' }, bold('completed'), { text: ' ' }, { text: docs[2].text, marks: { strike: true } }], null, true, docs[2].id),
+    event('start1', 1.1, 'accepted', 'tlAccepted', [{ text: 'Tomas Ilves ' }, bold('accepted'), { text: ' ' + docs[5].text }], null, false, docs[5].id),
+    { ...event('edit1', 1.3, 'edit', 'updated', [{ text: 'Sam Okafor ' }, bold('edited'), { text: ' ' + docs[0].text }], null, false, docs[0].id), timeline: { uri: docs[0].id, note: null, tone: 'edit', change: 'Description added for Christmas activities proposed by Nadia', detail: 'Nadia proposed extending Healthcare\'s Christmas activities, such as karaoke and games, across Nedap to replace separate business unit programmes.' } },
+    { ...event('edit2', 2, 'edit', 'updated', [{ text: 'Priya Raman ' }, bold('edited'), { text: ' ' + docs[6].text }], null, false, docs[6].id), timeline: { uri: docs[6].id, note: null, tone: 'edit', change: 'Changed the deadline from Friday to Wednesday' } },
+    event('group2', 2.4, 'new', 'tlNew', [{ text: 'Tomas Ilves added a task to your Inbox' }], null, false, null, [tlTask(docs[7])]),
+    event('done2', 26, 'done', 'apply', [{ text: 'Sam Okafor ' }, bold('completed'), { text: ' ' }, { text: docs[0].text, marks: { strike: true } }], 'Task completed and a note added about the deadline', false, docs[0].id),
+    event('group3', 26.5, 'new', 'tana', [{ text: "Tana's AI added a task to your Inbox" }], null, false, null, [tlTask(docs[9])]),
+    event('later1', 27, 'quiet', 'tlLater', [{ text: 'Tomas Ilves ' }, bold('moved to Later'), { text: ' ' + docs[8].text }], null, false, docs[8].id)];
   // an image block (not editable; api.image resolves its uri to a data URL): a 2x2 PNG scaled by width/height
   content.mockdoc0.splice(2, 0, { id: 'img' + (++seq), kind: 'block', type: 'image', image: { uri: 'tana:image:mock', alt: 'Mock image', width: 160, height: 100 }, hasChildren: false, children: [] });
   // inline references (embeds): read-only nodes rendering the target's title/state, like sdk/content.js (editable: false) with main resolving reference.node
@@ -594,6 +610,7 @@ function mockApi() {
     inboxSetRead: async (id, read) => { const n = content[INBOX].find((x) => x.id === id); if (n) n.unread = !read; return tellInbox(); },
     inboxMarkAll: async () => { for (const n of content[INBOX]) n.unread = false; return tellInbox(); },
     onInbox: (cb) => inboxCbs.push(cb),
+    timelineWeeks: async (n) => n, // the mock's Timeline is the same rows at any depth
     proposalAnswer: async (chatUri, proposedUri, approve) => {
       const p = content[PROPOSALS].find((n) => n.proposal.proposedUri === proposedUri);
       if (approve && p && !p.proposal.approvable) throw new Error('Tana merges a change itself: approve it in Tana');

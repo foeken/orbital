@@ -34,6 +34,7 @@ contextBridge.exposeInMainWorld('api', {
   // Tana AI proposals (main/proposals.js). Its rows are children('orbital:proposals'); approve true accepts one, false
   // rejects it, resolving to the warnings a rejection leaves behind.
   proposalAnswer: (chatUri, proposedUri, approve) => ipcRenderer.invoke('proposals:answer', chatUri, proposedUri, approve),
+  timelineWeeks: (n) => ipcRenderer.invoke('timeline:weeks', n), // how many weeks back children('orbital:timeline') reads; resolves to the number it took
   codexIds: () => ipcRenderer.invoke('codex:list'), // nodes handed to the local Codex agent; app-local, not a Tana assignee
   setCodex: (docId, on, prompt, model, host) => ipcRenderer.invoke('codex:set', docId, on, prompt, model, host), // prompt, model and the machine it runs on are per assignment
   codexModels: (host) => ipcRenderer.invoke('codex:models', host), // the models that host offers
