@@ -2113,6 +2113,9 @@ async function main() {
       const nine = Date.UTC(2026, 8, 25, 7); // 09:00 in Amsterdam, summer time
       const zoned = R({ type: 'zoned', datetime: '2026-09-25T09:00', timezone: 'Europe/Amsterdam' });
       assert.deepEqual([inbox.shown(zoned, nine - 60000), inbox.shown(zoned, nine)], [false, true], 'a zoned reminder is due at that time in its own timezone');
+      const at = (datetime, timezone) => inbox.when(R({ type: 'zoned', datetime, timezone }));
+      assert.deepEqual([at('2026-03-08T02:30', 'America/New_York'), at('2026-10-04T02:15', 'Australia/Lord_Howe'), at('2026-10-25T02:30', 'Europe/Amsterdam')],
+        [Date.UTC(2026, 2, 8, 7, 30), Date.UTC(2026, 9, 3, 15, 45), Date.UTC(2026, 9, 25, 0, 30)], 'Temporal compatible: a skipped time moves forward by the gap, a repeated one is the earlier');
       const local = new Date(2026, 8, 25, 9).getTime(), plain = R({ type: 'plain', datetime: '2026-09-25T09:00' });
       assert.deepEqual([inbox.shown(plain, local - 60000), inbox.shown(plain, local)], [false, true], 'a plain one in the local timezone');
       assert.ok(inbox.shown(R({ type: 'zoned', datetime: '2026-09-25T09:00', timezone: 'Mars/Olympus' }), 0) && inbox.shown(R({ type: 'plain', datetime: 'soon' }), 0) && inbox.shown(R(undefined), 0),

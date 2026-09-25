@@ -26,15 +26,17 @@ const maps = (doc) => {
 };
 
 // ng(): when a reminder is due, in ms — a plain time in the local timezone, a zoned one in its own; NaN when unreadable.
-// ponytail: in the hour a clock turns back this picks the later of the two moments (Temporal the earlier); Temporal once node has it.
+// Tana resolves the wall time with Temporal's 'compatible' rule (node 22 has no Temporal, so Intl does it here): in the
+// hour a clock turns back the earlier of the two moments, and a time the clock skips moves forward by the gap.
 function dueAt(n) {
   const m = /^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d)(?::(\d\d))?$/.exec(n.due && n.due.datetime);
   if (!m) return NaN;
   try {
     const f = new Intl.DateTimeFormat('en-US', { timeZone: n.due.type === 'zoned' ? n.due.timezone : undefined, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric' });
     const offset = (t) => { const p = Object.fromEntries(f.formatToParts(t).map((x) => [x.type, +x.value])); return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - t; };
-    const wall = Date.UTC(m[1], m[2] - 1, m[3], m[4], m[5], m[6] || 0);
-    return wall - offset(wall - offset(wall));
+    const wall = Date.UTC(m[1], m[2] - 1, m[3], m[4], m[5], m[6] || 0), before = offset(wall - 864e5);
+    const fits = [before, offset(wall + 864e5)].map((o) => wall - o).filter((t) => offset(t) === wall - t);
+    return fits.length ? Math.min(...fits) : wall - before; // a skipped time keeps the offset from before the jump
   } catch { return NaN; } // an unknown timezone
 }
 const REMINDER = 'comment-reminder';
