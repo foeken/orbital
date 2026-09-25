@@ -2462,6 +2462,12 @@ async function main() {
     summaries.get(watched.id).push({ title: 'Signed by both parties', authors: [COLLEAGUE], endTime: ago(-1000) });
     const next = await read();
     assert.deepEqual(next.filter((r) => r[4]).map((r) => r[1]), ['Signed by both parties'], 'what came after your last visit is marked new, and only that');
+    // A week a page: ten days back is not on the first one, and one step older brings it in
+    summaries.get(watched.id).push({ title: 'Renamed the task', authors: [COLLEAGUE], endTime: ago(10 * 24 * H) });
+    assert.ok(!(await read()).some((r) => r[1] === 'Renamed the task'), 'the Timeline opens on the last week');
+    assert.equal(backend.timelinePage.setWeeks(2), 2, 'one week older');
+    assert.ok((await read()).some((r) => r[1] === 'Renamed the task'), 'brings the week before it in');
+    backend.timelinePage.setWeeks(1);
     console.log('ok  timeline: what changed and what finished first, new Inbox tasks grouped and quiet, newest first, new since the last visit');
   }
 

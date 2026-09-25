@@ -30,5 +30,20 @@ function timelineGroups(list) {
   return days.map((g) => ({ ...g, title: timelineDay(g.id), collapsed: timelineFolded.has(g.id),
     toggle: () => { if (!timelineFolded.delete(g.id)) timelineFolded.add(g.id); render(true); } }));
 }
+// A week a page (main/timeline.js setWeeks): opening the page starts at one week (renderer/edit.js), and the button at
+// its end reaches one week further back. The count is set once here too, so a reloaded window and main agree on it.
+let timelineWeeks = 1;
+if (tana.timelineWeeks) tana.timelineWeeks(1).catch(() => {});
+function timelineOlder() {
+  run(async () => { timelineWeeks = await tana.timelineWeeks(timelineWeeks + 1); await reload(TIMELINE_PAGE); renderSoon(true); });
+}
+function timelineOlderEl() {
+  const el = document.createElement('button');
+  el.type = 'button'; el.className = 'gmore tl-older';
+  el.textContent = 'Show the week before ' + new Date(Date.now() - timelineWeeks * 7 * 864e5).toLocaleDateString(undefined, { day: 'numeric', month: 'long' });
+  el.onmousedown = (e) => e.preventDefault();
+  el.onclick = timelineOlder;
+  return el;
+}
 const timelineTime = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }); // a column of times: 24-hour, so they line up
 

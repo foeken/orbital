@@ -610,6 +610,7 @@ function mockApi() {
     inboxSetRead: async (id, read) => { const n = content[INBOX].find((x) => x.id === id); if (n) n.unread = !read; return tellInbox(); },
     inboxMarkAll: async () => { for (const n of content[INBOX]) n.unread = false; return tellInbox(); },
     onInbox: (cb) => inboxCbs.push(cb),
+    timelineWeeks: async (n) => n, // the mock's Timeline is the same rows at any depth
     proposalAnswer: async (chatUri, proposedUri, approve) => {
       const p = content[PROPOSALS].find((n) => n.proposal.proposedUri === proposedUri);
       if (approve && p && !p.proposal.approvable) throw new Error('Tana merges a change itself: approve it in Tana');

@@ -327,7 +327,7 @@ function noteNavigation() {
   // Proposals are read afresh on every arrival: nothing pushes them, and one approved in Tana should not linger here.
   if (id === PROPOSALS_PAGE && previousDoc !== id && kids.get(id)) run(async () => { await reload(id); renderSoon(true); });
   // The Timeline too: main rebuilds it from Tana on every read, so an arrival is what brings it up to date.
-  if (id === TIMELINE_PAGE && previousDoc !== id && kids.get(id)) run(async () => { await reload(id); renderSoon(true); });
+  if (id === TIMELINE_PAGE && previousDoc !== id && kids.get(id)) run(async () => { if (tana.timelineWeeks) timelineWeeks = await tana.timelineWeeks(1); await reload(id); renderSoon(true); }); // and it opens on the last week again
   // Returning by history, a crumb or a pin must rerun the query, not reuse its old result set.
   if (id !== previousDoc && isSearchDoc({ id }) && kids.get(id)) {
     releaseHeld();

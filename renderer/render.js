@@ -346,6 +346,7 @@ function renderOutline() {
     outline.replaceChildren(...(groups
       ? groups.flatMap((g) => [...(g.title ? [groupHeadEl(g)] : []), ...(g.collapsed ? [] : g.nodes.map((n) => childEl(n, parent))), ...(g.more ? [groupMoreEl(g)] : [])])
       : list.map((n) => childEl(n, parent))));
+    if (parent.docId === TIMELINE_PAGE && tana.timelineWeeks && kids.get(TIMELINE_PAGE)) outline.append(timelineOlderEl()); // a week a page: one more, at the end
     animView = null; // a zoom replaced every row, and a zoomed row is keyed docId/nodeId while a view row is keyed by
     // its document id, so on the way back nothing would match and the whole view would flash as if it had just arrived
     // A node opens at its top, however far down the draft tail the caret goes (the caretOnOpen block below parks it
