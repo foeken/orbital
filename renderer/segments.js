@@ -55,7 +55,8 @@ function demoWords(value, identity) {
 }
 // Demo mode masks what came from Tana and leaves the app's own words alone: a page or row of the app's own
 // (orbital:…) keeps its text, and inside one only the parts marked as a name (person) or as Tana's content are masked.
-const appOwned = (identity) => String(identity || '').startsWith('orbital:');
+// A saved search's title is a place in the app ("My Tasks"), so it reads as itself, like the app's own pages.
+const appOwned = (identity) => /^(orbital|tana:search):/.test(String(identity || ''));
 const demoText = (value, identity) => !demoMode || appOwned(identity) ? value : String(identity || '').startsWith('tana:user-profile:') ? demoPersonName(identity, demoWordCount(value)) : demoWords(value, identity);
 function demoSegments(segs, identity) {
   if (!demoMode) return segs;
