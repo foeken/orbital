@@ -390,6 +390,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .node.tl > .children .meta { display: none; } /* assigned to you and private: true of every one, so said by none */
 .node.tl .cbadge { display: none; } /* the local agent's badge is a fact about the task, not about what happened to it */
 .node.tl .line, .node.tl .line .text { cursor: pointer; } /* every row here opens something: a click is not a place for a caret */
+.node.tl-new > .line, .node.tl-new > .line .text { cursor: default; } /* except an "added to your Inbox" line: its rows open, it does not */
 .node.tl.unread > .line::after { content: ''; position: absolute; left: 88px; top: 24px; width: 6px; height: 6px; border-radius: 50%; background: #0090ff; }
 [data-theme="dark"] .node.tl::before { border-left-color: #34373a; }
 [data-theme="dark"] .node.tl > .line > .bullet.icon svg { background: #1b1d1e; color: #8a8f95; }

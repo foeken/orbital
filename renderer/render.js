@@ -801,7 +801,8 @@ function nodeEl(node, docId, parent) {
   // with the end of the row, which walked the caret past everything written after the point that was clicked.
   line.onclick = (e) => { if (!e.metaKey && !e.shiftKey && !reference && !fullref && (e.target === line || e.target === body || e.target.parentElement === text)) setCaret(text, caretAt(text, e.clientX, e.clientY)); };
   if (node.notification) line.onclick = (e) => { if (!e.metaKey && !e.shiftKey && !e.target.closest('.bullet, .chev')) openNotification(node); }; // a click on it opens it, as in Tana
-  if (node.timeline) line.onclick = (e) => { if (!e.metaKey && !e.shiftKey && !e.target.closest('.chev')) openTimeline(node); }; // and a Timeline row opens the node it is about
+  if (node.timeline?.uri) line.onclick = (e) => { if (!e.metaKey && !e.shiftKey && !e.target.closest('.chev')) openTimeline(node); }; // and a Timeline row opens the node it is about
+  else if (node.timeline) line.onmousedown = (e) => e.preventDefault(); // one about nothing (an "added to your Inbox" line) takes no click and no caret
   // as does a task listed under one, as itself: goTo reads the real node, where zoomTo would open the read-only copy the
   // Timeline lists, filed under the Timeline in the crumb — a page that looked like the task and could not be edited
   else if (parent?.node?.timeline) line.onclick = (e) => { if (!e.metaKey && !e.shiftKey && !e.target.closest('.chev, .check, .bullet')) goTo(node.id); };

@@ -140,8 +140,8 @@ async function rows() {
     return { id: PAGE + ':' + e.kind + ':' + e.uri + ':' + e.at, text: segments.map((x) => x.text).join(''), segments,
       kind: 'block', block: 'bullet', icon: e.icon, editable: false, hasChildren: children.length > 0, children,
       createdAt: iso(e.at), unread: (e.tasks || [e]).some((t) => t.at > seen),
-      // a group has no one node to open: its tasks open themselves
-      timeline: { uri: e.kind === 'inbox' && e.tasks.length > 1 ? null : e.uri, note, change, detail, tone: e.tone } };
+      // an "added to your Inbox" line opens nothing: the rows under it open themselves, one task or six
+      timeline: { uri: e.kind === 'inbox' ? null : e.uri, note, change, detail, tone: e.tone } };
   });
 }
 

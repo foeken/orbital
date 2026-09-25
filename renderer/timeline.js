@@ -6,6 +6,7 @@
 // is read afresh on every arrival (renderer/edit.js): main rebuilds it from Tana rather than keeping a history.
 const TIMELINE_PAGE = 'orbital:timeline';
 extra.set(TIMELINE_PAGE, { id: TIMELINE_PAGE, text: 'Timeline', title: 'Timeline', kind: 'document', icon: 'timeline', editable: false, hasChildren: true, appPage: true });
+// An entry with no uri ("An AI agent added 6 tasks to your Inbox") is a heading for the rows under it: not clickable
 function openTimeline(node) {
   const uri = node.timeline && node.timeline.uri;
   if (!uri) return;
