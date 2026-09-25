@@ -23,11 +23,13 @@ const { notifySilencedIds, notifyWatchedIds } = require('./documents');
 const { inboxFrom } = require('./views');
 
 const PAGE = 'orbital:timeline';
-const VERB = { closed: 'Completed', open: 'Started', not_now: 'Moved to Later', proposed: 'Moved back to Inbox' };
-const ICON = { closed: 'apply', open: 'status', not_now: 'later', proposed: 'inbox' };
-// The marker a row gets on the rail (styles.css .tl-*): finished a green check, started a blue ring, an edit a dark
-// pencil, another move a grey ring, and a new task only a small hollow dot
-const TONE = { closed: 'done', open: 'started', not_now: 'quiet', proposed: 'quiet' };
+// Inbox to In Progress is a task being taken on, so it reads as accepted, the way Tana's own box accepts it first
+const VERB = { closed: 'Completed', open: 'Accepted', not_now: 'Moved to Later', proposed: 'Moved back to Inbox' };
+// The marker a row gets on the rail (styles.css .tl-*), each a 20px circle: finished a green one with a white check,
+// an edit a grey one with a white pen, the other moves Nucleo's grey solid circles (icons.js tl*), and a new task a
+// light dotted ring
+const ICON = { closed: 'apply', open: 'tlAccepted', not_now: 'tlLater', proposed: 'tlInbox' };
+const TONE = { closed: 'done', open: 'accepted', not_now: 'quiet', proposed: 'quiet' };
 // The state a status summary went to, in the words Tana's AI uses for it ("Task status changed from In Progress to
 // Inbox", "Task marked as completed and a note added …"); null for any other summary.
 // ponytail: reads English wording; the latest move per node does not depend on it (the node's state does)
@@ -99,7 +101,9 @@ async function rows() {
     if (!inboxFrom(me, n.createdBy, chat, names)) continue; // yours, by hand
     // who put it there: the person, or for a chat the kind of writer (an MCP client is somebody's agent)
     const actor = n.createdBy && n.createdBy !== me ? who([n.createdBy]) : isMcp(chat) ? 'An AI agent' : "Tana's AI";
-    events.push({ kind: 'inbox', uri: n.id, title: n.title, at: Date.parse(n.createTime), actor, tone: 'new', node: n });
+    // the marker says who: the AI sparkle for an agent, Tana's prism for Tana's own AI, a dotted ring for a person
+    const icon = actor === 'An AI agent' ? 'sparkle' : actor === "Tana's AI" ? 'tana' : 'tlNew';
+    events.push({ kind: 'inbox', uri: n.id, title: n.title, at: Date.parse(n.createTime), actor, icon, tone: 'new', node: n });
   }
   // What is new is what came after your last visit, which this visit then becomes. The first visit marks nothing.
   const seen = Number(db.setting('timelineSeen')) || Infinity;

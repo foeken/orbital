@@ -2445,11 +2445,11 @@ async function main() {
     assert.deepEqual(await read(), [
       ['Completed: Contract renewal', 'Rob Jansen', 'apply', 'done', false, []],
       ['Added the Q4 numbers from Rob', 'Rob Jansen · Contract renewal', 'updated', 'edit', false, []],
-      ['An AI agent added 2 tasks to your Inbox', null, null, 'new', false, ['Answer Jules', 'Plan the pilot']],
-      ['Rob Jansen added a task to your Inbox', null, null, 'new', false, ['Review the vendor contract']],
-      ['Started: Contract renewal', 'Rob Jansen', 'status', 'started', false, []],
+      ['An AI agent added 2 tasks to your Inbox', null, 'sparkle', 'new', false, ['Answer Jules', 'Plan the pilot']],
+      ['Rob Jansen added a task to your Inbox', null, 'tlNew', 'new', false, ['Review the vendor contract']],
+      ['Accepted: Contract renewal', 'Rob Jansen', 'tlAccepted', 'accepted', false, []],
       ['Moved the deadline to Friday', 'Rob Jansen · Contract renewal', 'updated', 'edit', false, []],
-      ["Tana's AI added a task to your Inbox", null, null, 'new', false, ['Share the transcript']],
+      ["Tana's AI added a task to your Inbox", null, 'tana', 'new', false, ['Share the transcript']],
     ], 'a timeline, newest first: an edit says what changed, a status move its verb; new tasks from one source in a row are one quiet entry; a completion told once, from the node\'s own state; yours alone, by hand, or weeks old stay out');
     assert.deepEqual(JSON.parse(JSON.stringify((await backend.timelinePage.rows())[0].segments)), [{ text: 'Completed: ', marks: { bold: true } }, { text: 'Contract renewal', marks: { strike: true } }],
       'and a finished node is struck through');
