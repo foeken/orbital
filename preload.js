@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('api', {
   setDemoMode: (on) => ipcRenderer.send('app:demoMode', on === true), // demo mode is on in the outliner: main posts no notification banners
   weekNode: (findOnly) => ipcRenderer.invoke('doc:weekNode', findOnly === true), // the "Week 38 (2026)" document (ISO week), created if missing unless findOnly; not linked to the day nodes
   newWindow: () => ipcRenderer.invoke('window:new'), // another outliner window (File › New Window)
+  splitWindow: () => ipcRenderer.invoke('window:split'), // a second page beside this one in the same window, or back to this one alone
   openExternal: (url) => ipcRenderer.invoke('shell:open', url), // http(s) link from node text, in the default browser
   exportPdf: (docId) => ipcRenderer.invoke('doc:exportPdf', docId),
   nodeLink: (docId) => ipcRenderer.invoke('doc:link', docId), // the home.tana.inc url for a node

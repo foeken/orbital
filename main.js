@@ -2,7 +2,7 @@
 // Electron main: the process boundary. Everything that knows Tana lives in main/ (state, rows, documents, related,
 // views, pins, images); this file owns the window, the menu, the IPC table and the boot sequence, plus the test hook
 // that scripts/sdk-check.js and the CLI use to drive the same modules without a window.
-const { app, BrowserWindow, Menu, Notification, globalShortcut, ipcMain, nativeTheme, screen, shell } = require('electron');
+const { app, BaseWindow, BrowserWindow, Menu, Notification, WebContentsView, globalShortcut, ipcMain, nativeTheme, screen, shell } = require('electron');
 const path = require('node:path');
 const db = require('./db');
 const { createTanaSession } = require('./tana-session');
@@ -49,38 +49,74 @@ function restoredBounds(saved, workAreas) {
   return onScreen ? { x, y, width, height } : DEFAULT_WINDOW;
 }
 
-// Outliner windows (issue #137): Cmd+N opens another, a little down and right of the one in front. What main pushes is
-// shared state and goes to all of them (main/state.js send); S.win is the one used last, which a notification click
-// opens in. Each window's view is refreshed and kept live (main/views.js openViews), and each keeps its own sidebar
-// watch (main/related.js). The first window takes the saved bounds; the one closed last saves them.
+// Outliner windows (issue #137): Cmd+N opens another, a little down and right of the one in front. A window holds one
+// page, or two side by side (issue #159): a BaseWindow with a WebContentsView per page, each a whole outliner with its
+// own view, place and history. Main already keys a page by its webContents id (the view it shows, its sidebar watch),
+// so a page beside another is to them what a page in another window is. What main pushes is shared state and goes to
+// every page (main/state.js send); S.win is the window used last and S.pane its page, which a notification click opens
+// in. The first window takes the saved bounds; the one closed last saves them.
 S.windows = new Set();
-S.windowViews = new Map(); // webContents id -> { id, filter }: the view that window shows
+S.windowViews = new Map(); // webContents id -> { id, filter }: the view that page shows
+const SPLIT_GAP = 1; // the hairline between two pages: the window's own background showing through
+function layout(win) {
+  const { width, height } = win.getContentBounds(), n = win.panes.length, w = Math.floor((width - SPLIT_GAP * (n - 1)) / n);
+  win.panes.forEach((p, i) => { const x = i * (w + SPLIT_GAP); p.setBounds({ x, y: 0, width: i === n - 1 ? width - x : w, height }); });
+}
+function addPane(win) {
+  const pane = new WebContentsView({ webPreferences: { preload: path.join(__dirname, 'preload.js') } });
+  pane.webContents.on('focus', () => { S.win = win; S.pane = pane.webContents; });
+  win.panes.push(pane); win.contentView.addChildView(pane); layout(win);
+  pane.webContents.loadFile(path.join(__dirname, 'index.html'));
+  return pane;
+}
+// A WebContentsView's page outlives its window unless it is closed by hand.
+function removePane(win, pane) {
+  const wc = pane.webContents, key = wc.id;
+  win.panes = win.panes.filter((p) => p !== pane);
+  if (!win.isDestroyed()) { win.contentView.removeChildView(pane); layout(win); }
+  S.windowViews.delete(key); unwatchRelated(key);
+  if (S.pane === wc) S.pane = win.panes[0]?.webContents || null;
+  if (!wc.isDestroyed()) wc.close();
+}
+const frontPane = () => S.win && !S.win.isDestroyed() ? (S.win.panes.find((p) => p.webContents === S.pane) || S.win.panes[0])?.webContents : null;
 function createWindow() {
   const saved = db.setting('window'), front = S.windows.size ? S.win : null;
   const bounds = front && !front.isDestroyed() ? { ...front.getNormalBounds(), x: front.getNormalBounds().x + 24, y: front.getNormalBounds().y + 24 } : restoredBounds(saved, screen.getAllDisplays().map((d) => d.workArea));
-  const win = new BrowserWindow({
-    ...bounds, title: 'Orbital', titleBarStyle: 'hiddenInset',
-    webPreferences: { preload: path.join(__dirname, 'preload.js') },
-  });
-  const key = win.webContents.id;
-  S.windows.add(win); S.win = win;
+  const win = new BaseWindow({ ...bounds, title: 'Orbital', titleBarStyle: 'hiddenInset', backgroundColor: '#8e8e93' });
+  win.panes = [];
+  S.windows.add(win); S.win = win; S.pane = addPane(win).webContents;
   if (!front && saved && saved.maximized) win.maximize();
   // saved shortly after a move or resize settles, and once more on close, so a quit or an update relaunch keeps it
   let boundsTimer = null;
   const saveBounds = () => { clearTimeout(boundsTimer); boundsTimer = null; if (!win.isDestroyed()) db.setSetting('window', { ...win.getNormalBounds(), maximized: win.isMaximized() }); };
   for (const name of ['resize', 'move', 'maximize', 'unmaximize']) win.on(name, () => { clearTimeout(boundsTimer); boundsTimer = setTimeout(saveBounds, 500); });
+  win.on('resize', () => layout(win));
   win.on('close', saveBounds);
-  win.on('page-title-updated', (e) => e.preventDefault());
   win.on('focus', () => { S.win = win; refresh(); });
   // The quick-add panel is a window of its own, and a hidden one still counts as open: without this, closing the
   // outliner after the panel had been summoned once would leave the app running invisibly instead of quitting.
   win.on('closed', () => {
-    S.windows.delete(win); S.windowViews.delete(key); unwatchRelated(key);
-    if (S.win === win) S.win = [...S.windows].at(-1) || null;
+    for (const p of [...win.panes]) removePane(win, p);
+    S.windows.delete(win);
+    if (S.win === win) { S.win = [...S.windows].at(-1) || null; S.pane = frontPane(); }
     if (S.windows.size) return;
     const panel = quick.panelState.win; if (panel && !panel.isDestroyed()) panel.destroy();
   });
-  win.loadFile(path.join(__dirname, 'index.html'));
+}
+// ⌥⌘N (issue #159): a second page beside the one that asked, opening where it was (the renderer stores its place
+// first), or back to one page, the one that asked.
+function toggleSplit(wc) {
+  const win = [...S.windows].find((w) => w.panes.some((p) => p.webContents === wc));
+  if (!win) return;
+  if (win.panes.length > 1) { for (const p of win.panes) if (p.webContents !== wc) removePane(win, p); return; }
+  const pane = addPane(win);
+  pane.webContents.once('did-finish-load', () => pane.webContents.focus()); // keyboard first: the new page takes the keys
+}
+// Cmd+W closes the page you are in when there are two, and the window otherwise.
+function closeFront(win) {
+  if (!win) return;
+  const pane = win.panes && win.panes.length > 1 && win.panes.find((p) => p.webContents === S.pane);
+  if (pane) removePane(win, pane); else win.close();
 }
 
 // Quick add (docs/QUICK-ADD.md): a second, frameless window the global shortcut summons from any app. It is not a
@@ -113,7 +149,7 @@ function createMenu() {
       { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' },
       { type: 'separator' }, { role: 'quit' },
     ] },
-    { label: 'File', submenu: [{ label: 'New Window', accelerator: 'CmdOrCtrl+N', registerAccelerator: false, click: () => createWindow() }, { type: 'separator' }, { role: 'close' }] },
+    { label: 'File', submenu: [{ label: 'New Window', accelerator: 'CmdOrCtrl+N', registerAccelerator: false, click: () => createWindow() }, { type: 'separator' }, { label: 'Close', accelerator: 'CmdOrCtrl+W', click: (_item, win) => closeFront(win) }] },
     { role: 'editMenu' },
     { role: 'windowMenu' },
   ]));
@@ -171,6 +207,7 @@ ipcMain.handle('icons:types', () => icons.typeIcons());
 // first paint) and one write per change.
 // the menu shows ⌘N but leaves the key to the renderer's New window row (DEFAULT_HOTKEYS), so it can be re-recorded
 ipcMain.handle('window:new', () => { createWindow(); });
+ipcMain.handle('window:split', (e) => { toggleSplit(e.sender); });
 // Demo mode lives in the outliner (renderer/state.js); main only needs to know it is on, so no banner shows a real title.
 ipcMain.on('app:demoMode', (_e, on) => { S.demo = on === true; });
 ipcMain.on('prefs:snapshot', (e) => { e.returnValue = settings.prefs(); });
@@ -519,7 +556,7 @@ if (process.env.TANA_MAIN_TEST) {
       if (kind === 'summary' && clickedEdits.has(id)) return;
       if (kind === 'edit') clickedEdits.delete(id);
       const note = new Notification({ id, title, subtitle, body, silent: kind === 'summary' });
-      note.on('click', () => { if (id) clickedEdits.add(id); if (S.win && !S.win.isDestroyed()) { S.win.show(); S.win.focus(); S.win.webContents.send('notify:open', docId); } }); // the window used last, not all of them
+      note.on('click', () => { if (id) clickedEdits.add(id); const wc = frontPane(); if (wc) { S.win.show(); S.win.focus(); wc.focus(); wc.send('notify:open', docId); } }); // the page used last, not all of them
       note.show();
     };
     S.userData = app.getPath('userData');
