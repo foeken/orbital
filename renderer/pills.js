@@ -51,8 +51,8 @@ function pillDefs() {
   // sorting and grouping re-order and re-section rows already loaded, rather than changing which rows are found.
   // A view keeps them in the browser; a saved search stores them in its document, so the arrangement travels with
   // the search and is what it opens on next time.
-  defs.push({ id: 'sort', label: 'Sort', command: 'Sort by', icon: 'sort', value: SORTS.find(([id]) => id === sortBy())[1], rows: () => SORTS.map(([id, label]) => ({ label, checked: sortBy() === id, run: () => setSortBy(id) })) });
-  defs.push({ id: 'group', label: 'Group', command: 'Group by', icon: 'group', value: GROUPS.find(([id]) => id === groupBy())[1], rows: () => GROUPS.filter(([id]) => id !== 'responsibility' || tasksInFilter(f)).map(([id, label]) => ({ label, checked: groupBy() === id, run: () => setGroupBy(id) })) });
+  defs.push({ id: 'sort', label: 'Sort', command: 'Sort by', icon: 'sort', value: SORTS.find(([id]) => id === sortBy())[1], rows: () => sortList().map(([id, label]) => ({ label, checked: sortBy() === id, run: () => setSortBy(id) })) });
+  defs.push({ id: 'group', label: 'Group', command: 'Group by', icon: 'group', value: groupList().find(([id]) => id === groupBy())[1], rows: () => groupList().filter(([id]) => id !== 'responsibility' || tasksInFilter(f)).map(([id, label]) => ({ label, checked: groupBy() === id, run: () => setGroupBy(id) })) });
   // what each row shows of itself; multi-select, so the menu stays open to tick more, like the type and status lists
   defs.push({ id: 'display', label: 'Display', command: 'Display', icon: 'field', value: names(displayList(), displayKeys()) || 'Nothing', rows: () => displayList().map(([id, label]) => ({ label, keepOpen: true, checked: displayOn(id), run: () => setDisplay(id) })) });
   return defs;

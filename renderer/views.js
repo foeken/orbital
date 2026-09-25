@@ -75,7 +75,18 @@ const arranged = (k, what) => (VIEW_ARRANGEMENT[k] || {})[what];
 // Keyed by the page, not the view: a saved search carries its own sort and grouping, stored in the document beside
 // its query, so opening one shows the arrangement it was saved with rather than whatever the last view was using.
 // A search's key is its document id, so the per-view defaults below simply do not match it.
-const groupOf = (k) => { const g = groupPref[k] ?? arranged(k, 'group'); return GROUPS.some(([id]) => id === g) ? g : 'none'; };
+const groupOf = (k) => { const g = groupPref[k] ?? arranged(k, 'group'); return groupList().some(([id]) => id === g) ? g : 'none'; };
+// On a type page the menu speaks the type: its options, link and member fields join it (sections per value, an
+// options field's in the order of its choices), Type goes (every row is one), and so do the task-only choices unless
+// the rows are tasks. Everywhere else it is GROUPS as it was.
+const noTasks = () => onTypePage() && !(kids.get(zoom.docId) || []).some(isTask);
+const TASK_ONLY = ['status', 'assignee'];
+const isFieldKey = (key) => String(key).includes('?attribute=');
+const groupList = () => (onTypePage()
+  ? [...GROUPS.filter(([id]) => id !== 'type' && !(noTasks() && TASK_ONLY.includes(id))), ...typeDefs().filter((d) => ['options', 'link', 'member'].includes(d.type)).map((d) => [fieldKey(d), d.title || 'Untitled field'])]
+  : GROUPS);
+const fieldOrder = (key) => ((typeDefs().find((d) => fieldKey(d) === key) || {}).options || []).map((o) => o.label);
+const fieldFallback = (key) => 'No ' + ((groupList().find(([k]) => k === key) || [])[1] || 'value');
 // Responsibility is about your tasks, and leaves out every row that is not yours: with no tasks in the filter (only
 // Risk picked in the Type pill, #139) it would hide the other people's risks, so such a list is not sectioned and the
 // Group menu does not offer it. The choice is kept: ticking Tasks again brings the sections back.
@@ -138,6 +149,8 @@ function groupKey(n, by) {
   if (by === 'assignee') { const meta = taskMetaById.get(n.id), uri = meta && meta.assignees[0]; return uri ? memberName(uri) : FALLBACK.assignee; }
   // The same lazily read metadata grouping by assignee uses; null means the row has no section here and is left out.
   if (by === 'responsibility') return responsibilityOf(n);
+  // ponytail: a field with several values is filed under the first, like the assignee grouping above
+  if (isFieldKey(by)) return ((n.fields || {})[by] || [])[0] || fieldFallback(by);
   return (visibleTags(n)[0] || {}).label || FALLBACK.type;
 }
 // [{ title, nodes }] in a fixed order: the status sequence as the Status menu lists it, names alphabetically,
@@ -147,7 +160,8 @@ function groupRows(list, by) {
   // no key means this grouping has no section for the row (Responsibility, above): it is left out, and since a
   // grouped page takes its flat list from the sections, it leaves the keyboard order too.
   for (const n of list) { const k = groupKey(n, by); if (!k) continue; if (!buckets.has(k)) buckets.set(k, []); buckets.get(k).push(n); }
-  const fixed = by === 'status' ? STATES.map((s) => s[1]) : by === 'updated' ? UPDATED_BUCKETS.map((b) => b[1]) : by === 'responsibility' ? RESPONSIBILITY : [], last = FALLBACK[by]; // Updated: newest first
+  const fixed = by === 'status' ? STATES.map((s) => s[1]) : by === 'updated' ? UPDATED_BUCKETS.map((b) => b[1]) : by === 'responsibility' ? RESPONSIBILITY : isFieldKey(by) ? fieldOrder(by) : []; // Updated: newest first
+  const last = isFieldKey(by) ? fieldFallback(by) : FALLBACK[by];
   const rank = (t) => (t === last ? 2 : fixed.includes(t) ? 0 : 1);
   return [...buckets.keys()]
     .sort((a, b) => rank(a) - rank(b) || (rank(a) === 0 ? fixed.indexOf(a) - fixed.indexOf(b) : a.localeCompare(b)))
@@ -218,6 +232,7 @@ function showAllTracking(id) { trackingShown.add(collapseKey(id)); render(true);
 // Only what a row actually carries can be sorted on. main.js toNode passes updatedAt and createdAt as ISO 8601
 // strings, so they compare as strings; a row that carries neither (an older cached row) keeps its place at the end.
 const SORTS = [['default', 'Default'], ['status', 'Status'], ['updated', 'Updated'], ['created', 'Created'], ['title', 'Title']];
+const sortList = () => SORTS.filter(([id]) => id !== 'status' || !noTasks());
 // Status sorts by the workflow rather than by the word: Inbox, In Progress, Completed, Later — the order the Status
 // menu and the Status grouping already run in, so the rank is that table's own index. A row with no task state has
 // nothing to rank and keeps its place at the end, like any other row missing the field it is sorted on.
@@ -251,7 +266,7 @@ const DISPLAY_DEFAULT = ['status', 'assigned', 'updated'];
 const typeDefs = () => (onTypePage() && (relatedBy.get(zoom.docId) || {}).definitions) || [];
 const fieldKey = (def) => zoom.docId + '?attribute=' + def.key;
 const PILL_FIELDS = ['options', 'link', 'member', 'date'];
-const displayList = () => [...typeDefs().map((d) => [fieldKey(d), d.title || 'Untitled field']), ...DISPLAY];
+const displayList = () => [...typeDefs().map((d) => [fieldKey(d), d.title || 'Untitled field']), ...DISPLAY.filter(([id]) => !(noTasks() && ['status', 'assigned'].includes(id)))];
 const displayKeys = () => {
   const k = pillKey(), chosen = displayPref[k] ?? arranged(k, 'display');
   if (Array.isArray(chosen)) return chosen;
@@ -361,7 +376,8 @@ function groupHeadEl(g) {
   const el = document.createElement('button');
   el.type = 'button'; el.className = 'ghead';
   const chev = iconNode('chevronRight'); // the icon set's own chevron, turned a quarter down by CSS while the section is open
-  el.append(...(chev ? [chev] : []), document.createTextNode(g.title));
+  // a field's heading is one of its values, which demo mode masks on the rows too (subtextEl)
+  el.append(...(chev ? [chev] : []), document.createTextNode(isFieldKey(groupBy()) ? demoText(g.title, g.id) : g.title));
   el.setAttribute('aria-expanded', g.collapsed ? 'false' : 'true');
   el.title = g.collapsed ? 'Expand' : 'Collapse'; // the words the row chevrons already use
   el.onmousedown = (e) => e.preventDefault();
