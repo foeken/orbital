@@ -372,7 +372,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .node.tl-new > .line > .bullet.icon svg, .node.tl-new > .line > .bullet.icon:hover svg { color: #c4c4c4; }
 .node.tl-new > .line > .bullet.icon:is(.robot, .tana) svg { color: #aeb1b5; }
 .node.tl > .line > .body { margin-left: 11px; } /* room between the rail and what happened: 16px with the body padding */
-.tl-detail { margin: 6px 0 4px 8px; /* its edge in line with the checkboxes of the tasks a group lists */ padding: 6px 12px; max-width: 640px; border-left: 3px solid #dcdcdc; border-radius: 0 6px 6px 0; background: #f6f6f6; color: #555; font-size: 15px; line-height: 21px; }
+.tl-detail { margin: 18px 0 -6px 8px; /* placed as the tasks a group lists are: its edge in line with their checkboxes, 20px under the line above, 25px over the next entry */ padding: 6px 12px; max-width: 640px; border-left: 3px solid #dcdcdc; border-radius: 0 6px 6px 0; background: #f6f6f6; color: #555; font-size: 15px; line-height: 21px; }
 .tl-detail strong { display: block; color: #333; font-weight: 600; }
 [data-theme="dark"] .tl-detail strong { color: #d4d6d8; }
 [data-theme="dark"] .tl-detail { border-left-color: #45484b; background: #242628; color: #b4b6b8; }
