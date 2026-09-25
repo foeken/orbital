@@ -1,5 +1,5 @@
 'use strict';
-// Timeline (issue #135; main/timeline.js): today's pinned tasks, then what happened to the nodes you watch and what
+// Timeline (issue #135; main/timeline.js): tasks pinned through today, then what happened to the nodes you watch and what
 // landed in your Inbox, newest first, in day sections. History rows are events drawn like a notification: the node's
 // title in bold, what happened on the grey line under it (subtextOf), and the time. A bell marks watched nodes and a
 // tray marks new tasks, blue when newer than your last visit. Opening a row (a click, Enter, Space) goes to its node. The page
@@ -31,6 +31,9 @@ function timelineGroups(list) {
   return days.map((g) => ({ ...g, title: timelineDay(g.id), collapsed: timelineFolded.has(g.id),
     toggle: () => { if (!timelineFolded.delete(g.id)) timelineFolded.add(g.id); render(true); } }));
 }
+function timelineDividerEl() {
+  const el = document.createElement('div'); el.className = 'tl-divider'; el.setAttribute('aria-hidden', 'true'); return el;
+}
 // A week a page (main/timeline.js setWeeks): opening the page starts at one week (renderer/edit.js), and the button at
 // its end reaches one week further back. The count is set once here too, so a reloaded window and main agree on it.
 let timelineWeeks = 1;
@@ -46,9 +49,9 @@ function timelineOlderEl() {
   el.onclick = timelineOlder;
   return el;
 }
-function timelineAddMoreEl(node) {
+function timelineAddMoreEl(node, inline = false) {
   const el = document.createElement('button');
-  el.type = 'button'; el.className = 'gmore tl-add'; el.textContent = 'Add more';
+  el.type = 'button'; el.className = 'gmore tl-add' + (inline ? ' tl-add-inline' : ''); el.textContent = 'Add more';
   el.setAttribute('aria-label', 'Add more tasks pinned to today');
   el.onmousedown = (e) => e.preventDefault();
   el.onclick = () => openTodayTaskSearch(node);

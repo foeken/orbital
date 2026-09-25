@@ -2450,9 +2450,14 @@ async function main() {
     const id = () => 'tana:text:' + ulid();
     const pinnedEditable = { id: id(), title: 'Pinned and editable', participants: { [ME]: { type: 'user', role: 'admin' } }, state: { type: 'open' } };
     const pinnedReadOnly = { id: id(), title: 'Pinned but read-only', participants: { [ME]: { type: 'user', role: 'viewer' } }, state: { type: 'open' } };
+    const completedOverdue = { id: id(), title: 'Completed yesterday', state: { type: 'open' } };
+    const completedDoc = new Document(completedOverdue.id);
+    completedDoc.transact((l) => initDocument(l, completedOverdue.title, ME, { kind: 'task' })); setState(completedDoc, 'closed', COLLEAGUE);
+    const liveDocs = new Map([[completedOverdue.id, completedDoc]]);
     const pinMapUri = 'tana:pin-map:' + ulid(), today = new Date().toLocaleDateString('sv-SE');
+    const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
     const profile = { data: { get: (key) => key === 'pinMapUri' ? pinMapUri : undefined } };
-    const pinMap = { loro: { getMap: () => ({ toJSON: () => Object.fromEntries([pinnedEditable, pinnedReadOnly].map((n) => [n.id, { pins: [{ type: 'plain', datetime: today }] }])) }) } };
+    const pinMap = { loro: { getMap: () => ({ toJSON: () => Object.fromEntries([[pinnedEditable, today], [pinnedReadOnly, today], [completedOverdue, yesterday.toLocaleDateString('sv-SE')]].map(([n, datetime]) => [n.id, { pins: [{ type: 'plain', datetime }] }])) }) } };
     const watched = { id: id(), title: 'Contract renewal', createdBy: ME, assignedTo: [COLLEAGUE], state: { type: 'closed', enteredAt: ago(0.1 * H), changedBy: COLLEAGUE } };
     const kept = { id: id(), title: 'Mine to do', createdBy: ME, assignedTo: [ME], state: { type: 'open' } }; // assigned to you: not watched
     const MCP_CHAT = 'tana:chat:' + ulid(), AI_CHAT = 'tana:chat:' + ulid();
@@ -2476,7 +2481,7 @@ async function main() {
           listNodes: async (p) => {
             if ((p.nodeTypes || []).includes('user-profile')) return { nodes: [{ id: COLLEAGUE, title: 'Rob Jansen', userProfile: {} }] };
             if (p.nodeIds && (p.nodeTypes || []).includes('chat')) return { nodes: [{ id: MCP_CHAT, title: 'MCP: Nedap Compliance', invocationContext: { intent: 'mcp' } }, { id: AI_CHAT, title: 'Chat for Weekly', invocationContext: { intent: 'meeting' } }].filter((c) => p.nodeIds.includes(c.id)) };
-            if (p.nodeIds && (p.nodeTypes || []).includes('text')) return { nodes: [pinnedEditable, pinnedReadOnly].filter((n) => p.nodeIds.includes(n.id)) };
+            if (p.nodeIds && (p.nodeTypes || []).includes('text')) return { nodes: [pinnedEditable, pinnedReadOnly, completedOverdue].filter((n) => p.nodeIds.includes(n.id)) };
             if (p.nodeIds) return { nodes: [] };
             if ((p.createdBy || []).includes(ME)) return { nodes: [watched, kept] };
             if ((p.assignedTo || []).includes(ME)) return { nodes: [byHand, viaMcp, viaMcpToo, fromRob, viaAi, old] };
@@ -2485,12 +2490,12 @@ async function main() {
           listEdges: async ({ fromNodeIds }) => ({ edges: [[viaMcp.id, MCP_CHAT], [viaMcpToo.id, MCP_CHAT], [viaAi.id, AI_CHAT]].filter(([f]) => fromNodeIds.includes(f)).map(([fromNodeId, toNodeId]) => ({ fromNodeId, toNodeId, type: 'EDGE_TYPE_CREATED_IN' })) }),
         },
         history: { listChanges: async ({ uri }) => ({ summaries: summaries.get(uri) || [] }) },
-        sync: { getDocument: () => null, subscribe: async (uri) => uri === ME ? profile : uri === pinMapUri ? pinMap : null },
+        sync: { getDocument: (uri) => liveDocs.get(uri) || null, subscribe: async (uri) => uri === ME ? profile : uri === pinMapUri ? pinMap : null },
       } });
     // through JSON: rows are built in the main-process vm, whose arrays fail a deep compare on their prototype alone
     const read = async () => JSON.parse(JSON.stringify((await backend.timelinePage.rows()).map((r) => [r.text, r.timeline.change || r.timeline.note, r.icon || null, r.timeline.tone, r.unread, r.children.map((c) => c.text)])));
     assert.deepEqual(await read(), [
-      ['Tasks pinned to today', null, 'pinDate', 'new', false, ['Pinned and editable', 'Pinned but read-only']],
+      ["Today's Tasks", null, 'todayTasks', 'new', false, ['Pinned and editable', 'Pinned but read-only']],
       ['Rob Jansen completed Contract renewal', null, 'apply', 'done', false, []],
       ['Rob Jansen edited Contract renewal', 'Added the Q4 numbers from Rob', 'updated', 'edit', false, []],
       ['An AI agent added 2 tasks to your Inbox', null, 'robot', 'new', false, ['Answer Jules', 'Plan the pilot']],
