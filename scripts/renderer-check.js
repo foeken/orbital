@@ -537,7 +537,8 @@ assert.doesNotMatch(source, /SPIN_MS|await Promise\.all\(\[answered, turning\]\)
 const nucleoWeight = styleSheet.match(/--nucleo-stroke-width: ([\d.]+)/);
 assert.ok(nucleoWeight && Number(nucleoWeight[1]) === 1, 'the built-in Nucleo set is drawn at the icon set\'s own weight');
 for (const rule of styleSheet.split('\n').filter((line) => /\{[^}]*[^-]stroke-width:/.test(line))) {
-  assert.match(rule, /\.pill\.refresh/, 'only the Refresh pill changes an icon\'s weight: ' + rule.trim());
+  // ...and the Timeline's completed marker, whose white check is drawn at 12px inside a filled circle and asked to be heavier
+  assert.match(rule, /\.pill\.refresh|\.node\.tl-done > \.line > \.bullet\.icon svg g/, 'only the Refresh pill and the Timeline\'s completed check change an icon\'s weight: ' + rule.trim());
 }
 const icons = {};
 new Function('window', fs.readFileSync(require.resolve('../icons.js'), 'utf8'))(icons);
