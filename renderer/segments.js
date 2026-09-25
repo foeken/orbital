@@ -14,7 +14,7 @@ const dayLabel = (day) => DAY_LABEL.format(new Date(day + 'T00:00:00'));
 // accepts segments, a plain string, or a Node
 const segsOf = (v) => (Array.isArray(v) ? v : typeof v === 'string' ? (v ? [{ text: v }] : []) : v.segments || (v.text ? [{ text: v.text }] : []));
 const plainOf = (v) => segsOf(v).map((s) => ('text' in s ? s.text : s.mention.label)).join('');
-let demoMode = false; // Cmd+K "Toggle demo mode": made-up names and words on screen, never persisted, and every Tana write refused (renderer/state.js)
+let demoMode = false; // Cmd+K "Toggle demo mode": made-up names and words on screen, and every Tana write refused (renderer/state.js reads the stored choice)
 // Short words stand in for short ones ("to", "the", "Q4"), so a masked title keeps the rhythm of a sentence.
 const DEMO_SHORT = ['a', 'an', 'the', 'to', 'of', 'in', 'on', 'for', 'and', 'with', 'by', 'at', 'up', 'new', 'our', 'its', 'all', 'one', 'two', 'big', 'odd', 'red', 'sky', 'sun', 'sea', 'owl', 'fox', 'map', 'key', 'ink', 'jam', 'hum', 'zip', 'go', 'we', 'so'];
 const DEMO_WORDS = ['velvet', 'comet', 'cobalt', 'orchard', 'signal', 'lantern', 'orbit', 'wildflower', 'copper', 'moonlit', 'ripple', 'midnight',

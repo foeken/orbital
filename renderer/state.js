@@ -129,10 +129,13 @@ function setZoom(f) {
 if (zoomFactor !== 1 && tana.zoom) tana.zoom(zoomFactor);
 
 const $ = (id) => document.getElementById(id);
+// Demo mode is remembered on this machine, like sensitive visibility: a reload opens the way you left it.
+demoMode = localStorage.getItem('demoMode') === '1';
 function toggleDemoMode() {
   flushAll(); // finish any real edit before masking the text currently on screen
   if (document.activeElement?.isContentEditable) document.activeElement.blur();
   demoMode = !demoMode;
+  localStorage.setItem('demoMode', demoMode ? '1' : '0');
   render(true);
 }
 const outline = $('outline'), filterEl = $('filter'), filterRow = $('filterRow');
