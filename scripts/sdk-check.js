@@ -2808,6 +2808,10 @@ async function main() {
     assert.equal(docs.size, 2, 'and nothing else is created along the way');
     const nextYear = await backend.weekNode(new Date(2027, 8, 20)); // week 38 again, a year later
     assert.equal(titleOf(docs.get(nextYear.id)), 'Week 38 (2027)', 'and next year\'s week 38 is a node of its own');
+    // demo mode asks for a lookup only (renderer/state.js readOnlyInDemo): the week that exists, and a refusal for one that does not
+    assert.equal((await backend.weekNode(new Date(2026, 8, 16), true)).id, first.id, 'a lookup finds the existing week node');
+    await assert.rejects(backend.weekNode(new Date(2028, 0, 12), true), /Demo mode is on/, 'and refuses a missing one');
+    assert.equal(docs.size, 3, 'without creating it');
     console.log('ok  week node: one plain document per ISO week, reused by every day in it');
   }
 

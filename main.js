@@ -448,8 +448,8 @@ ipcMain.handle('shell:open', (_e, url) => {
 // The node for today: a document titled with today's date, pinned to today. Created and pinned when missing,
 // so "Show today node" always lands somewhere. Matching is by exact title, the same string the pin uses.
 // A 'YYYY-MM-DD' day instead of the offset is the page a date mention opens.
-ipcMain.handle('doc:todayNode', (_e, offset) => todayNode(isDateUri('tana:plaindate:' + offset) ? offset : offset === 1 ? 1 : 0));
-ipcMain.handle('doc:weekNode', async () => (await weekNode()).id);
+ipcMain.handle('doc:todayNode', (_e, offset, findOnly) => todayNode(isDateUri('tana:plaindate:' + offset) ? offset : offset === 1 ? 1 : 0, findOnly === true));
+ipcMain.handle('doc:weekNode', async (_e, findOnly) => (await weekNode(new Date(), findOnly === true)).id);
 // macOS appearance, for the renderer's "follow the system" theme: current value on demand, plus live changes
 const systemTheme = () => (nativeTheme && nativeTheme.shouldUseDarkColors ? 'dark' : 'light');
 ipcMain.handle('theme:system', () => systemTheme());

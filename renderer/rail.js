@@ -233,7 +233,7 @@ function railChangeEl(change, title, docId) {
   const el = document.createElement('div');
   el.className = 'rrow rchange';
   el.tabIndex = -1; el.dataset.id = 'change:' + [change.action, change.by || '', change.at || ''].join(':');
-  if (change.note) el.title = change.note; // the longer description, for the pointer only: the row stays one line of its own
+  if (change.note) el.title = demoText(change.note, docId); // the longer description, for the pointer only: the row stays one line of its own
   const glyph = iconNode(CHANGE_ICON[change.action]);
   const icon = document.createElement('span');
   icon.className = 'ricon';

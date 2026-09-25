@@ -32,7 +32,7 @@ function meetingRows(page, group) {
   return [
     // not on an all-day meeting: Tana has no date-only write path to the calendar, and its updateEvent refuses the same
     ...(info.allDay ? [] : [{ id: 'meetingTime', group, icon: 'calendar', label: 'Change time \u2026', hint: info.start ? meetingSpan(info.start, info.end) : '', keepOpen: true, run: () => openMeetingPage('meetingTime', 'Move to\u2026') }]),
-    { id: 'meetingLocation', group, icon: 'globe', label: 'Change location \u2026', hint: info.location || '', keepOpen: true, run: () => openMeetingPage('meetingLocation', 'Location\u2026') },
+    { id: 'meetingLocation', group, icon: 'globe', label: 'Change location \u2026', hint: demoText(info.location || '', doc.id), keepOpen: true, run: () => openMeetingPage('meetingLocation', 'Location\u2026') },
     { id: 'meetingAttendee', group, icon: 'member', label: 'Add attendee \u2026', hint: people ? people + (people === 1 ? ' attendee' : ' attendees') : '', keepOpen: true, run: () => openMeetingPage('meetingAttendee', 'Add who? New attendees may get a calendar invite') },
   ];
 }
@@ -62,7 +62,7 @@ function meetingLocationRows(typed) {
   if (!info) return [];
   if (words) return [{ group, icon: 'globe', label: 'Set location to \u201C' + words + '\u201D', hint: '\u21A9', run: () => editMeetingNow({ location: words }) }];
   if (!info.location) return [{ group, icon: 'globe', label: 'Type a room, an address or a link', disabled: true }];
-  return [{ group, icon: 'globe', label: info.location, hint: 'Current', disabled: true }, { group, icon: 'none', label: 'Remove location', run: () => editMeetingNow({ location: '' }) }];
+  return [{ group, icon: 'globe', label: demoText(info.location, meetingCtx.docId), hint: 'Current', disabled: true }, { group, icon: 'none', label: 'Remove location', run: () => editMeetingNow({ location: '' }) }];
 }
 function loadAttendeePool() {
   attendeePool = null;

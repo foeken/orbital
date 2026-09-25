@@ -13,7 +13,14 @@ const DEMO_WRITES = new Set(['editMeeting', 'setNotify', 'inboxSetRead', 'inboxM
   'setCodex', 'undo', 'redo']);
 function readOnlyInDemo(api) {
   return new Proxy({ ...api }, { // a copy: contextBridge freezes window.api, and a proxy of a frozen object must hand back its own values
-    get: (own, key) => (demoMode && DEMO_WRITES.has(key) && typeof own[key] === 'function' ? () => Promise.reject(new Error('Demo mode is on: nothing is saved to Tana')) : own[key]),
+    get: (own, key) => {
+      if (!demoMode || typeof own[key] !== 'function') return own[key];
+      if (DEMO_WRITES.has(key)) return () => Promise.reject(new Error('Demo mode is on: nothing is saved to Tana'));
+      // the day and week nodes are made (and pinned) the first time they are asked for: in demo mode only found
+      if (key === 'todayNode') return (offset) => own.todayNode(offset, true);
+      if (key === 'weekNode') return () => own.weekNode(true);
+      return own[key];
+    },
   });
 }
 

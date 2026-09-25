@@ -8106,7 +8106,7 @@ async function runMeetingEditCheck() {
     };
     const membersLoaded = async () => { members = [{ id: 'tana:user-profile:me', title: 'Me', me: true }, { id: 'tana:user-profile:priya', title: 'Priya' }, { id: 'tana:user-profile:tomas', title: 'Tomas' }]; };
     const localDate = () => '2026-09-22', WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const demoMode = false, demoPersonName = (id) => id, memberName = (uri) => ((members || []).find((m) => m.id === uri) || {}).title || uri;
+    const demoMode = false, demoPersonName = (id) => id, demoText = (value) => value, memberName = (uri) => ((members || []).find((m) => m.id === uri) || {}).title || uri;
     ${functionSource('fuzzyMatch')}
     ${sourceBetween('const WEEKDAYS =', 'const PIN_DATE_GROUP')}
     ${fs.readFileSync(require.resolve('../renderer/meeting.js'), 'utf8').replace("'use strict';", '')}
