@@ -203,6 +203,7 @@ async function runDraftMaterialiseFocusCheck() {
     const sectionOf = () => null, fresh = new Map(); let zoom = null;
     const scheduleSave = (_item, segs) => { saved = segs; };
     const render = () => { renders++; row.isConnected = false; document.activeElement = {}; };
+    const addSearch = () => {}; // searches made here (#141) have their own check
     ${functionSource('materialise')}
     Object.assign(globalThis, {
       start: () => materialise(item, el), release,
@@ -4966,7 +4967,8 @@ async function runCreateTaskFlowCheck() {
       ${functionSource('creationSection')}
       ${functionSource('startCreation')}
       ${functionSource('dropDraft')}
-      ${functionSource('materialise')}
+      const addSearch = () => {}; // searches made here (#141) have their own check
+    ${functionSource('materialise')}
       ${sourceBetween("titleEl.addEventListener('input'", "titleEl.addEventListener('keydown'")}
       Object.assign(globalThis, {
         redraw: () => render(true),
@@ -5440,7 +5442,8 @@ async function runPasteDraftCheck() {
         insertChild: async (docId, id, text) => { calls.push(['insertChild', docId, id, text]); return 'real'; },
         setText: async (docId, id, value) => { calls.push(['setText', docId, id, value]); },
       };
-      ${functionSource('materialise')}
+      const addSearch = () => {}; // searches made here (#141) have their own check
+    ${functionSource('materialise')}
       ${functionSource('linkTo')}
       ${sourceBetween("onRows('paste'", "onRows('focusout'")}
       Object.assign(globalThis, {

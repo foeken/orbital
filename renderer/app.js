@@ -122,7 +122,7 @@ loadRoots().then(render, showError).then(restorePlace).then(loadFilters);
 // searchesLoaded is the flag repairHome trusts, so only an answer that could have listed something sets it: the
 // boot call above lands before the client exists and its empty list is empty for everyone, which repairHome read
 // as "the saved search you chose is gone" and wrote the Library over the stored choice on every launch.
-function loadSearches() { if (tana.searches) tana.searches().then((list) => { searches = list || []; searchesLoaded = connected; repairHome(); renderSoon(); }, () => {}); }
+function loadSearches() { if (tana.searches) tana.searches().then((answer) => { const list = answer || [], ids = new Set(list.map((s) => s.id)); searches = [...searches.filter((s) => s.added && !ids.has(s.id)), ...list]; searchesLoaded = connected; repairHome(); renderSoon(); }, () => {}); }
 loadSearches();
 if (tana.mcpHidden) tana.mcpHidden().then((on) => { mcpHidden = !!on; }, () => {}); // Cmd+K only: the rows themselves are filtered in main
 tana.status().then(showStatus, showError);

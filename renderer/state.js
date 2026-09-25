@@ -6,6 +6,10 @@ const tana = window.api || mockApi();
 // ---- state ----
 let views = [];              // [{ id, title, icon, nodes: document Node[] }]
 let searches = [];           // [{ id, title, icon, … }] saved search documents, for the Cmd+K Searches group
+// Searches made here are listed at once and kept until the graph lists them too: its index lags a creation, so the
+// reload made right after Save as search came back without the new one and Cmd+K never showed it (#141).
+// Marked `added`, loadSearches keeps such an entry until the graph's answer has it; deleting it drops it like any other.
+function addSearch(n) { if (!n || typeof n.id !== 'string' || !n.id.startsWith(SEARCH_ID)) return; searches = [{ ...n, added: true }, ...searches.filter((s) => s.id !== n.id)]; }
 let searchesLoaded = false;  // whether that list has answered once: until it has, a Home search is trusted, not repaired away
 // Home: the page this app comes back to — the Library, or a saved search, kept as the target's own id ("library" or a
 // tana:search: document id) rather than its name, so renaming the search in Tana keeps the choice and only changes
