@@ -495,29 +495,40 @@ async function setCodex(id, on, prompt) {
 const notifySigs = new Map();
 const notifyQuiet = new Map(); // docId -> when a plain edit was last announced
 const EDIT_QUIET_MS = 60000; // a remote edit arrives op by op: someone typing is one banner a minute, not fifty
-// What changed, in Tana's own words. The sidebar's Changes section already reads ChangeSummaryService (sdk/history.js,
-// main/related.js), which names a window of edits ("Added dependency on …"); a banner saying only "Edited" was the
-// same event with the sentence thrown away. Not imported from main/related.js on purpose: that module requires this
-// one, and one small read is cheaper than the cycle. The service's order is not relied on — it has answered both
-// ways — so a few summaries are asked for and the newest wins. It is used only when it closed recently enough to be
-// about the edit being announced (summaries are written server-side, so the newest one can still be an older window)
-// and only when it says something the banner's title does not already say. Everything else keeps the old wording.
-// ponytail: one extra read per banner, at most one a minute per node; cache it if that ever matters.
-const SUMMARY_FRESH_MS = 5 * 60 * 1000;
-async function changeSummary(id, title) {
-  if (!S.client || !S.client.history) return null;
-  try {
-    const { summaries } = await S.client.history.listChanges({ uri: id, limit: 5 });
-    let best = null, bestAt = -Infinity;
-    for (const s of summaries || []) {
-      const said = typeof s.title === 'string' ? s.title.trim() : '';
-      const at = Date.parse((s.endTime || s.startTime) ?? '');
-      if (!said || Number.isNaN(at) || at <= bestAt) continue;
-      best = said; bestAt = at;
-    }
-    if (!best || Date.now() - bestAt > SUMMARY_FRESH_MS) return null;
-    return best === (title || '').trim() ? null : best;
-  } catch { return null; } // an older server, a refusal, a node it knows nothing about: the banner still goes out
+// What an edit was, in Tana's own words (issue #131). ChangeSummaryService (sdk/history.js, the sidebar's Changes
+// section) writes a sentence about a window of edits only once the edits stop — 3m20s after a one-line edit, measured
+// 2026-09-25 — so the banner goes out as "Edited" and is replaced by that sentence when it appears: same notification
+// id, silently (main.js S.notify). A summary counts when it was not there, or said something else, at the time of the
+// edit; its window's own times do not say it covers this edit (the measured one ended before the edit it described).
+// A newer edit banner for the node takes the follow-up over. Not imported from main/related.js: that module requires
+// this one. ponytail: polls every 30 s for 8 min per edit banner (one a minute per node at most); a live query if
+// Tana ever offers one for summaries.
+const SUMMARY_POLLS = 16, SUMMARY_EVERY_MS = 30000;
+const following = new Map(); // docId -> the follow-up that owns its edit banner
+const pause = (ms) => new Promise((resolve) => { const t = setTimeout(resolve, ms); if (t && t.unref) t.unref(); });
+async function followSummary(id, title, wait = () => pause(SUMMARY_EVERY_MS)) {
+  if (!S.client || !S.client.history) return;
+  const token = {}; following.set(id, token);
+  const read = async () => (await S.client.history.listChanges({ uri: id, limit: 5 })).summaries || [];
+  // A title only repeating the node's ("Orbital banner test" on "Scratch: Orbital banner test") says nothing: the description then.
+  const own = (title || '').trim().toLowerCase();
+  const repeats = (t) => !!own && (own.includes(t.toLowerCase()) || t.toLowerCase().includes(own));
+  const said = (s) => [s.title, s.description].map((t) => (typeof t === 'string' ? t.trim() : '')).find((t) => t && !repeats(t));
+  const key = (s) => s.id + '\n' + s.title;
+  let seen;
+  try { seen = new Set((await read()).map(key)); } catch { return; } // an older server or a refusal: "Edited" stays
+  for (let i = 0; i < SUMMARY_POLLS; i++) {
+    await wait();
+    if (following.get(id) !== token) return;
+    let fresh;
+    try { fresh = (await read()).filter((s) => !seen.has(key(s)) && said(s)); } catch { continue; }
+    if (!fresh.length) continue;
+    const at = (s) => Date.parse(s.endTime || s.startTime || '') || 0; // the service's order has gone both ways
+    following.delete(id);
+    if (S.notify) S.notify(id, title || 'Untitled', said(fresh.reduce((a, b) => (at(b) >= at(a) ? b : a))), 'summary');
+    return;
+  }
+  if (following.get(id) === token) following.delete(id);
 }
 // The same pair, kept across restarts: id -> [title, stateType] as it was when the app last saw the node.
 // notifySigs lives only as long as the process and a bootstrap takes its baseline in silence, so a task completed
@@ -580,8 +591,10 @@ async function notifyWatched(id, doc, n, info) {
   // ...and who moved it, when that is somebody else and an org member: a guest or a failed lookup keeps the plain wording.
   const who = state && n.stateChangedBy ? (await members().catch(() => [])).find((m) => m.id === n.stateChangedBy) : null;
   if (who && !who.me && who.title) state += ' by ' + who.title;
-  const body = state || await changeSummary(id, n.title) || 'Edited';
-  if (S.notify) S.notify(id, n.title || 'Untitled', body);
+  if (!S.notify) return;
+  if (state) return S.notify(id, n.title || 'Untitled', state);
+  S.notify(id, n.title || 'Untitled', 'Edited', 'edit');
+  followSummary(id, n.title).catch(() => {});
 }
 function onChange(docId, info) {
   try {
@@ -826,4 +839,4 @@ async function moveTarget(spaceId) {
   return document(spaceId);
 }
 
-module.exports = { outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, codexIds, setCodex, creatorOf, document, op, inHistory, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget };
+module.exports = { followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, codexIds, setCodex, creatorOf, document, op, inHistory, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget };
