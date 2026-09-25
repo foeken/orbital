@@ -2406,6 +2406,7 @@ async function main() {
     const MCP_CHAT = 'tana:chat:' + ulid(), AI_CHAT = 'tana:chat:' + ulid();
     const fromRob = { id: id(), title: 'Review the vendor contract', createdBy: COLLEAGUE, createTime: ago(2 * H) };
     const viaMcp = { id: id(), title: 'Answer Jules', createdBy: ME, createTime: ago(1 * H) };
+    const viaMcpToo = { id: id(), title: 'Plan the pilot', createdBy: ME, createTime: ago(1.2 * H) }; // the same agent, just before: one entry
     const viaAi = { id: id(), title: 'Share the transcript', createdBy: ME, createTime: ago(30 * H) };
     const byHand = { id: id(), title: 'Typed it myself', createdBy: ME, createTime: ago(0.5 * H) };
     const old = { id: id(), title: 'Last month', createdBy: COLLEAGUE, createTime: ago(40 * 24 * H) };
@@ -2425,36 +2426,37 @@ async function main() {
             if (p.nodeIds && (p.nodeTypes || []).includes('chat')) return { nodes: [{ id: MCP_CHAT, title: 'MCP: Nedap Compliance', invocationContext: { intent: 'mcp' } }, { id: AI_CHAT, title: 'Chat for Weekly', invocationContext: { intent: 'meeting' } }].filter((c) => p.nodeIds.includes(c.id)) };
             if (p.nodeIds) return { nodes: [] };
             if ((p.createdBy || []).includes(ME)) return { nodes: [watched, kept] };
-            if ((p.assignedTo || []).includes(ME)) return { nodes: [byHand, viaMcp, fromRob, viaAi, old] };
+            if ((p.assignedTo || []).includes(ME)) return { nodes: [byHand, viaMcp, viaMcpToo, fromRob, viaAi, old] };
             return { nodes: [] };
           },
-          listEdges: async ({ fromNodeIds }) => ({ edges: [[viaMcp.id, MCP_CHAT], [viaAi.id, AI_CHAT]].filter(([f]) => fromNodeIds.includes(f)).map(([fromNodeId, toNodeId]) => ({ fromNodeId, toNodeId, type: 'EDGE_TYPE_CREATED_IN' })) }),
+          listEdges: async ({ fromNodeIds }) => ({ edges: [[viaMcp.id, MCP_CHAT], [viaMcpToo.id, MCP_CHAT], [viaAi.id, AI_CHAT]].filter(([f]) => fromNodeIds.includes(f)).map(([fromNodeId, toNodeId]) => ({ fromNodeId, toNodeId, type: 'EDGE_TYPE_CREATED_IN' })) }),
         },
         history: { listChanges: async ({ uri }) => ({ summaries: summaries.get(uri) || [] }) },
         sync: { getDocument: () => null, subscribe: async () => null },
       } });
     // through JSON: rows are built in the main-process vm, whose arrays fail a deep compare on their prototype alone
-    const read = async () => JSON.parse(JSON.stringify((await backend.timelinePage.rows()).map((r) => [r.text, r.timeline.note, r.icon, r.timeline.tone, r.unread])));
+    const read = async () => JSON.parse(JSON.stringify((await backend.timelinePage.rows()).map((r) => [r.text, r.timeline.note, r.icon || null, r.timeline.tone, r.unread, r.children.map((c) => c.text)])));
     assert.deepEqual(await read(), [
-      ['Rob Jansen completed Contract renewal', null, 'apply', 'done', false],
-      ['Rob Jansen edited Contract renewal', 'Added the Q4 numbers from Rob', 'updated', 'quiet', false],
-      ['MCP added Answer Jules to your Inbox', 'Nedap Compliance', 'inbox', 'new', false],
-      ['Rob Jansen added Review the vendor contract to your Inbox', null, 'inbox', 'new', false],
-      ['Rob Jansen started Contract renewal', null, 'status', 'started', false],
-      ['Rob Jansen edited Contract renewal', 'Moved the deadline to Friday', 'updated', 'quiet', false],
-      ["Tana's AI added Share the transcript to your Inbox", 'Weekly', 'inbox', 'new', false],
-    ], 'a log, newest first: who did what to which node; a completion told once, from the node\'s own state; yours alone, by hand, or weeks old stay out');
-    assert.deepEqual(JSON.parse(JSON.stringify((await backend.timelinePage.rows())[0].segments)), [{ text: 'Rob Jansen', marks: { bold: true } }, { text: ' completed ' }, { text: 'Contract renewal', marks: { bold: true, strike: true } }],
+      ['Completed: Contract renewal', 'Rob Jansen', 'apply', 'done', false, []],
+      ['Added the Q4 numbers from Rob', 'Rob Jansen · Contract renewal', 'updated', 'edit', false, []],
+      ['An AI agent added 2 tasks to your Inbox', null, null, 'new', false, ['Answer Jules', 'Plan the pilot']],
+      ['Rob Jansen added a task to your Inbox', null, null, 'new', false, ['Review the vendor contract']],
+      ['Started: Contract renewal', 'Rob Jansen', 'status', 'started', false, []],
+      ['Moved the deadline to Friday', 'Rob Jansen · Contract renewal', 'updated', 'edit', false, []],
+      ["Tana's AI added a task to your Inbox", null, null, 'new', false, ['Share the transcript']],
+    ], 'a timeline, newest first: an edit says what changed, a status move its verb; new tasks from one source in a row are one quiet entry; a completion told once, from the node\'s own state; yours alone, by hand, or weeks old stay out');
+    assert.deepEqual(JSON.parse(JSON.stringify((await backend.timelinePage.rows())[0].segments)), [{ text: 'Completed: ', marks: { bold: true } }, { text: 'Contract renewal', marks: { strike: true } }],
       'and a finished node is struck through');
     const rows = await backend.timelinePage.rows();
     for (const [text, state] of [['Task status changed from In Progress to Inbox', 'proposed'], ['Task marked as completed and a note added', 'closed'], ['Task status updated to In Progress', 'open'], ['Added a document link', undefined]])
       assert.equal(backend.timelinePage.statusOf(text) || undefined, state, 'a summary says which state it went to: ' + text);
     assert.equal(new Set(rows.map((r) => r.id)).size, rows.length, 'a node changed twice is two rows with ids of their own');
     assert.equal(rows[0].timeline.uri, watched.id, 'and each row opens the node it is about');
+    assert.equal(rows[2].timeline.uri, null, 'except a group, whose tasks open themselves');
     summaries.get(watched.id).push({ title: 'Signed by both parties', authors: [COLLEAGUE], endTime: ago(-1000) });
     const next = await read();
-    assert.deepEqual(next.filter((r) => r[4]).map((r) => r[0]), ['Rob Jansen edited Contract renewal'], 'what came after your last visit is marked new, and only that');
-    console.log('ok  timeline: watched changes by others and new Inbox tasks from others, MCP and Tana\'s AI, newest first, new since the last visit');
+    assert.deepEqual(next.filter((r) => r[4]).map((r) => r[0]), ['Signed by both parties'], 'what came after your last visit is marked new, and only that');
+    console.log('ok  timeline: what changed and what finished first, new Inbox tasks grouped and quiet, newest first, new since the last visit');
   }
 
 

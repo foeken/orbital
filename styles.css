@@ -350,14 +350,38 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .bullet.meeting:hover svg { color: #8a6a17; }
 /* Renderer contract: appearance-driven icons add .hue and set --hue, including 0. */
 .bullet.icon.hue svg, .bullet.icon.hue:hover svg { color: oklch(0.7 0.1 var(--hue)); }
-/* Timeline rows (renderer/timeline.js): the icon's colour says what happened, and what is new since the last visit gets
-   its own blue dot in the gutter, since blue no longer means only that */
-.node.tl > .line { position: relative; }
-.node.tl.unread > .line::after { content: ''; position: absolute; left: 4px; top: 11px; width: 6px; height: 6px; border-radius: 50%; background: #0090ff; }
-.node.tl-done > .line > .bullet.icon svg { color: #2f9e44; }
-.node.tl-started > .line > .bullet.icon svg { color: #0090ff; }
-.node.tl-new > .line > .bullet.icon svg { color: #e8890c; }
+/* Timeline (renderer/timeline.js): a time column, a rail down the page, a marker on it for each entry, then what
+   happened. The rail is each entry's own left line, so a group's tasks sit along it too; markers are filled or ringed
+   in the page colour so the rail passes behind them. A finished entry is a green check, an edit a dark pencil, a start
+   a blue ring, any other move a grey ring, and a new task only a small hollow dot: it matters least. */
+.node.tl { position: relative; }
+/* a row's line starts 10px left of its node (the gutter's negative margin), so the rail is placed on the marker's centre */
+.node.tl::before { content: ''; position: absolute; left: 101px; top: 0; bottom: 0; border-left: 1px solid #e6e6e6; }
+.node.tl > .line { position: relative; padding: 9px 0 9px 102px; }
+.node.tl > .line > .chev { width: 0; }
+.node.tl > .line > .body > .meta { position: absolute; left: 34px; top: 9px; margin: 0; line-height: 24px; font-variant-numeric: tabular-nums; }
+.node.tl > .line > .bullet { position: relative; z-index: 1; }
+.node.tl-done > .line > .bullet, .node.tl-edit > .line > .bullet { width: 20px; height: 20px; margin: 2px 0 0 -1px; border-radius: 50%; background: #5a9670; }
+.node.tl-edit > .line > .bullet { background: #5d6166; }
+.node.tl-done > .line > .bullet.icon svg, .node.tl-edit > .line > .bullet.icon svg { color: #fff; width: 12px; height: 12px; left: 4px; top: 4px; }
+.node.tl-started > .line > .bullet, .node.tl-quiet > .line > .bullet { width: 14px; height: 14px; margin: 5px 2px 0 2px; border-radius: 50%; border: 1.5px solid #5b83b8; background: #fff; box-sizing: border-box; }
+.node.tl-quiet > .line > .bullet { border-color: #b5b5b5; }
+.node.tl-started > .line > .bullet svg, .node.tl-quiet > .line > .bullet svg { display: none; }
+.node.tl-new > .line > .bullet::before, .node.tl-new > .line > .bullet:hover::before { background: #fff; border: 1.5px solid #c4c4c4; box-sizing: border-box; width: 9px; height: 9px; left: 5px; top: 8px; box-shadow: none; }
+.node.tl-new > .line .text { color: #8a8a8a; }
 .node.tl-done > .line .text s, .node.tl-done > .line .text del { color: #8a8a8a; }
+.node.tl > .line > .body > .subtext { margin-top: 2px; }
+/* a group's tasks hang under its words, box first; their type glyph adds nothing here (block + t-bullet: the list rule it overrides) */
+.node.block.t-bullet.tl > .children { margin-left: 113px; border-left: 0; }
+.node.tl > .children .node > .line { padding: 1px 0; }
+.node.tl > .children .node > .line > .chev { width: 0; }
+.node.tl > .children .node > .line > .bullet { display: none; }
+.node.tl > .children .text { color: #8a8a8a; font-size: 15px; }
+.node.tl.unread > .line::after { content: ''; position: absolute; left: 88px; top: 19px; width: 6px; height: 6px; border-radius: 50%; background: #0090ff; }
+[data-theme="dark"] .node.tl::before { border-left-color: #34373a; }
+[data-theme="dark"] .node.tl-started > .line > .bullet, [data-theme="dark"] .node.tl-quiet > .line > .bullet { background: #1b1d1e; }
+[data-theme="dark"] .node.tl-new > .line > .bullet::before { background: #1b1d1e; border-color: #5a5d60; }
+[data-theme="dark"] .node.tl-edit > .line > .bullet { background: #8a8f95; }
 .check {
   flex: none; width: 18px; height: 18px; margin: 3px 8px 0 2px; border-radius: 5px; background: #e4e4e4;
   border: 0; padding: 0; cursor: pointer; -webkit-appearance: none; appearance: none; position: relative;

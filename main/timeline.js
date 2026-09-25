@@ -9,21 +9,24 @@
 //   inbox:   a task assigned to you that someone else, an MCP client or Tana's AI created (views.js inboxFrom)
 // A row is one event, not a node: a node changed three times is three rows, so a row's id is its own and the node it
 // is about rides along in row.timeline.uri, which is what opening it goes to.
-// A row reads as a log line — who, did what, to which node — because a title with the change in grey under it had to
-// be read twice to see that something was finished. A status move is a verb of its own (completed, started, moved to
-// Later, moved back to Inbox): the latest one comes from the node's own state (type, enteredAt, changedBy — exact,
-// and there before Tana has written a word about it), older ones from summaries that say which state they went to.
-// Tana's summary is what the grey line under an edit says; a status line has none unless its summary says more.
+// The page reads as a timeline (renderer/timeline.js, styles.css .tl-*): a time, a marker on a rail, and what happened.
+// What happened comes first, because that is the news: an edit's line is Tana's sentence about the change, with who
+// and which node small under it; a status move is its verb and the node ("Completed: ~~Plan the offsite~~"), who
+// under it. The latest move comes from the node's own state (type, enteredAt, changedBy — exact, and there before
+// Tana has written a word about it), older ones from summaries that say which state they went to. New Inbox tasks
+// matter less than both, so a run of them from one source on one day is one quiet row with the tasks listed under it
+// ("An AI agent added 3 tasks to your Inbox"), each a task row of its own that opens as one.
 const db = require('../db');
 const { NOT_CONNECTED, S, iso, isMcp } = require('./state');
-const { members } = require('./rows');
+const { graphRow, members, toNode } = require('./rows');
 const { notifySilencedIds, notifyWatchedIds } = require('./documents');
 const { inboxFrom } = require('./views');
 
 const PAGE = 'orbital:timeline';
-const VERB = { closed: 'completed', open: 'started', not_now: 'moved to Later', proposed: 'moved back to Inbox' };
+const VERB = { closed: 'Completed', open: 'Started', not_now: 'Moved to Later', proposed: 'Moved back to Inbox' };
 const ICON = { closed: 'apply', open: 'status', not_now: 'later', proposed: 'inbox' };
-// The colour a row is drawn in (styles.css .tl-*): finished green, started blue, new in your Inbox amber, the rest grey
+// The marker a row gets on the rail (styles.css .tl-*): finished a green check, started a blue ring, an edit a dark
+// pencil, another move a grey ring, and a new task only a small hollow dot
 const TONE = { closed: 'done', open: 'started', not_now: 'quiet', proposed: 'quiet' };
 // The state a status summary went to, in the words Tana's AI uses for it ("Task status changed from In Progress to
 // Inbox", "Task marked as completed and a note added …"); null for any other summary.
@@ -78,7 +81,7 @@ async function rows() {
       if (state && latest && latest.state === state && Math.abs(latest.at - at) < 15 * 6e4) continue; // the same move, already told from the node
       events.push(state
         ? { kind: 'status', uri: n.id, title: n.title, at, actor: who(others), verb: VERB[state], icon: ICON[state], tone: TONE[state], note: beyondStatus(text) }
-        : { kind: 'edit', uri: n.id, title: n.title, at, actor: who(others), verb: 'edited', icon: 'updated', tone: 'quiet', note: text });
+        : { kind: 'edit', uri: n.id, title: n.title, at, actor: who(others), icon: 'updated', tone: 'edit', change: text });
     }
   });
   // Inbox: the newest tasks assigned to you, whatever state they are in now, and the chat each was created in
@@ -91,20 +94,36 @@ async function rows() {
   for (const n of recent) {
     const chat = createdIn.has(n.id) ? chats.get(createdIn.get(n.id)) || {} : null;
     if (!inboxFrom(me, n.createdBy, chat, names)) continue; // yours, by hand
-    // who put it there: the person, or for a chat the kind of writer, with the chat's topic on the grey line
-    const actor = n.createdBy && n.createdBy !== me ? who([n.createdBy]) : isMcp(chat) ? 'MCP' : "Tana's AI";
-    const topic = chat && (chat.title || '').replace(/^(MCP:|Chat for)\s*/i, '').trim();
-    events.push({ kind: 'inbox', uri: n.id, title: n.title, at: Date.parse(n.createTime), actor, verb: 'added', after: ' to your Inbox', icon: 'inbox', tone: 'new', note: topic || null });
+    // who put it there: the person, or for a chat the kind of writer (an MCP client is somebody's agent)
+    const actor = n.createdBy && n.createdBy !== me ? who([n.createdBy]) : isMcp(chat) ? 'An AI agent' : "Tana's AI";
+    events.push({ kind: 'inbox', uri: n.id, title: n.title, at: Date.parse(n.createTime), actor, tone: 'new', node: n });
   }
   // What is new is what came after your last visit, which this visit then becomes. The first visit marks nothing.
   const seen = Number(db.setting('timelineSeen')) || Infinity;
   db.setSetting('timelineSeen', Date.now());
-  // who, did what, to which node; a finished node struck through, the way a done task reads everywhere else
-  return events.sort((a, b) => b.at - a.at).map((e) => {
-    const segments = [{ text: e.actor, marks: { bold: true } }, { text: ' ' + e.verb + ' ' }, { text: e.title || 'Untitled', marks: e.tone === 'done' ? { bold: true, strike: true } : { bold: true } }, ...(e.after ? [{ text: e.after }] : [])];
+  // New tasks in a row from one source on one day are one entry, timed by the newest of them
+  const day = (at) => new Date(at).toDateString();
+  const merged = [];
+  for (const e of events.sort((a, b) => b.at - a.at)) {
+    const last = merged.at(-1);
+    if (e.kind === 'inbox' && last && last.kind === 'inbox' && last.actor === e.actor && day(last.at) === day(e.at)) last.tasks.push(e);
+    else merged.push(e.kind === 'inbox' ? { ...e, tasks: [e] } : e);
+  }
+  return merged.map((e) => {
+    const title = e.title || 'Untitled';
+    let segments, note = null, children = [];
+    if (e.kind === 'edit') { segments = [{ text: e.change, marks: { bold: true } }]; note = e.actor + ' · ' + title; }
+    else if (e.kind === 'status') { segments = [{ text: e.verb + ': ', marks: { bold: true } }, { text: title, marks: e.tone === 'done' ? { strike: true } : {} }]; note = e.actor + (e.note ? ' · ' + e.note : ''); }
+    else {
+      const n = e.tasks.length;
+      segments = [{ text: e.actor + ' added ' + (n === 1 ? 'a task' : n + ' tasks') + ' to your Inbox' }];
+      children = e.tasks.map((t) => ({ ...toNode(graphRow(t.node)), editable: false })); // each a task row, opening as one
+    }
     return { id: PAGE + ':' + e.kind + ':' + e.uri + ':' + e.at, text: segments.map((x) => x.text).join(''), segments,
-      kind: 'block', block: 'bullet', icon: e.icon, editable: false, hasChildren: false, children: [],
-      createdAt: iso(e.at), unread: e.at > seen, timeline: { uri: e.uri, note: e.note || null, tone: e.tone } };
+      kind: 'block', block: 'bullet', icon: e.icon, editable: false, hasChildren: children.length > 0, children,
+      createdAt: iso(e.at), unread: (e.tasks || [e]).some((t) => t.at > seen),
+      // a group has no one node to open: its tasks open themselves
+      timeline: { uri: e.kind === 'inbox' && e.tasks.length > 1 ? null : e.uri, note, tone: e.tone } };
   });
 }
 
