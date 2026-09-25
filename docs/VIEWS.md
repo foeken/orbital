@@ -154,7 +154,7 @@ node they point at, dates by Tana's presets (today, upcoming, past); verified li
 3 of 6, "On track" or "Unknown" 4). A change applies at once and is kept per type in the `typeFields` preference; nothing
 is written to Tana. Display lists every field the type defines and starts on the ones with pills plus Updated; the values
 come on the row itself (`fields`, from the graph node's `attributes`), drawn as chips on its grey line. The field
-definitions are not drawn there (a list, not the type's edit view): ⌘K Edit fields shows them under the title. An open type page is kept current by a live query over its instances
+definitions are not drawn there (a list, not the type's edit view): ⌘K Edit fields shows them under the title. ⌘K Show as table lays the same rows out as a table, a column per field Display shows plus the times (kept per type in the `typeTables` preference). An open type page is kept current by a live query over its instances
 (`watchRelated`), as a saved search is.
 
 

@@ -348,6 +348,7 @@ function renderOutline() {
     outline.replaceChildren(...(groups
       ? groups.flatMap((g) => [...(g.title ? [groupHeadEl(g)] : []), ...(g.collapsed ? [] : g.nodes.flatMap((n) => [childEl(n, parent), ...(n.timeline?.today ? [timelineDividerEl()] : [])])), ...(g.more ? [groupMoreEl(g)] : [])])
       : list.map((n) => childEl(n, parent))));
+    if (tableView() && list.length) { outline.style.setProperty('--cols', tableKeys().length); outline.prepend(tableHeadEl()); } // a type page shown as a table (renderer/views.js)
     if (parent.docId === TIMELINE_PAGE && tana.timelineWeeks && kids.get(TIMELINE_PAGE)) outline.append(timelineOlderEl()); // a week a page: one more, at the end
     animView = null; // a zoom replaced every row, and a zoomed row is keyed docId/nodeId while a view row is keyed by
     // its document id, so on the way back nothing would match and the whole view would flash as if it had just arrived
@@ -375,6 +376,7 @@ function renderOutline() {
       outline.parentElement.scrollTop = 0;
     }
   }
+  outline.classList.toggle('table-view', !!parent && tableView());
   // "No content" is about a page with nothing on it, so it goes by what was just drawn rather than by the row count:
   // a grouped page with every section folded away has no rows and is not empty — its headings are right there.
   if (parent && !list.length && !outline.children.length) {

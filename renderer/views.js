@@ -269,12 +269,41 @@ const shownFieldValues = (node) => (node.fields ? displayKeys().flatMap((k) => n
 // The grey line under a title: those values as chips, then subtextOf's words. A render and a late metadata patch
 // (renderer/tasks.js) both build it here, so the row keeps its shape when its metadata lands. `sub` is refilled in place.
 function subtextEl(node, taskInfo, sub = document.createElement('div')) {
+  if (tableView()) return tableCells(node, sub);
   const words = subtextOf(node, taskInfo), values = shownFieldValues(node);
   if (!words && !values.length) return null;
   sub.className = 'subtext';
   sub.textContent = values.length ? '' : words; // a row without fields is the plain line it always was
   if (values.length) sub.append(...values.map((v) => { const chip = document.createElement('span'); chip.className = 'fchip'; chip.textContent = demoText(v, node.id); return chip; }), ...(words ? [words] : []));
   return sub;
+}
+// ---- a type page as a table (⌘K Show as table): a column per field Display shows, plus the times ----
+// The rows stay the outline's own rows: the grey line becomes one cell per column and CSS lays the row out as a grid
+// (styles.css .table-view), so the keys, the caret and the pills work as they do on the list. Kept per type, synced.
+const TABLE_FACTS = { updated: (n) => agoText(n.updatedAt), created: (n) => agoText(n.createdAt), creator: (n) => (n.createdBy ? memberName(n.createdBy) : '') };
+const tableView = () => onTypePage() && pref('typeTables', []).includes(zoom.docId);
+const tableKeys = () => displayKeys().filter((k) => k.includes('?attribute=') || TABLE_FACTS[k]);
+function setTableView(on) {
+  const rest = pref('typeTables', []).filter((id) => id !== zoom.docId);
+  setPref('typeTables', on ? [...rest, zoom.docId] : rest);
+  render(true);
+}
+function tableCells(node, sub) {
+  sub.className = 'subtext'; sub.textContent = '';
+  for (const k of tableKeys()) {
+    const cell = document.createElement('span'); cell.className = 'cell';
+    if (TABLE_FACTS[k]) cell.textContent = TABLE_FACTS[k](node);
+    else for (const v of (node.fields && node.fields[k]) || []) { const chip = document.createElement('span'); chip.className = 'fchip'; chip.textContent = demoText(v, node.id); cell.append(chip); }
+    sub.append(cell);
+  }
+  return sub;
+}
+// The column titles, over the gutter a row keeps for its chevron and marker. Not a row: no key, nothing to land on.
+function tableHeadEl() {
+  const names = new Map(displayList()), el = document.createElement('div');
+  el.className = 'thead';
+  for (const label of ['Title', ...tableKeys().map((k) => names.get(k))]) { const c = document.createElement('span'); c.textContent = label; el.append(c); }
+  return el;
 }
 // "4 hours ago". Nothing else in the app says an age in words, so this is the one place that turns a time into one.
 function agoText(iso) {
