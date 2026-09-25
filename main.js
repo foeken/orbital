@@ -171,6 +171,8 @@ ipcMain.handle('icons:types', () => icons.typeIcons());
 // first paint) and one write per change.
 // the menu shows ⌘N but leaves the key to the renderer's New window row (DEFAULT_HOTKEYS), so it can be re-recorded
 ipcMain.handle('window:new', () => { createWindow(); });
+// Demo mode lives in the outliner (renderer/state.js); main only needs to know it is on, so no banner shows a real title.
+ipcMain.on('app:demoMode', (_e, on) => { S.demo = on === true; });
 ipcMain.on('prefs:snapshot', (e) => { e.returnValue = settings.prefs(); });
 ipcMain.handle('prefs:set', (_e, key, value) => settings.setPref(key, value));
 ipcMain.handle('openai:setKey', (_e, key) => {
@@ -448,8 +450,8 @@ ipcMain.handle('shell:open', (_e, url) => {
 // The node for today: a document titled with today's date, pinned to today. Created and pinned when missing,
 // so "Show today node" always lands somewhere. Matching is by exact title, the same string the pin uses.
 // A 'YYYY-MM-DD' day instead of the offset is the page a date mention opens.
-ipcMain.handle('doc:todayNode', (_e, offset) => todayNode(isDateUri('tana:plaindate:' + offset) ? offset : offset === 1 ? 1 : 0));
-ipcMain.handle('doc:weekNode', async () => (await weekNode()).id);
+ipcMain.handle('doc:todayNode', (_e, offset, findOnly) => todayNode(isDateUri('tana:plaindate:' + offset) ? offset : offset === 1 ? 1 : 0, findOnly === true));
+ipcMain.handle('doc:weekNode', async (_e, findOnly) => (await weekNode(new Date(), findOnly === true)).id);
 // macOS appearance, for the renderer's "follow the system" theme: current value on demand, plus live changes
 const systemTheme = () => (nativeTheme && nativeTheme.shouldUseDarkColors ? 'dark' : 'light');
 ipcMain.handle('theme:system', () => systemTheme());
@@ -512,7 +514,7 @@ if (process.env.TANA_MAIN_TEST) {
     // main/documents.js followSummary) replaces it in place, silently — unless it was clicked, and so already seen.
     const clickedEdits = new Set();
     S.notify = (docId, title, body, kind, subtitle) => { // subtitle: macOS's line between title and body (what an edit changed)
-      if (!Notification.isSupported || !Notification.isSupported()) return;
+      if (S.demo || !Notification.isSupported || !Notification.isSupported()) return; // demo mode: nothing real on screen, banners included
       const id = kind ? 'edit:' + docId : undefined; // undefined: a fresh random id, as before
       if (kind === 'summary' && clickedEdits.has(id)) return;
       if (kind === 'edit') clickedEdits.delete(id);

@@ -144,7 +144,7 @@ function paletteRows(q, typed = q) {
     loadMeeting();
     const doc = palDoc, live = meetingNow;
     rows.push({ id: 'pinToMeeting', group: docGroup, icon: 'pin', label: 'Pin to current meeting',
-      hint: live.pending ? 'Checking…' : live.meeting ? live.meeting.title || 'Current meeting' : live.error || 'No active meeting',
+      hint: live.pending ? 'Checking…' : live.meeting ? demoText(live.meeting.title || 'Current meeting', live.meeting.id) : live.error || 'No active meeting',
       disabled: !(live && live.meeting), run: () => pinToMeeting(doc) });
   }
   // And any other meeting, chosen from a page of its own: the same pin, a target picked rather than detected. It
@@ -322,6 +322,8 @@ function paletteRows(q, typed = q) {
   if (tana.filters) rows.push({ id: 'hidden', group: 'Actions', icon: 'hiddenItems', label: 'Edit hidden items', keepOpen: true, run: openHiddenPalette });
   if (tana.codexHosts) rows.push({ id: 'codexHosts', group: 'Actions', icon: 'host', label: 'Manage Codex hosts', keepOpen: true, run: openHostsPalette });
   if (tana.sensitiveIds) rows.push({ id: 'sensitiveVisibility', group: 'Actions', icon: 'hidden', label: 'Toggle sensitive visibility', hint: sensitiveVisible ? 'Shown' : 'Hidden', run: toggleSensitiveVisibility });
+  // names and Tana's words swapped for made-up ones on screen, for showing the app to someone (renderer/segments.js)
+  rows.push({ id: 'demoMode', group: 'Actions', icon: 'hidden', label: 'Toggle demo mode', hint: demoMode ? 'On' : 'Off', run: () => toggleDemoMode() });
   if (tana.chatgptStatus) rows.push({ id: 'chatgpt', group: 'Actions', icon: 'chatgpt', label: chatgptAuth?.signedIn ? 'Sign out of ChatGPT' : 'Sign in with ChatGPT',
     hint: chatgptAuth?.signedIn ? (chatgptAuth.email || 'Signed in') : chatgptAuth?.available === false ? 'Status unavailable' : chatgptAuth ? 'Not signed in · preferred over API key' : 'Checking sign-in',
     keepOpen: true, run: chatgptCommand });
@@ -472,7 +474,7 @@ function openAIKeyRows() {
 const TRASH_GROUP = 'Recently deleted · ↩ restores it';
 let trashList = null; // null while the list is in flight
 function trashRows(q) {
-  const rows = (trashList || []).filter((d) => fuzzyMatch(d.title, q)).map((d) => ({ group: TRASH_GROUP, icon: 'trash', label: d.title,
+  const rows = (trashList || []).filter((d) => fuzzyMatch(d.title, q)).map((d) => ({ group: TRASH_GROUP, icon: 'trash', label: demoText(d.title, d.id),
     hint: agoText(d.deletedAt), keepOpen: true, run: () => run(async () => { await tana.restoreDocument(d.id); closePalette(); goTo(d.id); }) }));
   if (!rows.length) rows.push({ group: TRASH_GROUP, label: trashList ? 'Nothing deleted recently' : 'Loading…', disabled: true });
   return rows;
@@ -902,7 +904,7 @@ function discussRows(typed) {
   if (guess) guess.arriving = false;
   if (guess && guess.state === 'thinking') rows.push({ group: DISCUSS_GROUP, icon: 'sparkle', spin: true, label: 'Reading the title\u2026', disabled: true });
   else if (guess && guess.state === 'failed') rows.push({ group: DISCUSS_GROUP, icon: 'sparkle', arrive, label: guess.error, disabled: true });
-  else if (guess && guess.value && guess.value !== words) rows.push({ group: DISCUSS_GROUP, icon: 'sparkle', arrive, label: '\u201C' + guess.value + '\u201D', hint: 'From the title', run: () => applyDiscussWith(doc, guess.value) });
+  else if (guess && guess.value && guess.value !== words) rows.push({ group: DISCUSS_GROUP, icon: 'sparkle', arrive, label: '\u201C' + (demoMode ? demoPersonName(guess.value, demoWordCount(guess.value)) : guess.value) + '\u201D', hint: 'From the title', run: () => applyDiscussWith(doc, guess.value) });
   return rows;
 }
 function applyDiscussWith(doc, who) {
@@ -1117,7 +1119,8 @@ function renderPalette() {
     if (rowHue != null) { icon.classList.add('hue'); icon.style.setProperty('--hue', String(rowHue)); }
     const label = document.createElement('span'); label.className = 'label';
     const match = r.match || (q ? fuzzyMatch(r.label, q.toLowerCase()) : null); // every level: the letters the query matched, in bold
-    if (match && match.length) {
+    if (demoMode && r.node) label.textContent = demoText(r.label, r.node.id); // a document's title is content: masked, and no highlight to give its words away
+    else if (match && match.length) {
       const hit = new Set(match); let run = '', bold = false;
       const flushRun = () => { if (!run) return; if (bold) { const b = document.createElement('b'); b.textContent = run; label.append(b); } else label.append(run); run = ''; };
       for (let i = 0; i < r.label.length; i++) { if (hit.has(i) !== bold) { flushRun(); bold = hit.has(i); } run += r.label[i]; }
@@ -1128,7 +1131,7 @@ function renderPalette() {
     row.append(icon, label);
     if (r.right) { const s = document.createElement('span'); s.className = 'ricon right'; s.innerHTML = iconSvg(r.right); row.append(s); }
     if (r.kbd) { const k = document.createElement('kbd'); k.textContent = r.kbd; row.append(k); }
-    if (r.hint) { const h = document.createElement('span'); h.className = 'hint'; h.textContent = r.hint; blurSensitive(h, r.node && r.node.id); row.append(h); }
+    if (r.hint) { const h = document.createElement('span'); h.className = 'hint'; h.textContent = demoMeta(r.node, r.hint); blurSensitive(h, r.node && r.node.id); row.append(h); }
     row.onmousedown = (e) => e.preventDefault();
     row.onclick = () => runRow(r);
     els.push(row);

@@ -1,7 +1,28 @@
 'use strict';
 // The api handle and all renderer state, page zoom, and the root elements.
 
-const tana = window.api || mockApi();
+const tana = window.api ? readOnlyInDemo(window.api) : readOnlyInDemo(mockApi());
+// Demo mode draws made-up words, and nothing on screen may then reach Tana: every call that writes is refused here,
+// whatever asked for it (a key, Cmd+K, a checkbox, a drop). Reads, navigation and the app's own settings still work.
+const DEMO_WRITES = new Set(['editMeeting', 'setNotify', 'inboxSetRead', 'inboxMarkAll', 'proposalAnswer', 'linkCodexTask', 'discussWith',
+  'deleteDocument', 'restoreDocument', 'archiveDocument', 'unarchiveDocument', 'setType', 'setField', 'defineField', 'addField', 'setTypeIcon',
+  'setTypeHue', 'createDocument', 'createSearch', 'setSearchFilter', 'setTitle', 'setDone', 'setState', 'setStateMany', 'toggleCheckbox',
+  'setSharing', 'moveToSpace', 'setAssignees', 'setAssigneesMany', 'setText', 'setCell', 'tableOp', 'setBlockType', 'insertDivider',
+  'insertImage', 'insertTable', 'insertAfter', 'insertBefore', 'split', 'join', 'insertChild', 'removeMany', 'moveMany', 'indentMany',
+  'outdentMany', 'remove', 'indent', 'outdent', 'move', 'moveTo', 'insertMention', 'pin', 'unpin', 'pinTo', 'unpinFrom', 'setSensitive',
+  'setCodex', 'undo', 'redo']);
+function readOnlyInDemo(api) {
+  return new Proxy({ ...api }, { // a copy: contextBridge freezes window.api, and a proxy of a frozen object must hand back its own values
+    get: (own, key) => {
+      if (!demoMode || typeof own[key] !== 'function') return own[key];
+      if (DEMO_WRITES.has(key)) return () => Promise.reject(new Error('Demo mode is on: nothing is saved to Tana'));
+      // the day and week nodes are made (and pinned) the first time they are asked for: in demo mode only found
+      if (key === 'todayNode') return (offset) => own.todayNode(offset, true);
+      if (key === 'weekNode') return () => own.weekNode(true);
+      return own[key];
+    },
+  });
+}
 
 // ---- state ----
 let views = [];              // [{ id, title, icon, nodes: document Node[] }]
@@ -115,4 +136,19 @@ function setZoom(f) {
 if (zoomFactor !== 1 && tana.zoom) tana.zoom(zoomFactor);
 
 const $ = (id) => document.getElementById(id);
+// Demo mode is remembered on this machine, like sensitive visibility: a reload opens the way you left it. Every
+// outliner window follows a switch made in another (the storage event), and main is told so it posts no banners.
+function applyDemoMode(on) {
+  if (on && typeof flushAll === 'function') flushAll(); // finish any real edit before masking the text on screen
+  if (on && document.activeElement?.isContentEditable) document.activeElement.blur();
+  demoMode = on;
+  if (tana.setDemoMode) tana.setDemoMode(on);
+}
+applyDemoMode(localStorage.getItem('demoMode') === '1');
+function toggleDemoMode() {
+  applyDemoMode(!demoMode);
+  localStorage.setItem('demoMode', demoMode ? '1' : '0');
+  render(true);
+}
+window.addEventListener('storage', (e) => { if (e.key === 'demoMode' && (e.newValue === '1') !== demoMode) { applyDemoMode(e.newValue === '1'); render(true); } });
 const outline = $('outline'), filterEl = $('filter'), filterRow = $('filterRow');

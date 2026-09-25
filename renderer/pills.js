@@ -36,14 +36,14 @@ function pillDefs() {
     // pill and keeps its value, so putting it back shows the same window as before.
     if (showsCompleted(f)) defs.push({ id: 'completed', label: 'Completed', command: 'Filter completed by age', icon: 'task', value: COMPLETED.find(([v]) => v === completedWindow(f))[1], rows: () => COMPLETED.map(([v, l]) => ({ label: l, checked: completedWindow(f) === v, run: () => save({ completedWithin: v }) })) });
     loadMembers();
-    const you = 'You' + (me() ? ' (' + me().title + ')' : '');
-    const a = f.assignee, m = (members || []).find((x) => x.id === a), who = a === 'anyone' ? 'Anyone' : a === 'unassigned' ? 'Unassigned' : a === 'me' || !a ? you : m ? m.title : '…';
+    const you = 'You' + (me() ? ' (' + memberName(me().id) + ')' : '');
+    const a = f.assignee, m = (members || []).find((x) => x.id === a), who = a === 'anyone' ? 'Anyone' : a === 'unassigned' ? 'Unassigned' : a === 'me' || !a ? you : m ? memberName(m.id) : '…';
     defs.push({ id: 'assigned', label: 'Assigned to', command: 'Filter by assignee', icon: 'assigned', value: who, rows: () => [
       { label: 'Anyone', checked: a === 'anyone', run: () => save({ assignee: 'anyone' }) },
       { label: you, checked: a === 'me' || !a, run: () => save({ assignee: 'me' }) },
       { label: 'Unassigned', checked: a === 'unassigned', run: () => save({ assignee: 'unassigned' }) },
       { head: 'Members' },
-      ...(members || []).filter((x) => !x.me).map((x) => ({ label: x.title, checked: a === x.id, run: () => save({ assignee: x.id }) })),
+      ...(members || []).filter((x) => !x.me).map((x) => ({ label: memberName(x.id), checked: a === x.id, run: () => save({ assignee: x.id }) })),
     ] });
   }
   // sorting and grouping re-order and re-section rows already loaded, rather than changing which rows are found.

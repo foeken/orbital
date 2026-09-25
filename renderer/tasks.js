@@ -15,7 +15,11 @@ function loadMembers() {
   }, showError);
 }
 const me = () => (members || []).find((m) => m.me);
-const memberName = (uri) => { const member = (members || []).find((m) => m.id === uri); return member ? member.title || member.text : uri; };
+function memberName(uri) {
+  if (demoMode) return demoPersonName(uri);
+  const member = (members || []).find((m) => m.id === uri);
+  return member ? member.title || member.text : uri;
+}
 const AUDIENCES = {
   'only-me': { icon: 'lock', label: 'Visible only to you' },
   people: { icon: 'userLock', label: 'Visible to selected people' },
@@ -27,8 +31,9 @@ function audienceInfo(audience, audienceSpace) {
   const info = AUDIENCES[scope];
   if (!info) return null;
   const title = audience?.title || audienceSpace?.title;
+  const named = title && demoText(title, audienceSpace?.uri || 'space'); // a space's name is Tana's: masked in demo mode
   // a space audience names the space, so a row can read "Robin Vega · Platform Guild"
-  return scope === 'space' && title ? { ...info, label: 'Visible to members of ' + title, space: title } : info;
+  return scope === 'space' && title ? { ...info, label: 'Visible to members of ' + named, space: named } : info;
 }
 function loadTaskMeta(docId) {
   // Metadata is supplemental. Calling it before the sync client connects retries on every render.

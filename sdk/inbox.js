@@ -43,23 +43,25 @@ const markAsReadBySourceUri = (doc, uri) => write(doc, (at) => maps(doc).filter(
 const markAllAsRead = (doc) => write(doc, (at) => maps(doc).map((item) => read(item, at)).includes(true));
 
 // ---- how a notification reads (Tana's Wqt and Gqt) ----
-// The sentence, as parts: { text, emphasis? }. actor is the actor's name, if known; title overrides the stored one,
+// The sentence, as parts: { text, emphasis?, title? }. actor is the actor's name, if known; title overrides the stored one,
 // which is what Tana does for type-archived/unarchived (the type's current title, so a rename shows through).
 function phrase(n, actor, title) {
   const em = (text) => ({ text, emphasis: true }), t = (text) => ({ text }), o = title || n.title;
+  // title: the notification's own words (a document, meeting or message title), told apart from Tana's fixed sentence
+  const ti = (text) => ({ text, emphasis: true, title: true }), own = (text, fallback) => (text ? { text, title: true } : t(fallback));
   switch (n.notificationType) {
     case 'document-access':
     case 'event-access': {
       const what = n.notificationType === 'event-access' ? 'a meeting' : 'a doc';
-      return actor ? (o ? [em(actor), t(' added you to '), em(o)] : [em(actor), t(' added you to ' + what)]) : o ? [t('You were added to '), em(o)] : [t('You were added to ' + what)];
+      return actor ? (o ? [em(actor), t(' added you to '), ti(o)] : [em(actor), t(' added you to ' + what)]) : o ? [t('You were added to '), ti(o)] : [t('You were added to ' + what)];
     }
     case 'task-assignment': return actor ? [em(actor), t(' assigned you to a task')] : [t('You were assigned to a task')];
-    case 'comment-mention': return actor ? (o ? [em(actor), t(' mentioned you in '), em(o)] : [em(actor), t(' mentioned you in a comment')]) : o ? [t('You were mentioned in '), em(o)] : [t('You were mentioned in a comment')];
-    case 'comment-reply': return actor ? (o ? [em(actor), t(' replied in '), em(o)] : [em(actor), t(' replied to a comment')]) : o ? [t('New reply in '), em(o)] : [t('New reply to a comment')];
-    case 'incoming-call': return actor ? [em(actor), t(' is waiting for you in a meeting')] : [t(o || 'Someone is waiting for you in a meeting')];
-    case 'type-archived': return actor ? (o ? [em(actor), t(' archived '), em(o)] : [em(actor), t(' archived a type')]) : o ? [em(o), t(' was archived')] : [t('A type was archived')];
-    case 'type-unarchived': return actor ? (o ? [em(actor), t(' unarchived '), em(o)] : [em(actor), t(' unarchived a type')]) : o ? [em(o), t(' was unarchived')] : [t('A type was unarchived')];
-    default: return actor ? [em(actor), t(' sent you a message')] : [t(o || 'New message')]; // chat-message, ai-usage-warning and anything newer
+    case 'comment-mention': return actor ? (o ? [em(actor), t(' mentioned you in '), ti(o)] : [em(actor), t(' mentioned you in a comment')]) : o ? [t('You were mentioned in '), ti(o)] : [t('You were mentioned in a comment')];
+    case 'comment-reply': return actor ? (o ? [em(actor), t(' replied in '), ti(o)] : [em(actor), t(' replied to a comment')]) : o ? [t('New reply in '), ti(o)] : [t('New reply to a comment')];
+    case 'incoming-call': return actor ? [em(actor), t(' is waiting for you in a meeting')] : [own(o, 'Someone is waiting for you in a meeting')];
+    case 'type-archived': return actor ? (o ? [em(actor), t(' archived '), ti(o)] : [em(actor), t(' archived a type')]) : o ? [ti(o), t(' was archived')] : [t('A type was archived')];
+    case 'type-unarchived': return actor ? (o ? [em(actor), t(' unarchived '), ti(o)] : [em(actor), t(' unarchived a type')]) : o ? [ti(o), t(' was unarchived')] : [t('A type was unarchived')];
+    default: return actor ? [em(actor), t(' sent you a message')] : [own(o, 'New message')]; // chat-message, ai-usage-warning and anything newer
   }
 }
 // The line Tana writes after it (as ". <detail>."): markdown flattened, trailing punctuation dropped; '' for none.

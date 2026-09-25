@@ -14,6 +14,68 @@ const dayLabel = (day) => DAY_LABEL.format(new Date(day + 'T00:00:00'));
 // accepts segments, a plain string, or a Node
 const segsOf = (v) => (Array.isArray(v) ? v : typeof v === 'string' ? (v ? [{ text: v }] : []) : v.segments || (v.text ? [{ text: v.text }] : []));
 const plainOf = (v) => segsOf(v).map((s) => ('text' in s ? s.text : s.mention.label)).join('');
+let demoMode = false; // Cmd+K "Toggle demo mode": made-up names and words on screen, and every Tana write refused (renderer/state.js reads the stored choice)
+// Short words stand in for short ones ("to", "the", "Q4"), so a masked title keeps the rhythm of a sentence.
+const DEMO_SHORT = ['a', 'an', 'the', 'to', 'of', 'in', 'on', 'for', 'and', 'with', 'by', 'at', 'up', 'new', 'our', 'its', 'all', 'one', 'two', 'big', 'odd', 'red', 'sky', 'sun', 'sea', 'owl', 'fox', 'map', 'key', 'ink', 'jam', 'hum', 'zip', 'go', 'we', 'so'];
+const DEMO_WORDS = ['velvet', 'comet', 'cobalt', 'orchard', 'signal', 'lantern', 'orbit', 'wildflower', 'copper', 'moonlit', 'ripple', 'midnight',
+  'canvas', 'thunder', 'silver', 'afterglow', 'paper', 'starlight', 'glacier', 'daybreak', 'foxglove', 'tideline', 'ember', 'horizon', 'paradox',
+  'quietly', 'electric', 'drifting', 'bright', 'gather', 'harbor', 'meadow', 'compass', 'saffron', 'granite', 'marble', 'pepper', 'biscuit',
+  'tangerine', 'lagoon', 'cactus', 'pelican', 'walrus', 'otter', 'falcon', 'badger', 'heron', 'dolphin', 'penguin', 'raccoon', 'kettle', 'teapot',
+  'blanket', 'pillow', 'ladder', 'bicycle', 'trumpet', 'violin', 'accordion', 'banjo', 'rocket', 'satellite', 'nebula', 'meteor', 'galaxy',
+  'volcano', 'canyon', 'island', 'river', 'forest', 'prairie', 'tundra', 'desert', 'waterfall', 'lighthouse', 'windmill', 'bakery', 'library',
+  'museum', 'garden', 'balcony', 'attic', 'cellar', 'workshop', 'postcard', 'envelope', 'notebook', 'pencil', 'crayon', 'sketch', 'mosaic',
+  'puzzle', 'riddle', 'journey', 'voyage', 'picnic', 'festival', 'parade', 'carnival', 'harvest', 'blossom', 'pebble', 'feather', 'crystal',
+  'plan', 'draft', 'review', 'polish', 'launch', 'wander', 'borrow', 'juggle', 'whisper', 'sparkle', 'tumble', 'wobble', 'giggle',
+  'shuffle', 'nibble', 'ponder', 'doodle', 'rescue', 'untangle', 'measure', 'balance', 'arrange', 'follow', 'imagine', 'discover', 'collect',
+  'curious', 'gentle', 'fuzzy', 'crisp', 'breezy', 'cozy', 'sunny', 'rusty', 'dusty', 'golden', 'hollow', 'humble', 'jolly', 'lucky', 'mellow',
+  'nimble', 'plucky', 'quirky', 'rapid', 'sleepy', 'spicy', 'tiny', 'vivid', 'wiggly', 'zesty', 'honest', 'clever', 'patient', 'restless'];
+const DEMO_FIRST = ['Avery', 'Jordan', 'Casey', 'Taylor', 'Morgan', 'Riley', 'Alex', 'Jamie', 'Noor', 'Lotte', 'Sven', 'Mila', 'Daan', 'Fleur',
+  'Mateo', 'Ines', 'Yusuf', 'Hana', 'Oscar', 'Freya', 'Kofi', 'Amara', 'Luca', 'Elif', 'Ravi', 'Sofia', 'Emeka', 'Greta', 'Tomas', 'Leila'];
+const DEMO_MIDDLE = ['Quinn', 'Rowan', 'Sage', 'Ellis', 'River', 'Noel', 'Marie', 'Jan', 'Ann', 'Lee'];
+const DEMO_LAST = ['Lee', 'Rivera', 'Brooks', 'Chen', 'Patel', 'Bennett', 'Parker', 'de Wit', 'Jansen', 'Bakker', 'Visser', 'Okafor', 'Nakamura',
+  'Moreau', 'Rossi', 'Novak', 'Lindqvist', 'Haddad', 'Kowalski', 'Mendes', 'Osei', 'Fischer', 'Silva', 'Horvath', 'Duarte', 'Ahmadi', 'Keller'];
+function demoHash(identity) {
+  let hash = 2166136261;
+  for (const char of String(identity || '')) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
+  return hash >>> 0;
+}
+const demoWordCount = (value) => (String(value || '').match(/[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*/gu) || []).length;
+function demoPersonName(identity, count = 2) {
+  const pick = (list, part) => list[demoHash(identity + ':' + part) % list.length], words = Math.max(1, count); // each part drawn on its own
+  if (words === 1) return pick(DEMO_FIRST, 'first');
+  return [pick(DEMO_FIRST, 'first'), ...Array.from({ length: words - 2 }, (_, i) => pick(DEMO_MIDDLE, 'middle' + i)), pick(DEMO_LAST, 'last')].join(' ');
+}
+function demoWords(value, identity) {
+  let index = 0;
+  return String(value || '').replace(/[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*/gu, (word) => {
+    const list = word.length <= 3 ? DEMO_SHORT : DEMO_WORDS;
+    const replacement = list[demoHash(identity + ':' + index++) % list.length]; // each word drawn on its own: neighbours no longer walk the list in order
+    return /\p{Lu}/u.test(word[0]) ? replacement[0].toUpperCase() + replacement.slice(1) : replacement; // a capital stays a capital, never all caps
+  });
+}
+// Demo mode masks what came from Tana and leaves the app's own words alone: a page or row of the app's own
+// (orbital:…) keeps its text, and inside one only the parts marked as a name (person) or as Tana's content are masked.
+// A saved search's title is a place in the app ("My Tasks"), so it reads as itself, like the app's own pages.
+const appOwned = (identity) => /^(orbital|tana:search):/.test(String(identity || ''));
+const demoText = (value, identity) => !demoMode || appOwned(identity) ? value : String(identity || '').startsWith('tana:user-profile:') ? demoPersonName(identity, demoWordCount(value)) : demoWords(value, identity);
+// A row's grey meta is a date, "MCP" or, for a type, the space it lives in: only that last one is Tana's words.
+const demoMeta = (node, meta) => (demoMode && meta && /^tana:type:/.test((node && node.id) || '') ? demoText(meta, 'space') : meta);
+function demoSegments(segs, identity) {
+  if (!demoMode) return segs;
+  if (String(identity || '').startsWith('tana:user-profile:')) return [{ text: demoPersonName(identity, demoWordCount(plainOf(segs))) }];
+  const ownWords = appOwned(identity);
+  let index = 0;
+  return segs.map((s) => {
+    const seed = String(identity || '') + ':' + index++;
+    if (s.person) return { ...s, text: s.text.replace(/\S.*\S|\S/, (name) => demoPersonName(name, demoWordCount(name))) };
+    if (s.keep || (ownWords && !s.content)) return s; // the app's wording, or Tana's fixed sentence around a notification's names
+    if ('text' in s) return { ...s, text: demoWords(s.text, seed) };
+    if (dayOfUri(s.mention.uri)) return s; // a date is a date, and says nothing about anyone
+    const label = s.mention.uri.startsWith('tana:user-profile:')
+      ? demoPersonName(s.mention.uri, demoWordCount(s.mention.label)) : demoWords(s.mention.label, seed);
+    return { ...s, mention: { ...s.mention, label } };
+  });
+}
 const MARK_TAGS = { code: 'code', strike: 's', underline: 'u', italic: 'em', bold: 'strong' }; // innermost first: the order a run is wrapped in
 // The caret anchor is a placeholder, not content: readSegs strips it and every offset helper counts it as nothing,
 // so what is stored and what the caret reports are the same with it as without it.
@@ -27,7 +89,8 @@ function markWrap(nodes, marks) {
   if (marks.link) { const a = document.createElement('a'); a.className = 'link'; a.dataset.href = marks.link; a.append(...out); out = [a]; } // outermost: the whole run is one link
   return out;
 }
-function renderSegs(el, segs) {
+function renderSegs(el, segs, identity) {
+  segs = demoSegments(segs, identity);
   const nodes = segs.flatMap((s, i) => {
     // Chromium needs a placeholder newline after a trailing soft break to put the caret on the empty line; readSegs strips it
     if ('text' in s) {

@@ -155,7 +155,7 @@ assert.match(source, /people: \{ icon: 'userLock', label: 'Visible to selected p
 assert.match(source, /space: \{ icon: 'houseLock', label: 'Visible to space members' \}/);
 assert.match(source, /function audienceInfo\(audience, audienceSpace\) \{/);
 assert.match(source, /const title = audience\?\.title \|\| audienceSpace\?\.title/);
-assert.match(source, /label: 'Visible to members of ' \+ title/);
+assert.match(source, /label: 'Visible to members of ' \+ named/);
 assert.match(source, /everyone: \{ icon: 'users', label: 'Visible to everyone' \}/);
 assert.match(source, /who\.textContent = summary\.assignees/);
 assert.match(source, /clickable\(who, \(\) => openAssigneePalette\(node\)\)/);
@@ -241,6 +241,7 @@ assert.deepEqual(JSON.parse(JSON.stringify(visibleTags({ kind: 'document', icon:
 assert.deepEqual(JSON.parse(JSON.stringify(visibleTags({ kind: 'document', icon: 'task', tags: [{ label: 'task', color: 'grey' }] }))), [{ label: 'task', color: 'grey' }], 'an untyped task retains #task');
 
 const audienceInfo = vm.runInNewContext(`
+  const demoText = (value) => value; // demo mode off
   const AUDIENCES = {
     'only-me': { icon: 'lock', label: 'Visible only to you' },
     people: { icon: 'userLock', label: 'Visible to selected people' },

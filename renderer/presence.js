@@ -76,8 +76,9 @@ function paintPresence() {
         : item.node.table ? line.querySelector('.cell[data-para="' + CSS.escape(p.blockId) + '"]') : null;
       if (!text) continue;
       const mark = document.createElement('span');
-      mark.className = 'pcaret'; mark.style.setProperty('--hue', String(presenceHue(p))); mark.title = p.me ? 'You, in another tab' : p.name;
-      mark.dataset.name = p.name; // the full name, yours too, as Tana labels a caret
+      const name = demoMode ? demoPersonName(p.userHash || p.name, demoWordCount(p.name)) : p.name;
+      mark.className = 'pcaret'; mark.style.setProperty('--hue', String(presenceHue(p))); mark.title = p.me ? 'You, in another tab' : name;
+      mark.dataset.name = name; // the full name, yours too, as Tana labels a caret
       line.append(mark);
       // at the character their caret is on, as Tana draws it; in an empty row, or before its position is known, where the
       // row's text begins (never the line's own left edge, which is out over the bullet)

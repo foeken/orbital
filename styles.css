@@ -540,6 +540,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .text.table table { border-collapse: collapse; margin: 4px 0; }
 .text.table th, .text.table td { border: 1px solid #dcdcdc; padding: 3px 8px; vertical-align: top; text-align: left; min-width: 48px; }
 .text.table .cellimg { display: block; max-width: 100%; max-height: 240px; margin-top: 4px; border-radius: 3px; cursor: zoom-in; }
+.text.table .cellimg.demo { width: 120px; height: 68px; background: #f1f1f1; cursor: default; } /* demo mode: where a picture is, not the picture */
 .text.table th { background: #f6f6f6; font-weight: 600; }
 .text.table .cell { outline: none; min-height: 1.4em; white-space: pre-wrap; cursor: text; }
 .text.table .more { color: #888; }
@@ -835,6 +836,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .chip.gold { background: #4b4024; color: #e4c968; }
 [data-theme="dark"] .chip.hue { background: oklch(0.33 0.06 var(--hue)); color: oklch(0.83 0.09 var(--hue)); }
 [data-theme="dark"] .text.image.loading { background: #303436; }
+[data-theme="dark"] .text.table .cellimg.demo { background: #303436; }
 [data-theme="dark"] .text.upload { background: #303436; color: #8d9396; }
 [data-theme="dark"] .text.image:focus img, [data-theme="dark"] .selected .text.image img { outline-color: #58768a; }
 [data-theme="dark"] .text.chiponly:focus .mention, [data-theme="dark"] .selected .text.chiponly .mention, [data-theme="dark"] .reference .text:not([contenteditable]):focus { outline-color: #58768a; }

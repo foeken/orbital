@@ -278,10 +278,10 @@ function pinnedOn(n) {
 // "Lives in" only has an answer for a document shared with a space, which is the only place a row learns a space name.
 function subtextOf(node, taskInfo) {
   const bits = [];
-  if (node.proposal) bits.push(node.proposal.note); // where it was proposed, first: it is why the row is on the Proposals page
-  if (node.timeline && node.timeline.note) bits.push(node.timeline.note); // Tana's words for an edit, or where a new task came from
+  if (node.proposal) bits.push(demoText(node.proposal.note, node.id)); // where it was proposed, first: it is why the row is on the Proposals page
+  if (node.timeline && node.timeline.note) bits.push(demoText(node.timeline.note, node.timeline.uri)); // Tana's words for an edit, or where a new task came from
   const pinned = pinnedOn(node); if (pinned) bits.push(pinned);
-  if (displayOn('space') && taskInfo && taskInfo.audience && taskInfo.audience.space) bits.push(taskInfo.audience.space);
+  if (displayOn('space') && taskInfo && taskInfo.audience && taskInfo.audience.space) bits.push(demoText(taskInfo.audience.space, node.id));
   // Who made it joins when it was made rather than repeating the word: "Created 2 days ago by Robin Vega". The name
   // needs the member list, which loads once and re-renders when it lands; until then memberName answers with the uri.
   if (displayOn('creator') && node.createdBy) loadMembers();

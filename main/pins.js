@@ -16,14 +16,18 @@ function weekTitle(d) {
   return 'Week ' + Math.ceil(((t - Date.UTC(year, 0, 1)) / 864e5 + 1) / 7) + ' (' + year + ')';
 }
 // A plain document beside the day nodes, like today's node and with no link between them.
-async function weekNode(date = new Date()) {
+// findOnly (demo mode, renderer/state.js): the existing node or a refusal, never a write.
+async function weekNode(date = new Date(), findOnly = false) {
   if (!S.client) throw new Error(NOT_CONNECTED);
   const title = weekTitle(date);
   // Searched without the bracketed year, which is punctuation to a text index; the match below is the exact title.
   const { nodes = [] } = await S.client.graph.listNodes({ textQuery: title.split(' (')[0], nodeTypes: ['text'], limit: 20 }).catch(() => ({ nodes: [] }));
   // An existing node wins over a new one, case-insensitively: "week 38 (2026)" must not gain a second one beside it.
-  return nodes.find((n) => (n.title || '').trim().toLowerCase() === title.toLowerCase()) || createDocument(title, { kind: 'doc' });
+  const existing = nodes.find((n) => (n.title || '').trim().toLowerCase() === title.toLowerCase());
+  if (!existing && findOnly) throw new Error(DEMO_READ_ONLY);
+  return existing || createDocument(title, { kind: 'doc' });
 }
+const DEMO_READ_ONLY = 'Demo mode is on: nothing is saved to Tana';
 const pinTarget = (target) => { if (target !== 'sidebar' && target !== 'today') throw new Error('pin target must be sidebar or today: ' + target); return target; };
 
 // Sidebar pins as Nodes, in sidebar order; pinned items we cannot subscribe (spaces, types, ...) are skipped quietly.
@@ -110,11 +114,13 @@ async function nodePin(hubId, uri, on) {
   return pins.items(doc).map((p) => p.uri);
 }
 // offset 0 is today, 1 tomorrow, or a 'YYYY-MM-DD' day (a date mention's): the document titled with that date, pinned to it.
-async function todayNode(offset = 0) {
+// findOnly (demo mode): the existing node as it is, unpinned or not, and a refusal where one would have been created.
+async function todayNode(offset = 0, findOnly = false) {
   if (!S.client) throw new Error(NOT_CONNECTED);
   const date = typeof offset === 'string' ? offset : today(offset);
   const { nodes = [] } = await S.client.graph.listNodes({ textQuery: date, nodeTypes: ['text'], limit: 20 }).catch(() => ({ nodes: [] }));
   const existing = nodes.find((n) => (n.title || '').trim() === date);
+  if (findOnly) { if (existing) return existing.id; throw new Error(DEMO_READ_ONLY); }
   if (existing) {
     const pinnedDates = await pins.dates(S.client.sync, S.me.userUri, existing.id).catch(() => []);
     if (!pinnedDates.includes(date)) await setPin(existing.id, 'today', true, date);

@@ -2098,6 +2098,11 @@ async function main() {
     assert.equal(say({ notificationType: 'type-archived', title: 'Old' }, null, 'New'), '*New* was archived', 'a type is named by its current title');
     assert.equal(say({ notificationType: 'type-unarchived' }, 'Sam'), '*Sam* unarchived a type');
     assert.equal(say({ notificationType: 'chat-message', title: 'Hello' }), 'Hello');
+    // which parts are the notification's own words (demo mode masks those and keeps Tana's sentence)
+    const titled = (n, actor) => inbox.phrase(n, actor).filter((p) => p.title).map((p) => p.text);
+    assert.deepEqual([titled({ notificationType: 'document-access', title: 'Plan' }, 'Sam'), titled({ notificationType: 'incoming-call', title: 'Board sync' }),
+      titled({ notificationType: 'chat-message', title: 'Hello' }), titled({ notificationType: 'chat-message' }), titled({ notificationType: 'comment-reply' }, 'Sam')],
+    [['Plan'], ['Board sync'], ['Hello'], [], []], 'a title standing in for the sentence is marked as the notification\'s own words, the fallback sentence is not');
     assert.equal(say({ notificationType: 'ai-usage-warning' }, 'Sam'), '*Sam* sent you a message', 'anything else reads as a message');
     assert.equal(inbox.detail({ notificationType: 'task-assignment', title: 'Ship **it**!', body: 'b' }), 'Ship it', 'a task shows its title, markdown and end punctuation gone');
     assert.equal(inbox.detail({ notificationType: 'comment-reply', body: '[Plan](tana:x) looks _good_.' }), 'Plan looks good');
@@ -2117,7 +2122,7 @@ async function main() {
     const rows = await backend.handlers.get('outline:children')(null, 'orbital:notifications');
     assert.deepEqual(JSON.parse(JSON.stringify(rows.map((r) => r.text))), ['Robin Vega assigned you to a task. Ship it.', 'You were added to Plan', 'Robin Vega archived Renamed'],
       'each row is Tana\'s sentence, the actor named from the members and a type by its current title');
-    assert.deepEqual(JSON.parse(JSON.stringify(rows[0].segments[0])), { text: 'Robin Vega', marks: { bold: true } }, 'what Tana emphasises is bold');
+    assert.deepEqual(JSON.parse(JSON.stringify(rows[0].segments[0])), { text: 'Robin Vega', marks: { bold: true }, person: true }, 'what Tana emphasises is bold, and the actor is marked as a name for demo mode');
     assert.deepEqual(JSON.parse(JSON.stringify(rows.map((r) => r.unread))), [true, false, false]);
     assert.ok(rows.every((r) => r.editable === false && r.notification.sourceUri), 'read-only rows that know what they are about');
     assert.equal(await backend.handlers.get('inbox:unread')(), 1);
@@ -2504,8 +2509,8 @@ async function main() {
       ['Rob Jansen edited Contract renewal', 'Moved the deadline to Friday', 'updated', 'edit', false, []],
       ["Tana's AI added a task to your Inbox", null, 'tana', 'new', false, ['Share the transcript']],
     ], 'a timeline, newest first: who, then what they did, then the node; an edit\'s change quoted under it; new tasks from one source in a row are one quiet entry; a completion told once, from the node\'s own state; yours alone, by hand, or weeks old stay out');
-    assert.deepEqual(JSON.parse(JSON.stringify((await backend.timelinePage.rows())[1].segments)), [{ text: 'Rob Jansen ' }, { text: 'completed', marks: { bold: true } }, { text: ' ' }, { text: 'Contract renewal', marks: { strike: true } }],
-      'the person plain, the verb bold, and a finished node struck through');
+    assert.deepEqual(JSON.parse(JSON.stringify((await backend.timelinePage.rows())[1].segments)), [{ text: 'Rob Jansen ', person: true }, { text: 'completed', marks: { bold: true } }, { text: ' ' }, { text: 'Contract renewal', content: true, marks: { strike: true } }],
+      'the person plain, the verb bold, and a finished node struck through; demo mode masks the name and title and keeps the verb');
     const rows = await backend.timelinePage.rows();
     for (const [text, state] of [['Task status changed from In Progress to Inbox', 'proposed'], ['Task marked as completed and a note added', 'closed'], ['Task status updated to In Progress', 'open'], ['Added a document link', undefined]])
       assert.equal(backend.timelinePage.statusOf(text) || undefined, state, 'a summary says which state it went to: ' + text);
@@ -2808,6 +2813,10 @@ async function main() {
     assert.equal(docs.size, 2, 'and nothing else is created along the way');
     const nextYear = await backend.weekNode(new Date(2027, 8, 20)); // week 38 again, a year later
     assert.equal(titleOf(docs.get(nextYear.id)), 'Week 38 (2027)', 'and next year\'s week 38 is a node of its own');
+    // demo mode asks for a lookup only (renderer/state.js readOnlyInDemo): the week that exists, and a refusal for one that does not
+    assert.equal((await backend.weekNode(new Date(2026, 8, 16), true)).id, first.id, 'a lookup finds the existing week node');
+    await assert.rejects(backend.weekNode(new Date(2028, 0, 12), true), /Demo mode is on/, 'and refuses a missing one');
+    assert.equal(docs.size, 3, 'without creating it');
     console.log('ok  week node: one plain document per ISO week, reused by every day in it');
   }
 

@@ -32,7 +32,7 @@ function meetingRows(page, group) {
   return [
     // not on an all-day meeting: Tana has no date-only write path to the calendar, and its updateEvent refuses the same
     ...(info.allDay ? [] : [{ id: 'meetingTime', group, icon: 'calendar', label: 'Change time \u2026', hint: info.start ? meetingSpan(info.start, info.end) : '', keepOpen: true, run: () => openMeetingPage('meetingTime', 'Move to\u2026') }]),
-    { id: 'meetingLocation', group, icon: 'globe', label: 'Change location \u2026', hint: info.location || '', keepOpen: true, run: () => openMeetingPage('meetingLocation', 'Location\u2026') },
+    { id: 'meetingLocation', group, icon: 'globe', label: 'Change location \u2026', hint: demoText(info.location || '', doc.id), keepOpen: true, run: () => openMeetingPage('meetingLocation', 'Location\u2026') },
     { id: 'meetingAttendee', group, icon: 'member', label: 'Add attendee \u2026', hint: people ? people + (people === 1 ? ' attendee' : ' attendees') : '', keepOpen: true, run: () => openMeetingPage('meetingAttendee', 'Add who? New attendees may get a calendar invite') },
   ];
 }
@@ -62,7 +62,7 @@ function meetingLocationRows(typed) {
   if (!info) return [];
   if (words) return [{ group, icon: 'globe', label: 'Set location to \u201C' + words + '\u201D', hint: '\u21A9', run: () => editMeetingNow({ location: words }) }];
   if (!info.location) return [{ group, icon: 'globe', label: 'Type a room, an address or a link', disabled: true }];
-  return [{ group, icon: 'globe', label: info.location, hint: 'Current', disabled: true }, { group, icon: 'none', label: 'Remove location', run: () => editMeetingNow({ location: '' }) }];
+  return [{ group, icon: 'globe', label: demoText(info.location, meetingCtx.docId), hint: 'Current', disabled: true }, { group, icon: 'none', label: 'Remove location', run: () => editMeetingNow({ location: '' }) }];
 }
 function loadAttendeePool() {
   attendeePool = null;
@@ -85,9 +85,9 @@ function meetingAttendeeRows(typed) {
     const email = String(s.email || '').toLowerCase();
     if (s.identityUri) named.add(s.identityUri);
     if (here.has(s.identityUri) || here.has(email) || !(fuzzyMatch(s.displayName || email, q) || email.includes(q))) continue;
-    add(s.displayName || s.email, s.displayName ? s.email : '', { email: s.email, userUri: s.identityUri });
+    add(demoMode ? demoPersonName(s.identityUri || s.email) : s.displayName || s.email, demoMode ? '' : s.displayName ? s.email : '', { email: s.email, userUri: s.identityUri });
   }
-  for (const m of members || []) if (!m.me && !here.has(m.id) && !named.has(m.id) && fuzzyMatch(m.title || '', q)) add(m.title, 'Member', { userUri: m.id });
+  for (const m of members || []) if (!m.me && !here.has(m.id) && !named.has(m.id) && fuzzyMatch(m.title || '', q)) add(memberName(m.id), 'Member', { userUri: m.id });
   if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(words) && !here.has(q) && !rows.some((r) => r.hint.toLowerCase() === q)) rows.unshift({ group, icon: 'member', label: 'Add ' + words, hint: '\u21A9', keepOpen: true, run: () => editMeetingNow({ attendees: [{ email: words }] }, true) });
   if (!rows.length) rows.push({ group, label: q ? 'No one matches \u2014 type an email address to add it' : 'No one to suggest', disabled: true });
   return rows;

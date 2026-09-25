@@ -95,7 +95,7 @@ function railRow(node) {
     const check = document.createElement('input');
     check.type = 'checkbox'; check.className = 'check'; check.checked = !!node.done; check.tabIndex = -1;
     if (node.stateType === 'proposed') check.classList.add('inbox');
-    check.disabled = !canEditNode(node);
+    check.disabled = demoMode || !canEditNode(node);
     check.onmousedown = (e) => e.preventDefault();
     check.onclick = (e) => { e.stopPropagation(); toggleRelated(node); };
     row.append(check);
@@ -107,7 +107,7 @@ function railRow(node) {
     row.append(icon);
   }
   const title = document.createElement('span');
-  title.className = 'rtitle'; title.textContent = node.text || node.title || 'Untitled';
+  title.className = 'rtitle'; title.textContent = demoText(node.text || node.title || 'Untitled', node.id);
   blurSensitive(title, node.id);
   row.append(title);
   appendTags(row, node);
@@ -125,7 +125,7 @@ function railRow(node) {
   return row;
 }
 function toggleRelated(node) {
-  if (!canEditNode(node) || !tana.setDone) return;
+  if (demoMode || !canEditNode(node) || !tana.setDone) return;
   // node is the row's own copy (railRow(asDoc(…))): the sidebar is drawn again from relatedBy, so that changes too
   if (acceptsFirst(node)) { node.stateType = 'open'; patchCopies(node.id, { stateType: 'open' }); run(async () => { await tana.setState(node.id, 'open'); }); return render(true); } // Inbox: accept first, complete next
   const done = node.done ? 0 : 1;
@@ -161,7 +161,7 @@ function railKey(e, node, row) {
 function railCallRow(data) {
   const call = data && data.call;
   if (!call || !call.url || !tana.openExternal) return null; // no call, no row
-  return { id: 'call', icon: 'video', label: call.label || call.url, run: () => run(() => tana.openExternal(call.url)) };
+  return { id: 'call', icon: 'video', label: demoText(call.label || call.url, 'call'), run: () => run(() => tana.openExternal(call.url)) }; // a call link names the meeting: masked in demo mode
 }
 // The zoomed task's own metadata, at the top of the sidebar: who it is assigned to and who can see it. Both open the
 // pickers the palette already uses (api.setAssignees / api.setSharing). Nothing known, nothing shown.
@@ -233,7 +233,7 @@ function railChangeEl(change, title, docId) {
   const el = document.createElement('div');
   el.className = 'rrow rchange';
   el.tabIndex = -1; el.dataset.id = 'change:' + [change.action, change.by || '', change.at || ''].join(':');
-  if (change.note) el.title = change.note; // the longer description, for the pointer only: the row stays one line of its own
+  if (change.note) el.title = demoText(change.note, docId); // the longer description, for the pointer only: the row stays one line of its own
   const glyph = iconNode(CHANGE_ICON[change.action]);
   const icon = document.createElement('span');
   icon.className = 'ricon';
@@ -241,7 +241,7 @@ function railChangeEl(change, title, docId) {
   const text = document.createElement('span');
   text.className = 'rtext';
   const head = document.createElement('span');
-  head.className = 'rtitle'; head.textContent = change.title || title;
+  head.className = 'rtitle'; head.textContent = demoText(change.title || title, docId);
   blurSensitive(head, docId);
   const sub = document.createElement('span');
   sub.className = 'rsub';

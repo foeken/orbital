@@ -124,3 +124,7 @@ against the stylesheet itself.
   `quick-add.html`: the meeting states, empty and duplicate submit, the keyboard assignee, escape, the retry that keeps
   the title, re-open keeping what was typed, the two stylesheet rules above, and a 200-member workspace where the
   search, the wrapping highlight and the dismissal still behave as they do with two people.
+
+## Demo mode
+
+With demo mode on in the outliner (Cmd+K, stored in the app's localStorage, which this window shares), the panel asks main for nothing: no meeting and no members are read, the meeting line says "Demo mode is on: nothing is saved to Tana", and a submit is refused with the same words and keeps what was typed. It is checked at every open and every submit, since the outliner can switch it while the panel lives.

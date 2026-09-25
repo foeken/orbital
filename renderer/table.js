@@ -7,7 +7,7 @@
 // cell id -> { item, segs, timer }: typed and not written yet, drawn instead of the stored text so a rebuild keeps it
 const cellPending = new Map();
 function tableEl(item) {
-  const table = document.createElement('table'), writable = !!tana.setCell && canEditStructure(item);
+  const table = document.createElement('table'), writable = !demoMode && !!tana.setCell && canEditStructure(item);
   for (const row of item.node.table.rows) {
     const tr = document.createElement('tr');
     for (const cell of row) {
@@ -18,14 +18,14 @@ function tableEl(item) {
       if (width) td.style.setProperty('width', width + 'px');
       const el = document.createElement('div');
       el.className = 'cell'; el.dataset.cell = cell.id || ''; el.dataset.para = cell.paragraph || ''; el.spellcheck = false; // para: the block presence names
-      renderSegs(el, cellPending.has(cell.id) ? cellPending.get(cell.id).segs : cell.segments);
+      renderSegs(el, cellPending.has(cell.id) ? cellPending.get(cell.id).segs : cell.segments, cell.id);
       if (writable && cell.id) el.contentEditable = 'plaintext-only';
       td.append(el);
       // what else the cell holds shows under its text, read-only: an image as the picture (a click opens it, as on an
       // image row), anything else (a second paragraph, a list) as grey text; only the first paragraph is the cell's text
       for (const b of cell.blocks) {
         if (b.type === 'image' && b.image) td.append(cellImage(b));
-        else if (b.id !== cell.paragraph && b.text) { const more = document.createElement('div'); more.className = 'more'; more.textContent = b.text; td.append(more); }
+        else if (b.id !== cell.paragraph && b.text) { const more = document.createElement('div'); more.className = 'more'; more.textContent = demoText(b.text, b.id); td.append(more); }
       }
       tr.append(td);
     }
@@ -40,6 +40,7 @@ function tableEl(item) {
 function cellImage(b) {
   const img = document.createElement('img'), uri = b.image.uri, cached = images.get(uri);
   img.className = 'cellimg';
+  if (demoMode) { img.classList.add('demo'); return img; } // demo mode: a grey block where the picture is, nothing fetched
   if (b.image.alt) img.alt = img.title = b.image.alt;
   if (typeof cached === 'string') img.src = cached;
   else (cached || images.set(uri, tana.image(uri)).get(uri)).then((url) => { images.set(uri, url); img.src = url; }, (e) => { images.delete(uri); showError(e); });

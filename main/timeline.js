@@ -145,12 +145,14 @@ async function rows() {
     let segments, note = null, change = null, detail = null, children = [];
     // who, in plain text, then what they did in bold, then the node: "Kevin Favier **completed** ~~Plan the offsite~~".
     // An edit's what-changed rides in the quote under it: Tana's line for it, then its longer words.
-    const who = { text: e.actor + ' ' }, what = (verb) => ({ text: verb, marks: { bold: true } });
-    if (e.kind === 'edit') { segments = [who, what('edited'), { text: ' ' + title }]; change = e.change; detail = e.detail || null; }
-    else if (e.kind === 'status') { segments = [who, what(e.verb), { text: ' ' }, { text: title, marks: e.tone === 'done' ? { strike: true } : {} }]; note = e.note || null; }
+    // person/content: the words demo mode masks in this row of the app's own; the rest is the app's wording (renderer/segments.js)
+    const person = !/^(An AI agent|Tana's AI)$/.test(e.actor);
+    const who = { text: e.actor + ' ', ...(person ? { person } : {}) }, what = (verb) => ({ text: verb, marks: { bold: true } });
+    if (e.kind === 'edit') { segments = [who, what('edited'), { text: ' ' }, { text: title, content: true }]; change = e.change; detail = e.detail || null; }
+    else if (e.kind === 'status') { segments = [who, what(e.verb), { text: ' ' }, { text: title, content: true, marks: e.tone === 'done' ? { strike: true } : {} }]; note = e.note || null; }
     else {
       const n = e.tasks.length;
-      segments = [{ text: e.actor + ' added ' + (n === 1 ? 'a task' : n + ' tasks') + ' to your Inbox' }];
+      segments = [{ ...who, text: e.actor }, { text: ' added ' + (n === 1 ? 'a task' : n + ' tasks') + ' to your Inbox' }];
       // each a task row, opening as one: its words read-only here, its box ticking the task where you may tick it anywhere
       children = e.tasks.map((t) => { const row = toNode(graphRow(t.node)); return { ...row, editable: false, checkable: row.editable !== false }; });
     }
