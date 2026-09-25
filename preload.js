@@ -1,7 +1,9 @@
 const { contextBridge, ipcRenderer, webFrame } = require('electron');
+const pane = ipcRenderer.sendSync('window:getSide'); // { side, split }: this page's place in its window (main.js)
 
 contextBridge.exposeInMainWorld('api', {
-  side: ipcRenderer.sendSync('window:getSide'), // '' the left or only page, '2' the right half of a split (renderer/state.js SIDE)
+  side: pane.side, // '' the left or only page, '2' the right half of a split (renderer/state.js SIDE)
+  inSplit: pane.split, // half of a split when it loaded: it reopens its own view, not Home (renderer/edit.js)
   zoom: (factor) => { webFrame.setZoomFactor(factor); return webFrame.getZoomFactor(); },
   systemTheme: () => ipcRenderer.invoke('theme:system'), // 'dark' | 'light' right now
   onSystemTheme: (fn) => ipcRenderer.on('theme:system', (_e, theme) => fn(theme)), // macOS appearance changed

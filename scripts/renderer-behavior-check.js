@@ -5683,9 +5683,10 @@ function runRailChangesCheck() {
 // Stored as the target's own id, so a rename in Tana shows through and a deletion is something the app can see.
 async function runHomeCheck() {
   const homeInit = source.match(/let home = pref\('home', 'library'\);/)[0];
-  const seed = source.match(/if \(!savedPlace && isRealId\(home\)\) savedPlace = [^\n]*/)[0];
+  const seed = source.match(/if \(!savedPlace && isRealId\(home\) && !IN_SPLIT\) savedPlace = [^\n]*/)[0];
   const api = vm.runInNewContext(FAKE_DOM + `
     const SIDE = ''; // renderer/state.js: a page on its own, not the right half of a split
+    const IN_SPLIT = false;
     const stored = {};
     const localStorage = { getItem: (k) => (k in stored ? stored[k] : null), setItem: (k, v) => { stored[k] = v; }, removeItem: (k) => { delete stored[k]; } };
     const prefs = {}; const pref = (k, fb) => (k in prefs ? prefs[k] : fb); const setPref = (k, v) => { prefs[k] = v; stored[k] = v; };

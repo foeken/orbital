@@ -113,7 +113,9 @@ function createWindow() {
   // The quick-add panel is a window of its own, and a hidden one still counts as open: without this, closing the
   // outliner after the panel had been summoned once would leave the app running invisibly instead of quitting.
   win.on('closed', () => {
-    for (const p of [...win.panes]) removePane(win, p);
+    // right half first: the left one closing first would leave the right one alone for a moment, and removePane would
+    // hand it the left half's keys, so it saved its page over the left one's and a restart opened both on it
+    for (const p of [...win.panes].reverse()) removePane(win, p);
     S.windows.delete(win);
     if (S.win === win) { S.win = [...S.windows].at(-1) || null; S.pane = frontPane(); }
     if (S.windows.size) return;
@@ -228,7 +230,11 @@ ipcMain.handle('window:split', (e) => { toggleSplit(e.sender); });
 // ⌘\: the keys go to the other half of a split (nothing to do in a window with one page)
 ipcMain.handle('window:otherPane', (e) => { const other = paneWindow(e.sender)?.panes.find((p) => p.webContents !== e.sender); if (other) other.webContents.focus(); });
 // asked by preload.js on every load, a Reload included: which side this page is ('' left or alone, '2' the right half)
-ipcMain.on('window:getSide', (e) => { e.returnValue = paneWindow(e.sender)?.panes.find((p) => p.webContents === e.sender)?.side || ''; });
+// and whether it is half of a split. A restart adds both halves before either loads, so a restored split says so.
+ipcMain.on('window:getSide', (e) => {
+  const win = paneWindow(e.sender);
+  e.returnValue = { side: win?.panes.find((p) => p.webContents === e.sender)?.side || '', split: !!win && win.panes.length > 1 };
+});
 // Cmd+K Swap panes: the halves change sides, and each takes the other's side marker, so a restart keeps them there
 ipcMain.handle('window:swapPanes', (e) => {
   const win = paneWindow(e.sender);

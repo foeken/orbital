@@ -383,7 +383,9 @@ let savedPlace = readStoredPlace();
 // Nothing to restore: a launch opens Home. The Library needs nothing here (it is the view already), and a saved
 // search is opened exactly the way a stored place is — it waits for the connection, is fetched if no view lists it,
 // and silently leaves you on the view if it cannot be read, which is the fallback a deleted Home needs anyway.
-if (!savedPlace && isRealId(home)) savedPlace = { docId: home, nodeId: null };
+// Half of a split is the exception: it reopens the view it was on, or two halves left on lists would both come
+// back on Home and show the same page.
+if (!savedPlace && isRealId(home) && !IN_SPLIT) savedPlace = { docId: home, nodeId: null };
 // The page itself, before the first paint. A launch used to draw the view behind the place it was about to reopen
 // and replace it once the connection came up, which read as the Library flashing past on every start; the stored
 // title and glyph are enough for the header, and the rows say Loading… until there is a connection to ask. Only

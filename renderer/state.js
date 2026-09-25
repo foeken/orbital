@@ -40,6 +40,7 @@ let home = pref('home', 'library');
 // The right half of a split (main.js addPane, api.side) keeps its own view and place, so a restart reopens both halves
 // where they were; main says so when a page changes sides (onSide in renderer/app.js).
 let SIDE = typeof window !== 'undefined' && window.api && window.api.side ? ':' + window.api.side : '';
+const IN_SPLIT = typeof window !== 'undefined' && !!(window.api && window.api.inSplit);
 let view = localStorage.getItem('view' + SIDE) || 'library'; // active view id; the outline shows one view at a time
 // Views that no longer exist. A stored one would leave the app on a page with no filter, no rows and no way back,
 // so it lands in the Library, which lists every kind those pages used to list one of.
