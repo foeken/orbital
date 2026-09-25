@@ -3,8 +3,8 @@ const db = require('../db');
 const path = require('node:path');
 const { peerIdentity } = require('../tana-session');
 const { createTanaClient } = require('../sdk');
-const { parseQuery, searchParams, needsTypes, viewParams, completedInWindow, filterToSearchQuery, validViewFilter, VIEW_PRESETS, hideRules, isHidden } = require('../sdk/query');
-const { LIVE_ROWS, NOT_CONNECTED, S, deletedNodes, docStates, errText, idKind, isDeleted, isMcp, memberTitle, now, reading, truncatedViews, typeTitles, redoStack, report, send, setStatus, subscribed, undoStack, visibleGraphNodes } = require('./state');
+const { liveTrigger, parseQuery, searchParams, needsTypes, viewParams, completedInWindow, filterToSearchQuery, validViewFilter, VIEW_PRESETS, hideRules, isHidden } = require('../sdk/query');
+const { LIVE_ROWS, NOT_CONNECTED, S, deletedNodes, docStates, errText, idKind, isDeleted, isMcp, memberTitle, now, reading, truncatedViews, typeTitles, redoStack, report, scheduleRefresh, send, setStatus, subscribed, undoStack, visibleGraphNodes } = require('./state');
 const { graphRow, members, rememberNodeHue, resolveTypes, toNode, typesByTitle } = require('./rows');
 const { codexIds, createDocument, creatorOf, document, inHistory, notifySilencedIds, notifyWatchedIds, onChange, subscribe } = require('./documents');
 const settings = require('./settings');
@@ -32,10 +32,11 @@ const hiddenRules = () => hideRules(settings.get('hiddenTitles'));
 // Not a view filter: a filter key has to round-trip into a saved search, which is what killed the per-view
 // includeMcp toggle (#247). Off unless the setting says otherwise.
 const mcpHidden = () => settings.get('hideMcp') === true;
+// A view's filter as it is asked: its stored filter under what this window sent, the preset if that is unreadable.
+const effectiveFilter = (id, filter) => { const base = viewFilter(id); return filter === undefined ? base : validViewFilter(filter) ? { ...base, ...filter } : preset(id); };
 async function viewRows(id, filter) {
   if (!S.client) return { nodes: [], truncated: false };
-  const base = viewFilter(id);
-  const f = filter === undefined ? base : validViewFilter(filter) ? { ...base, ...filter } : preset(id);
+  const f = effectiveFilter(id, filter);
   if (!validViewFilter(f)) throw new Error('invalid view filter');
   const result = await S.client.graph.listNodes(viewParams(f, S.me.userUri));
   const docsWithoutTasks = Array.isArray(f.types) && f.types.includes('docs') && !f.types.includes('tasks');
@@ -199,6 +200,7 @@ async function start() {
   // Watched nodes are live from boot, listed or not: a deleted or unreachable one is simply not watched any more.
   for (const id of new Set([...notifyWatchedIds(), ...codexIds()])) S.client.sync.subscribe(id).catch(() => {});
   watchInbox().catch(report); // new Inbox tasks, pushed by Tana as they land
+  watchMine().catch(report); // the tasks you made for others, which the watch rule follows
   await refresh();
 }
 
@@ -263,10 +265,48 @@ const INBOX_QUERY = (me) => ({ types: ['text'], stateTypes: ['proposed'], assign
 async function watchInbox() {
   const client = S.client, me = S.me && S.me.userUri;
   if (!client || !me) return;
-  const live = await openLiveQuery(client.sync, INBOX_QUERY(me), { label: 'Orbital new Inbox tasks' });
+  // The badge rides the same answer: a task entering or leaving your Inbox moves it, so the count is asked then.
+  // A plain function: `this` is the live query, which a warm first answer reaches before openLiveQuery has resolved.
+  const live = await openLiveQuery(client.sync, INBOX_QUERY(me), { label: 'Orbital new Inbox tasks', onRows: function onRows() {
+    if (S.client !== client) return;
+    announceNewInbox(this.state().nodes).catch(report);
+    updateBadge();
+  } });
   if (S.client !== client) return live.close().catch(() => {}); // a second login got here first
-  live.on('rows', () => { if (S.client === client) announceNewInbox(live.state().nodes).catch(report); });
   live.on('error', report);
+}
+// A number on the app icon is not worth an error banner, so a failed count leaves the badge as it was.
+function updateBadge() { if (S.badge && S.client) inboxCount().then(S.badge, () => {}); }
+
+// Keeping lists current (#148, PR #152): Tana pushes a live query's answer whenever it moves, so every list here has
+// one, and its answers wake the one query that decides the rows. The views get one each, opened and closed at the
+// end of every refresh, which is where a switched view, a changed filter or a closed window settles; the tasks you
+// made for someone else (refreshWatched) get one of their own. What woke them is only ever a trigger: the lists are
+// still read by ListNodes, so what a live query cannot say (text, owners, the meeting chats) is still applied.
+const viewLive = new Map(); // the trigger query as JSON -> { client, handle }
+function watchViews() {
+  const client = S.client, me = S.me && S.me.userUri;
+  const want = new Map();
+  if (client && me) for (const v of openViews()) {
+    const f = effectiveFilter(v.id, v.filter);
+    if (!validViewFilter(f)) continue;
+    const q = liveTrigger(viewParams(f, me));
+    want.set(JSON.stringify(q), q);
+  }
+  for (const [k, w] of viewLive) if (!want.has(k) || w.client !== client) { viewLive.delete(k); w.handle.then((h) => h && h.close()).catch(() => {}); }
+  for (const [k, q] of want) if (!viewLive.has(k)) {
+    const handle = openLiveQuery(client.sync, q, { label: 'Orbital view', onRows: () => { if (S.client === client) scheduleRefresh(500); } })
+      .then((h) => { h.on('error', () => {}); return h; }, () => null); // refused: the backstop refresh still reads it
+    viewLive.set(k, { client, handle });
+  }
+}
+async function watchMine() {
+  const client = S.client, me = S.me && S.me.userUri;
+  if (!client || !me) return;
+  const query = { types: ['text'], createdBy: [me], stateTypes: ['proposed', 'open', 'closed', 'not_now'], orderBy: ['-updatedAt'], limit: 200 };
+  const live = await openLiveQuery(client.sync, query, { label: 'Orbital tasks you made', onRows: () => { if (S.client === client) refreshWatched().catch(() => {}); } });
+  if (S.client !== client) return live.close().catch(() => {});
+  live.on('error', () => {});
 }
 // rows: the live query's answer, newest first ({ uri, title, createdAt } in epoch ms)
 async function announceNewInbox(rows) {
@@ -296,6 +336,7 @@ async function doRefresh() {
     // before the view, so the sweep in viewRows sees the set this refresh found rather than the last one's
     try { await refreshWatched(); } catch { /* the watch set keeps what it had, like the badge keeps its number */ }
     for (const v of openViews()) await viewRows(v.id, v.filter); // each window's view, once
+    watchViews(); // and a live query for each, so the next change arrives without waiting for a refresh
     send('outline:changed', null);
     setStatus({ syncing: false, lastSync: now() });
     // The badge rides the same refresh the views do, in its own try and deliberately silent: a number on the app icon
@@ -379,4 +420,4 @@ async function setMcpHidden(on) {
 // ponytail: on-demand subscriptions last for the S.session; drop the oldest if a long S.session ever holds too many.
 
 
-module.exports = { announceNewInbox, inboxFrom, watchInbox, preset, viewFilter, setViewFilter, hiddenRules, mcpHidden, viewRows, inboxCount, search, searchList, searchCreate, searchTitle, start, refresh, doRefresh, listFilter, setHidden, setMcpHidden };
+module.exports = { announceNewInbox, inboxFrom, watchInbox, watchMine, preset, viewFilter, setViewFilter, hiddenRules, mcpHidden, viewRows, inboxCount, search, searchList, searchCreate, searchTitle, start, refresh, doRefresh, listFilter, setHidden, setMcpHidden };

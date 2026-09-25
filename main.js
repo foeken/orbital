@@ -534,8 +534,10 @@ if (process.env.TANA_MAIN_TEST) {
       try { await start(); }
       catch (e) { setStatus({ error: errText(e) }); }
     }
-    // Discovery has no query subscription. Refreshing the active view is one ListNodes call every 30 seconds.
-    setInterval(refresh, 30000);
+    // The lists are kept current by live queries (main/views.js watchViews, watchMine, watchInbox; a saved search in
+    // main/related.js): Tana pushes their answers, and each answer re-reads its list. This is only the backstop for a
+    // push that never arrived — a dropped connection, a query Tana refused — at a tenth of the old 30 s poll.
+    setInterval(refresh, 5 * 60 * 1000);
     // Updates: at launch and once a day, silent unless there is one (updater.js swaps the bundle and relaunches).
     updater.check();
     setInterval(() => updater.check(), 24 * 60 * 60 * 1000);

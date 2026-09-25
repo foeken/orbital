@@ -93,8 +93,17 @@ truncation note the Library already shows still tells the user when there is mor
   Not the whole list: a subscription is a bootstrap RPC and a LoroDoc each, and every bootstrap reaches
   the renderer as a change, so a Library of several hundred rows opened with a subscription storm on the
   one sync connection — the page lagged and the read for whatever was opened next queued behind it. The
-  tail keeps its cached row and is re-read by the 30 s refresh. `searchChildren` (main/related.js) caps
+  tail keeps its cached row and is re-read by the next refresh. `searchChildren` (main/related.js) caps
   its rows the same way.
+- **Nothing polls** (#148): what runs a refresh is a push. Each open view has a live query (sdk/livequery.js,
+  `watchViews` in main/views.js, opened and closed at the end of every refresh), built from the view's own
+  ListNodes params by `liveTrigger` (sdk/query.js): the same kinds, types, states and people, less what a live
+  query cannot say, so it is a superset of the view. Its answers only wake the refresh; ListNodes still decides
+  the rows. The tasks you made for others (the watch rule) and the Inbox badge ride live queries the same way
+  (`watchMine`, `watchInbox`), and an open saved search gets one from `watchRelated` (main/related.js), rebuilt
+  when its stored query changes. A timer still refreshes every 5 minutes (main.js) as the backstop for a push
+  that never came. A live query that matches nothing stays pending instead of answering empty, which is why every
+  trigger counts its first answer too.
 
 ## 5. IPC
 

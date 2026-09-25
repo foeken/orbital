@@ -333,16 +333,30 @@ async function related(id) {
 // properties move with every edit of the text around it, and no section is drawn from them.
 // One per window (issue #137): each window's page keeps its own sidebar live, keyed by the window's webContents id.
 const watching = new Map(); // window -> { id, client, ready: Promise<boolean>, handles: Promise<[handle|null]> }
+// The saved search's live query, rebuilt whenever the query stored on the search document changes: a Save that widens
+// the search while it is open must widen what wakes it too (PR #152 review). The first answer counts as well: a
+// query that matches nothing stays pending rather than answering empty (live 2026-09-25), so when a search's scope
+// starts empty its first row arrives as the initial answer. That costs one re-read just after opening a search that
+// has rows; the answers after it come only when something moved.
 async function searchTrigger(id, w, key) {
-  const query = await op(id, (doc) => doc.loro.getMap('query').toJSON());
-  if (!query || !Object.keys(query).length) return null;
-  const live = await openLiveQuery(w.client.sync, liveTrigger(searchQueryParams(query, S.me && S.me.userUri)), { label: 'Orbital saved search' });
-  // The first answer counts too: a query that matches nothing stays pending rather than answering empty (live
-  // 2026-09-25), so when a search's scope starts empty, its first row arrives as the initial answer. That costs one
-  // re-read just after opening a search that has rows; the answers after it come only when something moved.
-  live.on('rows', () => { if (watching.get(key) === w) send('outline:changed', id); });
-  live.on('error', () => {}); // a refused query leaves the page as it was: it still re-reads on opening and on Refresh
-  return live;
+  const doc = await w.client.sync.subscribe(id); // the page's own document, already open: this only takes a handle
+  let asked = null, live = null;
+  const reread = () => { if (watching.get(key) === w) send('outline:changed', id); };
+  const follow = async () => {
+    const query = doc.loro.getMap('query').toJSON(), json = JSON.stringify(query || {});
+    if (json === asked) return; // a change to the title, the sort or the grouping: the same question
+    asked = json;
+    if (live) { live.close().catch(() => {}); live = null; }
+    if (!query || !Object.keys(query).length) return;
+    const next = await openLiveQuery(w.client.sync, liveTrigger(searchQueryParams(query, S.me && S.me.userUri)), { label: 'Orbital saved search', onRows: reread });
+    next.on('error', () => {}); // a refused query leaves the page as it was: it still re-reads on opening and on Refresh
+    if (asked !== json) return next.close().catch(() => {}); // superseded while it opened, or closed
+    live = next;
+  };
+  const changed = () => { follow().catch(() => {}); };
+  await follow();
+  doc.on('change', changed);
+  return { close: () => { doc.off('change', changed); asked = '#closed'; return live ? live.close() : Promise.resolve(); } };
 }
 function unwatchRelated(key = 'main') {
   const w = watching.get(key);
