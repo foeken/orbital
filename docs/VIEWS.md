@@ -96,7 +96,7 @@ truncation note the Library already shows still tells the user when there is mor
   tail keeps its cached row and is re-read by the next refresh. `searchChildren` (main/related.js) caps
   its rows the same way.
 - **Nothing polls** (#148): what runs a refresh is a push. Each open view has a live query (sdk/livequery.js,
-  `watchViews` in main/views.js, opened and closed at the end of every refresh), built from the view's own
+  `watchViews` in main/views.js, opened and closed whenever a view is read, so a changed filter moves it at once), built from the view's own
   ListNodes params by `liveTrigger` (sdk/query.js): the same kinds, types, states and people, less what a live
   query cannot say, so it is a superset of the view. Its answers only wake the refresh; ListNodes still decides
   the rows. The tasks you made for others (the watch rule) and the Inbox badge ride live queries the same way

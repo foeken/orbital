@@ -59,10 +59,13 @@ async function viewRows(id, filter) {
     return row;
   });
   db.replaceSection(id, rows);
+  // Every read of a view settles the live queries (PR #152 review): a changed filter reads the view straight away
+  // (view:list), and its trigger has to follow then rather than at the next refresh.
+  watchViews();
   if (openViews().some((v) => v.id === id)) {
     // The head of the list, not all of it (LIVE_ROWS in main/state.js): a wide Library lists hundreds of rows, and
     // subscribing every one of them meant hundreds of bootstraps on one connection and a redraw per bootstrap.
-    // The tail keeps its cached row and is re-read by the 30 s refresh like everything else.
+    // The tail keeps its cached row and is re-read by the next refresh like everything else.
     const ids = new Set(nodes.slice(0, LIVE_ROWS).map((n) => n.id));
     // a node you asked to be told about — or the rule watches, or that was handed to the Codex agent — stays
     // subscribed wherever you are
@@ -279,8 +282,8 @@ async function watchInbox() {
 function updateBadge() { if (S.badge && S.client) inboxCount().then(S.badge, () => {}); }
 
 // Keeping lists current (#148, PR #152): Tana pushes a live query's answer whenever it moves, so every list here has
-// one, and its answers wake the one query that decides the rows. The views get one each, opened and closed at the
-// end of every refresh, which is where a switched view, a changed filter or a closed window settles; the tasks you
+// one, and its answers wake the one query that decides the rows. The views get one each, opened and closed whenever a
+// view is read (viewRows), which is where a switched view, a changed filter or a closed window settles; the tasks you
 // made for someone else (refreshWatched) get one of their own. What woke them is only ever a trigger: the lists are
 // still read by ListNodes, so what a live query cannot say (text, owners, the meeting chats) is still applied.
 const viewLive = new Map(); // the trigger query as JSON -> { client, handle }
@@ -335,8 +338,7 @@ async function doRefresh() {
   try {
     // before the view, so the sweep in viewRows sees the set this refresh found rather than the last one's
     try { await refreshWatched(); } catch { /* the watch set keeps what it had, like the badge keeps its number */ }
-    for (const v of openViews()) await viewRows(v.id, v.filter); // each window's view, once
-    watchViews(); // and a live query for each, so the next change arrives without waiting for a refresh
+    for (const v of openViews()) await viewRows(v.id, v.filter); // each window's view, once, each settling its live query
     send('outline:changed', null);
     setStatus({ syncing: false, lastSync: now() });
     // The badge rides the same refresh the views do, in its own try and deliberately silent: a number on the app icon

@@ -2907,9 +2907,11 @@ async function main() {
     } });
     const listed = await backend.handlers.get('view:list')(null, 'library', { types: ['tasks', 'docs'], states: null, assignee: 'anyone' });
     assert.equal(listed.nodes.length, rows.length, 'every row is still listed, cached and drawn');
-    assert.equal(subscribedIds.length, LIVE_ROWS, 'but only the head of the list is subscribed');
+    // the view's own live query is a subscription too (watchViews, #148); the rows are what this counts
+    assert.equal(subscribedIds.filter((id) => !id.startsWith('tana:liveQuery:')).length, LIVE_ROWS, 'but only the head of the list is subscribed');
+    assert.equal(subscribedIds.filter((id) => id.startsWith('tana:liveQuery:')).length, 1, 'and the view gets its live query as it is read');
     assert.deepEqual([subscribedIds.includes(rows[0].id), subscribedIds.includes(rows.at(-1).id)], [true, false],
-      'the rows at the top are the live ones; the tail rides the 30 s refresh like the rest of the list');
+      'the rows at the top are the live ones; the tail rides the next refresh like the rest of the list');
     // And the cap is a set the sweep agrees with: a row that drops out of the head is let go on the next list.
     rows.unshift({ id: 'tana:text:' + ulid(), title: 'Newest', updateTime: '2026-09-14T10:00:00Z' });
     const pushedOut = rows[LIVE_ROWS].id;
