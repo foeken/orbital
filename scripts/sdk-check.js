@@ -2353,6 +2353,48 @@ async function main() {
     console.log('ok  a status that moved while the app was closed is announced once on the way back, not replayed');
   }
 
+  // New tasks in your Inbox (issue #133): announced unless you made them by hand. A mail agent writing through Tana's
+  // MCP with your login is "you" to createdBy; the MCP chat the task was created in is what says otherwise.
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const COLLEAGUE = 'tana:user-profile:01examplex0000000000000000';
+    // a live query row (sdk/livequery.js): no creator, which the graph answers, and no creating chat, which the document does
+    const task = (title, createdBy, createdInUri, msAgo = 60000) => ({ uri: 'tana:text:' + ulid(), title, createdAt: Date.now() - msAgo, createdBy, createdInUri });
+    const rows = () => inbox.map(({ uri, title, createdAt }) => ({ uri, title, createdAt }));
+    const MCP_CHAT = 'tana:chat:' + ulid(), MEETING_CHAT = 'tana:chat:' + ulid();
+    const chats = new Map([[MCP_CHAT, { id: MCP_CHAT, title: 'MCP: Nedap Compliance', invocationContext: { intent: 'mcp' } }],
+      [MEETING_CHAT, { id: MEETING_CHAT, title: 'Chat for Weekly', invocationContext: { intent: 'meeting' } }]]);
+    let inbox = [task('Already there', ME, MCP_CHAT)];
+    const notified = [];
+    backend.testRuntime({ me: { userUri: ME }, win: { isDestroyed: () => false, webContents: { send: () => {} } },
+      client: {
+        graph: { listNodes: async (p) => {
+          if (p.nodeIds) return { nodes: p.nodeIds.map((id) => chats.get(id) || inbox.filter((n) => n.uri === id).map((n) => ({ id, createdBy: n.createdBy }))[0]).filter(Boolean) };
+          if ((p.nodeTypes || []).includes('user-profile')) return { nodes: [{ id: COLLEAGUE, title: 'Rob Jansen', userProfile: {} }] };
+          throw new Error('the Inbox is a live query, not a listing: ' + JSON.stringify(p));
+        } },
+        sync: { getDocument: () => null, subscribe: async (id) => ({ id, data: new Map([['createdInUri', (inbox.find((n) => n.uri === id) || {}).createdInUri]]) }) },
+      } });
+    backend.S.notify = (id, title, body) => notified.push([title, body]);
+    await backend.announceNewInbox(rows());
+    assert.deepEqual(notified, [], 'the first look is a baseline, whatever made what is already there');
+    inbox = [...inbox, task('Complete InsiderLog items', ME, MCP_CHAT), task('Share the budget', ME, undefined),
+      task('Review the contract', COLLEAGUE, undefined), task('Send the transcript', ME, MEETING_CHAT), task('Last month', COLLEAGUE, undefined, 40 * 24 * 60 * 60 * 1000)];
+    await backend.announceNewInbox(rows());
+    assert.deepEqual(notified, [
+      ['Complete InsiderLog items', 'New in Inbox · Via MCP: Nedap Compliance'],
+      ['Review the contract', 'New in Inbox · From Rob Jansen'],
+      ["Send the transcript", "New in Inbox · From Tana's AI"],
+    ], 'your agent, a colleague and Tana\'s AI are announced; what you made by hand and an old task back in the Inbox are not');
+    await backend.announceNewInbox(rows());
+    assert.equal(notified.length, 3, 'and each once');
+    inbox = [...inbox, ...[1, 2, 3, 4].map((i) => task('Mail ' + i, COLLEAGUE, undefined))];
+    await backend.announceNewInbox(rows());
+    assert.equal(notified.length, 6, 'a burst is capped at three banners');
+    console.log('ok  new Inbox tasks: announced when someone else, an MCP agent or Tana\'s AI made them; yours by hand stay quiet');
+  }
+
+
   // Handing a node to the local Codex agent: an app-local mark in the settings table, never a Tana assignee, and one
   // the view refresh's unsubscribe sweep is not allowed to drop.
   {

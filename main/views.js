@@ -5,9 +5,10 @@ const { peerIdentity } = require('../tana-session');
 const { createTanaClient } = require('../sdk');
 const { parseQuery, searchParams, needsTypes, viewParams, completedInWindow, filterToSearchQuery, validViewFilter, VIEW_PRESETS, hideRules, isHidden } = require('../sdk/query');
 const { LIVE_ROWS, NOT_CONNECTED, S, deletedNodes, docStates, errText, idKind, isDeleted, isMcp, memberTitle, now, reading, truncatedViews, typeTitles, redoStack, report, send, setStatus, subscribed, undoStack, visibleGraphNodes } = require('./state');
-const { graphRow, rememberNodeHue, resolveTypes, toNode, typesByTitle } = require('./rows');
-const { codexIds, createDocument, inHistory, notifySilencedIds, notifyWatchedIds, onChange, subscribe } = require('./documents');
+const { graphRow, members, rememberNodeHue, resolveTypes, toNode, typesByTitle } = require('./rows');
+const { codexIds, createDocument, creatorOf, document, inHistory, notifySilencedIds, notifyWatchedIds, onChange, subscribe } = require('./documents');
 const settings = require('./settings');
+const { openLiveQuery } = require('../sdk/livequery');
 
 
 // Persisted view filters are merged over their preset; an invalid saved value cannot strand a view across restarts.
@@ -185,6 +186,7 @@ async function start() {
   try { await settings.hydrate(); } catch (e) { report(e); }
   // Watched nodes are live from boot, listed or not: a deleted or unreachable one is simply not watched any more.
   for (const id of new Set([...notifyWatchedIds(), ...codexIds()])) S.client.sync.subscribe(id).catch(() => {});
+  watchInbox().catch(report); // new Inbox tasks, pushed by Tana as they land
   await refresh();
 }
 
@@ -226,6 +228,52 @@ async function refreshWatched() {
     ruleWatched.add(n.id);
     if (!subscribed.has(n.id)) { subscribed.add(n.id); subscribe(n.id); }
   }
+}
+// A new task in your Inbox is announced unless you made it yourself (issue #133). Your mail agent writes through Tana's
+// MCP with your login, so createdBy is you for its tasks too; what gives it away is data.createdInUri, the chat the
+// task was written in ("MCP: …", invocationContext.intent 'mcp'). A task you made by hand has no creating chat. Every
+// MCP client counts: Tana does not record which one wrote. The first answer is a baseline, a task over a day old is
+// not new whatever state it comes back in, and a burst (back from a week away) is capped rather than buried on screen.
+// The Inbox arrives as a live query (sdk/livequery.js, opened in start): Tana pushes a new row the moment a task lands, so
+// nothing polls. Its rows carry no creator, which creatorOf answers from the graph (cached).
+// ponytail: seen = the newest 50 Inbox ids of the last answer; a task leaving and re-entering the Inbox within its
+// first day is announced twice. Keep a dated set if that ever happens in practice.
+const NEW_TASK_MS = 24 * 60 * 60 * 1000, NEW_TASK_MAX = 3;
+const INBOX_QUERY = (me) => ({ types: ['text'], stateTypes: ['proposed'], assignedTo: [me], orderBy: ['-createdAt'], limit: 50 });
+async function watchInbox() {
+  const client = S.client, me = S.me && S.me.userUri;
+  if (!client || !me) return;
+  const live = await openLiveQuery(client.sync, INBOX_QUERY(me), { label: 'Orbital new Inbox tasks' });
+  if (S.client !== client) return live.close().catch(() => {}); // a second login got here first
+  live.on('rows', () => { if (S.client === client) announceNewInbox(live.state().nodes).catch(report); });
+  live.on('error', report);
+}
+// rows: the live query's answer, newest first ({ uri, title, createdAt } in epoch ms)
+async function announceNewInbox(rows) {
+  const me = S.me && S.me.userUri;
+  if (!me || !S.notify) return;
+  const stored = db.setting('inboxSeen');
+  db.setSetting('inboxSeen', rows.map((r) => r.uri)); // before any wait: a second answer arriving meanwhile compares against this one
+  if (!Array.isArray(stored)) return;
+  const seen = new Set(stored);
+  const fresh = rows.filter((r) => !seen.has(r.uri) && Date.now() - r.createdAt < NEW_TASK_MS).map((r) => ({ id: r.uri, title: r.title }));
+  let shown = 0; // counts banners, not candidates: your own quiet tasks do not use up the cap
+  for (const n of fresh) try {
+    if (shown >= NEW_TASK_MAX) break;
+    let from;
+    const creator = await creatorOf(n.id);
+    if (creator && creator !== me) {
+      from = 'From ' + ((await members().catch(() => [])).find((m) => m.id === creator)?.title || 'someone else');
+    } else {
+      const chatUri = (await document(n.id)).data.get('createdInUri');
+      if (!chatUri) continue; // yours, by hand
+      const chat = (await S.client.graph.listNodes({ nodeIds: [chatUri], nodeTypes: ['chat'], includeOwnedChats: true, limit: 1 })).nodes[0];
+      const topic = /^MCP:\s*(.+)/i.exec((chat && chat.title) || '')?.[1]; // the chat's title names what the agent was doing
+      from = chat && isMcp(chat) ? 'Via MCP' + (topic ? ': ' + topic : '') : "From Tana's AI";
+    }
+    S.notify(n.id, n.title || 'Untitled', 'New in Inbox · ' + from);
+    shown++;
+  } catch { /* one unreadable task costs its own banner, not the ones after it */ }
 }
 async function doRefresh() {
   setStatus({ syncing: true, error: null });
@@ -316,4 +364,4 @@ async function setMcpHidden(on) {
 // ponytail: on-demand subscriptions last for the S.session; drop the oldest if a long S.session ever holds too many.
 
 
-module.exports = { preset, viewFilter, setViewFilter, hiddenRules, mcpHidden, viewRows, inboxCount, search, searchList, searchCreate, searchTitle, start, refresh, doRefresh, listFilter, setHidden, setMcpHidden };
+module.exports = { announceNewInbox, watchInbox, preset, viewFilter, setViewFilter, hiddenRules, mcpHidden, viewRows, inboxCount, search, searchList, searchCreate, searchTitle, start, refresh, doRefresh, listFilter, setHidden, setMcpHidden };
