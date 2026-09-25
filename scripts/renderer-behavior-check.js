@@ -1487,7 +1487,7 @@ async function runSyncShortcutCheck() {
     ({ rows: async (q) => { paletteRows(q); await Promise.resolve(); await Promise.resolve(); return paletteRows(q).map((r) => r.label); }, loads: () => loads,
        ids: (q) => paletteRows(q).map((r) => r.id), press: async (id) => { const hit = runAction(id); await Promise.resolve(); return [hit, ran.splice(0)]; } });
   `);
-  assert.deepEqual(plain(await folded.rows('s')), ['Sync', 'Search Tana', 'Smaller text', 'Hide sidebar', 'Reset text size', 'Set status', 'Filter rows by text'],
+  assert.deepEqual(plain(await folded.rows('s')), ['Sync', 'Swap panes', 'Search Tana', 'Smaller text', 'Hide sidebar', 'Reset text size', 'Toggle split view', 'Set status', 'Filter rows by text'],
     'one letter: the first level only, the groups whose best row starts with it first (the shortest such row leading), a letter inside a word last');
   assert.deepEqual(plain(await folded.rows('sesp')), ['Set status to In Progress'], 'two letters in: the level below is folded in and the query reaches into it');
   assert.deepEqual(plain(await folded.rows('seinb')), ['Set status to Inbox'], 'a disabled choice is left out, the others are single rows');
@@ -1557,7 +1557,7 @@ async function runSyncShortcutCheck() {
     'Views: Inbox', 'Views: Today', 'Views: This week', 'Views: Library',
     'View options: Filter by type', 'View options: Filter rows by text',
     'Actions: Log in to Tana', 'Actions: Create new …', 'Actions: Search Tana', 'Actions: Go back', 'Actions: Go forward', 'Actions: Go to Home', 'Actions: Focus the sidebar', 'Actions: Hide sidebar', 'Actions: Set as Home',
-    'Actions: Undo', 'Actions: Redo', 'Actions: Sync', 'Actions: Reload', 'Actions: New window', 'Actions: Edit hidden items', 'Actions: Toggle sensitive visibility', 'Actions: Toggle demo mode',
+    'Actions: Undo', 'Actions: Redo', 'Actions: Sync', 'Actions: Reload', 'Actions: New window', 'Actions: Toggle split view', 'Actions: Go to the other half', 'Actions: Swap panes', 'Actions: Edit hidden items', 'Actions: Toggle sensitive visibility', 'Actions: Toggle demo mode',
     'Actions: Larger text', 'Actions: Smaller text', 'Actions: Reset text size', 'Actions: Toggle dark mode',
   ], 'the palette lists its rows in one fixed, meaningful order');
   // The two date pins differ only in the day they name: today's row passes no date (main defaults to today), the
@@ -1769,6 +1769,7 @@ async function runReservedComboCheck() {
 // way of navigating counts; going back then somewhere new drops the forward places, like a browser.
 function runHistoryCheck() {
   const api = vm.runInNewContext(`
+    const SIDE = ''; // renderer/state.js: a page on its own, not the right half of a split
     let view = 'tasks', zoom = null, caretOnOpen = false, rendered = 0;
     const INBOX_PAGE = 'orbital:notifications', PROPOSALS_PAGE = 'orbital:proposals', TIMELINE_PAGE = 'orbital:timeline';
     let notificationLeaves = 0;
@@ -4090,6 +4091,7 @@ async function runRestorePlaceCheck() {
   const seed = source.match(/if \(savedPlace && isPlaceId\(savedPlace\.docId\)[\s\S]*?\n\}/);
   assert.ok(seed, 'a launch draws the page it is reopening before anything is fetched');
   const api = vm.runInNewContext(`
+    const SIDE = ''; // renderer/state.js: a page on its own, not the right half of a split
     let view = 'inbox', zoom = null, rendered = 0, fetches = 0, nodeResolve = null, nodeMode = 'auto', docs = [], savedPlace = null, connected = true;
     const storage = new Map();
     const localStorage = {
@@ -4926,6 +4928,7 @@ async function runCreateTaskFlowCheck() {
     let release;
     const context = { creationGate: delayed ? new Promise((resolve) => { release = resolve; }) : Promise.resolve() };
     vm.runInNewContext(`
+    const SIDE = ''; // renderer/state.js: a page on its own, not the right half of a split
       const listeners = {}, created = [], saved = [];
       const rowEl = { isContentEditable: true, dataset: { key: 'tana:text:01j0row000000000000000000' }, textContent: 'existing' };
       const titleEl = { isContentEditable: false, dataset: { key: '' }, textContent: '', classList: { remove: () => {} },
@@ -5680,8 +5683,10 @@ function runRailChangesCheck() {
 // Stored as the target's own id, so a rename in Tana shows through and a deletion is something the app can see.
 async function runHomeCheck() {
   const homeInit = source.match(/let home = pref\('home', 'library'\);/)[0];
-  const seed = source.match(/if \(!savedPlace && isRealId\(home\)\) savedPlace = [^\n]*/)[0];
+  const seed = source.match(/if \(!savedPlace && isRealId\(home\) && !IN_SPLIT\) savedPlace = [^\n]*/)[0];
   const api = vm.runInNewContext(FAKE_DOM + `
+    const SIDE = ''; // renderer/state.js: a page on its own, not the right half of a split
+    const IN_SPLIT = false;
     const stored = {};
     const localStorage = { getItem: (k) => (k in stored ? stored[k] : null), setItem: (k, v) => { stored[k] = v; }, removeItem: (k) => { delete stored[k]; } };
     const prefs = {}; const pref = (k, fb) => (k in prefs ? prefs[k] : fb); const setPref = (k, v) => { prefs[k] = v; stored[k] = v; };
@@ -7484,6 +7489,7 @@ async function runSetHueCheck() {
 // this, a deleted page opened as an empty outline whose metadata read failed on every backoff, for the whole session.
 async function runDeletedNodeCheck() {
   const api = vm.runInNewContext(`
+    const SIDE = ''; // renderer/state.js: a page on its own, not the right half of a split
     const deletedIds = new Set();
     const INBOX_PAGE = 'orbital:notifications', PROPOSALS_PAGE = 'orbital:proposals', TIMELINE_PAGE = 'orbital:timeline';
     const markAllNotificationsRead = () => {};

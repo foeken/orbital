@@ -37,7 +37,11 @@ let searchesLoaded = false;  // whether that list has answered once: until it ha
 // what it reads. It is the anchor crumb on every zoomed page, where Back lands with nothing to go back to, and the
 // page a launch opens with no place to restore. The Library is the default and the fallback (nodes.js).
 let home = pref('home', 'library');
-let view = localStorage.getItem('view') || 'library'; // active view id; the outline shows one view at a time
+// The right half of a split (main.js addPane, api.side) keeps its own view and place, so a restart reopens both halves
+// where they were; main says so when a page changes sides (onSide in renderer/app.js).
+let SIDE = typeof window !== 'undefined' && window.api && window.api.side ? ':' + window.api.side : '';
+const IN_SPLIT = typeof window !== 'undefined' && !!(window.api && window.api.inSplit);
+let view = localStorage.getItem('view' + SIDE) || 'library'; // active view id; the outline shows one view at a time
 // Views that no longer exist. A stored one would leave the app on a page with no filter, no rows and no way back,
 // so it lands in the Library, which lists every kind those pages used to list one of.
 // Tasks lands in the Library rather than the Inbox: the two listed almost the same thing (your tasks, proposed and
@@ -65,7 +69,7 @@ const hotkeys = { ...pref('hotkeys', {}) }; // palette row id -> combo ("⇧⌘M
 // The built-in keys are palette rows with a default combo, in the same map the recorder edits: a recorded combo
 // overrides the default, and Reset in the recorder restores it. What is not here is fixed on purpose (⌘K, ⇧⌘K,
 // the text-size keys, ⇧⌘⌫ and the ⇧⌘↑/↓ moves, which act on blocks the palette does not address).
-const DEFAULT_HOTKEYS = { search: '⌘S', filter: '⌘F', copyLink: '⌘C', back: '⌘[', forward: '⌘]', undo: '⌘Z', redo: '⇧⌘Z', expand: '⌘↓', collapse: '⌘↑', toggleDone: '⌘↩', today: '⌃⇧D', reload: '⌘R', newWindow: '⌘N' }; // "Focus the sidebar" is a palette row with no default key
+const DEFAULT_HOTKEYS = { search: '⌘S', filter: '⌘F', copyLink: '⌘C', back: '⌘[', forward: '⌘]', undo: '⌘Z', redo: '⇧⌘Z', expand: '⌘↓', collapse: '⌘↑', toggleDone: '⌘↩', today: '⌃⇧D', reload: '⌘R', newWindow: '⌘N', splitView: '⌥⌘N', otherPane: '⌘\\' }; // "Focus the sidebar" is a palette row with no default key
 const hotkeyFor = (id) => (Object.hasOwn(hotkeys, id) ? hotkeys[id] : DEFAULT_HOTKEYS[id]);
 const hotkeyIds = () => [...new Set([...Object.keys(DEFAULT_HOTKEYS), ...Object.keys(hotkeys)])];
 let pinInfo = null;          // { docId, sidebar, dates } of the palette's document (api.pinState)

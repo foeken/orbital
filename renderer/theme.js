@@ -9,6 +9,8 @@ function applyTheme(next) {
   theme = next === 'dark' ? 'dark' : 'light';
   if (theme === 'dark') document.documentElement.dataset.theme = 'dark';
   else delete document.documentElement.dataset.theme;
+  // window.api, not tana: this runs at load, before renderer/state.js declares it. Main colours the split line with it.
+  if (typeof window !== 'undefined' && window.api && window.api.windowTheme) window.api.windowTheme(theme);
   const pal = document.getElementById('palette'); // by id: this also runs before the palette const exists
   if (pal && !pal.hidden) renderPalette();
 }

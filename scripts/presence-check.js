@@ -142,6 +142,19 @@ const ME = peer(1234567, 1), MY_OTHER_TAB = peer(1234567, 2), OTHER = peer(76543
     presence.view(DOC); presence.view(DOC);
     assert.equal(sent.filter((s) => s[0] === 'view').length, 1, 'the page on screen gets the heartbeat, once per change of page');
     presence.view(null);
+    // a split (issue #159): the heartbeat is the last asker's. The other half letting go leaves it running; the half that
+    // has it letting go stops it and asks every page to say again what it views, and the one still on screen takes it.
+    const beats = () => sent.filter((s) => s[0] === 'view').length;
+    presence.view('tana:text:left', 1); presence.view(DOC, 2);
+    const running = beats(); told.length = 0;
+    presence.view(null, 1); presence.view(DOC, 2);
+    assert.equal(beats(), running, 'the left half closing leaves the right half beating: no restart, no stop');
+    assert.equal(told.some((t) => t[0] === 'presence:ask'), false, 'nothing to hand over');
+    presence.view(null, 2);
+    assert.ok(told.some((t) => t[0] === 'presence:ask'), 'the half with the heartbeat closing asks the others back');
+    presence.view('tana:text:left', 1);
+    assert.deepEqual(sent.filter((s) => s[0] === 'view').at(-1), ['view', 'tana:text:left'], 'and the half left on screen takes it');
+    presence.view(null, 1);
     // content.cursorAt: text runs, a mention counted as its label, and past the end
     const at = (o) => { const c = content.cursorAt(page, b3, o); return c && page.loro.getCursorPos(c).offset; };
     assert.deepEqual([at(0), at(3), at(4), at(6), at(12), at(99)], [0, 3, 1, 0, 6, 3], 'text run, end of run, inside the mention (list index), right after it, end, past the end');

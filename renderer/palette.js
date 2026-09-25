@@ -318,6 +318,10 @@ function paletteRows(q, typed = q) {
   rows.push({ id: 'sync', group: 'Actions', icon: 'sync', label: 'Sync', run: () => run(() => tana.refresh()) });
   rows.push({ id: 'reload', group: 'Actions', icon: 'reload', label: 'Reload', run: () => location.reload() });
   rows.push({ id: 'newWindow', group: 'Actions', icon: 'createNew', label: 'New window', run: () => tana.newWindow() });
+  // the new right half opens on this page: it reads the right half's view and place, so this page is stored there first
+  rows.push({ id: 'splitView', group: 'Actions', icon: 'rail', label: 'Toggle split view', run: () => { localStorage.setItem('view:2', view); rememberPlace('place:2'); tana.splitWindow(); } });
+  rows.push({ id: 'otherPane', group: 'Actions', icon: 'rail', label: 'Go to the other half', run: () => tana.otherPane() });
+  rows.push({ id: 'swapPanes', group: 'Actions', icon: 'rail', label: 'Swap panes', run: () => tana.swapPanes() });
   // the list of titles hidden from every view and from search, edited in the palette itself
   if (tana.filters) rows.push({ id: 'hidden', group: 'Actions', icon: 'hiddenItems', label: 'Edit hidden items', keepOpen: true, run: openHiddenPalette });
   if (tana.codexHosts) rows.push({ id: 'codexHosts', group: 'Actions', icon: 'host', label: 'Manage Codex hosts', keepOpen: true, run: openHostsPalette });
@@ -695,7 +699,7 @@ function creationSection() {
 function startCreation(choice) {
   const section = creationSection(), tags = choice.kind === 'custom' ? [{ label: choice.title, hue: choice.hue }] : undefined;
   const node = draftDocNode(choice.kind, { typeUri: choice.typeUri, icon: choice.icon, tags });
-  section.nodes.unshift(node); view = section.id; localStorage.setItem('view', view);
+  section.nodes.unshift(node); view = section.id; localStorage.setItem('view' + SIDE, view);
   // render(true), like every other action that changes the page: closePalette puts the caret back in the row ⌘K was
   // opened from, and an ordinary render defers while a row holds the caret. The draft page was then never drawn, the
   // caret never reached its title, and the empty draft sat in the view as a node nobody created.

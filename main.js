@@ -2,7 +2,7 @@
 // Electron main: the process boundary. Everything that knows Tana lives in main/ (state, rows, documents, related,
 // views, pins, images); this file owns the window, the menu, the IPC table and the boot sequence, plus the test hook
 // that scripts/sdk-check.js and the CLI use to drive the same modules without a window.
-const { app, BrowserWindow, Menu, Notification, globalShortcut, ipcMain, nativeTheme, screen, shell } = require('electron');
+const { app, BaseWindow, BrowserWindow, Menu, Notification, WebContentsView, globalShortcut, ipcMain, nativeTheme, screen, shell } = require('electron');
 const path = require('node:path');
 const db = require('./db');
 const { createTanaSession } = require('./tana-session');
@@ -49,38 +49,95 @@ function restoredBounds(saved, workAreas) {
   return onScreen ? { x, y, width, height } : DEFAULT_WINDOW;
 }
 
-// Outliner windows (issue #137): Cmd+N opens another, a little down and right of the one in front. What main pushes is
-// shared state and goes to all of them (main/state.js send); S.win is the one used last, which a notification click
-// opens in. Each window's view is refreshed and kept live (main/views.js openViews), and each keeps its own sidebar
-// watch (main/related.js). The first window takes the saved bounds; the one closed last saves them.
+// Outliner windows (issue #137): Cmd+N opens another, a little down and right of the one in front. A window holds one
+// page, or two side by side (issue #159): a BaseWindow with a WebContentsView per page, each a whole outliner with its
+// own view, place and history. Main already keys a page by its webContents id (the view it shows, its sidebar watch),
+// so a page beside another is to them what a page in another window is. What main pushes is shared state and goes to
+// every page (main/state.js send); S.win is the window used last and S.pane its page, which a notification click opens
+// in. The first window takes the saved bounds; the one closed last saves them.
 S.windows = new Set();
-S.windowViews = new Map(); // webContents id -> { id, filter }: the view that window shows
+S.windowViews = new Map(); // webContents id -> { id, filter }: the view that page shows
+const SPLIT_GAP = 1; // the hairline between two pages: the window's own background showing through
+const MIN_PANE = 320; // neither half is dragged narrower than this (renderer/app.js splitGrip)
+const SPLIT_LINE = { light: '#ececec', dark: '#2b2f31' }; // the sidebar's border (styles.css .rail), in the page's theme
+const paneWindow = (wc) => [...S.windows].find((w) => w.panes.some((p) => p.webContents === wc));
+// win.splitAt: the left half's share of the width, dragged by the grip and saved with the window (even by default)
+function layout(win) {
+  const { width, height } = win.getContentBounds(), [left, right] = win.panes;
+  if (!right) return left && left.setBounds({ x: 0, y: 0, width, height });
+  const min = Math.min(MIN_PANE, Math.floor((width - SPLIT_GAP) / 2));
+  const w = Math.max(min, Math.min(width - SPLIT_GAP - min, Math.round((width - SPLIT_GAP) * (win.splitAt ?? 0.5))));
+  left.setBounds({ x: 0, y: 0, width: w, height });
+  right.setBounds({ x: w + SPLIT_GAP, y: 0, width: width - w - SPLIT_GAP, height });
+}
+function addPane(win, side) {
+  const pane = new WebContentsView({ webPreferences: { preload: path.join(__dirname, 'preload.js') } });
+  pane.side = side; // '2': the right half, which keeps its own view and place (renderer/state.js SIDE)
+  pane.webContents.on('focus', () => { S.win = win; S.pane = pane.webContents; });
+  win.panes.push(pane); win.contentView.addChildView(pane); layout(win);
+  pane.webContents.loadFile(path.join(__dirname, 'index.html'));
+  if (win.saveBounds) win.saveBounds();
+  return pane;
+}
+// A WebContentsView's page outlives its window unless it is closed by hand.
+function removePane(win, pane) {
+  const wc = pane.webContents, key = wc.id;
+  win.panes = win.panes.filter((p) => p !== pane);
+  if (!win.isDestroyed()) { win.contentView.removeChildView(pane); layout(win); }
+  const left = win.panes.length === 1 && win.panes[0];
+  if (left && left.side) { left.side = ''; left.webContents.send('window:side', ''); } // the right half, alone now, is the window's page
+  if (win.saveBounds && !win.isDestroyed()) win.saveBounds();
+  S.windowViews.delete(key); unwatchRelated(key);
+  if (S.pane === wc) S.pane = win.panes[0]?.webContents || null;
+  // waitForBeforeUnload: the page gets its beforeunload (renderer/app.js), which sends the characters still waiting on
+  // the 400 ms edit timer and lets go of its presence room and heartbeat before it is gone
+  if (!wc.isDestroyed()) wc.close({ waitForBeforeUnload: true });
+}
+const frontPane = () => S.win && !S.win.isDestroyed() ? (S.win.panes.find((p) => p.webContents === S.pane) || S.win.panes[0])?.webContents : null;
 function createWindow() {
   const saved = db.setting('window'), front = S.windows.size ? S.win : null;
   const bounds = front && !front.isDestroyed() ? { ...front.getNormalBounds(), x: front.getNormalBounds().x + 24, y: front.getNormalBounds().y + 24 } : restoredBounds(saved, screen.getAllDisplays().map((d) => d.workArea));
-  const win = new BrowserWindow({
-    ...bounds, title: 'Orbital', titleBarStyle: 'hiddenInset',
-    webPreferences: { preload: path.join(__dirname, 'preload.js') },
-  });
-  const key = win.webContents.id;
-  S.windows.add(win); S.win = win;
-  if (!front && saved && saved.maximized) win.maximize();
+  const win = new BaseWindow({ ...bounds, title: 'Orbital', titleBarStyle: 'hiddenInset', backgroundColor: SPLIT_LINE.light });
+  win.panes = [];
   // saved shortly after a move or resize settles, and once more on close, so a quit or an update relaunch keeps it
   let boundsTimer = null;
-  const saveBounds = () => { clearTimeout(boundsTimer); boundsTimer = null; if (!win.isDestroyed()) db.setSetting('window', { ...win.getNormalBounds(), maximized: win.isMaximized() }); };
-  for (const name of ['resize', 'move', 'maximize', 'unmaximize']) win.on(name, () => { clearTimeout(boundsTimer); boundsTimer = setTimeout(saveBounds, 500); });
+  const saveBounds = () => { clearTimeout(boundsTimer); boundsTimer = null; if (!win.isDestroyed()) db.setSetting('window', { ...win.getNormalBounds(), maximized: win.isMaximized(), split: win.panes.length > 1, splitAt: win.splitAt }); };
+  const saveSoon = () => { clearTimeout(boundsTimer); boundsTimer = setTimeout(saveBounds, 500); };
+  if (!front && saved && Number.isFinite(saved.splitAt)) win.splitAt = saved.splitAt;
+  S.windows.add(win); S.win = win; S.pane = addPane(win, '').webContents;
+  if (!front && saved && saved.split) addPane(win, '2'); // the split comes back with the frame it was saved with
+  win.saveBounds = saveBounds; win.saveSoon = saveSoon; // a split opened, closed or dragged is saved too
+  if (!front && saved && saved.maximized) win.maximize();
+  for (const name of ['resize', 'move', 'maximize', 'unmaximize']) win.on(name, saveSoon);
+  win.on('resize', () => layout(win));
   win.on('close', saveBounds);
-  win.on('page-title-updated', (e) => e.preventDefault());
   win.on('focus', () => { S.win = win; refresh(); });
   // The quick-add panel is a window of its own, and a hidden one still counts as open: without this, closing the
   // outliner after the panel had been summoned once would leave the app running invisibly instead of quitting.
   win.on('closed', () => {
-    S.windows.delete(win); S.windowViews.delete(key); unwatchRelated(key);
-    if (S.win === win) S.win = [...S.windows].at(-1) || null;
+    // right half first: the left one closing first would leave the right one alone for a moment, and removePane would
+    // hand it the left half's keys, so it saved its page over the left one's and a restart opened both on it
+    for (const p of [...win.panes].reverse()) removePane(win, p);
+    S.windows.delete(win);
+    if (S.win === win) { S.win = [...S.windows].at(-1) || null; S.pane = frontPane(); }
     if (S.windows.size) return;
     const panel = quick.panelState.win; if (panel && !panel.isDestroyed()) panel.destroy();
   });
-  win.loadFile(path.join(__dirname, 'index.html'));
+}
+// ⌥⌘N (issue #159): a second page beside the one that asked, opening where it was (the renderer stores its place
+// first), or back to one page, the one that asked.
+function toggleSplit(wc) {
+  const win = paneWindow(wc);
+  if (!win) return;
+  if (win.panes.length > 1) { for (const p of win.panes) if (p.webContents !== wc) removePane(win, p); return; }
+  const pane = addPane(win, '2');
+  pane.webContents.once('did-finish-load', () => pane.webContents.focus()); // keyboard first: the new page takes the keys
+}
+// Cmd+W closes the page you are in when there are two, and the window otherwise.
+function closeFront(win) {
+  if (!win) return;
+  const pane = win.panes && win.panes.length > 1 && win.panes.find((p) => p.webContents === S.pane);
+  if (pane) removePane(win, pane); else win.close();
 }
 
 // Quick add (docs/QUICK-ADD.md): a second, frameless window the global shortcut summons from any app. It is not a
@@ -113,7 +170,7 @@ function createMenu() {
       { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' },
       { type: 'separator' }, { role: 'quit' },
     ] },
-    { label: 'File', submenu: [{ label: 'New Window', accelerator: 'CmdOrCtrl+N', registerAccelerator: false, click: () => createWindow() }, { type: 'separator' }, { role: 'close' }] },
+    { label: 'File', submenu: [{ label: 'New Window', accelerator: 'CmdOrCtrl+N', registerAccelerator: false, click: () => createWindow() }, { type: 'separator' }, { label: 'Close', accelerator: 'CmdOrCtrl+W', click: () => closeFront(BaseWindow.getFocusedWindow()) }] },
     { role: 'editMenu' },
     { role: 'windowMenu' },
   ]));
@@ -171,6 +228,39 @@ ipcMain.handle('icons:types', () => icons.typeIcons());
 // first paint) and one write per change.
 // the menu shows ⌘N but leaves the key to the renderer's New window row (DEFAULT_HOTKEYS), so it can be re-recorded
 ipcMain.handle('window:new', () => { createWindow(); });
+ipcMain.handle('window:split', (e) => { toggleSplit(e.sender); });
+// ⌘\: the keys go to the other half of a split (nothing to do in a window with one page)
+ipcMain.handle('window:otherPane', (e) => { const other = paneWindow(e.sender)?.panes.find((p) => p.webContents !== e.sender); if (other) other.webContents.focus(); });
+// asked by preload.js on every load, a Reload included: which side this page is ('' left or alone, '2' the right half)
+// and whether it is half of a split. A restart adds both halves before either loads, so a restored split says so.
+ipcMain.on('window:getSide', (e) => {
+  const win = paneWindow(e.sender);
+  e.returnValue = { side: win?.panes.find((p) => p.webContents === e.sender)?.side || '', split: !!win && win.panes.length > 1 };
+});
+// Cmd+K Swap panes: the halves change sides, and each takes the other's side marker, so a restart keeps them there
+ipcMain.handle('window:swapPanes', (e) => {
+  const win = paneWindow(e.sender);
+  if (!win || win.panes.length < 2) return;
+  win.panes.reverse();
+  if (win.splitAt != null) win.splitAt = 1 - win.splitAt; // each half keeps its width
+  win.panes.forEach((p, i) => { p.side = i ? '2' : ''; p.webContents.send('window:side', p.side); });
+  layout(win);
+  win.saveSoon();
+});
+// The grip on the right half's left edge (renderer/app.js splitGrip): 'start', 'move' or 'even'. The cursor is read
+// here, from the screen, rather than from the page: the page moves under the pointer as it is dragged, so its own
+// coordinates run ahead of the drag. The share kept is the one on screen, clamped, so a restart draws the same line.
+ipcMain.on('window:splitDrag', (e, phase) => {
+  const win = paneWindow(e.sender);
+  if (!win || win.panes.length < 2) return;
+  const b = win.getContentBounds(), room = b.width - SPLIT_GAP, x = screen.getCursorScreenPoint().x - b.x;
+  if (phase === 'start') { win.dragOffset = x - win.panes[0].getBounds().width; return; }
+  if (phase === 'even') win.splitAt = undefined;
+  else { const min = Math.min(MIN_PANE, Math.floor(room / 2)); win.splitAt = Math.max(min, Math.min(room - min, x - (win.dragOffset || 0))) / room; }
+  layout(win); win.saveSoon();
+});
+// a page says which theme it drew itself in (renderer/theme.js), and the line between split pages follows it
+ipcMain.on('window:theme', (e, theme) => { const win = paneWindow(e.sender); if (win) win.setBackgroundColor(SPLIT_LINE[theme] || SPLIT_LINE.light); });
 // Demo mode lives in the outliner (renderer/state.js); main only needs to know it is on, so no banner shows a real title.
 ipcMain.on('app:demoMode', (_e, on) => { S.demo = on === true; });
 ipcMain.on('prefs:snapshot', (e) => { e.returnValue = settings.prefs(); });
@@ -428,7 +518,7 @@ ipcMain.handle('ai:classifyType', async (_e, id) => ai.classifyType(await typeCa
 const presence = require('./main/presence');
 ipcMain.handle('presence:open', (_e, id) => presence.open(id));
 ipcMain.handle('presence:close', (_e, id) => presence.close(id));
-ipcMain.handle('presence:view', (_e, id) => presence.view(id));
+ipcMain.handle('presence:view', (e, id) => presence.view(id, e.sender.id)); // per page: one half going away cannot end the other's heartbeat
 ipcMain.handle('presence:set', (_e, id, at) => presence.set(id, at && typeof at.blockId === 'string' ? { blockId: at.blockId, anchor: Number(at.anchor) || 0, focus: Number(at.focus) || 0 } : null));
 ipcMain.handle('doc:exportPdf', (_e, id) => require('./main/pdf').exportPdf(id, S.win));
 // The web link for a node, the same url home.tana.inc opens: /o/<org>/<route>/<encoded node uri>. The route is Tana's
@@ -519,7 +609,7 @@ if (process.env.TANA_MAIN_TEST) {
       if (kind === 'summary' && clickedEdits.has(id)) return;
       if (kind === 'edit') clickedEdits.delete(id);
       const note = new Notification({ id, title, subtitle, body, silent: kind === 'summary' });
-      note.on('click', () => { if (id) clickedEdits.add(id); if (S.win && !S.win.isDestroyed()) { S.win.show(); S.win.focus(); S.win.webContents.send('notify:open', docId); } }); // the window used last, not all of them
+      note.on('click', () => { if (id) clickedEdits.add(id); const wc = frontPane(); if (wc) { S.win.show(); S.win.focus(); wc.focus(); wc.send('notify:open', docId); } }); // the page used last, not all of them
       note.show();
     };
     S.userData = app.getPath('userData');

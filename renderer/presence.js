@@ -37,6 +37,9 @@ function viewPresence() {
 }
 for (const type of ['keydown', 'mousedown', 'mousemove', 'wheel']) document.addEventListener(type, () => { const idle = Date.now() - lastActive >= ACTIVE_MS; lastActive = Date.now(); if (idle) viewPresence(); }, { passive: true, capture: true });
 document.addEventListener('visibilitychange', viewPresence);
+// Main ran the heartbeat for another page, and that page stopped it (closed, or moved off a document): this one says
+// again what it views, since it told main once and would not repeat itself.
+if (tana.onPresenceAsk) tana.onPresenceAsk(() => { presenceViewed = undefined; viewPresence(); });
 setInterval(viewPresence, 10000); // notices the minute of inactivity running out
 // Where a character offset is inside a row's text, as a screen rectangle: the text as the row shows it, mention labels
 // included and the caret anchors the editor keeps left out (segments.js CARET_ANCHOR). Past the end: the end.

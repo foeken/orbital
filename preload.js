@@ -1,6 +1,9 @@
 const { contextBridge, ipcRenderer, webFrame } = require('electron');
+const pane = ipcRenderer.sendSync('window:getSide'); // { side, split }: this page's place in its window (main.js)
 
 contextBridge.exposeInMainWorld('api', {
+  side: pane.side, // '' the left or only page, '2' the right half of a split (renderer/state.js SIDE)
+  inSplit: pane.split, // half of a split when it loaded: it reopens its own view, not Home (renderer/edit.js)
   zoom: (factor) => { webFrame.setZoomFactor(factor); return webFrame.getZoomFactor(); },
   systemTheme: () => ipcRenderer.invoke('theme:system'), // 'dark' | 'light' right now
   onSystemTheme: (fn) => ipcRenderer.on('theme:system', (_e, theme) => fn(theme)), // macOS appearance changed
@@ -22,6 +25,12 @@ contextBridge.exposeInMainWorld('api', {
   setDemoMode: (on) => ipcRenderer.send('app:demoMode', on === true), // demo mode is on in the outliner: main posts no notification banners
   weekNode: (findOnly) => ipcRenderer.invoke('doc:weekNode', findOnly === true), // the "Week 38 (2026)" document (ISO week), created if missing unless findOnly; not linked to the day nodes
   newWindow: () => ipcRenderer.invoke('window:new'), // another outliner window (File › New Window)
+  splitWindow: () => ipcRenderer.invoke('window:split'), // a second page beside this one in the same window, or back to this one alone
+  otherPane: () => ipcRenderer.invoke('window:otherPane'), // the keyboard to the other half of a split
+  swapPanes: () => ipcRenderer.invoke('window:swapPanes'), // the two halves of a split change sides
+  splitDrag: (phase) => ipcRenderer.send('window:splitDrag', phase), // the split grip: 'start', 'move' (main reads the cursor) or 'even'
+  onSide: (cb) => ipcRenderer.on('window:side', (_e, side) => cb(side)), // this page's side changed: '' the left or only page, '2' the right half
+  windowTheme: (theme) => ipcRenderer.send('window:theme', theme), // 'light' | 'dark': the line between split pages matches the page
   openExternal: (url) => ipcRenderer.invoke('shell:open', url), // http(s) link from node text, in the default browser
   exportPdf: (docId) => ipcRenderer.invoke('doc:exportPdf', docId),
   nodeLink: (docId) => ipcRenderer.invoke('doc:link', docId), // the home.tana.inc url for a node
@@ -63,6 +72,7 @@ contextBridge.exposeInMainWorld('api', {
   presenceView: (docId) => ipcRenderer.invoke('presence:view', docId),
   presenceSet: (docId, at) => ipcRenderer.invoke('presence:set', docId, at),
   onPresence: (cb) => ipcRenderer.on('presence:changed', (_e, docId, peers) => cb(docId, peers)),
+  onPresenceAsk: (cb) => ipcRenderer.on('presence:ask', () => cb()), // the viewing heartbeat stopped: say again which page this one views
   viewList: (id, filter) => ipcRenderer.invoke('view:list', id, filter), // { nodes, truncated }
   viewFilter: (id) => ipcRenderer.invoke('view:filter', id),
   setViewFilter: (id, filter) => ipcRenderer.invoke('view:setFilter', id, filter),
