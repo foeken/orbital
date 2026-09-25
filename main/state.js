@@ -60,7 +60,9 @@ const idKind = (id) => id.split(':')[1];
 const memberTitle = (n) => n.title || (n.userProfile && n.userProfile.name) || '';
 const isMcp = (n) => (n.invocationContext && n.invocationContext.intent === 'mcp') || /^MCP:/i.test(n.title || '');
 function send(channel, ...payload) {
-  if (S.win && !S.win.isDestroyed()) S.win.webContents.send(channel, ...payload);
+  // every outliner window (issue #137): what is pushed is shared state; a command for one window is sent to it directly
+  const wins = S.windows && S.windows.size ? S.windows : S.win ? [S.win] : [];
+  for (const w of wins) if (!w.isDestroyed()) w.webContents.send(channel, ...payload);
 }
 // local YYYY-MM-DD, optionally N days from now (1 = tomorrow)
 const today = (offset = 0) => { const d = new Date(); d.setDate(d.getDate() + offset); return d.toLocaleDateString('sv-SE'); };

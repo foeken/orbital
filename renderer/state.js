@@ -40,7 +40,7 @@ const hotkeys = { ...pref('hotkeys', {}) }; // palette row id -> combo ("⇧⌘M
 // The built-in keys are palette rows with a default combo, in the same map the recorder edits: a recorded combo
 // overrides the default, and Reset in the recorder restores it. What is not here is fixed on purpose (⌘K, ⇧⌘K,
 // the text-size keys, ⇧⌘⌫ and the ⇧⌘↑/↓ moves, which act on blocks the palette does not address).
-const DEFAULT_HOTKEYS = { search: '⌘S', filter: '⌘F', copyLink: '⌘C', back: '⌘[', forward: '⌘]', undo: '⌘Z', redo: '⇧⌘Z', expand: '⌘↓', collapse: '⌘↑', toggleDone: '⌘↩', today: '⌃⇧D', reload: '⌘R' }; // "Focus the sidebar" is a palette row with no default key
+const DEFAULT_HOTKEYS = { search: '⌘S', filter: '⌘F', copyLink: '⌘C', back: '⌘[', forward: '⌘]', undo: '⌘Z', redo: '⇧⌘Z', expand: '⌘↓', collapse: '⌘↑', toggleDone: '⌘↩', today: '⌃⇧D', reload: '⌘R', newWindow: '⌘N' }; // "Focus the sidebar" is a palette row with no default key
 const hotkeyFor = (id) => (Object.hasOwn(hotkeys, id) ? hotkeys[id] : DEFAULT_HOTKEYS[id]);
 const hotkeyIds = () => [...new Set([...Object.keys(DEFAULT_HOTKEYS), ...Object.keys(hotkeys)])];
 let pinInfo = null;          // { docId, sidebar, dates } of the palette's document (api.pinState)

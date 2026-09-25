@@ -18,7 +18,7 @@ const ai = require('./main/ai');
 const { NOT_CONNECTED, S, VIEWS, docStates, errText, idKind, isSearch, isSpace, metaSigs, pathCache, today, truncatedViews, redoStack, report, scheduleRefresh, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
 const { cachedNodeHue, graphRow, members, rememberNodeHue, rememberType, toNode } = require('./main/rows');
 const { accessContext, addTypeField, archivedTypes, chatOutline, codexIds, createDocument, creationOptions, creatorOf, defineField, discussWith, documentAction, followSummary, history, info, linkShared, metaSig, moveBlock, moveTarget, mut, mutTasks, notifyOn, notifyState, referenceIn, setCodex, setField, setNotify, onChange, op, outlineWithReferences, sensitiveIds, setSensitive, setType, setTypeHue, typeCandidates, typeChoices, typeList } = require('./main/documents');
-const { callOf, changesOf, pathOf, related, searchChildren, searchPreview, spaceChildren, summaryChanges, summaryUri, watchRelated } = require('./main/related');
+const { callOf, changesOf, pathOf, related, searchChildren, searchPreview, spaceChildren, summaryChanges, summaryUri, unwatchRelated, watchRelated } = require('./main/related');
 const { announceNewInbox, hiddenRules, watchInbox, inboxCount, listFilter, mcpHidden, preset, refresh, search, searchCreate, searchList, searchTitle, setHidden, setMcpHidden, setViewFilter, start, viewFilter, viewRows } = require('./main/views');
 const { nodePin, pinState, pinTree, pinned, pinnedDates, pinnedUris, setPin, todayNode, weekNode, weekTitle } = require('./main/pins');
 const { image, insertImage, cancelUpload } = require('./main/images');
@@ -49,24 +49,38 @@ function restoredBounds(saved, workAreas) {
   return onScreen ? { x, y, width, height } : DEFAULT_WINDOW;
 }
 
+// Outliner windows (issue #137): Cmd+N opens another, a little down and right of the one in front. What main pushes is
+// shared state and goes to all of them (main/state.js send); S.win is the one used last, which a notification click
+// opens in. Each window's view is refreshed and kept live (main/views.js openViews), and each keeps its own sidebar
+// watch (main/related.js). The first window takes the saved bounds; the one closed last saves them.
+S.windows = new Set();
+S.windowViews = new Map(); // webContents id -> { id, filter }: the view that window shows
 function createWindow() {
-  const saved = db.setting('window');
-  S.win = new BrowserWindow({
-    ...restoredBounds(saved, screen.getAllDisplays().map((d) => d.workArea)), title: 'Orbital', titleBarStyle: 'hiddenInset',
+  const saved = db.setting('window'), front = S.windows.size ? S.win : null;
+  const bounds = front && !front.isDestroyed() ? { ...front.getNormalBounds(), x: front.getNormalBounds().x + 24, y: front.getNormalBounds().y + 24 } : restoredBounds(saved, screen.getAllDisplays().map((d) => d.workArea));
+  const win = new BrowserWindow({
+    ...bounds, title: 'Orbital', titleBarStyle: 'hiddenInset',
     webPreferences: { preload: path.join(__dirname, 'preload.js') },
   });
-  if (saved && saved.maximized) S.win.maximize();
+  const key = win.webContents.id;
+  S.windows.add(win); S.win = win;
+  if (!front && saved && saved.maximized) win.maximize();
   // saved shortly after a move or resize settles, and once more on close, so a quit or an update relaunch keeps it
   let boundsTimer = null;
-  const saveBounds = () => { clearTimeout(boundsTimer); boundsTimer = null; if (!S.win.isDestroyed()) db.setSetting('window', { ...S.win.getNormalBounds(), maximized: S.win.isMaximized() }); };
-  for (const name of ['resize', 'move', 'maximize', 'unmaximize']) S.win.on(name, () => { clearTimeout(boundsTimer); boundsTimer = setTimeout(saveBounds, 500); });
-  S.win.on('close', saveBounds);
-  S.win.on('page-title-updated', (e) => e.preventDefault());
-  S.win.on('focus', () => refresh());
+  const saveBounds = () => { clearTimeout(boundsTimer); boundsTimer = null; if (!win.isDestroyed()) db.setSetting('window', { ...win.getNormalBounds(), maximized: win.isMaximized() }); };
+  for (const name of ['resize', 'move', 'maximize', 'unmaximize']) win.on(name, () => { clearTimeout(boundsTimer); boundsTimer = setTimeout(saveBounds, 500); });
+  win.on('close', saveBounds);
+  win.on('page-title-updated', (e) => e.preventDefault());
+  win.on('focus', () => { S.win = win; refresh(); });
   // The quick-add panel is a window of its own, and a hidden one still counts as open: without this, closing the
   // outliner after the panel had been summoned once would leave the app running invisibly instead of quitting.
-  S.win.on('closed', () => { const panel = quick.panelState.win; if (panel && !panel.isDestroyed()) panel.destroy(); });
-  S.win.loadFile(path.join(__dirname, 'index.html'));
+  win.on('closed', () => {
+    S.windows.delete(win); S.windowViews.delete(key); unwatchRelated(key);
+    if (S.win === win) S.win = [...S.windows].at(-1) || null;
+    if (S.windows.size) return;
+    const panel = quick.panelState.win; if (panel && !panel.isDestroyed()) panel.destroy();
+  });
+  win.loadFile(path.join(__dirname, 'index.html'));
 }
 
 // Quick add (docs/QUICK-ADD.md): a second, frameless window the global shortcut summons from any app. It is not a
@@ -99,6 +113,7 @@ function createMenu() {
       { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' },
       { type: 'separator' }, { role: 'quit' },
     ] },
+    { label: 'File', submenu: [{ label: 'New Window', accelerator: 'CmdOrCtrl+N', registerAccelerator: false, click: () => createWindow() }, { type: 'separator' }, { role: 'close' }] },
     { role: 'editMenu' },
     { role: 'windowMenu' },
   ]));
@@ -110,10 +125,11 @@ ipcMain.handle('outline:roots', async () => {
   const rules = hiddenRules(); // a row cached before the rule was added is hidden here too, refresh or no refresh
   return VIEWS.map((view) => ({ ...view, truncated: truncatedViews.has(view.id), nodes: (rows[view.id] || []).filter((r) => !isHidden(r.title, rules)).map(toNode) }));
 });
-ipcMain.handle('view:list', async (_e, id, filter) => {
+ipcMain.handle('view:list', async (e, id, filter) => {
   preset(id); // validate before changing which view the refresh loop owns
   S.activeView = id;
   S.activeFilter = filter;
+  if (e && e.sender && S.windows.size) S.windowViews.set(e.sender.id, { id, filter }); // this window's view (the checks call with no event)
   await S.refreshing;
   return viewRows(id, filter);
 });
@@ -121,6 +137,7 @@ ipcMain.handle('view:filter', (_e, id) => viewFilter(id));
 ipcMain.handle('view:setFilter', (_e, id, filter) => {
   const stored = setViewFilter(id, filter);
   if (id === S.activeView) S.activeFilter = stored;
+  for (const v of S.windowViews.values()) if (v.id === id) v.filter = stored; // every window showing it
   return stored;
 });
 // events start with an empty content map (no doc node yet); readOutline needs the children list
@@ -152,6 +169,8 @@ ipcMain.handle('icons:search', (_e, query) => icons.searchIcons(query));
 ipcMain.handle('icons:types', () => icons.typeIcons());
 // The renderer's preferences, from the same store: a synchronous snapshot at load (preload reads it before the
 // first paint) and one write per change.
+// the menu shows ⌘N but leaves the key to the renderer's New window row (DEFAULT_HOTKEYS), so it can be re-recorded
+ipcMain.handle('window:new', () => { createWindow(); });
 ipcMain.on('prefs:snapshot', (e) => { e.returnValue = settings.prefs(); });
 ipcMain.handle('prefs:set', (_e, key, value) => settings.setPref(key, value));
 ipcMain.handle('openai:setKey', (_e, key) => {
@@ -380,7 +399,7 @@ ipcMain.handle('pins:unpinFrom', (_e, hubId, uri) => nodePin(hubId, uri, false))
 ipcMain.handle('sensitive:list', () => sensitiveIds()); // the synced setting sensitive:set writes; db's table is only its migration source
 ipcMain.handle('sensitive:set', (_e, id, on) => setSensitive(id, on));
 ipcMain.handle('doc:related', (_e, id) => related(id)); // { summary, tagline, pinned[], outcomes[], proposals[], notes[], backlinks[] }
-ipcMain.handle('doc:watchRelated', (_e, id) => watchRelated(id)); // the page on screen (null: none): its sidebar's edges pushed as 'related:changed'
+ipcMain.handle('doc:watchRelated', (e, id) => watchRelated(id, e && e.sender ? e.sender.id : 'main')); // the page on screen (null: none): its sidebar's edges pushed as 'related:changed'
 ipcMain.handle('meeting:info', (_e, id) => meetings.meetingInfo(id));
 ipcMain.handle('meeting:edit', (_e, id, change) => meetings.editMeeting(id, change));
 ipcMain.handle('meeting:suggestions', () => meetings.attendeeSuggestions());
@@ -487,7 +506,7 @@ if (process.env.TANA_MAIN_TEST) {
       if (kind === 'summary' && clickedEdits.has(id)) return;
       if (kind === 'edit') clickedEdits.delete(id);
       const note = new Notification({ id, title, subtitle, body, silent: kind === 'summary' });
-      note.on('click', () => { if (id) clickedEdits.add(id); if (S.win && !S.win.isDestroyed()) { S.win.show(); S.win.focus(); send('notify:open', docId); } });
+      note.on('click', () => { if (id) clickedEdits.add(id); if (S.win && !S.win.isDestroyed()) { S.win.show(); S.win.focus(); S.win.webContents.send('notify:open', docId); } }); // the window used last, not all of them
       note.show();
     };
     S.userData = app.getPath('userData');
