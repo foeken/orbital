@@ -383,10 +383,10 @@ function renderOutline() {
     outline.append(note);
   }
   // the page title is the zoom target itself: documents use setTitle, blocks use setText through the same debounce
-  const editable = parent && !isAtomic(parent.node) && !isReference(parent.node) && canEditText(parent);
+  const editable = !demoMode && parent && !isAtomic(parent.node) && !isReference(parent.node) && canEditText(parent); // demo text is never typed into, so a mask is never saved
   if (editable) titleEl.contentEditable = 'plaintext-only'; else titleEl.removeAttribute('contenteditable');
   titleEl.dataset.key = editable ? parent.key : '';
-  titleEl.textContent = editable && pending.has(parent.key) ? plainOf(pending.get(parent.key).segs) : parent ? parent.node.text : viewOf() ? viewOf().title : 'Tana';
+  titleEl.textContent = editable && pending.has(parent.key) ? plainOf(pending.get(parent.key).segs) : parent ? demoText(parent.node.text, parent.node.id) : viewOf() ? viewOf().title : 'Tana';
   blurSensitive(titleEl, parent && parent.docId);
   // zoomed task: its checkbox before the title (toggleDone, like row checkboxes; Cmd+Enter in the title too)
   const zoomedTask = parent && isTask(parent.node);
@@ -394,6 +394,7 @@ function renderOutline() {
   titleCheck.classList.toggle('inbox', !!zoomedTask && acceptsFirst(parent.node)); // dashed while it waits in the Inbox
   titleCheck.disabled = zoomedTask && !canEditItem(parent);
   titleCheck.onclick = zoomedTask && canEditItem(parent) ? () => toggleDone(parent) : null;
+  if (demoMode) { titleCheck.disabled = true; titleCheck.onclick = null; } // read-only while demo mode is on
   titleEl.classList.toggle('done', zoomedTask && !!parent.node.done);
   codexHeader(); // a rebuilt header loses the badge with everything else, so it is put back with the title
   // assignees and visibility now live at the top of the sidebar (railMetaRows); under the title only the chips remain.
@@ -578,7 +579,7 @@ function renderCrumbs(trail) {
     const a = document.createElement('a');
     // ancestors can share a title (a meeting named after its space), so each crumb shows its kind icon
     if (p.icon) { const ricon = document.createElement('span'); ricon.className = 'ricon ' + p.icon; ricon.innerHTML = iconSvg(p.icon); a.append(ricon); }
-    a.append(p.title);
+    a.append(p.id === 'library' ? p.title : demoText(p.title, p.id));
     const when = crumbWhen(p.id); // a meeting crumb also says when it was: two meetings often share a title
     if (when) { const date = document.createElement('span'); date.className = 'cdate'; date.textContent = when; a.append(date); }
     blurSensitive(a, p.id);
@@ -586,11 +587,11 @@ function renderCrumbs(trail) {
     addCrumb(a);
   }
   for (const v of zoom.via || []) {
-    const a = document.createElement('a'); a.textContent = (docOf(v.docId) || {}).text || 'Untitled'; blurSensitive(a, v.docId); a.onclick = () => { zoom = v; render(); };
+    const a = document.createElement('a'); a.textContent = demoText((docOf(v.docId) || {}).text || 'Untitled', v.docId); blurSensitive(a, v.docId); a.onclick = () => { zoom = v; render(); };
     addCrumb(a);
   }
   for (const item of trail.slice(0, -1)) { // ancestors only: the page title already shows the current node
-    const a = document.createElement('a'); a.textContent = item.node.text || 'Untitled'; blurSensitive(a, item.docId); a.onclick = () => zoomTo(item);
+    const a = document.createElement('a'); a.textContent = demoText(item.node.text || 'Untitled', item.node.id); blurSensitive(a, item.docId); a.onclick = () => zoomTo(item);
     addCrumb(a);
   }
 }
@@ -736,6 +737,7 @@ function nodeEl(node, docId, parent) {
     const ticks = canEditItem(item) || (!!node.checkable && isTask(node));
     check.disabled = target ? !canEditNode(display) : !ticks;
     check.onclick = target && canEditNode(display) ? () => toggleReference(node) : ticks ? () => (isTask(node) ? toggleDone(item) : toggleCheckbox(item)) : null;
+    if (demoMode) { check.disabled = true; check.onclick = null; } // read-only while demo mode is on
     line.append(check);
   }
   const body = document.createElement('div'); body.className = 'body'; // text + meta + chips; only .text is editable
@@ -755,7 +757,7 @@ function nodeEl(node, docId, parent) {
     text.append(img);
   } else if (node.upload) { // renderer/upload.js: a file on its way up; Esc cancels it
     text.classList.add('upload'); text.tabIndex = -1;
-    text.textContent = node.text + ' — Uploading…';
+    text.textContent = demoText(node.text, node.id) + ' — Uploading…';
   } else if (isDivider(node)) { // atomic like an image: focusable so Up/Down and Backspace still reach it
     text.classList.add('divider'); text.tabIndex = -1;
     text.append(document.createElement('hr'));
@@ -763,10 +765,10 @@ function nodeEl(node, docId, parent) {
     text.classList.add('table'); text.tabIndex = -1;
     text.append(tableEl(item));
   } else {
-    if (canEditText(item)) text.contentEditable = 'plaintext-only'; else text.tabIndex = -1;
+    if (!demoMode && canEditText(item)) text.contentEditable = 'plaintext-only'; else text.tabIndex = -1;
     text.spellcheck = false;
     // a full reference reads its label from the target, like the rest of the row, so a rename in Tana shows through
-    renderSegs(text, pending.has(item.key) ? pending.get(item.key).segs : reference ? [{ text: referenceLabel(node) }] : fullref ? [{ mention: { uri: node.reference.uri, label: referenceLabel(node) } }] : segsOf(node));
+    renderSegs(text, pending.has(item.key) ? pending.get(item.key).segs : reference ? [{ text: referenceLabel(node) }] : fullref ? [{ mention: { uri: node.reference.uri, label: referenceLabel(node) } }] : segsOf(node), display.id);
     text.classList.toggle('chiponly', chipOnly(text));
   }
   body.append(text);
@@ -783,8 +785,8 @@ function nodeEl(node, docId, parent) {
   // what a Timeline edit put there (renderer/timeline.js): Tana's longer words, quoted between the headline and who did it
   if (node.timeline && (node.timeline.change || node.timeline.detail)) {
     const q = document.createElement('div'); q.className = 'tl-detail';
-    if (node.timeline.change) { const h = document.createElement('strong'); h.textContent = node.timeline.change; q.append(h); } // what changed, in Tana's one line
-    if (node.timeline.detail) { const d = document.createElement('div'); d.textContent = node.timeline.detail; q.append(d); } // and its longer words for it
+    if (node.timeline.change) { const h = document.createElement('strong'); h.textContent = demoText(node.timeline.change, node.timeline.uri); q.append(h); } // what changed, in Tana's one line
+    if (node.timeline.detail) { const d = document.createElement('div'); d.textContent = demoText(node.timeline.detail, node.timeline.uri); q.append(d); } // and its longer words for it
     body.append(q);
   }
   const subText = subtextOf(display, taskInfo);

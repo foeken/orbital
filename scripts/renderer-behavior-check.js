@@ -44,6 +44,8 @@ const withShims = (src) => {
   // Row listeners are bound to both roots the app has (the outline and the fields under the title, which are
   // outlines too). A harness exercises one root, so the binding becomes the plain listener it was.
   src = src.replace(/onRows\('([a-z]+)', /g, "outline.addEventListener('$1', ");
+  // demo mode (renderer/segments.js) is off in every harness: the helpers hand text back as it is
+  if (/\bdemo(Mode|Text|Segments|PersonName|WordCount)\b/.test(src) && !/let demoMode =/.test(src)) src = 'globalThis.demoMode ??= false; globalThis.demoText ??= (value) => value; globalThis.demoSegments ??= (segs) => segs; globalThis.demoPersonName ??= (id) => id; globalThis.demoWordCount ??= () => 2;\n' + src;
   // a row knows whether it is drawn in a field from the id it is addressed with (renderer/nodes.js)
   if (/\binField\(/.test(src) && !/const inField =/.test(src)) src = sourceLine('const inField') + '\n' + src;
   // a date mention's day (renderer/segments.js): the real one, since chips and clicks both ask it
@@ -1555,7 +1557,7 @@ async function runSyncShortcutCheck() {
     'Views: Inbox', 'Views: Today', 'Views: This week', 'Views: Library',
     'View options: Filter by type', 'View options: Filter rows by text',
     'Actions: Log in to Tana', 'Actions: Create new …', 'Actions: Search Tana', 'Actions: Go back', 'Actions: Go forward', 'Actions: Go to Home', 'Actions: Focus the sidebar', 'Actions: Hide sidebar', 'Actions: Set as Home',
-    'Actions: Undo', 'Actions: Redo', 'Actions: Sync', 'Actions: Reload', 'Actions: New window', 'Actions: Edit hidden items', 'Actions: Toggle sensitive visibility',
+    'Actions: Undo', 'Actions: Redo', 'Actions: Sync', 'Actions: Reload', 'Actions: New window', 'Actions: Edit hidden items', 'Actions: Toggle sensitive visibility', 'Actions: Toggle demo mode',
     'Actions: Larger text', 'Actions: Smaller text', 'Actions: Reset text size', 'Actions: Toggle dark mode',
   ], 'the palette lists its rows in one fixed, meaningful order');
   // The two date pins differ only in the day they name: today's row passes no date (main defaults to today), the
@@ -8104,6 +8106,7 @@ async function runMeetingEditCheck() {
     };
     const membersLoaded = async () => { members = [{ id: 'tana:user-profile:me', title: 'Me', me: true }, { id: 'tana:user-profile:priya', title: 'Priya' }, { id: 'tana:user-profile:tomas', title: 'Tomas' }]; };
     const localDate = () => '2026-09-22', WD = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const demoMode = false, demoPersonName = (id) => id, memberName = (uri) => ((members || []).find((m) => m.id === uri) || {}).title || uri;
     ${functionSource('fuzzyMatch')}
     ${sourceBetween('const WEEKDAYS =', 'const PIN_DATE_GROUP')}
     ${fs.readFileSync(require.resolve('../renderer/meeting.js'), 'utf8').replace("'use strict';", '')}

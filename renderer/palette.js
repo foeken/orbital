@@ -322,6 +322,8 @@ function paletteRows(q, typed = q) {
   if (tana.filters) rows.push({ id: 'hidden', group: 'Actions', icon: 'hiddenItems', label: 'Edit hidden items', keepOpen: true, run: openHiddenPalette });
   if (tana.codexHosts) rows.push({ id: 'codexHosts', group: 'Actions', icon: 'host', label: 'Manage Codex hosts', keepOpen: true, run: openHostsPalette });
   if (tana.sensitiveIds) rows.push({ id: 'sensitiveVisibility', group: 'Actions', icon: 'hidden', label: 'Toggle sensitive visibility', hint: sensitiveVisible ? 'Shown' : 'Hidden', run: toggleSensitiveVisibility });
+  // names and Tana's words swapped for made-up ones on screen, for showing the app to someone (renderer/segments.js)
+  rows.push({ id: 'demoMode', group: 'Actions', icon: 'hidden', label: 'Toggle demo mode', hint: demoMode ? 'On' : 'Off', run: () => toggleDemoMode() });
   if (tana.chatgptStatus) rows.push({ id: 'chatgpt', group: 'Actions', icon: 'chatgpt', label: chatgptAuth?.signedIn ? 'Sign out of ChatGPT' : 'Sign in with ChatGPT',
     hint: chatgptAuth?.signedIn ? (chatgptAuth.email || 'Signed in') : chatgptAuth?.available === false ? 'Status unavailable' : chatgptAuth ? 'Not signed in · preferred over API key' : 'Checking sign-in',
     keepOpen: true, run: chatgptCommand });
@@ -472,7 +474,7 @@ function openAIKeyRows() {
 const TRASH_GROUP = 'Recently deleted · ↩ restores it';
 let trashList = null; // null while the list is in flight
 function trashRows(q) {
-  const rows = (trashList || []).filter((d) => fuzzyMatch(d.title, q)).map((d) => ({ group: TRASH_GROUP, icon: 'trash', label: d.title,
+  const rows = (trashList || []).filter((d) => fuzzyMatch(d.title, q)).map((d) => ({ group: TRASH_GROUP, icon: 'trash', label: demoText(d.title, d.id),
     hint: agoText(d.deletedAt), keepOpen: true, run: () => run(async () => { await tana.restoreDocument(d.id); closePalette(); goTo(d.id); }) }));
   if (!rows.length) rows.push({ group: TRASH_GROUP, label: trashList ? 'Nothing deleted recently' : 'Loading…', disabled: true });
   return rows;
@@ -1117,7 +1119,8 @@ function renderPalette() {
     if (rowHue != null) { icon.classList.add('hue'); icon.style.setProperty('--hue', String(rowHue)); }
     const label = document.createElement('span'); label.className = 'label';
     const match = r.match || (q ? fuzzyMatch(r.label, q.toLowerCase()) : null); // every level: the letters the query matched, in bold
-    if (match && match.length) {
+    if (demoMode && r.node) label.textContent = demoText(r.label, r.node.id); // a document's title is content: masked, and no highlight to give its words away
+    else if (match && match.length) {
       const hit = new Set(match); let run = '', bold = false;
       const flushRun = () => { if (!run) return; if (bold) { const b = document.createElement('b'); b.textContent = run; label.append(b); } else label.append(run); run = ''; };
       for (let i = 0; i < r.label.length; i++) { if (hit.has(i) !== bold) { flushRun(); bold = hit.has(i); } run += r.label[i]; }

@@ -14,6 +14,49 @@ const dayLabel = (day) => DAY_LABEL.format(new Date(day + 'T00:00:00'));
 // accepts segments, a plain string, or a Node
 const segsOf = (v) => (Array.isArray(v) ? v : typeof v === 'string' ? (v ? [{ text: v }] : []) : v.segments || (v.text ? [{ text: v.text }] : []));
 const plainOf = (v) => segsOf(v).map((s) => ('text' in s ? s.text : s.mention.label)).join('');
+let demoMode = false; // Cmd+K "Toggle demo mode": made-up names and words on screen, never persisted, and every Tana write refused (renderer/state.js)
+const DEMO_WORDS = ['velvet', 'comet', 'cobalt', 'orchard', 'signal', 'lantern', 'orbit', 'wildflower', 'copper', 'moonlit', 'ripple', 'midnight', 'canvas', 'thunder', 'silver', 'afterglow', 'paper', 'starlight', 'glacier', 'daybreak', 'foxglove', 'tideline', 'ember', 'horizon', 'paradox', 'quietly', 'electric', 'drifting', 'bright', 'gather'];
+const DEMO_FIRST = ['Avery', 'Jordan', 'Casey', 'Taylor', 'Morgan', 'Riley', 'Alex', 'Jamie'];
+const DEMO_MIDDLE = ['Quinn', 'Rowan', 'Sage', 'Ellis', 'River', 'Noel'];
+const DEMO_LAST = ['Morgan', 'Lee', 'Rivera', 'Brooks', 'Chen', 'Patel', 'Bennett', 'Parker'];
+function demoHash(identity) {
+  let hash = 2166136261;
+  for (const char of String(identity || '')) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
+  return hash >>> 0;
+}
+const demoWordCount = (value) => (String(value || '').match(/[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*/gu) || []).length;
+function demoPersonName(identity, count = 2) {
+  const hash = demoHash(identity), words = Math.max(1, count);
+  if (words === 1) return DEMO_FIRST[hash % DEMO_FIRST.length];
+  return [DEMO_FIRST[hash % DEMO_FIRST.length], ...Array.from({ length: words - 2 }, (_, i) => DEMO_MIDDLE[(hash + i) % DEMO_MIDDLE.length]), DEMO_LAST[hash % DEMO_LAST.length]].join(' ');
+}
+function demoWords(value, identity) {
+  let index = 0;
+  return String(value || '').replace(/[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*/gu, (word) => {
+    let replacement = DEMO_WORDS[(demoHash(identity) + index++) % DEMO_WORDS.length];
+    return /\p{Lu}/u.test(word[0]) ? replacement[0].toUpperCase() + replacement.slice(1) : replacement; // a capital stays a capital, never all caps
+  });
+}
+// Demo mode masks what came from Tana and leaves the app's own words alone: a page or row of the app's own
+// (orbital:…) keeps its text, and inside one only the parts marked as a name (person) or as Tana's content are masked.
+const appOwned = (identity) => String(identity || '').startsWith('orbital:');
+const demoText = (value, identity) => !demoMode || appOwned(identity) ? value : String(identity || '').startsWith('tana:user-profile:') ? demoPersonName(identity, demoWordCount(value)) : demoWords(value, identity);
+function demoSegments(segs, identity) {
+  if (!demoMode) return segs;
+  if (String(identity || '').startsWith('tana:user-profile:')) return [{ text: demoPersonName(identity, demoWordCount(plainOf(segs))) }];
+  const ownWords = appOwned(identity);
+  let index = 0;
+  return segs.map((s) => {
+    const seed = String(identity || '') + ':' + index++;
+    if (s.person) return { ...s, text: s.text.replace(/\S.*\S|\S/, (name) => demoPersonName(name, demoWordCount(name))) };
+    if (s.keep || (ownWords && !s.content)) return s; // the app's wording, or Tana's fixed sentence around a notification's names
+    if ('text' in s) return { ...s, text: demoWords(s.text, seed) };
+    if (dayOfUri(s.mention.uri)) return s; // a date is a date, and says nothing about anyone
+    const label = s.mention.uri.startsWith('tana:user-profile:')
+      ? demoPersonName(s.mention.uri, demoWordCount(s.mention.label)) : demoWords(s.mention.label, seed);
+    return { ...s, mention: { ...s.mention, label } };
+  });
+}
 const MARK_TAGS = { code: 'code', strike: 's', underline: 'u', italic: 'em', bold: 'strong' }; // innermost first: the order a run is wrapped in
 // The caret anchor is a placeholder, not content: readSegs strips it and every offset helper counts it as nothing,
 // so what is stored and what the caret reports are the same with it as without it.
@@ -27,7 +70,8 @@ function markWrap(nodes, marks) {
   if (marks.link) { const a = document.createElement('a'); a.className = 'link'; a.dataset.href = marks.link; a.append(...out); out = [a]; } // outermost: the whole run is one link
   return out;
 }
-function renderSegs(el, segs) {
+function renderSegs(el, segs, identity) {
+  segs = demoSegments(segs, identity);
   const nodes = segs.flatMap((s, i) => {
     // Chromium needs a placeholder newline after a trailing soft break to put the caret on the empty line; readSegs strips it
     if ('text' in s) {

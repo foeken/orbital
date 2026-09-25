@@ -85,9 +85,9 @@ function meetingAttendeeRows(typed) {
     const email = String(s.email || '').toLowerCase();
     if (s.identityUri) named.add(s.identityUri);
     if (here.has(s.identityUri) || here.has(email) || !(fuzzyMatch(s.displayName || email, q) || email.includes(q))) continue;
-    add(s.displayName || s.email, s.displayName ? s.email : '', { email: s.email, userUri: s.identityUri });
+    add(demoMode ? demoPersonName(s.identityUri || s.email) : s.displayName || s.email, demoMode ? '' : s.displayName ? s.email : '', { email: s.email, userUri: s.identityUri });
   }
-  for (const m of members || []) if (!m.me && !here.has(m.id) && !named.has(m.id) && fuzzyMatch(m.title || '', q)) add(m.title, 'Member', { userUri: m.id });
+  for (const m of members || []) if (!m.me && !here.has(m.id) && !named.has(m.id) && fuzzyMatch(m.title || '', q)) add(memberName(m.id), 'Member', { userUri: m.id });
   if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(words) && !here.has(q) && !rows.some((r) => r.hint.toLowerCase() === q)) rows.unshift({ group, icon: 'member', label: 'Add ' + words, hint: '\u21A9', keepOpen: true, run: () => editMeetingNow({ attendees: [{ email: words }] }, true) });
   if (!rows.length) rows.push({ group, label: q ? 'No one matches \u2014 type an email address to add it' : 'No one to suggest', disabled: true });
   return rows;

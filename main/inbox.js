@@ -32,7 +32,9 @@ async function rows() {
   return list.map((n) => {
     const words = inbox.phrase(n, names.get(n.actorUri), inbox.retitled(n.notificationType) ? typeTitles.get(n.sourceUri) : undefined);
     const more = inbox.detail(n);
-    const segments = [...words.map((p) => (p.emphasis ? { text: p.text, marks: { bold: true } } : { text: p.text })), ...(more ? [{ text: '. ' + more + '.' }] : [])];
+    // keep/person tell demo mode which words are Tana's fixed sentence and which the actor's name (renderer/segments.js)
+    const actor = names.get(n.actorUri);
+    const segments = [...words.map((p) => (p.emphasis ? { text: p.text, marks: { bold: true }, ...(p.text === actor ? { person: true } : {}) } : { text: p.text, keep: true })), ...(more ? [{ text: '. ' + more + '.' }] : [])];
     return {
       id: n.id, text: segments.map((s) => s.text).join(''), kind: 'block', block: 'bullet', editable: false, segments, hasChildren: false, children: [],
       unread: !n.readAt, createdAt: iso(n.createdAt),

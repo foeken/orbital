@@ -15,7 +15,11 @@ function loadMembers() {
   }, showError);
 }
 const me = () => (members || []).find((m) => m.me);
-const memberName = (uri) => { const member = (members || []).find((m) => m.id === uri); return member ? member.title || member.text : uri; };
+function memberName(uri) {
+  if (demoMode) return demoPersonName(uri);
+  const member = (members || []).find((m) => m.id === uri);
+  return member ? member.title || member.text : uri;
+}
 const AUDIENCES = {
   'only-me': { icon: 'lock', label: 'Visible only to you' },
   people: { icon: 'userLock', label: 'Visible to selected people' },

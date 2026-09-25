@@ -2117,7 +2117,7 @@ async function main() {
     const rows = await backend.handlers.get('outline:children')(null, 'orbital:notifications');
     assert.deepEqual(JSON.parse(JSON.stringify(rows.map((r) => r.text))), ['Robin Vega assigned you to a task. Ship it.', 'You were added to Plan', 'Robin Vega archived Renamed'],
       'each row is Tana\'s sentence, the actor named from the members and a type by its current title');
-    assert.deepEqual(JSON.parse(JSON.stringify(rows[0].segments[0])), { text: 'Robin Vega', marks: { bold: true } }, 'what Tana emphasises is bold');
+    assert.deepEqual(JSON.parse(JSON.stringify(rows[0].segments[0])), { text: 'Robin Vega', marks: { bold: true }, person: true }, 'what Tana emphasises is bold, and the actor is marked as a name for demo mode');
     assert.deepEqual(JSON.parse(JSON.stringify(rows.map((r) => r.unread))), [true, false, false]);
     assert.ok(rows.every((r) => r.editable === false && r.notification.sourceUri), 'read-only rows that know what they are about');
     assert.equal(await backend.handlers.get('inbox:unread')(), 1);
@@ -2504,8 +2504,8 @@ async function main() {
       ['Rob Jansen edited Contract renewal', 'Moved the deadline to Friday', 'updated', 'edit', false, []],
       ["Tana's AI added a task to your Inbox", null, 'tana', 'new', false, ['Share the transcript']],
     ], 'a timeline, newest first: who, then what they did, then the node; an edit\'s change quoted under it; new tasks from one source in a row are one quiet entry; a completion told once, from the node\'s own state; yours alone, by hand, or weeks old stay out');
-    assert.deepEqual(JSON.parse(JSON.stringify((await backend.timelinePage.rows())[1].segments)), [{ text: 'Rob Jansen ' }, { text: 'completed', marks: { bold: true } }, { text: ' ' }, { text: 'Contract renewal', marks: { strike: true } }],
-      'the person plain, the verb bold, and a finished node struck through');
+    assert.deepEqual(JSON.parse(JSON.stringify((await backend.timelinePage.rows())[1].segments)), [{ text: 'Rob Jansen ', person: true }, { text: 'completed', marks: { bold: true } }, { text: ' ' }, { text: 'Contract renewal', content: true, marks: { strike: true } }],
+      'the person plain, the verb bold, and a finished node struck through; demo mode masks the name and title and keeps the verb');
     const rows = await backend.timelinePage.rows();
     for (const [text, state] of [['Task status changed from In Progress to Inbox', 'proposed'], ['Task marked as completed and a note added', 'closed'], ['Task status updated to In Progress', 'open'], ['Added a document link', undefined]])
       assert.equal(backend.timelinePage.statusOf(text) || undefined, state, 'a summary says which state it went to: ' + text);

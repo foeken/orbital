@@ -1,7 +1,21 @@
 'use strict';
 // The api handle and all renderer state, page zoom, and the root elements.
 
-const tana = window.api || mockApi();
+const tana = window.api ? readOnlyInDemo(window.api) : readOnlyInDemo(mockApi());
+// Demo mode draws made-up words, and nothing on screen may then reach Tana: every call that writes is refused here,
+// whatever asked for it (a key, Cmd+K, a checkbox, a drop). Reads, navigation and the app's own settings still work.
+const DEMO_WRITES = new Set(['editMeeting', 'setNotify', 'inboxSetRead', 'inboxMarkAll', 'proposalAnswer', 'linkCodexTask', 'discussWith',
+  'deleteDocument', 'restoreDocument', 'archiveDocument', 'unarchiveDocument', 'setType', 'setField', 'defineField', 'addField', 'setTypeIcon',
+  'setTypeHue', 'createDocument', 'createSearch', 'setSearchFilter', 'setTitle', 'setDone', 'setState', 'setStateMany', 'toggleCheckbox',
+  'setSharing', 'moveToSpace', 'setAssignees', 'setAssigneesMany', 'setText', 'setCell', 'tableOp', 'setBlockType', 'insertDivider',
+  'insertImage', 'insertTable', 'insertAfter', 'insertBefore', 'split', 'join', 'insertChild', 'removeMany', 'moveMany', 'indentMany',
+  'outdentMany', 'remove', 'indent', 'outdent', 'move', 'moveTo', 'insertMention', 'pin', 'unpin', 'pinTo', 'unpinFrom', 'setSensitive',
+  'setCodex', 'undo', 'redo']);
+function readOnlyInDemo(api) {
+  return new Proxy({ ...api }, { // a copy: contextBridge freezes window.api, and a proxy of a frozen object must hand back its own values
+    get: (own, key) => (demoMode && DEMO_WRITES.has(key) && typeof own[key] === 'function' ? () => Promise.reject(new Error('Demo mode is on: nothing is saved to Tana')) : own[key]),
+  });
+}
 
 // ---- state ----
 let views = [];              // [{ id, title, icon, nodes: document Node[] }]
@@ -115,4 +129,10 @@ function setZoom(f) {
 if (zoomFactor !== 1 && tana.zoom) tana.zoom(zoomFactor);
 
 const $ = (id) => document.getElementById(id);
+function toggleDemoMode() {
+  flushAll(); // finish any real edit before masking the text currently on screen
+  if (document.activeElement?.isContentEditable) document.activeElement.blur();
+  demoMode = !demoMode;
+  render(true);
+}
 const outline = $('outline'), filterEl = $('filter'), filterRow = $('filterRow');
