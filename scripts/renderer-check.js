@@ -122,7 +122,9 @@ assert.match(source, /if \(\(isTask\(display\) && displayOn\('status'\)\) \|\| \
 assert.match(source, /function inheritCheckbox\(parent, nodeId\)/);
 assert.match(source, /const canEditNode = \(node\) => !!node && node\.editable !== false;/);
 // a resolved reference (native embed or full-line) checks its target off; an ordinary row checks itself
-assert.match(source, /check\.disabled = target \? !canEditNode\(display\) : !canEditItem\(item\);/);
+// ...or, read-only but checkable, a task listed on the Timeline (main/timeline.js)
+assert.match(source, /const ticks = canEditItem\(item\) \|\| \(!!node\.checkable && isTask\(node\)\);/);
+assert.match(source, /check\.disabled = target \? !canEditNode\(display\) : !ticks;/);
 assert.match(source, /if \(!canEditItem\(item\)\) \{/);
 assert.match(source, /tana\.taskMeta\(docId\)/);
 assert.match(source, /const taskMetaById = new Map\(\), taskMetaLoading = new Set\(\), taskMetaFailed = new Map\(\);/);

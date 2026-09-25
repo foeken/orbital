@@ -2459,6 +2459,7 @@ async function main() {
     assert.equal(new Set(rows.map((r) => r.id)).size, rows.length, 'a node changed twice is two rows with ids of their own');
     assert.equal(rows[0].timeline.uri, watched.id, 'and each row opens the node it is about');
     assert.equal(rows[2].timeline.uri, null, 'except a group, whose tasks open themselves');
+    assert.deepEqual(JSON.parse(JSON.stringify(rows[2].children.map((c) => [c.editable, c.checkable]))), [[false, true], [false, true]], 'whose words are read-only there and whose boxes tick');
     summaries.get(watched.id).push({ title: 'Signed by both parties', authors: [COLLEAGUE], endTime: ago(-1000) });
     const next = await read();
     assert.deepEqual(next.filter((r) => r[4]).map((r) => r[1]), ['Signed by both parties'], 'what came after your last visit is marked new, and only that');

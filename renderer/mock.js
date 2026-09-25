@@ -165,7 +165,7 @@ function mockApi() {
   const event = (key, hours, tone, icon, segments, note, unread, uri, children = []) => ({ id: 'orbital:timeline:' + key, text: segments.map((x) => x.text).join(''), segments, kind: 'block', block: 'bullet', icon, editable: false,
     hasChildren: children.length > 0, children, unread, createdAt: at(hours), timeline: { uri, note, tone } });
   const bold = (text) => ({ text, marks: { bold: true } });
-  const tlTask = (d) => ({ ...d, editable: false });
+  const tlTask = (d) => ({ ...d, editable: false, checkable: true });
   content['orbital:timeline'] = [
     event('group1', 0.1, 'new', 'sparkle', [{ text: 'An AI agent added 4 tasks to your Inbox' }], null, true, null, [tlTask(docs[1]), tlTask(docs[3]), tlTask(spaceDocs[0]), tlTask(docs[4])]),
     event('done1', 1, 'done', 'apply', [{ text: 'Priya Raman ' }, bold('completed'), { text: ' ' }, { text: docs[2].text, marks: { strike: true } }], null, true, docs[2].id),

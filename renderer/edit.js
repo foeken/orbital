@@ -210,7 +210,7 @@ function setOpen(item, value) {
 // The box and ⌘↩ accept an Inbox task first (In Progress) and complete it on the next go; direct is the Cmd+K
 // Complete/Reopen row, which does what its label says.
 function toggleDone(item, direct) {
-  if (!canEditItem(item) || !isTask(item.node) || item.node.draft) return;
+  if (!(canEditItem(item) || item.node.checkable) || !isTask(item.node) || item.node.draft) return; // checkable: a Timeline row's box (main/timeline.js)
   holdRow(item.node); // the row stays put, new box and all, until the view is left
   const accept = !direct && acceptsFirst(item.node);
   if (!accept) item.node.done = item.node.done ? 0 : 1;
