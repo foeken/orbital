@@ -2,8 +2,8 @@
 const fields = require('../sdk/fields');
 const pins = require('../sdk/pins');
 const { dateUri, isDateUri } = require('../sdk/dates');
-const { openEdgeQuery, EDGE_TYPES } = require('../sdk/livequery');
-const { completedInWindow, filterToSearchQuery, searchQueryParams, validViewFilter } = require('../sdk/query');
+const { openEdgeQuery, openLiveQuery, EDGE_TYPES } = require('../sdk/livequery');
+const { completedInWindow, filterToSearchQuery, liveTrigger, searchQueryParams, validViewFilter } = require('../sdk/query');
 const { DOC_URI, LIVE_ROWS, NOT_CONNECTED, PIN_HUBS, PLAIN_KINDS, S, idKind, isSpace, send, summaryCache, typeAttrTitles, typeTitles } = require('./state');
 const { graphRow, rememberNodeHue, resolveTypes, toNode } = require('./rows');
 const { canWriteDoc, op, resolveReferences, subscribe } = require('./documents');
@@ -333,6 +333,17 @@ async function related(id) {
 // properties move with every edit of the text around it, and no section is drawn from them.
 // One per window (issue #137): each window's page keeps its own sidebar live, keyed by the window's webContents id.
 const watching = new Map(); // window -> { id, client, ready: Promise<boolean>, handles: Promise<[handle|null]> }
+async function searchTrigger(id, w, key) {
+  const query = await op(id, (doc) => doc.loro.getMap('query').toJSON());
+  if (!query || !Object.keys(query).length) return null;
+  const live = await openLiveQuery(w.client.sync, liveTrigger(searchQueryParams(query, S.me && S.me.userUri)), { label: 'Orbital saved search' });
+  // The first answer counts too: a query that matches nothing stays pending rather than answering empty (live
+  // 2026-09-25), so when a search's scope starts empty, its first row arrives as the initial answer. That costs one
+  // re-read just after opening a search that has rows; the answers after it come only when something moved.
+  live.on('rows', () => { if (watching.get(key) === w) send('outline:changed', id); });
+  live.on('error', () => {}); // a refused query leaves the page as it was: it still re-reads on opening and on Refresh
+  return live;
+}
 function unwatchRelated(key = 'main') {
   const w = watching.get(key);
   watching.delete(key);
@@ -354,8 +365,13 @@ function watchRelated(id, key = 'main') {
     const hub = hubOf(id, node);
     return PIN_HUBS.has(idKind(hub)) ? open({ subject: { uris: [hub] }, predicate: { edgeTypes: [EDGE_TYPES.HAS_PIN] } }, 'Orbital sidebar pins') : null;
   });
-  // each half on its own: one that fails must not leave the other open and unclosable
-  w.handles = Promise.all([backlinks, pinned].map((p) => p.catch(() => null)));
+  // A saved search on screen is kept current the way Tana keeps its own lists (#148): a live query over what the
+  // search can list, and every answer it pushes re-reads the page through searchChildren, which stays the one that
+  // decides the rows. Without it the page only knew what its query answered when it was opened.
+  // ponytail: scoped by the query stored when the page opened; a Save while it is open narrows the rows, not this.
+  const search = idKind(id) === 'search' ? searchTrigger(id, w, key) : null;
+  // each on its own: one that fails must not leave the others open and unclosable
+  w.handles = Promise.all([backlinks, pinned, search].map((p) => p && p.catch(() => null)));
   w.ready = backlinks.then(() => true, () => { if (watching.get(key) === w) unwatchRelated(key); return false; }); // refused: asked again at the next render
   return w.ready;
 }

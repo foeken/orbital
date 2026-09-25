@@ -12,7 +12,7 @@ const { createTransport, SyncConnection, Document, derivePeerId, readNode, setTi
 const outline = require('../sdk/content');
 const { fetchImage, uploadFile, initImage, UPLOAD_LIMIT } = require('../sdk/assets');
 const { LoroMap, LoroList, LoroText } = require('loro-crdt');
-const { parseQuery, searchParams, needsTypes, viewParams, searchQueryParams, filterToSearchQuery, searchQueryToFilter, validViewFilter, VIEW_PRESETS, hideRules, isHidden, completedInWindow, completedWindow } = require('../sdk/query');
+const { liveTrigger, parseQuery, searchParams, needsTypes, viewParams, searchQueryParams, filterToSearchQuery, searchQueryToFilter, validViewFilter, VIEW_PRESETS, hideRules, isHidden, completedInWindow, completedWindow } = require('../sdk/query');
 const pins = require('../sdk/pins');
 
 const ORG = 'org_01EXAMPLE00000000000000000', DOC = 'tana:text:01exampleh0000000000000000', ME = 'tana:user-profile:01examplei0000000000000000';
@@ -3190,6 +3190,10 @@ async function main() {
     assert.equal(validViewFilter({ types: ['tana:type:nope'] }), false, 'only a real type uri joins the kinds');
     assert.deepEqual(filterToSearchQuery({ ...VIEW_PRESETS.library, types: [RISK] }, ME), { entityTypeUris: [RISK] }, 'a saved search stores it the way Tana does, without the task filters');
     assert.deepEqual(searchQueryToFilter({ entityTypeUris: [RISK] }, ME).types, [RISK], 'and reads it back into the pill');
+    // #148: the live query that re-reads an open saved search covers what it lists: kinds, type, state and assignee
+    // carried over, text and owners dropped (a live query cannot say them), newest change first.
+    assert.deepEqual(liveTrigger(searchQueryParams({ types: ['text'], entityTypeUris: [RISK], stateTypes: ['open'], assignedToViewer: true, textQuery: 'db', ownerUris: ['tana:space:01jspace000000000000000000'] }, ME)),
+      { types: ['text'], orderBy: ['-updatedAt'], limit: 100, entityTypeUris: [RISK], stateTypes: ['open'], assignedTo: [ME] });
     assert.equal(viewParams({ types: ['docs'], text: ' dpa ' }, ME, 25).textQuery, 'dpa');
     assert.equal(viewParams({ types: ['docs'], text: ' dpa ' }, ME, 25).limit, 25);
     assert.equal(validViewFilter({ types: ['docs'], states: null, assignee: 'anyone', text: '', participant: null, window: null }), true);
