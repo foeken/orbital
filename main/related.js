@@ -331,18 +331,21 @@ async function related(id) {
 // again. Only for one page at a time, like the presence room: a new page, or none, closes the last one's queries.
 // The first answer says nothing — related() has just read the same edges — and neither does a changed edge: a mention's
 // properties move with every edit of the text around it, and no section is drawn from them.
-let watching = null; // { id, client, ready: Promise<boolean>, handles: Promise<[handle|null]> }
-function unwatchRelated() {
-  const w = watching;
-  watching = null;
+// One per window (issue #137): each window's page keeps its own sidebar live, keyed by the window's webContents id.
+const watching = new Map(); // window -> { id, client, ready: Promise<boolean>, handles: Promise<[handle|null]> }
+function unwatchRelated(key = 'main') {
+  const w = watching.get(key);
+  watching.delete(key);
   if (w) w.handles.then((hs) => hs.forEach((h) => h && h.close().catch(() => {})));
 }
-function watchRelated(id) {
-  if (watching && watching.id === id && watching.client === S.client) return watching.ready;
-  unwatchRelated();
+function watchRelated(id, key = 'main') {
+  const current = watching.get(key);
+  if (current && current.id === id && current.client === S.client) return current.ready;
+  unwatchRelated(key);
   if (!S.client || !DOC_URI.test(id || '')) return Promise.resolve(false);
-  const w = watching = { id, client: S.client };
-  const moved = ({ added, removed, initial }) => { if (!initial && (added.length || removed.length) && watching === w) send('related:changed', id); };
+  const w = { id, client: S.client };
+  watching.set(key, w);
+  const moved = ({ added, removed, initial }) => { if (!initial && (added.length || removed.length) && watching.get(key) === w) send('related:changed', id); };
   const open = (query, label) => openEdgeQuery(w.client.sync, query, { label }).then((h) => { h.on('rows', moved); return h; });
   const self = w.client.graph.listNodes({ nodeIds: [id], limit: 1 }).then(({ nodes = [] }) => nodes[0]);
   const openBacklinks = (node) => open({ object: { uris: backlinkUris(id, node) }, predicate: { edgeTypes: [EDGE_TYPES.LINKS_TO, EDGE_TYPES.ATTRIBUTE_LINKS_TO] } }, 'Orbital sidebar backlinks');
@@ -353,7 +356,7 @@ function watchRelated(id) {
   });
   // each half on its own: one that fails must not leave the other open and unclosable
   w.handles = Promise.all([backlinks, pinned].map((p) => p.catch(() => null)));
-  w.ready = backlinks.then(() => true, () => { if (watching === w) unwatchRelated(); return false; }); // refused: asked again at the next render
+  w.ready = backlinks.then(() => true, () => { if (watching.get(key) === w) unwatchRelated(key); return false; }); // refused: asked again at the next render
   return w.ready;
 }
 

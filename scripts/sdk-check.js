@@ -1734,8 +1734,49 @@ async function main() {
     assert.equal(await backend.watchRelated(null), false);
     await new Promise(setImmediate);
     assert.deepEqual(closed.length, 3, 'no page, no queries');
+    // a window each: two pages watched at once, and one window's page change leaves the other's alone (issue #137)
+    assert.equal(await backend.watchRelated(page, 'w1'), true);
+    assert.equal(await backend.watchRelated(other, 'w2'), true);
+    await new Promise(setImmediate);
+    assert.equal(closed.length, 3, 'a second window\'s page closes nothing of the first\'s');
+    assert.equal(await backend.watchRelated(null, 'w1'), false);
+    await new Promise(setImmediate);
+    assert.equal(closed.length, 5, 'and closing one window\'s watch closes only its own two queries');
+    await backend.watchRelated(null, 'w2');
     console.log('ok  live sidebar: backlinks and meeting pins as edge live queries for the page on screen, one set at a time');
   }
+
+  // Two windows (issue #137): each window's view is refreshed and stays live, and a view's rows are let go only when no
+  // window shows it any more. Each window keeps its own sidebar watch.
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const inboxTask = 'tana:text:' + ulid(), aType = 'tana:type:' + ulid();
+    const subscribedIds = [], unsubscribed = [], asked = [];
+    const listNodes = async (p) => {
+      if (p.createdBy || p.nodeIds) return { nodes: [] };
+      if ((p.nodeTypes || []).includes('user-profile')) return { nodes: [] };
+      if ((p.nodeTypes || []).includes('type')) { asked.push('types'); return { nodes: [{ id: aType, title: 'Decision' }] }; }
+      if (JSON.stringify(p.stateTypes) === '["proposed"]') { asked.push('inbox'); return { nodes: [{ id: inboxTask, title: 'Answer Jules', state: { type: 'proposed' } }] }; }
+      return { nodes: [] };
+    };
+    const win = () => ({ isDestroyed: () => false, webContents: { send: () => {} } });
+    backend.testRuntime({ me: { userUri: ME }, activeView: 'inbox', win: win(), client: {
+      sync: { subscribe: async (id) => { subscribedIds.push(id); return null; }, getDocument: () => null, unsubscribe: async (id) => { unsubscribed.push(id); } },
+      graph: { listNodes, getOwnerChain: async () => ({ entries: [] }) },
+    } });
+    backend.S.windows = new Set([win(), win()]);
+    backend.S.windowViews = new Map([[1, { id: 'inbox' }], [2, { id: 'types' }]]);
+    await backend.refresh();
+    assert.deepEqual([...new Set(asked)].sort(), ['inbox', 'types'], 'the refresh reads every open window\'s view');
+    assert.ok(subscribedIds.includes(inboxTask) && subscribedIds.includes(aType), 'and keeps the rows of both live');
+    assert.deepEqual(unsubscribed, [], 'one window\'s view does not sweep the other\'s rows away');
+    backend.S.windowViews.delete(2); // the Types window closed
+    await backend.refresh();
+    assert.deepEqual(unsubscribed, [aType], 'a view no window shows lets its rows go');
+    backend.S.windows = new Set(); backend.S.windowViews = new Map();
+    console.log('ok  two windows: each window\'s view refreshed and kept live, let go when its window closes');
+  }
+
   // The fields a page shows (main/related.js fieldsOf): every field the type defines, empty or filled — an empty one
   // used to be left out, so there was nothing to fill in — then any value left under another type.
   {

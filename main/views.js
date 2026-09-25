@@ -58,7 +58,7 @@ async function viewRows(id, filter) {
     return row;
   });
   db.replaceSection(id, rows);
-  if (id === S.activeView && filter === S.activeFilter) {
+  if (openViews().some((v) => v.id === id)) {
     // The head of the list, not all of it (LIVE_ROWS in main/state.js): a wide Library lists hundreds of rows, and
     // subscribing every one of them meant hundreds of bootstraps on one connection and a redraw per bootstrap.
     // The tail keeps its cached row and is re-read by the 30 s refresh like everything else.
@@ -66,14 +66,26 @@ async function viewRows(id, filter) {
     // a node you asked to be told about — or the rule watches, or that was handed to the Codex agent — stays
     // subscribed wherever you are
     const watched = new Set([...notifyWatchedIds(), ...ruleWatched, ...codexIds()]);
+    liveIds.set(id, ids);
     for (const nodeId of ids) if (!subscribed.has(nodeId)) { subscribed.add(nodeId); subscribe(nodeId); }
+    // ...and so does what another window's view lists (issue #137)
+    const shown = new Set(openViews().flatMap((v) => [...(liveIds.get(v.id) || [])]));
     // Leaving a filtered view must not discard a document whose local undo step still points at its Loro handle.
     // ...and neither is a document an on-demand read is still waiting for: unsubscribing a bootstrap in flight
     // rejects it as 'unsubscribed <id>' under the reader (main/state.js reading).
-    for (const nodeId of subscribed) if (!ids.has(nodeId) && !watched.has(nodeId) && !deletedNodes.has(nodeId) && !inHistory(nodeId) && !reading.has(nodeId)) { subscribed.delete(nodeId); docStates.delete(nodeId); S.client.sync.unsubscribe(nodeId).catch(() => {}); }
+    for (const nodeId of subscribed) if (!shown.has(nodeId) && !watched.has(nodeId) && !deletedNodes.has(nodeId) && !inHistory(nodeId) && !reading.has(nodeId)) { subscribed.delete(nodeId); docStates.delete(nodeId); S.client.sync.unsubscribe(nodeId).catch(() => {}); }
   }
   if (result.truncated) truncatedViews.add(id); else truncatedViews.delete(id);
   return { nodes: rows.map(toNode), truncated: !!result.truncated };
+}
+
+// The views on screen: one per outliner window (S.windowViews, main.js), the same view once however many show it.
+// Without a window (the checks, the CLI) it is the one the last view:list asked for, as it always was.
+const liveIds = new Map(); // view id -> the head of its last answer, the rows kept subscribed while a window shows it
+function openViews() {
+  const byId = new Map();
+  for (const v of (S.windowViews && S.windowViews.values()) || []) if (!byId.has(v.id)) byId.set(v.id, v);
+  return byId.size ? [...byId.values()] : [{ id: S.activeView, filter: S.activeFilter }];
 }
 
 // Live search over all top-level items (graph full-text search, relevance order) with #task/#meeting/#Type filters.
@@ -283,7 +295,7 @@ async function doRefresh() {
   try {
     // before the view, so the sweep in viewRows sees the set this refresh found rather than the last one's
     try { await refreshWatched(); } catch { /* the watch set keeps what it had, like the badge keeps its number */ }
-    await viewRows(S.activeView, S.activeFilter);
+    for (const v of openViews()) await viewRows(v.id, v.filter); // each window's view, once
     send('outline:changed', null);
     setStatus({ syncing: false, lastSync: now() });
     // The badge rides the same refresh the views do, in its own try and deliberately silent: a number on the app icon
