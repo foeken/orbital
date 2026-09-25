@@ -2107,6 +2107,34 @@ async function main() {
     assert.equal(inbox.detail({ notificationType: 'task-assignment', title: 'Ship **it**!', body: 'b' }), 'Ship it', 'a task shows its title, markdown and end punctuation gone');
     assert.equal(inbox.detail({ notificationType: 'comment-reply', body: '[Plan](tana:x) looks _good_.' }), 'Plan looks good');
     assert.equal(inbox.detail({ notificationType: 'type-archived', body: 'x' }), '', 'a type change has no second line');
+    // Comment reminders (issue #160; rg and ng in Tana's bundle): hidden until due, a plain time local, a zoned one its own
+    {
+      const R = (due, more) => ({ notificationType: 'comment-reminder', due, ...more });
+      const nine = Date.UTC(2026, 8, 25, 7); // 09:00 in Amsterdam, summer time
+      const zoned = R({ type: 'zoned', datetime: '2026-09-25T09:00', timezone: 'Europe/Amsterdam' });
+      assert.deepEqual([inbox.shown(zoned, nine - 60000), inbox.shown(zoned, nine)], [false, true], 'a zoned reminder is due at that time in its own timezone');
+      const at = (datetime, timezone) => inbox.when(R({ type: 'zoned', datetime, timezone }));
+      assert.deepEqual([at('2026-03-08T02:30', 'America/New_York'), at('2026-10-04T02:15', 'Australia/Lord_Howe'), at('2026-10-25T02:30', 'Europe/Amsterdam')],
+        [Date.UTC(2026, 2, 8, 7, 30), Date.UTC(2026, 9, 3, 15, 45), Date.UTC(2026, 9, 25, 0, 30)], 'Temporal compatible: a skipped time moves forward by the gap, a repeated one is the earlier');
+      const local = new Date(2026, 8, 25, 9).getTime(), plain = R({ type: 'plain', datetime: '2026-09-25T09:00' });
+      assert.deepEqual([inbox.shown(plain, local - 60000), inbox.shown(plain, local)], [false, true], 'a plain one in the local timezone');
+      assert.ok(inbox.shown(R({ type: 'zoned', datetime: '2026-09-25T09:00', timezone: 'Mars/Olympus' }), 0) && inbox.shown(R({ type: 'plain', datetime: 'soon' }), 0) && inbox.shown(R(undefined), 0),
+        'an unreadable due time shows at once');
+      assert.ok(inbox.shown(R({ type: 'plain', datetime: '2999-01-01T09:00' }, { firedAt: 5 }), 0) && inbox.shown({ notificationType: 'comment-mention' }, 0), 'fired, or no reminder at all: shown');
+      assert.equal(inbox.when(zoned), nine, 'placed at its due time');
+      const later = new Document(inbox.inboxUri(ME));
+      later.transact((l) => {
+        const add = (id, fields) => { const m = l.getMap('notifications').setContainer(id, new LoroMap()); for (const [k, v] of Object.entries({ id, ...fields })) { if (k === 'due') m.setContainer(k, new LoroMap()).set('datetime', v); else m.set(k, v); } };
+        add('due', { notificationType: 'comment-reminder', sourceUri: TASK, createdAt: 1, due: '2000-01-01T09:00', title: 'Plan' });
+        add('waiting', { notificationType: 'comment-reminder', sourceUri: TASK, createdAt: 2, due: '2999-01-01T09:00' });
+        add('mention', { notificationType: 'comment-mention', sourceUri: TASK, createdAt: 3 });
+      });
+      assert.deepEqual([inbox.items(later).map((n) => n.id), inbox.unreadCount(later)], [['due', 'mention'], 2], 'a reminder not yet due is in neither the list nor the count, a due one sits at its due time');
+      assert.equal(inbox.nextDue(later), new Date(2999, 0, 1, 9).getTime(), 'and is the next moment to look again');
+      inbox.markAllAsRead(later);
+      assert.equal(later.loro.getMap('notifications').get('waiting').get('readAt'), undefined, 'mark all leaves it unread for when it comes due');
+      assert.deepEqual([say({ notificationType: 'comment-reminder', title: 'Plan' }), say({ notificationType: 'comment-reminder' })], ['Reminder — *Plan*', 'Reminder']);
+    }
 
     // main: the page is outline:children of its own id, the writes answer with the count, and a change to the inbox
     // reaches the renderer as inbox:changed rather than as a document change

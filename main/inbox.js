@@ -4,20 +4,31 @@
 // document, so it has an id of its own that no Tana id can collide with; main.js answers outline:children for it here.
 // Live: the inbox is subscribed once per connection, and every change to it — a new notification, a read on another
 // device — reaches the renderer as inbox:changed with the new unread count (main/documents.js onChange leaves it alone).
+// A comment reminder that comes due changes nothing in the document, so a timer tells the renderer then; it looks at
+// least once a minute, as Tana's reminder-tick does, which also covers a Mac that slept through the moment.
 const inbox = require('../sdk/inbox');
 const { NOT_CONNECTED, S, iso, send, typeTitles } = require('./state');
 const { members, resolveTypes } = require('./rows');
 
 const PAGE = 'orbital:notifications';
 const watched = new WeakSet();
+let timer;
+function wake(d) {
+  clearTimeout(timer);
+  const at = inbox.nextDue(d);
+  if (at !== Infinity) timer = setTimeout(() => (at <= Date.now() ? tell(d) : wake(d)), Math.min(at - Date.now(), 60000));
+}
+function tell(d) { send('inbox:changed', inbox.unreadCount(d)); wake(d); }
 async function doc() {
   if (!S.client || !S.me) throw new Error(NOT_CONNECTED);
   const client = S.client, uri = inbox.inboxUri(S.me.userUri);
   if (!watched.has(client)) {
     watched.add(client);
-    client.sync.on('change', (id) => { if (id === uri) send('inbox:changed', inbox.unreadCount(client.sync.getDocument(id))); });
+    client.sync.on('change', (id) => { if (id === uri) tell(client.sync.getDocument(id)); });
   }
-  return inbox.open(client.sync, S.me.userUri);
+  const d = await inbox.open(client.sync, S.me.userUri);
+  wake(d);
+  return d;
 }
 const unread = async () => (S.client ? inbox.unreadCount(await doc()) : 0);
 
@@ -39,7 +50,7 @@ async function rows() {
     const segments = [...words.map((p) => ({ text: p.text, ...(p.emphasis ? { marks: { bold: true } } : {}), ...demo(p) })), ...(more ? [{ text: '. ' + more + '.' }] : [])];
     return {
       id: n.id, text: segments.map((s) => s.text).join(''), kind: 'block', block: 'bullet', editable: false, segments, hasChildren: false, children: [],
-      unread: !n.readAt, createdAt: iso(n.createdAt),
+      unread: !n.readAt, createdAt: iso(inbox.when(n)), // a reminder at the moment it came due
       notification: { type: n.notificationType, sourceUri: n.sourceUri || null, threadUri: n.threadUri || null },
     };
   });
