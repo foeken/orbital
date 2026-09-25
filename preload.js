@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer, webFrame } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
+  side: ipcRenderer.sendSync('window:getSide'), // '' the left or only page, '2' the right half of a split (renderer/state.js SIDE)
   zoom: (factor) => { webFrame.setZoomFactor(factor); return webFrame.getZoomFactor(); },
   systemTheme: () => ipcRenderer.invoke('theme:system'), // 'dark' | 'light' right now
   onSystemTheme: (fn) => ipcRenderer.on('theme:system', (_e, theme) => fn(theme)), // macOS appearance changed
@@ -24,7 +25,8 @@ contextBridge.exposeInMainWorld('api', {
   newWindow: () => ipcRenderer.invoke('window:new'), // another outliner window (File › New Window)
   splitWindow: () => ipcRenderer.invoke('window:split'), // a second page beside this one in the same window, or back to this one alone
   otherPane: () => ipcRenderer.invoke('window:otherPane'), // the keyboard to the other half of a split
-  onSide: (cb) => ipcRenderer.on('window:side', (_e, side) => cb(side)), // '' once this page, the right half, is left alone in its window
+  swapPanes: () => ipcRenderer.invoke('window:swapPanes'), // the two halves of a split change sides
+  onSide: (cb) => ipcRenderer.on('window:side', (_e, side) => cb(side)), // this page's side changed: '' the left or only page, '2' the right half
   windowTheme: (theme) => ipcRenderer.send('window:theme', theme), // 'light' | 'dark': the line between split pages matches the page
   openExternal: (url) => ipcRenderer.invoke('shell:open', url), // http(s) link from node text, in the default browser
   exportPdf: (docId) => ipcRenderer.invoke('doc:exportPdf', docId),

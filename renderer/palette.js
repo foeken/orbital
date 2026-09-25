@@ -321,6 +321,7 @@ function paletteRows(q, typed = q) {
   // the new right half opens on this page: it reads the right half's view and place, so this page is stored there first
   rows.push({ id: 'splitView', group: 'Actions', icon: 'rail', label: 'Toggle split view', run: () => { localStorage.setItem('view:2', view); rememberPlace('place:2'); tana.splitWindow(); } });
   rows.push({ id: 'otherPane', group: 'Actions', icon: 'rail', label: 'Go to the other half', run: () => tana.otherPane() });
+  rows.push({ id: 'swapPanes', group: 'Actions', icon: 'rail', label: 'Swap panes', run: () => tana.swapPanes() });
   // the list of titles hidden from every view and from search, edited in the palette itself
   if (tana.filters) rows.push({ id: 'hidden', group: 'Actions', icon: 'hiddenItems', label: 'Edit hidden items', keepOpen: true, run: openHiddenPalette });
   if (tana.codexHosts) rows.push({ id: 'codexHosts', group: 'Actions', icon: 'host', label: 'Manage Codex hosts', keepOpen: true, run: openHostsPalette });

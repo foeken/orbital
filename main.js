@@ -69,7 +69,7 @@ function addPane(win, side) {
   pane.side = side; // '2': the right half, which keeps its own view and place (renderer/state.js SIDE)
   pane.webContents.on('focus', () => { S.win = win; S.pane = pane.webContents; });
   win.panes.push(pane); win.contentView.addChildView(pane); layout(win);
-  pane.webContents.loadFile(path.join(__dirname, 'index.html'), side ? { query: { side } } : undefined);
+  pane.webContents.loadFile(path.join(__dirname, 'index.html'));
   if (win.saveBounds) win.saveBounds();
   return pane;
 }
@@ -219,6 +219,16 @@ ipcMain.handle('window:new', () => { createWindow(); });
 ipcMain.handle('window:split', (e) => { toggleSplit(e.sender); });
 // ⌘\: the keys go to the other half of a split (nothing to do in a window with one page)
 ipcMain.handle('window:otherPane', (e) => { const other = paneWindow(e.sender)?.panes.find((p) => p.webContents !== e.sender); if (other) other.webContents.focus(); });
+// asked by preload.js on every load, a Reload included: which side this page is ('' left or alone, '2' the right half)
+ipcMain.on('window:getSide', (e) => { e.returnValue = paneWindow(e.sender)?.panes.find((p) => p.webContents === e.sender)?.side || ''; });
+// Cmd+K Swap panes: the halves change sides, and each takes the other's side marker, so a restart keeps them there
+ipcMain.handle('window:swapPanes', (e) => {
+  const win = paneWindow(e.sender);
+  if (!win || win.panes.length < 2) return;
+  win.panes.reverse();
+  win.panes.forEach((p, i) => { p.side = i ? '2' : ''; p.webContents.send('window:side', p.side); });
+  layout(win);
+});
 // a page says which theme it drew itself in (renderer/theme.js), and the line between split pages follows it
 ipcMain.on('window:theme', (e, theme) => { const win = paneWindow(e.sender); if (win) win.setBackgroundColor(SPLIT_LINE[theme] || SPLIT_LINE.light); });
 // Demo mode lives in the outliner (renderer/state.js); main only needs to know it is on, so no banner shows a real title.
