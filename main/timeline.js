@@ -20,7 +20,7 @@ const db = require('../db');
 const { STATE_TYPES } = require('../sdk/node');
 const { pinnedDates } = require('./pins');
 const { NOT_CONNECTED, S, iso, isMcp } = require('./state');
-const { graphRow, members, toNode } = require('./rows');
+const { graphRow, members, rememberNodeHue, toNode } = require('./rows');
 const { notifySilencedIds, notifyWatchedIds } = require('./documents');
 const { inboxFrom } = require('./views');
 
@@ -120,8 +120,9 @@ async function rows() {
   const { nodes: pinned = [] } = todayIds.length ? await graph.listNodes({ nodeIds: todayIds, nodeTypes: ['text'], stateTypes: STATE_TYPES, limit: todayIds.length }) : {};
   const byId = new Map(pinned.map((n) => [n.id, n]));
   const children = todayIds.map((id) => byId.get(id)).filter(Boolean).map((n) => {
+    rememberNodeHue(n); // graphRow drops participants, so seed the verified editability before toNode builds the row
     const row = toNode(graphRow(n));
-    return { ...row, editable: false, checkable: row.editable !== false };
+    return { ...row, editable: false, checkable: row.editable === true };
   });
   const todayText = children.length ? 'Tasks pinned to today' : 'All done for today';
   const todayRow = { id: PAGE + ':today:' + date, text: todayText, segments: [{ text: todayText }], kind: 'block', block: 'bullet', icon: 'pinDate',
