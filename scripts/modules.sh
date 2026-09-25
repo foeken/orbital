@@ -11,3 +11,7 @@ main=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/n
 [ -n "$main" ] && [ -d "$main/node_modules" ] || exit 0
 echo "modules: cloning $main/node_modules"
 cp -Rc "$main/node_modules" node_modules 2>/dev/null || cp -R "$main/node_modules" node_modules # -c is APFS only
+# The clone's Electron.app would carry the main checkout's bundle id, and macOS sends a notification click to whichever
+# bundle LaunchServices has for that id: with a worktree registered too it can start that copy instead (issue #129).
+app=node_modules/electron/dist/Electron.app
+[ -d "$app" ] && plutil -replace CFBundleIdentifier -string com.dreetje.orbital.dev.worktree "$app/Contents/Info.plist" && codesign --force --sign - "$app" 2>/dev/null || true
