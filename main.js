@@ -330,6 +330,17 @@ ipcMain.handle('codex:set', async (_e, id, on, prompt, model, host) => {
   if (!on) { const result = await setCodex(id, false, prompt); agent.clearCodexTask(id); await agent.releaseTask(id); return result; }
   return assignToAgent(id, prompt, model, host);
 });
+// Linking a node to a Codex task that already exists (#143): the link Codex copies, codex://threads/<id>, or the bare
+// id. The node takes the local agent mark the way an assignment does, as a task on this machine, where a pasted
+// link can only have come from; no task is started and nothing is written to the node.
+ipcMain.handle('codex:link', async (_e, id, link) => {
+  if (typeof id !== 'string' || !/^tana:[a-z-]+:[0-9a-z]{26}$/.test(id)) throw new Error('Not a Tana node');
+  const threadId = String(link || '').trim().replace(/^codex:\/\/threads\//i, '').replace(/\/$/, '');
+  if (!agent.THREAD_ID.test(threadId)) throw new Error('Paste a Codex task link: codex://threads/…');
+  const result = await setCodex(id, true);
+  agent.setCodexTask(id, threadId, 'local');
+  return result;
+});
 // The current request, delivered to the task this node already has. Best effort on purpose: the task is open in
 // front of the user either way, and a queue that does not land must not undo an assignment that did.
 function queueToTask(threadId, message) {

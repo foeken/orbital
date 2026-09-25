@@ -44,6 +44,7 @@ contextBridge.exposeInMainWorld('api', {
   removeCodexHost: (id) => ipcRenderer.invoke('codex:hostRemove', id), // the machine is forgotten; its tasks are not touched
   codexTaskHost: (docId) => ipcRenderer.invoke('codex:taskHost', docId), // which machine this node's task runs on
   codexTaskHosts: () => ipcRenderer.invoke('codex:taskHosts'), // nodeId -> host, for every linked node
+  linkCodexTask: (docId, link) => ipcRenderer.invoke('codex:link', docId, link), // an existing Codex task, pasted as codex://threads/<id>
   openCodexTask: (docId) => ipcRenderer.invoke('codex:open', docId), // open the Codex task this node is linked to
   codexStatus: () => ipcRenderer.invoke('codex:status'), // docId -> pending|working|waiting|done|broken for every linked node
   // Cmd+K "Discuss with …": gives the document the Discussion Task type (created in the Library when the workspace

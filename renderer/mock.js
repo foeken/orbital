@@ -483,6 +483,7 @@ function mockApi() {
       else { codexAssigned.delete(docId); codexPrompts.delete(docId); }
       return !!on;
     },
+    linkCodexTask: async (docId) => { codexAssigned.add(docId); return true; },
     nodeLink: async (docId) => 'https://home.tana.inc/o/mockorg/l/' + encodeURIComponent(docId),
     // the mock has no participants model, so nothing is watched by default here: the choice is all there is
     notifyState: async (docId) => ({ on: !!notifyChoices[docId], default: false, explicit: docId in notifyChoices }),
