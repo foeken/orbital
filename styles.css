@@ -629,7 +629,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
    clicking it (or Enter/Space on it) folds its own section away, and the triangle follows aria-expanded */
 /* 3px left and a 9px gap put the 12px chevron's centre on x=9, where a row's own chevron sits (its 14px circle is at
    left: 2px in a 24px gutter), and still start the heading's word at x=24, where a row's icon does */
-.ghead { display: flex; align-items: center; gap: 9px; width: 100%; margin-top: 18px; padding: 10px 6px 4px 3px; border: 0; background: none; font: inherit; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #999; text-align: left; cursor: pointer; user-select: none; }
+.ghead { display: flex; align-items: center; gap: 9px; width: 100%; margin-top: 18px; padding: 10px 6px 10px 3px; border: 0; background: none; font: inherit; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #999; text-align: left; cursor: pointer; user-select: none; }
 /* pointing right while the section is folded, a quarter turn down while it is open */
 .ghead svg { flex: none; width: 12px; height: 12px; transition: transform 120ms ease; }
 .ghead[aria-expanded="true"] svg { transform: rotate(90deg); }
