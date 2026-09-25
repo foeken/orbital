@@ -72,7 +72,7 @@ tana.onChanged((docId, info) => {
     // asks for it again, and that read keeps the old payload on screen until the new one lands. What this gives up
     // is the Changes section noticing your own latest edit: it says what it said when the page opened. Pins refresh
     // it themselves, because they do change a section.
-    if (!info || info.meta !== false) refreshRelated(docId);
+    if (!info || info.meta !== false || isTypeId(docId)) refreshRelated(docId); // a type's own change can be its fields, which its page's pills and columns are
     const work = [patchDoc(docId)];
     for (const id of outlinesOf(docId)) work.push(reload(id)); // its page and its fields: both are its rows
     // A zoom parks the caret in its blank tail, so an ordinary render defers until focus leaves and remote children
@@ -124,14 +124,18 @@ tana.onStatus(showStatus);
 // Another machine changed a preference: take the new set and apply it where it is already on screen. Everything a
 // preference feeds is visible from here, which is why the applying lives in this file and not beside the store.
 if (tana.onSettings) tana.onSettings((next) => {
+  const openType = onTypePage() ? zoom.docId : null, wasFields = openType && JSON.stringify((filters.get(openType) || {}).fields || null);
   mergePrefs(next);
   home = pref('home', 'library');
   for (const key of Object.keys(hotkeys)) delete hotkeys[key];
   Object.assign(hotkeys, pref('hotkeys', {}));
   for (const [store, key] of [[groupPref, 'groupBy'], [sortPref, 'sortBy'], [displayPref, 'display']]) {
-    for (const k of Object.keys(store)) if (!k.startsWith('tana:')) delete store[k]; // a saved search keeps its own, which lives in the document
+    for (const k of Object.keys(store)) if (!k.startsWith(SEARCH_ID)) delete store[k]; // a saved search keeps its own, which lives in the document
     Object.assign(store, pref(key, {}));
   }
+  // a type page's field pills are a preference too: the cached filters go, and the open page asks again if its own moved
+  for (const id of [...filters.keys()]) if (isTypeId(id)) filters.delete(id);
+  if (openType && JSON.stringify(typeFilter(openType).fields || null) !== wasFields) reload(openType).then(() => renderSoon(true), showError);
   collapsedGroups.clear(); for (const key of pref('collapsedGroups', [])) collapsedGroups.add(key);
   const nextTheme = ['dark', 'system', 'light'].includes(pref('theme')) ? pref('theme') : 'light';
   if (nextTheme !== themePref) { if (nextTheme === 'system') followSystem(true); else setTheme(nextTheme); } // writes the same value back, which is a no-op in the store

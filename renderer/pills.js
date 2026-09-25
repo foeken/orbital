@@ -22,7 +22,17 @@ function pillDefs() {
   // A kind page (Tasks, Meetings, Chats, People) is that kind: only the Library and the Inbox pick their kinds.
   // A saved search is never a kind page — choosing what it lists is the whole point of it.
   // A type's page is that type, so its pills are its fields instead (fieldPill below).
-  if (onTypePage()) defs.push(...typeDefs().map((def) => fieldPill(def, f, save)).filter(Boolean));
+  if (onTypePage()) {
+    const pills = typeDefs().map((def) => fieldPill(def, f, save)).filter(Boolean);
+    defs.push(...pills);
+    // A filter on a field that no longer gets a pill (retyped, removed, lost its link targets) keeps one to clear it
+    // with, or the page would stay narrowed by something nobody can see. Only once the definitions are in.
+    if ((relatedBy.get(zoom.docId) || {}).definitions) for (const key of Object.keys(f.fields || {})) {
+      if (pills.some((p) => fieldKey({ key: p.id.slice(6) }) === key)) continue;
+      const title = (typeDefs().find((d) => fieldKey(d) === key) || {}).title || 'Removed field';
+      defs.push({ id: 'field:' + key.split('?attribute=')[1], label: title, command: 'Clear filter on ' + title, icon: 'field', value: 'Filtered', rows: () => [{ label: 'Any', checked: false, run: () => putField(f, save, key, null) }] });
+    }
+  }
   else if (onSearchPage() || !(views.find((v) => v.id === view) || {}).kind) defs.push({ id: 'type', command: 'Filter by type', value: [names(TYPES, kinds), ...typed.map(typeName)].filter(Boolean).join(', ') || 'Any type', icon: one ? one[2] : typed.length === 1 && !kinds.length ? typeGlyph(typed[0]) : 'any', rows: () => (loadWorkspaceTypes(), [
     { label: 'Any type', icon: 'any', checked: !f.types, run: () => save({ types: null }) },
     ...TYPES.map((t) => (t ? { label: t[1], icon: t[2], keepOpen: true, checked: kinds.includes(t[0]), run: () => save({ types: toggleIn(kindIds, kinds.length ? kinds : null, t[0]) }) } : { div: true })), // multi-select: the menu stays open to tick more
@@ -61,22 +71,31 @@ function pillDefs() {
 // verified live 2026-09-25): an options field by its labels (several are ORed), a link or member field by the nodes it
 // points at, a date field by Tana's day presets. A text field has no set of values to offer, so it gets no pill.
 const DATE_PRESETS = [['today', 'Today'], ['upcoming', 'Upcoming'], ['past', 'Past']];
-const linkChoices = new Map(); // the target types of a link field, joined -> their instances ({ id, text }), once per session
+// the target types of a link field, joined -> { at, rows } ({ id, text }): asked again after a minute, so a new or
+// renamed target turns up without a restart
+// ponytail: the first 200 of them (searchPreview's cap); ask as the menu is typed into if a target type outgrows that
+const linkChoices = new Map();
 function fieldChoices(def) {
   if (def.type === 'options') return (def.options || []).map((o) => [o.label, o.label]);
   if (def.type === 'member') { loadMembers(); return (members || []).map((m) => [m.id, memberName(m.id)]); }
   const to = (def.to || []).map((t) => t.uri), key = to.join(',');
   if (!to.length) return [];
-  if (!linkChoices.has(key)) {
-    linkChoices.set(key, null);
-    tana.searchPreview({ types: to }).then((rows) => { linkChoices.set(key, rows); if (pillsDrawn) renderPills(true); }, () => linkChoices.delete(key));
+  const hit = linkChoices.get(key);
+  if (!hit || (hit.rows && Date.now() - hit.at > 6e4)) {
+    linkChoices.set(key, { at: Date.now(), rows: hit ? hit.rows : null }); // claimed: the renders while it is asked do not ask again
+    tana.searchPreview({ types: to }).then((rows) => { linkChoices.set(key, { at: Date.now(), rows }); if (pillsDrawn) renderPills(true); }, () => linkChoices.delete(key));
   }
-  return (linkChoices.get(key) || []).map((n) => [n.id, n.text || 'Untitled']);
+  return ((linkChoices.get(key) || {}).rows || []).map((n) => [n.id, n.text || 'Untitled']);
+}
+function putField(f, save, key, value) {
+  const fields = { ...f.fields };
+  if (value) fields[key] = value; else delete fields[key];
+  save({ fields: Object.keys(fields).length ? fields : null });
 }
 function fieldPill(def, f, save) {
   if (!PILL_FIELDS.includes(def.type) || (def.type === 'link' && !(def.to || []).length)) return null; // a link to anything has no list to pick from
   const key = fieldKey(def), now = (f.fields || {})[key] || {}, title = def.title || 'Untitled field';
-  const put = (value) => { const fields = { ...f.fields }; if (value) fields[key] = value; else delete fields[key]; save({ fields: Object.keys(fields).length ? fields : null }); };
+  const put = (value) => putField(f, save, key, value);
   const pill = { id: 'field:' + def.key, label: title, command: 'Filter by ' + title, icon: 'field' };
   if (def.type === 'date') {
     const preset = now.date && now.date.preset;

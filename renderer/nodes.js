@@ -186,8 +186,9 @@ function iconNode(icon) {
   return t ? t.cloneNode(true) : null;
 }
 const isTask = (node) => node.kind === 'document' && node.icon === 'task';
-// A member or a type is a fact about other nodes, not a page: nothing zooms into one (bullet, Space, Zoom in)
-const zoomable = (node) => !!node && !/^tana:(user-profile|type):/.test(node.id || '');
+// A member is a fact about other nodes, not a page: nothing zooms into one (bullet, Space, Zoom in). A type opens as
+// the list of its instances (renderer/render.js).
+const zoomable = (node) => !!node && !/^tana:user-profile:/.test(node.id || '');
 // A task put off is drawn with the zzz glyph instead of the task one: the row still is a task (its box, its
 // status, its metadata are unchanged), it only says at a glance that it is asleep.
 // A task keeps 'task' as its icon (that is what isTask reads), so its type's glyph — the one a typed document wears
