@@ -1201,7 +1201,7 @@ palInput.addEventListener('input', () => {
   // the set lives in main, so typing asks it — debounced like the document search, and the page says it is busy
   if (palMode === 'setIcon') { palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchIconsNow, 150); return renderPalette(); }
   if (palMode === 'spaces') { palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchSpacesNow, 150); return; }
-  if (palMode === 'pinToday') { palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(todayPickerSearchNow, 150); return; }
+  if (palMode === 'pinToday') { palSeq++; palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(todayPickerSearchNow, 150); return; }
   palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchNow, 150);
 });
 palInput.addEventListener('keydown', (e) => {

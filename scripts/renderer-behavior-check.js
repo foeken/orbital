@@ -1027,6 +1027,7 @@ async function runStalePaletteInvalidationCheck() {
     ${recent}
     let views = [], palRows = [], palDoc = null, pinInfo = null, dropDoc = null;
     let searches = [{ id: searchId, title: 'saved' }, { id: keptId, title: 'beta' }];
+    const TIMELINE_PAGE = 'orbital:timeline';
     let zoom = { docId: keptId };
     const taskMetaById = new Map(), kids = new Map(), extra = new Map(), paths = new Map(), fresh = new Map();
     const loadRoots = async () => {};
@@ -6948,13 +6949,15 @@ async function runLiveUpdateBurstCheck() {
   assert.ok(queued, 'renderSoon keeps the pending force beside the pending frame');
   const api = vm.runInNewContext(`
     ${queued[0]}
-    const frames = [], renders = [];
+    const frames = [], renders = [], reloaded = [];
     const requestAnimationFrame = (fn) => frames.push(fn);
     const render = (force) => renders.push(force === true);
     ${functionSource('renderSoon')}
     let listener;
+    const TIMELINE_PAGE = 'orbital:timeline';
+    let zoom = { docId: TIMELINE_PAGE };
     const taskMetaById = new Map(), taskMetaFailed = new Map(), relatedBy = new Map(), kids = new Map();
-    const patchDoc = async () => {}, reload = async () => {}, loadPins = () => {}, refreshRelated = () => {};
+    const patchDoc = async () => {}, reload = async (id) => { reloaded.push(id); }, loadPins = () => {}, refreshRelated = () => {};
     const loadRoots = async () => 'rows'; // a resolved value, which is what .then(renderSoon) hands the queue
     const showError = (error) => { throw error; };
     const tana = { onChanged: (fn) => { listener = fn; } };
@@ -6963,6 +6966,8 @@ async function runLiveUpdateBurstCheck() {
       change: (id) => listener(id),
       flush: () => { for (const fn of frames.splice(0)) fn(); },
       drawn: () => renders.splice(0),
+      reloaded: () => reloaded.splice(0),
+      page: (id) => { zoom = { docId: id }; },
     });
   `);
 
@@ -6974,19 +6979,28 @@ async function runLiveUpdateBurstCheck() {
 
   api.change(null);
   await new Promise(setImmediate);
+  assert.deepEqual(plain(api.reloaded()), ['orbital:timeline'], 'a global date-pin change reloads the open Timeline snapshot');
   api.flush();
   assert.deepEqual(plain(api.drawn()), [false], 'a global refresh renders unforced: the rows .then(renderSoon) hands it are not a force');
 
   api.change('tana:text:01j0burst0000000000000000');
   api.change(null);
   await new Promise(setImmediate);
+  assert.deepEqual(plain(api.reloaded()), ['orbital:timeline'], 'a pin change still reloads Timeline when batched with a task update');
   api.flush();
   assert.deepEqual(plain(api.drawn()), [true], 'a live update and a refresh in the same frame settle as one forced redraw rather than two');
 
   api.change(null);
   await new Promise(setImmediate);
+  assert.deepEqual(plain(api.reloaded()), ['orbital:timeline']);
   api.flush();
   assert.deepEqual(plain(api.drawn()), [false], 'and the force does not leak into the frame after it');
+
+  api.page('library'); api.change(null);
+  await new Promise(setImmediate);
+  assert.deepEqual(plain(api.reloaded()), [], 'global changes leave the timeline query alone while another page is open');
+  api.flush();
+  console.log('ok  global pin changes refresh Timeline only while it is open');
 }
 
 // Cmd+K "Discuss with …": the row on a document, and the page that asks who. Main owns both writes (the Discussion

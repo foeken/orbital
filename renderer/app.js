@@ -59,7 +59,9 @@ tana.onChanged((docId, info) => {
     Promise.all(work).then(() => renderSoon(true), showError);
   } else {
     loadPins();
-    loadRoots().then(renderSoon, showError);
+    const work = [loadRoots()];
+    if (zoom?.docId === TIMELINE_PAGE) work.push(reload(TIMELINE_PAGE));
+    Promise.all(work).then(renderSoon, showError);
   }
 });
 // A task is also drawn from copies of its own: a reference to it inside an open note (reference.node) and a sidebar row
