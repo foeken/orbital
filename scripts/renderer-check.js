@@ -180,7 +180,8 @@ assert.match(source, /draftDocNode\(choice\.kind, \{ typeUri: choice\.typeUri, i
 assert.match(source, /tana\.createDocument\(text, node\.createOptions \|\| \{ kind: node\.draft \}\)/);
 // one fetch path for every view: its rows replace that view's list, and its truncation is remembered per view
 assert.match(source, /if \(result\.truncated\) truncated\.add\(id\); else truncated\.delete\(id\);/);
-assert.match(source, /truncated\.has\(view\) \? 'Showing the first 1,000 results' : ''/);
+assert.match(source, /const cut = parent \? onTypePage\(\) && \(kids\.get\(zoom\.docId\) \|\| \[\]\)\.length >= 1000 : truncated\.has\(view\);/, 'a view says when it was cut, and so does a full type page');
+assert.match(source, /cut \? 'Showing the first 1,000 results' : ''/);
 assert.match(source, /function blockSelection\(keys, contiguous, action, siblings = true\)/);
 // Removing a selection does not need siblings: a set of rows across levels is an ordinary thing to delete, and
 // the write takes it (sdk/content.js removeMany). Moving, indenting and outdenting still do.

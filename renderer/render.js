@@ -416,7 +416,9 @@ function renderOutline() {
   renderPills(showPills);
   filterRow.hidden = (!!parent && !isSearchDoc(parent.node) && !isTypeDoc(parent.node)) || !(filterShown || filterEl.value);
   filterRow.classList.toggle('empty', !filterEl.value);
-  $('filtered').textContent = [hidden ? hidden + ' items filtered out' : '', truncated.has(view) ? 'Showing the first 1,000 results' : ''].filter(Boolean).join(' · ');
+  // a type page asks for 1,000 rows (main/related.js searchPreview), so a full answer is one that may have been cut
+  const cut = parent ? onTypePage() && (kids.get(zoom.docId) || []).length >= 1000 : truncated.has(view);
+  $('filtered').textContent = [hidden ? hidden + ' items filtered out' : '', cut ? 'Showing the first 1,000 results' : ''].filter(Boolean).join(' · ');
   // Cached rows remain usable while auth and sync reconnect; reserve the skeleton for an empty outline.
   const loading = !parent && !outline.children.length && (authChecking || !rootsLoaded || !filters.has(view) || (authed && !connected));
   $('skeleton').classList.toggle('gone', !loading);

@@ -269,7 +269,8 @@ const PILL_FIELDS = ['options', 'link', 'member', 'date'];
 const displayList = () => [...typeDefs().map((d) => [fieldKey(d), d.title || 'Untitled field']), ...DISPLAY.filter(([id]) => !(noTasks() && ['status', 'assigned'].includes(id)))];
 const displayKeys = () => {
   const k = pillKey(), chosen = displayPref[k] ?? arranged(k, 'display');
-  if (Array.isArray(chosen)) return chosen;
+  // a field the type no longer defines is dropped: the menu cannot offer it, so nothing could turn it off
+  if (Array.isArray(chosen)) return onTypePage() ? chosen.filter((k) => !isFieldKey(k) || typeDefs().some((d) => fieldKey(d) === k)) : chosen;
   return onTypePage() ? [...typeDefs().filter((d) => PILL_FIELDS.includes(d.type)).map(fieldKey), 'updated'] : DISPLAY_DEFAULT;
 };
 const displayOn = (id) => displayKeys().includes(id);
