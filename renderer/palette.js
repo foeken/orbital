@@ -144,7 +144,7 @@ function paletteRows(q, typed = q) {
     loadMeeting();
     const doc = palDoc, live = meetingNow;
     rows.push({ id: 'pinToMeeting', group: docGroup, icon: 'pin', label: 'Pin to current meeting',
-      hint: live.pending ? 'Checking…' : live.meeting ? live.meeting.title || 'Current meeting' : live.error || 'No active meeting',
+      hint: live.pending ? 'Checking…' : live.meeting ? demoText(live.meeting.title || 'Current meeting', live.meeting.id) : live.error || 'No active meeting',
       disabled: !(live && live.meeting), run: () => pinToMeeting(doc) });
   }
   // And any other meeting, chosen from a page of its own: the same pin, a target picked rather than detected. It

@@ -746,8 +746,8 @@ function nodeEl(node, docId, parent) {
   if (isImage(node)) { // focusable, not editable: keeps its place in texts() so Up/Down/Backspace work like any block
     text.classList.add('image'); text.tabIndex = -1;
     const img = document.createElement('img'), { uri, alt, width, height } = node.image;
-    if (alt) img.alt = img.title = alt;
-    else imageTitle(uri).then((t) => { if (t) img.alt = img.title = t; }); // Tana's AI title, once it has written one
+    if (alt) img.alt = img.title = demoText(alt, display.id);
+    else imageTitle(uri).then((t) => { if (t) img.alt = img.title = demoText(t, display.id); }); // Tana's AI title, once it has written one
     if (width && height) { img.width = width; img.height = height; }
     const show = (url) => { images.set(uri, url); img.src = url; text.classList.remove('loading'); if (images.size > 200) images.delete(images.keys().next().value); }; // oldest out: main keeps the file cache
     const cached = images.get(uri);

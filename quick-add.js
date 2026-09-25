@@ -48,6 +48,10 @@ const HOSTS_ROW = { hosts: true, title: 'Run on…' }; // from the model list in
 const MODELS_ROW = { models: true, title: 'Choose a model…' }; // and back again
 const qtext = (e) => String((e && e.message) || e || '');
 function qsetError(text) { qerror.textContent = text || ''; qerror.hidden = !text; }
+// Demo mode (Cmd+K in the outliner, remembered in this app's localStorage): the panel reads nothing from Tana to show
+// and writes nothing to it. Asked at every open and every submit, since the outliner can switch it while this panel lives.
+const QDEMO = 'Demo mode is on: nothing is saved to Tana';
+const qdemo = () => typeof localStorage !== 'undefined' && localStorage.getItem('demoMode') === '1';
 
 // The meeting line is the panel's one claim about Tana, so it never guesses: it says it is still looking, names the
 // meeting the user has actually joined, says there is none, or says why it could not tell.
@@ -57,6 +61,7 @@ function qshowMeeting() {
   qmeeting.textContent = qmeetingState === 'live' ? 'Adding to ' + (m.title || 'this meeting')
     : qmeetingState === 'none' ? 'No active meeting'
     : qmeetingState === 'error' ? 'Could not check meetings'
+    : qmeetingState === 'demo' ? QDEMO
     : 'Checking for an active meeting…';
 }
 // Who has the task, as a pill: the app's member glyph for a person, its robot for the agent, and the agent's model
@@ -155,6 +160,7 @@ function qpick(row) {
 // Read at every open, never cached: the meeting must be the one being attended now. It runs after the field is
 // already focused and never touches the title, so a slow or failing lookup cannot swallow what is being typed.
 async function qloadContext() {
+  if (qdemo()) { qctx = { meeting: null, members: [] }; qassigned = null; qmeetingState = 'demo'; qshowMeeting(); qshowAssignee(); return; }
   if (!qapi || !qapi.quickContext) { qmeetingState = 'error'; qshowMeeting(); return; }
   qmeetingState = 'loading';
   qshowMeeting();
@@ -175,6 +181,7 @@ async function qloadContext() {
 // here, so the empty and in-flight guards cannot be walked around. A failure keeps the title exactly as typed and
 // says why; only a created task clears and closes the panel.
 async function qsubmit() {
+  if (qdemo()) { qsetError(QDEMO); return null; }
   const title = (qtitle.value || '').trim();
   if (!title) { qsetError('A task needs a title'); return null; }
   const prompt = qagent ? (qprompt.value || '').trim() : '';

@@ -5847,7 +5847,7 @@ async function runQuickAddPanelCheck() {
   const settled = (value) => () => Promise.resolve(value);
   const tick = async () => { for (let i = 0; i < 6; i += 1) await Promise.resolve(); };
 
-  function panel({ context = settled({ meeting: MEETING, members: PEOPLE, me: PEOPLE[0].id }), create, models = ['gpt-5-codex'] } = {}) {
+  function panel({ context = settled({ meeting: MEETING, members: PEOPLE, me: PEOPLE[0].id }), create, models = ['gpt-5-codex'], demo = false } = {}) {
     const els = new Map(), keydown = [], created = [], closed = [], asked = [];
     let focused = null, reopen = null;
     const makeEl = (id) => {
@@ -5885,7 +5885,7 @@ async function runQuickAddPanelCheck() {
       api, console,
       // the real icons.js sets exactly this global; the markup is stubbed so a glyph can be told apart by name
       ICONS: { member: '<svg data-icon="member"></svg>', robot: '<svg data-icon="robot"></svg>', brain: '<svg data-icon="brain"></svg>' },
-      localStorage: { getItem: () => 'light' },
+      localStorage: { getItem: (key) => (key === 'demoMode' ? (demo ? '1' : '0') : 'light') },
       matchMedia: () => ({ matches: false }),
       document: {
         documentElement: { dataset: {} },
@@ -5921,6 +5921,16 @@ async function runQuickAddPanelCheck() {
       'the meeting goes over as its id, so main pins the task to the event itself');
     assert.deepEqual(p.closed, [true], 'a created task closes the panel');
     assert.equal(p.el('qtitle').value, '');
+  }
+  // Demo mode (the outliner's Cmd+K, the same localStorage): nothing from Tana is read to show, and nothing is written.
+  {
+    const p = panel({ demo: true });
+    await tick();
+    assert.deepEqual([p.asked.length, p.el('qmeeting').textContent], [0, 'Demo mode is on: nothing is saved to Tana'], 'demo mode neither asks for the meeting and members nor names them');
+    p.el('qtitle').value = 'Draft the agenda';
+    p.key('Enter');
+    await tick();
+    assert.deepEqual([p.created.length, p.el('qerror').textContent, p.el('qtitle').value], [0, 'Demo mode is on: nothing is saved to Tana', 'Draft the agenda'], 'and a submit creates nothing, says why and keeps the words');
   }
   // No meeting, and a lookup that failed: both say so, and neither invents a link.
   {

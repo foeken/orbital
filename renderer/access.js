@@ -81,7 +81,7 @@ function searchSpacesNow() {
 // state rather than a place, so it is not offered here: Set status to Inbox puts a task there.
 async function moveTargets(doc) {
   const nodes = tana.searchSpaces ? (await tana.searchSpaces('')).map(asDoc) : [];
-  return nodes.map((node) => ({ icon: node.icon, label: node.text, disabled: !node.selectable, keepOpen: true, run: () => { openMovePalette(doc); previewMoveToSpace(doc, node); } }));
+  return nodes.map((node) => ({ icon: node.icon, label: demoText(node.text, node.id), disabled: !node.selectable, keepOpen: true, run: () => { openMovePalette(doc); previewMoveToSpace(doc, node); } }));
 }
 function openMovePalette(doc) {
   clearTimeout(palTimer); palTimer = null; ++palSeq;
@@ -100,7 +100,7 @@ function previewMoveToSpace(doc, space) {
     palRows = [
       { group: 'Move', label: 'Before: ' + audienceLabel(preview.before), disabled: true },
       { group: 'Move', label: 'After: ' + audienceLabel(preview.after), disabled: true },
-      { group: 'Move', icon: 'space', label: 'Move to ' + (preview.target?.title || space.text || 'space'), keepOpen: true, run: () => moveToSpace(doc, space, preview.token) },
+      { group: 'Move', icon: 'space', label: 'Move to ' + demoText(preview.target?.title || space.text || 'space', space.id), keepOpen: true, run: () => moveToSpace(doc, space, preview.token) },
       { group: 'Move', label: 'Cancel', keepOpen: true, run: () => openMovePalette(doc) },
     ];
     renderPalette();

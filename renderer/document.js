@@ -66,7 +66,7 @@ function editPinRows(q) {
   if (pinInfo.sidebar) listed.push({ group: PIN_GROUP, icon: 'pinned', label: 'Sidebar', keepOpen: true, run: () => pinAction('unpin', 'sidebar') });
   for (const date of [...pinInfo.dates].sort()) listed.push({ group: PIN_GROUP, icon: 'pinDate', label: pinDateLabel(date), keepOpen: true, run: () => pinAction('unpin', 'today', date) });
   // and the meetings and spaces it hangs on, which are pins on those documents rather than on yours (api.unpinFrom)
-  for (const hub of pinInfo.hubs || []) listed.push({ group: PIN_GROUP, icon: hub.kind === 'space' ? 'space' : 'meeting', label: hub.title || 'Untitled',
+  for (const hub of pinInfo.hubs || []) listed.push({ group: PIN_GROUP, icon: hub.kind === 'space' ? 'space' : 'meeting', label: demoText(hub.title || 'Untitled', hub.id),
     hint: hub.kind === 'space' ? 'Space' : 'Meeting', keepOpen: true, run: () => unpinFromHub(hub.id) });
   // and the other direction from the same page: the sidebar pin is asked for nowhere else, and the two days are the
   // ones ⌘K offers. A day it is already pinned to is listed above instead, so it is not offered twice.
