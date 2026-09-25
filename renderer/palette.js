@@ -22,7 +22,7 @@ const docRow = (n, hint, run) => ({ node: n, icon: n.icon, label: n.text ?? n.ti
 // assignee), where it lives (pins, the date nodes, its space), what it looks like (image, visibility, sensitivity),
 // its link, and last the one destructive row. Rows without an id carry a `rank` from this list instead.
 // The rows about a field the caret is on (renderer/fields.js) come before the node's own: they are about what is focused.
-const NODE_ROW_ORDER = ['fieldValue', 'fieldKind', 'fieldCount', 'fieldChoices', 'fieldTargets', 'zoomIn', 'expand', 'collapse', 'toggleDone', 'markRead', 'markUnread', 'approveProposal', 'rejectProposal', 'status', 'setType', 'classifyType', 'removeType', 'addField', 'discussWith', 'setIcon', 'setHue', 'assign', 'assignTo', 'codex', 'codexOpen', 'pinToday', 'pinTomorrow', 'pinToDate', 'pinToMeeting', 'pinToSelectedMeeting', 'editPins', 'addToday', 'addTomorrow', 'addWeek', 'move', 'moveLibrary', 'visibility', 'notify', 'sensitive', 'copyLink', 'exportPdf', 'delete'];
+const NODE_ROW_ORDER = ['fieldValue', 'fieldKind', 'fieldCount', 'fieldChoices', 'fieldTargets', 'zoomIn', 'expand', 'collapse', 'toggleDone', 'markRead', 'markUnread', 'approveProposal', 'rejectProposal', 'status', 'setType', 'classifyType', 'removeType', 'addField', 'discussWith', 'setIcon', 'setHue', 'assign', 'assignTo', 'codex', 'codexOpen', 'codexLink', 'pinToday', 'pinTomorrow', 'pinToDate', 'pinToMeeting', 'pinToSelectedMeeting', 'editPins', 'addToday', 'addTomorrow', 'addWeek', 'move', 'moveLibrary', 'visibility', 'notify', 'sensitive', 'copyLink', 'exportPdf', 'delete'];
 const DOC_KIND = /^tana:text:/; // the Discussion Task type applies to documents, so a meeting is not offered that row
 const nodeRank = (r) => { const i = NODE_ROW_ORDER.indexOf(r.rank || r.id); return i < 0 ? NODE_ROW_ORDER.length : i; };
 const VIEW_ORDER = ['inbox', 'notifications', 'proposals', 'today', 'week', 'library'];
@@ -238,6 +238,8 @@ function paletteRows(q, typed = q) {
         });
       } });
   }
+  // A task that already exists in Codex, linked by pasting its link (#143): the page below.
+  if (palDoc && tana.linkCodexTask && isRealId(palDoc.id)) { const doc = palDoc; rows.push({ rank: 'codexLink', group: docGroup, icon: 'robot', label: 'Link Agent task…', keepOpen: true, run: () => openAgentLink(doc) }); }
   // The way into the task the agent is handling, from the keyboard. Both halves have to hold: the node is assigned
   // now, and a task id is known for it. The status map alone was not enough — it is a snapshot, and an unassigned
   // node kept its entry until the next read, which is how this row turned up on nodes with no agent on them.
@@ -387,7 +389,7 @@ function openCommandPalette() {
   palInput.placeholder = 'Run a command'; palInput.value = ''; refreshChatGPTStatus(); renderPalette(); palInput.focus();
 }
 function backPalette() {
-  const SECOND_LEVEL = new Set(['setType', 'classify', 'trash', 'archived', 'discuss', 'setIcon', 'setHue', 'openaiKey', 'chatgpt', 'pins', 'pinDate', 'create', 'hidden', 'hosts', ...Object.keys(MEETING_PAGES)]); // pages opened from the command page
+  const SECOND_LEVEL = new Set(['setType', 'classify', 'trash', 'archived', 'discuss', 'setIcon', 'setHue', 'openaiKey', 'chatgpt', 'pins', 'pinDate', 'create', 'hidden', 'hosts', 'agentLink', ...Object.keys(MEETING_PAGES)]); // pages opened from the command page
   if (palMode === 'pill') openCommandPalette();
   // Escape on the prompt page cancels the whole thing rather than stepping back a level: the page was opened to
   // answer one question, and abandoning that question is abandoning the assignment. Nothing is written either way.
@@ -519,6 +521,26 @@ function openHostsPalette() {
   palInput.value = '';
   hostList = null; renderPalette(); palInput.focus();
   hostsApply(() => tana.codexHosts());
+}
+// ---- linking a node to a Codex task that already exists (#143) ----
+// Pasted rather than picked: Codex's Copy link gives codex://threads/<id>, and a bare id works too. Main checks it
+// again and stores it as a task on this machine; the badge and Go to Agent task then work as for any assignment.
+const CODEX_LINK = /^(?:codex:\/\/threads\/)?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/?$/i;
+let agentLinkDoc = null; // the node the pasted link is for, while this page is up
+function agentLinkRows(q) {
+  const group = 'Link Agent task · paste a codex://threads/… link', m = q.trim().match(CODEX_LINK), doc = agentLinkDoc;
+  if (!m) return [{ group, icon: 'robot', label: q.trim() ? 'Not a Codex task link' : 'Paste the task link from Codex', disabled: true }];
+  return [{ group, icon: 'robot', label: 'Link to Codex task ' + m[1].slice(0, 8) + '…', keepOpen: true, run: () => run(async () => {
+    await tana.linkCodexTask(doc.id, m[1]);
+    codexIds.add(doc.id); agentTaskHosts.set(doc.id, 'local');
+    closePalette(); patchCodex(doc.id); loadAgentStates();
+  }) }];
+}
+function openAgentLink(doc) {
+  palMode = 'agentLink'; palRows = []; palIndex = 0; palette.hidden = false; agentLinkDoc = doc;
+  promptEditor(false);
+  palInput.placeholder = 'codex://threads/…'; palInput.value = '';
+  renderPalette(); palInput.focus();
 }
 // ---- assigning a node to the local agent: the prompt page, one level down in Cmd+K ----
 // "Assign to Agent" does not assign: it advances to this page, where the palette's single-line field is swapped for a
@@ -1034,6 +1056,7 @@ function renderPalette() {
   else if (palMode === 'setIcon') palRows = iconPickRows();
   else if (palMode === 'setHue') palRows = huePickRows(q.toLowerCase());
   else if (palMode === 'hosts') palRows = hostRows(q);
+  else if (palMode === 'agentLink') palRows = agentLinkRows(q);
   else if (palMode === 'trash') palRows = trashRows(q.toLowerCase());
   else if (palMode === 'archived') palRows = archivedRows(q.toLowerCase());
   else if (palMode === 'agentPrompt') palRows = agentPromptRows();
@@ -1130,7 +1153,7 @@ function nextPalIndex(rows, index, step) {
   return index;
 }
 // pages whose rows are built from what is typed, with nothing to fetch
-const LOCAL_MODES = new Set(['cmd', 'create', 'slash', 'assignees', 'assigneesMany', 'status', 'setType', 'classify', 'discuss', 'setHue', 'visibility', 'visibilityPeople', 'hidden', 'pins', 'pill', 'pinMeeting', 'openaiKey', 'chatgpt', 'hosts', 'trash', 'archived', 'field', ...Object.keys(MEETING_PAGES)]);
+const LOCAL_MODES = new Set(['cmd', 'create', 'slash', 'assignees', 'assigneesMany', 'status', 'setType', 'classify', 'discuss', 'setHue', 'visibility', 'visibilityPeople', 'hidden', 'pins', 'pill', 'pinMeeting', 'openaiKey', 'chatgpt', 'hosts', 'agentLink', 'trash', 'archived', 'field', ...Object.keys(MEETING_PAGES)]);
 palInput.addEventListener('input', () => {
   palIndex = 0; palEnter = null; // typing on supersedes an Enter that was waiting for the previous query
   if (LOCAL_MODES.has(palMode)) return renderPalette();
