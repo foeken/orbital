@@ -35,6 +35,14 @@ $('errorLogin').onclick = () => tana.login().catch(showError);
 // view's fresh rows into the cache before saying so, so roots already carry them and no second query is needed.
 // Clicking a notification opens the node it was about; main has already raised and focused the window.
 if (tana.onNotifyOpen) tana.onNotifyOpen((docId) => { if (docId) goTo(docId); });
+// This page is going away: a split half or its window closed (main.js closes it with waitForBeforeUnload), or a
+// Reload. What is still on the 400 ms edit timer is sent now, and its presence room and heartbeat are let go.
+window.addEventListener('beforeunload', () => {
+  flushAll();
+  if (!tana.presenceOpen) return;
+  if (presenceDoc) { tana.presenceSet(presenceDoc, null); if (presenceOpen) tana.presenceClose(presenceDoc); }
+  tana.presenceView(null);
+});
 // This page changed sides (swapped, or the right half left alone): it saves its view and place under its new side's
 // keys from now on. A Reload asks main again (api.side), so it reads the same ones.
 if (tana.onSide) tana.onSide((side) => { SIDE = side ? ':' + side : ''; splitGrip.hidden = SIDE !== ':2'; localStorage.setItem('view' + SIDE, view); rememberPlace(); });

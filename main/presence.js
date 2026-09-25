@@ -63,8 +63,12 @@ function close(docId, all = false) {
 }
 // The page on screen gets Tana's viewing heartbeat, and only that one.
 // ponytail: it runs while the page is open, not only while the window is visible and you are active (Tana's rule)
-let viewed = null, beat = null;
-function view(docId) {
+// by: the page asking (its webContents id). A page's null ends only a heartbeat it started, so a split half or another
+// window closing leaves the one on screen beating.
+let viewed = null, beat = null, viewer = null;
+function view(docId, by = null) {
+  if (docId == null && by !== viewer) return;
+  viewer = by;
   if (docId === viewed) return;
   viewed = typeof docId === 'string' ? docId : null;
   clearInterval(beat); beat = null;

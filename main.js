@@ -89,7 +89,9 @@ function removePane(win, pane) {
   if (win.saveBounds && !win.isDestroyed()) win.saveBounds();
   S.windowViews.delete(key); unwatchRelated(key);
   if (S.pane === wc) S.pane = win.panes[0]?.webContents || null;
-  if (!wc.isDestroyed()) wc.close();
+  // waitForBeforeUnload: the page gets its beforeunload (renderer/app.js), which sends the characters still waiting on
+  // the 400 ms edit timer and lets go of its presence room and heartbeat before it is gone
+  if (!wc.isDestroyed()) wc.close({ waitForBeforeUnload: true });
 }
 const frontPane = () => S.win && !S.win.isDestroyed() ? (S.win.panes.find((p) => p.webContents === S.pane) || S.win.panes[0])?.webContents : null;
 function createWindow() {
@@ -168,7 +170,7 @@ function createMenu() {
       { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' },
       { type: 'separator' }, { role: 'quit' },
     ] },
-    { label: 'File', submenu: [{ label: 'New Window', accelerator: 'CmdOrCtrl+N', registerAccelerator: false, click: () => createWindow() }, { type: 'separator' }, { label: 'Close', accelerator: 'CmdOrCtrl+W', click: (_item, win) => closeFront(win) }] },
+    { label: 'File', submenu: [{ label: 'New Window', accelerator: 'CmdOrCtrl+N', registerAccelerator: false, click: () => createWindow() }, { type: 'separator' }, { label: 'Close', accelerator: 'CmdOrCtrl+W', click: () => closeFront(BaseWindow.getFocusedWindow()) }] },
     { role: 'editMenu' },
     { role: 'windowMenu' },
   ]));
@@ -516,7 +518,7 @@ ipcMain.handle('ai:classifyType', async (_e, id) => ai.classifyType(await typeCa
 const presence = require('./main/presence');
 ipcMain.handle('presence:open', (_e, id) => presence.open(id));
 ipcMain.handle('presence:close', (_e, id) => presence.close(id));
-ipcMain.handle('presence:view', (_e, id) => presence.view(id));
+ipcMain.handle('presence:view', (e, id) => presence.view(id, e.sender.id)); // per page: one half going away cannot end the other's heartbeat
 ipcMain.handle('presence:set', (_e, id, at) => presence.set(id, at && typeof at.blockId === 'string' ? { blockId: at.blockId, anchor: Number(at.anchor) || 0, focus: Number(at.focus) || 0 } : null));
 ipcMain.handle('doc:exportPdf', (_e, id) => require('./main/pdf').exportPdf(id, S.win));
 // The web link for a node, the same url home.tana.inc opens: /o/<org>/<route>/<encoded node uri>. The route is Tana's
