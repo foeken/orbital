@@ -2484,6 +2484,7 @@ async function main() {
     // through JSON: rows are built in the main-process vm, whose arrays fail a deep compare on their prototype alone
     const read = async () => JSON.parse(JSON.stringify((await backend.timelinePage.rows()).map((r) => [r.text, r.timeline.change || r.timeline.note, r.icon || null, r.timeline.tone, r.unread, r.children.map((c) => c.text)])));
     assert.deepEqual(await read(), [
+      ['All done for today', null, 'pinDate', 'new', false, []],
       ['Rob Jansen completed Contract renewal', null, 'apply', 'done', false, []],
       ['Rob Jansen edited Contract renewal', 'Added the Q4 numbers from Rob', 'updated', 'edit', false, []],
       ['An AI agent added 2 tasks to your Inbox', null, 'robot', 'new', false, ['Answer Jules', 'Plan the pilot']],
@@ -2492,15 +2493,15 @@ async function main() {
       ['Rob Jansen edited Contract renewal', 'Moved the deadline to Friday', 'updated', 'edit', false, []],
       ["Tana's AI added a task to your Inbox", null, 'tana', 'new', false, ['Share the transcript']],
     ], 'a timeline, newest first: who, then what they did, then the node; an edit\'s change quoted under it; new tasks from one source in a row are one quiet entry; a completion told once, from the node\'s own state; yours alone, by hand, or weeks old stay out');
-    assert.deepEqual(JSON.parse(JSON.stringify((await backend.timelinePage.rows())[0].segments)), [{ text: 'Rob Jansen ' }, { text: 'completed', marks: { bold: true } }, { text: ' ' }, { text: 'Contract renewal', marks: { strike: true } }],
+    assert.deepEqual(JSON.parse(JSON.stringify((await backend.timelinePage.rows())[1].segments)), [{ text: 'Rob Jansen ' }, { text: 'completed', marks: { bold: true } }, { text: ' ' }, { text: 'Contract renewal', marks: { strike: true } }],
       'the person plain, the verb bold, and a finished node struck through');
     const rows = await backend.timelinePage.rows();
     for (const [text, state] of [['Task status changed from In Progress to Inbox', 'proposed'], ['Task marked as completed and a note added', 'closed'], ['Task status updated to In Progress', 'open'], ['Added a document link', undefined]])
       assert.equal(backend.timelinePage.statusOf(text) || undefined, state, 'a summary says which state it went to: ' + text);
     assert.equal(new Set(rows.map((r) => r.id)).size, rows.length, 'a node changed twice is two rows with ids of their own');
-    assert.equal(rows[0].timeline.uri, watched.id, 'and each row opens the node it is about');
-    assert.equal(rows[2].timeline.uri, null, 'except a group, whose tasks open themselves');
-    assert.deepEqual(JSON.parse(JSON.stringify(rows[2].children.map((c) => [c.editable, c.checkable]))), [[false, true], [false, true]], 'whose words are read-only there and whose boxes tick');
+    assert.equal(rows[1].timeline.uri, watched.id, 'and each row opens the node it is about');
+    assert.equal(rows[3].timeline.uri, null, 'except a group, whose tasks open themselves');
+    assert.deepEqual(JSON.parse(JSON.stringify(rows[3].children.map((c) => [c.editable, c.checkable]))), [[false, true], [false, true]], 'whose words are read-only there and whose boxes tick');
     summaries.get(watched.id).push({ title: 'Signed by both parties', authors: [COLLEAGUE], endTime: ago(-1000) });
     const next = await read();
     assert.deepEqual(next.filter((r) => r[4]).map((r) => r[1]), ['Signed by both parties'], 'what came after your last visit is marked new, and only that');

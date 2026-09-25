@@ -28,7 +28,11 @@ const SEARCH_ID = 'tana:search:';
 const isSearchDoc = (node) => !!node && String(node.id || '').startsWith(SEARCH_ID);
 const onSearchPage = () => !!zoom && !zoom.nodeId && String(zoom.docId || '').startsWith(SEARCH_ID);
 const childrenOf = (item) => (item.node.kind === 'document' ? kids.get(item.docId) : item.node.children || []);
-const hasKids = (item) => { const c = childrenOf(item); return Array.isArray(c) ? c.length > 0 : !!item.node.hasChildren; };
+const hasKids = (item) => {
+  if (item.node.timeline?.today) return true;
+  const c = childrenOf(item);
+  return Array.isArray(c) ? c.length > 0 : !!item.node.hasChildren;
+};
 const isOpen = (item) => (open.has(item.key) ? open.get(item.key) : item.node.kind === 'block');
 const canInsertChild = (item) => item.node.kind === 'document' || hasKids(item) || item.node.done != null || (!isAtomic(item.node) && ['paragraph', 'bullet', 'numbered'].includes(item.node.block));
 const canExpand = (item) => hasKids(item) || (!item.node.draft && canEditItem(item));
