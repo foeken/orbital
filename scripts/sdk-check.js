@@ -2441,18 +2441,18 @@ async function main() {
         sync: { getDocument: () => null, subscribe: async () => null },
       } });
     // through JSON: rows are built in the main-process vm, whose arrays fail a deep compare on their prototype alone
-    const read = async () => JSON.parse(JSON.stringify((await backend.timelinePage.rows()).map((r) => [r.text, r.timeline.note, r.icon || null, r.timeline.tone, r.unread, r.children.map((c) => c.text)])));
+    const read = async () => JSON.parse(JSON.stringify((await backend.timelinePage.rows()).map((r) => [r.text, r.timeline.change || r.timeline.note, r.icon || null, r.timeline.tone, r.unread, r.children.map((c) => c.text)])));
     assert.deepEqual(await read(), [
-      ['Completed: Contract renewal', 'Rob Jansen', 'apply', 'done', false, []],
-      ['Added the Q4 numbers from Rob', 'Rob Jansen · Contract renewal', 'updated', 'edit', false, []],
+      ['Rob Jansen completed Contract renewal', null, 'apply', 'done', false, []],
+      ['Rob Jansen edited Contract renewal', 'Added the Q4 numbers from Rob', 'updated', 'edit', false, []],
       ['An AI agent added 2 tasks to your Inbox', null, 'sparkle', 'new', false, ['Answer Jules', 'Plan the pilot']],
       ['Rob Jansen added a task to your Inbox', null, 'tlNew', 'new', false, ['Review the vendor contract']],
-      ['Accepted: Contract renewal', 'Rob Jansen', 'tlAccepted', 'accepted', false, []],
-      ['Moved the deadline to Friday', 'Rob Jansen · Contract renewal', 'updated', 'edit', false, []],
+      ['Rob Jansen accepted Contract renewal', null, 'tlAccepted', 'accepted', false, []],
+      ['Rob Jansen edited Contract renewal', 'Moved the deadline to Friday', 'updated', 'edit', false, []],
       ["Tana's AI added a task to your Inbox", null, 'tana', 'new', false, ['Share the transcript']],
-    ], 'a timeline, newest first: an edit says what changed, a status move its verb; new tasks from one source in a row are one quiet entry; a completion told once, from the node\'s own state; yours alone, by hand, or weeks old stay out');
-    assert.deepEqual(JSON.parse(JSON.stringify((await backend.timelinePage.rows())[0].segments)), [{ text: 'Completed: ', marks: { bold: true } }, { text: 'Contract renewal', marks: { strike: true } }],
-      'and a finished node is struck through');
+    ], 'a timeline, newest first: who, then what they did, then the node; an edit\'s change quoted under it; new tasks from one source in a row are one quiet entry; a completion told once, from the node\'s own state; yours alone, by hand, or weeks old stay out');
+    assert.deepEqual(JSON.parse(JSON.stringify((await backend.timelinePage.rows())[0].segments)), [{ text: 'Rob Jansen ' }, { text: 'completed', marks: { bold: true } }, { text: ' ' }, { text: 'Contract renewal', marks: { strike: true } }],
+      'the person plain, the verb bold, and a finished node struck through');
     const rows = await backend.timelinePage.rows();
     for (const [text, state] of [['Task status changed from In Progress to Inbox', 'proposed'], ['Task marked as completed and a note added', 'closed'], ['Task status updated to In Progress', 'open'], ['Added a document link', undefined]])
       assert.equal(backend.timelinePage.statusOf(text) || undefined, state, 'a summary says which state it went to: ' + text);
@@ -2461,7 +2461,7 @@ async function main() {
     assert.equal(rows[2].timeline.uri, null, 'except a group, whose tasks open themselves');
     summaries.get(watched.id).push({ title: 'Signed by both parties', authors: [COLLEAGUE], endTime: ago(-1000) });
     const next = await read();
-    assert.deepEqual(next.filter((r) => r[4]).map((r) => r[0]), ['Signed by both parties'], 'what came after your last visit is marked new, and only that');
+    assert.deepEqual(next.filter((r) => r[4]).map((r) => r[1]), ['Signed by both parties'], 'what came after your last visit is marked new, and only that');
     console.log('ok  timeline: what changed and what finished first, new Inbox tasks grouped and quiet, newest first, new since the last visit');
   }
 

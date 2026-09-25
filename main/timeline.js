@@ -24,7 +24,7 @@ const { inboxFrom } = require('./views');
 
 const PAGE = 'orbital:timeline';
 // Inbox to In Progress is a task being taken on, so it reads as accepted, the way Tana's own box accepts it first
-const VERB = { closed: 'Completed', open: 'Accepted', not_now: 'Moved to Later', proposed: 'Moved back to Inbox' };
+const VERB = { closed: 'completed', open: 'accepted', not_now: 'moved to Later', proposed: 'moved back to Inbox' };
 // The marker a row gets on the rail (styles.css .tl-*), each a 20px circle: finished a green one with a white check,
 // an edit a grey one with a white pen, the other moves Nucleo's grey solid circles (icons.js tl*), and a new task a
 // light dotted ring
@@ -118,9 +118,12 @@ async function rows() {
   }
   return merged.map((e) => {
     const title = e.title || 'Untitled';
-    let segments, note = null, detail = null, children = [];
-    if (e.kind === 'edit') { segments = [{ text: e.change, marks: { bold: true } }]; note = e.actor + ' · ' + title; detail = e.detail || null; }
-    else if (e.kind === 'status') { segments = [{ text: e.verb + ': ', marks: { bold: true } }, { text: title, marks: e.tone === 'done' ? { strike: true } : {} }]; note = e.actor + (e.note ? ' · ' + e.note : ''); }
+    let segments, note = null, change = null, detail = null, children = [];
+    // who, in plain text, then what they did in bold, then the node: "Kevin Favier **completed** ~~Plan the offsite~~".
+    // An edit's what-changed rides in the quote under it: Tana's line for it, then its longer words.
+    const who = { text: e.actor + ' ' }, what = (verb) => ({ text: verb, marks: { bold: true } });
+    if (e.kind === 'edit') { segments = [who, what('edited'), { text: ' ' + title }]; change = e.change; detail = e.detail || null; }
+    else if (e.kind === 'status') { segments = [who, what(e.verb), { text: ' ' }, { text: title, marks: e.tone === 'done' ? { strike: true } : {} }]; note = e.note || null; }
     else {
       const n = e.tasks.length;
       segments = [{ text: e.actor + ' added ' + (n === 1 ? 'a task' : n + ' tasks') + ' to your Inbox' }];
@@ -130,7 +133,7 @@ async function rows() {
       kind: 'block', block: 'bullet', icon: e.icon, editable: false, hasChildren: children.length > 0, children,
       createdAt: iso(e.at), unread: (e.tasks || [e]).some((t) => t.at > seen),
       // a group has no one node to open: its tasks open themselves
-      timeline: { uri: e.kind === 'inbox' && e.tasks.length > 1 ? null : e.uri, note, detail, tone: e.tone } };
+      timeline: { uri: e.kind === 'inbox' && e.tasks.length > 1 ? null : e.uri, note, change, detail, tone: e.tone } };
   });
 }
 

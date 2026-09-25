@@ -778,7 +778,12 @@ function nodeEl(node, docId, parent) {
   if (displayOn('type')) appendTags(body, display);
   // when it was made, when it last moved and where it lives, as one grey line under the title (renderer/views.js)
   // what a Timeline edit put there (renderer/timeline.js): Tana's longer words, quoted between the headline and who did it
-  if (node.timeline && node.timeline.detail) { const q = document.createElement('div'); q.className = 'tl-detail'; q.textContent = node.timeline.detail; body.append(q); }
+  if (node.timeline && (node.timeline.change || node.timeline.detail)) {
+    const q = document.createElement('div'); q.className = 'tl-detail';
+    if (node.timeline.change) { const h = document.createElement('strong'); h.textContent = node.timeline.change; q.append(h); } // what changed, in Tana's one line
+    if (node.timeline.detail) { const d = document.createElement('div'); d.textContent = node.timeline.detail; q.append(d); } // and its longer words for it
+    body.append(q);
+  }
   const subText = subtextOf(display, taskInfo);
   if (subText) {
     const sub = document.createElement('div');

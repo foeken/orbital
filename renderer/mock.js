@@ -168,14 +168,14 @@ function mockApi() {
   const tlTask = (d) => ({ ...d, editable: false });
   content['orbital:timeline'] = [
     event('group1', 0.1, 'new', 'sparkle', [{ text: 'An AI agent added 4 tasks to your Inbox' }], null, true, null, [tlTask(docs[1]), tlTask(docs[3]), tlTask(spaceDocs[0]), tlTask(docs[4])]),
-    event('done1', 1, 'done', 'apply', [bold('Completed: '), { text: docs[2].text, marks: { strike: true } }], 'Priya Raman', true, docs[2].id),
-    event('start1', 1.1, 'accepted', 'tlAccepted', [bold('Accepted: '), { text: docs[5].text }], 'Tomas Ilves', false, docs[5].id),
-    { ...event('edit1', 1.3, 'edit', 'updated', [bold('Description added for Christmas activities proposed by Nadia')], 'Sam Okafor · ' + docs[0].text, false, docs[0].id), timeline: { uri: docs[0].id, note: 'Sam Okafor · ' + docs[0].text, tone: 'edit', detail: 'Nadia proposed extending Healthcare\'s Christmas activities, such as karaoke and games, across Nedap to replace separate business unit programmes.' } },
-    event('edit2', 2, 'edit', 'updated', [bold('Changed the deadline from Friday to Wednesday')], 'Priya Raman · ' + docs[6].text, false, docs[6].id),
+    event('done1', 1, 'done', 'apply', [{ text: 'Priya Raman ' }, bold('completed'), { text: ' ' }, { text: docs[2].text, marks: { strike: true } }], null, true, docs[2].id),
+    event('start1', 1.1, 'accepted', 'tlAccepted', [{ text: 'Tomas Ilves ' }, bold('accepted'), { text: ' ' + docs[5].text }], null, false, docs[5].id),
+    { ...event('edit1', 1.3, 'edit', 'updated', [{ text: 'Sam Okafor ' }, bold('edited'), { text: ' ' + docs[0].text }], null, false, docs[0].id), timeline: { uri: docs[0].id, note: null, tone: 'edit', change: 'Description added for Christmas activities proposed by Nadia', detail: 'Nadia proposed extending Healthcare\'s Christmas activities, such as karaoke and games, across Nedap to replace separate business unit programmes.' } },
+    { ...event('edit2', 2, 'edit', 'updated', [{ text: 'Priya Raman ' }, bold('edited'), { text: ' ' + docs[6].text }], null, false, docs[6].id), timeline: { uri: docs[6].id, note: null, tone: 'edit', change: 'Changed the deadline from Friday to Wednesday' } },
     event('group2', 2.4, 'new', 'tlNew', [{ text: 'Tomas Ilves added a task to your Inbox' }], null, false, docs[7].id, [tlTask(docs[7])]),
-    event('done2', 26, 'done', 'apply', [bold('Completed: '), { text: docs[0].text, marks: { strike: true } }], 'Sam Okafor · Task completed and a note added about the deadline', false, docs[0].id),
+    event('done2', 26, 'done', 'apply', [{ text: 'Sam Okafor ' }, bold('completed'), { text: ' ' }, { text: docs[0].text, marks: { strike: true } }], 'Task completed and a note added about the deadline', false, docs[0].id),
     event('group3', 26.5, 'new', 'tana', [{ text: "Tana's AI added a task to your Inbox" }], null, false, docs[9].id, [tlTask(docs[9])]),
-    event('later1', 27, 'quiet', 'tlLater', [bold('Moved to Later: '), { text: docs[8].text }], 'Tomas Ilves', false, docs[8].id)];
+    event('later1', 27, 'quiet', 'tlLater', [{ text: 'Tomas Ilves ' }, bold('moved to Later'), { text: ' ' + docs[8].text }], null, false, docs[8].id)];
   // an image block (not editable; api.image resolves its uri to a data URL): a 2x2 PNG scaled by width/height
   content.mockdoc0.splice(2, 0, { id: 'img' + (++seq), kind: 'block', type: 'image', image: { uri: 'tana:image:mock', alt: 'Mock image', width: 160, height: 100 }, hasChildren: false, children: [] });
   // inline references (embeds): read-only nodes rendering the target's title/state, like sdk/content.js (editable: false) with main resolving reference.node
