@@ -296,7 +296,7 @@ function subtextEl(node, taskInfo, sub = document.createElement('div')) {
 // ---- a type page as a table (⌘K Show as table): a column per field Display shows, plus the times ----
 // The rows stay the outline's own rows: the grey line becomes one cell per column and CSS lays the row out as a grid
 // (styles.css .table-view), so the keys, the caret and the pills work as they do on the list. Kept per type, synced.
-const TABLE_FACTS = { updated: (n) => agoText(n.updatedAt), created: (n) => agoText(n.createdAt), creator: (n) => (n.createdBy ? memberName(n.createdBy) : '') };
+const TABLE_FACTS = { updated: (n) => agoText(n.updatedAt), created: (n) => agoText(n.createdAt), creator: (n) => (n.createdBy ? (loadMembers(), memberName(n.createdBy)) : '') }; // names load once and re-render, as subtextOf's do
 const tableView = () => onTypePage() && pref('typeTables', []).includes(zoom.docId);
 const tableKeys = () => displayKeys().filter((k) => k.includes('?attribute=') || TABLE_FACTS[k]);
 function setTableView(on) {

@@ -387,6 +387,8 @@ function watchRelated(id, key = 'main') {
   // A type's page is the list of its instances (renderer/render.js), kept current the same way.
   const search = idKind(id) === 'search' ? searchTrigger(id, w, key)
     // watching as many rows as the page shows (searchPreview), so a change or deletion anywhere in it is heard
+    // ponytail: the newest 1,000 of the type, unfiltered; a type past that with a field filter on can miss a change to
+    // an older matching row until the page is reopened. Watch the filtered query instead if a type ever gets that big.
     : idKind(id) === 'type' ? openLiveQuery(w.client.sync, { ...liveTrigger(searchQueryParams({ entityTypeUris: [id] }, S.me && S.me.userUri)), limit: 1000 }, { label: 'Orbital type page', onRows: () => { if (watching.get(key) === w) send('outline:changed', id); } })
       .then((h) => { h.on('error', () => {}); return h; }) : null;
   // each on its own: one that fails must not leave the others open and unclosable
