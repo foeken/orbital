@@ -30,17 +30,17 @@ function pillDefs() {
     if ((relatedBy.get(zoom.docId) || {}).definitions) for (const key of Object.keys(f.fields || {})) {
       if (pills.some((p) => fieldKey({ key: p.id.slice(6) }) === key)) continue;
       const title = (typeDefs().find((d) => fieldKey(d) === key) || {}).title || 'Removed field';
-      defs.push({ id: 'field:' + key.split('?attribute=')[1], label: title, command: 'Clear filter on ' + title, icon: 'field', value: 'Filtered', rows: () => [{ label: 'Any', checked: false, run: () => putField(f, save, key, null) }] });
+      defs.push({ id: 'field:' + key.split('?attribute=')[1], label: title, command: 'Clear filter on ' + title, icon: 'field', value: 'Filtered', rows: () => [{ label: 'Any', reset: true, checked: false, run: () => putField(f, save, key, null) }] });
     }
   }
   else if (onSearchPage() || !(views.find((v) => v.id === view) || {}).kind) defs.push({ id: 'type', command: 'Filter by type', value: [names(TYPES, kinds), ...typed.map(typeName)].filter(Boolean).join(', ') || 'Any type', icon: one ? one[2] : typed.length === 1 && !kinds.length ? typeGlyph(typed[0]) : 'any', rows: () => (loadWorkspaceTypes(), [
-    { label: 'Any type', icon: 'any', checked: !f.types, run: () => save({ types: null }) },
+    { label: 'Any type', reset: true, icon: 'any', checked: !f.types, run: () => save({ types: null }) },
     ...TYPES.map((t) => (t ? { label: t[1], icon: t[2], keepOpen: true, checked: kinds.includes(t[0]), run: () => save({ types: toggleIn(kindIds, kinds.length ? kinds : null, t[0]) }) } : { div: true })), // multi-select: the menu stays open to tick more
     ...(typeListCache && typeListCache.length ? [{ head: 'Workspace types' }, ...typeListCache.map((t) => ({ label: t.title || 'Untitled type', icon: typeGlyph(t.uri), keepOpen: true, checked: typed.includes(t.uri), run: () => save({ types: toggleIn(typeListCache.map((x) => x.uri), typed.length ? typed : null, t.uri) }) }))] : []),
   ]) });
   if (tasksInFilter(f)) {
     defs.push({ id: 'status', label: 'Status', command: 'Filter by status', icon: 'status', value: names(STATES, f.states) || 'Any', rows: () => [
-      { label: 'Any status', checked: !f.states, run: () => save({ states: null }) },
+      { label: 'Any status', reset: true, checked: !f.states, run: () => save({ states: null }) },
       ...STATES.map(([v, l]) => ({ label: l, keepOpen: true, checked: !!f.states && f.states.includes(v), run: () => save({ states: toggleIn(STATES.map((s) => s[0]), f.states, v) }) })), // multi-select, like the type list
     ] });
     // Only while the Status filter lets completed tasks in, and never as a second way to keep them out: this says
@@ -51,7 +51,7 @@ function pillDefs() {
     const you = 'You' + (me() ? ' (' + memberName(me().id) + ')' : '');
     const a = f.assignee, m = (members || []).find((x) => x.id === a), who = a === 'anyone' ? 'Anyone' : a === 'unassigned' ? 'Unassigned' : a === 'me' || !a ? you : m ? memberName(m.id) : '…';
     defs.push({ id: 'assigned', label: 'Assigned to', command: 'Filter by assignee', icon: 'assigned', value: who, rows: () => [
-      { label: 'Anyone', checked: a === 'anyone', run: () => save({ assignee: 'anyone' }) },
+      { label: 'Anyone', reset: true, checked: a === 'anyone', run: () => save({ assignee: 'anyone' }) },
       { label: you, checked: a === 'me' || !a, run: () => save({ assignee: 'me' }) },
       { label: 'Unassigned', checked: a === 'unassigned', run: () => save({ assignee: 'unassigned' }) },
       { head: 'Members' },
@@ -100,7 +100,7 @@ function fieldPill(def, f, save) {
   if (def.type === 'date') {
     const preset = now.date && now.date.preset;
     return { ...pill, value: (DATE_PRESETS.find(([p]) => p === preset) || [])[1] || 'Any', rows: () => [
-      { label: 'Any', checked: !preset, run: () => put(null) },
+      { label: 'Any', reset: true, checked: !preset, run: () => put(null) },
       ...DATE_PRESETS.map(([p, label]) => ({ label, checked: preset === p, run: () => put({ date: { preset: p } }) })),
     ] };
   }
@@ -108,7 +108,7 @@ function fieldPill(def, f, save) {
   const byLabel = def.type === 'options', on = byLabel ? (now.textMatches || []).map((m) => m.value) : now.refs || [];
   const choices = fieldChoices(def), ids = choices.map(([id]) => id), nameOf = (id) => (choices.find(([x]) => x === id) || [id, '…'])[1];
   return { ...pill, value: on.map(nameOf).join(', ') || 'Any', rows: () => [
-    { label: 'Any', checked: !on.length, run: () => put(null) },
+    { label: 'Any', reset: true, checked: !on.length, run: () => put(null) },
     ...choices.map(([id, label]) => ({ label, keepOpen: true, checked: on.includes(id), run: () => {
       const next = toggleIn(ids, on.length ? on : null, id);
       put(next && (byLabel ? { textMatches: next.map((value) => ({ value })) } : { refs: next }));
@@ -382,7 +382,7 @@ function menuEl(d) {
     row.className = 'mrow' + (pick.indexOf(r) === menu.index ? ' active' : '');
     if (rows.some((x) => x.icon)) { const i = document.createElement('span'); i.className = 'micon'; i.innerHTML = r.icon ? iconSvg(r.icon) : ''; row.append(i); }
     const l = document.createElement('span'); l.className = 'mlabel'; l.textContent = r.label; row.append(l);
-    if (r.checked && !['Any status', 'Any type', 'Anyone', 'Any'].includes(r.label)) { const t = document.createElement('span'); t.className = 'tick'; t.textContent = '✓'; row.append(t); }
+    if (r.checked && !r.reset) { const t = document.createElement('span'); t.className = 'tick'; t.textContent = '✓'; row.append(t); }
     row.onclick = () => pickMenuRow(r, pick);
     el.append(row);
   }
