@@ -61,7 +61,8 @@ function flatProto(d, out) {
     const n = at + '.' + m.name;
     out['message ' + n] = '';
     for (const f of m.field) {
-      const oneof = f.oneofIndex !== undefined && !f.proto3Optional ? ' oneof ' + m.oneofDecl[f.oneofIndex].name : '';
+      // protobuf-es fills an unset oneofIndex with 0, so only an index actually on the wire marks a oneof member.
+      const oneof = Object.hasOwn(f, 'oneofIndex') && !f.proto3Optional ? ' oneof ' + m.oneofDecl[f.oneofIndex].name : '';
       out['field ' + n + '.' + f.name] = '#' + f.number + ' ' + (f.label === 3 ? 'repeated ' : f.proto3Optional ? 'optional ' : '') + (f.typeName || TYPES[f.type]) + oneof;
     }
     m.enumType.forEach((e) => en(e, n));
