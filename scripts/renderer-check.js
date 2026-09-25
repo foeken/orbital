@@ -140,7 +140,8 @@ assert.match(source, /entry\.until = 0; renderSoon\(\);/, 'the retry timer opens
 assert.match(source, /const wasConnected = connected;[\s\S]*?if \(connected && !wasConnected\) \{ taskMetaFailed\.clear\(\); loadSearches\(\); loadPinned\(true\); restorePlace\(\)\.finally\(\(\) => loadView\(\)\); \}/);
 // a global change (a refresh, a pin, a filter) reloads the cached rows, which the refresh loop wrote before saying so;
 // it must not run the active view's query a second time, and a single document's change patches its row alone
-assert.match(source, /loadRoots\(\)\.then\(renderSoon, showError\)/);
+assert.match(source, /const work = \[loadRoots\(\)\];[\s\S]*?Promise\.all\(work\)\.then\(renderSoon, showError\)/);
+assert.match(source, /if \(zoom\?\.docId === TIMELINE_PAGE\) work\.push\(reload\(TIMELINE_PAGE\)\)/, 'global pin changes reload the Timeline page when it is open');
 assert.doesNotMatch(source.slice(source.indexOf('tana.onChanged((docId, info) => {'), source.indexOf('function removeStale')), /loadView\(\)/, 'no second query per refresh');
 assert.match(source, /const work = \[patchDoc\(docId\)\];/);
 // Forced, so a zoom whose parked caret defers an ordinary render still redraws — and coalesced, because a view
@@ -168,7 +169,8 @@ assert.match(source, /palMode === 'assignees'/);
 assert.match(source, /e\.key === 'Backspace' && \(!mod \|\| e\.shiftKey\)/);
 assert.match(source, /tana\.removeMany\(its\[0\]\.docId, its\.map\(\(it\) => it\.node\.id\)\)/);
 assert.match(source, /tana\.moveMany\(its\[0\]\.docId, its\.map\(\(it\) => it\.node\.id\), dir\)/);
-assert.match(source, /if \(palBusy && \(palMode === 'spaces' \|\| palMode === 'search'\)\) \{ palEnter = create \? 'create' : 'pick'; return; \}/, 'an Enter during a running search is kept, not dropped');
+assert.match(source, /if \(palBusy && \(palMode === 'spaces' \|\| palMode === 'search' \|\| palMode === 'pinToday'\)\) \{ palEnter = create \? 'create' : 'pick'; return; \}/, 'an Enter during a running search is kept, not dropped');
+assert.match(source, /if \(palMode === 'pinToday'\) \{ palSeq\+\+; palBusy = true; clearTimeout\(palTimer\); palTimer = setTimeout\(todayPickerSearchNow, 150\); return; \}/, 'typing invalidates an older today-pin search immediately');
 assert.match(source, /else if \(e\.key === 'Enter'\) \{ e\.preventDefault\(\); e\.stopPropagation\(\);/);
 assert.match(source, /function openCreationPalette\(\)/);
 assert.match(source, /id: 'create', group: 'Actions', icon: 'createNew', label: 'Create new …'/);

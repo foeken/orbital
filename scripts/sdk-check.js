@@ -2448,6 +2448,11 @@ async function main() {
     const COLLEAGUE = 'tana:user-profile:01exampley0000000000000000';
     const ago = (ms) => new Date(Date.now() - ms).toISOString(), H = 36e5;
     const id = () => 'tana:text:' + ulid();
+    const pinnedEditable = { id: id(), title: 'Pinned and editable', participants: { [ME]: { type: 'user', role: 'admin' } }, state: { type: 'open' } };
+    const pinnedReadOnly = { id: id(), title: 'Pinned but read-only', participants: { [ME]: { type: 'user', role: 'viewer' } }, state: { type: 'open' } };
+    const pinMapUri = 'tana:pin-map:' + ulid(), today = new Date().toLocaleDateString('sv-SE');
+    const profile = { data: { get: (key) => key === 'pinMapUri' ? pinMapUri : undefined } };
+    const pinMap = { loro: { getMap: () => ({ toJSON: () => Object.fromEntries([pinnedEditable, pinnedReadOnly].map((n) => [n.id, { pins: [{ type: 'plain', datetime: today }] }])) }) } };
     const watched = { id: id(), title: 'Contract renewal', createdBy: ME, assignedTo: [COLLEAGUE], state: { type: 'closed', enteredAt: ago(0.1 * H), changedBy: COLLEAGUE } };
     const kept = { id: id(), title: 'Mine to do', createdBy: ME, assignedTo: [ME], state: { type: 'open' } }; // assigned to you: not watched
     const MCP_CHAT = 'tana:chat:' + ulid(), AI_CHAT = 'tana:chat:' + ulid();
@@ -2471,6 +2476,7 @@ async function main() {
           listNodes: async (p) => {
             if ((p.nodeTypes || []).includes('user-profile')) return { nodes: [{ id: COLLEAGUE, title: 'Rob Jansen', userProfile: {} }] };
             if (p.nodeIds && (p.nodeTypes || []).includes('chat')) return { nodes: [{ id: MCP_CHAT, title: 'MCP: Nedap Compliance', invocationContext: { intent: 'mcp' } }, { id: AI_CHAT, title: 'Chat for Weekly', invocationContext: { intent: 'meeting' } }].filter((c) => p.nodeIds.includes(c.id)) };
+            if (p.nodeIds && (p.nodeTypes || []).includes('text')) return { nodes: [pinnedEditable, pinnedReadOnly].filter((n) => p.nodeIds.includes(n.id)) };
             if (p.nodeIds) return { nodes: [] };
             if ((p.createdBy || []).includes(ME)) return { nodes: [watched, kept] };
             if ((p.assignedTo || []).includes(ME)) return { nodes: [byHand, viaMcp, viaMcpToo, fromRob, viaAi, old] };
@@ -2479,11 +2485,12 @@ async function main() {
           listEdges: async ({ fromNodeIds }) => ({ edges: [[viaMcp.id, MCP_CHAT], [viaMcpToo.id, MCP_CHAT], [viaAi.id, AI_CHAT]].filter(([f]) => fromNodeIds.includes(f)).map(([fromNodeId, toNodeId]) => ({ fromNodeId, toNodeId, type: 'EDGE_TYPE_CREATED_IN' })) }),
         },
         history: { listChanges: async ({ uri }) => ({ summaries: summaries.get(uri) || [] }) },
-        sync: { getDocument: () => null, subscribe: async () => null },
+        sync: { getDocument: () => null, subscribe: async (uri) => uri === ME ? profile : uri === pinMapUri ? pinMap : null },
       } });
     // through JSON: rows are built in the main-process vm, whose arrays fail a deep compare on their prototype alone
     const read = async () => JSON.parse(JSON.stringify((await backend.timelinePage.rows()).map((r) => [r.text, r.timeline.change || r.timeline.note, r.icon || null, r.timeline.tone, r.unread, r.children.map((c) => c.text)])));
     assert.deepEqual(await read(), [
+      ['Tasks pinned to today', null, 'pinDate', 'new', false, ['Pinned and editable', 'Pinned but read-only']],
       ['Rob Jansen completed Contract renewal', null, 'apply', 'done', false, []],
       ['Rob Jansen edited Contract renewal', 'Added the Q4 numbers from Rob', 'updated', 'edit', false, []],
       ['An AI agent added 2 tasks to your Inbox', null, 'robot', 'new', false, ['Answer Jules', 'Plan the pilot']],
@@ -2492,15 +2499,16 @@ async function main() {
       ['Rob Jansen edited Contract renewal', 'Moved the deadline to Friday', 'updated', 'edit', false, []],
       ["Tana's AI added a task to your Inbox", null, 'tana', 'new', false, ['Share the transcript']],
     ], 'a timeline, newest first: who, then what they did, then the node; an edit\'s change quoted under it; new tasks from one source in a row are one quiet entry; a completion told once, from the node\'s own state; yours alone, by hand, or weeks old stay out');
-    assert.deepEqual(JSON.parse(JSON.stringify((await backend.timelinePage.rows())[0].segments)), [{ text: 'Rob Jansen ' }, { text: 'completed', marks: { bold: true } }, { text: ' ' }, { text: 'Contract renewal', marks: { strike: true } }],
+    assert.deepEqual(JSON.parse(JSON.stringify((await backend.timelinePage.rows())[1].segments)), [{ text: 'Rob Jansen ' }, { text: 'completed', marks: { bold: true } }, { text: ' ' }, { text: 'Contract renewal', marks: { strike: true } }],
       'the person plain, the verb bold, and a finished node struck through');
     const rows = await backend.timelinePage.rows();
     for (const [text, state] of [['Task status changed from In Progress to Inbox', 'proposed'], ['Task marked as completed and a note added', 'closed'], ['Task status updated to In Progress', 'open'], ['Added a document link', undefined]])
       assert.equal(backend.timelinePage.statusOf(text) || undefined, state, 'a summary says which state it went to: ' + text);
     assert.equal(new Set(rows.map((r) => r.id)).size, rows.length, 'a node changed twice is two rows with ids of their own');
-    assert.equal(rows[0].timeline.uri, watched.id, 'and each row opens the node it is about');
-    assert.equal(rows[2].timeline.uri, null, 'except a group, whose tasks open themselves');
-    assert.deepEqual(JSON.parse(JSON.stringify(rows[2].children.map((c) => [c.editable, c.checkable]))), [[false, true], [false, true]], 'whose words are read-only there and whose boxes tick');
+    assert.equal(rows[1].timeline.uri, watched.id, 'and each row opens the node it is about');
+    assert.equal(rows[3].timeline.uri, null, 'except a group, whose tasks open themselves');
+    assert.deepEqual(JSON.parse(JSON.stringify(rows[0].children.map((c) => [c.editable, c.checkable]))), [[false, true], [false, false]], 'timeline task text is read-only, and only tasks with confirmed edit access get a checkbox');
+    assert.deepEqual(JSON.parse(JSON.stringify(rows[3].children.map((c) => [c.editable, c.checkable]))), [[false, true], [false, true]], 'inbox task words are read-only there and their boxes tick');
     summaries.get(watched.id).push({ title: 'Signed by both parties', authors: [COLLEAGUE], endTime: ago(-1000) });
     const next = await read();
     assert.deepEqual(next.filter((r) => r[4]).map((r) => r[1]), ['Signed by both parties'], 'what came after your last visit is marked new, and only that');

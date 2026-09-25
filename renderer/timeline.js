@@ -1,8 +1,8 @@
 'use strict';
-// Timeline (issue #135; main/timeline.js): what happened to the nodes you watch and what landed in your Inbox, newest
-// first, in day sections. A row is an event, drawn like a notification: the node's title in bold, what happened on the
-// grey line under it (subtextOf), the time on the right, a bell for a watched node and a tray for a new task, blue
-// while it is newer than your last visit. Opening a row (a click, Enter, Space) goes to the node it is about. The page
+// Timeline (issue #135; main/timeline.js): today's pinned tasks, then what happened to the nodes you watch and what
+// landed in your Inbox, newest first, in day sections. History rows are events drawn like a notification: the node's
+// title in bold, what happened on the grey line under it (subtextOf), and the time. A bell marks watched nodes and a
+// tray marks new tasks, blue when newer than your last visit. Opening a row (a click, Enter, Space) goes to its node. The page
 // is read afresh on every arrival (renderer/edit.js): main rebuilds it from Tana rather than keeping a history.
 const TIMELINE_PAGE = 'orbital:timeline';
 extra.set(TIMELINE_PAGE, { id: TIMELINE_PAGE, text: 'Timeline', title: 'Timeline', kind: 'document', icon: 'timeline', editable: false, hasChildren: true, appPage: true });
@@ -46,5 +46,12 @@ function timelineOlderEl() {
   el.onclick = timelineOlder;
   return el;
 }
+function timelineAddMoreEl(node) {
+  const el = document.createElement('button');
+  el.type = 'button'; el.className = 'gmore tl-add'; el.textContent = 'Add more';
+  el.setAttribute('aria-label', 'Add more tasks pinned to today');
+  el.onmousedown = (e) => e.preventDefault();
+  el.onclick = () => openTodayTaskSearch(node);
+  return el;
+}
 const timelineTime = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }); // a column of times: 24-hour, so they line up
-

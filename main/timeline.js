@@ -1,5 +1,5 @@
 'use strict';
-// The Timeline page (issue #135): one list, newest first, of what happened to the nodes you watch and what landed in
+// The Timeline page (issue #135): today's pinned tasks, then what happened to the nodes you watch and what landed in
 // your Inbox — the same two things the banners announce (main/documents.js notifyWatched, main/views.js
 // announceNewInbox), read back from Tana rather than kept here. Nothing is stored but the time of the last visit: the
 // page is rebuilt on every arrival, which measured 0.2 s for 53 watched nodes (ListChanges, twelve at a time), so it
@@ -17,8 +17,10 @@
 // matter less than both, so a run of them from one source on one day is one quiet row with the tasks listed under it
 // ("An AI agent added 3 tasks to your Inbox"), each a task row of its own that opens as one.
 const db = require('../db');
+const { STATE_TYPES } = require('../sdk/node');
+const { pinnedDates } = require('./pins');
 const { NOT_CONNECTED, S, iso, isMcp } = require('./state');
-const { graphRow, members, toNode } = require('./rows');
+const { graphRow, members, rememberNodeHue, toNode } = require('./rows');
 const { notifySilencedIds, notifyWatchedIds } = require('./documents');
 const { inboxFrom } = require('./views');
 
@@ -113,6 +115,18 @@ async function rows() {
     const icon = actor === 'An AI agent' ? 'robot' : actor === "Tana's AI" ? 'tana' : 'tlNew';
     events.push({ kind: 'inbox', uri: n.id, title: n.title, at: Date.parse(n.createTime), actor, icon, tone: 'new', node: n });
   }
+  const now = Date.now(), date = new Date(now).toLocaleDateString('sv-SE');
+  const todayIds = Object.entries(await pinnedDates()).filter(([, dates]) => dates.includes(date)).map(([id]) => id);
+  const { nodes: pinned = [] } = todayIds.length ? await graph.listNodes({ nodeIds: todayIds, nodeTypes: ['text'], stateTypes: STATE_TYPES, limit: todayIds.length }) : {};
+  const byId = new Map(pinned.map((n) => [n.id, n]));
+  const children = todayIds.map((id) => byId.get(id)).filter(Boolean).map((n) => {
+    rememberNodeHue(n); // graphRow drops participants, so seed the verified editability before toNode builds the row
+    const row = toNode(graphRow(n));
+    return { ...row, editable: false, checkable: row.editable === true };
+  });
+  const todayText = children.length ? 'Tasks pinned to today' : 'All done for today';
+  const todayRow = { id: PAGE + ':today:' + date, text: todayText, segments: [{ text: todayText }], kind: 'block', block: 'bullet', icon: 'pinDate',
+    editable: false, hasChildren: true, children, createdAt: iso(now), unread: false, timeline: { uri: null, time: 'Now', tone: 'new', today: true } };
   // What is new is what came after your last visit, which this visit then becomes. The first visit marks nothing.
   if (weeks === 1 || markFrom === null) { markFrom = Number(db.setting('timelineSeen')) || Infinity; db.setSetting('timelineSeen', Date.now()); }
   const seen = markFrom;
@@ -124,7 +138,7 @@ async function rows() {
     if (e.kind === 'inbox' && last && last.kind === 'inbox' && last.actor === e.actor && day(last.at) === day(e.at)) last.tasks.push(e);
     else merged.push(e.kind === 'inbox' ? { ...e, tasks: [e] } : e);
   }
-  return merged.map((e) => {
+  return [todayRow, ...merged.map((e) => {
     const title = e.title || 'Untitled';
     let segments, note = null, change = null, detail = null, children = [];
     // who, in plain text, then what they did in bold, then the node: "Kevin Favier **completed** ~~Plan the offsite~~".
@@ -143,8 +157,7 @@ async function rows() {
       createdAt: iso(e.at), unread: (e.tasks || [e]).some((t) => t.at > seen),
       // an "added to your Inbox" line opens nothing: the rows under it open themselves, one task or six
       timeline: { uri: e.kind === 'inbox' ? null : e.uri, note, change, detail, tone: e.tone } };
-  });
+  })];
 }
 
 module.exports = { PAGE, rows, said, statusOf, setWeeks };
-

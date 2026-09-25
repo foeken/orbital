@@ -8,10 +8,11 @@ let palEnter = null; // an Enter pressed while a search was still running: 'pick
 let chatgptAuth = null, chatgptAuthLoading = null;
 let meetingNow; // the active meeting as last read: undefined = not asked this open, { meeting } or { error } after
 let meetingList = null, meetingListError = null, pinMeetingDoc = null, pinMeetingBack = null; // the meeting picker: rows, why it has none, the node being pinned, and the page escape returns it to
+let todayPickerNode = null, todayPickerResults = null;
 // Enter chooses: the highlighted row, or for an @ selection ⌘↩ always creates. While the search is still out, the
 // choice is kept and made the moment the rows arrive, so the first Enter after "@" is never lost.
 function chooseRow(create) {
-  if (palBusy && (palMode === 'spaces' || palMode === 'search')) { palEnter = create ? 'create' : 'pick'; return; }
+  if (palBusy && (palMode === 'spaces' || palMode === 'search' || palMode === 'pinToday')) { palEnter = create ? 'create' : 'pick'; return; }
   const r = create && linkCtx ? palRows.find((row) => row.create) : palRows[palIndex];
   if (r) runRow(r);
 }
@@ -1042,6 +1043,38 @@ function searchNow() {
     settleEnter();
   }, showError);
 }
+function todayPickerRows(q) {
+  const group = 'Open tasks assigned to you';
+  if (palBusy || todayPickerResults === null) return [{ group, label: 'Searching…', disabled: true }];
+  const pinned = new Set((todayPickerNode?.children || []).map((n) => n.id));
+  const rows = todayPickerResults.filter((n) => !pinned.has(n.id)).map(asDoc)
+    .map((n) => ({ ...docRow(n, n.meta, () => pinTodayResult(n)), group }));
+  return rows.length ? rows : q ? [] : [{ group, label: 'No open tasks to add', disabled: true }];
+}
+function todayPickerSearchNow() {
+  const q = palInput.value.trim(), seq = ++palSeq;
+  palTimer = null; palBusy = true; renderPalette();
+  tana.searchPreview({ types: ['tasks'], states: ['open'], assignee: 'me', text: q }).then((nodes) => {
+    if (seq !== palSeq || palMode !== 'pinToday') return;
+    todayPickerResults = nodes || []; palBusy = false; renderPalette(); settleEnter();
+  }, (e) => {
+    if (seq !== palSeq || palMode !== 'pinToday') return;
+    todayPickerResults = []; palBusy = false; showError(e); renderPalette();
+  });
+}
+function pinTodayResult(node) {
+  run(async () => {
+    await tana.pin(node.id, 'today');
+    loadPinned(true);
+    await reload(TIMELINE_PAGE);
+    render(true);
+  });
+}
+function openTodayTaskSearch(node) {
+  todayPickerNode = node; todayPickerResults = null;
+  togglePalette('pinToday');
+  todayPickerSearchNow();
+}
 function renderPalette() {
   const q = palInput.value.trim();
   if (palMode === 'cmd') palRows = paletteRows(q.toLowerCase(), q);
@@ -1055,6 +1088,7 @@ function renderPalette() {
   else if (palMode === 'hidden') palRows = hiddenRows(q);
   else if (palMode === 'pins') palRows = editPinRows(q.toLowerCase());
   else if (palMode === 'pinDate') palRows = pinDateRows(q);
+  else if (palMode === 'pinToday') palRows = todayPickerRows(q);
   else if (Object.hasOwn(MEETING_PAGES, palMode)) palRows = MEETING_PAGES[palMode](q);
   else if (palMode === 'pinMeeting') palRows = meetingPickRows(q.toLowerCase());
   else if (palMode === 'setType') palRows = typeRows(q.toLowerCase());
@@ -1123,7 +1157,7 @@ function togglePalette(mode, link, pin) {
   // meetingNow is cleared, not kept: every open re-reads the meeting, the same rule the quick-add panel follows.
   fieldLinkCtx = null;
   if (mode === 'cmd') { palDoc = currentDoc(); palField = fieldAt(document.activeElement); fieldReturn = palField && palField.key; palTaskCtx = null; meetingNow = undefined; meetingCtx = null; loadPins(); subCache.clear(); }
-  palInput.placeholder = mode === 'search' ? 'Search Tana' : mode === 'slash' ? 'Choose a block type or create' : 'Run a command';
+  palInput.placeholder = mode === 'search' ? 'Search Tana' : mode === 'pinToday' ? 'Search open tasks assigned to you' : mode === 'slash' ? 'Choose a block type or create' : 'Run a command';
   palInput.value = link ? link.text : '';
   if (mode === 'search') searchNow(); else renderPalette();
   palInput.focus();
@@ -1167,6 +1201,7 @@ palInput.addEventListener('input', () => {
   // the set lives in main, so typing asks it — debounced like the document search, and the page says it is busy
   if (palMode === 'setIcon') { palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchIconsNow, 150); return renderPalette(); }
   if (palMode === 'spaces') { palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchSpacesNow, 150); return; }
+  if (palMode === 'pinToday') { palSeq++; palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(todayPickerSearchNow, 150); return; }
   palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchNow, 150);
 });
 palInput.addEventListener('keydown', (e) => {
