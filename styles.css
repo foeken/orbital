@@ -71,6 +71,16 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .fields { margin-top: 18px; padding: 10px 0; border-top: 1px solid #e6e6e6; border-bottom: 1px solid #e6e6e6; display: grid; grid-template-columns: 14px max-content 1fr; column-gap: 10px; row-gap: 6px; align-items: start; }
 .fields .field > .fvalues { margin-left: 8px; } /* the label needs air after it: the value is a column of rows, not a word */
 .fields .field { display: contents; color: #1a1a1a; }
+/* A page's fields read as a table: a hairline between one field and the next, under the icon, the label and the value
+   alike. The grid's gaps become padding inside the cells for that, since a border cannot cross a gap. The inline
+   fields under a row stay a plain list. */
+.fields:not(.inline-fields) { row-gap: 0; column-gap: 0; padding: 3px 0; }
+.fields:not(.inline-fields) .field > * { padding-top: 7px; padding-bottom: 7px; border-top: 1px solid #efefef; }
+.fields:not(.inline-fields) .field:first-child > * { border-top: 0; }
+.fields:not(.inline-fields) .field > .ricon { margin-top: 0; padding-top: 10px; } /* the glyph's 3px offset, inside the cell so its line stays level */
+.fields:not(.inline-fields) .field > .flabel { padding-left: 10px; padding-right: 18px; } /* the two gaps, and the value's own 8px */
+.fields:not(.inline-fields) .field > .fvalues { margin-left: 0; }
+[data-theme="dark"] .fields .field > * { border-top-color: #2e3234; }
 .fields[hidden] { display: none; } /* the grid's own display would otherwise win over [hidden] and leave the two lines on a page with no fields */
 .inline-fields { margin-top: 0; margin-left: 17px; margin-bottom: 6px; border-top: 0; border-image: linear-gradient(to right, #8884, transparent 80%) 1; }
 .inline-fields .field > .ricon { transform: translateX(-1px); }
@@ -112,7 +122,10 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .fields .fvalues .node.block:not(.t-bullet):not(.t-numbered) > .line > .bullet::before { visibility: hidden; }
 /* A field that holds choices or links (renderer/fields.js): one focusable line of chips, no editor. A label the type
    no longer offers is greyed and struck, a link to the wrong type carries a small warning mark. */
-.fields .fchoice { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; min-height: 22px; border-radius: 4px; cursor: default; }
+.fields .fchoice { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; min-height: 22px; border-radius: 4px; cursor: default; margin-left: 10px; }
+/* A text value's words start after its row's 16px gutter; a chip's start 6px into the chip. The 10px above puts the
+   two in one column, and the hint, which has no chip around it, takes the other 6. */
+.fields .fchoice > .fhint { margin-left: 6px; }
 .fields .fchoice:focus { outline: none; box-shadow: 0 0 0 2px rgba(80, 143, 187, 0.35); }
 .fields .fchip { padding: 0 6px; border-radius: 4px; background: rgba(0, 0, 0, 0.05); line-height: 20px; }
 .fields .fchip.gone { color: #999; text-decoration: line-through; }
