@@ -3,7 +3,7 @@ const db = require('../db');
 const access = require('../sdk/access');
 const content = require('../sdk/content');
 const chat = require('../sdk/chat');
-const { readNode, editable, setEntityType, contentText, ulid, initDocument, STATE_TYPES } = require('../sdk/node');
+const { readNode, editable, setEntityType, contentText, ulid, initDocument, STATE_TYPES, setTitle, setState, taskMeta, audienceMetadata, setAssignees } = require('../sdk/node');
 const fields = require('../sdk/fields');
 const { DOC_URI, KINDS, LIVE_ROWS, NOT_CONNECTED, PLAIN_KINDS, S, TAG, deletedNodes, docStates, editability, errText, hueLoaded, idKind, isDeleted, metaSigs, nodeCreators, nodeHues, nodeMeta, now, reading, redoStack, report, scheduleRefresh, send, sendChanged, subscribed, summaryCache, typeAttrTitles, typeHues, typeTitles, undoStack, visibleGraphNodes } = require('./state');
 const { eventMeta, graphRow, hueOf, hueWithType, kindRow, memberRow, members, nodeTag, plainRow, rememberNodeHue, rememberType, resolveHue, resolveTypes, toNode, typeTag, typeUriOf } = require('./rows');
@@ -903,4 +903,124 @@ async function moveTarget(spaceId) {
   return document(spaceId);
 }
 
-module.exports = { followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, codexIds, setCodex, creatorOf, document, op, historyIds, readOnDemand, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget };
+// A page writing text it has just typed says so (typed): while the write is applied it is S.writer, and the change it
+// makes reaches that page marked as its own (main/documents.js onChange, sendChanged), so the page is not read again
+// and rebuilt under the caret on every save (#265). The write and its announcement are one synchronous call
+// (transact → change → onChange), so nothing else can run in between.
+const typed = (e, own, fn) => { if (own !== true || !e) return fn(); S.writer = e.sender; try { return fn(); } finally { S.writer = null; } };
+// The web link for a node, the same url home.tana.inc opens: /o/<org>/<route>/<encoded node uri>. The route is Tana's
+// per kind (its link resolver beside JP.type.url, shared bundle of 2026-09-23): a type, a person, a meeting and a space
+// have pages of their own, and /l/ — every other document — shows a type as raw JSON (issue #88).
+const LINK_ROUTES = { type: 't', 'user-profile': 'u', event: 'e', space: 's' };
+// What the renderer asks this module (preload.js names each channel for the page; main.js registers the table).
+const ipc = {
+  'doc:info': (_e, id) => op(id, info),
+  'doc:creationOptions': () => creationOptions(),
+  'doc:taskTypes': () => taskTypes(), // Create task's picker: the workflow types a task can be made with
+  // A document's type: the choices it can be given (with the ones it cannot, and why), and the change itself.
+  'doc:types': (_e, id) => typeChoices(id),
+  'doc:setType': (_e, id, typeUri) => setType(id, typeUri ?? null),
+  // Fields that hold choices or links (issue #33): a value checked the way Tana checks it, a field's definition on its
+  // type, a new field, and every type a link field could point at.
+  'field:set': (_e, id, key, value) => setField(id, key, value),
+  'field:define': (_e, typeUri, attribute, change) => defineField(typeUri, attribute, change || {}),
+  'field:add': (_e, typeUri, def) => addTypeField(typeUri, def),
+  'types:list': () => typeList(),
+  // A type's colour: the one `appearance` field Tana keeps, written on the type itself, so every document wearing
+  // it follows. setTypeHue rebuilds the rows and announces them itself, since no change event carries appearance.
+  'doc:setTypeHue': (_e, typeUri, hue) => setTypeHue(typeUri, hue ?? null),
+  'doc:create': (_e, title, opts) => createDocument(title, opts || {}),
+  'history:undo': () => history(undoStack, redoStack, 'undo', 'canUndo'),
+  'history:redo': () => history(redoStack, undoStack, 'redo', 'canRedo'),
+  'doc:delete': (_e, id) => documentAction(id, 'softDelete'),
+  'doc:restore': (_e, id) => documentAction(id, 'restore'),
+  'doc:archive': (_e, id) => documentAction(id, 'archive'),
+  'doc:unarchive': (_e, id) => documentAction(id, 'unarchive'),
+  'types:archived': () => archivedTypes(),
+  'deleted:list': () => db.deletedList(), // local: the graph does not list deleted documents
+  'doc:setTitle': (e, id, title, own) => mut(id, (doc) => typed(e, own, () => { setTitle(doc, title); })),
+  'doc:setDone': (_e, id, done) => mut(id, (doc) => {
+    setState(doc, done ? 'closed' : 'open', S.me.userUri);
+    docStates.set(id, done ? 'closed' : 'open');
+    scheduleRefresh(2000); // a closed task drops off the open list
+  }),
+  // The state is recorded here, where it is known, rather than left to whatever reads the document next: the refresh
+  // two seconds from now asks the search index, which can still be answering with the state from before this write.
+  'doc:setState': (_e, id, state) => mutTasks([id], (doc) => setState(doc, state, S.me.userUri)).then((count) => { docStates.set(id, state); scheduleRefresh(2000); return count; }),
+  'doc:setStateMany': (_e, ids, state) => mutTasks(ids, (doc) => setState(doc, state, S.me.userUri)).then((count) => { for (const id of ids) docStates.set(id, state); scheduleRefresh(2000); return count; }),
+  // linkSharing lives on the graph node, never in the document, so public-to-the-internet needs its own lookup
+  'doc:taskMeta': (_e, id) => op(id, async doc => {
+    const n = readNode(doc);
+    metaSigs.set(id, metaSig(n)); // from here on, only a change to these fields invalidates the renderer's copy
+    // watched rides along: the creator is a graph fact, already cached for anything a view has listed
+    return { ...taskMeta(doc), ...await audienceMetadata(doc, S.me.userUri, S.client.graph, S.client.sync), linkShared: await linkShared(id), watched: notifyOn(n, await creatorOf(id)) };
+  }),
+  // Access has native capability checks independent of the outliner's editable-body support.
+  // Watching a node for changes: on by default where you were given access to the document itself and are not its
+  // assignee. null clears the choice and falls back to that rule, so "default" stays a live answer rather than a copy.
+  'notify:state': (_e, id) => notifyState(id),
+  'notify:set': (_e, id, on) => setNotify(id, on),
+  // Assigned to the local Codex agent: an app-local mark, not a Tana assignee (see main/documents.js).
+  'codex:list': () => codexIds(),
+  'doc:accessOptions': (_e, id) => op(id, async doc => access.capabilities(doc, S.me.userUri, await accessContext())),
+  'doc:setSharing': (_e, id, selection) => mut(id, async doc => {
+    await access.setSharing(doc, S.me.userUri, selection, await accessContext()); scheduleRefresh(2000);
+  }, true),
+  'spaces:search': async (_e, query = '') => {
+    if (typeof query !== 'string' || query.length > 500) throw new Error('Invalid space query');
+    if (!S.client) throw new Error(NOT_CONNECTED);
+    const { nodes } = await S.client.graph.listNodes({ nodeTypes: ['space'], textQuery: query.trim(), limit: 50 });
+    const ctx = await accessContext();
+    const spaces = await Promise.all(nodes.map(async n => ({ ...toNode(graphRow(n)), selectable: await access.canWrite(n, S.me.userUri, ctx) })));
+    // "Library" moves a document out of every space; it is a target, not a space, so it is added here rather than queried.
+    const library = { id: 'library', title: 'Library', text: 'Library', kind: 'document', icon: 'library', editable: false, selectable: true };
+    return 'library'.startsWith(query.trim().toLowerCase()) || !query.trim() ? [library, ...spaces] : spaces;
+  },
+  'doc:previewMove': (_e, id, spaceId) => op(id, async doc => access.previewMove(doc, await moveTarget(spaceId), S.me.userUri, await accessContext())),
+  'doc:moveToSpace': (_e, id, spaceId, token) => mut(id, async doc => {
+    const result = await access.moveToSpace(doc, await moveTarget(spaceId), S.me.userUri, await accessContext(), token);
+    send('outline:changed', null); scheduleRefresh(2000); return result;
+  }, true),
+  'doc:setAssignees': (_e, id, uris) => mut(id, (doc) => {
+    setAssignees(doc, uris, S.me.userUri);
+    scheduleRefresh(2000); // reassignment may add or remove this task from the active filter
+  }),
+  'doc:setAssigneesMany': (_e, ids, uris) => mutTasks(ids, (doc) => setAssignees(doc, uris, S.me.userUri)).then((count) => { scheduleRefresh(2000); return count; }),
+  'block:setText': (e, id, nodeId, value, own) => mut(id, (doc) => typed(e, own, () => { content.setText(doc, nodeId, value); })), // value: string or segments
+  'block:setCell': (e, id, cellId, value, own) => mut(id, (doc) => typed(e, own, () => { content.setCellText(doc, cellId, value); })), // one table cell's text, same value as setText
+  'block:tableOp': (_e, id, cellId, op) => mut(id, (doc) => content.tableOp(doc, cellId, op)), // a row or column around a cell (content.TABLE_OPS); returns the cell for the caret
+  'block:setBlockType': (_e, id, nodeId, type) => mut(id, (doc) => { content.setBlockType(doc, nodeId, type); }), // type: one of content.BLOCK_TYPES
+  'block:insertDivider': (_e, id, nodeId) => mut(id, (doc) => content.insertDivider(doc, nodeId)), // nodeId null appends at the end
+  'block:insertTable': (_e, id, nodeId) => mut(id, (doc) => content.insertTable(doc, nodeId)), // "/" Table: 3x3 with a header row after nodeId; returns its first cell
+  'block:insertAfter': (_e, id, nodeId, text, block) => mut(id, (doc) => content.insertAfter(doc, nodeId, text, false, block)),
+  'block:insertBefore': (_e, id, nodeId, text) => mut(id, (doc) => content.insertBefore(doc, nodeId, text)),
+  'block:split': (_e, id, nodeId, before, after, asChild) => mut(id, (doc) => content.split(doc, nodeId, before, after, asChild)), // one undo step for both halves
+  'block:join': (_e, id, nodeId, intoId, value) => mut(id, (doc) => content.join(doc, nodeId, intoId, value)), // its reverse: the row above takes the words, one undo step
+  'block:insertChild': (_e, id, nodeId, text) => mut(id, (doc) => content.insertChild(doc, nodeId, text)),
+  'block:removeMany': (_e, id, nodeIds) => mut(id, doc => content.removeMany(doc, nodeIds)),
+  'block:moveMany': (_e, id, nodeIds, direction) => mut(id, doc => content.moveMany(doc, nodeIds, direction)),
+  'block:indentMany': (_e, id, nodeIds) => mut(id, doc => content.indentMany(doc, nodeIds)),
+  'block:outdentMany': (_e, id, nodeIds) => mut(id, doc => content.outdentMany(doc, nodeIds)),
+  'block:remove': (_e, id, nodeId) => mut(id, (doc) => { content.remove(doc, nodeId); }),
+  'block:indent': (_e, id, nodeId) => mut(id, (doc) => { content.indent(doc, nodeId); }),
+  'block:outdent': (_e, id, nodeId) => mut(id, (doc) => { content.outdent(doc, nodeId); }),
+  'block:move': (_e, id, nodeId, direction) => mut(id, (doc) => { content.move(doc, nodeId, direction); }),
+  // A drag names the place outright: the row lands behind afterId, or at the top of parentId, or at the top of toId's
+  // own rows. toId is the outline it lands in, which is the page or one of its fields (main/documents.js moveBlock).
+  'block:moveTo': (_e, id, nodeId, toId, parentId, afterId) => moveBlock(id, nodeId, toId, parentId, afterId),
+  // The same place, with a link landing in it instead of the row itself (main/documents.js referenceIn).
+  'block:insertMention': (_e, toId, uri, label, parentId, afterId) => referenceIn(toId, uri, label, parentId, afterId),
+  'block:toggleCheckbox': (_e, id, nodeId) => mut(id, (doc) => { content.toggleCheckbox(doc, nodeId); }),
+  'sensitive:list': () => sensitiveIds(), // the synced setting sensitive:set writes; db's table is only its migration source
+  // "Discuss with …": one call for the type and the field, because both are the same decision (main/documents.js)
+  'doc:discussWith': (_e, id, who) => discussWith(id, who),
+  'doc:link': (_e, id) => {
+    // the path segment is the org *document* ulid (tana:org:01ks7…), not the WorkOS org id in S.me.orgId
+    const org = (S.me && S.me.orgDocUri || '').split(':').pop();
+    if (!org) throw new Error(NOT_CONNECTED);
+    if (!/^tana:[a-z-]+:[0-9a-z]{26}$/.test(id)) throw new Error('Not a Tana document id');
+    return 'https://home.tana.inc/o/' + org + '/' + (LINK_ROUTES[id.split(':')[1]] || 'l') + '/' + encodeURIComponent(id);
+  },
+};
+
+module.exports = { followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, codexIds, setCodex, creatorOf, document, op, historyIds, readOnDemand, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget, ipc };
