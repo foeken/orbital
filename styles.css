@@ -805,7 +805,15 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 .palette input { border: 0; outline: none; font: inherit; font-size: 17px; color: #1a1a1a; padding: 16px 20px; border-bottom: 1px solid #eee; }
 /* Create task (task.html): the palette's card, with a line saying why the task could not be made */
 .palette .terror { padding: 10px 20px 0; font-size: 13px; color: #d0433a; }
-.palette:has(#taskTypes[hidden]) input { border-bottom: 0; } /* no types to choose: the field alone */
+/* what the task will be and who it is for, under the field; a click or ⇥ there chooses someone else */
+.palette:has(#taskPicks:not([hidden])) input { border-bottom: 0; } /* the picks line takes the field's divider; "Assign to…" gives it back */
+.palette:has(#taskTypes[hidden]) .tpicks { border-bottom: 0; } /* nothing under it to divide off */
+.palette .tpicks { display: flex; align-items: center; gap: 4px; padding: 0 20px 12px; border-bottom: 1px solid #eee; font-size: 13px; color: #8a8a8a; cursor: pointer; user-select: none; }
+.palette .tpicks[hidden] { display: none; }
+.palette .tpicks b { font-weight: 500; color: #555; }
+.palette .tpicks kbd { margin-left: auto; }
+[data-theme="dark"] .palette .tpicks { border-bottom-color: #3a3f41; color: #858b8e; }
+[data-theme="dark"] .palette .tpicks b { color: #c9c9c9; }
 .palette input::placeholder { color: #999; }
 /* the prompt page: the same field the palette always shows, with room for a few lines (↩ is a newline here) */
 .palette .ptext { border: 0; outline: none; resize: none; font: inherit; font-size: 17px; line-height: 24px; color: #1a1a1a; padding: 16px 20px; border-bottom: 1px solid #eee; background: #fff; }

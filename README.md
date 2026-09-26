@@ -48,8 +48,8 @@ your own OpenAI key or sign in with ChatGPT; only the title is sent, and the key
 instructions: a sure answer is applied, otherwise you choose from the odds.
 
 **Create a task from its title.** Shift+Cmd+Space (or Cmd+K "Create task") asks for the title and,
-if you like, one of your workflow types (arrow keys): press Enter and the task is there, open and
-assigned to you. Where it goes and who else has it are the task's own Cmd+K rows afterwards.
+if you like, one of your workflow types (arrow keys) and who it is for (Tab): press Enter and the
+task is there, open and assigned to you or to whoever you picked. Where it goes and who else has it are the task's own Cmd+K rows afterwards.
 
 **The things a day needs.** Meetings carry their times; a meeting's sidebar shows its call link,
 its write-up, its pins, its outcomes and its notes, and a page's sidebar shows its fields, what
