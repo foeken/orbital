@@ -396,7 +396,7 @@ async function reload(docId) {
   // them, or the next draw asks again (#406 review).
   if (releasedSince(since, rowIds(rows, [docId.split('|')[0]]))) {
     if (kids.get(docId) == null) { kids.delete(docId); renderSoon(); return; } // loading: let the loading path ask again
-    return reload(docId); // cached: those rows stay until a read begun after the release lands (it subscribes what it names)
+    return reload(docId); // cached: those rows stay until a read begun after the release lands (it subscribes the outline's document; reference targets main resolves from the graph)
   }
   // A saved search's stored answer is its rows only while it still answers the stored filter (a Save since replaced
   // it) and no staged pills are on screen; then the newest such answer wins. lands() last: a refused answer claims nothing.
