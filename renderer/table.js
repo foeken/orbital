@@ -73,7 +73,7 @@ function saveCell(id) {
   if (!cell || JSON.stringify(p.segs) === JSON.stringify(cell.segments)) return;
   cell.segments = p.segs; cell.text = plainOf(p.segs); // what the row is drawn from until the write comes back
   run(async () => {
-    try { await tana.setCell(item.docId, id, saveValue(p.segs)); }
+    try { await tana.setCell(item.docId, id, saveValue(p.segs), true); } // typed here: its echo is this page's own (#265)
     catch (e) { await reload(item.docId); render(true); throw e; }
   });
 }

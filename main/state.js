@@ -22,6 +22,7 @@ const S = {
   status: { authenticated: null, authChecking: true, connected: false, syncing: false, lastSync: null, error: null },
   activeView: 'inbox', activeFilter: undefined, refreshing: null, refreshTimer: null, historyBusy: false, typesLoaded: null, membersLoaded: null,
   refresh: null, // views.js sets this: the one place a refresh runs, reached from here so documents.js and pins.js need no cycle
+  writer: null, // the page whose typed text is being written right now (main.js typed): its echo is its own (#265)
   badge: null, // main.js sets this: the app icon's badge belongs to electron, the counting to views.js (same split as refresh)
 };
 const subscribed = new Set(); // ids the view refresh subscribed: the only ones it unsubscribes again
@@ -59,11 +60,15 @@ const isSearch = (id) => id.startsWith('tana:search:'); // a saved search: its "
 const idKind = (id) => id.split(':')[1];
 const memberTitle = (n) => n.title || (n.userProfile && n.userProfile.name) || '';
 const isMcp = (n) => (n.invocationContext && n.invocationContext.intent === 'mcp') || /^MCP:/i.test(n.title || '');
-function send(channel, ...payload) {
-  // every outliner page (issues #137, #159): what is pushed is shared state; a command for one page is sent to it directly
+// every outliner page (issues #137, #159): what is pushed is shared state; a command for one page is sent to it directly
+function pages() {
   const wins = S.windows && S.windows.size ? S.windows : S.win ? [S.win] : [];
-  for (const w of wins) if (!w.isDestroyed()) for (const p of w.panes || [w]) p.webContents.send(channel, ...payload);
+  return [...wins].filter((w) => !w.isDestroyed()).flatMap((w) => (w.panes || [w]).map((p) => p.webContents));
 }
+function send(channel, ...payload) { for (const wc of pages()) wc.send(channel, ...payload); }
+// One document changed. The page that typed the change already shows it, so it hears it as its own and skips
+// re-reading the page (renderer/app.js); every other page, the other half of a split included, hears it as before (#265).
+function sendChanged(docId, info) { for (const wc of pages()) wc.send('outline:changed', docId, wc === S.writer ? { ...info, own: true } : info); }
 // local YYYY-MM-DD, optionally N days from now (1 = tomorrow)
 const today = (offset = 0) => { const d = new Date(); d.setDate(d.getDate() + offset); return d.toLocaleDateString('sv-SE'); };
 function setStatus(patch) {
@@ -85,4 +90,4 @@ function scheduleRefresh(ms) {
   S.refreshTimer = setTimeout(() => S.refresh && S.refresh(), ms);
 }
 
-module.exports = { VIEWS, TAG, KINDS, PLAIN_KINDS, PIN_HUBS, DOC_URI, LIVE_ROWS, S, subscribed, reading, deletedNodes, isDeleted, visibleGraphNodes, typeTitles, typeHues, nodeHues, nodeCreators, editability, nodeMeta, docStates, iso, errText, NOT_CONNECTED, notReady, report, now, isSpace, isSearch, idKind, memberTitle, isMcp, send, today, setStatus, pathCache, metaSigs, truncatedViews, summaryCache, typeAttrTitles, hueLoaded, undoStack, redoStack, scheduleRefresh };
+module.exports = { VIEWS, TAG, KINDS, PLAIN_KINDS, PIN_HUBS, DOC_URI, LIVE_ROWS, S, subscribed, reading, deletedNodes, isDeleted, visibleGraphNodes, typeTitles, typeHues, nodeHues, nodeCreators, editability, nodeMeta, docStates, iso, errText, NOT_CONNECTED, notReady, report, now, isSpace, isSearch, idKind, memberTitle, isMcp, send, sendChanged, today, setStatus, pathCache, metaSigs, truncatedViews, summaryCache, typeAttrTitles, hueLoaded, undoStack, redoStack, scheduleRefresh };

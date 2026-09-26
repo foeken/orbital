@@ -6749,7 +6749,7 @@ async function runLiveUpdateBurstCheck() {
   assert.ok(queued, 'renderSoon keeps the pending force beside the pending frame');
   const api = vm.runInNewContext(`
     ${queued[0]}
-    const frames = [], renders = [], reloaded = [];
+    const frames = [], renders = [], reloaded = [], patched = [];
     const requestAnimationFrame = (fn) => frames.push(fn);
     const render = (force) => renders.push(force === true);
     ${functionSource('renderSoon')}
@@ -6757,16 +6757,19 @@ async function runLiveUpdateBurstCheck() {
     const TIMELINE_PAGE = 'orbital:timeline';
     let zoom = { docId: TIMELINE_PAGE };
     const taskMetaById = new Map(), taskMetaFailed = new Map(), relatedBy = new Map(), kids = new Map();
-    const patchDoc = async () => {}, reload = async (id) => { reloaded.push(id); }, loadPins = () => {}, refreshRelated = () => {};
+    const outlinesOf = (docId) => [...kids.keys()].filter((id) => id === docId || id.startsWith(docId + '|'));
+    const patchDoc = async (id) => { patched.push(id); }, reload = async (id) => { reloaded.push(id); }, loadPins = () => {}, refreshRelated = () => {};
     const loadRoots = async () => 'rows'; // a resolved value, which is what .then(renderSoon) hands the queue
     const showError = (error) => { throw error; };
     const tana = { onChanged: (fn) => { listener = fn; } };
     ${sourceBetween('tana.onChanged((docId, info) => {', '// A task is also drawn from copies')}
     ({
-      change: (id) => listener(id),
+      change: (id, info) => listener(id, info),
       flush: () => { for (const fn of frames.splice(0)) fn(); },
       drawn: () => renders.splice(0),
       reloaded: () => reloaded.splice(0),
+      patched: () => patched.splice(0),
+      open: (id) => { kids.set(id, []); kids.set(id + '|tana:type:t?attribute=a', []); },
       page: (id) => { zoom = { docId: id }; },
     });
   `);
@@ -6800,6 +6803,26 @@ async function runLiveUpdateBurstCheck() {
   await new Promise(setImmediate);
   assert.deepEqual(plain(api.reloaded()), [], 'global changes leave the timeline query alone while another page is open');
   api.flush();
+
+  // The echo of this page's own typing (#265): the page and its fields are not read again and nothing is forced under
+  // the caret, while the document's copies elsewhere still take the new title. Anyone else's change reads as before.
+  const PAGE = 'tana:text:01j0typed000000000000000000';
+  api.page(PAGE); api.open(PAGE); api.drawn(); api.patched();
+  api.change(PAGE, { meta: false, own: true });
+  await new Promise(setImmediate);
+  assert.deepEqual(plain(api.reloaded()), [], 'its own typing does not re-read the page or its fields');
+  assert.deepEqual(plain(api.patched()), [PAGE], 'the row copies of the document are still patched');
+  api.flush();
+  assert.deepEqual(plain(api.drawn()), [false], 'and drawn unforced, so a caret in a row keeps the render waiting');
+  api.change(PAGE, { meta: false });
+  await new Promise(setImmediate);
+  assert.deepEqual(plain(api.reloaded()), [PAGE, PAGE + '|tana:type:t?attribute=a'], 'the same change from another page or machine re-reads the page and its fields');
+  api.flush();
+  assert.deepEqual(plain(api.drawn()), [true], 'and is forced onto the screen');
+  api.change(PAGE, { meta: true, own: true });
+  await new Promise(setImmediate);
+  assert.deepEqual(plain(api.reloaded()), [PAGE, PAGE + '|tana:type:t?attribute=a'], 'own typing that moved metadata (a field value) still re-reads, as that needs');
+  api.flush(); api.drawn(); api.patched();
   console.log('ok  global pin changes refresh Timeline only while it is open');
 }
 
@@ -7708,7 +7731,7 @@ async function runTableCheck() {
   table.listeners.input({ target: c1 });
   assert.equal(api.writes.length, 0, 'nothing is written on the keystroke');
   api.timers.shift()();
-  assert.deepEqual(plain(api.writes), [['d1', 'c1', 'Robin Vega']], 'the cell is written by its own id');
+  assert.deepEqual(plain(api.writes), [['d1', 'c1', 'Robin Vega', true]], 'the cell is written by its own id, as typed here (#265)');
   table.listeners.input({ target: c1 }); api.timers.shift()();
   table.listeners.focusout({ target: c1 });
   assert.equal(api.writes.length, 1, 'the same text is not written twice');

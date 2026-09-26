@@ -389,7 +389,12 @@ ipcMain.handle('doc:archive', (_e, id) => documentAction(id, 'archive'));
 ipcMain.handle('doc:unarchive', (_e, id) => documentAction(id, 'unarchive'));
 ipcMain.handle('types:archived', () => archivedTypes());
 ipcMain.handle('deleted:list', () => db.deletedList()); // local: the graph does not list deleted documents
-ipcMain.handle('doc:setTitle', (_e, id, title) => mut(id, (doc) => { setTitle(doc, title); }));
+// A page writing text it has just typed says so (typed): while the write is applied it is S.writer, and the change it
+// makes reaches that page marked as its own (main/documents.js onChange, sendChanged), so the page is not read again
+// and rebuilt under the caret on every save (#265). The write and its announcement are one synchronous call
+// (transact → change → onChange), so nothing else can run in between.
+const typed = (e, own, fn) => { if (own !== true || !e) return fn(); S.writer = e.sender; try { return fn(); } finally { S.writer = null; } };
+ipcMain.handle('doc:setTitle', (e, id, title, own) => mut(id, (doc) => typed(e, own, () => { setTitle(doc, title); })));
 ipcMain.handle('doc:setDone', (_e, id, done) => mut(id, (doc) => {
   setState(doc, done ? 'closed' : 'open', S.me.userUri);
   docStates.set(id, done ? 'closed' : 'open');
@@ -525,8 +530,8 @@ ipcMain.handle('doc:setAssignees', (_e, id, uris) => mut(id, (doc) => {
   scheduleRefresh(2000); // reassignment may add or remove this task from the active filter
 }));
 ipcMain.handle('doc:setAssigneesMany', (_e, ids, uris) => mutTasks(ids, (doc) => setAssignees(doc, uris, S.me.userUri)).then((count) => { scheduleRefresh(2000); return count; }));
-ipcMain.handle('block:setText', (_e, id, nodeId, value) => mut(id, (doc) => { content.setText(doc, nodeId, value); })); // value: string or segments
-ipcMain.handle('block:setCell', (_e, id, cellId, value) => mut(id, (doc) => { content.setCellText(doc, cellId, value); })); // one table cell's text, same value as setText
+ipcMain.handle('block:setText', (e, id, nodeId, value, own) => mut(id, (doc) => typed(e, own, () => { content.setText(doc, nodeId, value); }))); // value: string or segments
+ipcMain.handle('block:setCell', (e, id, cellId, value, own) => mut(id, (doc) => typed(e, own, () => { content.setCellText(doc, cellId, value); }))); // one table cell's text, same value as setText
 ipcMain.handle('block:tableOp', (_e, id, cellId, op) => mut(id, (doc) => content.tableOp(doc, cellId, op))); // a row or column around a cell (content.TABLE_OPS); returns the cell for the caret
 ipcMain.handle('block:setBlockType', (_e, id, nodeId, type) => mut(id, (doc) => { content.setBlockType(doc, nodeId, type); })); // type: one of content.BLOCK_TYPES
 ipcMain.handle('block:insertDivider', (_e, id, nodeId) => mut(id, (doc) => content.insertDivider(doc, nodeId))); // nodeId null appends at the end

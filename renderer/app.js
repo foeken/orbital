@@ -112,6 +112,11 @@ tana.onChanged((docId, info) => {
     // is the Changes section noticing your own latest edit: it says what it said when the page opened. Pins refresh
     // it themselves, because they do change a section.
     if (!info || info.meta !== false || isTypeId(docId)) refreshRelated(docId); // a type's own change can be its fields, which its page's pills and columns are
+    // What this page just typed (main.js typed): the words are already on screen, so the page is not read again and not
+    // rebuilt under the caret on every save. The document's copies elsewhere — a list row, a search result — still take
+    // the new title and time, drawn when the caret leaves. Another page, the other half of a split included, never
+    // hears a change as its own and reads it as before (#265).
+    if (info && info.own && info.meta === false) { patchDoc(docId).then(() => renderSoon(), showError); return; }
     const work = [patchDoc(docId)];
     for (const id of outlinesOf(docId)) work.push(reload(id)); // its page and its fields: both are its rows
     // A zoom parks the caret in its blank tail, so an ordinary render defers until focus leaves and remote children

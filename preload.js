@@ -126,7 +126,7 @@ contextBridge.exposeInMainWorld('api', {
   searchFilter: (docId) => ipcRenderer.invoke('search:filter', docId), // { filter, sort, group }: the stored query as a filter, plus how its rows are arranged
   setSearchFilter: (docId, filter, sort, group, display) => ipcRenderer.invoke('search:setFilter', docId, filter, sort, group, display), // the query, the arrangement and what rows show, together
   searchPreview: (filter) => ipcRenderer.invoke('search:preview', filter), // the rows that filter would find, without storing it
-  setTitle: (docId, title) => ipcRenderer.invoke('doc:setTitle', docId, title),
+  setTitle: (docId, title, own) => ipcRenderer.invoke('doc:setTitle', docId, title, own === true), // own: text this page typed and already shows (main.js typed)
   setDone: (docId, done) => ipcRenderer.invoke('doc:setDone', docId, done),
   setState: (docId, state) => ipcRenderer.invoke('doc:setState', docId, state),
   setStateMany: (docIds, state) => ipcRenderer.invoke('doc:setStateMany', docIds, state),
@@ -139,8 +139,8 @@ contextBridge.exposeInMainWorld('api', {
   taskMeta: (docId) => ipcRenderer.invoke('doc:taskMeta', docId), // { assignees, restricted, participants, audience, audienceSpace?:{uri,title?}, watched }; participants are Tana's actual sharing data
   setAssignees: (docId, uris) => ipcRenderer.invoke('doc:setAssignees', docId, uris), // unique tana:user-profile:<ulid>[]; [] unassigns
   setAssigneesMany: (docIds, uris) => ipcRenderer.invoke('doc:setAssigneesMany', docIds, uris),
-  setText: (docId, nodeId, textOrSegments) => ipcRenderer.invoke('block:setText', docId, nodeId, textOrSegments),
-  setCell: (docId, cellId, textOrSegments) => ipcRenderer.invoke('block:setCell', docId, cellId, textOrSegments), // a table cell's text (its first paragraph); the table row itself stays read-only
+  setText: (docId, nodeId, textOrSegments, own) => ipcRenderer.invoke('block:setText', docId, nodeId, textOrSegments, own === true),
+  setCell: (docId, cellId, textOrSegments, own) => ipcRenderer.invoke('block:setCell', docId, cellId, textOrSegments, own === true), // a table cell's text (its first paragraph); the table row itself stays read-only
   tableOp: (docId, cellId, op) => ipcRenderer.invoke('block:tableOp', docId, cellId, op), // rowBefore|rowAfter|deleteRow|columnBefore|columnAfter|deleteColumn|rowUp|rowDown|columnLeft|columnRight; returns the cell for the caret
   // segments carry marks: { text, marks?: { bold, italic, strike, code, link: href } } | { mention: { uri, label } }
   setBlockType: (docId, nodeId, type) => ipcRenderer.invoke('block:setBlockType', docId, nodeId, type), // paragraph|heading1..3|bullet|numbered|code|quote

@@ -5,7 +5,7 @@ const content = require('../sdk/content');
 const chat = require('../sdk/chat');
 const { readNode, editable, setEntityType, contentText, ulid, initDocument, STATE_TYPES } = require('../sdk/node');
 const fields = require('../sdk/fields');
-const { DOC_URI, KINDS, NOT_CONNECTED, PLAIN_KINDS, S, TAG, deletedNodes, editability, errText, hueLoaded, idKind, isDeleted, metaSigs, nodeCreators, nodeHues, nodeMeta, now, pathCache, reading, redoStack, report, scheduleRefresh, send, subscribed, summaryCache, typeAttrTitles, typeHues, typeTitles, undoStack, visibleGraphNodes } = require('./state');
+const { DOC_URI, KINDS, NOT_CONNECTED, PLAIN_KINDS, S, TAG, deletedNodes, editability, errText, hueLoaded, idKind, isDeleted, metaSigs, nodeCreators, nodeHues, nodeMeta, now, pathCache, reading, redoStack, report, scheduleRefresh, send, sendChanged, subscribed, summaryCache, typeAttrTitles, typeHues, typeTitles, undoStack, visibleGraphNodes } = require('./state');
 const { eventMeta, graphRow, hueOf, hueWithType, kindRow, memberRow, members, nodeTag, plainRow, rememberNodeHue, rememberType, resolveHue, resolveTypes, toNode, typeTag, typeUriOf } = require('./rows');
 const settings = require('./settings');
 
@@ -662,7 +662,7 @@ function onChange(docId, info) {
     const sig = metaSig(n), meta = metaSigs.get(docId) !== sig;
     metaSigs.set(docId, sig);
     notifyWatched(docId, doc, n, info).catch(report); // the signature is taken here and now; the audience it may need is not
-    send('outline:changed', docId, { meta }); // the renderer patches this one row from doc:info
+    sendChanged(docId, { meta }); // the renderer patches this one row from doc:info; the page that typed it knows it has it
     if (pinsChanged || restored) send('outline:changed', null);
     if (restored) scheduleRefresh(0);
   } catch (e) {
