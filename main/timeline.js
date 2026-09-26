@@ -126,8 +126,8 @@ async function rows(progress) {
   const whoOf = (names) => (uris) => andList(uris.map((a) => names.get(a) || 'Someone'));
   const myEmail = String((S.me.user && S.me.user.email) || '').toLowerCase();
   // What is new is what came after your last visit, which this visit then becomes. The first visit marks nothing.
-  if (pages === 1 || markFrom === null) { markFrom = Number(db.setting('timelineSeen')) || Infinity; db.setSetting('timelineSeen', Date.now()); }
-  const seen = markFrom;
+  // Read now, for the marks on the parts; moved on only once the whole page is read, so a failed read loses no marks.
+  const fresh = pages === 1 || markFrom === null, seen = fresh ? Number(db.setting('timelineSeen')) || Infinity : markFrom;
   const now = Date.now(), date = new Date(now).toLocaleDateString('sv-SE');
   // Watched: what the watch rule follows (made by you, not assigned to you; closed ones too, since finishing one is
   // news) and what you switched on, less what you switched off. Titles come with the rule's own answer.
@@ -244,12 +244,15 @@ async function rows(progress) {
   }
   const got = {};
   const page = () => pageOf(got, seen, now, date);
-  let shown = 0; // rows the page asking has been sent: a part that adds none sends nothing
+  // shown: rows the page asking has been sent, so a part that adds none sends nothing; failed: one read refused, the
+  // answer is that refusal, and what the others bring after it is not sent as though the page were on its way
+  let shown = 0, failed = false;
   await Promise.all([['watched', watched], ['agents', agents], ['inbox', inbox], ['meetings', meetingsPart], ['today', today]].map(([k, read]) => read().then((v) => {
     got[k] = v;
     const p = page();
-    if (progress && p.length > shown) { shown = p.length; progress(p); }
-  })));
+    if (progress && !failed && p.length > shown) { shown = p.length; progress(p); }
+  }, (e) => { failed = true; throw e; })));
+  if (fresh) { markFrom = seen; db.setSetting('timelineSeen', now); }
   watchMeetings(me, since);
   // The page is read again at the next moment a meeting moves: one starting (out of Upcoming meetings, into the timeline)
   // or one under way ending (its Join button goes, and without a summary it turns quiet). The read it causes sets the next.
