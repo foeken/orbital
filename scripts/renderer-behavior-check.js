@@ -1083,6 +1083,7 @@ async function runStalePaletteInvalidationCheck() {
     let searches = [{ id: searchId, title: 'saved' }, { id: keptId, title: 'beta' }];
     const TIMELINE_PAGE = 'orbital:timeline';
     let zoom = { docId: keptId };
+    const agentStates = new Map(), agentTaskHosts = new Map(), loadAgentStates = () => {};
     const taskMetaById = new Map(), kids = new Map(), extra = new Map(), fresh = new Map();
     const loadRoots = async () => {};
     const reload = async () => {};
@@ -7034,6 +7035,7 @@ async function runLiveUpdateBurstCheck() {
     const taskMetaById = new Map(), taskMetaFailed = new Map(), relatedBy = new Map(), kids = new Map();
     const outlinesOf = (docId) => [...kids.keys()].filter((id) => id === docId || id.startsWith(docId + '|'));
     const patchDoc = async (id) => { patched.push(id); }, reload = async (id) => { reloaded.push(id); }, loadPins = () => {}, refreshRelated = () => {};
+    const agentStates = new Map([['tana:text:01j0agent000000000000000000', 'working']]), agentTaskHosts = new Map(), statusReads = [], loadAgentStates = () => statusReads.push(1);
     const loadRoots = async () => 'rows'; // a resolved value, which is what .then(renderSoon) hands the queue
     const showError = (error) => { throw error; };
     const tana = { onChanged: (fn) => { listener = fn; } };
@@ -7046,6 +7048,7 @@ async function runLiveUpdateBurstCheck() {
       patched: () => patched.splice(0),
       open: (id) => { kids.set(id, []); kids.set(id + '|tana:type:t?attribute=a', []); },
       page: (id) => { zoom = { docId: id }; },
+      statusReads: () => statusReads.splice(0).length,
     });
   `);
 
@@ -7073,6 +7076,12 @@ async function runLiveUpdateBurstCheck() {
   assert.deepEqual(plain(api.reloaded()), ['orbital:timeline']);
   api.flush();
   assert.deepEqual(plain(api.drawn()), [false], 'and the force does not leak into the frame after it');
+  // A node linked to an agent task whose metadata moved (another page relinked it) asks what its task is doing now;
+  // any other node's metadata, or a linked node's plain edit, starts no status read
+  api.change('tana:text:01j0agent000000000000000000', { meta: true }); api.change('tana:text:01j0other000000000000000000', { meta: true });
+  api.change('tana:text:01j0agent000000000000000000', { meta: false });
+  assert.equal(api.statusReads(), 1, 'a linked node\u2019s metadata change reads its task\u2019s status, and nothing else does');
+  await new Promise(setImmediate); api.flush(); api.drawn(); api.reloaded(); api.patched();
 
   api.page('library'); api.change(null);
   await new Promise(setImmediate);

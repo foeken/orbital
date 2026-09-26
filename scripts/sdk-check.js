@@ -1049,13 +1049,20 @@ async function main() {
     assert.deepEqual(others().map(([name, channel, value]) => [name, channel === 'outline:changed' ? value : channel]), [['left', 'settings:changed'], ['left', watchedDoc], ['other', 'settings:changed'], ['other', watchedDoc]],
       'a watch choice tells the other pages, and has them read that document’s metadata again');
     await backend.handlers.get('codex:link')({ sender: left.webContents }, watchedDoc, '00000000-0000-4000-8000-000000000000');
-    assert.deepEqual(others().map(([name]) => name), ['right', 'other'], 'an agent mark tells the other pages too');
+    assert.deepEqual(others().map(([name, channel]) => name + ' ' + channel), ['right settings:changed', 'right outline:changed', 'other settings:changed', 'other outline:changed'],
+      'an agent mark tells the other pages too, with the node, since a relink moves only its task');
     // A watch choice another machine made reaches every page as that document's metadata change, as a local one does.
     const remoteWatch = 'tana:text:' + ulid(), settingsDoc = docs.get(settings.settingsDocId());
+    await settings.flush(); // this machine's writes are in the document before another machine's land on top
     settingsDoc.transact((loro) => loro.getMap(settings.ROOT).set('notify', JSON.stringify({ ...settings.get('notify'), [remoteWatch]: true })));
     await settings.applyRemote(settingsDoc.id);
     assert.deepEqual(others().filter(([, channel]) => channel === 'outline:changed').map(([name, , value]) => [name, value]), [['left', remoteWatch], ['right', remoteWatch], ['other', remoteWatch]],
       'a watch choice from another machine has every page read that document again');
+    // So does an agent task another machine linked or relinked: the mark and the host can stay the same while the task moves.
+    settingsDoc.transact((loro) => loro.getMap(settings.ROOT).set('codexTask', JSON.stringify({ ...settings.get('codexTask'), [watchedDoc]: { host: 'local', threadId: '00000000-0000-4000-8000-000000000001' } })));
+    await settings.applyRemote(settingsDoc.id);
+    assert.deepEqual(others().filter(([, channel]) => channel === 'outline:changed').map(([name, , value]) => [name, value]), [['left', watchedDoc], ['right', watchedDoc], ['other', watchedDoc]],
+      'an agent task relinked on another machine has every page read that node again');
     for (const key of ['viewFilter:library', 'notify', 'codex', 'codexPrompt', 'codexTask']) settings.set(key, undefined);
     backend.S.windows.clear(); settings.setPref('theme', undefined); await settings.flush();
     // Signed out, both halves of a split are the same login button: the left one fills the window, the right one hides.

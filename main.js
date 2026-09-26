@@ -410,7 +410,7 @@ ipcMain.handle('codex:set', async (e, id, on, prompt, model, host) => {
       throw error;
     }
   }
-  tellOthers(e?.sender);
+  tellOthers(e?.sender, id); // the node too: a relink keeps the mark and the host, and only its task moved
   return result;
 });
 // Linking a node to a Codex task that already exists (#143): the link Codex copies, codex://threads/<id>, or the bare
@@ -422,7 +422,7 @@ ipcMain.handle('codex:link', async (e, id, link) => {
   if (!agent.THREAD_ID.test(threadId)) throw new Error('Paste a Codex task link: codex://threads/…');
   const result = await setCodex(id, true);
   agent.setCodexTask(id, threadId, 'local');
-  tellOthers(e?.sender);
+  tellOthers(e?.sender, id);
   return result;
 });
 // The current request, delivered to the task this node already has. Best effort on purpose: the task is open in

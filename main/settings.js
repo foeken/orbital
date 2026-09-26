@@ -167,17 +167,19 @@ function migrate(doc) {
   });
 }
 // A change to the document, wherever it came from: the other machine's, or our own write coming back.
-// A watch choice is about one document, and a page draws it from that document's metadata (the bell, the Tracking
-// section), so every document whose choice another machine moved is announced as a metadata change of its own, as
-// tellOthers does for this machine's other pages.
+// A watch choice and an agent task are each about one document, and a page draws them with that document (the bell,
+// the Tracking section, the agent badge), so every document whose entry another machine moved is announced as a
+// metadata change of its own, as tellOthers does for this machine's other pages.
+const PER_DOCUMENT = ['notify', 'codexTask'];
 function applyRemote(id) {
   if (!docId || id !== docId) return false;
-  const watched = load().notify || {};
+  const before = PER_DOCUMENT.map((key) => load()[key] || {});
   return hydrate().then((changed) => {
     if (!changed) return changed;
     send('settings:changed', prefs());
-    const now = load().notify || {};
-    for (const doc of Object.keys({ ...watched, ...now })) if (watched[doc] !== now[doc]) send('outline:changed', doc, { meta: true });
+    const moved = new Set();
+    PER_DOCUMENT.forEach((key, i) => { const was = before[i], now = load()[key] || {}; for (const doc of Object.keys({ ...was, ...now })) if (JSON.stringify(was[doc]) !== JSON.stringify(now[doc])) moved.add(doc); });
+    for (const doc of moved) send('outline:changed', doc, { meta: true });
     return changed;
   }).catch((e) => { report(e); return false; });
 }
@@ -195,7 +197,8 @@ const reset = () => { cache = null; docId = null; opening = null; }; // tests, a
 // it already holds the value and an older snapshot arriving late would undo a newer choice there. Every handler that
 // writes a setting a page keeps a copy of calls this (#228: preferences, sensitive marks, the MCP switch; view
 // filters, watch choices and agent marks were left out and a stale page wrote its old filter back). docId: the
-// document a choice is about, whose metadata the other pages read again, since that is where its watch state is drawn.
+// document a choice is about, whose metadata the other pages read again, since that is where its watch state and its
+// agent badge are drawn.
 function tellOthers(sender, docId) {
   const next = prefs();
   for (const w of S.windows || []) if (!w.isDestroyed()) for (const p of w.panes) if (p.webContents !== sender && !p.webContents.isDestroyed()) {
