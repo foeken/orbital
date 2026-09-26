@@ -205,7 +205,7 @@ ipcMain.handle('view:setFilter', (_e, id, filter) => {
   return stored;
 });
 // events start with an empty content map (no doc node yet); readOutline needs the children list
-ipcMain.handle('outline:children', (_e, id) => (id === inbox.PAGE ? inbox.rows() : id === proposalsPage.PAGE ? proposalsPage.rows() : id === timelinePage.PAGE ? timelinePage.rows() : isSearch(id) ? searchChildren(id) : isSpace(id) ? spaceChildren(id) : op(id, (doc) => (idKind(id) === 'chat' ? chatOutline(doc) : doc.content.get('children') ? outlineWithReferences(doc) : []))));
+ipcMain.handle('outline:children', (e, id) => (id === inbox.PAGE ? inbox.rows() : id === proposalsPage.PAGE ? proposalsPage.rows() : id === timelinePage.PAGE ? timelinePage.rows((part) => { if (!e.sender.isDestroyed()) e.sender.send('timeline:part', part); }) : isSearch(id) ? searchChildren(id) : isSpace(id) ? spaceChildren(id) : op(id, (doc) => (idKind(id) === 'chat' ? chatOutline(doc) : doc.content.get('children') ? outlineWithReferences(doc) : []))));
 // Notifications (main/inbox.js): the page's rows come through outline:children above; these are its count and writes.
 ipcMain.handle('inbox:unread', () => inbox.unread());
 ipcMain.handle('inbox:setRead', (_e, id, read) => inbox.setRead(id, !!read));

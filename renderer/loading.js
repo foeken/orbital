@@ -21,19 +21,22 @@ let previewLoading = () => {};
   const ROWS = Array.from({ length: 48 }, (_, i) => ({ head: i === 0 || (i > 2 && rnd() < 0.12), glyph: Math.floor(rnd() * 4), depth: rnd() < 0.2 ? 1 : 0, w: 0.25 + 0.5 * rnd(), meta: rnd() < 0.35 ? 0.06 + 0.1 * rnd() : 0 }));
   ROWS.forEach((r, i) => { if (i && ROWS[i - 1].head) r.head = false; });
   let page = null, key = '';
-  // Where each part goes, measured off the real page (its header is laid out while hidden), and when it comes in.
-  function layout(w, h) {
+  // Where each part goes, measured off the real page (its header is laid out while hidden), and when it comes in. Under
+  // a page landing in parts (.tail, the Timeline) only rows are drawn, from below the last real one, built from `from` on.
+  function layout(w, h, from) {
     const c = canvas.getBoundingClientRect();
     const at = (el, dx, dy) => { const r = el && el.getBoundingClientRect(); return r && r.width + r.height ? [Math.round(r.left - c.left + dx), Math.round(r.top - c.top + dy)] : null; };
     const [cx, cy] = at(document.getElementById('crumbs'), 0, 4) || [32, 52], [tx, ty] = at(document.getElementById('title'), 0, 9) || [32, 84];
-    const [sx, sy] = at(document.querySelector('.scroll'), 16, 4) || [16, 140];
-    const k = [w, h, cx, cy, tx, ty, sx, sy].join();
+    const tail = box.classList.contains('tail') && !previewing(), last = tail && document.getElementById('outline').lastElementChild;
+    let [sx, sy] = at(document.querySelector('.scroll'), 16, 4) || [16, 140];
+    if (last) sy = Math.round(last.getBoundingClientRect().bottom - c.top + 16);
+    const k = [w, h, cx, cy, tx, ty, sx, sy, tail].join();
     if (k === key) return page;
     const items = [], bar = (x, y, bw, bh, a, start, dur) => { items.push({ x, y, w: bw, h: bh, a, start, dur }); return start + dur; };
-    bar(cx, cy, 48, 8, 0.1, 0, 0.5); bar(cx + 58, cy, 72, 8, 0.1, 0.12, 0.5);
-    let end = bar(tx, ty, 176, 24, 0.14, 0.1, 0.8);
+    let end = 0;
+    if (!tail) { bar(cx, cy, 48, 8, 0.1, 0, 0.5); bar(cx + 58, cy, 72, 8, 0.1, 0.12, 0.5); end = bar(tx, ty, 176, 24, 0.14, 0.1, 0.8); }
     const avail = Math.max(120, Math.min(w - sx - 47 - 40, 600));
-    let y = sy, s = 0.6;
+    let y = sy, s = tail ? from : 0.6;
     for (const r of ROWS) {
       if (y > h) break;
       const x = sx + r.depth * 24;
@@ -70,7 +73,7 @@ let previewLoading = () => {};
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
       if (t >= 0) {
-        const { items } = layout(w, h);
+        const { items } = layout(w, h, bt);
         // every bar carries a band of light running left to right through it, the rows lower down a step behind the
         // ones above, so the page reads as still loading; the glyphs keep a steady strength
         const col = (getComputedStyle(canvas).color.match(/[\d.]+/g) || [0, 0, 0]).slice(0, 3).join(','), base = 'rgba(' + col + ',0.55)';
@@ -95,21 +98,27 @@ let previewLoading = () => {};
     }
     frame = requestAnimationFrame(draw);
   }
-  // the real rows arriving: each rises in a little after the one above it
+  // the real rows arriving: each rises in a little after the one above it, once — a page landing in parts brings new
+  // rows between old ones, and a render rebuilds rows it cannot reuse, so a row is known by its key rather than its element
+  const risen = new Set(), keyOf = (el) => el.dataset.key || el.dataset.group;
   function buildIn() {
-    const rows = [...document.querySelectorAll('#outline > *')].filter((el) => el.getBoundingClientRect().top < innerHeight).slice(0, 40);
-    rows.forEach((el, i) => play(el, [{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { duration: MOTION.slow, easing: MOTION.out, delay: i * 35 }));
+    const rows = [...document.querySelectorAll('#outline > *')].filter((el) => keyOf(el) && !risen.has(keyOf(el)));
+    rows.filter((el) => el.getBoundingClientRect().top < innerHeight).slice(0, 40)
+      .forEach((el, i) => play(el, [{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { duration: MOTION.slow, easing: MOTION.out, delay: i * 35 }));
+    for (const el of rows) risen.add(keyOf(el));
   }
   const previewing = () => document.body.classList.contains('loading-preview');
   const sync = () => {
     const now = !box.classList.contains('gone') || previewing();
     if (on && !now) buildIn();
-    if (now && !on) t0 = 0;
+    if (now && !on) { t0 = 0; if (previewing()) risen.clear(); } // a preview ends in the build-in a load does
     on = now;
     if (on && !frame) frame = requestAnimationFrame(draw);
   };
   if (typeof MutationObserver === 'function') {
     new MutationObserver(sync).observe(box, { attributes: true, attributeFilter: ['class'] });
+    // a part of the page landing under the loader (.tail): its new rows rise in now, not when the last part is in
+    new MutationObserver(() => { if (on && box.classList.contains('tail')) buildIn(); }).observe(document.getElementById('outline'), { childList: true });
     new MutationObserver(() => { if (on && !frame) frame = requestAnimationFrame(draw); }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] }); // the still frame repaints in the new colour
   }
   // (focus leaves the page too: a menu command such as Paste goes to whatever has focus, keys or not)

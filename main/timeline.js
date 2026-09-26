@@ -112,105 +112,132 @@ function watchMeetings(me, since) {
     { label: 'Orbital timeline meetings', onRows }).then((h) => { h.on('error', () => { if (live === opened) live = null; }); return h; }, () => { if (live === opened) live = null; return null; }); // refused, now or later: the next read asks again
 }
 
-async function rows() {
+// The page is four reads that do not wait on each other — what happened to the nodes you watch, what landed in your
+// Inbox, your meetings, today's pins — so they run side by side, and each is handed to progress (the page asking, over
+// timeline:part) the moment it lands, merged with whatever is in already; the answer is the whole page. At a launch
+// Tana is answering a thousand other reads, each hop takes a second rather than 40 ms, and one after another they
+// kept the page empty for five (live 2026-09-26).
+async function rows(progress) {
   if (!S.client || !S.me) throw new Error(NOT_CONNECTED);
   const me = S.me.userUri, since = sinceOf(), graph = S.client.graph;
-  const names = new Map((await members().catch(() => [])).map((m) => [m.id, m.title]));
+  const namesP = members().catch(() => []).then((list) => new Map(list.map((m) => [m.id, m.title])));
+  const whoOf = (names) => (uris) => andList(uris.map((a) => names.get(a) || 'Someone'));
+  const myEmail = String((S.me.user && S.me.user.email) || '').toLowerCase();
+  // What is new is what came after your last visit, which this visit then becomes. The first visit marks nothing.
+  if (pages === 1 || markFrom === null) { markFrom = Number(db.setting('timelineSeen')) || Infinity; db.setSetting('timelineSeen', Date.now()); }
+  const seen = markFrom;
+  const now = Date.now(), date = new Date(now).toLocaleDateString('sv-SE');
   // Watched: what the watch rule follows (made by you, not assigned to you; closed ones too, since finishing one is
   // news) and what you switched on, less what you switched off. Titles come with the rule's own answer.
-  const silenced = notifySilencedIds();
-  const { nodes: made } = await graph.listNodes({ nodeTypes: ['text'], createdBy: [me], stateTypes: ['proposed', 'open', 'closed', 'not_now'], limit: 200 });
-  const nodes = new Map(made.filter((n) => !(n.assignedTo || []).includes(me)).map((n) => [n.id, n]));
-  const chosen = [...notifyWatchedIds()].filter((id) => !nodes.has(id));
-  if (chosen.length) for (const n of (await graph.listNodes({ nodeIds: chosen, limit: chosen.length })).nodes) nodes.set(n.id, n);
-  for (const id of silenced) nodes.delete(id);
-  const events = [];
-  const who = (uris) => andList(uris.map((a) => names.get(a) || 'Someone'));
-  // a node nobody has touched since the window opened has nothing in it to tell, so its history is not asked for:
-  // that is most of them on a short window, and one ListChanges each was most of the page's time
-  await pool([...nodes.values()].filter((n) => !n.updateTime || Date.parse(n.updateTime) > since), async (n) => {
-    const st = n.state || {}, moved = Date.parse(st.enteredAt || '');
-    const latest = st.changedBy && st.changedBy !== me && moved > since && VERB[st.type] ? { state: st.type, at: moved } : null;
-    if (latest) events.push({ kind: 'status', uri: n.id, title: n.title, at: moved, actor: who([st.changedBy]), verb: VERB[st.type], icon: ICON[st.type], tone: TONE[st.type] });
-    let summaries = [];
-    try { summaries = (await S.client.history.listChanges({ uri: n.id, limit: Math.min(50, 10 * pages) })).summaries || []; } catch { return; } // one refusal costs that node only
-    for (const s of summaries) {
-      const at = Date.parse(s.endTime || s.startTime || ''), others = (s.authors || []).filter((a) => a !== me);
-      const text = said(s, n.title);
-      if (!(at > since) || !others.length || !text) continue; // yours alone is not news, as with a banner
-      const state = statusOf(text);
-      if (state && latest && latest.state === state && Math.abs(latest.at - at) < 15 * 6e4) continue; // the same move, already told from the node
-      events.push(state
-        ? { kind: 'status', uri: n.id, title: n.title, at, actor: who(others), verb: VERB[state], icon: ICON[state], tone: TONE[state], note: beyondStatus(text) }
-        : { kind: 'edit', uri: n.id, title: n.title, at, actor: who(others), icon: 'updated', tone: 'edit', change: text, detail: detailOf(s, text) });
-    }
-  });
+  async function watched() {
+    const silenced = notifySilencedIds();
+    const [names, { nodes: made }] = await Promise.all([namesP, graph.listNodes({ nodeTypes: ['text'], createdBy: [me], stateTypes: ['proposed', 'open', 'closed', 'not_now'], limit: 200 })]);
+    const who = whoOf(names), events = [];
+    const nodes = new Map(made.filter((n) => !(n.assignedTo || []).includes(me)).map((n) => [n.id, n]));
+    const chosen = [...notifyWatchedIds()].filter((id) => !nodes.has(id));
+    if (chosen.length) for (const n of (await graph.listNodes({ nodeIds: chosen, limit: chosen.length })).nodes) nodes.set(n.id, n);
+    for (const id of silenced) nodes.delete(id);
+    // a node nobody has touched since the window opened has nothing in it to tell, so its history is not asked for:
+    // that is most of them on a short window, and one ListChanges each was most of the page's time
+    await pool([...nodes.values()].filter((n) => !n.updateTime || Date.parse(n.updateTime) > since), async (n) => {
+      const st = n.state || {}, moved = Date.parse(st.enteredAt || '');
+      const latest = st.changedBy && st.changedBy !== me && moved > since && VERB[st.type] ? { state: st.type, at: moved } : null;
+      if (latest) events.push({ kind: 'status', uri: n.id, title: n.title, at: moved, actor: who([st.changedBy]), verb: VERB[st.type], icon: ICON[st.type], tone: TONE[st.type] });
+      let summaries = [];
+      try { summaries = (await S.client.history.listChanges({ uri: n.id, limit: Math.min(50, 10 * pages) })).summaries || []; } catch { return; } // one refusal costs that node only
+      for (const s of summaries) {
+        const at = Date.parse(s.endTime || s.startTime || ''), others = (s.authors || []).filter((a) => a !== me);
+        const text = said(s, n.title);
+        if (!(at > since) || !others.length || !text) continue; // yours alone is not news, as with a banner
+        const state = statusOf(text);
+        if (state && latest && latest.state === state && Math.abs(latest.at - at) < 15 * 6e4) continue; // the same move, already told from the node
+        events.push(state
+          ? { kind: 'status', uri: n.id, title: n.title, at, actor: who(others), verb: VERB[state], icon: ICON[state], tone: TONE[state], note: beyondStatus(text) }
+          : { kind: 'edit', uri: n.id, title: n.title, at, actor: who(others), icon: 'updated', tone: 'edit', change: text, detail: detailOf(s, text) });
+      }
+    });
+    return events;
+  }
   // Inbox: the newest tasks assigned to you, whatever state they are in now, and the chat each was created in
-  const { nodes: tasks } = await graph.listNodes({ nodeTypes: ['text'], assignedTo: [me], sortOptions: [{ field: 'SORT_FIELD_CREATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }], limit: Math.min(1000, 100 * pages) });
-  const recent = tasks.filter((n) => Date.parse(n.createTime || '') > since);
-  const mine = recent.filter((n) => !n.createdBy || n.createdBy === me).map((n) => n.id);
-  const createdIn = new Map(mine.length ? ((await graph.listEdges({ fromNodeIds: mine, edgeTypes: ['EDGE_TYPE_CREATED_IN'] }).catch(() => ({}))).edges || []).map((e) => [e.fromNodeId, e.toNodeId]) : []);
-  const chatIds = [...new Set(createdIn.values())];
-  const chats = new Map(chatIds.length ? (await graph.listNodes({ nodeIds: chatIds, nodeTypes: ['chat'], includeOwnedChats: true, limit: chatIds.length })).nodes.map((c) => [c.id, c]) : []);
-  for (const n of recent) {
-    const chat = createdIn.has(n.id) ? chats.get(createdIn.get(n.id)) || {} : null;
-    if (!inboxFrom(me, n.createdBy, chat, names)) continue; // yours, by hand
-    // who put it there: the person, or for a chat the kind of writer (an MCP client is somebody's agent)
-    const actor = n.createdBy && n.createdBy !== me ? who([n.createdBy]) : isMcp(chat) ? 'An AI agent' : "Tana's AI";
-    // the marker says who: a robot for an agent, Tana's prism for Tana's own AI, a dotted ring for a person
-    const icon = actor === 'An AI agent' ? 'robot' : actor === "Tana's AI" ? 'tana' : 'tlNew';
-    events.push({ kind: 'inbox', uri: n.id, title: n.title, at: Date.parse(n.createTime), actor, icon, tone: 'new', node: n });
+  async function inbox() {
+    const [names, { nodes: tasks }] = await Promise.all([namesP, graph.listNodes({ nodeTypes: ['text'], assignedTo: [me], sortOptions: [{ field: 'SORT_FIELD_CREATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }], limit: Math.min(1000, 100 * pages) })]);
+    const who = whoOf(names), events = [];
+    const recent = tasks.filter((n) => Date.parse(n.createTime || '') > since);
+    const mine = recent.filter((n) => !n.createdBy || n.createdBy === me).map((n) => n.id);
+    const createdIn = new Map(mine.length ? ((await graph.listEdges({ fromNodeIds: mine, edgeTypes: ['EDGE_TYPE_CREATED_IN'] }).catch(() => ({}))).edges || []).map((e) => [e.fromNodeId, e.toNodeId]) : []);
+    const chatIds = [...new Set(createdIn.values())];
+    const chats = new Map(chatIds.length ? (await graph.listNodes({ nodeIds: chatIds, nodeTypes: ['chat'], includeOwnedChats: true, limit: chatIds.length })).nodes.map((c) => [c.id, c]) : []);
+    for (const n of recent) {
+      const chat = createdIn.has(n.id) ? chats.get(createdIn.get(n.id)) || {} : null;
+      if (!inboxFrom(me, n.createdBy, chat, names)) continue; // yours, by hand
+      // who put it there: the person, or for a chat the kind of writer (an MCP client is somebody's agent)
+      const actor = n.createdBy && n.createdBy !== me ? who([n.createdBy]) : isMcp(chat) ? 'An AI agent' : "Tana's AI";
+      // the marker says who: a robot for an agent, Tana's prism for Tana's own AI, a dotted ring for a person
+      const icon = actor === 'An AI agent' ? 'robot' : actor === "Tana's AI" ? 'tana' : 'tlNew';
+      events.push({ kind: 'inbox', uri: n.id, title: n.title, at: Date.parse(n.createTime), actor, icon, tone: 'new', node: n });
+    }
+    return events;
   }
   // Meetings: the ones you are in that started in the window, up to now, each opening the meeting (which forwards to
   // its write-up, renderer/edit.js followSummary), and the rest of today's for the Upcoming meetings block. One ask to
   // the end of today; a refusal costs the meetings only.
-  const endOfToday = new Date(); endOfToday.setHours(24, 0, 0, 0);
-  const { nodes: meetings = [] } = await graph.listNodes({ nodeTypes: ['event'], hasParticipantUris: [me], eventStartTimeMin: new Date(since).toISOString(), eventStartTimeMax: endOfToday.toISOString(),
-    sortOptions: [{ field: 'SORT_FIELD_EVENT_START_TIME', direction: 'SORT_DIRECTION_DESCENDING' }], limit: Math.min(1000, 100 * pages) }).catch(() => ({}));
-  const myEmail = String((S.me.user && S.me.user.email) || '').toLowerCase();
-  const shown = meetings.filter((n) => { const ev = n.calendarEvent || {}, at = Date.parse(ev.startTime || ''); return at >= since && at <= Date.now() && !isAllDay(ev.startTime, ev.endTime, ev.allDay); });
-  // A meeting that is over and left no summary is drawn quiet, like a new-task line; one with a summary, or still
-  // going, as it is. The summary is Tana's own, on the event: calendarEvent.tagline and .summary, written when the
-  // write-up is. Not the write-up document itself: that can be moved into a space, and then the meeting no longer
-  // owns it (live 2026-09-26, "Datadog & Nedap - executive alignment").
-  for (const n of shown) {
-    const ev = n.calendarEvent || {}, going = Date.parse(ev.endTime || '') > Date.now(), bare = !going && !String(ev.tagline || ev.summary || '').trim();
-    // still under way: joined from Tana (row.join, the meeting's id: renderer/timeline.js opens it there)
-    events.push({ kind: 'meeting', uri: n.id, title: n.title, at: Date.parse(ev.startTime), icon: 'meeting', tone: bare ? 'faint' : 'meeting', note: meetingNote(ev, me, myEmail),
-      join: going ? n.id : undefined, end: going ? Date.parse(ev.endTime) : undefined });
+  async function meetingsPart() {
+    const endOfToday = new Date(); endOfToday.setHours(24, 0, 0, 0);
+    const { nodes: meetings = [] } = await graph.listNodes({ nodeTypes: ['event'], hasParticipantUris: [me], eventStartTimeMin: new Date(since).toISOString(), eventStartTimeMax: endOfToday.toISOString(),
+      sortOptions: [{ field: 'SORT_FIELD_EVENT_START_TIME', direction: 'SORT_DIRECTION_DESCENDING' }], limit: Math.min(1000, 100 * pages) }).catch(() => ({}));
+    const shown = meetings.filter((n) => { const ev = n.calendarEvent || {}, at = Date.parse(ev.startTime || ''); return at >= since && at <= Date.now() && !isAllDay(ev.startTime, ev.endTime, ev.allDay); });
+    // A meeting that is over and left no summary is drawn quiet, like a new-task line; one with a summary, or still
+    // going, as it is. The summary is Tana's own, on the event: calendarEvent.tagline and .summary, written when the
+    // write-up is. Not the write-up document itself: that can be moved into a space, and then the meeting no longer
+    // owns it (live 2026-09-26, "Datadog & Nedap - executive alignment").
+    const events = shown.map((n) => {
+      const ev = n.calendarEvent || {}, going = Date.parse(ev.endTime || '') > Date.now(), bare = !going && !String(ev.tagline || ev.summary || '').trim();
+      // still under way: joined from Tana (row.join, the meeting's id: renderer/timeline.js opens it there)
+      return { kind: 'meeting', uri: n.id, title: n.title, at: Date.parse(ev.startTime), icon: 'meeting', tone: bare ? 'faint' : 'meeting', note: meetingNote(ev, me, myEmail),
+        join: going ? n.id : undefined, end: going ? Date.parse(ev.endTime) : undefined };
+    });
+    // Upcoming meetings: today's still to start, earliest first, under Today's Tasks as a block of their own. Each opens
+    // the meeting; its grey line says when and who (renderer/views.js subtextOf, node.subtext). No meetings, no block.
+    const upcoming = meetings.filter((n) => { const ev = n.calendarEvent || {}; return Date.parse(ev.startTime || '') > Date.now() && !isAllDay(ev.startTime, ev.endTime, ev.allDay); })
+      .sort((a, b) => Date.parse(a.calendarEvent.startTime) - Date.parse(b.calendarEvent.startTime))
+      .map((n) => ({ id: n.id, text: n.title || 'Untitled', title: n.title || 'Untitled', kind: 'document', icon: 'meeting', editable: false, hasChildren: false, start: n.calendarEvent.startTime, join: n.id,
+        subtext: meetingNote(n.calendarEvent, me, myEmail, true) }));
+    return { events, upcoming };
   }
+  // Today's Tasks: the tasks pinned through today. Completed tasks age out after their pinned day; a pin for today
+  // still keeps them here.
+  async function today() {
+    const pinDatesById = new Map(Object.entries(await pinnedDates()));
+    const pinnedIds = [...pinDatesById].filter(([, dates]) => dates.some((pinnedDate) => pinnedDate <= date)).map(([id]) => id);
+    const { nodes: pinned = [] } = pinnedIds.length ? await graph.listNodes({ nodeIds: pinnedIds, nodeTypes: ['text'], stateTypes: STATE_TYPES, limit: pinnedIds.length }) : {};
+    const byId = new Map(pinned.map((n) => [n.id, n]));
+    return pinnedIds.map((id) => byId.get(id)).filter(Boolean).map((n) => {
+      rememberNodeHue(n); // graphRow drops participants, so seed the verified editability before toNode builds the row
+      const row = toNode(graphRow(n));
+      return row.done && !pinDatesById.get(n.id).includes(date) ? null : { ...row, editable: false, checkable: row.editable === true };
+    }).filter(Boolean);
+  }
+  const got = {};
+  const page = () => pageOf(got, seen, now, date);
+  await Promise.all([['watched', watched], ['inbox', inbox], ['meetings', meetingsPart], ['today', today]].map(([k, read]) => read().then((v) => { got[k] = v; if (progress) progress(page()); })));
   watchMeetings(me, since);
-  // Upcoming meetings: today's still to start, earliest first, under Today's Tasks as a block of their own. Each opens
-  // the meeting; its grey line says when and who (renderer/views.js subtextOf, node.subtext). No meetings, no block.
-  const upcoming = meetings.filter((n) => { const ev = n.calendarEvent || {}; return Date.parse(ev.startTime || '') > Date.now() && !isAllDay(ev.startTime, ev.endTime, ev.allDay); })
-    .sort((a, b) => Date.parse(a.calendarEvent.startTime) - Date.parse(b.calendarEvent.startTime))
-    .map((n) => ({ id: n.id, text: n.title || 'Untitled', title: n.title || 'Untitled', kind: 'document', icon: 'meeting', editable: false, hasChildren: false, start: n.calendarEvent.startTime, join: n.id,
-      subtext: meetingNote(n.calendarEvent, me, myEmail, true) }));
-  const upcomingText = 'Upcoming meetings';
   // The page is read again at the next moment a meeting moves: one starting (out of Upcoming meetings, into the timeline)
   // or one under way ending (its Join button goes, and without a summary it turns quiet). The read it causes sets the next.
   clearTimeout(startTimer);
-  const next = Math.min(...upcoming.map((m) => Date.parse(m.start)), ...events.filter((e) => e.end).map((e) => e.end));
+  const next = Math.min(...got.meetings.upcoming.map((m) => Date.parse(m.start)), ...got.meetings.events.filter((e) => e.end).map((e) => e.end));
   if (next < Infinity) startTimer = setTimeout(() => send('outline:changed', PAGE), next - Date.now() + 1000); // a second in, so it has happened
+  return page();
+}
+// The page from the parts in so far: Today's Tasks once its pins are read, Upcoming meetings, then every event newest first
+function pageOf(got, seen, now, date) {
+  const upcoming = got.meetings ? got.meetings.upcoming : [];
+  const upcomingText = 'Upcoming meetings';
   const upcomingRow = upcoming.length ? [{ id: PAGE + ':upcoming', text: upcomingText, segments: [{ text: upcomingText }], kind: 'block', block: 'bullet', icon: 'meeting',
-    editable: false, hasChildren: true, children: upcoming, createdAt: iso(Date.now()), unread: false, timeline: { uri: null, time: '', tone: 'new', upcoming: true } }] : []; // no time of its own: it sits under Today's Now
-  const now = Date.now(), date = new Date(now).toLocaleDateString('sv-SE');
-  const pinDatesById = new Map(Object.entries(await pinnedDates()));
-  const pinnedIds = [...pinDatesById].filter(([, dates]) => dates.some((pinnedDate) => pinnedDate <= date)).map(([id]) => id);
-  const { nodes: pinned = [] } = pinnedIds.length ? await graph.listNodes({ nodeIds: pinnedIds, nodeTypes: ['text'], stateTypes: STATE_TYPES, limit: pinnedIds.length }) : {};
-  const byId = new Map(pinned.map((n) => [n.id, n]));
-  // Completed tasks age out after their pinned day; a pin for today still keeps them here.
-  const children = pinnedIds.map((id) => byId.get(id)).filter(Boolean).map((n) => {
-    rememberNodeHue(n); // graphRow drops participants, so seed the verified editability before toNode builds the row
-    const row = toNode(graphRow(n));
-    return row.done && !pinDatesById.get(n.id).includes(date) ? null : { ...row, editable: false, checkable: row.editable === true };
-  }).filter(Boolean);
+    editable: false, hasChildren: true, children: upcoming, createdAt: iso(now), unread: false, timeline: { uri: null, time: '', tone: 'new', upcoming: true } }] : []; // no time of its own: it sits under Today's Now
   const todayText = "Today's Tasks";
-  const todayRow = { id: PAGE + ':today:' + date, text: todayText, segments: [{ text: todayText }], kind: 'block', block: 'bullet', icon: 'todayTasks',
-    editable: false, hasChildren: true, children, createdAt: iso(now), unread: false, timeline: { uri: null, time: 'Now', tone: 'new', today: true } };
-  // What is new is what came after your last visit, which this visit then becomes. The first visit marks nothing.
-  if (pages === 1 || markFrom === null) { markFrom = Number(db.setting('timelineSeen')) || Infinity; db.setSetting('timelineSeen', Date.now()); }
-  const seen = markFrom;
+  const todayRow = got.today ? [{ id: PAGE + ':today:' + date, text: todayText, segments: [{ text: todayText }], kind: 'block', block: 'bullet', icon: 'todayTasks',
+    editable: false, hasChildren: true, children: got.today, createdAt: iso(now), unread: false, timeline: { uri: null, time: 'Now', tone: 'new', today: true } }] : [];
+  const events = [...(got.watched || []), ...(got.inbox || []), ...(got.meetings ? got.meetings.events : [])];
   // New tasks in a row from one source on one day are one entry, timed by the newest of them
   const day = (at) => new Date(at).toDateString();
   const merged = [];
@@ -219,7 +246,7 @@ async function rows() {
     if (e.kind === 'inbox' && last && last.kind === 'inbox' && last.actor === e.actor && day(last.at) === day(e.at)) last.tasks.push(e);
     else merged.push(e.kind === 'inbox' ? { ...e, tasks: [e] } : e);
   }
-  return [todayRow, ...upcomingRow, ...merged.map((e) => {
+  return [...todayRow, ...upcomingRow, ...merged.map((e) => {
     const title = e.title || 'Untitled';
     let segments, note = null, change = null, detail = null, children = [];
     // who, in plain text, then what they did in bold, then the node: "Kevin Favier **completed** ~~Plan the offsite~~".

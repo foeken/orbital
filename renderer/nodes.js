@@ -361,6 +361,7 @@ async function reload(docId) {
   // through a menu quickly could leave the page on an older choice than the pills show.
   if (isTypeId(docId)) { const asked = typeFilter(docId), rows = await tana.searchPreview(asked); if (filters.get(docId) === asked) kids.set(docId, rows); return; }
   kids.set(docId, syncUploads(docId, await tana.children(docId))); // uploads still running keep their placeholders
+  if (docId === TIMELINE_PAGE) timelinePartial = false; // the whole page is in (renderer/timeline.js)
 }
 // A document's rows are not only the ones on its page: every field it has is an outline of that document too,
 // loaded under "<document>|<type>?attribute=<key>". Anything that re-reads a document's rows re-reads those with
