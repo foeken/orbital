@@ -4151,9 +4151,9 @@ async function runRestorePlaceCheck() {
   `);
   assert.equal(api.remember({ docId: 'tana:text:a', nodeId: 'n1', from: 'Search' }), JSON.stringify({ docId: 'tana:text:a', nodeId: 'n1', from: 'Search' }),
     'the node you are looking at is remembered as the place to reopen');
-  assert.equal(api.remember(null), null, 'a view is not a zoom: the stored place is cleared rather than left stale');
+  assert.equal(api.remember(null), '{}', 'a view with nothing zoomed is a place too: stored as {}, so a reload stays on it instead of opening Home');
   api.remember({ docId: 'tana:text:a', nodeId: null });
-  assert.equal(api.remember({ docId: 'draft:7', nodeId: null }), null, 'a draft id would mean nothing after a restart, so it replaces nothing');
+  assert.equal(api.remember({ docId: 'draft:7', nodeId: null }), '{}', 'a draft id would mean nothing after a restart, so it stores the view behind it');
   api.seed([{ id: 'tana:text:a', text: 'Weekly notes', icon: 'doc' }]);
   assert.equal(api.remember({ docId: 'tana:text:a', nodeId: null }), JSON.stringify({ docId: 'tana:text:a', nodeId: null, title: 'Weekly notes', icon: 'doc' }),
     'the page\'s own title and glyph ride along, which is what lets the next launch draw it before anything is fetched');
@@ -5806,6 +5806,7 @@ async function runHomeCheck() {
   // A launch with nothing to restore opens Home; an explicit place wins
   assert.deepEqual(plain(api.seed(null)), { docId: SEARCH, nodeId: null }, 'a launch with no place to restore opens Home');
   assert.deepEqual(plain(api.seed({ docId: OTHER, nodeId: null })), { docId: OTHER, nodeId: null }, 'and a place to restore is left alone');
+  assert.deepEqual(plain(api.seed({})), {}, 'and a view left unzoomed (the Library, Types) reopens as that view, not Home');
 
   // One route Home, whatever page asks for it: the anchor crumb, Back with no history and the Cmd+K row all call this.
   api.view('library');

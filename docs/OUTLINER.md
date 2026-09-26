@@ -424,6 +424,8 @@ is instant, needs no key and never changes between two reads of the same words. 
 
 - **Reopening where you left off.** `rememberPlace` (renderer/edit.js) stores `{ docId, nodeId, from, title, icon }`
   under `place`; the title and glyph are the page's own, taken off the row it was drawn from, so they cost nothing.
+  A view with nothing zoomed (the Library, Types) is stored as `{}`: it is a place too, so a reload or a restart
+  stays on it, and only a launch with nothing stored at all opens Home.
   Boot seeds `extra` and `zoom` from them **before the first render**, so a launch opens on the page you were on
   with its header and `Loading…` under it — it used to draw the active view first and replace it once the connection
   came up, which read as the Library flashing past. `restorePlace` then reads the real node over that stub (the stub
