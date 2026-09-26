@@ -2905,6 +2905,10 @@ async function main() {
     backend.electron.shell.refuse = true;
     await assert.rejects(() => backend.handlers.get('codex:set')(null, task.id, true, 'Try again'),
       'an assignment that cannot open Codex fails rather than claiming delegation');
+    // ...and leaves no mark behind: the mark is a synced setting, so another machine and the next launch would show a
+    // pending badge for a handoff the page that asked reported as failed.
+    assert.equal(await assigned(), '', 'a failed handoff takes back the mark it made');
+    assert.equal(backend.agent.codexTaskFor(task.id), null, 'and the task link');
     backend.electron.shell.refuse = false;
     // Unassigning opens nothing at all: it takes the assignment away and leaves the task and the context alone.
     const openedBefore = backend.opened.length;
