@@ -417,8 +417,10 @@ html:not(:hover) :is(#crumbs, .navbtns) { opacity: 0; }
 /* a row's line starts 10px left of its node (the gutter's negative margin), so the rail is placed on the marker's centre */
 .node.tl::before { content: ''; position: absolute; left: 101px; top: 0; bottom: 0; border-left: 1px solid #e6e6e6; }
 .node.tl-today::before { top: 26px; }
-.tl-divider { position: relative; height: 17px; }
-.tl-divider::before { content: ''; position: absolute; inset: 8px 0 auto; border-top: 1px solid #e6e6e6; }
+/* 16px between the end of today's rail and the line, 8px under it: the heading below brings its own room, so this
+   balances the line between the two */
+.tl-divider { position: relative; height: 25px; }
+.tl-divider::before { content: ''; position: absolute; inset: 16px 0 auto; border-top: 1px solid #e6e6e6; }
 /* the line is the space between today and the day before it: the heading under it gives up its own top margin, or the
    line sits twice as far from the heading as from the rows above it (#190) */
 .tl-divider + .ghead { margin-top: 0; }
