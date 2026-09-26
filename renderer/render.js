@@ -754,7 +754,7 @@ function nodeEl(node, docId, parent) {
     text.classList.toggle('chiponly', chipOnly(text));
   }
   body.append(text);
-  const metaText = node.notification ? agoText(node.createdAt) : node.timeline ? node.timeline.time || timelineTime(node.createdAt) : node.proposal ? agoText(node.proposal.proposedAt) : demoMeta(display, display.meta); // a notification says when it came in, a proposal when it was made
+  const metaText = node.notification ? agoText(node.createdAt) : node.timeline ? node.timeline.time ?? timelineTime(node.createdAt) : node.proposal ? agoText(node.proposal.proposedAt) : demoMeta(display, display.meta); // a notification says when it came in, a proposal when it was made
   if (metaText) { const m = document.createElement('span'); m.className = 'meta'; m.textContent = metaText; body.append(m); }
   // every row describes who can see it, not only task rows; the fetch waits until the row is on screen
   const taskInfo = taskSummary(display, true) || documentSummary(display, true);

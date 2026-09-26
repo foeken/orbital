@@ -182,7 +182,7 @@ async function rows() {
       subtext: meetingNote(n.calendarEvent, me, myEmail, true) }));
   const upcomingText = 'Upcoming meetings';
   const upcomingRow = upcoming.length ? [{ id: PAGE + ':upcoming', text: upcomingText, segments: [{ text: upcomingText }], kind: 'block', block: 'bullet', icon: 'meeting',
-    editable: false, hasChildren: true, children: upcoming, createdAt: iso(Date.now()), unread: false, timeline: { uri: null, time: 'Next', tone: 'new', upcoming: true } }] : [];
+    editable: false, hasChildren: true, children: upcoming, createdAt: iso(Date.now()), unread: false, timeline: { uri: null, time: '', tone: 'new', upcoming: true } }] : []; // no time of its own: it sits under Today's Now
   const now = Date.now(), date = new Date(now).toLocaleDateString('sv-SE');
   const pinDatesById = new Map(Object.entries(await pinnedDates()));
   const pinnedIds = [...pinDatesById].filter(([, dates]) => dates.some((pinnedDate) => pinnedDate <= date)).map(([id]) => id);

@@ -2592,7 +2592,7 @@ async function main() {
     const withSoon = await backend.timelinePage.rows();
     const hm = (ms) => { const d = new Date(ms); return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0'); };
     assert.deepEqual(JSON.parse(JSON.stringify([withSoon[1].text, withSoon[1].timeline.time, withSoon[1].timeline.upcoming, withSoon[1].children.map((c) => [c.id, c.text, c.icon, c.subtext])])),
-      ['Upcoming meetings', 'Next', true, [[soon.id, 'Standup', 'meeting', hm(Date.parse(soon.calendarEvent.startTime)) + '–' + hm(Date.parse(soon.calendarEvent.endTime)) + ' · Ann Bakker']]],
+      ['Upcoming meetings', '', true, [[soon.id, 'Standup', 'meeting', hm(Date.parse(soon.calendarEvent.startTime)) + '–' + hm(Date.parse(soon.calendarEvent.endTime)) + ' · Ann Bakker']]],
       'a meeting later today sits under Upcoming meetings, after Today\'s Tasks, saying when and who');
     assert.ok(!withSoon.slice(2).some((r) => r.timeline.uri === soon.id), 'and not among what happened');
     soonToo = false;
