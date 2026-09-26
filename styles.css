@@ -205,6 +205,10 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
    disappear beneath them. One row from the right edge, so a button that is not offered (the sidebar toggle on a page
    without a sidebar) leaves no gap: the others move up to the edge. */
 .navbtns { position: absolute; top: 44px; right: 32px; z-index: 1; display: flex; gap: 2px; }
+/* The top row (Home and Cmd+K, and the buttons on the right) shows only while the mouse is over this page: each half
+   of a split is a page of its own, so the half you are not pointing at is just its title and rows. The fade is the
+   one .titlebar's children already have (the loading animation's rule below). */
+html:not(:hover) :is(#crumbs, .navbtns) { opacity: 0; }
 #railToggle { margin-left: 6px; } /* the sidebar's own button, a step apart from the page's */
 .navbtn {
   display: flex; align-items: center; justify-content: center;
