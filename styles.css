@@ -784,7 +784,7 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 .gmore.tl-add { padding-left: 6px; } /* inside the today row, aligned with task titles */
 .gmore.tl-add-inline { display: inline-block; margin: 0; padding: 0; }
 .tl-empty { color: var(--muted); font-size: 14px; }
-.gmore:focus { outline: none; box-shadow: 0 0 0 2px #b7d2f5; border-radius: 3px; }
+.gmore:focus { outline: none; box-shadow: 0 0 0 2px var(--focus); border-radius: 3px; }
 /* offered beside "Nothing here yet" only while a filter is narrowing the view; a real button, so Tab and Enter reach it */
 .clearfilters { border: 0; background: none; color: var(--muted); font: inherit; font-size: 16px; padding: 0; margin-left: 10px; text-decoration: underline; cursor: pointer; }
 .clearfilters:hover { color: #1a1a1a; }
@@ -819,7 +819,7 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 @starting-style { .toolbar:not([hidden]) { opacity: 0; transform: translateY(4px) scale(.96); } }
 .tbtn { position: relative; display: flex; align-items: center; gap: 4px; min-width: 30px; height: 28px; padding: 0 8px; border: 0; border-radius: 6px; background: none; color: #444; font-size: 15px; cursor: pointer; }
 .tbtn:hover { background: #f0f0f0; }
-.tbtn:focus { outline: none; box-shadow: 0 0 0 2px #b7d2f5; }
+.tbtn:focus { outline: none; box-shadow: 0 0 0 2px var(--focus); }
 .tbtn.on { background: #e8f1fb; color: #2257a3; }
 .tbtn.b { font-weight: 700; }
 .tbtn.i { font-style: italic; }
@@ -969,6 +969,7 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 /* A dialog's button (the key recorder, the Help tour's footer): grey, or .primary for the one that goes on */
 .button { border: 0; border-radius: 7px; background: #f1f1f1; color: #1a1a1a; font: inherit; font-size: 13.5px; padding: 6px 14px; cursor: pointer; outline-offset: 2px; }
 .button:hover { background: #e6e6e6; }
+.button:focus-visible { outline: 2px solid var(--focus); }
 .button:disabled { color: #b5b5b5; cursor: default; background: #f1f1f1; }
 .button.primary { background: #1c2024; color: #fff; }
 .button.primary:hover { background: #3a3f44; }
@@ -1059,7 +1060,6 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 [data-theme="dark"] .toolbar { box-shadow: 0 6px 24px rgba(0, 0, 0, .5), 0 0 0 1px rgba(255, 255, 255, .08); }
 [data-theme="dark"] .tbtn { color: #c9c9c9; }
 [data-theme="dark"] .tbtn:hover, [data-theme="dark"] .tbtn.style.open { background: #2f3436; }
-[data-theme="dark"] .tbtn:focus { box-shadow: 0 0 0 2px #58768a; }
 [data-theme="dark"] .tbtn.on { background: #263842; color: #9cc9e8; }
 [data-theme="dark"] .tbtn .tcaret { color: #9a9fa1; }
 [data-theme="dark"] .glyph { color: #aeb4b6; }
@@ -1083,7 +1083,6 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 [data-theme="dark"] .palette .row.disabled .ricon { color: #5d6467; }
 [data-theme="dark"] .ghead:hover { color: #c3c8ca; }
 [data-theme="dark"] .gmore:hover { color: #8fc1e1; }
-[data-theme="dark"] .gmore:focus { box-shadow: 0 0 0 2px #58768a; }
 [data-theme="dark"] .rail .rrow:hover { background: #24282a; }
 [data-theme="dark"] .rail .rrow:focus { background: #2b3237; }
 [data-theme="dark"] .rail .rrow .ricon { color: #aeb4b6; }
