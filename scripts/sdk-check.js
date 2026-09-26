@@ -982,20 +982,16 @@ async function main() {
     assert.deepEqual(rows.nodes.map((n) => n.title), ['A real note'], 'the settings document is kept out of every list, like a hidden title');
     console.log('ok  settings document: created or found by name, JSON per key, machine-local settings left behind, and a new machine opens with your choices');
   }
-  // Quick add (docs/QUICK-ADD.md): what the panel is told when it opens, the one write it makes, and the shortcut
-  // and window lifecycle behind it. The meeting is the live call, the link is a pin on the event, and neither the
-  // assignment nor the pin may turn a created task into a failure.
+  // What stayed of quick add when the panel went (issue #232): the meeting this user has joined (⌘K Pin to current
+  // meeting), a task from its title alone (⌘K Create task), and the one agent handoff, driven through its real path.
   {
     const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
-    // main/ runs in its own vm realm, so anything that comes back from it is built from that realm's prototypes and
-    // deepEqual rejects it as "same structure but not reference-equal". Normalise once, here, rather than reaching
-    // for a spread or Array.from at each assertion and hitting the same trap with the next one.
+    // main/ runs in its own vm realm, so what comes back is built from that realm's prototypes: normalise before deepEqual.
     const plainJson = (value) => JSON.parse(JSON.stringify(value));
-    const docs = new Map(), created = [], asked = [];
-    const OTHER = 'tana:user-profile:01examplek0000000000000000';
-    const make = (kind, title, extra = {}) => {
+    const docs = new Map();
+    const make = (kind, title) => {
       const d = new Document('tana:' + kind + ':' + ulid());
-      d.transact((l) => { initDocument(l, title, ME); const data = l.getMap('data'); data.set('type', kind); for (const [k, v] of Object.entries(extra)) data.set(k, v); });
+      d.transact((l) => { initDocument(l, title, ME); l.getMap('data').set('type', kind); });
       docs.set(d.id, d); return d;
     };
     const meeting = make('event', 'Platform Sync');
@@ -1008,89 +1004,35 @@ async function main() {
     });
     joinCall(true);
     docs.set(callDoc.id, callDoc);
-    let failMembers = false, failCalls = false;
     backend.testRuntime({
       me: { userUri: ME, orgId: ORG },
       win: { isDestroyed: () => false, webContents: { send: () => {} } },
       session: { getAccessToken: async () => 'x.' + Buffer.from(JSON.stringify({ org_id: ORG, role: 'member' })).toString('base64url') + '.x' },
       client: {
         graph: { listNodes: async (p) => {
-          asked.push(p);
-          if ((p.nodeTypes || [])[0] === 'call') { if (failCalls) throw new Error('graph unavailable'); return { nodes: [{ id: callDoc.id }] }; }
-          if ((p.nodeTypes || [])[0] === 'user-profile') { if (failMembers) throw new Error('members unavailable'); return { nodes: [{ id: ME, title: 'Andre' }, { id: OTHER, title: 'Renate' }] }; }
+          if ((p.nodeTypes || [])[0] === 'call') return { nodes: [{ id: callDoc.id }] };
           if (p.nodeIds) return { nodes: p.nodeIds.map((id) => ({ id, title: docs.has(id) ? readNode(docs.get(id)).title : null })) };
           return { nodes: [] };
         } },
-        sync: { subscribe: async (id, init) => { if (init) { const d = new Document(id); d.transact(init); docs.set(id, d); created.push(d); return d; } if (!docs.has(id)) throw new Error(id + ' unavailable'); return docs.get(id); },
+        sync: { subscribe: async (id, init) => { if (init) { const d = new Document(id); d.transact(init); docs.set(id, d); return d; } if (!docs.has(id)) throw new Error(id + ' unavailable'); return docs.get(id); },
           getDocument: (id) => docs.get(id) || null }, // a document already open, which is how the handoff reads a title without subscribing again
       },
     });
-    const joined = await backend.quickContext();
-    assert.deepEqual({ id: joined.meeting.id, title: joined.meeting.title }, { id: meeting.id, title: 'Platform Sync' }, 'the panel is told the meeting whose call this user has joined');
-    assert.deepEqual(plainJson(joined.members).map((m) => m.title), ['Andre', 'Renate']);
-    assert.equal(joined.me, ME);
-    joinCall(false); // the call ended between two presses of the shortcut
-    assert.equal((await backend.quickContext()).meeting, null, 'the meeting is read at every open, never cached from the last one');
+    const current = () => backend.handlers.get('meeting:current')(null);
+    const joined = await current();
+    assert.deepEqual({ id: joined.id, title: joined.title }, { id: meeting.id, title: 'Platform Sync' }, 'the current meeting is the one whose call this user has joined');
+    joinCall(false); // the call ended between two asks
+    assert.equal(await current(), null, 'and it is read at every ask, never cached from the last one');
     joinCall(true);
-    failMembers = true; backend.S.membersLoaded = null;
-    const halfA = await backend.quickContext();
-    assert.ok(halfA.meeting && /members unavailable/.test(halfA.membersError), 'a broken member list still leaves the meeting');
-    failMembers = false; failCalls = true; backend.S.membersLoaded = null;
-    const halfB = await backend.quickContext();
-    assert.equal(halfB.meeting, null);
-    assert.ok(/graph unavailable/.test(halfB.meetingError) && halfB.members.length === 2, 'and a broken meeting lookup still leaves the people');
-    failCalls = false;
-    const before = created.length;
-    await assert.rejects(backend.quickCreate({ title: '   ' }), /needs a title/);
-    await assert.rejects(backend.quickCreate({ title: 'Ok', assigneeUri: 'Renate' }), /assignee from the member list/);
-    await assert.rejects(backend.quickCreate({ title: 'Ok', meetingId: meeting.id.replace('event', 'text') }), /Not a meeting/);
-    assert.equal(created.length, before, 'a refused quick add creates nothing');
-    const added = await backend.quickCreate({ title: '  Draft the agenda  ', assigneeUri: OTHER, meetingId: meeting.id });
-    const task = readNode(docs.get(added.node.id));
-    assert.equal(task.title, 'Draft the agenda', 'the title is trimmed, and it is a task');
-    assert.equal(task.stateType, 'open');
-    assert.deepEqual(plainJson(task.assignedToUris), [OTHER], 'the chosen member replaces the creator the task is assigned to by default');
-    assert.deepEqual(plainJson(pins.items(meeting)).map((p) => p.uri), [added.node.id], 'the link is a pin on the meeting itself, not a copy of its title');
-    assert.deepEqual([added.assigned, added.linked], [OTHER, meeting.id]);
-    assert.equal(added.linkError, undefined);
-    // A meeting this user may not write: the task is still created and says why it could not be linked, because a
-    // thrown error here would invite a second submit and a second task.
-    meeting.transact((l) => l.getMap('data').get('participants').get(ME).set('role', 'viewer'));
-    const unlinked = await backend.quickCreate({ title: 'Someone else meeting', meetingId: meeting.id });
-    assert.ok(unlinked.node.id.startsWith('tana:text:'), 'the task exists');
-    assert.equal(unlinked.linked, null);
-    assert.ok(/permission/.test(unlinked.linkError), 'and the refusal is carried, not thrown');
-    assert.equal(backend.S.status.error, unlinked.linkError, 'which the window shows too');
-    assert.deepEqual(plainJson(pins.items(meeting)).map((p) => p.uri), [added.node.id], 'nothing was pinned');
-    // The agent is not a member: it is handed the task through main.js's own handoff, injected here, and never
-    // becomes a Tana assignee. A handoff that fails must not cost the task either.
-    const handoffs = [];
-    const deps = { assignToAgent: async (id, prompt, model) => { handoffs.push({ id, prompt, model }); return true; } };
-    await assert.rejects(backend.quickCreate({ title: 'Both', assigneeUri: OTHER, agent: { prompt: 'do it' } }, deps), /agent or to a person/);
-    await assert.rejects(backend.quickCreate({ title: 'Silent', agent: { prompt: '   ' } }, deps), /Tell the agent what to do/);
-    await assert.rejects(backend.quickCreate({ title: 'Nowhere', agent: { prompt: 'do it' } }), /agent is unavailable/);
-    const handed = await backend.quickCreate({ title: 'Ship the notes', agent: { prompt: '  Draft them from the changelog  ', model: 'gpt-5-codex' } }, deps);
-    assert.deepEqual(plainJson(handoffs), [{ id: handed.node.id, prompt: 'Draft them from the changelog', model: 'gpt-5-codex' }],
-      'the prompt is trimmed and the model rides with it, through the one handoff Cmd+K already uses');
-    assert.equal(handed.agent, true);
-    assert.deepEqual(plainJson(readNode(docs.get(handed.node.id)).assignedToUris), [ME],
-      'and the task keeps its ordinary creator assignee: the agent is an app-local mark, not a person');
-    await backend.quickCreate({ title: 'Default model', agent: { prompt: 'do it', model: '' } }, deps);
-    assert.equal(handoffs.at(-1).model, undefined, "an unchosen model is sent as nothing, which is Codex's own default");
-    const stuck = await backend.quickCreate({ title: 'Codex missing', agent: { prompt: 'do it' } },
-      { assignToAgent: async () => { throw new Error('Cannot open Codex from here'); } });
-    assert.ok(stuck.node.id.startsWith('tana:text:') && stuck.agent === false, 'the task exists even when the handoff does not');
-    assert.ok(/Cannot open Codex/.test(stuck.agentError), 'and the reason is carried, not thrown');
-    // Both ways in name the task the same way, because both go through main.js's own handoff. Driven here through
-    // the real one rather than the stub above, so what is asserted is the prompt the panel's task is actually given.
-    require('../db').open(':memory:');
-    const fromPanel = [];
-    backend.agent.createTask = async (opts) => { fromPanel.push(opts); return '01a0b3a3-c000-70b0-896e-08e86986ca0e'; };
-    await backend.quickCreate({ title: 'Review the Q3 risk log', agent: { prompt: 'Summarise it' } },
-      { assignToAgent: backend.assignToAgent, hostReady: async () => true });
-    assert.equal(String(fromPanel[0].prompt).split('\n')[0], 'Tana: Review the Q3 risk log',
-      'a task made in the quick-add panel opens with its node title, so Codex names it after the work');
-    assert.equal(backend.S.status.error, stuck.agentError, 'which the window shows too');
+    const added = await backend.createDocument('Draft the agenda', { kind: 'task' });
+    const task = readNode(docs.get(added.id));
+    assert.deepEqual([task.title, task.stateType, plainJson(task.assignedToUris)], ['Draft the agenda', 'open', [ME]], 'a task from its title alone is open and assigned to its creator');
+    // The handoff names the task after its node title, so Codex names the thread after the work.
+    const handed = [];
+    backend.agent.createTask = async (opts) => { handed.push(opts); return '01a0b3a3-c000-70b0-896e-08e86986ca0e'; };
+    const risk = make('text', 'Review the Q3 risk log');
+    await backend.assignToAgent(risk.id, 'Summarise it', undefined, undefined);
+    assert.equal(String(handed[0].prompt).split('\n')[0], 'Tana: Review the Q3 risk log', 'the agent is told the node title first');
     // A node whose task already runs on another machine is refused before anything is written: the context and the
     // stored prompt used to be rewritten first, for a handoff that then never happened.
     const elsewhere = 'tana:text:01j0elsewhere000000000000';
@@ -1098,34 +1040,7 @@ async function main() {
     backend.agent.setCodexTask(elsewhere, '01a0b3a3-c000-70b0-896e-08e86986ca0f', attic.id);
     await assert.rejects(backend.assignToAgent(elsewhere, 'Do it', 'm', 'local'), /runs on Attic/, 'a remote task is refused by name');
     assert.equal((backend.settings.get('codexPrompt') || {})[elsewhere], undefined, 'and its prompt was not rewritten on the way');
-    // The shortcut: both ways registration can fail used to be silent.
-    const ok = backend.registerShortcut({ register: () => true }, () => {});
-    assert.deepEqual(plainJson(ok), { accelerator: backend.QUICK_ACCELERATOR, registered: true, error: null });
-    assert.deepEqual(plainJson(backend.S.status.quickAdd), plainJson(ok), 'and the status the window reads carries it');
-    const taken = backend.registerShortcut({ register: () => false }, () => {});
-    assert.ok(/held by another app/.test(taken.error) && taken.registered === false);
-    assert.ok(/Quick add shortcut unavailable/.test(backend.S.status.error), 'a shortcut nothing answers is visible in the app, not silent');
-    const refused = backend.registerShortcut({ register: () => { throw new Error('bad accelerator'); } }, () => {}, { accelerator: 'Nonsense' });
-    assert.deepEqual([refused.accelerator, refused.registered, refused.error], ['Nonsense', false, 'bad accelerator']);
-    // One panel, reused: a press shows it, a press while it has focus hides it, and a press while it is buried
-    // raises the same window rather than building a second one.
-    let built = 0;
-    const fakeWin = () => { built += 1; const win = { visible: false, focused: false, destroyed: false, opens: 0 };
-      Object.assign(win, { isDestroyed: () => win.destroyed, isVisible: () => win.visible, isFocused: () => win.focused,
-        show: () => { win.visible = true; }, focus: () => { win.focused = true; }, hide: () => { win.visible = false; win.focused = false; },
-        webContents: { send: (channel) => { if (channel === 'quick:open') win.opens += 1; } } });
-      return win; };
-    const panel = { win: null };
-    const first = backend.togglePanel(panel, fakeWin);
-    assert.deepEqual([first.action, built, first.win.visible, first.win.focused, first.win.opens], ['shown', 1, true, true, 1]);
-    assert.equal(backend.togglePanel(panel, fakeWin).action, 'hidden', 'a second press closes it');
-    assert.equal(built, 1);
-    first.win.visible = true; first.win.focused = false; // open, but behind the app the user is in
-    assert.deepEqual([backend.togglePanel(panel, fakeWin).action, built, first.win.opens], ['shown', 1, 2], 'that press raises the same window and re-reads the meeting');
-    first.win.destroyed = true;
-    assert.equal(backend.togglePanel(panel, fakeWin).action, 'shown');
-    assert.equal(built, 2, 'only a destroyed panel is built again');
-    console.log('ok  quick add: fresh meeting per open, half-broken context, the meeting pin, the agent handoff with its prompt and model, refusals, created-but-unlinked, shortcut failure and one reused panel');
+    console.log('ok  current meeting read fresh, a task from its title alone, and the agent handoff by name and by machine');
   }
   {
     const backend=mainHelpers(), d=new Document(DOC);

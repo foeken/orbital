@@ -2,7 +2,7 @@
 // Electron main: the process boundary. Everything that knows Tana lives in main/ (state, rows, documents, related,
 // views, pins, images); this file owns the window, the menu, the IPC table and the boot sequence, plus the test hook
 // that scripts/sdk-check.js and the CLI use to drive the same modules without a window.
-const { app, BaseWindow, BrowserWindow, Menu, Notification, WebContentsView, globalShortcut, ipcMain, nativeTheme, screen, shell } = require('electron');
+const { app, BaseWindow, Menu, Notification, WebContentsView, ipcMain, nativeTheme, screen, shell } = require('electron');
 const path = require('node:path');
 const db = require('./db');
 const { createTanaSession } = require('./tana-session');
@@ -27,7 +27,6 @@ const proposalsPage = require('./main/proposals');
 const timelinePage = require('./main/timeline');
 const icons = require('./main/icons');
 const settings = require('./main/settings');
-const quick = require('./main/quickadd');
 const meetings = require('./main/meetings');
 
 ipcMain.handle('doc:path', async (_e, id) => { try { const p = await pathOf(id); pathCache.set(id, p); return p; } catch (e) { report(e); return pathCache.get(id) || []; } });
@@ -138,8 +137,6 @@ function createWindow() {
   win.on('resize', () => layout(win));
   win.on('close', saveBounds);
   win.on('focus', () => { S.win = win; refresh(); });
-  // The quick-add panel is a window of its own, and a hidden one still counts as open: without this, closing the
-  // outliner after the panel had been summoned once would leave the app running invisibly instead of quitting.
   win.on('closed', () => {
     closeHelp(win);
     // right half first: the left one closing first would leave the right one alone for a moment, and removePane would
@@ -147,8 +144,6 @@ function createWindow() {
     for (const p of [...win.panes].reverse()) removePane(win, p);
     S.windows.delete(win);
     if (S.win === win) { S.win = [...S.windows].at(-1) || null; S.pane = frontPane(); }
-    if (S.windows.size) return;
-    const panel = quick.panelState.win; if (panel && !panel.isDestroyed()) panel.destroy();
   });
 }
 // ⌥⌘N (issue #159): a second page beside the one that asked, opening where it was (the renderer stores its place
@@ -166,32 +161,6 @@ function closeFront(win, wc = S.pane) {
   const pane = win.panes && win.panes.length > 1 && win.panes.find((p) => p.webContents === wc);
   if (pane) removePane(win, pane); else win.close();
 }
-
-// Quick add (docs/QUICK-ADD.md): a second, frameless window the global shortcut summons from any app. It is not a
-// mode of the main window — the outliner keeps its own state and the panel stays cheap — and there is only ever one
-// of it: main/quickadd.js decides whether a press shows, raises or hides it.
-// Tall enough that the assignee list has somewhere to scroll; the card fills the window and the chooser takes
-// whatever the form leaves it (quick-add.css).
-const QUICK_PANEL = { width: 560, height: 320 };
-function createQuickPanel() {
-  const win = new BrowserWindow({
-    // A real panel: the system's material behind the form, and its own rounded corners and shadow around it
-    ...QUICK_PANEL, show: false, frame: false, vibrancy: 'popover', visualEffectState: 'active', backgroundColor: '#00000000', roundedCorners: true, resizable: false, minimizable: false,
-    maximizable: false, fullscreenable: false, skipTaskbar: true, alwaysOnTop: true, title: 'Quick add',
-    webPreferences: { preload: path.join(__dirname, 'preload.js') },
-  });
-  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true }); // summoned over whatever the user is in
-  win.on('blur', () => { if (!win.isDestroyed()) win.hide(); }); // clicking away dismisses it, like the shortcut does
-  win.on('hide', () => { if (nativeTheme) nativeTheme.themeSource = 'system'; }); // only while it shows: the outliner's Follow system reads it
-  win.on('closed', () => { quick.panelState.win = null; });
-  win.loadFile(path.join(__dirname, 'quick-add.html'));
-  return win;
-}
-// The panel's material is native, and native material follows the app's appearance, not the page: so the app takes
-// Orbital's own theme, or the panel's text would sit on the wrong material whenever it differs from macOS's.
-const themeSource = () => { const t = settings.prefs().theme; return t === 'dark' || t === 'light' ? t : 'system'; };
-const toggleQuickPanel = () => { if (nativeTheme) nativeTheme.themeSource = themeSource(); quick.togglePanel(quick.panelState, createQuickPanel); };
-const hideQuickPanel = () => { const win = quick.panelState.win; if (win && !win.isDestroyed()) win.hide(); };
 
 function createMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate([
@@ -445,8 +414,7 @@ ipcMain.handle('codex:open', async (_e, id) => {
   await shell.openExternal(agent.TASK + encodeURIComponent(link.threadId));
   return true;
 });
-// The handoff itself, lifted out of the handler below unchanged so the quick-add panel can hand a new task over
-// through this exact path instead of a second one of its own (docs/QUICK-ADD.md).
+// The handoff itself, lifted out of the handler below so a check can drive it without the IPC around it.
 async function assignToAgent(id, prompt, model, host) {
   const where = agent.hostId(host); // an id the registry knows, or nothing
   if (!where) throw new Error('That machine is not configured any more');
@@ -618,15 +586,8 @@ ipcMain.handle('theme:system', () => systemTheme());
 if (nativeTheme) nativeTheme.on('updated', () => send('theme:system', systemTheme()));
 ipcMain.handle('image', (_e, uri) => image(uri));
 ipcMain.handle('members', () => members());
-// The quick-add panel's whole surface: what to show when it opens, and the one write it makes.
-ipcMain.handle('quick:context', () => quick.quickContext());
-// assignToAgent is injected rather than required: main/quickadd.js knows Tana, not electron's shell, and the Agent
-// handoff must stay the one above rather than a copy living in the panel's path.
-ipcMain.handle('quick:create', (_e, input) => quick.quickCreate(input || {}, { assignToAgent }));
-ipcMain.handle('quick:close', () => { hideQuickPanel(); return true; });
-// The meeting this user has joined right now, for the outliner's Pin to meeting row: the same read the panel makes,
-// so meeting detection lives in one place (main/quickadd.js) rather than once per window.
-ipcMain.handle('meeting:current', () => quick.currentMeeting());
+// The meeting this user has joined right now, for the outliner's Pin to current meeting row (main/meetings.js).
+ipcMain.handle('meeting:current', () => meetings.currentMeeting());
 // Hidden titles: the user's list of patterns, applied to every list and search (see listFilter/sdk-query isHidden).
 ipcMain.handle('filters:list', () => hiddenRules());
 ipcMain.handle('filters:set', (_e, patterns) => setHidden(patterns));
@@ -651,7 +612,6 @@ if (process.env.TANA_MAIN_TEST) {
     statusSnapshot: () => ({ ...S.status }), rememberNodeHue, restoredBounds, today,
     undo: () => history(undoStack, redoStack, 'undo', 'canUndo'), redo: () => history(redoStack, undoStack, 'redo', 'canRedo'), visibleGraphNodes, pinTree, changesOf, summaryChanges, followSummary, announceNewInbox, watchInbox, timelinePage,
     nodePin,
-    quickContext: quick.quickContext, quickCreate: quick.quickCreate, togglePanel: quick.togglePanel, registerShortcut: quick.registerShortcut, QUICK_ACCELERATOR: quick.ACCELERATOR,
     assignToAgent, // the one handoff both entry points use, so a check can drive the panel through the real path
     accessContext, inboxCount, S,
     testRuntime: (runtime) => { S.client = runtime.client; S.me = runtime.me; S.win = runtime.win; S.session = runtime.session; S.userData = runtime.userData || null; S.activeView = runtime.activeView || 'inbox'; S.activeFilter = undefined; if (S.client) listFilter(S.client); } };
@@ -687,9 +647,6 @@ if (process.env.TANA_MAIN_TEST) {
     S.session = createTanaSession();
     createMenu();
     createWindow();
-    // The global shortcut is registered once the app is ready and released at quit; a refusal (another app holds the
-    // combo) lands in the status the window shows rather than leaving a key that quietly does nothing.
-    quick.registerShortcut(globalShortcut, toggleQuickPanel);
     const auth = await resolveInitialAuth(S.session);
     setStatus({ authChecking: false, authenticated: auth.authenticated, error: auth.error ? errText(auth.error) : null });
     if (auth.authenticated) {
@@ -707,5 +664,4 @@ if (process.env.TANA_MAIN_TEST) {
 
   app.on('window-all-closed', () => app.quit());
   app.on('before-quit', () => { if (S.client) S.client.close().catch(() => {}); agent.stopOwnedTasks(); ai.stop(); }); // no writer outlives the app that spawned it
-  app.on('will-quit', () => globalShortcut.unregisterAll());
 }

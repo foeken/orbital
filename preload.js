@@ -109,7 +109,6 @@ contextBridge.exposeInMainWorld('api', {
   // The preferences that follow you between machines (main/settings.js), read synchronously so renderer/prefs.js has
   // them before the first paint, and written through one at a time.
   prefs: ipcRenderer.sendSync('prefs:snapshot'),
-  prefsNow: () => ipcRenderer.sendSync('prefs:snapshot'), // the same, read again: quick add's panel lives on between opens
   setPref: (key, value) => ipcRenderer.invoke('prefs:set', key, value),
   setOpenAIKey: (key) => ipcRenderer.invoke('openai:setKey', key),
   chatgptStatus: () => ipcRenderer.invoke('chatgpt:status'),
@@ -177,19 +176,13 @@ contextBridge.exposeInMainWorld('api', {
   // api.related(id).pinHub, which is set only when this user may write that hub. Resolves to the hub's pinned uris.
   pinTo: (hubId, docId) => ipcRenderer.invoke('pins:pinTo', hubId, docId),
   unpinFrom: (hubId, docId) => ipcRenderer.invoke('pins:unpinFrom', hubId, docId),
-  // The meeting this user has actually *joined* right now (sdk/calls through main/quickadd), or null. Read fresh:
+  // The meeting this user has actually *joined* right now (sdk/calls through main/meetings), or null. Read fresh:
   // "the meeting I am in" is only true for minutes at a time, so nothing caches it across an open.
   currentMeeting: () => ipcRenderer.invoke('meeting:current'), // { id, title, joinedAt, callUri } | null
   sensitiveIds: () => ipcRenderer.invoke('sensitive:list'),
   setSensitive: (docId, on) => ipcRenderer.invoke('sensitive:set', docId, on),
   image: (uri) => ipcRenderer.invoke('image', uri), // tana:image: uri -> data URL (main fetches with the session token and caches)
   members: () => ipcRenderer.invoke('members'),
-  // Quick add (docs/QUICK-ADD.md), used by quick-add.html only: what the panel shows when it opens, the one write it
-  // makes, and the two ends of its lifecycle.
-  quickContext: () => ipcRenderer.invoke('quick:context'), // { meeting:{id,title,joinedAt}|null, meetingError?, members[], membersError?, me }
-  quickCreate: (input) => ipcRenderer.invoke('quick:create', input), // { title, assigneeUri?, meetingId?, agent?:{prompt,model?,host?} } -> { node, assigned, linked, agent, assignedError?, linkError?, agentError? }
-  quickClose: () => ipcRenderer.invoke('quick:close'),
-  onQuickOpen: (fn) => ipcRenderer.on('quick:open', () => fn()), // the shortcut showed the panel again: re-read the meeting
   // Hidden titles: patterns that keep matching nodes out of every list and search (a node opened directly still opens).
   // Case-insensitive; a pattern matches the whole title, or its start when it ends with '*' ("Block*", "Lunch").
   // All four resolve to the stored list (string[]) after the views have refreshed.

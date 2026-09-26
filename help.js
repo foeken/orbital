@@ -1,6 +1,6 @@
 'use strict';
 // The Help tour (help.html; issue #230): a few pages of the basics, each with a short loop of the keys at work
-// (styles.css Help). Its own page and its own scope, like the quick-add panel: main lays it over the whole window, both
+// (styles.css Help). Its own page and its own scope: main lays it over the whole window, both
 // halves of a split, and takes it away again when it closes (main.js openHelp). The page that asked gave its theme in
 // the query, gets the keys back on close, and the palette too when ⌘K is what closed it.
 // A native modal <dialog>: it keeps the focus and closes on Esc by itself. A page's loop runs only while it has .on:

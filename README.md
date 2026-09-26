@@ -47,11 +47,9 @@ your own OpenAI key or sign in with ChatGPT; only the title is sent, and the key
 "Classify type" has the same model pick a node's type from each type's description and AI
 instructions: a sure answer is applied, otherwise you choose from the odds.
 
-**Quick add from anywhere.** Cmd+Shift+Space opens a small panel over whatever app you are in: type a
-task and press Enter. If you are in a meeting right now it says so and pins the new task to that
-meeting; if you are not, it says that instead and creates a plain task. Tab picks an assignee from
-your workspace members, or the Agent with its prompt and model, without leaving the keyboard. The
-panel is described in [docs/QUICK-ADD.md](docs/QUICK-ADD.md).
+**Create a task from its title.** Shift+Cmd+Space (or Cmd+K "Create task") asks for one thing, the
+title: type it and press Enter, and the task is there, open and assigned to you. Where it goes and
+who else has it are the task's own Cmd+K rows afterwards.
 
 **The things a day needs.** Meetings carry their times; a meeting's sidebar shows its call link,
 its write-up, its pins, its outcomes and its notes, and a page's sidebar shows its fields, what
@@ -151,7 +149,7 @@ Requests and their state are tracked as GitHub issues; the tracker kept before 2
 
 `main.js` is the Electron process boundary (windows, menu, the IPC table, boot) and `main/` is what
 it delegates to: shared state, rows, documents and their undo stack, the meeting hub, the views
-and their refresh loop, pins, the quick-add panel, the agent handoff, the settings document.
+and their refresh loop, pins, the agent handoff, the settings document.
 `renderer/` with `index.html` and `styles.css` is the whole UI: twenty plain scripts sharing one
 global scope, loaded in the order `index.html` lists them, no framework and no bundler. `sdk/` is a
 generic, Electron-independent Tana client (graph queries, the sync stream, Loro documents, outline
@@ -163,7 +161,7 @@ Start with [AGENTS.md](AGENTS.md) for the map and the working rules, then the do
 and keyboard contract), [PLATFORM-PROTOCOL.md](docs/PLATFORM-PROTOCOL.md) (the wire protocol, the
 source of truth), [sdk/01–05](docs/sdk) (overview, data model, API reference, recipes, gotchas),
 [MEETINGS.md](docs/MEETINGS.md), [CHATS.md](docs/CHATS.md), [PINNING.md](docs/PINNING.md),
-[SETTINGS.md](docs/SETTINGS.md), [QUICK-ADD.md](docs/QUICK-ADD.md) and
+[SETTINGS.md](docs/SETTINGS.md) and
 [VERIFICATION.md](docs/VERIFICATION.md) (what was checked against real data, and how).
 
 ## The caveat
