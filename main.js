@@ -313,6 +313,7 @@ ipcMain.handle('prefs:set', (e, key, value) => { const stored = settings.setPref
 ipcMain.handle('openai:setKey', (_e, key) => {
   if (typeof key !== 'string' || !key.trim()) throw new Error('OpenAI API key cannot be empty');
   settings.set('openaiApiKey', key.trim());
+  autoTypeIcons(); // a key is somebody to ask: the types with no icon need not wait for the next boot
   return true;
 });
 ipcMain.handle('chatgpt:status', () => ai.chatgptStatus(app.getPath('userData'), true));
@@ -335,6 +336,16 @@ ipcMain.handle('icons:setType', async (_e, typeUri, name) => {
   send('outline:changed', null);
   return chosen;
 });
+// After each start: the fast AI picks a glyph for every titled type that has none (issue #250). In the background,
+// because the lists must not wait on a model, and quiet without a ChatGPT sign-in or an API key.
+async function autoTypeIcons() {
+  try {
+    const types = (await typeList()).filter((t) => t.title.trim());
+    const added = await icons.fillTypeIcons(types, (missing, labels) => ai.pickTypeIcons(missing, labels, globalThis.fetch, app.getPath('userData')));
+    if (added) { await refresh(); send('outline:changed', null); }
+  } catch (e) { console.warn('type icons:', errText(e)); } // a missing glyph is not worth an error in the window
+}
+ai.onSignedIn = autoTypeIcons; // and a ChatGPT sign-in the same
 ipcMain.handle('doc:create', (_e, title, opts) => createDocument(title, opts || {}));
 ipcMain.handle('search', (_e, query, scope) => search(query, scope));
 ipcMain.handle('search:list', () => searchList());
@@ -617,6 +628,7 @@ ipcMain.handle('sync:login', async () => {
   try {
     await S.session.login();
     await start();
+    autoTypeIcons();
   } catch (e) {
     report(e);
   } finally { relayout(); }
@@ -679,7 +691,7 @@ if (process.env.TANA_MAIN_TEST) {
     setStatus({ authChecking: false, authenticated: auth.authenticated, error: auth.error ? errText(auth.error) : null });
     relayout();
     if (auth.authenticated) {
-      try { await start(); }
+      try { await start(); autoTypeIcons(); }
       catch (e) { setStatus({ error: errText(e) }); }
     }
     // The lists are kept current by live queries (main/views.js watchViews, watchMine, watchInbox; a saved search in

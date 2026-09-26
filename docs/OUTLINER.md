@@ -625,6 +625,15 @@ Tana has nowhere to keep an icon — `appearance` holds an image uri and a hue �
 somebody else's CRDT. The glyphs a type wears arrive with the roots (`renderer/nodes.js loadRoots`), so a row is
 never drawn before the markup its icon name refers to exists.
 
+**On boot the fast AI picks one** for every titled type that has no choice yet (issue #250): `autoTypeIcons` (main.js)
+runs after each start and again when a ChatGPT sign-in completes or an API key is saved, in the background, and
+`main/ai.js pickTypeIcons` sends the type titles and every name in the
+set in one request, so the answer is a name that exists (Terra-low named twelve real types in 8.7 s, all twelve in
+the set). `icons.fillTypeIcons` keeps only names in the set and stores them in one write. A pick is stored like a
+chosen icon, so each type is asked about once and Set icon changes it as usual; **No icon** is stored as a `null`
+entry, a choice the boot pick leaves alone. No ChatGPT sign-in and no API key means nothing is asked, and a failure
+is logged, never shown.
+
 **Set colour** (Cmd+K on a type, beside Set icon) is the other half, and like the glyph it is this app's own: a hue
 (0-360) or **grey** for the type, kept in the settings document under `typeHues` (docs/SETTINGS.md), so it follows you
 between machines and leaves the hue Tana keeps on the type (`appearance.hue`) untouched — Tana has no grey, every hue
