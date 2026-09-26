@@ -328,7 +328,7 @@ const tableLabel = () => (tableView() ? 'Switch to outliner' : 'Switch to table'
 function renderTableBtn(available) {
   tableBtn.hidden = !available;
   if (!available) return;
-  tableBtn.title = tableLabel();
+  keyTitle(tableBtn, tableLabel(), 'tableView');
   tableBtn.setAttribute('aria-label', tableLabel());
   const svg = iconNode(tableView() ? 'outline' : 'table');
   if (svg) tableBtn.replaceChildren(svg);

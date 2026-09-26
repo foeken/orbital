@@ -27,7 +27,7 @@ function renderRailToggle(available) {
   railToggle.hidden = !available;
   if (!available) return;
   const label = railHidden ? 'Show sidebar' : 'Hide sidebar';
-  railToggle.title = label;
+  keyTitle(railToggle, label, 'railToggle');
   railToggle.setAttribute('aria-label', label);
   railToggle.setAttribute('aria-pressed', railHidden ? 'true' : 'false');
   const svg = iconNode(railHidden ? 'railShow' : 'railHide');

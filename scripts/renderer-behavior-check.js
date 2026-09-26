@@ -39,7 +39,8 @@ const ANCHOR_SRC = source.match(/const CARET_ANCHOR = [^\n]*\nconst unanchored =
 // marker, so the real three go in rather than a restatement of them; a harness with its own keeps its own.
 const ATOMIC_SRC = source.match(/const isImage = [^\n]*\nconst isDivider = [^\n]*\nconst isAtomic = [^\n]*/)[0].replace(/const (\w+) =/g, 'globalThis.$1 ??=');
 const RENDER_SHIM = 'globalThis.renderSoon ??= (...a) => render(...a); globalThis.patchMeta ??= () => render(); globalThis.iconNode ??= () => null;\n'
-  + `globalThis.DEFAULT_HOTKEYS ??= ${DEFAULT_HOTKEYS_SRC}; globalThis.hk ??= () => (typeof hotkeys === 'object' ? hotkeys : {}); globalThis.hotkeyFor ??= (id) => (Object.hasOwn(hk(), id) ? hk()[id] : DEFAULT_HOTKEYS[id]); globalThis.hotkeyIds ??= () => [...new Set([...Object.keys(DEFAULT_HOTKEYS), ...Object.keys(hk())])]; globalThis.comboOf ??= () => '';\n`;
+  + `globalThis.DEFAULT_HOTKEYS ??= ${DEFAULT_HOTKEYS_SRC}; globalThis.hk ??= () => (typeof hotkeys === 'object' ? hotkeys : {}); globalThis.hotkeyFor ??= (id) => (Object.hasOwn(hk(), id) ? hk()[id] : DEFAULT_HOTKEYS[id]); globalThis.hotkeyIds ??= () => [...new Set([...Object.keys(DEFAULT_HOTKEYS), ...Object.keys(hk())])]; globalThis.comboOf ??= () => '';\n`
+  + 'globalThis.keyTitle ??= ' + source.match(/^function keyTitle\(.*?^\}/ms)[0] + ';\n'; // the real one: a header button's tooltip names its key
 const withShims = (src) => {
   // Row listeners are bound to both roots the app has (the outline and the fields under the title, which are
   // outlines too). A harness exercises one root, so the binding becomes the plain listener it was.
@@ -147,7 +148,7 @@ const withShims = (src) => {
   // Motion (renderer/motion.js) is what no harness looks at: a slice that calls it gets moves that change nothing, and
   // the state change a move wraps runs at once, exactly as it does under reduced motion.
   if (/\b(turnPage|foldRow|foldSection|showHide|rowsQuiet|dismissRow|settleEmpty|settling|slideRail|motionBefore|motionAfter|armGlide|flash|flashAt|playOnce|rowFor|badgeMoved|popRead|popMention|swapPanel|menuMotion|crossfade|growFrom|play|MOTION|motionOK|stillPreferred)\b/.test(src) && !/function motionAfter\(/.test(src)) src = MOTION_SHIM + src;
-  return /\b(renderSoon|patchMeta|iconNode|hotkeyFor|hotkeyIds|comboOf|settleEnter)\b/.test(src) ? RENDER_SHIM + 'globalThis.settleEnter ??= () => {};\n' + src : src;
+  return /\b(renderSoon|patchMeta|iconNode|hotkeyFor|hotkeyIds|comboOf|keyTitle|settleEnter)\b/.test(src) ? RENDER_SHIM + 'globalThis.settleEnter ??= () => {};\n' + src : src;
 };
 const MOTION_SHIM = 'globalThis.turnPage ??= (dir, update) => update(); globalThis.foldRow ??= (key, opening, done) => done(); globalThis.foldSection ??= (head, toggle) => toggle(); '
   + "globalThis.showHide ??= (el, show) => { el.hidden = !show; }; globalThis.rowsQuiet ??= false; "
@@ -4787,7 +4788,7 @@ function runPillsFoldCheck() {
     const matchMedia = (query) => ({ matches: reduced && query.includes('reduce') });
     const mkEl = (id) => {
       const classes = new Set(), handlers = [];
-      return { id, hidden: false, childNodes: [], children: [], attrs: {}, style: { setProperty() {} },
+      return { id, hidden: false, childNodes: [], children: [], attrs: {}, dataset: {}, style: { setProperty() {} },
         classList: { add: (...n) => { n.forEach((x) => classes.add(x)); log.push(id + ' add ' + n.join(' ')); },
           remove: (...n) => { n.forEach((x) => classes.delete(x)); log.push(id + ' remove ' + n.join(' ')); },
           contains: (n) => classes.has(n) },

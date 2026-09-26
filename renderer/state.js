@@ -71,6 +71,13 @@ const hotkeys = { ...pref('hotkeys', {}) }; // palette row id -> combo ("⇧⌘M
 // the text-size keys, ⇧⌘⌫ and the ⇧⌘↑/↓ moves, which act on blocks the palette does not address).
 const DEFAULT_HOTKEYS = { search: '⌘S', filter: '⌘F', copyLink: '⌘C', back: '⌘[', forward: '⌘]', undo: '⌘Z', redo: '⇧⌘Z', expand: '⌘↓', collapse: '⌘↑', toggleDone: '⌘↩', today: '⌃⇧D', reload: '⌘R', newWindow: '⌘N', splitView: '⌥⌘N', otherPane: '⌘\\' }; // "Focus the sidebar" is a palette row with no default key
 const hotkeyFor = (id) => (Object.hasOwn(hotkeys, id) ? hotkeys[id] : DEFAULT_HOTKEYS[id]);
+// A header button's tooltip: what it does and, when it has one, the key that does the same. The label and row id stay
+// on the button so hovering can read the key again (renderer/edit.js), since a key recorded later changes it.
+function keyTitle(el, label, id) {
+  el.dataset.label = label; el.dataset.hotkey = id;
+  const key = hotkeyFor(id);
+  el.title = key ? label + ' ' + key : label;
+}
 const hotkeyIds = () => [...new Set([...Object.keys(DEFAULT_HOTKEYS), ...Object.keys(hotkeys)])];
 let pinInfo = null;          // { docId, sidebar, dates } of the palette's document (api.pinState)
 let pinnedIds = null, pinnedLoading = null; // every pinned document (api.pinIds), for the pin mark on a row; null until the first answer

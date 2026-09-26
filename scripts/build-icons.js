@@ -73,6 +73,7 @@ WANT.planet = path.join(__dirname, '..', 'build', 'icons', 'planet.svg');
 // Cmd+K rows for the keys the outline answers to
 for (const [name, file] of [['expand', 'v-shaped-arrow-down'], ['collapse', 'v-shaped-arrow-up'], ['undo', 'undo'], ['redo', 'redo'], ['textLarger', 'text-size-increase'], ['textSmaller', 'text-size-decrease'], ['textReset', 'text'], ['rail', 'sidebar-right-4'], ['railShow', 'sidebar-right-show'], ['railHide', 'sidebar-right-hide'], ['back', 'arrow-left'], ['forward', 'arrow-right'], ['zoomIn', 'magnifier-3'], ['search', 'magnifier'], ['filter', 'filter-2'], ['discuss', 'msg'], ['meetingPin', 'calendar-pin'], ['splitPanes', 'split-view'], ['otherPane', 'layout-move-to-right'], ['swapPanes', 'arrows-opposite-direction-x']]) WANT[name] = path.join(__dirname, '..', 'build', 'icons', file + '.svg');
 WANT.outline = path.join(__dirname, '..', 'build', 'icons', 'unordered-list.svg'); // the header's Outliner/Table switch while a list is a table
+WANT.command = path.join(__dirname, '..', 'build', 'icons', 'command.svg'); // the header button that opens Cmd+K
 const out = {};
 for (const [name, file] of Object.entries(WANT)) {
   if (!SRC && !path.isAbsolute(file)) { if (!current[name]) throw new Error(name + ' needs the icon set: node scripts/build-icons.js <dir>'); out[name] = current[name]; continue; }
