@@ -413,7 +413,7 @@ function renderOutline() {
   if (parent && !list.length && !outline.children.length) {
     asking = !signedOut && !(kids.has(parent.docId) && kids.get(parent.docId) !== null); // signed out, nothing is on its way: the login shows
     const note = document.createElement('div');
-    note.className = 'empty-note'; note.textContent = 'No content';
+    note.className = 'empty-note'; note.textContent = emptyText(parent);
     if (!asking) outline.append(note);
   }
   // the page title is the zoom target itself: documents use setTitle, blocks use setText through the same debounce
@@ -493,6 +493,19 @@ function renderOutline() {
   }
   noteNavigation(); // where this render landed, for Cmd+[ and Cmd+]
   renderNav(); // and what the two arrows can do from here, which only the line above knows
+}
+
+// What an empty page says. A document has no content; a list page has no answer yet, and says what would fill it. The
+// two a first launch opens on, the Timeline and My Tasks, are the whole first screen of a new account, so a list of
+// tasks also names the key that makes one.
+function emptyText(parent) {
+  const id = parent.docId;
+  if (id === TIMELINE_PAGE) return 'Nothing yet. Changes to the nodes you watch, and tasks added to your Inbox, show up here.';
+  if (id === INBOX_PAGE) return 'No notifications yet.';
+  if (id === PROPOSALS_PAGE) return 'No proposals waiting.';
+  if (!isSearchDoc(parent.node) && !isTypeDoc(parent.node)) return 'No content';
+  const filter = filters.get(id), key = hotkeyFor('createTask');
+  return 'Nothing matches.' + (filter && tasksInFilter(filter) && key ? ' ' + key + ' creates a task.' : '');
 }
 
 function resolveZoom() {

@@ -2235,6 +2235,26 @@ async function runTaskMetaRetryCheck() {
 
 // Palette arrows step over rows that cannot run (info lines, unavailable choices) instead of parking on a dead row.
 function runPaletteSkipCheck() {
+  // An empty list page says what would fill it (the Work View a new account opens on is two of them), a document
+  // says it has no content, and a list of tasks names the key that makes one: the one that is recorded now.
+  const emptyText = vm.runInNewContext(`
+    const TIMELINE_PAGE = 'orbital:timeline', INBOX_PAGE = 'orbital:notifications', PROPOSALS_PAGE = 'orbital:proposals', SEARCH_ID = 'tana:search:';
+    const isTypeDoc = (n) => n.id.startsWith('tana:type:'), hotkeys = {}, DEFAULT_HOTKEYS = { createTask: '⇧⌘Space' };
+    const filters = new Map([['tana:search:mine', { types: ['tasks'] }], ['tana:search:meet', { types: ['meetings'] }]]);
+    ${sourceLine('const isSearchDoc =')}
+    ${sourceLine('const hotkeyFor =')}
+    ${sourceLine('const tasksInFilter =')}
+    ${functionSource('emptyText')}
+    ({ text: (id) => emptyText({ docId: id, node: { id } }), record: (k) => { hotkeys.createTask = k; } });
+  `);
+  assert.match(emptyText.text('orbital:timeline'), /^Nothing yet\./, 'an empty Timeline says what shows up there');
+  assert.equal(emptyText.text('tana:search:mine'), 'Nothing matches. ⇧⌘Space creates a task.', 'an empty My Tasks names the key that makes one');
+  assert.equal(emptyText.text('tana:search:meet'), 'Nothing matches.', 'a search that lists no tasks does not');
+  assert.equal(emptyText.text('tana:text:doc'), 'No content', 'a document still has no content');
+  emptyText.record('⌃⌥T');
+  assert.equal(emptyText.text('tana:search:mine'), 'Nothing matches. ⌃⌥T creates a task.', 'the key named is the one recorded');
+  emptyText.record('');
+  assert.equal(emptyText.text('tana:search:mine'), 'Nothing matches.', 'and with none, no key is promised');
   const nextPalIndex = vm.runInNewContext(functionSource('nextPalIndex') + '; nextPalIndex;');
   const rows = [{ disabled: true }, { label: 'a' }, { disabled: true }, { label: 'b' }];
   assert.equal(nextPalIndex(rows, 1, 1), 3, 'Down skips a disabled row');

@@ -830,6 +830,10 @@ nothing about them as documents. Each is a place the app remembers, so ⌘R on o
   right (`api.myTasks`: your saved search called My Tasks, or one made from the My Tasks preset with the Library's
   arrangement). Cmd+K Work View stores both halves' places and main opens the right half or sends the other half to
   its place (`window:workView`). A first launch opens it split.
+  On a new account both halves are empty, so an empty page says what would fill it (`emptyText`, renderer/render.js):
+  the Timeline what shows up there, Notifications and Proposals that there are none, a saved search or a type's page
+  "Nothing matches.", with the Create task key after it when the search lists tasks, so an empty My Tasks is where the
+  first task starts. Only a document says "No content".
 - **Windows** (issue #137). File › New Window, ⌘N or Cmd+K New window opens another outliner window 24px down and right
   of the front one. Each window has its own view and page; a new one starts where you last were. What main pushes
   (`send`) reaches every page of every window; each window's view is refreshed and kept live while any window shows it
