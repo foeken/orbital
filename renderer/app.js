@@ -203,11 +203,22 @@ function applySettings(next) {
   notifyById.clear();
   renderSoon();
 }
-if (tana.onSettings) tana.onSettings(applySettings);
 // settings:changed is not kept for a page that is not listening yet, and the first connect's read of the settings
 // document can land while this one is still loading: whatever changed since preload's snapshot is asked for once more.
-// A choice made here while the answer was on its way is newer than it, so the answer is dropped then.
-if (tana.prefsNow) { const asked = JSON.stringify(prefs); tana.prefsNow().then((now) => { const held = JSON.stringify(prefs); if (held === asked && JSON.stringify(now) !== held) applySettings(now); }, () => {}); }
+// A key changed here while the answer was on its way is newer than it and keeps the page's value; the rest applies.
+function catchUpSettings() {
+  const asked = JSON.parse(JSON.stringify(prefs));
+  return tana.prefsNow().then((now) => {
+    const next = { ...now };
+    for (const key of new Set([...Object.keys(asked), ...Object.keys(prefs)])) {
+      if (JSON.stringify(prefs[key]) === JSON.stringify(asked[key])) continue;
+      if (key in prefs) next[key] = prefs[key]; else delete next[key];
+    }
+    if (JSON.stringify(next) !== JSON.stringify(prefs)) applySettings(next);
+  }, () => {});
+}
+if (tana.onSettings) tana.onSettings(applySettings);
+if (tana.prefsNow) catchUpSettings();
 if (tana.onSystemTheme) tana.onSystemTheme((t) => { if (themePref === 'system') applyTheme(t); }); // macOS appearance changes re-theme a running window
 if (themePref === 'system') showTheme('system');
 loadRoots().then(render, showError).then(restorePlace).then(loadFilters);

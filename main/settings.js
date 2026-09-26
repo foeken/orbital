@@ -101,7 +101,11 @@ async function open() {
       const oldest = await discover();
       if (!oldest || oldest.id === known) return use(doc);
       // the one this machine used is still an app document, not a note of yours: it stays out of the lists (views.js listed)
-      set('settingsOld', [...new Set([...(Array.isArray(get('settingsOld')) ? get('settingsOld') : []), known])]);
+      // with what the winner already lists: a third machine giving its own up must not drop the second one's
+      const list = (value) => (Array.isArray(value) ? value : []);
+      const old = [...new Set([...list(decode(oldest.loro.getMap(ROOT).get('settingsOld'))), ...list(get('settingsOld')), known])];
+      oldest.transact((loro) => loro.getMap(ROOT).set('settingsOld', encode(old))); // now, not queued: hydrate reads this document next
+      set('settingsOld', old);
       return use(oldest);
     }
   }

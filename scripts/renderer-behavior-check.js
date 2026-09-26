@@ -8439,13 +8439,15 @@ async function runLateSettingsCheck() {
     const prefs = ${JSON.stringify(snapshot)}, applied = [];
     const applySettings = (next) => applied.push(next);
     const tana = { prefsNow: async () => { Object.assign(prefs, ${JSON.stringify(meanwhile || {})}); return ${JSON.stringify(now)}; } };
-    ${sourceLine('if (tana.prefsNow)')}
+    ${functionSource('catchUpSettings')}
+    catchUpSettings();
     ({ applied: async () => { await null; await null; return applied; } });
   `);
   assert.deepEqual(plain(await run({}, { theme: 'dark', home: 'library' }).applied()), [{ theme: 'dark', home: 'library' }], 'a new machine\u2019s choices, read after the page loaded, are applied');
   assert.deepEqual(plain(await run({ theme: 'dark' }, { theme: 'dark' }).applied()), [], 'and nothing is applied when nothing changed');
-  assert.deepEqual(plain(await run({ theme: 'light' }, { theme: 'light', home: 'library' }, { theme: 'dark' }).applied()), [], 'a choice made while the answer was on its way is newer, so the answer does not undo it');
-  assert.match(source, /if \(tana\.onSettings\) tana\.onSettings\(applySettings\);\n(?:\/\/[^\n]*\n)*if \(tana\.prefsNow\)/, 'it asks after it starts listening, so no change can fall between the two');
+  assert.deepEqual(plain(await run({ theme: 'light' }, { theme: 'light', home: 'library' }, { theme: 'dark' }).applied()), [{ theme: 'dark', home: 'library' }],
+    'a choice made while the answer was on its way is newer, so it keeps its value, and the rest of the answer still applies');
+  assert.match(source, /if \(tana\.onSettings\) tana\.onSettings\(applySettings\);\nif \(tana\.prefsNow\) catchUpSettings\(\);/, 'it asks after it starts listening, so no change can fall between the two');
   assert.match(functionSource('applySettings'), /railHidden = pref\('railHidden', false\) === true; railClosed\.clear\(\); for \(const key of pref\('railClosed', \[\]\)\) railClosed\.add\(key\);/,
     'and what it applies reaches the sidebar too, whose shown state and folded sections were copied at load');
   console.log('ok  settings: a change sent before the page listened is still applied');

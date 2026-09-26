@@ -1215,7 +1215,8 @@ async function main() {
     const win = { isDestroyed: () => false, webContents: { send: (channel, value) => sent.push([channel, value]) } };
     const connect = () => { settings.reset(); backend.testRuntime({ me: { userUri: ME }, win, client: { sync, graph: { listNodes: async (p) => ({ nodes: p.textQuery === settings.TITLE ? listed : [] }) } } }); };
     const theirs = new Document('tana:text:' + ulid()); // the other machine's, made a second earlier
-    theirs.transact((l) => { initDocument(l, settings.TITLE, ME); l.getMap(settings.ROOT).set('pref:theme', JSON.stringify('dark')); });
+    const third = 'tana:text:' + ulid(); // one a third machine already gave up to it
+    theirs.transact((l) => { initDocument(l, settings.TITLE, ME); l.getMap(settings.ROOT).set('pref:theme', JSON.stringify('dark')); l.getMap(settings.ROOT).set('settingsOld', JSON.stringify([third])); });
     docs.set(theirs.id, theirs);
     const note = new Document('tana:text:' + ulid()); // a note of yours that happens to be called Orbital, older than both
     note.transact((l) => initDocument(l, settings.TITLE, ME));
@@ -1234,7 +1235,8 @@ async function main() {
     assert.equal(JSON.parse(theirs.loro.getMap(settings.ROOT).get('pref:home')), 'library', 'and pushes up the ones only this machine had');
     assert.ok(sent.some(([channel, prefs]) => channel === 'settings:changed' && prefs.theme === 'dark'), 'and the open page is told, rather than keeping the defaults until the next launch');
     assert.deepEqual(note.loro.getMap(settings.ROOT).toJSON(), {}, 'an older note that only shares the title is never taken over');
-    assert.deepEqual(JSON.parse(JSON.stringify(settings.get('settingsOld'))), [mine], 'the document this machine gave up is remembered, and synced');
+    assert.deepEqual(JSON.parse(JSON.stringify(settings.get('settingsOld'))), [third, mine], 'the document this machine gave up is remembered, and synced, beside the one another machine gave up');
+    assert.deepEqual(JSON.parse(theirs.loro.getMap(settings.ROOT).get('settingsOld')), [third, mine], 'in the document too');
     const shown = await backend.S.client.graph.listNodes({ nodeTypes: ['text'], textQuery: settings.TITLE });
     assert.deepEqual(JSON.parse(JSON.stringify(shown.nodes.map((n) => n.id))), [note.id], 'so neither settings document is listed anywhere, while your own note called Orbital is');
     theirs.transact((l) => l.getMap('data').set('deletedAt', 123));
