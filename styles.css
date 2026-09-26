@@ -54,6 +54,7 @@ button { font: inherit; }
    header area and padding -- drags the window, and everything interactive opts out once, here, not per element.
    [tabindex] covers the sidebar rows, section heads and focusable outline blocks; .railgrip keeps the resize drag. */
 .titlebar, .rail { -webkit-app-region: drag; }
+.palette { -webkit-app-region: no-drag; } /* its scrim covers both: Electron would take a click there as a window drag, and it never reaches the mousedown that closes the palette */
 button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -webkit-app-region: no-drag; }
 
 .titlebar { padding: 48px 32px 6px; user-select: none; } /* the 4px the scroll area took, so the outline sits where it did */
