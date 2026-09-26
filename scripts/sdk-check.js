@@ -3443,7 +3443,8 @@ async function main() {
     search.transact((l) => initDocument(l, 'Hits', ME, { kind: 'search', query: { types: ['text'], textQuery: 'hits' } }));
     docs.set(search.id, search);
     const read = Array.from({ length: LIVE_ROWS + 20 }, (_, i) => make('Row ' + i));
-    backend.testRuntime({ me: { userUri: ME }, activeView: 'library', win: null, client: {
+    const told = []; // what the pages hear: the ids main let go of (#389)
+    backend.testRuntime({ me: { userUri: ME }, activeView: 'library', win: { isDestroyed: () => false, webContents: { send: (channel, ids) => { if (channel === 'outline:released') told.push(...ids); } } }, client: {
       sync: { subscribe: async (id, init) => { if (init) { const d = new Document(id); d.transact(init); return d; } return docs.get(id) || null; },
         getDocument: (id) => docs.get(id), unsubscribe: async (id) => { unsubscribed.push(id); } },
       graph: { listNodes: async (p) => ({ nodes: p.nodeIds ? p.nodeIds.map((id) => ({ id })) : p.textQuery === 'hits' ? hits.map((id) => ({ id, title: 'Hit' })) : [] }) },
@@ -3459,6 +3460,7 @@ async function main() {
     await backend.handlers.get('view:list')(null, 'library');
     const released = () => unsubscribed.filter((id) => !id.startsWith('tana:liveQuery:'));
     assert.deepEqual(released(), read.slice(1, 29), 'the oldest reads past LIVE_ROWS are let go, oldest first');
+    assert.deepEqual(told, read.slice(1, 29), 'and the pages are told which, so none keeps an outline that hears no more changes');
     assert.deepEqual([released().includes(onScreen), released().includes(edited), released().includes(search.id), hits.some((id) => released().includes(id))], [false, false, false, false],
       'but not the page on screen, a document with an undo step, or a saved search on screen and the head of its rows');
     await backend.handlers.get('view:list')(null, 'library');

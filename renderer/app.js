@@ -175,6 +175,42 @@ function removeStale(id) {
   loadRoots().then(render, showError);
 }
 if (tana.onRemoved) tana.onRemoved(removeStale);
+// Main let go of these documents (the oldest reads past LIVE_ROWS, rows that left a list), so no change to them reaches
+// this page any more, and an outline kept for one would stay as it was: reopened by ⌘[, a crumb or a pin, or expanded
+// again, it showed the old text for good (#389). It is forgotten and read again the next time it is drawn, which
+// subscribes it again; one on screen now is read again at once.
+function forgetReleased(ids) {
+  const list = Array.isArray(ids) ? ids : [];
+  // On screen: the page itself, an outline drawn open (an expanded row or full reference, empty or not: render.js marks
+  // its children with the outline's id), and one some row of which is drawn (a field's rows carry its id). A collapsed
+  // row draws no outline, and reading it again would only subscribe what main has just let go of (#406 review).
+  const drawn = new Set([...items.values()].filter((item) => item.node && item.node.id !== item.docId).map((item) => item.docId));
+  for (const wrap of outline.querySelectorAll('.children[data-outline]')) drawn.add(wrap.dataset.outline);
+  if (zoom) drawn.add(zoom.docId);
+  const gone = new Set(list);
+  releases++;
+  for (const id of list) releasedDocs.set(id, releases); // a read begun before now that names one is not cached (nodes.js reload)
+  // What goes stale: every outline of a released document, and every outline holding a copy of one, as a row it lists
+  // (a space's documents) or as a reference (reference.node): its title and checkbox came with the read. Decided per
+  // document: one drawn outline (its page, its body, a field's rows) means its fields are on screen with it, and a
+  // choice field draws chips rather than rows, so all its outlines are read again (#406 review).
+  const base = (key) => key.split('|')[0];
+  const cites = (rows) => Array.isArray(rows) && rows.some((row) => row && (gone.has(row.id) || (row.reference && gone.has(row.reference.uri)) || cites(row.children)));
+  const shownDocs = new Set([...drawn].map(base));
+  for (const key of [...kids.keys()].filter((key) => gone.has(base(key)) || cites(kids.get(key)))) {
+    // unforced: a row of it may be under the caret, and that render waits for the edit (#406 review); failed, the loading path asks again
+    // A saved search with unsaved pill edits shows their preview, which a plain reload (its stored query) would replace.
+    if (shownDocs.has(base(key))) { if (searchRows.delete(key)) previewRows(key); else reload(key).then(() => renderSoon(), () => { kids.delete(key); renderSoon(); }); }
+    else if (!isSearchDoc({ id: key }) && !isTypeDoc({ id: key })) kids.delete(key); // those run their query again on every arrival (edit.js noteNavigation)
+  }
+  // The sidebar read of such a page, of a page whose meeting or space it was (pinHub), or of one that lists it in a
+  // section (a pin, an outcome, a reference, a backlink) is read again on the next visit, keeping the old one on screen
+  // until then (renderer/rail.js relatedStale): what changed meanwhile would otherwise never show (#396, #406 review). A
+  // read still out checks its own answer (rail.js loadRelated).
+  const lists = (payload) => railGroups(payload).some(([, rows]) => (rows || []).some((row) => row && gone.has(row.id)));
+  for (const [page, payload] of relatedBy) if (gone.has(page) || (payload && (gone.has(payload.pinHub) || lists(payload)))) relatedStale.add(page);
+}
+if (tana.onReleased) tana.onReleased(forgetReleased);
 tana.onStatus(showStatus);
 // Another page, window or machine changed a setting: take the new set and apply it where it is already on screen.
 // Everything a preference feeds is visible from here, which is why the applying lives in this file and not beside

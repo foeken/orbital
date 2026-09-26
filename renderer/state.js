@@ -93,6 +93,8 @@ let selectionFrozen = false;
 const filters = new Map();   // view id -> the persisted query filter
 const viewSeq = new Map();   // stale viewList responses never replace a newer filter result
 const truncated = new Set();
+let releases = 0;            // how many times main has let documents go (app.js forgetReleased)
+const releasedDocs = new Map(); // docId -> the release that let it go: an outline read begun before it that names it is not cached (nodes.js reload)
 let members = null;
 // The marks live in Tana; whether they are shown is this machine's business, like the page you had open and the
 // sidebar width — revealing them on your own laptop should not unblur them on a shared one.

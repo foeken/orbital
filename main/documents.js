@@ -729,16 +729,19 @@ const onDemand = new Map(); // docId -> true
 const readOnDemand = (id) => { if (!subscribed.has(id)) { onDemand.delete(id); onDemand.set(id, true); } };
 // The system documents a read may reach that the app keeps live for itself: your profile, pins, the inbox, settings.
 const SYSTEM_KINDS = new Set(['collection', 'pin-map', 'user-inbox', 'liveQuery']);
-function releaseOnDemand(held) {
+function releaseOnDemand(held) { // returns the ids it let go of
+  const gone = [];
   let excess = onDemand.size - LIVE_ROWS;
   for (const id of [...onDemand.keys()]) {
-    if (excess <= 0) return;
+    if (excess <= 0) break;
     if (subscribed.has(id)) { onDemand.delete(id); excess--; continue; } // a view has taken it over, and its own sweep decides
     if (held(id) || id === (S.me && S.me.userUri) || id === settings.settingsDocId() || SYSTEM_KINDS.has(idKind(id))) continue;
     onDemand.delete(id); excess--;
     docStates.delete(id);
     S.client.sync.unsubscribe(id).catch(() => {});
+    gone.push(id);
   }
+  return gone;
 }
 // Mutations: same as op, plus global undo ordering across documents (each Document keeps its own Loro UndoManager).
 // Every document a step can still undo, as one set per sweep: asked once per subscription, a copy of both stacks per
