@@ -136,9 +136,9 @@ function toggleSplit(wc) {
   pane.webContents.once('did-finish-load', () => pane.webContents.focus()); // keyboard first: the new page takes the keys
 }
 // Cmd+W closes the page you are in when there are two, and the window otherwise.
-function closeFront(win) {
+function closeFront(win, wc = S.pane) {
   if (!win) return;
-  const pane = win.panes && win.panes.length > 1 && win.panes.find((p) => p.webContents === S.pane);
+  const pane = win.panes && win.panes.length > 1 && win.panes.find((p) => p.webContents === wc);
   if (pane) removePane(win, pane); else win.close();
 }
 
@@ -252,6 +252,9 @@ ipcMain.handle('window:workView', (e) => {
   if (win.panes.length < 2) addPane(win, '2');
   else for (const p of win.panes) if (p.webContents !== e.sender) p.webContents.send('window:toPlace');
 });
+// The X at the end of the right half's header (renderer/app.js): that half closes, as Cmd+W closes it. Only in a
+// split: a page alone never closes its window from here.
+ipcMain.handle('window:closePane', (e) => { const win = paneWindow(e.sender); if (win && win.panes.length > 1) closeFront(win, e.sender); });
 // Cmd+K Swap panes: the halves change sides, and each takes the other's side marker, so a restart keeps them there
 ipcMain.handle('window:swapPanes', (e) => {
   const win = paneWindow(e.sender);

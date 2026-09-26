@@ -497,6 +497,7 @@ function mockApi() {
     splitWindow: async () => {},
     otherPane: async () => {},
     swapPanes: async () => {},
+    closePane: async () => {},
     workView: async () => {},
     splitDrag: () => {},
     openExternal: async (url) => { if (!/^https?:\/\//i.test(url)) throw new Error('Only http(s) links can be opened'); return url; },
