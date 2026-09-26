@@ -8,7 +8,7 @@ Read in this order: this file → [02-data-model.md](02-data-model.md) → [03-a
 
 | Concern | Module | One line |
 |---|---|---|
-| Auth plumbing | `transport.js` | Connect transport with `Authorization: Bearer`, request ids, one retry after 401 via `getAccessToken({ refresh: true })`. |
+| Auth plumbing | `transport.js` | Connect transport with `Authorization: Bearer`, request ids, one retry after 401 via `getAccessToken({ refresh: true })`; `unary`, the one protobuf-JSON unary call every service client goes through. |
 | Discovery / queries | `graph.js` | `tana.graph.v1alpha1.GraphService`: ListNodes, ListEdges, GetEdge, GetOwnerChain, Traverse. Protobuf JSON in and out. |
 | Live documents | `sync.js` | One `ServerSync` stream per client; per-document bootstrap → live; outbound batching; reconnect; resync; create (subscribe with init); soft delete. |
 | A document | `document.js` | LoroDoc wrapper: `data`/`content` maps, `transact`, undo/redo, export/import, change events. |
@@ -83,7 +83,7 @@ Each kind of addition has one home. Add it there, document it in the module's se
 
 | Adding | Where | Check |
 |---|---|---|
-| A unary call on a service we already load | A method on its client class (`graph.js` `GraphClient`, `history.js`, `search.js`) going through `unary(client, service, name, params)`, which does the JSON mapping and the one retry. Normalise omitted repeated fields to `[]` there. | `scripts/sdk-check.js`: a `createRouterTransport` fake serving the method, as the `GraphClient` checks do. |
+| A unary call on a service we already load | A method on its client class (`graph.js` `GraphClient`, `history.js`, `search.js`) going through `transport.js` `unary(client, service, name, params)`, which does the JSON mapping and the one retry. Normalise omitted repeated fields to `[]` there. | `scripts/sdk-check.js`: a `createRouterTransport` fake serving the method, as the `GraphClient` checks do. |
 | A new service | Its descriptor in `proto/descriptors.js` (a `fileDesc` blob from the bundle, see [05-gotchas.md](05-gotchas.md) Protocol, added to `files` and exported as `<Name>Service`), a small client class in a file of its own shaped like `history.js`, and one line in `index.js` `createTanaClient`. | Add its request to the proto round-trips in `sdk-check.js` (sync and graph are there), plus a fake-transport check of the class. |
 | A new sync command or stream frame | `sync.js` `SyncConnection` only; its wire shape goes in [../PLATFORM-PROTOCOL.md](../PLATFORM-PROTOCOL.md). | The fake `SyncService` lifecycle in `sdk-check.js` (ephemeral channels: `presence-check.js`). |
 | A new document kind that Orbital creates | A `kind` branch in `node.js` `initDocument`, seeding exactly the keys Tana's own client writes (read them from a real document with `platform-cli.js rawdoc`). In `access.js`, a kind the access checks should handle at all goes in `KINDS` (enough for sharing and move); deleting it also needs `DELETABLE`, archiving `ARCHIVABLE`, a public link `LINK_SHAREABLE`. The app side is `KINDS` in main/state.js. | `sdk-check.js` asserts the seeded data map key by key, as it does for the task, meeting, chat, search and type kinds. |
@@ -93,4 +93,4 @@ Each kind of addition has one home. Add it there, document it in the module's se
 | A live-query key | `LISTS`/`SCALARS` (or `SIDE_*`) in `livequery.js`. Unknown keys throw on purpose. | `livequery-check.js`. |
 | A query or view filter key | `query.js`: `FILTER_KEYS`, `validViewFilter`, `viewParams`, and both saved-search conversions. | `sdk-check.js` query sections (round-trip of `filterToSearchQuery`/`searchQueryToFilter`). |
 
-Sibling requires point one way: `index` wires `transport`, `graph`, `history`, `search`, `sync` and `document`; `history` and `search` lean on `graph`'s `unary`; `sync` on `document`; `access`, `content`, `events`, `livequery` and `query` on `node`; `fields` on `content` and `dates`; `proposals` on `content`. The rest stand alone. A module that takes a `sync` or `graph` argument, rather than requiring one, stays usable with a fake. Keep it that way, so no cycle can form.
+Sibling requires point one way: `index` wires `transport`, `graph`, `history`, `search`, `sync` and `document`; `graph`, `history` and `search` lean on `transport`'s `unary` and the descriptors; `sync` on `document` and the descriptors; `livequery` on `node` and the descriptors (`EDGE_TYPES`); `access`, `content`, `events` and `query` on `node`; `fields` on `content` and `dates`; `proposals` on `content`. The rest stand alone. A module that takes a `sync` or `graph` argument, rather than requiring one, stays usable with a fake. Keep it that way, so no cycle can form.
