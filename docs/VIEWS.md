@@ -89,8 +89,9 @@ truncation note the Library already shows still tells the user when there is mor
 - Every view caches its rows in SQLite under its own id (`db.replaceSection(viewId, rows)`), so any
   view opens instantly from cache and stays readable while auth or sync reconnect.
 - `outline:roots` returns `[{ id, title, icon, nodes }]` for the views from that cache.
-- The refresh loop refreshes the **active** view (the last one listed) and subscribes the first
-  `LIVE_ROWS` (100, main/state.js) of its rows, with the undo-history retention from #178 unchanged.
+- A refresh reads **every open view** — one per window or split half (`openViews`, main/views.js) — and
+  subscribes the first `LIVE_ROWS` (100, main/state.js) of each one's rows. Its sweep unsubscribes what no
+  open view, watch, undo step (#178), pending read or page on screen still holds.
   Not the whole list: a subscription is a bootstrap RPC and a LoroDoc each, and every bootstrap reaches
   the renderer as a change, so a Library of several hundred rows opened with a subscription storm on the
   one sync connection — the page lagged and the read for whatever was opened next queued behind it. The
@@ -101,10 +102,12 @@ truncation note the Library already shows still tells the user when there is mor
 - **Nothing polls** (#148): what runs a refresh is a push. Each open view has a live query (sdk/livequery.js,
   `watchViews` in main/views.js, opened and closed whenever a view is read, so a changed filter moves it at once), built from the view's own
   ListNodes params by `liveTrigger` (sdk/query.js): the same kinds, types, states and people, less what a live
-  query cannot say, so it is a superset of the view. Its answers only wake the refresh; ListNodes still decides
-  the rows. The tasks you made for others (the watch rule) and the Inbox badge ride live queries the same way
-  (`watchMine`, `watchInbox`), and an open saved search gets one from `watchRelated` (main/related.js), rebuilt
-  when its stored query changes. A timer still refreshes every 5 minutes (main.js) as the backstop for a push
+  query cannot say, so it is a superset of the view. Its answers only schedule the refresh; ListNodes still
+  decides the rows. Two more live queries do their own work rather than wake the refresh: `watchMine` (the
+  tasks you made for others, the watch rule) re-reads the watch set through `refreshWatched`, and `watchInbox`
+  announces new Inbox tasks and updates the badge. An open saved search gets one from `watchRelated`
+  (main/related.js), rebuilt when its stored query changes, and a type page one over its instances; each
+  re-reads that page. A timer still refreshes every 5 minutes (main.js) as the backstop for a push
   that never came, and a window gaining focus refreshes unless the last refresh finished within
   `FOCUS_FRESH_MS` (30 s, main.js). A live query that matches nothing stays pending instead of answering
   empty, which is why every trigger counts its first answer too.
