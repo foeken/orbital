@@ -57,6 +57,7 @@ function restoredBounds(saved, workAreas) {
 S.windows = new Set();
 S.windowViews = new Map(); // webContents id -> { id, filter }: the view that page shows
 const MIN_PANE = 320; // neither half is dragged narrower than this (renderer/app.js splitGrip)
+const FOCUS_FRESH_MS = 30000; // a window gaining focus within this long of the last completed refresh does not start another
 const SPLIT_LINE = { light: '#ececec', dark: '#2b2f31' }; // the window behind the pages, in the page's theme; the line itself is the right half's (styles.css .splitgrip)
 const paneWindow = (wc) => [...S.windows].find((w) => w.panes.some((p) => p.webContents === wc));
 // Signed out, every page is the same login button, so the window shows its left page alone and the right one waits
@@ -146,7 +147,9 @@ function createWindow() {
   for (const name of ['resize', 'move', 'maximize', 'unmaximize']) win.on(name, saveSoon);
   win.on('resize', () => layout(win));
   win.on('close', saveBounds);
-  win.on('focus', () => { S.win = win; refresh(); });
+  // Coming back to a window re-reads the lists, unless they were read moments ago: the live queries keep them
+  // current, and every Cmd+Tab re-reading all of them (and every page reloading after it) was chatter (issue #268).
+  win.on('focus', () => { S.win = win; if (!(Date.now() - Date.parse(S.status.lastSync) < FOCUS_FRESH_MS)) refresh(); });
   win.on('closed', () => {
     closeOverlay(win);
     // right half first: the left one closing first would leave the right one alone for a moment, and removePane would
@@ -499,8 +502,11 @@ function queueToTask(threadId, message) {
   const bin = agent.codexBin(); // the task was opened through the Codex app, so this Mac has a codex to queue with
   try { if (bin) require('node:child_process').execFile(bin, ['queue', '--thread', threadId, '--message', message], { timeout: 20000 }, () => {}); } catch { /* the task is open regardless */ }
 }
-// One bounded app-server child per refresh answers for every linked node (main/agent.js).
-ipcMain.handle('codex:status', () => agent.readAgentStatuses(agent.codexTasks()));
+// One bounded app-server child per refresh answers for every linked node (main/agent.js). Every page asks on every
+// refresh, so the pages asking while a read runs share it: each read is a child per host (an ssh session for a remote
+// one), and a split window used to start two at once for the same answer (issue #267).
+let agentStatusRead = null;
+ipcMain.handle('codex:status', () => (agentStatusRead ||= agent.readAgentStatuses(agent.codexTasks()).finally(() => { agentStatusRead = null; })));
 ipcMain.handle('doc:accessOptions', (_e, id) => op(id, async doc => access.capabilities(doc, S.me.userUri, await accessContext())));
 ipcMain.handle('doc:setSharing', (_e, id, selection) => mut(id, async doc => {
   await access.setSharing(doc, S.me.userUri, selection, await accessContext()); scheduleRefresh(2000);

@@ -2626,6 +2626,23 @@ async function main() {
 
 
 
+  {
+    // Every page asks for the Codex statuses on every refresh, and each read starts an app-server per host: the pages
+    // asking while one read runs share it, and the next refresh reads afresh (issue #267).
+    const backend = mainHelpers(); require('../db').open(':memory:');
+    let reads = 0, finish;
+    backend.agent.codexTasks = () => ({ 'tana:text:01examplea0000000000000000': 'thread' });
+    backend.agent.readAgentStatuses = () => { reads++; return new Promise((done) => { finish = done; }); };
+    const status = backend.handlers.get('codex:status');
+    const left = status(), right = status();
+    assert.equal(reads, 1, 'two pages asking at once start one read');
+    finish({ n: 'working' });
+    assert.deepEqual([(await left).n, (await right).n], ['working', 'working'], 'and both get its answer');
+    status();
+    assert.equal(reads, 2, 'a read that has settled is not reused: the next refresh asks again');
+    finish({});
+    console.log('ok  codex status: one read shared by every page asking at once');
+  }
   // Handing a node to the local Codex agent: an app-local mark in the settings table, never a Tana assignee, and one
   // the view refresh's unsubscribe sweep is not allowed to drop.
   {
