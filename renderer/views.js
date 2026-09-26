@@ -346,7 +346,7 @@ function tableCells(node, info, sub) {
 function tableHeadEl() {
   const names = new Map(displayList()), el = document.createElement('div');
   el.className = 'thead';
-  for (const label of ['Title', ...tableKeys().map((k) => names.get(k))]) { const c = document.createElement('span'); c.textContent = label; el.append(c); }
+  for (const label of ['Title', ...tableKeys().map((k) => names.get(k)), '']) { const c = document.createElement('span'); c.textContent = label; el.append(c); } // '': over the row's icons
   return el;
 }
 // "4 hours ago". Nothing else in the app says an age in words, so this is the one place that turns a time into one.

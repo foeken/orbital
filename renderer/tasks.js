@@ -131,7 +131,7 @@ function taskMetaEl(summary, docId, node) {
     target.onclick = (e) => { e.stopPropagation(); open(); };
   };
   const who = document.createElement('span'); who.textContent = summary.assignees;
-  if (summary.assignees) el.append(who);
+  if (summary.assignees && !tableView()) el.append(who); // a table has an Assigned column: the icons are what is left here
   if (summary.assignees && writable && isTask(node) && tana.setAssignees) { who.title = 'Edit assignees'; clickable(who, () => openAssigneePalette(node)); }
   // the icons stand 6px apart, but the first one needs no gap of its own: a row with no assignee name in front of it
   // (every doc and meeting row) already has the 8px the .meta span carries, and 14px reads as a hole
@@ -161,7 +161,7 @@ function taskMetaEl(summary, docId, node) {
     if (writable && tana.accessOptions) { icon.title = label + ' — click to edit visibility'; clickable(icon, () => openVisibility(node, summary.scope)); }
     el.append(icon);
   }
-  else if (summary.unknownAudience) el.append(' · Visibility unknown');
+  else if (summary.unknownAudience && !tableView()) el.append(' · Visibility unknown');
   // Pinned, in the same slot and with the same behaviour as the audience icon beside it: the glyph says the node is
   // pinned somewhere, and a click opens the page that says where and takes it off. Pins are personal, so a node you
   // cannot write still carries the mark and still opens the page.

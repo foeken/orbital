@@ -259,6 +259,7 @@ function render(force = false) {
 const META_SEP = ' · ';
 const META_GAP = 8; // .meta's margin-left in styles.css, which offsetWidth does not carry
 function fitRowMeta() {
+  if (tableView()) return; // a table keeps the facts in a column of their own, and its grey line is the other columns
   const plan = [];
   for (const body of outline.querySelectorAll('.node > .line > .body')) {
     const meta = body.querySelector('.meta.tmeta'), sub = body.querySelector(':scope > .subtext');
