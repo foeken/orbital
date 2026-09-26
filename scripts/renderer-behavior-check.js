@@ -5582,6 +5582,10 @@ async function runRailReadinessCheck() {
   context.connect();
   context.ask('draftdoc:2');
   assert.deepEqual(plain(context.state().asked), [], 'and never about a local draft id');
+  // A change to a document whose sidebar this page never read (every document a view subscribes announces its first
+  // bootstrap as one) asks nothing: at boot that was 188 related reads, ~700 ListNodes, before anything was opened.
+  context.refresh('tana:text:01j0never00000000000000000');
+  assert.deepEqual(plain(context.state().asked), [], 'a change re-reads only a sidebar this page has read');
   context.ask('tana:text:01j0task0000000000000000');
   context.ask('tana:text:01j0task0000000000000000');
   await new Promise(setImmediate);
