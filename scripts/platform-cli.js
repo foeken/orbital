@@ -575,7 +575,7 @@ commands.assignee = async () => {
   out('Tasks view (all states) = ' + tasks.length + ', of those assigned = ' + tasks.filter((n) => (n.assignedTo || []).includes(uri)).length);
   out('-- direct per-node-type probes: which node types the graph filters by assignedTo / unassigned --');
   for (const kind of kinds) {
-    const params = { nodeTypes: [{ meetings: 'event', tasks: 'text', docs: 'text', chats: 'chat', canvases: 'canvas', agents: 'agent', skills: 'skill' }[kind]], assignedTo: [uri], limit: 100 };
+    const params = { nodeTypes: [query.KIND_NODE_TYPE[kind]], assignedTo: [uri], limit: 100 }; // the SDK's one table: a copy here had no searches or types (#249)
     try {
       const { nodes } = await client.graph.listNodes(params);
       const { assignedTo, ...rest } = params; // the proto encoder rejects an undefined repeated field, so drop the key

@@ -357,4 +357,4 @@ function liveTrigger(p) {
   return q;
 }
 
-module.exports = { liveTrigger, parseQuery, searchParams, needsTypes, viewParams, searchQueryParams, searchOwners, filterToSearchQuery, searchQueryToFilter, validViewFilter, VIEW_PRESETS, VIEW_KINDS, hideRules, isHidden, completedWindow, completedInWindow };
+module.exports = { liveTrigger, parseQuery, searchParams, needsTypes, viewParams, searchQueryParams, searchOwners, filterToSearchQuery, searchQueryToFilter, validViewFilter, VIEW_PRESETS, VIEW_KINDS, KIND_NODE_TYPE, hideRules, isHidden, completedWindow, completedInWindow };
