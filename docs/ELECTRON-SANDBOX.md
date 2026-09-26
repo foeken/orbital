@@ -37,5 +37,6 @@ node scripts/platform-cli.js list          # not ./node_modules/.bin/electron
 Run it with escalated (unsandboxed) permissions — GUI Electron cannot work otherwise. Verified: 25
 sandboxed runs produce a clear error and **no** new crash report; 5 unsandboxed runs return real data.
 
-**Still true elsewhere.** `npm start`, `npm run icon` and the packaged Tana Companion app hit the same
-wall in a sandbox (there is one `Tana Companion-*.ips` with this stack); run them unsandboxed.
+**Still true elsewhere.** `npm start`, `npm run tana`, `npm run icon` and the packaged Orbital app are GUI
+Electron too and hit the same wall in a sandbox (one crash report from when the app was still called Tana
+Companion, `Tana Companion-*.ips`, has this stack); run them unsandboxed.
