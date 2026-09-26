@@ -5,7 +5,7 @@
 // `withinId` asks for the summaries *inside* an expandable one; nothing here writes.
 const { createClient } = require('@connectrpc/connect');
 const { ChangeSummaryService } = require('./proto/descriptors');
-const { unary } = require('./graph');
+const { unary } = require('./transport');
 
 class HistoryClient {
   constructor(transport) {

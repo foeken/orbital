@@ -4,7 +4,7 @@
 // ids (search and hybridSearch serve Tana's AI agent alone; issue #20). FailedPrecondition means not enabled.
 const { createClient } = require('@connectrpc/connect');
 const { SearchService } = require('./proto/descriptors');
-const { unary } = require('./graph');
+const { unary } = require('./transport');
 
 class SearchClient {
   constructor(transport) {

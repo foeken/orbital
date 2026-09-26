@@ -1,7 +1,9 @@
 'use strict';
-// Connect transport for home.tana.inc/platform: bearer auth, request ids, one retry after a 401 (protocol doc §4).
+// Connect transport for home.tana.inc/platform: bearer auth, request ids, one retry after a 401 (protocol doc §4),
+// and `unary`, the one way a service client makes a unary read.
 const { randomUUID } = require('node:crypto');
 const { createConnectTransport } = require('@connectrpc/connect-web');
+const { fromJson, toJson } = require('@bufbuild/protobuf');
 
 function createTransport({ baseUrl = 'https://home.tana.inc/platform', getAccessToken, clientName = 'tana-tasks', fetch = globalThis.fetch } = {}) {
   if (typeof getAccessToken !== 'function') throw new Error('createTransport: getAccessToken is required');
@@ -21,4 +23,19 @@ function createTransport({ baseUrl = 'https://home.tana.inc/platform', getAccess
   return createConnectTransport({ baseUrl, useBinaryFormat: true, fetch: authFetch });
 }
 
-module.exports = { createTransport };
+// One unary read on Tana's services: protobuf JSON in, protobuf JSON out (sdk/graph.js, history.js, search.js).
+const unary = async (client, service, name, params) => {
+  const m = service.methods.find((x) => x.localName === name);
+  const call = () => client[name](fromJson(m.input, params || {}));
+  let response;
+  try { response = await call(); }
+  catch (e) {
+    if (e.rawMessage !== 'fetch failed') throw e;
+    // ponytail: one 250 ms retry handles short resets; add backoff only if unary reads show longer outages.
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    response = await call();
+  }
+  return toJson(m.output, response);
+};
+
+module.exports = { createTransport, unary };
