@@ -2316,13 +2316,20 @@ function runPaletteSkipCheck() {
     const searchSpacesNow = function searchSpacesNow() {}, todayPickerSearchNow = function todayPickerSearchNow() {};
     let listener; const palInput = { addEventListener: (type, fn) => { if (type === 'input') listener = fn; } };
     ${sourceBetween("palInput.addEventListener('input'", "palInput.addEventListener('keydown'")}
-    (mode) => { palMode = mode; renders = 0; asked.length = 0; listener(); return { renders, asked: [...asked], palIndex, palEnter }; };
+    const typeOn = (mode) => { palMode = mode; renders = 0; asked.length = 0; listener(); return { renders, asked: [...asked], palIndex, palEnter }; };
+    typeOn.seq = () => palSeq;
+    typeOn;
   `);
   for (const mode of ['pinDate', 'moveConfirm', 'cmd', 'field', 'meetingTime']) {
     assert.deepEqual(plain(typing(mode)), { renders: 1, asked: [], palIndex: 0, palEnter: null }, mode + ': typing redraws the page from the words and asks main nothing');
   }
   assert.deepEqual(plain(typing('search')), { renders: 0, asked: ['searchNow'], palIndex: 0, palEnter: null }, 'the document search asks Tana, debounced');
   assert.deepEqual(plain(typing('setIcon').asked), ['searchIconsNow'], 'and Set icon asks main for its glyphs');
+  for (const mode of ['search', 'spaces', 'setIcon', 'pinToday']) {
+    const seq = typing.seq();
+    typing(mode);
+    assert.ok(typing.seq() > seq, mode + ': typing retires the answer to the words before, so it cannot settle an Enter meant for these (#397)');
+  }
 
   // Every page opens through showPage (#275), so none inherits what the last one left running: Escape from Set icon
   // with an icon search still debounced used to land on the command page with the timer live and busy still set.
@@ -7335,7 +7342,8 @@ async function runSetIconCheck() {
     const goTo = () => {}, setView = () => {}, openDoc = () => {}, filterEl = {}, zoomFactor = 1, BASE_ZOOM = 1;
     const visibilityRows = () => [], moveTargets = async () => [], previewMoveToSpace = () => {};
     const openTypePalette = () => {}, typesLoaded = async () => {}, typeRows = () => [], typeNameOf = () => '';
-    let renderedPages = 0; const renderPalette = () => { renderedPages++; };
+    let renderedPages = 0, palEnter = null; const renderPalette = () => { renderedPages++; if (palMode === 'setIcon') palRows = iconPickRows(palInput.value); }; // the rows Enter runs are the ones drawn
+    const runRow = (row) => row.run();
     let closed = 0; const closePalette = () => { closed++; }, promptEditor = () => {};
     const openCommandPalette = () => { palMode = 'cmd'; palRows = []; palIndex = 0; };
     const errors = []; let queue = Promise.resolve();
@@ -7357,12 +7365,16 @@ async function runSetIconCheck() {
     ${functionSource('openIconPalette')}
     ${functionSource('applyIcon')}
     ${functionSource('backPalette')}
+    ${functionSource('chooseRow')}
+    ${functionSource('settleEnter')}
     ({ row: () => paletteRows('').find((r) => r.id === 'setIcon'),
        node: (next) => { palDoc = next; },
        wearing: (uri, name) => { if (name) typeGlyphs.set(uri, name); else typeGlyphs.delete(uri); },
        answer: (next, fails) => { answer = next === null ? [] : next; searchFails = fails || null; },
        search: (q) => { palInput.value = q; searchIconsNow(); },
-       page: () => iconPickRows(),
+       // what typing does (the input listener): busy at once, main asked after the debounce; Enter pressed in between
+       typeThenEnter: (q) => { palInput.value = q; palIndex = 0; palBusy = true; chooseRow(false); searchIconsNow(); },
+       page: (q) => iconPickRows(q),
        mode: () => palMode,
        escape: () => backPalette(),
        known: (name) => customIcons.has(name),
@@ -7422,6 +7434,25 @@ async function runSetIconCheck() {
   api.row().run();
   await api.settle();
   assert.deepEqual(plain(api.page().map((r) => [r.label, r.disabled])), [['No icon matches', true]], 'and a query that matches nothing says so');
+
+  // 5. Enter right after typing runs the row for what was typed, not the one drawn for the words before (#392).
+  const svg = '<svg viewBox="0 0 18 18"><path d="M1 1"></path></svg>';
+  api.answer([{ name: 'nc-rocket', label: 'rocket', svg }]);
+  api.row().run();
+  await api.settle();
+  const before = api.state().written.length;
+  api.answer([{ name: 'nc-calendar', label: 'calendar', svg }]);
+  api.typeThenEnter('calendar');
+  await api.settle();
+  assert.deepEqual(plain(api.state().written.slice(before)), [[TYPE, 'nc-calendar']], 'Enter while main is still answering waits, and applies the icon that was typed');
+  // A type that wears one leads with "No icon", but only for words that could mean it: typed "calendar", Enter applies calendar.
+  api.wearing(TYPE, 'nc-rocket');
+  api.answer([{ name: 'nc-calendar', label: 'calendar', svg }]);
+  api.typeThenEnter('calendar');
+  await api.settle();
+  assert.deepEqual(plain(api.state().written.at(-1)), [TYPE, 'nc-calendar'], 'on a type that wears an icon, Enter after typing applies the typed one rather than taking it off');
+  assert.deepEqual(plain(api.page('no').map((r) => r.label)), ['No icon', 'calendar'], 'and "No icon" still answers to its own name');
+  api.wearing(TYPE, null);
   console.log('ok  Set icon: offered on a type, the page searches main\u2019s set and registers what it draws, the current glyph is ticked and removable, one call per choice');
 }
 

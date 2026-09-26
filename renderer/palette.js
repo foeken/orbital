@@ -11,7 +11,8 @@ let todayPickerNode = null, todayPickerResults = null;
 // Enter chooses: the highlighted row, or for an @ selection ⌘↩ always creates. While the search is still out, the
 // choice is kept and made the moment the rows arrive, so the first Enter after "@" is never lost.
 function chooseRow(create) {
-  if (palBusy && (palMode === 'spaces' || palMode === 'search' || palMode === 'pinToday')) { palEnter = create ? 'create' : 'pick'; return; }
+  // the four pages whose rows main finds (the input listener below): an Enter there waits for the answer to what was typed
+  if (palBusy && (palMode === 'spaces' || palMode === 'search' || palMode === 'pinToday' || palMode === 'setIcon')) { palEnter = create ? 'create' : 'pick'; return; }
   const r = create && linkCtx ? palRows.find((row) => row.create) : palRows[palIndex];
   if (r) runRow(r);
 }
@@ -765,14 +766,15 @@ function searchIconsNow() {
     if (seq !== palSeq || palMode !== 'setIcon') return;
     iconList = Array.isArray(list) ? list : [];
     registerIcons(iconList); // the rows about to be drawn name these glyphs
-    palBusy = false; renderPalette();
+    palBusy = false; renderPalette(); settleEnter();
   }, (e) => { if (seq === palSeq) { palBusy = false; iconList = []; showError(e); renderPalette(); } });
 }
 function iconPickRows(q) {
   const doc = iconCtx;
   if (!doc) return [];
   const rows = [];
-  if (typeGlyphs.has(doc.id)) rows.push({ group: ICON_GROUP, icon: 'none', label: 'No icon', hint: 'Back to the generic glyph', keepOpen: true, run: () => applyIcon(doc, null) });
+  // narrowed with the rest, as Unassigned is (memberRows): leading whatever was typed, Enter after "calendar" took the icon off
+  if (typeGlyphs.has(doc.id) && fuzzyMatch('No icon', q)) rows.push({ group: ICON_GROUP, icon: 'none', label: 'No icon', hint: 'Back to the generic glyph', keepOpen: true, run: () => applyIcon(doc, null) });
   for (const icon of iconList) rows.push({ group: ICON_GROUP, icon: icon.name, label: icon.label,
     hint: typeGlyphs.get(doc.id) === icon.name ? '✓' : '', keepOpen: true, run: () => applyIcon(doc, icon.name) });
   if (!rows.length && (palBusy || !q)) rows.push({ group: ICON_GROUP, label: palBusy ? 'Loading…' : 'No icon matches', disabled: true }); // a query that finds none: "No results"
@@ -1037,10 +1039,12 @@ function movePalIndex(step) {
 // missing from it (Pin to date) ignored every key and sent a search nobody read (#297).
 palInput.addEventListener('input', () => {
   palIndex = 0; palEnter = null; // typing on supersedes an Enter that was waiting for the previous query
-  if (palMode === 'setIcon') { palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchIconsNow, 150); return renderPalette(); }
-  if (palMode === 'spaces') { palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchSpacesNow, 150); return; }
+  // palSeq++ on each: an answer to the words before, landing during the debounce, would draw its rows and settle the
+  // Enter waiting for these words with them (#397 review)
+  if (palMode === 'setIcon') { palSeq++; palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchIconsNow, 150); return renderPalette(); }
+  if (palMode === 'spaces') { palSeq++; palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchSpacesNow, 150); return; }
   if (palMode === 'pinToday') { palSeq++; palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(todayPickerSearchNow, 150); return; }
-  if (palMode === 'search') { palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchNow, 150); return; }
+  if (palMode === 'search') { palSeq++; palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchNow, 150); return; }
   renderPalette();
 });
 palInput.addEventListener('keydown', (e) => {
