@@ -106,6 +106,7 @@ const withShims = (src) => {
   // subtextOf guard below, which then supplies what it calls.
   if (/\bsubtextEl\(/.test(src) && !/function subtextEl\(/.test(src)) src = functionSource('subtextEl') + '\nglobalThis.shownFieldValues ??= (node) => (node.fields ? displayKeys().flatMap((k) => node.fields[k] || []) : []);\n' + src;
   // a type's page (renderer/nodes.js): a harness that is not about one is never on one
+  if (/\bfieldType\(/.test(src) && !/const fieldType =/.test(src)) src = 'globalThis.fieldType ??= () => (onTypePage() ? zoom.docId : null);\n' + src; // nor on a page narrowed to one type
   if (/\b(isTypeDoc|onTypePage|isTypeId|opensOnClick)\b/.test(src) && !/const isTypeId =/.test(src)) src = "globalThis.isTypeId ??= (id) => /^tana:type:[^|?]+$/.test(String(id || '')); globalThis.isTypeDoc ??= (node) => !!node && isTypeId(node.id); globalThis.onTypePage ??= () => false; globalThis.opensOnClick ??= (item) => isTypeDoc(item.node) && !String(item.docId || '').includes('|tana:type:');\n" + src;
   if (/\bSEARCH_ID\b/.test(src) && !/const SEARCH_ID =/.test(src)) src = "globalThis.SEARCH_ID ??= 'tana:search:';\n" + src;
   if (/\beditingType\b/.test(src) && !/let editingType\b/.test(src)) src = 'globalThis.editingType ??= null;\n' + src; // no type's fields being edited
@@ -1587,6 +1588,7 @@ async function runSyncShortcutCheck() {
     'Navigate: Go back', 'Navigate: Go forward', 'Navigate: Go to Home', 'Navigate: Set as Home', 'Navigate: Set Work View as Home', 'Navigate: Focus the sidebar',
     'Window: New window', 'Window: Toggle split panes', 'Window: Go to the other half', 'Window: Swap panes', 'Window: Hide sidebar', 'Window: Reload',
     'Settings: Larger text', 'Settings: Smaller text', 'Settings: Reset text size', 'Settings: Toggle dark mode', 'Settings: Edit hidden items', 'Settings: Toggle sensitive visibility', 'Settings: Toggle demo mode',
+    'Help: Help',
   ], 'the palette lists its rows in one fixed, meaningful order');
   // The two date pins differ only in the day they name: today's row passes no date (main defaults to today), the
   // tomorrow row passes the next local day, and each label follows whether that day is already pinned.
@@ -2412,8 +2414,8 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
       reset: () => filters.set('library', { types: ['tasks'], states: ['open'], assignee: 'me' }) });
   `);
   const anyType = api.pick('type', 'Any type');
-  assert.deepEqual(plain(anyType), { open: false, filter: { types: null, states: ['open'], assignee: 'me' } },
-    '"Any type" is a single choice: it applies and closes');
+  assert.deepEqual(plain(anyType), { open: false, filter: { types: null, states: ['open'], assignee: 'me', fields: null } },
+    '"Any type" is a single choice: it applies and closes, and lets go of the last type\'s field filters');
   api.reset();
   assert.equal(api.pick('type', 'Meetings').open, true, 'a tickable type keeps the multi-select menu open');
   api.reset();
@@ -2625,18 +2627,23 @@ function runClearFiltersCheck() {
   api.set('tasks', { states: ['closed'], assignee: 'anyone' });
   assert.equal(api.filtered(), true, 'a changed status or assignee offers the action');
   api.clear();
-  assert.deepEqual(plain(api.state()), { types: null, states: null, assignee: 'anyone', text: '', audience: null, participant: null, window: null }, 'clearing Tasks means an unrestricted query');
+  assert.deepEqual(plain(api.state()), { types: null, states: null, assignee: 'anyone', text: '', fields: null, audience: null, participant: null, window: null }, 'clearing Tasks means an unrestricted query');
   assert.equal(api.filtered(), false, 'and the action goes away again');
   api.set('library');
   assert.equal(api.filtered(), true, 'the shipped library filter still narrows the view');
   api.set('library', { text: 'memo' });
   assert.equal(api.filtered(), true, 'a search text narrows the Library view');
   api.clear();
-  assert.deepEqual(plain(api.state()), { types: null, states: null, assignee: 'anyone', text: '', audience: null, participant: null, window: null }, 'clearing the Library means anything, not the shipped default');
+  assert.deepEqual(plain(api.state()), { types: null, states: null, assignee: 'anyone', text: '', fields: null, audience: null, participant: null, window: null }, 'clearing the Library means anything, not the shipped default');
   assert.equal(api.filtered(), false, 'and with everything set to any, the action goes away');
+  api.set('library', { types: ['tana:type:01m1e3nthqj48b8drqb1fmma9d'], fields: { 'tana:type:01m1e3nthqj48b8drqb1fmma9d?attribute=hpgqd4jv': { textMatches: [{ value: 'High' }] } } });
+  assert.equal(api.filtered(), true, 'a field filter narrows the Library');
+  api.clear();
+  assert.equal(api.state().fields, null, 'and Clear filters lets go of it, rather than merging over it');
+  assert.equal(api.filtered(), false, 'so the action goes away');
   api.set('scoped');
   api.clear();
-  assert.deepEqual(plain(api.state()), { types: null, states: null, assignee: 'anyone', text: '', audience: null, participant: 'me', window: 'recent' }, 'clearing a filter that carries a calendar scope keeps the participant and the window');
+  assert.deepEqual(plain(api.state()), { types: null, states: null, assignee: 'anyone', text: '', fields: null, audience: null, participant: 'me', window: 'recent' }, 'clearing a filter that carries a calendar scope keeps the participant and the window');
   assert.equal(api.filtered(), false, 'the preserved calendar scope is that filter\'s clear baseline');
   // A saved search is dirty when its pills differ from what it stored, so the completed window has to be part of
   // that comparison — and an unset one is the default rather than a different filter.
@@ -3127,7 +3134,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
 }
 
 // Pin to current meeting / Pin to meeting: the two Cmd+K rows that put a node on a meeting. The first finds the
-// meeting itself (tana.currentMeeting -> main/quickadd.currentMeeting, sdk/calls); the second opens a page of
+// meeting itself (tana.currentMeeting -> main/meetings.currentMeeting, sdk/calls); the second opens a page of
 // meetings to choose from (tana.searchPreview over the meetings filter). Both end in the one shared event pin
 // (tana.pinTo -> pins.nodePin), so what is checked here is the rows, the page, and that the pin is the same write.
 async function runPinToMeetingCheck() {
@@ -4055,6 +4062,9 @@ function runRailToggleCheck() {
   // the same instrument runSearchesGroupCheck uses for the boot statement it cannot reach.
   assert.match(source, /railEl\.hidden = railGrip\.hidden = railOff\(empty\);/,
     'renderRail actually asks railOff, so the preference reaches the sidebar rather than sitting in a helper nobody calls');
+  // A saved search is a list: the same anchor keeps it without a sidebar, and so without the button that shows one.
+  assert.match(source, /!String\(parent\.docId\)\.startsWith\(SEARCH_ID\) \? parent\.docId : null;/,
+    'renderRail gives a saved search no sidebar and no sidebar button');
 }
 
 // A saved search is a query you can edit, so the pills serve it too, keyed by the document rather than the view.
@@ -5782,7 +5792,8 @@ async function runHomeCheck() {
     ${functionSource('renderCrumbs')}
     const bar = document.createElement('nav');
     const cmdBtn = document.createElement('button'); // the ⌘K button index.html puts in the bar
-    const $ = (id) => (id === 'crumbs' ? bar : id === 'navPalette' ? cmdBtn : null);
+    const helpBtn = document.createElement('button'); // and the ? after it
+    const $ = (id) => (id === 'crumbs' ? bar : id === 'navPalette' ? cmdBtn : id === 'navHelp' ? helpBtn : null);
     const blurSensitive = () => {}, iconSvg = () => '', zoomTo = () => {};
     const viewOf = () => ({ title: 'Library' }), docOf = () => null;
     const OTHER_DOC = 'tana:text:01j0note0000000000000000';
@@ -5800,7 +5811,7 @@ async function runHomeCheck() {
       crumbs: (docId = OTHER_DOC) => {
         zoom = { docId, nodeId: null };
         renderCrumbs();
-        return bar.childNodes.map((kid) => (kid === cmdBtn ? '[⌘K]' : kid.tagName === 'button' ? '[Home]' : kid.textContent)).join(' ');
+        return bar.childNodes.map((kid) => (kid === cmdBtn ? '[⌘K]' : kid === helpBtn ? '[?]' : kid.tagName === 'button' ? '[Home]' : kid.textContent)).join(' ');
       },
       back: () => navigate(-1), push: (place) => { navBack.push(place); navHere = { view, zoom, key: 'here' }; },
       seed: (place) => { savedPlace = place; ${seed} return savedPlace; },
@@ -5842,7 +5853,7 @@ async function runHomeCheck() {
   assert.equal(api.target(), null, 'a note is not a place to come back to, so it does not offer itself as Home');
 
   // The bar is Home then ⌘K and nothing else: no location behind them, however deep the page
-  assert.equal(api.crumbs(), '[Home] [⌘K]', 'the bar over a document is the Home button, then ⌘K, and no breadcrumbs');
+  assert.equal(api.crumbs(), '[Home] [⌘K] [?]', 'the bar over a document is the Home button, then ⌘K and Help, and no breadcrumbs');
 
   // Back with nothing to go back to lands on Home; a real prior place still wins
   api.back();
@@ -5872,7 +5883,7 @@ async function runHomeCheck() {
     'a deleted Home falls back to the Library and the stale preference is repaired, not left behind');
   api.view('library');
   assert.equal(api.crumb().tag, 'button', 'and with the Library as Home the button still shows, rather than disappearing with the choice');
-  assert.equal(api.crumbs(), '[Home] [⌘K]', 'and the bar is the same two buttons');
+  assert.equal(api.crumbs(), '[Home] [⌘K] [?]', 'and the bar is the same three buttons');
   // The bar used to be hidden on a view page, which has no location; it now carries the two buttons on every page.
   assert.doesNotMatch(source, /nav\.hidden =/, 'the bar is never hidden: Home and ⌘K on every page, a view page (the Library, Inbox, Tasks) included');
   assert.deepEqual(plain(api.seed(null)), TIMELINE, 'a Library Home changes nothing about a first launch either');
@@ -5881,353 +5892,6 @@ async function runHomeCheck() {
   assert.deepEqual(plain(api.went()), ['view:library'], 'and once it has fallen back, Home is the Library view — no dead saved search is opened');
 }
 
-
-// The quick-add panel (quick-add.js) is its own window's script, not part of the outliner's shared scope, so it runs
-// here whole in a fake DOM with a fake preload bridge — the same two things quick-add.html gives it.
-async function runQuickAddPanelCheck() {
-  const src = fs.readFileSync(require.resolve('../quick-add.js'), 'utf8');
-  // The panel's markup is the other half of the panel: the ids it reaches for and which parts start hidden are read
-  // from quick-add.html rather than restated here, so the script and its window cannot drift apart unnoticed.
-  const html = fs.readFileSync(__dirname + '/../quick-add.html', 'utf8');
-  const markupIds = new Set([...html.matchAll(/id="([^"]+)"/g)].map((m) => m[1]));
-  const hiddenAtStart = new Set([...html.matchAll(/id="([^"]+)"[^>]*\shidden/g)].map((m) => m[1]));
-  assert.ok(hiddenAtStart.has('qchooser') && hiddenAtStart.has('qerror'), 'the chooser and the error line start hidden in the markup');
-  assert.match(html, /<script src="icons\.js">/, 'the panel loads the app icon set rather than drawing glyphs of its own');
-  // The stylesheet is the other half of this panel and a fake DOM has no CSS engine, so the rules that failed in use
-  // are asserted here against the real file. Two of them looked like broken behaviour and were pure styling: the
-  // finder stayed on screen after a pick had already been committed, and a long member list grew the form out of the
-  // window.
-  const css = fs.readFileSync(__dirname + '/../quick-add.css', 'utf8');
-  const appCss = fs.readFileSync(__dirname + '/../styles.css', 'utf8');
-  const hiddenWorks = /\[hidden\]\s*\{[^}]*display:\s*none/.test(css);
-  for (const id of hiddenAtStart) {
-    const tag = html.match(new RegExp('<[^>]*id="' + id + '"[^>]*>'))[0];
-    const classes = ((tag.match(/class="([^"]+)"/) || ['', ''])[1]).split(' ').filter(Boolean);
-    const ownDisplay = ['#' + id, ...classes.map((name) => '.' + name)]
-      .some((selector) => new RegExp(selector.replace('.', '\\.') + '\\s*\\{[^}]*display:').test(css));
-    assert.ok(!ownDisplay || hiddenWorks,
-      id + ' starts hidden and the panel stylesheet gives it a display of its own, so the hidden property alone leaves it on screen');
-  }
-  assert.match(css, /\.qlist\s*\{[^}]*overflow-y:\s*auto/, 'the member list scrolls on its own');
-  assert.match(css, /\.qlist\s*\{[^}]*min-height:\s*0/, 'and may shrink, or a long list pushes the form out of the window');
-  assert.match(css, /\.qchooser\s*\{[^}]*min-height:\s*0/, 'as may the chooser around it');
-  // The panel is one window of one app: its accent is the app's, not a second blue that only appears here.
-  for (const accent of ['#e8f1fb', '#2b6fcf', '#b7d2f5']) {
-    assert.ok(css.includes(accent), 'the panel uses the app accent ' + accent + ' for its chosen and focused states');
-    assert.ok(appCss.includes(accent), accent + ' is the accent the rest of the app already uses');
-  }
-  for (const [hex] of css.matchAll(/#([0-9a-f]{6})\b/g)) {
-    const [r, g, b] = [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16));
-    if (b - Math.max(r, g) < 24) continue; // greys and near-greys: only a decidedly blue colour is an accent
-    assert.ok(appCss.includes(hex), hex + ' is a blue the panel invents; reuse one the app already has');
-  }
-
-  const MEETING = { id: 'tana:event:01example60000000000000000', title: 'Platform Sync', joinedAt: 111 };
-  const PEOPLE = [{ id: 'tana:user-profile:01examplei0000000000000000', title: 'Andre', me: true },
-    { id: 'tana:user-profile:01examplek0000000000000000', title: 'Renate' }];
-  const settled = (value) => () => Promise.resolve(value);
-  const tick = async () => { for (let i = 0; i < 6; i += 1) await Promise.resolve(); };
-
-  function panel({ context = settled({ meeting: MEETING, members: PEOPLE, me: PEOPLE[0].id }), create, models = ['gpt-5-codex'], demo = false } = {}) {
-    const els = new Map(), keydown = [], created = [], closed = [], asked = [];
-    let focused = null, reopen = null;
-    const makeEl = (id) => {
-      const classes = new Set(), listeners = {};
-      const self = {
-        id, value: '', hidden: hiddenAtStart.has(id), dataset: {}, childNodes: [], text: '',
-        classList: { add: (...names) => names.forEach((name) => classes.add(name)), contains: (name) => classes.has(name) },
-        get className() { return [...classes].join(' '); },
-        set className(value) { classes.clear(); for (const name of String(value).split(' ')) if (name) classes.add(name); },
-        // children win over a directly set string, the way a real element reads back what was appended to it
-        get textContent() { return self.childNodes.length ? self.childNodes.map((kid) => (typeof kid === 'string' ? kid : kid.textContent)).join('') : self.text; },
-        set textContent(value) { self.text = String(value); self.childNodes = []; },
-        focus() { focused = id; },
-        addEventListener(type, fn) { (listeners[type] ||= []).push(fn); },
-        fire(type, event) { for (const fn of listeners[type] || []) fn(event || {}); },
-        replaceChildren(...kids) { self.childNodes = kids; },
-        cloneNode() { const copy = makeEl(self.id); copy.dataset = { ...self.dataset }; copy.text = self.text; return copy; },
-        // enough of a <template> for the icon helper: the markup in, its one element out
-        set innerHTML(markup) { const icon = (String(markup).match(/data-icon="([^"]+)"/) || [])[1];
-          const node = icon ? makeEl('svg') : null; if (node) node.dataset.icon = icon;
-          self.content = { firstElementChild: node }; },
-      };
-      return self;
-    };
-    const el = (id) => { if (!els.has(id)) els.set(id, makeEl(id)); return els.get(id); };
-    const api = {
-      quickContext: () => { asked.push(true); return context(); },
-      quickCreate: (input) => { created.push(input); return create ? create(input) : Promise.resolve({ node: { id: 'tana:text:01examplez0000000000000000' }, assigned: input.assigneeUri, linked: input.meetingId }); },
-      quickClose: () => { closed.push(true); },
-      onQuickOpen: (fn) => { reopen = fn; },
-      codexModels: () => Promise.resolve(models),
-      codexHosts: async () => [{ id: 'local', title: 'This Mac' }, { id: 'donut-id', title: 'Donut' }],
-    };
-    const ctx = {
-      api, console,
-      // the real icons.js sets exactly this global; the markup is stubbed so a glyph can be told apart by name
-      ICONS: { member: '<svg data-icon="member"></svg>', robot: '<svg data-icon="robot"></svg>', brain: '<svg data-icon="brain"></svg>' },
-      localStorage: { getItem: (key) => (key === 'demoMode' ? (demo ? '1' : '0') : 'light') },
-      matchMedia: () => ({ matches: false }),
-      document: {
-        documentElement: { dataset: {} },
-        getElementById: el,
-        createElement: (tag) => makeEl(tag === 'template' ? 'template' : 'row'),
-        addEventListener: (type, fn) => { if (type === 'keydown') keydown.push(fn); },
-      },
-    };
-    vm.runInNewContext(src, ctx);
-    for (const id of els.keys()) assert.ok(markupIds.has(id) || ['template', 'row', 'svg'].includes(id), 'quick-add.js reaches for #' + id + ', which quick-add.html does not have');
-    const key = (k, opts = {}) => { let prevented = false;
-      const event = { key: k, metaKey: !!opts.meta, target: opts.in ? el(opts.in) : el('qtitle'), preventDefault: () => { prevented = true; } };
-      for (const fn of keydown) fn(event); return prevented; };
-    const iconOf = (element) => { const glyph = element.childNodes.find((kid) => kid && kid.dataset && kid.dataset.icon); return glyph ? glyph.dataset.icon : null; };
-    return { el, key, created, closed, asked, iconOf, focus: () => focused, reopen: () => reopen && reopen(),
-      rows: () => el('qlist').childNodes.map((row) => row.textContent),
-      rowIcons: () => el('qlist').childNodes.map(iconOf) };
-  }
-
-  // A meeting the user is in: named, and sent as an id. Typing during the lookup survives it.
-  {
-    const p = panel();
-    assert.equal(p.focus(), 'qtitle', 'the caret starts in the title, before anything is fetched');
-    assert.equal(p.el('qmeeting').textContent, 'Checking for an active meeting…');
-    p.el('qtitle').value = 'Draft the agenda';
-    await tick();
-    assert.equal(p.el('qmeeting').textContent, 'Adding to Platform Sync');
-    assert.ok(p.el('qmeeting').classList.contains('live'));
-    assert.equal(p.el('qtitle').value, 'Draft the agenda', 'a slow meeting lookup never touches what is being typed');
-    assert.ok(p.key('Enter'), 'Enter is the panel\'s own key, not the browser\'s');
-    await tick();
-    assert.deepEqual(plain(p.created), [{ title: 'Draft the agenda', assigneeUri: null, meetingId: MEETING.id, agent: null }],
-      'the meeting goes over as its id, so main pins the task to the event itself');
-    assert.deepEqual(p.closed, [true], 'a created task closes the panel');
-    assert.equal(p.el('qtitle').value, '');
-  }
-  // Demo mode (the outliner's Cmd+K, the same localStorage): nothing from Tana is read to show, and nothing is written.
-  {
-    const p = panel({ demo: true });
-    await tick();
-    assert.deepEqual([p.asked.length, p.el('qmeeting').textContent], [0, 'Demo mode is on: nothing is saved to Tana'], 'demo mode neither asks for the meeting and members nor names them');
-    p.el('qtitle').value = 'Draft the agenda';
-    p.key('Enter');
-    await tick();
-    assert.deepEqual([p.created.length, p.el('qerror').textContent, p.el('qtitle').value], [0, 'Demo mode is on: nothing is saved to Tana', 'Draft the agenda'], 'and a submit creates nothing, says why and keeps the words');
-  }
-  // No meeting, and a lookup that failed: both say so, and neither invents a link.
-  {
-    const none = panel({ context: settled({ meeting: null, members: PEOPLE }) });
-    await tick();
-    assert.equal(none.el('qmeeting').textContent, 'No active meeting');
-    none.el('qtitle').value = 'Solo task';
-    none.key('Enter');
-    await tick();
-    assert.equal(plain(none.created)[0].meetingId, null, 'an unlinked task is still created');
-    const broken = panel({ context: () => Promise.reject(new Error('graph unavailable')) });
-    await tick();
-    assert.equal(broken.el('qmeeting').textContent, 'Could not check meetings');
-    broken.el('qtitle').value = 'Still usable';
-    broken.key('Enter');
-    await tick();
-    assert.equal(plain(broken.created)[0].meetingId, null, 'and a failed lookup links nothing rather than guessing');
-  }
-  // Nothing empty, and nothing twice.
-  {
-    const p = panel({ create: () => new Promise(() => {}) });
-    await tick();
-    p.key('Enter');
-    await tick();
-    assert.deepEqual(p.created, [], 'an empty title creates nothing');
-    assert.deepEqual([p.el('qerror').textContent, p.el('qerror').hidden], ['A task needs a title', false]);
-    p.el('qtitle').value = 'One task';
-    p.key('Enter');
-    p.key('Enter');
-    await tick();
-    assert.equal(p.created.length, 1, 'a second Enter while the write is in flight creates no second task');
-    assert.deepEqual(p.closed, [], 'and nothing closes until the write comes back');
-  }
-  // A failed create is recoverable: the text stays, the reason shows, the next Enter retries.
-  {
-    let failing = true;
-    const p = panel({ create: () => (failing ? Promise.reject(new Error('Write permission is unknown or unavailable')) : Promise.resolve({ node: { id: 'tana:text:01examplez0000000000000000' } })) });
-    await tick();
-    p.el('qtitle').value = 'Keep me';
-    p.key('Enter');
-    await tick();
-    assert.equal(p.el('qtitle').value, 'Keep me', 'a failed create keeps every character');
-    assert.equal(p.el('qerror').textContent, 'Write permission is unknown or unavailable');
-    assert.deepEqual(p.closed, [], 'and the panel stays open to try again');
-    failing = false;
-    p.key('Enter');
-    await tick();
-    assert.deepEqual([p.created.length, p.closed.length], [2, 1], 'the retry is the same one path, and it closes');
-  }
-  // The assignee chooser is reachable, filterable and dismissable without a mouse, and yields a real uri.
-  {
-    const p = panel();
-    await tick();
-    assert.equal(p.el('qchooser').hidden, true);
-    p.key('Tab');
-    assert.deepEqual([p.el('qchooser').hidden, p.focus()], [false, 'qfilter']);
-    assert.deepEqual(p.rows(), ['Agent', 'Andre', 'Renate'], 'the agent is offered alongside the people');
-    p.el('qfilter').value = 'ren';
-    p.el('qfilter').fire('input');
-    assert.deepEqual(p.rows(), ['Renate'], 'the list filters as the name is typed');
-    p.key('Enter');
-    assert.deepEqual([p.el('qassignee').textContent, p.el('qchooser').hidden, p.focus()], ['Renate', true, 'qtitle'],
-      'picking returns the caret to the title');
-    assert.equal(p.iconOf(p.el('qassignee')), 'member', 'a person is shown with the app\'s member glyph');
-    assert.ok(p.el('qassignee').classList.contains('set'));
-    p.el('qtitle').value = 'Assigned task';
-    p.key('Enter');
-    await tick();
-    assert.equal(plain(p.created)[0].assigneeUri, PEOPLE[1].id, 'the assignee is a member uri, never a typed name');
-  }
-  // Arrow keys move the highlight, and picking the chosen person again clears the choice.
-  {
-    const p = panel();
-    await tick();
-    p.key('ArrowDown');
-    assert.equal(p.el('qchooser').hidden, false, 'Down opens the chooser from the title');
-    p.key('ArrowDown');
-    p.key('ArrowDown');
-    p.key('Enter');
-    assert.equal(p.el('qassignee').textContent, 'Renate');
-    p.key('Tab'); p.key('ArrowDown'); p.key('ArrowDown'); p.key('Enter');
-    assert.equal(p.el('qassignee').textContent, 'Assign to…', 'choosing the same person again clears the assignment');
-    assert.equal(p.iconOf(p.el('qassignee')), null, 'and the pill goes back to carrying no glyph');
-  }
-  // Escape unwinds one level at a time.
-  {
-    const p = panel();
-    await tick();
-    p.key('Tab');
-    p.key('Escape');
-    assert.deepEqual([p.el('qchooser').hidden, p.closed.length], [true, 0], 'Escape closes the chooser first');
-    p.key('Escape');
-    assert.deepEqual(p.closed, [true], 'and then the panel');
-  }
-  // Every press of the shortcut re-reads the meeting and keeps the half-typed title.
-  {
-    let meeting = MEETING;
-    const p = panel({ context: () => Promise.resolve({ meeting, members: PEOPLE }) });
-    await tick();
-    assert.equal(p.asked.length, 1);
-    p.el('qtitle').value = 'Half typed';
-    meeting = null;
-    p.reopen();
-    await tick();
-    assert.equal(p.asked.length, 2, 'the meeting is read again on every open, not cached from the first');
-    assert.deepEqual([p.el('qmeeting').textContent, p.el('qtitle').value, p.focus()], ['No active meeting', 'Half typed', 'qtitle']);
-  }
-  // A workspace with a long member list: bounded by the stylesheet, never by dropping people, and the search and the
-  // keyboard work exactly as they do with two.
-  {
-    const many = Array.from({ length: 200 }, (_, i) => ({ id: 'tana:user-profile:' + String(i).padStart(26, '0'), title: 'Person ' + i }));
-    const p = panel({ context: settled({ meeting: MEETING, members: many }) });
-    await tick();
-    p.key('Tab');
-    assert.equal(p.rows().length, 201, 'every member is listed behind the agent row; the list scrolls rather than being truncated');
-    p.key('ArrowUp');
-    p.key('Enter');
-    assert.equal(p.el('qassignee').textContent, 'Person 199', 'Up from the first row wraps to the last of a long list');
-    p.key('Tab');
-    p.el('qfilter').value = 'person 17';
-    p.el('qfilter').fire('input');
-    assert.deepEqual(p.rows().slice(0, 2), ['Person 17', 'Person 170'], 'and the search still narrows it');
-    p.key('Enter');
-    assert.deepEqual([p.el('qchooser').hidden, p.focus()], [true, 'qtitle'],
-      'a pick from a long list dismisses the finder and puts the caret back in the title');
-    p.el('qtitle').value = 'Long list task';
-    p.key('Enter');
-    await tick();
-    assert.equal(plain(p.created)[0].assigneeUri, many[17].id, 'and it is the person that was highlighted');
-  }
-  // The agent is an option in the same finder, and it is not a person: no Tana assignee is ever sent for it.
-  {
-    const p = panel();
-    await tick();
-    p.key('Tab');
-    assert.deepEqual([p.rows()[0], p.rowIcons()[0]], ['Agent', 'robot'], 'the agent leads the list, with its own glyph');
-    p.el('qfilter').value = 'age';
-    p.el('qfilter').fire('input');
-    assert.deepEqual(p.rows(), ['Agent'], 'and it is found by typing like any other row');
-    p.key('Enter');
-    assert.deepEqual([p.el('qassignee').textContent, p.iconOf(p.el('qassignee'))], ['Agent', 'robot']);
-    assert.deepEqual([p.el('qchooser').hidden, p.el('qprompt').hidden, p.focus()], [true, false, 'qprompt'],
-      'the finder closes and the caret lands in the prompt the agent needs');
-    p.el('qtitle').value = 'Ship the release notes';
-    p.key('Enter', { in: 'qprompt' });
-    assert.deepEqual(p.created, [], 'a bare Enter in the prompt is a newline, not a submit');
-    p.key('Enter');
-    await tick();
-    assert.deepEqual([p.created.length, p.el('qerror').textContent], [0, 'Tell the agent what to do'],
-      'and the agent is never handed a task with no instruction');
-    p.el('qprompt').value = 'Draft them from the changelog';
-    p.key('Enter', { in: 'qprompt', meta: true });
-    await tick();
-    assert.deepEqual(plain(p.created), [{ title: 'Ship the release notes', assigneeUri: null, meetingId: MEETING.id, agent: { prompt: 'Draft them from the changelog', model: '', host: 'local' } }],
-      'the agent goes over as a prompt and a model, never as a user uri');
-    assert.deepEqual([p.closed, p.el('qprompt').hidden, p.el('qassignee').textContent], [[true], true, 'Assign to…'],
-      'and the panel resets to a plain task afterwards');
-  }
-  // The model for this one assignment, from Codex's own list, in the same chooser.
-  {
-    const p = panel({ models: ['gpt-5-codex', 'o4-mini'] });
-    await tick();
-    p.key('Tab'); p.key('Enter'); // Agent
-    p.key('Tab');
-    await tick();
-    assert.deepEqual(p.rows(), ['Assign to someone else…', 'Codex default', 'gpt-5-codex', 'o4-mini', 'Run on…'],
-      'with the agent chosen, the same finder offers the models, a way back to the people, and the machines last');
-    p.key('ArrowDown'); p.key('ArrowDown'); p.key('Enter');
-    assert.deepEqual([p.el('qassignee').textContent, p.focus()], ['Agent · gpt-5-codex', 'qprompt'],
-      'the choice shows on the pill and the caret goes back to the prompt');
-    // Where it runs travels with the rest: "Run on…" is the last row of the model list, the machines behind it come
-    // from the registry, and the payload carries the opaque id. The default is this Mac for every new panel session,
-    // which is what the submit above asserts.
-    p.el('qtitle').value = 'Model task';
-    p.el('qprompt').value = 'Do the thing';
-    p.key('Enter', { meta: true, in: 'qassignee' });
-    await tick();
-    assert.equal(plain(p.created)[0].agent.model, 'gpt-5-codex', 'and it is sent with the assignment');
-  }
-  // Going back to a person from the agent, and the other way: one of them holds the task, never both.
-  {
-    const p = panel();
-    await tick();
-    p.key('Tab'); p.key('Enter'); // Agent
-    p.el('qprompt').value = 'something';
-    p.key('Tab'); // the model list
-    await tick();
-    p.key('Enter'); // "Assign to someone else…"
-    assert.deepEqual(p.rows(), ['Agent', 'Andre', 'Renate'], 'the back row returns the finder to the people');
-    p.key('ArrowDown'); p.key('ArrowDown'); p.key('Enter');
-    assert.deepEqual([p.el('qassignee').textContent, p.iconOf(p.el('qassignee')), p.el('qprompt').hidden, p.el('qprompt').value],
-      ['Renate', 'member', true, ''], 'choosing a person takes the task off the agent, prompt and all');
-    p.el('qtitle').value = 'Back to a person';
-    p.key('Enter');
-    await tick();
-    assert.deepEqual([plain(p.created)[0].agent, plain(p.created)[0].assigneeUri], [null, PEOPLE[1].id]);
-  }
-  // Cmd+Enter creates from anywhere, through the same guarded submit: the finder must not swallow it, and it is
-  // refused for an empty title exactly as a bare Enter is.
-  {
-    const p = panel({ create: () => new Promise(() => {}) });
-    await tick();
-    p.key('Enter', { meta: true });
-    assert.deepEqual([p.created.length, p.el('qerror').textContent], [0, 'A task needs a title'], 'the empty guard still holds');
-    p.el('qtitle').value = 'From the finder';
-    p.key('Tab');
-    assert.equal(p.el('qchooser').hidden, false);
-    assert.ok(p.key('Enter', { meta: true, in: 'qfilter' }), 'Cmd+Enter is answered by the panel, not left to the field');
-    await tick();
-    assert.equal(p.created.length, 1, 'with the finder open, Cmd+Enter creates rather than picking a row');
-    p.key('Enter', { meta: true, in: 'qfilter' });
-    await tick();
-    assert.equal(p.created.length, 1, 'and the in-flight guard covers it too');
-  }
-  console.log('ok  quick add panel: meeting states, empty/duplicate/Cmd+Enter submit, the agent with its prompt and model, member and robot glyphs, keyboard assignee, escape, retry, re-open and a long member list');
-}
 
 // A reload used to leave every linked task grey: the status read was gated on the set of assigned ids, which is
 // filled asynchronously and is still empty when the first load runs. Main knows the links; the renderer must ask.
@@ -6891,7 +6555,7 @@ async function runToastCheck() {
   console.log('ok  toast: notices and errors fade at the foot of the window and leave the relogin line alone');
 }
 
-const checks = [runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runAgentStatusBootCheck, runQuickAddPanelCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck,runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck];
+const checks = [runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck,runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck];
 // The chips under a zoomed title, driven through the shipped line itself: a typed document shows its type whatever
 // kind it is, and the kind chip (task, doc, meeting, space, chat…) stays out of the header, as it always did for a task.
 function runZoomTypeChipCheck() {

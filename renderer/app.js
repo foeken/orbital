@@ -57,9 +57,16 @@ if (tana.onToPlace) tana.onToPlace(() => {
 });
 // The line between the halves is dragged from a grip on each half's inner edge; main reads the cursor and moves the
 // line (main.js window:splitDrag), and a double click evens the halves out again. Over either grip both halves draw
-// their half of the swap pill (main.js window:splitHover), so it sits whole on the line.
+// their half of the swap pill (main.js window:splitHover), so it sits whole on the line; a click on either half of
+// it swaps the panes, as Cmd+K "Swap panes" does, and is neither a drag nor a double click on the line.
 const splitGrip = $('splitGrip');
-{ const svg = iconNode('swapPanes'); if (svg) splitGrip.firstElementChild.append(svg); }
+const splitPill = splitGrip.firstElementChild;
+{ const svg = iconNode('swapPanes'); if (svg) splitPill.append(svg); }
+keyTitle(splitPill, 'Swap panes', 'swapPanes');
+splitPill.addEventListener('pointerdown', (e) => e.stopPropagation()); // not the start of a drag
+splitPill.onmousedown = (e) => e.preventDefault(); // the caret stays in its row
+splitPill.onclick = (e) => { if (e.detail < 2) tana.swapPanes(); }; // a double click swaps once, not back again
+splitPill.ondblclick = (e) => e.stopPropagation(); // and does not even the halves out
 function showSplitGrip(split) { splitGrip.hidden = !split; splitGrip.classList.toggle('left', SIDE !== ':2'); splitGrip.classList.remove('on'); }
 showSplitGrip(tana.paneSplit === true);
 splitGrip.addEventListener('pointerenter', () => tana.splitHover?.(true));
@@ -178,7 +185,7 @@ if (tana.onSettings) tana.onSettings((next) => {
 });
 if (tana.onSystemTheme) tana.onSystemTheme((t) => { if (themePref === 'system') applyTheme(t); }); // macOS appearance changes re-theme a running window
 if (themePref === 'system') showTheme('system');
-loadRoots().then(render, showError).then(restorePlace).then(loadFilters);
+loadRoots().then(render, showError).then(restorePlace).then(helpOnce).then(loadFilters); // the tour opens over the page it came back to
 // Cmd+K only: never blocks the first paint. Boot almost always races the sync connect (main creates the window
 // before S.client exists, so main/views.js:searchList answers []), so this alone would usually leave the group
 // empty; showStatus's connect edge above re-runs it once a client actually exists. Called here too so a session

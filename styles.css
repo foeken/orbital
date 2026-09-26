@@ -248,6 +248,9 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 .pills { position: relative; z-index: 5; display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 32px 12px; }
 .pills[hidden] { display: none; }
 .pill { position: relative; border: 0; border-radius: 999px; padding: 6px 14px; background: #e8f1fb; color: #4f8ad9; font-weight: 600; font-size: 15px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+/* ...and the same spring would put the pills of a second line over the menu, so the pill carrying one (arriving or
+   leaving) sits above its neighbours */
+.pill:has(> .menu) { z-index: 1; }
 .pill b { color: #2b6fcf; font-weight: 700; }
 .pill svg { width: 16px; height: 16px; }
 /* Refresh is a header button beside the fold one (renderer/pills.js), and it answers the press before the query
@@ -294,6 +297,11 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 .menu .mrow.disabled:hover { background: none; }
 .menu .mrow.disabled .micon { color: #bbb; }
 .menu .mhead { padding: 10px 12px 4px; font-size: 13px; font-weight: 600; color: #999; user-select: none; }
+/* a searchable menu's typing line (renderer/pills.js menuEl): pinned above the rows it narrows */
+.menu .msearch { position: sticky; top: -8px; z-index: 1; display: flex; align-items: center; gap: 12px; margin: -8px -8px 6px; padding: 14px 20px 10px; background: inherit; border-bottom: 1px solid #ececec; font-size: 16px; user-select: none; }
+.menu .msearch.empty { color: #999; }
+.menu .msearch .micon { flex: none; width: 18px; height: 18px; color: #999; }
+.menu .msearch .micon svg { display: block; width: 18px; height: 18px; }
 .menu .mdiv { height: 1px; margin: 6px 4px; background: #e6e6e6; }
 
 .scroll { position: relative; flex: 1; overflow-y: auto; padding: 4px 32px 40px 16px; } /* 4px at the top: the first row's focus ring (2px, 2px out) is drawn outside the row, and a scroll box clips at its edge; relative: the loading animation fills it */
@@ -312,6 +320,7 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 .splitpill { position: absolute; top: 50%; left: -13px; width: 26px; height: 28px; margin-top: -14px; box-sizing: border-box; display: none; place-items: center;
   border: 1px solid #e3e3e3; border-radius: 8px; background: #fff; color: #8a8a8a; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); }
 .splitgrip.left .splitpill { left: auto; right: -13px; }
+.splitpill { cursor: pointer; } /* a button on the line: it swaps the panes (renderer/app.js), the line around it resizes */
 .splitgrip:is(:hover, .on, .dragging) .splitpill { display: grid; }
 .splitpill svg { width: 16px; height: 16px; }
 .rail .rhead { display: flex; align-items: center; gap: 6px; width: 100%; border: 0; background: none; margin-top: 18px; padding: 10px 6px 4px; cursor: pointer;
@@ -803,6 +812,17 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
   background: #fff; border-radius: 12px; box-shadow: 0 12px 40px rgba(0, 0, 0, .18), 0 0 0 1px rgba(0, 0, 0, .05);
 }
 .palette input { border: 0; outline: none; font: inherit; font-size: 17px; color: #1a1a1a; padding: 16px 20px; border-bottom: 1px solid #eee; }
+/* Create task (task.html): the palette's card, with a line saying why the task could not be made */
+.palette .terror { padding: 10px 20px 0; font-size: 13px; color: #d0433a; }
+/* what the task will be and who it is for, under the field; a click or ⇥ there chooses someone else */
+.palette:has(#taskPicks:not([hidden])) input { border-bottom: 0; } /* the picks line takes the field's divider; "Assign to…" gives it back */
+.palette:has(#taskTypes[hidden]) .tpicks { border-bottom: 0; } /* nothing under it to divide off */
+.palette .tpicks { display: flex; align-items: center; gap: 4px; padding: 0 20px 12px; border-bottom: 1px solid #eee; font-size: 13px; color: #8a8a8a; cursor: pointer; user-select: none; }
+.palette .tpicks[hidden] { display: none; }
+.palette .tpicks b { font-weight: 500; color: #555; }
+.palette .tpicks kbd { margin-left: auto; }
+[data-theme="dark"] .palette .tpicks { border-bottom-color: #3a3f41; color: #858b8e; }
+[data-theme="dark"] .palette .tpicks b { color: #c9c9c9; }
 .palette input::placeholder { color: #999; }
 /* the prompt page: the same field the palette always shows, with room for a few lines (↩ is a newline here) */
 .palette .ptext { border: 0; outline: none; resize: none; font: inherit; font-size: 17px; line-height: 24px; color: #1a1a1a; padding: 16px 20px; border-bottom: 1px solid #eee; background: #fff; }
@@ -933,6 +953,7 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 [data-theme="dark"] .menu .mrow .tick { color: #c9c9c9; }
 [data-theme="dark"] .menu .mhead { color: #858b8e; }
 [data-theme="dark"] .menu .mdiv { background: #3a3f41; }
+[data-theme="dark"] .menu .msearch { border-color: #3a3f41; }
 
 [data-theme="dark"] .chev::before { border-color: #555b5e; background: #282b2d; }
 [data-theme="dark"] .chev::after { border-color: #adb1b2; }
@@ -1119,3 +1140,203 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 
 /* Page: a theme change crossfades the whole window (renderer/motion.js crossfade) at the base pace. */
 ::view-transition-group(root) { animation-duration: var(--dur-base); animation-timing-function: var(--ease-out); }
+
+/* Help (help.html, help.js): a modal <dialog> of a few pages, each a stage with a short loop of the keys at work over its
+   words. The stage's plain rules are the scene's last frame, which is what reduced motion shows; the loops live only
+   under no-preference, all one --hv-loop long, so a keycap's delay lines it up with the scene it presses in. */
+body.overlaypage, [data-theme="dark"] body.overlaypage { background: transparent; } /* help.html, task.html: only the scrim and the card over the window's pages */
+.help { position: fixed; inset: 0; width: auto; height: auto; max-width: none; max-height: none; margin: 0; padding: 9vh 24px 0; border: 0;
+  background: rgba(0, 0, 0, .12); color: inherit; justify-content: center; align-items: flex-start; -webkit-app-region: no-drag; }
+.help[open] { display: flex; }
+.help::backdrop { background: none; }
+.help { transition: opacity var(--dur-base) var(--ease-out); }
+@starting-style { .help[open] { opacity: 0; } .help[open] .card { opacity: 0; transform: translateY(-8px) scale(.97); } }
+.help .card { position: relative; width: 100%; max-width: 600px; overflow: hidden; background: #fff; border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .18), 0 0 0 1px rgba(0, 0, 0, .05); transition: transform var(--dur-base) var(--ease-out), opacity var(--dur-base) var(--ease-out); }
+.help .hclose { position: absolute; top: 10px; right: 10px; z-index: 2; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 6px; background: none; color: #999; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.help .hclose:hover { background: rgba(0, 0, 0, .06); color: #555; }
+.help i { display: contents; }
+.help .hclose svg { width: 16px; height: 16px; }
+/* the pages share one cell, so the card is as tall as the tallest and never jumps; the one on screen slides in from
+   the side it comes from */
+.help .hpages { display: grid; grid-template-columns: minmax(0, 1fr); } /* as wide as the card, whatever a stage holds */
+.help .hpage { grid-area: 1 / 1; opacity: 0; visibility: hidden; transform: translateX(28px);
+  transition: opacity var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-out), visibility 0s linear var(--dur-base); }
+.help .hpage.before { transform: translateX(-28px); }
+.help .hpage.on { opacity: 1; visibility: visible; transform: none; transition-delay: 0s; }
+.help h2 { margin: 24px 28px 10px; font-size: 21px; font-weight: 650; letter-spacing: -.3px; color: #1c2024; }
+.help p { margin: 0 28px; font-size: 15px; line-height: 1.85; color: #45484c; }
+.help p b { font-weight: 600; color: #1c2024; }
+.help kbd { font: inherit; font-size: 13px; line-height: 1; color: #45484c; background: #f1f1f1; border-radius: 5px; padding: 3px 6px; box-shadow: inset 0 -1px 0 rgba(0, 0, 0, .1); white-space: nowrap; }
+.help .hkeys { list-style: none; margin: 0 28px; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 12px 24px; font-size: 14.5px; line-height: 1.75; color: #45484c; }
+.help .hfoot { display: flex; align-items: center; gap: 8px; padding: 22px 28px 20px; }
+.help .spacer { flex: 1; }
+.help .hdots { display: flex; gap: 6px; }
+.help .hdots button { width: 7px; height: 7px; padding: 0; border: 0; border-radius: 4px; background: #d8d8d8; cursor: pointer; transition: width var(--dur-base) var(--ease-out), background-color var(--dur-base) var(--ease-out); }
+.help .hdots button.on { width: 20px; background: #508fbb; }
+.help .hfoot > button { border: 0; border-radius: 7px; background: #f1f1f1; color: #1a1a1a; font-size: 13.5px; padding: 6px 14px; cursor: pointer; outline-offset: 2px; }
+.help .hfoot > button:hover { background: #e6e6e6; }
+.help .hfoot > button:disabled { visibility: hidden; }
+.help .hfoot > button.primary { background: #1c2024; color: #fff; }
+.help .hfoot > button.primary:hover { background: #3a3f44; }
+.help .hfoot > button:active:not(:disabled) { transform: scale(.95); }
+
+/* the stage and the few things drawn on it: a palette card, outline rows, a task box, a keycap */
+.hv { --hv-loop: 6s; --hv-ink: #1a1a1a; --hv-box: #e4e4e4; --hv-active: #f0f0f0; --hv-run: #d6e6f3; position: relative; height: 240px; overflow: hidden; background: #f5f6f7; display: flex; justify-content: center; align-items: flex-start; padding-top: 22px; font-size: 14px; color: #1a1a1a; }
+.hv .hv-pal { width: 340px; overflow: hidden; background: #fff; border-radius: 10px; box-shadow: 0 8px 24px rgba(0, 0, 0, .08), 0 0 0 1px rgba(0, 0, 0, .05); padding-bottom: 6px; }
+.hv .hv-input { height: 42px; margin-bottom: 6px; padding: 0 14px; display: flex; align-items: center; border-bottom: 1px solid #eee; font-size: 15px; }
+.hv .hv-caret { width: 1.5px; height: 18px; margin-left: 1px; background: #508fbb; }
+.hv .hv-row { height: 32px; margin: 0 6px; padding: 0 10px; display: flex; align-items: center; gap: 10px; border-radius: 7px; overflow: hidden; white-space: nowrap; }
+.hv .hv-row svg { display: block; width: 15px; height: 15px; color: #8a8a8a; }
+.hv .hv-active { background: var(--hv-active); }
+.hv .hv-line { height: 30px; display: flex; align-items: center; gap: 10px; font-size: 15px; white-space: nowrap; }
+.hv .hv-dot { flex: none; width: 5px; height: 5px; margin: 0 5.5px; border-radius: 50%; background: #9a9a9a; }
+.hv .hv-child { padding-left: 26px; }
+.hv .hv-check { flex: none; position: relative; width: 16px; height: 16px; border-radius: 4.5px; background: #6fae82; }
+.hv .hv-check::after { content: ""; position: absolute; inset: 0;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18' fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 8.7l3.3 3.3 6.9-6.9'/%3E%3C/svg%3E") center / 100% no-repeat; }
+.hv .hv-check.hv-inbox { background: none; border: 1.5px dashed #b8b8b8; border-radius: 3px; }
+.hv .hv-check.hv-inbox::after { content: none; }
+.hv .hv-task .hv-title { color: #999; text-decoration: line-through; }
+.hv .hv-task:has(.hv-inbox) .hv-title { color: inherit; text-decoration: none; }
+.hv .hv-press { position: absolute; right: 18px; bottom: 16px; font-size: 16px; padding: 6px 11px; color: #333; background: #fff; border-radius: 8px;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, .14), 0 3px 10px rgba(0, 0, 0, .08); opacity: 0; }
+.hv .hv-toast { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); padding: 7px 14px; border-radius: 8px; background: #1f2328; color: #fff; font-size: 13px; opacity: 0; }
+
+/* 1 Welcome: the Orbital mark, a moon going round it (behind the planet on the far side), and the three keys */
+.hv-welcome { flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 0; }
+.hv-orbit { position: relative; width: 160px; height: 150px; }
+.hv-planet { position: absolute; left: 50%; top: 50%; z-index: 1; width: 72px; height: 72px; margin: -36px; border-radius: 50%;
+  background: radial-gradient(circle at 34% 30%, #a9d0ec, #508fbb 68%, #3f7aa3); box-shadow: inset -7px -9px 16px rgba(0, 0, 0, .16); }
+.hv-tilt { position: absolute; inset: -5px 0; transform: rotate(-22deg); }
+.hv-tilt svg { width: 100%; height: 100%; overflow: visible; }
+.hv-tilt :is(ellipse, path) { fill: none; stroke: #97b7ce; } /* 1.5 wide, set on the shapes: not an icon's weight */
+.hv-tilt.hv-front { z-index: 2; } /* the near half of the ring crosses in front of the planet */
+.hv-moonbox { z-index: 3; } /* in front on the near half, behind the planet on the far one (hv-moon-z) */
+.hv-moon { position: absolute; left: 0; top: 0; width: 10px; height: 10px; border-radius: 50%; background: #1c2024;
+  offset-path: path('M10,80 A70,22 0 0 0 150,80 A70,22 0 0 0 10,80'); offset-rotate: 0deg; offset-distance: 12%; }
+.hv-keys { display: flex; gap: 10px; }
+.hv-keys kbd { font-size: 16px; padding: 7px 12px; background: #fff; color: #333; border-radius: 8px; box-shadow: 0 1px 0 rgba(0, 0, 0, .14), 0 3px 10px rgba(0, 0, 0, .06); }
+
+/* 2 ⌘K: the palette opens, "pin" is typed, what does not match folds away, Enter runs the first row */
+.hv-cmd .hv-typed::after { content: 'pin'; }
+.hv-cmd .hv-drop { height: 0; opacity: 0; }
+
+/* 3 Outline: Enter makes a row, Tab indents it, ⌘↩ completes the task above */
+.hv-outline { padding-top: 44px; flex-direction: column; align-items: center; }
+.hv-outline > .hv-line { width: 320px; }
+.hv-outline .hv-typed::after { content: 'Book a room'; }
+
+/* 4 Linking: "@Fou" finds Foundry, Enter turns it into a link */
+.hv-link { padding-top: 70px; }
+.hv-link > .hv-line { position: relative; width: 380px; }
+.hv-link .hv-chip { color: #508fbb; text-decoration: underline; text-underline-offset: 2px; display: inline-block; overflow: hidden; vertical-align: bottom; } /* overflow moves an inline-block's baseline to its bottom edge */
+.hv-link .hv-typed::after { content: ''; } /* the box the typing animation writes into: without a content of its own it is never made */
+.hv-link .hv-caret { display: inline-block; vertical-align: -3px; } /* after the chip, so it follows the "@Fou" and then the link */
+.hv-link .hv-drop-menu { position: absolute; left: calc(50% + 12px); top: 106px; width: 210px; padding: 5px 0; background: #fff; border-radius: 9px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .1), 0 0 0 1px rgba(0, 0, 0, .05); opacity: 0; }
+.hv-link .hv-drop-menu .hv-row { margin: 0 5px; height: 30px; }
+
+/* 5 Your day: the Work View, a task created from its title alone, a task ticked */
+.hv-day { gap: 12px; align-items: flex-start; padding-top: 24px; }
+.hv-pane { width: 230px; height: 176px; padding: 12px 14px; background: #fff; border-radius: 10px; box-shadow: 0 0 0 1px rgba(0, 0, 0, .05); }
+.hv-pane > b { display: block; margin-bottom: 8px; font-size: 13px; font-weight: 650; }
+.hv-tl { padding: 6px 0 6px 10px; border-left: 2px solid #e2e5e8; font-size: 12.5px; color: #555; }
+.hv-tl i { font-style: normal; font-weight: 600; color: #1a1a1a; }
+.hv-day .hv-line { height: 28px; font-size: 13px; gap: 8px; }
+.hv-day .hv-check { width: 14px; height: 14px; }
+.hv-quick { position: absolute; left: 50%; top: 70px; width: 300px; height: 42px; padding: 0 14px; display: flex; align-items: center; transform: translateX(-50%);
+  background: #fff; border-radius: 10px; box-shadow: 0 10px 30px rgba(0, 0, 0, .16), 0 0 0 1px rgba(0, 0, 0, .06); font-size: 15px; opacity: 0; }
+.hv-quick .hv-typed::after { content: 'Call the supplier'; }
+
+/* 6 Your keys: ⇧⌘K on a row, three keys recorded, and the row wears them */
+.hv-keys-demo { flex-direction: column; align-items: center; gap: 14px; padding-top: 36px; }
+.hv-keys-demo .hv-pal { padding: 6px 0; }
+.hv-keys-demo .hv-row { justify-content: flex-start; }
+.hv-own { margin-left: auto; font-size: 12px; }
+.hv-rec { display: flex; gap: 12px; padding: 12px 26px; font-size: 30px; color: #666; background: #fff; border-radius: 10px; box-shadow: 0 0 0 1px rgba(0, 0, 0, .06); opacity: 0; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .hpage.on .hv-press { animation: hv-press var(--hv-loop) linear infinite both; }
+  .hpage.on .hv-at5 { animation-delay: .3s; } .hpage.on .hv-at10 { animation-delay: .6s; } .hpage.on .hv-at30 { animation-delay: 1.8s; }
+  .hpage.on .hv-at35 { animation-delay: 2.1s; } .hpage.on .hv-at42 { animation-delay: 2.52s; } .hpage.on .hv-at50 { animation-delay: 3s; }
+  .hpage.on .hv-at55 { animation-delay: 3.3s; } .hpage.on .hv-at60 { animation-delay: 3.6s; }
+  .hpage.on .hv-caret { animation: hv-blink 1s steps(1) infinite; }
+  /* 1 */
+  .hpage.on .hv-moon { animation: hv-moon 7s linear infinite; }
+  .hpage.on .hv-moonbox { animation: hv-moon-z 7s linear infinite; }
+  .hpage.on .hv-keys kbd { animation: pop-in var(--dur-slow) var(--ease-spring) backwards; }
+  .hpage.on .hv-keys kbd:nth-child(1) { animation-delay: .25s; } .hpage.on .hv-keys kbd:nth-child(2) { animation-delay: .4s; } .hpage.on .hv-keys kbd:nth-child(3) { animation-delay: .55s; }
+  /* 2 */
+  .hpage.on .hv-cmd .hv-pal { animation: hv-cmd-card var(--hv-loop) var(--ease-out) infinite both; }
+  .hpage.on .hv-cmd .hv-typed::after { animation: hv-type-pin var(--hv-loop) infinite both; }
+  .hpage.on .hv-cmd .hv-drop { animation: hv-cmd-drop var(--hv-loop) var(--ease-out) infinite both; }
+  .hpage.on .hv-cmd .hv-active { animation: hv-cmd-run var(--hv-loop) infinite both; }
+  .hpage.on .hv-cmd .hv-toast { animation: hv-cmd-toast var(--hv-loop) var(--ease-out) infinite both; }
+  /* 3 */
+  .hpage.on .hv-outline .hv-new { animation: hv-out-new var(--hv-loop) var(--ease-out) infinite both; }
+  .hpage.on .hv-outline .hv-typed::after { animation: hv-type-room var(--hv-loop) infinite both; }
+  .hpage.on .hv-outline .hv-check { animation: hv-tick var(--hv-loop) infinite both; }
+  .hpage.on .hv-outline .hv-check::after { animation: hv-tick-mark var(--hv-loop) infinite both; }
+  .hpage.on .hv-outline .hv-task .hv-title { animation: hv-strike var(--hv-loop) infinite both; }
+  /* 4 */
+  .hpage.on .hv-link .hv-typed::after { animation: hv-type-at var(--hv-loop) infinite both; }
+  .hpage.on .hv-link .hv-drop-menu { animation: hv-link-menu var(--hv-loop) var(--ease-out) infinite both; }
+  .hpage.on .hv-link .hv-chip { animation: hv-link-chip var(--hv-loop) var(--ease-spring) infinite both; }
+  /* 5 */
+  .hpage.on .hv-tl { animation: hv-day-tl var(--hv-loop) var(--ease-out) infinite both; }
+  .hpage.on .hv-tl:nth-child(3) { animation-delay: .15s; } .hpage.on .hv-tl:nth-child(4) { animation-delay: .3s; }
+  .hpage.on .hv-quick { animation: hv-day-quick var(--hv-loop) var(--ease-out) infinite both; }
+  .hpage.on .hv-quick .hv-typed::after { animation: hv-type-call var(--hv-loop) infinite both; }
+  .hpage.on .hv-day .hv-new { animation: hv-day-new var(--hv-loop) var(--ease-out) infinite both; }
+  .hpage.on .hv-day .hv-check:not(.hv-inbox) { animation: hv-tick var(--hv-loop) infinite both; }
+  .hpage.on .hv-day .hv-check:not(.hv-inbox)::after { animation: hv-tick-mark var(--hv-loop) infinite both; }
+  .hpage.on .hv-day .hv-task:not(:has(.hv-inbox)) .hv-title { animation: hv-strike var(--hv-loop) infinite both; }
+  /* 6 */
+  .hpage.on .hv-rec { animation: hv-keys-rec var(--hv-loop) var(--ease-out) infinite both; }
+  .hpage.on .hv-rec span { animation: hv-keys-pop var(--hv-loop) var(--ease-spring) infinite both; }
+  .hpage.on .hv-rec span:nth-child(2) { animation-delay: .36s; } .hpage.on .hv-rec span:nth-child(3) { animation-delay: .72s; }
+  .hpage.on .hv-own { animation: hv-keys-own var(--hv-loop) var(--ease-spring) infinite both; }
+}
+@keyframes hv-blink { 50% { opacity: 0; } }
+@keyframes hv-press { 0% { opacity: 0; transform: translateY(8px) scale(.9); } 3% { opacity: 1; transform: none; } 6% { transform: translateY(2px) scale(.92); box-shadow: 0 0 0 rgba(0, 0, 0, .14); } 10% { transform: none; } 17% { opacity: 1; } 22%, 100% { opacity: 0; } }
+@keyframes hv-moon { from { offset-distance: 0%; } to { offset-distance: 100%; } }
+@keyframes hv-moon-z { 0%, 49.9% { z-index: 3; } 50%, 100% { z-index: 0; } }
+@keyframes hv-cmd-card { 0%, 4% { opacity: 0; transform: translateY(-8px) scale(.97); } 9%, 58% { opacity: 1; transform: none; } 63%, 100% { opacity: 0; transform: scale(.98); } }
+@keyframes hv-type-pin { 0%, 21.9% { content: ''; } 22%, 27.9% { content: 'p'; } 28%, 33.9% { content: 'pi'; } 34%, 100% { content: 'pin'; } }
+@keyframes hv-cmd-drop { 0%, 22% { height: 32px; opacity: 1; } 28%, 100% { height: 0; opacity: 0; } }
+@keyframes hv-cmd-run { 0%, 54% { background: var(--hv-active); } 56% { background: var(--hv-run); } 60%, 100% { background: var(--hv-active); } }
+@keyframes hv-cmd-toast { 0%, 62% { opacity: 0; transform: translate(-50%, 8px); } 66%, 90% { opacity: 1; transform: translate(-50%, 0); } 95%, 100% { opacity: 0; transform: translate(-50%, 0); } }
+@keyframes hv-out-new { 0%, 6% { height: 0; opacity: 0; transform: translateX(-26px); } 10%, 35% { height: 30px; opacity: 1; transform: translateX(-26px); } 40%, 92% { height: 30px; opacity: 1; transform: none; } 97%, 100% { height: 0; opacity: 0; transform: none; } }
+@keyframes hv-type-room { 0%, 11.9% { content: ''; } 12%, 14.9% { content: 'Bo'; } 15%, 17.9% { content: 'Book'; } 18%, 20.9% { content: 'Book a'; } 21%, 100% { content: 'Book a room'; } }
+@keyframes hv-tick { 0%, 61% { background: var(--hv-box); } 62%, 94% { background: #6fae82; } 97%, 100% { background: var(--hv-box); } }
+@keyframes hv-tick-mark { 0%, 61% { opacity: 0; transform: scale(.4); } 64% { opacity: 1; transform: scale(1.15); } 67%, 94% { opacity: 1; transform: none; } 97%, 100% { opacity: 0; } }
+@keyframes hv-strike { 0%, 61% { color: var(--hv-ink); text-decoration-color: transparent; } 64%, 94% { color: #999; text-decoration-color: #999; } 97%, 100% { color: var(--hv-ink); text-decoration-color: transparent; } }
+@keyframes hv-type-at { 0%, 7.9% { content: ''; } 8%, 17.9% { content: '@'; } 18%, 21.9% { content: '@F'; } 22%, 25.9% { content: '@Fo'; } 26%, 43.9% { content: '@Fou'; } 44%, 100% { content: ''; } }
+@keyframes hv-link-menu { 0%, 12% { opacity: 0; transform: translateY(-4px); } 15%, 42% { opacity: 1; transform: none; } 45%, 100% { opacity: 0; transform: none; } }
+@keyframes hv-link-chip { 0%, 44% { opacity: 0; max-width: 0; } 45% { max-width: 100px; opacity: 0; transform: scale(.6); } 50%, 92% { opacity: 1; max-width: 100px; transform: none; } 97%, 100% { opacity: 0; max-width: 100px; } }
+@keyframes hv-day-tl { 0%, 3% { opacity: 0; transform: translateY(6px); } 10%, 94% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+@keyframes hv-day-quick { 0%, 30% { opacity: 0; transform: translate(-50%, -8px) scale(.97); } 34%, 52% { opacity: 1; transform: translate(-50%, 0); } 56%, 100% { opacity: 0; transform: translate(-50%, 0) scale(.98); } }
+@keyframes hv-type-call { 0%, 35.9% { content: ''; } 36%, 39.9% { content: 'Call'; } 40%, 43.9% { content: 'Call the'; } 44%, 100% { content: 'Call the supplier'; } }
+@keyframes hv-day-new { 0%, 54% { height: 0; opacity: 0; } 60%, 94% { height: 28px; opacity: 1; } 98%, 100% { height: 0; opacity: 0; } }
+@keyframes hv-keys-rec { 0%, 14% { opacity: 0; transform: translateY(6px) scale(.97); } 18%, 54% { opacity: 1; transform: none; } 58%, 100% { opacity: 0; } }
+@keyframes hv-keys-pop { 0%, 26% { opacity: 0; transform: scale(.5); } 30%, 100% { opacity: 1; transform: none; } }
+@keyframes hv-keys-own { 0%, 58% { opacity: 0; transform: scale(.5); } 62%, 94% { opacity: 1; transform: none; } 98%, 100% { opacity: 0; } }
+
+[data-theme="dark"] .help { background: rgba(0, 0, 0, .52); }
+[data-theme="dark"] .help .card { background: #242729; box-shadow: 0 12px 40px rgba(0, 0, 0, .5), 0 0 0 1px rgba(255, 255, 255, .08); }
+[data-theme="dark"] .help h2, [data-theme="dark"] .help p b { color: #e2e4e4; }
+[data-theme="dark"] .help :is(p, .hkeys) { color: #adb1b2; }
+[data-theme="dark"] .help kbd { background: #303436; color: #c9c9c9; box-shadow: inset 0 -1px 0 rgba(0, 0, 0, .3); }
+[data-theme="dark"] .help .hclose:hover { background: rgba(255, 255, 255, .08); color: #c9c9c9; }
+[data-theme="dark"] .help .hdots button { background: #454b4e; }
+[data-theme="dark"] .help .hdots button.on { background: #6ea8d6; }
+[data-theme="dark"] .help .hfoot > button { background: #303436; color: #c9c9c9; }
+[data-theme="dark"] .help .hfoot > button:hover { background: #3b4144; }
+[data-theme="dark"] .help .hfoot > button.primary { background: #e2e4e4; color: #1b1d1e; }
+[data-theme="dark"] .hv { --hv-ink: #d0d2d2; --hv-box: #454b4e; --hv-active: #343a3d; --hv-run: #2f4a5f; background: #1d2022; color: #d0d2d2; }
+[data-theme="dark"] .hv :is(.hv-pal, .hv-pane, .hv-quick, .hv-rec, .hv-drop-menu, .hv-press), [data-theme="dark"] .hv-keys kbd { background: #2b2f31; color: #d0d2d2; box-shadow: 0 0 0 1px rgba(255, 255, 255, .08); }
+[data-theme="dark"] .hv .hv-input { border-bottom-color: #3a3f42; }
+[data-theme="dark"] .hv-tl { border-left-color: #3a3f42; color: #adb1b2; }
+[data-theme="dark"] .hv-tl i { color: #e2e4e4; }
+[data-theme="dark"] .hv-moon { background: #e2e4e4; }

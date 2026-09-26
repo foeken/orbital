@@ -147,8 +147,8 @@ function paletteRows(q, typed = q) {
     rows.push({ id: 'pinToDate', group: docGroup, icon: 'pinDate', label: 'Pin to date \u2026', hint: 'sunday, in 3 days, 12 oct', keepOpen: true, run: () => openPinDatePalette(doc) });
   }
   rows.push(...meetingRows(palDoc, docGroup)); // Change time / location, Add attendee: on a meeting this user may change (renderer/meeting.js)
-  // Pin this node onto the meeting I am in, through the same event pin the quick-add panel writes (docs/QUICK-ADD.md)
-  // and the sidebar reads back under Pinned. The row is listed whenever a real node is on screen, so ⇧⌘K can record
+  // Pin this node onto the meeting I am in, through the event pin the sidebar reads back under Pinned (docs/PINNING.md).
+  // The row is listed whenever a real node is on screen, so ⇧⌘K can record
   // a key against it, and says why instead of disappearing when there is no meeting to pin to. Its id is unchanged
   // from when it was called "Pin to meeting": a recorded key belongs to the id, and the label is only what it reads.
   if (palDoc && tana.currentMeeting && tana.pinTo && isRealId(palDoc.id)) {
@@ -309,6 +309,7 @@ function paletteRows(q, typed = q) {
   // (moving between places), Window (windows, panes, the sidebar) and Settings (how it looks, what it hides, accounts).
   if (signedOut) rows.push({ id: 'login', group: 'Actions', icon: 'tana', label: 'Log in to Tana', run: () => tana.login().catch(showError) });
   if (tana.creationOptions) rows.push({ id: 'create', group: 'Actions', icon: 'createNew', label: 'Create new …', keepOpen: true, run: openCreationPalette, sub: async () => { creationChoices = (await tana.creationOptions()).options || []; return creationRows(''); } });
+  if (tana.createDocument) rows.push({ id: 'createTask', group: 'Actions', icon: 'task', label: 'Create task', run: () => openTask() }); // ⇧⌘Space: task.html over the window (renderer/overlays.js)
   // the keys the outline answers to, as rows: each has a default combo in DEFAULT_HOTKEYS and can be re-recorded
   rows.push({ id: 'search', group: 'Actions', icon: 'search', label: 'Search Tana', keepOpen: true, run: () => togglePalette('search') });
   rows.push({ id: 'undo', group: 'Actions', icon: 'undo', label: 'Undo', run: () => history('undo') });
@@ -360,6 +361,7 @@ function paletteRows(q, typed = q) {
     hint: chatgptAuth?.signedIn ? (chatgptAuth.email || 'Signed in') : chatgptAuth?.available === false ? 'Status unavailable' : chatgptAuth ? 'Not signed in · preferred over API key' : 'Checking sign-in',
     keepOpen: true, run: chatgptCommand });
   if (tana.setOpenAIKey) rows.push({ id: 'openaiKey', group: 'Settings', icon: 'openaiKey', label: 'Set OpenAI API key', hint: 'Stored locally', keepOpen: true, run: openOpenAIKeyPalette });
+  rows.push({ id: 'help', group: 'Help', icon: 'help', label: 'Help', hint: 'The basics and the keys', run: () => openHelp() }); // renderer/overlays.js
   // A second level is folded in once the query's first two letters reach its row, as a prefix or as the first words'
   // initials ("mo" or "mt" for Move to …, "as" or "at" for Assign to), and loaded once per palette opening. The spaces
   // and the four statuses are short fixed lists, so "Move to …" and "Set status" (`subAlways`) load them as the palette
@@ -1186,7 +1188,7 @@ function togglePalette(mode, link, pin) {
   if (mode !== 'slash') slashCtx = null;
   promptEditor(false); // ⌘K over the prompt page leaves it, without assigning
   palMode = mode; palRows = []; palIndex = 0; palBusy = false; palEnter = null; clearTimeout(palTimer); palTimer = null;
-  // meetingNow is cleared, not kept: every open re-reads the meeting, the same rule the quick-add panel follows.
+  // meetingNow is cleared, not kept: every open re-reads the meeting, because "the meeting I am in" lasts minutes.
   fieldLinkCtx = null;
   if (mode === 'cmd') { palDoc = currentDoc(); palField = fieldAt(document.activeElement); fieldReturn = palField && palField.key; palTaskCtx = null; meetingNow = undefined; meetingCtx = null; loadPins(); loadWorkspaceTypes(true); subCache.clear(); refreshChatGPTStatus(); }
   palInput.placeholder = mode === 'search' ? 'Search Tana' : mode === 'pinToday' ? 'Search open tasks assigned to you' : mode === 'slash' ? 'Choose a block type or create' : 'Run a command';

@@ -21,23 +21,26 @@ function pillDefs() {
   const typeName = (uri) => ((typeListCache || []).find((t) => t.uri === uri) || {}).title || '…';
   // A kind page (Tasks, Meetings, Chats, People) is that kind: only the Library and the Inbox pick their kinds.
   // A saved search is never a kind page — choosing what it lists is the whole point of it.
-  // A type's page is that type, so its pills are its fields instead (fieldPill below).
-  if (onTypePage()) {
+  // A type's page is that type, so it has no Type pill: its pills are its fields (fieldPill below).
+  // Field filters belong to one type, so a change of type lets go of them.
+  if (!onTypePage() && (onSearchPage() || !(views.find((v) => v.id === view) || {}).kind)) defs.push({ id: 'type', command: 'Filter by type', value: [names(TYPES, kinds), ...typed.map(typeName)].filter(Boolean).join(', ') || 'Any type', icon: one ? one[2] : typed.length === 1 && !kinds.length ? typeGlyph(typed[0]) : 'any', rows: () => (loadWorkspaceTypes(), [
+    { label: 'Any type', reset: true, icon: 'any', checked: !f.types, run: () => save({ types: null, fields: null }) },
+    ...TYPES.map((t) => (t ? { label: t[1], icon: t[2], keepOpen: true, checked: kinds.includes(t[0]), run: () => save({ types: toggleIn(kindIds, kinds.length ? kinds : null, t[0]), fields: null }) } : { div: true })), // multi-select: the menu stays open to tick more
+    ...(typeListCache && typeListCache.length ? [{ head: 'Workspace types' }, ...typeListCache.map((t) => ({ label: t.title || 'Untitled type', icon: typeGlyph(t.uri), keepOpen: true, checked: typed.includes(t.uri), run: () => save({ types: toggleIn(typeListCache.map((x) => x.uri), typed.length ? typed : null, t.uri), fields: null }) }))] : []),
+  ]) });
+  // One workspace type (a type's page, or a search or view picking that type alone): its fields get pills.
+  const ft = fieldType();
+  if (ft) {
     const pills = typeDefs().map((def) => fieldPill(def, f, save)).filter(Boolean);
     defs.push(...pills);
     // A filter on a field that no longer gets a pill (retyped, removed, lost its link targets) keeps one to clear it
     // with, or the page would stay narrowed by something nobody can see. Only once the definitions are in.
-    if ((relatedBy.get(zoom.docId) || {}).definitions) for (const key of Object.keys(f.fields || {})) {
+    if ((relatedBy.get(ft) || {}).definitions) for (const key of Object.keys(f.fields || {})) {
       if (pills.some((p) => fieldKey({ key: p.id.slice(6) }) === key)) continue;
       const title = (typeDefs().find((d) => fieldKey(d) === key) || {}).title || 'Removed field';
       defs.push({ id: 'field:' + key.split('?attribute=')[1], label: title, command: 'Clear filter on ' + title, icon: 'field', value: 'Filtered', rows: () => [{ label: 'Any', reset: true, checked: false, run: () => putField(f, save, key, null) }] });
     }
   }
-  else if (onSearchPage() || !(views.find((v) => v.id === view) || {}).kind) defs.push({ id: 'type', command: 'Filter by type', value: [names(TYPES, kinds), ...typed.map(typeName)].filter(Boolean).join(', ') || 'Any type', icon: one ? one[2] : typed.length === 1 && !kinds.length ? typeGlyph(typed[0]) : 'any', rows: () => (loadWorkspaceTypes(), [
-    { label: 'Any type', reset: true, icon: 'any', checked: !f.types, run: () => save({ types: null }) },
-    ...TYPES.map((t) => (t ? { label: t[1], icon: t[2], keepOpen: true, checked: kinds.includes(t[0]), run: () => save({ types: toggleIn(kindIds, kinds.length ? kinds : null, t[0]) }) } : { div: true })), // multi-select: the menu stays open to tick more
-    ...(typeListCache && typeListCache.length ? [{ head: 'Workspace types' }, ...typeListCache.map((t) => ({ label: t.title || 'Untitled type', icon: typeGlyph(t.uri), keepOpen: true, checked: typed.includes(t.uri), run: () => save({ types: toggleIn(typeListCache.map((x) => x.uri), typed.length ? typed : null, t.uri) }) }))] : []),
-  ]) });
   if (tasksInFilter(f)) {
     defs.push({ id: 'status', label: 'Status', command: 'Filter by status', icon: 'status', value: names(STATES, f.states) || 'Any', rows: () => [
       { label: 'Any status', reset: true, checked: !f.states, run: () => save({ states: null }) },
@@ -105,7 +108,8 @@ function fieldPill(def, f, save) {
   if (!PILL_FIELDS.includes(def.type) || (def.type === 'link' && !(def.to || []).length)) return null; // a link to anything has no list to pick from
   const key = fieldKey(def), now = (f.fields || {})[key] || {}, title = def.title || 'Untitled field';
   const put = (value) => putField(f, save, key, value);
-  const pill = { id: 'field:' + def.key, label: title, command: 'Filter by ' + title, icon: 'field' };
+  // a link or member field can point at hundreds of nodes, so its menu says it can be searched (menuEl)
+  const pill = { id: 'field:' + def.key, label: title, command: 'Filter by ' + title, icon: 'field', search: def.type === 'link' || def.type === 'member' };
   if (def.type === 'date') {
     const preset = now.date && now.date.preset;
     return { ...pill, value: (DATE_PRESETS.find(([p]) => p === preset) || [])[1] || 'Any', rows: () => [
@@ -374,8 +378,14 @@ function menuEl(d) {
   const rows = menuRows(d), el = document.createElement('div'); el.className = 'menu';
   el.dataset.for = d.id; // which pill it hangs from, so a redraw can tell a new menu from the same one (menuMotion)
   const typed = (menu.q || '').trim();
-  if (typed) { const h = document.createElement('div'); h.className = 'mhead'; h.textContent = typed; el.append(h); }
+  // A long list (a link field's targets) shows where the typing goes before anything is typed; the keys stay the pill's
+  if (d.search) {
+    const s = document.createElement('div'); s.className = 'msearch' + (typed ? '' : ' empty');
+    const i = document.createElement('span'); i.className = 'micon'; i.innerHTML = iconSvg('search');
+    s.append(i, typed || 'Search ' + (d.label || 'options') + '…'); el.append(s);
+  } else if (typed) { const h = document.createElement('div'); h.className = 'mhead'; h.textContent = typed; el.append(h); }
   const pick = rows.filter((r) => r.label); // navigable rows
+  if (d.search && typed && !pick.length) { const n = document.createElement('div'); n.className = 'mhead'; n.textContent = 'No matches'; el.append(n); }
   menu.index = Math.max(0, Math.min(menu.index, pick.length - 1));
   for (const r of rows) {
     const row = document.createElement('div');

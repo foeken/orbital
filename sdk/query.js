@@ -128,6 +128,14 @@ function validViewFilter(f) {
       && Object.entries(f.fields).every(([k, v]) => FIELD_KEY.test(k) && !!v && typeof v === 'object' && !Array.isArray(v))));
 }
 const FIELD_KEY = /^tana:type:[0-9a-z]{26}\?attribute=[0-9a-z]+$/;
+// A filter's field values count only while it lists one workspace type alone, the one they belong to: beside another
+// type or a kind they would silently drop every row of those, and no pill would show why.
+function typeFields(f) {
+  const { kinds, typeUris } = splitTypes(f.types);
+  if (kinds.length || typeUris.length !== 1 || !f.fields) return null;
+  const own = Object.fromEntries(Object.entries(f.fields).filter(([k]) => k.startsWith(typeUris[0] + '?attribute=')));
+  return Object.keys(own).length ? own : null;
+}
 
 function viewParams(f, me, limit = 1000) {
   if (!validViewFilter(f)) throw new Error('invalid view filter');
@@ -150,6 +158,8 @@ function viewParams(f, me, limit = 1000) {
   }
   if (f.text) p.textQuery = f.text.trim();
   if (f.audience === 'everyone') p.restricted = false;
+  const attributes = attributeFilters(typeFields(f), Date.now());
+  if (attributes) p.attributeFilters = attributes;
   if (f.participant === 'me') p.hasParticipantUris = [me];
   if (f.window === 'recent') {
     const start = new Date(); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() - 7);
@@ -280,7 +290,8 @@ function filterToSearchQuery(filter = {}, me) {
   const tasks = tasksInScope(filter.types);
   if (tasks && Array.isArray(filter.states) && filter.states.length) q.stateTypes = [...filter.states];
   if (typeof filter.text === 'string' && filter.text.trim()) q.textQuery = filter.text.trim();
-  if (filter.fields && Object.keys(filter.fields).length) q.attributes = filter.fields;
+  const fields = typeFields(filter);
+  if (fields) q.attributes = fields;
   const a = tasks ? filter.assignee : 'anyone';
   // 'me' without a signed-in user stores nothing: falling through to the uri branch would write the literal
   // string 'me' as a user-profile uri, which matches nobody and reads as a real filter for ever after.
@@ -301,7 +312,8 @@ function filterToSearchQuery(filter = {}, me) {
 //   - Several view kinds share one node type (tasks and docs are both `text`), so a stored `text` reads as tasks
 //     when the query also constrains task state and as docs otherwise — the same reading viewRows applies at its
 //     docsWithoutTasks line when it separates those two.
-//   - A query can say things no pill can (attributes, workflowStates, visibility, several assignees at once).
+//   - A query can say things no pill can (workflowStates, visibility, several assignees at once, attributes unless
+//     the query lists one workspace type alone — then they are that type's field pills).
 //     Those are dropped here rather than approximated, so what comes back is exactly what the pills can show.
 // Saving therefore rewrites the query from the pills alone: anything in the first bullet survives, anything in the
 // second does not, which is why saving is an explicit action on a saved search rather than a write per keystroke.
@@ -321,6 +333,9 @@ function searchQueryToFilter(query, me) {
     participant: me && (list(q.participantUris) || []).includes(me) ? 'me' : null,
     window: q.eventTime && (q.eventTime.min != null || q.eventTime.max != null) ? 'recent' : null,
   };
+  const stored = q.attributes && typeof q.attributes === 'object' && !Array.isArray(q.attributes) ? q.attributes : {};
+  const fields = Object.fromEntries(Object.entries(stored).filter(([k, v]) => FIELD_KEY.test(k) && !!v && typeof v === 'object' && !Array.isArray(v)));
+  if (!kinds.length && typeFields({ types: typed, fields })) f.fields = typeFields({ types: typed, fields });
   // assignedToViewer and an assignedTo that happens to be the signed-in user mean the same thing to a pill ("You"),
   // so both come back as 'me' — writing it out again as assignedToViewer, which is what the viewer-relative pill means.
   if (q.assignedToViewer === true || (me && assigned.includes(me))) f.assignee = 'me';
