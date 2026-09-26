@@ -133,8 +133,10 @@ async function discover() {
       const mine = nodes.filter((n) => (n.title || '').trim().toLowerCase() === title.toLowerCase())
         .sort((a, b) => String(a.createTime || '').localeCompare(String(b.createTime || '')));
       for (const node of mine) {
+        const had = !!S.client.sync.getDocument(node.id); // somebody else's subscription stays, whatever this decides
         const doc = await S.client.sync.subscribe(node.id).catch(() => null);
         if (doc && !isDeleted(readNode(doc)) && holdsSettings(doc) && await onlyMine(doc)) return doc;
+        if (doc && !had) S.client.sync.unsubscribe(node.id).catch(() => {}); // not ours: no live copy of it for the session
       }
     }
   } catch (e) { report(e); }
@@ -144,8 +146,10 @@ async function discover() {
 // Ours carries the mark it was made with, or (made by an older build) at least one key in either root.
 const holdsSettings = (doc) => [MARK, ROOT, OLD_ROOT].some((root) => Object.keys(doc.loro.getMap(root).toJSON() || {}).length > 0);
 // The title and the mark are anybody's to write who can edit a document, and every synced key (the sensitive marks, the
-// agent prompts) would be written into the one taken: only one nobody else can read is taken (sdk/access.js audienceOf).
-const onlyMine = async (doc) => (await audienceOf(readNode(doc), S.me.userUri, { sync: S.client.sync, orgDocUri: S.me.orgDocUri })).scope === 'only-me';
+// agent prompts) would be written into the one taken: only one nobody else can read is taken — only you in its audience
+// (sdk/access.js audienceOf) and no public link, which audienceOf leaves to the linkSharing root.
+const onlyMine = async (doc) => !doc.loro.getMap('linkSharing').get('mode')
+  && (await audienceOf(readNode(doc), S.me.userUri, { sync: S.client.sync, orgDocUri: S.me.orgDocUri })).scope === 'only-me';
 async function create() {
   const id = 'tana:text:' + ulid();
   const doc = await S.client.sync.subscribe(id, (loro) => {

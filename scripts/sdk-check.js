@@ -1206,11 +1206,11 @@ async function main() {
   {
     const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
     const settings = backend.settings; settings.reset();
-    const docs = new Map(), sent = [];
+    const docs = new Map(), sent = [], live = new Set(), released = [];
     let listed = [];
     const sync = {
-      subscribe: async (id, init) => { if (!docs.has(id)) { if (!init) throw new Error('unavailable'); const d = new Document(id); d.transact(init); docs.set(id, d); } return docs.get(id); },
-      getDocument: (id) => docs.get(id), unsubscribe: async () => {},
+      subscribe: async (id, init) => { if (!docs.has(id)) { if (!init) throw new Error('unavailable'); const d = new Document(id); d.transact(init); docs.set(id, d); } live.add(id); return docs.get(id); },
+      getDocument: (id) => (live.has(id) ? docs.get(id) : undefined), unsubscribe: async (id) => { live.delete(id); released.push(id); },
     };
     const win = { isDestroyed: () => false, webContents: { send: (channel, value) => sent.push([channel, value]) } };
     const connect = () => { settings.reset(); backend.testRuntime({ me: { userUri: ME }, win, client: { sync, graph: { listNodes: async (p) => ({ nodes: p.textQuery === settings.TITLE ? listed : [] }) } } }); };
@@ -1224,13 +1224,17 @@ async function main() {
     const shared = new Document('tana:text:' + ulid()); // one called Orbital, marked, but where others can read it: somebody with edit rights made it look like ours
     shared.transact((l) => { initDocument(l, settings.TITLE, ME); l.getMap('ext:orbital:doc').set('app', 'orbital'); l.getMap('data').set('restricted', false); });
     docs.set(shared.id, shared);
+    const linked = new Document('tana:text:' + ulid()); // private to you, marked, but readable by anyone with its public link
+    linked.transact((l) => { initDocument(l, settings.TITLE, ME); l.getMap('ext:orbital:doc').set('app', 'orbital'); l.getMap('linkSharing').set('mode', 'view'); });
+    docs.set(linked.id, linked);
     connect();
     settings.setPref('home', 'library');
     await settings.hydrate(); await settings.flush();
     const mine = settings.settingsDocId();
     assert.ok(mine && mine !== theirs.id, 'the index did not list theirs yet, so this machine made its own');
     listed = [{ id: mine, title: settings.TITLE, createTime: '2026-09-26T09:00:01Z' }, { id: theirs.id, title: settings.TITLE, createTime: '2026-09-26T09:00:00Z' },
-      { id: note.id, title: settings.TITLE, createTime: '2026-01-01T00:00:00Z' }, { id: shared.id, title: settings.TITLE, createTime: '2025-12-01T00:00:00Z' }];
+      { id: note.id, title: settings.TITLE, createTime: '2026-01-01T00:00:00Z' }, { id: shared.id, title: settings.TITLE, createTime: '2025-12-01T00:00:00Z' },
+      { id: linked.id, title: settings.TITLE, createTime: '2025-11-01T00:00:00Z' }];
     connect(); sent.length = 0;
     await settings.hydrate(); await settings.flush();
     assert.equal(settings.settingsDocId(), theirs.id, 'the next launch settles on the oldest, pointer or not, so the two machines stop drifting apart');
@@ -1239,10 +1243,12 @@ async function main() {
     assert.ok(sent.some(([channel, prefs]) => channel === 'settings:changed' && prefs.theme === 'dark'), 'and the open page is told, rather than keeping the defaults until the next launch');
     assert.deepEqual(note.loro.getMap(settings.ROOT).toJSON(), {}, 'an older note that only shares the title is never taken over');
     assert.deepEqual(shared.loro.getMap(settings.ROOT).toJSON(), {}, 'nor one others can read, mark or not: no synced key is ever written where somebody else sees it');
+    assert.deepEqual(linked.loro.getMap(settings.ROOT).toJSON(), {}, 'nor one with a public link, private as its audience is');
+    assert.deepEqual([linked.id, shared.id, note.id].filter((id) => released.includes(id) && !live.has(id)), [linked.id, shared.id, note.id], 'and each one looked at and turned down is let go again');
     assert.deepEqual(JSON.parse(JSON.stringify(settings.get('settingsOld'))), [third, mine], 'the document this machine gave up is remembered, and synced, beside the one another machine gave up');
     assert.deepEqual(JSON.parse(theirs.loro.getMap(settings.ROOT).get('settingsOld')), [third, mine], 'in the document too');
     const shown = await backend.S.client.graph.listNodes({ nodeTypes: ['text'], textQuery: settings.TITLE });
-    assert.deepEqual(JSON.parse(JSON.stringify(shown.nodes.map((n) => n.id))), [note.id, shared.id], 'so neither settings document is listed anywhere, while the notes that are only called Orbital are');
+    assert.deepEqual(JSON.parse(JSON.stringify(shown.nodes.map((n) => n.id))), [note.id, shared.id, linked.id], 'so neither settings document is listed anywhere, while the notes that are only called Orbital are');
     theirs.transact((l) => l.getMap('data').set('deletedAt', 123));
     connect();
     await settings.hydrate(); await settings.flush();
