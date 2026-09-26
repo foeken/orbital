@@ -18,6 +18,10 @@ const pins = require('../sdk/pins');
 const ORG = 'org_01EXAMPLE00000000000000000', DOC = 'tana:text:01exampleh0000000000000000', ME = 'tana:user-profile:01examplei0000000000000000';
 const snapshot = Buffer.from(fs.readFileSync(require('node:path').join(__dirname, 'fixtures', 'task-snapshot.b64'), 'utf8').trim(), 'base64');
 const b64 = (u8) => Buffer.from(u8).toString('base64');
+// Waits for what a test is waiting for rather than for a fixed time, which is what most of this file's run time was.
+async function until(ready, what, ms = 10000) {
+  for (const end = Date.now() + ms; !ready(); await new Promise((r) => setTimeout(r, 5))) if (Date.now() > end) throw new Error('timed out waiting for ' + what);
+}
 
 // Load the real main-process helpers without Electron startup or a Tana connection: main.js and everything under
 // main/ run in one sandboxed context (one realm, stubbed timers, a fake electron), the rest through the real require.
@@ -5216,6 +5220,11 @@ async function main() {
   const warns = [];
   const log = { warn: (m) => warns.push(m), error: (m) => console.error(m), info: () => {} };
   const sync = new SyncConnection({ transport: router, orgId: ORG, peerId, logger: log });
+  // The retry and reconnect backoffs (sdk/sync.js jitter: 250 ms to 5 s) run at once here: what this checks is that a
+  // retry happens and what it sends, never how long it waited. The watchdog (3 x 50 ms heartbeats) and the fake
+  // server's own 5 and 40 ms timers are shorter than the cut, so they keep their real timing.
+  const backoffTimeout = setTimeout;
+  global.setTimeout = (fn, ms, ...a) => backoffTimeout(fn, ms >= 200 && ms < 6000 ? 0 : ms, ...a);
   const changes = [];
   sync.on('change', (id, info) => changes.push(info.origin));
   sync.on('error', (e) => { throw e; });
@@ -5250,24 +5259,24 @@ async function main() {
   assert.equal(readNode(d).title, 'renamed by server', 'a frame for another session is ignored');
   // resync_required -> new bootstrap (warm start: empty serverUpdates, catch-up sent), session id changes
   push({ resyncRequired: { documentId: DOC, sessionId: 's1', reason: 'test', recovery: 'RECOVERY_STRATEGY_RETRY' } });
-  await new Promise((r) => setTimeout(r, 700));
+  await until(() => server.commands.length >= 5, 'the re-bootstrap after resync_required');
   assert.deepEqual(server.commands.slice(3), ['beginDocumentSync', 'applyBootstrapUpdates']);
   assert.equal(server.session, 2);
   setTitle(d, 'after resync');
-  await new Promise((r) => setTimeout(r, 30));
+  await until(() => readNode(server.serverDoc).title === 'after resync', 'the edit after the resync');
   assert.equal(readNode(server.serverDoc).title, 'after resync');
   // watchdog: server goes silent (no heartbeats) -> 3x interval -> reconnect -> same Document re-bootstrapped
   let disconnected = 0; sync.on('disconnected', () => disconnected++);
   server.stall = true;
-  await new Promise((r) => setTimeout(r, 1500));
+  await until(() => disconnected >= 1, 'the watchdog to drop the silent stream');
   server.stall = false;
-  await new Promise((r) => setTimeout(r, 3000));
+  await until(() => connected >= 2 && server.session >= 3, 'the reconnect and its re-bootstrap');
   assert.ok(disconnected >= 1 && connected >= 2, 'reconnected after watchdog: ' + disconnected + '/' + connected);
   assert.equal(sync.getDocument(DOC), d);
   assert.ok(server.session >= 3, 'document re-bootstrapped after reconnect');
   assert.equal(readNode(d).title, 'after resync');
   setTitle(d, 'after reconnect');
-  await new Promise((r) => setTimeout(r, 30));
+  await until(() => readNode(server.serverDoc).title === 'after reconnect', 'the edit after the reconnect');
   assert.equal(readNode(server.serverDoc).title, 'after reconnect');
   // create: subscribe(id, init) on an unknown id -> MISSING -> full snapshot as catch-up -> live; later edits flow as usual
   const NEW = 'tana:text:' + ulid();
@@ -5325,19 +5334,18 @@ async function main() {
   assert.equal(readNode(server.created.get(DENIED)).title, 'shared with me');
   // Warm-bootstrap budget (Tana's #J): unavailable is retried while under 60 s or 5 attempts, then the session pauses
   // instead of retrying forever; asking for it again resumes it. The clock jumps 20 s per attempt and the retry sleeps
-  // are cut to nothing, so this takes milliseconds.
-  const UNAV = 'tana:text:' + ulid(), realNow = Date.now, realTimeout = setTimeout;
+  // are cut to nothing (the backoff cut above), so this takes milliseconds.
+  const UNAV = 'tana:text:' + ulid(), realNow = Date.now;
   let skew = 0;
   Date.now = () => realNow() + skew;
-  global.setTimeout = (fn, ms, ...a) => realTimeout(fn, ms >= 200 && ms < 6000 ? 0 : ms, ...a);
   server.onUnavailable = () => { skew += 20000; };
   server.unavailable.add(UNAV);
   try {
     const pending = sync.subscribe(UNAV, (l) => initDocument(l, 'waiting for the server', ME));
-    await new Promise((r) => realTimeout(r, 300));
+    await new Promise((r) => backoffTimeout(r, 300));
     const tries = () => server.begins.filter((id) => id === UNAV).length;
     assert.equal(tries(), 5, 'five attempts over 60 s, then no more');
-    await new Promise((r) => realTimeout(r, 200));
+    await new Promise((r) => backoffTimeout(r, 200));
     assert.equal(tries(), 5, 'paused, not retrying');
     assert.ok(warns.some((w) => w.includes(UNAV) && /paused/.test(w)));
     server.unavailable.delete(UNAV);
@@ -5380,9 +5388,10 @@ async function main() {
       sync.docs.delete(COLD);
     }
   } finally {
-    Date.now = realNow; global.setTimeout = realTimeout;
+    Date.now = realNow;
   }
   await sync.close();
+  global.setTimeout = backoffTimeout;
   assert.equal(sync.connected, false);
   assert.ok(server.commands.includes('unsubscribeDocument'), 'unsubscribe sent on close');
   assert.ok(changes.includes('local') && changes.includes('remote'));
