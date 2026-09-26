@@ -157,7 +157,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 /* A text value's words start after its row's 16px gutter; a chip's start 6px into the chip. The 10px above puts the
    two in one column, and the hint, which has no chip around it, takes the other 6. */
 .fields .fchoice > .fhint { margin-left: 6px; }
-.fields .fchoice:focus { outline: none; box-shadow: 0 0 0 2px rgba(80, 143, 187, 0.35); }
+.fields .fchoice:focus { outline: none; box-shadow: 0 0 0 2px var(--focus); }
 .fields .fchip { padding: 0 6px; border-radius: 4px; background: rgba(0, 0, 0, 0.05); line-height: 20px; }
 .fields .fchip.gone { color: #999; text-decoration: line-through; }
 .fields .fchip.wrong::after { content: ' ⚠'; color: #c8841c; }
@@ -285,7 +285,7 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
   .pills.folding { height: 0; margin-bottom: 0; }
 }
 .pill:hover, .pill.open { background: #d9e8fa; }
-.pill:focus { outline: none; box-shadow: 0 0 0 2px #b7d2f5; }
+.pill:focus { outline: none; box-shadow: 0 0 0 2px var(--focus); }
 /* Sort and Group arrange the rows the view already has, so they sit beside the filters in grey rather than filter blue */
 .pill[data-id="sort"], .pill[data-id="group"], .pill[data-id="display"] { background: #f1f1f1; color: #777; }
 .pill[data-id="sort"] b, .pill[data-id="group"] b, .pill[data-id="display"] b { color: #444; }
@@ -757,7 +757,7 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 .ghead svg { flex: none; width: 12px; height: 12px; transition: transform var(--dur-quick) var(--ease-out); }
 .ghead[aria-expanded="true"] svg { transform: rotate(90deg); }
 .ghead:hover { color: #666; }
-.ghead:focus { outline: none; box-shadow: 0 0 0 2px #b7d2f5; border-radius: 3px; }
+.ghead:focus { outline: none; box-shadow: 0 0 0 2px var(--focus); border-radius: 3px; }
 .ghead:first-child { margin-top: 0; }
 /* the tail of a trimmed section (Tracking): a quiet link where the next row's text would start, not a row itself */
 .gmore { display: block; margin: 2px 0 0; padding: 4px 0 4px 47px; border: 0; background: none; font: inherit; font-size: 14px; color: #8a8a8a; text-align: left; cursor: pointer; }
@@ -770,7 +770,7 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 /* offered beside "Nothing here yet" only while a filter is narrowing the view; a real button, so Tab and Enter reach it */
 .clearfilters { border: 0; background: none; color: #aaa; font: inherit; font-size: 16px; padding: 0; margin-left: 10px; text-decoration: underline; cursor: pointer; }
 .clearfilters:hover { color: #1a1a1a; }
-.clearfilters:focus { outline: none; box-shadow: 0 0 0 2px #b7d2f5; border-radius: 3px; }
+.clearfilters:focus { outline: none; box-shadow: 0 0 0 2px var(--focus); border-radius: 3px; }
 /* Loading (Build): renderer/loading.js draws it on the canvas, which fills the whole page — the page building itself
    where the real header and rows will be, on a launch or a Reload only. One colour, the page's own text
    colour, at a few strengths, so the theme reaches it. It draws nothing for the first 300ms, so a quick load never
@@ -1007,7 +1007,6 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 [data-theme="dark"] .meta, [data-theme="dark"] .filtered, [data-theme="dark"] .empty-note { color: #858b8e; }
 [data-theme="dark"] .clearfilters { color: #858b8e; }
 [data-theme="dark"] .clearfilters:hover { color: #e6e8e9; }
-[data-theme="dark"] .clearfilters:focus { box-shadow: 0 0 0 2px #58768a; }
 [data-theme="dark"] .chip.grey { background: #303436; color: #b7bcbe; }
 [data-theme="dark"] .chip.gold { background: #4b4024; color: #e4c968; }
 [data-theme="dark"] .chip.hue { background: oklch(0.33 0.06 var(--hue)); color: oklch(0.83 0.09 var(--hue)); }
@@ -1054,7 +1053,6 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 [data-theme="dark"] .login p { color: #9a9a9a; }
 [data-theme="dark"] .login button:hover { background: #363a3c; }
 
-[data-theme="dark"] .palette.anchored .card { box-shadow: var(--shadow-card); } /* ponytail: the dark @ dropdown wears a dialog's shadow, the light one a menu's; kept as it was */
 [data-theme="dark"] .palette input { color: #c9c9c9; border-bottom-color: #3a3f41; background: #242729; }
 [data-theme="dark"] .palette input::placeholder { color: #858b8e; }
 [data-theme="dark"] .palette .ptext { color: #c9c9c9; border-bottom-color: #3a3f41; background: #242729; }
