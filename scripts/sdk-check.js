@@ -2555,7 +2555,7 @@ async function main() {
       ['Rob Jansen edited Contract renewal', 'Moved the deadline to Friday', 'updated', 'edit', false, []],
       ["Tana's AI added a task to your Inbox", null, 'tana', 'new', false, ['Share the transcript']],
     ], 'a timeline, newest first: who, then what they did, then the node; an edit\'s change quoted under it; new tasks from one source in a row are one quiet entry; a completion told once, from the node\'s own state; a meeting at its start time, quiet once it is over with no summary, all-day ones left out; yours alone, by hand, or weeks old stay out');
-    assert.deepEqual(JSON.parse(JSON.stringify([meetingsAsked.hasParticipantUris, Date.parse(meetingsAsked.eventStartTimeMax) === (() => { const d = new Date(); d.setHours(24, 0, 0, 0); return d.getTime(); })(), Date.parse(meetingsAsked.eventStartTimeMin) === (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime() - 2 * 24 * H; })()])), [[ME], true, true],
+    assert.deepEqual(JSON.parse(JSON.stringify([meetingsAsked.hasParticipantUris, Date.parse(meetingsAsked.eventStartTimeMax) === (() => { const d = new Date(); d.setHours(24, 0, 0, 0); return d.getTime(); })(), Date.parse(meetingsAsked.eventStartTimeMin) === (() => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - 2); return d.getTime(); })()])), [[ME], true, true],
       'the meetings asked for are yours, from the start of the day before yesterday to the end of today');
     // Join: a meeting under way carries its call link, one that is over does not
     const joins = new Map((await backend.timelinePage.rows()).map((r) => [r.timeline.uri, r.join]));
@@ -2563,7 +2563,7 @@ async function main() {
     // Kept current (#210): the read left a live query open over your meetings; the server's answers re-read the page
     // when a meeting's title or time moves, or one comes or goes, and not when only something else about it changed
     const liveQuery = liveDoc.data.toJSON().query;
-    assert.deepEqual(JSON.parse(JSON.stringify([liveQuery.types, liveQuery.hasParticipantUris, liveQuery.eventStartTimeMin === (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime() - 2 * 24 * H; })(), liveQuery.eventStartTimeMax > Date.now()])), [['event'], [ME], true, true],
+    assert.deepEqual(JSON.parse(JSON.stringify([liveQuery.types, liveQuery.hasParticipantUris, liveQuery.eventStartTimeMin === (() => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - 2); return d.getTime(); })(), liveQuery.eventStartTimeMax > Date.now()])), [['event'], [ME], true, true],
       'the live query is your meetings from the start of the day before yesterday to the end of today');
     const answerLive = (rows, version) => liveDoc.transact((loro) => {
       const data = loro.getMap('data'), nodes = data.get('result').setContainer('nodes', new LoroList());
@@ -2932,11 +2932,13 @@ async function main() {
     let watchedTasks = [{ id: delegatedId, title: 'Talk to Peter', state: { type: 'open' }, assignedTo: [OTHER_USER], createdBy: ME }];
     let writeUp = [], ownerQueries = 0;
     const movedEventId = 'tana:event:' + ulid(), movedId = 'tana:text:' + ulid(), MOVED = 'The one where we reset the conversation';
+    const twiceEventId = 'tana:event:' + ulid(), TWICE = 'Weekly sync notes';
     const listNodes = async (p) => {
       if (p.ownerIds) { ownerQueries++; return { nodes: p.ownerIds[0] === eventId ? writeUp : [] }; }
       // a write-up moved into a space: its meeting owns it no longer, and only its title (the tagline) still points at it
+      if (p.textQuery === TWICE) return { nodes: [{ id: 'tana:text:' + ulid(), title: TWICE }, { id: 'tana:text:' + ulid(), title: TWICE }] }; // a recurring meeting's name, twice
       if (p.textQuery === MOVED) return { nodes: [{ id: 'tana:text:' + ulid(), title: 'Sketched, but some other page', appearance: { imageUri: 'tana:image:x' } }, { id: movedId, title: MOVED, ownerUri: spaceId }] };
-      if (p.nodeIds) return { nodes: p.nodeIds.map((id) => (id === eventId ? { id, calendarEvent: { tagline: 'Notes' } } : id === movedEventId ? { id, calendarEvent: { tagline: MOVED } } : { id, title: id === spaceId ? 'Deal' : 'Node', ...(id === spaceId ? { appearance: { hue: 200 } } : {}) })) };
+      if (p.nodeIds) return { nodes: p.nodeIds.map((id) => (id === eventId ? { id, calendarEvent: { tagline: 'Notes' } } : id === movedEventId ? { id, calendarEvent: { tagline: MOVED } } : id === twiceEventId ? { id, calendarEvent: { tagline: TWICE } } : { id, title: id === spaceId ? 'Deal' : 'Node', ...(id === spaceId ? { appearance: { hue: 200 } } : {}) })) };
       if (p.createdBy) return { nodes: watchedTasks }; // the watch query, which asks by maker rather than by view
       const [kind] = p.nodeTypes || [];
       if (kind === 'user-profile') return { nodes: [] };
@@ -2997,6 +2999,7 @@ async function main() {
     assert.equal(ownerQueries, settled, 'the write-up it did find is cached');
     assert.equal(await backend.handlers.get('doc:summaryUri')(null, movedEventId), movedId,
       'a write-up moved out of its meeting into a space is found by its title, the tagline, and a sketched page with another title is not it');
+    assert.equal(await backend.handlers.get('doc:summaryUri')(null, twiceEventId), null, 'and with two pages of that title there is no telling which: none');
 
     cache.setSetting('viewFilter:inbox', { states: ['open', 'nonsense'], assignee: 'sam' });
     const stored = await backend.handlers.get('view:filter')(null, 'inbox');

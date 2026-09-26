@@ -398,7 +398,7 @@ function renderOutline() {
   // then it shows the loading animation, as a view does, rather than a line saying so.
   let asking = false;
   if (parent && !list.length && !outline.children.length) {
-    asking = !(kids.has(parent.docId) && kids.get(parent.docId) !== null);
+    asking = !signedOut && !(kids.has(parent.docId) && kids.get(parent.docId) !== null); // signed out, nothing is on its way: the login shows
     const note = document.createElement('div');
     note.className = 'empty-note'; note.textContent = 'No content';
     if (!asking) outline.append(note);

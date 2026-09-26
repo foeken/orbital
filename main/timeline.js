@@ -59,7 +59,8 @@ const DAYS = 3, MAX_PAGES = 120;
 let pages = 1;
 const setPages = (n) => (pages = Math.max(1, Math.min(MAX_PAGES, Math.floor(Number(n)) || 1)));
 // whole local days: today and the ones before it, so the oldest section on the page is never half a day
-const sinceOf = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime() - (DAYS * pages - 1) * 864e5; };
+// (by the calendar, not in 24-hour steps: a day across a clock change is 23 or 25 hours)
+const sinceOf = () => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - (DAYS * pages - 1)); return d.getTime(); };
 let markFrom = null; // the last visit, as read when this one began: an older page keeps the same new marks
 // A summary's title only repeating the node's says nothing (followSummary makes the same call): its description then.
 function said(s, title) {
@@ -81,7 +82,7 @@ let live = null, liveClient = null, liveKey = null;
 // the timeline on its own. One timer, set by every read (the read it causes sets the one after it).
 let startTimer = null;
 // the tagline and summary too: a summary landing is heard, and the entry brightens
-const meetingSig = (row) => { const ev = row.calendarEvent || {}; return JSON.stringify([row.title, ev.startTime, ev.endTime, ev.allDay, ev.tagline, ev.summary, ev.location, ev.actionUrl, attendeesOf(ev).map((a) => a.displayName || a.email)]); };
+const meetingSig = (row) => { const ev = row.calendarEvent || {}; return JSON.stringify([row.title, ev.startTime, ev.endTime, ev.allDay, ev.tagline, ev.summary, ev.location, ev.actionUrl, attendeesOf(ev).map((a) => [a.displayName, a.email, a.role, a.identityUri])]); }; // all meetingNote reads of them
 // Who is on a meeting, as the graph gives it: the roster (calendarEvent.roster), or the calendar's own attendee list
 const attendeesOf = (ev) => (Array.isArray(ev.roster) && ev.roster.length ? ev.roster : Array.isArray(ev.attendees) ? ev.attendees : []).filter((a) => a && typeof a === 'object');
 const duration = (ms) => { const m = Math.round(ms / 6e4), h = Math.floor(m / 60); return m < 60 ? m + ' min' : h + ' h' + (m % 60 ? ' ' + (m % 60) + ' min' : ''); };
@@ -109,7 +110,7 @@ function watchMeetings(me, since) {
     if (moved) send('outline:changed', PAGE);
   };
   const opened = live = openLiveQuery(S.client.sync, { types: ['event'], hasParticipantUris: [me], eventStartTimeMin: since, eventStartTimeMax: end.getTime(), orderBy: ['-updatedAt'], limit: 200 },
-    { label: 'Orbital timeline meetings', onRows }).then((h) => { h.on('error', () => {}); return h; }, () => { if (live === opened) live = null; return null; }); // refused: the next read asks again
+    { label: 'Orbital timeline meetings', onRows }).then((h) => { h.on('error', () => { if (live === opened) live = null; }); return h; }, () => { if (live === opened) live = null; return null; }); // refused, now or later: the next read asks again
 }
 
 async function rows() {
@@ -133,7 +134,7 @@ async function rows() {
     const latest = st.changedBy && st.changedBy !== me && moved > since && VERB[st.type] ? { state: st.type, at: moved } : null;
     if (latest) events.push({ kind: 'status', uri: n.id, title: n.title, at: moved, actor: who([st.changedBy]), verb: VERB[st.type], icon: ICON[st.type], tone: TONE[st.type] });
     let summaries = [];
-    try { summaries = (await S.client.history.listChanges({ uri: n.id, limit: Math.min(50, 5 * pages) })).summaries || []; } catch { return; } // one refusal costs that node only
+    try { summaries = (await S.client.history.listChanges({ uri: n.id, limit: Math.min(50, 10 * pages) })).summaries || []; } catch { return; } // one refusal costs that node only
     for (const s of summaries) {
       const at = Date.parse(s.endTime || s.startTime || ''), others = (s.authors || []).filter((a) => a !== me);
       const text = said(s, n.title);
@@ -146,7 +147,7 @@ async function rows() {
     }
   });
   // Inbox: the newest tasks assigned to you, whatever state they are in now, and the chat each was created in
-  const { nodes: tasks } = await graph.listNodes({ nodeTypes: ['text'], assignedTo: [me], sortOptions: [{ field: 'SORT_FIELD_CREATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }], limit: Math.min(500, 25 * pages) });
+  const { nodes: tasks } = await graph.listNodes({ nodeTypes: ['text'], assignedTo: [me], sortOptions: [{ field: 'SORT_FIELD_CREATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }], limit: Math.min(1000, 100 * pages) });
   const recent = tasks.filter((n) => Date.parse(n.createTime || '') > since);
   const mine = recent.filter((n) => !n.createdBy || n.createdBy === me).map((n) => n.id);
   const createdIn = new Map(mine.length ? ((await graph.listEdges({ fromNodeIds: mine, edgeTypes: ['EDGE_TYPE_CREATED_IN'] }).catch(() => ({}))).edges || []).map((e) => [e.fromNodeId, e.toNodeId]) : []);
@@ -166,7 +167,7 @@ async function rows() {
   // the end of today; a refusal costs the meetings only.
   const endOfToday = new Date(); endOfToday.setHours(24, 0, 0, 0);
   const { nodes: meetings = [] } = await graph.listNodes({ nodeTypes: ['event'], hasParticipantUris: [me], eventStartTimeMin: new Date(since).toISOString(), eventStartTimeMax: endOfToday.toISOString(),
-    sortOptions: [{ field: 'SORT_FIELD_EVENT_START_TIME', direction: 'SORT_DIRECTION_DESCENDING' }], limit: Math.min(500, 25 * pages) }).catch(() => ({}));
+    sortOptions: [{ field: 'SORT_FIELD_EVENT_START_TIME', direction: 'SORT_DIRECTION_DESCENDING' }], limit: Math.min(1000, 100 * pages) }).catch(() => ({}));
   const myEmail = String((S.me.user && S.me.user.email) || '').toLowerCase();
   const shown = meetings.filter((n) => { const ev = n.calendarEvent || {}, at = Date.parse(ev.startTime || ''); return at > since && at <= Date.now() && !isAllDay(ev.startTime, ev.endTime, ev.allDay); });
   // A meeting that is over and left no summary is drawn quiet, like a new-task line; one with a summary, or still

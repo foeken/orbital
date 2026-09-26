@@ -115,7 +115,7 @@ contextBridge.exposeInMainWorld('api', {
   search: (query, scope) => ipcRenderer.invoke('search', query, scope), // scope: { types } or { members } for a link field
   searches: () => ipcRenderer.invoke('search:list'), // saved search documents, newest first
   createSearch: (viewId, title) => ipcRenderer.invoke('search:create', viewId, title), // saves that view's current filter as a saved search; returns the Node to zoom
-  myTasks: () => ipcRenderer.invoke('search:myTasks'), // the saved search called My Tasks, made the first time it is asked for; returns its Node
+  myTasks: (findOnly) => ipcRenderer.invoke('search:myTasks', findOnly), // the saved search called My Tasks, made the first time it is asked for (findOnly: never made); returns its Node
   searchFilter: (docId) => ipcRenderer.invoke('search:filter', docId), // { filter, sort, group }: the stored query as a filter, plus how its rows are arranged
   setSearchFilter: (docId, filter, sort, group, display) => ipcRenderer.invoke('search:setFilter', docId, filter, sort, group, display), // the query, the arrangement and what rows show, together
   searchPreview: (filter) => ipcRenderer.invoke('search:preview', filter), // the rows that filter would find, without storing it

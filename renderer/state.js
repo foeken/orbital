@@ -6,7 +6,7 @@ const tana = window.api ? readOnlyInDemo(window.api) : readOnlyInDemo(mockApi())
 // whatever asked for it (a key, Cmd+K, a checkbox, a drop). Reads, navigation and the app's own settings still work.
 const DEMO_WRITES = new Set(['editMeeting', 'setNotify', 'inboxSetRead', 'inboxMarkAll', 'proposalAnswer', 'linkCodexTask', 'discussWith',
   'deleteDocument', 'restoreDocument', 'archiveDocument', 'unarchiveDocument', 'setType', 'setField', 'defineField', 'addField', 'setTypeIcon',
-  'setTypeHue', 'createDocument', 'createSearch', 'myTasks', 'setSearchFilter', 'setTitle', 'setDone', 'setState', 'setStateMany', 'toggleCheckbox',
+  'setTypeHue', 'createDocument', 'createSearch', 'setSearchFilter', 'setTitle', 'setDone', 'setState', 'setStateMany', 'toggleCheckbox',
   'setSharing', 'moveToSpace', 'setAssignees', 'setAssigneesMany', 'setText', 'setCell', 'tableOp', 'setBlockType', 'insertDivider',
   'insertImage', 'insertTable', 'insertAfter', 'insertBefore', 'split', 'join', 'insertChild', 'removeMany', 'moveMany', 'indentMany',
   'outdentMany', 'remove', 'indent', 'outdent', 'move', 'moveTo', 'insertMention', 'pin', 'unpin', 'pinTo', 'unpinFrom', 'setSensitive',
@@ -19,6 +19,7 @@ function readOnlyInDemo(api) {
       // the day and week nodes are made (and pinned) the first time they are asked for: in demo mode only found
       if (key === 'todayNode') return (offset) => own.todayNode(offset, true);
       if (key === 'weekNode') return () => own.weekNode(true);
+      if (key === 'myTasks') return () => own.myTasks(true); // the Work View's My Tasks, found and never made
       return own[key];
     },
   });

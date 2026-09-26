@@ -65,26 +65,30 @@ function timelineDividerEl() {
 // its end reads three days more, as the button there does when pressed; it says Loading… while it does. The count is
 // set once here too, so a reloaded window and main agree on it. Main stops at MAX_PAGES, and so does the button.
 const TIMELINE_MAX_PAGES = 120;
-let timelinePages = 1, timelineLoading = false;
+// timelineDry: the last page read added nothing, so scrolling stops asking; the button still reads on when pressed.
+// Without it an empty or sparse Timeline kept its end in view and read on, page after page, to the last.
+let timelinePages = 1, timelineLoading = false, timelineDry = false;
 if (tana.timelinePages) tana.timelinePages(1).catch(() => {});
-function timelineOlder() {
-  if (timelineLoading || timelinePages >= TIMELINE_MAX_PAGES) return;
+function timelineOlder(scrolled) {
+  if (timelineLoading || timelinePages >= TIMELINE_MAX_PAGES || (scrolled === true && timelineDry)) return;
   timelineLoading = true; renderSoon();
   run(async () => {
+    const had = (kids.get(TIMELINE_PAGE) || []).length;
     try { timelinePages = await tana.timelinePages(timelinePages + 1); await reload(TIMELINE_PAGE); } finally { timelineLoading = false; }
+    timelineDry = (kids.get(TIMELINE_PAGE) || []).length <= had;
     renderSoon(true);
   });
 }
 // The button coming within a screen of view is the scroll reaching the end: each render draws a new one, watched in
 // place of the last, so a page still too short to scroll keeps reading until it fills the screen.
 const timelineEnd = typeof IntersectionObserver === 'function'
-  ? new IntersectionObserver((seen) => { if (seen.some((e) => e.isIntersecting)) timelineOlder(); }, { root: outline.parentElement, rootMargin: '0px 0px 100% 0px' }) : null;
+  ? new IntersectionObserver((seen) => { if (seen.some((e) => e.isIntersecting)) timelineOlder(true); }, { root: outline.parentElement, rootMargin: '0px 0px 100% 0px' }) : null;
 function timelineOlderEl() {
   const el = document.createElement('button');
   el.type = 'button'; el.className = 'gmore tl-older';
   el.textContent = timelineLoading ? 'Loading…' : 'Show three more days';
   el.onmousedown = (e) => e.preventDefault();
-  el.onclick = timelineOlder;
+  el.onclick = () => timelineOlder();
   if (timelineEnd) { timelineEnd.disconnect(); timelineEnd.observe(el); }
   return el;
 }

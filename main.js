@@ -329,7 +329,7 @@ ipcMain.handle('search:list', () => searchList());
 // The renderer sends a view id, never a query: the filter→query vocabulary lives in sdk/query, which classic
 // renderer scripts cannot require, and main already holds the canonical filter for every view.
 ipcMain.handle('search:create', (_e, id, title) => searchCreate(id, title));
-ipcMain.handle('search:myTasks', () => myTasks());
+ipcMain.handle('search:myTasks', (_e, findOnly) => myTasks(findOnly === true));
 // The same filter vocabulary in both directions, so the pills that edit a view can edit a saved search. The query
 // lives in a root container of its own, which readNode never sees, so reading takes it off the document directly.
 // Writing replaces it wholesale rather than patching: what the pills are showing is what the document ends up saying.

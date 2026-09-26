@@ -45,11 +45,11 @@ async function searchChildren(id) {
   // unreadable, not that the user saved an unconstrained search — and searchQueryParams({}) would otherwise fall
   // back to "every listable kind", silently showing the wrong rows as if they were this search's results.
   if (!query || !Object.keys(query).length) throw new Error('this saved search has no readable query');
-  const nodes = await searchRows(query, view.completedWithin);
+  const nodes = await searchRows(query, view.completedWithin, 1000); // a view's 1,000, as its preview asks: My Tasks lists every task and groups afterwards
   // A view keeps the head of its list live (views.js), which is what makes a change someone else makes show up in
   // it. These rows are listed the same way and were not subscribed at all, so a saved search only ever showed what
   // its query answered when the page opened. The same cap applies here, and for the same reason: a search answers
-  // up to 200 rows, and these subscriptions are never swept. sync.subscribe is idempotent, and these ids stay out
+  // up to 1,000 rows, the first LIVE_ROWS of them subscribed, and these subscriptions are never swept. sync.subscribe is idempotent, and these ids stay out
   // of `subscribed` — that set belongs to the view refresh, which unsubscribes what the active view no longer lists.
   // ponytail: they stay subscribed for the rest of the session, like every other on-demand subscription.
   nodes.slice(0, LIVE_ROWS).forEach((n) => subscribe(n.id));
@@ -148,7 +148,8 @@ async function writeUpFor(event, owned) {
   const found = writeUpOf(event, owned), tagline = event && event.calendarEvent && event.calendarEvent.tagline;
   if (found || !tagline || !S.client) return found;
   const { nodes = [] } = await S.client.graph.listNodes({ nodeTypes: ['text'], textQuery: tagline, limit: 20 }).catch(() => ({}));
-  return nodes.find((n) => n.title === tagline && !(n.state && n.state.type) && idKind(n.id) === 'text') || null;
+  const named = nodes.filter((n) => n.title === tagline && !(n.state && n.state.type) && idKind(n.id) === 'text');
+  return named.length === 1 ? named[0] : null; // two pages of that title (a recurring meeting, a reused name): no telling which
 }
 // The uri a meeting should open at, or null when it is not an event or has no write-up yet.
 async function summaryUri(id) {
