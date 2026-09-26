@@ -3467,6 +3467,7 @@ async function runClosedPaletteKeysCheck() {
     let visibilityPeople = null, visibilityRoles = null; const me = () => null, loadMembers = () => {}, visibilityPeopleRows = () => [];
     const moveTargets = async (doc) => [{ label: 'Studio', run: () => writes.push(['move', doc.id, 'Studio']) }];
     const renderPalette = () => {}, closePalette = () => {}, promptEditor = () => {}, loadPinned = () => {};
+    let pinFailed = null; // loadPins keeps a failed read here (renderer/state.js)
     const groupBy = () => 'none', holdRow = () => {}, isTask = () => true;
     const errors = []; let queue = Promise.resolve();
     const showError = (e) => { if (e) errors.push((e && e.message) || String(e)); };
@@ -4005,7 +4006,7 @@ async function runEditPinsCheck() {
     const renderPalette = () => {}, showError = () => {}, run = (fn) => fn();
     const render = () => {}; // the shimmed renderSoon a refreshed mark set asks for
     const tana = {
-      pinState: async (id) => { calls.push(['pinState', id]); if (state && state.fail) throw new Error(state.fail); return state; },
+      pinState: async (id) => { calls.push(['pinState', id]); if (id === 'A' && slowA) await slowA; const st = states.get(id) || state; if (st && st.fail) throw new Error(st.fail); return st; },
       pinIds: async () => { calls.push(['pinIds']); return [...ids]; },
       pin: async (id, target, date) => { calls.push(['pin', id, target, date]); },
       unpin: async (id, target, date) => { calls.push(['unpin', id, target, date]); },
@@ -4015,6 +4016,7 @@ async function runEditPinsCheck() {
     const refreshRelated = (id) => { calls.push(['refreshRelated', id]); };
     const isRealId = (id) => typeof id === 'string';
     let picker = null; // the meeting picker is its own page with its own check; here what matters is what opens it
+    let slowA = null; const states = new Map(); // a read of one document that answers late, and answers per document
     const openMeetingPicker = (doc, back) => { picker = { doc: doc.id, back }; };
     ${sourceLine('const localDate =')}
     ${functionSource('fuzzyMatch')}
@@ -4033,6 +4035,8 @@ async function runEditPinsCheck() {
       tomorrow: () => localDate(1),
       picker: () => (picker ? { doc: picker.doc, back: typeof picker.back } : null),
       escape: () => { picker.back(); return palMode; },
+      openFor: (id, answer) => { states.set(id, answer); openPinsPalette({ id }); },
+      slow: () => { let go; slowA = new Promise((resolve) => { go = resolve; }); return () => { slowA = null; go(); }; },
     });
   `, { setImmediate, Date, Promise });
 
@@ -4075,6 +4079,14 @@ async function runEditPinsCheck() {
   await new Promise(setImmediate); // the page escape reopened has had its answer
   await api.open({ fail: 'Not connected' });
   assert.deepEqual(plain(api.page().map((r) => [r.label, !!r.disabled, !!r.note])), [['Not connected', true, true]], 'a failed read of the pins is the page\u2019s one line');
+  // A read for the page before that answers late does not wipe this page's failure back to Loading….
+  const resume = api.slow();
+  api.openFor('A', { sidebar: false, dates: [] });
+  api.openFor('B', { fail: 'Not connected' });
+  await new Promise(setImmediate);
+  resume();
+  await new Promise(setImmediate); await new Promise(setImmediate);
+  assert.deepEqual(plain(api.page().map((r) => r.label)), ['Not connected'], 'a late answer for another document leaves this one\u2019s failure standing');
   console.log('ok  Edit pins: the page opens with this document\u2019s pins, names today, unpins each of them, offers the sidebar, date and meeting pins that can be made, and the row marks come from one list');
 }
 
@@ -4090,11 +4102,13 @@ async function runLinkTargetsLoadCheck() {
     ${sourceLine('const plainDef =')}
     ${sourceBetween('let targetTypes', 'function targetRows')}
     ${functionSource('targetRows')}
-    ({ open: async (next, cached = null) => { answer = next; typeListCache = cached; openTargetsPage({ def: { title: 'Client', to: [] } }); const first = targetRows('').map((r) => r.label);
+    ({ rows: (q) => targetRows(q).map((r) => r.label),
+      open: async (next, cached = null) => { answer = next; typeListCache = cached; openTargetsPage({ def: { title: 'Client', to: [] } }); const first = targetRows('').map((r) => r.label);
       for (let i = 0; i < 4; i++) await Promise.resolve(); return [first, targetRows('').map((r) => r.label)]; } })
   `), { Promise });
   assert.deepEqual(plain(await api.open([{ uri: 'tana:type:a', title: 'Person' }])), [['Loading…'], ['Person']], 'the page says Loading… until the types are in');
   assert.deepEqual(plain(await api.open([{ uri: 'tana:type:b', title: 'Company' }], [{ uri: 'tana:type:a', title: 'Person' }])), [['Person'], ['Company']], 'the Type pill\u2019s copy shows while the read is out');
+  assert.deepEqual(plain(api.rows('zzqx')), ['No types match'], 'a query that matches no type says so: the page is typed, so the palette draws no No results under it');
   assert.deepEqual(plain(await api.open({ fail: 'Not connected' })), [['Loading…'], ['Not connected']], 'and a failed read says why');
   console.log('ok  Link to types: Loading…, the types, or why they could not be read');
 }

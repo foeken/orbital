@@ -248,11 +248,13 @@ function openTargetsPage(ctx) {
 }
 function targetRows(q) {
   const ctx = fieldCtx, to = plainDef(ctx.def.to), group = (ctx.def.title || 'Field') + ' links to';
-  return listRows(group, targetTypes, q, 'No types in this workspace', (list) => list.filter((t) => fuzzyMatch(t.title || '', q)).map((t) => {
+  const rows = listRows(group, targetTypes, q, 'No types in this workspace', (list) => list.filter((t) => fuzzyMatch(t.title || '', q)).map((t) => {
     const on = to.some((x) => x.uri === t.uri);
     return { group, icon: typeGlyph(t.uri), label: t.title || 'Untitled type', hint: on ? '✓' : '', keepOpen: true,
       run: () => saveDefinition(ctx, { to: on ? to.filter((x) => x.uri !== t.uri) : [...to, { uri: t.uri }] }) };
   }));
+  // a typed page draws no "No results" of its own (renderPalette), so a query that matches no type says so here
+  return rows.length || !q ? rows : [{ group, label: 'No types match', disabled: true, note: true }];
 }
 // Add field …: its name first, then what kind of field it is, then one write.
 function addFieldRows(q, typed) {

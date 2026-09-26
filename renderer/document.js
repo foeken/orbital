@@ -31,7 +31,7 @@ function loadPins() {
   if (!doc || !tana.pinState || doc.appPage) { pinInfo = null; return; } // a page of the app's own (Notifications) has no pins
   tana.pinState(doc.id).then((s) => {
     pinInfo = s ? { docId: doc.id, ...s } : null;
-    pinFailed = null;
+    if (pinFailed && pinFailed.docId === doc.id) pinFailed = null; // a late answer for another document leaves this one's failure standing
     if (!palette.hidden && (palMode === 'cmd' || palMode === 'pins')) renderPalette();
   }, (e) => {
     pinFailed = { docId: doc.id, message: (e && e.message) || String(e) };
