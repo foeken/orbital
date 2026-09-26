@@ -6854,33 +6854,40 @@ async function runStagedSearchReloadCheck() {
     const kids = new Map(), searchRows = new Map(), filters = new Map(), searchFilters = new Map();
     const isTypeId = () => false, typeFilter = () => ({}), syncUploads = (id, rows) => rows, render = () => {}, showError = (e) => { throw e; };
     const sameFilter = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-    const answers = []; // the stored-query reads still out, oldest first
-    const tana = { children: () => new Promise((resolve) => answers.push(resolve)), searchPreview: async () => ['preview'] };
+    const answers = []; // every read still out, stored query or preview, in the order it was asked
+    const ask = () => new Promise((resolve) => answers.push(resolve));
+    const tana = { children: ask, searchPreview: ask };
     ${sourceBetween('const reloadSeq =', 'async function reload(')}
     ${functionSource('reload')}
     ${functionSource('previewRows')}
     ({
       reload,
-      stage: (id) => { searchFilters.set(id, { filter: { states: ['open'] } }); filters.set(id, { states: ['closed'] }); previewRows(id); },
+      stage: (id) => { searchFilters.set(id, { filter: { states: ['open'] } }); filters.set(id, { states: ['closed'] }); searchRows.delete(id); previewRows(id); },
       save: (id) => { searchFilters.set(id, { filter: { states: ['closed'] } }); searchRows.delete(id); return reload(id); }, // what Save does (renderer/pills.js)
-      answer: (i, rows) => answers[i](rows),
+      answer: async (i, rows) => { answers[i](rows); for (let n = 0; n < 5; n++) await Promise.resolve(); },
       rows: (id) => kids.get(id),
     });
   `);
   const id = 'tana:search:01j0staged000000000000000';
-  const old = api.reload(id);
-  api.stage(id); await new Promise(setImmediate);
-  api.answer(0, ['old']); await old;
+  const old = api.reload(id); // 0
+  api.stage(id); await api.answer(1, ['preview']);
+  await api.answer(0, ['old']); await old;
   assert.deepEqual(plain(api.rows(id)), ['preview'], 'a stored-query answer that lands after the pills were staged leaves the preview rows');
   // Clean, staged, saved: the page is clean again when the first read lands, and that read is still from before the Save
   const other = 'tana:search:01j0saved0000000000000000';
-  const before = api.reload(other);
-  api.stage(other); await new Promise(setImmediate);
-  const saved = api.save(other);
-  api.answer(2, ['saved']); await saved; api.answer(1, ['before the save']); await before;
+  const before = api.reload(other); // 2
+  api.stage(other); await api.answer(3, ['preview']);
+  const saved = api.save(other); // 4
+  await api.answer(4, ['saved']); await saved; await api.answer(2, ['before the save']); await before;
   assert.deepEqual(plain(api.rows(other)), ['saved'], 'and a read from before a Save that lands after it does not put the old rows back');
-  console.log('ok  a saved search keeps the rows of its newest read: staged pills and a Save both retire the reads still out');
+  // A preview asked again (a global change) while the first is out: the first answer, landing last, is not the page's
+  const third = 'tana:search:01j0twice0000000000000000';
+  api.stage(third); api.stage(third); // 5, 6
+  await api.answer(6, ['fresh preview']); await api.answer(5, ['stale preview']);
+  assert.deepEqual(plain(api.rows(third)), ['fresh preview'], 'an older preview landing after a newer one leaves the newer rows');
+  console.log('ok  a saved search keeps the rows of its newest read: staged pills, a second preview and a Save all retire the reads still out');
 }
+
 
 
 

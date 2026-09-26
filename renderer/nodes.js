@@ -471,8 +471,9 @@ function previewRows(docId) {
   const asked = JSON.stringify(staged);
   if (searchRows.get(docId) === asked) return; // these rows already answer this filter
   searchRows.set(docId, asked);
-  nextRead(docId); // a stored-query read still out answers what the page showed before these pills
-  tana.searchPreview(staged).then((rows) => { kids.set(docId, rows); render(); }, (e) => { searchRows.delete(docId); showError(e); });
+  // a read still out, the stored query or an earlier preview, answers what the page showed before these pills
+  const seq = nextRead(docId), newest = () => reloadSeq.get(docId) === seq;
+  tana.searchPreview(staged).then((rows) => { if (newest()) { kids.set(docId, rows); render(); } }, (e) => { if (newest()) { searchRows.delete(docId); showError(e); } });
 }
 function setSearchF(patch) {
   const id = pillKey();
