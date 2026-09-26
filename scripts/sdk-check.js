@@ -1067,6 +1067,7 @@ async function main() {
     const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
     const settings = backend.settings; settings.reset();
     const docs = new Map(), searches = [];
+    let settingsListed = [];
     let clock = Date.parse('2026-09-26T08:00:00Z');
     const sync = {
       subscribe: async (id, init) => {
@@ -1081,6 +1082,7 @@ async function main() {
     };
     const listNodes = async (p) => {
       if (p.nodeIds) return { nodes: searches.filter((n) => p.nodeIds.includes(n.id)) };
+      if (p.textQuery === settings.TITLE) return { nodes: settingsListed };
       if (p.nodeTypes && p.nodeTypes.join() === 'search') return { nodes: [...searches].reverse().filter((n) => !p.createdBy || p.createdBy.includes(n.createdBy)) }; // newest first, as the graph sorts by default
       return { nodes: [] };
     };
@@ -1092,6 +1094,11 @@ async function main() {
     searches[0].title = 'Mine';
     assert.equal((await launch()).id, first.id, 'renamed in Tana, it is still the Work View\u2019s search');
     assert.equal(searches.length, 1, 'and no second My Tasks is made beside it');
+    await settings.flush();
+    settingsListed = [{ id: settings.settingsDocId(), title: settings.TITLE, createTime: '2026-09-26T07:00:00Z' }];
+    cache.open(':memory:'); settings.reset(); // a new machine, asking the moment sync connects, before start() has read the settings document
+    assert.equal((await launch()).id, first.id, 'a new machine reads which one it is from the settings document before it looks by title');
+    assert.equal(searches.length, 1, 'rather than making another beside the renamed one');
     searches[0].title = 'My Tasks';
     settings.set('myTasks', undefined); // a machine that has not heard which one it is yet
     settings.set('hiddenTitles', ['My Tasks']);

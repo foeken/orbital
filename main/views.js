@@ -196,6 +196,9 @@ async function searchCreate(id, title) {
 let myTasksAsk = null, myTasksMade = null;
 async function findMyTasks() {
   if (!S.client) throw new Error(NOT_CONNECTED);
+  // The renderer asks the moment sync connects, which can be before start() has read the settings document: on a new
+  // machine the id is only there once it has. hydrate is cheap once the document is open.
+  try { await settings.hydrate(); } catch (e) { report(e); }
   const known = settings.get('myTasks');
   if (typeof known === 'string' && known) {
     const { nodes = [] } = await S.client.graph.listNodes({ nodeIds: [known] }); // a lookup by id skips hidden titles, not deletions
