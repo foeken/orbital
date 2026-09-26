@@ -3108,6 +3108,34 @@ async function main() {
   // Document went with it, and its Loro undo history with that, so Cmd+Z could not uncheck the task and silently
   // undid an older step in another document instead.
   {
+    // Text a page has just typed comes back to it as a change like any other, and used to cost that page a re-read and
+    // a rebuild on every save. The typing page hears it as its own; the other half of a split hears it as before, and
+    // a write the page did not mark as typed (Cmd+K, a slash command) is nobody's own (#265).
+    const backend = mainHelpers(); require('../db').open(':memory:');
+    const id = 'tana:text:' + ulid(), doc = new Document(id);
+    doc.transact((l) => initDocument(l, 'Page', ME));
+    doc.on('change', (info) => backend.onChange(id, info));
+    backend.testRuntime({ me: { userUri: ME }, win: { isDestroyed: () => false, webContents: { send: () => {} } }, client: {
+      sync: { subscribe: async () => doc, getDocument: () => doc }, graph: { listNodes: async () => ({ nodes: [] }), getOwnerChain: async () => ({ entries: [] }) },
+    } });
+    const heard = [], pane = (name) => ({ webContents: { send: (channel, docId, info) => { if (channel === 'outline:changed' && docId === id) heard.push([name, info && info.own === true]); } } });
+    const left = pane('left'), right = pane('right');
+    backend.S.windows.add({ isDestroyed: () => false, panes: [left, right] });
+    const setTitle = backend.handlers.get('doc:setTitle');
+    await setTitle({ sender: left.webContents }, id, 'Typed on the left', true);
+    assert.deepEqual(heard, [['left', true], ['right', false]], 'the page that typed it hears its own echo; the other half is told as before');
+    heard.length = 0;
+    await setTitle({ sender: left.webContents }, id, 'From Cmd+K');
+    assert.deepEqual(heard, [['left', false], ['right', false]], 'a write not marked as typed is nobody\'s own');
+    heard.length = 0;
+    await assert.rejects(backend.handlers.get('block:setText')({ sender: right.webContents }, id, 'no-such-row', 'x', true));
+    assert.equal(backend.S.writer, null, 'a write that fails leaves no writer behind');
+    doc.transact((l) => l.getMap('data').set('title', 'Edited elsewhere'));
+    assert.deepEqual(heard, [['left', false], ['right', false]], 'so the next change, from anywhere, is nobody\'s own either');
+    backend.S.windows.clear();
+    console.log('ok  typed text: the typing page hears its own echo, every other page the change');
+  }
+  {
     const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
     const taskId = 'tana:text:' + ulid(), otherId = 'tana:text:' + ulid();
     const task = new Document(taskId); task.transact((l) => { initDocument(l, 'Task', ME); l.getMap('data').set('stateType', 'open'); });

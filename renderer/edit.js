@@ -18,7 +18,7 @@ function flush(key) {
   if (isReference(item.node)) { // the row edits the referenced document's title
     if (text === referenceLabel(item.node)) return;
     item.node.reference.node.title = text;
-    return run(() => tana.setTitle(item.node.reference.uri, text));
+    return run(() => tana.setTitle(item.node.reference.uri, text, true)); // true: typed here, already on screen (#265)
   }
   if (text === item.node.text && JSON.stringify(segs) === JSON.stringify(segsOf(item.node))) return;
   if (item.node.kind === 'block' && (typeof item.node.id !== 'string' || !item.node.id)) {
@@ -29,7 +29,7 @@ function flush(key) {
   // patch carries only text. Same rule as the mark toggles in toolbar.js.
   item.node.text = text; item.node.segments = item.node.kind === 'document' ? undefined : segs;
   run(async () => {
-    try { await (item.node.kind === 'document' ? tana.setTitle(item.docId, text) : tana.setText(item.docId, item.node.id, saveValue(segs))); }
+    try { await (item.node.kind === 'document' ? tana.setTitle(item.docId, text, true) : tana.setText(item.docId, item.node.id, saveValue(segs), true)); }
     catch (e) { if (item.node.kind === 'block') { await reload(item.docId); render(true); } throw e; }
   });
 }
