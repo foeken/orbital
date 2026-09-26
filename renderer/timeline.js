@@ -48,19 +48,31 @@ function timelineGroups(list) {
 function timelineDividerEl() {
   const el = document.createElement('div'); el.className = 'tl-divider'; el.setAttribute('aria-hidden', 'true'); return el;
 }
-// A week a page (main/timeline.js setWeeks): opening the page starts at one week (renderer/edit.js), and the button at
-// its end reaches one week further back. The count is set once here too, so a reloaded window and main agree on it.
-let timelineWeeks = 1;
-if (tana.timelineWeeks) tana.timelineWeeks(1).catch(() => {});
+// Three days a page (main/timeline.js setPages): opening the page starts at the first (renderer/edit.js), and nearing
+// its end reads three days more, as the button there does when pressed; it says Loading… while it does. The count is
+// set once here too, so a reloaded window and main agree on it. Main stops at MAX_PAGES, and so does the button.
+const TIMELINE_MAX_PAGES = 120;
+let timelinePages = 1, timelineLoading = false;
+if (tana.timelinePages) tana.timelinePages(1).catch(() => {});
 function timelineOlder() {
-  run(async () => { timelineWeeks = await tana.timelineWeeks(timelineWeeks + 1); await reload(TIMELINE_PAGE); renderSoon(true); });
+  if (timelineLoading || timelinePages >= TIMELINE_MAX_PAGES) return;
+  timelineLoading = true; renderSoon();
+  run(async () => {
+    try { timelinePages = await tana.timelinePages(timelinePages + 1); await reload(TIMELINE_PAGE); } finally { timelineLoading = false; }
+    renderSoon(true);
+  });
 }
+// The button coming within a screen of view is the scroll reaching the end: each render draws a new one, watched in
+// place of the last, so a page still too short to scroll keeps reading until it fills the screen.
+const timelineEnd = typeof IntersectionObserver === 'function'
+  ? new IntersectionObserver((seen) => { if (seen.some((e) => e.isIntersecting)) timelineOlder(); }, { root: outline.parentElement, rootMargin: '0px 0px 100% 0px' }) : null;
 function timelineOlderEl() {
   const el = document.createElement('button');
   el.type = 'button'; el.className = 'gmore tl-older';
-  el.textContent = 'Show the week before ' + new Date(Date.now() - timelineWeeks * 7 * 864e5).toLocaleDateString(undefined, { day: 'numeric', month: 'long' });
+  el.textContent = timelineLoading ? 'Loading…' : 'Show three more days';
   el.onmousedown = (e) => e.preventDefault();
   el.onclick = timelineOlder;
+  if (timelineEnd) { timelineEnd.disconnect(); timelineEnd.observe(el); }
   return el;
 }
 function timelineAddMoreEl(node, inline = false) {

@@ -49,15 +49,17 @@ const beyondStatus = (text) => (/ and /i.test(text) ? text : null);
 // karaoke and games, across Nedap …"): the summary's description, when it says more than its title
 const detailOf = (s, headline) => { const d = typeof s.description === 'string' ? s.description.trim() : ''; return d && d !== headline ? d : null; };
 const andList = (xs) => (xs.length > 1 ? xs.slice(0, -1).join(', ') + ' and ' + xs.at(-1) : xs[0]);
-// A week a page: the Timeline opens on the last seven days and reaches one week further back per click on its button
-// (renderer/timeline.js), which sets weeks here and reads the page again. What is asked of Tana grows with it, so the
-// older weeks have something to show: more summaries per watched node, more of your newest tasks.
-// ponytail: every older week is a full re-read of all the weeks before it (about half a second a read); fetch only the
-// new week if anyone ever pages far back.
+// Three days a page: the Timeline opens on today and the two days before it, and scrolling to its end reaches three
+// days further back (renderer/timeline.js), which sets pages here and reads the page again. What is asked of Tana grows
+// with it, so the older days have something to show: more summaries per watched node, more of your newest tasks.
+// ponytail: every older page is a full re-read of all the pages before it; fetch only the new days if that gets slow.
 const AT_ONCE = 12;
-let weeks = 1;
-const setWeeks = (n) => (weeks = Math.max(1, Math.min(52, Math.floor(Number(n)) || 1)));
-let markFrom = null; // the last visit, as read when this one began: an older week keeps the same new marks
+const DAYS = 3, MAX_PAGES = 120;
+let pages = 1;
+const setPages = (n) => (pages = Math.max(1, Math.min(MAX_PAGES, Math.floor(Number(n)) || 1)));
+// whole local days: today and the ones before it, so the oldest section on the page is never half a day
+const sinceOf = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime() - (DAYS * pages - 1) * 864e5; };
+let markFrom = null; // the last visit, as read when this one began: an older page keeps the same new marks
 // A summary's title only repeating the node's says nothing (followSummary makes the same call): its description then.
 function said(s, title) {
   const own = (title || '').trim().toLowerCase();
@@ -72,7 +74,7 @@ async function pool(list, fn) {
 // The meetings on the page stay current (#210): a live query over the meetings it lists, to the end of today, and a
 // meeting added or gone, renamed or moved, re-reads the page (renderer/app.js). Nothing else about a meeting is news
 // here, and Tana touches events often (a reply, a synced calendar), so only what the page shows of one counts.
-// Opened by a read, and again when the client, the weeks or the day change; a refusal leaves the page as it was.
+// Opened by a read, and again when the client, the pages or the day change; a refusal leaves the page as it was.
 let live = null, liveClient = null, liveKey = null;
 const meetingSig = (row) => { const ev = row.calendarEvent || {}; return JSON.stringify([row.title, ev.startTime, ev.endTime, ev.allDay, attendeesOf(ev).map((a) => a.displayName || a.email)]); };
 // Who is on a meeting, as the graph gives it: the roster (calendarEvent.roster), or the calendar's own attendee list
@@ -88,7 +90,7 @@ function meetingNote(ev, me, myEmail) {
 }
 function watchMeetings(me, since) {
   const end = new Date(); end.setHours(24, 0, 0, 0);
-  const key = [me, weeks, end.getTime()].join(' ');
+  const key = [me, pages, end.getTime()].join(' ');
   if (live && liveClient === S.client && liveKey === key) return;
   if (live) live.then((h) => h && h.close().catch(() => {}));
   liveClient = S.client; liveKey = key;
@@ -105,7 +107,7 @@ function watchMeetings(me, since) {
 
 async function rows() {
   if (!S.client || !S.me) throw new Error(NOT_CONNECTED);
-  const me = S.me.userUri, since = Date.now() - weeks * 7 * 864e5, graph = S.client.graph;
+  const me = S.me.userUri, since = sinceOf(), graph = S.client.graph;
   const names = new Map((await members().catch(() => [])).map((m) => [m.id, m.title]));
   // Watched: what the watch rule follows (made by you, not assigned to you; closed ones too, since finishing one is
   // news) and what you switched on, less what you switched off. Titles come with the rule's own answer.
@@ -117,12 +119,14 @@ async function rows() {
   for (const id of silenced) nodes.delete(id);
   const events = [];
   const who = (uris) => andList(uris.map((a) => names.get(a) || 'Someone'));
-  await pool([...nodes.values()], async (n) => {
+  // a node nobody has touched since the window opened has nothing in it to tell, so its history is not asked for:
+  // that is most of them on a short window, and one ListChanges each was most of the page's time
+  await pool([...nodes.values()].filter((n) => !n.updateTime || Date.parse(n.updateTime) > since), async (n) => {
     const st = n.state || {}, moved = Date.parse(st.enteredAt || '');
     const latest = st.changedBy && st.changedBy !== me && moved > since && VERB[st.type] ? { state: st.type, at: moved } : null;
     if (latest) events.push({ kind: 'status', uri: n.id, title: n.title, at: moved, actor: who([st.changedBy]), verb: VERB[st.type], icon: ICON[st.type], tone: TONE[st.type] });
     let summaries = [];
-    try { summaries = (await S.client.history.listChanges({ uri: n.id, limit: Math.min(50, 10 * weeks) })).summaries || []; } catch { return; } // one refusal costs that node only
+    try { summaries = (await S.client.history.listChanges({ uri: n.id, limit: Math.min(50, 5 * pages) })).summaries || []; } catch { return; } // one refusal costs that node only
     for (const s of summaries) {
       const at = Date.parse(s.endTime || s.startTime || ''), others = (s.authors || []).filter((a) => a !== me);
       const text = said(s, n.title);
@@ -135,7 +139,7 @@ async function rows() {
     }
   });
   // Inbox: the newest tasks assigned to you, whatever state they are in now, and the chat each was created in
-  const { nodes: tasks } = await graph.listNodes({ nodeTypes: ['text'], assignedTo: [me], sortOptions: [{ field: 'SORT_FIELD_CREATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }], limit: Math.min(500, 50 * weeks) });
+  const { nodes: tasks } = await graph.listNodes({ nodeTypes: ['text'], assignedTo: [me], sortOptions: [{ field: 'SORT_FIELD_CREATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }], limit: Math.min(500, 25 * pages) });
   const recent = tasks.filter((n) => Date.parse(n.createTime || '') > since);
   const mine = recent.filter((n) => !n.createdBy || n.createdBy === me).map((n) => n.id);
   const createdIn = new Map(mine.length ? ((await graph.listEdges({ fromNodeIds: mine, edgeTypes: ['EDGE_TYPE_CREATED_IN'] }).catch(() => ({}))).edges || []).map((e) => [e.fromNodeId, e.toNodeId]) : []);
@@ -153,7 +157,7 @@ async function rows() {
   // Meetings: the ones you are in that started in the window, up to now, each opening the meeting (which forwards to
   // its write-up, renderer/edit.js followSummary). A refusal costs the meetings only.
   const { nodes: meetings = [] } = await graph.listNodes({ nodeTypes: ['event'], hasParticipantUris: [me], eventStartTimeMin: new Date(since).toISOString(), eventStartTimeMax: new Date().toISOString(),
-    sortOptions: [{ field: 'SORT_FIELD_EVENT_START_TIME', direction: 'SORT_DIRECTION_DESCENDING' }], limit: Math.min(500, 50 * weeks) }).catch(() => ({}));
+    sortOptions: [{ field: 'SORT_FIELD_EVENT_START_TIME', direction: 'SORT_DIRECTION_DESCENDING' }], limit: Math.min(500, 25 * pages) }).catch(() => ({}));
   const myEmail = String((S.me.user && S.me.user.email) || '').toLowerCase();
   for (const n of meetings) {
     const ev = n.calendarEvent || {}, at = Date.parse(ev.startTime || '');
@@ -175,7 +179,7 @@ async function rows() {
   const todayRow = { id: PAGE + ':today:' + date, text: todayText, segments: [{ text: todayText }], kind: 'block', block: 'bullet', icon: 'todayTasks',
     editable: false, hasChildren: true, children, createdAt: iso(now), unread: false, timeline: { uri: null, time: 'Now', tone: 'new', today: true } };
   // What is new is what came after your last visit, which this visit then becomes. The first visit marks nothing.
-  if (weeks === 1 || markFrom === null) { markFrom = Number(db.setting('timelineSeen')) || Infinity; db.setSetting('timelineSeen', Date.now()); }
+  if (pages === 1 || markFrom === null) { markFrom = Number(db.setting('timelineSeen')) || Infinity; db.setSetting('timelineSeen', Date.now()); }
   const seen = markFrom;
   // New tasks in a row from one source on one day are one entry, timed by the newest of them
   const day = (at) => new Date(at).toDateString();
@@ -210,4 +214,4 @@ async function rows() {
   })];
 }
 
-module.exports = { PAGE, rows, said, statusOf, setWeeks };
+module.exports = { PAGE, rows, said, statusOf, setPages };

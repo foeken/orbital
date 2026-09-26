@@ -211,7 +211,7 @@ ipcMain.handle('inbox:unread', () => inbox.unread());
 ipcMain.handle('inbox:setRead', (_e, id, read) => inbox.setRead(id, !!read));
 ipcMain.handle('inbox:markAll', () => inbox.markAll());
 // Proposals (main/proposals.js): its rows come through outline:children too; this is the one write, approve or reject.
-ipcMain.handle('timeline:weeks', (_e, n) => timelinePage.setWeeks(n)); // how many weeks back the Timeline reads (main/timeline.js)
+ipcMain.handle('timeline:pages', (_e, n) => timelinePage.setPages(n)); // how many pages of three days back the Timeline reads (main/timeline.js)
 ipcMain.handle('proposals:answer', (_e, chatUri, proposedUri, approve) => proposalsPage.answer(chatUri, proposedUri, !!approve));
 ipcMain.handle('doc:info', (_e, id) => op(id, info));
 ipcMain.handle('doc:creationOptions', () => creationOptions());

@@ -2507,7 +2507,7 @@ async function main() {
       person('Me Myself', { identityUri: ME }), person('Board Room', { role: 'resource' }), person('Ann Bakker'), person('Bo Smit'), person('Cas de Vries'), person('Dee Jansen'), person('Eva Mol')] } };
     const allDay = { id: 'tana:event:' + ulid(), title: 'Offsite', calendarEvent: { startTime: ago(6 * H), endTime: ago(-18 * H), allDay: true } };
     let meetingsAsked = null;
-    let liveDoc = null; const sent = [];
+    let liveDoc = null; const sent = [], historyAsks = [];
     const summaries = new Map([[watched.id, [
       { title: 'Task status changed to Completed', authors: [COLLEAGUE], endTime: ago(0.05 * H) }, // the same move the node's state already tells
       { title: 'Added the Q4 numbers from Rob', authors: [COLLEAGUE], endTime: ago(0.2 * H) },
@@ -2531,7 +2531,7 @@ async function main() {
           },
           listEdges: async ({ fromNodeIds }) => ({ edges: [[viaMcp.id, MCP_CHAT], [viaMcpToo.id, MCP_CHAT], [viaAi.id, AI_CHAT]].filter(([f]) => fromNodeIds.includes(f)).map(([fromNodeId, toNodeId]) => ({ fromNodeId, toNodeId, type: 'EDGE_TYPE_CREATED_IN' })) }),
         },
-        history: { listChanges: async ({ uri }) => ({ summaries: summaries.get(uri) || [] }) },
+        history: { listChanges: async ({ uri }) => { historyAsks.push(uri); return { summaries: summaries.get(uri) || [] }; } },
         sync: { getDocument: (uri) => liveDocs.get(uri) || null, unsubscribe: async () => {},
           subscribe: async (uri, init) => { if (uri.startsWith('tana:liveQuery:')) { liveDoc = new Document(uri); liveDoc.transact(init); return liveDoc; } return uri === ME ? profile : uri === pinMapUri ? pinMap : null; } },
       } });
@@ -2548,13 +2548,13 @@ async function main() {
       ['Rob Jansen edited Contract renewal', 'Moved the deadline to Friday', 'updated', 'edit', false, []],
       ["Tana's AI added a task to your Inbox", null, 'tana', 'new', false, ['Share the transcript']],
     ], 'a timeline, newest first: who, then what they did, then the node; an edit\'s change quoted under it; new tasks from one source in a row are one quiet entry; a completion told once, from the node\'s own state; a meeting at its start time, all-day ones left out; yours alone, by hand, or weeks old stay out');
-    assert.deepEqual(JSON.parse(JSON.stringify([meetingsAsked.hasParticipantUris, Date.parse(meetingsAsked.eventStartTimeMax) <= Date.now(), Date.parse(meetingsAsked.eventStartTimeMin) < Date.now() - 6 * 24 * H])), [[ME], true, true],
-      'the meetings asked for are yours, from the week back up to now');
+    assert.deepEqual(JSON.parse(JSON.stringify([meetingsAsked.hasParticipantUris, Date.parse(meetingsAsked.eventStartTimeMax) <= Date.now(), Date.parse(meetingsAsked.eventStartTimeMin) === (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime() - 2 * 24 * H; })()])), [[ME], true, true],
+      'the meetings asked for are yours, from the start of the day before yesterday up to now');
     // Kept current (#210): the read left a live query open over your meetings; the server's answers re-read the page
     // when a meeting's title or time moves, or one comes or goes, and not when only something else about it changed
     const liveQuery = liveDoc.data.toJSON().query;
-    assert.deepEqual(JSON.parse(JSON.stringify([liveQuery.types, liveQuery.hasParticipantUris, liveQuery.eventStartTimeMin < Date.now() - 6 * 24 * H, liveQuery.eventStartTimeMax > Date.now()])), [['event'], [ME], true, true],
-      'the live query is your meetings from the week back to the end of today');
+    assert.deepEqual(JSON.parse(JSON.stringify([liveQuery.types, liveQuery.hasParticipantUris, liveQuery.eventStartTimeMin === (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime() - 2 * 24 * H; })(), liveQuery.eventStartTimeMax > Date.now()])), [['event'], [ME], true, true],
+      'the live query is your meetings from the start of the day before yesterday to the end of today');
     const answerLive = (rows, version) => liveDoc.transact((loro) => {
       const data = loro.getMap('data'), nodes = data.get('result').setContainer('nodes', new LoroList());
       for (const row of rows) nodes.push(row);
@@ -2581,12 +2581,18 @@ async function main() {
     summaries.get(watched.id).push({ title: 'Signed by both parties', authors: [COLLEAGUE], endTime: ago(-1000) });
     const next = await read();
     assert.deepEqual(next.filter((r) => r[4]).map((r) => r[1]), ['Signed by both parties'], 'what came after your last visit is marked new, and only that');
-    // A week a page: ten days back is not on the first one, and one step older brings it in
-    summaries.get(watched.id).push({ title: 'Renamed the task', authors: [COLLEAGUE], endTime: ago(10 * 24 * H) });
-    assert.ok(!(await read()).some((r) => r[1] === 'Renamed the task'), 'the Timeline opens on the last week');
-    assert.equal(backend.timelinePage.setWeeks(2), 2, 'one week older');
-    assert.ok((await read()).some((r) => r[1] === 'Renamed the task'), 'brings the week before it in');
-    backend.timelinePage.setWeeks(1);
+    // Three days a page: four days back is not on the first one, and one page older brings it in
+    summaries.get(watched.id).push({ title: 'Renamed the task', authors: [COLLEAGUE], endTime: ago(4 * 24 * H) });
+    assert.ok(!(await read()).some((r) => r[1] === 'Renamed the task'), 'the Timeline opens on today and the two days before');
+    assert.equal(backend.timelinePage.setPages(2), 2, 'three days older');
+    assert.ok((await read()).some((r) => r[1] === 'Renamed the task'), 'brings the three days before it in');
+    backend.timelinePage.setPages(1);
+    // A node nobody has touched since the window opened is not asked for its history: that was most of the page's time
+    watched.updateTime = ago(5 * 24 * H);
+    historyAsks.length = 0; await read();
+    assert.ok(!historyAsks.includes(watched.id), 'a watched node last updated before the window is not asked for its changes');
+    watched.updateTime = ago(0.1 * H); historyAsks.length = 0; await read();
+    assert.ok(historyAsks.includes(watched.id), 'and one updated inside it is');
     console.log('ok  timeline: what changed and what finished first, new Inbox tasks grouped and quiet, newest first, new since the last visit');
   }
 
