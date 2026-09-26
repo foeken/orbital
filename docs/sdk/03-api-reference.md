@@ -122,7 +122,7 @@ These helpers are the app's verified native capability boundary. Ownership is an
 
 | Member | Behaviour |
 |---|---|
-| `new Document(id, { peerId })` | LoroDoc with `setPeerId`, `setRecordTimestamp(true)`, `setChangeMergeInterval(60)`, and an `UndoManager({ mergeInterval: 0, maxUndoSteps: 200 })`. |
+| `new Document(id, { peerId })` | LoroDoc with `setPeerId`, `setRecordTimestamp(true)` and `setChangeMergeInterval(60)`. Its `UndoManager({ mergeInterval: 0, maxUndoSteps: 200 })` is made by the first `transact`: `undoManager` is `null` until then, and `undo`/`redo`/`canUndo`/`canRedo` answer `false`. One that exists during a snapshot import makes Loro decode the whole document. |
 | `id`, `loro`, `data`, `content` | The LoroDoc and its two root maps. |
 | `transact(fn)` | `fn(loro)`; commit; export ops since the last export; emit `local-update` (bytes) and `change` ({ origin: 'local' }). |
 | `undo()` / `redo()` → bool, `canUndo()` / `canRedo()` | Local-only, CRDT-aware; the resulting ops flow out like any local change. |
