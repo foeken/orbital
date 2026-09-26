@@ -132,10 +132,10 @@ function foldRow(key, opening, done) {
   const row = nodeElOf(key), chev = row && row.querySelector(':scope > .line > .chev');
   // the chevron answers the click at once, and the redraw finds it already pointing the new way
   if (chev && motionOK()) chev.animate([{ transform: 'none' }, { transform: 'rotate(' + (opening ? 90 : -90) + 'deg)' }], { duration: MOTION.base, easing: MOTION.out, fill: 'forwards' });
-  if (!opening) { // closed at once for the keyboard (renderer/nodes.js rowsIn), while the children shrink away
+  if (!opening) { // closed at once for the keyboard (inert: no Tab, no caret move into it), while the children shrink away
     const kids = row && row.querySelector(':scope > .children');
-    if (kids) kids.classList.add('closing');
-    return curtain([kids], false, done);
+    if (kids) kids.inert = true;
+    return curtain([kids], false, () => { if (kids) kids.inert = false; done(); }); // rows are reused: none keeps it
   }
   const open = () => { settleAt = 0; done(); revealing = { key, until: performance.now() + 1500 }; revealOpened(); };
   // A document opens onto its fields and its children, both read from Tana. Wait a moment for them, so the block opens
@@ -177,7 +177,9 @@ function foldSection(head, toggle, find) {
   const quietly = () => { rowsQuiet = true; try { toggle(); } finally { rowsQuiet = false; } };
   const land = () => { const again = find(); turnFrom(again && again.querySelector('svg'), from); if (opening && again) curtain(sectionRows(again), true); };
   if (opening) { quietly(); return land(); }
-  curtain(sectionRows(head), false, () => { quietly(); land(); });
+  const rows = sectionRows(head); // closed at once for the keyboard, as a node's children are (foldRow)
+  for (const el of rows) el.inert = true;
+  curtain(rows, false, () => { for (const el of rows) el.inert = false; quietly(); land(); });
 }
 let rowsQuiet = false;
 // Something that comes and goes in the page's flow (the ⌘F field): it opens and closes as a curtain, so what is below

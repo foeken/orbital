@@ -155,6 +155,7 @@ function createQuickPanel() {
   });
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true }); // summoned over whatever the user is in
   win.on('blur', () => { if (!win.isDestroyed()) win.hide(); }); // clicking away dismisses it, like the shortcut does
+  win.on('hide', () => { if (nativeTheme) nativeTheme.themeSource = 'system'; }); // only while it shows: the outliner's Follow system reads it
   win.on('closed', () => { quick.panelState.win = null; });
   win.loadFile(path.join(__dirname, 'quick-add.html'));
   return win;
