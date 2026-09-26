@@ -398,6 +398,14 @@ function runAction(id) {
     if (!parent.disabled) run(async () => { const kid = (await parent.sub()).find((k) => k.label === id.slice(fold + 1) && !k.disabled); if (kid) kid.run(); });
     return true;
   }
+  // A key on a choice folded under Move to … or Edit visibility ("move>Foundry"): those two rows exist once main has
+  // said what this node allows, which the closed palette does not ask on its own (#274). Asked here, for this key only,
+  // and the key runs again with the answer.
+  if (palette.hidden && /^(move|visibility)>/.test(id) && palDoc && tana.accessOptions && isRealId(palDoc.id) && !accessById.has(palDoc.id)) {
+    const doc = palDoc;
+    run(async () => { accessById.set(doc.id, await tana.accessOptions(doc.id)); if (palette.hidden && currentDoc()?.id === doc.id) runAction(id); });
+    return true;
+  }
   if (id.startsWith('doc:')) { goTo(id.slice(4)); return true; }
   return false;
 }

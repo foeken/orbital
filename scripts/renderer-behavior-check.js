@@ -3397,7 +3397,8 @@ async function runClosedPaletteKeysCheck() {
     const openCreationPalette = () => {}, openHiddenPalette = () => {}, toggleSensitiveVisibility = () => {}, followSystem = () => {};
     const openVisibilityPalette = () => {}, openMovePalette = () => {}, copyText = () => {};
     const togglePalette = () => {}, navigate = () => {}, history = () => {}, focusRail = () => {}, setZoom = () => {};
-    const filterEl = {}, zoomFactor = 1, BASE_ZOOM = 1, visibilityRows = () => [], moveTargets = async () => [], previewMoveToSpace = () => {};
+    const filterEl = {}, zoomFactor = 1, BASE_ZOOM = 1, visibilityRows = () => [], previewMoveToSpace = () => {};
+    const moveTargets = async (doc) => [{ label: 'Studio', run: () => writes.push(['move', doc.id, 'Studio']) }];
     const renderPalette = () => {}, closePalette = () => {}, promptEditor = () => {}, loadPinned = () => {};
     const groupBy = () => 'none', holdRow = () => {}, isTask = () => true;
     const errors = []; let queue = Promise.resolve();
@@ -3410,7 +3411,7 @@ async function runClosedPaletteKeysCheck() {
     const tana = { refresh: async () => {}, filters: {}, related: async () => ({ pinned: [] }),
       currentMeeting: async () => { calls.current++; return answer; },
       pinTo: async (hub, id) => { writes.push(['pinTo', hub, id]); },
-      accessOptions: async () => { calls.access++; return {}; },
+      accessOptions: async () => { calls.access++; return { move: true }; },
       notifyState: async () => { calls.notify++; return { on: false }; },
       pinState: async () => ({ sidebar: false, dates: [...pinned] }),
       pin: async (id, target, date) => { writes.push(['pin', id, date]); pinned.add(date); },
@@ -3465,6 +3466,11 @@ async function runClosedPaletteKeysCheck() {
   assert.deepEqual(plain(api.state().calls), { current: 0, access: 0, notify: 0 }, 'a key with the palette closed looks up no call, sharing or watch state');
   api.open();
   assert.deepEqual(plain(api.state().calls), { current: 1, access: 1, notify: 1 }, 'the open palette does, for the rows and hints it draws');
+  // 5. A key on a choice folded under Move to … asks for this node's access itself, once, and then moves it.
+  api.reset();
+  assert.equal(await api.key('move>Studio'), true, 'a folded Move to key is answered while the access is asked for');
+  assert.deepEqual(plain(api.state().writes), [['move', DOC, 'Studio']], 'and moves the node once the access is in');
+  assert.equal(api.state().calls.access, 1, 'asking for it once, for this key');
   console.log('ok  keys with the palette closed: date pins and Pin to current meeting act on the node under the caret with state read at the press, and no palette-only lookup is made');
 }
 function runCmdPillsCheck() {
