@@ -47,6 +47,25 @@ client.sync    // SyncConnection (call connect() first)
 await client.close();
 ```
 
+## Composing less than the whole client
+
+`createTanaClient` builds everything, and needs `orgId` and `peerId` because it always builds a `SyncConnection`. The parts stand alone; take only what you need:
+
+```js
+const { createTransport, GraphClient, SyncConnection } = require('./sdk');
+const transport = createTransport({ getAccessToken });             // auth, request ids, the 401 retry
+const graph = new GraphClient(transport);                          // reads only: no orgId, no peerId, no stream
+const sync = new SyncConnection({ transport, orgId, peerId });     // documents, without graph, history or search
+```
+
+`HistoryClient` and `SearchClient` take a transport the same way. Everything above the sync connection is a function of a `SyncConnection` you pass in (`openLiveQuery(sync, …)`, `openPresence(sync, …)`), so live queries and presence cost nothing unless opened, and every helper is required from its own module (`sdk/node`, `sdk/content`, …), not from the index.
+
+## Adding a Tana service call or descriptor
+
+- **A method on a service we already have** is one method on that service's client (`GraphClient` in `graph.js`, `HistoryClient` in `history.js`, `SearchClient` in `search.js`), made through `unary(this.client, Service, 'methodName', params)` with protobuf JSON in and out. Normalise the answer there (for example `nodes ||= []`, since protobuf JSON omits empty lists), nowhere else.
+- **A new service** is its `.proto` file descriptor in `proto/descriptors.js` (the base64 `fileDesc` blob from the `Mr(` calls in Tana's `shared-*.js` bundle, with its dependencies, added to `files` and its service exported by name), a client class in a file of its own shaped like `HistoryClient` (`constructor(transport) { this.client = createClient(Service, transport); }`), and one line in `createTanaClient` if the app should get it by default.
+- **A new sync command** (`ServerSyncCommand`) is a method on `SyncConnection` calling `this._command({ case, value })`; presence-sized ones go through `_lightCommand` so they queue behind at most four in flight.
+
 ## Verification
 
 `npm run check` runs `scripts/sdk-check.js` (offline: proto round-trips, documents, outline ops, undo, query builders, pins, image fetch against fakes, and the full sync lifecycle against an in-process fake `SyncService`) and `scripts/db-check.js`. Live behaviour is exercised with `scripts/platform-cli.js` (see recipes).
