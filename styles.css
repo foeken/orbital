@@ -54,6 +54,7 @@ button { font: inherit; }
    header area and padding -- drags the window, and everything interactive opts out once, here, not per element.
    [tabindex] covers the sidebar rows, section heads and focusable outline blocks; .railgrip keeps the resize drag. */
 .titlebar, .rail { -webkit-app-region: drag; }
+.palette { -webkit-app-region: no-drag; } /* its scrim covers both: Electron would take a click there as a window drag, and it never reaches the mousedown that closes the palette */
 button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -webkit-app-region: no-drag; }
 
 .titlebar { padding: 48px 32px 6px; user-select: none; } /* the 4px the scroll area took, so the outline sits where it did */
@@ -70,17 +71,14 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
    starts flush with the title and the rest keep their spacing. */
 #taskInfo { margin-left: 0; margin-top: 6px; white-space: normal; }
 #taskInfo .chip:first-child { margin-left: 0; }
-/* only the crumb links block the drag; the empty band beside them moves the window */
-.crumbs { font-size: 13px; color: #888; margin-bottom: 14px; }
-.crumbs a { color: #888; text-decoration: none; cursor: pointer; }
-.crumbs a .ricon { display: inline-flex; vertical-align: -2px; margin-right: 4px; }
-.crumbs a .ricon svg { width: 14px; height: 14px; }
+/* only the two buttons block the drag; the empty band beside them moves the window */
+.crumbs { font-size: 13px; margin-bottom: 14px; } /* 13px: the line the buttons sit in, which is the row's height */
 .text a.url { color: #508fbb; text-decoration: underline; cursor: pointer; }
 [data-theme="dark"] .text a.url { color: #7fb8dd; }
-.crumbs a:hover { color: #1a1a1a; } /* hover reads as contrast alone: an underline sits badly under the icon and the date */
-.crumbs .sep { margin: 0 6px; color: #bbb; }
-/* a meeting crumb's date: a secondary detail beside the label, quieter than the crumb text itself */
-.crumbs .cdate { margin-left: 6px; color: #bbb; }
+/* Home and ⌘K: in the line without making it taller, 2px apart as the buttons top right are; -3px: the first glyph,
+   not its box, on the title's edge; -1px: level with the buttons top right (measured) */
+.crumbs .navbtn { display: inline-flex; vertical-align: middle; margin: -4px 2px -4px 0; position: relative; top: -1px; }
+.crumbs .navbtn:first-child { margin-left: -3px; }
 .error { font-size: 13px; color: #c0392b; margin-top: 6px; }
 .error button { margin-left: 8px; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; }
 /* a zoomed node's fields (type attributes), under the title */
@@ -181,7 +179,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .outline.table-view > .node > .line > .body > .tmeta > :not(.mtext) ~ :not(.mtext) { margin-left: 10px !important; } /* over taskMetaEl's inline 6px: alone in a column they read as cramped */
 .outline.table-view > .node > .line > .body > .text, .outline.table-view .cell { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .outline.table-view > .node { border-bottom: 1px solid #f0f0f0; }
-.outline.table-view > .thead { padding: 0 40px 6px 70px; border-bottom: 1px solid #ececec; color: #999; font-size: 13px; line-height: 18px; user-select: none; } /* 65 + the body's own 5; 40: the badge's slot */
+.outline.table-view > .thead { margin-top: 16px; padding: 0 40px 6px 70px; border-bottom: 1px solid #ececec; color: #999; font-size: 13px; line-height: 18px; user-select: none; } /* 65 + the body's own 5; 40: the badge's slot; 16px: clear of the title above */
 .outline.table-view > .thead > span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 [data-theme="dark"] .outline.table-view > .node, [data-theme="dark"] .outline.table-view > .thead { border-color: #2b2f31; }
 .tbtn.c svg { width: 13px; height: 13px; display: block; }
@@ -202,7 +200,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .filter .clear:hover { background: #ddd; }
 .filter.empty .clear { display: none; }
 .titlebar { position: relative; }
-/* The header buttons (the palette, back and forward, the page's switches, the sidebar toggle last): top right of the
+/* The header buttons (back and forward, the page's switches, the sidebar toggle last): top right of the
    header band, absolute against .titlebar so they never shift as the crumbs, task meta or fields rows appear and
    disappear beneath them. One row from the right edge, so a button that is not offered (the sidebar toggle on a page
    without a sidebar) leaves no gap: the others move up to the edge. */
@@ -227,7 +225,10 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .navbtn.out { animation: pop-out var(--dur-quick) var(--ease-in) forwards; }
 
 /* filter pills (Tasks / Library): "Status <Inbox, In Progress>", "Assigned to <You>", "<Type>"; each opens a menu below it */
-.pills { position: relative; display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 32px 12px; }
+/* z-index: the row, not each menu, is what stacks over the page. A pressed pill is transformed while it springs back
+   (the Press rule below), which traps its menu in the pill's own stacking context, and a table's outline is one too
+   (container-type): without it the table drew over the menu until the spring settled. */
+.pills { position: relative; z-index: 5; display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 32px 12px; }
 .pills[hidden] { display: none; }
 .pill { position: relative; border: 0; border-radius: 999px; padding: 6px 14px; background: #e8f1fb; color: #4f8ad9; font-weight: 600; font-size: 15px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
 .pill b { color: #2b6fcf; font-weight: 700; }
@@ -866,10 +867,6 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .text { color: #ccd0d3; }
 [data-theme="dark"] .titlebar h1, [data-theme="dark"] .h1 > .line .text, [data-theme="dark"] .h2 > .line .text, [data-theme="dark"] .h3 > .line .text { color: #e8eaec; }
 [data-theme="dark"] .titlebar h1.done { color: #777d80; }
-[data-theme="dark"] .crumbs, [data-theme="dark"] .crumbs a { color: #858b8e; }
-[data-theme="dark"] .crumbs a:hover { color: #c9c9c9; }
-[data-theme="dark"] .crumbs .sep { color: #555b5e; }
-[data-theme="dark"] .crumbs .cdate { color: #6a7073; }
 [data-theme="dark"] .error { color: #ed8b83; }
 
 [data-theme="dark"] .filter input { background: #282b2d; color: #c9c9c9; }

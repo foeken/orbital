@@ -423,7 +423,7 @@ function renderOutline() {
   for (const tag of titleTags) taskInfoEl.append(chipEl(tag, parent.node.hue));
   blurSensitive(taskInfoEl, parent && parent.docId);
   renderFields(parent, true); // this render already got past the caret guard, so the fields are redrawn with it
-  renderCrumbs(trail);
+  renderCrumbs();
   renderRail(parent);
   // A saved search is a query you can edit, so it gets the pills too — every other zoomed page is content, not a query.
   const showPills = authed && pillsApply() && (!parent || isSearchDoc(parent.node) || isTypeDoc(parent.node));
@@ -539,83 +539,25 @@ function renderFields(parent, force = false, el = $('fields')) {
   blurSensitive(el, parent && parent.docId);
   if (keep) el.querySelector('.fchoice[data-key="' + CSS.escape(keep) + '"]')?.focus();
 }
-// The date of a meeting crumb, in the form the Meetings list and search already show (main.js eventMeta): read off
-// the event row when the app has it, else fetched once through api.node, which carries the same formatted string.
-const eventWhen = new Map(); // event id -> its meta string ('' when it has none), null while the fetch is in flight
-function crumbWhen(id) {
-  if (typeof id !== 'string' || !id.startsWith('tana:event:')) return null;
-  const known = docOf(id);
-  if (known && known.meta) return known.meta;
-  if (connected && !eventWhen.has(id) && tana.node) {
-    eventWhen.set(id, null);
-    tana.node(id).then((n) => { eventWhen.set(id, n.meta || ''); if (n.meta) renderSoon(); }, () => eventWhen.delete(id));
-  }
-  return eventWhen.get(id) || null;
-}
-// One link, icon and name together, so the whole thing is the target and the icon is never the only thing to read.
+// Home as a button, the same size and look as ⌘K beside it: the two are the whole bar.
 function homeCrumb() {
   const name = homeName();
   if (!name) return null; // only while a Home search is still loading
-  const a = document.createElement('a');
+  const b = document.createElement('button');
+  b.className = 'navbtn'; b.tabIndex = -1;
   const icon = iconNode('home');
-  if (icon) { const ricon = document.createElement('span'); ricon.className = 'ricon home'; ricon.append(icon); a.append(ricon); }
-  a.append('Home'); // the label is the role, not the target; the name it points at stays in the tooltip
-  a.setAttribute('aria-label', 'Go to Home: ' + name);
-  a.title = 'Go to Home: ' + name;
-  a.onclick = () => goHome();
-  return a;
+  if (icon) b.append(icon);
+  b.setAttribute('aria-label', 'Go to Home: ' + name); // the role; the name it points at is in the label and tooltip
+  b.title = 'Go to Home: ' + name;
+  b.onmousedown = (e) => e.preventDefault(); // the caret stays where it is, as with the other header buttons
+  b.onclick = () => goHome();
+  return b;
 }
-function renderCrumbs(trail) {
+// The bar over the title: Home, then ⌘K, and nothing else — the page title says where you are. Home is always
+// shown, even on Home itself or with the Library as Home: one fixed way back beats a button that comes and goes.
+function renderCrumbs() {
   const nav = $('crumbs');
-  nav.replaceChildren();
-  // The Home anchor, ahead of the location: the house glyph and the word Home, then a bullet to keep it apart from
-  // the › chain that follows. It is a shortcut, not an ancestor — the structural path behind it is untouched, so
-  // nothing suggests a saved search owns the node. Always shown, even on Home itself or with the Library as Home:
-  // one fixed way back beats a link that comes and goes.
-  const homeEl = homeCrumb();
-  // A view page has no location to show, but it still gets the anchor: the bar is one fixed place, on every page.
-  nav.hidden = !trail && !homeEl;
-  if (homeEl) nav.append(homeEl);
-  if (!trail) return;
-  const back = () => { zoom = null; render(); };
-  // location in Tana (owner chain from api.path, e.g. "Library" or "Automation Guild › Meeting"), loaded once per document.
-  // A document reached through a space (zoom.via) starts at the space's location; the spaces follow as crumbs.
-  const root = zoom.via ? zoom.via[0] : zoom, rootId = root.docId;
-  const path = paths.get(rootId);
-  if (connected && !path && tana.path && isRealId(rootId)) { paths.set(rootId, []); tana.path(rootId).then((p) => { paths.set(rootId, p); if (zoom && (zoom.via ? zoom.via[0] : zoom).docId === rootId) renderSoon(); }).catch(() => {}); }
-  // Separators are decided as crumbs go in rather than by index: the first one after the Home anchor is the • that
-  // keeps the shortcut apart from the › chain, the rest are ›, and a location that filters down to nothing leaves
-  // no dangling separator behind.
-  let crumbs = 0;
-  const addCrumb = (a) => {
-    if (crumbs || homeEl) { const sep = document.createElement('span'); sep.className = 'sep'; sep.textContent = crumbs ? '›' : '•'; nav.append(sep); }
-    crumbs++;
-    nav.append(a);
-  };
-  // Once Home is a place of the user's own, the Library is one they do not use: it is left out of the location, so a
-  // document that sits in it starts at whatever comes next, or at the Home anchor alone.
-  const located = path && path.length
-    ? path.filter((p) => p.id !== 'library' || homeId() === 'library')
-    : docOf(rootId)?.appPage ? [] : [{ id: '', title: root.from || (viewOf() ? viewOf().title : 'Tana') }]; // a page of the app's own is in no view
-  for (const p of located) {
-    const a = document.createElement('a');
-    // ancestors can share a title (a meeting named after its space), so each crumb shows its kind icon
-    if (p.icon) { const ricon = document.createElement('span'); ricon.className = 'ricon ' + p.icon; ricon.innerHTML = iconSvg(p.icon); a.append(ricon); }
-    a.append(p.id === 'library' ? p.title : demoText(p.title, p.id));
-    const when = crumbWhen(p.id); // a meeting crumb also says when it was: two meetings often share a title
-    if (when) { const date = document.createElement('span'); date.className = 'cdate'; date.textContent = when; a.append(date); }
-    blurSensitive(a, p.id);
-    a.onclick = p.id === 'library' ? () => setView('library') : p.id ? () => goTo(p.id) : back;
-    addCrumb(a);
-  }
-  for (const v of zoom.via || []) {
-    const a = document.createElement('a'); a.textContent = demoText((docOf(v.docId) || {}).text || 'Untitled', v.docId); blurSensitive(a, v.docId); a.onclick = () => { zoom = v; render(); };
-    addCrumb(a);
-  }
-  for (const item of trail.slice(0, -1)) { // ancestors only: the page title already shows the current node
-    const a = document.createElement('a'); a.textContent = demoText(item.node.text || 'Untitled', item.node.id); blurSensitive(a, item.docId); a.onclick = () => zoomTo(item);
-    addCrumb(a);
-  }
+  nav.replaceChildren(...[homeCrumb(), $('navPalette')].filter(Boolean)); // ⌘K: renderer/palette.js; Home: null only while a Home search loads
 }
 
 // a child row: document children (inside a space) are their own document, so their key, children and edits go by their own id

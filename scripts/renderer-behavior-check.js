@@ -363,9 +363,6 @@ function runSensitiveBlurCheck() {
     ['zoomed fields', /blurSensitive\(el, parent && parent\.docId\)/],
     ['sidebar titles', /blurSensitive\(title, node\.id\)/],
     ['sidebar chips', /blurSensitive\(chip, node\.id\)/],
-    ['owner breadcrumbs', /blurSensitive\(a, p\.id\)/],
-    ['zoom breadcrumbs', /blurSensitive\(a, v\.docId\)/],
-    ['outline breadcrumbs', /blurSensitive\(a, item\.docId\)/],
     ['palette labels', /blurSensitive\(label, r\.node && r\.node\.id\)/],
     ['palette hints', /blurSensitive\(h, r\.node && r\.node\.id\)/],
   ]) assert.match(source, pattern, surface + ' uses the shared sensitive treatment');
@@ -1053,7 +1050,7 @@ async function runStalePaletteInvalidationCheck() {
     let searches = [{ id: searchId, title: 'saved' }, { id: keptId, title: 'beta' }];
     const TIMELINE_PAGE = 'orbital:timeline';
     let zoom = { docId: keptId };
-    const taskMetaById = new Map(), kids = new Map(), extra = new Map(), paths = new Map(), fresh = new Map();
+    const taskMetaById = new Map(), kids = new Map(), extra = new Map(), fresh = new Map();
     const loadRoots = async () => {};
     const reload = async () => {};
     const loadPins = async () => { pinInfo = null; };
@@ -4345,7 +4342,7 @@ async function runSearchPageRowUpdateCheck() {
     let views = [{ id: 'library', nodes: [] }], palRows = [], palDoc = null, pinInfo = null, view = 'library';
     let zoom = { docId: SEARCH, nodeId: null };
     const kids = new Map([[SEARCH, [{ id: TASK, kind: 'document', icon: 'task', text: 'old title', done: 0, stateType: 'proposed' }]]]);
-    const extra = new Map(), paths = new Map(), fresh = new Map(), taskMetaById = new Map(), relatedBy = new Map();
+    const extra = new Map(), fresh = new Map(), taskMetaById = new Map(), relatedBy = new Map();
     const railGroups = () => [], localStorage = { getItem: () => null, setItem() {}, removeItem() {} };
     const isTask = (node) => node.kind === 'document' && node.icon === 'task';
     const asDoc = (node) => ({ ...node, text: node.text ?? node.title ?? '', kind: 'document' });
@@ -5766,9 +5763,9 @@ async function runHomeCheck() {
     ${functionSource('homeCrumb')}
     ${functionSource('renderCrumbs')}
     const bar = document.createElement('nav');
-    const $ = () => bar;
-    const paths = new Map();
-    const crumbWhen = () => null, blurSensitive = () => {}, iconSvg = () => '', zoomTo = () => {};
+    const cmdBtn = document.createElement('button'); // the ⌘K button index.html puts in the bar
+    const $ = (id) => (id === 'crumbs' ? bar : id === 'navPalette' ? cmdBtn : null);
+    const blurSensitive = () => {}, iconSvg = () => '', zoomTo = () => {};
     const viewOf = () => ({ title: 'Library' }), docOf = () => null;
     const OTHER_DOC = 'tana:text:01j0note0000000000000000';
     ${functionSource('navigate')}
@@ -5780,13 +5777,12 @@ async function runHomeCheck() {
       drop: (id) => { searches = searches.filter((s) => s.id !== id); repairHome(); },
       go: (place) => { zoom = place; }, view: (id) => { view = id; zoom = null; },
       home: () => goHome(),
-      crumb: () => { const el = homeCrumb(); return el && { text: el.textContent, label: el.getAttribute('aria-label'), icon: el.childNodes[0].childNodes[0].dataset.icon, click: el.onclick }; },
-      // the whole crumb bar, as it reads: the Home anchor, the separators and the location behind them
-      crumbs: (location, docId = OTHER_DOC) => {
+      crumb: () => { const el = homeCrumb(); return el && { tag: el.tagName, text: el.textContent, label: el.getAttribute('aria-label'), icon: el.childNodes[0].dataset.icon, click: el.onclick }; },
+      // the whole bar over the title, as it reads
+      crumbs: (docId = OTHER_DOC) => {
         zoom = { docId, nodeId: null };
-        paths.set(docId, location);
-        renderCrumbs([{ docId, node: { text: 'Note' } }]);
-        return bar.childNodes.map((kid) => kid.textContent).join(' ');
+        renderCrumbs();
+        return bar.childNodes.map((kid) => (kid === cmdBtn ? '[⌘K]' : kid.tagName === 'button' ? '[Home]' : kid.textContent)).join(' ');
       },
       back: () => navigate(-1), push: (place) => { navBack.push(place); navHere = { view, zoom, key: 'here' }; },
       seed: (place) => { savedPlace = place; ${seed} return savedPlace; },
@@ -5809,24 +5805,19 @@ async function runHomeCheck() {
   await api.list([{ id: SEARCH, text: 'Everything of mine' }]);
   assert.equal(api.name(), 'Everything of mine', 'a renamed search shows its current name');
 
-  // The crumb: icon and name in one link, which is the whole target, and it goes Home
+  // The Home button: the house glyph alone, beside ⌘K, its label saying where it goes, and it goes Home
   api.go({ docId: OTHER, nodeId: null });
   const crumb = api.crumb();
-  assert.deepEqual([crumb.text, crumb.label, crumb.icon], ['Home', 'Go to Home: Everything of mine', 'home'],
-    'a zoomed page starts with the Home anchor: the house glyph and the word Home, in one link whose label says where it goes');
+  assert.deepEqual([crumb.tag, crumb.text, crumb.label, crumb.icon], ['button', '', 'Go to Home: Everything of mine', 'home'],
+    'a zoomed page starts with the Home button: the house glyph and no word, a button like ⌘K, whose label says where it goes');
   crumb.click();
   assert.deepEqual(plain(api.went()), [SEARCH], 'and pressing it opens Home');
-  assert.equal(api.crumb().text, 'Home', 'the anchor stays on Home itself: one fixed way back, always in the same place');
+  assert.equal(api.crumb().tag, 'button', 'the button stays on Home itself: one fixed way back, always in the same place');
   api.go({ docId: OTHER, nodeId: null });
   assert.equal(api.target(), null, 'a note is not a place to come back to, so it does not offer itself as Home');
 
-  // The location behind the anchor: with a Home of the user's own, the Library is not a page they use, so it is
-  // left out of it — and a document that sits in the Library keeps the anchor alone, with no trailing separator.
-  const LIB = { id: 'library', title: 'Library', icon: 'library' }, SPACE = { id: 'tana:space:01j0space000000000000000', title: 'Foundry', icon: 'space' };
-  assert.equal(api.crumbs([LIB, SPACE]), 'Home • Foundry',
-    'with a saved search as Home the location starts at the space: the Library crumb is dropped, and the • still separates the anchor from what follows');
-  assert.equal(api.crumbs([LIB]), 'Home',
-    'a document that lives in the Library shows the anchor alone, rather than a • with nothing after it');
+  // The bar is Home then ⌘K and nothing else: no location behind them, however deep the page
+  assert.equal(api.crumbs(), '[Home] [⌘K]', 'the bar over a document is the Home button, then ⌘K, and no breadcrumbs');
 
   // Back with nothing to go back to lands on Home; a real prior place still wins
   api.back();
@@ -5854,12 +5845,10 @@ async function runHomeCheck() {
   assert.deepEqual([api.id(), api.name(), api.stored().home], ['library', 'Library', 'library'],
     'a deleted Home falls back to the Library and the stale preference is repaired, not left behind');
   api.view('library');
-  assert.equal(api.crumb().text, 'Home', 'and with the Library as Home the anchor still shows, rather than disappearing with the choice');
-  assert.equal(api.crumbs([LIB, SPACE]), 'Home • Library › Foundry',
-    'and with no Home of their own the Library is still the start of the location, unchanged');
-  // A view page has no location, so the bar used to be hidden outright; the anchor alone is enough to show it.
-  assert.match(source, /nav\.hidden = !trail && !homeEl;\n\s*if \(homeEl\) nav\.append\(homeEl\);/,
-    'the crumb bar is shown for the Home anchor alone, so a view page (the Library, Inbox, Tasks) keeps it too');
+  assert.equal(api.crumb().tag, 'button', 'and with the Library as Home the button still shows, rather than disappearing with the choice');
+  assert.equal(api.crumbs(), '[Home] [⌘K]', 'and the bar is the same two buttons');
+  // The bar used to be hidden on a view page, which has no location; it now carries the two buttons on every page.
+  assert.doesNotMatch(source, /nav\.hidden =/, 'the bar is never hidden: Home and ⌘K on every page, a view page (the Library, Inbox, Tasks) included');
   assert.equal(api.seed(null), null, 'a Library Home needs no restore target: it is the view a launch already opens');
   api.view('inbox');
   api.home();

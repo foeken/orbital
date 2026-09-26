@@ -1163,7 +1163,7 @@ function renderPalette() {
   const active = palList.querySelector('.row.active');
   if (active) active.scrollIntoView({ block: 'nearest' });
 }
-// ⌘K as a button beside back and forward, for whoever has not met the key yet: the same toggle the key runs.
+// ⌘K as a button, first in the crumbs bar before Home (renderCrumbs), for whoever has not met the key yet: the same toggle the key runs.
 const paletteBtn = $('navPalette');
 paletteBtn.onmousedown = (e) => e.preventDefault(); // the caret stays in its row, so closing the palette puts it back
 paletteBtn.onclick = () => togglePalette('cmd');
