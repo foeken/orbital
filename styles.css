@@ -234,7 +234,10 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .navbtn.out { animation: pop-out var(--dur-quick) var(--ease-in) forwards; }
 
 /* filter pills (Tasks / Library): "Status <Inbox, In Progress>", "Assigned to <You>", "<Type>"; each opens a menu below it */
-.pills { position: relative; display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 32px 12px; }
+/* z-index: the row, not each menu, is what stacks over the page. A pressed pill is transformed while it springs back
+   (the Press rule below), which traps its menu in the pill's own stacking context, and a table's outline is one too
+   (container-type): without it the table drew over the menu until the spring settled. */
+.pills { position: relative; z-index: 5; display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 32px 12px; }
 .pills[hidden] { display: none; }
 .pill { position: relative; border: 0; border-radius: 999px; padding: 6px 14px; background: #e8f1fb; color: #4f8ad9; font-weight: 600; font-size: 15px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
 .pill b { color: #2b6fcf; font-weight: 700; }
