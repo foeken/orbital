@@ -181,7 +181,7 @@ In a table a row's title opens the node (click, Enter or Space; the title is ren
 box ticks without opening it. A field column is plain text, comma-joined, cut with an ellipsis and whole in the hover
 tooltip (none while the row is hidden as sensitive). On a type's page an options column can be changed in place: a click
 on the cell (without ⌘ or ⇧, which select) or ⌘K **Set <field> …** on the focused row opens the options picker of
-docs/OUTLINER.md's fields addendum for that row. Every fact column can be resized: drag the grip on its header's right
+docs/OUTLINER.md §12 (Fields) for that row. Every fact column can be resized: drag the grip on its header's right
 edge, double-click it to reset; from the keyboard, ⌘K **Column widths …** (View options, while the page is a table) lists
 the columns, ←/→ make the highlighted one 20px narrower or wider while nothing is typed, ↩ resets it. Widths are kept per
 page key and column in the synced `tableWidths` preference; Title takes what the others leave, and the icons column and

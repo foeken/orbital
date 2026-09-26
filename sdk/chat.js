@@ -1,6 +1,6 @@
 'use strict';
 // A chat document has no content outline: its conversation is data.messages (docs/CHATS.md). This turns that list
-// into ordinary read-only outline rows in the vocabulary the renderer already knows (docs/OUTLINER.md addendum 1):
+// into ordinary read-only outline rows in the vocabulary the renderer already knows (docs/OUTLINER.md §3):
 // one author row per message, its markdown blocks as children, mentions as segments, attachments/proposals as
 // reference rows. Pure and Electron-free so scripts/sdk-check.js can run it offline.
 
