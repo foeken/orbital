@@ -1830,6 +1830,13 @@ async function main() {
     answers[3](Promise.reject(new Error('unavailable'))); await fourth.catch(() => {}); answers[2]({ nodes: kept }); await third;
     await new Promise(setImmediate);
     assert.equal(subscribes.includes(kept[0].id), true, 'a newer read that failed leaves an older answered read to keep its head live');
+    // One search open in two windows: each keeps the head its own newest read answered, whichever window asked last
+    const inA = [{ id: 'tana:text:' + ulid(), title: 'A' }], inB = [{ id: 'tana:text:' + ulid(), title: 'B' }];
+    const readA = backend.handlers.get('outline:children')({ sender: { id: 101 } }, searchId), readB = backend.handlers.get('outline:children')({ sender: { id: 102 } }, searchId);
+    while (answers.length < 6) await new Promise(setImmediate);
+    answers[5]({ nodes: inB }); await readB; answers[4]({ nodes: inA }); await readA;
+    await new Promise(setImmediate);
+    assert.deepEqual([subscribes.includes(inA[0].id), subscribes.includes(inB[0].id)], [true, true], 'two windows showing one search each keep their own head live');
 
     const brokenDoc = new Document('tana:search:' + ulid());
     brokenDoc.transact((l) => initDocument(l, 'Broken search', ME)); // no query container at all

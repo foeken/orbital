@@ -21,12 +21,14 @@ async function spaceChildren(id) {
   return nodes.map((n) => toNode(graphRow(n)));
 }
 // A saved search's "content" is the rows its stored query returns (sdk/node.js readSearch).
-const searchReads = new Map(); // saved search id -> the number the last read of it was given
-const headRead = new Map(); // saved search id -> the number of the read its head came from
-async function searchChildren(id) {
+// Both per page (the key watchRelated uses: the renderer that asked), since two windows showing one search each hold
+// the rows their own newest read installed (renderer/nodes.js), and each window's head has to stay live.
+const searchReads = new Map(); // "<page>\n<search id>" -> the number the last read of it was given
+const headRead = new Map(); // "<page>\n<search id>" -> the number of the read its head came from
+async function searchChildren(id, page = 'main') {
   if (!S.client) throw new Error(NOT_CONNECTED);
-  const seq = (searchReads.get(id) || 0) + 1;
-  searchReads.set(id, seq);
+  const read = page + '\n' + id, seq = (searchReads.get(read) || 0) + 1;
+  searchReads.set(read, seq);
   // The completed window is the app's own setting, so it lives in the `view` map beside the sort and the grouping
   // rather than in Tana's query vocabulary — read together, in one pass over the document.
   const { query, view } = await op(id, readSearch);
@@ -44,17 +46,21 @@ async function searchChildren(id) {
   // The newest read that answered decides the head: one from before a Save that lands after it would put the old rows
   // back in the head and let the sweep release the ones on screen (the renderer drops its rows the same way,
   // renderer/nodes.js). A newer read that failed decides nothing, so an older one that answered still keeps its rows live.
-  if (seq > (headRead.get(id) || 0)) {
-    headRead.set(id, seq);
+  if (seq > (headRead.get(read) || 0)) {
+    headRead.set(read, seq);
     const head = nodes.slice(0, LIVE_ROWS).map((n) => n.id);
-    searchHeads.set(id, head);
+    if (!searchHeads.has(id)) searchHeads.set(id, new Map());
+    searchHeads.get(id).set(page, head);
     for (const uri of head) subscribe(uri).then((doc) => { if (doc) readOnDemand(uri); });
   }
   return nodes.map((n) => toNode(graphRow(n)));
 }
-const searchHeads = new Map(); // saved search id -> the ids of the head its page keeps live
+const searchHeads = new Map(); // saved search id -> page -> the ids of the head that page keeps live
 // The documents on screen, and the head of any saved search among them: its page's rows stay live while it is shown.
-const withSearchHeads = (ids) => [...ids, ...ids.flatMap((id) => searchHeads.get(id) || [])];
+const withSearchHeads = (ids) => [...ids, ...ids.flatMap((id) => [...(searchHeads.get(id) || new Map()).values()].flat())];
+// A page that closed holds no head (main.js removePane). One that only moved on keeps its last one, which counts only
+// while another page shows that search, and is replaced when it opens the search again.
+const dropSearchHeads = (page) => { for (const heads of searchHeads.values()) heads.delete(page); };
 // The rows a filter would find, without storing it: what a saved search shows while its pills are being edited.
 // It asks the graph exactly what Save would store — filterToSearchQuery, then the same searchQueryParams the stored
 // query goes through — so the preview and the saved result cannot disagree. Saving is then only a write, never a
@@ -398,4 +404,4 @@ const ipc = {
   'search:preview': (_e, filter) => searchPreview(filter),
 };
 
-module.exports = { spaceChildren, searchChildren, searchPreview, attributeTitles, fieldsOf, summaryUri, changesOf, summaryChanges, historyOf, backlinkGroups, related, watchRelated, unwatchRelated, watchedPages, withSearchHeads, ipc };
+module.exports = { spaceChildren, searchChildren, searchPreview, attributeTitles, fieldsOf, summaryUri, changesOf, summaryChanges, historyOf, backlinkGroups, related, watchRelated, unwatchRelated, watchedPages, withSearchHeads, dropSearchHeads, ipc };
