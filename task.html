@@ -1,0 +1,23 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; img-src 'self' data:">
+<title>Create task</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<!-- Create task (task.js): a transparent page main lays over the whole window, both halves of a split (main.js openOverlay).
+     The card is the command palette's, so it looks, arrives and themes the way ⌘K does. -->
+<body class="overlaypage">
+<div id="task" class="palette">
+  <div class="card">
+    <input id="taskTitle" type="text" placeholder="New task" aria-label="Task title" autocomplete="off" spellcheck="false">
+    <div id="taskPicks" class="tpicks" title="Assign to someone else ⇥"></div>
+    <div id="taskError" class="terror" role="alert" hidden></div>
+    <div id="taskTypes" class="list" role="listbox" aria-label="Type" hidden></div>
+  </div>
+</div>
+<script src="icons.js"></script>
+<script src="task.js"></script>
+</body>
+</html>

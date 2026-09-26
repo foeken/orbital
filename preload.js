@@ -38,6 +38,9 @@ contextBridge.exposeInMainWorld('api', {
   splitHover: (on) => ipcRenderer.send('window:splitHover', on === true), // the pointer is over this half's split grip
   onSplitHover: (cb) => ipcRenderer.on('window:splitHover', (_e, on) => cb(on === true)), // or over the other half's
   windowTheme: (theme) => ipcRenderer.send('window:theme', theme), // 'light' | 'dark': the line between split pages matches the page
+  openOverlay: (page, theme) => ipcRenderer.invoke('overlay:open', page, theme), // 'help' | 'task' over this whole window (main.js openOverlay), in this page's theme
+  closeOverlay: (result) => ipcRenderer.invoke('overlay:close', result), // help.html and task.html: done; { palette?: true, note?: string } for the page that asked
+  onOverlayClosed: (cb) => ipcRenderer.on('overlay:closed', (_e, result) => cb(result || {})), // the page that asked hears what the overlay had to say
   openExternal: (url) => ipcRenderer.invoke('shell:open', url), // http(s) link from node text, in the default browser
   exportPdf: (docId) => ipcRenderer.invoke('doc:exportPdf', docId),
   nodeLink: (docId) => ipcRenderer.invoke('doc:link', docId), // the home.tana.inc url for a node
@@ -106,7 +109,6 @@ contextBridge.exposeInMainWorld('api', {
   // The preferences that follow you between machines (main/settings.js), read synchronously so renderer/prefs.js has
   // them before the first paint, and written through one at a time.
   prefs: ipcRenderer.sendSync('prefs:snapshot'),
-  prefsNow: () => ipcRenderer.sendSync('prefs:snapshot'), // the same, read again: quick add's panel lives on between opens
   setPref: (key, value) => ipcRenderer.invoke('prefs:set', key, value),
   setOpenAIKey: (key) => ipcRenderer.invoke('openai:setKey', key),
   chatgptStatus: () => ipcRenderer.invoke('chatgpt:status'),
@@ -115,7 +117,8 @@ contextBridge.exposeInMainWorld('api', {
   chatgptLogout: () => ipcRenderer.invoke('chatgpt:logout'),
   onChatGPTStatus: (cb) => ipcRenderer.on('ai:chatgptChanged', (_e, status) => cb(status)),
   onSettings: (cb) => ipcRenderer.on('settings:changed', (_e, synced) => cb(synced)),
-  createDocument: (title, opts) => ipcRenderer.invoke('doc:create', title, opts), // nonblank title; opts:{kind:doc|task|meeting|chat|custom|search,typeUri?,query?}; a search requires query and nothing else may carry one; returns Node to zoom
+  createDocument: (title, opts) => ipcRenderer.invoke('doc:create', title, opts), // nonblank title; opts:{kind:doc|task|meeting|chat|custom|search,typeUri?,query?}; a search requires query and nothing else may carry one; a task may carry a workflow typeUri; returns Node to zoom
+  taskTypes: () => ipcRenderer.invoke('doc:taskTypes'), // [{ uri, title, hue }]: the workflow types Create task offers (task.html)
   search: (query, scope) => ipcRenderer.invoke('search', query, scope), // scope: { types } or { members } for a link field
   searches: () => ipcRenderer.invoke('search:list'), // saved search documents, newest first
   createSearch: (viewId, title) => ipcRenderer.invoke('search:create', viewId, title), // saves that view's current filter as a saved search; returns the Node to zoom
@@ -174,19 +177,13 @@ contextBridge.exposeInMainWorld('api', {
   // api.related(id).pinHub, which is set only when this user may write that hub. Resolves to the hub's pinned uris.
   pinTo: (hubId, docId) => ipcRenderer.invoke('pins:pinTo', hubId, docId),
   unpinFrom: (hubId, docId) => ipcRenderer.invoke('pins:unpinFrom', hubId, docId),
-  // The meeting this user has actually *joined* right now (sdk/calls through main/quickadd), or null. Read fresh:
+  // The meeting this user has actually *joined* right now (sdk/calls through main/meetings), or null. Read fresh:
   // "the meeting I am in" is only true for minutes at a time, so nothing caches it across an open.
   currentMeeting: () => ipcRenderer.invoke('meeting:current'), // { id, title, joinedAt, callUri } | null
   sensitiveIds: () => ipcRenderer.invoke('sensitive:list'),
   setSensitive: (docId, on) => ipcRenderer.invoke('sensitive:set', docId, on),
   image: (uri) => ipcRenderer.invoke('image', uri), // tana:image: uri -> data URL (main fetches with the session token and caches)
   members: () => ipcRenderer.invoke('members'),
-  // Quick add (docs/QUICK-ADD.md), used by quick-add.html only: what the panel shows when it opens, the one write it
-  // makes, and the two ends of its lifecycle.
-  quickContext: () => ipcRenderer.invoke('quick:context'), // { meeting:{id,title,joinedAt}|null, meetingError?, members[], membersError?, me }
-  quickCreate: (input) => ipcRenderer.invoke('quick:create', input), // { title, assigneeUri?, meetingId?, agent?:{prompt,model?,host?} } -> { node, assigned, linked, agent, assignedError?, linkError?, agentError? }
-  quickClose: () => ipcRenderer.invoke('quick:close'),
-  onQuickOpen: (fn) => ipcRenderer.on('quick:open', () => fn()), // the shortcut showed the panel again: re-read the meeting
   // Hidden titles: patterns that keep matching nodes out of every list and search (a node opened directly still opens).
   // Case-insensitive; a pattern matches the whole title, or its start when it ends with '*' ("Block*", "Lunch").
   // All four resolve to the stored list (string[]) after the views have refreshed.

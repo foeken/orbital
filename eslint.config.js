@@ -36,8 +36,8 @@ module.exports = [
     },
   },
   {
-    // The quick-add panel is its own window and its own scope (index.html does not load it).
-    files: ['quick-add.js'],
+    // The Help tour and Create task are pages of their own, each its own scope (index.html does not load them).
+    files: ['help.js', 'task.js'],
     languageOptions: { sourceType: 'script', globals: globals.browser },
     rules: { 'no-unused-vars': ['error', { vars: 'local', args: 'none' }] },
   },

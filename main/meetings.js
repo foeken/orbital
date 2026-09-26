@@ -3,6 +3,7 @@
 // are sdk/events.js; who may make them is access.canEditEvent, Tana's own organizer rule. Not through mut: the
 // outliner's editable() keeps an event's title read-only, and a calendar change is not an outline step to undo.
 const access = require('../sdk/access');
+const calls = require('../sdk/calls');
 const events = require('../sdk/events');
 const { readNode } = require('../sdk/node');
 const { NOT_CONNECTED, S } = require('./state');
@@ -42,4 +43,14 @@ async function attendeeSuggestions() {
   return S.client.graph.listAttendeeSuggestions({ limit: 20 });
 }
 
-module.exports = { meetingInfo, editMeeting, attendeeSuggestions };
+// The meeting this user has joined right now, for ⌘K "Pin to current meeting". Read at every ask, never cached:
+// "the meeting I am in" is true for minutes at a time. currentCalls is the only proof of having joined
+// (docs/MEETINGS.md); an event merely scheduled now is not it.
+async function currentMeeting() {
+  if (!S.client || !S.me) throw new Error(NOT_CONNECTED);
+  const [live] = await calls.currentCalls(S.client, S.me.userUri, { limit: 5 });
+  if (!live || !live.eventUri) return null;
+  return { id: live.eventUri, title: live.title || '', joinedAt: live.joinedAt, callUri: live.callUri };
+}
+
+module.exports = { meetingInfo, editMeeting, attendeeSuggestions, currentMeeting };
