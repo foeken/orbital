@@ -321,7 +321,7 @@ function rowSig(n) {
     n.updatedAt, n.createdAt, n.createdBy, n.fields, // the subtext's times, author and field values: they arrive after the row and a reused row would still show none
     sensitiveHidden(n.id), isPinned(n.id), meta || (taskMetaLoading.has(n.id) ? 'loading' : null), members ? members.length : 0, open.get(n.id), pending.has(n.id),
     displayKeys().join(','), codexIds.has(n.id), agentStateOf(n.id), agentTaskHosts.get(n.id), pinnedOn(n), n.table,
-    n.proposal ? n.proposal.note : null, n.subtext, tableView()]); // which facts the row shows, and as a list or a table: without this a reused row would keep the old ones, a proposal's buttons included
+    n.proposal ? n.proposal.note : null, n.subtext, n.join, tableView()]); // which facts the row shows, and as a list or a table: without this a reused row would keep the old ones, a proposal's buttons included
 }
 function renderOutline() {
   const saved = focused();
@@ -754,6 +754,7 @@ function nodeEl(node, docId, parent) {
     text.classList.toggle('chiponly', chipOnly(text));
   }
   body.append(text);
+  if (node.join && tana.openExternal) body.append(timelineJoinEl(node)); // a meeting to come or under way, on the Timeline
   const metaText = node.notification ? agoText(node.createdAt) : node.timeline ? node.timeline.time ?? timelineTime(node.createdAt) : node.proposal ? agoText(node.proposal.proposedAt) : demoMeta(display, display.meta); // a notification says when it came in, a proposal when it was made
   if (metaText) { const m = document.createElement('span'); m.className = 'meta'; m.textContent = metaText; body.append(m); }
   // every row describes who can see it, not only task rows; the fetch waits until the row is on screen

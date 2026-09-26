@@ -2507,10 +2507,10 @@ async function main() {
     const meeting = { id: 'tana:event:' + ulid(), title: 'Leadership sync', calendarEvent: { startTime: ago(3 * H), endTime: ago(2.5 * H), roster: [
       person('Me Myself', { identityUri: ME }), person('Board Room', { role: 'resource' }), person('Ann Bakker'), person('Bo Smit'), person('Cas de Vries'), person('Dee Jansen'), person('Eva Mol')] } };
     const allDay = { id: 'tana:event:' + ulid(), title: 'Offsite', calendarEvent: { startTime: ago(6 * H), endTime: ago(-18 * H), allDay: true } };
-    const going = { id: 'tana:event:' + ulid(), title: 'Board prep', calendarEvent: { startTime: ago(3.5 * H), endTime: ago(-1 * H) } }; // still going: as it is
+    const going = { id: 'tana:event:' + ulid(), title: 'Board prep', calendarEvent: { startTime: ago(3.5 * H), endTime: ago(-1 * H), actionUrl: 'https://teams.example/join/1' } }; // still going: as it is
     const summed = { id: 'tana:event:' + ulid(), title: 'Weekly', calendarEvent: { startTime: ago(4.5 * H), endTime: ago(4 * H), summary: 'The roadmap was agreed.' } }; // Tana's summary on the event, wherever its write-up now lives
     // still to come today (a second from now, so the end of the day cannot overtake it), shown only once asked for below
-    const soon = { id: 'tana:event:' + ulid(), title: 'Standup', calendarEvent: { startTime: new Date(Date.now() + 1000).toISOString(), endTime: new Date(Date.now() + 1000 + 15 * 6e4).toISOString(), roster: [person('Ann Bakker')] } };
+    const soon = { id: 'tana:event:' + ulid(), title: 'Standup', calendarEvent: { startTime: new Date(Date.now() + 1000).toISOString(), endTime: new Date(Date.now() + 1000 + 15 * 6e4).toISOString(), roster: [person('Ann Bakker')], location: 'https://meet.example/abc; Room 5', actionUrl: 'https://teams.example/join/2' } };
     let meetingsAsked = null, soonToo = false;
     let liveDoc = null; const sent = [], historyAsks = [];
     const summaries = new Map([[watched.id, [
@@ -2557,6 +2557,9 @@ async function main() {
     ], 'a timeline, newest first: who, then what they did, then the node; an edit\'s change quoted under it; new tasks from one source in a row are one quiet entry; a completion told once, from the node\'s own state; a meeting at its start time, quiet once it is over with no summary, all-day ones left out; yours alone, by hand, or weeks old stay out');
     assert.deepEqual(JSON.parse(JSON.stringify([meetingsAsked.hasParticipantUris, Date.parse(meetingsAsked.eventStartTimeMax) === (() => { const d = new Date(); d.setHours(24, 0, 0, 0); return d.getTime(); })(), Date.parse(meetingsAsked.eventStartTimeMin) === (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime() - 2 * 24 * H; })()])), [[ME], true, true],
       'the meetings asked for are yours, from the start of the day before yesterday to the end of today');
+    // Join: a meeting under way carries its call link, one that is over does not
+    const joins = new Map((await backend.timelinePage.rows()).map((r) => [r.timeline.uri, r.join]));
+    assert.deepEqual([joins.get(going.id), joins.get(meeting.id)], ['https://teams.example/join/1', undefined], 'a meeting under way has a Join to its call, one that is over has none');
     // Kept current (#210): the read left a live query open over your meetings; the server's answers re-read the page
     // when a meeting's title or time moves, or one comes or goes, and not when only something else about it changed
     const liveQuery = liveDoc.data.toJSON().query;
@@ -2601,6 +2604,7 @@ async function main() {
     assert.deepEqual(JSON.parse(JSON.stringify([withSoon[1].text, withSoon[1].timeline.time, withSoon[1].timeline.upcoming, withSoon[1].children.map((c) => [c.id, c.text, c.icon, c.subtext])])),
       ['Upcoming meetings', '', true, [[soon.id, 'Standup', 'meeting', hm(Date.parse(soon.calendarEvent.startTime)) + '–' + hm(Date.parse(soon.calendarEvent.endTime)) + ' · Ann Bakker']]],
       'a meeting later today sits under Upcoming meetings, after Today\'s Tasks, saying when and who');
+    assert.equal(withSoon[1].children[0].join, 'https://meet.example/abc', 'and joins its call: the link in its location first, as the meeting\'s sidebar has it');
     assert.ok(!withSoon.slice(2).some((r) => r.timeline.uri === soon.id), 'and not among what happened');
     soonToo = false;
     assert.ok(!(await backend.timelinePage.rows()).some((r) => r.timeline.upcoming), 'with none to come the block is not drawn');

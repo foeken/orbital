@@ -24,6 +24,7 @@ const { NOT_CONNECTED, S, iso, isMcp, send } = require('./state');
 const { graphRow, hm, isAllDay, members, rememberNodeHue, toNode } = require('./rows');
 const { notifySilencedIds, notifyWatchedIds } = require('./documents');
 const { inboxFrom } = require('./views');
+const { callOf } = require('./related');
 const { openLiveQuery } = require('../sdk/livequery');
 
 const PAGE = 'orbital:timeline';
@@ -80,7 +81,7 @@ let live = null, liveClient = null, liveKey = null;
 // the timeline on its own. One timer, set by every read (the read it causes sets the one after it).
 let startTimer = null;
 // the tagline and summary too: a summary landing is heard, and the entry brightens
-const meetingSig = (row) => { const ev = row.calendarEvent || {}; return JSON.stringify([row.title, ev.startTime, ev.endTime, ev.allDay, ev.tagline, ev.summary, attendeesOf(ev).map((a) => a.displayName || a.email)]); };
+const meetingSig = (row) => { const ev = row.calendarEvent || {}; return JSON.stringify([row.title, ev.startTime, ev.endTime, ev.allDay, ev.tagline, ev.summary, ev.location, ev.actionUrl, attendeesOf(ev).map((a) => a.displayName || a.email)]); };
 // Who is on a meeting, as the graph gives it: the roster (calendarEvent.roster), or the calendar's own attendee list
 const attendeesOf = (ev) => (Array.isArray(ev.roster) && ev.roster.length ? ev.roster : Array.isArray(ev.attendees) ? ev.attendees : []).filter((a) => a && typeof a === 'object');
 const duration = (ms) => { const m = Math.round(ms / 6e4), h = Math.floor(m / 60); return m < 60 ? m + ' min' : h + ' h' + (m % 60 ? ' ' + (m % 60) + ' min' : ''); };
@@ -173,19 +174,24 @@ async function rows() {
   // write-up is. Not the write-up document itself: that can be moved into a space, and then the meeting no longer
   // owns it (live 2026-09-26, "Datadog & Nedap - executive alignment").
   for (const n of shown) {
-    const ev = n.calendarEvent || {}, bare = Date.parse(ev.endTime || '') <= Date.now() && !String(ev.tagline || ev.summary || '').trim();
-    events.push({ kind: 'meeting', uri: n.id, title: n.title, at: Date.parse(ev.startTime), icon: 'meeting', tone: bare ? 'faint' : 'meeting', note: meetingNote(ev, me, myEmail) });
+    const ev = n.calendarEvent || {}, going = Date.parse(ev.endTime || '') > Date.now(), bare = !going && !String(ev.tagline || ev.summary || '').trim();
+    // still under way: a Join button to its call (main/related.js callOf, the link the meeting's sidebar offers)
+    events.push({ kind: 'meeting', uri: n.id, title: n.title, at: Date.parse(ev.startTime), icon: 'meeting', tone: bare ? 'faint' : 'meeting', note: meetingNote(ev, me, myEmail),
+      join: going ? (callOf(ev) || {}).url : undefined, end: going ? Date.parse(ev.endTime) : undefined });
   }
   watchMeetings(me, since);
   // Upcoming meetings: today's still to start, earliest first, under Today's Tasks as a block of their own. Each opens
   // the meeting; its grey line says when and who (renderer/views.js subtextOf, node.subtext). No meetings, no block.
   const upcoming = meetings.filter((n) => { const ev = n.calendarEvent || {}; return Date.parse(ev.startTime || '') > Date.now() && !isAllDay(ev.startTime, ev.endTime, ev.allDay); })
     .sort((a, b) => Date.parse(a.calendarEvent.startTime) - Date.parse(b.calendarEvent.startTime))
-    .map((n) => ({ id: n.id, text: n.title || 'Untitled', title: n.title || 'Untitled', kind: 'document', icon: 'meeting', editable: false, hasChildren: false, start: n.calendarEvent.startTime,
+    .map((n) => ({ id: n.id, text: n.title || 'Untitled', title: n.title || 'Untitled', kind: 'document', icon: 'meeting', editable: false, hasChildren: false, start: n.calendarEvent.startTime, join: (callOf(n.calendarEvent) || {}).url,
       subtext: meetingNote(n.calendarEvent, me, myEmail, true) }));
   const upcomingText = 'Upcoming meetings';
+  // The page is read again at the next moment a meeting moves: one starting (out of Upcoming meetings, into the timeline)
+  // or one under way ending (its Join button goes, and without a summary it turns quiet). The read it causes sets the next.
   clearTimeout(startTimer);
-  if (upcoming.length) startTimer = setTimeout(() => send('outline:changed', PAGE), Date.parse(upcoming[0].start) - Date.now() + 1000); // a second in, so it has started
+  const next = Math.min(...upcoming.map((m) => Date.parse(m.start)), ...events.filter((e) => e.end).map((e) => e.end));
+  if (next < Infinity) startTimer = setTimeout(() => send('outline:changed', PAGE), next - Date.now() + 1000); // a second in, so it has happened
   const upcomingRow = upcoming.length ? [{ id: PAGE + ':upcoming', text: upcomingText, segments: [{ text: upcomingText }], kind: 'block', block: 'bullet', icon: 'meeting',
     editable: false, hasChildren: true, children: upcoming, createdAt: iso(Date.now()), unread: false, timeline: { uri: null, time: '', tone: 'new', upcoming: true } }] : []; // no time of its own: it sits under Today's Now
   const now = Date.now(), date = new Date(now).toLocaleDateString('sv-SE');
@@ -234,7 +240,7 @@ async function rows() {
       kind: 'block', block: 'bullet', icon: e.icon, editable: false, hasChildren: children.length > 0, children,
       createdAt: iso(e.at), unread: e.kind !== 'meeting' && (e.tasks || [e]).some((t) => t.at > seen), // a meeting is on your calendar: not news
       // an "added to your Inbox" line opens nothing: the rows under it open themselves, one task or six
-      timeline: { uri: e.kind === 'inbox' ? null : e.uri, note, change, detail, tone: e.tone } };
+      join: e.join, timeline: { uri: e.kind === 'inbox' ? null : e.uri, note, change, detail, tone: e.tone } };
   })];
 }
 
