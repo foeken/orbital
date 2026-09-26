@@ -343,8 +343,10 @@ function tableCells(node, info, sub) {
     const cell = document.createElement('span'); cell.className = 'cell';
     if (TABLE_FACTS[k]) cell.append(...[TABLE_FACTS[k](node, info)].flat());
     else {
-      // plain text, as every other column is; the cell's ellipsis cuts it and the tooltip has the rest
-      cell.textContent = cell.title = ((node.fields && node.fields[k]) || []).map((v) => demoText(v, node.id)).join(', ');
+      // plain text, as every other column is; the cell's ellipsis cuts it and the tooltip has the rest — asked at the
+      // hover, since the sensitive switch only toggles the blur (blurSensitive), and a hidden row's tooltip says nothing
+      cell.textContent = ((node.fields && node.fields[k]) || []).map((v) => demoText(v, node.id)).join(', ');
+      cell.onmouseenter = () => { cell.title = isRealId(node.id) && sensitiveHidden(node.id) ? '' : cell.textContent; };
       const def = pickableDef(node, k);
       if (def) {
         cell.classList.add('pick');
