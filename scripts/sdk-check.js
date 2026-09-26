@@ -993,6 +993,9 @@ async function main() {
     const auth = { ...backend.S.status };
     Object.assign(backend.S.status, { authChecking: false, authenticated: false }); backend.layout(split);
     assert.deepEqual([split.panes[0].bounds.width, split.panes[1].visible], [1000, false], 'signed out: the login fills the window');
+    const [hidden] = split.panes.slice(1); split.panes = [hidden]; backend.layout(split); // the left half closed: the hidden right one is all there is
+    assert.deepEqual([hidden.bounds.width, hidden.visible], [1000, true], 'the page left alone is shown again, not a blank window');
+    split.panes = [box(), hidden];
     Object.assign(backend.S.status, { authenticated: true }); backend.layout(split);
     assert.deepEqual([split.panes[0].bounds.width, split.panes[1].visible], [500, true], 'signed in: the split comes back');
     Object.assign(backend.S.status, auth);
