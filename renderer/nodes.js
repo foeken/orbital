@@ -315,8 +315,9 @@ function loadCodex() {
     .then((ids) => { codexIds = new Set(ids); renderSoon(); }, showError);
   return codexLoading;
 }
-// What each linked task is doing, read on the refresh rather than on a timer of its own: one bounded app-server
-// child in main answers for every linked node at once. A node it says nothing about stays pending.
+// What each linked task is doing: one bounded app-server child in main answers for every linked node at once. Read at
+// boot, every 30 s while something is linked, and when a link moves (renderer/app.js), never per list reload: those
+// come in bursts, and each started a child. A node it says nothing about stays pending.
 function loadAgentStates() {
   // No guard on codexIds: it is filled by loadCodex, which is still in flight at boot, so gating on it meant the
   // status was never asked for after a reload and every linked task sat grey until the next refresh. Main knows the
@@ -351,7 +352,6 @@ const recentRows = () => recent().map((row) => { const live = docOf(row.id); ret
 async function loadRoots() {
   await loadSensitive(); // privacy gate: no document reaches the first render before the local marks do
   loadCodex();
-  loadAgentStates();
   const drafts = views.flatMap((s) => s.nodes.map((node, i) => ({ view: s.id, i, node })).filter((d) => d.node.draft)); // a refresh must not drop a draft being typed
   // The type glyphs come with the roots rather than on their own: a row carries the *name* of its type's icon, so
   // the markup has to be here before the rows are, and a roots load is exactly when the rows change.

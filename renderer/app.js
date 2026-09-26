@@ -152,20 +152,20 @@ function patchCopies(docId, state) {
   for (const data of relatedBy.values()) for (const [, rows] of railGroups(data)) for (const n of rows || []) if (n.id === docId) Object.assign(n, changes);
 }
 // The changed document's row, wherever it is listed, from one doc:info call instead of a reload of every view.
-// A document no view knows about may have just become listable, so that case still reloads.
+// A document no list shows is left alone. One that becomes listable (created, restored, moved or reassigned) moves a
+// view's live query, and main answers that with the global refresh (main/views.js watchViews), which reloads the lists;
+// reloading them here too cost every page ~40 roots reads at boot, one per document bootstrapping.
 async function patchDoc(docId) {
   if (!tana.node) return loadRoots();
   let fresh;
   try { fresh = asDoc(await tana.node(docId)); } catch (e) { noteGone(docId, e); return loadRoots(); } // deleted or unreadable: the lists decide
   deletedIds.delete(docId); // it answered, so it is not gone: an undo of a delete brings the rows and the chips back
   if (isTask(fresh)) patchCopies(docId, { text: fresh.text, title: fresh.title, done: fresh.done, stateType: fresh.stateType });
-  let hit = extra.has(docId);
-  if (hit) Object.assign(extra.get(docId), fresh);
-  for (const s of views) for (const n of s.nodes) if (n.id === docId) { Object.assign(n, fresh); hit = true; }
+  if (extra.has(docId)) Object.assign(extra.get(docId), fresh);
+  for (const s of views) for (const n of s.nodes) if (n.id === docId) Object.assign(n, fresh);
   // A zoomed page that lists documents — a saved search, a space — holds its rows in kids, not in any view, so a
   // change to one of them reached nothing here and the row kept the title, box and assignee it was drawn with.
-  for (const rows of kids.values()) for (const n of rows || []) if (n.id === docId) { Object.assign(n, fresh); hit = true; }
-  if (!hit) return loadRoots();
+  for (const rows of kids.values()) for (const n of rows || []) if (n.id === docId) Object.assign(n, fresh);
 }
 function removeStale(id) {
   deletedIds.add(id); // it stays known: copies of it elsewhere (a mention, a reference row) are drawn as gone, and nothing opens it
@@ -264,6 +264,7 @@ if (tana.onSettings) tana.onSettings(applySettings);
 if (tana.prefsNow) catchUpSettings();
 if (tana.onSystemTheme) tana.onSystemTheme((t) => { if (themePref === 'system') applyTheme(t); }); // macOS appearance changes re-theme a running window
 if (themePref === 'system') showTheme('system');
+loadAgentStates(); // what each linked Codex task is doing: at boot, then on the 30 s timer below and when a link moves
 loadRoots().then(render, showError).then(restorePlace).then(loadFilters);
 // Cmd+K only: never blocks the first paint. Boot almost always races the sync connect (main creates the window
 // before S.client exists, so main/views.js:searchList answers []), so this alone would usually leave the group
