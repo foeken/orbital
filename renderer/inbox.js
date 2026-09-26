@@ -34,10 +34,11 @@ function setNotificationRead(node, read) {
 }
 function markAllNotificationsRead() {
   if (!tana.inboxMarkAll) return;
-  popRead((kids.get(INBOX_PAGE) || []).filter((n) => n.unread).map((n) => n.id)); // each dot in turn, down the page
+  const read = (kids.get(INBOX_PAGE) || []).filter((n) => n.unread).map((n) => n.id);
   for (const n of kids.get(INBOX_PAGE) || []) n.unread = false;
   inboxUnread = 0;
   renderSoon(true);
+  popRead(read); // each dot in turn, down the page — queued after the redraw, so it plays on the rows that redraw draws
   run(async () => { inboxUnread = await tana.inboxMarkAll(); });
 }
 // Tana marks the one notification read and navigates to its source. A source Orbital has no page for — a type, a

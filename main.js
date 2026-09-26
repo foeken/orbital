@@ -159,7 +159,10 @@ function createQuickPanel() {
   win.loadFile(path.join(__dirname, 'quick-add.html'));
   return win;
 }
-const toggleQuickPanel = () => quick.togglePanel(quick.panelState, createQuickPanel);
+// The panel's material is native, and native material follows the app's appearance, not the page: so the app takes
+// Orbital's own theme, or the panel's text would sit on the wrong material whenever it differs from macOS's.
+const themeSource = () => { const t = settings.prefs().theme; return t === 'dark' || t === 'light' ? t : 'system'; };
+const toggleQuickPanel = () => { if (nativeTheme) nativeTheme.themeSource = themeSource(); quick.togglePanel(quick.panelState, createQuickPanel); };
 const hideQuickPanel = () => { const win = quick.panelState.win; if (win && !win.isDestroyed()) win.hide(); };
 
 function createMenu() {

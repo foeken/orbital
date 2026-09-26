@@ -132,7 +132,11 @@ function foldRow(key, opening, done) {
   const row = nodeElOf(key), chev = row && row.querySelector(':scope > .line > .chev');
   // the chevron answers the click at once, and the redraw finds it already pointing the new way
   if (chev && motionOK()) chev.animate([{ transform: 'none' }, { transform: 'rotate(' + (opening ? 90 : -90) + 'deg)' }], { duration: MOTION.base, easing: MOTION.out, fill: 'forwards' });
-  if (!opening) return curtain([row && row.querySelector(':scope > .children')], false, done);
+  if (!opening) { // closed at once for the keyboard (renderer/nodes.js rowsIn), while the children shrink away
+    const kids = row && row.querySelector(':scope > .children');
+    if (kids) kids.classList.add('closing');
+    return curtain([kids], false, done);
+  }
   const open = () => { settleAt = 0; done(); revealing = { key, until: performance.now() + 1500 }; revealOpened(); };
   // A document opens onto its fields and its children, both read from Tana. Wait a moment for them, so the block opens
   // in one move instead of the fields landing after it and pushing the rows below a second time; an answer slower
@@ -325,8 +329,8 @@ function badgeMoved(el, id, state) {
   const was = badgeSeen.get(id);
   badgeSeen.set(id, state);
   if (!was || was === state || !motionOK()) return;
-  el.classList.add(state.startsWith('broken') ? 'shake' : 'pop');
-  if (state === 'done') el.classList.add('shine');
+  playOnce(el, state.startsWith('broken') ? 'shake' : 'pop'); // one-shot: a row reused by a later render must not play it again
+  if (state === 'done') playOnce(el, 'shine');
 }
 // Notifications just read: each dot shrinks back to a plain one, in order, once the render that reads them has drawn.
 function popRead(ids) {

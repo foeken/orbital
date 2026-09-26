@@ -21,7 +21,7 @@ html { --nucleo-stroke-width: 1; }
   --flash-in: rgba(52, 168, 83, .16); --flash-out: rgba(217, 48, 37, .16); --flash-here: rgba(80, 143, 187, .2);
   interpolate-size: allow-keywords; /* heights go to and from auto (a row arriving, a section closing) without measuring */
 }
-@media (prefers-reduced-motion: reduce) { :root { --dur-quick: 0ms; --dur-base: 0ms; --dur-slow: 0ms; --dur-flash: 0ms; --stagger: 0ms; } }
+@media (prefers-reduced-motion: reduce) { :root { --dur-quick: 0ms; --dur-base: 0ms; --dur-slow: 0ms; --dur-flash: 0ms; --stagger: 0ms; --loader-wait: 0ms; } }
 [data-theme="dark"] { --flash-in: rgba(90, 190, 120, .2); --flash-out: rgba(240, 90, 80, .2); --flash-here: rgba(110, 168, 220, .22); }
 /* A type's colour is Tana's `appearance.hue`, and it is an **OKLCH** hue, not an HSL one: the Organization type's
    232 draws as #58aad2 in Tana, which is oklch(0.7 0.1 232) — read as an HSL angle the same number lands 42° away
@@ -688,12 +688,12 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .skeleton { position: absolute; inset: 0; pointer-events: none; transition: opacity var(--dur-base) var(--ease-out), display var(--dur-base) allow-discrete; }
 .skeleton.gone { display: none; opacity: 0; pointer-events: none; }
 :where(.titlebar > :not(#error), #pills, #filterRow) { transition: opacity var(--dur-base) var(--ease-out); }
-:is(.loading-preview, body:has(#skeleton:not(.gone))) :is(.titlebar > :not(#error), #pills, #filterRow) { opacity: 0; pointer-events: none; transition-delay: 300ms; }
+:is(.loading-preview, body:has(#skeleton:not(.gone))) :is(.titlebar > :not(#error), #pills, #filterRow) { opacity: 0; pointer-events: none; transition-delay: var(--loader-wait, 300ms); }
 /* Cmd+K "Preview loading animation" (renderer/loading.js): the page as it looks while a view loads, until Esc */
 .loading-preview .skeleton.gone { display: block; opacity: 1; }
 .loading-preview :is(#outline, #filtered, #loginBox) { display: none; }
 .skeleton canvas { display: block; width: 100%; height: 100%; color: #1c2024;
-  mask-image: radial-gradient(ellipse 70% 70% at 50% 50%, #000 55%, transparent 100%); animation: loader-in var(--dur-slow) var(--ease-out) 300ms backwards; }
+  mask-image: radial-gradient(ellipse 70% 70% at 50% 50%, #000 55%, transparent 100%); animation: loader-in var(--dur-slow) var(--ease-out) var(--loader-wait, 300ms) backwards; } /* no wait under reduced motion: the still frame shows at once */
 @keyframes loader-in { from { opacity: 0; } }
 @keyframes shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 @keyframes breathe { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }

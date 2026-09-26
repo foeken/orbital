@@ -98,7 +98,8 @@ function paintPresence() {
       mark.style.left = (box.left - base.left) + 'px'; mark.style.top = (box.top - base.top) + 'px'; mark.style.height = box.height + 'px';
       // the name sits on top of the caret; on a row too near the top of the scroll area it would be clipped, so below
       if (box.top - outline.parentElement.getBoundingClientRect().top < 22) mark.classList.add('below');
-      const who = (p.me ? 'me:' : '') + (p.userHash || p.name), now = mark.getBoundingClientRect(), x = now.left - origin.left, y = now.top - origin.top, old = was.get(who);
+      // per connection: one person in two tabs has two carets, each gliding from its own last place
+      const who = (p.me ? 'me:' : '') + (p.userHash || p.name) + '|' + (p.peer || ''), now = mark.getBoundingClientRect(), x = now.left - origin.left, y = now.top - origin.top, old = was.get(who);
       caretsAt.set(who, [x, y]);
       if (!old) playOnce(mark, 'pop');
       else if (Math.abs(old[0] - x) > 1 || Math.abs(old[1] - y) > 1) play(mark, [{ transform: 'translate(' + (old[0] - x) + 'px, ' + (old[1] - y) + 'px)' }, { transform: 'none' }], { duration: MOTION.quick, easing: MOTION.move });
