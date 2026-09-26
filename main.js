@@ -17,7 +17,7 @@ const agent = require('./main/agent');
 const ai = require('./main/ai');
 const { NOT_CONNECTED, S, VIEWS, docStates, errText, idKind, isSearch, isSpace, metaSigs, pathCache, today, truncatedViews, redoStack, report, scheduleRefresh, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
 const { cachedNodeHue, graphRow, members, rememberNodeHue, rememberType, toNode } = require('./main/rows');
-const { accessContext, addTypeField, archivedTypes, chatOutline, codexIds, createDocument, creationOptions, creatorOf, defineField, discussWith, documentAction, followSummary, history, info, linkShared, metaSig, moveBlock, moveTarget, mut, mutTasks, notifyOn, notifyState, referenceIn, setCodex, setField, setNotify, onChange, op, outlineWithReferences, sensitiveIds, setSensitive, setType, setTypeHue, typeCandidates, typeChoices, typeList } = require('./main/documents');
+const { accessContext, addTypeField, archivedTypes, chatOutline, codexIds, createDocument, creationOptions, taskTypes, creatorOf, defineField, discussWith, documentAction, followSummary, history, info, linkShared, metaSig, moveBlock, moveTarget, mut, mutTasks, notifyOn, notifyState, referenceIn, setCodex, setField, setNotify, onChange, op, outlineWithReferences, sensitiveIds, setSensitive, setType, setTypeHue, typeCandidates, typeChoices, typeList } = require('./main/documents');
 const { callOf, changesOf, pathOf, related, searchChildren, searchPreview, spaceChildren, summaryChanges, summaryUri, unwatchRelated, watchRelated } = require('./main/related');
 const { announceNewInbox, hiddenRules, watchInbox, inboxCount, listFilter, mcpHidden, myTasks, preset, refresh, search, searchCreate, searchList, searchTitle, setHidden, setMcpHidden, setViewFilter, start, viewFilter, viewRows } = require('./main/views');
 const { nodePin, pinState, pinTree, pinned, pinnedDates, pinnedUris, setPin, todayNode, weekNode, weekTitle } = require('./main/pins');
@@ -64,7 +64,7 @@ const tellSides = (win) => win.panes.forEach((p, i) => { p.side = i ? '2' : ''; 
 // win.splitAt: the left half's share of the width, dragged by the grip and saved with the window (even by default)
 function layout(win) {
   const { width, height } = win.getContentBounds(), [left, right] = win.panes;
-  if (win.help) win.help.setBounds({ x: 0, y: 0, width, height }); // the Help tour covers both halves (openHelp)
+  if (win.overlay) win.overlay.setBounds({ x: 0, y: 0, width, height }); // the Help tour or Create task covers both halves (openOverlay)
   if (!right) return left && left.setBounds({ x: 0, y: 0, width, height });
   const min = Math.min(MIN_PANE, Math.floor(width / 2));
   const w = Math.max(min, Math.min(width - min, Math.round(width * (win.splitAt ?? 0.5))));
@@ -94,27 +94,31 @@ function removePane(win, pane) {
   // the 400 ms edit timer and lets go of its presence room and heartbeat before it is gone
   if (!wc.isDestroyed()) wc.close({ waitForBeforeUnload: true });
 }
-// The Help tour (help.html, issue #230): a transparent page of its own laid over the whole window, so it sits above both
-// halves of a split rather than inside the one that asked. Added last, it is on top; closing it hands the keys back to
-// the page that asked, whose caret is where it was, and opens that page's palette when ⌘K is what closed it.
-function openHelp(wc, theme) {
+// The Help tour (help.html, issue #230) and Create task (task.html, issue #237): a transparent page of its own laid
+// over the whole window, so it sits above both halves of a split rather than inside the one that asked. Added last, it
+// is on top, and there is one at a time. Closing it hands the keys back to the page that asked, whose caret is where it
+// was, with what it has to say: open the palette (⌘K closed the tour), or a note for its toast (the task it made).
+const OVERLAYS = { help: 'help.html', task: 'task.html' };
+function openOverlay(wc, page, theme) {
   const win = paneWindow(wc);
-  if (!win || win.help) return;
+  if (!win || win.overlay || !Object.hasOwn(OVERLAYS, page)) return;
   const view = new WebContentsView({ webPreferences: { preload: path.join(__dirname, 'preload.js') } });
   view.setBackgroundColor('#00000000');
   view.opener = wc;
-  win.help = view; win.contentView.addChildView(view); layout(win);
+  win.overlay = view; win.contentView.addChildView(view); layout(win);
   view.webContents.once('did-finish-load', () => view.webContents.focus());
-  view.webContents.loadFile(path.join(__dirname, 'help.html'), { query: { theme: theme === 'dark' ? 'dark' : 'light' } });
+  view.webContents.loadFile(path.join(__dirname, OVERLAYS[page]), { query: { theme: theme === 'dark' ? 'dark' : 'light' } });
 }
-function closeHelp(win, palette) {
-  const view = win && win.help;
+function closeOverlay(win, result = {}) {
+  const view = win && win.overlay;
   if (!view) return;
-  win.help = null;
+  win.overlay = null;
   if (!win.isDestroyed()) win.contentView.removeChildView(view);
   if (!view.webContents.isDestroyed()) view.webContents.close();
   const opener = view.opener;
-  if (opener && !opener.isDestroyed()) { opener.focus(); if (palette) opener.send('help:palette'); }
+  if (!opener || opener.isDestroyed()) return;
+  opener.focus();
+  opener.send('overlay:closed', { palette: result.palette === true, note: typeof result.note === 'string' ? result.note.slice(0, 200) : undefined });
 }
 const frontPane = () => S.win && !S.win.isDestroyed() ? (S.win.panes.find((p) => p.webContents === S.pane) || S.win.panes[0])?.webContents : null;
 function createWindow() {
@@ -138,7 +142,7 @@ function createWindow() {
   win.on('close', saveBounds);
   win.on('focus', () => { S.win = win; refresh(); });
   win.on('closed', () => {
-    closeHelp(win);
+    closeOverlay(win);
     // right half first: the left one closing first would leave the right one alone for a moment, and removePane would
     // hand it the left half's keys, so it saved its page over the left one's and a restart opened both on it
     for (const p of [...win.panes].reverse()) removePane(win, p);
@@ -209,6 +213,7 @@ ipcMain.handle('timeline:pages', (_e, n) => timelinePage.setPages(n)); // how ma
 ipcMain.handle('proposals:answer', (_e, chatUri, proposedUri, approve) => proposalsPage.answer(chatUri, proposedUri, !!approve));
 ipcMain.handle('doc:info', (_e, id) => op(id, info));
 ipcMain.handle('doc:creationOptions', () => creationOptions());
+ipcMain.handle('doc:taskTypes', () => taskTypes()); // Create task's picker: the workflow types a task can be made with
 // A document's type: the choices it can be given (with the ones it cannot, and why), and the change itself.
 ipcMain.handle('doc:types', (_e, id) => typeChoices(id));
 ipcMain.handle('doc:setType', (_e, id, typeUri) => setType(id, typeUri ?? null));
@@ -249,8 +254,8 @@ ipcMain.handle('window:workView', (e) => {
 // The X at the end of the right half's header (renderer/app.js): that half closes, as Cmd+W closes it. Only in a
 // split: a page alone never closes its window from here.
 ipcMain.handle('window:closePane', (e) => { const win = paneWindow(e.sender); if (win && win.panes.length > 1) closeFront(win, e.sender); });
-ipcMain.handle('help:open', (e, theme) => { openHelp(e.sender, theme); });
-ipcMain.handle('help:close', (e, palette) => { closeHelp([...S.windows].find((w) => w.help && w.help.webContents === e.sender), palette === true); });
+ipcMain.handle('overlay:open', (e, page, theme) => { openOverlay(e.sender, page, theme); });
+ipcMain.handle('overlay:close', (e, result) => { closeOverlay([...S.windows].find((w) => w.overlay && w.overlay.webContents === e.sender), result && typeof result === 'object' ? result : {}); });
 // A page's header is a window drag region, where the page hears nothing of the mouse, so a page the pointer has left
 // asks for the cursor to be watched here: every 100 ms until it is outside that half, and then it is told
 // (renderer/app.js pointer-in, which shows the top row).
@@ -271,7 +276,7 @@ ipcMain.handle('window:swapPanes', (e) => {
   const win = paneWindow(e.sender);
   if (!win || win.panes.length < 2) return;
   win.panes.reverse();
-  if (win.splitAt != null) win.splitAt = 1 - win.splitAt; // each half keeps its width
+  // the pages change sides and the line stays where it is: the left half is as wide as it was, with the other page in it
   tellSides(win);
   layout(win);
   win.saveSoon();

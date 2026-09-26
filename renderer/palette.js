@@ -309,7 +309,7 @@ function paletteRows(q, typed = q) {
   // (moving between places), Window (windows, panes, the sidebar) and Settings (how it looks, what it hides, accounts).
   if (signedOut) rows.push({ id: 'login', group: 'Actions', icon: 'tana', label: 'Log in to Tana', run: () => tana.login().catch(showError) });
   if (tana.creationOptions) rows.push({ id: 'create', group: 'Actions', icon: 'createNew', label: 'Create new …', keepOpen: true, run: openCreationPalette, sub: async () => { creationChoices = (await tana.creationOptions()).options || []; return creationRows(''); } });
-  if (tana.createDocument) rows.push({ id: 'createTask', group: 'Actions', icon: 'task', label: 'Create task', keepOpen: true, run: () => togglePalette('newTask') }); // ⇧⌘Space: one field (newTaskRows)
+  if (tana.createDocument) rows.push({ id: 'createTask', group: 'Actions', icon: 'task', label: 'Create task', run: () => openTask() }); // ⇧⌘Space: task.html over the window (renderer/overlays.js)
   // the keys the outline answers to, as rows: each has a default combo in DEFAULT_HOTKEYS and can be re-recorded
   rows.push({ id: 'search', group: 'Actions', icon: 'search', label: 'Search Tana', keepOpen: true, run: () => togglePalette('search') });
   rows.push({ id: 'undo', group: 'Actions', icon: 'undo', label: 'Undo', run: () => history('undo') });
@@ -361,7 +361,7 @@ function paletteRows(q, typed = q) {
     hint: chatgptAuth?.signedIn ? (chatgptAuth.email || 'Signed in') : chatgptAuth?.available === false ? 'Status unavailable' : chatgptAuth ? 'Not signed in · preferred over API key' : 'Checking sign-in',
     keepOpen: true, run: chatgptCommand });
   if (tana.setOpenAIKey) rows.push({ id: 'openaiKey', group: 'Settings', icon: 'openaiKey', label: 'Set OpenAI API key', hint: 'Stored locally', keepOpen: true, run: openOpenAIKeyPalette });
-  rows.push({ id: 'help', group: 'Help', icon: 'help', label: 'Help', hint: 'The basics and the keys', run: () => openHelp() }); // renderer/help.js
+  rows.push({ id: 'help', group: 'Help', icon: 'help', label: 'Help', hint: 'The basics and the keys', run: () => openHelp() }); // renderer/overlays.js
   // A second level is folded in once the query's first two letters reach its row, as a prefix or as the first words'
   // initials ("mo" or "mt" for Move to …, "as" or "at" for Assign to), and loaded once per palette opening. The spaces
   // and the four statuses are short fixed lists, so "Move to …" and "Set status" (`subAlways`) load them as the palette
@@ -942,14 +942,6 @@ function openDiscussPalette(doc) {
   palInput.placeholder = 'Discuss with…'; palInput.value = '';
   loadDiscussSuggestion(doc); renderPalette(); palInput.focus();
 }
-// ---- Create task (⇧⌘Space, Cmd+K "Create task"): the palette card with its one field and nothing under it. Enter
-// makes a task of what was typed, as Tana's own capture does: open, and assigned to you (main/documents.js
-// createDocument); where it goes and who else has it are the node's own rows afterwards. The one row is never drawn
-// (.palette.ask), it is only what Enter runs. ----
-function newTaskRows(title) {
-  if (!title) return [];
-  return [{ label: title, run: () => run(async () => { await tana.createDocument(title, { kind: 'task' }); showNote('Task created: ' + title); }) }];
-}
 // ---- Set icon: the Nucleo UI set built into the app, searched in main, a page of results at a time ----
 // The set is not in the renderer: main holds it (3.5k glyphs, half a megabyte gzipped) and answers with the page
 // being shown, which is registered as it arrives so the rows can draw it. Choosing writes the choice against the
@@ -1113,7 +1105,6 @@ function openTodayTaskSearch(node) {
 function renderPalette() {
   const q = palInput.value.trim();
   swapPanel(palList, palMode); // a mode changed while open slides its list across
-  palette.classList.toggle('ask', palMode === 'newTask'); // a page that only asks for words: the field alone (styles.css)
   if (palMode === 'cmd') palRows = paletteRows(q.toLowerCase(), q);
   else if (palMode === 'create') palRows = creationRows(q.toLowerCase());
   else if (palMode === 'slash') palRows = slashRows(q.toLowerCase());
@@ -1131,7 +1122,6 @@ function renderPalette() {
   else if (palMode === 'setType') palRows = typeRows(q.toLowerCase());
   else if (palMode === 'classify') palRows = classifyRows(q.toLowerCase());
   else if (palMode === 'discuss') palRows = discussRows(q);
-  else if (palMode === 'newTask') palRows = newTaskRows(q);
   else if (palMode === 'setIcon') palRows = iconPickRows();
   else if (palMode === 'setHue') palRows = huePickRows(q.toLowerCase());
   else if (palMode === 'hosts') palRows = hostRows(q);
@@ -1201,7 +1191,7 @@ function togglePalette(mode, link, pin) {
   // meetingNow is cleared, not kept: every open re-reads the meeting, because "the meeting I am in" lasts minutes.
   fieldLinkCtx = null;
   if (mode === 'cmd') { palDoc = currentDoc(); palField = fieldAt(document.activeElement); fieldReturn = palField && palField.key; palTaskCtx = null; meetingNow = undefined; meetingCtx = null; loadPins(); loadWorkspaceTypes(true); subCache.clear(); refreshChatGPTStatus(); }
-  palInput.placeholder = mode === 'search' ? 'Search Tana' : mode === 'pinToday' ? 'Search open tasks assigned to you' : mode === 'slash' ? 'Choose a block type or create' : mode === 'newTask' ? 'New task' : 'Run a command';
+  palInput.placeholder = mode === 'search' ? 'Search Tana' : mode === 'pinToday' ? 'Search open tasks assigned to you' : mode === 'slash' ? 'Choose a block type or create' : 'Run a command';
   palInput.value = link ? link.text : '';
   if (mode === 'search') searchNow(); else renderPalette();
   palInput.focus();
@@ -1239,7 +1229,7 @@ function nextPalIndex(rows, index, step) {
   return index;
 }
 // pages whose rows are built from what is typed, with nothing to fetch
-const LOCAL_MODES = new Set(['cmd', 'newTask', 'create', 'slash', 'assignees', 'assigneesMany', 'status', 'setType', 'classify', 'discuss', 'setHue', 'visibility', 'visibilityPeople', 'hidden', 'pins', 'pill', 'pinMeeting', 'openaiKey', 'chatgpt', 'hosts', 'agentLink', 'trash', 'archived', 'field', ...Object.keys(MEETING_PAGES)]);
+const LOCAL_MODES = new Set(['cmd', 'create', 'slash', 'assignees', 'assigneesMany', 'status', 'setType', 'classify', 'discuss', 'setHue', 'visibility', 'visibilityPeople', 'hidden', 'pins', 'pill', 'pinMeeting', 'openaiKey', 'chatgpt', 'hosts', 'agentLink', 'trash', 'archived', 'field', ...Object.keys(MEETING_PAGES)]);
 palInput.addEventListener('input', () => {
   palIndex = 0; palEnter = null; // typing on supersedes an Enter that was waiting for the previous query
   if (LOCAL_MODES.has(palMode)) return renderPalette();

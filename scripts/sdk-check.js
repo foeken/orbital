@@ -1004,6 +1004,9 @@ async function main() {
     });
     joinCall(true);
     docs.set(callDoc.id, callDoc);
+    // Three types for Create task's picker: a workflow type for documents, a plain type, and a workflow type for meetings
+    const typeDoc = (title, extra) => { const d = new Document('tana:type:' + ulid()); d.transact((l) => { const data = l.getMap('data'); data.set('type', 'type'); data.set('title', title); for (const [k, v] of Object.entries(extra)) data.set(k, v); }); docs.set(d.id, d); return d; };
+    const bug = typeDoc('Bug', { workflowUri: 'tana:workflow:' + ulid() }), note = typeDoc('Note', {}), agenda = typeDoc('Agenda', { workflowUri: 'tana:workflow:' + ulid(), appliesTo: 'events' });
     backend.testRuntime({
       me: { userUri: ME, orgId: ORG },
       win: { isDestroyed: () => false, webContents: { send: () => {} } },
@@ -1011,6 +1014,7 @@ async function main() {
       client: {
         graph: { listNodes: async (p) => {
           if ((p.nodeTypes || [])[0] === 'call') return { nodes: [{ id: callDoc.id }] };
+          if ((p.nodeTypes || [])[0] === 'type') return { nodes: [bug, note, agenda].map((d) => ({ id: d.id, title: readNode(d).title })) };
           if (p.nodeIds) return { nodes: p.nodeIds.map((id) => ({ id, title: docs.has(id) ? readNode(docs.get(id)).title : null })) };
           return { nodes: [] };
         } },
@@ -1027,6 +1031,11 @@ async function main() {
     const added = await backend.createDocument('Draft the agenda', { kind: 'task' });
     const task = readNode(docs.get(added.id));
     assert.deepEqual([task.title, task.stateType, plainJson(task.assignedToUris)], ['Draft the agenda', 'open', [ME]], 'a task from its title alone is open and assigned to its creator');
+    // Create task's picker (issue #237): workflow types for documents only, and a task of one keeps being an open task of yours
+    assert.deepEqual(plainJson(await backend.handlers.get('doc:taskTypes')(null)).map((t) => t.title), ['Bug'], 'Create task offers only the workflow types for documents');
+    const typed = readNode(docs.get((await backend.createDocument('Login fails', { kind: 'task', typeUri: bug.id })).id));
+    assert.deepEqual([typed.entityTypeUri, typed.stateType, plainJson(typed.assignedToUris)], [bug.id, 'open', [ME]], 'a task of a type is an open task of yours, with the type');
+    await assert.rejects(backend.createDocument('Standup', { kind: 'task', typeUri: agenda.id }), /applies to meetings/, 'a type for meetings makes no task');
     // The handoff names the task after its node title, so Codex names the thread after the work.
     const handed = [];
     backend.agent.createTask = async (opts) => { handed.push(opts); return '01a0b3a3-c000-70b0-896e-08e86986ca0e'; };
@@ -1040,7 +1049,7 @@ async function main() {
     backend.agent.setCodexTask(elsewhere, '01a0b3a3-c000-70b0-896e-08e86986ca0f', attic.id);
     await assert.rejects(backend.assignToAgent(elsewhere, 'Do it', 'm', 'local'), /runs on Attic/, 'a remote task is refused by name');
     assert.equal((backend.settings.get('codexPrompt') || {})[elsewhere], undefined, 'and its prompt was not rewritten on the way');
-    console.log('ok  current meeting read fresh, a task from its title alone, and the agent handoff by name and by machine');
+    console.log('ok  current meeting read fresh, a task from its title alone or of a workflow type, and the agent handoff by name and by machine');
   }
   {
     const backend=mainHelpers(), d=new Document(DOC);

@@ -803,9 +803,9 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
   background: #fff; border-radius: 12px; box-shadow: 0 12px 40px rgba(0, 0, 0, .18), 0 0 0 1px rgba(0, 0, 0, .05);
 }
 .palette input { border: 0; outline: none; font: inherit; font-size: 17px; color: #1a1a1a; padding: 16px 20px; border-bottom: 1px solid #eee; }
-/* A page that only asks for words (Create task, renderer/palette.js newTaskRows): the field, and nothing under it */
-.palette.ask .list { display: none; }
-.palette.ask input { border-bottom: 0; }
+/* Create task (task.html): the palette's card, with a line saying why the task could not be made */
+.palette .terror { padding: 10px 20px 0; font-size: 13px; color: #d0433a; }
+.palette:has(#taskTypes[hidden]) input { border-bottom: 0; } /* no types to choose: the field alone */
 .palette input::placeholder { color: #999; }
 /* the prompt page: the same field the palette always shows, with room for a few lines (↩ is a newline here) */
 .palette .ptext { border: 0; outline: none; resize: none; font: inherit; font-size: 17px; line-height: 24px; color: #1a1a1a; padding: 16px 20px; border-bottom: 1px solid #eee; background: #fff; }
@@ -1123,10 +1123,10 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 /* Page: a theme change crossfades the whole window (renderer/motion.js crossfade) at the base pace. */
 ::view-transition-group(root) { animation-duration: var(--dur-base); animation-timing-function: var(--ease-out); }
 
-/* Help (renderer/help.js): a modal <dialog> of a few pages, each a stage with a short loop of the keys at work over its
+/* Help (help.html, help.js): a modal <dialog> of a few pages, each a stage with a short loop of the keys at work over its
    words. The stage's plain rules are the scene's last frame, which is what reduced motion shows; the loops live only
    under no-preference, all one --hv-loop long, so a keycap's delay lines it up with the scene it presses in. */
-body.helppage, [data-theme="dark"] body.helppage { background: transparent; } /* help.html: only the scrim and the card over the window's pages */
+body.overlaypage, [data-theme="dark"] body.overlaypage { background: transparent; } /* help.html, task.html: only the scrim and the card over the window's pages */
 .help { position: fixed; inset: 0; width: auto; height: auto; max-width: none; max-height: none; margin: 0; padding: 9vh 24px 0; border: 0;
   background: rgba(0, 0, 0, .12); color: inherit; justify-content: center; align-items: flex-start; -webkit-app-region: no-drag; }
 .help[open] { display: flex; }

@@ -1,7 +1,7 @@
 'use strict';
 // The Help tour (help.html; issue #230): a few pages of the basics, each with a short loop of the keys at work
 // (styles.css Help). Its own page and its own scope: main lays it over the whole window, both
-// halves of a split, and takes it away again when it closes (main.js openHelp). The page that asked gave its theme in
+// halves of a split, and takes it away again when it closes (main.js openOverlay). The page that asked gave its theme in
 // the query, gets the keys back on close, and the palette too when ⌘K is what closed it.
 // A native modal <dialog>: it keeps the focus and closes on Esc by itself. A page's loop runs only while it has .on:
 // putting the class back restarts it from the top.
@@ -28,7 +28,7 @@ function showHelpPage(n) {
 }
 function helpStep(dir) { if (helpAt + dir >= helpPages.length) helpEl.close(); else showHelpPage(helpAt + dir); }
 // Every way out (Esc, the ×, the scrim, the last Next, ⌘K) ends here
-helpEl.addEventListener('close', () => { if (helpApi && helpApi.helpClose) helpApi.helpClose(helpPalette); });
+helpEl.addEventListener('close', () => { if (helpApi && helpApi.closeOverlay) helpApi.closeOverlay({ palette: helpPalette }); });
 helpBack.onclick = () => helpStep(-1);
 helpNext.onclick = () => helpStep(1);
 document.getElementById('helpClose').onclick = () => helpEl.close();

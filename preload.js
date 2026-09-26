@@ -38,9 +38,9 @@ contextBridge.exposeInMainWorld('api', {
   splitHover: (on) => ipcRenderer.send('window:splitHover', on === true), // the pointer is over this half's split grip
   onSplitHover: (cb) => ipcRenderer.on('window:splitHover', (_e, on) => cb(on === true)), // or over the other half's
   windowTheme: (theme) => ipcRenderer.send('window:theme', theme), // 'light' | 'dark': the line between split pages matches the page
-  openHelp: (theme) => ipcRenderer.invoke('help:open', theme), // the Help tour over this whole window (main.js openHelp), drawn in this page's theme
-  helpClose: (palette) => ipcRenderer.invoke('help:close', palette === true), // help.html only: the tour closed; true when ⌘K closed it
-  onHelpPalette: (cb) => ipcRenderer.on('help:palette', () => cb()), // and the page that asked opens the palette
+  openOverlay: (page, theme) => ipcRenderer.invoke('overlay:open', page, theme), // 'help' | 'task' over this whole window (main.js openOverlay), in this page's theme
+  closeOverlay: (result) => ipcRenderer.invoke('overlay:close', result), // help.html and task.html: done; { palette?: true, note?: string } for the page that asked
+  onOverlayClosed: (cb) => ipcRenderer.on('overlay:closed', (_e, result) => cb(result || {})), // the page that asked hears what the overlay had to say
   openExternal: (url) => ipcRenderer.invoke('shell:open', url), // http(s) link from node text, in the default browser
   exportPdf: (docId) => ipcRenderer.invoke('doc:exportPdf', docId),
   nodeLink: (docId) => ipcRenderer.invoke('doc:link', docId), // the home.tana.inc url for a node
@@ -117,7 +117,8 @@ contextBridge.exposeInMainWorld('api', {
   chatgptLogout: () => ipcRenderer.invoke('chatgpt:logout'),
   onChatGPTStatus: (cb) => ipcRenderer.on('ai:chatgptChanged', (_e, status) => cb(status)),
   onSettings: (cb) => ipcRenderer.on('settings:changed', (_e, synced) => cb(synced)),
-  createDocument: (title, opts) => ipcRenderer.invoke('doc:create', title, opts), // nonblank title; opts:{kind:doc|task|meeting|chat|custom|search,typeUri?,query?}; a search requires query and nothing else may carry one; returns Node to zoom
+  createDocument: (title, opts) => ipcRenderer.invoke('doc:create', title, opts), // nonblank title; opts:{kind:doc|task|meeting|chat|custom|search,typeUri?,query?}; a search requires query and nothing else may carry one; a task may carry a workflow typeUri; returns Node to zoom
+  taskTypes: () => ipcRenderer.invoke('doc:taskTypes'), // [{ uri, title, hue }]: the workflow types Create task offers (task.html)
   search: (query, scope) => ipcRenderer.invoke('search', query, scope), // scope: { types } or { members } for a link field
   searches: () => ipcRenderer.invoke('search:list'), // saved search documents, newest first
   createSearch: (viewId, title) => ipcRenderer.invoke('search:create', viewId, title), // saves that view's current filter as a saved search; returns the Node to zoom

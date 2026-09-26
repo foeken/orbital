@@ -47,9 +47,9 @@ your own OpenAI key or sign in with ChatGPT; only the title is sent, and the key
 "Classify type" has the same model pick a node's type from each type's description and AI
 instructions: a sure answer is applied, otherwise you choose from the odds.
 
-**Create a task from its title.** Shift+Cmd+Space (or Cmd+K "Create task") asks for one thing, the
-title: type it and press Enter, and the task is there, open and assigned to you. Where it goes and
-who else has it are the task's own Cmd+K rows afterwards.
+**Create a task from its title.** Shift+Cmd+Space (or Cmd+K "Create task") asks for the title and,
+if you like, one of your workflow types (arrow keys): press Enter and the task is there, open and
+assigned to you. Where it goes and who else has it are the task's own Cmd+K rows afterwards.
 
 **The things a day needs.** Meetings carry their times; a meeting's sidebar shows its call link,
 its write-up, its pins, its outcomes and its notes, and a page's sidebar shows its fields, what

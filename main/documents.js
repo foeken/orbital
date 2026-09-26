@@ -98,6 +98,24 @@ async function creationOptions() {
   }));
   return {options:[...options,...types.sort((a,b)=>a.title.localeCompare(b.title))],complete:result.totalCount !== undefined && result.totalCount === result.nodes.length};
 }
+// The types Create task offers (task.html, issue #237): workflow types only — a type with a board of states
+// (data.workflowUri) is one whose documents are tasks — that apply to documents and that this user may create in,
+// by the same rules as the creation chooser (customCreation). The graph's typeDef carries no workflowUri, so each
+// type's own document is read, as the chooser reads it; one that cannot be used is left out rather than offered.
+async function taskTypes() {
+  if (!S.client) throw new Error(NOT_CONNECTED);
+  // ponytail: one page of 200, as typeList; page by createTimeMin if a workspace outgrows it.
+  const { nodes = [] } = await S.client.graph.listNodes({ nodeTypes: ['type'], limit: 200 });
+  nodes.forEach(rememberType);
+  const types = await Promise.all(nodes.map(async (t) => {
+    try {
+      if (!readNode(await document(t.id)).workflowUri) return null;
+      const config = await customCreation(t.id); // a type for meetings, or one in a space this user cannot write, throws
+      return config.kind === 'doc' ? { uri: t.id, title: t.title || '', hue: hueOf(t) } : null;
+    } catch { return null; }
+  }));
+  return types.filter(Boolean).sort((a, b) => a.title.localeCompare(b.title));
+}
 
 // ---- a document's type (Cmd+K "Set type") ----
 // Two rules decide which types a document can be given, and both are Tana's own (their shared bundle, read 2026-09-20):
@@ -319,6 +337,13 @@ async function createDocument(title, opts = {}) {
   if (!S.client) throw new Error(NOT_CONNECTED);
   let config = {kind:opts.kind || 'doc'};
   if (config.kind === 'custom') config = await customCreation(opts.typeUri);
+  // A task of a type (Create task's picker): the type's own rules decide, as for a custom document, and it stays a
+  // task — open, assigned to its creator — rather than becoming the type's plain document.
+  else if (config.kind === 'task' && opts.typeUri !== undefined) {
+    config = await customCreation(opts.typeUri);
+    if (config.kind !== 'doc') throw new Error('That type applies to meetings, not tasks');
+    config = {...config, kind:'task'};
+  }
   else if (opts.typeUri !== undefined) throw new Error('Custom type requires kind custom');
   // A saved search is created from a query, never from a bare title: initDocument writes the query container at
   // birth because searchChildren reads an empty one as unreadable and refuses to run it.
@@ -852,4 +877,4 @@ async function moveTarget(spaceId) {
   return document(spaceId);
 }
 
-module.exports = { followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, codexIds, setCodex, creatorOf, document, op, inHistory, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget };
+module.exports = { followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, codexIds, setCodex, creatorOf, document, op, inHistory, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget };
