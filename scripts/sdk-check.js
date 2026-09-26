@@ -768,6 +768,10 @@ async function main() {
     assert.equal(await ai.suggestDiscussWith('t',fetchWith({ok:true,status:200,json:async()=>({output_text:'Heads of Tech'})})),'Heads of Tech','the convenience field is read too');
     assert.equal(await ai.suggestDiscussWith('t',fetchWith(answer('  \u201CStan and Peter\u201D  '))),'Stan and Peter','trimmed, and the quotes a model likes to add are taken off');
     assert.equal(await ai.suggestDiscussWith('t',fetchWith(answer(''))),null,'a title naming nobody is an empty answer, not a guess');
+    // The boot icon pick (issue #250): every icon name and the type titles go out, and the answer maps back to uris.
+    const picked=await ai.pickTypeIcons([{uri:'tana:type:a',title:'Meeting'},{uri:'tana:type:b',title:'Person'}],['calendar','user'],fetchWith(answer('Sure: {"1": " calendar ", "2": 7}')));
+    assert.deepEqual(picked,{'tana:type:a':'calendar','tana:type:b':null},'a name is read per type number, trimmed, and anything else is no pick');
+    assert.deepEqual([calls.at(-1).init.body.input,calls.at(-1).init.body.instructions],['Icons: calendar, user\n\nType 1: Meeting\nType 2: Person',ai.ICON_INSTRUCTIONS],'the names and the titles are the input, and nothing else about a type');
     assert.equal(await ai.suggestDiscussWith('t',fetchWith(answer('This title does not name anyone to discuss it with, so there is nobody to suggest here.'))),null,'a sentence is the model explaining itself: not a name');
     assert.equal(await ai.suggestDiscussWith('t',fetchWith(answer('Stan\nPeter'))),null,'nor is a list of lines');
     await assert.rejects(ai.suggestDiscussWith('t',fetchWith({ok:false,status:401,json:async()=>({})})),/401: check the API key/,'a rejected key says so rather than looking like an empty title');
@@ -811,7 +815,10 @@ async function main() {
     try {
       const login=await ai.startChatGPTLogin(userData);
       assert.deepEqual([login.userCode,login.verificationUrl],['ABCD-EFGH','https://auth.openai.com/codex/device'],'sign-in starts the device flow and returns only its code and verification URL');
+      let signIns=0; ai.onSignedIn=()=>signIns++;
       signedIn=true; note({method:'account/login/completed',params:{loginId:'login-1',success:true}});
+      ai.onSignedIn=null;
+      assert.equal(signIns,1,'a completed sign-in tells main, which runs the type icon pick then rather than at the next boot');
       const status=await ai.chatgptStatus(userData);
       assert.deepEqual([status.signedIn,status.email,status.planType],[true,'person@example.com','plus'],'the app reads back the signed-in account status');
       assert.equal(Object.hasOwn(status,'accessToken'),false,'credentials never enter the status sent to the renderer');
@@ -869,7 +876,17 @@ async function main() {
     assert.equal(backend.toNode({ id: 'tana:chat:' + ulid(), title: 'Chat', icon: 'chat', tags: [] }).icon, 'chat', 'no other kind is touched');
     assert.equal(icons.setTypeIcon(TYPE, null), null, 'clearing answers with nothing to draw');
     assert.equal(icons.typeIcons().length, 0, 'and the type goes back to the generic glyph');
-    assert.equal(JSON.stringify(cache.setting('typeIcons')), '{}', 'with nothing left behind in the setting');
+    assert.equal(JSON.stringify(cache.setting('typeIcons')), JSON.stringify({ [TYPE]: null }), 'which is kept as a choice, so the boot pick leaves it alone');
+    // The boot pick (issue #250): only types with no choice at all are asked about, and only names in the set stick.
+    {
+      const THIRD = 'tana:type:' + ulid(), asked = [];
+      const pick = async (missing, labels) => { asked.push(missing.map((t) => t.uri), labels.includes('rocket')); return { [TYPE]: 'rocket', [OTHER]: 'rocket', [THIRD]: 'nothinglikethis' }; };
+      assert.equal(await icons.fillTypeIcons([{ uri: TYPE, title: 'A' }, { uri: OTHER, title: 'B' }, { uri: THIRD, title: 'C' }], pick), 1, 'one type picked for');
+      assert.deepEqual(asked, [[OTHER, THIRD], true], 'the type set back to the generic glyph is not asked about, and the whole set is offered');
+      assert.deepEqual([icons.typeIconName(TYPE), icons.typeIconName(OTHER), icons.typeIconName(THIRD)], [null, 'nc-rocket', null], 'a name outside the set is dropped');
+      assert.equal(await icons.fillTypeIcons([{ uri: OTHER, title: 'B' }], async () => { throw new Error('asked again'); }), 0, 'a picked type is never asked about again');
+      icons.setTypeIcon(OTHER, null);
+    }
     console.log('ok  type icons: the built-in Nucleo set searched in main, the choice stored as a name, and every row of that type drawn with it');
     // The colour the same way: a hue of our own, or grey, kept beside the glyph in the settings; Tana's own hue on
     // the type shows through when there is no entry, and is never written.
@@ -971,6 +988,17 @@ async function main() {
     await backend.handlers.get('sensitive:set')({ sender: right.webContents }, marked, false);
     assert.deepEqual(heard.map(([name]) => name), ['left', 'other'], 'a sensitive mark tells the other pages too');
     backend.S.windows.clear(); settings.setPref('theme', undefined); await settings.flush();
+    // Signed out, both halves of a split are the same login button: the left one fills the window, the right one hides.
+    const box = () => ({ setBounds(b) { this.bounds = b; }, setVisible(v) { this.visible = v; } }), split = { getContentBounds: () => ({ width: 1000, height: 600 }), panes: [box(), box()] };
+    const auth = { ...backend.S.status };
+    Object.assign(backend.S.status, { authChecking: false, authenticated: false }); backend.layout(split);
+    assert.deepEqual([split.panes[0].bounds.width, split.panes[1].visible], [1000, false], 'signed out: the login fills the window');
+    const [hidden] = split.panes.slice(1); split.panes = [hidden]; backend.layout(split); // the left half closed: the hidden right one is all there is
+    assert.deepEqual([hidden.bounds.width, hidden.visible], [1000, true], 'the page left alone is shown again, not a blank window');
+    split.panes = [box(), hidden];
+    Object.assign(backend.S.status, { authenticated: true }); backend.layout(split);
+    assert.deepEqual([split.panes[0].bounds.width, split.panes[1].visible], [500, true], 'signed in: the split comes back');
+    Object.assign(backend.S.status, auth);
     // A node's link opens it in Tana on the route Tana itself picks for its kind (issue #88).
     backend.testRuntime({ me: { orgDocUri: 'tana:org:01ks7rqsrqjn7vwyjhx75r6jg0' } });
     const link = (kind) => backend.handlers.get('doc:link')(null, 'tana:' + kind + ':01m2nrv0v6qj2brghq04t8wv87');

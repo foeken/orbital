@@ -6516,34 +6516,36 @@ function runCaretAtPointCheck() {
   assert.match(functionSource('materialise'), /tana\.insertAfter\(parent\.docId, last\?\.id \|\| null, text, node\.block\)/, 'and the draft is written as the kind it was drawn as');
 }
 
-// Notices are a toast that fades on its own (#123). The line under the title is errors' alone: writing a notice into
-// it replaced #errorText and the relogin button, so the next showError threw and the write queue behind run() stopped.
-// The fake #error does what the DOM does when its text is set: its children go.
+// Notices and action errors are a toast that fades on its own (#123). The line under the title is the relogin state
+// alone: writing into it replaced #errorText and the relogin button, so the next write there threw and the queue
+// behind run() stopped. The fake #error does what the DOM does when its text is set: its children go.
 async function runToastCheck() {
   const nodes = new Map(), timers = [];
   for (const id of ['error', 'errorText', 'errorLogin', 'toast']) {
     const n = { id, hidden: id !== 'toast', classes: new Set() };
-    n.classList = { add: (c) => n.classes.add(c), remove: (c) => n.classes.delete(c) };
+    n.classList = { add: (c) => n.classes.add(c), remove: (c) => n.classes.delete(c), toggle: (c, on) => (on ? n.classes.add(c) : n.classes.delete(c)) };
     let text = '';
     Object.defineProperty(n, 'textContent', { get: () => text, set: (v) => { text = String(v); if (id === 'error') { nodes.delete('errorText'); nodes.delete('errorLogin'); } } });
     nodes.set(id, n);
   }
   const api = vm.runInNewContext(`
     const $ = (id) => nodes.get(id) || null;
-    ${sourceBetween('const showError =', 'const run =')}
-    ${sourceBetween('let toastTimer', 'async function copyText')}
+    ${sourceBetween('let toastTimer', 'const run =')}
     ({ showNote, showError });
-  `, { nodes, setTimeout: (fn) => { timers.push({ fn, live: true }); return timers.length; }, clearTimeout: (i) => { if (timers[i - 1]) timers[i - 1].live = false; } });
+  `, { nodes, setTimeout: (fn, ms) => { timers.push({ fn, ms, live: true }); return timers.length; }, clearTimeout: (i) => { if (timers[i - 1]) timers[i - 1].live = false; } });
   api.showNote('Link copied');
   assert.deepEqual([nodes.get('toast').textContent, nodes.get('toast').classes.has('show')], ['Link copied', true], 'a notice is the toast');
   assert.ok(nodes.has('errorText') && nodes.has('errorLogin') && nodes.get('error').hidden, 'and leaves the error line, with its login button, hidden and whole');
-  api.showError(new Error('Write refused'));
-  assert.deepEqual([nodes.get('errorText').textContent, nodes.get('error').hidden], ['Write refused', false], 'so an error after a notice still has its place');
+  api.showError(new Error('[permission_denied] permission denied'));
+  assert.deepEqual([nodes.get('toast').textContent, nodes.get('toast').classes.has('error'), timers[1].ms], ['[permission_denied] permission denied', true, 6000], 'an error is a red toast that stays longer');
+  assert.ok(nodes.has('errorText') && nodes.get('error').hidden, 'and stays out of the line under the title');
+  api.showError(null);
+  assert.equal(nodes.get('toast').textContent, '[permission_denied] permission denied', 'a later success does not wipe the error away');
   api.showNote('Classified as Project (91%)');
-  assert.equal(timers[0].live, false, 'a newer notice restarts the clock, so the older one cannot fade it early');
+  assert.ok(!timers[1].live && !nodes.get('toast').classes.has('error'), 'a newer notice restarts the clock and is no longer red');
   for (const t of timers.filter((t) => t.live)) t.fn();
   assert.deepEqual([nodes.get('toast').textContent, nodes.get('toast').classes.has('show')], ['Classified as Project (91%)', false], 'and the toast fades on its own');
-  console.log('ok  toast: notices fade at the foot of the window and leave the error line and its login button alone');
+  console.log('ok  toast: notices and errors fade at the foot of the window and leave the relogin line alone');
 }
 
 const checks = [runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck,runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck];

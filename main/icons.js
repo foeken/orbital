@@ -60,11 +60,12 @@ const typeIcons = () => Object.entries(stored())
   .map(([uri, label]) => { const icon = icons().find((i) => i.n === label); return icon ? { uri, ...row(icon) } : null; })
   .filter(Boolean);
 // Choosing one: a label from the set, or null to go back to the generic type glyph. Stored under the type, so every
-// document of that type follows it.
+// document of that type follows it. The generic glyph is kept as a null entry rather than no entry: it is a choice
+// too, and fillTypeIcons only picks for types nobody has chosen for.
 function setTypeIcon(typeUri, name) {
   if (typeof typeUri !== 'string' || !/^tana:type:[0-9a-z]{26}$/.test(typeUri)) throw new Error('Icons are set on a type');
   const next = { ...stored() };
-  if (name == null) delete next[typeUri];
+  if (name == null) next[typeUri] = null;
   else {
     const label = labelOf(name) || String(name);
     if (!icons().some((i) => i.n === label)) throw new Error('No icon called ' + label);
@@ -74,5 +75,20 @@ function setTypeIcon(typeUri, name) {
   chosen = next;
   return name == null ? null : { uri: typeUri, ...row(icons().find((i) => i.n === (labelOf(name) || name))) };
 }
+// At boot (main.js autoTypeIcons): the types with no choice at all get the one `pick` (main/ai.js pickTypeIcons) names,
+// in one write. A name outside the set is dropped, and so is a type chosen for while the model was answering.
+async function fillTypeIcons(types, pick) {
+  const missing = types.filter((t) => !(t.uri in stored()));
+  if (!missing.length) return 0;
+  const picks = await pick(missing, icons().map((i) => i.n));
+  const next = { ...stored() };
+  const known = new Set(icons().map((i) => i.n));
+  const fresh = missing.filter((t) => !(t.uri in next) && known.has(picks && picks[t.uri]));
+  if (!fresh.length) return 0;
+  for (const t of fresh) next[t.uri] = picks[t.uri];
+  settings.set('typeIcons', next);
+  chosen = next;
+  return fresh.length;
+}
 
-module.exports = { searchIcons, typeIcons, typeIconName, setTypeIcon, iconName, labelOf, forgetTypeIcons };
+module.exports = { searchIcons, typeIcons, typeIconName, setTypeIcon, fillTypeIcons, iconName, labelOf, forgetTypeIcons };

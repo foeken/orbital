@@ -248,6 +248,9 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 .pills { position: relative; z-index: 5; display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 32px 12px; }
 .pills[hidden] { display: none; }
 .pill { position: relative; border: 0; border-radius: 999px; padding: 6px 14px; background: #e8f1fb; color: #4f8ad9; font-weight: 600; font-size: 15px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+/* ...and the same spring would put the pills of a second line over the menu, so the pill carrying one (arriving or
+   leaving) sits above its neighbours */
+.pill:has(> .menu) { z-index: 1; }
 .pill b { color: #2b6fcf; font-weight: 700; }
 .pill svg { width: 16px; height: 16px; }
 /* Refresh is a header button beside the fold one (renderer/pills.js), and it answers the press before the query
@@ -798,6 +801,7 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
   opacity: 0; visibility: hidden; transform: translate(-50%, 6px) scale(.96); pointer-events: none;
   transition: opacity var(--dur-quick) var(--ease-in), transform var(--dur-quick) var(--ease-in), visibility 0s linear var(--dur-quick); }
 .toast.show { opacity: 1; visibility: visible; transform: translate(-50%, 0); transition: opacity var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-spring); }
+.toast.error, [data-theme="dark"] .toast.error { background: #c0392b; color: #fff; }
 .palette .card {
   width: 100%; max-width: 620px; max-height: min(70vh, 440px); display: flex; flex-direction: column; overflow: hidden;
   background: #fff; border-radius: 12px; box-shadow: 0 12px 40px rgba(0, 0, 0, .18), 0 0 0 1px rgba(0, 0, 0, .05);
