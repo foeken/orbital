@@ -68,12 +68,12 @@ async function install(release) {
   const target = path.resolve(app.getPath('exe'), '../../..'); // …/Orbital.app/Contents/MacOS/<exe>
   if (!target.endsWith('.app')) throw new Error('Cannot locate the running app bundle');
   // The zip came over https from GitHub; before anything is replaced, codesign confirms the bundle inside it is
-  // intact and signed by the team that signed the running copy. A tampered, truncated or ad-hoc build fails here,
-  // while the running app is still in place.
-  await run('/usr/bin/codesign', ['--verify', '--deep', '--strict', fresh]);
-  const team = async (bundle) => teamOf((await run('/usr/bin/codesign', ['-dv', '--verbose=2', bundle])).stderr);
-  const [mine, theirs] = await Promise.all([team(target), team(fresh)]);
-  if (!theirs || theirs !== mine) throw new Error(`The download is signed by ${theirs || 'nobody'}, this app by ${mine || 'nobody'}`);
+  // intact and carries a Developer ID signature, chained to Apple, of the team that signed the running copy. A
+  // tampered, truncated, ad-hoc or self-signed build fails here, while the running app is still in place.
+  const mine = teamOf((await run('/usr/bin/codesign', ['-dv', '--verbose=2', target])).stderr);
+  if (!mine) throw new Error('This copy of Orbital is not signed, so an update cannot be checked against it');
+  await run('/usr/bin/codesign', ['--verify', '--deep', '--strict', '-R', signedBy(mine), fresh])
+    .catch(() => { throw new Error('The download is not signed by the team that signed this app'); });
   // The running bundle cannot be replaced underneath itself: hand the swap to a detached shell that waits for
   // this process to exit, then reopens the new copy.
   const q = (s) => `'${s.replace(/'/g, "'\\''")}'`;
@@ -88,4 +88,12 @@ function teamOf(codesignOutput) {
   return id && id !== 'not set' ? id : null;
 }
 
-module.exports = { check, isNewer, teamOf };
+// The code requirement for "a Developer ID Application signature of `team`, chained to Apple's root", for
+// `codesign --verify -R`. --verify alone accepts any consistent signature, and -dv only repeats what the certificate
+// claims, so a self-signed certificate naming the right team passes both; this requirement does not.
+const signedBy = (team) => {
+  if (!/^[A-Z0-9]{10}$/.test(team)) throw new Error('Not a team identifier: ' + team);
+  return `=anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] and certificate leaf[field.1.2.840.113635.100.6.1.13] and certificate leaf[subject.OU] = "${team}"`;
+};
+
+module.exports = { check, isNewer, teamOf, signedBy };
