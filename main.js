@@ -131,10 +131,14 @@ function closeOverlay(win, result = {}) {
   // a ⌘K that closed Create task does not leave the palette open under the tour.
   const pending = win.helpPending; win.helpPending = null;
   const help = !!pending && !win.isDestroyed() && !!win.panes[0] && firstHelp(win.panes[0].webContents, pending.theme);
+  const note = typeof result.note === 'string' ? result.note.slice(0, 200) : undefined;
   if (opener && !opener.isDestroyed()) {
     if (!help) opener.focus(); // the tour has the keys now
-    opener.send('overlay:closed', { palette: result.palette === true && !help, note: typeof result.note === 'string' ? result.note.slice(0, 200) : undefined });
+    opener.send('overlay:closed', { palette: result.palette === true && !help, note: help ? undefined : note });
   }
+  if (help && note) win.overlay.later = { opener, note }; // the task's toast waits for the tour: under it, it would be gone first
+  const later = view.later; // this was that tour: the toast it held back is due now
+  if (later && later.opener && !later.opener.isDestroyed()) later.opener.send('overlay:closed', { palette: false, note: later.note });
 }
 const frontPane = () => S.win && !S.win.isDestroyed() ? (S.win.panes.find((p) => p.webContents === S.pane) || S.win.panes[0])?.webContents : null;
 function createWindow() {
