@@ -372,15 +372,19 @@ async function loadRoots() {
 // what waits on a reload (the Timeline's paging) counts on.
 const reloadSeq = new Map();
 const nextRead = (docId) => { const seq = (reloadSeq.get(docId) || 0) + 1; reloadSeq.set(docId, seq); return seq; };
+// page id -> the read whose rows are on the page. A read that answered replaces them only when it is newer: a newer one
+// that failed decides nothing, so an older answer for the same filter still lands.
+const landedRead = new Map();
+const lands = (docId, seq) => { if (seq <= (landedRead.get(docId) || 0)) return false; landedRead.set(docId, seq); return true; };
 async function reload(docId) {
   const seq = nextRead(docId);
   // A type page asks its filter; an answer to a filter the pills have since moved on from is dropped, or clicking
   // through a menu quickly could leave the page on an older choice than the pills show.
-  if (isTypeId(docId)) { const asked = typeFilter(docId), rows = await tana.searchPreview(asked); if (filters.get(docId) === asked && reloadSeq.get(docId) === seq) kids.set(docId, rows); return; } // and a newer read of the same filter wins
+  if (isTypeId(docId)) { const asked = typeFilter(docId), rows = await tana.searchPreview(asked); if (filters.get(docId) === asked && lands(docId, seq)) kids.set(docId, rows); return; } // and a newer read of the same filter wins
   let rows;
   // the whole page is in, or the read failed: no later part of it stands in for the page either way (renderer/timeline.js)
   try { rows = await tana.children(docId); } finally { if (docId === TIMELINE_PAGE) timelinePartial = false; }
-  if (String(docId).startsWith(SEARCH_ID) && reloadSeq.get(docId) !== seq) return;
+  if (String(docId).startsWith(SEARCH_ID) && !lands(docId, seq)) return;
   kids.set(docId, syncUploads(docId, rows)); // uploads still running keep their placeholders
 }
 // A document's rows are not only the ones on its page: every field it has is an outline of that document too,
@@ -473,8 +477,10 @@ function previewRows(docId) {
   if (searchRows.get(docId) === asked) return; // these rows already answer this filter
   searchRows.set(docId, asked);
   // a read still out, the stored query or an earlier preview, answers what the page showed before these pills
-  const seq = nextRead(docId), newest = () => reloadSeq.get(docId) === seq;
-  tana.searchPreview(staged).then((rows) => { if (newest()) { kids.set(docId, rows); render(); } }, (e) => { if (newest()) { searchRows.delete(docId); showError(e); } });
+  // only the newest read asked reports a failure; one that answered puts its staged filter back beside its rows
+  const seq = nextRead(docId);
+  tana.searchPreview(staged).then((rows) => { if (lands(docId, seq)) { searchRows.set(docId, asked); kids.set(docId, rows); render(); } },
+    (e) => { if (reloadSeq.get(docId) === seq) { searchRows.delete(docId); showError(e); } });
 }
 function setSearchF(patch) {
   const id = pillKey();

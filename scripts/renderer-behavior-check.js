@@ -6852,7 +6852,7 @@ async function runStagedSearchReloadCheck() {
   const api = vm.runInNewContext(`
     const TIMELINE_PAGE = 'orbital:timeline', SEARCH_ID = 'tana:search:'; let timelinePartial = false;
     const kids = new Map(), searchRows = new Map(), filters = new Map(), searchFilters = new Map();
-    const isTypeId = (id) => String(id).startsWith('tana:type:'), syncUploads = (id, rows) => rows, render = () => {}, showError = (e) => { throw e; };
+    const errors = [], isTypeId = (id) => String(id).startsWith('tana:type:'), syncUploads = (id, rows) => rows, render = () => {}, showError = (e) => errors.push(String(e.message || e));
     const typeFilter = (id) => { if (!filters.has(id)) filters.set(id, { types: [id] }); return filters.get(id); };
     const sameFilter = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     const answers = []; // every read still out, stored query or preview, in the order it was asked
@@ -6867,6 +6867,8 @@ async function runStagedSearchReloadCheck() {
       save: (id) => { searchFilters.set(id, { filter: { states: ['closed'] } }); searchRows.delete(id); return reload(id); }, // what Save does (renderer/pills.js)
       answer: async (i, rows) => { answers[i](rows); for (let n = 0; n < 5; n++) await Promise.resolve(); },
       rows: (id) => kids.get(id),
+      staged: (id) => searchRows.has(id),
+      errors: () => errors.splice(0),
     });
   `);
   const id = 'tana:search:01j0staged000000000000000';
@@ -6896,6 +6898,12 @@ async function runStagedSearchReloadCheck() {
   const typeFirst = api.reload(type), typeSecond = api.reload(type); // 9, 10
   await api.answer(10, ['newer type rows']); await typeSecond; await api.answer(9, ['older type rows']); await typeFirst;
   assert.deepEqual(plain(api.rows(type)), ['newer type rows'], 'an older read of a type page answering last leaves the newer rows');
+  // A preview asked twice for the same pills (a global change) whose second ask fails first: the first answer still lands
+  const dup = 'tana:search:01j0dup00000000000000000000';
+  api.stage(dup); api.stage(dup); // 11, 12
+  await api.answer(12, Promise.reject(new Error('unavailable'))); await api.answer(11, ['preview']);
+  assert.deepEqual([plain(api.rows(dup)), api.staged(dup)], [['preview'], true], 'a preview whose newer duplicate failed still lands, staged');
+  assert.deepEqual(plain(api.errors()), ['unavailable'], 'and the failure is said once');
   console.log('ok  a saved search keeps the rows of its newest read: staged pills, a second preview and a Save all retire the reads still out');
 }
 
