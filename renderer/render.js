@@ -439,9 +439,12 @@ function renderOutline() {
   // Cached rows remain usable while auth and sync reconnect; reserve the skeleton for an empty outline.
   const loading = asking || (!parent && !outline.children.length && (authChecking || !rootsLoaded || !filters.has(view) || (authed && !connected)));
   // Only the first page builds itself (renderer/loading.js); one opened later, or a reconnect, waits blank for its
-  // rows. Signed out is not landed: the page after the login is still the first.
-  $('skeleton').classList.toggle('gone', !loading || booted);
-  if (!loading && authed) booted = true;
+  // rows. Signed out is not landed: the page after the login is still the first. Nor is the view under a place still
+  // being restored (a first launch's My Tasks half is found only once connected): the loader stays over it, and the
+  // outline under it is hidden (styles.css). Offline with nothing to restore, the cached rows show as they are.
+  const placing = !placed && (!!savedPlace || connected);
+  $('skeleton').classList.toggle('gone', booted || !(loading || placing));
+  if (!loading && !placing && authed) booted = true;
   // the same rule as "No content" above: a view with every section folded away has no rows and is not empty
   if (!parent && !list.length && !outline.children.length && !loading && !filterEl.value) { // an empty view says so; a filtered-out list is explained by the count below it
     const note = document.createElement('div');

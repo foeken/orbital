@@ -116,5 +116,6 @@ let previewLoading = () => {};
   previewLoading = (show) => { if (show && document.activeElement && document.activeElement.blur) document.activeElement.blur(); document.body.classList.toggle('loading-preview', show); sync(); };
   // Esc ends a preview before anything else hears it, and no other key reaches the page hidden behind it
   addEventListener('keydown', (e) => { if (!previewing()) return; e.preventDefault(); e.stopImmediatePropagation(); if (e.key === 'Escape') previewLoading(false); }, true);
-  sync();
+  // after the last renderer script: a frame drawn earlier reads the page state (zoom) before it exists and dies
+  if (document.readyState === 'loading') addEventListener('DOMContentLoaded', sync); else sync();
 })();

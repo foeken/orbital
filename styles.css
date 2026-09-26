@@ -729,6 +729,7 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 .skeleton.gone { display: none; opacity: 0; pointer-events: none; }
 :where(.titlebar > :not(#error), #pills, #filterRow, #fields) { transition: opacity var(--dur-base) var(--ease-out); }
 :is(.loading-preview, body:has(#skeleton:not(.gone))) :is(.titlebar > :not(#error), #pills, #filterRow, #fields) { opacity: 0; pointer-events: none; transition-delay: var(--loader-wait, 300ms); }
+body:has(#skeleton:not(.gone)) :is(#outline, #filtered) { opacity: 0; pointer-events: none; } /* a view under a page still being restored; its rows rise in once it is gone */
 /* Cmd+K "Preview loading animation" (renderer/loading.js): the page as it looks while a view loads, until Esc */
 .loading-preview .skeleton.gone { display: block; opacity: 1; }
 .loading-preview :is(#outline, #filtered, #loginBox) { display: none; }
