@@ -116,12 +116,15 @@ async function discover() {
         .sort((a, b) => String(a.createTime || '').localeCompare(String(b.createTime || '')));
       for (const node of mine) {
         const doc = await S.client.sync.subscribe(node.id).catch(() => null);
-        if (doc && !isDeleted(readNode(doc))) return doc;
+        if (doc && !isDeleted(readNode(doc)) && holdsSettings(doc)) return doc;
       }
     }
   } catch (e) { report(e); }
   return null;
 }
+// A title is not proof: a note of yours called "Orbital" must never be taken over and filled with every synced key.
+// Ours holds at least one key in its root (or the root older builds wrote); one that never held any is worth nothing.
+const holdsSettings = (doc) => [ROOT, OLD_ROOT].some((root) => Object.keys(doc.loro.getMap(root).toJSON() || {}).length > 0);
 async function create() {
   const id = 'tana:text:' + ulid();
   const doc = await S.client.sync.subscribe(id, (loro) => {

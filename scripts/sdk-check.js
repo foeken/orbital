@@ -1216,18 +1216,23 @@ async function main() {
     const theirs = new Document('tana:text:' + ulid()); // the other machine's, made a second earlier
     theirs.transact((l) => { initDocument(l, settings.TITLE, ME); l.getMap(settings.ROOT).set('pref:theme', JSON.stringify('dark')); });
     docs.set(theirs.id, theirs);
+    const note = new Document('tana:text:' + ulid()); // a note of yours that happens to be called Orbital, older than both
+    note.transact((l) => initDocument(l, settings.TITLE, ME));
+    docs.set(note.id, note);
     connect();
     settings.setPref('home', 'library');
     await settings.hydrate(); await settings.flush();
     const mine = settings.settingsDocId();
     assert.ok(mine && mine !== theirs.id, 'the index did not list theirs yet, so this machine made its own');
-    listed = [{ id: mine, title: settings.TITLE, createTime: '2026-09-26T09:00:01Z' }, { id: theirs.id, title: settings.TITLE, createTime: '2026-09-26T09:00:00Z' }];
+    listed = [{ id: mine, title: settings.TITLE, createTime: '2026-09-26T09:00:01Z' }, { id: theirs.id, title: settings.TITLE, createTime: '2026-09-26T09:00:00Z' },
+      { id: note.id, title: settings.TITLE, createTime: '2026-01-01T00:00:00Z' }];
     connect(); sent.length = 0;
     await settings.hydrate(); await settings.flush();
     assert.equal(settings.settingsDocId(), theirs.id, 'the next launch settles on the oldest, pointer or not, so the two machines stop drifting apart');
     assert.equal(settings.get('pref:theme'), 'dark', 'it takes the choices made on the other machine');
     assert.equal(JSON.parse(theirs.loro.getMap(settings.ROOT).get('pref:home')), 'library', 'and pushes up the ones only this machine had');
     assert.ok(sent.some(([channel, prefs]) => channel === 'settings:changed' && prefs.theme === 'dark'), 'and the open page is told, rather than keeping the defaults until the next launch');
+    assert.deepEqual(note.loro.getMap(settings.ROOT).toJSON(), {}, 'an older note that only shares the title is never taken over');
     theirs.transact((l) => l.getMap('data').set('deletedAt', 123));
     connect();
     await settings.hydrate(); await settings.flush();
