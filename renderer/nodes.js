@@ -366,9 +366,10 @@ async function loadRoots() {
   }
   for (const d of drafts) { const s = views.find((x) => x.id === d.view); if (s) s.nodes.splice(d.i, 0, d.node); }
 }
-// page id -> its newest read: an answer from an older read that lands later is dropped. A preview of staged pills
-// (previewRows) takes a number too, so a saved search staged, or staged and saved, while its stored query was out keeps
-// the rows that answer what it shows now.
+// saved search id -> its newest read: an answer from an older read that lands later is dropped. A preview of staged
+// pills (previewRows) takes a number too, so a search staged, or staged and saved, while its stored query was out keeps
+// the rows that answer what it shows now. Only saved searches: every other page takes each answer as it lands, which
+// what waits on a reload (the Timeline's paging) counts on.
 const reloadSeq = new Map();
 const nextRead = (docId) => { const seq = (reloadSeq.get(docId) || 0) + 1; reloadSeq.set(docId, seq); return seq; };
 async function reload(docId) {
@@ -379,7 +380,7 @@ async function reload(docId) {
   let rows;
   // the whole page is in, or the read failed: no later part of it stands in for the page either way (renderer/timeline.js)
   try { rows = await tana.children(docId); } finally { if (docId === TIMELINE_PAGE) timelinePartial = false; }
-  if (reloadSeq.get(docId) !== seq) return;
+  if (String(docId).startsWith(SEARCH_ID) && reloadSeq.get(docId) !== seq) return;
   kids.set(docId, syncUploads(docId, rows)); // uploads still running keep their placeholders
 }
 // A document's rows are not only the ones on its page: every field it has is an outline of that document too,

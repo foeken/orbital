@@ -6850,7 +6850,7 @@ async function runSettingsElsewhereCheck() {
 // get staged: the preview installs its rows first, and the stored answer landing after must not replace them.
 async function runStagedSearchReloadCheck() {
   const api = vm.runInNewContext(`
-    const TIMELINE_PAGE = 'orbital:timeline'; let timelinePartial = false;
+    const TIMELINE_PAGE = 'orbital:timeline', SEARCH_ID = 'tana:search:'; let timelinePartial = false;
     const kids = new Map(), searchRows = new Map(), filters = new Map(), searchFilters = new Map();
     const isTypeId = () => false, typeFilter = () => ({}), syncUploads = (id, rows) => rows, render = () => {}, showError = (e) => { throw e; };
     const sameFilter = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -6885,6 +6885,11 @@ async function runStagedSearchReloadCheck() {
   api.stage(third); api.stage(third); // 5, 6
   await api.answer(6, ['fresh preview']); await api.answer(5, ['stale preview']);
   assert.deepEqual(plain(api.rows(third)), ['fresh preview'], 'an older preview landing after a newer one leaves the newer rows');
+  // Any other page takes each answer as it lands: the Timeline's paging waits on its reload and counts the rows after
+  const first = api.reload('orbital:timeline'), second = api.reload('orbital:timeline'); // 7, 8
+  await api.answer(7, ['older page']); await first;
+  assert.deepEqual(plain(api.rows('orbital:timeline')), ['older page'], 'a page that is no saved search installs an answer even while a newer read is out');
+  await api.answer(8, ['newer page']); await second;
   console.log('ok  a saved search keeps the rows of its newest read: staged pills, a second preview and a Save all retire the reads still out');
 }
 
