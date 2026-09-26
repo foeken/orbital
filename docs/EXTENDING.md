@@ -158,8 +158,11 @@ A kind is the `<kind>` of `tana:<kind>:<ulid>` (AGENTS.md lists the ones Tana ha
 1. **sdk/query.js** — one entry in `KIND_NODE_TYPE` (view kind → node type). `VIEW_KINDS` and the reverse
    `NODE_TYPE_KIND` are derived from it, so the filter accepts it and a saved search reads it back; sdk-check
    round-trips every kind through a saved search. Leave it out of `ANY_KINDS` if it is not library content (spaces,
-   people and types are asked for by name), and add its node type to `searchParams` if ⌘S should find it.
-2. **main/state.js** — `PLAIN_KINDS`, which gives its rows the icon named after the kind and a kind tag. The SVG itself
+   people and types are asked for by name), and add its node type to `searchParams` if ⌘S should find it. sdk-check pins the exact lists these make (`VIEW_KINDS`,
+   the library's and ⌘S's node types): update those assertions with it.
+2. **main/state.js** — `PLAIN_KINDS`, which gives its rows the icon named after the kind and a kind tag, and also keeps
+   its documents out of a meeting's or space's sidebar notes and outcomes (main/related.js `related`); if they belong
+   there, that filter needs a set of its own. The SVG itself
    is an entry in `scripts/build-icons.js` `WANT` (which writes `icons.js`) or in `renderer/nodes.js` `LIB_ICONS`,
    the two tables `iconSvg` looks in.
 3. **renderer/views.js** — its choice in the Type pill, `TYPES`.
