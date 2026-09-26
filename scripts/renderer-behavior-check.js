@@ -8432,6 +8432,22 @@ function runRowChromeCheck() {
 checks.push(runRowChromeCheck);
 // A burst of metadata answers patches one row each, and each asks for the fit: it runs once in the next frame for all
 // of them, not once per answer, which forced a layout of the whole outline every time (#264).
+// A settings:changed sent before the page listened is lost (the first connect's read of the settings document can land
+// while the page loads), so the page asks for the preferences once more after it starts listening.
+async function runLateSettingsCheck() {
+  const run = (snapshot, now) => vm.runInNewContext(`
+    const prefs = ${JSON.stringify(snapshot)}, applied = [];
+    const applySettings = (next) => applied.push(next);
+    const tana = { prefsNow: async () => (${JSON.stringify(now)}) };
+    ${sourceLine('if (tana.prefsNow)')}
+    ({ applied: async () => { await null; await null; return applied; } });
+  `);
+  assert.deepEqual(plain(await run({}, { theme: 'dark', home: 'library' }).applied()), [{ theme: 'dark', home: 'library' }], 'a new machine\u2019s choices, read after the page loaded, are applied');
+  assert.deepEqual(plain(await run({ theme: 'dark' }, { theme: 'dark' }).applied()), [], 'and nothing is applied when nothing changed');
+  assert.match(source, /if \(tana\.onSettings\) tana\.onSettings\(applySettings\);\n(?:\/\/[^\n]*\n)*if \(tana\.prefsNow\)/, 'it asks after it starts listening, so no change can fall between the two');
+  console.log('ok  settings: a change sent before the page listened is still applied');
+}
+checks.push(runLateSettingsCheck);
 function runFitSoonCheck() {
   const api = vm.runInNewContext(`
     let fits = 0;

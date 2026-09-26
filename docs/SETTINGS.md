@@ -83,6 +83,9 @@ changes something, main sends `settings:changed` and `renderer/app.js` applies i
 theme, Home, hotkeys, the arrangements and the folded sections, and it reads the views' filters, the agent marks and
 the watch choices again. A write from another page or window of this machine arrives the same way
 (`settings.tellOthers`, main/settings.js), except to the page that made it.
+Electron does not keep that message for a page that is not listening yet, and the first connect's read of the document
+can land while the page is still loading, so once the page listens it asks again (`prefsNow`) and applies whatever
+differs from its snapshot.
 
 One trap, paid for once: `contextBridge` **freezes** everything it exposes, so `window.api.prefs` is a frozen
 object and the store must keep a *copy* of it (`{ ...window.api.prefs }`). Writing into the bridge's own object
