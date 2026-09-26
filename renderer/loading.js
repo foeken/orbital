@@ -4,6 +4,9 @@
 // dots light up as nodes and are joined, one link at a time, into a small graph — the knowledge being gathered. Drawn on
 // a canvas, only while it is on screen; one still frame, graph complete, where motion is not welcome. The colours are
 // styles.css's (.skeleton canvas), so the theme reaches it.
+// Cmd+K "Preview loading animation" shows it over the page until Esc (body.loading-preview, styles.css): a load is
+// usually over before there is anything to see.
+let previewLoading = () => {};
 (() => {
   const box = document.getElementById('skeleton'), canvas = box && box.querySelector && box.querySelector('canvas');
   if (!canvas || !canvas.getContext) return;
@@ -71,7 +74,11 @@
     ctx.globalAlpha = 1;
     if (!still) frame = requestAnimationFrame(draw);
   }
-  const run = () => { if (!frame && !box.classList.contains('gone')) { t0 = 0; frame = requestAnimationFrame(draw); } };
+  const previewing = () => document.body.classList.contains('loading-preview');
+  const run = () => { if (!frame && (!box.classList.contains('gone') || previewing())) { t0 = 0; frame = requestAnimationFrame(draw); } };
   if (typeof MutationObserver === 'function') new MutationObserver(run).observe(box, { attributes: true, attributeFilter: ['class'] });
+  previewLoading = (on) => { document.body.classList.toggle('loading-preview', on); t0 = 0; run(); };
+  // Esc ends a preview before anything else hears it
+  addEventListener('keydown', (e) => { if (e.key === 'Escape' && previewing()) { e.preventDefault(); e.stopImmediatePropagation(); previewLoading(false); } }, true);
   run();
 })();

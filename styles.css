@@ -686,6 +686,9 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
    colours come from here, so the theme reaches it: color is the dots, --node the graph. */
 .skeleton { display: flex; justify-content: center; padding: 6vh 0 0; transition: opacity var(--dur-base) var(--ease-out), display var(--dur-base) allow-discrete; }
 .skeleton.gone { display: none; opacity: 0; pointer-events: none; }
+/* Cmd+K "Preview loading animation" (renderer/loading.js): the page as it looks while a view loads, until Esc */
+.loading-preview .skeleton.gone { display: flex; opacity: 1; }
+.loading-preview :is(#outline, #filtered, #loginBox) { display: none; }
 .skeleton canvas { display: block; width: min(100%, 760px); height: 280px; color: #9aa1a8; --node: #5b9bd5;
   mask-image: radial-gradient(ellipse 58% 72% at 50% 58%, #000 30%, transparent 78%); animation: loader-in var(--dur-slow) var(--ease-out) 300ms backwards; }
 @keyframes loader-in { from { opacity: 0; transform: translateY(10px); } }
