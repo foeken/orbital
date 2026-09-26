@@ -390,7 +390,7 @@ function renderOutline() {
   outline.classList.toggle('table-view', tableView());
   // ponytail: at least one fact column, because repeat(0) and a division by 0 make the grid invalid; with Display
   // empty that column is simply blank. A layout of its own if that case ever matters.
-  if (tableView() && list.length) { outline.style.setProperty('--cols', Math.max(1, tableKeys().length)); outline.prepend(tableHeadEl()); } // a list page shown as a table (renderer/views.js)
+  if (tableView() && list.length) { outline.style.setProperty('--cols', Math.max(1, tableKeys().length)); outline.style.setProperty('--fcols', tableCols()); outline.prepend(tableHeadEl()); } // a list page shown as a table (renderer/views.js)
   // "No content" is about a page with nothing on it, so it goes by what was just drawn rather than by the row count:
   // a grouped page with every section folded away has no rows and is not empty — its headings are right there.
   if (parent && !list.length && !outline.children.length) {

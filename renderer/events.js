@@ -17,6 +17,7 @@ function moveTo(el, dir, offset) {
 for (const [zone, rows] of [[$('fields'), () => fieldValues()], [outline.parentElement, () => texts()]]) {
   zone.addEventListener('mousedown', (e) => {
     if (!e.target.closest || e.target.closest('.node, .text, input, button, a, .pills, .crumbs')) return; // something better was clicked
+    if (e.target.closest('#fields, .scroll') !== zone) return; // the fields sit inside the page's scroll area: a click there is theirs alone
     const all = rows();
     const target = all.filter((row) => row.getBoundingClientRect().top <= e.clientY).at(-1) || all[0];
     if (!target) return;

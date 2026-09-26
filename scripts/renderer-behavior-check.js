@@ -8281,12 +8281,20 @@ async function runFieldChoiceCheck() {
     ${functionSource('writeChoice')}
     ${functionSource('optionRows')}
     ${functionSource('pickLink')}
+    ${functionSource('openCellChooser')}
+    const openChooser = (ctx) => { fieldCtx = ctx; };
     let fieldCtx = null;
     const ctxOf = (field, values) => { kids.set('host', values.map((segments) => ({ segments }))); return { docId: 'doc', hostId: 'host', key: 'k', field: { key: 'tana:type:t?attribute=a', ...field } }; };
     ({
       rows: (field, values) => { fieldCtx = ctxOf(field, values); return optionRows('').map((r) => [r.label, r.hint || '', !!r.keepOpen]); },
       pick: async (label) => { const row = optionRows('').find((r) => r.label === label); written.length = 0; await row.run(); return written[0]; },
       link: async (field, values, n) => { written.length = 0; await pickLink(ctxOf(field, values), n); return written[0]; },
+      cell: async (node, label) => {
+        openCellChooser(node, 'tana:type:t?attribute=a', { title: 'Level', type: 'options', options: [{ label: 'High' }, { label: 'Low' }] });
+        const ticked = optionRows('').filter((r) => r.hint === '✓').map((r) => r.label);
+        written.length = 0; await optionRows('').find((r) => r.label === label).run();
+        return { ticked, written: written[0], fields: node.fields };
+      },
     });
   `);
   const level = { type: 'options', label: 'Level', options: [{ label: 'High' }, { label: 'Low' }] };
@@ -8302,6 +8310,8 @@ async function runFieldChoiceCheck() {
   assert.deepEqual(plain(await api.link({ type: 'link' }, [a], b)), [[{ mention: { label: 'A', uri: 'tana:text:a' } }], [{ mention: { label: 'B', uri: 'tana:text:b' } }]],
     'unset allows several: one more line, written as a bare reference');
   assert.deepEqual(plain(await api.link({ type: 'member' }, [a], { id: 'tana:text:a', title: 'A' })), [[{ mention: { label: 'A', uri: 'tana:text:a' } }]], 'linking what is there already adds nothing');
+  assert.deepEqual(plain(await api.cell({ id: 'tana:text:r', fields: { 'tana:type:t?attribute=a': ['High'] } }, 'Low')),
+    { ticked: ['High'], written: ['Low'], fields: { 'tana:type:t?attribute=a': ['Low'] } }, 'a table cell picks from its row’s value, and the row shows the new one at once');
   console.log('ok  field choices: options pick one or toggle many, a dropped label is shown but never written, links replace or add');
 }
 checks.push(runFieldChoiceCheck);

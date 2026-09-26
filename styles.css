@@ -88,6 +88,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
    cannot line them up now that a value is rows rather than one line box, and the label drifted below the name
    beside it. Each column is given the same 22px line as a row, so the three tops agree. */
 .fields { margin-top: 18px; padding: 3px 0; border-top: 1px solid #e6e6e6; border-bottom: 1px solid #e6e6e6; display: grid; grid-template-columns: 14px max-content 1fr; align-items: start; }
+#fields { margin: 8px 0 0 16px; } /* in .scroll: its 16px more puts the fields under the title, 8px + the 10px above it is the 18px they had in the header */
 .fields .field { display: contents; color: #1a1a1a; }
 /* A page's fields read as a table: a hairline between one field and the next, under the icon, the label and the value
    alike. The grid's gaps become padding inside the cells for that, since a border cannot cross a gap. The inline
@@ -149,22 +150,25 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .fields .fhint, .fields .fkind { color: #aaa; line-height: 22px; }
 .fields .fkind { color: #888; padding: 0 6px; border-radius: 4px; background: rgba(0, 0, 0, 0.05); }
 /* a row's field values on its grey line (renderer/views.js subtextEl): the same chip, a step quieter */
-.subtext .fchip { padding: 0 5px; margin-right: 6px; border-radius: 4px; background: rgba(0, 0, 0, 0.05); color: #777; line-height: 18px; display: inline-block; }
-[data-theme="dark"] .fields .fchip, [data-theme="dark"] .fields .fkind, [data-theme="dark"] .subtext .fchip { background: rgba(255, 255, 255, 0.08); }
-[data-theme="dark"] .subtext .fchip { color: #aaa; }
+[data-theme="dark"] .fields .fchip, [data-theme="dark"] .fields .fkind { background: rgba(255, 255, 255, 0.08); }
 /* a list page as a table (renderer/views.js tableCells): each row's body is a grid, its grey line's cells are the
    columns after the title, and the header uses the same columns. The body starts at one fixed gutter on every row —
    the widest a row's own gutter gets, chevron 24 + marker 18 + a task's checkbox 23 — so a meeting or a doc without a
    checkbox has the same title column as a task, and a table grouped by type has one set of columns, not one per group.
    The fact columns are one fixed width each, measured against the outline (a container). The last column is the row's
    icons (visibility, pinned, link, watched — renderer/tasks.js taskMetaEl without the name, which has its own column):
-   90px holds all four 10px apart, right-aligned so they end the row as they do in the outline. */
-.outline.table-view { container-type: inline-size; --tcols: minmax(0, 1fr) repeat(var(--cols), min(160px, calc(60cqw / var(--cols)))) 90px; } /* px: the header's type is smaller than a row's */
+   90px holds all four 10px apart, right-aligned so they end the row as they do in the outline. That column, and the
+   agent badge's slot below, are only kept on a page where some row has them: otherwise they were empty space at the end. */
+/* --fcols: Title and the fact columns, each at the width it was dragged to or its share (renderer/views.js tableCols) */
+.outline.table-view { container-type: inline-size; --slot: 0px; --tcols: var(--fcols); } /* px: the header's type is smaller than a row's */
+.outline.table-view:has(> .node > .line > .body > .tmeta) { --tcols: var(--fcols) 90px; }
+.outline.table-view:not(:has(> .node > .line > .body > .tmeta)) > .thead > span:last-child { display: none; } /* the header's blank over the icons */
+.outline.table-view:has(> .node > .line > .cbadge) { --slot: 40px; }
 .outline.table-view > .node > .line > .body, .outline.table-view > .thead { display: grid; grid-template-columns: var(--tcols); column-gap: 16px; align-items: center; }
 /* The local agent's badge ends a row (renderer/render.js codexBadgeEl). Taking its width from that row's grid shifted
    every column on it, so each row keeps the badge's slot at its right end, empty or not, and the badge is put in it. */
 .outline.table-view > .node > .line { position: relative; }
-.outline.table-view > .node > .line > .body { flex: 0 1 calc(100% - 65px - 40px); margin: 0 40px 0 auto; }
+.outline.table-view > .node > .line > .body { flex: 0 1 calc(100% - 65px - var(--slot)); margin: 0 var(--slot) 0 auto; }
 .outline.table-view > .node > .line > .cbadge { position: absolute; top: 3px; right: 0; }
 .outline.table-view > .node > .line > .body > .subtext { display: contents; }
 .outline.table-view > .node > .line > .body > :not(.text, .subtext, .meta) { display: none; }
@@ -178,9 +182,16 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .outline.table-view > .node > .line > .body > .tmeta > .mtext { display: none; }
 .outline.table-view > .node > .line > .body > .tmeta > :not(.mtext) ~ :not(.mtext) { margin-left: 10px !important; } /* over taskMetaEl's inline 6px: alone in a column they read as cramped */
 .outline.table-view > .node > .line > .body > .text, .outline.table-view .cell { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.outline.table-view .cell.pick { min-height: 18px; cursor: pointer; } /* an options value: a click picks it (renderer/fields.js openCellChooser) */
 .outline.table-view > .node { border-bottom: 1px solid #f0f0f0; }
-.outline.table-view > .thead { margin-top: 16px; padding: 0 40px 6px 70px; border-bottom: 1px solid #ececec; color: #999; font-size: 13px; line-height: 18px; user-select: none; } /* 65 + the body's own 5; 40: the badge's slot; 16px: clear of the title above */
-.outline.table-view > .thead > span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.outline.table-view > .thead { margin-top: 16px; padding: 0 var(--slot) 6px 70px; border-bottom: 1px solid #ececec; color: #999; font-size: 13px; line-height: 18px; user-select: none; } /* 65 + the body's own 5; --slot: the badge's; 16px: clear of the title above */
+.outline.table-view > .thead > span { position: relative; min-width: 0; }
+.outline.table-view > .thead .tlabel { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* in the middle of the 16px gap after its column, as wide as the gap so it is easy to catch */
+.outline.table-view > .thead .tgrip { position: absolute; top: -4px; bottom: -4px; right: -16px; width: 16px; cursor: col-resize; }
+.outline.table-view > .thead .tgrip::after { content: ''; position: absolute; top: 0; bottom: 0; left: 7px; width: 2px; border-radius: 1px; }
+.outline.table-view > .thead .tgrip:hover::after, .outline.table-view > .thead .tgrip.dragging::after { background: #d0d0d0; }
+[data-theme="dark"] .outline.table-view > .thead .tgrip:hover::after, [data-theme="dark"] .outline.table-view > .thead .tgrip.dragging::after { background: #4a5053; }
 [data-theme="dark"] .outline.table-view > .node, [data-theme="dark"] .outline.table-view > .thead { border-color: #2b2f31; }
 .tbtn.c svg { width: 13px; height: 13px; display: block; }
 .fields a { color: #508fbb; text-decoration: underline; cursor: pointer; }
@@ -696,8 +707,8 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
    load never blinks it, and comes back as the rows do; the error line stays, since it may be what the page waits on. */
 .skeleton { position: absolute; inset: 0; pointer-events: none; transition: opacity var(--dur-base) var(--ease-out), display var(--dur-base) allow-discrete; }
 .skeleton.gone { display: none; opacity: 0; pointer-events: none; }
-:where(.titlebar > :not(#error), #pills, #filterRow) { transition: opacity var(--dur-base) var(--ease-out); }
-:is(.loading-preview, body:has(#skeleton:not(.gone))) :is(.titlebar > :not(#error), #pills, #filterRow) { opacity: 0; pointer-events: none; transition-delay: var(--loader-wait, 300ms); }
+:where(.titlebar > :not(#error), #pills, #filterRow, #fields) { transition: opacity var(--dur-base) var(--ease-out); }
+:is(.loading-preview, body:has(#skeleton:not(.gone))) :is(.titlebar > :not(#error), #pills, #filterRow, #fields) { opacity: 0; pointer-events: none; transition-delay: var(--loader-wait, 300ms); }
 /* Cmd+K "Preview loading animation" (renderer/loading.js): the page as it looks while a view loads, until Esc */
 .loading-preview .skeleton.gone { display: block; opacity: 1; }
 .loading-preview :is(#outline, #filtered, #loginBox) { display: none; }

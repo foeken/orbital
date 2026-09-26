@@ -76,7 +76,8 @@ function writeChoice(ctx, values) {
     : values.map((segs) => segs.find((s) => s.mention)).filter(Boolean).map((s) => [{ mention: { label: s.mention.label, uri: s.mention.uri } }]);
   return run(async () => {
     await tana.setField(ctx.docId, ctx.field.key, lines);
-    await reload(ctx.hostId);
+    if (ctx.row) { ctx.row.fields = { ...ctx.row.fields, [ctx.field.key]: lines }; ctx.field.lines = lines.map((text) => ({ segments: [{ text }] })); } // a table cell: its row shows it now, the type page's live query reads it again
+    else await reload(ctx.hostId);
     render(true);
     if (palette.hidden) focusField(ctx.key); else if (palMode === 'field') renderPalette(); // a multiple pick stays open: its ticks move
   });
@@ -85,6 +86,12 @@ function openChooser(ctx, back, text = '') {
   fieldReturn = ctx.key;
   if (ctx.field.type !== 'options') return openFieldLink(ctx, text);
   openFieldPage(ctx, optionRows, 'Select ' + (ctx.field.label || 'value') + '…', back, text);
+}
+// A table cell on a type's page (renderer/views.js tableCells): that row's value of one options field, from the row
+// the page was read with.
+function openCellChooser(node, key, def) {
+  const lines = ((node.fields || {})[key] || []).map((text) => ({ segments: [{ text }] }));
+  openChooser({ docId: node.id, key: 'cell|' + node.id + '|' + key, row: node, editable: true, field: { key, label: def.title, type: def.type, cardinality: def.cardinality, options: def.options, lines } });
 }
 // ---- a field page in the palette: one mode, the rows and the way back given by whoever opens it ----
 function openFieldPage(ctx, rows, placeholder, back, text = '', keys = null) {

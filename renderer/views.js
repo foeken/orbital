@@ -285,7 +285,7 @@ function setDisplay(id) {
 }
 // The values of the fields Display shows, in the menu's order: the row carries them from the graph (main/rows.js).
 const shownFieldValues = (node) => (node.fields ? displayKeys().flatMap((k) => node.fields[k] || []) : []);
-// The grey line under a title: those values as chips, then subtextOf's words. A render and a late metadata patch
+// The grey line under a title: those values, then subtextOf's words, one · between each, as a saved search's rows read. A render and a late metadata patch
 // (renderer/tasks.js) both build it here, so the row keeps its shape when its metadata lands. `sub` is refilled in place.
 // asTable: a row of the page's own list while it is a table (tableRow); what an expanded row shows under it stays an outline
 function subtextEl(node, taskInfo, sub = document.createElement('div'), asTable = false) {
@@ -293,8 +293,7 @@ function subtextEl(node, taskInfo, sub = document.createElement('div'), asTable 
   const words = subtextOf(node, taskInfo), values = shownFieldValues(node);
   if (!words && !values.length) return null;
   sub.className = 'subtext';
-  sub.textContent = values.length ? '' : words; // a row without fields is the plain line it always was
-  if (values.length) sub.append(...values.map((v) => { const chip = document.createElement('span'); chip.className = 'fchip'; chip.textContent = demoText(v, node.id); return chip; }), ...(words ? [words] : []));
+  sub.textContent = [...values.map((v) => demoText(v, node.id)), ...(words ? [words] : [])].join(' · ');
   return sub;
 }
 // ---- a list page as a table (the header's Outliner/Table switch, or ⌘K): a column per fact Display shows ----
@@ -340,17 +339,59 @@ function tableCells(node, info, sub) {
   for (const k of tableKeys()) {
     const cell = document.createElement('span'); cell.className = 'cell';
     if (TABLE_FACTS[k]) cell.append(...[TABLE_FACTS[k](node, info)].flat());
-    else for (const v of (node.fields && node.fields[k]) || []) { const chip = document.createElement('span'); chip.className = 'fchip'; chip.textContent = demoText(v, node.id); cell.append(chip); }
+    else {
+      // plain text, as every other column is; the cell's ellipsis cuts it and the tooltip has the rest
+      cell.textContent = cell.title = ((node.fields && node.fields[k]) || []).map((v) => demoText(v, node.id)).join(', ');
+      const def = typeDefs().find((d) => fieldKey(d) === k); // an options field on a type's page: a click picks its value in ⌘K
+      if (def && def.type === 'options' && canEditNode(node) && tana.setField && !demoMode) {
+        cell.classList.add('pick');
+        cell.onclick = (e) => { e.stopPropagation(); openCellChooser(node, k, def); }; // the row's own click opens the row
+      }
+    }
     sub.append(cell);
   }
   return sub;
 }
 // The column titles, over the gutter a row keeps for its chevron and marker. Not a row: no key, nothing to land on.
+// Each fact column has a grip on its right edge; Title has none, since it takes whatever the others leave.
 function tableHeadEl() {
   const names = new Map(displayList()), el = document.createElement('div');
   el.className = 'thead';
-  for (const label of ['Title', ...tableKeys().map((k) => names.get(k)), '']) { const c = document.createElement('span'); c.textContent = label; el.append(c); } // '': over the row's icons
+  for (const [key, label] of [[null, 'Title'], ...tableKeys().map((k) => [k, names.get(k)]), [null, '']]) { // '': over the row's icons
+    const c = document.createElement('span'), words = document.createElement('span');
+    words.className = 'tlabel'; words.textContent = label; c.append(words);
+    if (key) {
+      const grip = document.createElement('span'); grip.className = 'tgrip'; grip.title = 'Drag to resize · double-click to reset';
+      grip.onpointerdown = (e) => resizeColumn(e, key, c);
+      grip.ondblclick = () => setColumnWidth(key, undefined);
+      c.append(grip);
+    }
+    el.append(c);
+  }
   return el;
+}
+// A column's width in px, per page and column, synced like the choice of a table itself. A column nobody dragged
+// keeps its share of the page (styles.css), and Title takes what is left.
+const tableWidths = () => pref('tableWidths', {})[pillKey()] || {};
+const tableCols = (widths = tableWidths()) => ['minmax(0, 1fr)', ...tableKeys().map((k) => (widths[k] ? widths[k] + 'px' : 'min(160px, calc(60cqw / var(--cols)))'))].join(' ');
+function resizeColumn(e, key, cell) {
+  e.preventDefault();
+  const grip = e.currentTarget, startX = e.clientX, start = cell.getBoundingClientRect().width, widths = { ...tableWidths() };
+  grip.setPointerCapture(e.pointerId); grip.classList.add('dragging');
+  const move = (ev) => { widths[key] = Math.round(Math.max(40, start + ev.clientX - startX)); outline.style.setProperty('--fcols', tableCols(widths)); };
+  const up = () => {
+    grip.removeEventListener('pointermove', move); grip.removeEventListener('pointerup', up); grip.classList.remove('dragging');
+    if (widths[key]) setColumnWidth(key, widths[key]); // a click without a move changes nothing
+  };
+  grip.addEventListener('pointermove', move); grip.addEventListener('pointerup', up);
+}
+function setColumnWidth(key, px) {
+  const all = pref('tableWidths', {}), mine = { ...all[pillKey()], [key]: px };
+  if (!px) delete mine[key];
+  const next = { ...all, [pillKey()]: mine };
+  if (!Object.keys(mine).length) delete next[pillKey()];
+  setPref('tableWidths', next);
+  outline.style.setProperty('--fcols', tableCols());
 }
 // "4 hours ago". Nothing else in the app says an age in words, so this is the one place that turns a time into one.
 function agoText(iso) {
