@@ -2255,6 +2255,15 @@ function runPaletteSkipCheck() {
   assert.equal(emptyText.text('tana:search:mine'), 'Nothing matches. ⌃⌥T creates a task.', 'the key named is the one recorded');
   emptyText.record('');
   assert.equal(emptyText.text('tana:search:mine'), 'Nothing matches.', 'and with none, no key is promised');
+  const saved = vm.runInNewContext(`
+    const hotkeys = { createTask: '⌃⌥T' }, stored = [];
+    let renders = 0;
+    const setPref = (key, value) => stored.push([key, value]), renderSoon = () => { renders++; };
+    ${sourceLine('const saveHotkeys =')}
+    saveHotkeys();
+    ({ stored, renders });
+  `);
+  assert.deepEqual([saved.stored.length, saved.renders], [1, 1], 'a key recorded or reset redraws the page, so the empty note names the key as it is now');
   const nextPalIndex = vm.runInNewContext(functionSource('nextPalIndex') + '; nextPalIndex;');
   const rows = [{ disabled: true }, { label: 'a' }, { disabled: true }, { label: 'b' }];
   assert.equal(nextPalIndex(rows, 1, 1), 3, 'Down skips a disabled row');
