@@ -420,11 +420,21 @@ function pickMenuRow(r, pick) {
   r.run();
   renderPills(true);
 }
+// ↑/↓ in an open menu move the highlight over the rows it already shows, as the palette does (#272): one class on
+// two elements, rather than every pill and the menu built again. A menu drawn from another list is drawn afresh.
+function moveMenuIndex(pill, count, step) {
+  if (!count) return;
+  menu.index = (menu.index + step + count) % count;
+  const rows = pill.querySelectorAll('.menu:not(.out) .mrow');
+  if (rows.length !== count) return renderPills(true);
+  rows.forEach((row, i) => row.classList.toggle('active', i === menu.index));
+  rows[menu.index].scrollIntoView({ block: 'nearest', inline: 'nearest', container: 'nearest' });
+}
 function pillKeys(e, d, pill) {
   // the same rows the menu is showing: navigating a list the user has narrowed must not highlight a row that is not there
   const open = menu && menu.id === d.id, pick = open ? menuRows(d).filter((r) => r.label) : [];
   const typing = open && (menu.q || '') !== '';
-  if (open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) { e.preventDefault(); if (pick.length) menu.index = (menu.index + (e.key === 'ArrowDown' ? 1 : pick.length - 1)) % pick.length; renderPills(true); }
+  if (open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) { e.preventDefault(); moveMenuIndex(pill, pick.length, e.key === 'ArrowDown' ? 1 : -1); }
   // Space selects an unnarrowed list, but types into one being narrowed: member names have spaces in them
   else if (open && (e.key === 'Enter' || (e.key === ' ' && !typing))) { e.preventDefault(); pickMenuRow(pick[menu.index], pick); }
   else if (open && e.key === 'Backspace') { e.preventDefault(); menu.q = (menu.q || '').slice(0, -1); menu.index = 0; renderPills(true); }
