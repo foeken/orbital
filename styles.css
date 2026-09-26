@@ -180,7 +180,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .outline.table-view > .node > .line > .body .cell, .outline.table-view > .node > .line > .body > .tmeta { grid-row: 1; }
 .outline.table-view > .node > .line > .body > .tmeta { order: 1; grid-column: -2; margin: 0; text-align: right; line-height: 18px; }
 .outline.table-view > .node > .line > .body > .tmeta > .mtext { display: none; }
-.outline.table-view > .node > .line > .body > .tmeta > :not(.mtext) ~ :not(.mtext) { margin-left: 10px !important; } /* over taskMetaEl's inline 6px: alone in a column they read as cramped */
+.outline.table-view > .node > .line > .body > .tmeta > :not(.mtext) ~ :not(.mtext) { margin-left: 10px; } /* wider than .ticon's 6px: alone in a column they read as cramped */
 .outline.table-view > .node > .line > .body > .text, .outline.table-view .cell { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .outline.table-view .cell.pick { min-height: 18px; cursor: pointer; } /* an options value: a click picks it (renderer/fields.js openCellChooser) */
 .outline.table-view > .node { border-bottom: 1px solid #f0f0f0; }
@@ -555,6 +555,14 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 /* the row's facts, moved down by fitRowMeta when the title left them no room: already grey and 14px, so they only
    need the 8px that separated them from the title taken back off */
 .subtext .tmeta { margin-left: 0; }
+/* one of a row's facts (renderer/tasks.js taskMetaEl): a 14px glyph, 6px from whatever stands before it. The first
+   needs no gap of its own: the 8px the .meta span carries is already there, and 14px reads as a hole. */
+.ticon { display: inline-block; width: 14px; height: 14px; vertical-align: -2px; }
+.ticon svg { width: 14px; height: 14px; }
+.tmeta > .ticon:not(:first-child) { margin-left: 6px; }
+.tmeta .mtext > .ticon { margin-right: 4px; } /* Unassigned's glyph, in front of the word */
+.tmeta [role="button"] { cursor: pointer; }
+button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 /* the visibility icon arrives after the row does, so the row holds its place with a dashed outline of one */
 .meta.pending { color: #d5d5d5; }
 .chip {

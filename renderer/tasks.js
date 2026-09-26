@@ -126,7 +126,7 @@ function taskMetaEl(summary, docId, node) {
   const writable = node && canEditNode(node) && isRealId(node.id);
   // a click opens the picker and leaves the caret where it is, as every other row control does
   const clickable = (target, open) => {
-    target.setAttribute('role', 'button'); target.style.cursor = 'pointer';
+    target.setAttribute('role', 'button'); // styles.css gives [role="button"] its pointer
     target.onmousedown = (e) => { e.preventDefault(); e.stopPropagation(); };
     target.onclick = (e) => { e.stopPropagation(); open(); };
   };
@@ -134,25 +134,16 @@ function taskMetaEl(summary, docId, node) {
   const who = document.createElement('span'); who.className = 'mtext'; who.textContent = summary.assignees;
   if (summary.assignees) el.append(who);
   if (summary.assignees && writable && isTask(node) && tana.setAssignees) { who.title = 'Edit assignees'; clickable(who, () => openAssigneePalette(node)); }
-  // the icons stand 6px apart, but the first one needs no gap of its own: a row with no assignee name in front of it
-  // (every doc and meeting row) already has the 8px the .meta span carries, and 14px reads as a hole
-  const gap = () => (el.textContent || el.children.length ? '6px' : '0');
-  // an icon in the 14px slot; no label means it carries no information of its own (the placeholder)
+  // an icon in the 14px slot (styles.css .ticon, which also spaces it from what stands before it); no label means it
+  // carries no information of its own (the placeholder)
   const iconEl = (name, label, tag = 'span') => {
-    const icon = document.createElement(tag);
+    const icon = document.createElement(tag); icon.className = 'ticon';
+    const svg = iconNode(name); if (svg) icon.append(svg);
     if (label) { icon.setAttribute('role', 'img'); icon.setAttribute('aria-label', label); icon.title = label; } else icon.setAttribute('aria-hidden', 'true');
-    icon.style.cssText = 'display:inline-block;width:14px;height:14px;margin-left:' + gap() + ';vertical-align:-2px';
-    const svg = iconNode(name); if (svg) { svg.setAttribute('width', '14'); svg.setAttribute('height', '14'); icon.append(svg); }
     return icon;
   };
   if (summary.pending) el.append(iconEl('pending', null)); // the answer is still on its way: same slot, same size
-  if (summary.assignees === 'Unassigned') {
-    const icon = document.createElement('span');
-    icon.setAttribute('aria-hidden', 'true'); icon.title = 'Unassigned';
-    icon.style.cssText = 'display:inline-block;width:14px;height:14px;margin-right:4px;vertical-align:-2px';
-    const svg = iconNode('unassigned'); if (svg) { svg.setAttribute('width', '14'); svg.setAttribute('height', '14'); icon.append(svg); }
-    who.prepend(icon);
-  }
+  if (summary.assignees === 'Unassigned') { const icon = iconEl('unassigned', null); icon.title = 'Unassigned'; who.prepend(icon); }
   if (summary.audience) {
     // Assigned to someone who cannot see it: the audience icon itself is the warning, in the stylesheet's colour
     // (.hiddenfrom), and says who is shut out. hiddenFrom only comes with a known audience, so there is always one.
@@ -176,8 +167,7 @@ function taskMetaEl(summary, docId, node) {
   // last of the row's icons: a bell says changes to this node reach you, whether you asked or the rule decided
   if (summary.watched) {
     const bell = iconEl('notify', 'Stop notifying', 'button');
-    bell.type = 'button'; bell.setAttribute('role', 'button');
-    bell.style.cssText += ';padding:0;border:0;background:none;color:inherit;cursor:pointer';
+    bell.type = 'button'; bell.setAttribute('role', 'button'); // styles.css button.ticon takes the button's own look off
     bell.onmousedown = (e) => { e.preventDefault(); e.stopPropagation(); };
     bell.onclick = (e) => { e.stopPropagation(); run(() => setNodeNotify(docId, false)); };
     el.append(bell);
