@@ -85,6 +85,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .crumbs .navbtn { display: inline-flex; vertical-align: middle; margin: -4px 2px -4px 0; position: relative; top: -1px; }
 .crumbs .navbtn:first-child { margin-left: -3px; }
 .crumbs button:last-of-type { margin-right: 8px; }
+.crumbs > :not(.navbtn) { position: relative; top: 1px; } /* the location's capitals centred on the button glyphs (measured) */
 /* a meeting crumb's date: a secondary detail beside the label, quieter than the crumb text itself */
 .crumbs .cdate { margin-left: 6px; color: #bbb; }
 .error { font-size: 13px; color: #c0392b; margin-top: 6px; }
