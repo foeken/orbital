@@ -18,15 +18,29 @@ function weekTitle(d) {
 }
 // A plain document beside the day nodes, like today's node and with no link between them.
 // findOnly (demo mode, renderer/state.js): the existing node or a refusal, never a write.
+// The day and week nodes are yours: found among the documents you made, since a colleague's node with the same title is
+// theirs, and a search that fails is an error rather than "there is none", which made a second one in your Tana. The
+// text index lists a new document seconds late, so one made here is remembered for the session (#393).
+const madeHere = new Map(); // user + title -> the node made on this machine, reused while it still carries that title
+async function ownNode(title, textQuery) {
+  const made = madeHere.get(S.me.userUri + ' ' + title), doc = made && S.client.sync.getDocument(made.id);
+  if (doc && !deletedNodes.has(made.id) && (readNode(doc).title || '').trim().toLowerCase() === title.toLowerCase()) return made;
+  const { nodes = [] } = await S.client.graph.listNodes({ textQuery, nodeTypes: ['text'], createdBy: [S.me.userUri], limit: 20 });
+  // An existing node wins over a new one, case-insensitively: "week 38 (2026)" must not gain a second one beside it.
+  return nodes.find((n) => (n.title || '').trim().toLowerCase() === title.toLowerCase()) || null;
+}
+async function makeOwn(title) {
+  const made = await createDocument(title, { kind: 'doc' });
+  madeHere.set(S.me.userUri + ' ' + title, made);
+  return made;
+}
 async function weekNode(date = new Date(), findOnly = false) {
   if (!S.client) throw new Error(NOT_CONNECTED);
   const title = weekTitle(date);
   // Searched without the bracketed year, which is punctuation to a text index; the match below is the exact title.
-  const { nodes = [] } = await S.client.graph.listNodes({ textQuery: title.split(' (')[0], nodeTypes: ['text'], limit: 20 }).catch(() => ({ nodes: [] }));
-  // An existing node wins over a new one, case-insensitively: "week 38 (2026)" must not gain a second one beside it.
-  const existing = nodes.find((n) => (n.title || '').trim().toLowerCase() === title.toLowerCase());
+  const existing = await ownNode(title, title.split(' (')[0]);
   if (!existing && findOnly) throw new Error(DEMO_READ_ONLY);
-  return existing || createDocument(title, { kind: 'doc' });
+  return existing || makeOwn(title);
 }
 const DEMO_READ_ONLY = 'Demo mode is on: nothing is saved to Tana';
 const pinTarget = (target) => { if (target !== 'sidebar' && target !== 'today') throw new Error('pin target must be sidebar or today: ' + target); return target; };
@@ -114,15 +128,14 @@ async function nodePin(hubId, uri, on) {
 async function todayNode(offset = 0, findOnly = false) {
   if (!S.client) throw new Error(NOT_CONNECTED);
   const date = typeof offset === 'string' ? offset : today(offset);
-  const { nodes = [] } = await S.client.graph.listNodes({ textQuery: date, nodeTypes: ['text'], limit: 20 }).catch(() => ({ nodes: [] }));
-  const existing = nodes.find((n) => (n.title || '').trim() === date);
+  const existing = await ownNode(date, date);
   if (findOnly) { if (existing) return existing.id; throw new Error(DEMO_READ_ONLY); }
   if (existing) {
     const pinnedDates = await pins.dates(S.client.sync, S.me.userUri, existing.id).catch(() => []);
     if (!pinnedDates.includes(date)) await setPin(existing.id, 'today', true, date);
     return existing.id;
   }
-  const created = await createDocument(date, { kind: 'doc' });
+  const created = await makeOwn(date);
   await setPin(created.id, 'today', true, date);
   scheduleRefresh(1000);
   return created.id;
