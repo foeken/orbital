@@ -324,6 +324,7 @@ function taskActionRows(group = 'Actions') {
   if (!ctx) return [];
   if (ctx.multi) {
     const count = ctx.docs.length, noun = count === 1 ? 'task' : 'tasks', hint = ctx.skipped ? `${ctx.skipped} skipped` : '';
+    if (!count) return []; // no task in the selection: nothing here could run, as for a single row that is not a task
     return [
       { id: 'status', group, icon: 'status', label: `Set status for ${count} ${noun}`, subBase: `Set status for ${count} ${noun} to`, hint, disabled: !count || !tana.setStateMany, keepOpen: true, subAlways: true, run: () => openStatusPalette(ctx), sub: () => statusRows('', ctx) },
       { id: 'assign', group, icon: 'member', label: `Assign ${count} ${noun} to`, hint, disabled: !count || !tana.setAssigneesMany, keepOpen: true, run: () => openManyAssigneePalette(ctx), sub: async () => { await membersLoaded(); return manyAssigneeRows('', ctx); } },
