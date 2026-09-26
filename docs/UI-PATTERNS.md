@@ -245,7 +245,7 @@ the top of the file. State classes are set by the renderer, pseudo-classes by th
 | Proposal buttons | `.pbuttons > .pbutton.approve` / `.pbutton.reject` (renderer/proposals.js) | `:hover`, `:disabled` |
 | Empty and loading | `.empty-note` ("Nothing here yet"), `.children.loading`, `.skeleton` (renderer/loading.js) | `.empty-note.cleared` |
 | Toast | `.toast`, only through `showNote` / `showError` | `.show`, `.error` |
-| Button | `.button`, `.button.primary` for the one that goes on (a dialog's footer: the key recorder, Help) | `:hover`, `:disabled` |
+| Button | `.button`, `.button.primary` for the one that goes on (a dialog's footer: the key recorder, Help) | `:hover`, `:disabled` on a plain `.button` only: `.primary` has no disabled look, so a button that can be disabled (the recorder's Save) stays plain |
 | Dialog | a scrim element with a `.card` inside: `.palette`, `.recorder`, `.help` | `[hidden]` on `.palette` and `.recorder`; `.help` is a `<dialog>`, so `[open]` (`showModal()` / `close()`). The palette and the recorder arrive and leave with the Surface motion; Help only arrives, and `close()` removes it at once |
 | Lightbox | `.lightbox` | `.out` while it closes |
 
