@@ -817,7 +817,9 @@ section needs and takes away what would keep the task elsewhere, in the order `r
 | Today's Tasks | Pinned to today unless it is on Today already | anything but a task |
 
 So watched to Pinned pins it and keeps the watch, and watched to Mine takes it over and stops watching. A drop in
-its own section writes nothing, and a drop a little to the right, inside a task, is still a reference to it. The
+its own section writes nothing. A drop inside a task — a reference to the dragged one under it — is offered only
+once that task is expanded (`dropDepth`): a closed task shows no rows to land among, so beside it the drop is on
+its group, which is what it looked like. The
 tasks under Today's Tasks show a box where the marker would be, so their whole read-only line is what is grabbed.
 A task you cannot edit is refused before anything is written wherever the drop would change its assignees or
 status, so a refused drop leaves no pin behind. While a task is dragged over a pane grouped by Responsibility, its

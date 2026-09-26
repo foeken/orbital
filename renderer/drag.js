@@ -47,10 +47,13 @@ function dropHost(x, y) {
 }
 // Which level the pointer is asking for at a gap. Counted from the row above it, one step per level, and held
 // between the row below it (nothing may sit shallower than the row it lands in front of) and one level inside the
-// row above, which is offered only where that row can hold children at all.
+// row above, which is offered only where that row can hold children at all — and, for a document row such as a
+// task in My Tasks, only once it is expanded: a closed task shows no rows to land among, so a drop beside it is a
+// drop on its group (dropOnGroup) rather than a reference slipped inside it (#169).
 function dropDepth(host, above, below, x) {
   const here = rowDepth(host, above);
-  const deepest = here + (canInsertChild(items.get(above.dataset.key)) ? 1 : 0);
+  const item = items.get(above.dataset.key);
+  const deepest = here + (canInsertChild(item) && (item.node.kind !== 'document' || !!above.querySelector(':scope > .children')) ? 1 : 0);
   const shallowest = below ? rowDepth(host, below) : 0;
   const asked = here + Math.round((x - dragLine(above).getBoundingClientRect().left) / DRAG_STEP);
   return Math.max(shallowest, Math.min(Math.max(shallowest, deepest), asked));

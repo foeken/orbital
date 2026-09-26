@@ -7844,6 +7844,7 @@ function runDropPlanCheck() {
   assert.deepEqual(linked.ref, { uri: 'tana:text:01docrow00000000000000000', label: 'row-doc' }, 'a dragged document lands as a reference to itself');
   assert.equal(linked.afterId, 'c');
   assert.equal(plain(api.plan('row-doc', 20, 136)).docId, 'd2', 'and a reference may land in another document');
+  assert.equal(api.plan('a', 100, 236), null, 'nothing lands inside a document row until it is expanded');
 
   // 9. What was picked up decides the write, and nothing else does: a block moves even when it is a row that
   //    points at a document, because the row is the thing being dragged.
