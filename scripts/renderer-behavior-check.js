@@ -6767,9 +6767,11 @@ async function runSettingsElsewhereCheck() {
     const onTypePage = () => false, isTypeId = () => false, typeFilter = () => ({}), reload = async () => {}, mergePrefs = () => {}, pref = (k, d) => d;
     const renderSoon = () => {}, showError = (e) => { throw e; }, showTheme = () => {}, loadSensitive = async () => {}, refreshSensitive = () => {};
     const widenFilter = (id, f) => f, loadView = () => { listed++; };
+    let railHidden = false; const railClosed = new Set(); // the sidebar's, which applySettings reads again too
     const loadCodex = () => { codexReads++; codexIds = new Set(marks); return (codexLoading = Promise.resolve()); };
     const loadAgentStates = () => { stateReads++; agentTaskHosts.clear(); for (const [id, host] of Object.entries(hosts)) agentTaskHosts.set(id, host); };
     ${functionSource('loadFilters')}
+    ${functionSource('applySettings')} // the handler is a named function since the page also calls it after catchUpSettings
     ${sourceBetween('if (tana.onSettings) tana.onSettings(', 'if (tana.onSystemTheme)')}
     ({
       change: async (next, agents = marks, tasks = hosts) => { stored = next; marks = agents; hosts = tasks; handler({}); for (let i = 0; i < 8; i++) await Promise.resolve(); },
