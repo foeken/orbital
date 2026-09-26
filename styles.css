@@ -1,3 +1,9 @@
+/* styles.css keeps each component together, in this order (search for "==== <name>"): Base; Window chrome; Fields;
+   Table view; Filter row; Header buttons; Pills and their menus; Page scroll, sidebar and split; Rows; Timeline; Row
+   content; Agent badge and proposal buttons; Children, empty notes, group headings; Loading; Selection toolbar; Login;
+   Palette and toast; Key recorder; Dark theme; Presence; Motion; Help tour. docs/UI-PATTERNS.md lists the tokens and
+   the component classes. */
+/* ==== Base: reset, tokens (motion, hue, theme), the page body ==== */
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
 /* The Nucleo set built into the app draws its strokes at var(--nucleo-stroke-width, 1.5); the app's own glyphs are
@@ -64,6 +70,7 @@ button { font: inherit; }
 .outline .body.sensitive { text-decoration-thickness: 12px !important; }
 .outline .body.sensitive .meta { font-size: inherit; }
 
+/* ==== Window chrome and the page head: drag regions, title, crumbs, error line ==== */
 /* Frameless window (titleBarStyle: hiddenInset): the chrome -- the title bar and the sidebar's own background,
    header area and padding -- drags the window, and everything interactive opts out once, here, not per element.
    [tabindex] covers the sidebar rows, section heads and focusable outline blocks; .railgrip keeps the resize drag. */
@@ -71,7 +78,7 @@ button { font: inherit; }
 .palette { -webkit-app-region: no-drag; } /* its scrim covers both: Electron would take a click there as a window drag, and it never reaches the mousedown that closes the palette */
 button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -webkit-app-region: no-drag; }
 
-.titlebar { padding: 48px 32px 6px; user-select: none; } /* the 4px the scroll area took, so the outline sits where it did */
+.titlebar { padding: 48px 32px 6px; user-select: none; position: relative; } /* the 4px the scroll area took, so the outline sits where it did */
 .titlebar h1 { margin: 0; font-size: 34px; font-weight: 700; letter-spacing: -0.5px; color: #1c2024; } /* the page title is a heading: the same near-black */
 .titlebar h1[contenteditable] { outline: none; user-select: text; min-height: 1lh; }
 .titlebar h1[contenteditable]:empty { display: inline-block; min-width: 1px; }
@@ -95,6 +102,8 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .crumbs .navbtn:first-child { margin-left: -3px; }
 .error { font-size: 13px; color: #c0392b; margin-top: 6px; }
 .error button { margin-left: 8px; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; }
+.error[hidden] { display: none; }
+/* ==== Fields (renderer/fields.js) ==== */
 /* a zoomed node's fields (type attributes), under the title */
 /* The zoomed page's fields sit in a block of their own between two hairlines under the title and its tag, laid
    out as a property list: icon, label and value in three columns shared by every row, so the labels line up. */
@@ -113,6 +122,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .fields .field > .flabel { padding-left: 10px; padding-right: 18px; } /* the two gaps, and the value's own 8px */
 [data-theme="dark"] .fields .field > * { border-top-color: #2e3234; }
 .fields[hidden] { display: none; } /* the grid's own display would otherwise win over [hidden] and leave the two lines on a page with no fields */
+.fields a { color: #508fbb; text-decoration: underline; cursor: pointer; }
 .inline-fields { margin-top: 0; margin-left: 17px; margin-bottom: 6px; }
 .inline-fields .field > .ricon { transform: translateX(-1px); }
 /* The glyph belongs to the field, which begins at its first line: centred on the whole value it drifted to the
@@ -165,6 +175,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .fields .fkind { color: #888; padding: 0 6px; border-radius: 4px; background: rgba(0, 0, 0, 0.05); }
 /* a row's field values on its grey line (renderer/views.js subtextEl): the same chip, a step quieter */
 [data-theme="dark"] .fields .fchip, [data-theme="dark"] .fields .fkind { background: rgba(255, 255, 255, 0.08); }
+/* ==== Table view (renderer/views.js) ==== */
 /* a list page as a table (renderer/views.js tableCells): each row's body is a grid, its grey line's cells are the
    columns after the title, and the header uses the same columns. The body starts at one fixed gutter on every row —
    the widest a row's own gutter gets, chevron 24 + marker 18 + a task's checkbox 23 — so a meeting or a doc without a
@@ -207,10 +218,8 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .outline.table-view > .thead .tgrip:hover::after, .outline.table-view > .thead .tgrip.dragging::after { background: #d0d0d0; }
 [data-theme="dark"] .outline.table-view > .thead .tgrip:hover::after, [data-theme="dark"] .outline.table-view > .thead .tgrip.dragging::after { background: #4a5053; }
 [data-theme="dark"] .outline.table-view > .node, [data-theme="dark"] .outline.table-view > .thead { border-color: #2b2f31; }
-.tbtn.c svg { width: 13px; height: 13px; display: block; }
-.fields a { color: #508fbb; text-decoration: underline; cursor: pointer; }
-.error[hidden] { display: none; }
 
+/* ==== Filter row (⌘F) ==== */
 .filter { position: relative; margin: 4px 32px 14px; width: 260px; }
 .filter[hidden] { display: none; }
 .filter input {
@@ -224,7 +233,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 }
 .filter .clear:hover { background: #ddd; }
 .filter.empty .clear { display: none; }
-.titlebar { position: relative; }
+/* ==== Header buttons (renderer/pills.js, app.js) ==== */
 /* The header buttons (back and forward, the page's switches, the sidebar toggle last): top right of the
    header band, absolute against .titlebar so they never shift as the crumbs, task meta or fields rows appear and
    disappear beneath them. One row from the right edge, so a button that is not offered (the sidebar toggle on a page
@@ -255,6 +264,7 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 .navbtn.in { animation: pop-in var(--dur-base) var(--ease-spring) backwards; }
 .navbtn.out { animation: pop-out var(--dur-quick) var(--ease-in) forwards; }
 
+/* ==== Pills and their menus (renderer/pills.js) ==== */
 /* filter pills (Tasks / Library): "Status <Inbox, In Progress>", "Assigned to <You>", "<Type>"; each opens a menu below it */
 /* z-index: the row, not each menu, is what stacks over the page. A pressed pill is transformed while it springs back
    (the Press rule below), which traps its menu in the pill's own stacking context, and a table's outline is one too
@@ -330,6 +340,7 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 @media (prefers-reduced-motion: no-preference) { .menu .msearch .mcaret { animation: blink 1s steps(1) infinite; } }
 .menu .mdiv { height: 1px; margin: 6px 4px; background: #e6e6e6; }
 
+/* ==== Page scroll, sidebar and split (renderer/rail.js, app.js) ==== */
 .scroll { position: relative; flex: 1; overflow-y: auto; padding: 4px 32px 40px 16px; } /* 4px at the top: the first row's focus ring (2px, 2px out) is drawn outside the row, and a scroll box clips at its edge; relative: the loading animation fills it */
 /* a real sidebar: full height beside the document, holding its relationships (edges, never editable) */
 .rail { flex: none; width: 272px; height: 100%; overflow-y: auto; user-select: none;
@@ -383,7 +394,7 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 .rail .rrow .rtitle { flex: 1; min-width: 0; font-size: 14px; line-height: 19px; color: #1a1a1a; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .rail .rrow.done .rtitle { color: #999; text-decoration: line-through; }
 
-/* outline */
+/* ==== Rows: line, chevron, marker, dragging (renderer/render.js, drag.js) ==== */
 .line { display: flex; align-items: flex-start; line-height: 24px; padding: 3px 0; }
 .chev, .bullet { flex: none; width: 18px; height: 24px; border: 0; background: none; padding: 0; cursor: pointer; position: relative; }
 /* chevron: 14px Outliner-style circle in a 24px gutter left of the icon slot (8px clear of the icon), shown only while hovering the line; down = expanded, right = collapsed */
@@ -464,6 +475,7 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 .bullet.meeting:hover svg { color: #8a6a17; }
 /* Renderer contract: appearance-driven icons add .hue and set --hue, including 0. */
 .bullet.icon.hue svg, .bullet.icon.hue:hover svg { color: oklch(0.7 0.1 var(--hue)); }
+/* ==== Timeline (renderer/timeline.js) ==== */
 /* Timeline (renderer/timeline.js): a time column, a rail down the page, a marker on it for each entry, then what
    happened. The rail is each entry's own left line, so a group's tasks sit along it too. Every marker is a 20px circle
    over the rail: finished a filled green one with a white check, an edit a grey pen, accepted a grey plus, put off or sent back to the Inbox a grey arrow (Nucleo's outline circles, drawn at 22.5px because the
@@ -533,6 +545,7 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 [data-theme="dark"] .node.tl > .children .bullet.icon svg, [data-theme="dark"] .node.tl > .children .bullet.icon:hover svg { color: #8a8f95; }
 [data-theme="dark"] .node.tl-done > .line > .bullet.icon svg { color: #fff; background: none; }
 [data-theme="dark"] .node:is(.tl-new, .tl-faint) > .line > .bullet.icon svg { color: #5a5d60; }
+/* ==== Row content: checkbox, text, facts, chips, images, references, marks, blocks ==== */
 .check {
   flex: none; width: 18px; height: 18px; margin: 3px 8px 0 2px; border-radius: 5px; background: #e4e4e4;
   border: 0; padding: 0; cursor: pointer; -webkit-appearance: none; appearance: none; position: relative;
@@ -586,7 +599,7 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 .chip.hue { background: oklch(0.95 0.04 var(--hue)); color: oklch(0.45 0.12 var(--hue)); } /* type colour: --hue 0-360 set per chip */
 /* image block: not editable, focus = selected frame; .loading = placeholder box until api.image resolves */
 .text.image { display: block; cursor: default; }
-.text.image img { display: block; max-width: 100%; max-height: 360px; height: auto; border-radius: 6px; }
+.text.image img { display: block; max-width: 100%; max-height: 360px; height: auto; border-radius: 6px; cursor: zoom-in; }
 .text.image.loading img { visibility: hidden; }
 .text.image.loading { min-height: 120px; max-height: 360px; background: #f1f1f1; border-radius: 6px; width: min(100%, 360px); }
 /* a picture on its way, and a file on its way up: the same shimmer and breath the loading skeleton has (Ambient) */
@@ -667,7 +680,6 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 @starting-style { .lightbox { opacity: 0; } }
 .lightbox.out { opacity: 0; transition-duration: var(--dur-quick); transition-timing-function: var(--ease-in); }
 .lightbox img { max-width: 92vw; max-height: 92vh; border-radius: 6px; box-shadow: 0 20px 60px rgba(0, 0, 0, .45); }
-.text.image img { cursor: zoom-in; }
 .text.divider { display: block; cursor: default; }
 .text.divider hr { border: 0; border-top: 1px solid #dcdcdc; margin: 10px 0; }
 .text.divider:focus hr, .selected .text.divider hr { border-top-color: var(--focus); }
@@ -700,6 +712,7 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 #outline > .node:first-child, .children > .node:first-child { margin-top: 0; }
 .selected { background: #e8f1fb; } /* the whole node: a selected parent takes its children with it, so they show as selected too */
 .selected .line { border-radius: 0; }
+.selected .text { caret-color: transparent; }
 /* A row arriving in or dropping out of a view (Flash): the room for it opens first and it fades in over a green tint;
    one that left fades over a red tint and then the gap closes, so the rows below slide instead of jumping. A row you
    are still editing only dims, and leaves for real once the caret does. --tint is the colour: a proposal approved
@@ -708,6 +721,7 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 .node.entering { --tint: var(--flash-in); overflow-y: clip; animation: row-in var(--dur-flash) var(--ease-out); }
 .node.leaving { --tint: var(--flash-out); overflow-y: clip; pointer-events: none; animation: row-out calc(var(--dur-quick) + var(--dur-base)) var(--ease-move) forwards; }
 .node.falling { opacity: .45; }
+/* ==== Agent badge and proposal buttons (renderer/render.js, proposals.js) ==== */
 /* a node handed to the local Codex agent: the robot glyph at the end of the row, on a green tag */
 .cbadge { position: relative; overflow: hidden; flex: none; display: inline-flex; align-items: center; margin: 2px 0 0 8px; padding: 2px 5px; border-radius: 6px; background: #d9f0de; color: #17652f; --cbadge-sheen: rgba(255, 255, 255, .85); }
 .cbadge svg { display: block; }
@@ -730,6 +744,7 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 .cbadge.unavailable { background: #ececec; color: #6a6a6a; } /* the machine is away, not the task broken: grey, still */
 /* the task is completed: whatever the agent did is over, so the badge drops to a grey outline and stops sweeping */
 .cbadge.closed { background: none; border: 1px solid #d5d5d5; color: #9a9a9a; padding: 1px 4px; }
+.cbadge.closed::after { content: none; }
 /* approve and reject at the end of a Proposals row (renderer/proposals.js): grey like every row glyph until pointed at,
    then the green and red the Codex badge uses for done and broken, so the colour says which answer it is */
 .pbuttons { flex: none; display: inline-flex; gap: 2px; margin: 1px 0 0 8px; }
@@ -738,9 +753,8 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 .pbutton.approve:hover:not(:disabled) { background: #d9f0de; color: #17652f; }
 .pbutton.reject:hover { background: #fbdede; color: #8f1b1b; }
 .pbutton:disabled { opacity: .35; cursor: default; }
-.cbadge.closed::after { content: none; }
 @keyframes cbadge-sweep { 0%, 18% { transform: translateX(-130%); } 72%, 100% { transform: translateX(130%); } }
-.selected .text { caret-color: transparent; }
+/* ==== Children, empty notes, group headings (renderer/render.js, views.js) ==== */
 .children { margin-left: 33px; padding-left: 0; border-left: 1px solid #ececec; }
 .children > .node.fullref > .line > .bullet { margin-right: 4px; } /* give the full-reference icon more room before its status or title */
 .children.loading { color: #aaa; font-style: italic; padding: 3px 0 3px 22px; }
@@ -771,6 +785,7 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 .clearfilters { border: 0; background: none; color: #aaa; font: inherit; font-size: 16px; padding: 0; margin-left: 10px; text-decoration: underline; cursor: pointer; }
 .clearfilters:hover { color: #1a1a1a; }
 .clearfilters:focus { outline: none; box-shadow: 0 0 0 2px var(--focus); border-radius: 3px; }
+/* ==== Loading (renderer/loading.js) ==== */
 /* Loading (Build): renderer/loading.js draws it on the canvas, which fills the whole page — the page building itself
    where the real header and rows will be, on a launch or a Reload only. One colour, the page's own text
    colour, at a few strengths, so the theme reaches it. It draws nothing for the first 300ms, so a quick load never
@@ -787,6 +802,7 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 
 .filtered { padding: 18px 10px 8px 16px; color: #999; font-weight: 600; } /* lines up with the title, filter and pills */
 
+/* ==== Selection toolbar (renderer/toolbar.js) ==== */
 /* selection toolbar: floats over a non-empty selection inside an editable node (style dropdown, B I S code, @) */
 .toolbar { position: fixed; z-index: var(--z-toolbar); display: flex; align-items: center; gap: 2px; padding: 4px; background: var(--surface); border-radius: 8px; box-shadow: 0 6px 24px rgba(0, 0, 0, .18), 0 0 0 1px rgba(0, 0, 0, .06); }
 .toolbar[hidden] { display: none; }
@@ -804,6 +820,7 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 .tbtn.i { font-style: italic; }
 .tbtn.s { text-decoration: line-through; }
 .tbtn.c { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+.tbtn.c svg { width: 13px; height: 13px; display: block; }
 .tbtn.style { font-size: 14px; }
 .tbtn.style.open { background: #f0f0f0; }
 .tbtn .tcaret { display: flex; color: #888; }
@@ -815,12 +832,14 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 .glyph.icon svg { width: 13px; height: 13px; display: block; }
 .palette .row.active .glyph, .menu .mrow.active .glyph { color: #555; }
 .filtered:empty { display: none; }
+/* ==== Login ==== */
 .login { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 120px 0; }
 .login p { margin: 0; max-width: 360px; text-align: center; color: #666; font-size: 14px; line-height: 1.5; }
 .login[hidden] { display: none; }
 .login button { border: 1px solid #ddd; background: #fff; border-radius: 8px; padding: 8px 18px; font-size: 15px; cursor: pointer; }
 .login button:hover { background: #f0f0f0; }
 
+/* ==== Palette and toast (renderer/palette.js; showNote in renderer/nodes.js) ==== */
 /* command palette (Cmd+K) */
 /* ⌘K and the key recorder over it share a scrim, and arrive and leave alike (Surface, below) */
 .palette, .recorder { position: fixed; inset: 0; display: flex; justify-content: center; align-items: flex-start; padding: 12vh 24px 0; background: var(--scrim); }
@@ -919,6 +938,7 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 .palette.anchored .row { font-size: 14px; padding: 6px 10px; }
 .palette.anchored .hint { font-size: 13px; }
 
+/* ==== Key recorder (renderer/palette.js) ==== */
 /* hotkey recorder (Cmd+Shift+K on a Cmd+K row) */
 /* Surface: the card arrives as the palette's does; the keys pop in as they are pressed (Pop), and
    a combination the app already owns shakes its warning (the refusal pattern). */
@@ -947,6 +967,7 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 .recorder button:disabled { color: #b5b5b5; cursor: default; background: #f1f1f1; }
 
 
+/* ==== Dark theme: twins of the rules above that write a colour of their own ==== */
 /* Dark theme contract: renderer sets document.documentElement.dataset.theme = "dark". */
 [data-theme="dark"] { color-scheme: dark; }
 [data-theme="dark"] body { color: #c9c9c9; background: #1b1d1e; }
@@ -1112,6 +1133,7 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 [data-theme="dark"] .recorder button:hover { background: #3b4144; }
 [data-theme="dark"] .recorder button:disabled { color: #777d80; background: #303436; }
 
+/* ==== Presence (renderer/presence.js) ==== */
 /* Presence (renderer/presence.js): others' carets in the page on screen, one colour per person (--hue from their user hash). */
 .node > .line:has(> .pcaret) { position: relative; } /* only lines that carry a marker */
 .pcaret { position: absolute; left: -6px; top: 4px; bottom: 4px; width: 2px; border-radius: 1px; background: oklch(0.82 0.13 var(--hue)); z-index: 2; }
@@ -1119,6 +1141,7 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
   background: oklch(0.82 0.13 var(--hue)); color: #1c2024; font-weight: 600; white-space: nowrap; pointer-events: none; } /* on the caret, as Tana labels one */
 .pcaret.below::after { bottom: auto; top: 100%; border-radius: 0 5px 5px 5px; }
 .pcaret.at { bottom: auto; width: 2px; border-radius: 0; pointer-events: none; } /* between the characters, as Tana draws it */
+/* ==== Motion: keyframes, Press, Surface, Pop and Flash (renderer/motion.js) ==== */
 /* ---- Motion: the keyframes every pattern shares (the durations and curves are at the top of this file) ---- */
 @keyframes pop-in { from { opacity: 0; transform: scale(.5); } }
 @keyframes pop-out { to { opacity: 0; transform: scale(.5); } }
@@ -1166,6 +1189,7 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 /* Page: a theme change crossfades the whole window (renderer/motion.js crossfade) at the base pace. */
 ::view-transition-group(root) { animation-duration: var(--dur-base); animation-timing-function: var(--ease-out); }
 
+/* ==== Help tour (help.html, help.js) ==== */
 /* Help (help.html, help.js): a modal <dialog> of a few pages, each a stage with a short loop of the keys at work over its
    words. The stage's plain rules are the scene's last frame, which is what reduced motion shows; the loops live only
    under no-preference, all one --hv-loop long, so a keycap's delay lines it up with the scene it presses in. */
