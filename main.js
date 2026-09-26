@@ -126,9 +126,13 @@ function closeOverlay(win, result = {}) {
   if (!win.isDestroyed()) win.contentView.removeChildView(view);
   if (!view.webContents.isDestroyed()) view.webContents.close();
   const opener = view.opener;
-  if (!opener || opener.isDestroyed()) return;
-  opener.focus();
-  opener.send('overlay:closed', { palette: result.palette === true, note: typeof result.note === 'string' ? result.note.slice(0, 200) : undefined });
+  if (opener && !opener.isDestroyed()) {
+    opener.focus();
+    opener.send('overlay:closed', { palette: result.palette === true, note: typeof result.note === 'string' ? result.note.slice(0, 200) : undefined });
+  }
+  // a first start this overlay was covering (firstHelp): now there is room for it, whichever half opened this one
+  const pending = win.helpPending; win.helpPending = null;
+  if (pending && !win.isDestroyed()) firstHelp(pending.wc, pending.theme);
 }
 const frontPane = () => S.win && !S.win.isDestroyed() ? (S.win.panes.find((p) => p.webContents === S.pane) || S.win.panes[0])?.webContents : null;
 function createWindow() {
@@ -268,15 +272,19 @@ ipcMain.on('prefs:snapshot', (e) => { e.returnValue = settings.prefs(); });
 // The Help tour's first start (renderer/overlays.js helpOnce), opened here, by main, once. Only after this session has
 // read the settings document — the snapshot above is this machine's last copy, which on a new machine knows nothing yet,
 // so a read that failed declines rather than trusting it — and only over a page still open in a window nothing covers
-// (Create task open: the page asks again when that closes). helpSeen is marked only once the tour is really opening:
+// (Create task open: main opens it when that closes, firstHelp). helpSeen is marked only once the tour is really opening:
 // one step, so two windows, Create task or a page closing on the way can neither show it twice nor spend it unseen.
-ipcMain.handle('help:claim', async (e, theme) => {
-  await settingsReady();
-  if (!settings.settingsDocId() || settings.prefs().helpSeen || !e || !e.sender || e.sender.isDestroyed()) return false;
-  if (!openOverlay(e.sender, 'help', theme)) return false;
+// A window Create task covers keeps the ask (helpPending) and closeOverlay opens it once that closes: the close is told
+// only to the half that opened Create task, which is not always the one that asked.
+function firstHelp(wc, theme) {
+  if (!settings.settingsDocId() || settings.prefs().helpSeen || !wc || wc.isDestroyed()) return false;
+  const win = paneWindow(wc);
+  if (win && win.overlay) { win.helpPending = { wc, theme }; return false; }
+  if (!openOverlay(wc, 'help', theme)) return false;
   settings.setPref('helpSeen', true);
   return true;
-});
+}
+ipcMain.handle('help:claim', async (e, theme) => { await settingsReady(); return firstHelp(e && e.sender, theme); });
 // A setting one page writes reaches every other page and window at once: settings.applyRemote announces only what
 // another machine changed, since this machine's own write comes back from Tana as nothing new. The writer is left
 // out, because it already holds the value and an older snapshot arriving late would undo a newer choice there.

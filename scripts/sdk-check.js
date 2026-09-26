@@ -1127,7 +1127,7 @@ async function main() {
     const claim = backend.handlers.get('help:claim');
     const pageOf = (overlay = null) => {
       const wc = { destroyed: false, isDestroyed() { return this.destroyed; } };
-      const win = { panes: [{ webContents: wc, setVisible() {}, setBounds() {} }], overlay, isDestroyed: () => false, getContentBounds: () => ({ width: 800, height: 600 }), contentView: { addChildView() {} } };
+      const win = { panes: [{ webContents: wc, setVisible() {}, setBounds() {} }], overlay, isDestroyed: () => false, getContentBounds: () => ({ width: 800, height: 600 }), contentView: { addChildView() {}, removeChildView() {} } };
       backend.S.windows.add(win);
       return { wc, win, ask: () => claim({ sender: wc }, 'light') };
     };
@@ -1143,16 +1143,25 @@ async function main() {
     assert.equal(await asking, false, 'a page that closed while main waited for the settings cannot show it');
     assert.equal(settings.prefs().helpSeen, undefined, 'so it is not spent on it');
     assert.equal(await claim(null, 'light'), false, 'nor on a call with no page behind it');
-    const covered = pageOf({});
-    assert.equal(await covered.ask(), false, 'a window with Create task open cannot show it');
-    assert.equal(settings.prefs().helpSeen, undefined, 'so nothing is marked, and the page asks again when that closes');
     early.win.overlay = null; const two = pageOf();
     assert.deepEqual(await Promise.all([early.ask(), two.ask()]), [true, false], 'two pages asking at once: one gets the tour');
     assert.ok(early.win.overlay && !two.win.overlay, 'opened by main over that window, in the same step as the claim');
     assert.equal(settings.prefs().helpSeen, true, 'and marked as the synced helpSeen preference');
-    covered.win.overlay = null;
-    assert.equal(await covered.ask(), false, 'nobody after them, Create task closed or not');
-    for (const p of [early, two, covered]) backend.S.windows.delete(p.win);
+    assert.equal(await two.ask(), false, 'and nobody after them');
+    for (const p of [early, two]) backend.S.windows.delete(p.win);
+    // Create task open from the right half of a split while the left half asks: the close is told only to the right
+    // half, so main keeps the ask and opens the tour itself once there is room.
+    settings.setPref('helpSeen', undefined);
+    const told = [], right = { isDestroyed: () => false, focus() {}, send: (channel) => told.push(channel) };
+    const task = { webContents: { isDestroyed: () => false, close() {} }, opener: right };
+    const covered = pageOf(task);
+    assert.equal(await covered.ask(), false, 'a window with Create task open cannot show it yet');
+    assert.equal(settings.prefs().helpSeen, undefined, 'so nothing is marked');
+    await backend.handlers.get('overlay:close')({ sender: task.webContents }, {});
+    assert.deepEqual(told, ['overlay:closed'], 'Create task\u2019s half hears it closed');
+    assert.ok(covered.win.overlay && covered.win.overlay !== task, 'and main opens the tour over the window at once, for the half that asked');
+    assert.equal(settings.prefs().helpSeen, true, 'marked in that same step');
+    backend.S.windows.delete(covered.win);
     console.log('ok  help:claim: the first-start tour goes to one page, once');
   }
   // What stayed of quick add when the panel went (issue #232): the meeting this user has joined (⌘K Pin to current

@@ -865,8 +865,9 @@ keeps its caret and gets the keys back when the overlay closes, with what it had
   in the header row, and once by itself on a first start (`helpOnce`, the `helpSeen` preference): after login, once
   the connection is up and the page the launch came back to is drawn. Main opens it (`api.claimHelp`, main.js
   `help:claim`): only after this session read the settings document (a failed read declines), over the first page asking
-  in a window nothing covers, and marks `helpSeen` in the same step; a page that found Create task open asks again when it
-  closes. So it neither covers the login, nor shows again on a new machine, nor opens in every window, nor is spent
+  in a window nothing covers, and marks `helpSeen` in the same step; a window Create task was covering gets it from main the
+  moment that closes (`firstHelp`, `helpPending`), whichever half opened Create task. So it neither covers the login, nor
+  shows again on a new machine, nor opens in every window, nor is spent
   unseen. ⌘K closes it and opens the palette.
 - **Create task** (task.html; `createTask`, ⇧⌘Space, issues #232, #237, #241): the palette's card with a title field
   and, under it, the type — plain Task first, then the workflow types main offers (`api.taskTypes`: types with a board
