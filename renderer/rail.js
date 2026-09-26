@@ -77,7 +77,8 @@ function loadRelated(docId) {
 // This document's relations have moved on (an edit, a pin): read them again without taking the sidebar down. Only a
 // sidebar this page has read: one it never read is read fresh when it is drawn (loadRelated), and every document a
 // view subscribes announces its first bootstrap as a change, which read the sidebars of ~94 documents per page at boot.
-function refreshRelated(docId) { if (docId && relatedBy.has(docId)) { relatedStale.add(docId); loadRelated(docId); } }
+// always: read it even so, for the page on screen whose first read may have failed (main's push, below).
+function refreshRelated(docId, always) { if (docId && (always || relatedBy.has(docId))) { relatedStale.add(docId); loadRelated(docId); } }
 // Kept live (main/related.js watchRelated): main follows the page the sidebar is drawn for, and says so when a mention
 // or a pin of it is added or taken away anywhere; the sidebar is then read again the way a pin re-reads it. Asked again
 // at the next render until main has taken it: before the connection there is nothing to watch on.
@@ -90,7 +91,7 @@ function watchRail(docId) {
   railWatching = true;
   Promise.resolve(tana.relatedWatch(docId)).then((ok) => { if (!ok && railWatched === docId) railWatching = false; }, () => { if (railWatched === docId) railWatching = false; });
 }
-if (tana.onRelatedChanged) tana.onRelatedChanged((docId) => refreshRelated(docId));
+if (tana.onRelatedChanged) tana.onRelatedChanged((docId) => refreshRelated(docId, true)); // only ever the watched page
 function railRow(node) {
   const row = document.createElement('div');
   row.className = 'rrow' + (node.done ? ' done' : '');
