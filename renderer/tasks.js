@@ -82,7 +82,7 @@ function patchMeta(docId) {
     row.dataset.sig = rowSig(item.node); // the row now matches what a fresh render would build
     patched = true;
   }
-  if (patched) fitRowMeta(); // the row was rebuilt in place, so where its facts belong is decided again
+  if (patched) fitRowMetaSoon(); // the row was rebuilt in place, so where its facts belong is decided again, once per frame for a burst
   // The answer can also decide whether a row is shown at all — Group by Responsibility leaves out what it has no
   // section for, including rows whose assignees had not arrived — so one that is not on screen asks for a render
   // rather than being patched. renderSoon coalesces, so a burst of answers still costs one.
