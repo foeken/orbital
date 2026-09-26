@@ -73,9 +73,10 @@ npm start
 
 On first run, open Cmd+K and choose **Log in to Tana**: a window opens on home.tana.inc, you sign in
 as usual, and the cookie session stays in the app's own partition. Everything after that is
-background: the access token is refreshed before it expires, every listed document is subscribed for
-live updates, and the active view is re-queried every 30 seconds and whenever the window regains
-focus.
+background: the access token is refreshed before it expires, the first 100 rows of every open view are
+subscribed for live updates, and a view is re-queried whenever Tana pushes a change to what it lists,
+when a window regains focus more than 30 seconds after the last refresh, and every 5 minutes as a
+backstop (docs/VIEWS.md §4).
 
 Local state lives in `~/Library/Application Support/Orbital`: the SQLite row cache, cached images,
 the sync peer identity and the login partition. Deleting that folder resets the app without touching

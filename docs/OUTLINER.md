@@ -79,7 +79,8 @@ A row restored from the SQLite cache carries no window.
 
 `window.api` is defined in preload.js, which is the list of calls and the shape of each answer (one comment per
 method). The renderer calls it as `tana` (renderer/state.js), the copy demo mode guards (§17). Every IPC channel is
-`<area>:<verb>` and is registered in main.js. The live events are `onChanged`, `onRemoved` and `onStatus` (§15), plus
+`<area>:<verb>`, answered by the owning `main/` module's `ipc` table (or by main.js for what is not yet moved, and
+Electron's own), and main.js registers them all. The live events are `onChanged`, `onRemoved` and `onStatus` (§15), plus
 one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSettings`, …).
 
 ## 4. The page
@@ -959,4 +960,3 @@ empty sidebar hidden; a collapsed section is remembered (`railClosed`), and ever
   is edited, so Changes says what it said when the page opened.
 - **Keys**: Cmd+K **Focus the sidebar** (`rail`, no default key; record one with ⇧⌘K) enters it, ↑/↓ move, Enter opens, Space toggles a task, ← folds
   the focused row's section and → unfolds it, Escape or ⌘← returns the caret to the document.
-
