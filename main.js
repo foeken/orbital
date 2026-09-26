@@ -300,7 +300,14 @@ ipcMain.on('window:theme', (e, theme) => { const win = paneWindow(e.sender); if 
 // Demo mode lives in the outliner (renderer/state.js); main only needs to know it is on, so no banner shows a real title.
 ipcMain.on('app:demoMode', (_e, on) => { S.demo = on === true; });
 ipcMain.on('prefs:snapshot', (e) => { e.returnValue = settings.prefs(); });
-ipcMain.handle('prefs:set', (_e, key, value) => settings.setPref(key, value));
+// A setting one page writes reaches every other page and window at once: settings.applyRemote announces only what
+// another machine changed, since this machine's own write comes back from Tana as nothing new. The writer is left
+// out, because it already holds the value and an older snapshot arriving late would undo a newer choice there.
+const tellOthers = (sender) => {
+  const synced = settings.prefs();
+  for (const w of S.windows) if (!w.isDestroyed()) for (const p of w.panes) if (p.webContents !== sender && !p.webContents.isDestroyed()) p.webContents.send('settings:changed', synced);
+};
+ipcMain.handle('prefs:set', (e, key, value) => { const stored = settings.setPref(key, value); tellOthers(e?.sender); return stored; });
 ipcMain.handle('openai:setKey', (_e, key) => {
   if (typeof key !== 'string' || !key.trim()) throw new Error('OpenAI API key cannot be empty');
   settings.set('openaiApiKey', key.trim());
@@ -537,7 +544,7 @@ ipcMain.handle('pins:unpin', (_e, id, target, date) => setPin(id, target, false,
 ipcMain.handle('pins:pinTo', (_e, hubId, uri) => nodePin(hubId, uri, true)); // pin a document on a meeting/space
 ipcMain.handle('pins:unpinFrom', (_e, hubId, uri) => nodePin(hubId, uri, false));
 ipcMain.handle('sensitive:list', () => sensitiveIds()); // the synced setting sensitive:set writes; db's table is only its migration source
-ipcMain.handle('sensitive:set', (_e, id, on) => setSensitive(id, on));
+ipcMain.handle('sensitive:set', (e, id, on) => { const stored = setSensitive(id, on); tellOthers(e?.sender); return stored; });
 ipcMain.handle('doc:related', (_e, id) => related(id)); // { summary, tagline, pinned[], outcomes[], proposals[], notes[], backlinks[] }
 ipcMain.handle('doc:watchRelated', (e, id) => watchRelated(id, e && e.sender ? e.sender.id : 'main')); // the page on screen (null: none): its sidebar's edges pushed as 'related:changed'
 ipcMain.handle('meeting:info', (_e, id) => meetings.meetingInfo(id));
@@ -601,7 +608,7 @@ ipcMain.handle('filters:add', (_e, pattern) => setHidden([...hiddenRules(), patt
 ipcMain.handle('filters:remove', (_e, pattern) => setHidden(hiddenRules().filter((p) => p.toLowerCase() !== String(pattern ?? '').trim().toLowerCase())));
 // MCP chats: one switch over every list and search, applied in the same listFilter the hidden titles go through.
 ipcMain.handle('mcp:hidden', () => mcpHidden());
-ipcMain.handle('mcp:setHidden', (_e, on) => setMcpHidden(on));
+ipcMain.handle('mcp:setHidden', async (e, on) => { const stored = await setMcpHidden(on); tellOthers(e?.sender); return stored; });
 ipcMain.handle('sync:refresh', () => refresh());
 ipcMain.handle('sync:status', () => S.status);
 ipcMain.handle('sync:login', async () => {

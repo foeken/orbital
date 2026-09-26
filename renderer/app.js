@@ -150,8 +150,9 @@ function removeStale(id) {
 }
 if (tana.onRemoved) tana.onRemoved(removeStale);
 tana.onStatus(showStatus);
-// Another machine changed a preference: take the new set and apply it where it is already on screen. Everything a
-// preference feeds is visible from here, which is why the applying lives in this file and not beside the store.
+// Another page, window or machine changed a setting: take the new set and apply it where it is already on screen.
+// Everything a preference feeds is visible from here, which is why the applying lives in this file and not beside
+// the store. Nothing here writes back: the change is already stored, and a write would bounce between the pages.
 if (tana.onSettings) tana.onSettings((next) => {
   const openType = onTypePage() ? zoom.docId : null, wasFields = openType && JSON.stringify((filters.get(openType) || {}).fields || null);
   mergePrefs(next);
@@ -167,11 +168,13 @@ if (tana.onSettings) tana.onSettings((next) => {
   if (openType && JSON.stringify(typeFilter(openType).fields || null) !== wasFields) reload(openType).then(() => renderSoon(true), showError);
   collapsedGroups.clear(); for (const key of pref('collapsedGroups', [])) collapsedGroups.add(key);
   const nextTheme = ['dark', 'system', 'light'].includes(pref('theme')) ? pref('theme') : 'light';
-  if (nextTheme !== themePref) { if (nextTheme === 'system') followSystem(true); else setTheme(nextTheme); } // writes the same value back, which is a no-op in the store
+  if (nextTheme !== themePref) showTheme(nextTheme);
+  sensitiveLoading = null; loadSensitive().then(refreshSensitive); // the sensitive marks and the MCP switch are settings too, kept outside the preferences
+  if (tana.mcpHidden) tana.mcpHidden().then((on) => { mcpHidden = !!on; }, () => {});
   renderSoon();
 });
 if (tana.onSystemTheme) tana.onSystemTheme((t) => { if (themePref === 'system') applyTheme(t); }); // macOS appearance changes re-theme a running window
-if (themePref === 'system') followSystem(true);
+if (themePref === 'system') showTheme('system');
 loadRoots().then(render, showError).then(restorePlace).then(loadFilters);
 // Cmd+K only: never blocks the first paint. Boot almost always races the sync connect (main creates the window
 // before S.client exists, so main/views.js:searchList answers []), so this alone would usually leave the group

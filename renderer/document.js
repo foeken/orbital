@@ -193,3 +193,4 @@ function renderSensitiveBtn() {
 sensitiveBtn.onmousedown = (e) => e.preventDefault(); // the caret stays in its row, as with the other header buttons
 sensitiveBtn.onclick = toggleSensitiveVisibility; // the same action the Cmd+K row runs
 renderSensitiveBtn();
+window.addEventListener('storage', (e) => { if (e.key === 'sensitiveVisible' && (e.newValue === '1') !== sensitiveVisible) toggleSensitiveVisibility(); }); // switched in another page
