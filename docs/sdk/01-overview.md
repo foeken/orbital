@@ -8,7 +8,7 @@ Read in this order: this file → [02-data-model.md](02-data-model.md) → [03-a
 
 | Concern | Module | One line |
 |---|---|---|
-| Auth plumbing | `transport.js` | Connect transport with `Authorization: Bearer`, request ids, one retry after 401 via `getAccessToken({ refresh: true })`; `unary`, the one protobuf-JSON unary call every service client goes through. |
+| Auth plumbing | `transport.js` | Connect transport with `Authorization: Bearer`, request ids, one retry after 401 via `getAccessToken({ refresh: true })`; `unary`, the protobuf-JSON unary read the graph, history and search clients go through (sync commands do not: it retries). |
 | Discovery / queries | `graph.js` | `tana.graph.v1alpha1.GraphService`: ListNodes, ListEdges, GetEdge, GetOwnerChain, Traverse. Protobuf JSON in and out. |
 | Live documents | `sync.js` | One `ServerSync` stream per client; per-document bootstrap → live; outbound batching; reconnect; resync; create (subscribe with init); soft delete. |
 | A document | `document.js` | LoroDoc wrapper: `data`/`content` maps, `transact`, undo/redo, export/import, change events. |
@@ -73,7 +73,7 @@ const sync = new SyncConnection({ transport, orgId, peerId });     // documents,
 
 ## Extending the SDK
 
-Each kind of addition has one home. Add it there, document it in the module's section of [03-api-reference.md](03-api-reference.md), and cover it in the check named. This table covers `sdk/`; the app side of the same additions (IPC, views, kinds, outline blocks) is [../EXTENDING.md](../EXTENDING.md). Anything on the wire that the loaded descriptors do not have yet (a service, a method, a message field, a sync command or frame) needs its descriptor re-extracted first ([05-gotchas.md](05-gotchas.md) Protocol) and a round-trip of it in the proto section of `sdk-check.js`; the rows below assume that is done.
+Each kind of addition has one home. Add it there, document it in the module's section of [03-api-reference.md](03-api-reference.md), and cover it in the check named. This table covers `sdk/`; the app side of the same additions (IPC, views, kinds, outline blocks) is [../EXTENDING.md](../EXTENDING.md). Anything on the wire that the loaded descriptors do not have yet (a service, a method, a message field, a sync command or frame) needs its descriptor re-extracted first ([05-gotchas.md](05-gotchas.md) Protocol) and a round-trip of it in the proto section of `sdk-check.js`; the rows below assume that is done. A new file in `sdk/` also gets a row in the module table above and in the `sdk/` map of AGENTS.md.
 
 | Adding | Where | Check |
 |---|---|---|
