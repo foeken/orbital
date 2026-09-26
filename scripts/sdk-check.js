@@ -1050,6 +1050,12 @@ async function main() {
       'a watch choice tells the other pages, and has them read that document’s metadata again');
     await backend.handlers.get('codex:link')({ sender: left.webContents }, watchedDoc, '00000000-0000-4000-8000-000000000000');
     assert.deepEqual(others().map(([name]) => name), ['right', 'other'], 'an agent mark tells the other pages too');
+    // A watch choice another machine made reaches every page as that document's metadata change, as a local one does.
+    const remoteWatch = 'tana:text:' + ulid(), settingsDoc = docs.get(settings.settingsDocId());
+    settingsDoc.transact((loro) => loro.getMap(settings.ROOT).set('notify', JSON.stringify({ ...settings.get('notify'), [remoteWatch]: true })));
+    await settings.applyRemote(settingsDoc.id);
+    assert.deepEqual(others().filter(([, channel]) => channel === 'outline:changed').map(([name, , value]) => [name, value]), [['left', remoteWatch], ['right', remoteWatch], ['other', remoteWatch]],
+      'a watch choice from another machine has every page read that document again');
     for (const key of ['viewFilter:library', 'notify', 'codex', 'codexPrompt', 'codexTask']) settings.set(key, undefined);
     backend.S.windows.clear(); settings.setPref('theme', undefined); await settings.flush();
     // Signed out, both halves of a split are the same login button: the left one fills the window, the right one hides.

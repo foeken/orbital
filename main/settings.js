@@ -167,9 +167,19 @@ function migrate(doc) {
   });
 }
 // A change to the document, wherever it came from: the other machine's, or our own write coming back.
+// A watch choice is about one document, and a page draws it from that document's metadata (the bell, the Tracking
+// section), so every document whose choice another machine moved is announced as a metadata change of its own, as
+// tellOthers does for this machine's other pages.
 function applyRemote(id) {
   if (!docId || id !== docId) return false;
-  return hydrate().then((changed) => { if (changed) send('settings:changed', prefs()); return changed; }).catch((e) => { report(e); return false; });
+  const watched = load().notify || {};
+  return hydrate().then((changed) => {
+    if (!changed) return changed;
+    send('settings:changed', prefs());
+    const now = load().notify || {};
+    for (const doc of Object.keys({ ...watched, ...now })) if (watched[doc] !== now[doc]) send('outline:changed', doc, { meta: true });
+    return changed;
+  }).catch((e) => { report(e); return false; });
 }
 
 const synced = () => Object.fromEntries(Object.entries(load()).filter(([key]) => isSynced(key)));

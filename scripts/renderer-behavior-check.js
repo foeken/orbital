@@ -6749,8 +6749,9 @@ function runPrefsStoreCheck() {
 async function runSettingsElsewhereCheck() {
   const api = vm.runInNewContext(`
     let handler = null, home = null, themePref = 'light', sensitiveLoading = null, mcpHidden = false, codexLoading = null, zoom = null, view = 'library';
-    let listed = 0, codexReads = 0, stateReads = 0, stored = {}, codexIds = new Set(), marks = [];
-    const tana = { onSettings: (cb) => { handler = cb; }, viewFilter: async (id) => stored[id] };
+    let listed = 0, codexReads = 0, stateReads = 0, stored = {}, codexIds = new Set(), marks = [], hosts = {};
+    const agentTaskHosts = new Map();
+    const tana = { onSettings: (cb) => { handler = cb; }, viewFilter: async (id) => stored[id], codexTaskHosts: async () => hosts };
     const views = [{ id: 'library' }, { id: 'inbox' }];
     const filters = new Map([['library', { states: ['open'] }], ['inbox', { states: ['proposed'] }]]);
     const notifyById = new Map([['tana:text:a', { on: false }]]);
@@ -6759,11 +6760,11 @@ async function runSettingsElsewhereCheck() {
     const renderSoon = () => {}, showError = (e) => { throw e; }, showTheme = () => {}, loadSensitive = async () => {}, refreshSensitive = () => {};
     const widenFilter = (id, f) => f, loadView = () => { listed++; };
     const loadCodex = () => { codexReads++; codexIds = new Set(marks); return (codexLoading = Promise.resolve()); };
-    const loadAgentStates = () => { stateReads++; };
+    const loadAgentStates = () => { stateReads++; agentTaskHosts.clear(); for (const [id, host] of Object.entries(hosts)) agentTaskHosts.set(id, host); };
     ${functionSource('loadFilters')}
     ${sourceBetween('if (tana.onSettings) tana.onSettings(', 'if (tana.onSystemTheme)')}
     ({
-      change: async (next, agents = marks) => { stored = next; marks = agents; handler({}); for (let i = 0; i < 5; i++) await Promise.resolve(); },
+      change: async (next, agents = marks, tasks = hosts) => { stored = next; marks = agents; hosts = tasks; handler({}); for (let i = 0; i < 8; i++) await Promise.resolve(); },
       state: () => ({ library: filters.get('library'), listed, codexReads, stateReads, watch: notifyById.size }),
     });
   `);
@@ -6772,6 +6773,9 @@ async function runSettingsElsewhereCheck() {
     'the filter another page stored replaces this page’s copy and lists the view again; the agent marks, a new mark’s task state and the watch states are read afresh');
   await api.change({ library: { states: ['closed'] }, inbox: { states: ['proposed'] } });
   assert.deepEqual([api.state().listed, api.state().stateReads], [1, 1], 'a settings change that leaves this view’s filter and the marks alone lists nothing and starts no Codex read');
+  // Another machine writes the mark first and the task it became later: the second change moves only the task
+  await api.change({ library: { states: ['closed'] }, inbox: { states: ['proposed'] } }, ['tana:text:a'], { 'tana:text:a': 'local' });
+  assert.equal(api.state().stateReads, 2, 'a task that arrives after its mark reads the state again');
   console.log('ok  settings from another page: view filters, agent marks and watch states follow, and the view is listed again only when its filter moved');
 }
 
