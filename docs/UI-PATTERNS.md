@@ -51,13 +51,14 @@ function huePickRows(q, typed) { … } // every page's rows: q lowercased, typed
   arguments, then `renderPalette()` and `palInput.focus()` itself.
 - An answer that arrives later must check that it still belongs to the page on screen. `palMode` alone is not
   enough, because the same page may have been left and opened again for another document. Take the generation
-  that `showPage` moves on, and compare it when the answer lands:
+  that `showPage` moves on, and compare it when the answer lands, a failure included. A page whose rows are one read
+  gets all of this from `loadList` (below); anything else follows this shape:
 
   ```js
   typeCtx = doc; typeList = null; // the first draw says Loading…, never the last document's choices
   openPage('setType', 'Set type to…', { rows: typeRows, back: BACK_TO_COMMANDS });
-  const seq = palSeq;
-  tana.docTypes(doc.id).then((list) => { if (seq !== palSeq) return; typeList = list; renderPalette(); });
+  const seq = palSeq, landed = (keep) => (answer) => { if (seq === palSeq) { keep(answer); renderPalette(); } };
+  tana.docTypes(doc.id).then(landed((list) => { typeList = list; }), landed((e) => { typeList = e; })); // rows show e.message
   ```
 
 ### A page that lists one read: `loadList` and `listRows` (renderer/palette.js)
