@@ -52,7 +52,8 @@ let previewLoading = () => {};
     ctx.clearRect(0, 0, w, h);
     ctx.fillStyle = ctx.strokeStyle = getComputedStyle(canvas).color;
     const arrive = still ? 1 : ease(t / 1.6); // the globe gathers from a tighter, fainter cloud on arrival
-    const R = Math.min(w, h) * 0.3 * (0.82 + 0.18 * arrive), cx = w / 2, cy = h * 0.5, D = 3.4, px = R / 260; // px: a dot's size follows the globe's
+    // a little above the middle: the title and the pills weigh down the top of the page, and a globe centred under them read as sinking
+    const R = Math.min(w, h) * 0.3 * (0.82 + 0.18 * arrive), cx = w / 2, cy = h * 0.44, D = 3.4, px = R / 260; // px: a dot's size follows the globe's
     // the globe turns about its axis, the axis tilted towards you and swaying a little
     const spin = t * 0.11, tilt = 0.38 + Math.sin(t * 0.07) * 0.06, cs = Math.cos(spin), sn = Math.sin(spin), ct = Math.cos(tilt), st = Math.sin(tilt);
     const turn = (p) => { const x = p[0] * cs + p[2] * sn, z = -p[0] * sn + p[2] * cs; return [x, p[1] * ct - z * st, p[1] * st + z * ct]; };
@@ -99,27 +100,31 @@ let previewLoading = () => {};
     links.forEach(([a, b], i) => {
       const grow = ease((c - START - i * STEP) / GROW);
       if (!grow) return;
-      lit[a] = 1; if (grow > 0.95) lit[b] = 1;
-      let prev = null;
-      for (let k = 0; k <= 32; k++) {
-        const sp = k / 32;
-        if (sp > grow) break;
-        const s = project(turn(arcPoint(nodes[a], nodes[b], sp)));
+      // The node it leaves lights as it sets off, and the one it reaches lights as its head arrives and fades into it:
+      // the head vanishing and the node appearing in the same frame read as a jolt.
+      lit[a] = Math.max(lit[a], clamp(grow / 0.12));
+      lit[b] = Math.max(lit[b], clamp((grow - 0.82) / 0.18));
+      // Drawn up to exactly where it has grown to, the last piece partial: stopping at the 32 fixed steps made the tip
+      // hop from step to step as the easing slowed it down at the end.
+      const steps = 32, end = grow * steps;
+      let prev = project(turn(nodes[a]));
+      for (let k = 1; k <= Math.ceil(end); k++) {
+        const s = project(turn(arcPoint(nodes[a], nodes[b], Math.min(k, end) / steps)));
         if (prev && !hidden(s) && !hidden(prev)) {
           ctx.globalAlpha = (0.12 + 0.5 * clamp((s.z + 1) / 2)) * fade;
           ctx.beginPath(); ctx.moveTo(prev.x, prev.y); ctx.lineTo(s.x, s.y); ctx.stroke();
         }
         prev = s;
       }
-      if (grow < 1 && prev && !hidden(prev)) { ctx.globalAlpha = fade; ctx.beginPath(); ctx.arc(prev.x, prev.y, 2.4 * px * prev.f, 0, TAU); ctx.fill(); }
+      if (grow < 1 && !hidden(prev)) { ctx.globalAlpha = fade * clamp((1 - grow) / 0.18); ctx.beginPath(); ctx.arc(prev.x, prev.y, 2.4 * px * prev.f, 0, TAU); ctx.fill(); }
     });
     nodes.forEach((p, i) => {
       if (!lit[i]) return;
       const s = project(turn(p));
       if (hidden(s) || s.z < -0.2) return;
-      const near = (s.z + 1) / 2, r = (2 + 1.8 * near) * px * s.f;
-      ctx.globalAlpha = (0.35 + 0.6 * near) * fade; ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, TAU); ctx.fill();
-      ctx.globalAlpha = 0.25 * near * fade; ctx.beginPath(); ctx.arc(s.x, s.y, r * 2.4 + (still ? 0 : Math.sin(t * 2 + i) * px), 0, TAU); ctx.stroke(); // a ring around it
+      const near = (s.z + 1) / 2, on = lit[i], r = (2 + 1.8 * near) * px * s.f * (0.6 + 0.4 * on);
+      ctx.globalAlpha = (0.35 + 0.6 * near) * fade * on; ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, TAU); ctx.fill();
+      ctx.globalAlpha = 0.25 * near * fade * on; ctx.beginPath(); ctx.arc(s.x, s.y, r * 2.4 + (still ? 0 : Math.sin(t * 2 + i) * px), 0, TAU); ctx.stroke(); // a ring around it
     });
     drawRing(true);
     ctx.globalAlpha = 1;
