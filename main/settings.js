@@ -153,7 +153,9 @@ const holdsSettings = (doc) => [MARK, ROOT, OLD_ROOT].some((root) => Object.keys
 // The title and the mark are anybody's to write who can edit a document, and every synced key (the sensitive marks, the
 // agent prompts) would be written into the one taken: only one nobody else can read is taken — only you in its audience
 // (sdk/access.js audienceOf) and no public link, which audienceOf leaves to the linkSharing root.
-const onlyMine = async (doc) => !doc.loro.getMap('linkSharing').get('mode')
+// Only a restricted one is asked about at all: audienceOf answers it from the document itself, where an open one would
+// have it load the owner chain and the org, subscriptions nobody lets go of, for an answer that can only be no.
+const onlyMine = async (doc) => readNode(doc).restricted === true && !doc.loro.getMap('linkSharing').get('mode')
   && (await audienceOf(readNode(doc), S.me.userUri, { sync: S.client.sync, orgDocUri: S.me.orgDocUri })).scope === 'only-me';
 async function create() {
   const id = 'tana:text:' + ulid();

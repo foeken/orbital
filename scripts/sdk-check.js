@@ -1206,15 +1206,15 @@ async function main() {
   {
     const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
     const settings = backend.settings; settings.reset();
-    const docs = new Map(), sent = [], live = new Set(), released = [];
+    const docs = new Map(), sent = [], live = new Set(), released = [], tried = [];
     let listed = [];
     const sync = {
-      subscribe: async (id, init) => { if (!docs.has(id)) { if (!init) throw new Error('unavailable'); const d = new Document(id); d.transact(init); docs.set(id, d); } live.add(id); return docs.get(id); },
+      subscribe: async (id, init) => { tried.push(id); if (!docs.has(id)) { if (!init) throw new Error('unavailable'); const d = new Document(id); d.transact(init); docs.set(id, d); } live.add(id); return docs.get(id); },
       getDocument: (id) => (live.has(id) ? docs.get(id) : undefined), unsubscribe: async (id) => { live.delete(id); released.push(id); },
     };
     const win = { isDestroyed: () => false, webContents: { send: (channel, value) => sent.push([channel, value]) } };
     let asked = null;
-    const connect = () => { settings.reset(); live.clear(); backend.testRuntime({ me: { userUri: ME }, win, client: { sync, graph: { listNodes: async (p) => { if (p.textQuery === settings.TITLE) asked = p; return { nodes: p.textQuery === settings.TITLE ? listed : [] }; } } } }); }; // a launch: a new client, nothing subscribed yet
+    const connect = () => { settings.reset(); live.clear(); backend.testRuntime({ me: { userUri: ME, orgDocUri: 'tana:org:01examplek0000000000000000' }, win, client: { sync, graph: { listNodes: async (p) => { if (p.textQuery === settings.TITLE) asked = p; return { nodes: p.textQuery === settings.TITLE ? listed : [] }; } } } }); }; // a launch: a new client, nothing subscribed yet
     const theirs = new Document('tana:text:' + ulid()); // the other machine's, made a second earlier
     const third = 'tana:text:' + ulid(); // one a third machine already gave up to it
     theirs.transact((l) => { initDocument(l, settings.TITLE, ME); l.getMap(settings.ROOT).set('pref:theme', JSON.stringify('dark')); l.getMap(settings.ROOT).set('settingsOld', JSON.stringify([third])); });
@@ -1248,6 +1248,7 @@ async function main() {
     assert.deepEqual(shared.loro.getMap(settings.ROOT).toJSON(), {}, 'nor one others can read, mark or not: no synced key is ever written where somebody else sees it');
     assert.deepEqual(linked.loro.getMap(settings.ROOT).toJSON(), {}, 'nor one with a public link, private as its audience is');
     assert.deepEqual([linked.id, shared.id, note.id].filter((id) => released.includes(id) && !live.has(id)), [linked.id, shared.id, note.id], 'and each one looked at and turned down is let go again');
+    assert.ok(!tried.some((id) => id.startsWith('tana:org:')), 'and an open one is turned down on its own flag, without loading the org or an owner chain to ask about it');
     assert.ok(released.includes(mine) && !live.has(mine) && live.has(theirs.id), 'as is the one this machine gave up, while the one it took stays live');
     assert.deepEqual(JSON.parse(JSON.stringify(settings.get('settingsOld'))), [third, mine], 'the document this machine gave up is remembered, and synced, beside the one another machine gave up');
     assert.deepEqual(JSON.parse(theirs.loro.getMap(settings.ROOT).get('settingsOld')), [third, mine], 'in the document too');
