@@ -1075,7 +1075,7 @@ function showCombo() {
   $('recSave').disabled = !validCombo(rec.combo) || !!warn;
 }
 function closeRecorder() { rec = null; recorder.hidden = true; renderPalette(); palInput.focus(); }
-const saveHotkeys = () => setPref('hotkeys', hotkeys);
+const saveHotkeys = () => { setPref('hotkeys', hotkeys); renderSoon(); }; // the page may name a key: an empty My Tasks names Create task's (emptyText)
 $('recReset').onclick = () => { delete hotkeys[rec.row.id]; saveHotkeys(); closeRecorder(); };
 $('recCancel').onclick = closeRecorder;
 $('recSave').onclick = () => { if (validCombo(rec.combo) && !comboTaken(rec.combo, rec.row.id)) { hotkeys[rec.row.id] = rec.combo; saveHotkeys(); closeRecorder(); } };
