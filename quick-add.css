@@ -1,9 +1,10 @@
 /* The quick-add panel (docs/QUICK-ADD.md): a frameless window summoned by the global shortcut. It links styles.css
-   for the app font, colours and the [data-theme="dark"] contract, and adds only its own compact layout. */
+   for the app font, colours and the [data-theme="dark"] contract, and adds only its own compact layout. The window is
+   a real macOS panel (main.js: vibrancy, native corners and shadow), so the card draws no background, corners or
+   shadow of its own: a drawn one was cut off at the window's edge and read as pasted on. */
 body.quick { background: transparent; display: block; }
 .qpanel {
-  height: 100%; padding: 14px 16px 10px; border-radius: 12px; background: #fff; color: #1a1a1a;
-  box-shadow: 0 18px 50px rgba(0, 0, 0, .28); display: flex; flex-direction: column; gap: 8px;
+  height: 100%; padding: 14px 16px 10px; color: #1a1a1a; display: flex; flex-direction: column; gap: 8px;
   overflow: hidden; -webkit-app-region: drag;
 }
 .qpanel input, .qpanel button, .qlist div { -webkit-app-region: no-drag; }
@@ -22,9 +23,7 @@ body.quick { background: transparent; display: block; }
 /* the meeting is live: a dot before its name breathes, as the recorder's does (styles.css Motion, Ambient) */
 .qmeeting.live::before { content: ''; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: currentColor; vertical-align: 1px; }
 @media (prefers-reduced-motion: no-preference) { .qmeeting.live::before { animation: breathe var(--dur-loop) ease-in-out infinite; } }
-/* The panel arrives with the shortcut and leaves with the task it made (Surface); a refusal shakes its reason (quick-add.js). */
-.qpanel.in { animation: surface-in var(--dur-base) var(--ease-out); }
-.qpanel.out { animation: surface-out var(--dur-quick) var(--ease-in) forwards; }
+/* a refusal shakes its reason (quick-add.js); the panel itself comes and goes as macOS shows a panel */
 .qmeeting.none { color: #9aa0a3; }
 /* The same pill the outliner uses for its own filters, down to the colours: neutral until something is chosen, then
    the app accent (styles.css .pill). The icon is the app's own member/robot glyph at the 14px the sidebar uses. */
@@ -55,7 +54,7 @@ body.quick { background: transparent; display: block; }
 .qlist svg { flex: none; width: 14px; height: 14px; color: #8a8a8a; }
 .qlist .qempty { color: #9aa0a3; cursor: default; }
 .qhint { display: flex; gap: 14px; font-size: 11px; color: #b0b4b7; margin-top: auto; } /* stays at the foot of the card whether or not the chooser is open */
-[data-theme="dark"] .qpanel { background: #232628; color: #c9c9c9; box-shadow: 0 18px 50px rgba(0, 0, 0, .5); }
+[data-theme="dark"] .qpanel { color: #c9c9c9; }
 [data-theme="dark"] #qtitle::placeholder { color: #6a7073; }
 [data-theme="dark"] .qassignee { background: #2a2d2f; color: #9a9fa1; }
 [data-theme="dark"] .qassignee:focus { box-shadow: 0 0 0 2px #58768a; }

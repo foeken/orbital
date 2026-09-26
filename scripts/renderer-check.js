@@ -431,7 +431,8 @@ assert.match(source, /if \(!zoom \|\| onSearchPage\(\) \|\| onTypePage\(\)\) row
 assert.match(source, /if \(row\) \{ if \(!row\.disabled\) row\.run\(\); return true; \}/, 'a hotkey for a disabled row is a no-op the app still owns');
 // and the palette's own arrows land on such a row, which is the only way Cmd+Shift+K can record a shortcut for it
 assert.match(source, /if \(!rows\[next\]\.disabled \|\| rows\[next\]\.id\) return next;/, 'Up/Down reach a disabled row that has a stable id, so it can be given a key before it goes live');
-assert.match(source, /filterRow\.hidden = \(!!parent && !isSearchDoc\(parent\.node\) && !isTypeDoc\(parent\.node\)\)/, 'the filter row stays on screen on a saved search page and a type page');
+// (shown and hidden through showHide, which opens and closes it in place: renderer/motion.js)
+assert.match(source, /(filterRow\.hidden = |showHide\(filterRow, !\()\(!!parent && !isSearchDoc\(parent\.node\) && !isTypeDoc\(parent\.node\)\)/, 'the filter row stays on screen on a saved search page and a type page');
 assert.match(source, /if \(isSearchDoc\(parent\.node\) \|\| isTypeDoc\(parent\.node\)\) \{/, 'the zoomed branch narrows a saved search and a type page the way a view narrows its rows');
 // the Library keeps the query it is showing as a saved search; main owns the filter→query translation
 assert.match(source, /if \(defs\.length && tana\.createSearch && !onSearchPage\(\) && !onTypePage\(\)\) box\.append\(saveSearchPill\(\)\)/, 'a view with pills offers to save its query as a search, and a saved search does not: it already is one');

@@ -148,7 +148,8 @@ function closeFront(win) {
 const QUICK_PANEL = { width: 560, height: 320 };
 function createQuickPanel() {
   const win = new BrowserWindow({
-    ...QUICK_PANEL, show: false, frame: false, transparent: true, resizable: false, minimizable: false,
+    // A real panel: the system's material behind the form, and its own rounded corners and shadow around it
+    ...QUICK_PANEL, show: false, frame: false, vibrancy: 'popover', visualEffectState: 'active', backgroundColor: '#00000000', roundedCorners: true, resizable: false, minimizable: false,
     maximizable: false, fullscreenable: false, skipTaskbar: true, alwaysOnTop: true, title: 'Quick add',
     webPreferences: { preload: path.join(__dirname, 'preload.js') },
   });

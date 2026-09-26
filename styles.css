@@ -680,17 +680,17 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .clearfilters { border: 0; background: none; color: #aaa; font: inherit; font-size: 16px; padding: 0; margin-left: 10px; text-decoration: underline; cursor: pointer; }
 .clearfilters:hover { color: #1a1a1a; }
 .clearfilters:focus { outline: none; box-shadow: 0 0 0 2px #b7d2f5; border-radius: 3px; }
-/* loading skeleton: 6 shimmering bars while a view has no rows yet; .gone fades it out, then collapses it */
-.skeleton { padding-left: 24px; transition: opacity var(--dur-base) var(--ease-out); }
-.skeleton.gone { opacity: 0; height: 0; overflow: hidden; pointer-events: none; transition: opacity var(--dur-base) var(--ease-out), height 0s var(--dur-base); }
-.skeleton div { position: relative; height: 14px; margin: 8px 0 8px 27px; border-radius: 7px; background: #e4e4e4; background-image: linear-gradient(90deg, #e4e4e4 0%, #f7f7f7 50%, #e4e4e4 100%); background-size: 200% 100%; animation: shimmer var(--dur-loop) ease-in-out infinite, breathe var(--dur-loop) ease-in-out infinite; }
-.skeleton div:nth-child(2) { animation-delay: .12s; } .skeleton div:nth-child(3) { animation-delay: .24s; } .skeleton div:nth-child(4) { animation-delay: .36s; } .skeleton div:nth-child(5) { animation-delay: .48s; } .skeleton div:nth-child(6) { animation-delay: .6s; }
-.skeleton div::before { content: ""; position: absolute; left: -21px; top: 4px; width: 6px; height: 6px; border-radius: 50%; background: #ddd; }
-.skeleton div:nth-child(1) { width: 62%; } .skeleton div:nth-child(2) { width: 48%; } .skeleton div:nth-child(3) { width: 71%; }
-.skeleton div:nth-child(4) { width: 39%; } .skeleton div:nth-child(5) { width: 56%; } .skeleton div:nth-child(6) { width: 44%; }
+/* Loading (Ambient): renderer/loading.js draws it on the canvas — a dotted surface rolling slowly in perspective under a
+   camera that sways around it, on which a few dots light up as nodes and are joined, one link at a time, into a small
+   graph. It shows itself only when loading takes a moment (the delay below) and fades away as the rows arrive. The
+   colours come from here, so the theme reaches it: color is the dots, --node the graph. */
+.skeleton { display: flex; justify-content: center; padding: 6vh 0 0; transition: opacity var(--dur-base) var(--ease-out), display var(--dur-base) allow-discrete; }
+.skeleton.gone { display: none; opacity: 0; pointer-events: none; }
+.skeleton canvas { display: block; width: min(100%, 760px); height: 280px; color: #9aa1a8; --node: #5b9bd5;
+  mask-image: radial-gradient(ellipse 58% 72% at 50% 58%, #000 30%, transparent 78%); animation: loader-in var(--dur-slow) var(--ease-out) 300ms backwards; }
+@keyframes loader-in { from { opacity: 0; transform: translateY(10px); } }
 @keyframes shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 @keyframes breathe { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .skeleton div { animation: none; } }
 
 .filtered { padding: 18px 10px 8px 16px; color: #999; font-weight: 600; } /* lines up with the title, filter and pills */
 
@@ -955,8 +955,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .children { border-left-color: #34393b; }
 [data-theme="dark"] .children.loading { color: #858b8e; }
 
-[data-theme="dark"] .skeleton div { background-color: #313537; background-image: linear-gradient(90deg, #313537 0%, #3d4244 50%, #313537 100%); }
-[data-theme="dark"] .skeleton div::before { background: #444a4c; }
+[data-theme="dark"] .skeleton canvas { color: #626a6f; --node: #6ea8dc; }
 [data-theme="dark"] .login button { border-color: #454b4e; background: #2a2d2f; color: #c9c9c9; }
 [data-theme="dark"] .login button:hover { background: #363a3c; }
 
@@ -1061,10 +1060,6 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .menu.up { transform-origin: 20px 100%; }
 .menu.in { animation: surface-in var(--dur-quick) var(--ease-out); }
 .menu.out { pointer-events: none; animation: surface-out calc(var(--dur-quick) * .7) var(--ease-in) forwards; }
-/* the filter field (⌘F) arrives and leaves the way the other surfaces do */
-.filter { transition: opacity var(--dur-quick) var(--ease-out), transform var(--dur-quick) var(--ease-out), display var(--dur-quick) allow-discrete; }
-.filter[hidden] { opacity: 0; transform: translateY(-4px); transition-timing-function: var(--ease-in); }
-@starting-style { .filter:not([hidden]) { opacity: 0; transform: translateY(-4px); } }
 
 /* Pop and Flash as classes a script plays once (renderer/motion.js playOnce, flash): the same two keyframes wherever
    they land — a mention just linked, a chip just chosen, a caret someone else just put down, a row you came back to. */

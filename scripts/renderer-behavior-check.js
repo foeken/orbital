@@ -145,10 +145,11 @@ const withShims = (src) => {
   if (/\b(atHome|homeId|homeTarget|homeName|repairHome|setHome|goHome)\b/.test(src) && !/const homeId =/.test(src)) src = "globalThis.atHome ??= () => true; globalThis.homeId ??= () => 'library'; globalThis.homeName ??= () => 'Library'; globalThis.homeTarget ??= () => null; globalThis.repairHome ??= () => {}; globalThis.setHome ??= () => {}; globalThis.goHome ??= () => {};\n" + src;
   // Motion (renderer/motion.js) is what no harness looks at: a slice that calls it gets moves that change nothing, and
   // the state change a move wraps runs at once, exactly as it does under reduced motion.
-  if (/\b(turnPage|foldRow|foldSection|dismissRow|settleEmpty|settling|slideRail|motionBefore|motionAfter|armGlide|flash|flashAt|playOnce|rowFor|badgeMoved|popRead|popMention|swapPanel|menuMotion|crossfade|growFrom|play|MOTION|motionOK|stillPreferred)\b/.test(src) && !/function motionAfter\(/.test(src)) src = MOTION_SHIM + src;
+  if (/\b(turnPage|foldRow|foldSection|showHide|rowsQuiet|dismissRow|settleEmpty|settling|slideRail|motionBefore|motionAfter|armGlide|flash|flashAt|playOnce|rowFor|badgeMoved|popRead|popMention|swapPanel|menuMotion|crossfade|growFrom|play|MOTION|motionOK|stillPreferred)\b/.test(src) && !/function motionAfter\(/.test(src)) src = MOTION_SHIM + src;
   return /\b(renderSoon|patchMeta|iconNode|hotkeyFor|hotkeyIds|comboOf|settleEnter)\b/.test(src) ? RENDER_SHIM + 'globalThis.settleEnter ??= () => {};\n' + src : src;
 };
 const MOTION_SHIM = 'globalThis.turnPage ??= (dir, update) => update(); globalThis.foldRow ??= (key, opening, done) => done(); globalThis.foldSection ??= (head, toggle) => toggle(); '
+  + "globalThis.showHide ??= (el, show) => { el.hidden = !show; }; globalThis.rowsQuiet ??= false; "
   + 'globalThis.dismissRow ??= (el, kind, done) => done(); globalThis.settleEmpty ??= () => {}; globalThis.slideRail ??= (opening, update) => update(); globalThis.crossfade ??= (update) => update(); globalThis.motionBefore ??= () => null; globalThis.motionAfter ??= () => {}; '
   + 'globalThis.armGlide ??= () => {}; globalThis.flash ??= () => {}; globalThis.flashAt ??= () => {}; globalThis.playOnce ??= () => {}; globalThis.rowFor ??= () => null; globalThis.badgeMoved ??= () => {}; '
   + 'globalThis.popRead ??= () => {}; globalThis.popMention ??= () => {}; globalThis.swapPanel ??= () => {}; globalThis.menuMotion ??= () => {}; globalThis.growFrom ??= async () => {}; globalThis.play ??= async () => {}; '

@@ -78,7 +78,7 @@ function rowFor(id) {
 let settleAt = 0;
 const settling = () => Math.max(0, settleAt - performance.now()); // how long a move still needs the rows it moves (renderSoon waits)
 function below(el) { // what is drawn after el in its scroll box: its later siblings, and theirs at every level up
-  const stop = el.closest('.scroll, .rail'), out = [];
+  const stop = el.closest('.scroll, .rail, .app'), out = []; // .app: the ⌘F field sits above the scroll box, and the sidebar beside it must not move
   for (let n = el; n && n !== stop && n !== document.body; n = n.parentElement) for (let s = n.nextElementSibling; s; s = s.nextElementSibling) out.push(s);
   return out;
 }
@@ -108,9 +108,12 @@ function curtain(els, opening, done) {
   const flip = (frames) => frames.map((f) => ({ ...f, offset: 1 - f.offset })).reverse();
   const anims = els.map((el, i) => {
     // each piece of the region opens while the edge crosses it: one keyframe where the edge reaches its top, one where
-    // it passes its bottom, on the same eased progress the rows below move on
+    // it passes its bottom, on the same eased progress the rows below move on. One piece (a node's children) is
+    // clipped to the edge; many (a section's rows) fade in as it reaches each, since a clip repaints every row it
+    // cuts on every frame and a fade does not repaint at all — that was the stutter of a long section.
     const at = Math.min(1, (rects[i].top - top) / d), end = Math.min(1, (rects[i].bottom - top) / d), hi = rects[i].height;
-    const frames = [{ offset: 0, clipPath: clip(hi) }, ...(at > 0 ? [{ offset: at, clipPath: clip(hi) }] : []), ...(end < 1 ? [{ offset: end, clipPath: clip(0) }] : []), { offset: 1, clipPath: clip(0) }];
+    const shut = els.length > 1 ? { opacity: 0 } : { clipPath: clip(hi) }, shown = els.length > 1 ? { opacity: 1 } : { clipPath: clip(0) };
+    const frames = [{ offset: 0, ...shut }, ...(at > 0 ? [{ offset: at, ...shut }] : []), ...(end < 1 ? [{ offset: end, ...shown }] : []), { offset: 1, ...shown }];
     return el.animate(opening ? frames : flip(frames), timing);
   });
   const slid = [{ transform: 'translateY(' + -d + 'px)' }, { transform: 'none' }];
@@ -165,9 +168,28 @@ function foldSection(head, toggle, find) {
   glideUntil = 0;
   const svg = head.querySelector('svg'), from = svg && motionOK() ? getComputedStyle(svg).transform : undefined;
   const opening = head.getAttribute('aria-expanded') === 'false';
+  // The redraw that folds or unfolds is quiet: its rows are not arriving in the view or leaving it, and playing that
+  // on top of the curtain (the green grow, the red shrink) is what made a section stutter (renderer/render.js animateRows).
+  const quietly = () => { rowsQuiet = true; try { toggle(); } finally { rowsQuiet = false; } };
   const land = () => { const again = find(); turnFrom(again && again.querySelector('svg'), from); if (opening && again) curtain(sectionRows(again), true); };
-  if (opening) { toggle(); return land(); }
-  curtain(sectionRows(head), false, () => { toggle(); land(); });
+  if (opening) { quietly(); return land(); }
+  curtain(sectionRows(head), false, () => { quietly(); land(); });
+}
+let rowsQuiet = false;
+// Something that comes and goes in the page's flow (the ⌘F field): it opens and closes as a curtain, so what is below
+// slides instead of jumping by its height. Only for a hand; a page drawn with it already open simply has it.
+function showHide(el, show) {
+  if (show) {
+    const was = el.hidden && !el.dataset.closing;
+    delete el.dataset.closing;
+    el.hidden = false;
+    if (was && acted()) curtain([el], true);
+    return;
+  }
+  if (el.hidden || el.dataset.closing) return;
+  if (!motionOK() || !acted()) { el.hidden = true; return; }
+  el.dataset.closing = '1';
+  curtain([el], false, () => { if (el.dataset.closing) { delete el.dataset.closing; el.hidden = true; } });
 }
 // Flash for a zoomed page's row, which a render builds afresh: it leaves the way a view's row does (styles.css
 // .node.leaving), tinted green for a yes and red for a no, and done takes it off the page once it has gone.

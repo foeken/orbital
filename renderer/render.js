@@ -137,7 +137,8 @@ function animateRows(before) {
   // Nothing on screen before this paint is the view appearing, not every row arriving at once: a view whose rows have
   // not loaded yet paints empty first (loadView resolves after the render that asked for it), and that empty paint
   // must not be mistaken for "these rows were already here".
-  if (animView !== view || !before.size) { animView = view; return; }
+  // A section folding or unfolding redraws quietly too (renderer/motion.js foldSection): its own move shows it.
+  if (animView !== view || !before.size || rowsQuiet) { animView = view; return; }
   const rows = [...outline.children].filter((el) => el.classList.contains('node'));
   const keys = new Set(rows.map((el) => el.dataset.key));
   const old = [...before.keys()];
@@ -424,7 +425,7 @@ function renderOutline() {
   // A saved search is a query you can edit, so it gets the pills too — every other zoomed page is content, not a query.
   const showPills = authed && pillsApply() && (!parent || isSearchDoc(parent.node) || isTypeDoc(parent.node));
   renderPills(showPills);
-  filterRow.hidden = (!!parent && !isSearchDoc(parent.node) && !isTypeDoc(parent.node)) || !(filterShown || filterEl.value);
+  showHide(filterRow, !((!!parent && !isSearchDoc(parent.node) && !isTypeDoc(parent.node)) || !(filterShown || filterEl.value))); // it opens and closes in place (renderer/motion.js)
   filterRow.classList.toggle('empty', !filterEl.value);
   // a type page asks for 1,000 rows (main/related.js searchPreview), so a full answer is one that may have been cut
   const cut = parent ? onTypePage() && (kids.get(zoom.docId) || []).length >= 1000 : truncated.has(view);

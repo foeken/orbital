@@ -301,7 +301,7 @@ function paletteRows(q, typed = q) {
   // offer it, or the key falls through to the browser exactly as it did before.
   // The field is shown here rather than left to the render: a render is deferred while the caret is in a row or a
   // selection is frozen, and focusing a still-hidden input does nothing — which is why ⌘F used to need a click first.
-  if (!zoom || onSearchPage() || onTypePage()) rows.push({ id: 'filter', group: 'View options', icon: 'filter', label: 'Filter rows by text', run: () => { filterShown = true; filterRow.hidden = false; render(); filterEl.focus(); } });
+  if (!zoom || onSearchPage() || onTypePage()) rows.push({ id: 'filter', group: 'View options', icon: 'filter', label: 'Filter rows by text', run: () => { filterShown = true; showHide(filterRow, true); render(); filterEl.focus(); } });
   // The app's own rows, in four groups: Actions (getting in, making and finding things, undoing, syncing), Navigate
   // (moving between places), Window (windows, panes, the sidebar) and Settings (how it looks, what it hides, accounts).
   if (signedOut) rows.push({ id: 'login', group: 'Actions', icon: 'tana', label: 'Log in to Tana', run: () => tana.login().catch(showError) });
