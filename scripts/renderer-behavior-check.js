@@ -1086,6 +1086,7 @@ async function runStalePaletteInvalidationCheck() {
     const TIMELINE_PAGE = 'orbital:timeline';
     let zoom = { docId: keptId };
     const agentStates = new Map(), agentTaskHosts = new Map(), loadAgentStates = () => {};
+    const listPage = () => false; // a document is zoomed here, never a list page
     const taskMetaById = new Map(), kids = new Map(), extra = new Map(), fresh = new Map();
     const loadRoots = async () => {};
     const reload = async () => {};
@@ -7097,6 +7098,10 @@ async function runLiveUpdateBurstCheck() {
     let listener;
     const TIMELINE_PAGE = 'orbital:timeline';
     let zoom = { docId: TIMELINE_PAGE };
+    const SEARCH_ID = 'tana:search:', isTypeId = (id) => String(id).startsWith('tana:type:');
+    ${sourceLine('const onSearchPage =')}
+    ${sourceLine('const onTypePage =')}
+    ${sourceLine('const listPage =')}
     const taskMetaById = new Map(), taskMetaFailed = new Map(), relatedBy = new Map(), kids = new Map();
     const outlinesOf = (docId) => [...kids.keys()].filter((id) => id === docId || id.startsWith(docId + '|'));
     const patchDoc = async (id) => { patched.push(id); }, reload = async (id) => { reloaded.push(id); }, loadPins = () => {}, refreshRelated = () => {};
@@ -7148,6 +7153,17 @@ async function runLiveUpdateBurstCheck() {
   assert.equal(api.statusReads(), 1, 'a linked node\u2019s metadata change reads its task\u2019s status, and nothing else does');
   await new Promise(setImmediate); api.flush(); api.drawn(); api.reloaded(); api.patched();
 
+  // A saved search or a type's page is a list of its own the same way: a hidden title or the MCP switch changes its rows
+  for (const page of ['tana:search:01j0search0000000000000000', 'tana:type:01j0type000000000000000000']) {
+    api.page(page); api.change(null);
+    await new Promise(setImmediate);
+    assert.deepEqual(plain(api.reloaded()), [page], 'a global change reloads an open ' + page.split(':')[1] + ' page, whose rows loadRoots does not reach');
+    api.flush(); api.drawn();
+  }
+  api.page('tana:text:01j0note000000000000000000'); api.change(null);
+  await new Promise(setImmediate);
+  assert.deepEqual(plain(api.reloaded()), [], 'a document page is not a list: its outline is left to its own changes');
+  api.flush(); api.drawn();
   api.page('library'); api.change(null);
   await new Promise(setImmediate);
   assert.deepEqual(plain(api.reloaded()), [], 'global changes leave the timeline query alone while another page is open');
