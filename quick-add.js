@@ -24,7 +24,8 @@ function qicon(name) {
 // same contract as the outliner (renderer/theme.js): the preference travels with the rest of them, read from the
 // bridge's synchronous snapshot, and dark is a data attribute
 function qtheme() {
-  const pref = (qapi && qapi.prefs && qapi.prefs.theme) || null;
+  const prefs = qapi && (qapi.prefsNow ? qapi.prefsNow() : qapi.prefs); // read on every open: the panel is reused
+  const pref = (prefs && prefs.theme) || null;
   const dark = pref === 'dark' || (pref === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
   if (dark) document.documentElement.dataset.theme = 'dark';
   else delete document.documentElement.dataset.theme;
@@ -47,7 +48,16 @@ const BACK_ROW = { people: true, title: 'Assign to someone else…' };
 const HOSTS_ROW = { hosts: true, title: 'Run on…' }; // from the model list into the machines
 const MODELS_ROW = { models: true, title: 'Choose a model…' }; // and back again
 const qtext = (e) => String((e && e.message) || e || '');
-function qsetError(text) { qerror.textContent = text || ''; qerror.hidden = !text; }
+function qsetError(text) { qerror.textContent = text || ''; qerror.hidden = !text; if (text) qplay(qerror, 'shake'); }
+// The outliner's refusal shake (styles.css Motion) for this window's error line: one class played once, restartable,
+// and nothing at all where motion is not welcome.
+const qmoving = () => typeof matchMedia === 'function' && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+function qplay(el, name) {
+  if (!el || !el.classList || !el.classList.remove || !qmoving()) return;
+  el.classList.remove(name);
+  void el.offsetWidth;
+  el.classList.add(name);
+}
 // Demo mode (Cmd+K in the outliner, remembered in this app's localStorage): the panel reads nothing from Tana to show
 // and writes nothing to it. Asked at every open and every submit, since the outliner can switch it while this panel lives.
 const QDEMO = 'Demo mode is on: nothing is saved to Tana';
@@ -255,4 +265,4 @@ qtitle.focus();
 qloadContext();
 // Every press of the shortcut re-opens on the same window: focus the title again and re-read the meeting, keeping
 // whatever was typed before.
-if (qapi && qapi.onQuickOpen) qapi.onQuickOpen(() => { qsetError(''); qtitle.focus(); qloadContext(); });
+if (qapi && qapi.onQuickOpen) qapi.onQuickOpen(() => { qtheme(); qsetError(''); qtitle.focus(); qloadContext(); });

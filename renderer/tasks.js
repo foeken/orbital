@@ -292,6 +292,7 @@ function statusRows(q, ctx = palTaskCtx) {
   return STATES.filter(([, label]) => fuzzyMatch(label, q)).map(([state, label]) => ({
     group: 'Status', icon: 'status', label, hint: state === current ? '✓' : '', keepOpen: true,
     run: () => applyTaskChange(ctx, async () => {
+      armGlide(); // a row whose group is its status slides to its new section when the hold is let go
       for (const doc of ctx.docs) holdRow(doc); // stays put, like a clicked box (renderer/views.js)
       const changed = await (ctx.multi ? tana.setStateMany(ctx.docs.map((doc) => doc.id), state) : tana.setState(ctx.docs[0].id, state));
       // shown now rather than when the live update lands: the caret is back in this row, where a plain render waits

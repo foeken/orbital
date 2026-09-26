@@ -32,10 +32,10 @@
 </div>
 <main class="scroll">
   <div id="loginBox" class="login" hidden><button id="login">Log in to Tana</button></div>
-  <div id="skeleton" class="skeleton" aria-hidden="true"><div></div><div></div><div></div><div></div><div></div><div></div></div>
   <div id="outline" class="outline"></div>
   <div id="filtered" class="filtered"></div>
 </main>
+<div id="skeleton" class="skeleton" aria-hidden="true"><canvas></canvas></div>
 </div>
 <div id="railGrip" class="railgrip" title="Drag to resize" hidden></div>
 <div id="splitGrip" class="splitgrip" title="Drag to resize, double-click to even out" hidden></div>
@@ -67,6 +67,8 @@
 <!-- one classic script per concern, in dependency order: every file shares the same global scope -->
 <script src="renderer/prefs.js"></script>
 <script src="renderer/theme.js"></script>
+<script src="renderer/motion.js"></script>
+<script src="renderer/loading.js"></script>
 <script src="renderer/mock.js"></script>
 <script src="renderer/segments.js"></script>
 <script src="renderer/state.js"></script>

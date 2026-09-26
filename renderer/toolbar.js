@@ -33,6 +33,7 @@ async function linkTo(ctx, mention) {
   await run(async () => { if (isDoc) await tana.setTitle(item.docId, item.node.text); else { await tana.setText(item.docId, item.node.id, next); await reload(item.docId); } });
   render(true); // the caret is back in the row by now, and a plain render would wait for it to leave
   placeCaret(item.key, start + mention.label.length);
+  popMention(item.key, mention.uri); // the chip just made lights up
 }
 function createAndLink(ctx, title = ctx.text) {
   tana.createDocument(title).then((n) => { extra.set(n.id, { ...n, text: n.title || '', hasChildren: true }); return linkTo(ctx, { label: n.title, uri: n.id, ...(n.icon ? { icon: n.icon } : {}) }); }, showError);
@@ -68,6 +69,7 @@ function renderToolbar() {
   const item = toolItem();
   if (!item) return hideToolbar();
   const segs = toolSegs();
+  const oldMenu = toolbarEl.querySelector('.menu:not(.out)');
   toolbarEl.replaceChildren();
   const style = document.createElement('button');
   style.type = 'button'; style.className = 'tbtn style' + (toolMenu ? ' open' : ''); style.dataset.id = 'style';
@@ -76,6 +78,7 @@ function renderToolbar() {
   style.onclick = toggleStyleMenu;
   toolbarEl.append(style);
   if (toolMenu) style.append(styleMenuEl(item));
+  menuMotion(oldMenu, toolMenu ? style.querySelector('.menu') : null, style);
   for (const [mark, label, cls, title] of TOOL_MARKS) {
     const b = document.createElement('button');
     b.type = 'button'; b.dataset.id = mark; b.title = title;
@@ -123,6 +126,7 @@ function placeToolbar() {
 const blockedType = (item, type) => type === 'paragraph' && nestedRow(item);
 function styleMenuEl(item) {
   const el = document.createElement('div'); el.className = 'menu';
+  el.dataset.for = 'style';
   BLOCK_TYPES.forEach(([type, label], i) => {
     const row = document.createElement('div'); row.className = 'mrow' + (i === toolMenu.index ? ' active' : '');
     const icon = document.createElement('span'); icon.className = 'micon'; icon.innerHTML = glyphSvg(type);

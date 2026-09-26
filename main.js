@@ -148,17 +148,22 @@ function closeFront(win) {
 const QUICK_PANEL = { width: 560, height: 320 };
 function createQuickPanel() {
   const win = new BrowserWindow({
-    ...QUICK_PANEL, show: false, frame: false, transparent: true, resizable: false, minimizable: false,
+    // A real panel: the system's material behind the form, and its own rounded corners and shadow around it
+    ...QUICK_PANEL, show: false, frame: false, vibrancy: 'popover', visualEffectState: 'active', backgroundColor: '#00000000', roundedCorners: true, resizable: false, minimizable: false,
     maximizable: false, fullscreenable: false, skipTaskbar: true, alwaysOnTop: true, title: 'Quick add',
     webPreferences: { preload: path.join(__dirname, 'preload.js') },
   });
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true }); // summoned over whatever the user is in
   win.on('blur', () => { if (!win.isDestroyed()) win.hide(); }); // clicking away dismisses it, like the shortcut does
+  win.on('hide', () => { if (nativeTheme) nativeTheme.themeSource = 'system'; }); // only while it shows: the outliner's Follow system reads it
   win.on('closed', () => { quick.panelState.win = null; });
   win.loadFile(path.join(__dirname, 'quick-add.html'));
   return win;
 }
-const toggleQuickPanel = () => quick.togglePanel(quick.panelState, createQuickPanel);
+// The panel's material is native, and native material follows the app's appearance, not the page: so the app takes
+// Orbital's own theme, or the panel's text would sit on the wrong material whenever it differs from macOS's.
+const themeSource = () => { const t = settings.prefs().theme; return t === 'dark' || t === 'light' ? t : 'system'; };
+const toggleQuickPanel = () => { if (nativeTheme) nativeTheme.themeSource = themeSource(); quick.togglePanel(quick.panelState, createQuickPanel); };
 const hideQuickPanel = () => { const win = quick.panelState.win; if (win && !win.isDestroyed()) win.hide(); };
 
 function createMenu() {

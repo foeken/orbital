@@ -15,10 +15,11 @@ function applyTheme(next) {
   if (pal && !pal.hidden) renderPalette();
 }
 applyTheme(theme);
-function setTheme(next) { themePref = next === 'dark' ? 'dark' : 'light'; setPref('theme', themePref); applyTheme(themePref); } // an explicit theme stops following the system
+// A theme chosen here crossfades the window (renderer/motion.js crossfade); one following macOS, or set at load, is simply applied.
+function setTheme(next) { themePref = next === 'dark' ? 'dark' : 'light'; setPref('theme', themePref); crossfade(() => applyTheme(themePref)); } // an explicit theme stops following the system
 function followSystem(on) {
   themePref = on ? 'system' : theme;
   setPref('theme', themePref);
-  if (on && tana.systemTheme) tana.systemTheme().then((t) => applyTheme(themePref === 'system' ? t : theme), showError);
-  else applyTheme(theme);
+  if (on && tana.systemTheme) tana.systemTheme().then((t) => crossfade(() => applyTheme(themePref === 'system' ? t : theme)), showError);
+  else crossfade(() => applyTheme(theme));
 }

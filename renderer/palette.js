@@ -303,7 +303,7 @@ function paletteRows(q, typed = q) {
   // offer it, or the key falls through to the browser exactly as it did before.
   // The field is shown here rather than left to the render: a render is deferred while the caret is in a row or a
   // selection is frozen, and focusing a still-hidden input does nothing — which is why ⌘F used to need a click first.
-  if (!zoom || onSearchPage() || onTypePage()) rows.push({ id: 'filter', group: 'View options', icon: 'filter', label: 'Filter rows by text', run: () => { filterShown = true; filterRow.hidden = false; render(); filterEl.focus(); } });
+  if (!zoom || onSearchPage() || onTypePage()) rows.push({ id: 'filter', group: 'View options', icon: 'filter', label: 'Filter rows by text', run: () => { filterShown = true; showHide(filterRow, true); render(); filterEl.focus(); } });
   // The app's own rows, in four groups: Actions (getting in, making and finding things, undoing, syncing), Navigate
   // (moving between places), Window (windows, panes, the sidebar) and Settings (how it looks, what it hides, accounts).
   if (signedOut) rows.push({ id: 'login', group: 'Actions', icon: 'tana', label: 'Log in to Tana', run: () => tana.login().catch(showError) });
@@ -342,6 +342,7 @@ function paletteRows(q, typed = q) {
   rows.push({ id: 'textReset', group: 'Settings', icon: 'textReset', label: 'Reset text size', kbd: '⌘0', run: () => setZoom(BASE_ZOOM) });
   const dark = typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark';
   rows.push({ id: 'theme', group: 'Settings', icon: 'darkLight', label: 'Toggle ' + (dark ? 'light' : 'dark') + ' mode', run: () => setTheme(dark ? 'light' : 'dark') });
+  rows.push({ id: 'previewLoading', group: 'Settings', icon: 'planet', label: 'Preview loading animation', hint: 'Esc hides it', run: () => previewLoading(true) });
   if (tana.systemTheme) rows.push({ id: 'systemTheme', group: 'Settings', icon: 'darkLight', label: 'Toggle system dark/light mode', hint: themePref === 'system' ? 'Following macOS' : '', run: () => followSystem(themePref !== 'system') });
   // the list of titles hidden from every view and from search, edited in the palette itself
   if (tana.filters) rows.push({ id: 'hidden', group: 'Settings', icon: 'hiddenItems', label: 'Edit hidden items', keepOpen: true, run: openHiddenPalette });
@@ -1097,6 +1098,7 @@ function openTodayTaskSearch(node) {
 }
 function renderPalette() {
   const q = palInput.value.trim();
+  swapPanel(palList, palMode); // a mode changed while open slides its list across
   if (palMode === 'cmd') palRows = paletteRows(q.toLowerCase(), q);
   else if (palMode === 'create') palRows = creationRows(q.toLowerCase());
   else if (palMode === 'slash') palRows = slashRows(q.toLowerCase());
@@ -1198,6 +1200,7 @@ function anchorPalette(rect) {
   if (up) card.style.bottom = (innerHeight - rect.top + 6) + 'px'; else card.style.top = (rect.bottom + 6) + 'px';
 }
 function closePalette() {
+  swapPanel(null, null);
   palette.hidden = true; clearTimeout(palTimer); palTimer = null; cancelLink(); pinCtx = null; pillCtx = null; fieldLinkCtx = null; promptEditor(false); returnFocus();
   const field = fieldReturn; fieldReturn = null;
   if (field && !focused()) focusField(field); // a field that holds choices is no row: returnFocus cannot find it

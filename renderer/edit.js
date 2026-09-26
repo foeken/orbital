@@ -101,6 +101,7 @@ async function splitNode(item, el, off) {
 
 async function shiftNode(item, el, op, arg) {
   if (!canEditStructure(item)) return;
+  armGlide(); // the row slides to its new place, sideways for an indent, and its neighbours make room
   flush(item.key);
   const off = caretOffset(el);
   if (op === 'indent') {
@@ -200,12 +201,13 @@ async function history(op) {
     if (undone) { placeCaret(undone.from, undone.at); lastEnter = null; }
     else caretNear(keys, keys.indexOf(saved.key), saved.offset);
   }
+  flashAt(focused()?.key); // the row the undo landed on says so
 }
 
 function setOpen(item, value) {
   if (value && !canExpand(item)) return;
   if (value && !hasKids(item) && item.node.kind !== 'document' && item.node.done == null && !['paragraph', 'bullet', 'numbered'].includes(item.node.block)) return;
-  open.set(item.key, value); render(true);
+  foldRow(item.key, value, () => { open.set(item.key, value); render(true); }); // children close up before, open out after (renderer/motion.js)
 }
 // The box and ⌘↩ accept an Inbox task first (In Progress) and complete it on the next go; direct is the Cmd+K
 // Complete/Reopen row, which does what its label says.
@@ -238,8 +240,7 @@ function zoomTo(item) {
   const same = zoom && zoom.docId === item.docId;
   const via = same ? zoom.via : top.parent && zoom ? [...(zoom.via || []), zoom] : undefined; // a document inside a zoomed space: the space stays in the crumb
   if (via && !docOf(item.docId)) extra.set(item.docId, top.node);
-  zoom = { docId: item.docId, nodeId: item.node.kind === 'document' ? null : item.node.id, from: same ? zoom.from : undefined, via };
-  render(true);
+  turnPage('in', () => { zoom = { docId: item.docId, nodeId: item.node.kind === 'document' ? null : item.node.id, from: same ? zoom.from : undefined, via }; render(true); }); // the page rises into place (renderer/motion.js)
   followSummary(item.docId);
 }
 function openReference(node) {
@@ -264,7 +265,7 @@ function toggleReference(node) {
   render(true);
   run(() => tana.setDone(target.id, done));
 }
-function setView(id) { dropDrafts(); releaseHeld(); view = id; localStorage.setItem('view' + SIDE, id); zoom = null; sel = null; menu = null; loadView(id); render(true); }
+function setView(id) { turnPage('swap', () => { dropDrafts(); releaseHeld(); view = id; localStorage.setItem('view' + SIDE, id); zoom = null; sel = null; menu = null; loadView(id); render(true); }); }
 // zoom into a document, switching to its view first when it belongs to another one; from = breadcrumb root instead of the view
 function openDoc(docId, from) {
   // Every zoom of a document comes through here, whichever route asked for it — a row, a pin, the rail, a crumb, a
@@ -276,8 +277,7 @@ function openDoc(docId, from) {
   if (s && s.id !== view) { releaseHeld(); view = s.id; localStorage.setItem('view' + SIDE, view); }
   const doc = allDocs().find((d) => d.id === docId) || extra.get(docId);
   if (doc) recordRecent(doc);
-  zoom = { docId, nodeId: null, from };
-  render(true);
+  turnPage('in', () => { zoom = { docId, nodeId: null, from }; render(true); });
   followSummary(docId);
 }
 // An event has no content of its own, so a meeting opens at its write-up. Every zoom passes through here, so the
@@ -347,14 +347,18 @@ function navigate(dir) {
   // the whole point of choosing one — a note opened from a search or a link used to leave you in the Library.
   if (!place) return dir < 0 && !atHome() ? goHome() : undefined;
   to.push(navHere);
+  const left = dir < 0 && navHere && navHere.zoom ? navHere.zoom.docId : null; // Back lands on the page that listed it: that row lights up
   navigating = true;
   try {
-    flushAll(); dropDrafts();
-    if (place.view !== view) { view = place.view; localStorage.setItem('view' + SIDE, view); }
-    zoom = place.zoom && { ...place.zoom };
-    caretOnOpen = !!zoom;
-    render(true);
+    turnPage(dir < 0 ? 'back' : 'fwd', () => {
+      flushAll(); dropDrafts();
+      if (place.view !== view) { view = place.view; localStorage.setItem('view' + SIDE, view); }
+      zoom = place.zoom && { ...place.zoom };
+      caretOnOpen = !!zoom;
+      render(true);
+    });
   } finally { navigating = false; }
+  if (left) flash(rowFor(left));
 }
 // The same two moves as a pair of buttons in the header, beside the sidebar toggle: the mouse route to Cmd+[ and
 // Cmd+]. They run navigate, so there is one history and one set of rules; every render draws their state.

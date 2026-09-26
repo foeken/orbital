@@ -131,6 +131,7 @@ const shownDocs = () => { const docs = (onSearchPage() || onTypePage() ? kids.ge
 // not be deferred because a caret happens to sit in an editable title — which on a saved search page it often does,
 // since the title is renameable and there is no draft row to take the focus.
 function setGroupBy(id) {
+  armGlide(); // rows keep their places across the regrouping where they can, and slide to the new ones
   groupPref[pillKey()] = id; held = null; persistPref('groupBy', groupPref);
   // the same write the Assigned to pill makes: a view persists it and re-asks, a saved search stages it for Save
   if (needsAnyone(pillKey(), filters.get(pillKey()))) (onSearchPage() ? setSearchF : setViewF)({ assignee: 'anyone' });
@@ -244,7 +245,7 @@ const NEWEST_FIRST = new Set(['updated', 'created']); // times read newest first
 // Every page, saved searches included, keeps the order its query returned until the user says otherwise; Library's
 // starting arrangement above (newest change first) is the one exception.
 const sortBy = () => { const k = pillKey(), s = sortPref[k] ?? arranged(k, 'sort'); return SORTS.some(([id]) => id === s) ? s : 'default'; };
-function setSortBy(id) { sortPref[pillKey()] = id; held = null; persistPref('sortBy', sortPref); render(true); }
+function setSortBy(id) { armGlide(); sortPref[pillKey()] = id; held = null; persistPref('sortBy', sortPref); render(true); }
 function sortRows(list) {
   const id = sortBy(), key = SORT_KEY[id], desc = NEWEST_FIRST.has(id);
   const sorted = !key ? list : [...list].sort((a, b) => { // no key: Default, the order the view produced
@@ -413,7 +414,8 @@ function groupHeadEl(g) {
   el.setAttribute('aria-expanded', g.collapsed ? 'false' : 'true');
   el.title = g.collapsed ? 'Expand' : 'Collapse'; // the words the row chevrons already use
   el.onmousedown = (e) => e.preventDefault();
-  el.onclick = () => (g.toggle ? g.toggle() : toggleGroup(g.id)); // a page with sections of its own folds them itself (renderer/proposals.js)
+  // a page with sections of its own folds them itself (renderer/proposals.js); the rows close up or open out either way
+  el.onclick = () => foldSection(el, () => (g.toggle ? g.toggle() : toggleGroup(g.id)), () => [...outline.querySelectorAll('.ghead')].find((h) => h.dataset.group === g.id));
   return el;
 }
 // The tail of a trimmed section, one click away. A button like the heading rather than a row: no key, no bullet, and

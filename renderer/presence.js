@@ -67,9 +67,15 @@ function rangeRect(node, i) {
   const box = r.getClientRects()[0] || r.getBoundingClientRect();
   return box && (box.height || box.top) ? box : null;
 }
+// Where each caret was last drawn, against the outline: a caret that moved glides there, one that has just arrived
+// pops in (renderer/motion.js). Kept here rather than read off the old marks, since a render rebuilds the rows they sat on.
+let caretsAt = new Map();
 function paintPresence() {
   for (const el of document.querySelectorAll('.pcaret')) el.remove();
+  const was = caretsAt;
+  caretsAt = new Map();
   if (!presencePeers.length) return;
+  const origin = outline.getBoundingClientRect();
   for (const line of eachRow('.node > .line')) {
     const item = items.get(line.parentElement.dataset.key);
     if (!item || item.docId !== presenceDoc) continue;
@@ -92,6 +98,11 @@ function paintPresence() {
       mark.style.left = (box.left - base.left) + 'px'; mark.style.top = (box.top - base.top) + 'px'; mark.style.height = box.height + 'px';
       // the name sits on top of the caret; on a row too near the top of the scroll area it would be clipped, so below
       if (box.top - outline.parentElement.getBoundingClientRect().top < 22) mark.classList.add('below');
+      // per connection: one person in two tabs has two carets, each gliding from its own last place
+      const who = (p.me ? 'me:' : '') + (p.userHash || p.name) + '|' + (p.peer || ''), now = mark.getBoundingClientRect(), x = now.left - origin.left, y = now.top - origin.top, old = was.get(who);
+      caretsAt.set(who, [x, y]);
+      if (!old) playOnce(mark, 'pop');
+      else if (Math.abs(old[0] - x) > 1 || Math.abs(old[1] - y) > 1) play(mark, [{ transform: 'translate(' + (old[0] - x) + 'px, ' + (old[1] - y) + 'px)' }, { transform: 'none' }], { duration: MOTION.quick, easing: MOTION.move });
     }
   }
 }

@@ -128,6 +128,7 @@ function sameSpot(src, plan) {
 async function applyDrop(key, plan) {
   const src = items.get(key);
   if (!src || (!plan.ref && sameSpot(src, plan))) return; // a reference is never a no-op: it is a new row either way
+  armGlide(); // the rows around the drop make room and close up rather than jumping
   await run(async () => {
     if (plan.ref) await tana.insertMention(plan.docId, plan.ref.uri, plan.ref.label, plan.parentId, plan.afterId);
     else {
@@ -180,6 +181,7 @@ const GROUP_WRITES = {
   watch: (id, on) => tana.setNotify(id, on),
 };
 function dropOnGroup(task, target) {
+  armGlide();
   run(async () => {
     const [meta, pins] = await Promise.all([tana.taskMeta(task.id), tana.pinState(task.id)]);
     const writes = groupDropWrites(target, { ...task, assignees: meta.assignees, watched: meta.watched, dates: pins?.dates || [], agent: codexIds.has(task.id) }, me()?.id, localDate());

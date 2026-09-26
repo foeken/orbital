@@ -432,7 +432,8 @@ assert.match(source, /if \(!zoom \|\| onSearchPage\(\) \|\| onTypePage\(\)\) row
 assert.match(source, /if \(row\) \{ if \(!row\.disabled\) row\.run\(\); return true; \}/, 'a hotkey for a disabled row is a no-op the app still owns');
 // and the palette's own arrows land on such a row, which is the only way Cmd+Shift+K can record a shortcut for it
 assert.match(source, /if \(!rows\[next\]\.disabled \|\| rows\[next\]\.id\) return next;/, 'Up/Down reach a disabled row that has a stable id, so it can be given a key before it goes live');
-assert.match(source, /filterRow\.hidden = \(!!parent && !isSearchDoc\(parent\.node\) && !isTypeDoc\(parent\.node\)\)/, 'the filter row stays on screen on a saved search page and a type page');
+// (shown and hidden through showHide, which opens and closes it in place: renderer/motion.js)
+assert.match(source, /(filterRow\.hidden = |showHide\(filterRow, !\()\(!!parent && !isSearchDoc\(parent\.node\) && !isTypeDoc\(parent\.node\)\)/, 'the filter row stays on screen on a saved search page and a type page');
 assert.match(source, /if \(isSearchDoc\(parent\.node\) \|\| isTypeDoc\(parent\.node\)\) \{/, 'the zoomed branch narrows a saved search and a type page the way a view narrows its rows');
 // the Library keeps the query it is showing as a saved search; main owns the filter→query translation
 assert.match(source, /if \(defs\.length && tana\.createSearch && !onSearchPage\(\) && !onTypePage\(\)\) box\.append\(saveSearchPill\(\)\)/, 'a view with pills offers to save its query as a search, and a saved search does not: it already is one');
@@ -462,8 +463,9 @@ const styleSheet = fs.readFileSync(require.resolve('../styles.css'), 'utf8');
 for (const rule of [/\.toolbar \{/, /\.tbtn \{/, /\.text code \{/, /\.text a\.link \{/, /\.node\.t-numbered \{/, /\.node\.t-code > \.line \.text \{/, /\.node\.t-quote > \.line \.text \{/, /\.text\.divider hr \{/, /\.clearfilters \{/, /#taskInfo \.chip:first-child \{ margin-left: 0; \}/]) {
   assert.match(styleSheet, rule, 'styles.css carries ' + rule.source);
 }
-// a closed palette must hide even while it still carries the @ dropdown class (#240): same weight, later rule wins
-assert.doesNotMatch(styleSheet, /\.palette\.anchored \{/, 'the @ dropdown layout must not outweigh .palette[hidden]');
+// a closed palette must hide even while it still carries the @ dropdown class (#240): same weight, later rule wins. The
+// dropdown's missing scrim may hold while it fades out (#185), but a display of its own would outweigh .palette[hidden].
+assert.doesNotMatch(styleSheet, /\.palette\.anchored \{[^}]*display/, 'the @ dropdown layout must not outweigh .palette[hidden]');
 // A type's colour is an OKLCH hue in Tana (Organization's 232 is #58aad2 = oklch(0.7 0.1 232)); as an HSL angle the
 // same number is 42° away and half as light. And it must be written into the rule: a custom property substitutes
 // its own var() where it is declared, so `--hue-color: oklch(… var(--hue))` on <html> — which has no --hue —
@@ -499,11 +501,15 @@ for (const [state, label] of [['pending', 'Agent pending'], ['working', 'Agent w
 // under reduced motion the rule is not even declared, which leaves the plain green tag.
 const sheen = styleSheet.match(/@media \(prefers-reduced-motion: no-preference\) \{ \.cbadge\.working::after \{[^\n]*\}/);
 assert.ok(sheen, 'the scan sweep is drawn on .cbadge::after, behind the reduced-motion gate');
-// and on working alone: every other state is still, whatever the colour says
+// and on working alone: every other state is still, whatever the colour says. A state that has just changed may mark
+// the moment once (styles.css .cbadge.done.shine, renderer/motion.js badgeMoved) — what it may not do is keep moving.
 for (const state of ['pending', 'waiting', 'done', 'broken']) {
-  assert.doesNotMatch(styleSheet, new RegExp('\\.cbadge\\.' + state + '[^\\n]*animation:'), state + ' does not animate');
+  assert.doesNotMatch(styleSheet, new RegExp('\\.cbadge\\.' + state + '[^\\n]*animation:[^\\n]*infinite'), state + ' does not keep animating');
 }
-assert.match(sheen[0], /animation: cbadge-sweep (2\.[5-9]|3(\.0)?)s/, 'it crosses the badge every two and a half to three seconds');
+// the sweep is paced by the Ambient rhythm (styles.css --dur-loop), twice over
+const loop = Number((styleSheet.match(/--dur-loop: (\d+)ms/) || [])[1]);
+assert.match(sheen[0], /animation: cbadge-sweep calc\(var\(--dur-loop\) \* 2\)/, 'the sweep keeps the ambient rhythm');
+assert.ok(loop * 2 >= 2500 && loop * 2 <= 3000, 'it crosses the badge every two and a half to three seconds');
 assert.match(styleSheet, /\.cbadge \{[^\n]*overflow: hidden/, 'and is clipped to the badge, so it reads as a sweep across it rather than a streak over the row');
 // Transform only: a sweep that moved the badge, resized it or faded the whole tag would be the thing this replaced.
 const sweep = styleSheet.match(/@keyframes cbadge-sweep \{[\s\S]*?\n/)[0];
@@ -521,16 +527,17 @@ assert.match(turn, /transform: rotate\(360deg\)/, 'and it is one full turn');
 // A header button that is offered on some pages and not others has to be able to disappear: .navbtn sets its own
 // display, which wins over the browser's rule for [hidden] and left Refresh and the fold button as blank slots.
 assert.match(styleSheet, /\.navbtn\[hidden\] \{ display: none; \}/, 'a withheld header button is gone rather than empty');
-// Clean up arrives with a pop and shrinks away again rather than appearing and disappearing between two frames,
-// and both are opt-in: under reduced motion neither rule is declared and pills.js hides it on the spot.
-const btnMotion = styleSheet.match(/@media \(prefers-reduced-motion: no-preference\) \{\n  \.navbtn\.in \{[^}]*\}\n  \.navbtn\.out \{[^}]*\}\n\}/);
-assert.ok(btnMotion, 'a header button that comes and goes pops in and shrinks away, only where motion is welcome');
-assert.match(btnMotion[0], /animation: btn-in [\d.]+s/, 'the arrival is one shot');
-assert.match(btnMotion[0], /animation: btn-out [\d.]+s[^;]*forwards/, 'and the departure holds where it ends, so nothing flashes back before it is hidden');
+// Clean up arrives with a pop and shrinks away again rather than appearing and disappearing between two frames: the
+// shared Pop keyframes, whose durations reduced motion sets to nought (styles.css :root), while pills.js hides it on the spot.
+const btnMotion = styleSheet.match(/\.navbtn\.in \{[^}]*\}\n\.navbtn\.out \{[^}]*\}/);
+assert.ok(btnMotion, 'a header button that comes and goes pops in and shrinks away');
+assert.match(btnMotion[0], /animation: pop-in var\(--dur-[a-z]+\)[^;]*backwards/, 'the arrival is one shot');
+assert.match(btnMotion[0], /animation: pop-out var\(--dur-[a-z]+\)[^;]*forwards/, 'and the departure holds where it ends, so nothing flashes back before it is hidden');
+assert.match(styleSheet, /@media \(prefers-reduced-motion: reduce\) \{ :root \{ --dur-quick: 0ms; --dur-base: 0ms;/, 'and where motion is not welcome every duration is nought');
 // Every render builds the pills again, so the arrival is marked on each pill rather than on the row: with it on the
 // row, a redraw landing while they were still coming in handed the mark to the new pills and played it all again.
 assert.match(source, /el\.style\.setProperty\('--i', i\); if \(arriving\) el\.classList\.add\('in'\)/, 'a pill knows it is arriving; the row does not');
-assert.match(styleSheet, /\.pills > \.pill\.in \{ animation: pill-in/, 'and that is what the entrance is drawn from');
+assert.match(styleSheet, /\.pills > \.pill\.in \{ animation: pop-in/, 'and that is what the entrance is drawn from');
 // Only the press moves the row: a view's pills are the view, and a page just arrived at — a reload, a link, the
 // Library — is drawn as it stands rather than assembling itself in front of you.
 assert.match(source, /const arriving = pillsPressed && \(box\.hidden \|\| box\.classList\.contains\('out'\)\)/, 'only a pressed fold animates the pills in');

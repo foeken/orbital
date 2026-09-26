@@ -3,6 +3,26 @@ html, body { margin: 0; height: 100%; }
 /* The Nucleo set built into the app draws its strokes at var(--nucleo-stroke-width, 1.5); the app's own glyphs are
    1, so one declaration puts 3500 icons on the same line weight as the rest instead of rewriting them. */
 html { --nucleo-stroke-width: 1; }
+/* Motion: every move the app makes is one of a few patterns, and each is written once — the durations and curves
+   here, the keyframes in the Motion section at the end, and the moves a script plays in renderer/motion.js, which
+   reads these same numbers. Press (a button answers the finger), Surface (what floats over the page arrives and
+   leaves), Reveal (what opens in place), Glide (what changes place), Flash (a tint saying "this changed"), Pop (a
+   small thing changing state), Page (going somewhere) and Ambient (only while something works). Exits take the
+   quicker duration and the ease-in curve; entrances the base one and ease-out. Reduced motion is one switch: every
+   duration goes to nought, so a CSS move ends where it starts (and still reports that it ended), and motion.js
+   plays nothing at all. Endless loops stay behind their own no-preference guard, since nought would spin them. */
+:root {
+  --dur-quick: 160ms; --dur-base: 240ms; --dur-slow: 420ms; --dur-flash: 800ms; --dur-loop: 1400ms; --stagger: 30ms;
+  --ease-out: cubic-bezier(.2, .8, .2, 1); --ease-in: cubic-bezier(.4, 0, 1, 1);
+  --ease-spring: cubic-bezier(.34, 1.56, .64, 1); --ease-move: cubic-bezier(.3, 0, .2, 1);
+  /* a damped spring (ratio .5), sampled: it overshoots a sixth of the way and settles, where a cubic curve can only
+     overshoot once and stop dead. What a pressed button springs back on (Press). */
+  --ease-settle: linear(0, 0.049, 0.172, 0.337, 0.517, 0.691, 0.844, 0.969, 1.061, 1.122, 1.154, 1.163, 1.154, 1.134, 1.107, 1.077, 1.049, 1.024, 1.004, 0.989, 0.98, 0.975, 0.973, 0.975, 0.978, 0.983, 0.988, 0.992, 0.996, 0.999, 1.002, 1.003, 1);
+  --flash-in: rgba(52, 168, 83, .16); --flash-out: rgba(217, 48, 37, .16); --flash-here: rgba(80, 143, 187, .2);
+  interpolate-size: allow-keywords; /* heights go to and from auto (a row arriving, a section closing) without measuring */
+}
+@media (prefers-reduced-motion: reduce) { :root { --dur-quick: 0ms; --dur-base: 0ms; --dur-slow: 0ms; --dur-flash: 0ms; --stagger: 0ms; --loader-wait: 0ms; } }
+[data-theme="dark"] { --flash-in: rgba(90, 190, 120, .2); --flash-out: rgba(240, 90, 80, .2); --flash-here: rgba(110, 168, 220, .22); }
 /* A type's colour is Tana's `appearance.hue`, and it is an **OKLCH** hue, not an HSL one: the Organization type's
    232 draws as #58aad2 in Tana, which is oklch(0.7 0.1 232) — read as an HSL angle the same number lands 42° away
    and half as light (a navy #2b336f instead of that blue). So every hued rule below is oklch(L C var(--hue)), with
@@ -15,7 +35,8 @@ body {
   font-size: 16px; color: #1a1a1a; background: #fff;
   display: flex; flex-direction: row; -webkit-font-smoothing: antialiased;
 }
-.app { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; }
+.app { position: relative; flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; } /* relative: the loading animation fills it */
+body { overflow: clip; } /* the window never scrolls itself; the sidebar sliding out past its edge must not make it */
 button { font: inherit; }
 .sensitive {
   color: transparent !important;
@@ -210,15 +231,11 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
    own display would otherwise win over the browser's rule for [hidden] and leave a blank, glyphless slot. */
 .navbtn[hidden] { display: none; }
 .navbtn svg { display: block; width: 18px; height: 18px; }
-/* Clean up comes and goes with the rows a status change keeps in place, so it arrives with a pop and shrinks away
-   again rather than appearing and disappearing between two frames. Only where motion is welcome; the classes are
-   put on by renderer/pills.js, which also waits for the leaving one before hiding the button. */
-@media (prefers-reduced-motion: no-preference) {
-  .navbtn.in { animation: btn-in .45s cubic-bezier(.2, .9, .3, 1.4) backwards; }
-  .navbtn.out { animation: btn-out .35s cubic-bezier(.4, 0, .7, .2) forwards; }
-}
-@keyframes btn-in { from { opacity: 0; transform: scale(.5); } }
-@keyframes btn-out { to { opacity: 0; transform: scale(.5); } }
+/* Clean up comes and goes with the rows a status change keeps in place, so it pops in and shrinks away again (Pop)
+   rather than appearing and disappearing between two frames. The classes are put on by renderer/pills.js, which also
+   waits for the leaving one before hiding the button. */
+.navbtn.in { animation: pop-in var(--dur-base) var(--ease-spring) backwards; }
+.navbtn.out { animation: pop-out var(--dur-quick) var(--ease-in) forwards; }
 
 /* filter pills (Tasks / Library): "Status <Inbox, In Progress>", "Assigned to <You>", "<Type>"; each opens a menu below it */
 .pills { position: relative; display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 32px 12px; }
@@ -229,7 +246,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 /* Refresh is a header button beside the fold one (renderer/pills.js), and it answers the press before the query
    does: one turn of the glyph, on transform alone, and only where motion is welcome — under reduced motion the
    class selects nothing and the icon stands still. */
-@media (prefers-reduced-motion: no-preference) { .navbtn svg.spin { animation: pill-spin .75s ease-in-out; transform-origin: 50% 50%; } }
+@media (prefers-reduced-motion: no-preference) { .navbtn svg.spin { animation: pill-spin calc(var(--dur-slow) * 2) var(--ease-move); transform-origin: 50% 50%; } }
 @keyframes pill-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 /* A saved search folds its pills away behind the header button (renderer/pills.js). They arrive and leave one after
    another, left to right -- --i is the pill's place in the row -- and the row's own height follows them, so what is
@@ -239,13 +256,11 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
    disappears -- which is what pills.js falls back to. */
 @media (prefers-reduced-motion: no-preference) {
   .pills { interpolate-size: allow-keywords; } /* declared on the row, not on .sliding: the height it opens from is read before that class lands */
-  .pills > .pill.in { animation: pill-in .3s cubic-bezier(.2, .9, .3, 1.35) backwards; animation-delay: calc(var(--i, 0) * 35ms); }
-  .pills.out > .pill { animation: pill-out .24s ease-in forwards; animation-delay: calc(var(--i, 0) * 25ms); }
-  .pills.sliding { overflow: hidden; transition: height .3s cubic-bezier(.3, 0, .2, 1), margin-bottom .3s cubic-bezier(.3, 0, .2, 1); }
+  .pills > .pill.in { animation: pop-in var(--dur-base) var(--ease-spring) backwards; animation-delay: calc(var(--i, 0) * var(--stagger)); }
+  .pills.out > .pill { animation: pop-out var(--dur-quick) var(--ease-in) forwards; animation-delay: calc(var(--i, 0) * var(--stagger)); }
+  .pills.sliding { overflow: hidden; transition: height var(--dur-base) var(--ease-move), margin-bottom var(--dur-base) var(--ease-move); }
   .pills.folding { height: 0; margin-bottom: 0; }
 }
-@keyframes pill-in { from { opacity: 0; transform: translateY(-10px) scale(.8); } }
-@keyframes pill-out { to { opacity: 0; transform: translateY(-10px) scale(.8); } }
 .pill:hover, .pill.open { background: #d9e8fa; }
 .pill:focus { outline: none; box-shadow: 0 0 0 2px #b7d2f5; }
 /* Sort and Group arrange the rows the view already has, so they sit beside the filters in grey rather than filter blue */
@@ -274,7 +289,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .menu .mhead { padding: 10px 12px 4px; font-size: 13px; font-weight: 600; color: #999; user-select: none; }
 .menu .mdiv { height: 1px; margin: 6px 4px; background: #e6e6e6; }
 
-.scroll { flex: 1; overflow-y: auto; padding: 4px 32px 40px 16px; } /* 4px at the top: the first row's focus ring (2px, 2px out) is drawn outside the row, and a scroll box clips at its edge */
+.scroll { position: relative; flex: 1; overflow-y: auto; padding: 4px 32px 40px 16px; } /* 4px at the top: the first row's focus ring (2px, 2px out) is drawn outside the row, and a scroll box clips at its edge; relative: the loading animation fills it */
 /* a real sidebar: full height beside the document, holding its relationships (edges, never editable) */
 .rail { flex: none; width: 272px; height: 100%; overflow-y: auto; user-select: none;
   /* padding-top lines the first section heading up with the breadcrumbs (heading text sits 10px into its button) */
@@ -287,7 +302,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .rail .rhead { display: flex; align-items: center; gap: 6px; width: 100%; border: 0; background: none; margin-top: 18px; padding: 10px 6px 4px; cursor: pointer;
   font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #999; }
 .rail .rhead:first-child { margin-top: 0; } /* the three groups read as separate blocks, the first one starts at the top */
-.rail .rhead svg { width: 12px; height: 12px; transition: transform 0.12s; }
+.rail .rhead svg { width: 12px; height: 12px; transition: transform var(--dur-quick) var(--ease-out); }
 .rail .rhead.closed svg { transform: rotate(-90deg); }
 .rail .rrow { display: flex; align-items: baseline; gap: 6px; padding: 4px 6px; border-radius: 4px; cursor: pointer; outline: none; }
 .rail .rrow:hover { background: #f4f6f8; }
@@ -297,7 +312,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .rail .rrow .ricon svg { display: block; width: 15px; height: 15px; }
 .rail .rrow .ricon.hue { color: oklch(0.7 0.1 var(--hue)); } /* a hued node keeps its colour in the sidebar too */
 /* collapsed, the chip shows its "#" alone; the label appears only while the row expands it */
-.rail .rrow .chip { flex: none; max-width: 1.63em; overflow: hidden; white-space: nowrap; transition: max-width 0.12s ease; }
+.rail .rrow .chip { flex: none; max-width: 1.63em; overflow: hidden; white-space: nowrap; transition: max-width var(--dur-quick) var(--ease-out); }
 .rail .rrow .chip-label { display: none; }
 .rail .rrow:hover .chip, .rail .rrow:focus .chip { max-width: 12em; }
 .rail .rrow:hover .chip-label, .rail .rrow:focus .chip-label { display: inline; }
@@ -322,7 +337,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .line { display: flex; align-items: flex-start; line-height: 24px; padding: 3px 0; }
 .chev, .bullet { flex: none; width: 18px; height: 24px; border: 0; background: none; padding: 0; cursor: pointer; position: relative; }
 /* chevron: 14px Outliner-style circle in a 24px gutter left of the icon slot (8px clear of the icon), shown only while hovering the line; down = expanded, right = collapsed */
-.chev { visibility: hidden; width: 24px; }
+.chev { visibility: hidden; width: 24px; transform-origin: 9px 12px; } /* the circle's centre: renderer/motion.js turns the whole chevron about it */
 .chev::before {
   content: ""; position: absolute; left: 2px; top: 5px; width: 14px; height: 14px;
   border-radius: 50%; border: 1px solid #d0d0d0; background: #fff;
@@ -380,12 +395,14 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
   content: ''; position: absolute; left: 0; top: 7px; width: 9px; height: 11px;
   background-image: radial-gradient(circle at center, #b9bbbe 1.1px, transparent 1.3px); background-size: 4.5px 4px;
 }
-.node.dragging > .line { opacity: .45; }
+.node.dragging > .line { opacity: .45; transition: opacity var(--dur-quick) var(--ease-out); }
 /* Where it will land, at the level it will land on: a line across the outline from that level's left edge, with a
    dot on the end the row will start at. Fixed, because it is drawn from what the rows measure on screen. */
-#dropline { position: fixed; z-index: 15; height: 2px; margin-top: -1px; border-radius: 2px; background: #5b9bd5; pointer-events: none; }
+/* It glides from gap to gap rather than jumping (Glide); shown again after a drop it starts where it is put. */
+#dropline { position: fixed; z-index: 15; height: 2px; margin-top: -1px; border-radius: 2px; background: #5b9bd5; pointer-events: none;
+  transition: left var(--dur-quick) var(--ease-move), top var(--dur-quick) var(--ease-move), width var(--dur-quick) var(--ease-move); }
 #dropline::before { content: ''; position: absolute; left: -5px; top: -3px; width: 8px; height: 8px; border-radius: 50%; background: inherit; }
-.drop-into { border-radius: 6px; box-shadow: 0 0 0 2px #5b9bd5; } /* the group a task dropped here joins (renderer/drag.js groupAt) */
+.drop-into { border-radius: 6px; box-shadow: 0 0 0 2px #5b9bd5; animation: ring-in var(--dur-base) var(--ease-spring); } /* the group a task dropped here joins (renderer/drag.js groupAt) */
 .bullet.icon::before { display: none; }
 .bullet.still { cursor: default; } /* a member's or a type's glyph: nothing to zoom into */
 .bullet.still.icon:hover svg { color: #8a8a8a; }
@@ -500,6 +517,11 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .text.image img { display: block; max-width: 100%; max-height: 360px; height: auto; border-radius: 6px; }
 .text.image.loading img { visibility: hidden; }
 .text.image.loading { min-height: 120px; max-height: 360px; background: #f1f1f1; border-radius: 6px; width: min(100%, 360px); }
+/* a picture on its way, and a file on its way up: the same shimmer and breath the loading skeleton has (Ambient) */
+@media (prefers-reduced-motion: no-preference) {
+  .text.image.loading:not(.demo) { background-image: linear-gradient(90deg, #f1f1f1 0%, #fafafa 50%, #f1f1f1 100%); background-size: 200% 100%; animation: shimmer var(--dur-loop) ease-in-out infinite; }
+  .text.upload { animation: breathe var(--dur-loop) ease-in-out infinite; }
+}
 .text.image:focus img, .selected .text.image img { outline: 2px solid #b5d0ee; outline-offset: 2px; }
 .text.upload { display: inline-block; padding: 6px 10px; border-radius: 6px; background: #f1f1f1; color: #8a8a8a; cursor: default; } /* renderer/upload.js: a file on its way up */
 /* no caret shows beside a lone mention chip or in a read-only reference row, so the focus is drawn around them instead */
@@ -567,7 +589,11 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .node.t-quote > .line .text { display: block; border-left: 3px solid #d8d8d8; padding-left: 12px; color: #555; }
 /* divider: an atomic block, focusable like an image so the keyboard can still reach and delete it */
 /* a full view of an image, over everything: Space on the row or a click on it, and a click anywhere closes it */
-.lightbox { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; background: rgba(20, 22, 24, .72); cursor: zoom-out; outline: none; }
+/* The scrim fades in over the page and the picture grows out of its row (renderer/render.js openImage); closing plays it back. */
+.lightbox { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; background: rgba(20, 22, 24, .72); cursor: zoom-out; outline: none;
+  transition: opacity var(--dur-base) var(--ease-out); }
+@starting-style { .lightbox { opacity: 0; } }
+.lightbox.out { opacity: 0; transition-duration: var(--dur-quick); transition-timing-function: var(--ease-in); }
 .lightbox img { max-width: 92vw; max-height: 92vh; border-radius: 6px; box-shadow: 0 20px 60px rgba(0, 0, 0, .45); }
 .text.image img { cursor: zoom-in; }
 .text.divider { display: block; cursor: default; }
@@ -602,16 +628,14 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 #outline > .node:first-child, .children > .node:first-child { margin-top: 0; }
 .selected { background: #e8f1fb; } /* the whole node: a selected parent takes its children with it, so they show as selected too */
 .selected .line { border-radius: 0; }
-/* a row arriving in or dropping out of a view: green tint fading in, red tint fading out; a row you are still
-   editing only dims, and leaves for real once the caret does */
-.node.entering { animation: rowEnter .8s ease-out; }
-.node.leaving { animation: rowLeave .45s ease-in forwards; pointer-events: none; }
+/* A row arriving in or dropping out of a view (Flash): the room for it opens first and it fades in over a green tint;
+   one that left fades over a red tint and then the gap closes, so the rows below slide instead of jumping. A row you
+   are still editing only dims, and leaves for real once the caret does. --tint is the colour: a proposal approved
+   leaves green (renderer/motion.js dismissRow). Clipped top and bottom only, so a list marker left of the row stays. */
+.node { transition: background-color var(--dur-quick) var(--ease-out); } /* selecting a row tints it in, not on */
+.node.entering { --tint: var(--flash-in); overflow-y: clip; animation: row-in var(--dur-flash) var(--ease-out); }
+.node.leaving { --tint: var(--flash-out); overflow-y: clip; pointer-events: none; animation: row-out calc(var(--dur-quick) + var(--dur-base)) var(--ease-move) forwards; }
 .node.falling { opacity: .45; }
-.node.falling.leaving { animation: rowLeaveDim .45s ease-in forwards; }
-@keyframes rowEnter { from { background: rgba(52, 168, 83, .16); opacity: 0; } 35% { opacity: 1; } to { background: rgba(52, 168, 83, 0); opacity: 1; } }
-@keyframes rowLeave { from { background: rgba(217, 48, 37, .16); opacity: 1; } to { background: rgba(217, 48, 37, 0); opacity: 0; } }
-@keyframes rowLeaveDim { from { background: rgba(217, 48, 37, .16); opacity: .45; } to { background: rgba(217, 48, 37, 0); opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .node.entering, .node.leaving, .node.falling.leaving { animation: none; } }
 /* a node handed to the local Codex agent: the robot glyph at the end of the row, on a green tag */
 .cbadge { position: relative; overflow: hidden; flex: none; display: inline-flex; align-items: center; margin: 2px 0 0 8px; padding: 2px 5px; border-radius: 6px; background: #d9f0de; color: #17652f; --cbadge-sheen: rgba(255, 255, 255, .85); }
 .cbadge svg { display: block; }
@@ -622,7 +646,10 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
    under reduced motion the badge is the same green tag, standing still. */
 /* Only work in progress sweeps. Pending, waiting, completed and broken are still: a badge that keeps moving after the
    task stopped would claim activity that is not there. */
-@media (prefers-reduced-motion: no-preference) { .cbadge.working::after { content: ''; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 28%, var(--cbadge-sheen) 50%, transparent 72%); transform: translateX(-130%); animation: cbadge-sweep 2.8s ease-in-out infinite; } }
+@media (prefers-reduced-motion: no-preference) { .cbadge.working::after { content: ''; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 28%, var(--cbadge-sheen) 50%, transparent 72%); transform: translateX(-130%); animation: cbadge-sweep calc(var(--dur-loop) * 2) ease-in-out infinite; } }
+/* A badge whose state just changed (renderer/motion.js badgeMoved): it pops; finished work gets the sweep once, as a
+   shine rather than as work still going on; broken work shakes. */
+.cbadge.done.shine:not(.closed)::after { content: ''; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 28%, var(--cbadge-sheen) 50%, transparent 72%); transform: translateX(-130%); animation: cbadge-sweep var(--dur-flash) var(--ease-out) var(--dur-quick) backwards; }
 /* one colour per state, and the label says the same thing in words (renderer/state.js AGENT_BADGE) */
 .cbadge.pending { background: #ececec; color: #5a5a5a; }
 .cbadge.working, .cbadge.waiting { background: #dde8fb; color: #1b4a8f; --cbadge-sheen: rgba(255, 255, 255, .9); }
@@ -646,17 +673,19 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .children > .node.fullref > .line > .bullet { margin-right: 4px; } /* give the full-reference icon more room before its status or title */
 .children.loading { color: #aaa; font-style: italic; padding: 3px 0 3px 22px; }
 .empty-note { color: #aaa; font-size: 16px; padding: 8px 40px; }
+/* The last row just left the view (renderer/motion.js motionAfter): the note says so with a tick, and pops (Pop). */
+.empty-note.cleared { display: flex; align-items: center; gap: 10px; color: #5a9670; font-weight: 600; transform-origin: 40px 50%; animation: pop-in var(--dur-slow) var(--ease-spring) backwards; }
+.empty-note.cleared::before { content: '✓'; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: #5a9670; color: #fff; font-size: 13px; }
 /* group headings (Group pill): the quiet uppercase the sidebar sections use, over the rows of one group. A button:
    clicking it (or Enter/Space on it) folds its own section away, and the triangle follows aria-expanded */
 /* 3px left and a 9px gap put the 12px chevron's centre on x=9, where a row's own chevron sits (its 14px circle is at
    left: 2px in a 24px gutter), and still start the heading's word at x=24, where a row's icon does */
 .ghead { display: flex; align-items: center; gap: 9px; width: 100%; margin-top: 18px; padding: 10px 6px 10px 3px; border: 0; background: none; font: inherit; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #999; text-align: left; cursor: pointer; user-select: none; }
 /* pointing right while the section is folded, a quarter turn down while it is open */
-.ghead svg { flex: none; width: 12px; height: 12px; transition: transform 120ms ease; }
+.ghead svg { flex: none; width: 12px; height: 12px; transition: transform var(--dur-quick) var(--ease-out); }
 .ghead[aria-expanded="true"] svg { transform: rotate(90deg); }
 .ghead:hover { color: #666; }
 .ghead:focus { outline: none; box-shadow: 0 0 0 2px #b7d2f5; border-radius: 3px; }
-@media (prefers-reduced-motion: reduce) { .ghead svg { transition: none; } }
 .ghead:first-child { margin-top: 0; }
 /* the tail of a trimmed section (Tracking): a quiet link where the next row's text would start, not a row itself */
 .gmore { display: block; margin: 2px 0 0; padding: 4px 0 4px 47px; border: 0; background: none; font: inherit; font-size: 14px; color: #8a8a8a; text-align: left; cursor: pointer; }
@@ -670,23 +699,35 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .clearfilters { border: 0; background: none; color: #aaa; font: inherit; font-size: 16px; padding: 0; margin-left: 10px; text-decoration: underline; cursor: pointer; }
 .clearfilters:hover { color: #1a1a1a; }
 .clearfilters:focus { outline: none; box-shadow: 0 0 0 2px #b7d2f5; border-radius: 3px; }
-/* loading skeleton: 6 shimmering bars while a view has no rows yet; .gone fades it out, then collapses it */
-.skeleton { padding-left: 24px; transition: opacity .35s; }
-.skeleton.gone { opacity: 0; height: 0; overflow: hidden; pointer-events: none; transition: opacity .35s, height 0s .35s; }
-.skeleton div { position: relative; height: 14px; margin: 8px 0 8px 27px; border-radius: 7px; background: #e4e4e4; background-image: linear-gradient(90deg, #e4e4e4 0%, #f7f7f7 50%, #e4e4e4 100%); background-size: 200% 100%; animation: shimmer 1.4s ease-in-out infinite, breathe 1.4s ease-in-out infinite; }
-.skeleton div:nth-child(2) { animation-delay: .12s; } .skeleton div:nth-child(3) { animation-delay: .24s; } .skeleton div:nth-child(4) { animation-delay: .36s; } .skeleton div:nth-child(5) { animation-delay: .48s; } .skeleton div:nth-child(6) { animation-delay: .6s; }
-.skeleton div::before { content: ""; position: absolute; left: -21px; top: 4px; width: 6px; height: 6px; border-radius: 50%; background: #ddd; }
-.skeleton div:nth-child(1) { width: 62%; } .skeleton div:nth-child(2) { width: 48%; } .skeleton div:nth-child(3) { width: 71%; }
-.skeleton div:nth-child(4) { width: 39%; } .skeleton div:nth-child(5) { width: 56%; } .skeleton div:nth-child(6) { width: 44%; }
+/* Loading (Ambient): renderer/loading.js draws it on the canvas, which fills the whole page — a knowledge system with
+   gravity: a dotted core in a spiral disk, nodes on tilted orbits, links that form and break. Monochrome: one colour,
+   the page's own text colour, at many strengths, so the theme reaches it. It shows itself only when loading takes a
+   moment (the delay below) and fades as the rows arrive. The header steps aside for it after the same delay, so a quick
+   load never blinks it, and comes back as the rows do; the error line stays, since it may be what the page waits on. */
+.skeleton { position: absolute; inset: 0; pointer-events: none; transition: opacity var(--dur-base) var(--ease-out), display var(--dur-base) allow-discrete; }
+.skeleton.gone { display: none; opacity: 0; pointer-events: none; }
+:where(.titlebar > :not(#error), #pills, #filterRow) { transition: opacity var(--dur-base) var(--ease-out); }
+:is(.loading-preview, body:has(#skeleton:not(.gone))) :is(.titlebar > :not(#error), #pills, #filterRow) { opacity: 0; pointer-events: none; transition-delay: var(--loader-wait, 300ms); }
+/* Cmd+K "Preview loading animation" (renderer/loading.js): the page as it looks while a view loads, until Esc */
+.loading-preview .skeleton.gone { display: block; opacity: 1; }
+.loading-preview :is(#outline, #filtered, #loginBox) { display: none; }
+.skeleton canvas { display: block; width: 100%; height: 100%; color: #1c2024;
+  mask-image: radial-gradient(ellipse 70% 70% at 50% 50%, #000 55%, transparent 100%); animation: loader-in var(--dur-slow) var(--ease-out) var(--loader-wait, 300ms) backwards; } /* no wait under reduced motion: the still frame shows at once */
+@keyframes loader-in { from { opacity: 0; } }
 @keyframes shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 @keyframes breathe { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .skeleton div { animation: none; } .skeleton, .skeleton.gone { transition: none; } }
 
 .filtered { padding: 18px 10px 8px 16px; color: #999; font-weight: 600; } /* lines up with the title, filter and pills */
 
 /* selection toolbar: floats over a non-empty selection inside an editable node (style dropdown, B I S code, @) */
 .toolbar { position: fixed; z-index: 9; display: flex; align-items: center; gap: 2px; padding: 4px; background: #fff; border-radius: 8px; box-shadow: 0 6px 24px rgba(0, 0, 0, .18), 0 0 0 1px rgba(0, 0, 0, .06); }
 .toolbar[hidden] { display: none; }
+/* Surface: it rises in over a selection and sinks away; from one selection to the next it glides (Glide) rather than
+   jumping. A toolbar arriving from nothing starts where it is put, since there is no earlier place to glide from. */
+.toolbar { transform-origin: 50% 100%; transition: opacity var(--dur-quick) var(--ease-out), transform var(--dur-quick) var(--ease-out), display var(--dur-quick) allow-discrete,
+  left var(--dur-quick) var(--ease-move), top var(--dur-quick) var(--ease-move); }
+.toolbar[hidden] { opacity: 0; transform: translateY(4px) scale(.96); pointer-events: none; transition-timing-function: var(--ease-in); }
+@starting-style { .toolbar:not([hidden]) { opacity: 0; transform: translateY(4px) scale(.96); } }
 .tbtn { position: relative; display: flex; align-items: center; gap: 4px; min-width: 30px; height: 28px; padding: 0 8px; border: 0; border-radius: 6px; background: none; color: #444; font-size: 15px; cursor: pointer; }
 .tbtn:hover { background: #f0f0f0; }
 .tbtn:focus { outline: none; box-shadow: 0 0 0 2px #b7d2f5; }
@@ -714,13 +755,23 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 /* command palette (Cmd+K) */
 .palette { position: fixed; inset: 0; z-index: 10; background: rgba(0, 0, 0, .12); display: flex; justify-content: center; align-items: flex-start; padding: 12vh 24px 0; }
 .palette[hidden] { display: none; }
+/* Surface: the scrim fades and the card rises in; closing, both go quicker. Every mode is the same element shown and
+   hidden, so all of them — Cmd+K, Search, Assign, Set status, the @ dropdown — arrive and leave alike. Switching mode
+   while it is open slides the list across instead (renderer/motion.js swapPanel). */
+.palette { transition: opacity var(--dur-base) var(--ease-out), display var(--dur-base) allow-discrete; }
+.palette[hidden] { opacity: 0; pointer-events: none; transition-duration: var(--dur-quick); transition-timing-function: var(--ease-in); }
+@starting-style { .palette:not([hidden]) { opacity: 0; } }
+.palette .card { transform-origin: 50% 0; transition: transform var(--dur-base) var(--ease-out), opacity var(--dur-base) var(--ease-out); }
+.palette[hidden] .card { opacity: 0; transform: translateY(-4px) scale(.98); transition-duration: var(--dur-quick); transition-timing-function: var(--ease-in); }
+@starting-style { .palette:not([hidden]) .card { opacity: 0; transform: translateY(-8px) scale(.97); } }
+.palette.anchored .card { transform-origin: 0 0; }
+.palette .list.swap { animation: swap-in var(--dur-base) var(--ease-out); }
 /* A notice (showNote, renderer/toolbar.js): a toast at the foot of the window, above the palette, fading on its own */
 .toast { position: fixed; left: 50%; bottom: 24px; z-index: 12; max-width: min(480px, calc(100vw - 48px)); padding: 8px 14px; border-radius: 8px;
   background: #1f2328; color: #fff; font-size: 13px; line-height: 1.4; box-shadow: 0 6px 24px rgba(0, 0, 0, .18);
-  opacity: 0; visibility: hidden; transform: translate(-50%, 6px); pointer-events: none;
-  transition: opacity .18s ease, transform .18s ease, visibility 0s linear .18s; }
-.toast.show { opacity: 1; visibility: visible; transform: translate(-50%, 0); transition: opacity .18s ease, transform .18s ease; }
-@media (prefers-reduced-motion: reduce) { .toast, .toast.show { transition: none; } }
+  opacity: 0; visibility: hidden; transform: translate(-50%, 6px) scale(.96); pointer-events: none;
+  transition: opacity var(--dur-quick) var(--ease-in), transform var(--dur-quick) var(--ease-in), visibility 0s linear var(--dur-quick); }
+.toast.show { opacity: 1; visibility: visible; transform: translate(-50%, 0); transition: opacity var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-spring); }
 .palette .card {
   width: 100%; max-width: 620px; max-height: min(70vh, 440px); display: flex; flex-direction: column; overflow: hidden;
   background: #fff; border-radius: 12px; box-shadow: 0 12px 40px rgba(0, 0, 0, .18), 0 0 0 1px rgba(0, 0, 0, .05);
@@ -751,11 +802,11 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
    turning is visible without competing with the stars. Still — and readable — where motion is not welcome. */
 .palette .ricon.thinking { color: #8a8a8a; }
 @media (prefers-reduced-motion: no-preference) {
-  .palette .ricon.thinking svg { animation: sparkle-orbit 3.2s linear infinite; transform-origin: 50% 50%; }
-  .palette .ricon.thinking svg path { transform-origin: 50% 50%; transform-box: fill-box; animation: sparkle-twinkle 1.5s ease-in-out infinite; }
-  .palette .ricon.thinking svg path:nth-child(2) { animation-delay: .5s; }
-  .palette .ricon.thinking svg path:nth-child(5) { animation-delay: 1s; }
-  .palette .ricon.thinking svg path:nth-child(3), .palette .ricon.thinking svg path:nth-child(4) { animation: sparkle-trail 3.2s ease-in-out infinite; }
+  .palette .ricon.thinking svg { animation: sparkle-orbit calc(var(--dur-loop) * 2) linear infinite; transform-origin: 50% 50%; }
+  .palette .ricon.thinking svg path { transform-origin: 50% 50%; transform-box: fill-box; animation: sparkle-twinkle var(--dur-loop) ease-in-out infinite; }
+  .palette .ricon.thinking svg path:nth-child(2) { animation-delay: calc(var(--dur-loop) / 3); }
+  .palette .ricon.thinking svg path:nth-child(5) { animation-delay: calc(var(--dur-loop) * 2 / 3); }
+  .palette .ricon.thinking svg path:nth-child(3), .palette .ricon.thinking svg path:nth-child(4) { animation: sparkle-trail calc(var(--dur-loop) * 2) ease-in-out infinite; }
 }
 @keyframes sparkle-orbit { to { transform: rotate(360deg); } }
 @keyframes sparkle-twinkle { 0%, 100% { opacity: .25; transform: scale(.55) rotate(-25deg); } 45% { opacity: 1; transform: scale(1.2) rotate(0deg); } }
@@ -764,8 +815,8 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
    being swapped for a still one between two frames, while the name it brought fades in beside it. Played on the
    one render the answer arrives in (renderer/palette.js marks that row), never again as you keep typing. */
 @media (prefers-reduced-motion: no-preference) {
-  .palette .row.arrive .ricon svg { animation: sparkle-settle .55s cubic-bezier(.16, .8, .3, 1.05) backwards; transform-origin: 50% 50%; }
-  .palette .row.arrive .label, .palette .row.arrive .hint { animation: sparkle-said .45s ease-out .1s backwards; }
+  .palette .row.arrive .ricon svg { animation: sparkle-settle var(--dur-slow) var(--ease-spring) backwards; transform-origin: 50% 50%; }
+  .palette .row.arrive .label, .palette .row.arrive .hint { animation: sparkle-said var(--dur-base) var(--ease-out) var(--stagger) backwards; }
 }
 @keyframes sparkle-settle { from { transform: rotate(-160deg) scale(.5); opacity: .2; } 70% { transform: rotate(6deg) scale(1.08); opacity: 1; } }
 @keyframes sparkle-said { from { opacity: 0; transform: translateX(-6px); } }
@@ -774,7 +825,10 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .palette kbd { font: inherit; font-size: 13px; color: #666; background: #f1f1f1; border-radius: 6px; padding: 1px 8px; }
 .palette .row.active kbd { background: #e4e4e4; }
 /* @ linking: the same palette as a dropdown under the caret (anchorPalette places and sizes the card), no scrim */
-.palette.anchored:not([hidden]) { display: block; padding: 0; background: none; } /* :not([hidden]): the same weight as .palette[hidden] would keep a closed dropdown on screen */
+/* No scrim, open or closing: a dropdown fading out must not bring the Cmd+K scrim back for the length of its fade.
+   Only the display waits on :not([hidden]), the same weight as .palette[hidden], which would keep it on screen. */
+.palette.anchored { padding: 0; background: none; }
+.palette.anchored:not([hidden]) { display: block; }
 .palette.anchored .card { position: absolute; border-radius: 10px; box-shadow: 0 8px 30px rgba(0, 0, 0, .16), 0 0 0 1px rgba(0, 0, 0, .06); }
 .palette.anchored input { font-size: 15px; padding: 10px 14px; }
 .palette.anchored .list { padding: 6px 6px 8px; }
@@ -785,6 +839,16 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 /* hotkey recorder (Cmd+Shift+K on a Cmd+K row) */
 .recorder { position: fixed; inset: 0; z-index: 11; display: flex; justify-content: center; align-items: flex-start; padding: 12vh 24px 0; background: rgba(0, 0, 0, .12); } /* same scrim as the palette it opens over */
 .recorder[hidden] { display: none; }
+/* Surface, the same arrival and leaving as the palette it opens over; the keys pop in as they are pressed (Pop), and
+   a combination the app already owns shakes its warning (the refusal pattern). */
+.recorder { transition: opacity var(--dur-base) var(--ease-out), display var(--dur-base) allow-discrete; }
+.recorder[hidden] { opacity: 0; pointer-events: none; transition-duration: var(--dur-quick); transition-timing-function: var(--ease-in); }
+@starting-style { .recorder:not([hidden]) { opacity: 0; } }
+.recorder .card { transform-origin: 50% 0; transition: transform var(--dur-base) var(--ease-out); }
+.recorder[hidden] .card { transform: translateY(-4px) scale(.98); transition-duration: var(--dur-quick); }
+@starting-style { .recorder:not([hidden]) .card { transform: translateY(-8px) scale(.97); } }
+.recorder .keys > span { animation: pop-in var(--dur-base) var(--ease-spring) backwards; }
+.recorder .rwarn:not([hidden]) { animation: shake var(--dur-slow) var(--ease-out); }
 .recorder .card {
   width: 100%; max-width: 620px; padding: 36px 36px 28px; background: #fff; border-radius: 12px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, .18), 0 0 0 1px rgba(0, 0, 0, .05);
@@ -793,10 +857,10 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .recorder h2 { margin: 2px 0 18px; font-size: 20px; font-weight: 600; letter-spacing: -0.2px; }
 .recorder .rbox { height: 200px; border: 1px solid #ddd; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 14px; }
 .recorder .keys { display: flex; gap: 14px; font-size: 44px; color: #666; }
-.recorder .dot { flex: none; width: 60px; height: 60px; border-radius: 50%; background: #fde9e6; position: relative; animation: pulse 1.2s ease-in-out infinite; }
+.recorder .dot { flex: none; width: 60px; height: 60px; border-radius: 50%; background: #fde9e6; position: relative; }
+@media (prefers-reduced-motion: no-preference) { .recorder .dot { animation: pulse var(--dur-loop) ease-in-out infinite; } }
 .recorder .dot::after { content: ""; position: absolute; inset: 15px; border-radius: 50%; background: #ef5b4a; }
 @keyframes pulse { 50% { opacity: .55; transform: scale(.9); } }
-@media (prefers-reduced-motion: reduce) { .recorder .dot { animation: none; } }
 .recorder .rbuttons { display: flex; gap: 8px; margin-top: 18px; }
 .recorder .rwarn { margin-top: 10px; font-size: 13px; color: #d0433a; } /* a combo the app already owns, or another row has */
 .recorder .rwarn[hidden] { display: none; }
@@ -874,6 +938,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .chip.gold { background: #4b4024; color: #e4c968; }
 [data-theme="dark"] .chip.hue { background: oklch(0.33 0.06 var(--hue)); color: oklch(0.83 0.09 var(--hue)); }
 [data-theme="dark"] .text.image.loading { background: #303436; }
+@media (prefers-reduced-motion: no-preference) { [data-theme="dark"] .text.image.loading:not(.demo) { background-image: linear-gradient(90deg, #303436 0%, #3d4244 50%, #303436 100%); } }
 [data-theme="dark"] .text.table .cellimg.demo { background: #303436; }
 [data-theme="dark"] .text.upload { background: #303436; color: #8d9396; }
 [data-theme="dark"] .text.image:focus img, [data-theme="dark"] .selected .text.image img { outline-color: #58768a; }
@@ -914,13 +979,12 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .children { border-left-color: #34393b; }
 [data-theme="dark"] .children.loading { color: #858b8e; }
 
-[data-theme="dark"] .skeleton div { background-color: #313537; background-image: linear-gradient(90deg, #313537 0%, #3d4244 50%, #313537 100%); }
-[data-theme="dark"] .skeleton div::before { background: #444a4c; }
+[data-theme="dark"] .skeleton canvas { color: #e8eaec; }
 [data-theme="dark"] .login button { border-color: #454b4e; background: #2a2d2f; color: #c9c9c9; }
 [data-theme="dark"] .login button:hover { background: #363a3c; }
 
 [data-theme="dark"] .palette { background: rgba(0, 0, 0, .52); }
-[data-theme="dark"] .palette.anchored:not([hidden]) { background: none; }
+[data-theme="dark"] .palette.anchored { background: none; }
 [data-theme="dark"] .recorder { background: rgba(0, 0, 0, .52); }
 [data-theme="dark"] .palette .card, [data-theme="dark"] .recorder .card { background: #242729; box-shadow: 0 12px 40px rgba(0, 0, 0, .5), 0 0 0 1px rgba(255, 255, 255, .08); }
 [data-theme="dark"] .palette input { color: #c9c9c9; border-bottom-color: #3a3f41; background: #242729; }
@@ -987,3 +1051,47 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
   background: oklch(0.82 0.13 var(--hue)); color: #1c2024; font-weight: 600; white-space: nowrap; pointer-events: none; } /* on the caret, as Tana labels one */
 .pcaret.below::after { bottom: auto; top: 100%; border-radius: 0 5px 5px 5px; }
 .pcaret.at { bottom: auto; width: 2px; border-radius: 0; pointer-events: none; } /* between the characters, as Tana draws it */
+/* ---- Motion: the keyframes every pattern shares (the durations and curves are at the top of this file) ---- */
+@keyframes pop-in { from { opacity: 0; transform: scale(.5); } }
+@keyframes pop-out { to { opacity: 0; transform: scale(.5); } }
+@keyframes surface-in { from { opacity: 0; transform: translateY(-4px) scale(.97); } }
+@keyframes surface-out { to { opacity: 0; transform: scale(.97); } }
+@keyframes swap-in { from { opacity: .2; transform: translateX(8px); } }
+@keyframes flash { from { background-color: var(--tint, var(--flash-here)); } }
+@keyframes row-in { from { height: 0; opacity: 0; background-color: var(--tint); } 30% { height: auto; opacity: 1; } to { background-color: transparent; } }
+@keyframes row-out { from { background-color: var(--tint); } 45% { opacity: 0; height: auto; } to { opacity: 0; height: 0; margin-top: 0; margin-bottom: 0; background-color: transparent; } }
+@keyframes shake { 20% { transform: translateX(-4px); } 40% { transform: translateX(4px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(2px); } }
+@keyframes ring-in { from { box-shadow: 0 0 0 7px transparent; } }
+@keyframes dot-read { from { background: #0090ff; transform: scale(1.6); } }
+
+/* Press: every button answers the finger by easing down a little, and settles back on a spring when let go. The
+   press itself is quick but eased, so it follows the finger rather than snapping; the release is slower, since that is
+   where the spring shows. One rule, so a new button kind joins it here. A task's box is not one: its tick is its own
+   squash and pop (renderer/render.js playTick), and a press before it only held it back. */
+/* --press marks these for renderer/motion.js, which hands the spring to a button a press draws again; it does not
+   inherit, so what sits inside a button (a pill's menu) is not one. A press inside a pill's menu is the menu's, so the
+   pill does not shrink under it. */
+@property --press { syntax: '<number>'; inherits: false; initial-value: 0; }
+:is(.navbtn, .railtoggle, .pill, .tbtn, .pbutton, .chev, .gmore, .clearfilters, .login button, .recorder button, .cbadge[role="button"], .filter .clear) {
+  --press: 1; transition: transform var(--dur-slow) var(--ease-settle); }
+:is(.navbtn, .railtoggle, .pill, .tbtn, .pbutton, .chev, .gmore, .clearfilters, .login button, .recorder button, .cbadge[role="button"], .filter .clear):active:not(:disabled):not(:has(.menu:active)) {
+  transform: scale(.95); transition: transform var(--dur-quick) var(--ease-out); }
+
+/* Surface for what is built again on every key: a pill's menu and the toolbar's style menu (renderer/motion.js
+   menuMotion). One arriving grows from its button; one no longer wanted shrinks away over it. */
+.menu { transform-origin: 20px 0; }
+.menu.up { transform-origin: 20px 100%; }
+.menu.in { animation: surface-in var(--dur-quick) var(--ease-out); }
+.menu.out { pointer-events: none; animation: surface-out calc(var(--dur-quick) * .7) var(--ease-in) forwards; }
+
+/* Pop and Flash as classes a script plays once (renderer/motion.js playOnce, flash): the same two keyframes wherever
+   they land — a mention just linked, a chip just chosen, a caret someone else just put down, a row you came back to. */
+.pop { animation: pop-in var(--dur-base) var(--ease-spring) backwards; }
+.shake { animation: shake var(--dur-slow) var(--ease-out); }
+.flash { animation: flash var(--dur-flash) var(--ease-out); }
+.mention.pop { animation: flash var(--dur-flash) var(--ease-out); border-radius: 3px; } /* inline, so it cannot scale: it lights up instead */
+/* a notification just read: its blue dot shrinks back to a plain one, one row after another when all are read */
+.node.read-now > .line > .bullet::before { animation: dot-read var(--dur-base) var(--ease-out) backwards; animation-delay: calc(var(--i, 0) * var(--stagger)); }
+
+/* Page: a theme change crossfades the whole window (renderer/motion.js crossfade) at the base pace. */
+::view-transition-group(root) { animation-duration: var(--dur-base); animation-timing-function: var(--ease-out); }

@@ -137,7 +137,8 @@ function animateRows(before) {
   // Nothing on screen before this paint is the view appearing, not every row arriving at once: a view whose rows have
   // not loaded yet paints empty first (loadView resolves after the render that asked for it), and that empty paint
   // must not be mistaken for "these rows were already here".
-  if (animView !== view || !before.size) { animView = view; return; }
+  // A section folding or unfolding redraws quietly too (renderer/motion.js foldSection): its own move shows it.
+  if (animView !== view || !before.size || rowsQuiet) { animView = view; return; }
   const rows = [...outline.children].filter((el) => el.classList.contains('node'));
   const keys = new Set(rows.map((el) => el.dataset.key));
   const old = [...before.keys()];
@@ -147,14 +148,18 @@ function animateRows(before) {
   // set of rows), and it neither reads as an arrival nor is worth a few hundred ghost rows. Raise if it feels shy.
   const BULK = 25;
   if (arrived.length > BULK || gone.length > BULK) return;
-  for (const el of arrived) el.classList.add('entering');
+  // An arrival plays once: the class goes when it ends, or every later render — which puts reused rows back with
+  // replaceChildren, restarting whatever animation they carry — would play it again.
+  for (const el of arrived) { el.classList.add('entering'); el.onanimationend = (e) => { if (e.target === el) el.classList.remove('entering'); }; }
   for (const key of gone) {
     const el = before.get(key);
     const next = old.slice(old.indexOf(key) + 1).find((k) => keys.has(k)); // back where it was: before the first row that outlived it
     if (!el.classList.contains('leaving')) { // one that is already on its way out: the renders that keep coming must not cut it short
       el.classList.add('leaving'); el.classList.remove('selected', 'entering'); // a row that just arrived and left again only leaves
       for (const t of el.querySelectorAll('[contenteditable]')) t.removeAttribute('contenteditable');
-      setTimeout(() => el.remove(), 500); // not animationend: reduced motion runs no animation and the row must still go
+      // not animationend: a render meanwhile restarts it. The last one gone draws the view again, so an emptied view
+      // says so (and Inbox zero gets its moment, renderer/motion.js motionAfter) instead of standing blank.
+      setTimeout(() => { el.remove(); settleEmpty(outline); }, 500);
     }
     outline.insertBefore(el, (next && nodeElOf(next)) || null);
   }
@@ -216,8 +221,10 @@ function strikeTop(text) {
   return { top: snap(lead + m.fontBoundingBoxAscent * 2 / 3 - thick / 2 + STRIKE_NUDGE), lh, thick: snap(thick) };
 }
 const STRIKE_NUDGE = 0;
+// Unchecking is instant: taking a tick back is a correction, not something to celebrate. The tick keeps its own timing,
+// tuned by eye: on the shared curves the strike lingered at its end and the whole thing read as slower.
 function playTick(check, text, at) {
-  if (!check || !text || check.dataset.tick === String(at) || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  if (!check || !text || check.dataset.tick === String(at) || !motionOK()) return;
   check.dataset.tick = String(at);
   const ring = (px, a) => '0 0 0 ' + px + 'px rgba(111, 174, 130, ' + a + ')';
   // one stroke per line (a line-high tile repeated down), so a wrapped title is struck on every line, where the line-through will be
@@ -300,7 +307,10 @@ function renderSoon(force) {
   renderQueuedForce ||= force === true;
   if (renderQueued) return;
   renderQueued = true;
-  requestAnimationFrame(() => { renderQueued = false; const forced = renderQueuedForce; renderQueuedForce = false; render(forced); });
+  // An answer that lands while a row is opening or closing waits for it to finish (renderer/motion.js settling): an
+  // expanded row is rebuilt on every render, and one rebuilt mid-move jumped straight to its end.
+  const go = () => { const wait = settling(); if (wait) return setTimeout(go, wait); renderQueued = false; const forced = renderQueuedForce; renderQueuedForce = false; render(forced); };
+  requestAnimationFrame(go);
 }
 // What a list row is built from. A row whose signature has not changed since the last render is kept as it is,
 // which turns a live update or a refresh into a handful of rebuilt rows instead of a whole new outline.
@@ -318,6 +328,7 @@ function renderOutline() {
   // a live update must not eat a selection: the formatting toolbar acts on it, and a re-render lands mid-toggle
   const savedSel = saved && document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('text') ? selectionOffsets(document.activeElement) : null;
   rendered.clear(); docCache.clear();
+  const was = motionBefore(outline); // where every row stood and what it said, for the moves after (renderer/motion.js)
   let trail = null;
   if (zoom) { trail = resolveZoom(); if (!trail) zoom = null; }
   const parent = trail && trail.at(-1);
@@ -417,7 +428,7 @@ function renderOutline() {
   // A saved search is a query you can edit, so it gets the pills too — every other zoomed page is content, not a query.
   const showPills = authed && pillsApply() && (!parent || isSearchDoc(parent.node) || isTypeDoc(parent.node));
   renderPills(showPills);
-  filterRow.hidden = (!!parent && !isSearchDoc(parent.node) && !isTypeDoc(parent.node)) || !(filterShown || filterEl.value);
+  showHide(filterRow, !((!!parent && !isSearchDoc(parent.node) && !isTypeDoc(parent.node)) || !(filterShown || filterEl.value))); // it opens and closes in place (renderer/motion.js)
   filterRow.classList.toggle('empty', !filterEl.value);
   // a type page asks for 1,000 rows (main/related.js searchPreview), so a full answer is one that may have been cut
   const cut = parent ? onTypePage() && (kids.get(zoom.docId) || []).length >= 1000 : truncated.has(view);
@@ -437,6 +448,7 @@ function renderOutline() {
     outline.append(note);
   }
   applySel();
+  motionAfter(outline, was);
   for (const key of items.keys()) if (!rendered.has(key)) items.delete(key);
   // Putting the caret back is preserving state, not navigating: a render that only rebuilt the rows must not scroll
   // the page to wherever the caret happens to be. Clicking a task's box while another row held the caret rebuilt the
@@ -622,6 +634,7 @@ function codexBadgeEl(id, done = !!docOf(id)?.done) {
   // The task itself being finished outranks whatever the agent state was: the badge becomes history, a grey outline
   // with a grey glyph, so a completed row says "there was a thread" without competing with the live ones.
   el.className = 'cbadge ' + state + (done ? ' closed' : '');
+  badgeMoved(el, id, state + (done ? ':closed' : '')); // a state that just changed pops, shines or shakes
   // A badge with a task behind it is the way into that task; a pending one has nowhere to go, so it stays a plain
   // image rather than a button that does nothing. Only linked nodes have a status entry at all, which is the same
   // fact — no second list to keep in step.
@@ -671,13 +684,22 @@ function codexHeader() {
 function openImage(node) {
   if (demoMode || document.querySelector('.lightbox')) return; // demo mode shows no picture, and the cache may still hold one
   const uri = node.image.uri, from = document.activeElement;
+  // the picture grows out of the row it was opened from and goes back into it (renderer/motion.js growFrom)
+  const thumb = from && from.querySelector ? from.querySelector('img') : null, at = () => (thumb && thumb.isConnected ? thumb.getBoundingClientRect() : null);
   const box = document.createElement('div'); box.className = 'lightbox'; box.tabIndex = -1;
   const img = document.createElement('img');
-  const close = () => { box.remove(); if (from && from.focus) from.focus(); };
+  const close = () => {
+    if (box.classList.contains('out')) return;
+    if (!motionOK()) { box.remove(); if (from && from.focus) from.focus(); return; }
+    box.classList.add('out');
+    growFrom(img, at(), 0, true).then(() => box.remove());
+    if (from && from.focus) from.focus();
+  };
   box.onclick = close;
   // its own keys: Escape, Space and Enter close it, and nothing reaches the outline behind it
   box.onkeydown = (e) => { e.stopPropagation(); if (['Escape', ' ', 'Enter'].includes(e.key)) { e.preventDefault(); close(); } };
   box.append(img);
+  img.onload = () => growFrom(img, at());
   document.body.append(box);
   box.focus();
   Promise.resolve(images.get(uri) ?? tana.image(uri)).then((url) => { images.set(uri, url); img.src = url; }, (e) => { close(); showError(e); });
@@ -715,6 +737,7 @@ function nodeEl(node, docId, parent) {
   el.className = 'node ' + node.kind + (reference ? ' reference' : '') + (fullref ? ' fullref' : '') + (gone ? ' gone' : '') + blockClass + (heading ? ' h' + heading : '') + (display.done ? ' done' : '') + (has ? ' has' : '') + (has && !opened ? ' collapsed' : '') + (node.draft || node.upload ? ' draft' : '') + ((node.notification || node.timeline) && node.unread ? ' unread' : '') + (node.timeline ? ' tl tl-' + node.timeline.tone : '') + (node.timeline?.today ? ' tl-today' : '');
   if (node.start != null) el.style.counterSet = 'ol ' + (node.start - 1); // a numbered list counting from its own start (sdk/content.js); the row's increment makes it start
   el.dataset.key = item.key;
+  el.dataset.body = [display.text, display.done ? 1 : 0, display.stateType || ''].join('\n'); // what an edit elsewhere would change (motionAfter)
   const line = document.createElement('div'); line.className = 'line';
   const chev = document.createElement('button'); chev.className = 'chev'; chev.tabIndex = -1;
   chev.onmousedown = (e) => e.preventDefault();

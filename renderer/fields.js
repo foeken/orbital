@@ -25,6 +25,7 @@ function focusField(key) { const el = queryRow('.fchoice[data-key="' + CSS.escap
 // ---- the value: chips ----
 // The value's lines, each a segments array: the field's rows once they are loaded (a write reloads them), else what
 // the page was read with.
+let chipsNew = null; // { key, seen, until }: the field just written here, whose new chips pop the first time they are drawn
 function choiceValues(ctx) {
   const rows = kids.get(ctx.hostId);
   const lines = Array.isArray(rows) ? rows.map((n) => n.segments || [{ text: n.text || '' }]) : (ctx.field.lines || []).map((l) => l.segments || []);
@@ -37,6 +38,7 @@ function choiceEl(parent, field, host) {
   const values = choiceValues(ctx), targets = (field.to || []).map((t) => t.uri);
   for (const segs of values) {
     const chip = document.createElement('span'); chip.className = 'fchip';
+    if (chipsNew && chipsNew.key === host.key && Date.now() < chipsNew.until && !chipsNew.seen.has(plainOf(segs))) { chipsNew.seen.add(plainOf(segs)); chip.classList.add('pop'); } // just chosen: it pops, once
     if (field.type === 'options') {
       chip.textContent = plainOf(segs).trim();
       if (!offered(field, chip.textContent)) { chip.classList.add('gone'); chip.title = 'No longer offered'; }
@@ -68,6 +70,7 @@ function choiceKey(e) {
 // Written the way the field holds it: an options value as its labels (only those still offered, since Tana refuses
 // the rest), a link value as one reference per line.
 function writeChoice(ctx, values) {
+  chipsNew = { key: ctx.key, seen: new Set(choiceValues(ctx).map(plainOf)), until: Date.now() + 3000 }; // what was there already does not pop
   const lines = ctx.field.type === 'options'
     ? values.map((segs) => plainOf(segs).trim()).filter((label) => offered(ctx.field, label))
     : values.map((segs) => segs.find((s) => s.mention)).filter(Boolean).map((s) => [{ mention: { label: s.mention.label, uri: s.mention.uri } }]);
