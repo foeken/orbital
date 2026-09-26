@@ -210,12 +210,13 @@ dark twin.
 
 Sizes are small fixed scales rather than tokens. Use a size from the scale and nothing in between:
 
-- **Font sizes**: 12 (chips, uppercase headings), 13 (crumbs, the error line, toasts, palette group names, `kbd`),
-  14 (a row's facts and grey line, hints, sidebar titles), 15 (pills, palette rows, toolbar), 16 (body text, menu
-  rows), 17 (the palette field); a dialog's `.button` is 13.5, its own size. Headings are 20 and 24, and the page title is 34. Weights are 400, 600 (labels,
-  headings) and 700 (bold, a pill's value).
-- **Radii**: 3 (a focus ring's corners), 4 (chips, small icon buttons), 6 (buttons, badges, code, images), 8 (rows
-  in a menu or ⌘K, inputs, toasts), 10 (menus), 12 (dialog cards), `999px` for a pill, `50%` for a dot.
+- **Font sizes**: 12 (chips, uppercase headings), 13 (crumbs, the error line, toasts, palette group names, `kbd`), 14
+  (a row's facts and grey line, hints, sidebar titles), 15 (pills, palette rows, toolbar), 16 (body text, menu rows),
+  17 (the palette field); a dialog's `.button` is 13.5, its own size. Headings are 20 and 24, and the page title is
+  34. Weights are 400, 600 (labels, headings) and 700 (bold, a pill's value).
+- **Radii**: 3 (a focus ring's corners), 4 (chips, small icon buttons), 6 (buttons, badges, code, images), 8 (rows in
+  a menu or ⌘K, inputs, toasts), 7 (a dialog's `.button`), 10 (menus), 12 (dialog cards; Help's is 14), `999px` for a
+  pill, `50%` for a dot.
 - **Spacing**: the page's side gutter is 32px (`.titlebar`, `.filter`, `.pills`, `.scroll`). A row is a 24px line
   with 3px above and below. A menu has 8px of padding and rows of 8px 12px.
 
