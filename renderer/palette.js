@@ -132,13 +132,15 @@ function paletteRows(q, typed = q) {
     const doc = palDoc;
     rows.push({ id: 'exportPdf', group: docGroup, icon: 'doc', label: 'Export to PDF', run: () => { flushAll(); run(() => tana.exportPdf(doc.id)); } });
   }
-  if (pinInfo && palDoc && pinInfo.docId === palDoc.id) { // labels follow pin state; ids stay stable for shortcuts
-    const td = pinInfo.dates.includes(localDate());
-    rows.push({ id: 'pinToday', rank: 'pinToday', group: docGroup, icon: 'pinDate', label: td ? 'Unpin from today' : 'Pin to today', run: () => pinAction(td ? 'unpin' : 'pin', 'today') });
-    // The same date pin one day on. The date is computed here because the label has to know whether it is already
-    // pinned, and pinInfo.dates is what answers that; main defaults to today when no date comes with the call.
-    const tm = localDate(1), tmPinned = pinInfo.dates.includes(tm);
-    rows.push({ id: 'pinTomorrow', rank: 'pinTomorrow', group: docGroup, icon: 'pinDate', label: tmPinned ? 'Unpin from tomorrow' : 'Pin to tomorrow', run: () => pinAction(tmPinned ? 'unpin' : 'pin', 'today', tm) });
+  // Pin to today and to tomorrow, on every real node so a recorded key works wherever it is pressed (#273). The label
+  // follows pinInfo when ⌘K has read it for this node; the press reads the pins again (toggleDatePin, renderer/
+  // document.js), because a key fires with the palette closed, where pinInfo is the node ⌘K was last opened on.
+  if (palDoc && tana.pinState && tana.pin && isRealId(palDoc.id)) {
+    const doc = palDoc, dates = pinInfo && pinInfo.docId === doc.id ? pinInfo.dates : [];
+    for (const [id, day, name] of [['pinToday', 0, 'today'], ['pinTomorrow', 1, 'tomorrow']]) {
+      const date = localDate(day);
+      rows.push({ id, rank: id, group: docGroup, icon: 'pinDate', label: (dates.includes(date) ? 'Unpin from ' : 'Pin to ') + name, run: () => toggleDatePin(doc, date) });
+    }
   }
   // Any other day, typed in words on a page of its own (renderer/document.js parseDay). Listed whenever a real node
   // is on screen, so ⇧⌘K can record a key against it.
@@ -151,12 +153,14 @@ function paletteRows(q, typed = q) {
   // The row is listed whenever a real node is on screen, so ⇧⌘K can record
   // a key against it, and says why instead of disappearing when there is no meeting to pin to. Its id is unchanged
   // from when it was called "Pin to meeting": a recorded key belongs to the id, and the label is only what it reads.
+  // The lookup and the greying are the open palette's: a key pressed with it closed runs pinToMeeting, which looks
+  // the meeting up itself and says when there is none (#273, #274).
   if (palDoc && tana.currentMeeting && tana.pinTo && isRealId(palDoc.id)) {
-    loadMeeting();
-    const doc = palDoc, live = meetingNow;
+    if (!palette.hidden) loadMeeting();
+    const doc = palDoc, live = palette.hidden ? null : meetingNow;
     rows.push({ id: 'pinToMeeting', group: docGroup, icon: 'meetingPin', label: 'Pin to current meeting',
-      hint: live.pending ? 'Checking…' : live.meeting ? demoText(live.meeting.title || 'Current meeting', live.meeting.id) : live.error || 'No active meeting',
-      disabled: !(live && live.meeting), run: () => pinToMeeting(doc) });
+      hint: !live ? '' : live.pending ? 'Checking…' : live.meeting ? demoText(live.meeting.title || 'Current meeting', live.meeting.id) : live.error || 'No active meeting',
+      disabled: !!live && !live.meeting, run: () => pinToMeeting(doc) });
   }
   // And any other meeting, chosen from a page of its own: the same pin, a target picked rather than detected. It
   // needs no live meeting, so it is never disabled — a workspace with no meetings at all says so on that page.
@@ -230,9 +234,10 @@ function paletteRows(q, typed = q) {
       hint: doc.hue == null ? 'Grey' : 'Hue ' + doc.hue, keepOpen: true, run: () => openHuePalette(doc) });
   }
   // Watching this node: the label says what pressing it does, so it carries no id — a hotkey whose meaning flips
-  // between "start" and "stop" would be a key you cannot learn.
+  // between "start" and "stop" would be a key you cannot learn. No key can reach it, so it is asked only for the
+  // open palette (#274), like the sharing rows below.
   if (palDoc && tana.notifyState && isRealId(palDoc.id)) {
-    loadNotify(palDoc.id);
+    if (!palette.hidden) loadNotify(palDoc.id);
     const watch = notifyById.get(palDoc.id);
     if (watch) rows.push({ rank: 'notify', group: docGroup, icon: 'notify', label: watch.on ? 'Stop notifying' : 'Notify on changes',
       run: () => run(() => setNodeNotify(palDoc.id, !watch.on)) });
@@ -272,7 +277,7 @@ function paletteRows(q, typed = q) {
     else rows.push({ rank: 'codexOpen', group: docGroup, icon: 'host', label: 'Agent task is on ' + ((agentHosts.find((h) => h.id === where) || {}).title || where), disabled: true, run: () => {} });
   }
   if (palDoc && tana.accessOptions) {
-    loadAccess(palDoc.id);
+    if (!palette.hidden) loadAccess(palDoc.id); // Edit visibility and Move carry no id, so no key needs them (#274)
     const access = accessById.get(palDoc.id);
     if (access?.sharing) rows.push({ rank: 'visibility', group: docGroup, icon: 'lock', label: 'Edit visibility', run: () => openVisibilityPalette(palDoc), sub: () => visibilityRows('') });
     if (access?.move) { // Library is a row of its own and the spaces are the folded level of "Move to …"; the Inbox is Set status to Inbox
@@ -386,9 +391,9 @@ function paletteRows(q, typed = q) {
 // command either way, so it must not mean one thing while it is live and something else while it is not.
 function runAction(id) {
   if (palette.hidden) { palDoc = currentDoc(); palField = fieldAt(document.activeElement); } // a key fires with the palette closed, so the "current node" is whatever is focused now
-  const row = paletteRows('').find((r) => r.id === id);
+  const rows = paletteRows(''), row = rows.find((r) => r.id === id);
   if (row) { if (!row.disabled) row.run(); return true; }
-  const fold = id.indexOf('>'), parent = fold > 0 && paletteRows('').find((r) => r.sub && (r.id || r.rank) === id.slice(0, fold));
+  const fold = id.indexOf('>'), parent = fold > 0 && rows.find((r) => r.sub && (r.id || r.rank) === id.slice(0, fold));
   if (parent) {
     if (!parent.disabled) run(async () => { const kid = (await parent.sub()).find((k) => k.label === id.slice(fold + 1) && !k.disabled); if (kid) kid.run(); });
     return true;
