@@ -383,6 +383,10 @@ costs a string and nothing else.
 
 ### The Tracking section opens short
 
+The Responsibility sections run Unassigned, Agent, My inbox, Pinned, Mine, Tracking, My later, My completed, Assigned by
+others (`RESPONSIBILITY` in renderer/views.js): your own work under way comes before what you are waiting on, and what
+you set aside or finished after it.
+
 **Tracking** — work you made and handed to somebody else, under Group by Responsibility — is the one section that does
 not open on all of its rows. It opens on what has moved: the rows updated in the last three days, with the rest behind
 a `button.gmore` reading "Show 19 more tasks" (singular for one). Pressing it shows the whole section for as long as

@@ -27,14 +27,14 @@ const FALLBACK = { status: 'No status', assignee: 'Unassigned', updated: 'Older'
 // and one that is filtered out never gets there, so this asks for what it is missing itself.
 // ponytail: that is one doc:taskMeta per row of the open view while this grouping is chosen; the graph node a view
 // lists already carries assignedTo, so a row could be told at list time instead if it ever costs too much.
-// The headings run in the order the work wants attention: nobody has taken it, you are waiting on somebody, then
-// your own work by its state, then what was handed to you. Your own — made by you and assigned to you — splits
+// The headings run in the order the work wants attention: nobody has taken it, then your own work — waiting, pinned,
+// under way — then what you are waiting on somebody for (Tracking), then your own set aside and done, then what was
+// handed to you. Your own — made by you and assigned to you — splits
 // across the four states the Status menu lists, so each such task sits in exactly one of them. The state is
 // stateOf, the reading the Status pill and the Status grouping already use, so a row carrying only the old done
 // flag lands in My completed or Mine as that flag says, and one with no state at all reads as under way. The rows
 // the grouping leaves out are simply not listed: an empty Other section explaining them was tried and removed.
-// Agent sits between Tracking and your own work, for the same reason Tracking does: it is work you are following
-// rather than doing. Handing a node to the local agent (⌘K, kept in the app's own settings — never a Tana assignee)
+// Agent sits between Unassigned and your own work: it is work you are following rather than doing, and it is moving now. Handing a node to the local agent (⌘K, kept in the app's own settings — never a Tana assignee)
 // is an explicit act of tracking, so it decides the section on its own, ahead of every other rule: before "you" is
 // known, whatever Tana says about its assignees, and even for a row this grouping would otherwise not list at all,
 // since you asked for that one by name. Being first is also what keeps the sections exclusive — nothing handed to
@@ -47,7 +47,7 @@ const MINE_STATES = { proposed: 'My inbox', open: 'Mine', closed: 'My completed'
 // Agent it decides the section on its own (after Agent, which stays first). Date pins are personal (the pin-map), so
 // nobody else's pins land here. It sits under My inbox and above Mine, and its rows say the day (pinnedOn below).
 // Once completed it is done asking for attention, so it goes to My completed (yours, like the pin) and keeps its pin.
-const RESPONSIBILITY = ['Unassigned', 'Tracking', 'Agent', 'My inbox', 'Pinned', 'Mine', 'My completed', 'My later', 'Assigned by others'];
+const RESPONSIBILITY = ['Unassigned', 'Agent', 'My inbox', 'Pinned', 'Mine', 'Tracking', 'My later', 'My completed', 'Assigned by others'];
 function responsibilityOf(n) {
   if (codexIds.has(n.id)) return 'Agent'; // the local mark the badge is drawn from (renderer/nodes.js loadCodex)
   if (isTask(n) && datePinsById.has(n.id)) return stateOf(n) === 'closed' ? 'My completed' : 'Pinned';

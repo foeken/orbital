@@ -2812,20 +2812,20 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     { id: 'ta3', tags: [], createdBy: 'sam' },
   ];
   assert.deepEqual(titles([...responsibility, ...agents], 'responsibility'),
-    [['Unassigned', ['t6']], ['Tracking', ['t1']], ['Agent', ['ta1', 'ta2', 'ta3']], ['My inbox', ['t8']], ['Mine', ['t10']], ['My completed', ['t2']], ['My later', ['t9']], ['Assigned by others', ['t5']]],
-    'Responsibility runs Unassigned, Tracking, Agent, then your own work by its state — My inbox, Mine, My completed, My later — and ends with what somebody else handed you');
+    [['Unassigned', ['t6']], ['Agent', ['ta1', 'ta2', 'ta3']], ['My inbox', ['t8']], ['Mine', ['t10']], ['Tracking', ['t1']], ['My later', ['t9']], ['My completed', ['t2']], ['Assigned by others', ['t5']]],
+    'Responsibility runs Unassigned, Agent, My inbox, Mine, then Tracking under your own work, then My later and My completed, and ends with what somebody else handed you');
   assert.deepEqual(titles(agents, 'responsibility'), [['Agent', ['ta1', 'ta2', 'ta3']]],
     'a node handed to the local agent is in the Agent section and in no other: whoever Tana has it assigned to, and even with no metadata read yet — asking for it by name is enough to list it');
   api.dragging(true);
-  assert.deepEqual(titles(agents, 'responsibility').map(([title]) => title), ['Unassigned', 'Tracking', 'Agent', 'My inbox', 'Pinned', 'Mine', 'My completed', 'My later'],
+  assert.deepEqual(titles(agents, 'responsibility').map(([title]) => title), ['Unassigned', 'Agent', 'My inbox', 'Pinned', 'Mine', 'Tracking', 'My later', 'My completed'],
     'while a task is dragged, every section a drop can land in is drawn, empty or not');
   api.dragging(false);
   const pinnedTask = { id: 'tp1', icon: 'task', tags: [], createdBy: 'sam' };
-  assert.deepEqual(titles([...responsibility, pinnedTask], 'responsibility').map(([title, ids]) => title + ':' + ids.join()).slice(2, 5),
+  assert.deepEqual(titles([...responsibility, pinnedTask], 'responsibility').map(([title, ids]) => title + ':' + ids.join()).slice(1, 4),
     ['My inbox:t8', 'Pinned:tp1', 'Mine:t10'],
     'a task pinned to a day sits in Pinned, under My inbox and above Mine, whoever has it and with no metadata read');
   assert.deepEqual(titles(responsibility, 'responsibility'),
-    [['Unassigned', ['t6']], ['Tracking', ['t1']], ['My inbox', ['t8']], ['Mine', ['t10']], ['My completed', ['t2']], ['My later', ['t9']], ['Assigned by others', ['t5']]],
+    [['Unassigned', ['t6']], ['My inbox', ['t8']], ['Mine', ['t10']], ['Tracking', ['t1']], ['My later', ['t9']], ['My completed', ['t2']], ['Assigned by others', ['t5']]],
     'and with nothing handed to the agent the other sections are exactly as they were');
   // Tracking follows the bell, not the hand-off: silencing a task you gave away takes it out of the section, the
   // same watch state (an explicit choice, else the default rule) the row's own bell is drawn from.
@@ -2849,8 +2849,8 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   assert.deepEqual([soon.nodes.map((n) => n.id).sort(), soon.more], [['tq1', 'tq3', 'tq4'], 2],
     'Pinned opens on what is pinned within the coming week or already past, and a task pinned only further ahead waits behind the link');
   assert.deepEqual(sections.map((g) => [g.title, g.nodes.map((n) => n.id)]),
-    [['Unassigned', ['t6']], ['Tracking', ['t1']], ['My inbox', ['t8']], ['Mine', ['t10']], ['My completed', ['t2']], ['My later', ['t9']], ['Assigned by others', ['t5']]],
-    'the sections run Unassigned, Tracking, My inbox, Mine, My completed, My later, Assigned by others, and end there');
+    [['Unassigned', ['t6']], ['My inbox', ['t8']], ['Mine', ['t10']], ['Tracking', ['t1']], ['My later', ['t9']], ['My completed', ['t2']], ['Assigned by others', ['t5']]],
+    'the sections run Unassigned, My inbox, Mine, Tracking, My later, My completed, Assigned by others, and end there');
   assert.ok(sections.every((g) => g.nodes.length && g.note === undefined),
     'no section is drawn empty, and none carries a line of its own');
   assert.equal(plain(api.pageRows(responsibility, '')).list.length, 7,
