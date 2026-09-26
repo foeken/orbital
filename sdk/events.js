@@ -1,5 +1,6 @@
 'use strict';
-// Editing a meeting (a 'tana:event:' document) the way Tana's own event wrapper does (shared-*.js, read 2026-09-23).
+// A meeting (a 'tana:event:' document): editing it the way Tana's own event wrapper does (shared-*.js, read 2026-09-23),
+// and, at the end, the two rules that read its graph node: which owned document is its write-up, and its join link.
 // Who may call these is access.canEditEvent's answer; these only write. Tana has no origin check: a calendar-synced
 // event ('provider') is edited like a Tana-made one ('tana') and the server writes the change back to the calendar,
 // reporting it in data.syncStatus ('pending' | 'synced' | 'failed') and data.syncError. No client writes those two.
@@ -74,4 +75,29 @@ function attendees(doc) {
   return out;
 }
 
-module.exports = { setTime, setTimezone, setLocation, setDescription, addAttendees, attendees, lineKey };
+// The write-up of an event has no edge of its own: it is the document the event owns whose title is the event's
+// tagline (Tana generates both together, and it carries the generated appearance.imageUri). Verified in English
+// and Dutch, so the rule is not language-bound. `event` and `owned` are graph nodes; null when neither signal is there.
+const writeUpOf = (event, owned) => {
+  const ev = (event && event.calendarEvent) || {};
+  const plain = owned.filter((n) => !(n.state && n.state.type) && n.id.split(':')[1] === 'text' && (n.title || '').trim());
+  return (ev.tagline && plain.find((n) => n.title === ev.tagline)) || plain.find((n) => n.appearance && n.appearance.imageUri) || null;
+};
+// The meeting's call link. A calendar location holds the join url for an online meeting (Tana Meet, Google Meet,
+// Zoom), a room or address for a physical one, and often both in one semicolon-separated string, so take the first
+// http(s) url out of it rather than the whole field. When the location names the room only ('Teams meeting',
+// '+Main Building 5-R1 Stairs - Zoom') the provider still carries the join url in calendarEvent.actionUrl, which
+// held nothing but Zoom and Teams join links across the calendar (read-only survey, 2026-09-14).
+// The label is the human part of the url; a Teams join path is a couple of hundred characters of ids, so a path that
+// long is dropped and the host speaks for itself.
+function callOf(ev) {
+  const found = typeof ev.location === 'string' ? ev.location.match(/https?:\/\/[^\s;,]+/i) : null;
+  const url = found ? found[0].replace(/[).,;]+$/, '') : typeof ev.actionUrl === 'string' ? ev.actionUrl : '';
+  if (!/^https?:\/\//i.test(url)) return undefined;
+  try {
+    const u = new URL(url), label = (u.host + u.pathname).replace(/\/+$/, '');
+    return { url, label: label.length > 60 ? u.host : label };
+  } catch { return undefined; }
+}
+
+module.exports = { setTime, setTimezone, setLocation, setDescription, addAttendees, attendees, lineKey, writeUpOf, callOf };

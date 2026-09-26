@@ -588,6 +588,7 @@ commands.assignee = async () => {
 // calls [--days 14] [--limit 6]: read-only check of the call link the meeting hub hands the sidebar. Prints the raw
 // calendar location beside related().call, so a Tana Meet, a Google Meet and a room-only meeting can be compared.
 commands.calls = async () => {
+  const { callOf } = require('../sdk/events');
   const main = backend(await connect());
   await client.sync.connect(); // related() reads the zoomed node's fields, which needs a subscription
   if (positional[0]) { const { call } = await main.related(positional[0]); return out('related(' + positional[0] + ').call = ' + JSON.stringify(call)); }
@@ -596,7 +597,7 @@ commands.calls = async () => {
   const withLocation = nodes.filter((n) => (n.calendarEvent || {}).location);
   out(withLocation.length + ' of ' + nodes.length + ' events carry a location');
   const hosts = new Map();
-  for (const n of withLocation) { const c = main.callOf(n.calendarEvent); const key = c ? c.label.split('/')[0] : 'no link (room or address)'; hosts.set(key, (hosts.get(key) || 0) + 1); }
+  for (const n of withLocation) { const c = callOf(n.calendarEvent); const key = c ? c.label.split('/')[0] : 'no link (room or address)'; hosts.set(key, (hosts.get(key) || 0) + 1); }
   out([...hosts].sort((a, b) => b[1] - a[1]).map(([k, v]) => k + ' ' + v).join(', '));
   // events an online meeting only through the provider action: the location names a room, the join url is elsewhere
   const hidden = nodes.filter((n) => (n.calendarEvent || {}).actionUrl && !/https?:\/\//i.test(n.calendarEvent.location || ''));

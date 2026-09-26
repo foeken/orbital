@@ -4056,8 +4056,7 @@ async function main() {
   }
   // A meeting's call link for the sidebar: the join url out of a calendar location that may also name a room.
   {
-    const { callOf } = mainHelpers();
-    // spread: the helper runs in its own vm realm, so compare plain values rather than cross-realm objects
+    const { callOf, writeUpOf } = require('../sdk/events');
     assert.deepEqual({ ...callOf({ location: 'https://meet.tana.inc/abc-defg-hij' }) }, { url: 'https://meet.tana.inc/abc-defg-hij', label: 'meet.tana.inc/abc-defg-hij' });
     assert.equal(callOf({ location: 'https://meet.google.com/klm-nopq-rst/' }).label, 'meet.google.com/klm-nopq-rst');
     const zoom = callOf({ location: '+Main Building 6.1a-R1 Presentationroom; https://example.zoom.us/j/653?pwd=AR8&from=addon' });
@@ -4069,6 +4068,14 @@ async function main() {
     assert.equal(teams.label, 'teams.microsoft.com', 'a join path of ids is not a label');
     assert.match(teams.url, /^https:\/\/teams\.microsoft\.com\/l\/meetup-join\//, 'the provider link is kept whole');
     assert.equal(callOf({ location: 'https://meet.tana.inc/a-b-c', actionUrl: 'https://zoom.us/j/1' }).label, 'meet.tana.inc/a-b-c', 'the location wins over the action');
+    // the write-up: the owned page titled with the tagline, else the owned page with Tana's sketch; never a task
+    const page = (id, title, extra) => ({ id: 'tana:text:' + id.padEnd(26, '0'), title, ...extra });
+    const tagged = page('a', 'Plan', {}), sketched = page('b', 'Other', { appearance: { imageUri: 'tana:image:x' } }), task = page('c', 'Plan', { state: { type: 'open' } });
+    const event = { calendarEvent: { tagline: 'Plan' } };
+    assert.equal(writeUpOf(event, [task, sketched, tagged]), tagged, 'the tagline names the write-up, and a task of that title is not it');
+    assert.equal(writeUpOf({}, [task, sketched, tagged]), sketched, 'without a tagline the sketch does');
+    assert.equal(writeUpOf(event, [task, page('d', 'Plan elsewhere', {})]), null, 'and with neither signal there is none');
+    assert.equal(writeUpOf(event, [{ id: 'tana:event:' + '0'.repeat(26), title: 'Plan' }]), null, 'only a text document is a write-up');
   }
   // A multi-select is one user action: one undo/redo step restores/reapplies its complete range.
   {

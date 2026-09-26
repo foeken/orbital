@@ -325,7 +325,7 @@ Cmd+K leads with a Selection group for it (§8).
   `caretOnOpen` is set, and the first character typed scrolls that row into view once (`scrollOnType`,
   `block: 'nearest'`). A read-only row neither scrolls nor spends that one-shot.
 - **A meeting opens at its write-up.** An event has no content of its own, so zooming one forwards to the document it
-  owns whose title is the event's tagline (`api.summaryUri`, `writeUpOf` in main), from every route; the write-up is
+  owns whose title is the event's tagline (`api.summaryUri`, `writeUpOf` in sdk/events.js), from every route; the write-up is
   never repeated in the sidebar ([MEETINGS.md](MEETINGS.md)).
 - **Back and Forward** (⌘[ and ⌘], the arrows at the top right) walk one history per page. Back with nothing to go back
   to lands on Home.
