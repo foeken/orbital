@@ -62,6 +62,8 @@ let previewLoading = () => {};
     const still = typeof stillPreferred === 'function' && stillPreferred();
     if (!t0) t0 = now;
     const t = still ? 99 : (now - t0) / 1000 - WAIT;
+    // the Timeline builds at its own slow pace; every other page builds in less than half the time (the sweep does not change)
+    const bt = t * (zoom && zoom.docId === TIMELINE_PAGE ? 1 : 2.2);
     const dpr = devicePixelRatio || 1, w = canvas.clientWidth, h = canvas.clientHeight;
     if (w && h) {
       if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) { canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr); }
@@ -80,7 +82,7 @@ let previewLoading = () => {};
         };
         ctx.strokeStyle = base; ctx.lineWidth = 1.5;
         for (const it of items) {
-          const p = (t - it.start) / it.dur;
+          const p = (bt - it.start) / it.dur;
           if (p <= 0) continue;
           ctx.globalAlpha = (it.a / 0.55) * clamp(p * 2.5);
           if (it.glyph != null) { ctx.fillStyle = base; glyph(it.glyph, it.x, it.y + 3 * (1 - ease(p))); continue; }
