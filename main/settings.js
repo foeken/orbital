@@ -19,6 +19,7 @@
 const db = require('../db');
 const content = require('../sdk/content');
 const { initDocument, readNode, ulid } = require('../sdk/node');
+const { audienceOf } = require('../sdk/access');
 const { S, isDeleted, report, send } = require('./state');
 
 const TITLE = 'Orbital'; // how a machine that has never seen the document finds it
@@ -126,12 +127,14 @@ async function discover() {
     const listNodes = S.client.graph.listNodesUnhidden || S.client.graph.listNodes;
     // The current name first, so a workspace carrying both settles on the one this app writes.
     for (const title of [TITLE, OLD_TITLE]) {
-      const { nodes } = await listNodes({ nodeTypes: ['text'], textQuery: title, createdBy: [S.me.userUri], limit: 20 });
+      // oldest first from the graph, so a crowd of newer notes with the same title cannot push the oldest past the limit
+      const { nodes } = await listNodes({ nodeTypes: ['text'], textQuery: title, createdBy: [S.me.userUri], limit: 100,
+        sortOptions: [{ field: 'SORT_FIELD_CREATE_TIME', direction: 'SORT_DIRECTION_ASCENDING' }] });
       const mine = nodes.filter((n) => (n.title || '').trim().toLowerCase() === title.toLowerCase())
         .sort((a, b) => String(a.createTime || '').localeCompare(String(b.createTime || '')));
       for (const node of mine) {
         const doc = await S.client.sync.subscribe(node.id).catch(() => null);
-        if (doc && !isDeleted(readNode(doc)) && holdsSettings(doc)) return doc;
+        if (doc && !isDeleted(readNode(doc)) && holdsSettings(doc) && await onlyMine(doc)) return doc;
       }
     }
   } catch (e) { report(e); }
@@ -140,6 +143,9 @@ async function discover() {
 // A title is not proof: a note of yours called "Orbital" must never be taken over and filled with every synced key.
 // Ours carries the mark it was made with, or (made by an older build) at least one key in either root.
 const holdsSettings = (doc) => [MARK, ROOT, OLD_ROOT].some((root) => Object.keys(doc.loro.getMap(root).toJSON() || {}).length > 0);
+// The title and the mark are anybody's to write who can edit a document, and every synced key (the sensitive marks, the
+// agent prompts) would be written into the one taken: only one nobody else can read is taken (sdk/access.js audienceOf).
+const onlyMine = async (doc) => (await audienceOf(readNode(doc), S.me.userUri, { sync: S.client.sync, orgDocUri: S.me.orgDocUri })).scope === 'only-me';
 async function create() {
   const id = 'tana:text:' + ulid();
   const doc = await S.client.sync.subscribe(id, (loro) => {

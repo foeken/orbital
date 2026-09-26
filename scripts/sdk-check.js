@@ -1221,13 +1221,16 @@ async function main() {
     const note = new Document('tana:text:' + ulid()); // a note of yours that happens to be called Orbital, older than both
     note.transact((l) => initDocument(l, settings.TITLE, ME));
     docs.set(note.id, note);
+    const shared = new Document('tana:text:' + ulid()); // one called Orbital, marked, but where others can read it: somebody with edit rights made it look like ours
+    shared.transact((l) => { initDocument(l, settings.TITLE, ME); l.getMap('ext:orbital:doc').set('app', 'orbital'); l.getMap('data').set('restricted', false); });
+    docs.set(shared.id, shared);
     connect();
     settings.setPref('home', 'library');
     await settings.hydrate(); await settings.flush();
     const mine = settings.settingsDocId();
     assert.ok(mine && mine !== theirs.id, 'the index did not list theirs yet, so this machine made its own');
     listed = [{ id: mine, title: settings.TITLE, createTime: '2026-09-26T09:00:01Z' }, { id: theirs.id, title: settings.TITLE, createTime: '2026-09-26T09:00:00Z' },
-      { id: note.id, title: settings.TITLE, createTime: '2026-01-01T00:00:00Z' }];
+      { id: note.id, title: settings.TITLE, createTime: '2026-01-01T00:00:00Z' }, { id: shared.id, title: settings.TITLE, createTime: '2025-12-01T00:00:00Z' }];
     connect(); sent.length = 0;
     await settings.hydrate(); await settings.flush();
     assert.equal(settings.settingsDocId(), theirs.id, 'the next launch settles on the oldest, pointer or not, so the two machines stop drifting apart');
@@ -1235,10 +1238,11 @@ async function main() {
     assert.equal(JSON.parse(theirs.loro.getMap(settings.ROOT).get('pref:home')), 'library', 'and pushes up the ones only this machine had');
     assert.ok(sent.some(([channel, prefs]) => channel === 'settings:changed' && prefs.theme === 'dark'), 'and the open page is told, rather than keeping the defaults until the next launch');
     assert.deepEqual(note.loro.getMap(settings.ROOT).toJSON(), {}, 'an older note that only shares the title is never taken over');
+    assert.deepEqual(shared.loro.getMap(settings.ROOT).toJSON(), {}, 'nor one others can read, mark or not: no synced key is ever written where somebody else sees it');
     assert.deepEqual(JSON.parse(JSON.stringify(settings.get('settingsOld'))), [third, mine], 'the document this machine gave up is remembered, and synced, beside the one another machine gave up');
     assert.deepEqual(JSON.parse(theirs.loro.getMap(settings.ROOT).get('settingsOld')), [third, mine], 'in the document too');
     const shown = await backend.S.client.graph.listNodes({ nodeTypes: ['text'], textQuery: settings.TITLE });
-    assert.deepEqual(JSON.parse(JSON.stringify(shown.nodes.map((n) => n.id))), [note.id], 'so neither settings document is listed anywhere, while your own note called Orbital is');
+    assert.deepEqual(JSON.parse(JSON.stringify(shown.nodes.map((n) => n.id))), [note.id, shared.id], 'so neither settings document is listed anywhere, while the notes that are only called Orbital are');
     theirs.transact((l) => l.getMap('data').set('deletedAt', 123));
     connect();
     await settings.hydrate(); await settings.flush();
