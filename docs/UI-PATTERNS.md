@@ -18,7 +18,9 @@ Everything the palette lists is a plain object. The full field list and ordering
 
 - `hint: '✓'` marks the current choice on every picker. `keepOpen: true` marks a row that opens another page or stays
   for the next pick.
-- A note is a row nobody can run: `{ group, label: 'Loading…', disabled: true }`. ↑/↓ step over it.
+- A note is a row nobody can run that says why there are no rows: `{ group, label: 'Loading…', disabled: true,
+  note: true }`. ↑/↓ step over it, and no "No results" is drawn under it. A disabled row without `note` is a choice
+  that is unavailable right now.
 - `docRow(node, hint, run)` (renderer/palette.js) makes a document into a row, with its icon, type chips and date.
 - `fuzzyMatch(label, q)` (renderer/palette.js) is the palette's matcher: filter a page's list with it, as in
   `list.filter((x) => fuzzyMatch(x.title, q))`, and the bold letters agree with ⌘K. It filters only: a page keeps
