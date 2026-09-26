@@ -59,10 +59,11 @@ function openAIKeyRows() {
 // path to codex", three values separated by spaces — because a page of three inputs is more machinery than this
 // needs and the palette already knows how to take one line. Main validates and stores; nothing is run here.
 const HOSTS_GROUP = 'Codex hosts · type "Name ssh-address /path/to/codex" to add one, ↩ on a host removes it';
-let hostList = null; // null while the list is in flight
+let hostList = null; // loadList's answer, then each write's
 const hostsApply = (call) => run(async () => { hostList = await call(); agentHosts = hostList; renderPalette(); });
-function hostRows(q, typed) {
-  const rows = (hostList || []).filter((h) => h.id !== 'local').map((h) => ({ group: HOSTS_GROUP, icon: 'host', label: h.title,
+// The hosts, with what is typed offered as a new one first; the list is short and never narrowed, so the page is a typed one.
+const hostRows = (q, typed) => listRows(HOSTS_GROUP, hostList, '', 'No other machines yet', (list) => {
+  const rows = list.filter((h) => h.id !== 'local').map((h) => ({ group: HOSTS_GROUP, icon: 'host', label: h.title,
     hint: '↩ removes it · its tasks stay', keepOpen: true, run: () => hostsApply(() => tana.removeCodexHost(h.id)) }));
   const parts = typed.trim().split(/\s+/);
   if (parts.length >= 3) {
@@ -70,12 +71,11 @@ function hostRows(q, typed) {
     rows.unshift({ group: HOSTS_GROUP, icon: 'createNew', label: 'Add "' + title + '" on ' + ssh, hint: bin, keepOpen: true,
       run: () => run(async () => { await tana.addCodexHost(title, ssh, bin); palInput.value = ''; hostsApply(() => tana.codexHosts()); }) });
   }
-  if (!rows.length) rows.push({ group: HOSTS_GROUP, label: hostList ? 'No other machines yet' : 'Loading…', disabled: true });
   return rows;
-}
+});
 function openHostsPalette() {
-  hostList = null; openPage('hosts', 'Name  ssh-address  /path/to/codex', { rows: hostRows, back: BACK_TO_COMMANDS });
-  hostsApply(() => tana.codexHosts());
+  loadList('hosts', () => tana.codexHosts(), (list) => { hostList = list; if (Array.isArray(list)) agentHosts = list; });
+  openPage('hosts', 'Name  ssh-address  /path/to/codex', { rows: hostRows, back: BACK_TO_COMMANDS, typed: true });
 }
 // ---- linking a node to a Codex task that already exists (#143) ----
 // Pasted rather than picked: Codex's Copy link gives codex://threads/<id>, and a bare id works too. Main checks it
@@ -92,7 +92,7 @@ function agentLinkRows(q, typed) {
   }) }];
 }
 function openAgentLink(doc) {
-  agentLinkDoc = doc; openPage('agentLink', 'codex://threads/…', { rows: agentLinkRows, back: BACK_TO_COMMANDS });
+  agentLinkDoc = doc; openPage('agentLink', 'codex://threads/…', { rows: agentLinkRows, back: BACK_TO_COMMANDS, typed: true });
 }
 // ---- assigning a node to the local agent: the prompt page, one level down in Cmd+K ----
 // "Assign to Agent" does not assign: it advances to this page, where the palette's single-line field is swapped for a

@@ -153,7 +153,7 @@ function pinDateRows(q, typed) {
     run: () => { if (typeof holdDatePin === 'function') holdDatePin(doc); return run(async () => { await tana.pin(doc.id, 'today', date); loadPins(); }); } }];
 }
 function openPinDatePalette(doc) {
-  pinDateDoc = doc; openPage('pinDate', 'Pin to date\u2026', { rows: pinDateRows, back: BACK_TO_COMMANDS });
+  pinDateDoc = doc; openPage('pinDate', 'Pin to date\u2026', { rows: pinDateRows, back: BACK_TO_COMMANDS, typed: true });
 }
 function invalidatePinCaches(id) {
   if (pinInfo && pinInfo.docId === id) pinInfo = null;
