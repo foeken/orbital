@@ -334,6 +334,9 @@ function renderTableBtn(available) {
 }
 tableBtn.onmousedown = (e) => e.preventDefault(); // the caret stays in its row, as with the other header buttons
 tableBtn.onclick = () => setTableView(!tableView());
+// An options field of the type whose page this is, which a table row's cell (a click) and ⌘K on that row (renderer/fields.js
+// fieldRows) both change through openCellChooser.
+const pickableDef = (node, k) => { const def = typeDefs().find((d) => fieldKey(d) === k); return def && def.type === 'options' && canEditNode(node) && tana.setField && !demoMode ? def : null; };
 function tableCells(node, info, sub) {
   sub.className = 'subtext'; sub.textContent = '';
   for (const k of tableKeys()) {
@@ -342,10 +345,11 @@ function tableCells(node, info, sub) {
     else {
       // plain text, as every other column is; the cell's ellipsis cuts it and the tooltip has the rest
       cell.textContent = cell.title = ((node.fields && node.fields[k]) || []).map((v) => demoText(v, node.id)).join(', ');
-      const def = typeDefs().find((d) => fieldKey(d) === k); // an options field on a type's page: a click picks its value in ⌘K
-      if (def && def.type === 'options' && canEditNode(node) && tana.setField && !demoMode) {
+      const def = pickableDef(node, k);
+      if (def) {
         cell.classList.add('pick');
-        cell.onclick = (e) => { e.stopPropagation(); openCellChooser(node, k, def); }; // the row's own click opens the row
+        // the row's own click opens the row; ⌘ or ⇧ is a selection (renderer/events.js), as it is on the title
+        cell.onclick = (e) => { if (e.metaKey || e.shiftKey) return; e.stopPropagation(); openCellChooser(node, k, def); };
       }
     }
     sub.append(cell);

@@ -89,9 +89,9 @@ function openChooser(ctx, back, text = '') {
 }
 // A table cell on a type's page (renderer/views.js tableCells): that row's value of one options field, from the row
 // the page was read with.
-function openCellChooser(node, key, def) {
+function openCellChooser(node, key, def, back) {
   const lines = ((node.fields || {})[key] || []).map((text) => ({ segments: [{ text }] }));
-  openChooser({ docId: node.id, key: 'cell|' + node.id + '|' + key, row: node, editable: true, field: { key, label: def.title, type: def.type, cardinality: def.cardinality, options: def.options, lines } });
+  openChooser({ docId: node.id, key: 'cell|' + node.id + '|' + key, row: node, editable: true, field: { key, label: def.title, type: def.type, cardinality: def.cardinality, options: def.options, lines } }, back);
 }
 // ---- a field page in the palette: one mode, the rows and the way back given by whoever opens it ----
 function openFieldPage(ctx, rows, placeholder, back, text = '', keys = null) {
@@ -170,6 +170,12 @@ function fieldRows(group) {
   if (ctx && ctx.field && ctx.editable) {
     rows.push({ id: 'fieldValue', group, icon: ctx.field.type === 'options' ? 'options' : 'link', label: ctx.field.type === 'options' ? 'Select value …' : 'Link to …',
       hint: ctx.field.label || '', keepOpen: true, run: () => openChooser(ctx, openCommandPalette) });
+  }
+  // a table row on a type's page: its options columns, the keyboard's way to what a click on the cell does
+  const row = palDoc && tableView() && onTypePage() && (kids.get(zoom.docId) || []).find((n) => n.id === palDoc.id);
+  if (row) for (const k of tableKeys()) {
+    const def = pickableDef(row, k);
+    if (def) rows.push({ id: 'cellValue:' + def.key, group, icon: 'options', label: 'Set ' + (def.title || 'value') + ' …', hint: ((row.fields || {})[k] || []).join(', '), keepOpen: true, run: () => openCellChooser(row, k, def, openCommandPalette) });
   }
   if (ctx && ctx.def && tana.defineField) {
     const def = ctx.def, type = def.type || '';
