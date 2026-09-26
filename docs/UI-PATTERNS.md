@@ -55,10 +55,15 @@ function huePickRows(q, typed) { … } // every page's rows: q lowercased, typed
   gets all of this from `loadList` (below); anything else follows this shape:
 
   ```js
-  typeCtx = doc; typeList = null; // the first draw says Loading…, never the last document's choices
-  openPage('setType', 'Set type to…', { rows: typeRows, back: BACK_TO_COMMANDS });
-  const seq = palSeq, landed = (keep) => (answer) => { if (seq === palSeq) { keep(answer); renderPalette(); } };
-  tana.docTypes(doc.id).then(landed((list) => { typeList = list; }), landed((e) => { typeList = e; })); // rows show e.message
+  let answer = null; // null while asked, then what main said, or the Error it failed with
+  const note = (label) => [{ group: 'Example', label, disabled: true, note: true }];
+  const exampleRows = (q) => (!answer ? note('Loading…') : answer instanceof Error ? note(answer.message) : rowsFrom(answer, q));
+  function openExample(doc) {
+    answer = null; // the first draw says Loading…, never the last document's answer
+    openPage('example', 'Choose…', { rows: exampleRows, back: BACK_TO_COMMANDS });
+    const seq = palSeq, landed = (value) => { if (seq === palSeq) { answer = value; renderPalette(); } };
+    tana.exampleRead(doc.id).then(landed, (e) => landed(e instanceof Error ? e : new Error(String(e))));
+  }
   ```
 
 ### A page that lists one read: `loadList` and `listRows` (renderer/palette.js)
