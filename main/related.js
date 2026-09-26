@@ -13,7 +13,8 @@ const crumbIcon = (id) => ({ space: 'space', event: 'meeting', 'user-profile': '
 async function pathOf(id) {
   if (!S.client) throw new Error(NOT_CONNECTED);
   const { entries = [] } = await S.client.graph.getOwnerChain(id);
-  const owners = entries.map((e) => e.uri).filter((u) => u !== id).reverse();
+  // The workspace (tana:org:) owns every type but is no place to open: as a crumb it led to an empty page.
+  const owners = entries.map((e) => e.uri).filter((u) => u !== id && idKind(u) !== 'org').reverse();
   const library = { id: 'library', title: 'Library', icon: 'library' }; // every location starts at the Library view
   if (!owners.length) return [library];
   await resolveTypes(owners); // same title cache: any node id -> title

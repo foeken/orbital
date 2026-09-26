@@ -1154,6 +1154,8 @@ function runReferenceEmbedRenderCheck() {
       return { className: el.className, editable: text.contentEditable === 'plaintext-only', rendered: rendered.get(text),
         checked: check ? !!check.checked : null, disabled: check ? !!check.disabled : null, toggles: check && check.onclick ? (check.onclick(), toggled) : null,
         selectsOnClick: typeof line.onmousedown === 'function', bullet: (line.children[1].onclick(), opened), loadedFrom: loaded,
+        lineClick: (opened = null, line.onclick({ target: { closest: () => null } }), opened),
+        opensClass: el.classes.has('opens'),
         bulletIcon: [...line.children[1].classes].find((name) => name !== 'icon' && name !== 'hue') || null,
         kidKeys: wrap ? wrap.children.filter((kid) => kid.dataset?.key).map((kid) => kid.dataset.key) : null };
     };
@@ -1222,6 +1224,12 @@ function runReferenceEmbedRenderCheck() {
     'clicking the row selects it instead of following a link out of it, and its bullet is the way into the node');
   assert.deepEqual([beside.selectsOnClick, beside.bullet], [false, 'zoomed the block'],
     'while an ordinary line with a link keeps the plain caret click and zooms into itself');
+  assert.equal(beside.lineClick, null, 'a click on its line places a caret and opens nothing');
+
+  // A type row (the Types view) opens on a click on its title: its name is renamed on its own page.
+  const typeRow = plain(api.built({ id: 'tana:type:01j0goal000000000000000000', kind: 'document', icon: 'type', text: 'Goal', editable: true }));
+  assert.deepEqual([typeRow.editable, typeRow.lineClick, typeRow.opensClass], [false, 'zoomed the block', true],
+    'a type row is not a caret: a click on its title zooms into the type');
 
   // A row with an outline of its own is never a full reference, because expanding one opens the outline of the node
   // it points at, which would leave the block's own with nowhere to go.
