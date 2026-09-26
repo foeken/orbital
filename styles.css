@@ -941,6 +941,16 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 .palette.anchored .group { font-size: 12px; padding: 8px 10px 4px; }
 .palette.anchored .row { font-size: 14px; padding: 6px 10px; }
 .palette.anchored .hint { font-size: 13px; }
+/* The palette over both halves of a split (issue #409, renderer/palette.js coverWindow): the page is laid over the whole
+   window and draws itself in its own half, see-through beside it, so only the palette and its scrim reach across.
+   The root's own (transparent) background keeps the body's on the body: a root with none paints the body's everywhere.
+   Hidden: the body now clips its own sidebar sliding out, which the window did before. What sits at an edge of the
+   window sits at the half's edge; what is placed from an element's rect (menus, the toolbar) is there already. */
+html.cover { background: linear-gradient(transparent, transparent); overflow: hidden; }
+html.cover body { margin-left: var(--pane-x); width: var(--pane-w); }
+html.cover .splitgrip { left: var(--pane-x); }
+html.cover .splitgrip.left { left: calc(var(--pane-x) + var(--pane-w) - 5px); right: auto; }
+html.cover .toast { left: calc(var(--pane-x) + var(--pane-w) / 2); max-width: min(480px, calc(var(--pane-w) - 48px)); }
 
 /* ==== Key recorder (renderer/palette.js) ==== */
 /* hotkey recorder (Cmd+Shift+K on a Cmd+K row) */

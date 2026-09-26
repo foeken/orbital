@@ -114,6 +114,18 @@ there, or on the field a field page came from. ⌘K records it in `togglePalette
 `keepOpen` is closed before its `run` (`runRow`). An action that opens a page instead of closing leaves focus in the
 palette. Nothing else moves focus back by hand.
 
+### A popover over the whole window: `coverWindow` (renderer/palette.js)
+
+In a split window each half is its own page, so anything `position: fixed` covers only that half. A centred, modal
+popover that should cover the window while acting on its half (the palette and the key recorder over it) calls
+`coverWindow(mode)` as it opens and `coverWindow(null)` as it closes: main lays the page over the whole window and
+the page keeps drawing itself in its half (`html.cover`), see-through beside it. `showPage` and `closePalette` already
+do this, so a palette page needs nothing. A new element fixed to an edge of the window gets an `html.cover` rule in
+styles.css that puts it at the half's edge (`--pane-x`, `--pane-w`), as the split line and the toast have; one placed
+from an element's rect is right already. A popover that belongs to a spot in the half (a pill menu, the toolbar, the
+@ and / menus) stays in the half and never covers. A page of its own over the window (Help, Create task) is an
+overlay instead (main.js `openOverlay`).
+
 ### Icons: `addIcon` and `iconNode` (renderer/nodes.js)
 
 An icon is a name from `ICONS` (icons.js, built by scripts/build-icons.js) or a registered Nucleo glyph. It is parsed

@@ -1075,6 +1075,32 @@ async function main() {
     split.panes = [box(), hidden];
     Object.assign(backend.S.status, { authenticated: true }); backend.layout(split);
     assert.deepEqual([split.panes[0].bounds.width, split.panes[1].visible], [500, true], 'signed in: the split comes back');
+    // ⌘K over both halves (issue #409): the page that asks is laid over the whole window, above the other half, and
+    // keeps being told where its own half is; the other half stays where it was. The asking page is the one covered.
+    const said = [], raised = [];
+    const own = (v) => JSON.parse(JSON.stringify(v ?? null)); // main runs in its own vm context: its objects, compared as data
+    const view = (name) => ({ name, setBounds(b) { this.bounds = own(b); }, setVisible() {}, webContents: { isDestroyed: () => false, send: (channel, half) => said.push([name, channel, own(half)]) } });
+    const covering = { isDestroyed: () => false, getContentBounds: () => ({ width: 1000, height: 600 }), panes: [view('left'), view('right')], contentView: { addChildView: (v) => raised.push(v.name) } };
+    const alone = { isDestroyed: () => false, getContentBounds: () => ({ width: 800, height: 600 }), panes: [view('alone')], contentView: { addChildView: (v) => raised.push(v.name) } };
+    backend.S.windows.add(covering).add(alone);
+    const cover = (pane, on) => { const e = { sender: pane.webContents }; backend.handlers.get('window:cover')(e, on); return own(e.returnValue); };
+    const [leftHalf, rightHalf] = covering.panes, full = { x: 0, y: 0, width: 1000, height: 600 };
+    assert.deepEqual(cover(rightHalf, true), { x: 500, width: 500 }, 'the right half asks: main answers where its half is, at once');
+    assert.deepEqual([rightHalf.bounds, leftHalf.bounds], [full, { x: 0, y: 0, width: 500, height: 600 }], 'it covers the whole window; the left half stays where it is');
+    assert.deepEqual(raised, ['right'], 'above the other half');
+    said.length = 0; covering.getContentBounds = () => ({ width: 1200, height: 700 }); backend.layout(covering);
+    assert.deepEqual([said, rightHalf.bounds.width, leftHalf.bounds.width], [[['right', 'window:cover', { x: 600, width: 600 }]], 1200, 600], 'a resize while covered: still the whole window, and told its half again');
+    assert.equal(cover(leftHalf, false), null, 'the half that does not cover letting go changes nothing');
+    assert.equal(rightHalf.bounds.width, 1200);
+    said.length = 0; cover(rightHalf, false);
+    assert.deepEqual([rightHalf.bounds, said], [{ x: 600, y: 0, width: 600, height: 700 }, []], 'closed: back to its half, told nothing more');
+    covering.overlay = { name: 'overlay', setBounds() {} }; raised.length = 0;
+    assert.deepEqual(cover(leftHalf, true), { x: 0, width: 600 }, 'the left half asks: its own half');
+    assert.deepEqual([raised, rightHalf.bounds.x], [['left', 'overlay'], 600], 'a Help tour or Create task open meanwhile stays on top, and the right half stays put');
+    cover(leftHalf, false); raised.length = 0;
+    assert.equal(cover(alone.panes[0], true), null, 'a page alone in its window: nothing to cover');
+    assert.deepEqual([alone.panes[0].bounds, raised.length], [undefined, 0], 'and nothing moved');
+    backend.S.windows.delete(covering); backend.S.windows.delete(alone);
     Object.assign(backend.S.status, auth);
     // A node's link opens it in Tana on the route Tana itself picks for its kind (issue #88).
     backend.testRuntime({ me: { orgDocUri: 'tana:org:01ks7rqsrqjn7vwyjhx75r6jg0' } });
