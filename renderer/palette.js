@@ -396,12 +396,13 @@ function runAction(id) {
   if (palette.hidden) { palDoc = currentDoc(); palField = fieldAt(document.activeElement); } // a key fires with the palette closed, so the "current node" is whatever is focused now
   const rows = paletteRows(''), row = rows.find((r) => r.id === id);
   if (row) { if (!row.disabled) row.run(); return true; }
+  // A key pressed with the palette closed may wait on main below (access, participants, spaces). A palette opened in
+  // the meantime, still open or already closed again, has moved palSeq on (showPage), and the key lets its answer go
+  // rather than taking that palette over or reopening one Esc just closed.
+  const closed = palette.hidden, seq = palSeq, current = () => !closed || palSeq === seq;
   const fold = id.indexOf('>'), parent = fold > 0 && rows.find((r) => r.sub && (r.id || r.rank) === id.slice(0, fold));
   if (parent) {
-    // a level that waits (the participants, the spaces) may answer after the palette was opened for something else:
-    // the key was pressed with it closed, so it lets that go rather than taking the palette over
-    const closed = palette.hidden;
-    if (!parent.disabled) run(async () => { const kids = await parent.sub(); if (closed && !palette.hidden) return; const kid = kids.find((k) => k.label === id.slice(fold + 1) && !k.disabled); if (kid) kid.run(); });
+    if (!parent.disabled) run(async () => { const kids = await parent.sub(); if (!current()) return; const kid = kids.find((k) => k.label === id.slice(fold + 1) && !k.disabled); if (kid) kid.run(); });
     return true;
   }
   // A key on a choice folded under Move to … or Edit visibility ("move>Foundry"): those two rows exist once main has
@@ -409,7 +410,7 @@ function runAction(id) {
   // and the key runs again with the answer.
   if (palette.hidden && /^(move|visibility)>/.test(id) && palDoc && tana.accessOptions && isRealId(palDoc.id) && !accessById.has(palDoc.id)) {
     const doc = palDoc;
-    run(async () => { accessById.set(doc.id, await tana.accessOptions(doc.id)); if (palette.hidden && currentDoc()?.id === doc.id) runAction(id); });
+    run(async () => { accessById.set(doc.id, await tana.accessOptions(doc.id)); if (current() && currentDoc()?.id === doc.id) runAction(id); });
     return true;
   }
   if (id.startsWith('doc:')) { goTo(id.slice(4)); return true; }

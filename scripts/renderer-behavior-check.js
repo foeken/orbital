@@ -65,6 +65,8 @@ const withShims = (src) => {
   }
   // the palette's own lookups run only while it is shown (#274): a harness that never declares it has it open
   if (/\bpalette\.hidden\b/.test(src)) src = 'globalThis.palette ??= { hidden: false };\n' + src;
+  // a key waiting on main notes the palette generation it was pressed in (runAction, #274)
+  if (/\bpalSeq\b/.test(src)) src = 'globalThis.palSeq ??= 0;\n' + src;
   // fields that hold choices or links (renderer/fields.js): a palette harness without that file has no field focused
   if (/\bfieldRows\(/.test(src) && !/function fieldRows\(/.test(src)) src = 'globalThis.fieldRows ??= () => [];\n' + src;
   if (/\b(fieldReturn|fieldLinkCtx|palField|fieldAt|focusField)\b/.test(src) && !/let fieldReturn\b/.test(src)) src = 'globalThis.fieldReturn ??= null; globalThis.fieldLinkCtx ??= null; globalThis.palField ??= null; globalThis.fieldAt ??= () => null; globalThis.focusField ??= () => {};\n' + src;
@@ -3386,7 +3388,7 @@ async function runClosedPaletteKeysCheck() {
     const palette = { hidden: true };
     let palDoc = null, palField = null, meetingNow;
     let pinInfo = { docId: '${OTHER}', sidebar: false, dates: [] }; // the node Cmd+K was last opened on
-    let openOnMeta = false, focus = '${DOC}', moveFocus = false; const currentDoc = () => ({ id: focus }), fieldAt = () => null, document = { activeElement: null, documentElement: { dataset: {} } };
+    let palSeq = 0, openOnMeta = false, focus = '${DOC}', moveFocus = false; const currentDoc = () => ({ id: focus }), fieldAt = () => null, document = { activeElement: null, documentElement: { dataset: {} } };
     const isRealId = () => true, localDate = (offset = 0) => (offset ? '2026-09-19' : '2026-09-18'), setTheme = () => {};
     const sectionOf = () => null, visibleTags = () => [], goTo = () => {}, setView = () => {}, openDoc = () => {};
     let palMode = 'cmd', palRows = [], palIndex = 0;
@@ -3415,7 +3417,7 @@ async function runClosedPaletteKeysCheck() {
       currentMeeting: async () => { calls.current++; return answer; },
       pinTo: async (hub, id) => { writes.push(['pinTo', hub, id]); },
       accessOptions: async () => { calls.access++; return { move: true, sharing: true }; },
-      taskMeta: async () => { calls.meta = (calls.meta || 0) + 1; if (openOnMeta) { palette.hidden = false; palMode = 'cmd'; } if (moveFocus) { focus = '${OTHER}'; palDoc = { id: focus }; } return { participants: [] }; },
+      taskMeta: async () => { calls.meta = (calls.meta || 0) + 1; if (openOnMeta) { palSeq++; palMode = 'cmd'; palette.hidden = openOnMeta === 'closed'; } if (moveFocus) { focus = '${OTHER}'; palDoc = { id: focus }; } return { participants: [] }; },
       notifyState: async () => { calls.notify++; return { on: false }; },
       pinState: async () => ({ sidebar: false, dates: [...pinned] }),
       pin: async (id, target, date) => { writes.push(['pin', id, date]); pinned.add(date); },
@@ -3494,6 +3496,10 @@ async function runClosedPaletteKeysCheck() {
   await api.key('visibility>Selected people …');
   api.opens(false);
   assert.deepEqual(plain([api.state().writes, api.page().mode]), [[], 'cmd'], 'a palette opened meanwhile keeps its page');
+  api.reset(); api.opens('closed');
+  await api.key('visibility>Selected people …');
+  api.opens(false);
+  assert.deepEqual(plain([api.state().writes, api.page().open]), [[], false], 'and a palette opened and closed again meanwhile is not reopened by the key');
   console.log('ok  keys with the palette closed: date pins and Pin to current meeting act on the node under the caret with state read at the press, and no palette-only lookup is made');
 }
 function runCmdPillsCheck() {
