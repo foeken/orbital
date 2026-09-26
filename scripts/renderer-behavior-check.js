@@ -109,6 +109,7 @@ const withShims = (src) => {
   if (/\bSEARCH_ID\b/.test(src) && !/const SEARCH_ID =/.test(src)) src = "globalThis.SEARCH_ID ??= 'tana:search:';\n" + src;
   if (/\beditingType\b/.test(src) && !/let editingType\b/.test(src)) src = 'globalThis.editingType ??= null;\n' + src; // no type's fields being edited
   if (/\btableView\(/.test(src) && !/const tableView =/.test(src)) src = 'globalThis.tableView ??= () => false;\n' + src; // no page shown as a table
+  if (/\btableRow\(/.test(src) && !/const tableRow =/.test(src)) src = 'globalThis.tableRow ??= () => false;\n' + src; // and so no row drawn as one
   if (/\b(displayOn|displayKeys|subtextOf)\b/.test(src) && !/const displayKeys =/.test(src) && !/function subtextOf\(/.test(src)) {
     src = functionSource('agoText') + '\n' + functionSource('subtextOf') + '\n' + src;
     // pinnedOn needs the grouping (views.js) and the date pins (state.js); no row here is in a Pinned section

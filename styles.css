@@ -153,7 +153,8 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .outline.table-view > .node > .line > .body > .subtext { display: contents; }
 .outline.table-view > .node > .line > .body > :not(.text, .subtext, .tmeta) { display: none; }
 .outline.table-view > .node > .line > .body > .tmeta { order: 1; grid-column: -2; margin: 0; text-align: right; line-height: 18px; }
-.outline.table-view > .node > .line > .body > .tmeta > * + * { margin-left: 10px !important; } /* over taskMetaEl's inline 6px: alone in a column they read as cramped */
+.outline.table-view > .node > .line > .body > .tmeta > .mtext { display: none; }
+.outline.table-view > .node > .line > .body > .tmeta > :not(.mtext) ~ :not(.mtext) { margin-left: 10px !important; } /* over taskMetaEl's inline 6px: alone in a column they read as cramped */
 .outline.table-view > .node > .line > .body > .text, .outline.table-view .cell { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .outline.table-view > .node { border-bottom: 1px solid #f0f0f0; }
 .outline.table-view > .thead { padding: 0 40px 6px 70px; border-bottom: 1px solid #ececec; color: #999; font-size: 13px; line-height: 18px; user-select: none; } /* 65 + the body's own 5; 40: the badge's slot */

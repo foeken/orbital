@@ -259,9 +259,9 @@ function render(force = false) {
 const META_SEP = ' · ';
 const META_GAP = 8; // .meta's margin-left in styles.css, which offsetWidth does not carry
 function fitRowMeta() {
-  if (tableView()) return; // a table keeps the facts in a column of their own, and its grey line is the other columns
   const plan = [];
   for (const body of outline.querySelectorAll('.node > .line > .body')) {
+    if (tableView() && body.matches('.outline.table-view > .node > .line > .body')) continue; // a table row keeps its icons in their own column: its grey line is the other columns
     const meta = body.querySelector('.meta.tmeta'), sub = body.querySelector(':scope > .subtext');
     if (!meta || !sub) continue;
     const anchor = body.querySelector(':scope > .meta:not(.tmeta)') || body.querySelector(':scope > .text');
@@ -377,7 +377,9 @@ function renderOutline() {
     }
   }
   outline.classList.toggle('table-view', tableView());
-  if (tableView() && list.length) { outline.style.setProperty('--cols', tableKeys().length); outline.prepend(tableHeadEl()); } // a list page shown as a table (renderer/views.js)
+  // ponytail: at least one fact column, because repeat(0) and a division by 0 make the grid invalid; with Display
+  // empty that column is simply blank. A layout of its own if that case ever matters.
+  if (tableView() && list.length) { outline.style.setProperty('--cols', Math.max(1, tableKeys().length)); outline.prepend(tableHeadEl()); } // a list page shown as a table (renderer/views.js)
   // "No content" is about a page with nothing on it, so it goes by what was just drawn rather than by the row count:
   // a grouped page with every section folded away has no rows and is not empty — its headings are right there.
   if (parent && !list.length && !outline.children.length) {
@@ -800,7 +802,7 @@ function nodeEl(node, docId, parent) {
     if (node.timeline.detail) { const d = document.createElement('div'); d.textContent = demoText(node.timeline.detail, node.timeline.uri); q.append(d); } // and its longer words for it
     body.append(q);
   }
-  const sub = subtextEl(display, taskInfo);
+  const sub = subtextEl(display, taskInfo, undefined, tableRow(parent));
   if (sub) body.append(sub);
   blurSensitive(body, docId, target && target.id);
   line.append(body);

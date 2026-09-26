@@ -286,8 +286,9 @@ function setDisplay(id) {
 const shownFieldValues = (node) => (node.fields ? displayKeys().flatMap((k) => node.fields[k] || []) : []);
 // The grey line under a title: those values as chips, then subtextOf's words. A render and a late metadata patch
 // (renderer/tasks.js) both build it here, so the row keeps its shape when its metadata lands. `sub` is refilled in place.
-function subtextEl(node, taskInfo, sub = document.createElement('div')) {
-  if (tableView()) return tableCells(node, taskInfo, sub);
+// asTable: a row of the page's own list while it is a table (tableRow); what an expanded row shows under it stays an outline
+function subtextEl(node, taskInfo, sub = document.createElement('div'), asTable = false) {
+  if (asTable) return tableCells(node, taskInfo, sub);
   const words = subtextOf(node, taskInfo), values = shownFieldValues(node);
   if (!words && !values.length) return null;
   sub.className = 'subtext';
@@ -312,6 +313,7 @@ const TABLE_FACTS = {
 const listPage = () => (zoom ? onSearchPage() || onTypePage() : !!viewOf());
 const tablePages = () => pref('tables', pref('typeTables', [])); // typeTables: what the type-only table was kept under
 const tableView = () => listPage() && tablePages().includes(pillKey());
+const tableRow = (parent) => tableView() && (parent ? parent.key : '') === outline.dataset.key; // a result row, not something under one
 const tableKeys = () => displayKeys().filter((k) => isFieldKey(k) || TABLE_FACTS[k]);
 function setTableView(on) {
   const rest = tablePages().filter((id) => id !== pillKey());
