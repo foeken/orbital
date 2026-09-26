@@ -54,9 +54,16 @@ if (tana.onToPlace) tana.onToPlace(() => {
 });
 // The line between the halves is dragged from a grip on each half's inner edge; main reads the cursor and moves the
 // line (main.js window:splitDrag), and a double click evens the halves out again. Over either grip both halves draw
-// their half of the swap pill (main.js window:splitHover), so it sits whole on the line.
+// their half of the swap pill (main.js window:splitHover), so it sits whole on the line; a click on either half of
+// it swaps the panes, as Cmd+K "Swap panes" does, and is neither a drag nor a double click on the line.
 const splitGrip = $('splitGrip');
-{ const svg = iconNode('swapPanes'); if (svg) splitGrip.firstElementChild.append(svg); }
+const splitPill = splitGrip.firstElementChild;
+{ const svg = iconNode('swapPanes'); if (svg) splitPill.append(svg); }
+keyTitle(splitPill, 'Swap panes', 'swapPanes');
+splitPill.addEventListener('pointerdown', (e) => e.stopPropagation()); // not the start of a drag
+splitPill.onmousedown = (e) => e.preventDefault(); // the caret stays in its row
+splitPill.onclick = (e) => { if (e.detail < 2) tana.swapPanes(); }; // a double click swaps once, not back again
+splitPill.ondblclick = (e) => e.stopPropagation(); // and does not even the halves out
 function showSplitGrip(split) { splitGrip.hidden = !split; splitGrip.classList.toggle('left', SIDE !== ':2'); splitGrip.classList.remove('on'); }
 showSplitGrip(tana.paneSplit === true);
 splitGrip.addEventListener('pointerenter', () => tana.splitHover?.(true));

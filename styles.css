@@ -312,6 +312,7 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 .splitpill { position: absolute; top: 50%; left: -13px; width: 26px; height: 28px; margin-top: -14px; box-sizing: border-box; display: none; place-items: center;
   border: 1px solid #e3e3e3; border-radius: 8px; background: #fff; color: #8a8a8a; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); }
 .splitgrip.left .splitpill { left: auto; right: -13px; }
+.splitpill { cursor: pointer; } /* a button on the line: it swaps the panes (renderer/app.js), the line around it resizes */
 .splitgrip:is(:hover, .on, .dragging) .splitpill { display: grid; }
 .splitpill svg { width: 16px; height: 16px; }
 .rail .rhead { display: flex; align-items: center; gap: 6px; width: 100%; border: 0; background: none; margin-top: 18px; padding: 10px 6px 4px; cursor: pointer;
