@@ -341,8 +341,8 @@ function renderTableBtn(available) {
   if (!available) return;
   keyTitle(tableBtn, tableLabel(), 'tableView');
   tableBtn.setAttribute('aria-label', tableLabel());
-  const svg = iconNode(tableView() ? 'outline' : 'table');
-  if (svg) tableBtn.replaceChildren(svg);
+  tableBtn.replaceChildren();
+  addIcon(tableBtn, tableView() ? 'outline' : 'table');
 }
 tableBtn.onmousedown = (e) => e.preventDefault(); // the caret stays in its row, as with the other header buttons
 tableBtn.onclick = () => setTableView(!tableView());

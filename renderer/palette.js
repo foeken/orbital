@@ -914,7 +914,7 @@ function renderPalette() {
     if (r.group && (!i || palRows[i - 1].group !== r.group)) { const h = document.createElement('div'); h.className = 'group'; h.textContent = r.group; els.push(h); }
     const row = document.createElement('div'); row.className = 'row' + (i === palIndex ? ' active' : '') + (r.disabled ? ' disabled' : '') + (r.arrive ? ' arrive' : ''); row.dataset.index = i;
     // a row names its glyph, or hands over the markup itself (the "/" menu's block glyphs, the refusal ban)
-    const icon = document.createElement('span'); icon.className = 'ricon' + (r.node ? ' ' + (r.icon || 'dot') : ''); icon.innerHTML = r.icon ? iconSvg(r.icon) : r.svg || '';
+    const icon = document.createElement('span'); icon.className = 'ricon' + (r.node ? ' ' + (r.icon || 'dot') : ''); if (r.icon) addIcon(icon, r.icon); else icon.innerHTML = r.svg || ''; // r.svg: our own markup (glyphSvg, banSvg)
     if (r.spin) icon.classList.add('thinking'); // a row waiting on an answer: its glyph breathes while it waits
     const rowHue = r.hue; // only the Set colour page carries one: every other glyph is monochrome
     if (rowHue != null) { icon.classList.add('hue'); icon.style.setProperty('--hue', String(rowHue)); }
@@ -930,7 +930,7 @@ function renderPalette() {
     for (const t of r.tags || []) label.append(chipEl(t, r.node && r.node.hue));
     blurSensitive(label, r.node && r.node.id);
     row.append(icon, label);
-    if (r.right) { const s = document.createElement('span'); s.className = 'ricon right'; s.innerHTML = iconSvg(r.right); row.append(s); }
+    if (r.right) { const s = document.createElement('span'); s.className = 'ricon right'; row.append(addIcon(s, r.right)); }
     if (r.kbd) { const k = document.createElement('kbd'); k.textContent = r.kbd; row.append(k); }
     if (r.hint) { const h = document.createElement('span'); h.className = 'hint'; h.textContent = demoMeta(r.node, r.hint); blurSensitive(h, r.node && r.node.id); row.append(h); }
     row.onmousedown = (e) => e.preventDefault();
@@ -955,7 +955,7 @@ function renderPalette() {
 const paletteBtn = $('navPalette');
 paletteBtn.onmousedown = (e) => e.preventDefault(); // the caret stays in its row, so closing the palette puts it back
 paletteBtn.onclick = () => togglePalette('cmd');
-{ const svg = iconNode('command'); if (svg) paletteBtn.append(svg); }
+addIcon(paletteBtn, 'command');
 // opens the palette in mode, closes it when already open in that mode; opening one mode closes the other.
 // link = @ linking context; pin = relationship pin context. Both reuse search results.
 function togglePalette(mode, link, pin) {

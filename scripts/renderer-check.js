@@ -73,6 +73,8 @@ assert.match(source, /if \(display\.hue != null\) \{ bullet\.classList\.add\('hu
 // back is narrower — a glyph chosen for a *type*, kept app-local as a name (main/icons.js), which every document of
 // that type is then drawn with. So the old shape stays out, and what the renderer keeps is a name, never an SVG.
 assert.doesNotMatch(source, /iconSvg:|\.iconSvg\b|startDrop/, 'per-node icons and the drop target are gone');
+// An icon is drawn from a template parsed once (iconNode, addIcon in renderer/nodes.js), never from its markup again (#361)
+for (const f of files.filter((f) => f !== 'renderer/nodes.js')) assert.doesNotMatch(fs.readFileSync(require.resolve('../' + f), 'utf8'), /\biconSvg\(/, f + ' parses an icon from markup: draw it with addIcon or iconNode');
 assert.match(source, /customIcons\.set\(icon\.name, icon\.svg\)/, 'the renderer registers glyphs main hands it, by name');
 assert.match(source, /typeGlyphs\.set\(icon\.uri, icon\.name\)/, 'and remembers which type wears which, so the picker knows what it has');
 assert.match(source, /scrollIntoView\(\{ block: 'nearest', inline: 'nearest', container: 'nearest' \}\)/);
@@ -465,7 +467,7 @@ assert.match(source, /if \(!cleanupBtn\.classList\.contains\('out'\)\) return;\n
 // A view re-asks its query every half minute; a saved search is asked once, when it is opened, so it needs a button.
 // It is a header button beside the fold one, not a pill: folding the pills away must not take it with them.
 assert.match(source, /renderRefreshBtn\(search && !searchRows\.has\(zoom\.docId\)\)/, 'a saved search offers Refresh, and not while a staged filter preview owns its rows');
-assert.match(source, /function renderRefreshBtn\(available\) \{[\s\S]{0,320}iconNode\('reload'\)/, 'the Refresh button carries the reload glyph');
+assert.match(source, /function renderRefreshBtn\(available\) \{[\s\S]{0,320}addIcon\(refreshBtn, 'reload'\)/, 'the Refresh button carries the reload glyph');
 const html = fs.readFileSync(require.resolve('../index.html'), 'utf8');
 assert.match(html, /<div id="toolbar" class="toolbar" role="toolbar"/);
 const styleSheet = fs.readFileSync(require.resolve('../styles.css'), 'utf8');

@@ -73,7 +73,7 @@ function renderToolbar() {
   for (const [mark, label, cls, title] of TOOL_MARKS) {
     const b = document.createElement('button');
     b.type = 'button'; b.dataset.id = mark; b.title = title;
-    if (label) b.textContent = label; else b.innerHTML = iconSvg('code'); // code uses the icon, the rest are letters
+    if (label) b.textContent = label; else addIcon(b, 'code'); // code uses the icon, the rest are letters
     b.className = 'tbtn ' + cls + (hasMark(segs, toolCtx.start, toolCtx.end, mark) ? ' on' : '');
     b.setAttribute('aria-pressed', String(b.className.includes(' on')));
     b.onclick = () => applyMark(mark);

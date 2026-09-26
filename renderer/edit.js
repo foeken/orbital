@@ -372,7 +372,7 @@ function renderNav() {
     el.disabled = !live;
     keyTitle(el, label, id);
     el.setAttribute('aria-label', label);
-    if (!el.childNodes.length) { const svg = iconNode(id); if (svg) el.append(svg); } // the glyph never changes: drawn once, not on every render
+    if (!el.childNodes.length) addIcon(el, id); // the glyph never changes: drawn once, not on every render
   }
 }
 document.querySelector('.navbtns').addEventListener('pointerover', (e) => {

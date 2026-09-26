@@ -189,7 +189,7 @@ function renderPills(show) {
   box.replaceChildren(...defs.map((d) => {
     const pill = document.createElement('div'); pill.className = 'pill' + (d.active ? ' active' : '') + (menu && menu.id === d.id ? ' open' : ''); pill.tabIndex = 0; pill.dataset.id = d.id; pill.setAttribute('role', 'button');
     if (d.toggle) pill.setAttribute('aria-pressed', String(!!d.active));
-    if (d.icon) { const s = document.createElement('span'); s.innerHTML = iconSvg(d.icon); pill.append(s.firstChild); }
+    addIcon(pill, d.icon);
     if (d.label) pill.append(d.label);
     if (d.value) { const b = document.createElement('b'); b.textContent = d.value; pill.append(b); }
     pill.onmousedown = (e) => { if (e.target.closest('.menu')) e.preventDefault(); }; // menu clicks keep the pill focused
@@ -237,7 +237,7 @@ function renderPillsToggle(available) {
   pillsToggle.title = label;
   pillsToggle.setAttribute('aria-label', label);
   pillsToggle.setAttribute('aria-pressed', String(open));
-  if (!pillsToggle.childNodes.length) { const svg = iconNode('options'); if (svg) pillsToggle.append(svg); } // the glyph never changes, like the nav buttons'
+  if (!pillsToggle.childNodes.length) addIcon(pillsToggle, 'options'); // the glyph never changes, like the nav buttons'
 }
 // Opening and closing the row: the pills come in one after another, left to right, and leave the same way, and the
 // row's own height follows them, so the outline below slides instead of jumping when it goes. Both are CSS
@@ -326,7 +326,7 @@ function renderRefreshBtn(available) {
   if (!available) return;
   refreshBtn.title = 'Ask this search again';
   refreshBtn.setAttribute('aria-label', 'Refresh'); // icon only, so the name has to come from here
-  if (!refreshBtn.childNodes.length) { const svg = iconNode('reload'); if (svg) refreshBtn.append(svg); }
+  if (!refreshBtn.childNodes.length) addIcon(refreshBtn, 'reload');
 }
 refreshBtn.onmousedown = (e) => e.preventDefault(); // the caret may be in a row with a render waiting on it (cleanupPill)
 refreshBtn.onclick = () => {
@@ -347,7 +347,7 @@ function renderCleanupBtn(available) {
   cleanupBtn.hidden = false;
   keyTitle(cleanupBtn, 'Put every row where it belongs now', 'cleanup');
   cleanupBtn.setAttribute('aria-label', 'Clean up');
-  if (!cleanupBtn.childNodes.length) { const svg = iconNode('cleanup'); if (svg) cleanupBtn.append(svg); }
+  if (!cleanupBtn.childNodes.length) addIcon(cleanupBtn, 'cleanup');
   if (arriving) playOnce(cleanupBtn, 'in');
 }
 // Leaving: it shrinks away rather than being gone between two frames, and is hidden only once that has played —
@@ -388,7 +388,7 @@ function menuEl(d) {
   // and the caret drawn there (styles.css .mcaret) shows only while the pill has the focus, which is when typing lands
   if (d.search) {
     const s = document.createElement('div'); s.className = 'msearch' + (typed ? '' : ' empty');
-    const i = document.createElement('span'); i.className = 'micon'; i.innerHTML = iconSvg('search');
+    const i = document.createElement('span'); i.className = 'micon'; addIcon(i, 'search');
     const c = document.createElement('span'); c.className = 'mcaret';
     s.append(i, typed, c, typed ? '' : 'Search ' + (d.label || 'options') + '…'); el.append(s);
   } else if (typed) { const h = document.createElement('div'); h.className = 'mhead'; h.textContent = typed; el.append(h); }
@@ -402,7 +402,7 @@ function menuEl(d) {
     if (r.head) { row.className = 'mhead'; row.textContent = r.head; el.append(row); continue; }
     if (r.div) { row.className = 'mdiv'; el.append(row); continue; }
     row.className = 'mrow' + (r.label && at++ === menu.index ? ' active' : '');
-    if (icons) { const i = document.createElement('span'); i.className = 'micon'; i.innerHTML = r.icon ? iconSvg(r.icon) : ''; row.append(i); }
+    if (icons) { const i = document.createElement('span'); i.className = 'micon'; row.append(addIcon(i, r.icon)); }
     const l = document.createElement('span'); l.className = 'mlabel'; l.textContent = r.label; row.append(l);
     if (r.checked && !r.reset) { const t = document.createElement('span'); t.className = 'tick'; t.textContent = '✓'; row.append(t); }
     row.onclick = () => pickMenuRow(r, pick);

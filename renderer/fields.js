@@ -139,7 +139,7 @@ function definitionEl(parent, def) {
   const key = parent.docId + '|def|' + def.key, ctx = { typeUri: parent.docId, key, def };
   fieldCtxs.set(key, ctx);
   const row = document.createElement('div'); row.className = 'field';
-  const icon = document.createElement('span'); icon.className = 'ricon'; icon.innerHTML = iconSvg('field');
+  const icon = document.createElement('span'); icon.className = 'ricon'; addIcon(icon, 'field');
   const label = document.createElement('span'); label.className = 'flabel fdef-title'; label.textContent = def.title || def.key;
   const values = document.createElement('div'); values.className = 'fvalues';
   const el = document.createElement('div'); el.className = 'fvalue fchoice fdef'; el.tabIndex = 0; el.dataset.key = key;

@@ -70,9 +70,7 @@ function proposalButtonsEl(node) {
     b.setAttribute('aria-label', label);
     b.onmousedown = (e) => e.preventDefault(); // the caret stays where it is, as every other row control does
     b.onclick = (e) => { e.stopPropagation(); answerProposal(node, approve); };
-    const svg = iconNode(icon);
-    if (svg) b.append(svg);
-    el.append(b);
+    el.append(addIcon(b, icon));
   }
   return el;
 }

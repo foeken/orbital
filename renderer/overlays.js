@@ -19,7 +19,7 @@ function helpOnce() { if (!SIDE && !pref('helpSeen', false)) openHelp(); }
 const helpBtn = $('navHelp');
 helpBtn.onmousedown = (e) => e.preventDefault(); // the caret stays in its row
 helpBtn.onclick = openHelp;
-{ const svg = iconNode('help'); if (svg) helpBtn.append(svg); }
+addIcon(helpBtn, 'help');
 // Create task (⇧⌘Space, ⌘K "Create task"; task.js). Its page writes through the bridge itself, past the demo guard
 // on `tana` (renderer/state.js), so demo mode refuses it here, in the guard's own words.
 function openTask() {

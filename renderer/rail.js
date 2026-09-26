@@ -30,9 +30,8 @@ function renderRailToggle(available) {
   keyTitle(railToggle, label, 'railToggle');
   railToggle.setAttribute('aria-label', label);
   railToggle.setAttribute('aria-pressed', railHidden ? 'true' : 'false');
-  const svg = iconNode(railHidden ? 'railShow' : 'railHide');
   railToggle.replaceChildren();
-  if (svg) railToggle.append(svg);
+  addIcon(railToggle, railHidden ? 'railShow' : 'railHide');
 }
 // drag the grip to resize the sidebar; the width persists like the other view preferences
 railGrip.addEventListener('pointerdown', (e) => {
@@ -103,8 +102,7 @@ function railRow(node) {
     const icon = document.createElement('span');
     icon.className = 'ricon ' + (node.icon || 'doc') + (node.hue != null ? ' hue' : '');
     if (node.hue != null) icon.style.setProperty('--hue', String(node.hue));
-    icon.innerHTML = iconSvg(node.icon || 'doc');
-    row.append(icon);
+    row.append(addIcon(icon, node.icon || 'doc'));
   }
   const title = document.createElement('span');
   title.className = 'rtitle'; title.textContent = demoText(node.text || node.title || 'Untitled', node.id);
@@ -198,7 +196,7 @@ function railMetaEl(row) {
   const el = document.createElement('div');
   el.className = 'rrow rmeta' + (row.run ? '' : ' fixed'); // not .meta: that is the grey inline meta text of an outline row
   el.tabIndex = -1; el.dataset.id = 'meta:' + row.id;
-  const icon = document.createElement('span'); icon.className = 'ricon'; icon.innerHTML = iconSvg(row.icon);
+  const icon = document.createElement('span'); icon.className = 'ricon'; addIcon(icon, row.icon);
   const title = document.createElement('span'); title.className = 'rtitle'; title.textContent = row.label;
   el.append(icon, title);
   el.onclick = row.run || null;

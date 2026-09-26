@@ -194,8 +194,8 @@ function renderSensitiveBtn() {
   keyTitle(sensitiveBtn, label, 'sensitiveVisibility');
   sensitiveBtn.setAttribute('aria-label', label);
   sensitiveBtn.setAttribute('aria-pressed', String(sensitiveVisible));
-  const svg = iconNode(sensitiveVisible ? 'visible' : 'hidden');
-  if (svg) sensitiveBtn.replaceChildren(svg);
+  sensitiveBtn.replaceChildren();
+  addIcon(sensitiveBtn, sensitiveVisible ? 'visible' : 'hidden');
 }
 sensitiveBtn.onmousedown = (e) => e.preventDefault(); // the caret stays in its row, as with the other header buttons
 sensitiveBtn.onclick = toggleSensitiveVisibility; // the same action the Cmd+K row runs

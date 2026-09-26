@@ -52,7 +52,7 @@ const timelineTopEnds = (n, next) => !!(n.timeline?.today || n.timeline?.upcomin
 function timelineJoinEl(node) {
   const b = document.createElement('button');
   b.type = 'button'; b.className = 'tl-join'; b.tabIndex = -1; b.title = 'Join in Tana'; b.setAttribute('aria-label', 'Join in Tana'); // icon only, so the name has to come from here
-  const svg = iconNode('tana'); if (svg) b.append(svg);
+  addIcon(b, 'tana');
   b.onmousedown = (ev) => ev.preventDefault();
   b.onclick = (ev) => { ev.stopPropagation(); run(async () => tana.openExternal(await tana.nodeLink(node.join))); };
   return b;
