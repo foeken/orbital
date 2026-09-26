@@ -3098,23 +3098,36 @@ async function main() {
     const docs = new Map(), unsubscribed = [];
     const make = (title) => { const d = new Document('tana:text:' + ulid()); d.transact((l) => initDocument(l, title, ME)); docs.set(d.id, d); return d.id; };
     const onScreen = make('On screen'), edited = make('Edited');
+    // a saved search open in the other half: its page keeps the head of its rows live (main/related.js searchChildren)
+    const hits = Array.from({ length: 5 }, (_, i) => make('Hit ' + i));
+    const search = new Document('tana:search:' + ulid());
+    search.transact((l) => initDocument(l, 'Hits', ME, { kind: 'search', query: { types: ['text'], textQuery: 'hits' } }));
+    docs.set(search.id, search);
     const read = Array.from({ length: LIVE_ROWS + 20 }, (_, i) => make('Row ' + i));
     backend.testRuntime({ me: { userUri: ME }, activeView: 'library', win: null, client: {
       sync: { subscribe: async (id, init) => { if (init) { const d = new Document(id); d.transact(init); return d; } return docs.get(id) || null; },
         getDocument: (id) => docs.get(id), unsubscribe: async (id) => { unsubscribed.push(id); } },
-      graph: { listNodes: async (p) => ({ nodes: p.nodeIds ? p.nodeIds.map((id) => ({ id })) : [] }) },
+      graph: { listNodes: async (p) => ({ nodes: p.nodeIds ? p.nodeIds.map((id) => ({ id })) : p.textQuery === 'hits' ? hits.map((id) => ({ id, title: 'Hit' })) : [] }) },
     } });
     await backend.handlers.get('doc:info')(null, onScreen);
     assert.equal(await backend.watchRelated(onScreen), true, 'the page on screen, with its sidebar watched');
+    assert.equal((await backend.handlers.get('outline:children')(null, search.id)).length, hits.length);
+    assert.equal(await backend.watchRelated(search.id, 'right'), true, 'and a saved search in the other half');
+    await new Promise(setImmediate);
     await backend.handlers.get('doc:setTitle')(null, edited, 'Edited again');
     for (const id of read) await backend.handlers.get('doc:info')(null, id);
     await backend.handlers.get('doc:info')(null, read[0]); // read again: the newest read now, not the oldest
     await backend.handlers.get('view:list')(null, 'library');
     const released = () => unsubscribed.filter((id) => !id.startsWith('tana:liveQuery:'));
-    assert.deepEqual(released(), read.slice(1, 23), 'the oldest reads past LIVE_ROWS are let go, oldest first');
-    assert.deepEqual([released().includes(onScreen), released().includes(edited)], [false, false], 'but not the page on screen, nor a document with an undo step');
+    assert.deepEqual(released(), read.slice(1, 29), 'the oldest reads past LIVE_ROWS are let go, oldest first');
+    assert.deepEqual([released().includes(onScreen), released().includes(edited), released().includes(search.id), hits.some((id) => released().includes(id))], [false, false, false, false],
+      'but not the page on screen, a document with an undo step, or a saved search on screen and the head of its rows');
     await backend.handlers.get('view:list')(null, 'library');
-    assert.equal(released().length, 22, 'and at the cap the next refresh lets go of nothing more');
+    assert.equal(released().length, 28, 'and at the cap the next refresh lets go of nothing more');
+    await backend.watchRelated(null, 'right'); // the search's half moves on
+    for (let i = 0; i <= hits.length; i++) await backend.handlers.get('doc:info')(null, make('Newer ' + i)); // newer reads
+    await backend.handlers.get('view:list')(null, 'library');
+    assert.deepEqual(released().slice(28).sort(), [search.id, ...hits].sort(), 'off screen, the search and its rows are reads like any other, and the oldest now');
     console.log('ok  reads past LIVE_ROWS are let go oldest first, never the page on screen or an undoable one');
   }
 

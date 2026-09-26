@@ -7,7 +7,7 @@ const { completedInWindow, filterToSearchQuery, liveTrigger, searchQueryParams, 
 const { everyoneOnly } = require('../sdk/access');
 const { DOC_URI, LIVE_ROWS, NOT_CONNECTED, PIN_HUBS, PLAIN_KINDS, S, idKind, isSpace, send, summaryCache, typeAttrTitles, typeTitles } = require('./state');
 const { graphRow, rememberNodeHue, resolveTypes, toNode } = require('./rows');
-const { canWriteDoc, op, resolveReferences, subscribe } = require('./documents');
+const { canWriteDoc, op, readOnDemand, resolveReferences, subscribe } = require('./documents');
 const { rows: proposalRows } = require('./proposals');
 
 const crumbIcon = (id) => ({ space: 'space', event: 'meeting', 'user-profile': 'member', chat: 'chat', agent: 'agent' })[idKind(id)] || 'doc';
@@ -50,12 +50,16 @@ async function searchChildren(id) {
   // A view keeps the head of its list live (views.js), which is what makes a change someone else makes show up in
   // it. These rows are listed the same way and were not subscribed at all, so a saved search only ever showed what
   // its query answered when the page opened. The same cap applies here, and for the same reason: a search answers
-  // up to 1,000 rows, the first LIVE_ROWS of them subscribed, and these subscriptions are never swept. sync.subscribe is idempotent, and these ids stay out
-  // of `subscribed` — that set belongs to the view refresh, which unsubscribes what the active view no longer lists.
-  // ponytail: they stay subscribed for the rest of the session, like every other on-demand subscription.
-  nodes.slice(0, LIVE_ROWS).forEach((n) => subscribe(n.id));
+  // up to 1,000 rows, the first LIVE_ROWS of them subscribed. They are reads like any other (main/documents.js
+  // releaseOnDemand), held while the search's page is on screen (withSearchHeads) and let go oldest first after that.
+  const head = nodes.slice(0, LIVE_ROWS).map((n) => n.id);
+  searchHeads.set(id, head);
+  for (const uri of head) subscribe(uri).then((doc) => { if (doc) readOnDemand(uri); });
   return nodes.map((n) => toNode(graphRow(n)));
 }
+const searchHeads = new Map(); // saved search id -> the ids of the head its page keeps live
+// The documents on screen, and the head of any saved search among them: its page's rows stay live while it is shown.
+const withSearchHeads = (ids) => [...ids, ...ids.flatMap((id) => searchHeads.get(id) || [])];
 // The rows a filter would find, without storing it: what a saved search shows while its pills are being edited.
 // It asks the graph exactly what Save would store — filterToSearchQuery, then the same searchQueryParams the stored
 // query goes through — so the preview and the saved result cannot disagree. Saving is then only a write, never a
@@ -412,4 +416,4 @@ function watchRelated(id, key = 'main') {
 }
 
 const watchedPages = () => [...watching.values()].map((w) => w.id); // each page's document, whose sidebar is on screen
-module.exports = { crumbIcon, pathOf, spaceChildren, searchChildren, searchPreview, attributeTitles, fieldsOf, writeUpOf, summaryUri, callOf, changesOf, summaryChanges, historyOf, backlinkGroups, related, watchRelated, unwatchRelated, watchedPages };
+module.exports = { crumbIcon, pathOf, spaceChildren, searchChildren, searchPreview, attributeTitles, fieldsOf, writeUpOf, summaryUri, callOf, changesOf, summaryChanges, historyOf, backlinkGroups, related, watchRelated, unwatchRelated, watchedPages, withSearchHeads };

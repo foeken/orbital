@@ -8,7 +8,7 @@ const { liveTrigger, parseQuery, searchParams, needsTypes, viewParams, completed
 const { LIVE_ROWS, NOT_CONNECTED, S, deletedNodes, docStates, errText, idKind, isDeleted, isMcp, memberTitle, now, reading, truncatedViews, typeTitles, redoStack, report, scheduleRefresh, send, setStatus, subscribed, undoStack, visibleGraphNodes } = require('./state');
 const { graphRow, members, rememberNodeHue, resolveTypes, toNode, typesByTitle } = require('./rows');
 const { codexIds, createDocument, creatorOf, document, historyIds, notifySilencedIds, notifyWatchedIds, onChange, releaseOnDemand, subscribe } = require('./documents');
-const { watchedPages } = require('./related');
+const { watchedPages, withSearchHeads } = require('./related');
 const presence = require('./presence');
 const settings = require('./settings');
 const { openLiveQuery } = require('../sdk/livequery');
@@ -79,7 +79,7 @@ async function viewRows(id, filter) {
     // ...and so does what another window's view lists (issue #137)
     const shown = new Set(openViews().flatMap((v) => [...(liveIds.get(v.id) || [])]));
     // ...and the page on screen in any window, which a list it has dropped out of must not take its live edits from
-    const onScreen = new Set([...presence.openIds(), ...watchedPages()]), history = historyIds();
+    const onScreen = new Set(withSearchHeads([...presence.openIds(), ...watchedPages()])), history = historyIds();
     // Leaving a filtered view must not discard a document whose local undo step still points at its Loro handle.
     // ...and neither is a document an on-demand read is still waiting for: unsubscribing a bootstrap in flight
     // rejects it as 'unsubscribed <id>' under the reader (main/state.js reading).

@@ -697,7 +697,7 @@ async function document(id, opts = {}) {
   try {
     const doc = await subscribe(id); // getDocument can expose an empty handle before bootstrap completes
     if (!doc) throw new Error(S.status.error || 'could not subscribe to ' + id);
-    if (!subscribed.has(id)) { onDemand.delete(id); onDemand.set(id, true); } // last read last: the oldest go first
+    readOnDemand(id);
     return doc;
   } finally {
     const left = (reading.get(id) || 1) - 1;
@@ -725,6 +725,8 @@ async function op(id, fn, opts = {}) {
 // first once there are more than LIVE_ROWS of them (releaseOnDemand). Kept for the session they undid LIVE_ROWS:
 // scrolling a long list subscribed every row for good, and each reconnect bootstrapped them all again (issue #269).
 const onDemand = new Map(); // docId -> true
+// A read subscribed id: it goes to the end, so the oldest reads are the first let go. A view's own row is its sweep's.
+const readOnDemand = (id) => { if (!subscribed.has(id)) { onDemand.delete(id); onDemand.set(id, true); } };
 // The system documents a read may reach that the app keeps live for itself: your profile, pins, the inbox, settings.
 const SYSTEM_KINDS = new Set(['collection', 'pin-map', 'user-inbox', 'liveQuery']);
 function releaseOnDemand(held) {
@@ -901,4 +903,4 @@ async function moveTarget(spaceId) {
   return document(spaceId);
 }
 
-module.exports = { followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, codexIds, setCodex, creatorOf, document, op, historyIds, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget };
+module.exports = { followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, codexIds, setCodex, creatorOf, document, op, historyIds, readOnDemand, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget };
