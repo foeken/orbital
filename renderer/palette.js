@@ -1239,15 +1239,16 @@ function movePalIndex(step) {
   drawn[palIndex].scrollIntoView({ block: 'nearest' });
 }
 // pages whose rows are built from what is typed, with nothing to fetch
-const LOCAL_MODES = new Set(['cmd', 'create', 'slash', 'assignees', 'assigneesMany', 'status', 'setType', 'classify', 'discuss', 'setHue', 'visibility', 'visibilityPeople', 'hidden', 'pins', 'pill', 'pinMeeting', 'openaiKey', 'chatgpt', 'hosts', 'agentLink', 'trash', 'archived', 'field', ...Object.keys(MEETING_PAGES)]);
+// Typing redraws the page from what is typed, except on the four pages whose rows main finds: those ask it, debounced
+// like the document search, and say they are busy meanwhile. There is no list of the other pages to keep in step: one
+// missing from it (Pin to date) ignored every key and sent a search nobody read (#297).
 palInput.addEventListener('input', () => {
   palIndex = 0; palEnter = null; // typing on supersedes an Enter that was waiting for the previous query
-  if (LOCAL_MODES.has(palMode)) return renderPalette();
-  // the set lives in main, so typing asks it — debounced like the document search, and the page says it is busy
   if (palMode === 'setIcon') { palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchIconsNow, 150); return renderPalette(); }
   if (palMode === 'spaces') { palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchSpacesNow, 150); return; }
   if (palMode === 'pinToday') { palSeq++; palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(todayPickerSearchNow, 150); return; }
-  palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchNow, 150);
+  if (palMode === 'search') { palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchNow, 150); return; }
+  renderPalette();
 });
 palInput.addEventListener('keydown', (e) => {
   const mod = e.metaKey || e.ctrlKey;

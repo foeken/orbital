@@ -2256,6 +2256,23 @@ function runPaletteSkipCheck() {
   assert.equal(moves.key(1).renders, 1, 'rows changed under the drawn list: it is drawn again rather than highlighting the wrong row');
   assert.deepEqual(plain(moves.menu(3, -1)), { index: 2, active: 2, pillRenders: 0 }, 'Up in a pill menu wraps to its last row without drawing the pills again');
   assert.equal(moves.menu(2, 1).pillRenders, 1, 'a menu drawn from another list is drawn afresh');
+
+  // Typing on a page redraws it from the words, unless main finds its rows (#297): Pin to date used to ignore every
+  // key and send a Tana search nobody read.
+  const typing = vm.runInNewContext(`
+    let palMode = 'cmd', palIndex = 3, palEnter = 'pick', palBusy = false, palSeq = 0, palTimer = null, renders = 0;
+    const asked = [], setTimeout = (fn) => { asked.push(fn.name); return 1; }, clearTimeout = () => {};
+    const renderPalette = () => { renders++; }, searchNow = function searchNow() {}, searchIconsNow = function searchIconsNow() {};
+    const searchSpacesNow = function searchSpacesNow() {}, todayPickerSearchNow = function todayPickerSearchNow() {};
+    let listener; const palInput = { addEventListener: (type, fn) => { if (type === 'input') listener = fn; } };
+    ${sourceBetween("palInput.addEventListener('input'", "palInput.addEventListener('keydown'")}
+    (mode) => { palMode = mode; renders = 0; asked.length = 0; listener(); return { renders, asked: [...asked], palIndex, palEnter }; };
+  `);
+  for (const mode of ['pinDate', 'moveConfirm', 'cmd', 'field', 'meetingTime']) {
+    assert.deepEqual(plain(typing(mode)), { renders: 1, asked: [], palIndex: 0, palEnter: null }, mode + ': typing redraws the page from the words and asks main nothing');
+  }
+  assert.deepEqual(plain(typing('search')), { renders: 0, asked: ['searchNow'], palIndex: 0, palEnter: null }, 'the document search asks Tana, debounced');
+  assert.deepEqual(plain(typing('setIcon').asked), ['searchIconsNow'], 'and Set icon asks main for its glyphs');
 }
 
 // Formatting: marks survive the DOM round trip, and toggling one over a selection rewrites only that range.
