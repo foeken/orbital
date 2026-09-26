@@ -143,12 +143,16 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
    The fact columns are one fixed width each, measured against the outline (a container). */
 .outline.table-view { container-type: inline-size; --tcols: minmax(0, 1fr) repeat(var(--cols), min(160px, calc(60cqw / var(--cols)))); } /* px: the header's type is smaller than a row's */
 .outline.table-view > .node > .line > .body, .outline.table-view > .thead { display: grid; grid-template-columns: var(--tcols); column-gap: 16px; align-items: center; }
-.outline.table-view > .node > .line > .body { flex: 0 1 calc(100% - 65px); margin-left: auto; }
+/* The local agent's badge ends a row (renderer/render.js codexBadgeEl). Taking its width from that row's grid shifted
+   every column on it, so each row keeps the badge's slot at its right end, empty or not, and the badge is put in it. */
+.outline.table-view > .node > .line { position: relative; }
+.outline.table-view > .node > .line > .body { flex: 0 1 calc(100% - 65px - 40px); margin: 0 40px 0 auto; }
+.outline.table-view > .node > .line > .cbadge { position: absolute; top: 3px; right: 0; }
 .outline.table-view > .node > .line > .body > .subtext { display: contents; }
 .outline.table-view > .node > .line > .body > :not(.text, .subtext) { display: none; }
 .outline.table-view > .node > .line > .body > .text, .outline.table-view .cell { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .outline.table-view > .node { border-bottom: 1px solid #f0f0f0; }
-.outline.table-view > .thead { padding: 0 0 6px 70px; border-bottom: 1px solid #ececec; color: #999; font-size: 13px; line-height: 18px; user-select: none; } /* 65 + the body's own 5 */
+.outline.table-view > .thead { padding: 0 40px 6px 70px; border-bottom: 1px solid #ececec; color: #999; font-size: 13px; line-height: 18px; user-select: none; } /* 65 + the body's own 5; 40: the badge's slot */
 .outline.table-view > .thead > span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 [data-theme="dark"] .outline.table-view > .node, [data-theme="dark"] .outline.table-view > .thead { border-color: #2b2f31; }
 .tbtn.c svg { width: 13px; height: 13px; display: block; }
