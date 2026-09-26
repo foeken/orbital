@@ -567,14 +567,13 @@ function homeCrumb() {
 }
 function renderCrumbs(trail) {
   const nav = $('crumbs');
-  nav.replaceChildren();
+  const cmd = $('navPalette');
+  nav.replaceChildren(...(cmd ? [cmd] : [])); // ⌘K leads the bar, ahead of Home: the one way to everything (renderer/palette.js)
   // The Home anchor, ahead of the location: the house glyph and the word Home, then a bullet to keep it apart from
   // the › chain that follows. It is a shortcut, not an ancestor — the structural path behind it is untouched, so
   // nothing suggests a saved search owns the node. Always shown, even on Home itself or with the Library as Home:
   // one fixed way back beats a link that comes and goes.
   const homeEl = homeCrumb();
-  // A view page has no location to show, but it still gets the anchor: the bar is one fixed place, on every page.
-  nav.hidden = !trail && !homeEl;
   if (homeEl) nav.append(homeEl);
   if (!trail) return;
   const back = () => { zoom = null; render(); };

@@ -5766,7 +5766,7 @@ async function runHomeCheck() {
     ${functionSource('homeCrumb')}
     ${functionSource('renderCrumbs')}
     const bar = document.createElement('nav');
-    const $ = () => bar;
+    const $ = (id) => (id === 'crumbs' ? bar : null); // no ⌘K button in this harness: the bar reads as Home and the location
     const paths = new Map();
     const crumbWhen = () => null, blurSensitive = () => {}, iconSvg = () => '', zoomTo = () => {};
     const viewOf = () => ({ title: 'Library' }), docOf = () => null;
@@ -5857,9 +5857,8 @@ async function runHomeCheck() {
   assert.equal(api.crumb().text, 'Home', 'and with the Library as Home the anchor still shows, rather than disappearing with the choice');
   assert.equal(api.crumbs([LIB, SPACE]), 'Home • Library › Foundry',
     'and with no Home of their own the Library is still the start of the location, unchanged');
-  // A view page has no location, so the bar used to be hidden outright; the anchor alone is enough to show it.
-  assert.match(source, /nav\.hidden = !trail && !homeEl;\n\s*if \(homeEl\) nav\.append\(homeEl\);/,
-    'the crumb bar is shown for the Home anchor alone, so a view page (the Library, Inbox, Tasks) keeps it too');
+  // A view page has no location, so the bar used to be hidden outright; now it leads with the ⌘K button, on every page.
+  assert.doesNotMatch(source, /nav\.hidden =/, 'the crumb bar is never hidden: it carries the ⌘K button ahead of Home, a view page (the Library, Inbox, Tasks) included');
   assert.equal(api.seed(null), null, 'a Library Home needs no restore target: it is the view a launch already opens');
   api.view('inbox');
   api.home();
