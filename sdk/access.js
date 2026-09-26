@@ -210,4 +210,20 @@ async function moveToSpace(doc, target, user, ctx = {}, confirmation) {
   doc.transact(loro => isLibrary(target) ? loro.getMap('data').delete('ownerUri'): loro.getMap('data').set('ownerUri', target.id));
   return preview;
 }
-module.exports = { capabilities, setSharing, setLinkSharing, moveToSpace, previewMove, canWrite, canDelete, canArchive, canEditEvent, audienceOf, LIBRARY };
+// The graph nodes everyone in the org can see (#253): not restricted themselves, and nothing restricted above them.
+// The org root is restricted to its members, so reaching it is everyone, as in node.js audienceMetadata; an owner
+// this user cannot open is someone else's boundary. ListNodes' own `restricted: false` reads only the node's flag, which
+// is Tana's "Open" (everyone in the org *or space*), so this asks one owner chain per distinct owner instead of per row.
+async function everyoneOnly(graph, nodes) {
+  const chains = new Map();
+  const open = (uri) => {
+    if (!uri) return true; // the Library: an unowned document inherits the org
+    if (!chains.has(uri)) chains.set(uri, graph.getOwnerChain(uri).then(({ entries = [] }) =>
+      !entries.some((e) => e.accessible === false || (e.restricted === true && !e.uri.startsWith('tana:org:'))), () => false));
+    return chains.get(uri);
+  };
+  const keep = await Promise.all(nodes.map((n) => n.restricted !== true && open(n.ownerUri)));
+  return nodes.filter((_, i) => keep[i]);
+}
+
+module.exports = { capabilities, setSharing, setLinkSharing, moveToSpace, previewMove, canWrite, canDelete, canArchive, canEditEvent, audienceOf, everyoneOnly, LIBRARY };

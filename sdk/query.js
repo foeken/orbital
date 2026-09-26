@@ -84,7 +84,10 @@ function assigneeParams(assignee, me) {
   return { assignedTo: [assignee === 'me' || !assignee ? me : assignee] };
 }
 
-const FILTER_KEYS = new Set(['types', 'states', 'assignee', 'text', 'participant', 'window', 'completedWithin', 'fields']);
+// audience: 'everyone' lists what everyone in the org can see (#253). The graph can only ask Tana's "Open" (restricted:
+// false, which includes whatever a restricted space or meeting holds), so that is the query and access.js
+// everyoneOnly narrows the answer, the way completedWithin is applied after the query.
+const FILTER_KEYS = new Set(['types', 'states', 'assignee', 'text', 'participant', 'window', 'completedWithin', 'fields', 'audience']);
 const USER = /^tana:user-profile:[0-9a-z]{26}$/;
 // A filter's types may also name the workspace's own types (`tana:type:` uris, #139): every Risk, say. They are sent as
 // entityTypes, which the graph ORs among themselves and ANDs with the kinds (verified live 2026-09-25: Risk 18 +
@@ -118,6 +121,7 @@ function validViewFilter(f) {
     && (f.participant === undefined || f.participant === null || f.participant === 'me')
     && (f.window === undefined || f.window === null || f.window === 'recent')
     && (f.completedWithin === undefined || COMPLETED_WINDOWS.includes(f.completedWithin))
+    && (f.audience === undefined || f.audience === null || f.audience === 'everyone')
     // a type page's field pills: Tana's own stored attributes ({ refs, textMatches, date } per field key), which
     // filterToSearchQuery passes on and attributeFilters cleans the way Tana does
     && (f.fields === undefined || f.fields === null || (typeof f.fields === 'object' && !Array.isArray(f.fields)
@@ -145,6 +149,7 @@ function viewParams(f, me, limit = 1000) {
     Object.assign(p, assigneeParams(f.assignee, me));
   }
   if (f.text) p.textQuery = f.text.trim();
+  if (f.audience === 'everyone') p.restricted = false;
   if (f.participant === 'me') p.hasParticipantUris = [me];
   if (f.window === 'recent') {
     const start = new Date(); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() - 7);
@@ -283,6 +288,7 @@ function filterToSearchQuery(filter = {}, me) {
   else if (a === 'unassigned') q.unassigned = true;
   else if (a && a !== 'anyone') q.assignedTo = [a];
   if (filter.participant === 'me' && me) q.participantUris = [me];
+  if (filter.audience === 'everyone') q.visibility = 'open'; // Tana's nearest: its client lists this superset (#253)
   if (filter.window === 'recent') {
     const start = new Date(); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() - 7);
     q.eventTime = { min: start.getTime(), max: start.getTime() + 14 * 864e5 };
