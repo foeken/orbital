@@ -29,8 +29,6 @@ Also exports the client's parts: `createTransport`, `GraphClient`, `HistoryClien
 
 Enums are passed by name (`'SORT_FIELD_UPDATE_TIME'`, `'LIST_NODES_MODE_WITH_COUNT'`). Timestamps are RFC 3339 strings.
 
-`unary(client, service, name, params)` is the one unary read behind all three clients (`GraphClient`, `HistoryClient`, `SearchClient`): protobuf JSON in and out, retried once after 250 ms when the fetch itself failed.
-
 ## `sdk/history.js` — `class HistoryClient(transport)`
 
 `listChanges({ uri, withinId?, limit? })` → `{ parent?, summaries: [{ id, level, title, description, authors, sources, startTime, endTime, expandable, changeType }] }`: the change summaries Tana's own Changes panel shows for a node, `summaries` always an array. `withinId` asks for the summaries inside an expandable one; nothing here writes.
