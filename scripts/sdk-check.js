@@ -4406,6 +4406,23 @@ async function main() {
   }
   // A multi-select is one user action: one undo/redo step restores/reapplies its complete range.
   {
+    // A document read from Tana has no UndoManager until its first local edit (sdk/document.js transact): one that
+    // exists during the snapshot import makes Loro decode the whole document there. The first edit after such an
+    // import is still one undo step, written under this document's own peer id, and the import itself is not undoable.
+    const tana = new Document(DOC, { peerId: '739' });
+    const row = outline.insertAfter(tana, null, 'From Tana');
+    const read = new Document(DOC, { peerId: '740' });
+    read.applyRemote([tana.exportSince()]);
+    assert.equal(read.undoManager, null, 'reading a document makes no UndoManager');
+    assert.deepEqual([read.canUndo(), read.canRedo(), read.undo(), read.redo()], [false, false, false, false], 'and there is nothing to undo');
+    outline.setText(read, row, 'Edited here');
+    assert.equal(read.loro.peerIdStr, '740', 'the edit is written under the peer id set before the UndoManager existed');
+    assert.equal(read.undo(), true);
+    assert.deepEqual(outline.readOutline(read).map((n) => n.text), ['From Tana'], 'the first edit after a lazy import undoes');
+    assert.equal(read.canUndo(), false, 'and the import is not an undo step');
+    assert.equal(read.redo(), true);
+    assert.deepEqual(outline.readOutline(read).map((n) => n.text), ['Edited here']);
+
     const d = new Document(DOC, { peerId: '741' });
     const a = outline.insertAfter(d, null, 'Detail A');
     const b = outline.insertAfter(d, a, 'Detail B');
