@@ -135,7 +135,7 @@ const pillName = (def) => def.label || def.id[0].toUpperCase() + def.id.slice(1)
 // In Cmd+K a pill is a row named for what it does ("Sort by", "Filter by status") with its current value as the hint;
 // its choices fold in as "Sort by Title", "Filter by status In Progress".
 function pillCommandRows() {
-  const defs = pillsApply() ? pillDefs() : [];
+  const defs = pillsDrawn ? pillDefs() : []; // only where the pills are: elsewhere they would set the view behind the page
   const rows = defs.map((def) => ({
     id: 'pill:' + def.id, group: 'View options', icon: /^(Filter|Clear filter)/.test(def.command) ? 'filter' : def.icon, label: def.command, hint: def.value || '',
     keepOpen: !!def.rows, run: def.rows ? () => openPillPalette(def.id) : def.toggle,
