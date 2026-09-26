@@ -371,8 +371,11 @@ async function reload(docId) {
   // through a menu quickly could leave the page on an older choice than the pills show.
   if (isTypeId(docId)) { const asked = typeFilter(docId), rows = await tana.searchPreview(asked); if (filters.get(docId) === asked) kids.set(docId, rows); return; }
   let rows;
+  // Likewise a saved search staged (or unstaged) while its stored query was read: the preview owns its rows then.
+  const staged = searchRows.get(docId);
   // the whole page is in, or the read failed: no later part of it stands in for the page either way (renderer/timeline.js)
   try { rows = await tana.children(docId); } finally { if (docId === TIMELINE_PAGE) timelinePartial = false; }
+  if (searchRows.get(docId) !== staged) return;
   kids.set(docId, syncUploads(docId, rows)); // uploads still running keep their placeholders
 }
 // A document's rows are not only the ones on its page: every field it has is an outline of that document too,
