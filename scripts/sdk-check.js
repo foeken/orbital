@@ -815,7 +815,10 @@ async function main() {
     try {
       const login=await ai.startChatGPTLogin(userData);
       assert.deepEqual([login.userCode,login.verificationUrl],['ABCD-EFGH','https://auth.openai.com/codex/device'],'sign-in starts the device flow and returns only its code and verification URL');
+      let signIns=0; ai.onSignedIn=()=>signIns++;
       signedIn=true; note({method:'account/login/completed',params:{loginId:'login-1',success:true}});
+      ai.onSignedIn=null;
+      assert.equal(signIns,1,'a completed sign-in tells main, which runs the type icon pick then rather than at the next boot');
       const status=await ai.chatgptStatus(userData);
       assert.deepEqual([status.signedIn,status.email,status.planType],[true,'person@example.com','plus'],'the app reads back the signed-in account status');
       assert.equal(Object.hasOwn(status,'accessToken'),false,'credentials never enter the status sent to the renderer');

@@ -311,6 +311,7 @@ ipcMain.handle('prefs:set', (e, key, value) => { const stored = settings.setPref
 ipcMain.handle('openai:setKey', (_e, key) => {
   if (typeof key !== 'string' || !key.trim()) throw new Error('OpenAI API key cannot be empty');
   settings.set('openaiApiKey', key.trim());
+  autoTypeIcons(); // a key is somebody to ask: the types with no icon need not wait for the next boot
   return true;
 });
 ipcMain.handle('chatgpt:status', () => ai.chatgptStatus(app.getPath('userData'), true));
@@ -342,6 +343,7 @@ async function autoTypeIcons() {
     if (added) { await refresh(); send('outline:changed', null); }
   } catch (e) { console.warn('type icons:', errText(e)); } // a missing glyph is not worth an error in the window
 }
+ai.onSignedIn = autoTypeIcons; // and a ChatGPT sign-in the same
 ipcMain.handle('doc:create', (_e, title, opts) => createDocument(title, opts || {}));
 ipcMain.handle('search', (_e, query, scope) => search(query, scope));
 ipcMain.handle('search:list', () => searchList());

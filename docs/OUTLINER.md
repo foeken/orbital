@@ -626,7 +626,8 @@ somebody else's CRDT. The glyphs a type wears arrive with the roots (`renderer/n
 never drawn before the markup its icon name refers to exists.
 
 **On boot the fast AI picks one** for every titled type that has no choice yet (issue #250): `autoTypeIcons` (main.js)
-runs after each start, in the background, and `main/ai.js pickTypeIcons` sends the type titles and every name in the
+runs after each start and again when a ChatGPT sign-in completes or an API key is saved, in the background, and
+`main/ai.js pickTypeIcons` sends the type titles and every name in the
 set in one request, so the answer is a name that exists (Terra-low named twelve real types in 8.7 s, all twelve in
 the set). `icons.fillTypeIcons` keeps only names in the set and stores them in one write. A pick is stored like a
 chosen icon, so each type is asked about once and Set icon changes it as usual; **No icon** is stored as a `null`

@@ -65,6 +65,7 @@ function chatgptNote(note) {
   if (note.method === 'account/login/completed' && activeLogin && (!note.params.loginId || note.params.loginId === activeLogin.loginId)) {
     activeLogin = null;
     loginError = note.params.success ? null : (note.params.error || 'ChatGPT sign-in failed');
+    if (note.params.success) module.exports.onSignedIn?.(); // main.js: the boot icon pick, which had nobody to ask until now
     if (authRpc) readChatGPT(authRpc).then((status) => send('ai:chatgptChanged', status), () => send('ai:chatgptChanged', { available: false, signedIn: false, error: loginError }));
   }
   if (note.method === 'turn/completed' && activeTurn && note.params?.threadId === activeTurn.threadId) {
