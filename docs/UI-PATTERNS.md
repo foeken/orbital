@@ -201,7 +201,7 @@ dark twin.
 | `--scrim` | 12% / 52% black | behind a dialog (⌘K, the key recorder, Help) |
 | `--shadow-menu` | | a menu or dropdown (`.menu`, the @ dropdown) |
 | `--shadow-card` | | a dialog's card (⌘K, the recorder; Help's as above) |
-| `--focus` | `#b5d0ee` / `#58768a` | the focus ring of anything new: `outline: 2px solid var(--focus); outline-offset: 2px` on a row or block, `box-shadow: 0 0 0 2px var(--focus)` on a button. A few older rules still write the colour out, with dark twins (`.gmore`, `.tbtn`, image and table focus; #379), and the agent badge keeps a stronger `#4f8ad9` on purpose |
+| `--focus` | `#b5d0ee` / `#58768a` | the focus ring of anything new: `outline: 2px solid var(--focus); outline-offset: 2px` on a row or block, `box-shadow: 0 0 0 2px var(--focus)` on a button. Not every ring uses it yet (#379): `.gmore`, `.tbtn` and image and table focus write the colour out with dark twins, the dark `.pill:focus` and `.ghead:focus` restate it, and `.button` keeps the browser's ring. On purpose: the green save pills ring green, and the agent badge rings a stronger `#4f8ad9` |
 | `--muted` | (PR #305) | secondary words: facts, hints, headings, placeholders, done rows. Until #305 lands, the greys it replaces are `#999` light and `#858b8e` dark |
 | `--z-toolbar` 9 < `--z-palette` 10 < `--z-recorder` 11 < `--z-toast` 12 < `--z-drag` 15 < `--z-lightbox` 20 | | what stacks over the page. Small local numbers (1, 2, 5) only order siblings inside one component |
 | `--dur-quick` / `--dur-base` / `--dur-slow` / `--dur-flash` / `--dur-loop`, `--stagger`, `--ease-*` | | every transition and animation. Reduced motion sets the durations to 0, so a rule that uses them needs no guard. An endless loop goes behind `@media (prefers-reduced-motion: no-preference)` |
@@ -274,13 +274,15 @@ The full contract is [OUTLINER.md](OUTLINER.md). These are the rules a new featu
 - **Keyboard first.** Everything works from the keyboard before a mouse affordance is added. A list (a page, a menu, the
   palette) answers ↑/↓, Enter and Escape. The Help tour pages with ←/→ instead. A command is a palette row, so ⌘K finds
   it and ⇧⌘K can give it a key (`DEFAULT_HOTKEYS`). New keys are written up in OUTLINER.md.
-- **Wording.** A row is sentence case and starts with a verb: "Pin to today", "Set status", "Move to Library". A row
-  that opens a further page ends in " …" ("Move to …", "Pin to date …"). A hint says the current value ("Inbox"), and
+- **Wording.** Rows are sentence case. A command row starts with a verb: "Pin to today", "Set status", "Move to
+  Library". A row that opens a further page ends in " …" ("Move to …", "Pin to date …"). A place or a choice is named as
+  it is (a view's title, "Any status", a member). A hint says the current value ("Inbox") or why a row cannot run, and
   `✓` marks the current choice. A placeholder says what to type ("Search Tana", "Choose a colour or type a hue…"). A
   notice says what was done, in the past tense, and names the thing: "Link copied", "Classified as Decision Record".
-- **Errors go to one place.** An action runs through `run()`, and a failure becomes the red toast (`showError`). The red
-  line under the title (`#error`) belongs to the session alone: it asks for a new login. Nothing writes an error into a
-  row, and a notice never goes to `#error`.
+- **Where errors go.** An action runs through `run()`, and a failure becomes the red toast (`showError`). A palette page
+  whose read failed says so as a disabled note row, in place of its rows (see the async page pattern above). The red
+  line under the title (`#error`) belongs to the session alone: it asks for a new login. A notice never goes to
+  `#error`.
 - **Focus after an action.** Closing the palette puts the caret back on the row that had it (`closePalette`). A pill's
   or the toolbar's menu gives focus back to its own button (renderer/pills.js, toolbar.js). A new row takes the caret.
   With nothing to go back to, focus goes back to the page itself, where ↑/↓ pick up the first or last row.
