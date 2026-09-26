@@ -14,6 +14,8 @@ Also re-exports `createTransport`, `GraphClient`, `HistoryClient`, `SearchClient
 
 `createTransport({ baseUrl = 'https://home.tana.inc/platform', getAccessToken, clientName = 'tana-tasks', fetch = globalThis.fetch })` → Connect transport (`@connectrpc/connect-web`, binary protobuf). Sets `authorization`, `x-client-name`, `x-request-id`; on HTTP 401 calls `getAccessToken({ refresh: true })` once and resends (safe: bodies are byte arrays). Covers the stream too, since an unauthenticated stream fails before its first frame.
 
+`unary(client, service, name, params)` → protobuf JSON: one unary call on a Connect client of `service` (a descriptor from `sdk/proto/descriptors.js`), `params` as protobuf JSON, retried once after 250 ms on `fetch failed`. `GraphClient`, `HistoryClient` and `SearchClient` make every unary read through it.
+
 ## `sdk/graph.js` — `class GraphClient(transport)`
 
 | Method | Params (protobuf JSON, lowerCamelCase) | Returns |

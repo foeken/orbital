@@ -4,23 +4,7 @@
 const { createClient } = require('@connectrpc/connect');
 const { fromJson, toJson } = require('@bufbuild/protobuf');
 const { GraphService } = require('./proto/descriptors');
-
-const method = (name) => GraphService.methods.find((m) => m.localName === name);
-
-// One unary read on Tana's services: protobuf JSON in, protobuf JSON out (sdk/history.js and search.js too).
-const unary = async (client, service, name, params) => {
-  const m = service.methods.find((x) => x.localName === name);
-  const call = () => client[name](fromJson(m.input, params || {}));
-  let response;
-  try { response = await call(); }
-  catch (e) {
-    if (e.rawMessage !== 'fetch failed') throw e;
-    // ponytail: one 250 ms retry handles short resets; add backoff only if unary reads show longer outages.
-    await new Promise((resolve) => setTimeout(resolve, 250));
-    response = await call();
-  }
-  return toJson(m.output, response);
-};
+const { unary } = require('./transport');
 
 class GraphClient {
   constructor(transport) {
@@ -38,7 +22,7 @@ class GraphClient {
       eventCount: s.eventCount || 0, nextMeetingAt: Number(s.nextMeetingAt || 0), identityUri: /^tana:[a-z-]+:[0-9a-z]{26}$/.test(s.identityUri || '') ? s.identityUri : undefined }));
   }
   async *traverse(params) {
-    const m = method('traverse');
+    const m = GraphService.methods.find((x) => x.localName === 'traverse');
     for await (const res of this.client.traverse(fromJson(m.input, params))) yield toJson(m.output, res);
   }
   _unary(name, params) {
@@ -46,4 +30,4 @@ class GraphClient {
   }
 }
 
-module.exports = { GraphClient, unary };
+module.exports = { GraphClient };
