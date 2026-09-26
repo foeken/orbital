@@ -233,7 +233,7 @@ the top of the file. State classes are set by the renderer, pseudo-classes by th
 | A row's facts | `.tmeta` holding `.ticon` glyphs (#372); `.meta.pending` while they load | `[role="button"]` makes one clickable |
 | Chip | `.chip.grey`, `.chip.gold` (meetings), `.chip.hue` with `--hue` (`chipEl`) | |
 | Pill | `.pills > .pill`, the value in `<b>`; grey for arranging (`data-id` sort, group, display); green `.save` for making something | `:hover`, `.open` (its menu is showing), `:focus`, `.in` (arriving). Leaving is on the row: `.pills.out`, with `.sliding` / `.folding` while it folds |
-| Menu | `.menu > .mrow > .micon, .mlabel, .tick`; `.mhead`, `.mdiv`, `.msearch`; `.menu.search` for long lists of titles | `.mrow.active` (keyboard), `:hover`, `.mrow.disabled` (the toolbar's style menu sets it; pill menus have no disabled row); `.menu.up` when it opens upwards |
+| Menu | `.menu > .mrow > .micon, .mlabel, .tick`; `.mhead`, `.mdiv`, `.msearch`; `.menu.search` for long lists of titles | `.mrow.active` (keyboard), `:hover`, `.mrow.disabled` (the toolbar's style menu sets it; pill menus have no disabled row); `.menu.up` when it opens upwards; `.menu.in` / `.menu.out` while it arrives or leaves, set by `menuMotion` (renderer/motion.js), never by hand |
 | Palette | `.palette > .card > input, .list > .group, .row > .ricon, .label, .hint, kbd` | `.row.active`, `.row.disabled`, `.ricon.thinking`, `.row.arrive`; `.palette.anchored` is the @ dropdown |
 | Header button | `.navbtn` holding an svg | `:hover`, `:disabled` (still shown, faint), `[hidden]`, `.in` / `.out` |
 | Toolbar | `.toolbar > .tbtn` | `.on` (the mark is set), `:hover`, `:focus`, `.style.open` |
