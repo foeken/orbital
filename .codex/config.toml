@@ -1,0 +1,3 @@
+# Project default for new Codex chats in Orbital (overrides ~/.codex/config.toml).
+model = "anthropic/claude-opus-5-5"
+model_reasoning_effort = "high"
