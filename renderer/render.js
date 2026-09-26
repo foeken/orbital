@@ -316,7 +316,10 @@ function renderSoon(force) {
   renderQueuedForce ||= force === true;
   if (renderQueued) return;
   renderQueued = true;
-  requestAnimationFrame(() => { renderQueued = false; const forced = renderQueuedForce; renderQueuedForce = false; render(forced); });
+  // An answer that lands while a row is opening or closing waits for it to finish (renderer/motion.js settling): an
+  // expanded row is rebuilt on every render, and one rebuilt mid-move jumped straight to its end.
+  const go = () => { const wait = settling(); if (wait) return setTimeout(go, wait); renderQueued = false; const forced = renderQueuedForce; renderQueuedForce = false; render(forced); };
+  requestAnimationFrame(go);
 }
 // What a list row is built from. A row whose signature has not changed since the last render is kept as it is,
 // which turns a live update or a refresh into a handful of rebuilt rows instead of a whole new outline.

@@ -44,22 +44,43 @@ function rowFor(id) {
   return null;
 }
 
-// ---- Reveal: what opens in place grows from nothing and fades in; what closes shrinks away first ----
-function reveal(els) {
-  els = els.filter(Boolean);
-  if (!motionOK() || !els.length) return;
-  const heights = els.map((el) => el.getBoundingClientRect().height); // every read before any write
-  els.forEach((el, i) => play(el, [{ height: '0px', opacity: 0, overflow: 'clip' }, { height: heights[i] + 'px', opacity: 1, overflow: 'clip' }],
-    { duration: MOTION.base, easing: MOTION.move, delay: Math.min(i, 8) * MOTION.stagger }));
+// ---- Reveal: what opens in place, as a curtain ----
+// Nothing is laid out while it moves. The page is drawn open (or still open, when closing) and the rows below the
+// region slide on transform alone, from where they stood to where they stand; the region shows through a clip whose
+// edge runs exactly along the top of those rows, so the two never overlap and nothing reflows frame by frame. Animating
+// height relaid the whole outline every frame, and every row of a section at once, which is what made it stutter.
+// els are the region (a node's children, or a section's rows), in order; done, when closing, is the state change,
+// run once the curtain is down, so the render lands on rows already where it puts them.
+let settleAt = 0;
+const settling = () => Math.max(0, settleAt - performance.now()); // how long a move still needs the rows it moves (renderSoon waits)
+function below(el) { // what is drawn after el in its scroll box: its later siblings, and theirs at every level up
+  const stop = el.closest('.scroll, .rail'), out = [];
+  for (let n = el; n && n !== stop && n !== document.body; n = n.parentElement) for (let s = n.nextElementSibling; s; s = s.nextElementSibling) out.push(s);
+  return out;
 }
-// done runs once they have gone, and is the state change itself: the render that follows replaces what shrank.
-function conceal(els, done) {
-  els = els.filter(Boolean);
-  if (!motionOK() || !els.length) return done();
-  const heights = els.map((el) => el.getBoundingClientRect().height);
-  const anims = els.map((el, i) => el.animate([{ height: heights[i] + 'px', opacity: 1, overflow: 'clip' }, { height: '0px', opacity: 0, overflow: 'clip' }],
-    { duration: MOTION.quick, easing: MOTION.move, fill: 'forwards' }));
-  Promise.all(anims.map((a) => a.finished.catch(() => {}))).then(() => { done(); for (const a of anims) a.cancel(); });
+function curtain(els, opening, done) {
+  els = els.filter((el) => el && el.isConnected);
+  if (!motionOK() || !els.length) return done && done();
+  const rects = els.map((el) => el.getBoundingClientRect()), top = rects[0].top, h = Math.max(...rects.map((r) => r.bottom)) - top;
+  if (h < 1) return done && done();
+  // only what is on screen at some point of the move — each travels between r.top - h and r.top, whichever way it
+  // goes — so rows far below go to their place unseen and cost nothing
+  const followers = below(els.at(-1)).filter((el) => { const r = el.getBoundingClientRect(); return r.height && r.bottom > 0 && r.top - h < innerHeight; });
+  const timing = { duration: opening ? MOTION.base : MOTION.quick, easing: MOTION.move, fill: opening ? 'backwards' : 'forwards' };
+  // the clip reaches a little past the sides and top, so list markers, chevrons and focus rings are not cut
+  const clip = (hidden) => 'inset(-4px -60px ' + hidden + 'px -60px)';
+  const flip = (frames) => frames.map((f) => ({ ...f, offset: 1 - f.offset })).reverse();
+  const anims = els.map((el, i) => {
+    // each piece of the region opens while the edge crosses it: one keyframe where the edge reaches its top, one where
+    // it passes its bottom, on the same eased progress the rows below move on
+    const at = (rects[i].top - top) / h, end = Math.min(1, (rects[i].bottom - top) / h), hi = rects[i].height;
+    const frames = [{ offset: 0, clipPath: clip(hi) }, ...(at > 0 ? [{ offset: at, clipPath: clip(hi) }] : []), ...(end < 1 ? [{ offset: end, clipPath: clip(0) }] : []), { offset: 1, clipPath: clip(0) }];
+    return el.animate(opening ? frames : flip(frames), timing);
+  });
+  const slid = [{ transform: 'translateY(' + -h + 'px)' }, { transform: 'none' }];
+  for (const el of followers) anims.push(el.animate(opening ? slid : [...slid].reverse(), timing));
+  settleAt = performance.now() + timing.duration + 40;
+  if (done) Promise.all(anims.map((a) => a.finished.catch(() => {}))).then(() => { done(); for (const a of anims) a.cancel(); });
 }
 // a chevron drawn afresh turns from where the old one pointed
 const turnFrom = (el, from) => { if (el && from !== undefined) play(el, [{ transform: from }, { transform: getComputedStyle(el).transform }], { duration: MOTION.quick, easing: MOTION.out }); };
@@ -77,7 +98,7 @@ function foldRow(key, opening, done) {
   };
   if (opening) return land();
   const row = nodeElOf(key);
-  conceal([row && row.querySelector(':scope > .children')], land);
+  curtain([row && row.querySelector(':scope > .children')], false, land);
 }
 function revealOpened() {
   if (!revealing) return;
@@ -85,7 +106,7 @@ function revealOpened() {
   const wrap = nodeElOf(revealing.key)?.querySelector(':scope > .children');
   if (!wrap || wrap.classList.contains('loading')) return;
   revealing = null;
-  reveal([wrap]);
+  curtain([wrap], true);
 }
 // A folded section: its rows are the siblings after its heading up to the next heading (the outline's group sections,
 // the sidebar's). find hands back the heading as the redraw built it again.
@@ -98,9 +119,9 @@ function foldSection(head, toggle, find) {
   glideUntil = 0;
   const svg = head.querySelector('svg'), from = svg && motionOK() ? getComputedStyle(svg).transform : undefined;
   const opening = head.getAttribute('aria-expanded') === 'false';
-  const land = () => { const again = find(); turnFrom(again && again.querySelector('svg'), from); if (opening && again) reveal(sectionRows(again)); };
+  const land = () => { const again = find(); turnFrom(again && again.querySelector('svg'), from); if (opening && again) curtain(sectionRows(again), true); };
   if (opening) { toggle(); return land(); }
-  conceal(sectionRows(head), () => { toggle(); land(); });
+  curtain(sectionRows(head), false, () => { toggle(); land(); });
 }
 // Flash for a zoomed page's row, which a render builds afresh: it leaves the way a view's row does (styles.css
 // .node.leaving), tinted green for a yes and red for a no, and done takes it off the page once it has gone.
