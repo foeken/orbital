@@ -2506,6 +2506,9 @@ async function main() {
     const meeting = { id: 'tana:event:' + ulid(), title: 'Leadership sync', calendarEvent: { startTime: ago(3 * H), endTime: ago(2.5 * H), roster: [
       person('Me Myself', { identityUri: ME }), person('Board Room', { role: 'resource' }), person('Ann Bakker'), person('Bo Smit'), person('Cas de Vries'), person('Dee Jansen'), person('Eva Mol')] } };
     const allDay = { id: 'tana:event:' + ulid(), title: 'Offsite', calendarEvent: { startTime: ago(6 * H), endTime: ago(-18 * H), allDay: true } };
+    const going = { id: 'tana:event:' + ulid(), title: 'Board prep', calendarEvent: { startTime: ago(3.5 * H), endTime: ago(-1 * H) } }; // still going: as it is
+    const summed = { id: 'tana:event:' + ulid(), title: 'Weekly', calendarEvent: { startTime: ago(4.5 * H), endTime: ago(4 * H), tagline: 'Weekly: roadmap agreed' } };
+    const writeUps = [{ id: 'tana:text:' + ulid(), title: 'Weekly: roadmap agreed', ownerUri: summed.id }, { id: 'tana:text:' + ulid(), title: 'Agenda', ownerUri: meeting.id }]; // an agenda is no write-up
     let meetingsAsked = null;
     let liveDoc = null; const sent = [], historyAsks = [];
     const summaries = new Map([[watched.id, [
@@ -2524,7 +2527,8 @@ async function main() {
             if (p.nodeIds && (p.nodeTypes || []).includes('chat')) return { nodes: [{ id: MCP_CHAT, title: 'MCP: Nedap Compliance', invocationContext: { intent: 'mcp' } }, { id: AI_CHAT, title: 'Chat for Weekly', invocationContext: { intent: 'meeting' } }].filter((c) => p.nodeIds.includes(c.id)) };
             if (p.nodeIds && (p.nodeTypes || []).includes('text')) return { nodes: [pinnedEditable, pinnedReadOnly, completedOverdue].filter((n) => p.nodeIds.includes(n.id)) };
             if (p.nodeIds) return { nodes: [] };
-            if ((p.nodeTypes || []).includes('event')) { meetingsAsked = p; return { nodes: [meeting, allDay] }; }
+            if ((p.nodeTypes || []).includes('event')) { meetingsAsked = p; return { nodes: [going, meeting, summed, allDay] }; }
+            if (p.ownerIds) return { nodes: writeUps.filter((n) => p.ownerIds.includes(n.ownerUri)) };
             if ((p.createdBy || []).includes(ME)) return { nodes: [watched, kept] };
             if ((p.assignedTo || []).includes(ME)) return { nodes: [byHand, viaMcp, viaMcpToo, fromRob, viaAi, old] };
             return { nodes: [] };
@@ -2543,11 +2547,13 @@ async function main() {
       ['Rob Jansen edited Contract renewal', 'Added the Q4 numbers from Rob', 'updated', 'edit', false, []],
       ['An AI agent added 2 tasks to your Inbox', null, 'robot', 'new', false, ['Answer Jules', 'Plan the pilot']],
       ['Rob Jansen added a task to your Inbox', null, 'tlNew', 'new', false, ['Review the vendor contract']],
-      ['Leadership sync', '30 min · Ann Bakker, Bo Smit, Cas de Vries, Dee Jansen, …', 'meeting', 'meeting', false, []],
+      ['Leadership sync', '30 min · Ann Bakker, Bo Smit, Cas de Vries, Dee Jansen, …', 'meeting', 'faint', false, []],
+      ['Board prep', '4 h 30 min', 'meeting', 'meeting', false, []],
       ['Rob Jansen accepted Contract renewal', null, 'tlAccepted', 'accepted', false, []],
+      ['Weekly', '30 min', 'meeting', 'meeting', false, []],
       ['Rob Jansen edited Contract renewal', 'Moved the deadline to Friday', 'updated', 'edit', false, []],
       ["Tana's AI added a task to your Inbox", null, 'tana', 'new', false, ['Share the transcript']],
-    ], 'a timeline, newest first: who, then what they did, then the node; an edit\'s change quoted under it; new tasks from one source in a row are one quiet entry; a completion told once, from the node\'s own state; a meeting at its start time, all-day ones left out; yours alone, by hand, or weeks old stay out');
+    ], 'a timeline, newest first: who, then what they did, then the node; an edit\'s change quoted under it; new tasks from one source in a row are one quiet entry; a completion told once, from the node\'s own state; a meeting at its start time, quiet once it is over with no write-up, all-day ones left out; yours alone, by hand, or weeks old stay out');
     assert.deepEqual(JSON.parse(JSON.stringify([meetingsAsked.hasParticipantUris, Date.parse(meetingsAsked.eventStartTimeMax) <= Date.now(), Date.parse(meetingsAsked.eventStartTimeMin) === (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime() - 2 * 24 * H; })()])), [[ME], true, true],
       'the meetings asked for are yours, from the start of the day before yesterday up to now');
     // Kept current (#210): the read left a live query open over your meetings; the server's answers re-read the page

@@ -437,14 +437,15 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 .node.tl-done > .line > .bullet.icon svg g { stroke-width: 2.5; } /* the check drawn at 12px: heavier than the line icons' 1, so it reads */
 /* line glyphs (the edit's pen, an agent's robot, Tana's prism) are drawn at their own 18px in the 20px marker's place */
 .node.tl > .line > .bullet.icon:is(.updated, .robot, .tana, .meeting) svg { width: 18px; height: 18px; left: 0; top: 3px; }
-.node.tl-new > .line > .bullet.icon svg, .node.tl-new > .line > .bullet.icon:hover svg { color: #c4c4c4; }
+/* tl-faint: a meeting that is over and left no write-up (main/timeline.js), as quiet as a new-task line */
+.node:is(.tl-new, .tl-faint) > .line > .bullet.icon svg, .node:is(.tl-new, .tl-faint) > .line > .bullet.icon:hover svg { color: #c4c4c4; }
 .node.tl-new > .line > .bullet.icon:is(.robot, .tana) svg { color: #aeb1b5; }
 .node.tl > .line > .body { margin-left: 11px; } /* room between the rail and what happened: 16px with the body padding */
 .tl-detail { margin: 18px 0 -6px 8px; /* placed as the tasks a group lists are: its edge in line with their checkboxes, 20px under the line above, 25px over the next entry */ padding: 6px 12px; max-width: 640px; border-left: 3px solid #dcdcdc; border-radius: 0 6px 6px 0; background: #f6f6f6; color: #555; font-size: 15px; line-height: 21px; }
 .tl-detail strong { display: block; color: #333; font-weight: 600; }
 [data-theme="dark"] .tl-detail strong { color: #d4d6d8; }
 [data-theme="dark"] .tl-detail { border-left-color: #45484b; background: #242628; color: #b4b6b8; }
-.node.tl-new > .line .text { color: #8a8a8a; }
+.node:is(.tl-new, .tl-faint) > .line .text { color: #8a8a8a; }
 .node.tl-done > .line .text s, .node.tl-done > .line .text del { color: #8a8a8a; }
 .node.tl > .line > .body > .subtext { margin-top: 2px; }
 /* a group's rows hang under its words (block + t-bullet: the list rule it overrides): a task by its box, which makes its
@@ -466,7 +467,7 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 [data-theme="dark"] .tl-divider::before { border-top-color: #34373a; }
 [data-theme="dark"] .node.tl > .line > .bullet.icon svg { background: #1b1d1e; color: #8a8f95; }
 [data-theme="dark"] .node.tl-done > .line > .bullet.icon svg { color: #fff; background: none; }
-[data-theme="dark"] .node.tl-new > .line > .bullet.icon svg { color: #5a5d60; }
+[data-theme="dark"] .node:is(.tl-new, .tl-faint) > .line > .bullet.icon svg { color: #5a5d60; }
 .check {
   flex: none; width: 18px; height: 18px; margin: 3px 8px 0 2px; border-radius: 5px; background: #e4e4e4;
   border: 0; padding: 0; cursor: pointer; -webkit-appearance: none; appearance: none; position: relative;
