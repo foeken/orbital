@@ -107,6 +107,10 @@ async function open() {
       // the one this machine used is still an app document, not a note of yours: it stays out of the lists (appDocIds), with
       // those it had taken over itself. One key per document, so two machines giving theirs up at once both keep theirs.
       carry(oldest, [known, ...gaveUp]);
+      // and what it holds that the winner does not: another machine may have written it there since this one last looked,
+      // which this machine's mirror cannot know. The winner keeps its own value where both have one.
+      const held = doc.loro.getMap(ROOT).toJSON() || {};
+      oldest.transact((loro) => { const map = loro.getMap(ROOT); for (const [key, text] of Object.entries(held)) if (map.get(key) === undefined) map.set(key, text); });
       if (!had) S.client.sync.unsubscribe(known).catch(() => {}); // given up: no live copy of it, and its changes are not ours to route
       return use(oldest);
     }
