@@ -74,6 +74,21 @@ const ME = peer(1234567, 1), MY_OTHER_TAB = peer(1234567, 2), OTHER = peer(76543
   assert.deepEqual(cmds, [['subscribeEphemeralChannel', DOC]], 'two holders, one subscription, still held');
   await conn.unsubscribeEphemeralChannel(DOC);
   assert.deepEqual(cmds.at(-1), ['unsubscribeEphemeralChannel', DOC]);
+  // a subscribe the server refuses is not held: the next holder sends it again rather than counting on a channel it never got
+  const ok = conn._command, refuse = async () => { throw new Error('refused'); };
+  conn._command = refuse;
+  await assert.rejects(conn.subscribeEphemeralChannel(DOC), /refused/);
+  assert.equal(conn.channels.has(DOC), false, 'a refused subscribe leaves no count behind');
+  conn._command = ok;
+  await conn.subscribeEphemeralChannel(DOC);
+  assert.deepEqual(cmds.at(-1), ['subscribeEphemeralChannel', DOC], 'and the next holder subscribes it');
+  await conn.unsubscribeEphemeralChannel(DOC);
+  // ...and openPresence leaves no room behind to answer frames and reconnects for a handle nobody has
+  const failing = new EventEmitter();
+  Object.assign(failing, { peerId: ME, calls: [], subscribeEphemeralChannel: refuse, viewingHeartbeat: async (id) => failing.calls.push(id), sendEphemeral: async () => true });
+  await assert.rejects(openPresence(failing, DOC, { viewing: true }), /refused/);
+  failing.emit('connected');
+  assert.deepEqual(failing.calls, [], 'a room that never opened sends no viewing heartbeat on a reconnect');
   assert.equal(await conn.sendEphemeral(DOC, new Uint8Array([1])), true);
   conn._command = async () => { throw new Error('refused'); };
   assert.equal(await conn.viewingHeartbeat(DOC), false, 'presence is best effort: a refusal is false, never a throw');

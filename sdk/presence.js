@@ -50,7 +50,14 @@ async function openPresence(sync, documentId, { timeout = TIMEOUT_MS, viewing = 
   const byDoc = route(sync);
   if (!byDoc.has(documentId)) byDoc.set(documentId, new Set());
   byDoc.get(documentId).add(room);
-  await sync.subscribeEphemeralChannel(documentId);
+  // Out of the route and its store gone: on close, and when the channel was refused, so no room is left behind to
+  // answer frames and reconnects for a handle nobody holds.
+  const leave = () => {
+    const rooms = byDoc.get(documentId); rooms.delete(room); if (!rooms.size) byDoc.delete(documentId);
+    unsubscribe(); offLocal();
+    store.destroy();
+  };
+  try { await sync.subscribeEphemeralChannel(documentId); } catch (e) { leave(); throw e; }
   if (viewing) { sync.viewingHeartbeat(documentId); beat = setInterval(() => sync.viewingHeartbeat(documentId), HEARTBEAT_MS); }
 
   handle.documentId = documentId;
@@ -77,10 +84,8 @@ async function openPresence(sync, documentId, { timeout = TIMEOUT_MS, viewing = 
   handle.close = async () => {
     handle.clearLocal();
     clearInterval(beat);
-    const rooms = byDoc.get(documentId); rooms.delete(room); if (!rooms.size) byDoc.delete(documentId);
-    unsubscribe(); offLocal();
+    leave();
     await sync.unsubscribeEphemeralChannel(documentId);
-    store.destroy();
   };
   return handle;
 }
