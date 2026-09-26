@@ -149,7 +149,8 @@ async function discover(skip = new Set()) {
       const mine = nodes.filter((n) => (n.title || '').trim().toLowerCase() === title.toLowerCase())
         .sort((a, b) => String(a.createTime || '').localeCompare(String(b.createTime || '')));
       for (const node of mine) {
-        if (skip.has(node.id)) continue;
+        // a public link is on the graph node (main/documents.js linkShared), whatever the document's own roots say
+        if (skip.has(node.id) || (node.linkSharing && node.linkSharing.mode)) continue;
         const had = !!S.client.sync.getDocument(node.id); // somebody else's subscription stays, whatever this decides
         const doc = await S.client.sync.subscribe(node.id).catch(() => null);
         if (doc && !isDeleted(readNode(doc)) && holdsSettings(doc) && await onlyMine(doc)) return doc;

@@ -1226,8 +1226,8 @@ async function main() {
     const shared = new Document('tana:text:' + ulid()); // one called Orbital, marked, but where others can read it: somebody with edit rights made it look like ours
     shared.transact((l) => { initDocument(l, settings.TITLE, ME); l.getMap('ext:orbital:doc').set('app', 'orbital'); l.getMap('data').set('restricted', false); });
     docs.set(shared.id, shared);
-    const linked = new Document('tana:text:' + ulid()); // private to you, marked, but readable by anyone with its public link
-    linked.transact((l) => { initDocument(l, settings.TITLE, ME); l.getMap('ext:orbital:doc').set('app', 'orbital'); l.getMap('linkSharing').set('mode', 'view'); });
+    const linked = new Document('tana:text:' + ulid()); // private to you, marked, but readable by anyone with its public link, which only the graph node says
+    linked.transact((l) => { initDocument(l, settings.TITLE, ME); l.getMap('ext:orbital:doc').set('app', 'orbital'); });
     docs.set(linked.id, linked);
     connect();
     settings.setPref('home', 'library');
@@ -1236,7 +1236,7 @@ async function main() {
     assert.ok(mine && mine !== theirs.id, 'the index did not list theirs yet, so this machine made its own');
     listed = [{ id: mine, title: settings.TITLE, createTime: '2026-09-26T09:00:01Z' }, { id: theirs.id, title: settings.TITLE, createTime: '2026-09-26T09:00:00Z' },
       { id: note.id, title: settings.TITLE, createTime: '2026-01-01T00:00:00Z' }, { id: shared.id, title: settings.TITLE, createTime: '2025-12-01T00:00:00Z' },
-      { id: linked.id, title: settings.TITLE, createTime: '2025-11-01T00:00:00Z' }];
+      { id: linked.id, title: settings.TITLE, createTime: '2025-11-01T00:00:00Z', linkSharing: { mode: 'view' } }];
     // while this machine was away, another one that also uses this machine's document wrote to it
     docs.get(mine).transact((l) => { const m = l.getMap(settings.ROOT); m.set('hiddenTitles', JSON.stringify(['Lunch'])); m.set('pref:theme', JSON.stringify('light')); });
     connect(); sent.length = 0;
@@ -1251,7 +1251,8 @@ async function main() {
     assert.deepEqual(note.loro.getMap(settings.ROOT).toJSON(), {}, 'an older note that only shares the title is never taken over');
     assert.deepEqual(shared.loro.getMap(settings.ROOT).toJSON(), {}, 'nor one others can read, mark or not: no synced key is ever written where somebody else sees it');
     assert.deepEqual(linked.loro.getMap(settings.ROOT).toJSON(), {}, 'nor one with a public link, private as its audience is');
-    assert.deepEqual([linked.id, shared.id, note.id].filter((id) => released.includes(id) && !live.has(id)), [linked.id, shared.id, note.id], 'and each one looked at and turned down is let go again');
+    assert.deepEqual([shared.id, note.id].filter((id) => released.includes(id) && !live.has(id)), [shared.id, note.id], 'and each one looked at and turned down is let go again');
+    assert.ok(!tried.includes(linked.id), 'one the graph says has a public link is turned down without even being opened');
     assert.ok(!tried.some((id) => id.startsWith('tana:org:')), 'and an open one is turned down on its own flag, without loading the org or an owner chain to ask about it');
     assert.ok(released.includes(mine) && !live.has(mine) && live.has(theirs.id), 'as is the one this machine gave up, while the one it took stays live');
     assert.deepEqual(Object.keys(theirs.loro.getMap('ext:orbital:old').toJSON()).sort(), [third, mine].sort(), 'the document this machine gave up is noted in the one it took, one key each beside the one another machine gave up, so concurrent notes merge');
