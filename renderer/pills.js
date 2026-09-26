@@ -78,11 +78,12 @@ function pillDefs() {
 const DATE_PRESETS = [['today', 'Today'], ['upcoming', 'Upcoming'], ['past', 'Past']];
 // the target types of a link field, joined -> { at, rows } ({ id, text }): asked again after a minute, so a new or
 // renamed target turns up without a restart
-// ponytail: the first 200 of them (searchPreview's cap); ask as the menu is typed into if a target type outgrows that
+// ponytail: the first 1,000 of them (searchPreview's cap); ask as the menu is typed into if a target type outgrows that
+// null while the list is still being asked, so the menu can say so rather than look empty (menuEl)
 const linkChoices = new Map();
 function fieldChoices(def) {
   if (def.type === 'options') return (def.options || []).map((o) => [o.label, o.label]);
-  if (def.type === 'member') { loadMembers(); return (members || []).map((m) => [m.id, memberName(m.id)]); }
+  if (def.type === 'member') { loadMembers(); return members && members.length ? members.map((m) => [m.id, memberName(m.id)]) : null; }
   const to = (def.to || []).map((t) => t.uri), key = to.join(',');
   if (!to.length) return [];
   const hit = linkChoices.get(key);
@@ -90,7 +91,8 @@ function fieldChoices(def) {
     linkChoices.set(key, { at: Date.now(), rows: hit ? hit.rows : null }); // claimed: the renders while it is asked do not ask again
     tana.searchPreview({ types: to }).then((rows) => { linkChoices.set(key, { at: Date.now(), rows }); if (pillsDrawn) renderPills(true); }, () => linkChoices.delete(key));
   }
-  return ((linkChoices.get(key) || {}).rows || []).map((n) => [n.id, n.text || 'Untitled']);
+  const rows = (linkChoices.get(key) || {}).rows;
+  return rows ? rows.map((n) => [n.id, n.text || 'Untitled']) : null;
 }
 function putField(f, save, key, value) {
   const fields = { ...f.fields };
@@ -112,8 +114,8 @@ function fieldPill(def, f, save) {
   }
   // options match their label, links and members the uri they point at; either way a multi-select, like Status
   const byLabel = def.type === 'options', on = byLabel ? (now.textMatches || []).map((m) => m.value) : now.refs || [];
-  const choices = fieldChoices(def), ids = choices.map(([id]) => id), nameOf = (id) => (choices.find(([x]) => x === id) || [id, '…'])[1];
-  return { ...pill, value: on.map(nameOf).join(', ') || 'Any', rows: () => [
+  const asked = fieldChoices(def), choices = asked || [], ids = choices.map(([id]) => id), nameOf = (id) => (choices.find(([x]) => x === id) || [id, '…'])[1];
+  return { ...pill, loading: !asked, value: on.map(nameOf).join(', ') || 'Any', rows: () => [
     { label: 'Any', reset: true, checked: !on.length, run: () => put(null) },
     ...choices.map(([id, label]) => ({ label, keepOpen: true, checked: on.includes(id), run: () => {
       const next = toggleIn(ids, on.length ? on : null, id);
@@ -363,29 +365,37 @@ cleanupBtn.onmousedown = (e) => e.preventDefault();
 cleanupBtn.onclick = cleanupNow; // the same action the Cmd+K "Clean up" row runs
 // Typing in an open menu narrows it, so a long list (every member, in Assigned to) is reachable without the mouse.
 // Headings and dividers describe a full list, so a narrowed one drops them and shows only what matched.
+// A searchable menu draws its first MENU_CAP rows: every render while a page loads rebuilds an open menu, and a link
+// field has up to 1,000 targets, which nobody scrolls through when typing finds one.
+const MENU_CAP = 100;
 function menuRows(d) {
   const all = d.rows(), q = (menu && menu.q || '').trim().toLowerCase();
-  return q ? all.filter((r) => r.label && fuzzyMatch(r.label, q)) : all;
+  const rows = q ? all.filter((r) => r.label && fuzzyMatch(r.label, q)) : all;
+  return d.search ? rows.slice(0, MENU_CAP) : rows;
 }
 function menuEl(d) {
   const rows = menuRows(d), el = document.createElement('div'); el.className = 'menu';
   el.dataset.for = d.id; // which pill it hangs from, so a redraw can tell a new menu from the same one (menuMotion)
   const typed = (menu.q || '').trim();
-  // A long list (a link field's targets) shows where the typing goes before anything is typed; the keys stay the pill's
+  // A long list (a link field's targets) shows where the typing goes before anything is typed; the keys stay the pill's,
+  // and the caret drawn there (styles.css .mcaret) shows only while the pill has the focus, which is when typing lands
   if (d.search) {
     const s = document.createElement('div'); s.className = 'msearch' + (typed ? '' : ' empty');
     const i = document.createElement('span'); i.className = 'micon'; i.innerHTML = iconSvg('search');
-    s.append(i, typed || 'Search ' + (d.label || 'options') + '…'); el.append(s);
+    const c = document.createElement('span'); c.className = 'mcaret';
+    s.append(i, typed, c, typed ? '' : 'Search ' + (d.label || 'options') + '…'); el.append(s);
   } else if (typed) { const h = document.createElement('div'); h.className = 'mhead'; h.textContent = typed; el.append(h); }
   const pick = rows.filter((r) => r.label); // navigable rows
-  if (d.search && typed && !pick.length) { const n = document.createElement('div'); n.className = 'mhead'; n.textContent = 'No matches'; el.append(n); }
+  if (d.loading || (d.search && typed && !pick.length)) { const n = document.createElement('div'); n.className = 'mhead'; n.textContent = d.loading ? 'Loading…' : 'No matches'; el.append(n); }
   menu.index = Math.max(0, Math.min(menu.index, pick.length - 1));
+  const icons = rows.some((x) => x.icon);
+  let at = 0; // this row's place among the navigable ones
   for (const r of rows) {
     const row = document.createElement('div');
     if (r.head) { row.className = 'mhead'; row.textContent = r.head; el.append(row); continue; }
     if (r.div) { row.className = 'mdiv'; el.append(row); continue; }
-    row.className = 'mrow' + (pick.indexOf(r) === menu.index ? ' active' : '');
-    if (rows.some((x) => x.icon)) { const i = document.createElement('span'); i.className = 'micon'; i.innerHTML = r.icon ? iconSvg(r.icon) : ''; row.append(i); }
+    row.className = 'mrow' + (r.label && at++ === menu.index ? ' active' : '');
+    if (icons) { const i = document.createElement('span'); i.className = 'micon'; i.innerHTML = r.icon ? iconSvg(r.icon) : ''; row.append(i); }
     const l = document.createElement('span'); l.className = 'mlabel'; l.textContent = r.label; row.append(l);
     if (r.checked && !r.reset) { const t = document.createElement('span'); t.className = 'tick'; t.textContent = '✓'; row.append(t); }
     row.onclick = () => pickMenuRow(r, pick);
