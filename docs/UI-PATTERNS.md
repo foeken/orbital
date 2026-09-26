@@ -59,8 +59,8 @@ function huePickRows(q, typed) { … } // every page's rows: q lowercased, typed
 ### Doing something: `run`, `showError`, `showNote` (renderer/nodes.js)
 
 `run(fn)` queues an async action behind the ones before it. A throw becomes the red toast, so an action never catches
-just to report. `showNote(text)` is the same toast, not red, for a result worth saying ("Link copied"). `showError(e)` shows an
-error you already hold.
+just to report. `showNote(text)` is the same toast, not red, for a result worth saying ("Link copied"). `showError(e)`
+shows an error you already hold.
 
 ```js
 run: () => run(async () => {
