@@ -90,11 +90,11 @@ async function resolveTypes(uris) {
   const { nodes } = await S.client.graph.listNodes({ nodeIds: missing, limit: missing.length });
   nodes.forEach(rememberType);
 }
-// { label, hue, uri } when the type node has appearance.hue, else grey (docs/OUTLINER.md addendum 12).
+// { label, hue, uri } when the type node has appearance.hue, else grey (docs/OUTLINER.md §5, Rows).
 // uri lets a row find its type again through the cache, for the type's hue and its app-local icon.
 const typeTag = (uri) => (uri && typeTitles.get(uri) ? [typeHue(uri) !== undefined ? { label: typeTitles.get(uri), hue: typeHue(uri), uri } : { label: typeTitles.get(uri), color: 'grey', uri }] : []);
 const typeUriOf = (r) => (r.tags || []).map((t) => t && t.uri).find(Boolean); // the row's type, from its type tag
-// a node without its own appearance.hue inherits the hue of its type, so icon and tag match (docs/OUTLINER.md addendum 14)
+// a node without its own appearance.hue inherits the hue of its type, so icon and tag match (docs/OUTLINER.md §5, Rows)
 const hueWithType = (own, typeUri) => (own === undefined && typeUri !== undefined ? typeHue(typeUri) : own);
 // A document opened straight from Loro (pins, zoom, spaces) has no appearance in its data map, so its colour needs
 // one graph lookup. Cached per id including "no hue", like resolveTypes caches titles.

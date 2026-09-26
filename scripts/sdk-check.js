@@ -4191,7 +4191,7 @@ async function main() {
     assert.equal(outline.readOutline(d).length, 3, 'and it is one undo step of its own');
     console.log('ok  a dropped text row keeps its kind, a dropped child becomes a list row, and a dropped document lands as a reference');
   }
-  // 3c. Image blocks (addendum 12): { nodeName 'image', attributes { blockId, tanaUri, displayWidth?, displayHeight? }, children [] }
+  // 3c. Image blocks (docs/OUTLINER.md §5): { nodeName 'image', attributes { blockId, tanaUri, displayWidth?, displayHeight? }, children [] }
   //     as seen in tana:text:01exampleu0000000000000000; read as { type 'image', image }, removable and movable like any block.
   {
     const IMG = 'tana:image:01examplev0000000000000000';

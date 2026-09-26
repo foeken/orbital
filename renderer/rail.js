@@ -2,7 +2,7 @@
 // The right rail: what a zoomed node is linked to (api.related). Rows here are edges, not nodes: they open, a task row toggles, nothing takes a caret.
 
 // ---- right rail: what a zoomed node is linked to (api.related). These rows are edges, not nodes:
-// they open, and a task row toggles, but nothing here ever takes a caret (docs/OUTLINER.md addendum 15).
+// they open, and a task row toggles, but nothing here ever takes a caret (docs/OUTLINER.md §18).
 const railEl = $('rail');
 const railGrip = $('railGrip');
 const RAIL_MIN = 200, RAIL_MAX = 620;

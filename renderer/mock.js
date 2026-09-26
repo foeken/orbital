@@ -27,7 +27,7 @@ function mockApi() {
   const typed = (type, text) => ({ ...block(text), block: type }); // a block carrying one of the api.setBlockType types
   const divider = () => ({ id: 'b' + (++seq), kind: 'block', block: 'divider', editable: false, hasChildren: false, children: [] }); // nothing to edit, like sdk/content.js
   const task = { label: 'task', color: 'grey' }, meeting = { label: 'meeting', color: 'gold' };
-  const project = { label: 'Project', hue: 268 }; // a typed tag with the type's colour (Addendum 12)
+  const project = { label: 'Project', hue: 268 }; // a typed tag with the type's colour (docs/OUTLINER.md §5)
   const docs = titles.map((text, i) => ({ id: 'mockdoc' + i, text, kind: 'document', done: 0, hasChildren: true, icon: 'task', tags: [task] }));
   docs[2].tags = [task, project];
   docs[0].state = 'proposed'; // Inbox; the rest are In Progress (open) unless done
