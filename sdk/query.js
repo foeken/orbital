@@ -59,8 +59,11 @@ const isHidden = (title, rules) => {
 // ---- Views (docs/VIEWS.md) ----
 // A saved search is a document like any other listed kind: Tana's own client groups `search` with text, event, chat,
 // canvas, agent and skill as a document kind (and keeps `liveQuery`, a materialised result cache, well away from them).
-const VIEW_KINDS = ['meetings', 'tasks', 'docs', 'chats', 'canvases', 'agents', 'skills', 'searches', 'spaces', 'people', 'types'];
+// The one table of view kinds: a kind listed here is a Type pill choice, a filter kind and a saved-search type both ways.
 const KIND_NODE_TYPE = { meetings: 'event', tasks: 'text', docs: 'text', chats: 'chat', canvases: 'canvas', agents: 'agent', skills: 'skill', searches: 'search', spaces: 'space', people: 'user-profile', types: 'type' };
+const VIEW_KINDS = Object.keys(KIND_NODE_TYPE);
+// and back; `text` is tasks or docs, which searchQueryToFilter tells apart by task state
+const NODE_TYPE_KIND = Object.fromEntries(Object.entries(KIND_NODE_TYPE).filter(([, t]) => t !== 'text').map(([k, t]) => [t, k]));
 // Spaces, people and types are containers, members and schema, not library content: each is listed when asked for by name.
 const ANY_KINDS = VIEW_KINDS.filter((k) => !['people', 'spaces', 'types'].includes(k));
 // Meetings, Chats and People are no longer views: each was a fixed query over a single kind, which is what a saved
@@ -317,7 +320,6 @@ function filterToSearchQuery(filter = {}, me) {
 //     Those are dropped here rather than approximated, so what comes back is exactly what the pills can show.
 // Saving therefore rewrites the query from the pills alone: anything in the first bullet survives, anything in the
 // second does not, which is why saving is an explicit action on a saved search rather than a write per keystroke.
-const NODE_TYPE_KIND = { event: 'meetings', chat: 'chats', canvas: 'canvases', agent: 'agents', skill: 'skills', search: 'searches', space: 'spaces', 'user-profile': 'people', type: 'types' };
 function searchQueryToFilter(query, me) {
   const q = query || {};
   const list = (v) => (Array.isArray(v) && v.length ? v : null);

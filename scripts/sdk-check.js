@@ -3576,6 +3576,10 @@ async function main() {
     // The documented lossy edge: tasks and docs share the node type `text`, so task state is what tells them apart.
     assert.deepEqual(searchQueryToFilter({ types: ['text'] }, ME).types, ['docs'], 'a text query with no task state is documents');
     assert.deepEqual(searchQueryToFilter({ types: ['text'], stateTypes: ['open'] }, ME).types, ['tasks'], 'the same query constrained by task state is tasks');
+    // Every kind survives a save and a read, so a kind added to KIND_NODE_TYPE is a saved-search type both ways.
+    const { VIEW_KINDS } = require('../sdk/query');
+    assert.deepEqual(VIEW_KINDS, ['meetings', 'tasks', 'docs', 'chats', 'canvases', 'agents', 'skills', 'searches', 'spaces', 'people', 'types'], 'the kinds, in the order the pills list them');
+    for (const kind of VIEW_KINDS) assert.deepEqual(searchQueryToFilter(filterToSearchQuery({ types: [kind], states: ['open'] }, ME), ME).types, [kind], kind + ' round-trips through a saved search');
     // Reading an assignee: the viewer flag and the viewer's own uri both mean "You" to a pill, which is the one thing
     // that lets an assignee survive a save — it goes back out as assignedToViewer either way.
     assert.equal(searchQueryToFilter({ assignedTo: [ME] }, ME).assignee, 'me', 'the signed-in user as a named assignee still reads as "You"');
