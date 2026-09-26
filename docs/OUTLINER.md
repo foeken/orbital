@@ -706,7 +706,10 @@ It is asked once per open, never per keystroke. Cmd+K offers **Sign in with Chat
 **Sign out of ChatGPT**, and shows the account status. A signed-in ChatGPT account takes priority; the local OpenAI
 API key is used when ChatGPT is signed out. Both credentials stay on this machine, never in Tana. ChatGPT sign-in
 uses the Codex CLI app-server in its own local auth directory, separate from the user's regular Codex login. It
-needs the `codex` command on PATH. Which model answers and how hard it thinks are the settings `aiModel` and
+uses this Mac's `codex` (on PATH, in `~/.local/bin`, Homebrew, or inside the ChatGPT/Codex app, main/agent.js
+`codexBin`); with none, the first sign-in downloads the standalone `codex-app-server` from Codex's GitHub release
+into userData and keeps it only when `codesign` shows OpenAI's Developer ID (team 2DC432GLL2). That covers the AI
+rows alone: Assign to Agent and Send to agent still need a real Codex. Which model answers and how hard it thinks are the settings `aiModel` and
 `aiEffort`, defaulting to the fast AI both AI rows share: `gpt-5.6-terra` with low reasoning, which answered a
 suggestion in the same time as Luna with none (5.8 s against 5.7 s, median of six) and left the subject of the
 task out of who to discuss it with where Luna put him in; they follow you between machines

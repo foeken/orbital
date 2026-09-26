@@ -794,11 +794,12 @@ async function main() {
     const sentSoFar=calls.length;
     await assert.rejects(ai.classifyType({...typed,types:[]},fetchWith(answer('{}'))),/No types/,'a document no type can go on asks nothing');
     assert.equal(calls.length,sentSoFar);
-    const agent=require('../main/agent'), originalRpc=agent.appServerRpc;
+    const agent=require('../main/agent'), originalRpc=agent.appServerRpc, originalBin=agent.codexBin;
     const userData=fs.mkdtempSync(require('node:path').join(require('node:os').tmpdir(),'orbital-ai-auth-'));
-    let signedIn=false, note, threadStart, turnStart;
-    agent.appServerRpc=(_timeout,_host,onNote)=>{
-      note=onNote;
+    let signedIn=false, note, threadStart, turnStart, serverOptions=null;
+    agent.codexBin=()=>null; // a Mac with no Codex at all
+    agent.appServerRpc=(_timeout,_host,onNote,options)=>{
+      note=onNote; serverOptions=options;
       return {ready:Promise.resolve(),stop(){},call:async(method,params)=>{
         if(method==='account/read')return {account:signedIn?{type:'chatgpt',email:'person@example.com',planType:'plus'}:{type:'apiKey'}};
         if(method==='account/login/start')return {type:params.type,loginId:'login-1',verificationUrl:'https://auth.openai.com/codex/device',userCode:'ABCD-EFGH'};
@@ -813,7 +814,13 @@ async function main() {
       }};
     };
     try {
+      const none=await ai.chatgptStatus(userData);
+      assert.deepEqual([none.available,none.signedIn,serverOptions],[true,false,null],'with no Codex and nothing downloaded, nobody is signed in here: an answer, not "sign-in unavailable", and nothing is spawned');
+      assert.equal((await ai.logoutChatGPT(userData)).signedIn,false,'and signing out of nothing is nothing');
+      const own=require('node:path').join(userData,'codex-app-server');
+      fs.writeFileSync(own,''); // stands in for the signed server the first sign-in downloads
       const login=await ai.startChatGPTLogin(userData);
+      assert.equal(serverOptions.bin,own,'the downloaded server runs sign-in when this Mac has no Codex');
       assert.deepEqual([login.userCode,login.verificationUrl],['ABCD-EFGH','https://auth.openai.com/codex/device'],'sign-in starts the device flow and returns only its code and verification URL');
       let signIns=0; ai.onSignedIn=()=>signIns++;
       signedIn=true; note({method:'account/login/completed',params:{loginId:'login-1',success:true}});
@@ -833,7 +840,7 @@ async function main() {
       assert.equal(signedOut.signedIn,false,'sign-out clears ChatGPT account status');
       assert.equal(await ai.suggestDiscussWith('Discuss with API fallback',fallback,userData),'API fallback','the local API key works again after sign-out');
       assert.equal(calls.length,before+1,'only the signed-out request reaches the API-key endpoint');
-    } finally { ai.stop(); agent.appServerRpc=originalRpc; fs.rmSync(userData,{recursive:true,force:true}); }
+    } finally { ai.stop(); agent.appServerRpc=originalRpc; agent.codexBin=originalBin; fs.rmSync(userData,{recursive:true,force:true}); }
     settings.set('openaiApiKey',undefined); settings.reset();
     console.log('ok  discuss suggestion: nothing sent without a key or a title, model and effort are settings, and only a name comes back');
   }
@@ -4641,7 +4648,12 @@ async function main() {
           Promise.resolve().then(() => child.onData(JSON.stringify({ id: m.id, result }) + '\n'));
         } } };
       spawned.push(child); return child; } };
+    // A codex first on PATH, so the check does not depend on this machine's own install (CI has none).
+    const fakeBin = fs.mkdtempSync(nodePath.join(os.tmpdir(), 'tana-codex-')), fakeCodex = nodePath.join(fakeBin, 'codex'), realPath = process.env.PATH;
+    fs.writeFileSync(fakeCodex, '', { mode: 0o755 });
+    process.env.PATH = fakeBin + ':' + realPath;
     const backend = mainHelpers(childProcess), cache = require('../db'); cache.open(':memory:');
+    process.env.PATH = realPath;
     const agent = backend.agent;
     const tick = async () => { for (let i = 0; i < 10; i++) await Promise.resolve(); };
     const notify = async (child, method, params) => { child.onData(JSON.stringify({ jsonrpc: '2.0', method, params }) + '\n'); await tick(); };
@@ -4649,7 +4661,7 @@ async function main() {
 
     const local = await agent.createTask({ nodeUri: NODES[0], prompt: 'Draft it', userData, host: 'local' });
     assert.equal(local, THREADS[0], 'the task is created and its id comes back');
-    assert.equal(spawned[0].cmd, 'codex', 'on this machine the app-server is run directly');
+    assert.equal(spawned[0].cmd, fakeCodex, 'on this machine the app-server is run directly, by the codex PATH finds');
     assert.equal([...spawned[0].args].join(' '), 'app-server', 'with no shell line and nothing else on the command');
     assert.equal(spawned[0].killed, 0, 'and the child is left alive while the turn runs: the work is not cut off to free a lock');
     // Someone else's turn ending says nothing about this one. Without the thread id being compared, one finished
@@ -4688,6 +4700,9 @@ async function main() {
     assert.equal(spawned[3].options.env.CODEX_HOME,isolatedHome,'the app-server cannot read the user\'s regular Codex home');
     assert.equal(['OPENAI_API_KEY','CODEX_API_KEY','CODEX_ACCESS_TOKEN'].some((key)=>Object.hasOwn(spawned[3].options.env,key)),false,'API tokens from the app environment are not inherited');
     isolated.stop();
+    const standalone = agent.appServerRpc(20000, undefined, undefined, { bin: '/x/codex-app-server' }); await standalone.ready; standalone.stop();
+    assert.deepEqual([spawned[4].cmd, spawned[4].args.length], ['/x/codex-app-server', 0], 'the standalone server ChatGPT sign-in downloads is run as named, with no subcommand');
+    fs.rmSync(fakeBin, { recursive: true, force: true });
     fs.rmSync(userData, { recursive: true, force: true });
     console.log('ok  agent writer lifecycle: released on the turn that ends it, scoped by thread and by machine, closed on quit');
   }

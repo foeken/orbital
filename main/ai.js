@@ -6,6 +6,9 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { promisify } = require('node:util');
+const { pipeline } = require('node:stream/promises');
+const { Readable } = require('node:stream');
 const settings = require('./settings');
 const agent = require('./agent');
 const { send } = require('./state');
@@ -28,13 +31,50 @@ const NO_TOOLS = ' Do not use tools or inspect files; answer only from the suppl
 
 let authRpc = null, authHome = null, authReady = null, activeLogin = null, loginError = null, activeTurn = null;
 
-function ensureChatGPT(userData) {
+// With no Codex on this Mac, sign-in runs on the standalone app-server from Codex's own GitHub release, fetched into
+// userData on the first "Sign in with ChatGPT" and kept only when it carries OpenAI's Developer ID. It answers for
+// the AI rows alone: handing work to a Codex task still needs a real Codex (main/agent.js codexBin).
+// ponytail: fetched once and never updated; replace the file when the sign-in protocol moves past it.
+const SERVER = 'codex-app-server', OPENAI_TEAM = '2DC432GLL2';
+const ownServer = (userData) => path.join(userData, SERVER);
+const serverBin = (userData) => agent.codexBin() || (fs.existsSync(ownServer(userData)) ? ownServer(userData) : null);
+let installing = null;
+async function downloadServer(userData) {
+  const run = promisify(require('node:child_process').execFile);
+  const name = SERVER + '-' + (process.arch === 'arm64' ? 'aarch64' : 'x86_64') + '-apple-darwin';
+  const res = await fetch('https://github.com/openai/codex/releases/latest/download/' + name + '.tar.gz'); // follows the redirect to the asset
+  if (!res.ok) throw new Error('Downloading ChatGPT sign-in failed with ' + res.status);
+  const dir = fs.mkdtempSync(path.join(userData, '.' + SERVER + '-'));
+  try {
+    await pipeline(Readable.fromWeb(res.body), fs.createWriteStream(path.join(dir, 'server.tar.gz')));
+    await run('/usr/bin/tar', ['-xzf', path.join(dir, 'server.tar.gz'), '-C', dir, name]);
+    const bin = path.join(dir, name);
+    await run('/usr/bin/codesign', ['--verify', '--strict', bin]); // intact and signed, or this throws
+    const { stderr } = await run('/usr/bin/codesign', ['-dv', bin]);
+    if (!new RegExp('^TeamIdentifier=' + OPENAI_TEAM + '$', 'm').test(stderr)) throw new Error('The ChatGPT sign-in download is not signed by OpenAI');
+    fs.renameSync(bin, ownServer(userData));
+    return ownServer(userData);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+}
+
+// The app-server for ChatGPT auth, or null when nothing on this Mac can run one and `install` is not asked for:
+// then nobody can be signed in here, which is an answer rather than an error.
+async function ensureChatGPT(userData, install = false) {
   if (!userData) throw new Error('ChatGPT auth needs the app data directory');
   const home = path.join(userData, 'chatgpt-auth');
   if (authRpc && authHome !== home) stop();
   if (!authRpc) {
+    const bin = serverBin(userData);
+    if (!bin && !install) return null;
+    if (!bin) {
+      send('ai:chatgptChanged', { ...authView(null), installing: true });
+      installing ||= downloadServer(userData).finally(() => { installing = null; });
+      try { await installing; } catch (error) { send('ai:chatgptChanged', authView(null)); throw error; }
+    }
+  }
+  if (!authRpc) { // a second caller may have started it while the download ran
     fs.mkdirSync(home, { recursive: true, mode: 0o700 });
-    const rpc = agent.appServerRpc(TIMEOUT_MS, undefined, chatgptNote, { codexHome: home });
+    const rpc = agent.appServerRpc(TIMEOUT_MS, undefined, chatgptNote, { codexHome: home, bin: serverBin(userData) });
     authRpc = rpc; authHome = home;
     authReady = rpc.ready.catch((error) => {
       if (authRpc === rpc) { authRpc = null; authHome = null; authReady = null; }
@@ -76,12 +116,12 @@ function chatgptNote(note) {
 }
 
 async function chatgptStatus(userData, refreshToken = false) {
-  try { return await readChatGPT(await ensureChatGPT(userData), refreshToken); }
+  try { const rpc = await ensureChatGPT(userData); return rpc ? await readChatGPT(rpc, refreshToken) : authView(null); }
   catch (error) { return { available: false, signedIn: false, loggingIn: !!activeLogin, error: error.message }; }
 }
 
 async function startChatGPTLogin(userData) {
-  const rpc = await ensureChatGPT(userData);
+  const rpc = await ensureChatGPT(userData, true);
   if (activeLogin) return activeLogin;
   const status = await readChatGPT(rpc);
   if (status.signedIn) return status;
@@ -107,6 +147,7 @@ async function cancelChatGPTLogin(userData) {
 
 async function logoutChatGPT(userData) {
   const rpc = await ensureChatGPT(userData);
+  if (!rpc) return authView(null);
   if (activeLogin) {
     await rpc.call('account/login/cancel', { loginId: activeLogin.loginId });
     activeLogin = null;

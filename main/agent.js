@@ -191,17 +191,29 @@ async function agentStatuses(links, rpc) {
   }
   return out;
 }
+// This Mac's `codex`: on PATH, then where its installers put it, then the copy the ChatGPT (Codex) app carries. An
+// app opened from the Finder gets launchd's PATH (/usr/bin:/bin:…), which has none of them. Null: no Codex here.
+function codexBin() {
+  const fs = require('node:fs'), path = require('node:path'), home = require('node:os').homedir();
+  const dirs = [...(process.env.PATH || '').split(':').filter(Boolean), home + '/.local/bin', '/opt/homebrew/bin', '/usr/local/bin'];
+  const apps = ['/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex', '/Applications/Codex.app/Contents/Resources/codex'];
+  return [...dirs.map((d) => path.join(d, 'codex')), ...apps].find((f) => { try { fs.accessSync(f, fs.constants.X_OK); return fs.statSync(f).isFile(); } catch { return false; } }) || null;
+}
 // `codex app-server` speaks JSON-RPC on stdio. Read callers stop this child after one call; ChatGPT auth holds it
 // open while a device login or model turn is active. Bounded by a timeout; stderr carries unrelated CLI warnings.
+// `options.bin` names the binary (main/ai.js: the standalone `codex-app-server`, which takes no subcommand).
 function appServerRpc(timeoutMs = 20000, host, onNote, options = {}) {
   const { spawn } = require('node:child_process');
   const where = hostRecord(host);
   if (!where) throw new Error('That machine is not configured any more'); // a removed host runs nothing
+  const bin = where.ssh ? where.bin : options.bin || codexBin();
+  if (!bin) throw new Error('Codex is not installed on this Mac: install the ChatGPT app or the Codex CLI');
+  const args = [...(options.codexHome ? ['-c', 'cli_auth_credentials_store="file"'] : []), ...(bin.endsWith('/codex-app-server') ? [] : ['app-server'])];
   // Remote: the same app-server, reached over the user's own SSH. No port to open, no token to keep, and the binary
   // is named absolutely because a non-interactive login has no PATH.
   const child = where.ssh
-    ? spawn('ssh', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8', where.ssh, where.bin, 'app-server'], { stdio: ['pipe', 'pipe', 'ignore'] })
-    : spawn('codex', options.codexHome ? ['-c', 'cli_auth_credentials_store="file"', 'app-server'] : ['app-server'], {
+    ? spawn('ssh', ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8', where.ssh, bin, 'app-server'], { stdio: ['pipe', 'pipe', 'ignore'] })
+    : spawn(bin, args, {
       env: options.codexHome ? isolatedCodexEnv(options.codexHome) : process.env, stdio: ['pipe', 'pipe', 'ignore'],
     });
   // Whose Codex is speaking. Both machines have the same home directory, so a remote error that quotes a path or a
@@ -344,4 +356,4 @@ async function hostReady(host, timeoutMs = 12000) {
   const rpc = appServerRpc(timeoutMs, host);
   try { await rpc.ready; return true; } catch { return false; } finally { rpc.stop(); }
 }
-module.exports = { codexTasks, codexTaskFor, taskLink, setCodexTask, clearCodexTask, agentPrompt, handoff, agentState, agentStatuses, readAgentStatuses, appServerRpc, createTask, releaseTask, stopOwnedTasks, listModels, hostReady, agentWorkspace, hostId, hosts, hostRecord, addHost, removeHost, validHost, NEW_TASK, TASK, THREAD_ID };
+module.exports = { codexTasks, codexTaskFor, taskLink, setCodexTask, clearCodexTask, agentPrompt, handoff, agentState, agentStatuses, readAgentStatuses, codexBin, appServerRpc, createTask, releaseTask, stopOwnedTasks, listModels, hostReady, agentWorkspace, hostId, hosts, hostRecord, addHost, removeHost, validHost, NEW_TASK, TASK, THREAD_ID };
