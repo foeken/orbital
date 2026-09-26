@@ -411,4 +411,5 @@ function watchRelated(id, key = 'main') {
   return w.ready;
 }
 
-module.exports = { crumbIcon, pathOf, spaceChildren, searchChildren, searchPreview, attributeTitles, fieldsOf, writeUpOf, summaryUri, callOf, changesOf, summaryChanges, historyOf, backlinkGroups, related, watchRelated, unwatchRelated };
+const watchedPages = () => [...watching.values()].map((w) => w.id); // each page's document, whose sidebar is on screen
+module.exports = { crumbIcon, pathOf, spaceChildren, searchChildren, searchPreview, attributeTitles, fieldsOf, writeUpOf, summaryUri, callOf, changesOf, summaryChanges, historyOf, backlinkGroups, related, watchRelated, unwatchRelated, watchedPages };

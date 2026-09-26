@@ -3088,6 +3088,36 @@ async function main() {
     console.log('ok  a wide view subscribes the head of its list, not every row in it');
   }
 
+  // Reads subscribe too — a zoom, doc:info, each row's doc:taskMeta as it scrolls into view — and they used to hold
+  // their documents for the session: a long list scrolled once stayed subscribed for good, and was bootstrapped again
+  // on every reconnect (issue #269). The refresh lets go of the oldest reads past LIVE_ROWS, and never of the page on
+  // screen or of a document an undo step still points at.
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const { LIVE_ROWS } = require('../main/state');
+    const docs = new Map(), unsubscribed = [];
+    const make = (title) => { const d = new Document('tana:text:' + ulid()); d.transact((l) => initDocument(l, title, ME)); docs.set(d.id, d); return d.id; };
+    const onScreen = make('On screen'), edited = make('Edited');
+    const read = Array.from({ length: LIVE_ROWS + 20 }, (_, i) => make('Row ' + i));
+    backend.testRuntime({ me: { userUri: ME }, activeView: 'library', win: null, client: {
+      sync: { subscribe: async (id, init) => { if (init) { const d = new Document(id); d.transact(init); return d; } return docs.get(id) || null; },
+        getDocument: (id) => docs.get(id), unsubscribe: async (id) => { unsubscribed.push(id); } },
+      graph: { listNodes: async (p) => ({ nodes: p.nodeIds ? p.nodeIds.map((id) => ({ id })) : [] }) },
+    } });
+    await backend.handlers.get('doc:info')(null, onScreen);
+    assert.equal(await backend.watchRelated(onScreen), true, 'the page on screen, with its sidebar watched');
+    await backend.handlers.get('doc:setTitle')(null, edited, 'Edited again');
+    for (const id of read) await backend.handlers.get('doc:info')(null, id);
+    await backend.handlers.get('doc:info')(null, read[0]); // read again: the newest read now, not the oldest
+    await backend.handlers.get('view:list')(null, 'library');
+    const released = () => unsubscribed.filter((id) => !id.startsWith('tana:liveQuery:'));
+    assert.deepEqual(released(), read.slice(1, 23), 'the oldest reads past LIVE_ROWS are let go, oldest first');
+    assert.deepEqual([released().includes(onScreen), released().includes(edited)], [false, false], 'but not the page on screen, nor a document with an undo step');
+    await backend.handlers.get('view:list')(null, 'library');
+    assert.equal(released().length, 22, 'and at the cap the next refresh lets go of nothing more');
+    console.log('ok  reads past LIVE_ROWS are let go oldest first, never the page on screen or an undoable one');
+  }
+
   // A read in flight holds its document. The refresh sweep lets go of the rows a view no longer lists, and letting go
   // of a bootstrap somebody is waiting for rejects it as 'unsubscribed <id>' under the reader — which is exactly what
   // a doc:info for a row of the view you just left reported, in red, whenever a view change raced it.
