@@ -153,7 +153,9 @@ which `filterToSearchQuery` passes on as `attributes` and `searchQueryParams` se
 link (with target types), member and date field gets a pill: options by label (several ORed), links and members by the
 node they point at, dates by Tana's presets (today, upcoming, past); verified live 2026-09-25 on Goal (Status "On track"
 3 of 6, "On track" or "Unknown" 4). A change applies at once and is kept per type in the `typeFields` preference; nothing
-is written to Tana. Display lists every field the type defines and starts on the ones with pills plus Updated; the values
+is written to Tana. A link or member pill's menu opens with a search line on top ("Search Sources…"): typing narrows its
+rows, the same keys every pill menu already answers to, since a link can point at hundreds of nodes.
+Display lists every field the type defines and starts on the ones with pills plus Updated; the values
 come on the row itself (`fields`, from the graph node's `attributes`), written on its grey line as plain text, one · between
 each, the way a saved search's row reads. The field
 definitions are not drawn there (a list, not the type's edit view): ⌘K Edit fields shows them under the title. An open type page is kept current by a live query over its instances
