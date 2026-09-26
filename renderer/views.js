@@ -334,9 +334,18 @@ function renderTableBtn(available) {
 }
 tableBtn.onmousedown = (e) => e.preventDefault(); // the caret stays in its row, as with the other header buttons
 tableBtn.onclick = () => setTableView(!tableView());
-// An options field of the type whose page this is, which a table row's cell (a click) and ⌘K on that row (renderer/fields.js
-// fieldRows) both change through openCellChooser.
-const pickableDef = (node, k) => { const def = typeDefs().find((d) => fieldKey(d) === k); return def && def.type === 'options' && canEditNode(node) && tana.setField && !demoMode ? def : null; };
+// A choice field (options, link, member) of the type whose page this is, which a table row's cell (a click) and ⌘K on
+// that row (renderer/fields.js fieldRows) both change through openCellChooser.
+const pickableDef = (node, k) => { const def = typeDefs().find((d) => fieldKey(d) === k); return def && ['options', 'link', 'member'].includes(def.type) && canEditNode(node) && !node.draft && tana.setField && !demoMode ? def : null; };
+// A Status, Assigned or choice cell opens the ⌘K page that changes it: the same pages the row's own facts open, and
+// on the keyboard the row's own ⌘K rows (Set status, Edit assignees, fieldRows' Set/Link) reach them.
+function cellPicker(node, k) {
+  const writable = canEditNode(node) && !node.draft && !demoMode;
+  if (k === 'status') return writable && isTask(node) && tana.setState ? () => openStatusPalette({ docs: [node], selected: 1, skipped: 0, fromSelection: false, multi: false }) : null;
+  if (k === 'assigned') return writable && isTask(node) && tana.setAssignees ? () => openAssigneePalette(node) : null;
+  const def = isFieldKey(k) && pickableDef(node, k);
+  return def ? () => openCellChooser(node, k, def) : null;
+}
 function tableCells(node, info, sub) {
   sub.className = 'subtext'; sub.textContent = '';
   for (const k of tableKeys()) {
@@ -347,12 +356,12 @@ function tableCells(node, info, sub) {
       // hover, since the sensitive switch only toggles the blur (blurSensitive), and a hidden row's tooltip says nothing
       cell.textContent = ((node.fields && node.fields[k]) || []).map((v) => demoText(v, node.id)).join(', ');
       cell.onmouseenter = () => { cell.title = isRealId(node.id) && sensitiveHidden(node.id) ? '' : cell.textContent; };
-      const def = pickableDef(node, k);
-      if (def) {
-        cell.classList.add('pick');
-        // the row's own click opens the row; ⌘ or ⇧ is a selection (renderer/events.js), as it is on the title
-        cell.onclick = (e) => { if (e.metaKey || e.shiftKey) return; e.stopPropagation(); openCellChooser(node, k, def); };
-      }
+    }
+    const open = cellPicker(node, k);
+    if (open) {
+      cell.classList.add('pick');
+      // the row's own click opens the row; ⌘ or ⇧ is a selection (renderer/events.js), as it is on the title
+      cell.onclick = (e) => { if (e.metaKey || e.shiftKey) return; e.stopPropagation(); open(); };
     }
     sub.append(cell);
   }

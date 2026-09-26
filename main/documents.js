@@ -333,8 +333,15 @@ async function createDocument(title, opts = {}) {
   const node = await info(doc); scheduleRefresh(2000); return node; // give GraphService's index time to include the new node
 }
 
-// Node shape for any subscribed document: cached row when listed, else derived from the Loro data map.
+// A row's field values, read off the document on every change like its title and state: the cached row carries the
+// ones its search saw, which a table cell (renderer/views.js) would otherwise show until the next refresh.
 async function info(doc) {
+  const values = {};
+  for (const f of fields.readFields(doc)) { const lines = f.text.split('\n').filter((l) => l.trim()); if (lines.length) values[f.key] = lines; }
+  return { ...(await rowInfo(doc)), fields: Object.keys(values).length ? values : undefined }; // undefined too: a cleared field clears the row's
+}
+// Node shape for any subscribed document: cached row when listed, else derived from the Loro data map.
+async function rowInfo(doc) {
   const n = readNode(doc), row = db.get(doc.id);
   if (isDeleted(n) || deletedNodes.has(doc.id)) throw new Error('Node has been deleted');
   rememberNodeHue(n);
