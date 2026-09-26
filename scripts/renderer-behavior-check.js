@@ -7319,7 +7319,8 @@ async function runSetIconCheck() {
     const goTo = () => {}, setView = () => {}, openDoc = () => {}, filterEl = {}, zoomFactor = 1, BASE_ZOOM = 1;
     const visibilityRows = () => [], moveTargets = async () => [], previewMoveToSpace = () => {};
     const openTypePalette = () => {}, typesLoaded = async () => {}, typeRows = () => [], typeNameOf = () => '';
-    let renderedPages = 0; const renderPalette = () => { renderedPages++; };
+    let renderedPages = 0, palEnter = null; const renderPalette = () => { renderedPages++; if (palMode === 'setIcon') palRows = iconPickRows(palInput.value); }; // the rows Enter runs are the ones drawn
+    const runRow = (row) => row.run();
     let closed = 0; const closePalette = () => { closed++; }, promptEditor = () => {};
     const openCommandPalette = () => { palMode = 'cmd'; palRows = []; palIndex = 0; };
     const errors = []; let queue = Promise.resolve();
@@ -7341,11 +7342,15 @@ async function runSetIconCheck() {
     ${functionSource('openIconPalette')}
     ${functionSource('applyIcon')}
     ${functionSource('backPalette')}
+    ${functionSource('chooseRow')}
+    ${functionSource('settleEnter')}
     ({ row: () => paletteRows('').find((r) => r.id === 'setIcon'),
        node: (next) => { palDoc = next; },
        wearing: (uri, name) => { if (name) typeGlyphs.set(uri, name); else typeGlyphs.delete(uri); },
        answer: (next, fails) => { answer = next === null ? [] : next; searchFails = fails || null; },
        search: (q) => { palInput.value = q; searchIconsNow(); },
+       // what typing does (the input listener): busy at once, main asked after the debounce; Enter pressed in between
+       typeThenEnter: (q) => { palInput.value = q; palIndex = 0; palBusy = true; chooseRow(false); searchIconsNow(); },
        page: () => iconPickRows(),
        mode: () => palMode,
        escape: () => backPalette(),
@@ -7406,6 +7411,17 @@ async function runSetIconCheck() {
   api.row().run();
   await api.settle();
   assert.deepEqual(plain(api.page().map((r) => [r.label, r.disabled])), [['No icon matches', true]], 'and a query that matches nothing says so');
+
+  // 5. Enter right after typing runs the row for what was typed, not the one drawn for the words before (#392).
+  const svg = '<svg viewBox="0 0 18 18"><path d="M1 1"></path></svg>';
+  api.answer([{ name: 'nc-rocket', label: 'rocket', svg }]);
+  api.row().run();
+  await api.settle();
+  const before = api.state().written.length;
+  api.answer([{ name: 'nc-calendar', label: 'calendar', svg }]);
+  api.typeThenEnter('calendar');
+  await api.settle();
+  assert.deepEqual(plain(api.state().written.slice(before)), [[TYPE, 'nc-calendar']], 'Enter while main is still answering waits, and applies the icon that was typed');
   console.log('ok  Set icon: offered on a type, the page searches main\u2019s set and registers what it draws, the current glyph is ticked and removable, one call per choice');
 }
 
