@@ -439,6 +439,7 @@ function pillRowsFor(def, q) {
 // palette does, and typed: true marks a page whose rows are what you type, which has no "No results" to show.
 function showPage(mode, placeholder, page, value = '') {
   clearTimeout(palTimer); palTimer = null; ++palSeq; palEnter = null; promptEditor(false);
+  if (palette.hidden && !palReturn) palReturn = focused(); // opened with the palette closed (a recorded key, a row's meta): closing comes back here (#376)
   palMode = mode; palPage = page || {}; palRows = []; palIndex = 0; palBusy = false; palette.hidden = false;
   palInput.placeholder = placeholder; palInput.value = value;
 }
