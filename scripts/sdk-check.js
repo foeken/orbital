@@ -1200,6 +1200,47 @@ async function main() {
     backend.S.windows.delete(covered.win);
     console.log('ok  help:claim: the first-start tour goes to one page, once');
   }
+  // Two machines that each made a settings document before either could find the other's, and a document deleted in
+  // Tana: the next launch settles on the oldest one standing, merges this machine's choices into it and tells the page.
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const settings = backend.settings; settings.reset();
+    const docs = new Map(), sent = [];
+    let listed = [];
+    const sync = {
+      subscribe: async (id, init) => { if (!docs.has(id)) { if (!init) throw new Error('unavailable'); const d = new Document(id); d.transact(init); docs.set(id, d); } return docs.get(id); },
+      getDocument: (id) => docs.get(id), unsubscribe: async () => {},
+    };
+    const win = { isDestroyed: () => false, webContents: { send: (channel, value) => sent.push([channel, value]) } };
+    const connect = () => { settings.reset(); backend.testRuntime({ me: { userUri: ME }, win, client: { sync, graph: { listNodes: async (p) => ({ nodes: p.textQuery === settings.TITLE ? listed : [] }) } } }); };
+    const theirs = new Document('tana:text:' + ulid()); // the other machine's, made a second earlier
+    theirs.transact((l) => { initDocument(l, settings.TITLE, ME); l.getMap(settings.ROOT).set('pref:theme', JSON.stringify('dark')); });
+    docs.set(theirs.id, theirs);
+    connect();
+    settings.setPref('home', 'library');
+    await settings.hydrate(); await settings.flush();
+    const mine = settings.settingsDocId();
+    assert.ok(mine && mine !== theirs.id, 'the index did not list theirs yet, so this machine made its own');
+    listed = [{ id: mine, title: settings.TITLE, createTime: '2026-09-26T09:00:01Z' }, { id: theirs.id, title: settings.TITLE, createTime: '2026-09-26T09:00:00Z' }];
+    connect(); sent.length = 0;
+    await settings.hydrate(); await settings.flush();
+    assert.equal(settings.settingsDocId(), theirs.id, 'the next launch settles on the oldest, pointer or not, so the two machines stop drifting apart');
+    assert.equal(settings.get('pref:theme'), 'dark', 'it takes the choices made on the other machine');
+    assert.equal(JSON.parse(theirs.loro.getMap(settings.ROOT).get('pref:home')), 'library', 'and pushes up the ones only this machine had');
+    assert.ok(sent.some(([channel, prefs]) => channel === 'settings:changed' && prefs.theme === 'dark'), 'and the open page is told, rather than keeping the defaults until the next launch');
+    theirs.transact((l) => l.getMap('data').set('deletedAt', 123));
+    connect();
+    await settings.hydrate(); await settings.flush();
+    assert.equal(settings.settingsDocId(), mine, 'deleted in Tana: a document in the trash is not written to; the oldest one still standing is');
+    assert.equal(JSON.parse(docs.get(mine).loro.getMap(settings.ROOT).get('pref:theme')), 'dark', 'and it gets what this machine remembers');
+    docs.get(mine).transact((l) => l.getMap('data').set('deletedAt', 124));
+    connect();
+    await settings.hydrate(); await settings.flush();
+    const next = settings.settingsDocId();
+    assert.ok(next && next !== theirs.id && next !== mine, 'with every one deleted, a new one is made');
+    assert.equal(JSON.parse(docs.get(next).loro.getMap(settings.ROOT).get('pref:theme')), 'dark', 'written from what this machine remembers');
+    console.log('ok  settings document: two machines settle on the oldest, a deleted one is replaced, the page hears what the document changed');
+  }
   // What stayed of quick add when the panel went (issue #232): the meeting this user has joined (⌘K Pin to current
   // meeting), a task from its title alone (⌘K Create task), and the one agent handoff, driven through its real path.
   {
