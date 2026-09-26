@@ -296,6 +296,15 @@ if (typeof ResizeObserver === 'function') new ResizeObserver(() => {
   fitWidth = outline.clientWidth;
   fitRowMeta();
 }).observe(outline);
+// A row patched in place (renderer/tasks.js patchMeta) asks for the fit here: metadata arrives one answer per row as
+// the rows scroll in, and fitting after each one forced a layout of the whole outline per answer (#264). The frame
+// callback runs before the paint, so a row is never seen with its facts on the wrong line.
+let fitQueued = false;
+function fitRowMetaSoon() {
+  if (fitQueued) return;
+  fitQueued = true;
+  requestAnimationFrame(() => { fitQueued = false; fitRowMeta(); });
+}
 // Metadata and sync may finish between keystrokes. Apply their deferred render only after the caret leaves editable rows.
 document.addEventListener('focusout', () => queueMicrotask(() => {
   if ((renderDeferred || fieldsDeferred) && !editingRow() && !selectionFrozen) render();

@@ -8049,6 +8049,27 @@ function runRowChromeCheck() {
   console.log('ok  deferred render: row chrome from one lookup of the fresh rows');
 }
 checks.push(runRowChromeCheck);
+// A burst of metadata answers patches one row each, and each asks for the fit: it runs once in the next frame for all
+// of them, not once per answer, which forced a layout of the whole outline every time (#264).
+function runFitSoonCheck() {
+  const api = vm.runInNewContext(`
+    let fits = 0;
+    const frames = [];
+    const requestAnimationFrame = (fn) => frames.push(fn);
+    const fitRowMeta = () => { fits++; };
+    ${source.match(/let fitQueued = false;\nfunction fitRowMetaSoon\(\) \{[\s\S]*?\n\}/)[0]}
+    ({ ask: () => fitRowMetaSoon(), frame: () => { const due = frames.splice(0); for (const fn of due) fn(); }, fits: () => fits });
+  `);
+  for (let i = 0; i < 40; i++) api.ask();
+  assert.equal(api.fits(), 0, 'nothing is measured while the answers are still landing');
+  api.frame();
+  assert.equal(api.fits(), 1, 'forty answers in one frame cost one fit');
+  api.ask(); api.frame();
+  assert.equal(api.fits(), 2, 'and an answer in a later frame is fitted again');
+  assert.match(source, /if \(patched\) fitRowMetaSoon\(\);/, 'patchMeta asks for the frame\'s fit rather than fitting at once');
+  console.log('ok  metadata answers: one row-meta fit per frame');
+}
+checks.push(runFitSoonCheck);
 process.exitCode = 1;
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);
