@@ -95,6 +95,7 @@ function settingsDoc() {
 async function open() {
   const known = db.setting(POINTER);
   if (typeof known === 'string' && known) {
+    const had = !!S.client.sync.getDocument(known); // held by something else before this looked: that stays
     const doc = await S.client.sync.subscribe(known).catch(() => null);
     if (doc && !isDeleted(readNode(doc))) {
       if (settled) return use(doc);
@@ -107,6 +108,7 @@ async function open() {
       const old = [...new Set([...list(decode(oldest.loro.getMap(ROOT).get('settingsOld'))), ...list(get('settingsOld')), known])];
       oldest.transact((loro) => loro.getMap(ROOT).set('settingsOld', encode(old))); // now, not queued: hydrate reads this document next
       set('settingsOld', old);
+      if (!had) S.client.sync.unsubscribe(known).catch(() => {}); // given up: no live copy of it, and its changes are not ours to route
       return use(oldest);
     }
   }

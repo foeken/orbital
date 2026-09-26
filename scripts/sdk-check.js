@@ -1213,7 +1213,7 @@ async function main() {
       getDocument: (id) => (live.has(id) ? docs.get(id) : undefined), unsubscribe: async (id) => { live.delete(id); released.push(id); },
     };
     const win = { isDestroyed: () => false, webContents: { send: (channel, value) => sent.push([channel, value]) } };
-    const connect = () => { settings.reset(); backend.testRuntime({ me: { userUri: ME }, win, client: { sync, graph: { listNodes: async (p) => ({ nodes: p.textQuery === settings.TITLE ? listed : [] }) } } }); };
+    const connect = () => { settings.reset(); live.clear(); backend.testRuntime({ me: { userUri: ME }, win, client: { sync, graph: { listNodes: async (p) => ({ nodes: p.textQuery === settings.TITLE ? listed : [] }) } } }); }; // a launch: a new client, nothing subscribed yet
     const theirs = new Document('tana:text:' + ulid()); // the other machine's, made a second earlier
     const third = 'tana:text:' + ulid(); // one a third machine already gave up to it
     theirs.transact((l) => { initDocument(l, settings.TITLE, ME); l.getMap(settings.ROOT).set('pref:theme', JSON.stringify('dark')); l.getMap(settings.ROOT).set('settingsOld', JSON.stringify([third])); });
@@ -1245,6 +1245,7 @@ async function main() {
     assert.deepEqual(shared.loro.getMap(settings.ROOT).toJSON(), {}, 'nor one others can read, mark or not: no synced key is ever written where somebody else sees it');
     assert.deepEqual(linked.loro.getMap(settings.ROOT).toJSON(), {}, 'nor one with a public link, private as its audience is');
     assert.deepEqual([linked.id, shared.id, note.id].filter((id) => released.includes(id) && !live.has(id)), [linked.id, shared.id, note.id], 'and each one looked at and turned down is let go again');
+    assert.ok(released.includes(mine) && !live.has(mine) && live.has(theirs.id), 'as is the one this machine gave up, while the one it took stays live');
     assert.deepEqual(JSON.parse(JSON.stringify(settings.get('settingsOld'))), [third, mine], 'the document this machine gave up is remembered, and synced, beside the one another machine gave up');
     assert.deepEqual(JSON.parse(theirs.loro.getMap(settings.ROOT).get('settingsOld')), [third, mine], 'in the document too');
     const shown = await backend.S.client.graph.listNodes({ nodeTypes: ['text'], textQuery: settings.TITLE });
