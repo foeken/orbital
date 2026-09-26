@@ -197,10 +197,10 @@ dark twin.
 
 | Token | Light / dark | For |
 |---|---|---|
-| `--surface` | `#fff` / `#242729` | anything that floats over the page: menus, the toolbar, ⌘K's card, dialogs |
+| `--surface` | `#fff` / `#242729` | anything that floats over the page: menus, the toolbar, ⌘K's and the recorder's cards. Help's card still writes its white and shadow out, with a dark twin, until #305 lands (#378) |
 | `--scrim` | 12% / 52% black | behind a dialog (⌘K, the key recorder, Help) |
 | `--shadow-menu` | | a menu or dropdown (`.menu`, the @ dropdown) |
-| `--shadow-card` | | a dialog's card (⌘K, the recorder, Help) |
+| `--shadow-card` | | a dialog's card (⌘K, the recorder; Help's as above) |
 | `--focus` | `#b5d0ee` / `#58768a` | the focus ring of anything new: `outline: 2px solid var(--focus); outline-offset: 2px` on a row or block, `box-shadow: 0 0 0 2px var(--focus)` on a button. A few older rules still write the colour out, with dark twins (`.gmore`, `.tbtn`, image and table focus; #379), and the agent badge keeps a stronger `#4f8ad9` on purpose |
 | `--muted` | (PR #305) | secondary words: facts, hints, headings, placeholders, done rows. Until #305 lands, the greys it replaces are `#999` light and `#858b8e` dark |
 | `--z-toolbar` 9 < `--z-palette` 10 < `--z-recorder` 11 < `--z-toast` 12 < `--z-drag` 15 < `--z-lightbox` 20 | | what stacks over the page. Small local numbers (1, 2, 5) only order siblings inside one component |
@@ -244,8 +244,8 @@ State classes are set by the renderer, pseudo-classes by the browser.
 | Dialog | a scrim element with a `.card` inside: `.palette`, `.recorder`, `.help` | `[hidden]` on `.palette` and `.recorder`; `.help` is a `<dialog>`, so `[open]` (`showModal()` / `close()`). Surface motion either way |
 | Lightbox | `.lightbox` | `.out` while it closes |
 
-A button of any kind joins the Press rule in styles.css (the `:is(.navbtn, .pill, …)` list), so it eases down under
-the pointer like the rest.
+A new kind of button is added by hand to both selector lists of the Press rule in styles.css (`:is(.navbtn, .pill, …)`
+and the same list with `:active`), so it eases down under the pointer like the others. Nothing joins it on its own.
 
 ### Adding a component
 
