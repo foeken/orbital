@@ -232,7 +232,7 @@ the top of the file. State classes are set by the renderer, pseudo-classes by th
 | Row | `.node > .line > .chev, .bullet, .check, .body > .text, .meta, .subtext`; children in `.children` | `.selected`, `.collapsed`, `.has`, `.done` (a document: struck and grey), `.draft`, `.gone`, `.unread`, `.entering` / `.leaving`; `.text[tabindex]:focus` rings a read-only row |
 | A row's facts | `.tmeta` holding `.ticon` glyphs (#372); `.meta.pending` while they load | `[role="button"]` makes one clickable |
 | Chip | `.chip.grey`, `.chip.gold` (meetings), `.chip.hue` with `--hue` (`chipEl`) | |
-| Pill | `.pills > .pill`, the value in `<b>`; grey for arranging (`data-id` sort, group, display); green `.save` for making something | `:hover`, `.open` (its menu is showing), `:focus`, `.in` / `.out` |
+| Pill | `.pills > .pill`, the value in `<b>`; grey for arranging (`data-id` sort, group, display); green `.save` for making something | `:hover`, `.open` (its menu is showing), `:focus`, `.in` (arriving). Leaving is on the row: `.pills.out`, with `.sliding` / `.folding` while it folds |
 | Menu | `.menu > .mrow > .micon, .mlabel, .tick`; `.mhead`, `.mdiv`, `.msearch`; `.menu.search` for long lists of titles | `.mrow.active` (keyboard), `:hover`, `.mrow.disabled`; `.menu.up` when it opens upwards |
 | Palette | `.palette > .card > input, .list > .group, .row > .ricon, .label, .hint, kbd` | `.row.active`, `.row.disabled`, `.ricon.thinking`, `.row.arrive`; `.palette.anchored` is the @ dropdown |
 | Header button | `.navbtn` holding an svg | `:hover`, `:disabled` (still shown, faint), `[hidden]`, `.in` / `.out` |
@@ -241,7 +241,8 @@ the top of the file. State classes are set by the renderer, pseudo-classes by th
 | Sidebar | `.rail > .rhead`, `.rrow > .ricon, .rtext > .rtitle, .rsub` | `.rhead.closed`, `.rrow:hover`, `.rrow:focus`, `.rrow.done`, `.rrow.rmeta.fixed` (not clickable) |
 | Fields | `.fields > .field > .ricon, .flabel, .fvalues`; `.fchoice > .fchip`, `.fhint`, `.fkind` | `.fchip.gone`, `.fchip.wrong` |
 | Table | `.outline.table-view` with `.thead`, `.cell`, `.tgrip`; a table block is `.text.table` | `.cell.pick`, `.tgrip.dragging` |
-| Badge | `.cbadge` (the agent), `.pbutton.approve` / `.reject` | `.pending`, `.working`, `.waiting`, `.done`, `.broken`, `.unavailable`, `.closed` |
+| Agent badge | `.cbadge` | `.pending`, `.working`, `.waiting`, `.done`, `.broken`, `.unavailable`, `.closed`; `[role="button"]` when it opens something |
+| Proposal buttons | `.pbuttons > .pbutton.approve` / `.pbutton.reject` (renderer/proposals.js) | `:hover`, `:disabled` |
 | Empty and loading | `.empty-note` ("Nothing here yet"), `.children.loading`, `.skeleton` (renderer/loading.js) | `.empty-note.cleared` |
 | Toast | `.toast`, only through `showNote` / `showError` | `.show`, `.error` |
 | Button | `.button`, `.button.primary` for the one that goes on (a dialog's footer: the key recorder, Help) | `:hover`, `:disabled` |
@@ -284,9 +285,9 @@ The full contract is [OUTLINER.md](OUTLINER.md). These are the rules a new featu
   marks the current choice. A placeholder says what to type ("Search Tana", "Choose a colour or type a hue…"). A notice
   says what was done, in the past tense, and names the thing: "Link copied", "Classified as Decision Record".
 - **Where errors go.** An action runs through `run()`, and a failure becomes the red toast (`showError`). A palette page
-  whose read failed says so as a disabled note row, in place of its rows (see the async page pattern above). The red
-  line under the title (`#error`) belongs to the session alone: it asks for a new login. A notice never goes to
-  `#error`.
+  built on `loadList` shows a failed read as a disabled note row in place of its rows; the other pages that read (Create
+  new …, Set icon) send it to the toast and draw an empty list. The red line under the title (`#error`) belongs to the
+  session alone: it asks for a new login. A notice never goes to `#error`.
 - **Focus after an action.** Closing the palette puts the caret back on the row that had it (`closePalette`). A pill's
   or the toolbar's menu gives focus back to its own button (renderer/pills.js, toolbar.js). A new row takes the caret.
   With nothing to go back to, focus goes back to the page itself, where ↑/↓ pick up the first or last row.
