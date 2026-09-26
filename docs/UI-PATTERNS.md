@@ -24,7 +24,8 @@ Everything the palette lists is a plain object. The full field list and ordering
   `list.filter((x) => fuzzyMatch(x.title, q))`, and the bold letters agree with ⌘K. It filters only: a page keeps
   its rows in the order it returns them, and only the command page ranks by match (`rankRows`).
 - `memberRows(q, pick, ticked)` (renderer/tasks.js) makes a list of people plus Unassigned, each row calling
-  `pick(uri)` and ticked where `ticked(uri)` says so.
+  `pick(uri)` and ticked where `ticked(uri)` says so. It lists the members already read, so the page's opener calls
+  `loadMembers()` first; the palette is drawn again when they arrive.
 
 ### A palette page: `openPage` (renderer/palette.js)
 
@@ -75,8 +76,10 @@ run: () => run(async () => {
 ### Focus after an action: `closePalette` (renderer/palette.js)
 
 The palette remembers the row that had the caret when it opened (`palReturn`), and `closePalette()` puts the caret back
-there, or on the field a field page came from. A row that is not `keepOpen` is closed before its `run` (`runRow`). An
-action that opens a page instead of closing leaves focus in the palette. Nothing else moves focus back by hand.
+there, or on the field a field page came from. ⌘K records it in `togglePalette`. A page that opens the palette itself
+(a recorded key, a row's meta) records it in `showPage` (#377), so an opener does nothing for it. A row that is not
+`keepOpen` is closed before its `run` (`runRow`). An action that opens a page instead of closing leaves focus in the
+palette. Nothing else moves focus back by hand.
 
 ### Icons: `addIcon` and `iconNode` (renderer/nodes.js)
 
