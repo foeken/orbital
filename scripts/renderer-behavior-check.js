@@ -109,6 +109,7 @@ const withShims = (src) => {
   if (/\bSEARCH_ID\b/.test(src) && !/const SEARCH_ID =/.test(src)) src = "globalThis.SEARCH_ID ??= 'tana:search:';\n" + src;
   if (/\beditingType\b/.test(src) && !/let editingType\b/.test(src)) src = 'globalThis.editingType ??= null;\n' + src; // no type's fields being edited
   if (/\btableView\(/.test(src) && !/const tableView =/.test(src)) src = 'globalThis.tableView ??= () => false;\n' + src; // no page shown as a table
+  if (/\btableRow\(/.test(src) && !/const tableRow =/.test(src)) src = 'globalThis.tableRow ??= () => false;\n' + src; // and so no row drawn as one
   if (/\b(displayOn|displayKeys|subtextOf)\b/.test(src) && !/const displayKeys =/.test(src) && !/function subtextOf\(/.test(src)) {
     src = functionSource('agoText') + '\n' + functionSource('subtextOf') + '\n' + src;
     // pinnedOn needs the grouping (views.js) and the date pins (state.js); no row here is in a Pinned section
@@ -3324,6 +3325,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     ['pill:sort', 'Sort by', 'Default', 'sort'], ['pill:group', 'Group by', 'None', 'group'],
     ['pill:display', 'Display', 'Status, Assigned, …', 'field'],
     ['cleanup', 'Clean up', 'Nothing to clean up', 'cleanup'], // always listed, off until a row is held in place
+    ['tableView', 'Switch to table', null, 'table'], // the header's Outliner/Table switch, on every page with pills
   ], 'Cmd+K names the current Tasks view options for what they do, with the value as the hint the filters with the filter icon and the rest their own (Tasks groups by Status until told otherwise), and Tasks is a kind page with no type to pick');
   assert.deepEqual(plain(api.open('status')), { mode: 'pill', rows: [['Any status', ''], ['Inbox', ''], ['In Progress', '✓'], ['Completed', ''], ['Later', '']] },
     'a command opens the same Status rows and active tick as the pill');
@@ -3335,15 +3337,15 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   assert.equal(api.pick('Assignee').group, 'assignee', 'Group uses the same shared action too');
   // A kind page is that kind: Tasks, Meetings, Chats and People do not offer a type to pick, so the page cannot be
   // turned into a different one; the Library picks its kinds, and so does the Inbox, which is a state, not a kind.
-  assert.deepEqual(plain(api.commands('library').map(([id]) => id)), ['pill:type', 'pill:status', 'pill:assigned', 'pill:sort', 'pill:group', 'pill:display', 'cleanup'],
+  assert.deepEqual(plain(api.commands('library').map(([id]) => id)), ['pill:type', 'pill:status', 'pill:assigned', 'pill:sort', 'pill:group', 'pill:display', 'cleanup', 'tableView'],
     'Library includes its Type filter plus the other applicable pills');
-  assert.deepEqual(plain(api.commands('inbox').map(([id]) => id)), ['pill:type', 'pill:status', 'pill:assigned', 'pill:sort', 'pill:group', 'pill:display', 'cleanup'],
+  assert.deepEqual(plain(api.commands('inbox').map(([id]) => id)), ['pill:type', 'pill:status', 'pill:assigned', 'pill:sort', 'pill:group', 'pill:display', 'cleanup', 'tableView'],
     'the Inbox is a state rather than a kind, so it still picks types');
   // Clean up is the header pill as a command row, always listed and greyed out while there is nothing to clean up,
   // running the same action under a fixed id when there is — so a shortcut can be recorded for it beforehand.
   api.commands('tasks'); api.group('status');
   const kept = { id: 'h1', icon: 'task', done: 0, stateType: 'proposed', tags: [] }, going = { id: 'h2', icon: 'task', done: 0, stateType: 'open', tags: [] };
-  const cleanupRow = (list) => plain(api.rows(list)).at(-1);
+  const cleanupRow = (list) => plain(api.rows(list)).find((row) => row.id === 'cleanup');
   assert.deepEqual(cleanupRow([kept, going]), { id: 'cleanup', label: 'Clean up', icon: 'cleanup', group: 'View options', disabled: true, hint: 'Nothing to clean up' },
     'Clean up closes the View options rows whatever the page is doing: with no row held in place it is off, and says why');
   assert.equal(api.press([kept, going]), false, 'and running it there does nothing — no release, no redraw');
@@ -3358,8 +3360,9 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   // ever needed. Pressing it is still refused above, so reachable is not runnable.
   const nextPalIndex = vm.runInNewContext(functionSource('nextPalIndex') + '; nextPalIndex;');
   const listed = plain(api.rows([kept, going]));
-  assert.equal(listed.at(-1).disabled, true, 'the row is off');
-  assert.equal(nextPalIndex(listed, listed.length - 2, 1), listed.length - 1, 'and Down still lands on it, so Cmd+Shift+K has a row to record against');
+  const at = listed.findIndex((row) => row.id === 'cleanup');
+  assert.equal(listed[at].disabled, true, 'the row is off');
+  assert.equal(nextPalIndex(listed, at - 1, 1), at, 'and Down still lands on it, so Cmd+Shift+K has a row to record against');
   assert.equal(nextPalIndex([{ disabled: true }, { disabled: true }], 0, 1), 0, 'while a row with no id and nothing to run is still stepped over');
   api.group('none');
   // Right on a pill steps to the next one; past the last (Group) it goes down to the first node, the way Up from

@@ -286,8 +286,9 @@ function setDisplay(id) {
 const shownFieldValues = (node) => (node.fields ? displayKeys().flatMap((k) => node.fields[k] || []) : []);
 // The grey line under a title: those values as chips, then subtextOf's words. A render and a late metadata patch
 // (renderer/tasks.js) both build it here, so the row keeps its shape when its metadata lands. `sub` is refilled in place.
-function subtextEl(node, taskInfo, sub = document.createElement('div')) {
-  if (tableView()) return tableCells(node, sub);
+// asTable: a row of the page's own list while it is a table (tableRow); what an expanded row shows under it stays an outline
+function subtextEl(node, taskInfo, sub = document.createElement('div'), asTable = false) {
+  if (asTable) return tableCells(node, taskInfo, sub);
   const words = subtextOf(node, taskInfo), values = shownFieldValues(node);
   if (!words && !values.length) return null;
   sub.className = 'subtext';
@@ -295,22 +296,49 @@ function subtextEl(node, taskInfo, sub = document.createElement('div')) {
   if (values.length) sub.append(...values.map((v) => { const chip = document.createElement('span'); chip.className = 'fchip'; chip.textContent = demoText(v, node.id); return chip; }), ...(words ? [words] : []));
   return sub;
 }
-// ---- a type page as a table (⌘K Show as table): a column per field Display shows, plus the times ----
+// ---- a list page as a table (the header's Outliner/Table switch, or ⌘K): a column per fact Display shows ----
 // The rows stay the outline's own rows: the grey line becomes one cell per column and CSS lays the row out as a grid
-// (styles.css .table-view), so the keys, the caret and the pills work as they do on the list. Kept per type, synced.
-const TABLE_FACTS = { updated: (n) => agoText(n.updatedAt), created: (n) => agoText(n.createdAt), creator: (n) => (n.createdBy ? (loadMembers(), memberName(n.createdBy)) : '') }; // names load once and re-render, as subtextOf's do
-const tableView = () => onTypePage() && pref('typeTables', []).includes(zoom.docId);
-const tableKeys = () => displayKeys().filter((k) => k.includes('?attribute=') || TABLE_FACTS[k]);
+// (styles.css .table-view), so the keys, the caret and the pills work as they do on the list. Every page with pills
+// can be one — a view, a saved search, a type — kept per page key and synced; a document's outline never is.
+// A column's cell is text, or chips (type, field values); info is the row's task/visibility summary, which arrives late
+// and patches the cells in place (patchMeta), so Assigned and Lives in fill in the way the list's own facts do.
+const TABLE_FACTS = {
+  type: (n) => visibleTags(n).map((tag) => chipEl(tag, n.hue)),
+  space: (n, info) => (info && info.audience && info.audience.space ? demoText(info.audience.space, n.id) : ''),
+  status: (n) => (isTask(n) ? (STATES.find(([id]) => id === stateOf(n)) || [])[1] || '' : ''),
+  assigned: (n, info) => (info && info.assignees) || '',
+  updated: (n) => agoText(n.updatedAt), created: (n) => agoText(n.createdAt),
+  creator: (n) => (n.createdBy ? (loadMembers(), memberName(n.createdBy)) : ''), // names load once and re-render, as subtextOf's do
+};
+const listPage = () => (zoom ? onSearchPage() || onTypePage() : !!viewOf());
+const tablePages = () => pref('tables', pref('typeTables', [])); // typeTables: what the type-only table was kept under
+const tableView = () => listPage() && tablePages().includes(pillKey());
+const tableRow = (parent) => tableView() && (parent ? parent.key : '') === outline.dataset.key; // a result row, not something under one
+const tableKeys = () => displayKeys().filter((k) => isFieldKey(k) || TABLE_FACTS[k]);
 function setTableView(on) {
-  const rest = pref('typeTables', []).filter((id) => id !== zoom.docId);
-  setPref('typeTables', on ? [...rest, zoom.docId] : rest);
+  const rest = tablePages().filter((id) => id !== pillKey());
+  setPref('tables', on ? [...rest, pillKey()] : rest);
   render(true);
 }
-function tableCells(node, sub) {
+// Outliner or Table: the switch at the top right of every page with pills (renderPills draws it), and the same press
+// as its Cmd+K row. The glyph is the mode a press gives you, as the Cmd+K row's icon is, so the two read the same.
+const tableBtn = $('navTable');
+const tableLabel = () => (tableView() ? 'Switch to outliner' : 'Switch to table');
+function renderTableBtn(available) {
+  tableBtn.hidden = !available;
+  if (!available) return;
+  tableBtn.title = tableLabel();
+  tableBtn.setAttribute('aria-label', tableLabel());
+  const svg = iconNode(tableView() ? 'outline' : 'table');
+  if (svg) tableBtn.replaceChildren(svg);
+}
+tableBtn.onmousedown = (e) => e.preventDefault(); // the caret stays in its row, as with the other header buttons
+tableBtn.onclick = () => setTableView(!tableView());
+function tableCells(node, info, sub) {
   sub.className = 'subtext'; sub.textContent = '';
   for (const k of tableKeys()) {
     const cell = document.createElement('span'); cell.className = 'cell';
-    if (TABLE_FACTS[k]) cell.textContent = TABLE_FACTS[k](node);
+    if (TABLE_FACTS[k]) cell.append(...[TABLE_FACTS[k](node, info)].flat());
     else for (const v of (node.fields && node.fields[k]) || []) { const chip = document.createElement('span'); chip.className = 'fchip'; chip.textContent = demoText(v, node.id); cell.append(chip); }
     sub.append(cell);
   }
@@ -320,7 +348,7 @@ function tableCells(node, sub) {
 function tableHeadEl() {
   const names = new Map(displayList()), el = document.createElement('div');
   el.className = 'thead';
-  for (const label of ['Title', ...tableKeys().map((k) => names.get(k))]) { const c = document.createElement('span'); c.textContent = label; el.append(c); }
+  for (const label of ['Title', ...tableKeys().map((k) => names.get(k)), '']) { const c = document.createElement('span'); c.textContent = label; el.append(c); } // '': over the row's icons
   return el;
 }
 // "4 hours ago". Nothing else in the app says an age in words, so this is the one place that turns a time into one.

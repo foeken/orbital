@@ -52,7 +52,7 @@ WANT.todayTasks = path.join(__dirname, '..', 'build', 'icons', 'tasks-2.svg'); /
 // What the model suggested, rather than what you typed or what Tana knows (Cmd+K "Discuss with …")
 WANT.sparkle = path.join(__dirname, '..', 'build', 'icons', 'orbit-sparkle.svg');
 // The "/" menu's Table and Image rows (renderer/nodes.js glyphSvg), from the Nucleo UI 18px outline set
-WANT.table = path.join(__dirname, '..', 'build', 'icons', 'table.svg');
+WANT.table = path.join(__dirname, '..', 'build', 'icons', 'table-rows-3-cols-2.svg'); // Nucleo UI at stroke 1, like the header glyphs beside it
 WANT.image = path.join(__dirname, '..', 'build', 'icons', 'image.svg');
 // A node assigned to someone outside its audience (renderer/tasks.js); the warning colour is set in styles.css
 WANT.userAlert = path.join(__dirname, '..', 'build', 'icons', 'user-alert.svg');
@@ -70,6 +70,7 @@ WANT.tlInbox = path.join(__dirname, '..', 'build', 'icons', 'circle-arrow-left-o
 WANT.tlNew = path.join(__dirname, '..', 'build', 'icons', 'circle-dotted.svg'); // outline: a new task is the quietest entry
 // Cmd+K rows for the keys the outline answers to
 for (const [name, file] of [['expand', 'v-shaped-arrow-down'], ['collapse', 'v-shaped-arrow-up'], ['undo', 'undo'], ['redo', 'redo'], ['textLarger', 'text-size-increase'], ['textSmaller', 'text-size-decrease'], ['textReset', 'text'], ['rail', 'sidebar-right-4'], ['railShow', 'sidebar-right-show'], ['railHide', 'sidebar-right-hide'], ['back', 'arrow-left'], ['forward', 'arrow-right'], ['zoomIn', 'magnifier-3'], ['search', 'magnifier'], ['filter', 'filter-2'], ['discuss', 'msg'], ['meetingPin', 'calendar-pin'], ['splitPanes', 'split-view'], ['otherPane', 'layout-move-to-right'], ['swapPanes', 'arrows-opposite-direction-x']]) WANT[name] = path.join(__dirname, '..', 'build', 'icons', file + '.svg');
+WANT.outline = path.join(__dirname, '..', 'build', 'icons', 'unordered-list.svg'); // the header's Outliner/Table switch while a list is a table
 const out = {};
 for (const [name, file] of Object.entries(WANT)) {
   if (!SRC && !path.isAbsolute(file)) { if (!current[name]) throw new Error(name + ' needs the icon set: node scripts/build-icons.js <dir>'); out[name] = current[name]; continue; }

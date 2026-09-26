@@ -75,7 +75,7 @@ function patchMeta(docId) {
     if (sep) sep.remove();
     // the same line a full render would build, so a row does not change shape when its metadata arrives late: the
     // facts go before the type chips, where nodeEl appends them, not after them
-    const had = body.querySelector(':scope > .subtext'), sub = subtextEl(item.node, summary, had || undefined);
+    const had = body.querySelector(':scope > .subtext'), sub = subtextEl(item.node, summary, had || undefined, tableRow(item.parent));
     if (summary && displayOn('assigned')) body.insertBefore(taskMetaEl(summary, docId, item.node), body.querySelector(':scope > .chip') || had || null);
     if (sub && !had) body.append(sub);
     else if (!sub && had) had.remove();
@@ -130,7 +130,8 @@ function taskMetaEl(summary, docId, node) {
     target.onmousedown = (e) => { e.preventDefault(); e.stopPropagation(); };
     target.onclick = (e) => { e.stopPropagation(); open(); };
   };
-  const who = document.createElement('span'); who.textContent = summary.assignees;
+  // .mtext: the words, which a table row leaves out (its Assigned column has the name; styles.css .table-view)
+  const who = document.createElement('span'); who.className = 'mtext'; who.textContent = summary.assignees;
   if (summary.assignees) el.append(who);
   if (summary.assignees && writable && isTask(node) && tana.setAssignees) { who.title = 'Edit assignees'; clickable(who, () => openAssigneePalette(node)); }
   // the icons stand 6px apart, but the first one needs no gap of its own: a row with no assignee name in front of it
@@ -161,7 +162,7 @@ function taskMetaEl(summary, docId, node) {
     if (writable && tana.accessOptions) { icon.title = label + ' — click to edit visibility'; clickable(icon, () => openVisibility(node, summary.scope)); }
     el.append(icon);
   }
-  else if (summary.unknownAudience) el.append(' · Visibility unknown');
+  else if (summary.unknownAudience) { const t = document.createElement('span'); t.className = 'mtext'; t.textContent = ' · Visibility unknown'; el.append(t); }
   // Pinned, in the same slot and with the same behaviour as the audience icon beside it: the glyph says the node is
   // pinned somewhere, and a click opens the page that says where and takes it off. Pins are personal, so a node you
   // cannot write still carries the mark and still opens the page.

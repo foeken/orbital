@@ -155,8 +155,15 @@ node they point at, dates by Tana's presets (today, upcoming, past); verified li
 3 of 6, "On track" or "Unknown" 4). A change applies at once and is kept per type in the `typeFields` preference; nothing
 is written to Tana. Display lists every field the type defines and starts on the ones with pills plus Updated; the values
 come on the row itself (`fields`, from the graph node's `attributes`), drawn as chips on its grey line. The field
-definitions are not drawn there (a list, not the type's edit view): ⌘K Edit fields shows them under the title. ⌘K Show as table lays the same rows out as a table, a column per field Display shows plus the times (kept per type in the `typeTables` preference). An open type page is kept current by a live query over its instances
+definitions are not drawn there (a list, not the type's edit view): ⌘K Edit fields shows them under the title. An open type page is kept current by a live query over its instances
 (`watchRelated`), as a saved search is.
+
+**Outliner or Table.** Every page with pills — a view, a saved search, a type's page — can be drawn as a table: the
+switch at the top right of the header, or ⌘K Switch to table / Switch to outliner (one row, id `tableView`, so a
+recorded key keeps working). The rows stay the outline's rows, laid out as a grid with a column per fact Display
+shows (a type's fields, Type, Lives in, Status, Assigned and the times). The choice is kept per page key in the
+synced `tables` preference, which starts from the older type-only `typeTables` list. A document's own outline and the
+Notifications, Proposals and Timeline pages have no pills and no table.
 
 
 Notifications (issue #18, docs/OUTLINER.md) is listed with the views in Cmd+K but is a page, like a saved search: it has no
