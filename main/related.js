@@ -21,8 +21,11 @@ async function spaceChildren(id) {
   return nodes.map((n) => toNode(graphRow(n)));
 }
 // A saved search's "content" is the rows its stored query returns (sdk/node.js readSearch).
+const searchReads = new Map(); // saved search id -> its newest read: an older one answering later leaves the newer head live
 async function searchChildren(id) {
   if (!S.client) throw new Error(NOT_CONNECTED);
+  const seq = (searchReads.get(id) || 0) + 1;
+  searchReads.set(id, seq);
   // The completed window is the app's own setting, so it lives in the `view` map beside the sort and the grouping
   // rather than in Tana's query vocabulary — read together, in one pass over the document.
   const { query, view } = await op(id, readSearch);
@@ -37,9 +40,13 @@ async function searchChildren(id) {
   // its query answered when the page opened. The same cap applies here, and for the same reason: a search answers
   // up to 1,000 rows, the first LIVE_ROWS of them subscribed. They are reads like any other (main/documents.js
   // releaseOnDemand), held while the search's page is on screen (withSearchHeads) and let go oldest first after that.
-  const head = nodes.slice(0, LIVE_ROWS).map((n) => n.id);
-  searchHeads.set(id, head);
-  for (const uri of head) subscribe(uri).then((doc) => { if (doc) readOnDemand(uri); });
+  // Only the newest read decides the head: one from before a Save that lands after it would put the old rows back in
+  // the head and let the sweep release the ones on screen (the renderer drops its rows the same way, renderer/nodes.js).
+  if (searchReads.get(id) === seq) {
+    const head = nodes.slice(0, LIVE_ROWS).map((n) => n.id);
+    searchHeads.set(id, head);
+    for (const uri of head) subscribe(uri).then((doc) => { if (doc) readOnDemand(uri); });
+  }
   return nodes.map((n) => toNode(graphRow(n)));
 }
 const searchHeads = new Map(); // saved search id -> the ids of the head its page keeps live

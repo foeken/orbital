@@ -1812,6 +1812,17 @@ async function main() {
     // A view subscribes every row it lists, which is what makes an edit someone else makes appear in it. These rows
     // are listed the same way and were left unsubscribed, so a saved search showed only what its query said on open.
     assert.deepEqual(found.map((n) => subscribes.includes(n.id)), [true, true], 'a saved search subscribes the rows it lists, so a change made elsewhere reaches them');
+    // Two reads of one search out at once (a refresh and a Save): the older one answering last must not take the head
+    const answers = [], older = [{ id: 'tana:text:' + ulid(), title: 'Before the save' }], newer = [{ id: 'tana:text:' + ulid(), title: 'Saved' }];
+    backend.testRuntime({ me: { userUri: ME }, win: null, client: {
+      sync: { subscribe: async (id) => { subscribes.push(id); return goodDoc; } },
+      graph: { listNodes: () => new Promise((resolve) => answers.push(resolve)) },
+    } });
+    const first = backend.handlers.get('outline:children')(null, searchId), second = backend.handlers.get('outline:children')(null, searchId);
+    while (answers.length < 2) await new Promise(setImmediate);
+    answers[1]({ nodes: newer }); await second; answers[0]({ nodes: older }); await first;
+    await new Promise(setImmediate);
+    assert.deepEqual([subscribes.includes(newer[0].id), subscribes.includes(older[0].id)], [true, false], 'an older read of a search answering after a newer one leaves the newer head live');
 
     const brokenDoc = new Document('tana:search:' + ulid());
     brokenDoc.transact((l) => initDocument(l, 'Broken search', ME)); // no query container at all
