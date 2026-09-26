@@ -32,11 +32,11 @@ let searches = [];           // [{ id, title, icon, … }] saved search document
 // Marked `added`, loadSearches keeps such an entry until the graph's answer has it; deleting it drops it like any other.
 function addSearch(n) { if (!n || typeof n.id !== 'string' || !n.id.startsWith(SEARCH_ID)) return; searches = [{ ...n, added: true }, ...searches.filter((s) => s.id !== n.id)]; }
 let searchesLoaded = false;  // whether that list has answered once: until it has, a Home search is trusted, not repaired away
-// Home: the page this app comes back to — the Library, or a saved search, kept as the target's own id ("library" or a
-// tana:search: document id) rather than its name, so renaming the search in Tana keeps the choice and only changes
-// what it reads. It is the anchor crumb on every zoomed page, where Back lands with nothing to go back to, and the
-// page a launch opens with no place to restore. The Library is the default and the fallback (nodes.js).
-let home = pref('home', 'library');
+// Home: the page this app comes back to — the Work View, the Library, or a saved search, kept as the target's own id
+// ("workView", "library" or a tana:search: document id) rather than its name, so renaming the search in Tana keeps the
+// choice and only changes what it reads. It is the Home button on every page and where Back lands with nothing to go
+// back to. The Work View is the default, the Library the fallback for a search that is gone (nodes.js).
+let home = pref('home', 'workView');
 // The right half of a split (main.js addPane, api.side) keeps its own view and place, so a restart reopens both halves
 // where they were; main says so when a page changes sides (onSide in renderer/app.js).
 let SIDE = typeof window !== 'undefined' && window.api && window.api.side ? ':' + window.api.side : '';

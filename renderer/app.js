@@ -145,7 +145,7 @@ tana.onStatus(showStatus);
 if (tana.onSettings) tana.onSettings((next) => {
   const openType = onTypePage() ? zoom.docId : null, wasFields = openType && JSON.stringify((filters.get(openType) || {}).fields || null);
   mergePrefs(next);
-  home = pref('home', 'library');
+  home = pref('home', 'workView');
   for (const key of Object.keys(hotkeys)) delete hotkeys[key];
   Object.assign(hotkeys, pref('hotkeys', {}));
   for (const [store, key] of [[groupPref, 'groupBy'], [sortPref, 'sortBy'], [displayPref, 'display']]) {

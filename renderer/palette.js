@@ -326,6 +326,8 @@ function paletteRows(q, typed = q) {
   // On the page that already is Home it stays, disabled and saying so, rather than disappearing or pretending to act.
   const homeNext = homeTarget();
   if (homeNext) rows.push({ id: 'setHome', group: 'Navigate', icon: 'home', label: 'Set as Home', hint: homeNext === homeId() ? 'Current' : '', disabled: homeNext === homeId(), run: () => setHome(homeNext) });
+  // The Work View is not a page you stand on, so it is offered from anywhere (and is the Home you start with)
+  rows.push({ id: 'setHomeWorkView', group: 'Navigate', icon: 'home', label: 'Set Work View as Home', hint: homeId() === 'workView' ? 'Current' : '', disabled: homeId() === 'workView', run: () => setHome('workView') });
   if (!railEl.hidden) rows.push({ id: 'rail', group: 'Navigate', icon: 'rail', label: 'Focus the sidebar', run: () => focusRail() });
   if (tana.deletedList) rows.push({ id: 'recentlyDeleted', group: 'Navigate', icon: 'trash', label: 'Recently deleted', keepOpen: true, run: openTrashPalette });
   if (tana.archivedTypes) rows.push({ id: 'archivedTypes', group: 'Navigate', icon: 'type', label: 'Archived types', keepOpen: true, run: openArchivedPalette });

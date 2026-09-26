@@ -1514,7 +1514,7 @@ async function runSyncShortcutCheck() {
     ({ rows: async (q) => { paletteRows(q); await Promise.resolve(); await Promise.resolve(); return paletteRows(q).map((r) => r.label); }, loads: () => loads,
        ids: (q) => paletteRows(q).map((r) => r.id), press: async (id) => { const hit = runAction(id); await Promise.resolve(); return [hit, ran.splice(0)]; } });
   `);
-  assert.deepEqual(plain(await folded.rows('s')), ['Sync', 'Search Tana', 'Set status', 'Swap panes', 'Hide sidebar', 'Toggle split panes', 'Smaller text', 'Reset text size', 'Filter rows by text'],
+  assert.deepEqual(plain(await folded.rows('s')), ['Sync', 'Search Tana', 'Set status', 'Swap panes', 'Hide sidebar', 'Toggle split panes', 'Smaller text', 'Reset text size', 'Set Work View as Home', 'Filter rows by text'],
     'one letter: the first level only, the groups whose best row starts with it first (the shortest such row leading), a letter inside a word last');
   assert.deepEqual(plain(await folded.rows('sesp')), ['Set status to In Progress'], 'two letters in: the level below is folded in and the query reaches into it');
   assert.deepEqual(plain(await folded.rows('seinb')), ['Set status to Inbox'], 'a disabled choice is left out, the others are single rows');
@@ -1584,7 +1584,7 @@ async function runSyncShortcutCheck() {
     'Views: Today', 'Views: This week', 'Views: Inbox', 'Views: Library',
     'View options: Filter by type', 'View options: Filter rows by text',
     'Actions: Log in to Tana', 'Actions: Create new …', 'Actions: Search Tana', 'Actions: Undo', 'Actions: Redo', 'Actions: Sync',
-    'Navigate: Go back', 'Navigate: Go forward', 'Navigate: Go to Home', 'Navigate: Set as Home', 'Navigate: Focus the sidebar',
+    'Navigate: Go back', 'Navigate: Go forward', 'Navigate: Go to Home', 'Navigate: Set as Home', 'Navigate: Set Work View as Home', 'Navigate: Focus the sidebar',
     'Window: New window', 'Window: Toggle split panes', 'Window: Go to the other half', 'Window: Swap panes', 'Window: Hide sidebar', 'Window: Reload',
     'Settings: Larger text', 'Settings: Smaller text', 'Settings: Reset text size', 'Settings: Toggle dark mode', 'Settings: Preview loading animation', 'Settings: Edit hidden items', 'Settings: Toggle sensitive visibility', 'Settings: Toggle demo mode',
   ], 'the palette lists its rows in one fixed, meaningful order');
@@ -5754,7 +5754,7 @@ function runRailChangesCheck() {
 // ---- Home: the Library or a saved search, as the anchor a zoomed page crumbs back to and where Back lands ----
 // Stored as the target's own id, so a rename in Tana shows through and a deletion is something the app can see.
 async function runHomeCheck() {
-  const homeInit = source.match(/let home = pref\('home', 'library'\);/)[0];
+  const homeInit = source.match(/let home = pref\('home', 'workView'\);/)[0];
   const seed = source.match(/if \(!savedPlace\) savedPlace = SIDE [^\n]*/)[0];
   const api = vm.runInNewContext(FAKE_DOM + `
     const SIDE = ''; // renderer/state.js: a page on its own, not the right half of a split
@@ -5765,6 +5765,7 @@ async function runHomeCheck() {
     let view = 'library', zoom = null, searches = [], typeListCache = null, searchesLoaded = false, connected = true, went = [], renders = 0;
     let navBack = [], navForward = [], navHere = null, navigating = false, caretOnOpen = false, savedPlace = null;
     const SEARCH_ID = 'tana:search:';
+    const TIMELINE_PAGE = 'orbital:timeline', run = (fn) => fn(), openWorkView = () => { went.push('workView'); }; // renderer/timeline.js
     const isRealId = (id) => typeof id === 'string' && id.startsWith('tana:');
     const onSearchPage = () => !!zoom && !zoom.nodeId && String(zoom.docId || '').startsWith(SEARCH_ID);
     const render = () => { renders++; }, renderSoon = render, flushAll = () => {}, dropDrafts = () => {};
@@ -5804,8 +5805,15 @@ async function runHomeCheck() {
   `);
 
   const SEARCH = 'tana:search:01j0myt00000000000000000', OTHER = 'tana:text:01j0note0000000000000000';
-  // Nothing chosen: the Library, and nothing written to say so
-  assert.deepEqual([api.id(), api.name(), plain(api.stored())], ['library', 'Library', {}], 'with no preference Home is the Library, and nothing is stored until something is chosen');
+  // Nothing chosen: the Work View, and nothing written to say so
+  assert.deepEqual([api.id(), api.name(), plain(api.stored())], ['workView', 'Work View', {}], 'with no preference Home is the Work View, and nothing is stored until something is chosen');
+  api.home();
+  assert.deepEqual(plain(api.went()), ['workView'], 'going Home opens the Work View, as its Cmd+K row does');
+  api.go({ docId: 'orbital:timeline', nodeId: null });
+  assert.equal(api.at(), true, 'and the left half is Home on the Timeline');
+  api.go({ docId: OTHER, nodeId: null });
+  assert.equal(api.at(), false, 'and not anywhere else');
+  api.view('library');
   await api.list([{ id: SEARCH, text: 'My Tasks' }]);
   assert.equal(api.target(), 'library', 'the Library page offers itself as Home');
   api.set(SEARCH);
