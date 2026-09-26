@@ -77,7 +77,6 @@ const truncatedViews = new Set(); // view ids whose last query hit the row cap, 
 const summaryCache = new Map(); // event uri -> write-up uri or null
 const typeAttrTitles = new Map(); // type uri -> { key: title }
 const hueLoaded = new Set();
-const imageCache = new Map(); // uri -> Promise<data URL>
 const undoStack = [];
 const redoStack = [];
 
@@ -86,4 +85,4 @@ function scheduleRefresh(ms) {
   S.refreshTimer = setTimeout(() => S.refresh && S.refresh(), ms);
 }
 
-module.exports = { VIEWS, TAG, KINDS, PLAIN_KINDS, PIN_HUBS, DOC_URI, LIVE_ROWS, S, subscribed, reading, deletedNodes, isDeleted, visibleGraphNodes, typeTitles, typeHues, nodeHues, nodeCreators, editability, nodeMeta, docStates, iso, errText, NOT_CONNECTED, notReady, report, now, isSpace, isSearch, idKind, memberTitle, isMcp, send, today, setStatus, pathCache, metaSigs, truncatedViews, summaryCache, typeAttrTitles, hueLoaded, imageCache, undoStack, redoStack, scheduleRefresh };
+module.exports = { VIEWS, TAG, KINDS, PLAIN_KINDS, PIN_HUBS, DOC_URI, LIVE_ROWS, S, subscribed, reading, deletedNodes, isDeleted, visibleGraphNodes, typeTitles, typeHues, nodeHues, nodeCreators, editability, nodeMeta, docStates, iso, errText, NOT_CONNECTED, notReady, report, now, isSpace, isSearch, idKind, memberTitle, isMcp, send, today, setStatus, pathCache, metaSigs, truncatedViews, summaryCache, typeAttrTitles, hueLoaded, undoStack, redoStack, scheduleRefresh };
