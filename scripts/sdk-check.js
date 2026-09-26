@@ -28,11 +28,12 @@ function mainHelpers(childProcess) {
   const handlers = new Map();
   // opened: every url main asked the OS to open, so a check can see whether assigning actually handed the work over
   const opened = [];
+  const timers = []; // every timer main set, never run on its own: a check can look at when one is due and run it by hand
   const electron = { app: {}, BrowserWindow: function () {}, Menu: {}, ipcMain: { handle: (name, fn) => handlers.set(name, fn), on: () => {} },
     shell: { openExternal: async (url) => { if (electron.shell.refuse) throw new Error('no handler for codex://'); opened.push(url); } } };
   const context = vm.createContext({
     Buffer, console, URL, // URL is a global in Electron's main process
-    setTimeout: () => 0, clearTimeout: () => {}, // no refresh/network timers in offline main helpers
+    setTimeout: (fn, ms) => timers.push({ fn, ms }), clearTimeout: () => {}, // no refresh/network timers in offline main helpers
     process: { env: { ...process.env, TANA_MAIN_TEST: '1' } },
   });
   const cache = new Map(), ours = (file) => file === nodePath.join(root, 'main.js') || file.startsWith(nodePath.join(root, 'main') + nodePath.sep);
@@ -48,7 +49,7 @@ function mainHelpers(childProcess) {
   };
   // the agent module itself as well: creating a task spawns a real app-server, which a check stubs out by replacing
   // that one function on the module main.js holds
-  return { ...load(nodePath.join(root, 'main.js')), handlers, opened, electron, agent: load(nodePath.join(root, 'main', 'agent.js')) };
+  return { ...load(nodePath.join(root, 'main.js')), handlers, opened, timers, electron, agent: load(nodePath.join(root, 'main', 'agent.js')) };
 }
 
 async function main() {
@@ -2589,7 +2590,13 @@ async function main() {
     assert.deepEqual(next.filter((r) => r[4]).map((r) => r[1]), ['Signed by both parties'], 'what came after your last visit is marked new, and only that');
     // Today's meetings still to come: a block of their own under Today's Tasks, earliest first, each saying when and who
     soonToo = true;
+    const timersBefore = backend.timers.length;
     const withSoon = await backend.timelinePage.rows();
+    // and when it starts it moves into the timeline on its own: a timer for just after its start reads the page again
+    const due = backend.timers.slice(timersBefore).filter((t) => t.ms > 1000 && t.ms <= 2000);
+    assert.equal(due.length, 1, 'a timer is set for a second after the next meeting starts');
+    const sendsBefore = pageSends(); due[0].fn();
+    assert.equal(pageSends(), sendsBefore + 1, 'and when it goes off the Timeline is read again, which moves the meeting out of Upcoming meetings');
     const hm = (ms) => { const d = new Date(ms); return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0'); };
     assert.deepEqual(JSON.parse(JSON.stringify([withSoon[1].text, withSoon[1].timeline.time, withSoon[1].timeline.upcoming, withSoon[1].children.map((c) => [c.id, c.text, c.icon, c.subtext])])),
       ['Upcoming meetings', '', true, [[soon.id, 'Standup', 'meeting', hm(Date.parse(soon.calendarEvent.startTime)) + '–' + hm(Date.parse(soon.calendarEvent.endTime)) + ' · Ann Bakker']]],

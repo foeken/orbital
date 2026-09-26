@@ -76,6 +76,9 @@ async function pool(list, fn) {
 // here, and Tana touches events often (a reply, a synced calendar), so only what the page shows of one counts.
 // Opened by a read, and again when the client, the pages or the day change; a refusal leaves the page as it was.
 let live = null, liveClient = null, liveKey = null;
+// The next upcoming meeting's start: the page is read again just after it, so the meeting leaves Upcoming meetings for
+// the timeline on its own. One timer, set by every read (the read it causes sets the one after it).
+let startTimer = null;
 // the tagline and summary too: a summary landing is heard, and the entry brightens
 const meetingSig = (row) => { const ev = row.calendarEvent || {}; return JSON.stringify([row.title, ev.startTime, ev.endTime, ev.allDay, ev.tagline, ev.summary, attendeesOf(ev).map((a) => a.displayName || a.email)]); };
 // Who is on a meeting, as the graph gives it: the roster (calendarEvent.roster), or the calendar's own attendee list
@@ -178,9 +181,11 @@ async function rows() {
   // the meeting; its grey line says when and who (renderer/views.js subtextOf, node.subtext). No meetings, no block.
   const upcoming = meetings.filter((n) => { const ev = n.calendarEvent || {}; return Date.parse(ev.startTime || '') > Date.now() && !isAllDay(ev.startTime, ev.endTime, ev.allDay); })
     .sort((a, b) => Date.parse(a.calendarEvent.startTime) - Date.parse(b.calendarEvent.startTime))
-    .map((n) => ({ id: n.id, text: n.title || 'Untitled', title: n.title || 'Untitled', kind: 'document', icon: 'meeting', editable: false, hasChildren: false,
+    .map((n) => ({ id: n.id, text: n.title || 'Untitled', title: n.title || 'Untitled', kind: 'document', icon: 'meeting', editable: false, hasChildren: false, start: n.calendarEvent.startTime,
       subtext: meetingNote(n.calendarEvent, me, myEmail, true) }));
   const upcomingText = 'Upcoming meetings';
+  clearTimeout(startTimer);
+  if (upcoming.length) startTimer = setTimeout(() => send('outline:changed', PAGE), Date.parse(upcoming[0].start) - Date.now() + 1000); // a second in, so it has started
   const upcomingRow = upcoming.length ? [{ id: PAGE + ':upcoming', text: upcomingText, segments: [{ text: upcomingText }], kind: 'block', block: 'bullet', icon: 'meeting',
     editable: false, hasChildren: true, children: upcoming, createdAt: iso(Date.now()), unread: false, timeline: { uri: null, time: '', tone: 'new', upcoming: true } }] : []; // no time of its own: it sits under Today's Now
   const now = Date.now(), date = new Date(now).toLocaleDateString('sv-SE');
