@@ -410,11 +410,12 @@ function renderOutline() {
   // launch starts — the page it reopens is drawn before there is a connection to ask with (renderer/edit.js). Until
   // then it shows the loading animation, as a view does, rather than a line saying so.
   let asking = false;
-  if (parent && !list.length && !outline.children.length) {
+  // the Timeline's "Show three more days" is a way to more rows, not a row: an empty Timeline still says so, above it
+  if (parent && !list.length && ![...outline.children].some((el) => !el.classList.contains('tl-older'))) {
     asking = !signedOut && !(kids.has(parent.docId) && kids.get(parent.docId) !== null); // signed out, nothing is on its way: the login shows
     const note = document.createElement('div');
     note.className = 'empty-note'; note.textContent = emptyText(parent);
-    if (!asking) outline.append(note);
+    if (!asking) outline.prepend(note);
   }
   // the page title is the zoom target itself: documents use setTitle, blocks use setText through the same debounce
   const editable = !demoMode && parent && !isAtomic(parent.node) && !isReference(parent.node) && canEditText(parent); // demo text is never typed into, so a mask is never saved

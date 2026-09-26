@@ -98,7 +98,8 @@ assert.match(source, /const collapsedGroups = new Set\(pref\('collapsedGroups', 
 assert.match(source, /if \(!collapsedGroups\.delete\(key\)\) collapsedGroups\.add\(key\);\n(?:[^\n]*\n)?  setPref\('collapsedGroups', \[\.\.\.collapsedGroups\]\);/, 'and written on every toggle');
 // a page whose sections are all folded away is not an empty page: its headings are drawn, so neither the zoomed
 // "No content" nor a view's "Nothing here yet" may appear under them
-assert.match(source, /if \(parent && !list\.length && !outline\.children\.length\) \{/, 'the zoomed empty note goes by what was drawn, not by the row count');
+assert.match(source, /if \(parent && !list\.length && !\[\.\.\.outline\.children\]\.some\(\(el\) => !el\.classList\.contains\('tl-older'\)\)\) \{/, 'the zoomed empty note goes by what was drawn, not by the row count, and the Timeline\'s pager is not a row');
+assert.match(source, /if \(!asking\) outline\.prepend\(note\);/, 'so the note sits above that pager');
 assert.match(source, /if \(!parent && !list\.length && !outline\.children\.length && !loading && !filterEl\.value\) \{/, 'and so does a view\'s');
 assert.doesNotMatch(source, /loadLibrary|loadChats|loadInbox|taskFilter|libraryFilter/);
 assert.match(source, /const chatIcon = \(n\) => n\.icon \|\| \(\(n\.tags \|\| \[\]\)\.some\(\(t\) => t\.label === 'chat'\) \? 'chat' : undefined\);/);
