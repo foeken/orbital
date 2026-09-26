@@ -96,4 +96,5 @@ function set(docId, at) {
   }, () => {});
 }
 
-module.exports = { open, close, view, set, peersOf };
+const openIds = () => [...rooms.keys()]; // the documents on screen in some page, which the refresh never lets go of
+module.exports = { open, close, view, set, peersOf, openIds };

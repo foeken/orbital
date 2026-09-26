@@ -25,7 +25,7 @@ const S = {
   writer: null, // the page whose typed text is being written right now (main.js typed): its echo is its own (#265)
   badge: null, // main.js sets this: the app icon's badge belongs to electron, the counting to views.js (same split as refresh)
 };
-const subscribed = new Set(); // ids the view refresh subscribed: the only ones it unsubscribes again
+const subscribed = new Set(); // ids the view refresh subscribed, which its list sweep lets go of (reads: documents.js onDemand)
 // Ids an on-demand read (doc:info, a zoom, a mutation) is waiting on a bootstrap for. The view refresh unsubscribes
 // every row it no longer lists, and unsubscribing a subscription that is still bootstrapping rejects it as
 // 'unsubscribed <id>' under whoever is awaiting it — which is what a doc:info for a row of the view you just left

@@ -5,7 +5,7 @@ const content = require('../sdk/content');
 const chat = require('../sdk/chat');
 const { readNode, editable, setEntityType, contentText, ulid, initDocument, STATE_TYPES } = require('../sdk/node');
 const fields = require('../sdk/fields');
-const { DOC_URI, KINDS, NOT_CONNECTED, PLAIN_KINDS, S, TAG, deletedNodes, editability, errText, hueLoaded, idKind, isDeleted, metaSigs, nodeCreators, nodeHues, nodeMeta, now, pathCache, reading, redoStack, report, scheduleRefresh, send, sendChanged, subscribed, summaryCache, typeAttrTitles, typeHues, typeTitles, undoStack, visibleGraphNodes } = require('./state');
+const { DOC_URI, KINDS, LIVE_ROWS, NOT_CONNECTED, PLAIN_KINDS, S, TAG, deletedNodes, docStates, editability, errText, hueLoaded, idKind, isDeleted, metaSigs, nodeCreators, nodeHues, nodeMeta, now, pathCache, reading, redoStack, report, scheduleRefresh, send, sendChanged, subscribed, summaryCache, typeAttrTitles, typeHues, typeTitles, undoStack, visibleGraphNodes } = require('./state');
 const { eventMeta, graphRow, hueOf, hueWithType, kindRow, memberRow, members, nodeTag, plainRow, rememberNodeHue, rememberType, resolveHue, resolveTypes, toNode, typeTag, typeUriOf } = require('./rows');
 const settings = require('./settings');
 
@@ -697,6 +697,7 @@ async function document(id, opts = {}) {
   try {
     const doc = await subscribe(id); // getDocument can expose an empty handle before bootstrap completes
     if (!doc) throw new Error(S.status.error || 'could not subscribe to ' + id);
+    readOnDemand(id);
     return doc;
   } finally {
     const left = (reading.get(id) || 1) - 1;
@@ -719,9 +720,34 @@ async function op(id, fn, opts = {}) {
   }
 }
 
+// Documents a read subscribed rather than a view (a zoom, doc:info, a row's doc:taskMeta as it scrolls into view),
+// in order of their last read. The view refresh lets go of what its lists stop showing; these it lets go of oldest
+// first once there are more than LIVE_ROWS of them (releaseOnDemand). Kept for the session they undid LIVE_ROWS:
+// scrolling a long list subscribed every row for good, and each reconnect bootstrapped them all again (issue #269).
+const onDemand = new Map(); // docId -> true
+// A read subscribed id: it goes to the end, so the oldest reads are the first let go. A view's own row is its sweep's.
+const readOnDemand = (id) => { if (!subscribed.has(id)) { onDemand.delete(id); onDemand.set(id, true); } };
+// The system documents a read may reach that the app keeps live for itself: your profile, pins, the inbox, settings.
+const SYSTEM_KINDS = new Set(['collection', 'pin-map', 'user-inbox', 'liveQuery']);
+function releaseOnDemand(held) {
+  let excess = onDemand.size - LIVE_ROWS;
+  for (const id of [...onDemand.keys()]) {
+    if (excess <= 0) return;
+    if (subscribed.has(id)) { onDemand.delete(id); excess--; continue; } // a view has taken it over, and its own sweep decides
+    if (held(id) || id === (S.me && S.me.userUri) || id === settings.settingsDocId() || SYSTEM_KINDS.has(idKind(id))) continue;
+    onDemand.delete(id); excess--;
+    docStates.delete(id);
+    S.client.sync.unsubscribe(id).catch(() => {});
+  }
+}
 // Mutations: same as op, plus global undo ordering across documents (each Document keeps its own Loro UndoManager).
-// ponytail: a linear scan of an unbounded stack, run once per refresh; index it if either ever grows into the thousands.
-const inHistory = (id) => [...undoStack, ...redoStack].some((step) => step === id || step?.id === id || (Array.isArray(step) && step.includes(id)));
+// Every document a step can still undo, as one set per sweep: asked once per subscription, a copy of both stacks per
+// question cost 10 ms a refresh at 300 subscriptions and 5,000 steps.
+function historyIds() {
+  const ids = new Set();
+  for (const step of [...undoStack, ...redoStack]) for (const id of Array.isArray(step) ? step : [step && typeof step === 'object' ? step.id : step]) ids.add(id);
+  return ids;
+}
 async function mut(id, fn, accessMutation = false) {
   if (S.historyBusy) throw new Error('History operation is still running');
   // A write into a field needs its value to exist; a read of the same id must not make one.
@@ -877,4 +903,4 @@ async function moveTarget(spaceId) {
   return document(spaceId);
 }
 
-module.exports = { followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, codexIds, setCodex, creatorOf, document, op, inHistory, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget };
+module.exports = { followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, codexIds, setCodex, creatorOf, document, op, historyIds, readOnDemand, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget };

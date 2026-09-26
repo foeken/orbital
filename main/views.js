@@ -7,7 +7,9 @@ const { everyoneOnly } = require('../sdk/access');
 const { liveTrigger, parseQuery, searchParams, needsTypes, viewParams, completedInWindow, filterToSearchQuery, validViewFilter, VIEW_PRESETS, hideRules, isHidden } = require('../sdk/query');
 const { LIVE_ROWS, NOT_CONNECTED, S, deletedNodes, docStates, errText, idKind, isDeleted, isMcp, memberTitle, now, reading, truncatedViews, typeTitles, redoStack, report, scheduleRefresh, send, setStatus, subscribed, undoStack, visibleGraphNodes } = require('./state');
 const { graphRow, members, rememberNodeHue, resolveTypes, toNode, typesByTitle } = require('./rows');
-const { codexIds, createDocument, creatorOf, document, inHistory, notifySilencedIds, notifyWatchedIds, onChange, subscribe } = require('./documents');
+const { codexIds, createDocument, creatorOf, document, historyIds, notifySilencedIds, notifyWatchedIds, onChange, releaseOnDemand, subscribe } = require('./documents');
+const { watchedPages, withSearchHeads } = require('./related');
+const presence = require('./presence');
 const settings = require('./settings');
 const { openLiveQuery } = require('../sdk/livequery');
 
@@ -76,10 +78,14 @@ async function viewRows(id, filter) {
     for (const nodeId of ids) if (!subscribed.has(nodeId)) { subscribed.add(nodeId); subscribe(nodeId); }
     // ...and so does what another window's view lists (issue #137)
     const shown = new Set(openViews().flatMap((v) => [...(liveIds.get(v.id) || [])]));
+    // ...and the page on screen in any window, which a list it has dropped out of must not take its live edits from
+    const onScreen = new Set(withSearchHeads([...presence.openIds(), ...watchedPages()])), history = historyIds();
     // Leaving a filtered view must not discard a document whose local undo step still points at its Loro handle.
     // ...and neither is a document an on-demand read is still waiting for: unsubscribing a bootstrap in flight
     // rejects it as 'unsubscribed <id>' under the reader (main/state.js reading).
-    for (const nodeId of subscribed) if (!shown.has(nodeId) && !watched.has(nodeId) && !deletedNodes.has(nodeId) && !inHistory(nodeId) && !reading.has(nodeId)) { subscribed.delete(nodeId); docStates.delete(nodeId); S.client.sync.unsubscribe(nodeId).catch(() => {}); }
+    const held = (nodeId) => shown.has(nodeId) || watched.has(nodeId) || deletedNodes.has(nodeId) || history.has(nodeId) || reading.has(nodeId) || onScreen.has(nodeId);
+    for (const nodeId of subscribed) if (!held(nodeId)) { subscribed.delete(nodeId); docStates.delete(nodeId); S.client.sync.unsubscribe(nodeId).catch(() => {}); }
+    releaseOnDemand(held); // what reads opened, oldest first, past LIVE_ROWS of them (main/documents.js)
   }
   if (result.truncated) truncatedViews.add(id); else truncatedViews.delete(id);
   return { nodes: rows.map(toNode), truncated: !!result.truncated };
@@ -446,9 +452,7 @@ async function setMcpHidden(on) {
   return mcpHidden();
 }
 
-// Subscribing on demand (zoom, create, metadata) does not put a document in a view, and only the refresh unsubscribes:
-// a document listed here as well would lose its live updates and its Loro undo history under the open editor.
-// ponytail: on-demand subscriptions last for the S.session; drop the oldest if a long S.session ever holds too many.
-
+// Subscribing on demand (zoom, create, metadata) does not put a document in a view: the refresh lets go of those
+// oldest first past LIVE_ROWS of them, under the same rule as its own rows (main/documents.js releaseOnDemand).
 
 module.exports = { announceNewInbox, inboxFrom, watchInbox, watchMine, preset, viewFilter, setViewFilter, hiddenRules, mcpHidden, viewRows, inboxCount, search, searchList, searchCreate, searchTitle, myTasks, start, refresh, doRefresh, listFilter, setHidden, setMcpHidden };
