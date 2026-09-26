@@ -219,7 +219,9 @@ task's picks line) belong to one component each and are not for reuse:
 - **Radii**: 3 (a focus ring's corners), 4 (chips, small icon buttons), 6 (buttons, badges, code, images), 7 (a
   dialog's `.button`), 8 (rows in a menu or ⌘K, inputs, toasts), 10 (menus), 12 (dialog cards; Help's is 14), `999px`
   for a pill, `50%` for a dot.
-- **Spacing**: the page's side gutter is 32px (`.titlebar`, `.filter`, `.pills`, `.scroll`). A row is a 24px line
+- **Spacing**: the page's side gutter is 32px (`.titlebar`, `.filter`, `.pills`, and `.scroll`'s
+  right edge). `.scroll` pads only 16px on the left: a row's own marker gutter makes up the rest, so its words line
+  up with the title. A row is a 24px line
   with 3px above and below. A menu has 8px of padding and rows of 8px 12px.
 
 ### Component classes
@@ -288,11 +290,12 @@ The full contract is [OUTLINER.md](OUTLINER.md). These are the rules a new featu
 - **Where errors go.** An action runs through `run()`, and a failure becomes the red toast (`showError`). A palette page
   built on `loadList` shows a failed read as a disabled note row in place of its rows; other pages that read (Create new
   …, Set icon, the Pin to today picker, for example) send it to the toast and draw an empty list. The Create task card,
-  a page of its own, keeps a failed create on the card (`.terror`) so the press can be repeated. The red line
-  under the title (`#error`) belongs to the session alone: it asks for a new login. A notice never goes to `#error`.
-- **Focus after an action.** Closing the palette puts the caret back on the row that had it (`closePalette`). A pill's
-  or the toolbar's menu gives focus back to its own button (renderer/pills.js, toolbar.js). A new row takes the caret.
-  With nothing to go back to, focus goes back to the page itself, where ↑/↓ pick up the first or last row.
+  a page of its own, keeps a failed create on the card (`.terror`) so the press can be repeated. The red line under the
+  title (`#error`) belongs to the session alone: it asks for a new login. A notice never goes to `#error`.
+- **Focus after an action.** Closing the palette puts the caret back on the row that had it (`closePalette`). A menu
+  dismissed with Escape gives focus back to its own button (renderer/pills.js, toolbar.js). A choice made in the
+  toolbar's style menu puts the text selection back instead (`applyBlockType`), so typing goes on. A new row takes the
+  caret. With nothing to go back to, focus goes back to the page itself, where ↑/↓ pick up the first or last row.
 - **Empty and loading.** A page with no rows says so in its own words (`.empty-note`; `emptyText` in
   renderer/render.js): "No notifications yet.", "Nothing matches." with the Create task key, or "Nothing here yet" with
   Clear filters when a filter hides rows. A new page adds its line to `emptyText`. A palette page with no match says "No
