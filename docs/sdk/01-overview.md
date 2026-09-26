@@ -62,7 +62,7 @@ const sync = new SyncConnection({ transport, orgId, peerId });     // documents,
 
 ## Adding a Tana service call or descriptor
 
-- **A method on a service we already have** is one method on that service's client (`GraphClient` in `graph.js`, `HistoryClient` in `history.js`, `SearchClient` in `search.js`), made through `unary(this.client, Service, 'methodName', params)` with protobuf JSON in and out. Normalise the answer there (for example `nodes ||= []`, since protobuf JSON omits empty lists), nowhere else.
+- **A method on a service we already have** is one method on that service's client (`GraphClient` in `graph.js`, `HistoryClient` in `history.js`, `SearchClient` in `search.js`), made through `unary(this.client, Service, 'methodName', params)` with protobuf JSON in and out when it is unary; a server-streaming method is an async generator over `this.client.method(...)` instead, as `GraphClient.traverse` is. Normalise the answer there (for example `nodes ||= []`, since protobuf JSON omits empty lists), nowhere else.
 - **A new service** is its `.proto` file descriptor in `proto/descriptors.js` (the base64 `fileDesc` blob from the `Mr(` calls in Tana's `shared-*.js` bundle, with its dependencies, added to `files` and its service exported by name), a client class in a file of its own shaped like `HistoryClient` (`constructor(transport) { this.client = createClient(Service, transport); }`), and one line in `createTanaClient` if the app should get it by default.
 - **A new sync command** (`ServerSyncCommand`) is a method on `SyncConnection` calling `this._command({ case, value })`; presence-sized ones go through `_lightCommand` so they queue behind at most four in flight.
 
