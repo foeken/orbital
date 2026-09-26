@@ -238,19 +238,23 @@ function choiceKeys(e) {
 }
 // Link to types: every type in the workspace, the current targets ticked; each Enter adds or removes one.
 // (typeListCache is declared in renderer/pills.js, whose Type pill lists the same types)
+// The page reads the types afresh (loadList: Loading…, the failure or the list), and shows the ones the Type pill
+// already read while it does; a failed read says so instead of Loading… for as long as the page is open (#394).
+let targetTypes = null;
 function openTargetsPage(ctx) {
+  // the read starts before the page is drawn, so its first render shows the pill's copy or Loading…, never the last failure
+  loadList('field', () => tana.typeList(), (list) => { targetTypes = list || typeListCache; if (Array.isArray(list)) typeListCache = list; });
   openFieldPage(ctx, targetRows, 'Link to types…', openCommandPalette);
-  run(async () => { typeListCache = await tana.typeList(); if (palPage.rows === targetRows) renderPalette(); });
 }
 function targetRows(q) {
   const ctx = fieldCtx, to = plainDef(ctx.def.to), group = (ctx.def.title || 'Field') + ' links to';
-  if (!typeListCache) return [{ group, label: 'Loading…', disabled: true }];
-  const rows = typeListCache.filter((t) => fuzzyMatch(t.title || '', q)).map((t) => {
+  const rows = listRows(group, targetTypes, q, 'No types in this workspace', (list) => list.filter((t) => fuzzyMatch(t.title || '', q)).map((t) => {
     const on = to.some((x) => x.uri === t.uri);
     return { group, icon: typeGlyph(t.uri), label: t.title || 'Untitled type', hint: on ? '✓' : '', keepOpen: true,
       run: () => saveDefinition(ctx, { to: on ? to.filter((x) => x.uri !== t.uri) : [...to, { uri: t.uri }] }) };
-  });
-  return rows.length ? rows : [{ group, label: 'No types match', disabled: true }];
+  }));
+  // a typed page draws no "No results" of its own (renderPalette), so a query that matches no type says so here
+  return rows.length || !q ? rows : [{ group, label: 'No types match', disabled: true, note: true }];
 }
 // Add field …: its name first, then what kind of field it is, then one write.
 function addFieldRows(q, typed) {

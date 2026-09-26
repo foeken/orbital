@@ -3467,6 +3467,7 @@ async function runClosedPaletteKeysCheck() {
     let visibilityPeople = null, visibilityRoles = null; const me = () => null, loadMembers = () => {}, visibilityPeopleRows = () => [];
     const moveTargets = async (doc) => [{ label: 'Studio', run: () => writes.push(['move', doc.id, 'Studio']) }];
     const renderPalette = () => {}, closePalette = () => {}, promptEditor = () => {}, loadPinned = () => {};
+    let pinFailed = null, pinRead = 0; // loadPins keeps a failed read here, and which read is the latest (renderer/state.js)
     const groupBy = () => 'none', holdRow = () => {}, isTask = () => true;
     const errors = []; let queue = Promise.resolve();
     const showError = (e) => { if (e) errors.push((e && e.message) || String(e)); };
@@ -3999,13 +4000,13 @@ async function runEditPinsCheck() {
   const api = vm.runInNewContext(`
     const calls = [];
     let state = { sidebar: false, dates: [] }, ids = ['doc'];
-    let pinInfo = null, pinnedIds = null, pinnedLoading = null;
+    let pinInfo = null, pinFailed = null, pinRead = 0, pinnedIds = null, pinnedLoading = null;
     let palDoc = { id: 'doc' }, palMode = 'cmd', palRows = [], palIndex = 3;
     const palette = { hidden: true }, palInput = { value: '', placeholder: '', focus() {} };
     const renderPalette = () => {}, showError = () => {}, run = (fn) => fn();
     const render = () => {}; // the shimmed renderSoon a refreshed mark set asks for
     const tana = {
-      pinState: async (id) => { calls.push(['pinState', id]); return state; },
+      pinState: async (id) => { calls.push(['pinState', id]); const st = states.get(id) || state; if (id === 'A' && slowA) { const wait = slowA; slowA = null; await wait; } if (st && st.fail) throw new Error(st.fail); return st; },
       pinIds: async () => { calls.push(['pinIds']); return [...ids]; },
       pin: async (id, target, date) => { calls.push(['pin', id, target, date]); },
       unpin: async (id, target, date) => { calls.push(['unpin', id, target, date]); },
@@ -4015,6 +4016,7 @@ async function runEditPinsCheck() {
     const refreshRelated = (id) => { calls.push(['refreshRelated', id]); };
     const isRealId = (id) => typeof id === 'string';
     let picker = null; // the meeting picker is its own page with its own check; here what matters is what opens it
+    let slowA = null; const states = new Map(); // a read of one document that answers late, and answers per document
     const openMeetingPicker = (doc, back) => { picker = { doc: doc.id, back }; };
     ${sourceLine('const localDate =')}
     ${functionSource('fuzzyMatch')}
@@ -4033,6 +4035,9 @@ async function runEditPinsCheck() {
       tomorrow: () => localDate(1),
       picker: () => (picker ? { doc: picker.doc, back: typeof picker.back } : null),
       escape: () => { picker.back(); return palMode; },
+      openFor: (id, answer) => { states.set(id, answer); openPinsPalette({ id }); },
+      answer: (next) => { state = next; },
+      slow: () => { let go; slowA = new Promise((resolve) => { go = resolve; }); return () => go(); }, // the next read of A answers when released
     });
   `, { setImmediate, Date, Promise });
 
@@ -4071,7 +4076,56 @@ async function runEditPinsCheck() {
   assert.equal(api.escape(), 'pins', 'and escaping the picker comes back to Edit pins');
   assert.match(source, /id: 'editPins'[^}]*'Edit pins'/, 'Cmd+K carries the command that opens it');
   assert.match(source, /palMode === 'pins'/, 'and the palette renders and types in that mode like any other');
+  // A read that fails says why on the page, rather than Loading… for as long as the page is open (#394).
+  await new Promise(setImmediate); // the page escape reopened has had its answer
+  await api.open({ fail: 'Not connected' });
+  assert.deepEqual(plain(api.page().map((r) => [r.label, !!r.disabled, !!r.note])), [['Not connected', true, true]], 'a failed read of the pins is the page\u2019s one line');
+  // A read for the page before that answers late does not wipe this page's failure back to Loading….
+  const resume = api.slow();
+  api.openFor('A', { sidebar: false, dates: [] });
+  api.openFor('B', { fail: 'Not connected' });
+  await new Promise(setImmediate);
+  resume();
+  await new Promise(setImmediate); await new Promise(setImmediate);
+  assert.deepEqual(plain(api.page().map((r) => r.label)), ['Not connected'], 'a late answer for another document leaves this one\u2019s failure standing');
+  const later = api.slow();
+  api.openFor('A', { sidebar: true, dates: [] });
+  api.openFor('A', { fail: 'Not connected' });
+  await new Promise(setImmediate);
+  later();
+  await new Promise(setImmediate); await new Promise(setImmediate);
+  assert.deepEqual(plain(api.page().map((r) => r.label)), ['Not connected'], 'and so does a late answer from an earlier read of the same document: only the latest read counts');
+  // A re-read after a pin is written (pinAction) that fails replaces the rows it read before with the failure.
+  await api.open({ sidebar: true, dates: [] });
+  api.answer({ fail: 'Not connected' });
+  await api.press('', 0); // unpins the sidebar, then reads the pins again
+  assert.deepEqual(plain(api.page().map((r) => r.label)), ['Not connected'], 'a failed re-read shows the failure, not the pins read before it');
   console.log('ok  Edit pins: the page opens with this document\u2019s pins, names today, unpins each of them, offers the sidebar, date and meeting pins that can be made, and the row marks come from one list');
+}
+
+// Link to types lists the workspace's types from one read (renderer/fields.js): while it is out the Type pill's copy,
+// or Loading…; a failed read says why rather than Loading… for as long as the page is open (#394).
+async function runLinkTargetsLoadCheck() {
+  const api = vm.runInNewContext(withShims(`
+    let fieldCtx = null, palMode = 'cmd', typeListCache = null, answer = null;
+    const openCommandPalette = () => {}, typeGlyph = () => 'type', saveDefinition = () => {};
+    let drawn = null; const openFieldPage = (ctx) => { fieldCtx = ctx; palMode = 'field'; drawn = targetRows('').map((r) => r.label); }; // the page draws as it opens
+    const tana = { typeList: async () => { if (answer && answer.fail) throw new Error(answer.fail); return answer; } };
+    ${functionSource('fuzzyMatch')}
+    ${sourceLine('const plainDef =')}
+    ${sourceBetween('let targetTypes', 'function targetRows')}
+    ${functionSource('targetRows')}
+    ({ rows: (q) => targetRows(q).map((r) => r.label),
+      open: async (next, cached = null) => { answer = next; typeListCache = cached; openTargetsPage({ def: { title: 'Client', to: [] } }); const first = drawn;
+      for (let i = 0; i < 4; i++) await Promise.resolve(); return [first, targetRows('').map((r) => r.label)]; } })
+  `), { Promise });
+  assert.deepEqual(plain(await api.open([{ uri: 'tana:type:a', title: 'Person' }])), [['Loading…'], ['Person']], 'the page says Loading… until the types are in');
+  assert.deepEqual(plain(await api.open([{ uri: 'tana:type:b', title: 'Company' }], [{ uri: 'tana:type:a', title: 'Person' }])), [['Person'], ['Company']], 'the Type pill\u2019s copy shows while the read is out');
+  assert.deepEqual(plain(api.rows('zzqx')), ['No types match'], 'a query that matches no type says so: the page is typed, so the palette draws no No results under it');
+  assert.deepEqual(plain(await api.open({ fail: 'Not connected' })), [['Loading…'], ['Not connected']], 'and a failed read says why');
+  assert.deepEqual(plain(await api.open([{ uri: 'tana:type:b', title: 'Company' }], [{ uri: 'tana:type:a', title: 'Person' }])), [['Person'], ['Company']],
+    'reopened after a failure, the page is drawn from the pill\u2019s copy rather than the last failure');
+  console.log('ok  Link to types: Loading…, the types, or why they could not be read');
 }
 
 // A view that gains and loses rows between two renders: arrivals flash, departures go back where they were.
@@ -6879,7 +6933,7 @@ async function runToastCheck() {
   console.log('ok  toast: notices and errors fade at the foot of the window and leave the relogin line alone');
 }
 
-const checks = [runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck,runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck];
+const checks = [runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck,runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck];
 // The chips under a zoomed title, driven through the shipped line itself: a typed document shows its type whatever
 // kind it is, and the kind chip (task, doc, meeting, space, chat…) stays out of the header, as it always did for a task.
 function runZoomTypeChipCheck() {
