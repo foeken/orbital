@@ -15,12 +15,12 @@ function openHelp() {
   openOverlay('help');
 }
 // A first start, from the main half: the right half of the Work View opens beside it and stays quiet. Only once signed
-// in and connected (renderer/app.js), and once the settings document has been read: over the login the tour taught a
-// window nobody could use yet, and a new machine went by its own empty copy and showed it to you again.
+// in and connected (renderer/app.js), and only if main says so (help:claim): it answers once the settings document has
+// been read, and yes to one page only. Over the login the tour taught a window nobody could use yet, a new machine went
+// by its own empty copy and showed it to you again, and every open window showed it at once.
 async function helpOnce() {
   if (SIDE || pref('helpSeen', false)) return;
-  const synced = tana.settingsReady ? await tana.settingsReady().catch(() => null) : null; // only helpSeen is read here: settings:changed applies the rest
-  if (!(synced && synced.helpSeen) && !pref('helpSeen', false)) openHelp();
+  if (tana.claimHelp ? await tana.claimHelp().catch(() => true) : true) openHelp(); // a claim that fails still opens it, rather than never
 }
 const helpBtn = $('navHelp');
 helpBtn.onmousedown = (e) => e.preventDefault(); // the caret stays in its row

@@ -1119,6 +1119,20 @@ async function main() {
     settings.set('myTasks', undefined);
     console.log('ok  My Tasks is remembered by id: a rename, a hidden title, a colleague\u2019s or a second machine\u2019s copy never makes or picks another');
   }
+  // The Help tour's first start is claimed in main (help:claim): yes once, to whichever page asks first, and no when the
+  // settings already say it was seen — every window's main page asks as the connection comes up (renderer/overlays.js).
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    backend.settings.reset();
+    const claim = backend.handlers.get('help:claim');
+    assert.deepEqual(await Promise.all([claim(), claim()]), [true, false], 'two pages asking at once: one gets the tour');
+    assert.equal(await claim(), false, 'and nobody after them');
+    assert.equal(backend.settings.prefs().helpSeen, true, 'the mark is the synced helpSeen preference');
+    cache.open(':memory:'); backend.settings.reset();
+    backend.settings.setPref('helpSeen', true);
+    assert.equal(await claim(), false, 'seen before, on this machine or in the settings document: no tour');
+    console.log('ok  help:claim: the first-start tour goes to one page, once');
+  }
   // What stayed of quick add when the panel went (issue #232): the meeting this user has joined (⌘K Pin to current
   // meeting), a task from its title alone (⌘K Create task), and the one agent handoff, driven through its real path.
   {

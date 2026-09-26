@@ -264,9 +264,15 @@ ipcMain.on('window:theme', (e, theme) => { const win = paneWindow(e.sender); if 
 // Demo mode lives in the outliner (renderer/state.js); main only needs to know it is on, so no banner shows a real title.
 ipcMain.on('app:demoMode', (_e, on) => { S.demo = on === true; });
 ipcMain.on('prefs:snapshot', (e) => { e.returnValue = settings.prefs(); });
-// The preferences once this session has read the settings document: the snapshot above is this machine's last copy,
-// which on a new machine knows nothing yet (renderer/overlays.js helpOnce).
-ipcMain.handle('settings:ready', async () => { await settingsReady(); return settings.prefs(); });
+// The Help tour's first start (renderer/overlays.js helpOnce): yes once, to whichever page asks first, and only once this
+// session has read the settings document — the snapshot above is this machine's last copy, which on a new machine knows
+// nothing yet. Every window's main page asks when the connection comes up, so the check and the mark are one step here.
+ipcMain.handle('help:claim', async () => {
+  await settingsReady();
+  if (settings.prefs().helpSeen) return false;
+  settings.setPref('helpSeen', true);
+  return true;
+});
 // A setting one page writes reaches every other page and window at once: settings.applyRemote announces only what
 // another machine changed, since this machine's own write comes back from Tana as nothing new. The writer is left
 // out, because it already holds the value and an older snapshot arriving late would undo a newer choice there.

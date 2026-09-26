@@ -8363,22 +8363,26 @@ checks.push(runFitSoonCheck);
 // The Help tour's first start (renderer/overlays.js helpOnce): not over the login, and not by this machine's empty copy
 // of the preferences when the settings document in Tana says it was seen elsewhere.
 async function runHelpOnceCheck() {
-  const run = (synced, side = '') => vm.runInNewContext(`
+  // each page has its own copy of the preferences; main's claim (main.js help:claim, checked in sdk-check) is shared
+  const pane = (claimHelp, side = '') => vm.runInNewContext(`
     const SIDE = ${JSON.stringify(side)}, prefs = {};
     let opened = 0;
     const pref = (key, fallback) => (key in prefs ? prefs[key] : fallback);
     const openHelp = () => { opened++; prefs.helpSeen = true; };
-    const tana = { settingsReady: async () => { if (${JSON.stringify(synced)} === 'fail') throw new Error('offline'); return ${JSON.stringify(synced)}; } };
     ${functionSource('helpOnce')}
     ({ go: async () => { await helpOnce(); await helpOnce(); return opened; } });
-  `);
-  assert.equal(await run({ helpSeen: true }).go(), 0, 'seen on another machine: a new one does not show it again');
-  assert.equal(await run({}).go(), 1, 'never seen: it opens, once');
-  assert.equal(await run('fail').go(), 1, 'a settings read that fails still opens it, rather than never');
-  assert.equal(await run({}, ':2').go(), 0, 'the right half of the Work View stays quiet');
+  `, { tana: { claimHelp } });
+  const main = (seen) => { let asked = 0; const claim = async () => { asked++; await null; if (seen) return false; seen = true; return true; }; claim.asked = () => asked; return claim; };
+  const fresh = main(false), opened = await Promise.all([pane(fresh).go(), pane(fresh).go()]);
+  assert.equal(opened[0] + opened[1], 1, 'two windows coming up at once: the tour opens in one of them');
+  assert.equal(await pane(main(true)).go(), 0, 'seen on another machine: main says no, so a new one does not show it again');
+  assert.equal(await pane(async () => { throw new Error('gone'); }).go(), 1, 'a claim that fails still opens it, rather than never');
+  const quiet = main(false);
+  assert.equal(await pane(quiet, ':2').go(), 0, 'the right half of the Work View stays quiet');
+  assert.equal(quiet.asked(), 0, 'and does not claim it from the main half');
   assert.doesNotMatch(source, /then\(restorePlace\)\.then\(helpOnce\)/, 'boot no longer opens it before there is a connection, over the login');
   assert.match(source, /restorePlace\(\)\.finally\(\(\) => \{ placed = true; loadView\(\); renderSoon\(\); helpOnce\(\); \}\)/, 'it opens once connected, over the page the launch came back to');
-  console.log('ok  Help tour first start: after login, and not again on a machine that has not read your settings yet');
+  console.log('ok  Help tour first start: after login, once across windows, and not again on a machine that has not read your settings yet');
 }
 checks.push(runHelpOnceCheck);
 process.exitCode = 1;
