@@ -2,6 +2,8 @@
 
 This repo is **Orbital** (formerly Tana Companion): a macOS Electron outliner over the *new* Tana (home.tana.inc), synced live through Tana's own (undocumented, v1alpha1) platform protocol. Read this file first, then the docs it points to. Keep changes small and plain (CommonJS, no bundler, no framework, no new dependencies unless a few lines cannot do it).
 
+Adding something — an IPC call, a `main/` module, a view or an app page, a Cmd+K row or built-in key, a renderer file, a setting — follows fixed steps across fixed files: [docs/EXTENDING.md](docs/EXTENDING.md) lists them, with the checks to extend.
+
 ## Map
 
 | Path | What |
