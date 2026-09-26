@@ -74,7 +74,18 @@ async function pool(list, fn) {
 // here, and Tana touches events often (a reply, a synced calendar), so only what the page shows of one counts.
 // Opened by a read, and again when the client, the weeks or the day change; a refusal leaves the page as it was.
 let live = null, liveClient = null, liveKey = null;
-const meetingSig = (row) => { const ev = row.calendarEvent || {}; return JSON.stringify([row.title, ev.startTime, ev.endTime, ev.allDay]); };
+const meetingSig = (row) => { const ev = row.calendarEvent || {}; return JSON.stringify([row.title, ev.startTime, ev.endTime, ev.allDay, attendeesOf(ev).map((a) => a.displayName || a.email)]); };
+// Who is on a meeting, as the graph gives it: the roster (calendarEvent.roster), or the calendar's own attendee list
+const attendeesOf = (ev) => (Array.isArray(ev.roster) && ev.roster.length ? ev.roster : Array.isArray(ev.attendees) ? ev.attendees : []).filter((a) => a && typeof a === 'object');
+const duration = (ms) => { const m = Math.round(ms / 6e4), h = Math.floor(m / 60); return m < 60 ? m + ' min' : h + ' h' + (m % 60 ? ' ' + (m % 60) + ' min' : ''); };
+// A meeting's grey line: how long it is, then who else is on it (rooms and you left out), four names and an ellipsis
+function meetingNote(ev, me, myEmail) {
+  const start = Date.parse(ev.startTime || ''), end = Date.parse(ev.endTime || '');
+  const names = [...new Set(attendeesOf(ev).filter((a) => a.role !== 'resource' && a.identityUri !== me && !(myEmail && String(a.email || '').toLowerCase() === myEmail))
+    .map((a) => a.displayName || String(a.email || '').split('@')[0]).filter(Boolean))];
+  const people = names.slice(0, 4).join(', ') + (names.length > 4 ? ', …' : '');
+  return [end > start ? duration(end - start) : '', people].filter(Boolean).join(' · ') || null;
+}
 function watchMeetings(me, since) {
   const end = new Date(); end.setHours(24, 0, 0, 0);
   const key = [me, weeks, end.getTime()].join(' ');
@@ -143,9 +154,10 @@ async function rows() {
   // its write-up, renderer/edit.js followSummary). A refusal costs the meetings only.
   const { nodes: meetings = [] } = await graph.listNodes({ nodeTypes: ['event'], hasParticipantUris: [me], eventStartTimeMin: new Date(since).toISOString(), eventStartTimeMax: new Date().toISOString(),
     sortOptions: [{ field: 'SORT_FIELD_EVENT_START_TIME', direction: 'SORT_DIRECTION_DESCENDING' }], limit: Math.min(500, 50 * weeks) }).catch(() => ({}));
+  const myEmail = String((S.me.user && S.me.user.email) || '').toLowerCase();
   for (const n of meetings) {
     const ev = n.calendarEvent || {}, at = Date.parse(ev.startTime || '');
-    if (at > since && at <= Date.now() && !isAllDay(ev.startTime, ev.endTime, ev.allDay)) events.push({ kind: 'meeting', uri: n.id, title: n.title, at, icon: 'meeting', tone: 'meeting' });
+    if (at > since && at <= Date.now() && !isAllDay(ev.startTime, ev.endTime, ev.allDay)) events.push({ kind: 'meeting', uri: n.id, title: n.title, at, icon: 'meeting', tone: 'meeting', note: meetingNote(ev, me, myEmail) });
   }
   watchMeetings(me, since);
   const now = Date.now(), date = new Date(now).toLocaleDateString('sv-SE');
@@ -183,7 +195,7 @@ async function rows() {
     const who = { text: e.actor + ' ', ...(person ? { person } : {}) }, what = (verb) => ({ text: verb, marks: { bold: true } });
     if (e.kind === 'edit') { segments = [who, what('edited'), { text: ' ' }, { text: title, content: true }]; change = e.change; detail = e.detail || null; }
     else if (e.kind === 'status') { segments = [who, what(e.verb), { text: ' ' }, { text: title, content: true, marks: e.tone === 'done' ? { strike: true } : {} }]; note = e.note || null; }
-    else if (e.kind === 'meeting') segments = [{ text: title, content: true }]; // the meeting's name is what happened
+    else if (e.kind === 'meeting') { segments = [{ text: title, content: true }]; note = e.note; } // the meeting's name is what happened, how long and who under it
     else {
       const n = e.tasks.length;
       segments = [{ ...who, text: e.actor }, { text: ' added ' + (n === 1 ? 'a task' : n + ' tasks') + ' to your Inbox' }];
