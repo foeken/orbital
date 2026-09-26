@@ -26,4 +26,19 @@ if (process.platform === 'darwin') {
     assert.equal(ok('--verify', '--strict', '-R', signedBy('2DC432GLL2'), bin), false, 'and it is refused once the signature must chain to a Developer ID of the team');
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
+// What the package leaves out (package.json's --ignore, #417): loro-crdt's four builds other than the one node
+// requires (16 MB of the 26 MB asar) and the offline checks, while everything the app reads at runtime stays in.
+{
+  const path = require('node:path'), root = path.join(__dirname, '..');
+  const ignore = new RegExp(require('../package.json').scripts.package.match(/--ignore='([^']+)'/)[1]);
+  const shipped = (file) => !ignore.test('/' + path.relative(root, file).split(path.sep).join('/'));
+  for (const file of [require.resolve('loro-crdt'), path.join(path.dirname(require.resolve('loro-crdt')), 'loro_wasm_bg.wasm'),
+    'main.js', 'preload.js', 'index.html', 'build/nucleo-ui.json.gz', 'scripts/agent-link.js', 'scripts/codex-host.js', 'scripts/platform-cli.js']) {
+    assert.ok(shipped(path.resolve(root, file)), file + ' is shipped: the app requires or runs it');
+  }
+  for (const file of ['node_modules/loro-crdt/web/index.js', 'node_modules/loro-crdt/base64', 'node_modules/loro-crdt/bundler/loro_wasm_bg.wasm',
+    'node_modules/loro-crdt/browser', 'scripts/sdk-check.js', 'scripts/fixtures/task-snapshot.b64']) {
+    assert.ok(!shipped(path.resolve(root, file)), file + ' is left out of the package');
+  }
+}
 console.log('updater ok');
