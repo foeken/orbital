@@ -397,6 +397,23 @@ function setColumnWidth(key, px) {
   setPref('tableWidths', next);
   outline.style.setProperty('--fcols', tableCols());
 }
+// The keyboard's way to the same widths: ⌘K Column widths …, a row per column; ←/→ on one make it 20px narrower or
+// wider (while nothing is typed, so the caret still moves in what is), ↩ gives it back its share.
+function openColumnWidths() { openFieldPage(null, columnWidthRows, 'Column widths', openCommandPalette, '', columnWidthKeys); }
+function columnWidthRows(q) {
+  const names = new Map(displayList()), widths = tableWidths();
+  return tableKeys().filter((k) => fuzzyMatch(names.get(k) || '', q)).map((k) => ({ group: 'Column widths', icon: 'table', label: names.get(k) || 'Column', column: k,
+    hint: (widths[k] ? widths[k] + 'px' : 'Auto') + ' · ←→ resizes · ↩ resets', keepOpen: true, run: () => { setColumnWidth(k, undefined); renderPalette(); } }));
+}
+function columnWidthKeys(e) {
+  const row = palRows[palIndex];
+  if (!row || !row.column || palInput.value || e.metaKey || e.ctrlKey || e.altKey || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return false;
+  const head = outline.querySelector(':scope > .thead'), cell = head && head.children[tableKeys().indexOf(row.column) + 1]; // + 1: past Title
+  const now = tableWidths()[row.column] || (cell ? cell.getBoundingClientRect().width : 160);
+  setColumnWidth(row.column, Math.round(Math.max(40, now + (e.key === 'ArrowRight' ? 20 : -20))));
+  renderPalette();
+  return true;
+}
 // "4 hours ago". Nothing else in the app says an age in words, so this is the one place that turns a time into one.
 function agoText(iso) {
   const at = Date.parse(iso || '');
