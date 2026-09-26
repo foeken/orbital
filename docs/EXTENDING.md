@@ -179,8 +179,9 @@ an entry in `main/documents.js` `creationOptions` and the mock's `creationOption
    words is in `ATOMS`.
    - A type the outliner can switch to: its name in `BLOCK_TYPES`, its leaf in `setLeaf` and its container in the `rehome(…)` call in `setBlockType`. A new
      ProseMirror node that carries words also goes in `TEXT_BLOCKS`, or `setText` and `setBlockType` refuse it once a
-     row has become one; a new holder (like `blockquote` around a quote) also goes in `HOLDERS`, is read through in `nodes()` as a
-     quote is, and is named back in `blockType`.
+     row has become one; the container must be one Tana already has (`bulletList`, `orderedList` or `blockquote`). A new
+     holder is a change to sdk/content.js of its own: every walk and wrap there tests `isList`/`isQuote`/`isHolder`
+     (reading, ids, lookup, wrapping, rehoming), so find them all with `rg "isList|isQuote|isHolder" sdk/content.js`.
    - A block that is inserted (like a divider or a table): an `insert…` function beside `insertDivider`, then an IPC
      call for it as above (the `block:insert…` handlers in main/documents.js, preload.js, `DEMO_WRITES`, the mock),
      and its "/" row and dispatch in renderer/toolbar.js.
