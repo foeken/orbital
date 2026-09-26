@@ -10,7 +10,12 @@ const { source, files } = require('./renderer-source');
 // top-level statement that runs immediately and reaches for something a later file declares (a ReferenceError).
 // Statements that only register callbacks are fine: those run after every file has loaded.
 {
-  const declared = (text) => [...text.matchAll(/^(?:const|let|async function|function) ([A-Za-z_$][\w$]*)/gm)].map((m) => m[1]);
+  // every name a top-level line declares, the later ones of a const/let list included ("const palette = …, palList = …")
+  const declared = (text) => text.split('\n').flatMap((line) => {
+    const first = line.match(/^(?:const|let|async function|function) ([A-Za-z_$][\w$]*)/);
+    if (!first) return [];
+    return [first[1], ...(/^(?:const|let) /.test(line) ? [...line.matchAll(/, ([A-Za-z_$][\w$]*) = /g)].map((m) => m[1]) : [])];
+  });
   const perFile = files.map((f) => ({ f, text: fs.readFileSync(require.resolve('../' + f), 'utf8') }));
   const seen = new Map();
   for (const { f, text } of perFile) for (const name of declared(text)) {
@@ -20,8 +25,10 @@ const { source, files } = require('./renderer-source');
   perFile.forEach(({ f, text }, i) => {
     const later = new Set(perFile.slice(i + 1).flatMap(({ text }) => declared(text)));
     for (const line of text.split('\n')) {
-      if (!/^[A-Za-z_$[(]/.test(line) || /^(?:const|let|async function|function|class) /.test(line) || /=>|function/.test(line)) continue;
-      for (const [, name] of line.matchAll(/\b([A-Za-z_$][\w$]*)\b/g)) assert.ok(!later.has(name), f + ' runs "' + line.slice(0, 60) + '" before ' + seen.get(name) + ' has loaded');
+      if (!/^[A-Za-z_$[(]/.test(line) || /^(?:const|let|async function|function|class) /.test(line)) continue;
+      // a line that registers a callback runs the callback later, but what it registers on is reached now
+      const now = /=>|function/.test(line) ? line.slice(0, line.indexOf('(')) : line;
+      for (const [, name] of now.matchAll(/\b([A-Za-z_$][\w$]*)\b/g)) assert.ok(!later.has(name), f + ' runs "' + line.slice(0, 60) + '" before ' + seen.get(name) + ' has loaded');
     }
   });
 }
