@@ -150,8 +150,9 @@ async function rows() {
   // summary's authors). The chat it wrote from gives it away: each change is an update proposal there, approved as it
   // is made (chat.proposals, the field the Proposals page reads; live 2026-09-26: proposedAt 1 ms after the task's
   // state.enteredAt). A task whose latest move is yours and came with such a proposal was the agent's. A refusal costs
-  // these rows only.
-  const { nodes: agentChats = [] } = await graph.listNodes({ nodeTypes: ['chat'], includeOwnedChats: true, limit: Math.min(1000, 200 * pages),
+  // these rows only. Asked past Hide MCP (main/views.js listFilter): that switch hides MCP chats from lists, which are
+  // the very agents looked for here.
+  const { nodes: agentChats = [] } = await (graph.listNodesUnhidden || ((p) => graph.listNodes(p)))({ nodeTypes: ['chat'], includeOwnedChats: true, limit: Math.min(1000, 200 * pages),
     sortOptions: [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }] }).catch(() => ({}));
   const proposed = new Map(); // task -> [[proposedAt, chat]]
   for (const c of agentChats) for (const p of (c.chat && c.chat.proposals) || []) {

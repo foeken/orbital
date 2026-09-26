@@ -2482,6 +2482,7 @@ async function main() {
   {
     const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
     const COLLEAGUE = 'tana:user-profile:01exampley0000000000000000';
+    cache.setSetting('hideMcp', true); // hides MCP chats from lists, not what agents did from the Timeline
     const ago = (ms) => new Date(Date.now() - ms).toISOString(), H = 36e5;
     const id = () => 'tana:text:' + ulid();
     const pinnedEditable = { id: id(), title: 'Pinned and editable', participants: { [ME]: { type: 'user', role: 'admin' } }, state: { type: 'open' } };
