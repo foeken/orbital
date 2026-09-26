@@ -155,7 +155,8 @@ const GROUP_STATES = { 'My inbox': 'proposed', Mine: 'open', 'My completed': 'cl
 function groupDropWrites(target, t, me, today) {
   const mine = !!me && t.createdBy === me, assigned = t.assignees.includes(me);
   const clear = [...(t.agent ? [['agent', false]] : []), ...t.dates.map((date) => ['unpin', date])];
-  if (target === 'Today') return t.dates.some((date) => date <= today) ? [] : [['pin', today]];
+  // on Today already: pinned to it, or an open task pinned to a day before it (main/timeline.js ages completed ones out)
+  if (target === 'Today') return t.dates.includes(today) || (t.stateType !== 'closed' && t.dates.some((date) => date < today)) ? [] : [['pin', today]];
   if (target === 'Pinned') return [...(t.dates.length ? [] : [['pin', today]]), ...(t.stateType === 'closed' ? [['state', 'open']] : [])];
   if (target === 'Agent') return t.agent ? [] : [['agent', true]];
   if (!mine) return null; // every other group is about tasks you made
@@ -177,7 +178,7 @@ const GROUP_WRITES = {
 function dropOnGroup(task, target) {
   run(async () => {
     const [meta, pins] = await Promise.all([tana.taskMeta(task.id), tana.pinState(task.id)]);
-    const writes = groupDropWrites(target, { ...task, assignees: meta.assignees, watched: meta.watched, dates: pins.dates, agent: codexIds.has(task.id) }, me()?.id, localDate());
+    const writes = groupDropWrites(target, { ...task, assignees: meta.assignees, watched: meta.watched, dates: pins?.dates || [], agent: codexIds.has(task.id) }, me()?.id, localDate());
     if (!writes) throw new Error('This task can\u2019t go under ' + target);
     if (writes.some(([op, on]) => op === 'agent' && on)) return openAgentPrompt(task); // it needs a prompt: nothing is written until it is sent
     for (const [op, arg] of writes) await GROUP_WRITES[op](task.id, arg);

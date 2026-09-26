@@ -7863,6 +7863,7 @@ function runGroupDropCheck() {
   assert.deepEqual(at('Unassigned', { assignees: [ME] }), [['assign', []]], 'Unassigned clears the assignees');
   assert.equal(at('Mine', { createdBy: OTHER, assignees: [ME] }), null, 'a task someone else made stays under Assigned by others');
   assert.deepEqual(at('Today', { dates: ['2026-09-20'] }), [], 'Today leaves a task already on it alone');
+  assert.deepEqual(at('Today', { dates: ['2026-09-20'], stateType: 'closed' }), [['pin', DAY]], 'but pins a completed one that has aged off it');
   assert.deepEqual(at('Agent', {}), [['agent', true]], 'Agent asks for a prompt');
   assert.deepEqual(at('Mine', { assignees: [ME] }), [], 'a drop in its own group writes nothing');
   console.log('ok  group drop: each group writes what puts a task there, lets go of what held it elsewhere, and refuses what a drop cannot say');
