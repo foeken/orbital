@@ -2626,18 +2626,23 @@ function runClearFiltersCheck() {
   api.set('tasks', { states: ['closed'], assignee: 'anyone' });
   assert.equal(api.filtered(), true, 'a changed status or assignee offers the action');
   api.clear();
-  assert.deepEqual(plain(api.state()), { types: null, states: null, assignee: 'anyone', text: '', participant: null, window: null }, 'clearing Tasks means an unrestricted query');
+  assert.deepEqual(plain(api.state()), { types: null, states: null, assignee: 'anyone', text: '', fields: null, participant: null, window: null }, 'clearing Tasks means an unrestricted query');
   assert.equal(api.filtered(), false, 'and the action goes away again');
   api.set('library');
   assert.equal(api.filtered(), true, 'the shipped library filter still narrows the view');
   api.set('library', { text: 'memo' });
   assert.equal(api.filtered(), true, 'a search text narrows the Library view');
   api.clear();
-  assert.deepEqual(plain(api.state()), { types: null, states: null, assignee: 'anyone', text: '', participant: null, window: null }, 'clearing the Library means anything, not the shipped default');
+  assert.deepEqual(plain(api.state()), { types: null, states: null, assignee: 'anyone', text: '', fields: null, participant: null, window: null }, 'clearing the Library means anything, not the shipped default');
   assert.equal(api.filtered(), false, 'and with everything set to any, the action goes away');
+  api.set('library', { types: ['tana:type:01m1e3nthqj48b8drqb1fmma9d'], fields: { 'tana:type:01m1e3nthqj48b8drqb1fmma9d?attribute=hpgqd4jv': { textMatches: [{ value: 'High' }] } } });
+  assert.equal(api.filtered(), true, 'a field filter narrows the Library');
+  api.clear();
+  assert.equal(api.state().fields, null, 'and Clear filters lets go of it, rather than merging over it');
+  assert.equal(api.filtered(), false, 'so the action goes away');
   api.set('scoped');
   api.clear();
-  assert.deepEqual(plain(api.state()), { types: null, states: null, assignee: 'anyone', text: '', participant: 'me', window: 'recent' }, 'clearing a filter that carries a calendar scope keeps the participant and the window');
+  assert.deepEqual(plain(api.state()), { types: null, states: null, assignee: 'anyone', text: '', fields: null, participant: 'me', window: 'recent' }, 'clearing a filter that carries a calendar scope keeps the participant and the window');
   assert.equal(api.filtered(), false, 'the preserved calendar scope is that filter\'s clear baseline');
   // A saved search is dirty when its pills differ from what it stored, so the completed window has to be part of
   // that comparison — and an unset one is the default rather than a different filter.
