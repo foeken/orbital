@@ -169,7 +169,7 @@ async function rows() {
   const { nodes: meetings = [] } = await graph.listNodes({ nodeTypes: ['event'], hasParticipantUris: [me], eventStartTimeMin: new Date(since).toISOString(), eventStartTimeMax: endOfToday.toISOString(),
     sortOptions: [{ field: 'SORT_FIELD_EVENT_START_TIME', direction: 'SORT_DIRECTION_DESCENDING' }], limit: Math.min(1000, 100 * pages) }).catch(() => ({}));
   const myEmail = String((S.me.user && S.me.user.email) || '').toLowerCase();
-  const shown = meetings.filter((n) => { const ev = n.calendarEvent || {}, at = Date.parse(ev.startTime || ''); return at > since && at <= Date.now() && !isAllDay(ev.startTime, ev.endTime, ev.allDay); });
+  const shown = meetings.filter((n) => { const ev = n.calendarEvent || {}, at = Date.parse(ev.startTime || ''); return at >= since && at <= Date.now() && !isAllDay(ev.startTime, ev.endTime, ev.allDay); });
   // A meeting that is over and left no summary is drawn quiet, like a new-task line; one with a summary, or still
   // going, as it is. The summary is Tana's own, on the event: calendarEvent.tagline and .summary, written when the
   // write-up is. Not the write-up document itself: that can be moved into a space, and then the meeting no longer

@@ -409,7 +409,7 @@ async function restorePlace() {
     if (!connected && !zoom) return;
     savedPlace = null;
     if (zoom) return; // somewhere else already
-    try { const n = await tana.myTasks(); addSearch(n); saved = { docId: n.id, nodeId: null }; } catch { return; } // the view it is on is the fallback
+    try { const n = await tana.myTasks(); saved = { docId: n.id, nodeId: null }; } catch { return; } // the view it is on is the fallback
     if (zoom) return;
   }
   // Somewhere else already — a link, a notification — wins. The page seeded above is this same place, so it does not.
@@ -429,6 +429,9 @@ async function restorePlace() {
     if (navPlace().key !== before) return; // you navigated while it loaded: you stay where you went
   }
   zoom = { docId: saved.docId, nodeId: saved.nodeId || null, from: saved.from };
+  // a saved search reopened here is listed in Cmd+K at once: one the other half has just made (the Work View's My
+  // Tasks) is not in the graph's answer yet
+  if (/^tana:search:/.test(saved.docId)) addSearch({ ...extra.get(saved.docId), id: saved.docId });
   render(true);
   followSummary(saved.docId);
 }

@@ -254,7 +254,8 @@ const homeId = () => (homeIsSearch() && searchesLoaded && !homeSearch() ? 'libra
 // is still unknown — the anchor waits for its name rather than borrowing the Library's.
 const homeName = () => { const s = homeSearch(); return s ? s.text || s.title || 'Untitled search' : { library: 'Library', workView: 'Work View' }[homeId()] || null; };
 // In the Work View a half is Home on its own page: the Timeline on the left, My Tasks (the search of that name) on the right
-const atWorkView = () => !!zoom && !zoom.nodeId && (SIDE ? (searches || []).some((s) => s.id === zoom.docId && /^my tasks$/i.test(String(s.text || s.title || '').trim())) : zoom.docId === TIMELINE_PAGE);
+// (by the page's own title: a search just made in the other half is not in this one's list yet)
+const atWorkView = () => !!zoom && !zoom.nodeId && (SIDE ? String(zoom.docId).startsWith(SEARCH_ID) && /^my tasks$/i.test(String((docOf(zoom.docId) || {}).text || '').trim()) : zoom.docId === TIMELINE_PAGE);
 const atHome = () => (homeId() === 'workView' ? atWorkView() : zoom ? !zoom.nodeId && zoom.docId === homeId() : homeId() === view);
 // The id this page would set as Home: the Library view, or the saved search you are looking at. Anything else — a
 // note, the Inbox, a space — is not a place to come back to, so the command is not offered there.

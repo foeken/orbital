@@ -47,7 +47,11 @@ window.addEventListener('beforeunload', () => {
 // keys from now on. A Reload asks main again (api.side), so it reads the same ones.
 if (tana.onSide) tana.onSide((side) => { SIDE = side ? ':' + side : ''; splitGrip.hidden = closePaneBtn.hidden = SIDE !== ':2'; localStorage.setItem('view' + SIDE, view); rememberPlace(); });
 // The Work View, asked for in the other half: it stored this half's place, and this half goes there (renderer/timeline.js)
-if (tana.onToPlace) tana.onToPlace(() => { const place = readStoredPlace(); if (place && isPlaceId(place.docId)) goTo(place.docId); });
+if (tana.onToPlace) tana.onToPlace(() => {
+  const place = readStoredPlace();
+  if (!place || !isPlaceId(place.docId)) return;
+  goTo(place.docId).then(() => { if (String(place.docId).startsWith(SEARCH_ID)) addSearch({ text: place.title, ...extra.get(place.docId), id: place.docId }); }); // listed in Cmd+K at once, as restorePlace does
+});
 // The line between the halves is dragged from a grip on the right half's left edge; main reads the cursor and moves
 // the line (main.js window:splitDrag), and a double click evens the halves out again.
 const splitGrip = $('splitGrip');
