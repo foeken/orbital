@@ -20,11 +20,10 @@
 const db = require('../db');
 const { STATE_TYPES } = require('../sdk/node');
 const { pinnedDates } = require('./pins');
-const { NOT_CONNECTED, S, iso, isMcp, send, summaryCache } = require('./state');
+const { NOT_CONNECTED, S, iso, isMcp, send } = require('./state');
 const { graphRow, hm, isAllDay, members, rememberNodeHue, toNode } = require('./rows');
 const { notifySilencedIds, notifyWatchedIds } = require('./documents');
 const { inboxFrom } = require('./views');
-const { writeUpOf } = require('./related');
 const { openLiveQuery } = require('../sdk/livequery');
 
 const PAGE = 'orbital:timeline';
@@ -77,8 +76,8 @@ async function pool(list, fn) {
 // here, and Tana touches events often (a reply, a synced calendar), so only what the page shows of one counts.
 // Opened by a read, and again when the client, the pages or the day change; a refusal leaves the page as it was.
 let live = null, liveClient = null, liveKey = null;
-// the tagline too: Tana writes it with the write-up, so a summary landing is heard and the entry brightens
-const meetingSig = (row) => { const ev = row.calendarEvent || {}; return JSON.stringify([row.title, ev.startTime, ev.endTime, ev.allDay, ev.tagline, attendeesOf(ev).map((a) => a.displayName || a.email)]); };
+// the tagline and summary too: a summary landing is heard, and the entry brightens
+const meetingSig = (row) => { const ev = row.calendarEvent || {}; return JSON.stringify([row.title, ev.startTime, ev.endTime, ev.allDay, ev.tagline, ev.summary, attendeesOf(ev).map((a) => a.displayName || a.email)]); };
 // Who is on a meeting, as the graph gives it: the roster (calendarEvent.roster), or the calendar's own attendee list
 const attendeesOf = (ev) => (Array.isArray(ev.roster) && ev.roster.length ? ev.roster : Array.isArray(ev.attendees) ? ev.attendees : []).filter((a) => a && typeof a === 'object');
 const duration = (ms) => { const m = Math.round(ms / 6e4), h = Math.floor(m / 60); return m < 60 ? m + ' min' : h + ' h' + (m % 60 ? ' ' + (m % 60) + ' min' : ''); };
@@ -166,15 +165,12 @@ async function rows() {
     sortOptions: [{ field: 'SORT_FIELD_EVENT_START_TIME', direction: 'SORT_DIRECTION_DESCENDING' }], limit: Math.min(500, 25 * pages) }).catch(() => ({}));
   const myEmail = String((S.me.user && S.me.user.email) || '').toLowerCase();
   const shown = meetings.filter((n) => { const ev = n.calendarEvent || {}, at = Date.parse(ev.startTime || ''); return at > since && at <= Date.now() && !isAllDay(ev.startTime, ev.endTime, ev.allDay); });
-  // A meeting that is over and left no write-up is drawn quiet, like a new-task line; one with a write-up, or still
-  // going, as it is. Which is which is main/related.js writeUpOf, the rule the rail and opening a meeting use, over one
-  // ask for what all of them own (a found write-up is cached there too, so later reads skip the meeting).
-  // ponytail: one list of up to 1,000 owned documents; ask per meeting if a page ever owns more than that.
-  const ended = shown.filter((n) => Date.parse((n.calendarEvent || {}).endTime || '') <= Date.now() && !summaryCache.has(n.id));
-  const owned = ended.length ? ((await graph.listNodes({ ownerIds: ended.map((n) => n.id), nodeTypes: ['text'], limit: 1000 }).catch(() => ({}))).nodes || []) : [];
-  for (const n of ended) { const found = writeUpOf(n, owned.filter((o) => o.ownerUri === n.id)); if (found) summaryCache.set(n.id, found.id); }
+  // A meeting that is over and left no summary is drawn quiet, like a new-task line; one with a summary, or still
+  // going, as it is. The summary is Tana's own, on the event: calendarEvent.tagline and .summary, written when the
+  // write-up is. Not the write-up document itself: that can be moved into a space, and then the meeting no longer
+  // owns it (live 2026-09-26, "Datadog & Nedap - executive alignment").
   for (const n of shown) {
-    const ev = n.calendarEvent || {}, bare = Date.parse(ev.endTime || '') <= Date.now() && !summaryCache.has(n.id);
+    const ev = n.calendarEvent || {}, bare = Date.parse(ev.endTime || '') <= Date.now() && !String(ev.tagline || ev.summary || '').trim();
     events.push({ kind: 'meeting', uri: n.id, title: n.title, at: Date.parse(ev.startTime), icon: 'meeting', tone: bare ? 'faint' : 'meeting', note: meetingNote(ev, me, myEmail) });
   }
   watchMeetings(me, since);

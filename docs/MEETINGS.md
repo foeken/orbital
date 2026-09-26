@@ -38,7 +38,9 @@ which the graph reports as EDGE_TYPE_BELONGS_TO), so it has to be identified by 
 - it carries the generated appearance.imageUri sketch, which the other owned documents do not.
 
 related() returns it as summaryUri using the tagline first and the sketch as a fallback, and never guesses
-when neither signal is present. The renderer forwards a zoomed meeting to that document, since an event has no
+when neither signal is present. A write-up can be moved out of its meeting into a space, and then the meeting owns
+nothing that matches: with a tagline, the document titled exactly that is looked up instead (`writeUpFor`, main/related.js;
+the sketch rule stays with owned documents, since any page can carry one). The renderer forwards a zoomed meeting to that document, since an event has no
 content of its own.
 
 ## Typed fields

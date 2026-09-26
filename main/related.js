@@ -141,6 +141,15 @@ const writeUpOf = (event, owned) => {
   const plain = owned.filter((n) => !(n.state && n.state.type) && idKind(n.id) === 'text' && (n.title || '').trim());
   return (ev.tagline && plain.find((n) => n.title === ev.tagline)) || plain.find((n) => n.appearance && n.appearance.imageUri) || null;
 };
+// A write-up can be moved out of its meeting into a space, and the meeting then owns it no longer (live 2026-09-26,
+// "Datadog & Nedap - executive alignment"). The tagline still names it, so with nothing owned it is looked up by that
+// exact title; only by that: any document can carry a sketch, so the sketch rule stays with what the meeting owns.
+async function writeUpFor(event, owned) {
+  const found = writeUpOf(event, owned), tagline = event && event.calendarEvent && event.calendarEvent.tagline;
+  if (found || !tagline || !S.client) return found;
+  const { nodes = [] } = await S.client.graph.listNodes({ nodeTypes: ['text'], textQuery: tagline, limit: 20 }).catch(() => ({}));
+  return nodes.find((n) => n.title === tagline && !(n.state && n.state.type) && idKind(n.id) === 'text') || null;
+}
 // The uri a meeting should open at, or null when it is not an event or has no write-up yet.
 async function summaryUri(id) {
   if (!S.client) throw new Error(NOT_CONNECTED);
@@ -150,7 +159,7 @@ async function summaryUri(id) {
     S.client.graph.listNodes({ nodeIds: [id], limit: 1 }).catch(() => ({ nodes: [] })),
     S.client.graph.listNodes({ ownerIds: [id], limit: 200 }).catch(() => ({ nodes: [] })),
   ]);
-  const found = writeUpOf(selfNodes[0], owned);
+  const found = await writeUpFor(selfNodes[0], owned);
   // Tana writes the summary after the meeting, so "no write-up yet" is a state to re-check, not an answer to cache.
   if (found) summaryCache.set(id, found.id);
   return found ? found.id : null;
@@ -303,7 +312,7 @@ async function related(id) {
   // never list the open document itself, an untitled draft, or something already shown as a pin
   const pinnedIds = new Set(pinIds);
   const owns = (owned.nodes || []).filter((n) => !PLAIN_KINDS.has(idKind(n.id)) && n.id !== id && !pinnedIds.has(n.id) && (n.title || '').trim());
-  const writeUp = writeUpOf(event, owned.nodes || []); // one rule for the rail and for navigation
+  const writeUp = await writeUpFor(event, owned.nodes || []); // one rule for the rail and for navigation
   const proposals = idKind(hub) === 'event' && writeUp && id === writeUp.id ? proposalRows(hub).catch(() => []) : Promise.resolve([]);
   const pendingProposals = await proposals;
   return {
