@@ -50,9 +50,17 @@ function playOnce(el, name) {
   if (!el || !el.classList) return;
   el.classList.remove(name); // dropped before anything is asked: these elements are not rebuilt, so a class left on one would be
   if (stillPreferred()) return;
+  const had = el.getAnimations ? new Set(el.getAnimations({ subtree: true })) : null;
   void el.offsetWidth;
   el.classList.add(name);
-  const end = (e) => { if (e && e.target !== el) return; el.removeEventListener('animationend', end); el.classList.remove(name); };
+  // cleared by this play only: a replay cancels the one before, whose end must not take the new class with it
+  const token = {}, clear = () => { if (el.onceTokens[name] === token) el.classList.remove(name); };
+  (el.onceTokens ||= {})[name] = token;
+  // It waits for the animations its own class started, a ::after's too: two one-shots on one element (a badge's pop
+  // and its later shine) each keep their class until their own animation is over.
+  const mine = had && el.getAnimations({ subtree: true }).filter((a) => !had.has(a));
+  if (mine && mine.length) return void Promise.all(mine.map((a) => a.finished)).then(clear, clear);
+  const end = (e) => { if (e && e.target !== el) return; el.removeEventListener('animationend', end); clear(); };
   if (el.addEventListener) el.addEventListener('animationend', end);
 }
 // Flash: a tint that says "this changed" and fades — green arriving, red leaving, blue for "here".

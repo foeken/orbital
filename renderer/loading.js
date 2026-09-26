@@ -206,6 +206,8 @@ let previewLoading = () => {};
   const previewing = () => document.body.classList.contains('loading-preview');
   const run = () => { if (!frame && (!box.classList.contains('gone') || previewing())) { t0 = last = 0; frame = requestAnimationFrame(draw); } };
   if (typeof MutationObserver === 'function') new MutationObserver(run).observe(box, { attributes: true, attributeFilter: ['class'] });
+  // a theme change repaints it: the still frame draws only once, in the colour it had then
+  if (typeof MutationObserver === 'function') new MutationObserver(run).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
   previewLoading = (on) => { document.body.classList.toggle('loading-preview', on); t0 = last = 0; run(); };
   // Esc ends a preview before anything else hears it
   addEventListener('keydown', (e) => { if (e.key === 'Escape' && previewing()) { e.preventDefault(); e.stopImmediatePropagation(); previewLoading(false); } }, true);

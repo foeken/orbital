@@ -24,7 +24,8 @@ function qicon(name) {
 // same contract as the outliner (renderer/theme.js): the preference travels with the rest of them, read from the
 // bridge's synchronous snapshot, and dark is a data attribute
 function qtheme() {
-  const pref = (qapi && qapi.prefs && qapi.prefs.theme) || null;
+  const prefs = qapi && (qapi.prefsNow ? qapi.prefsNow() : qapi.prefs); // read on every open: the panel is reused
+  const pref = (prefs && prefs.theme) || null;
   const dark = pref === 'dark' || (pref === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
   if (dark) document.documentElement.dataset.theme = 'dark';
   else delete document.documentElement.dataset.theme;
@@ -264,4 +265,4 @@ qtitle.focus();
 qloadContext();
 // Every press of the shortcut re-opens on the same window: focus the title again and re-read the meeting, keeping
 // whatever was typed before.
-if (qapi && qapi.onQuickOpen) qapi.onQuickOpen(() => { qsetError(''); qtitle.focus(); qloadContext(); });
+if (qapi && qapi.onQuickOpen) qapi.onQuickOpen(() => { qtheme(); qsetError(''); qtitle.focus(); qloadContext(); });
