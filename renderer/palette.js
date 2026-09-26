@@ -412,6 +412,14 @@ function runAction(id) {
     run(async () => { accessById.set(doc.id, await tana.accessOptions(doc.id)); if (current() && currentDoc()?.id === doc.id) runAction(id); });
     return true;
   }
+  // The same for Change time, Change location and Add attendee: they are offered once main has said this meeting may be
+  // changed, which the closed palette does not ask. Asked for this key only, and the key runs again with the answer (#391).
+  const meeting = palette.hidden && /^meeting(Time|Location|Attendee)$/.test(id) && tana.meetingInfo ? meetingOf(palDoc) : null;
+  if (meeting && !(meetingCtx && meetingCtx.docId === meeting.id && meetingCtx.info)) {
+    const doc = palDoc;
+    run(async () => { await loadMeetingCtx(meeting); if (current() && currentDoc()?.id === doc.id) runAction(id); });
+    return true;
+  }
   if (id.startsWith('doc:')) { goTo(id.slice(4)); return true; }
   return false;
 }

@@ -6,9 +6,9 @@
 let meetingCtx = null; // { docId, info } for the meeting Cmd+K was opened on; info is null while main is asked
 let attendeePool = null; // the suggestions the Add attendee page lists, null while they are fetched
 function loadMeetingCtx(doc) {
-  if (meetingCtx && meetingCtx.docId === doc.id) return;
+  if (meetingCtx && meetingCtx.docId === doc.id) return meetingCtx.loaded;
   const mine = meetingCtx = { docId: doc.id, info: null };
-  tana.meetingInfo(doc.id).then((info) => { mine.info = info || { editable: false }; }, () => { mine.info = { editable: false }; })
+  return mine.loaded = tana.meetingInfo(doc.id).then((info) => { mine.info = info || { editable: false }; }, () => { mine.info = { editable: false }; })
     .then(() => { if (meetingCtx === mine && !palette.hidden && palMode === 'cmd') renderPalette(); });
 }
 // "Tue 22 Sep 10:00–10:30", spelled out rather than toLocale*: ICU's en-GB has started writing "Sept"
@@ -25,6 +25,8 @@ function meetingOf(doc) {
 function meetingRows(page, group) {
   const doc = meetingOf(page);
   if (!doc || !tana.meetingInfo || !tana.editMeeting) return [];
+  // With the palette closed nothing is asked (#274): a key on one of these rows asks for its meeting in runAction (#391).
+  if (palette.hidden && !(meetingCtx && meetingCtx.docId === doc.id)) return [];
   loadMeetingCtx(doc);
   const info = meetingCtx.info;
   if (!info || !info.editable) return [];
