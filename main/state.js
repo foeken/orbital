@@ -12,7 +12,7 @@ const DOC_URI = /^tana:[a-z-]+:[0-9a-z]{26}$/; // a real document id; a renderer
 // How many rows of a list are kept live. A subscription is a bootstrap RPC and a LoroDoc of its own, and every
 // bootstrap lands as a change the renderer redraws on, so subscribing a whole list (the Library lists hundreds)
 // flooded the one sync connection and the outline with it: the page lagged and the read for whatever you opened
-// next queued behind it. The head of the list is what you are looking at; the rest ride the 30 s refresh, which
+// next queued behind it. The head of the list is what you are looking at; the rest ride the next refresh, which
 // re-queries the graph anyway. 100 also sits at the usual HTTP/2 stream limit, so the burst is one round.
 const LIVE_ROWS = 100;
 // Everything the modules share and reassign lives on S, so one require gives every file the same live values.

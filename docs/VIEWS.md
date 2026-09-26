@@ -122,9 +122,7 @@ setViewFilter(id, filter)     // validated, stored, returns the stored filter
 members()                     // unchanged: the assignee pill's member list
 ```
 
-Gone: `library:list`, `library:filter`, `library:setFilter`, `chats:list`, `inbox:list`,
-`tasks:filter`, `tasks:setFilter` and their `window.api` methods. The renderer's in-file mock
-implements the new surface too.
+The renderer's in-file mock implements the same surface.
 
 ## 6. Saved searches are not a view
 

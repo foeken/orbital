@@ -1076,7 +1076,7 @@ palInput.addEventListener('keydown', (e) => {
 });
 palette.addEventListener('mousedown', (e) => { if (e.target === palette) closePalette(); });
 
-// ---- hotkeys: Cmd+Shift+K on a Cmd+K row records a combo (localStorage "hotkeys"); the outline dispatches it ----
+// ---- hotkeys: Cmd+Shift+K on a Cmd+K row records a combo (the synced "hotkeys" preference); the outline dispatches it ----
 const KEYNAMES = { Enter: '↩', Backspace: '⌫', Tab: '⇥', ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', ' ': 'Space' };
 // "⌃⌥⇧⌘" + key ("M", "1", "↩"); modifiers alone while only they are pressed
 function comboOf(e) {

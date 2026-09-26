@@ -34,8 +34,8 @@ $('errorLogin').onclick = () => tana.login().catch(showError);
 
 // ---- live updates ----
 // One document changed (info.meta says whether its assignees, audience or sharing moved — main compares them, so a
-// text edit does not throw the row's metadata away); null is a global change: the refresh loop wrote the active
-// view's fresh rows into the cache before saying so, so roots already carry them and no second query is needed.
+// text edit does not throw the row's metadata away); null is a global change: the refresh wrote every open view's
+// fresh rows into the cache before saying so, so roots already carry them and no second query is needed.
 // Clicking a notification opens the node it was about; main has already raised and focused the window.
 if (tana.onNotifyOpen) tana.onNotifyOpen((docId) => { if (docId) goTo(docId); });
 // This page is going away: a split half or its window closed (main.js closes it with waitForBeforeUnload), or a
