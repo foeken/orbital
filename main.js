@@ -268,10 +268,11 @@ ipcMain.on('prefs:snapshot', (e) => { e.returnValue = settings.prefs(); });
 // session has read the settings document — the snapshot above is this machine's last copy, which on a new machine knows
 // nothing yet. Every window's main page asks when the connection comes up, so the check and the mark are one step here.
 // A window already covered (Create task open) cannot show it: no, and nothing marked, and the page asks again when that
-// overlay closes (renderer/overlays.js).
+// overlay closes (renderer/overlays.js). Nor can a page that closed while this waited: no, and it stays for another.
 ipcMain.handle('help:claim', async (e) => {
   await settingsReady();
-  if (settings.prefs().helpSeen || paneWindow(e && e.sender)?.overlay) return false;
+  const win = e && e.sender && !e.sender.isDestroyed() ? paneWindow(e.sender) : null;
+  if (settings.prefs().helpSeen || !win || win.isDestroyed() || win.overlay) return false;
   settings.setPref('helpSeen', true);
   return true;
 });

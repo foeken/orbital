@@ -1125,20 +1125,27 @@ async function main() {
     const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
     backend.settings.reset();
     const claim = backend.handlers.get('help:claim');
-    assert.deepEqual(await Promise.all([claim(), claim()]), [true, false], 'two pages asking at once: one gets the tour');
-    assert.equal(await claim(), false, 'and nobody after them');
+    const pageOf = (overlay = null) => { const wc = { destroyed: false, isDestroyed() { return this.destroyed; } }, win = { panes: [{ webContents: wc }], overlay, isDestroyed: () => false }; backend.S.windows.add(win); return { wc, win, ask: () => claim({ sender: wc }) }; };
+    const gone = pageOf();
+    const asking = gone.ask(); gone.wc.destroyed = true; backend.S.windows.delete(gone.win);
+    assert.equal(await asking, false, 'a page that closed while main waited for the settings cannot show it');
+    assert.equal(backend.settings.prefs().helpSeen, undefined, 'so it is not spent on it');
+    assert.equal(await claim(), false, 'nor on a call with no page behind it');
+    const one = pageOf(), two = pageOf();
+    assert.deepEqual(await Promise.all([one.ask(), two.ask()]), [true, false], 'two pages asking at once: one gets the tour');
+    assert.equal(await one.ask(), false, 'and nobody after them');
     assert.equal(backend.settings.prefs().helpSeen, true, 'the mark is the synced helpSeen preference');
     cache.open(':memory:'); backend.settings.reset();
     backend.settings.setPref('helpSeen', true);
-    assert.equal(await claim(), false, 'seen before, on this machine or in the settings document: no tour');
+    assert.equal(await one.ask(), false, 'seen before, on this machine or in the settings document: no tour');
+    backend.S.windows.delete(one.win); backend.S.windows.delete(two.win);
     cache.open(':memory:'); backend.settings.reset();
-    const page = { webContents: {} }, win = { panes: [page], overlay: {}, isDestroyed: () => false };
-    backend.S.windows.add(win);
-    assert.equal(await claim({ sender: page.webContents }), false, 'a window with Create task open cannot show it');
+    const covered = pageOf({});
+    assert.equal(await covered.ask(), false, 'a window with Create task open cannot show it');
     assert.equal(backend.settings.prefs().helpSeen, undefined, 'so nothing is marked, and the page asks again when that closes');
-    win.overlay = null;
-    assert.equal(await claim({ sender: page.webContents }), true, 'which then gets it');
-    backend.S.windows.delete(win);
+    covered.win.overlay = null;
+    assert.equal(await covered.ask(), true, 'which then gets it');
+    backend.S.windows.delete(covered.win);
     console.log('ok  help:claim: the first-start tour goes to one page, once');
   }
   // What stayed of quick add when the panel went (issue #232): the meeting this user has joined (⌘K Pin to current
