@@ -186,6 +186,7 @@ function applySettings(next) {
   for (const id of [...filters.keys()]) if (isTypeId(id)) filters.delete(id);
   if (openType && JSON.stringify(typeFilter(openType).fields || null) !== wasFields) reload(openType).then(() => renderSoon(true), showError);
   collapsedGroups.clear(); for (const key of pref('collapsedGroups', [])) collapsedGroups.add(key);
+  railHidden = pref('railHidden', false) === true; railClosed.clear(); for (const key of pref('railClosed', [])) railClosed.add(key); // the sidebar's, copied at load (renderer/rail.js)
   const nextTheme = ['dark', 'system', 'light'].includes(pref('theme')) ? pref('theme') : 'light';
   if (nextTheme !== themePref) showTheme(nextTheme);
   sensitiveLoading = null; loadSensitive().then(refreshSensitive); // the sensitive marks and the MCP switch are settings too, kept outside the preferences

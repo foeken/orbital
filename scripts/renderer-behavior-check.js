@@ -8446,6 +8446,8 @@ async function runLateSettingsCheck() {
   assert.deepEqual(plain(await run({ theme: 'dark' }, { theme: 'dark' }).applied()), [], 'and nothing is applied when nothing changed');
   assert.deepEqual(plain(await run({ theme: 'light' }, { theme: 'light', home: 'library' }, { theme: 'dark' }).applied()), [], 'a choice made while the answer was on its way is newer, so the answer does not undo it');
   assert.match(source, /if \(tana\.onSettings\) tana\.onSettings\(applySettings\);\n(?:\/\/[^\n]*\n)*if \(tana\.prefsNow\)/, 'it asks after it starts listening, so no change can fall between the two');
+  assert.match(functionSource('applySettings'), /railHidden = pref\('railHidden', false\) === true; railClosed\.clear\(\); for \(const key of pref\('railClosed', \[\]\)\) railClosed\.add\(key\);/,
+    'and what it applies reaches the sidebar too, whose shown state and folded sections were copied at load');
   console.log('ok  settings: a change sent before the page listened is still applied');
 }
 checks.push(runLateSettingsCheck);
