@@ -19,6 +19,9 @@ const pins = require('../sdk/pins');
 const ORG = 'org_01EXAMPLE00000000000000000', DOC = 'tana:text:01exampleh0000000000000000', ME = 'tana:user-profile:01examplei0000000000000000';
 const snapshot = Buffer.from(fs.readFileSync(require('node:path').join(__dirname, 'fixtures', 'task-snapshot.b64'), 'utf8').trim(), 'base64');
 const b64 = (u8) => Buffer.from(u8).toString('base64');
+// build/icon.png is the dev Dock icon, and main.js's app.dock.setIcon decodes it on main before the first window: at
+// 2048 px that blocked 244 ms and kept 147 MB, at 512 px it is 22 ms and 12 MB (#418). The PNG width is at byte 16.
+assert.ok(fs.readFileSync(require('node:path').join(__dirname, '..', 'build', 'icon.png')).readUInt32BE(16) <= 512, 'the dev Dock icon is at most 512 px');
 // Waits for what a test is waiting for rather than for a fixed time, which is what most of this file's run time was.
 async function until(ready, what, ms = 10000) {
   for (const end = Date.now() + ms; !ready(); await new Promise((r) => setTimeout(r, 5))) if (Date.now() > end) throw new Error('timed out waiting for ' + what);

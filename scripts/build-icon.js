@@ -1,5 +1,6 @@
 'use strict';
-// Renders the app icon (the Orbital planet, white on a black rounded square, macOS layout) to build/icon.png and build/icon.icns.
+// Renders the app icon (the Orbital planet, white on a black rounded square, macOS layout) to build/icon.icns and
+// build/icon.png, the dev Dock and About icon: 512 px, because main.js decodes it on main before the first window (#418).
 // Run: ./node_modules/.bin/electron scripts/build-icon.js
 const { app, BrowserWindow } = require('electron');
 const fs = require('node:fs');
@@ -18,7 +19,7 @@ app.whenReady().then(async () => {
   await new Promise((r) => setTimeout(r, 300));
   const image = await win.webContents.capturePage({ x: 0, y: 0, width: 1024, height: 1024 });
   const out = path.join(__dirname, '..', 'build');
-  fs.writeFileSync(path.join(out, 'icon.png'), image.toPNG());
+  fs.writeFileSync(path.join(out, 'icon.png'), image.resize({ width: 512, height: 512 }).toPNG());
   const set = path.join(out, 'icon.iconset');
   fs.rmSync(set, { recursive: true, force: true }); fs.mkdirSync(set);
   for (const [name, size] of [['16x16', 16], ['16x16@2x', 32], ['32x32', 32], ['32x32@2x', 64], ['128x128', 128], ['128x128@2x', 256], ['256x256', 256], ['256x256@2x', 512], ['512x512', 512], ['512x512@2x', 1024]]) {
