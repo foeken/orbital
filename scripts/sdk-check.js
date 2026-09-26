@@ -1199,6 +1199,7 @@ async function main() {
     await backend.handlers.get('overlay:close')({ sender: covered.win.overlay.webContents }, {});
     assert.equal(heard.at(-1).note, 'Task created', 'the toast comes when the tour closes, to the half that made the task');
     backend.S.windows.delete(covered.win);
+    await settings.flush(); // before the next block's database: a write still on its way would land its pointer there
     console.log('ok  help:claim: the first-start tour goes to one page, once');
   }
   // Two machines that each made a settings document before either could find the other's, and a document deleted in
