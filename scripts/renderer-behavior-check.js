@@ -1495,7 +1495,7 @@ async function runSyncShortcutCheck() {
     ({ rows: async (q) => { paletteRows(q); await Promise.resolve(); await Promise.resolve(); return paletteRows(q).map((r) => r.label); }, loads: () => loads,
        ids: (q) => paletteRows(q).map((r) => r.id), press: async (id) => { const hit = runAction(id); await Promise.resolve(); return [hit, ran.splice(0)]; } });
   `);
-  assert.deepEqual(plain(await folded.rows('s')), ['Sync', 'Swap panes', 'Search Tana', 'Smaller text', 'Hide sidebar', 'Reset text size', 'Toggle split view', 'Set status', 'Filter rows by text'],
+  assert.deepEqual(plain(await folded.rows('s')), ['Sync', 'Search Tana', 'Set status', 'Swap panes', 'Hide sidebar', 'Toggle split view', 'Smaller text', 'Reset text size', 'Filter rows by text'],
     'one letter: the first level only, the groups whose best row starts with it first (the shortest such row leading), a letter inside a word last');
   assert.deepEqual(plain(await folded.rows('sesp')), ['Set status to In Progress'], 'two letters in: the level below is folded in and the query reaches into it');
   assert.deepEqual(plain(await folded.rows('seinb')), ['Set status to Inbox'], 'a disabled choice is left out, the others are single rows');
@@ -1561,12 +1561,13 @@ async function runSyncShortcutCheck() {
   `);
   assert.deepEqual(plain(order.labels('')), [
     'Current node: Zoom in', 'Current node: Set status', 'Current node: Discuss with …', 'Current node: Pin to today', 'Current node: Pin to tomorrow', 'Current node: Move to …', 'Current node: Move to Library',
-    'Current node: Edit visibility', 'Current node: Mark as sensitive', 'Current node: Copy link', 'Current node: Delete',
-    'Views: Inbox', 'Views: Today', 'Views: This week', 'Views: Library',
+    'Current node: Mark as sensitive', 'Current node: Edit visibility', 'Current node: Copy link', 'Current node: Delete',
+    'Views: Today', 'Views: This week', 'Views: Inbox', 'Views: Library',
     'View options: Filter by type', 'View options: Filter rows by text',
-    'Actions: Log in to Tana', 'Actions: Create new …', 'Actions: Search Tana', 'Actions: Go back', 'Actions: Go forward', 'Actions: Go to Home', 'Actions: Focus the sidebar', 'Actions: Hide sidebar', 'Actions: Set as Home',
-    'Actions: Undo', 'Actions: Redo', 'Actions: Sync', 'Actions: Reload', 'Actions: New window', 'Actions: Toggle split view', 'Actions: Go to the other half', 'Actions: Swap panes', 'Actions: Edit hidden items', 'Actions: Toggle sensitive visibility', 'Actions: Toggle demo mode',
-    'Actions: Larger text', 'Actions: Smaller text', 'Actions: Reset text size', 'Actions: Toggle dark mode',
+    'Actions: Log in to Tana', 'Actions: Create new …', 'Actions: Search Tana', 'Actions: Undo', 'Actions: Redo', 'Actions: Sync',
+    'Navigate: Go back', 'Navigate: Go forward', 'Navigate: Go to Home', 'Navigate: Set as Home', 'Navigate: Focus the sidebar',
+    'Window: New window', 'Window: Toggle split view', 'Window: Go to the other half', 'Window: Swap panes', 'Window: Hide sidebar', 'Window: Reload',
+    'Settings: Larger text', 'Settings: Smaller text', 'Settings: Reset text size', 'Settings: Toggle dark mode', 'Settings: Edit hidden items', 'Settings: Toggle sensitive visibility', 'Settings: Toggle demo mode',
   ], 'the palette lists its rows in one fixed, meaningful order');
   // The two date pins differ only in the day they name: today's row passes no date (main defaults to today), the
   // tomorrow row passes the next local day, and each label follows whether that day is already pinned.
@@ -1606,7 +1607,7 @@ async function runSyncShortcutCheck() {
   assert.equal(plain(order.labels('mtl'))[0], 'Current node: Move to Library', 'the first letters of the words reach the row');
   // Tied on tier, the shorter label wins across groups: Views' Set status is a shorter word hit for "status" than the
   // Current node's Set status … no — "text": View options' Filter rows by text is longer than Actions' Larger text.
-  assert.equal(plain(order.labels('text'))[0], 'Actions: Larger text', 'a shorter label wins a tie on tier, whichever group comes first');
+  assert.equal(plain(order.labels('text'))[0], 'Settings: Larger text', 'a shorter label wins a tie on tier, whichever group comes first');
 
   const anchor = source.indexOf("filterEl.addEventListener('keydown'");
   const start = source.indexOf("document.addEventListener('keydown', (e) => {", anchor);
@@ -7674,8 +7675,8 @@ async function runRecentlyDeletedCheck() {
        state: () => ({ restored: [...restored], opened: [...opened], errors: [...errors], closed, placeholder: palInput.placeholder }) });
   `);
 
-  // 1. The row sits with the other app actions, and carries an id, so a key can be recorded against it.
-  assert.deepEqual(plain([api.row().label, api.row().group, api.row().icon]), ['Recently deleted', 'Actions', 'trash'], 'the row is offered');
+  // 1. The row sits with the other places to go, and carries an id, so a key can be recorded against it.
+  assert.deepEqual(plain([api.row().label, api.row().group, api.row().icon]), ['Recently deleted', 'Navigate', 'trash'], 'the row is offered');
 
   // 2. Until the list lands the page says so rather than "nothing was deleted", which is a different answer.
   api.row().run();

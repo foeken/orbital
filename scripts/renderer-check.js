@@ -46,8 +46,8 @@ assert.deepEqual(state({ authenticated: null, authChecking: false, error: 'tempo
 assert.match(source, /if \(signedOut\) rows\.push\(\{ id: 'login'/);
 assert.match(source, /s\.authChecking === false && s\.authenticated === false/);
 assert.doesNotMatch(source, /id: 'sync', group: 'Actions', icon: 'sync', label: 'Sync', kbd:/);
-assert.match(source, /id: 'openaiKey', group: 'Actions', icon: 'openaiKey', label: 'Set OpenAI API key'/);
-assert.match(source, /id: 'chatgpt', group: 'Actions', icon: 'chatgpt', label: chatgptAuth/);
+assert.match(source, /id: 'openaiKey', group: 'Settings', icon: 'openaiKey', label: 'Set OpenAI API key'/);
+assert.match(source, /id: 'chatgpt', group: 'Settings', icon: 'chatgpt', label: chatgptAuth/);
 assert.match(source, /function openOpenAIKeyPalette\(\)[\s\S]*palInput\.type = 'password'/);
 assert.match(source, /function openAIKeyRows\(\)[\s\S]*tana\.setOpenAIKey\(key\)/);
 assert.doesNotMatch(source, /mod && e\.key === 'r'/);
@@ -192,7 +192,7 @@ assert.match(source, /tana\.setAssigneesMany\(ctx\.docs\.map\(\(doc\) => doc\.id
 assert.match(source, /const rows = \[\.\.\.selection\];/, 'what acts on the selection comes before everything else in Cmd+K');
 assert.match(source, /id: 'sendToAgent'[\s\S]*?tana\.openExternal\('https:\/\/chatgpt\.com\/codex\/open-app\?q=' \+ encodeURIComponent\(link \+ '\\n'\)\)/, 'Send to agent opens a new Codex thread with the current node link and a trailing newline');
 // the current document's own actions (pins, link, icon, visibility, location) follow under the same heading, before the views
-assert.ok(source.indexOf("const docGroup = selection.length && selection[0].group === 'Selection' ? 'Actions' : 'Current node';") < source.indexOf("const viewRows = views.map((s) => ({ id: 'view:'"), 'the document actions join the Current node group ahead of the views');
+assert.ok(source.indexOf("const docGroup = selection.length && selection[0].group === 'Selection' ? 'Current page' : 'Current node';") < source.indexOf("const viewRows = views.map((s) => ({ id: 'view:'"), 'the document actions join the Current node group ahead of the views');
 assert.match(source, /if \(tana\.onRemoved\) tana\.onRemoved\(removeStale\);/);
 assert.doesNotMatch(source, /typeof change === 'string'\) return \[change\]/);
 assert.match(source, /const isReference = \(node\) => node\.type === 'reference';/);
@@ -200,7 +200,7 @@ assert.match(source, /referenceTarget\(node\)\?\.text \|\| node\.reference\?\.la
 assert.match(source, /function toggleReference\(node\)/);
 assert.match(source, /function openReference\(node\)/);
 assert.match(source, /delete document\.documentElement\.dataset\.theme/);
-assert.match(source, /id: 'theme', group: 'Actions', icon: 'darkLight', label: 'Toggle ' \+ \(dark \? 'light' : 'dark'\) \+ ' mode'/);
+assert.match(source, /id: 'theme', group: 'Settings', icon: 'darkLight', label: 'Toggle ' \+ \(dark \? 'light' : 'dark'\) \+ ' mode'/);
 assert.match(source, /e\.key === '0' \|\| \(e\.shiftKey/);
 assert.match(source, /pendingSplit: true/);
 assert.match(source, /readSplitDraft\(\);/);

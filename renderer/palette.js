@@ -19,14 +19,25 @@ function chooseRow(create) {
 function settleEnter() { if (palEnter) { const create = palEnter === 'create'; palEnter = null; chooseRow(create); } }
 // hint defaults to the node's own meta, so a meeting keeps its date and time in every palette list
 const docRow = (n, hint, run) => ({ node: n, icon: n.icon, label: n.text ?? n.title, tags: visibleTags(n), hint: hint === undefined ? n.meta : hint, run });
-// The order of the rows about the node you are on: where it goes (open it, unfold it), what it is (done, status,
-// assignee), where it lives (pins, the date nodes, its space), what it looks like (image, visibility, sensitivity),
-// its link, and last the one destructive row. Rows without an id carry a `rank` from this list instead.
+// The order of the rows about the node you are on: where it goes (open it, unfold it), its task state, who has it,
+// a meeting's own details, when and where it lives (pins, the date nodes, its space), what it is (type, fields), how
+// it looks, the agent, who sees it, its link and export, and last the destructive rows. Rows without an id carry a
+// `rank` from this list instead.
 // The rows about a field the caret is on (renderer/fields.js) come before the node's own: they are about what is focused.
-const NODE_ROW_ORDER = ['fieldValue', 'fieldKind', 'fieldCount', 'fieldChoices', 'fieldTargets', 'zoomIn', 'expand', 'collapse', 'toggleDone', 'markRead', 'markUnread', 'approveProposal', 'rejectProposal', 'status', 'setType', 'classifyType', 'removeType', 'addField', 'discussWith', 'setIcon', 'setHue', 'assign', 'assignTo', 'codex', 'codexOpen', 'codexLink', 'pinToday', 'pinTomorrow', 'pinToDate', 'pinToMeeting', 'pinToSelectedMeeting', 'editPins', 'addToday', 'addTomorrow', 'addWeek', 'move', 'moveLibrary', 'visibility', 'notify', 'sensitive', 'copyLink', 'sendToAgent', 'exportPdf', 'delete'];
+const NODE_ROW_ORDER = ['fieldValue', 'fieldKind', 'fieldCount', 'fieldChoices', 'fieldTargets',
+  'zoomIn', 'expand', 'collapse',
+  'toggleDone', 'markRead', 'markUnread', 'approveProposal', 'rejectProposal', 'status',
+  'assign', 'assignTo', 'discussWith',
+  'meetingTime', 'meetingLocation', 'meetingAttendee',
+  'pinToday', 'pinTomorrow', 'pinToDate', 'pinToMeeting', 'pinToSelectedMeeting', 'editPins', 'addToday', 'addTomorrow', 'addWeek', 'move', 'moveLibrary',
+  'setType', 'classifyType', 'removeType', 'addField', 'editFields',
+  'setIcon', 'setHue', 'sensitive',
+  'codex', 'codexOpen', 'codexLink', 'sendToAgent',
+  'visibility', 'notify', 'copyLink', 'exportPdf',
+  'archive', 'delete'];
 const DOC_KIND = /^tana:text:/; // the Discussion Task type applies to documents, so a meeting is not offered that row
 const nodeRank = (r) => { const i = NODE_ROW_ORDER.indexOf(r.rank || r.id); return i < 0 ? NODE_ROW_ORDER.length : i; };
-const VIEW_ORDER = ['inbox', 'notifications', 'proposals', 'today', 'week', 'library'];
+const VIEW_ORDER = ['timeline', 'today', 'week', 'inbox', 'notifications', 'proposals', 'library', 'types'];
 // Matching a row, tiered the way Raycast ranks a title (its manual: aliases first, then the title's fuzzy score, which
 // favours the first letters of words). Best first:
 //   0  the label starts with the query      "in"    → **In**box
@@ -115,8 +126,8 @@ function paletteRows(q, typed = q) {
   if (tana.inboxSetRead) rows.push(...notificationRows()); // a notification row's own two (renderer/inbox.js)
   if (tana.proposalAnswer) rows.push(...proposalRows()); // a proposal row's approve and reject (renderer/proposals.js)
   // What acts on the current document (pins, link, icon, visibility, location) sits with the rest of its rows under
-  // "Current node"; while a multi-selection owns the top of the palette these fall back among the app actions.
-  const docGroup = selection.length && selection[0].group === 'Selection' ? 'Actions' : 'Current node';
+  // "Current node"; while a multi-selection owns the top of the palette they are "Current page", right under it.
+  const docGroup = selection.length && selection[0].group === 'Selection' ? 'Current page' : 'Current node';
   if (palDoc && tana.exportPdf && DOC_KIND.test(palDoc.id)) {
     const doc = palDoc;
     rows.push({ id: 'exportPdf', group: docGroup, icon: 'doc', label: 'Export to PDF', run: () => { flushAll(); run(() => tana.exportPdf(doc.id)); } });
@@ -272,9 +283,9 @@ function paletteRows(q, typed = q) {
   }
   // only node rows so far: the selection's rows first, then (with a multi-selection) the document's own, each in NODE_ROW_ORDER
   rows.sort((a, b) => (a.group === 'Selection' ? 0 : 1) - (b.group === 'Selection' ? 0 : 1) || nodeRank(a) - nodeRank(b));
-  // Views, in the order of a day: what came in, today, this week, then the kinds, and the whole library last. Today's
-  // node (titled with the date, pinned to today) and the week's ("Week 38 (2026)") are documents created on demand,
-  // but places to go all the same, so they sit here.
+  // Views, most used first: the Timeline (today's tasks and what happened), Today and This week, then what came in
+  // (Inbox, Notifications, Proposals), and the Library and Types last. Today's node (titled with the date, pinned to
+  // today) and the week's ("Week 38 (2026)") are documents created on demand, but places to go all the same.
   const viewRows = views.map((s) => ({ id: 'view:' + s.id, group: 'Views', icon: s.icon, label: s.title, run: () => setView(s.id) }));
   if (tana.todayNode) viewRows.push({ id: 'today', group: 'Views', icon: 'today', label: 'Today', run: () => run(async () => goTo(await tana.todayNode())) });
   if (tana.weekNode) viewRows.push({ id: 'week', group: 'Views', icon: 'week', label: 'This week', run: () => run(async () => goTo(await tana.weekNode())) });
@@ -291,58 +302,59 @@ function paletteRows(q, typed = q) {
   // The field is shown here rather than left to the render: a render is deferred while the caret is in a row or a
   // selection is frozen, and focusing a still-hidden input does nothing — which is why ⌘F used to need a click first.
   if (!zoom || onSearchPage() || onTypePage()) rows.push({ id: 'filter', group: 'View options', icon: 'filter', label: 'Filter rows by text', run: () => { filterShown = true; filterRow.hidden = false; render(); filterEl.focus(); } });
-  // Actions: getting in first, then making and finding things, moving around, undoing, and last the app's own settings
+  // The app's own rows, in four groups: Actions (getting in, making and finding things, undoing, syncing), Navigate
+  // (moving between places), Window (windows, panes, the sidebar) and Settings (how it looks, what it hides, accounts).
   if (signedOut) rows.push({ id: 'login', group: 'Actions', label: 'Log in to Tana', run: () => tana.login().catch(showError) });
   if (tana.creationOptions) rows.push({ id: 'create', group: 'Actions', icon: 'createNew', label: 'Create new …', keepOpen: true, run: openCreationPalette, sub: async () => { creationChoices = (await tana.creationOptions()).options || []; return creationRows(''); } });
   // the keys the outline answers to, as rows: each has a default combo in DEFAULT_HOTKEYS and can be re-recorded
   rows.push({ id: 'search', group: 'Actions', icon: 'search', label: 'Search Tana', keepOpen: true, run: () => togglePalette('search') });
+  rows.push({ id: 'undo', group: 'Actions', icon: 'undo', label: 'Undo', run: () => history('undo') });
+  rows.push({ id: 'redo', group: 'Actions', icon: 'redo', label: 'Redo', run: () => history('redo') });
+  if (tana.inboxMarkAll) rows.push(markAllRow());
+  rows.push({ id: 'sync', group: 'Actions', icon: 'sync', label: 'Sync', run: () => run(() => tana.refresh()) });
   // Go back with an empty stack is still a move while you are away from Home, which is where it lands (edit.js)
-  rows.push({ id: 'back', group: 'Actions', icon: 'back', label: 'Go back', disabled: !navBack.length && atHome(), run: () => navigate(-1) });
-  rows.push({ id: 'forward', group: 'Actions', icon: 'forward', label: 'Go forward', disabled: !navForward.length, run: () => navigate(1) });
+  rows.push({ id: 'back', group: 'Navigate', icon: 'back', label: 'Go back', disabled: !navBack.length && atHome(), run: () => navigate(-1) });
+  rows.push({ id: 'forward', group: 'Navigate', icon: 'forward', label: 'Go forward', disabled: !navForward.length, run: () => navigate(1) });
   // Where Back lands with no history and what the anchor crumb points at, as a row: the same goHome (renderer/nodes.js),
   // so there is one route Home and it reads the choice live. On Home it stays, disabled, saying so — discoverable, and
   // still something ⇧⌘K can record a key against.
-  rows.push({ id: 'goHome', group: 'Actions', icon: 'home', label: 'Go to Home', hint: atHome() ? 'Current' : homeName() || '', disabled: atHome(), run: () => goHome() });
-  if (!railEl.hidden) rows.push({ id: 'rail', group: 'Actions', icon: 'rail', label: 'Focus the sidebar', run: () => focusRail() });
-  // Always reachable, unlike "Focus the sidebar" above: once the sidebar is hidden there would otherwise be no way back to it.
-  if (!railToggle.hidden) rows.push({ id: 'railToggle', group: 'Actions', icon: railHidden ? 'railShow' : 'railHide', label: railHidden ? 'Show sidebar' : 'Hide sidebar', run: () => toggleRail() });
+  rows.push({ id: 'goHome', group: 'Navigate', icon: 'home', label: 'Go to Home', hint: atHome() ? 'Current' : homeName() || '', disabled: atHome(), run: () => goHome() });
   // Choosing where the app comes back to: offered on the Library and on a saved search, the two pages that are places.
   // On the page that already is Home it stays, disabled and saying so, rather than disappearing or pretending to act.
   const homeNext = homeTarget();
-  if (homeNext) rows.push({ id: 'setHome', group: 'Actions', icon: 'home', label: 'Set as Home', hint: homeNext === homeId() ? 'Current' : '', disabled: homeNext === homeId(), run: () => setHome(homeNext) });
-  rows.push({ id: 'undo', group: 'Actions', icon: 'undo', label: 'Undo', run: () => history('undo') });
-  rows.push({ id: 'redo', group: 'Actions', icon: 'redo', label: 'Redo', run: () => history('redo') });
-  if (tana.deletedList) rows.push({ id: 'recentlyDeleted', group: 'Actions', icon: 'trash', label: 'Recently deleted', keepOpen: true, run: openTrashPalette });
-  if (tana.archivedTypes) rows.push({ id: 'archivedTypes', group: 'Actions', icon: 'type', label: 'Archived types', keepOpen: true, run: openArchivedPalette });
-  if (tana.inboxMarkAll) rows.push(markAllRow());
-  rows.push({ id: 'sync', group: 'Actions', icon: 'sync', label: 'Sync', run: () => run(() => tana.refresh()) });
-  rows.push({ id: 'reload', group: 'Actions', icon: 'reload', label: 'Reload', run: () => location.reload() });
-  rows.push({ id: 'newWindow', group: 'Actions', icon: 'createNew', label: 'New window', run: () => tana.newWindow() });
+  if (homeNext) rows.push({ id: 'setHome', group: 'Navigate', icon: 'home', label: 'Set as Home', hint: homeNext === homeId() ? 'Current' : '', disabled: homeNext === homeId(), run: () => setHome(homeNext) });
+  if (!railEl.hidden) rows.push({ id: 'rail', group: 'Navigate', icon: 'rail', label: 'Focus the sidebar', run: () => focusRail() });
+  if (tana.deletedList) rows.push({ id: 'recentlyDeleted', group: 'Navigate', icon: 'trash', label: 'Recently deleted', keepOpen: true, run: openTrashPalette });
+  if (tana.archivedTypes) rows.push({ id: 'archivedTypes', group: 'Navigate', icon: 'type', label: 'Archived types', keepOpen: true, run: openArchivedPalette });
+  rows.push({ id: 'newWindow', group: 'Window', icon: 'createNew', label: 'New window', run: () => tana.newWindow() });
   // the new right half opens on this page: it reads the right half's view and place, so this page is stored there first
-  rows.push({ id: 'splitView', group: 'Actions', icon: 'rail', label: 'Toggle split view', run: () => { localStorage.setItem('view:2', view); rememberPlace('place:2'); tana.splitWindow(); } });
-  rows.push({ id: 'otherPane', group: 'Actions', icon: 'rail', label: 'Go to the other half', run: () => tana.otherPane() });
-  rows.push({ id: 'swapPanes', group: 'Actions', icon: 'rail', label: 'Swap panes', run: () => tana.swapPanes() });
+  rows.push({ id: 'splitView', group: 'Window', icon: 'rail', label: 'Toggle split view', run: () => { localStorage.setItem('view:2', view); rememberPlace('place:2'); tana.splitWindow(); } });
+  rows.push({ id: 'otherPane', group: 'Window', icon: 'rail', label: 'Go to the other half', run: () => tana.otherPane() });
+  rows.push({ id: 'swapPanes', group: 'Window', icon: 'rail', label: 'Swap panes', run: () => tana.swapPanes() });
+  // Always reachable, unlike "Focus the sidebar": once the sidebar is hidden there would otherwise be no way back to it.
+  if (!railToggle.hidden) rows.push({ id: 'railToggle', group: 'Window', icon: railHidden ? 'railShow' : 'railHide', label: railHidden ? 'Show sidebar' : 'Hide sidebar', run: () => toggleRail() });
+  rows.push({ id: 'reload', group: 'Window', icon: 'reload', label: 'Reload', run: () => location.reload() });
+  // text size stays on the fixed keys (their characters depend on the keyboard layout), so the chips are literal
+  rows.push({ id: 'textLarger', group: 'Settings', icon: 'textLarger', label: 'Larger text', kbd: '⇧⌘+', run: () => setZoom(zoomFactor * 1.1) });
+  rows.push({ id: 'textSmaller', group: 'Settings', icon: 'textSmaller', label: 'Smaller text', kbd: '⇧⌘-', run: () => setZoom(zoomFactor / 1.1) });
+  rows.push({ id: 'textReset', group: 'Settings', icon: 'textReset', label: 'Reset text size', kbd: '⌘0', run: () => setZoom(BASE_ZOOM) });
+  const dark = typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark';
+  rows.push({ id: 'theme', group: 'Settings', icon: 'darkLight', label: 'Toggle ' + (dark ? 'light' : 'dark') + ' mode', run: () => setTheme(dark ? 'light' : 'dark') });
+  if (tana.systemTheme) rows.push({ id: 'systemTheme', group: 'Settings', icon: 'darkLight', label: 'Toggle system dark/light mode', hint: themePref === 'system' ? 'Following macOS' : '', run: () => followSystem(themePref !== 'system') });
   // the list of titles hidden from every view and from search, edited in the palette itself
-  if (tana.filters) rows.push({ id: 'hidden', group: 'Actions', icon: 'hiddenItems', label: 'Edit hidden items', keepOpen: true, run: openHiddenPalette });
-  if (tana.codexHosts) rows.push({ id: 'codexHosts', group: 'Actions', icon: 'host', label: 'Manage Codex hosts', keepOpen: true, run: openHostsPalette });
-  if (tana.sensitiveIds) rows.push({ id: 'sensitiveVisibility', group: 'Actions', icon: 'hidden', label: 'Toggle sensitive visibility', hint: sensitiveVisible ? 'Shown' : 'Hidden', run: toggleSensitiveVisibility });
-  // names and Tana's words swapped for made-up ones on screen, for showing the app to someone (renderer/segments.js)
-  rows.push({ id: 'demoMode', group: 'Actions', icon: 'hidden', label: 'Toggle demo mode', hint: demoMode ? 'On' : 'Off', run: () => toggleDemoMode() });
-  if (tana.chatgptStatus) rows.push({ id: 'chatgpt', group: 'Actions', icon: 'chatgpt', label: chatgptAuth?.signedIn ? 'Sign out of ChatGPT' : 'Sign in with ChatGPT',
-    hint: chatgptAuth?.signedIn ? (chatgptAuth.email || 'Signed in') : chatgptAuth?.available === false ? 'Status unavailable' : chatgptAuth ? 'Not signed in · preferred over API key' : 'Checking sign-in',
-    keepOpen: true, run: chatgptCommand });
-  if (tana.setOpenAIKey) rows.push({ id: 'openaiKey', group: 'Actions', icon: 'openaiKey', label: 'Set OpenAI API key', hint: 'Stored locally', keepOpen: true, run: openOpenAIKeyPalette });
+  if (tana.filters) rows.push({ id: 'hidden', group: 'Settings', icon: 'hiddenItems', label: 'Edit hidden items', keepOpen: true, run: openHiddenPalette });
+  if (tana.sensitiveIds) rows.push({ id: 'sensitiveVisibility', group: 'Settings', icon: 'hidden', label: 'Toggle sensitive visibility', hint: sensitiveVisible ? 'Shown' : 'Hidden', run: toggleSensitiveVisibility });
   // Every list and every search, not this page: the switch lives in main (main/views.js listFilter), so the Library
   // and Cmd+S stop offering MCP chats too. Stable label + hint, like the row above, so a recorded key keeps meaning.
-  if (tana.setMcpHidden) rows.push({ id: 'mcpChats', group: 'Actions', icon: 'hiddenItems', label: 'Toggle MCP chats', hint: mcpHidden ? 'Hidden' : 'Shown',
+  if (tana.setMcpHidden) rows.push({ id: 'mcpChats', group: 'Settings', icon: 'hiddenItems', label: 'Toggle MCP chats', hint: mcpHidden ? 'Hidden' : 'Shown',
     run: () => run(async () => { mcpHidden = await tana.setMcpHidden(!mcpHidden); }) });
-  // text size stays on the fixed keys (their characters depend on the keyboard layout), so the chips are literal
-  rows.push({ id: 'textLarger', group: 'Actions', icon: 'textLarger', label: 'Larger text', kbd: '⇧⌘+', run: () => setZoom(zoomFactor * 1.1) });
-  rows.push({ id: 'textSmaller', group: 'Actions', icon: 'textSmaller', label: 'Smaller text', kbd: '⇧⌘-', run: () => setZoom(zoomFactor / 1.1) });
-  rows.push({ id: 'textReset', group: 'Actions', icon: 'textReset', label: 'Reset text size', kbd: '⌘0', run: () => setZoom(BASE_ZOOM) });
-  const dark = typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark';
-  rows.push({ id: 'theme', group: 'Actions', icon: 'darkLight', label: 'Toggle ' + (dark ? 'light' : 'dark') + ' mode', run: () => setTheme(dark ? 'light' : 'dark') });
-  if (tana.systemTheme) rows.push({ id: 'systemTheme', group: 'Actions', icon: 'darkLight', label: 'Toggle system dark/light mode', hint: themePref === 'system' ? 'Following macOS' : '', run: () => followSystem(themePref !== 'system') });
+  // names and Tana's words swapped for made-up ones on screen, for showing the app to someone (renderer/segments.js)
+  rows.push({ id: 'demoMode', group: 'Settings', icon: 'hidden', label: 'Toggle demo mode', hint: demoMode ? 'On' : 'Off', run: () => toggleDemoMode() });
+  if (tana.codexHosts) rows.push({ id: 'codexHosts', group: 'Settings', icon: 'host', label: 'Manage Codex hosts', keepOpen: true, run: openHostsPalette });
+  if (tana.chatgptStatus) rows.push({ id: 'chatgpt', group: 'Settings', icon: 'chatgpt', label: chatgptAuth?.signedIn ? 'Sign out of ChatGPT' : 'Sign in with ChatGPT',
+    hint: chatgptAuth?.signedIn ? (chatgptAuth.email || 'Signed in') : chatgptAuth?.available === false ? 'Status unavailable' : chatgptAuth ? 'Not signed in · preferred over API key' : 'Checking sign-in',
+    keepOpen: true, run: chatgptCommand });
+  if (tana.setOpenAIKey) rows.push({ id: 'openaiKey', group: 'Settings', icon: 'openaiKey', label: 'Set OpenAI API key', hint: 'Stored locally', keepOpen: true, run: openOpenAIKeyPalette });
   // A second level is folded in once the query's first two letters reach its row, as a prefix or as the first words'
   // initials ("mo" or "mt" for Move to …, "as" or "at" for Assign to), and loaded once per palette opening. The spaces
   // and the four statuses are short fixed lists, so "Move to …" and "Set status" (`subAlways`) load them as the palette
