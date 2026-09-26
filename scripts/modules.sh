@@ -2,8 +2,7 @@
 # node_modules for a worktree that has none, without a second 360 MB download of the same dependencies: clone the
 # main checkout's tree. On APFS "cp -c" is copy-on-write, so what arrives is a real, independent directory (npm
 # install in the worktree touches only its own copy) that costs about a third of a second and no disk.
-# Run by npm before check, start and package, and by the main checkout's post-checkout hook when git itself makes a
-# worktree - Codex makes its own without running hooks, which is why this also hangs off the scripts.
+# Run by npm before check, start and package, and by the Codex project's setup script when Codex makes a worktree.
 # Two silences: node_modules is already there, or there is nothing to clone (a fresh clone: npm install is the
 # answer there, and the postinstall it needs cannot be skipped by copying anyway).
 [ -e node_modules ] && exit 0
