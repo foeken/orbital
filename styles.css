@@ -273,7 +273,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .menu .mhead { padding: 10px 12px 4px; font-size: 13px; font-weight: 600; color: #999; user-select: none; }
 .menu .mdiv { height: 1px; margin: 6px 4px; background: #e6e6e6; }
 
-.scroll { flex: 1; overflow-y: auto; padding: 4px 32px 40px 16px; } /* 4px at the top: the first row's focus ring (2px, 2px out) is drawn outside the row, and a scroll box clips at its edge */
+.scroll { position: relative; flex: 1; overflow-y: auto; padding: 4px 32px 40px 16px; } /* 4px at the top: the first row's focus ring (2px, 2px out) is drawn outside the row, and a scroll box clips at its edge; relative: the loading animation fills it */
 /* a real sidebar: full height beside the document, holding its relationships (edges, never editable) */
 .rail { flex: none; width: 272px; height: 100%; overflow-y: auto; user-select: none;
   /* padding-top lines the first section heading up with the breadcrumbs (heading text sits 10px into its button) */
@@ -680,18 +680,18 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .clearfilters { border: 0; background: none; color: #aaa; font: inherit; font-size: 16px; padding: 0; margin-left: 10px; text-decoration: underline; cursor: pointer; }
 .clearfilters:hover { color: #1a1a1a; }
 .clearfilters:focus { outline: none; box-shadow: 0 0 0 2px #b7d2f5; border-radius: 3px; }
-/* Loading (Ambient): renderer/loading.js draws it on the canvas — a dotted surface rolling slowly in perspective under a
-   camera that sways around it, on which a few dots light up as nodes and are joined, one link at a time, into a small
-   graph. It shows itself only when loading takes a moment (the delay below) and fades away as the rows arrive. The
-   colours come from here, so the theme reaches it: color is the dots, --node the graph. */
-.skeleton { display: flex; justify-content: center; padding: 6vh 0 0; transition: opacity var(--dur-base) var(--ease-out), display var(--dur-base) allow-discrete; }
+/* Loading (Ambient): renderer/loading.js draws it on the canvas, which fills the whole content area — a dotted globe
+   turning slowly in its orbit, where arcs of a knowledge graph rise and join, with a ring and two moons around it and a
+   faint field of stars behind. Monochrome: one colour, the page's own text colour, at many strengths, so the theme
+   reaches it. It shows itself only when loading takes a moment (the delay below) and fades as the rows arrive. */
+.skeleton { position: absolute; inset: 0; pointer-events: none; transition: opacity var(--dur-base) var(--ease-out), display var(--dur-base) allow-discrete; }
 .skeleton.gone { display: none; opacity: 0; pointer-events: none; }
 /* Cmd+K "Preview loading animation" (renderer/loading.js): the page as it looks while a view loads, until Esc */
-.loading-preview .skeleton.gone { display: flex; opacity: 1; }
+.loading-preview .skeleton.gone { display: block; opacity: 1; }
 .loading-preview :is(#outline, #filtered, #loginBox) { display: none; }
-.skeleton canvas { display: block; width: min(100%, 760px); height: 280px; color: #9aa1a8; --node: #5b9bd5;
-  mask-image: radial-gradient(ellipse 58% 72% at 50% 58%, #000 30%, transparent 78%); animation: loader-in var(--dur-slow) var(--ease-out) 300ms backwards; }
-@keyframes loader-in { from { opacity: 0; transform: translateY(10px); } }
+.skeleton canvas { display: block; width: 100%; height: 100%; color: #1c2024;
+  mask-image: radial-gradient(ellipse 70% 70% at 50% 50%, #000 55%, transparent 100%); animation: loader-in var(--dur-slow) var(--ease-out) 300ms backwards; }
+@keyframes loader-in { from { opacity: 0; } }
 @keyframes shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 @keyframes breathe { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
 
@@ -958,7 +958,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .children { border-left-color: #34393b; }
 [data-theme="dark"] .children.loading { color: #858b8e; }
 
-[data-theme="dark"] .skeleton canvas { color: #626a6f; --node: #6ea8dc; }
+[data-theme="dark"] .skeleton canvas { color: #e8eaec; }
 [data-theme="dark"] .login button { border-color: #454b4e; background: #2a2d2f; color: #c9c9c9; }
 [data-theme="dark"] .login button:hover { background: #363a3c; }
 
