@@ -44,9 +44,6 @@ module.exports = [
 ];
 
 function rendererGlobals() {
-  const { source } = require('./scripts/renderer-source');
-  const body = require('espree').parse(source, { ecmaVersion: 2024 }).body; // espree comes with eslint
-  const names = body.flatMap((n) =>
-    n.type === 'VariableDeclaration' ? n.declarations.map((d) => d.id.name) : n.id ? [n.id.name] : []);
-  return Object.fromEntries(names.filter(Boolean).map((name) => [name, 'writable']));
+  const { tops } = require('./scripts/renderer-source');
+  return Object.fromEntries(tops.flatMap((t) => t.names).map((name) => [name, 'writable']));
 }

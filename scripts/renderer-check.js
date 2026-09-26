@@ -4,32 +4,31 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-const { source, files } = require('./renderer-source');
+const { source, tops } = require('./renderer-source');
 // The renderer is classic scripts sharing one global scope, loaded in the order index.html lists them. Two things
 // break that silently at load time: a name declared twice (a SyntaxError that stops the second file), and a
 // top-level statement that runs immediately and reaches for something a later file declares (a ReferenceError).
-// Statements that only register callbacks are fine: those run after every file has loaded.
+// What a function body reaches is fine: it runs after every file has loaded. Both are read off the parsed top level.
 {
-  // every name a top-level line declares, the later ones of a const/let list included ("const palette = …, palList = …")
-  const declared = (text) => text.split('\n').flatMap((line) => {
-    const first = line.match(/^(?:const|let|async function|function) ([A-Za-z_$][\w$]*)/);
-    if (!first) return [];
-    return [first[1], ...(/^(?:const|let) /.test(line) ? [...line.matchAll(/, ([A-Za-z_$][\w$]*) = /g)].map((m) => m[1]) : [])];
-  });
-  const perFile = files.map((f) => ({ f, text: fs.readFileSync(require.resolve('../' + f), 'utf8') }));
   const seen = new Map();
-  for (const { f, text } of perFile) for (const name of declared(text)) {
-    assert.ok(!seen.has(name), name + ' is declared in both ' + seen.get(name) + ' and ' + f);
-    seen.set(name, f);
+  for (const { file, names } of tops) for (const name of names) {
+    assert.ok(!seen.has(name), name + ' is declared in both ' + seen.get(name) + ' and ' + file);
+    seen.set(name, file);
   }
-  perFile.forEach(({ f, text }, i) => {
-    const later = new Set(perFile.slice(i + 1).flatMap(({ text }) => declared(text)));
-    for (const line of text.split('\n')) {
-      if (!/^[A-Za-z_$[(]/.test(line) || /^(?:const|let|async function|function|class) /.test(line)) continue;
-      // a line that registers a callback runs the callback later, but what it registers on is reached now
-      const now = /=>|function/.test(line) ? line.slice(0, line.indexOf('(')) : line;
-      for (const [, name] of now.matchAll(/\b([A-Za-z_$][\w$]*)\b/g)) assert.ok(!later.has(name), f + ' runs "' + line.slice(0, 60) + '" before ' + seen.get(name) + ' has loaded');
+  const FUNCTIONS = new Set(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression']);
+  // the names an expression evaluates now: not a function's body, not a property name
+  const reached = (node, out = []) => {
+    if (!node || typeof node.type !== 'string' || FUNCTIONS.has(node.type)) return out;
+    if (node.type === 'Identifier') out.push(node);
+    for (const [key, value] of Object.entries(node)) {
+      if (key === 'loc' || (!node.computed && ((node.type === 'MemberExpression' && key === 'property') || (node.type === 'Property' && key === 'key')))) continue;
+      for (const child of [value].flat()) if (child && typeof child.type === 'string') reached(child, out);
     }
+    return out;
+  };
+  tops.forEach(({ file, body }, i) => {
+    const later = new Set(tops.slice(i + 1).flatMap((t) => t.names));
+    for (const id of body.flatMap((statement) => reached(statement))) assert.ok(!later.has(id.name), file + ':' + id.loc.start.line + ' reaches "' + id.name + '" at load, before ' + seen.get(id.name) + ' has loaded');
   });
 }
 const match = source.match(/function authView\(s\) \{[\s\S]*?\n\}/);
