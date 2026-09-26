@@ -340,11 +340,11 @@ function paletteRows(q, typed = q) {
   if (!railEl.hidden) rows.push({ id: 'rail', group: 'Navigate', icon: 'rail', label: 'Focus the sidebar', run: () => focusRail() });
   if (tana.deletedList) rows.push({ id: 'recentlyDeleted', group: 'Navigate', icon: 'trash', label: 'Recently deleted', keepOpen: true, run: openTrashPalette });
   if (tana.archivedTypes) rows.push({ id: 'archivedTypes', group: 'Navigate', icon: 'type', label: 'Archived types', keepOpen: true, run: openArchivedPalette });
-  rows.push({ id: 'newWindow', group: 'Window', icon: 'createNew', label: 'New window', run: () => tana.newWindow() });
+  rows.push({ id: 'newWindow', group: 'Window', icon: 'createNew', label: 'New window', run: () => run(() => tana.newWindow()) });
   // the new right half opens on this page: it reads the right half's view and place, so this page is stored there first
-  rows.push({ id: 'splitView', group: 'Window', icon: 'splitPanes', label: 'Toggle split panes', run: () => { localStorage.setItem('view:2', view); rememberPlace('place:2'); tana.splitWindow(); } });
-  rows.push({ id: 'otherPane', group: 'Window', icon: 'otherPane', label: 'Go to the other half', run: () => tana.otherPane() });
-  rows.push({ id: 'swapPanes', group: 'Window', icon: 'swapPanes', label: 'Swap panes', run: () => tana.swapPanes() });
+  rows.push({ id: 'splitView', group: 'Window', icon: 'splitPanes', label: 'Toggle split panes', run: () => { localStorage.setItem('view:2', view); rememberPlace('place:2'); run(() => tana.splitWindow()); } });
+  rows.push({ id: 'otherPane', group: 'Window', icon: 'otherPane', label: 'Go to the other half', run: () => run(() => tana.otherPane()) });
+  rows.push({ id: 'swapPanes', group: 'Window', icon: 'swapPanes', label: 'Swap panes', run: () => run(() => tana.swapPanes()) });
   // Always reachable, unlike "Focus the sidebar": once the sidebar is hidden there would otherwise be no way back to it.
   if (!railToggle.hidden) rows.push({ id: 'railToggle', group: 'Window', icon: railHidden ? 'railShow' : 'railHide', label: railHidden ? 'Show sidebar' : 'Hide sidebar', run: () => toggleRail() });
   rows.push({ id: 'reload', group: 'Window', icon: 'reload', label: 'Reload', run: () => location.reload() });
