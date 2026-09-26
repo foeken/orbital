@@ -136,17 +136,19 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .subtext .fchip { padding: 0 5px; margin-right: 6px; border-radius: 4px; background: rgba(0, 0, 0, 0.05); color: #777; line-height: 18px; display: inline-block; }
 [data-theme="dark"] .fields .fchip, [data-theme="dark"] .fields .fkind, [data-theme="dark"] .subtext .fchip { background: rgba(255, 255, 255, 0.08); }
 [data-theme="dark"] .subtext .fchip { color: #aaa; }
-/* a type page as a table (renderer/views.js tableCells): each row's body is a grid, its grey line's cells are the
-   columns after the title, and the header uses the same columns behind the row's gutter (chevron 24 + marker 18 + 5) */
-/* The fact columns are one fixed width each, measured against the outline (a container), so they line up at the right
-   edge on every row: a task's checkbox widens its gutter, and proportional columns drifted with it. The title takes the rest. */
+/* a list page as a table (renderer/views.js tableCells): each row's body is a grid, its grey line's cells are the
+   columns after the title, and the header uses the same columns. The body starts at one fixed gutter on every row —
+   the widest a row's own gutter gets, chevron 24 + marker 18 + a task's checkbox 23 — so a meeting or a doc without a
+   checkbox has the same title column as a task, and a table grouped by type has one set of columns, not one per group.
+   The fact columns are one fixed width each, measured against the outline (a container). */
 .outline.table-view { container-type: inline-size; --tcols: minmax(0, 1fr) repeat(var(--cols), min(160px, calc(60cqw / var(--cols)))); } /* px: the header's type is smaller than a row's */
 .outline.table-view > .node > .line > .body, .outline.table-view > .thead { display: grid; grid-template-columns: var(--tcols); column-gap: 16px; align-items: center; }
+.outline.table-view > .node > .line > .body { flex: 0 1 calc(100% - 65px); margin-left: auto; }
 .outline.table-view > .node > .line > .body > .subtext { display: contents; }
 .outline.table-view > .node > .line > .body > :not(.text, .subtext) { display: none; }
 .outline.table-view > .node > .line > .body > .text, .outline.table-view .cell { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .outline.table-view > .node { border-bottom: 1px solid #f0f0f0; }
-.outline.table-view > .thead { padding: 0 0 6px 47px; border-bottom: 1px solid #ececec; color: #999; font-size: 13px; line-height: 18px; user-select: none; }
+.outline.table-view > .thead { padding: 0 0 6px 70px; border-bottom: 1px solid #ececec; color: #999; font-size: 13px; line-height: 18px; user-select: none; } /* 65 + the body's own 5 */
 .outline.table-view > .thead > span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 [data-theme="dark"] .outline.table-view > .node, [data-theme="dark"] .outline.table-view > .thead { border-color: #2b2f31; }
 .tbtn.c svg { width: 13px; height: 13px; display: block; }
