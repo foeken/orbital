@@ -115,7 +115,10 @@ class SyncConnection extends EventEmitter {
       if (init) document.transact(init);
       if (this.connected) this._bootstrap(entry);
     } else {
-      entry.releasing = false; // asked for again while an unsubscribe waits on a send: that unsubscribe lets it be
+      // Asked for again while an unsubscribe waits on a send or a draining bootstrap: that unsubscribe lets it be, and a
+      // drain ends here, so the bootstrap goes back to retrying rather than stopping after its one attempt.
+      entry.releasing = false;
+      if (entry.drain) { entry.drain.resolve(); entry.drain = null; }
       if (entry.state === 'paused' && this.connected) this._bootstrap(entry); // asking again resumes, like Tana's retryRequest
     }
     return entry.ready.promise;

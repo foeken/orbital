@@ -5318,6 +5318,19 @@ async function main() {
   setTitle(kept, 'edited after the release');
   for (let i = 0; i < 40 && readNode(server.created.get(KEPT)).title !== 'edited after the release'; i++) await new Promise((r) => setTimeout(r, 10));
   assert.equal(readNode(server.created.get(KEPT)).title, 'edited after the release', 'its edits still reach the server');
+  // ...and asked for again while its release drains a bootstrap, it leaves drain mode: a bootstrap that fails once is
+  // retried as usual instead of stopping after the one attempt a drain allows, and the subscribe answers.
+  const REDRAIN = 'tana:text:' + ulid();
+  server.fail503 = 1;
+  const firstAsk = sync.subscribe(REDRAIN, (l) => initDocument(l, 'created, released and wanted again', ME));
+  const released = sync.unsubscribe(REDRAIN);
+  const secondAsk = sync.subscribe(REDRAIN);
+  await released;
+  // it used to hang here: without a retry the subscribe never answers, so a hang fails as a message instead
+  const back = await Promise.race([secondAsk, new Promise((_, no) => setTimeout(() => no(new Error('the second subscribe never answered')), 10000).unref())]);
+  assert.equal(back, await firstAsk);
+  assert.equal(sync.getDocument(REDRAIN), back, 'still subscribed');
+  assert.equal(readNode(server.created.get(REDRAIN)).title, 'created, released and wanted again', 'the retried create reached the server');
   // Write denied (Tana's access-revoked -> "write denied"): a refused live send re-bootstraps to probe read access; the
   // probe's catch-up is refused too, so the document stays open and readable, marked, and sends nothing more.
   const DENIED = 'tana:text:' + ulid();
