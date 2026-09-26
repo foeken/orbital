@@ -35,7 +35,7 @@ body {
   font-size: 16px; color: #1a1a1a; background: #fff;
   display: flex; flex-direction: row; -webkit-font-smoothing: antialiased;
 }
-.app { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; }
+.app { position: relative; flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; } /* relative: the loading animation fills it */
 body { overflow: clip; } /* the window never scrolls itself; the sidebar sliding out past its edge must not make it */
 button { font: inherit; }
 .sensitive {
@@ -680,12 +680,15 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .clearfilters { border: 0; background: none; color: #aaa; font: inherit; font-size: 16px; padding: 0; margin-left: 10px; text-decoration: underline; cursor: pointer; }
 .clearfilters:hover { color: #1a1a1a; }
 .clearfilters:focus { outline: none; box-shadow: 0 0 0 2px #b7d2f5; border-radius: 3px; }
-/* Loading (Ambient): renderer/loading.js draws it on the canvas, which fills the whole content area — a dotted globe
-   turning slowly in its orbit, where arcs of a knowledge graph rise and join, with a ring and two moons around it and a
-   faint field of stars behind. Monochrome: one colour, the page's own text colour, at many strengths, so the theme
-   reaches it. It shows itself only when loading takes a moment (the delay below) and fades as the rows arrive. */
+/* Loading (Ambient): renderer/loading.js draws it on the canvas, which fills the whole page — a knowledge system with
+   gravity: a dotted core in a spiral disk, nodes on tilted orbits, links that form and break. Monochrome: one colour,
+   the page's own text colour, at many strengths, so the theme reaches it. It shows itself only when loading takes a
+   moment (the delay below) and fades as the rows arrive. The header steps aside for it after the same delay, so a quick
+   load never blinks it, and comes back as the rows do; the error line stays, since it may be what the page waits on. */
 .skeleton { position: absolute; inset: 0; pointer-events: none; transition: opacity var(--dur-base) var(--ease-out), display var(--dur-base) allow-discrete; }
 .skeleton.gone { display: none; opacity: 0; pointer-events: none; }
+:where(.titlebar > :not(#error), #pills, #filterRow) { transition: opacity var(--dur-base) var(--ease-out); }
+:is(.loading-preview, body:has(#skeleton:not(.gone))) :is(.titlebar > :not(#error), #pills, #filterRow) { opacity: 0; pointer-events: none; transition-delay: 300ms; }
 /* Cmd+K "Preview loading animation" (renderer/loading.js): the page as it looks while a view loads, until Esc */
 .loading-preview .skeleton.gone { display: block; opacity: 1; }
 .loading-preview :is(#outline, #filtered, #loginBox) { display: none; }

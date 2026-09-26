@@ -83,8 +83,8 @@ let previewLoading = () => {};
     const dark = document.documentElement.dataset.theme === 'dark';
     ctx.fillStyle = ctx.strokeStyle = col;
     if (dark) ctx.globalCompositeOperation = 'lighter';
-    // a little above the middle: the title and the pills weigh down the top of the page
-    const R = Math.min(w * 0.27, h * 0.34), cx = w / 2, cy = h * 0.44, px = R / 260;
+    // the header steps aside while it plays (styles.css), so it sits in the middle of the page
+    const R = Math.min(w * 0.27, h * 0.34), cx = w / 2, cy = h * 0.5, px = R / 260;
     // the camera circles slowly, looking down onto the disk, and nods a little
     const yaw = still ? 0.6 : t * 0.045 + ex * 0.35, pitch = 0.42 + Math.sin(t * 0.06) * 0.07 + ey * 0.15;
     const cyw = Math.cos(yaw), syw = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
