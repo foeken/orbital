@@ -201,24 +201,13 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 }
 .filter .clear:hover { background: #ddd; }
 .filter.empty .clear { display: none; }
-/* Hide/show the sidebar: top right of the header band, above the crumbs and the title. Absolute against
-   .titlebar so it never shifts as the crumbs, task meta or fields rows appear and disappear beneath it,
-   and always in the same place whether or not a sidebar exists. Only shown when there is one to toggle. */
 .titlebar { position: relative; }
-.railtoggle {
-  position: absolute; top: 44px; right: 32px; z-index: 1;
-  display: flex; align-items: center; justify-content: center;
-  width: 24px; height: 24px; padding: 0; border: 0;
-  background: none; color: #777; cursor: pointer; border-radius: 4px;
-  opacity: .4;
-}
-.railtoggle:hover { background: #ddd; opacity: 1; }
-.railtoggle[hidden] { display: none; }
-.railtoggle svg { display: block; width: 18px; height: 18px; }
-/* Back and forward: the moves Cmd+[ and Cmd+] make, for the mouse. Same band and the same absolute anchor as the
-   sidebar toggle, just left of it, so the pair stays put as the crumbs, task meta and fields rows appear and
-   disappear beneath them -- and whether or not there is a sidebar to toggle beside them. */
-.navbtns { position: absolute; top: 44px; right: 64px; z-index: 1; display: flex; gap: 2px; }
+/* The header buttons (the palette, back and forward, the page's switches, the sidebar toggle last): top right of the
+   header band, absolute against .titlebar so they never shift as the crumbs, task meta or fields rows appear and
+   disappear beneath them. One row from the right edge, so a button that is not offered (the sidebar toggle on a page
+   without a sidebar) leaves no gap: the others move up to the edge. */
+.navbtns { position: absolute; top: 44px; right: 32px; z-index: 1; display: flex; gap: 2px; }
+#railToggle { margin-left: 6px; } /* the sidebar's own button, a step apart from the page's */
 .navbtn {
   display: flex; align-items: center; justify-content: center;
   width: 24px; height: 24px; padding: 0; border: 0;
@@ -1072,9 +1061,9 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
    inherit, so what sits inside a button (a pill's menu) is not one. A press inside a pill's menu is the menu's, so the
    pill does not shrink under it. */
 @property --press { syntax: '<number>'; inherits: false; initial-value: 0; }
-:is(.navbtn, .railtoggle, .pill, .tbtn, .pbutton, .chev, .gmore, .clearfilters, .login button, .recorder button, .cbadge[role="button"], .filter .clear) {
+:is(.navbtn, .pill, .tbtn, .pbutton, .chev, .gmore, .clearfilters, .login button, .recorder button, .cbadge[role="button"], .filter .clear) {
   --press: 1; transition: transform var(--dur-slow) var(--ease-settle); }
-:is(.navbtn, .railtoggle, .pill, .tbtn, .pbutton, .chev, .gmore, .clearfilters, .login button, .recorder button, .cbadge[role="button"], .filter .clear):active:not(:disabled):not(:has(.menu:active)) {
+:is(.navbtn, .pill, .tbtn, .pbutton, .chev, .gmore, .clearfilters, .login button, .recorder button, .cbadge[role="button"], .filter .clear):active:not(:disabled):not(:has(.menu:active)) {
   transform: scale(.95); transition: transform var(--dur-quick) var(--ease-out); }
 
 /* Surface for what is built again on every key: a pill's menu and the toolbar's style menu (renderer/motion.js

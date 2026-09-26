@@ -438,13 +438,16 @@ is instant, needs no key and never changes between two reads of the same words. 
 
 ## Addendum: the ← → buttons
 
-- Two arrows sit at the top right of the header, left of the sidebar toggle and anchored the same way (absolute
-  against `.titlebar`), so they stay put as the crumbs, task meta and fields rows come and go and whether or not there
-  is a sidebar to toggle. They run `navigate(-1)` and `navigate(1)` — the same history ⌘[ and ⌘] walk, with the same
+- Two arrows sit at the top right of the header in `.navbtns`, one flex row anchored to the right edge (absolute
+  against `.titlebar`), so they stay put as the crumbs, task meta and fields rows come and go. The sidebar toggle is
+  the last button in that row, so where there is no sidebar it is gone and the others move up to the edge instead of
+  leaving its slot empty. Left of the arrows, a ⌘ button opens the command palette (`togglePalette('cmd')`, as ⌘K
+  does) for whoever has not met the key. They run `navigate(-1)` and `navigate(1)` — the same history ⌘[ and ⌘] walk, with the same
   rule that Back with an empty stack lands on Home — so there is one history and nothing that navigates needs to know
   about them. `renderNav()` runs after `noteNavigation()` on every render and is the only thing that draws their
   state: disabled when the move does nothing, with the current recorded combo in the tooltip (`hotkeyFor`), so a key
-  re-recorded with ⇧⌘K shows through.
+  re-recorded with ⇧⌘K shows through. Every header button with a Cmd+K row does the same through `keyTitle`
+  (renderer/state.js): its label plus its combo, read again when the pointer arrives.
 
 ## Addendum: bullets and plain text
 

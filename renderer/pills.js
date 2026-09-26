@@ -331,7 +331,7 @@ function renderCleanupBtn(available) {
   const arriving = cleanupBtn.hidden || cleanupBtn.classList.contains('out');
   cleanupBtn.classList.remove('out'); // staying after all
   cleanupBtn.hidden = false;
-  cleanupBtn.title = 'Put every row where it belongs now';
+  keyTitle(cleanupBtn, 'Put every row where it belongs now', 'cleanup');
   cleanupBtn.setAttribute('aria-label', 'Clean up');
   if (!cleanupBtn.childNodes.length) { const svg = iconNode('cleanup'); if (svg) cleanupBtn.append(svg); }
   if (arriving) playOnce(cleanupBtn, 'in');

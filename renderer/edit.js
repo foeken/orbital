@@ -370,12 +370,15 @@ function renderNav() {
   // so it reads as live there -- the same rule the Cmd+K row uses.
   for (const [el, id, label, live] of [[backBtn, 'back', 'Go back', navBack.length || !atHome()], [fwdBtn, 'forward', 'Go forward', navForward.length]]) {
     el.disabled = !live;
-    const key = hotkeyFor(id);
-    el.title = key ? label + ' ' + key : label;
+    keyTitle(el, label, id);
     el.setAttribute('aria-label', label);
     if (!el.childNodes.length) { const svg = iconNode(id); if (svg) el.append(svg); } // the glyph never changes: drawn once, not on every render
   }
 }
+document.querySelector('.navbtns').addEventListener('pointerover', (e) => {
+  const el = e.target.closest('[data-hotkey]');
+  if (el) keyTitle(el, el.dataset.label, el.dataset.hotkey); // before the tooltip shows, so it names the key as it is now
+});
 // Reopen the last place, once the views are loaded. A document already in a view needs no fetch; one reached through a
 // mention or a search is pulled into extra the way goTo does it, but here a failure is silent — landing on the view is
 // fine, an error banner on every launch is not. renderOutline drops a zoom it cannot resolve, so a node that was

@@ -184,7 +184,7 @@ function toggleSensitiveVisibility() {
 const sensitiveBtn = $('navSensitive');
 function renderSensitiveBtn() {
   const label = sensitiveVisible ? 'Hide sensitive items' : 'Show sensitive items';
-  sensitiveBtn.title = label;
+  keyTitle(sensitiveBtn, label, 'sensitiveVisibility');
   sensitiveBtn.setAttribute('aria-label', label);
   sensitiveBtn.setAttribute('aria-pressed', String(sensitiveVisible));
   const svg = iconNode(sensitiveVisible ? 'visible' : 'hidden');
