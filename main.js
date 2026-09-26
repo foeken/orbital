@@ -394,11 +394,13 @@ ipcMain.handle('codex:set', async (e, id, on, prompt, model, host) => {
   // Codex task itself is left alone — it is the user's, with its own history — and so is the Tana context.
   // Letting go of the link lets go of the writer with it: a child still holding that thread is what makes Codex
   // refuse to open it. The Codex task itself is untouched — not deleted, not archived — so its history stays.
-  // The agent mark is a setting the other pages draw (the badge, the Agent section), so they hear of it either way.
-  try {
-    if (!on) { const result = await setCodex(id, false, prompt); agent.clearCodexTask(id); await agent.releaseTask(id); return result; }
-    return await assignToAgent(id, prompt, model, host);
-  } finally { tellOthers(e?.sender); }
+  // The agent mark is a setting the other pages draw (the badge, the Agent section): they hear of it once the change
+  // has gone through, so a handoff that failed, which the page that asked shows as unassigned, shows so everywhere.
+  let result;
+  if (!on) { result = await setCodex(id, false, prompt); agent.clearCodexTask(id); await agent.releaseTask(id); }
+  else result = await assignToAgent(id, prompt, model, host);
+  tellOthers(e?.sender);
+  return result;
 });
 // Linking a node to a Codex task that already exists (#143): the link Codex copies, codex://threads/<id>, or the bare
 // id. The node takes the local agent mark the way an assignment does, as a task on this machine, where a pasted
