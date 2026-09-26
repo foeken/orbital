@@ -798,8 +798,8 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 .skeleton { position: absolute; inset: 0; pointer-events: none; transition: opacity var(--dur-base) var(--ease-out), display var(--dur-base) allow-discrete; }
 .skeleton.gone { display: none; opacity: 0; pointer-events: none; }
 :where(.titlebar > :not(#error), #pills, #filterRow, #fields) { transition: opacity var(--dur-base) var(--ease-out); }
-body:has(#skeleton:not(.gone, .tail)) :is(.titlebar > :not(#error), #pills, #filterRow, #fields) { opacity: 0; pointer-events: none; transition-delay: var(--loader-wait, 300ms); }
-body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; pointer-events: none; } /* a view under a page still being restored; its rows rise in once it is gone */
+body.building :is(.titlebar > :not(#error), #pills, #filterRow, #fields) { opacity: 0; pointer-events: none; transition-delay: var(--loader-wait, 300ms); } /* renderer/render.js sets it with the loader */
+body.building :is(#outline, #filtered) { opacity: 0; pointer-events: none; } /* a view under a page still being restored; its rows rise in once it is gone */
 .skeleton canvas { display: block; width: 100%; height: 100%; color: #1c2024; mask-image: linear-gradient(to bottom, #000 30%, transparent 85%); } /* it thins out down the page */
 @keyframes shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 @keyframes breathe { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
