@@ -530,7 +530,8 @@ assert.match(source, /el\.style\.setProperty\('--i', i\); if \(arriving\) el\.cl
 assert.match(styleSheet, /\.pills > \.pill\.in \{ animation: pill-in/, 'and that is what the entrance is drawn from');
 // Only the press moves the row: a view's pills are the view, and a page just arrived at — a reload, a link, the
 // Library — is drawn as it stands rather than assembling itself in front of you.
-assert.match(source, /const arriving = search && pillsPressed && \(box\.hidden \|\| box\.classList\.contains\('out'\)\)/, 'only a pressed fold animates the pills in');
+assert.match(source, /const arriving = pillsPressed && \(box\.hidden \|\| box\.classList\.contains\('out'\)\)/, 'only a pressed fold animates the pills in');
+assert.match(source, /renderPillsToggle\(!!show\)/, 'every page with pills offers the button that folds them, not only a saved search');
 assert.match(source, /const last = stillPreferred\(\) \|\| !pillsPressed \? null : box\.lastElementChild;/, 'and only a pressed fold plays them out');
 // Nothing waits for that turn any more: the button is drawn once and outlives the redraw its answer brings, so the
 // rows land when they arrive and the glyph finishes turning on its own.
