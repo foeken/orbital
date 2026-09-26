@@ -201,7 +201,7 @@ async function setTypeHue(typeUri, hue) {
   const next = { ...(settings.get('typeHues') || {}) };
   if (hue === null) delete next[typeUri]; else next[typeUri] = hue;
   settings.set('typeHues', next);
-  if (S.refresh) await S.refresh(); // no change event carries a setting: the rows are rebuilt and announced here
+  if (S.refresh) await S.refresh({ after: true }); // no change event carries a setting: the rows are rebuilt and announced here
   return hue;
 }
 // ---- "Discuss with …" (Cmd+K): the Discussion Task type, and the name that goes in its one field ----

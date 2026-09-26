@@ -270,9 +270,12 @@ async function inboxCount() {
   const { totalCount, nodes } = await S.client.graph.listNodes({ ...viewParams({ ...VIEW_PRESETS.inbox, assignee: 'me' }, S.me.userUri), limit: 1 });
   return totalCount != null ? totalCount : (nodes || []).length;
 }
-// one refresh at a time; callers that changed the filter await the in-flight run and start a new one
-function refresh() {
+// One refresh at a time: a caller that only wants the lists current shares the run in flight. A caller that has just
+// changed what the rows are built from (the hidden titles, a type's icon or colour) asks for `after`: the run in
+// flight may have built its rows before the change, so it waits that run out and starts its own (#390).
+function refresh({ after = false } = {}) {
   if (!S.client) return Promise.resolve();
+  if (after && S.refreshing) return S.refreshing.then(() => refresh(), () => refresh());
   return S.refreshing ||= doRefresh().finally(() => { S.refreshing = null; });
 }
 S.refresh = refresh;
@@ -458,16 +461,14 @@ function listFilter(c) {
 async function setHidden(list) {
   const rules = hideRules(list);
   settings.set('hiddenTitles', rules);
-  await S.refreshing; // a run with the old list
-  await refresh();
+  await refresh({ after: true }); // not a run with the old list
   send('outline:changed', null); // also when there is no connection to refresh with
   return rules;
 }
 // The MCP switch refreshes the same way: the rows that are now hidden leave the cache with the refresh.
 async function setMcpHidden(on) {
   settings.set('hideMcp', !!on);
-  await S.refreshing;
-  await refresh();
+  await refresh({ after: true });
   send('outline:changed', null);
   return mcpHidden();
 }
