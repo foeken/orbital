@@ -402,8 +402,20 @@ function loadView(id = view) {
     render();
   }, showError);
 }
+// Every view's stored filter: at boot, and again whenever another page, window or machine stored one (renderer/app.js
+// onSettings). A page that kept its old copy drew stale pills and wrote that copy back over the newer filter with its
+// next pill. The view on screen is listed again only when its own filter moved (as loadView would widen it).
 function loadFilters() {
-  Promise.all(views.map(async (item) => filters.set(item.id, await tana.viewFilter(item.id)))).then(() => { loadView(); render(); }, showError);
+  return Promise.all(views.map(async (item) => [item.id, await tana.viewFilter(item.id)])).then((stored) => {
+    let moved = false;
+    for (const [id, f] of stored) {
+      if (JSON.stringify(widenFilter(id, f)) === JSON.stringify(filters.get(id))) continue;
+      filters.set(id, f);
+      if (id === view) moved = true;
+    }
+    if (moved) loadView();
+    renderSoon();
+  }, showError);
 }
 function setViewF(patch) {
   const id = view, next = { ...filters.get(id), ...patch };

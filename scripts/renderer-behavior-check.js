@@ -6744,6 +6744,36 @@ function runPrefsStoreCheck() {
   console.log('ok  preferences: the store writes into its own copy, not the frozen bridge object, so a choice sticks, reaches main and lets what follows it run');
 }
 
+// Another page stored a view filter, a watch choice or an agent mark (main/settings.js tellOthers): this page's copies
+// follow. A page left with the old filter drew stale pills and wrote that filter back over the new one with its next pill.
+async function runSettingsElsewhereCheck() {
+  const api = vm.runInNewContext(`
+    let handler = null, home = null, themePref = 'light', sensitiveLoading = null, mcpHidden = false, codexLoading = 'loaded', zoom = null, view = 'library';
+    let listed = 0, codexReads = 0, stored = {};
+    const tana = { onSettings: (cb) => { handler = cb; }, viewFilter: async (id) => stored[id] };
+    const views = [{ id: 'library' }, { id: 'inbox' }];
+    const filters = new Map([['library', { states: ['open'] }], ['inbox', { states: ['proposed'] }]]);
+    const notifyById = new Map([['tana:text:a', { on: false }]]);
+    const hotkeys = {}, groupPref = {}, sortPref = {}, displayPref = {}, collapsedGroups = new Set(), SEARCH_ID = 'tana:search:';
+    const onTypePage = () => false, isTypeId = () => false, typeFilter = () => ({}), reload = async () => {}, mergePrefs = () => {}, pref = (k, d) => d;
+    const renderSoon = () => {}, showError = (e) => { throw e; }, showTheme = () => {}, loadSensitive = async () => {}, refreshSensitive = () => {};
+    const widenFilter = (id, f) => f, loadView = () => { listed++; };
+    const loadCodex = () => { codexReads++; codexLoading = 'loaded'; };
+    ${functionSource('loadFilters')}
+    ${sourceBetween('if (tana.onSettings) tana.onSettings(', 'if (tana.onSystemTheme)')}
+    ({
+      change: async (next) => { stored = next; handler({}); for (let i = 0; i < 5; i++) await Promise.resolve(); },
+      state: () => ({ library: filters.get('library'), listed, codexReads, watch: notifyById.size }),
+    });
+  `);
+  await api.change({ library: { states: ['closed'] }, inbox: { states: ['proposed'] } });
+  assert.deepEqual(plain(api.state()), { library: { states: ['closed'] }, listed: 1, codexReads: 1, watch: 0 },
+    'the filter another page stored replaces this page’s copy and lists the view again; the agent marks and watch states are read afresh');
+  await api.change({ library: { states: ['closed'] }, inbox: { states: ['proposed'] } });
+  assert.equal(api.state().listed, 1, 'a settings change that leaves this view’s filter alone does not list it again');
+  console.log('ok  settings from another page: view filters, agent marks and watch states follow, and the view is listed again only when its filter moved');
+}
+
 
 // A click that misses the words still belongs to the row, and a row is bigger than its text: the padding around
 // it, and the blank line a soft break leaves inside it. Layout is the input here, so the geometry and the
@@ -6836,7 +6866,7 @@ async function runToastCheck() {
   console.log('ok  toast: notices and errors fade at the foot of the window and leave the relogin line alone');
 }
 
-const checks = [runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck,runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck];
+const checks = [runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck,runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck];
 // The chips under a zoomed title, driven through the shipped line itself: a typed document shows its type whatever
 // kind it is, and the kind chip (task, doc, meeting, space, chat…) stays out of the header, as it always did for a task.
 function runZoomTypeChipCheck() {

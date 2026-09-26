@@ -149,6 +149,9 @@ machines; a choice about this screen or this machine does not.
   `openaiApiKey` stays put). Every `pref:` key is synced already.
 - A preference another machine changes arrives as `settings:changed`; apply it to what is on screen in the
   `onSettings` handler in renderer/app.js (theme, Home, hotkeys and the arrangements are the examples).
+- A main handler that writes a setting a page keeps a copy of (a view filter, a watch choice, an agent mark) calls
+  `settings.tellOthers(e.sender)` (main/settings.js), so the other half of a split and every other window hear it as
+  `settings:changed` too; a page left holding the old value draws it and writes it back with its next change.
 - Add the key to the table in docs/SETTINGS.md.
 
 ## A document kind

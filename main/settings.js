@@ -180,5 +180,18 @@ const prefs = () => Object.fromEntries(Object.entries(load()).filter(([key]) => 
 const setPref = (key, value) => { if (typeof key !== 'string' || !key || key.includes(':')) throw new Error('Not a preference name'); return set(PREF + key, value); };
 const settingsDocId = () => docId;
 const reset = () => { cache = null; docId = null; opening = null; }; // tests, and a second login
+// A setting one page writes reaches every other page and window at once: applyRemote announces only what another
+// machine changed, since this machine's own write comes back from Tana as nothing new. The writer is left out, because
+// it already holds the value and an older snapshot arriving late would undo a newer choice there. Every handler that
+// writes a setting a page keeps a copy of calls this (#228: preferences, sensitive marks, the MCP switch; view
+// filters, watch choices and agent marks were left out and a stale page wrote its old filter back). docId: the
+// document a choice is about, whose metadata the other pages read again, since that is where its watch state is drawn.
+function tellOthers(sender, docId) {
+  const next = prefs();
+  for (const w of S.windows || []) if (!w.isDestroyed()) for (const p of w.panes) if (p.webContents !== sender && !p.webContents.isDestroyed()) {
+    p.webContents.send('settings:changed', next);
+    if (docId) p.webContents.send('outline:changed', docId, { meta: true });
+  }
+}
 
-module.exports = { get, set, prefs, setPref, flush, hydrate, applyRemote, synced, settingsDocId, isSynced, reset, TITLE, ROOT, POINTER, PREF };
+module.exports = { get, set, prefs, setPref, flush, hydrate, applyRemote, synced, settingsDocId, isSynced, reset, tellOthers, TITLE, ROOT, POINTER, PREF };
