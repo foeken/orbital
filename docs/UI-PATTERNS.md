@@ -280,7 +280,9 @@ The full contract is [OUTLINER.md](OUTLINER.md). These are the rules a new featu
 
 - **Keyboard first.** Everything works from the keyboard before a mouse affordance is added. A list (a page, a menu, the
   palette) answers ↑/↓, Enter and Escape. The Help tour pages with ←/→ instead. A command is a palette row, so ⌘K finds
-  it and ⇧⌘K can give it a key (`DEFAULT_HOTKEYS`). New keys are written up in OUTLINER.md.
+  it. A row with a stable `id` can also be given a key with ⇧⌘K (`DEFAULT_HOTKEYS` for a built-in one); a row that only
+  makes sense in context (Notify on changes, Assign to Agent) carries no `id` and takes no key. New keys are written up
+  in OUTLINER.md.
 - **Wording.** Rows are sentence case. A command row starts with a verb: "Pin to today", "Set status", "Move to
   Library". Some rows that ask something before they act end in " …" ("Move to …", "Pin to date …") and others do not
   ("Set type", "Search Tana"); a new row follows the rows beside it in its group. A place or a choice is named as it is
