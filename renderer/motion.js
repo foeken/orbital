@@ -214,13 +214,17 @@ function motionAfter(root, was) {
 // ---- Page: going somewhere ----
 // The page changes at once — every caller expects it changed when this returns — and then lands: the title comes in
 // the way you went and the rest follows it, one part after another. Back and forward slide by direction, opening a
-// page rises into place, a view switch only fades. Only for a hand: a reload, a notification click from outside the
-// window and a restored place are drawn as they stand.
+// page rises into place, a view switch only fades. Only for a hand, and only when it went somewhere: a reload, a
+// notification click from outside the window, a restored place, and Home (or a pin, a crumb) pressed on the page it
+// opens are drawn as they stand.
 let turning = false;
+const placeNow = () => JSON.stringify([view, zoom && zoom.docId, zoom && zoom.nodeId]);
 function turnPage(dir, update) {
   if (turning || !motionOK() || !acted()) return update();
+  const from = placeNow();
   turning = true;
   try { update(); } finally { turning = false; }
+  if (placeNow() === from) return; // the same page again: nothing to arrive
   const x = dir === 'back' ? -16 : dir === 'fwd' ? 16 : 0, y = dir === 'in' ? 8 : 0;
   ['title', 'crumbs', 'taskInfo', 'fields', 'pills', 'outline', 'rail'].forEach((id, i) => {
     const still = id === 'rail'; // the sidebar is beside the page, not ahead of it: it fades
