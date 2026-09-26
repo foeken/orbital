@@ -21,7 +21,8 @@ function openHelp() {
 // by its own empty copy and showed it to you again, and every open window showed it at once.
 async function helpOnce() {
   if (SIDE || !connected || pref('helpSeen', false)) return;
-  if (tana.claimHelp ? await tana.claimHelp().catch(() => true) : true) openHelp(); // a claim that fails still opens it, rather than never
+  if (!tana.claimHelp) return openHelp(); // the in-file mock: nobody to ask
+  if (await tana.claimHelp(theme).catch(() => false)) setPref('helpSeen', true); // main opened it and marked it; this page's copy follows
 }
 const helpBtn = $('navHelp');
 helpBtn.onmousedown = (e) => e.preventDefault(); // the caret stays in its row

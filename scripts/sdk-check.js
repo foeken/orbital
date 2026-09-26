@@ -34,7 +34,7 @@ function mainHelpers(childProcess) {
   // opened: every url main asked the OS to open, so a check can see whether assigning actually handed the work over
   const opened = [];
   const timers = []; // every timer main set, never run on its own: a check can look at when one is due and run it by hand
-  const electron = { app: {}, BrowserWindow: function () {}, Menu: {}, ipcMain: { handle: (name, fn) => { if (handlers.has(name)) throw new Error('a second handler for ' + name); handlers.set(name, fn); }, on: (name, fn) => handlers.set(name, fn) }, // Electron refuses a second handle too
+  const electron = { app: {}, BrowserWindow: function () {}, WebContentsView: function () { this.webContents = { once() {}, loadFile() {}, focus() {} }; this.setBackgroundColor = () => {}; this.setBounds = () => {}; }, Menu: {}, ipcMain: { handle: (name, fn) => { if (handlers.has(name)) throw new Error('a second handler for ' + name); handlers.set(name, fn); }, on: (name, fn) => handlers.set(name, fn) }, // Electron refuses a second handle too
     shell: { openExternal: async (url) => { if (electron.shell.refuse) throw new Error('no handler for codex://'); opened.push(url); } } };
   const context = vm.createContext({
     Buffer, console, URL, // URL is a global in Electron's main process
@@ -1119,33 +1119,40 @@ async function main() {
     settings.set('myTasks', undefined);
     console.log('ok  My Tasks is remembered by id: a rename, a hidden title, a colleague\u2019s or a second machine\u2019s copy never makes or picks another');
   }
-  // The Help tour's first start is claimed in main (help:claim): yes once, to whichever page asks first, and no when the
-  // settings already say it was seen — every window's main page asks as the connection comes up (renderer/overlays.js).
+  // The Help tour's first start is opened by main (help:claim): once, over the first page that asks, only after this
+  // session read the settings document, and marked seen only when it really opened (renderer/overlays.js).
   {
     const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
-    backend.settings.reset();
+    const settings = backend.settings; settings.reset();
     const claim = backend.handlers.get('help:claim');
-    const pageOf = (overlay = null) => { const wc = { destroyed: false, isDestroyed() { return this.destroyed; } }, win = { panes: [{ webContents: wc }], overlay, isDestroyed: () => false }; backend.S.windows.add(win); return { wc, win, ask: () => claim({ sender: wc }) }; };
+    const pageOf = (overlay = null) => {
+      const wc = { destroyed: false, isDestroyed() { return this.destroyed; } };
+      const win = { panes: [{ webContents: wc, setVisible() {}, setBounds() {} }], overlay, isDestroyed: () => false, getContentBounds: () => ({ width: 800, height: 600 }), contentView: { addChildView() {} } };
+      backend.S.windows.add(win);
+      return { wc, win, ask: () => claim({ sender: wc }, 'light') };
+    };
+    const early = pageOf();
+    assert.equal(await early.ask(), false, 'no settings document read this session (signed out, or the read failed): no tour');
+    assert.deepEqual([settings.prefs().helpSeen, early.win.overlay], [undefined, null], 'and nothing shown or spent: this machine\u2019s own copy is not an answer');
+    const docs = new Map();
+    const sync = { subscribe: async (id, init) => { if (!docs.has(id)) { if (!init) throw new Error('unavailable'); const d = new Document(id); d.transact(init); docs.set(id, d); } return docs.get(id); }, getDocument: (id) => docs.get(id), unsubscribe: async () => {} };
+    backend.testRuntime({ me: { userUri: ME }, win: null, client: { sync, graph: { listNodes: async () => ({ nodes: [] }) } } });
+    await settings.hydrate();
     const gone = pageOf();
     const asking = gone.ask(); gone.wc.destroyed = true; backend.S.windows.delete(gone.win);
     assert.equal(await asking, false, 'a page that closed while main waited for the settings cannot show it');
-    assert.equal(backend.settings.prefs().helpSeen, undefined, 'so it is not spent on it');
-    assert.equal(await claim(), false, 'nor on a call with no page behind it');
-    const one = pageOf(), two = pageOf();
-    assert.deepEqual(await Promise.all([one.ask(), two.ask()]), [true, false], 'two pages asking at once: one gets the tour');
-    assert.equal(await one.ask(), false, 'and nobody after them');
-    assert.equal(backend.settings.prefs().helpSeen, true, 'the mark is the synced helpSeen preference');
-    cache.open(':memory:'); backend.settings.reset();
-    backend.settings.setPref('helpSeen', true);
-    assert.equal(await one.ask(), false, 'seen before, on this machine or in the settings document: no tour');
-    backend.S.windows.delete(one.win); backend.S.windows.delete(two.win);
-    cache.open(':memory:'); backend.settings.reset();
+    assert.equal(settings.prefs().helpSeen, undefined, 'so it is not spent on it');
+    assert.equal(await claim(null, 'light'), false, 'nor on a call with no page behind it');
     const covered = pageOf({});
     assert.equal(await covered.ask(), false, 'a window with Create task open cannot show it');
-    assert.equal(backend.settings.prefs().helpSeen, undefined, 'so nothing is marked, and the page asks again when that closes');
+    assert.equal(settings.prefs().helpSeen, undefined, 'so nothing is marked, and the page asks again when that closes');
+    early.win.overlay = null; const two = pageOf();
+    assert.deepEqual(await Promise.all([early.ask(), two.ask()]), [true, false], 'two pages asking at once: one gets the tour');
+    assert.ok(early.win.overlay && !two.win.overlay, 'opened by main over that window, in the same step as the claim');
+    assert.equal(settings.prefs().helpSeen, true, 'and marked as the synced helpSeen preference');
     covered.win.overlay = null;
-    assert.equal(await covered.ask(), true, 'which then gets it');
-    backend.S.windows.delete(covered.win);
+    assert.equal(await covered.ask(), false, 'nobody after them, Create task closed or not');
+    for (const p of [early, two, covered]) backend.S.windows.delete(p.win);
     console.log('ok  help:claim: the first-start tour goes to one page, once');
   }
   // What stayed of quick add when the panel went (issue #232): the meeting this user has joined (⌘K Pin to current

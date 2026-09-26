@@ -8363,24 +8363,30 @@ checks.push(runFitSoonCheck);
 // The Help tour's first start (renderer/overlays.js helpOnce): not over the login, and not by this machine's empty copy
 // of the preferences when the settings document in Tana says it was seen elsewhere.
 async function runHelpOnceCheck() {
-  // each page has its own copy of the preferences; main's claim (main.js help:claim, checked in sdk-check) is shared
+  // each page has its own copy of the preferences; main's claim (main.js help:claim, checked in sdk-check) is shared,
+  // and it is main that opens the tour, in the same step
   const pane = (claimHelp, side = '', connected = true) => vm.runInNewContext(`
-    const SIDE = ${JSON.stringify(side)}, connected = ${connected}, prefs = {};
+    const SIDE = ${JSON.stringify(side)}, connected = ${connected}, prefs = {}, theme = 'light';
     let opened = 0;
     const pref = (key, fallback) => (key in prefs ? prefs[key] : fallback);
+    const setPref = (key, value) => { prefs[key] = value; };
     const openHelp = () => { opened++; prefs.helpSeen = true; };
     ${functionSource('helpOnce')}
-    ({ go: async () => { await helpOnce(); await helpOnce(); return opened; } });
-  `, { tana: { claimHelp } });
-  const main = (seen) => { let asked = 0; const claim = async () => { asked++; await null; if (seen) return false; seen = true; return true; }; claim.asked = () => asked; return claim; };
-  const fresh = main(false), opened = await Promise.all([pane(fresh).go(), pane(fresh).go()]);
-  assert.equal(opened[0] + opened[1], 1, 'two windows coming up at once: the tour opens in one of them');
-  assert.equal(await pane(main(true)).go(), 0, 'seen on another machine: main says no, so a new one does not show it again');
-  assert.equal(await pane(async () => { throw new Error('gone'); }).go(), 1, 'a claim that fails still opens it, rather than never');
+    ({ go: async () => { await helpOnce(); await helpOnce(); return { opened, seen: !!prefs.helpSeen }; } });
+  `, { tana: claimHelp ? { claimHelp } : {} });
+  const main = (seen) => { let asked = 0, shown = 0; const claim = async () => { asked++; await null; if (seen) return false; seen = true; shown++; return true; }; claim.asked = () => asked; claim.shown = () => shown; return claim; };
+  const fresh = main(false), both = await Promise.all([pane(fresh).go(), pane(fresh).go()]);
+  assert.equal(fresh.shown(), 1, 'two windows coming up at once: main shows the tour in one of them');
+  assert.deepEqual(both.map((b) => b.opened), [0, 0], 'and no page opens one of its own beside it');
+  assert.equal(both.filter((b) => b.seen).length, 1, 'the page it was shown over notes it as seen');
+  const seen = main(true); await pane(seen).go();
+  assert.equal(seen.shown(), 0, 'seen on another machine: main says no, so a new one does not show it again');
+  assert.deepEqual(plain(await pane(async () => { throw new Error('gone'); }).go()), { opened: 0, seen: false }, 'a claim that fails shows nothing and spends nothing: the next launch asks again');
+  assert.deepEqual(plain(await pane(null).go()), { opened: 1, seen: true }, 'with no main to ask (the in-file mock) the page opens it itself');
   const quiet = main(false);
-  assert.equal(await pane(quiet, ':2').go(), 0, 'the right half of the Work View stays quiet');
+  assert.deepEqual(plain(await pane(quiet, ':2').go()), { opened: 0, seen: false }, 'the right half of the Work View stays quiet');
   assert.equal(quiet.asked(), 0, 'and does not claim it from the main half');
-  assert.equal(await pane(quiet, '', false).go(), 0, 'signed out or not yet connected: no tour, over the login');
+  assert.deepEqual(plain(await pane(quiet, '', false).go()), { opened: 0, seen: false }, 'signed out or not yet connected: no tour, over the login');
   assert.equal(quiet.asked(), 0, 'and no claim, which main could only answer from this machine\u2019s own copy');
   assert.match(source, /tana\.onOverlayClosed\(\(result\) => \{[^\n]*helpOnce\(\); \}\);/, 'an overlay closing asks again, for a first start that found Create task open');
   assert.doesNotMatch(source, /then\(restorePlace\)\.then\(helpOnce\)/, 'boot no longer opens it before there is a connection, over the login');
