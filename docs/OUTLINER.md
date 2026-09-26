@@ -22,11 +22,12 @@ stored), [MEETINGS.md](MEETINGS.md) (meeting structure, the write-up, editing a 
   content blocks. Editable text is edited in place (no edit mode), where the node's capability allows it. A row with
   `editable === false` (a member profile, a chat message, a meeting title, anything read-only) never gets an editor,
   and main refuses the same writes.
-- **Errors and notices.** An error is one red line under the title (`showError`, `#error`), shown while it is
-  present and cleared by the next action that succeeds. A notice that reports something done ("Link copied", "Added 3
-  items to Today") is a toast at the foot of the window (`showNote`, renderer/toolbar.js; `#toast`,
-  `role="status"`) that fades after 2.5 s, restarts on a newer notice and sits above the palette. A notice never
-  writes into `#error`: that line holds `#errorText` and the relogin button.
+- **Errors and notices.** In the outliner, a failed action is a red toast at the foot of the window (`showError`,
+  renderer/nodes.js), up for 6 s; `run()` sends every error it catches there. A notice that reports something done
+  ("Link copied", "Added 3 items to Today") is the same toast, not red (`showNote`; `#toast`, `role="status"`): it
+  fades after 2.5 s, restarts on a newer notice and sits above the palette. The line under the title (`#error`) is the
+  session's alone: it shows when Tana needs a new login, with the relogin button (renderer/app.js `showStatus`). The
+  Create task card (task.html) keeps a failed create on the card, so the press can be repeated.
 - **Signed out.** The login button shows only after a completed session check says signed-out; an unresolved or
   failed check is not signed-out. Signed out, the outline area is a centred "Log in to Tana" button, and a split window
   shows its left page alone until login (issue #244).
@@ -281,7 +282,8 @@ carrying files, behind a writable row only, never as a first child. An image is 
 refused before their bytes are read, and anything else in a drop is ignored. Each file shows at once as a grey
 placeholder with its name and "Uploading…"; files go one at a time, each placeholder replaced by its image row as it
 lands, and when the last lands the caret moves to it unless it has gone elsewhere meanwhile. Escape on a placeholder
-cancels that file (`api.cancelUpload`). A refusal shows in the error line and does not stop the files behind it.
+cancels that file (`api.cancelUpload`). A refusal shows as the red toast (`showError`) and does not stop the files
+behind it.
 `api.insertImage(docId, afterId, { bytes, filename, mimeType }, uploadId)` uploads, creates the `tana:image:` document
 owned by the page and the block (main/images.js), outside the renderer's write queue so typing is not held up.
 
