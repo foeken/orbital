@@ -344,6 +344,8 @@ function setSearchView(document, view) {
   if ((document.data.get('type')) !== 'search') throw new Error('not a saved search');
   document.transact((loro) => { writeSearchView(loro, view); });
 }
+// What those two wrote, as JSON: { query, view }. Both are root containers of their own, so readNode never sees them.
+const readSearch = (document) => ({ query: document.loro.getMap('query').toJSON(), view: document.loro.getMap('view').toJSON() || {} });
 // The facts a saved search's rows show, from its view.display (JSON): the shown keys in order, or undefined for none.
 function searchDisplay(display) {
   if (typeof display === 'string') return display.split(',').filter(Boolean);
@@ -389,4 +391,4 @@ function render(node) {
   return kids.map(render).join(block ? '\n' : '');
 }
 
-module.exports = { readNode, editable, setTitle, setState, workflowStates, setArchived, setEntityType, taskMeta, audience, audienceMetadata, setAssignees, setSearchQuery, setSearchView, searchDisplay, searchSort, contentText, ulid, initDocument, STATE_TYPES, COMPLETED_WINDOWS };
+module.exports = { readNode, editable, setTitle, setState, workflowStates, setArchived, setEntityType, taskMeta, audience, audienceMetadata, setAssignees, setSearchQuery, setSearchView, readSearch, searchDisplay, searchSort, contentText, ulid, initDocument, STATE_TYPES, COMPLETED_WINDOWS };

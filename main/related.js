@@ -5,6 +5,7 @@ const { dateUri, isDateUri } = require('../sdk/dates');
 const { openEdgeQuery, openLiveQuery, EDGE_TYPES } = require('../sdk/livequery');
 const { completedInWindow, filterToSearchQuery, liveTrigger, searchQueryParams, validViewFilter } = require('../sdk/query');
 const { everyoneOnly } = require('../sdk/access');
+const { readSearch } = require('../sdk/node');
 const { DOC_URI, LIVE_ROWS, NOT_CONNECTED, PIN_HUBS, PLAIN_KINDS, S, idKind, isSpace, send, summaryCache, typeAttrTitles, typeTitles } = require('./state');
 const { graphRow, rememberNodeHue, resolveTypes, toNode } = require('./rows');
 const { canWriteDoc, op, readOnDemand, resolveReferences, subscribe } = require('./documents');
@@ -34,13 +35,12 @@ async function spaceChildren(id) {
   await resolveTypes(nodes.map((n) => n.entityType));
   return nodes.map((n) => toNode(graphRow(n)));
 }
-// A saved search's "content" is the rows its stored query returns. The query lives in a root Loro container of its
-// own (`query`), not in `data`, so readNode never sees it — take it off the document directly.
+// A saved search's "content" is the rows its stored query returns (sdk/node.js readSearch).
 async function searchChildren(id) {
   if (!S.client) throw new Error(NOT_CONNECTED);
   // The completed window is the app's own setting, so it lives in the `view` map beside the sort and the grouping
   // rather than in Tana's query vocabulary — read together, in one pass over the document.
-  const { query, view } = await op(id, (doc) => ({ query: doc.loro.getMap('query').toJSON(), view: doc.loro.getMap('view').toJSON() || {} }));
+  const { query, view } = await op(id, readSearch);
   // Tana's own client always writes every query key when it creates a search (arrays default to `[]`), so a real
   // saved search never reads back as an empty map. An empty result here means the container was missing or
   // unreadable, not that the user saved an unconstrained search — and searchQueryParams({}) would otherwise fall
@@ -362,7 +362,7 @@ async function searchTrigger(id, w, key) {
   let asked = null, live = null;
   const reread = () => { if (watching.get(key) === w) send('outline:changed', id); };
   const follow = async () => {
-    const query = doc.loro.getMap('query').toJSON(), json = JSON.stringify(query || {});
+    const { query } = readSearch(doc), json = JSON.stringify(query || {});
     if (json === asked) return; // a change to the title, the sort or the grouping: the same question
     asked = json;
     if (live) { live.close().catch(() => {}); live = null; }

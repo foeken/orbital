@@ -113,6 +113,8 @@ async function main() {
     assert.deepEqual([nodeSdk.searchSort(view.sortBy), nodeSdk.searchDisplay(view.display), nodeSdk.searchDisplay('type,space')], ['updated', ['status', 'updated'], ['type', 'space']]);
     nodeSdk.setSearchView(d, { sortBy: 'title' });
     assert.equal(d.loro.getMap('view').toJSON().sortBy, 'title', 'A to Z is Tana\'s ascending title');
+    assert.deepEqual(nodeSdk.readSearch(d), { query: d.loro.getMap('query').toJSON(), view: { sortBy: 'title' } }, 'readSearch hands back what the two writers stored');
+    assert.deepEqual(nodeSdk.readSearch(new Document('tana:search:' + ulid())), { query: {}, view: {} }, 'and an unreadable search reads as an empty query, which searchChildren refuses');
     const notASearch = new Document(DOC);
     notASearch.transact((l) => initDocument(l, 'plain', ME));
     assert.throws(() => setSearchQuery(notASearch, { types: ['text'] }), /not a saved search/, 'the query container is only written on a search');
