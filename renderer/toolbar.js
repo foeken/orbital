@@ -4,15 +4,6 @@
 // ---- @ linking: replace the selection with a mention chosen (or created) in the search palette ----
 // document titles are plain strings in Tana: there the picked item's title goes in as text (setTitle), no mention segment
 // copy to the clipboard and say so where errors already appear, since a copy has no other visible result
-// A notice ("Link copied", "Classified as …") is a toast at the foot of the window that fades on its own. The line
-// under the title is for errors only: it holds the relogin button, which writing a notice into it used to wipe out
-// (#123), and with it the #errorText every later showError needs.
-let toastTimer = null;
-function showNote(note) {
-  const el = $('toast');
-  el.textContent = note; el.classList.add('show');
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 2500); // a newer notice gets its own 2.5 s
-}
 async function copyText(text, note) { await navigator.clipboard.writeText(text); showNote(note); }
 function startLink(item, el, [start, end]) {
   // A row still being written into Tana has no block id yet (materialise), so there is nothing to link into: the "@"

@@ -110,9 +110,16 @@ const referenceTarget = (node) => ((isReference(node) || isFullReference(node)) 
 // 'reference') is unaffected: typing there edits the target's title, so it never stops pointing at it.
 const liveTarget = (node, typing) => (typing && !isReference(node) && !oneMention(typing.segs) ? null : referenceTarget(node));
 const referenceLabel = (node) => referenceTarget(node)?.text || node.reference?.label || node.text || node.reference?.uri || 'Unavailable reference';
-// An error from an action is transient: it clears when the next action succeeds, so a stale message never
-// outlives the problem it described.
-const showError = (e) => { $('errorText').textContent = e ? String(e.message || e) : ''; $('error').hidden = !e; };
+// A notice ("Link copied", "Classified as …") and an error from an action are both a toast at the foot of the window
+// that fades on its own; an error is red and stays longer. The line under the title is only the signed-out state
+// with its relogin button (app.js), which writing into it used to wipe out (#123).
+let toastTimer = null;
+function showNote(note, error = false) {
+  const el = $('toast');
+  el.textContent = note; el.classList.toggle('error', error); el.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), error ? 6000 : 2500); // a newer toast gets its own time
+}
+const showError = (e) => { if (e) showNote(String(e.message || e), true); };
 const run = (fn) => (queue = queue.then(fn).then((value) => { showError(null); return value; }, showError));
 // A row on its way out is not a keyboard stop.
 // A field that holds choices (renderer/fields.js) is one stop, and a caret stop all the same.
