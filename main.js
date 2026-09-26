@@ -103,6 +103,8 @@ function addPane(win, side) {
   pane.setBackgroundColor('#00000000'); // see-through where the page draws nothing: beside its half while it covers the window (coverWindow)
   pane.side = side; // '2': the right half, which keeps its own view and place (renderer/state.js SIDE)
   pane.webContents.on('focus', () => { S.win = win; S.pane = pane.webContents; });
+  // a Reload (⌘K runs it as the palette closes) or a crash: the page comes back with no palette, so it covers nothing
+  for (const name of ['did-start-loading', 'render-process-gone']) pane.webContents.on(name, () => coverWindow(pane.webContents, false));
   win.panes.push(pane); win.contentView.addChildView(pane); layout(win);
   tellSides(win);
   pane.webContents.loadFile(path.join(__dirname, 'index.html'));
