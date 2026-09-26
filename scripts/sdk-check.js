@@ -1792,7 +1792,29 @@ async function main() {
     assert.equal(searchDoc.loro.getMap('view').toJSON().completedWithin, 30, 'taking Completed out of the Status filter keeps the window, so putting it back reads the same as before');
     await backend.handlers.get('search:setFilter')(null, searchId, { types: ['tasks'], states: ['closed'], assignee: 'anyone', completedWithin: 3 }, 'updated', 'status', ['status']);
     assert.equal((await backend.handlers.get('search:filter')(null, searchId)).filter.completedWithin, 3, 'every window the pill offers survives a save, 3 days included');
+    await backend.handlers.get('search:setFilter')(null, searchId, { types: ['tasks'], states: ['closed'], assignee: 'anyone', completedWithin: 3, audience: 'everyone' }, 'updated', 'status', ['status']);
+    assert.equal(searchDoc.loro.getMap('view').toJSON().audience, 'everyone', 'Visible to everyone is kept beside the query, like the window (#253)');
+    assert.equal(searchDoc.loro.getMap('query').toJSON().visibility, 'open', 'while the query says Tana\'s nearest, Open, so Tana lists the superset');
+    assert.equal((await backend.handlers.get('search:filter')(null, searchId)).filter.audience, 'everyone', 'and the pill reads it back');
     console.log('ok  a saved search stores and reapplies its own completed window, beside the query rather than inside it');
+  }
+
+  // Visible to everyone (#253): the graph's restricted: false is Tana's "Open" (the node's own flag only), so the
+  // answer is narrowed by owner chains, one per distinct owner. The org root is restricted to its members: everyone.
+  {
+    const { everyoneOnly } = require('../sdk/access');
+    const ORG = 'tana:org:01jorg00000000000000000000', OPEN = 'tana:space:01jopen0000000000000000000', LOCKED = 'tana:space:01jlocked000000000000000000';
+    const chains = { [OPEN]: [{ uri: OPEN }, { uri: ORG, restricted: true }], [LOCKED]: [{ uri: LOCKED, restricted: true }, { uri: ORG, restricted: true }] };
+    let asked = 0;
+    const graph = { getOwnerChain: async (id) => { asked++; if (!chains[id]) throw new Error('not found'); return { entries: chains[id] }; } };
+    const nodes = [{ id: 'library' }, { id: 'open1', ownerUri: OPEN }, { id: 'open2', ownerUri: OPEN }, { id: 'locked', ownerUri: LOCKED },
+      { id: 'own', restricted: true }, { id: 'unreadable', ownerUri: 'tana:space:01jgone00000000000000000000' }];
+    assert.deepEqual((await everyoneOnly(graph, nodes)).map((n) => n.id), ['library', 'open1', 'open2'], 'unowned or under open owners only; a failed chain is not everyone');
+    assert.equal(asked, 3, 'one owner chain per distinct owner, not per row');
+    assert.equal(viewParams({ audience: 'everyone' }, ME).restricted, false, 'asked as Open, then narrowed');
+    assert.equal(filterToSearchQuery({ audience: 'everyone' }, ME).visibility, 'open');
+    assert.deepEqual(['everyone', null, 'open'].map((audience) => validViewFilter({ audience })), [true, true, false]);
+    console.log('ok  Visible to everyone: Open narrowed to what no restricted owner holds');
   }
 
   // A view is one graph query, then docs-without-tasks/hidden post-filters, row mapping and its own cache.

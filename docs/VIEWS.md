@@ -22,7 +22,7 @@ renderer. It replaces the per-view paths: `taskParams`/`libraryQueries`/`MEETING
 ## 1. Filter
 
 ```js
-{ types, states, assignee, text, participant, window, completedWithin }
+{ types, states, assignee, text, participant, window, completedWithin, audience }
 ```
 
 | key | values | meaning |
@@ -34,6 +34,7 @@ renderer. It replaces the per-view paths: `taskParams`/`libraryQueries`/`MEETING
 | `participant` | `me` or null | events the user is a participant of (`hasParticipantUris`). |
 | `window` | `recent` or null | events from 7 days ago to 7 days ahead. |
 | `completedWithin` | `3` | `7` | `30` | `'all'` | how old a **completed** task may be and still be listed. Not a way to hide them — `states` alone decides whether they are asked for — so it has no "off", and its value is kept while Completed is out of `states`. Unset reads as `7`. |
+| `audience` | `'everyone'` or null | what everyone in the org can see (#253), the "Visible to" pill. The graph can only ask Tana's "Open" (`restricted: false`: the node's own flag, so it also lists what a restricted space or meeting holds — live 286 against 51), so that is the query, and `everyoneOnly` (sdk/access.js) keeps the rows with no restricted owner above them, one `GetOwnerChain` per distinct owner. A saved search stores it in its `view` map, like `completedWithin`, and `visibility: 'open'` in its query, so Tana's client lists the superset. |
 
 ## 2. Presets
 

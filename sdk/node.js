@@ -336,6 +336,9 @@ function writeSearchView(loro, view = {}) {
   } else if (v.get('display') !== undefined) v.delete('display');
   if (COMPLETED_WINDOWS.includes(view.completedWithin)) v.set('completedWithin', view.completedWithin);
   else if (v.get('completedWithin') !== undefined) v.delete('completedWithin');
+  // audience, for the same reason: Tana's query can only say "Open", which is more than everyone (sdk/query.js)
+  if (view.audience === 'everyone') v.set('audience', 'everyone');
+  else if (v.get('audience') !== undefined) v.delete('audience');
 }
 function setSearchView(document, view) {
   if ((document.data.get('type')) !== 'search') throw new Error('not a saved search');

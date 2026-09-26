@@ -2627,14 +2627,14 @@ function runClearFiltersCheck() {
   api.set('tasks', { states: ['closed'], assignee: 'anyone' });
   assert.equal(api.filtered(), true, 'a changed status or assignee offers the action');
   api.clear();
-  assert.deepEqual(plain(api.state()), { types: null, states: null, assignee: 'anyone', text: '', fields: null, participant: null, window: null }, 'clearing Tasks means an unrestricted query');
+  assert.deepEqual(plain(api.state()), { types: null, states: null, assignee: 'anyone', text: '', fields: null, audience: null, participant: null, window: null }, 'clearing Tasks means an unrestricted query');
   assert.equal(api.filtered(), false, 'and the action goes away again');
   api.set('library');
   assert.equal(api.filtered(), true, 'the shipped library filter still narrows the view');
   api.set('library', { text: 'memo' });
   assert.equal(api.filtered(), true, 'a search text narrows the Library view');
   api.clear();
-  assert.deepEqual(plain(api.state()), { types: null, states: null, assignee: 'anyone', text: '', fields: null, participant: null, window: null }, 'clearing the Library means anything, not the shipped default');
+  assert.deepEqual(plain(api.state()), { types: null, states: null, assignee: 'anyone', text: '', fields: null, audience: null, participant: null, window: null }, 'clearing the Library means anything, not the shipped default');
   assert.equal(api.filtered(), false, 'and with everything set to any, the action goes away');
   api.set('library', { types: ['tana:type:01m1e3nthqj48b8drqb1fmma9d'], fields: { 'tana:type:01m1e3nthqj48b8drqb1fmma9d?attribute=hpgqd4jv': { textMatches: [{ value: 'High' }] } } });
   assert.equal(api.filtered(), true, 'a field filter narrows the Library');
@@ -2643,7 +2643,7 @@ function runClearFiltersCheck() {
   assert.equal(api.filtered(), false, 'so the action goes away');
   api.set('scoped');
   api.clear();
-  assert.deepEqual(plain(api.state()), { types: null, states: null, assignee: 'anyone', text: '', fields: null, participant: 'me', window: 'recent' }, 'clearing a filter that carries a calendar scope keeps the participant and the window');
+  assert.deepEqual(plain(api.state()), { types: null, states: null, assignee: 'anyone', text: '', fields: null, audience: null, participant: 'me', window: 'recent' }, 'clearing a filter that carries a calendar scope keeps the participant and the window');
   assert.equal(api.filtered(), false, 'the preserved calendar scope is that filter\'s clear baseline');
   // A saved search is dirty when its pills differ from what it stored, so the completed window has to be part of
   // that comparison — and an unset one is the default rather than a different filter.
@@ -3018,7 +3018,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     'letting Completed in offers the window, defaulting to 7 days the first time it is asked for');
   assert.deepEqual(plain(completedPill().rows().map((r) => [r.label, !!r.checked])), [['3 days', false], ['7 days', true], ['30 days', false], ['All', false]],
     'the choices are the four the rule knows, with the active one ticked and no way to turn completed tasks off here');
-  assert.deepEqual(plain(api.pillDefs().map((d) => d.id)), ['status', 'completed', 'assigned', 'sort', 'group', 'display'],
+  assert.deepEqual(plain(api.pillDefs().map((d) => d.id)), ['status', 'completed', 'assigned', 'audience', 'sort', 'group', 'display'],
     'and it sits with the filters, right after the Status pill it belongs to');
   completedPill().rows().find((r) => r.label === '30 days').run();
   assert.deepEqual(plain(api.savedPatch()), { completedWithin: 30 }, 'choosing one writes the window and touches nothing else about the filter');
@@ -3336,6 +3336,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   `);
   assert.deepEqual(plain(api.commands('tasks')), [
     ['pill:status', 'Filter by status', 'In Progress', 'filter'], ['pill:assigned', 'Filter by assignee', 'Anyone', 'filter'],
+    ['pill:audience', 'Filter by visibility', 'Any', 'filter'],
     ['pill:sort', 'Sort by', 'Default', 'sort'], ['pill:group', 'Group by', 'None', 'group'],
     ['pill:display', 'Display', 'Status, Assigned, …', 'field'],
     ['cleanup', 'Clean up', 'Nothing to clean up', 'cleanup'], // always listed, off until a row is held in place
@@ -3351,9 +3352,9 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   assert.equal(api.pick('Assignee').group, 'assignee', 'Group uses the same shared action too');
   // A kind page is that kind: Tasks, Meetings, Chats and People do not offer a type to pick, so the page cannot be
   // turned into a different one; the Library picks its kinds, and so does the Inbox, which is a state, not a kind.
-  assert.deepEqual(plain(api.commands('library').map(([id]) => id)), ['pill:type', 'pill:status', 'pill:assigned', 'pill:sort', 'pill:group', 'pill:display', 'cleanup', 'tableView'],
+  assert.deepEqual(plain(api.commands('library').map(([id]) => id)), ['pill:type', 'pill:status', 'pill:assigned', 'pill:audience', 'pill:sort', 'pill:group', 'pill:display', 'cleanup', 'tableView'],
     'Library includes its Type filter plus the other applicable pills');
-  assert.deepEqual(plain(api.commands('inbox').map(([id]) => id)), ['pill:type', 'pill:status', 'pill:assigned', 'pill:sort', 'pill:group', 'pill:display', 'cleanup', 'tableView'],
+  assert.deepEqual(plain(api.commands('inbox').map(([id]) => id)), ['pill:type', 'pill:status', 'pill:assigned', 'pill:audience', 'pill:sort', 'pill:group', 'pill:display', 'cleanup', 'tableView'],
     'the Inbox is a state rather than a kind, so it still picks types');
   // Clean up is the header pill as a command row, always listed and greyed out while there is nothing to clean up,
   // running the same action under a fixed id when there is — so a shortcut can be recorded for it beforehand.
@@ -4114,7 +4115,7 @@ function runSearchPillsCheck() {
   assert.equal(api.applies(), true, 'so they apply there at all');
   // A saved search is never a kind page: choosing what it lists is the whole point of it. Sort and Group are view
   // layout, and the page a search draws neither sorts nor groups, so offering them would offer something that does nothing.
-  assert.deepEqual(plain(api.ids()), ['type', 'status', 'assigned', 'sort', 'group', 'display'], 'a saved search offers the query pills and the arrangement ones, which it stores in its own document');
+  assert.deepEqual(plain(api.ids()), ['type', 'status', 'assigned', 'audience', 'sort', 'group', 'display'], 'a saved search offers the query pills and the arrangement ones, which it stores in its own document');
   api.loaded();
   assert.equal(api.dirty(), false, 'freshly loaded from the document, there is nothing to save');
   assert.deepEqual(plain(api.edit({ states: ['open'] })), { types: ['tasks'], states: ['open'], assignee: 'me', text: '' },

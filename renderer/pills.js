@@ -62,6 +62,13 @@ function pillDefs() {
     ] });
   }
   // sorting and grouping re-order and re-section rows already loaded, rather than changing which rows are found.
+  // Who can see a row (#253): everyone in the org, or any audience. Tana's "Open" is not offered: it includes whatever a
+  // restricted space holds, which is not what anybody picking a visibility means (sdk/query.js). Not on a type page:
+  // setTypeF keeps only the field pills, so a choice there would not survive a relaunch.
+  if (!onTypePage()) defs.push({ id: 'audience', label: 'Visible to', command: 'Filter by visibility', icon: 'users', value: f.audience === 'everyone' ? 'Everyone' : 'Any', rows: () => [
+    { label: 'Any visibility', reset: true, checked: !f.audience, run: () => save({ audience: null }) },
+    { label: 'Everyone', icon: 'users', checked: f.audience === 'everyone', run: () => save({ audience: 'everyone' }) },
+  ] });
   // A view keeps them in the browser; a saved search stores them in its document, so the arrangement travels with
   // the search and is what it opens on next time.
   defs.push({ id: 'sort', label: 'Sort', command: 'Sort by', icon: 'sort', value: SORTS.find(([id]) => id === sortBy())[1], rows: () => sortList().map(([id, label]) => ({ label, checked: sortBy() === id, run: () => setSortBy(id) })) });

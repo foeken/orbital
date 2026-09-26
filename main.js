@@ -365,7 +365,7 @@ ipcMain.handle('search:filter', (_e, id) => op(id, (doc) => {
   return {
     // the completed window is the app's own, so it is stored beside the query and handed back as part of the filter
     // the pills edit; absent, it reads as the default the pill shows the first time Completed is asked for
-    filter: { ...searchQueryToFilter(doc.loro.getMap('query').toJSON(), S.me && S.me.userUri), completedWithin: completedWindow(arrangement.completedWithin) },
+    filter: { ...searchQueryToFilter(doc.loro.getMap('query').toJSON(), S.me && S.me.userUri), completedWithin: completedWindow(arrangement.completedWithin), audience: arrangement.audience === 'everyone' ? 'everyone' : null },
     sort: searchSort(arrangement.sortBy),
     group: arrangement.groupBy,
     // Tana's record of key -> { shown, order } (or the comma-joined string earlier builds wrote)
@@ -378,7 +378,7 @@ ipcMain.handle('search:setFilter', (_e, id, filter, sort, group, display) => {
   if (!validViewFilter(filter)) throw new Error('invalid view filter'); // never let a bad filter empty a saved search
   return mut(id, (doc) => {
     setSearchQuery(doc, filterToSearchQuery(filter, S.me && S.me.userUri));
-    setSearchView(doc, { sortBy: sort, groupBy: group, display, completedWithin: filter.completedWithin }); // saved together: one press, one state of the page
+    setSearchView(doc, { sortBy: sort, groupBy: group, display, completedWithin: filter.completedWithin, audience: filter.audience }); // saved together: one press, one state of the page
   });
 });
 ipcMain.handle('history:undo', () => history(undoStack, redoStack, 'undo', 'canUndo'));

@@ -4,6 +4,7 @@ const pins = require('../sdk/pins');
 const { dateUri, isDateUri } = require('../sdk/dates');
 const { openEdgeQuery, openLiveQuery, EDGE_TYPES } = require('../sdk/livequery');
 const { completedInWindow, filterToSearchQuery, liveTrigger, searchQueryParams, validViewFilter } = require('../sdk/query');
+const { everyoneOnly } = require('../sdk/access');
 const { DOC_URI, LIVE_ROWS, NOT_CONNECTED, PIN_HUBS, PLAIN_KINDS, S, idKind, isSpace, send, summaryCache, typeAttrTitles, typeTitles } = require('./state');
 const { graphRow, rememberNodeHue, resolveTypes, toNode } = require('./rows');
 const { canWriteDoc, op, resolveReferences, subscribe } = require('./documents');
@@ -45,7 +46,7 @@ async function searchChildren(id) {
   // unreadable, not that the user saved an unconstrained search — and searchQueryParams({}) would otherwise fall
   // back to "every listable kind", silently showing the wrong rows as if they were this search's results.
   if (!query || !Object.keys(query).length) throw new Error('this saved search has no readable query');
-  const nodes = await searchRows(query, view.completedWithin, 1000); // a view's 1,000, as its preview asks: My Tasks lists every task and groups afterwards
+  const nodes = await searchRows(query, view, 1000); // a view's 1,000, as its preview asks: My Tasks lists every task and groups afterwards
   // A view keeps the head of its list live (views.js), which is what makes a change someone else makes show up in
   // it. These rows are listed the same way and were not subscribed at all, so a saved search only ever showed what
   // its query answered when the page opened. The same cap applies here, and for the same reason: a search answers
@@ -64,18 +65,20 @@ async function searchPreview(filter) {
   if (!S.client) throw new Error(NOT_CONNECTED);
   if (!validViewFilter(filter)) throw new Error('invalid view filter');
   // A type page is this too (renderer/nodes.js reload), a whole list rather than a preview: it gets a view's 1000 rows.
-  const nodes = await searchRows(filterToSearchQuery(filter, S.me && S.me.userUri), filter.completedWithin, 1000); // as the saved page will show it
+  const nodes = await searchRows(filterToSearchQuery(filter, S.me && S.me.userUri), filter, 1000); // as the saved page will show it
   return nodes.map((n) => toNode(graphRow(n)));
 }
 // The one runner behind both: a stored query's rows, completed ones outside the window dropped. A search scoped to a
 // space also covers every space beneath it, as in Tana (searchOwners), so the org's spaces are listed first — only
 // when a space is in scope, which leaves every other search at one graph call.
 // ponytail: spaces are listed on each run, not cached; cache them when a scoped search's latency shows.
-async function searchRows(query, completedWithin, limit = 200) {
+// `narrow` is what Orbital keeps beside Tana's query and applies to its answer: { completedWithin, audience }.
+async function searchRows(query, narrow, limit = 200) {
   const scoped = Array.isArray(query.ownerUris) && query.ownerUris.some((u) => typeof u === 'string' && isSpace(u));
   const spaces = scoped ? (await S.client.graph.listNodes({ nodeTypes: ['space'], limit: 1000 })).nodes : [];
   const answered = await S.client.graph.listNodes(searchQueryParams(query, S.me && S.me.userUri, limit, undefined, spaces));
-  const nodes = answered.nodes.filter((n) => completedInWindow(n, completedWithin));
+  let nodes = answered.nodes.filter((n) => completedInWindow(n, narrow.completedWithin));
+  if (narrow.audience === 'everyone') nodes = await everyoneOnly(S.client.graph, nodes);
   nodes.forEach(rememberNodeHue);
   await resolveTypes(nodes.map((n) => n.entityType));
   return nodes;

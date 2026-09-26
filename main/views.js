@@ -3,6 +3,7 @@ const db = require('../db');
 const path = require('node:path');
 const { peerIdentity } = require('../tana-session');
 const { createTanaClient } = require('../sdk');
+const { everyoneOnly } = require('../sdk/access');
 const { liveTrigger, parseQuery, searchParams, needsTypes, viewParams, completedInWindow, filterToSearchQuery, validViewFilter, VIEW_PRESETS, hideRules, isHidden } = require('../sdk/query');
 const { LIVE_ROWS, NOT_CONNECTED, S, deletedNodes, docStates, errText, idKind, isDeleted, isMcp, memberTitle, now, reading, truncatedViews, typeTitles, redoStack, report, scheduleRefresh, send, setStatus, subscribed, undoStack, visibleGraphNodes } = require('./state');
 const { graphRow, members, rememberNodeHue, resolveTypes, toNode, typesByTitle } = require('./rows');
@@ -41,10 +42,11 @@ async function viewRows(id, filter) {
   const result = await S.client.graph.listNodes(viewParams(f, S.me.userUri));
   const docsWithoutTasks = Array.isArray(f.types) && f.types.includes('docs') && !f.types.includes('tasks');
   const rules = hiddenRules();
-  const nodes = result.nodes.filter((n) => !(docsWithoutTasks && idKind(n.id) === 'text' && n.state && n.state.type))
+  let nodes = result.nodes.filter((n) => !(docsWithoutTasks && idKind(n.id) === 'text' && n.state && n.state.type))
     // the completed window (sdk/query.js): the graph has no field to ask it for, so it is applied to the answer
     .filter((n) => completedInWindow(n, f.completedWithin))
     .filter((n) => !isHidden(memberTitle(n), rules));
+  if (f.audience === 'everyone') nodes = await everyoneOnly(S.client.graph, nodes);
   nodes.forEach(rememberNodeHue);
   // Also the spaces the rows live in, for the Types view's subtext. A type node carries its space on the graph node
   // itself (verified: `spaceUri`, the same uri as `ownerUri`), so this is the one nodeIds lookup resolveTypes already
@@ -177,7 +179,7 @@ async function searchCreate(id, title) {
   const filter = viewFilter(id); // throws on an unknown view before anything is created
   const query = filterToSearchQuery(filter, S.me && S.me.userUri);
   const name = typeof title === 'string' && title.trim() ? title.trim() : searchTitle(id, filter);
-  return createDocument(name, { kind: 'search', query });
+  return createDocument(name, { kind: 'search', query, view: { completedWithin: filter.completedWithin, audience: filter.audience } });
 }
 // My Tasks, the right half of the Work View (renderer/timeline.js): the saved search of that name if you have one,
 // else one made from the My Tasks preset (VIEW_PRESETS.library) and shown the way the Library shows it. The one made
