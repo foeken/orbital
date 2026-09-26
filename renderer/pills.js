@@ -138,6 +138,7 @@ function pillCommandRows() {
     rows.push({ id: 'cleanup', group: 'View options', icon: 'cleanup', label: 'Clean up', hint: now ? '' : 'Nothing to clean up', disabled: !now, run: cleanupNow });
   }
   if (listPage()) rows.push({ id: 'tableView', group: 'View options', icon: tableView() ? 'outline' : 'table', label: tableLabel(), run: () => setTableView(!tableView()) });
+  if (tableView() && tableKeys().length) rows.push({ id: 'columnWidths', group: 'View options', icon: 'table', label: 'Column widths …', keepOpen: true, run: openColumnWidths }); // the grips' keyboard way (renderer/views.js)
   return rows;
 }
 // Let go of the rows a status change kept in place and draw the page the way it is now. The header pill and the

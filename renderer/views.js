@@ -285,7 +285,7 @@ function setDisplay(id) {
 }
 // The values of the fields Display shows, in the menu's order: the row carries them from the graph (main/rows.js).
 const shownFieldValues = (node) => (node.fields ? displayKeys().flatMap((k) => node.fields[k] || []) : []);
-// The grey line under a title: those values as chips, then subtextOf's words. A render and a late metadata patch
+// The grey line under a title: those values, then subtextOf's words, one · between each, as a saved search's rows read. A render and a late metadata patch
 // (renderer/tasks.js) both build it here, so the row keeps its shape when its metadata lands. `sub` is refilled in place.
 // asTable: a row of the page's own list while it is a table (tableRow); what an expanded row shows under it stays an outline
 function subtextEl(node, taskInfo, sub = document.createElement('div'), asTable = false) {
@@ -293,8 +293,7 @@ function subtextEl(node, taskInfo, sub = document.createElement('div'), asTable 
   const words = subtextOf(node, taskInfo), values = shownFieldValues(node);
   if (!words && !values.length) return null;
   sub.className = 'subtext';
-  sub.textContent = values.length ? '' : words; // a row without fields is the plain line it always was
-  if (values.length) sub.append(...values.map((v) => { const chip = document.createElement('span'); chip.className = 'fchip'; chip.textContent = demoText(v, node.id); return chip; }), ...(words ? [words] : []));
+  sub.textContent = [...values.map((v) => demoText(v, node.id)), ...(words ? [words] : [])].join(' · ');
   return sub;
 }
 // ---- a list page as a table (the header's Outliner/Table switch, or ⌘K): a column per fact Display shows ----
@@ -335,22 +334,87 @@ function renderTableBtn(available) {
 }
 tableBtn.onmousedown = (e) => e.preventDefault(); // the caret stays in its row, as with the other header buttons
 tableBtn.onclick = () => setTableView(!tableView());
+// An options field of the type whose page this is, which a table row's cell (a click) and ⌘K on that row (renderer/fields.js
+// fieldRows) both change through openCellChooser.
+const pickableDef = (node, k) => { const def = typeDefs().find((d) => fieldKey(d) === k); return def && def.type === 'options' && canEditNode(node) && tana.setField && !demoMode ? def : null; };
 function tableCells(node, info, sub) {
   sub.className = 'subtext'; sub.textContent = '';
   for (const k of tableKeys()) {
     const cell = document.createElement('span'); cell.className = 'cell';
     if (TABLE_FACTS[k]) cell.append(...[TABLE_FACTS[k](node, info)].flat());
-    else for (const v of (node.fields && node.fields[k]) || []) { const chip = document.createElement('span'); chip.className = 'fchip'; chip.textContent = demoText(v, node.id); cell.append(chip); }
+    else {
+      // plain text, as every other column is; the cell's ellipsis cuts it and the tooltip has the rest — asked at the
+      // hover, since the sensitive switch only toggles the blur (blurSensitive), and a hidden row's tooltip says nothing
+      cell.textContent = ((node.fields && node.fields[k]) || []).map((v) => demoText(v, node.id)).join(', ');
+      cell.onmouseenter = () => { cell.title = isRealId(node.id) && sensitiveHidden(node.id) ? '' : cell.textContent; };
+      const def = pickableDef(node, k);
+      if (def) {
+        cell.classList.add('pick');
+        // the row's own click opens the row; ⌘ or ⇧ is a selection (renderer/events.js), as it is on the title
+        cell.onclick = (e) => { if (e.metaKey || e.shiftKey) return; e.stopPropagation(); openCellChooser(node, k, def); };
+      }
+    }
     sub.append(cell);
   }
   return sub;
 }
 // The column titles, over the gutter a row keeps for its chevron and marker. Not a row: no key, nothing to land on.
+// Each fact column has a grip on its right edge; Title has none, since it takes whatever the others leave.
 function tableHeadEl() {
   const names = new Map(displayList()), el = document.createElement('div');
   el.className = 'thead';
-  for (const label of ['Title', ...tableKeys().map((k) => names.get(k)), '']) { const c = document.createElement('span'); c.textContent = label; el.append(c); } // '': over the row's icons
+  for (const [key, label] of [[null, 'Title'], ...tableKeys().map((k) => [k, names.get(k)]), [null, '']]) { // '': over the row's icons
+    const c = document.createElement('span'), words = document.createElement('span');
+    words.className = 'tlabel'; words.textContent = label; c.append(words);
+    if (key) {
+      const grip = document.createElement('span'); grip.className = 'tgrip'; grip.title = 'Drag to resize · double-click to reset';
+      grip.onpointerdown = (e) => resizeColumn(e, key, c);
+      grip.ondblclick = () => setColumnWidth(key, undefined);
+      c.append(grip);
+    }
+    el.append(c);
+  }
   return el;
+}
+// A column's width in px, per page and column, synced like the choice of a table itself. A column nobody dragged
+// keeps its share of the page (styles.css), and Title takes what is left.
+const tableWidths = () => pref('tableWidths', {})[pillKey()] || {};
+const tableCols = (widths = tableWidths()) => ['minmax(0, 1fr)', ...tableKeys().map((k) => (widths[k] ? widths[k] + 'px' : 'min(160px, calc(60cqw / var(--cols)))'))].join(' ');
+function resizeColumn(e, key, cell) {
+  e.preventDefault();
+  const grip = e.currentTarget, startX = e.clientX, start = cell.getBoundingClientRect().width, widths = { ...tableWidths() };
+  grip.setPointerCapture(e.pointerId); grip.classList.add('dragging');
+  const move = (ev) => { widths[key] = Math.round(Math.max(40, start + ev.clientX - startX)); outline.style.setProperty('--fcols', tableCols(widths)); };
+  const up = () => {
+    grip.removeEventListener('pointermove', move); grip.removeEventListener('pointerup', up); grip.classList.remove('dragging');
+    if (widths[key]) setColumnWidth(key, widths[key]); // a click without a move changes nothing
+  };
+  grip.addEventListener('pointermove', move); grip.addEventListener('pointerup', up);
+}
+function setColumnWidth(key, px) {
+  const all = pref('tableWidths', {}), mine = { ...all[pillKey()], [key]: px };
+  if (!px) delete mine[key];
+  const next = { ...all, [pillKey()]: mine };
+  if (!Object.keys(mine).length) delete next[pillKey()];
+  setPref('tableWidths', next);
+  outline.style.setProperty('--fcols', tableCols());
+}
+// The keyboard's way to the same widths: ⌘K Column widths …, a row per column; ←/→ on one make it 20px narrower or
+// wider (while nothing is typed, so the caret still moves in what is), ↩ gives it back its share.
+function openColumnWidths() { openFieldPage(null, columnWidthRows, 'Column widths', openCommandPalette, '', columnWidthKeys); }
+function columnWidthRows(q) {
+  const names = new Map(displayList()), widths = tableWidths();
+  return tableKeys().filter((k) => fuzzyMatch(names.get(k) || '', q)).map((k) => ({ group: 'Column widths', icon: 'table', label: names.get(k) || 'Column', column: k,
+    hint: (widths[k] ? widths[k] + 'px' : 'Auto') + ' · ←→ resizes · ↩ resets', keepOpen: true, run: () => { setColumnWidth(k, undefined); renderPalette(); } }));
+}
+function columnWidthKeys(e) {
+  const row = palRows[palIndex];
+  if (!row || !row.column || palInput.value || e.metaKey || e.ctrlKey || e.altKey || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return false;
+  const head = outline.querySelector(':scope > .thead'), cell = head && head.children[tableKeys().indexOf(row.column) + 1]; // + 1: past Title
+  const now = tableWidths()[row.column] || (cell ? cell.getBoundingClientRect().width : 160);
+  setColumnWidth(row.column, Math.round(Math.max(40, now + (e.key === 'ArrowRight' ? 20 : -20))));
+  renderPalette();
+  return true;
 }
 // "4 hours ago". Nothing else in the app says an age in words, so this is the one place that turns a time into one.
 function agoText(iso) {

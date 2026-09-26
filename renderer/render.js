@@ -390,7 +390,7 @@ function renderOutline() {
   outline.classList.toggle('table-view', tableView());
   // ponytail: at least one fact column, because repeat(0) and a division by 0 make the grid invalid; with Display
   // empty that column is simply blank. A layout of its own if that case ever matters.
-  if (tableView() && list.length) { outline.style.setProperty('--cols', Math.max(1, tableKeys().length)); outline.prepend(tableHeadEl()); } // a list page shown as a table (renderer/views.js)
+  if (tableView() && list.length) { outline.style.setProperty('--cols', Math.max(1, tableKeys().length)); outline.style.setProperty('--fcols', tableCols()); outline.prepend(tableHeadEl()); } // a list page shown as a table (renderer/views.js)
   // "No content" is about a page with nothing on it, so it goes by what was just drawn rather than by the row count:
   // a grouped page with every section folded away has no rows and is not empty — its headings are right there.
   if (parent && !list.length && !outline.children.length) {
@@ -785,7 +785,7 @@ function nodeEl(node, docId, parent) {
   // as does a task listed under one, as itself: goTo reads the real node, where zoomTo would open the read-only copy the
   // Timeline lists, filed under the Timeline in the crumb — a page that looked like the task and could not be edited
   else if (parent?.node?.timeline) line.onclick = (e) => { if (!e.metaKey && !e.shiftKey && !e.target.closest('.chev, .check, .bullet')) goTo(node.id); };
-  else if (clickOpens) line.onclick = (e) => { if (!e.metaKey && !e.shiftKey && !e.target.closest('.chev, .bullet')) zoomTo(item); };
+  else if (clickOpens) line.onclick = (e) => { if (!e.metaKey && !e.shiftKey && !e.target.closest('.chev, .bullet, .check')) zoomTo(item); }; // .check: a task's box in a table row ticks it and stays
   if (clickOpens) el.classList.add('opens');
   // a reference row: the bullet opens the target, a click selects the row, and a click on the selected row starts
   // editing it — a native embed takes the caret where it was clicked, while a full reference has nothing to click

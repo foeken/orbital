@@ -929,6 +929,11 @@ a cell; `colwidth` is a ProseMirror attribute (`null` until a column is resized,
   the last value off (an options field without `cardinality: multiple`, or a link field with `single`, is cleared); ⌘K
   offers **Select value …** or **Link to …** for the focused field. A stored label the type no longer declares is struck
   through ("No longer offered") and a link to a type the field does not list carries a ⚠.
+- **Where they are drawn.** A zoomed document's fields sit in the scroll area above its outline (`#fields` in `main.scroll`),
+  so a long list scrolls with the content under the header. The empty space inside them is theirs for a click, and no
+  drop target for the outline (renderer/drag.js `dropHost`).
+- **In a type's table** (docs/VIEWS.md, Outliner or Table) an options column is the same closed list for one row: a click
+  on the cell or ⌘K **Set <field> …** on the focused row opens this picker (`openCellChooser`).
 - **Options picker**: the declared labels with the current ones ticked, typing filters, **Clear value** empties. A single
   field writes and closes; a multiple one toggles and stays open. A label no longer offered is listed to be removed and is
   never written back, since Tana would refuse the whole value.

@@ -154,7 +154,8 @@ link (with target types), member and date field gets a pill: options by label (s
 node they point at, dates by Tana's presets (today, upcoming, past); verified live 2026-09-25 on Goal (Status "On track"
 3 of 6, "On track" or "Unknown" 4). A change applies at once and is kept per type in the `typeFields` preference; nothing
 is written to Tana. Display lists every field the type defines and starts on the ones with pills plus Updated; the values
-come on the row itself (`fields`, from the graph node's `attributes`), drawn as chips on its grey line. The field
+come on the row itself (`fields`, from the graph node's `attributes`), written on its grey line as plain text, one · between
+each, the way a saved search's row reads. The field
 definitions are not drawn there (a list, not the type's edit view): ⌘K Edit fields shows them under the title. An open type page is kept current by a live query over its instances
 (`watchRelated`), as a saved search is.
 
@@ -164,6 +165,16 @@ recorded key keeps working). The rows stay the outline's rows, laid out as a gri
 shows (a type's fields, Type, Lives in, Status, Assigned and the times). The choice is kept per page key in the
 synced `tables` preference, which starts from the older type-only `typeTables` list. A document's own outline and the
 Notifications, Proposals and Timeline pages have no pills and no table.
+
+In a table a row's title opens the node (click, Enter or Space; the title is renamed on the node's page), and its task
+box ticks without opening it. A field column is plain text, comma-joined, cut with an ellipsis and whole in the hover
+tooltip (none while the row is hidden as sensitive). On a type's page an options column can be changed in place: a click
+on the cell (without ⌘ or ⇧, which select) or ⌘K **Set <field> …** on the focused row opens the options picker of
+docs/OUTLINER.md's fields addendum for that row. Every fact column can be resized: drag the grip on its header's right
+edge, double-click it to reset; from the keyboard, ⌘K **Column widths …** (View options, while the page is a table) lists
+the columns, ←/→ make the highlighted one 20px narrower or wider while nothing is typed, ↩ resets it. Widths are kept per
+page key and column in the synced `tableWidths` preference; Title takes what the others leave, and the icons column and
+the agent badge's slot are only there when a row on the page has them.
 
 
 Notifications (issue #18, docs/OUTLINER.md) is listed with the views in Cmd+K but is a page, like a saved search: it has no
