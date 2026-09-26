@@ -221,8 +221,8 @@ Sizes are small fixed scales rather than tokens. Use a size from the scale and n
 
 ### Component classes
 
-Each component's rules are together in styles.css; the file's comment on each says which renderer file builds it.
-State classes are set by the renderer, pseudo-classes by the browser.
+styles.css keeps each component under one header, `/* ==== Name (renderer file) ==== */`, and lists them in order at
+the top of the file. State classes are set by the renderer, pseudo-classes by the browser.
 
 | Component | Classes | States |
 |---|---|---|
@@ -241,6 +241,7 @@ State classes are set by the renderer, pseudo-classes by the browser.
 | Badge | `.cbadge` (the agent), `.pbutton.approve` / `.reject` | `.pending`, `.working`, `.waiting`, `.done`, `.broken`, `.unavailable`, `.closed` |
 | Empty and loading | `.empty-note` ("Nothing here yet"), `.children.loading`, `.skeleton` (renderer/loading.js) | `.empty-note.cleared` |
 | Toast | `.toast`, only through `showNote` / `showError` | `.show`, `.error` |
+| Button | `.button`, `.button.primary` for the one that goes on (a dialog's footer: the key recorder, Help) | `:hover`, `:disabled` |
 | Dialog | a scrim element with a `.card` inside: `.palette`, `.recorder`, `.help` | `[hidden]` on `.palette` and `.recorder`; `.help` is a `<dialog>`, so `[open]` (`showModal()` / `close()`). Surface motion either way |
 | Lightbox | `.lightbox` | `.out` while it closes |
 
@@ -250,7 +251,8 @@ and the same list with `:active`), so it eases down under the pointer like the o
 ### Adding a component
 
 1. Look for the class that already draws it. A list of choices is a `.menu` or a palette page, a toggle is a
-   `.pill`, a label is a `.chip`, a small action is a `.navbtn`, a status is a `.cbadge`.
+   `.pill`, a label is a `.chip`, a small action is a `.navbtn`, a dialog's button is a `.button`, a status is a
+   `.cbadge`.
 2. If nothing fits, write one rule set under the section it belongs to, with a comment naming the renderer file that
    builds it. Colours come from the tokens, from `currentColor`, or from the colour the same meaning already has:
    link blue `#508fbb`, done green `#5a9670`, error red `#c0392b`, meeting gold `#8a6a17`, and the
