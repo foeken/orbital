@@ -125,7 +125,7 @@ assert.match(source, /const canEditNode = \(node\) => !!node && node\.editable !
 // ...or, read-only but checkable, a task listed on the Timeline (main/timeline.js)
 assert.match(source, /const ticks = canEditItem\(item\) \|\| \(!!node\.checkable && isTask\(node\)\);/);
 assert.match(source, /check\.disabled = target \? !canEditNode\(display\) : !ticks;/);
-assert.match(source, /if \(!canEditItem\(item\)\) \{/);
+assert.match(source, /if \(!canEditItem\(item\) \|\| opensOnClick\(item\)\) \{/);
 assert.match(source, /tana\.taskMeta\(docId\)/);
 assert.match(source, /const taskMetaById = new Map\(\), taskMetaLoading = new Set\(\), taskMetaFailed = new Map\(\);/);
 assert.match(source, /if \(!connected \|\| !tana\.taskMeta \|\| !isRealId\(docId\) \|\| isGone\(docId\) \|\| taskMetaById\.has\(docId\) \|\| taskMetaLoading\.has\(docId\) \|\| \(backoff && Date\.now\(\) < backoff\.until\)\) return;/);

@@ -105,7 +105,7 @@ const withShims = (src) => {
   // subtextOf guard below, which then supplies what it calls.
   if (/\bsubtextEl\(/.test(src) && !/function subtextEl\(/.test(src)) src = functionSource('subtextEl') + '\nglobalThis.shownFieldValues ??= (node) => (node.fields ? displayKeys().flatMap((k) => node.fields[k] || []) : []);\n' + src;
   // a type's page (renderer/nodes.js): a harness that is not about one is never on one
-  if (/\b(isTypeDoc|onTypePage|isTypeId)\b/.test(src) && !/const isTypeId =/.test(src)) src = "globalThis.isTypeId ??= (id) => /^tana:type:[^|?]+$/.test(String(id || '')); globalThis.isTypeDoc ??= (node) => !!node && isTypeId(node.id); globalThis.onTypePage ??= () => false;\n" + src;
+  if (/\b(isTypeDoc|onTypePage|isTypeId|opensOnClick)\b/.test(src) && !/const isTypeId =/.test(src)) src = "globalThis.isTypeId ??= (id) => /^tana:type:[^|?]+$/.test(String(id || '')); globalThis.isTypeDoc ??= (node) => !!node && isTypeId(node.id); globalThis.onTypePage ??= () => false; globalThis.opensOnClick ??= (item) => isTypeDoc(item.node) && !String(item.docId || '').includes('|tana:type:');\n" + src;
   if (/\bSEARCH_ID\b/.test(src) && !/const SEARCH_ID =/.test(src)) src = "globalThis.SEARCH_ID ??= 'tana:search:';\n" + src;
   if (/\beditingType\b/.test(src) && !/let editingType\b/.test(src)) src = 'globalThis.editingType ??= null;\n' + src; // no type's fields being edited
   if (/\btableView\(/.test(src) && !/const tableView =/.test(src)) src = 'globalThis.tableView ??= () => false;\n' + src; // no page shown as a table
@@ -833,13 +833,13 @@ function runEditabilityCheck() {
   const start = source.indexOf("onRows('keydown', (e) => {");
   const end = source.indexOf("onRows('input'", start);
   assert.notEqual(start, -1, 'outline editing keyboard handler is present');
-  const runKey = (editable, key = 'Enter', reference = false, meta = false) => {
+  const runKey = (editable, key = 'Enter', reference = false, meta = false, id = 'tana:text:row') => {
     const context = { listener: undefined };
     vm.runInNewContext(`
       let mutation = 0, zoomed = 0, opened = 0, prevented = 0;
       const editable = ${JSON.stringify(editable)};
       const outline = { addEventListener: (_name, fn) => { listener = fn; } };
-      const item = { key: 'row', docId: 'row', node: { kind: 'document', editable, text: 'Row' } };
+      const item = { key: 'row', docId: 'row', node: { id: ${JSON.stringify(id)}, kind: 'document', editable, text: 'Row' } };
       const items = new Map([['row', item]]);
       const keyOfEl = () => 'row';
       const caretOffset = () => 0, getSelection = () => ({ isCollapsed: true });
@@ -867,6 +867,8 @@ function runEditabilityCheck() {
   assert.deepEqual(plain(runKey(false, ' ')), { mutation: 0, zoomed: 1, opened: 0, prevented: true }, 'Space on a focused read-only row zooms into it');
   assert.deepEqual(plain(runKey(false, ' ', true)), { mutation: 0, zoomed: 0, opened: 1, prevented: true }, 'Space on a focused reference opens what it points at');
   assert.deepEqual(plain(runKey(true, ' ')).zoomed, 0, 'and an editable row keeps Space for typing');
+  // A type row opens on a click, so the keys do the same, even though the type itself can be edited (on its page)
+  for (const key of ['Enter', ' ']) assert.deepEqual(plain(runKey(true, key, false, false, 'tana:type:01j0goal000000000000000000')), { mutation: 0, zoomed: 1, opened: 0, prevented: true }, JSON.stringify(key) + ' on a type row opens it and creates nothing');
   // A read-only row swallowed every ⌘ combo but ⌘K and ⌘S, so ⌘F (and ⌘Z, ⌘C, ⌘[) did nothing while the caret sat
   // on one and started working again after a click elsewhere. The shortcuts are the document handler's to run.
   assert.equal(runKey(false, 'f', false, true).prevented, false, '⌘F on a read-only row reaches the document handler');

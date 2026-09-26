@@ -720,7 +720,7 @@ function nodeEl(node, docId, parent) {
   // A row in a field does not open as a page: a field is a list of values, and its rows are read and edited where
   // they are. A reference in one still opens what it points at — that is the chip's own click, not the bullet's.
   const opens = reference || fullref || (zoomable(node) && !field);
-  const clickOpens = opens && !reference && !fullref && isTypeDoc(node); // a type row opens on a click anywhere: its page is where it is renamed
+  const clickOpens = opensOnClick(item);
   if (opens) bullet.title = 'Zoom in'; else bullet.classList.add('still'); // a member or a type has no page: the bullet is only a glyph
   const bulletIcon = gone ? 'trash' : iconOf(display);
   if (bulletIcon) { bullet.classList.add('icon', bulletIcon); const svg = iconNode(bulletIcon); if (svg) bullet.append(svg); }
