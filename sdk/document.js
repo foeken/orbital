@@ -20,9 +20,7 @@ class Document extends EventEmitter {
     this.data = loro.getMap('data');
     this.content = loro.getMap('content');
     this._exported = loro.oplogVersion();
-    // Local-only, CRDT-aware undo: remote changes are never undone, concurrent edits are transformed against.
-    // mergeInterval 0 = one step per transact; typing is already grouped by the caller.
-    this.undoManager = new UndoManager(loro, { mergeInterval: 0, maxUndoSteps: 200 });
+    this.undoManager = null; // made by the first local edit (transact)
   }
 
   toJSON() { return this.loro.toJSON(); }
@@ -30,16 +28,22 @@ class Document extends EventEmitter {
   // Run local mutations, commit, and emit the update since the last exported version.
   transact(fn) {
     if (this._inTransact) return fn(this.loro); // nested: the outer call commits, so the whole thing is one undo step
+    // Local-only, CRDT-aware undo: remote changes are never undone, concurrent edits are transformed against.
+    // mergeInterval 0 = one step per transact; typing is already grouped by the caller. Made here, before the first
+    // local edit, rather than with the document: an UndoManager that exists during a snapshot import makes Loro
+    // decode the whole document there (23 ms for a 590 KB transcript, 0.33 ms without), and most documents are only
+    // read. The peer id is set in _init, so it still comes first.
+    this.undoManager ||= new UndoManager(this.loro, { mergeInterval: 0, maxUndoSteps: 200 });
     this._inTransact = true;
     try { fn(this.loro); } finally { this._inTransact = false; }
     this.loro.commit();
     this._flushLocal();
   }
 
-  undo() { const did = this.undoManager.undo(); if (did) this._flushLocal(); return did; }
-  redo() { const did = this.undoManager.redo(); if (did) this._flushLocal(); return did; }
-  canUndo() { return this.undoManager.canUndo(); }
-  canRedo() { return this.undoManager.canRedo(); }
+  undo() { const did = !!this.undoManager?.undo(); if (did) this._flushLocal(); return did; }
+  redo() { const did = !!this.undoManager?.redo(); if (did) this._flushLocal(); return did; }
+  canUndo() { return !!this.undoManager?.canUndo(); }
+  canRedo() { return !!this.undoManager?.canRedo(); }
 
   // Export whatever local ops were committed since the last export and announce them.
   _flushLocal() {
