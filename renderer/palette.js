@@ -398,7 +398,10 @@ function runAction(id) {
   if (row) { if (!row.disabled) row.run(); return true; }
   const fold = id.indexOf('>'), parent = fold > 0 && rows.find((r) => r.sub && (r.id || r.rank) === id.slice(0, fold));
   if (parent) {
-    if (!parent.disabled) run(async () => { const kid = (await parent.sub()).find((k) => k.label === id.slice(fold + 1) && !k.disabled); if (kid) kid.run(); });
+    // a level that waits (the participants, the spaces) may answer after the palette was opened for something else:
+    // the key was pressed with it closed, so it lets that go rather than taking the palette over
+    const closed = palette.hidden;
+    if (!parent.disabled) run(async () => { const kids = await parent.sub(); if (closed && !palette.hidden) return; const kid = kids.find((k) => k.label === id.slice(fold + 1) && !k.disabled); if (kid) kid.run(); });
     return true;
   }
   // A key on a choice folded under Move to … or Edit visibility ("move>Foundry"): those two rows exist once main has

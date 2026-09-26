@@ -3386,7 +3386,7 @@ async function runClosedPaletteKeysCheck() {
     const palette = { hidden: true };
     let palDoc = null, palField = null, meetingNow;
     let pinInfo = { docId: '${OTHER}', sidebar: false, dates: [] }; // the node Cmd+K was last opened on
-    let focus = '${DOC}', moveFocus = false; const currentDoc = () => ({ id: focus }), fieldAt = () => null, document = { activeElement: null, documentElement: { dataset: {} } };
+    let openOnMeta = false, focus = '${DOC}', moveFocus = false; const currentDoc = () => ({ id: focus }), fieldAt = () => null, document = { activeElement: null, documentElement: { dataset: {} } };
     const isRealId = () => true, localDate = (offset = 0) => (offset ? '2026-09-19' : '2026-09-18'), setTheme = () => {};
     const sectionOf = () => null, visibleTags = () => [], goTo = () => {}, setView = () => {}, openDoc = () => {};
     let palMode = 'cmd', palRows = [], palIndex = 0;
@@ -3415,7 +3415,7 @@ async function runClosedPaletteKeysCheck() {
       currentMeeting: async () => { calls.current++; return answer; },
       pinTo: async (hub, id) => { writes.push(['pinTo', hub, id]); },
       accessOptions: async () => { calls.access++; return { move: true, sharing: true }; },
-      taskMeta: async () => { calls.meta = (calls.meta || 0) + 1; if (moveFocus) { focus = '${OTHER}'; palDoc = { id: focus }; } return { participants: [] }; },
+      taskMeta: async () => { calls.meta = (calls.meta || 0) + 1; if (openOnMeta) { palette.hidden = false; palMode = 'cmd'; } if (moveFocus) { focus = '${OTHER}'; palDoc = { id: focus }; } return { participants: [] }; },
       notifyState: async () => { calls.notify++; return { on: false }; },
       pinState: async () => ({ sidebar: false, dates: [...pinned] }),
       pin: async (id, target, date) => { writes.push(['pin', id, date]); pinned.add(date); },
@@ -3441,6 +3441,7 @@ async function runClosedPaletteKeysCheck() {
        open: () => { palette.hidden = false; palDoc = currentDoc(); meetingNow = undefined; paletteRows(''); palette.hidden = true; },
        state: () => ({ writes: [...writes], errors: [...errors], calls: { ...calls } }),
        page: () => ({ open: !palette.hidden, mode: palMode, doc: palDoc && palDoc.id }),
+       opens: (on) => { openOnMeta = on; palette.hidden = true; palMode = 'cmd'; },
        race: (on) => { moveFocus = on; palette.hidden = true; focus = '${DOC}'; },
        reset: () => { writes.length = 0; errors.length = 0; calls.current = calls.access = calls.notify = 0; accessById.clear(); notifyById.clear(); taskMetaById.clear(); delete calls.meta; } });
   `);
@@ -3488,6 +3489,11 @@ async function runClosedPaletteKeysCheck() {
   await api.key('visibility>Selected people …');
   api.race(false);
   assert.deepEqual(plain([api.state().writes, api.page().doc]), [[['people', DOC]], DOC], 'the choice is the one built for the node the key was pressed on, whatever has the focus when the answer lands');
+  // Cmd+K opened while the participants are asked: the key lets its choice go rather than taking the palette over.
+  api.reset(); api.opens(true);
+  await api.key('visibility>Selected people …');
+  api.opens(false);
+  assert.deepEqual(plain([api.state().writes, api.page().mode]), [[], 'cmd'], 'a palette opened meanwhile keeps its page');
   console.log('ok  keys with the palette closed: date pins and Pin to current meeting act on the node under the caret with state read at the press, and no palette-only lookup is made');
 }
 function runCmdPillsCheck() {
