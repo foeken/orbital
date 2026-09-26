@@ -468,10 +468,11 @@ function renderOutline() {
   if (saved && savedSel) selectRange(saved.key, savedSel[0], savedSel[1], true);
   else if (saved && saved.cell) placeCell(saved.key, saved.cell, saved.offset);
   else if (saved) placeCaret(saved.key, saved.offset, true);
-  // the caret lands in that typable row once per open: a later render (a live update, a refresh) must not pull it back
+  // the caret lands in that typable row once per open: a later render (a live update, a refresh) must not pull it back,
+  // nor take it from a pill whose menu was opened while the rows were on their way: that is where the typing goes
   if (caretOnOpen && parent && Array.isArray(childrenOf(parent))) {
     caretOnOpen = false;
-    const last = list.at(-1), el = last && palette.hidden && !focused() ? textEl(keyFor(parent.docId, last)) : null;
+    const last = list.at(-1), el = last && palette.hidden && !focused() && !$('pills').contains(document.activeElement) ? textEl(keyFor(parent.docId, last)) : null;
     // preventScroll: that row is the last one, so focusing it the ordinary way scrolls a long node to its bottom and
     // the open never shows its top. setCaret's own focus() is then a no-op (already the active element) and collapsing
     // a range into it does not scroll either, so the caret waits out of sight until the first keystroke catches up.
