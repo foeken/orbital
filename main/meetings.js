@@ -53,4 +53,13 @@ async function currentMeeting() {
   return { id: live.eventUri, title: live.title || '', joinedAt: live.joinedAt, callUri: live.callUri };
 }
 
-module.exports = { meetingInfo, editMeeting, attendeeSuggestions, currentMeeting };
+// What the renderer asks this module (preload.js names each channel for the page; main.js registers the table).
+const ipc = {
+  'meeting:info': (_e, id) => meetingInfo(id),
+  'meeting:edit': (_e, id, change) => editMeeting(id, change),
+  'meeting:suggestions': () => attendeeSuggestions(),
+  // the meeting this user has joined right now, for the outliner's Pin to current meeting row
+  'meeting:current': () => currentMeeting(),
+};
+
+module.exports = { meetingInfo, editMeeting, attendeeSuggestions, currentMeeting, ipc };

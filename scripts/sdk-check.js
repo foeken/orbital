@@ -34,7 +34,7 @@ function mainHelpers(childProcess) {
   // opened: every url main asked the OS to open, so a check can see whether assigning actually handed the work over
   const opened = [];
   const timers = []; // every timer main set, never run on its own: a check can look at when one is due and run it by hand
-  const electron = { app: {}, BrowserWindow: function () {}, Menu: {}, ipcMain: { handle: (name, fn) => handlers.set(name, fn), on: () => {} },
+  const electron = { app: {}, BrowserWindow: function () {}, Menu: {}, ipcMain: { handle: (name, fn) => { if (handlers.has(name)) throw new Error('a second handler for ' + name); handlers.set(name, fn); }, on: (name, fn) => handlers.set(name, fn) }, // Electron refuses a second handle too
     shell: { openExternal: async (url) => { if (electron.shell.refuse) throw new Error('no handler for codex://'); opened.push(url); } } };
   const context = vm.createContext({
     Buffer, console, URL, // URL is a global in Electron's main process
@@ -58,6 +58,16 @@ function mainHelpers(childProcess) {
 }
 
 async function main() {
+  {
+    // Every channel preload.js calls has a handler in main, and every handler a caller in preload.js. A handler lives
+    // in main.js or in its module's ipc table (main.js registers those), so a move or a rename on one side only would
+    // otherwise surface as "No handler registered" the first time a page asks.
+    const backend = mainHelpers();
+    const called = [...fs.readFileSync(require.resolve('../preload'), 'utf8').matchAll(/ipcRenderer\.(?:invoke|send|sendSync)\('([^']+)'/g)].map((m) => m[1]);
+    assert.deepEqual(called.filter((c) => !backend.handlers.has(c)).sort(), [], 'preload.js calls channels main does not answer');
+    assert.deepEqual([...backend.handlers.keys()].filter((c) => !called.includes(c)).sort(), [], 'main answers channels preload.js never calls');
+    console.log('ok  ipc: every preload channel has one handler in main, and every handler a caller');
+  }
   {
     // A created saved search must match a real one, byte shape for byte shape. The reference is a raw container
     // dump of an actual Tana saved search (2026-09-17): data{type,createdAt,title,restricted,participants} and

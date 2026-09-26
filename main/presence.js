@@ -97,4 +97,13 @@ function set(docId, at) {
 }
 
 const openIds = () => [...rooms.keys()]; // the documents on screen in some page, which the refresh never lets go of
-module.exports = { open, close, view, set, peersOf, openIds };
+// What the renderer asks this module (preload.js names each channel for the page; main.js registers the table).
+const ipc = {
+  // the renderer opens a room per document on screen, names the one being viewed, and says where its caret is
+  'presence:open': (_e, id) => open(id),
+  'presence:close': (_e, id) => close(id),
+  'presence:view': (e, id) => view(id, e.sender.id), // per page: one half going away cannot end the other's heartbeat
+  'presence:set': (_e, id, at) => set(id, at && typeof at.blockId === 'string' ? { blockId: at.blockId, anchor: Number(at.anchor) || 0, focus: Number(at.focus) || 0 } : null),
+};
+
+module.exports = { open, close, view, set, peersOf, openIds, ipc };

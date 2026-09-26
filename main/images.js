@@ -53,4 +53,11 @@ async function insertImage(docId, nodeId, { bytes, filename, mimeType }, uploadI
 
 const cancelUpload = (uploadId) => { uploading.get(uploadId)?.abort(); };
 
-module.exports = { image, loadImage, insertImage, cancelUpload };
+// What the renderer asks this module (preload.js names each channel for the page; main.js registers the table).
+const ipc = {
+  'image': (_e, uri) => image(uri),
+  'block:insertImage': (_e, id, nodeId, file, uploadId) => insertImage(id, nodeId, file, uploadId), // file { bytes, filename, mimeType }: upload, image document, block after nodeId
+  'block:cancelUpload': (_e, uploadId) => cancelUpload(uploadId),
+};
+
+module.exports = { image, loadImage, insertImage, cancelUpload, ipc };

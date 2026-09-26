@@ -91,4 +91,12 @@ async function fillTypeIcons(types, pick) {
   return fresh.length;
 }
 
-module.exports = { searchIcons, typeIcons, typeIconName, setTypeIcon, fillTypeIcons, iconName, labelOf, forgetTypeIcons };
+// What the renderer asks this module (preload.js names each channel for the page; main.js registers the table).
+const ipc = {
+  // a type's own glyph: the built-in Nucleo set to search, and the glyphs currently chosen (sent with every roots load so
+  // no row is drawn before the glyph it names exists); the choice itself is main.js icons:setType, which refreshes the views
+  'icons:search': (_e, query) => searchIcons(query),
+  'icons:types': () => typeIcons(),
+};
+
+module.exports = { searchIcons, typeIcons, typeIconName, setTypeIcon, fillTypeIcons, iconName, labelOf, forgetTypeIcons, ipc };

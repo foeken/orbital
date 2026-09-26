@@ -147,7 +147,7 @@ Requests and their state are tracked as GitHub issues; the tracker kept before 2
 
 ## How it is put together
 
-`main.js` is the Electron process boundary (windows, menu, the IPC table, boot) and `main/` is what
+`main.js` is the Electron process boundary (windows, menu, boot, and registering each `main/` module's `ipc` table) and `main/` is what
 it delegates to: shared state, rows, documents and their undo stack, the meeting hub, the views
 and their refresh loop, pins, the agent handoff, the settings document.
 `renderer/` with `index.html` and `styles.css` is the whole UI: twenty plain scripts sharing one
