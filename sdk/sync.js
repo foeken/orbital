@@ -75,11 +75,18 @@ class SyncConnection extends EventEmitter {
 
   // ---- ephemeral channels (presence, docs/PLATFORM-PROTOCOL.md 2.8) ----
   // A channel is named by a document uri. Counted per channel as Tana's client does, so two presence handles on one
-  // document share one subscription; resent after every reconnect (_run), since a subscription belongs to the stream.
+  // document share one subscription; resent after every reconnect (_run), since a subscription belongs to the stream. A
+  // refused subscribe is not counted, so the next holder asks again instead of relying on a channel it never got.
   async subscribeEphemeralChannel(channelId) {
     const n = (this.channels.get(channelId) || 0) + 1;
     this.channels.set(channelId, n);
-    if (n === 1 && this.connected) await this._lightCommand({ case: 'subscribeEphemeralChannel', value: { channelId } });
+    if (n === 1 && this.connected) {
+      await this._lightCommand({ case: 'subscribeEphemeralChannel', value: { channelId } }).catch((e) => {
+        const left = (this.channels.get(channelId) || 1) - 1;
+        if (left > 0) this.channels.set(channelId, left); else this.channels.delete(channelId);
+        throw e;
+      });
+    }
   }
   async unsubscribeEphemeralChannel(channelId) {
     const n = (this.channels.get(channelId) || 0) - 1;
