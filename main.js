@@ -496,7 +496,8 @@ ipcMain.handle('codex:link', async (_e, id, link) => {
 // The current request, delivered to the task this node already has. Best effort on purpose: the task is open in
 // front of the user either way, and a queue that does not land must not undo an assignment that did.
 function queueToTask(threadId, message) {
-  try { require('node:child_process').execFile('codex', ['queue', '--thread', threadId, '--message', message], { timeout: 20000 }, () => {}); } catch { /* the task is open regardless */ }
+  const bin = agent.codexBin(); // the task was opened through the Codex app, so this Mac has a codex to queue with
+  try { if (bin) require('node:child_process').execFile(bin, ['queue', '--thread', threadId, '--message', message], { timeout: 20000 }, () => {}); } catch { /* the task is open regardless */ }
 }
 // One bounded app-server child per refresh answers for every linked node (main/agent.js).
 ipcMain.handle('codex:status', () => agent.readAgentStatuses(agent.codexTasks()));
