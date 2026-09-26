@@ -248,6 +248,9 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 .pills { position: relative; z-index: 5; display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 32px 12px; }
 .pills[hidden] { display: none; }
 .pill { position: relative; border: 0; border-radius: 999px; padding: 6px 14px; background: #e8f1fb; color: #4f8ad9; font-weight: 600; font-size: 15px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+/* ...and the same spring would put the pills of a second line over the menu, so the pill carrying one (arriving or
+   leaving) sits above its neighbours */
+.pill:has(> .menu) { z-index: 1; }
 .pill b { color: #2b6fcf; font-weight: 700; }
 .pill svg { width: 16px; height: 16px; }
 /* Refresh is a header button beside the fold one (renderer/pills.js), and it answers the press before the query
