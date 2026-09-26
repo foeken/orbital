@@ -1495,7 +1495,7 @@ async function runSyncShortcutCheck() {
     ({ rows: async (q) => { paletteRows(q); await Promise.resolve(); await Promise.resolve(); return paletteRows(q).map((r) => r.label); }, loads: () => loads,
        ids: (q) => paletteRows(q).map((r) => r.id), press: async (id) => { const hit = runAction(id); await Promise.resolve(); return [hit, ran.splice(0)]; } });
   `);
-  assert.deepEqual(plain(await folded.rows('s')), ['Sync', 'Search Tana', 'Set status', 'Swap panes', 'Hide sidebar', 'Toggle split view', 'Smaller text', 'Reset text size', 'Filter rows by text'],
+  assert.deepEqual(plain(await folded.rows('s')), ['Sync', 'Search Tana', 'Set status', 'Swap panes', 'Hide sidebar', 'Toggle split panes', 'Smaller text', 'Reset text size', 'Filter rows by text'],
     'one letter: the first level only, the groups whose best row starts with it first (the shortest such row leading), a letter inside a word last');
   assert.deepEqual(plain(await folded.rows('sesp')), ['Set status to In Progress'], 'two letters in: the level below is folded in and the query reaches into it');
   assert.deepEqual(plain(await folded.rows('seinb')), ['Set status to Inbox'], 'a disabled choice is left out, the others are single rows');
@@ -1566,7 +1566,7 @@ async function runSyncShortcutCheck() {
     'View options: Filter by type', 'View options: Filter rows by text',
     'Actions: Log in to Tana', 'Actions: Create new …', 'Actions: Search Tana', 'Actions: Undo', 'Actions: Redo', 'Actions: Sync',
     'Navigate: Go back', 'Navigate: Go forward', 'Navigate: Go to Home', 'Navigate: Set as Home', 'Navigate: Focus the sidebar',
-    'Window: New window', 'Window: Toggle split view', 'Window: Go to the other half', 'Window: Swap panes', 'Window: Hide sidebar', 'Window: Reload',
+    'Window: New window', 'Window: Toggle split panes', 'Window: Go to the other half', 'Window: Swap panes', 'Window: Hide sidebar', 'Window: Reload',
     'Settings: Larger text', 'Settings: Smaller text', 'Settings: Reset text size', 'Settings: Toggle dark mode', 'Settings: Edit hidden items', 'Settings: Toggle sensitive visibility', 'Settings: Toggle demo mode',
   ], 'the palette lists its rows in one fixed, meaningful order');
   // The two date pins differ only in the day they name: today's row passes no date (main defaults to today), the
@@ -3181,7 +3181,7 @@ async function runPinToMeetingCheck() {
   assert.deepEqual(plain([api.row('pinToMeeting').label, api.row('pinToMeeting').hint, api.row('pinToMeeting').disabled]), ['Pin to current meeting', 'Checking…', true],
     'it is listed while the lookup is still out, under its new label and its unchanged id');
   await api.settle();
-  assert.deepEqual(plain([api.row('pinToMeeting').hint, api.row('pinToMeeting').disabled, api.row('pinToMeeting').icon]), ['Bingo', false, 'pin'], 'once the meeting is known the row names it and is live');
+  assert.deepEqual(plain([api.row('pinToMeeting').hint, api.row('pinToMeeting').disabled, api.row('pinToMeeting').icon]), ['Bingo', false, 'meetingPin'], 'once the meeting is known the row names it and is live');
   api.track(EVENT);
   api.row('pinToMeeting').run();
   await api.settle();
@@ -3309,11 +3309,11 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     });
   `);
   assert.deepEqual(plain(api.commands('tasks')), [
-    ['pill:status', 'Filter by status', 'In Progress', 'status'], ['pill:assigned', 'Filter by assignee', 'Anyone', 'assigned'],
+    ['pill:status', 'Filter by status', 'In Progress', 'filter'], ['pill:assigned', 'Filter by assignee', 'Anyone', 'filter'],
     ['pill:sort', 'Sort by', 'Default', 'sort'], ['pill:group', 'Group by', 'None', 'group'],
     ['pill:display', 'Display', 'Status, Assigned, Updated', 'field'],
     ['cleanup', 'Clean up', 'Nothing to clean up', 'cleanup'], // always listed, off until a row is held in place
-  ], 'Cmd+K names the current Tasks view options for what they do, with the value as the hint and each its supplied icon (Tasks groups by Status until told otherwise), and Tasks is a kind page with no type to pick');
+  ], 'Cmd+K names the current Tasks view options for what they do, with the value as the hint the filters with the filter icon and the rest their own (Tasks groups by Status until told otherwise), and Tasks is a kind page with no type to pick');
   assert.deepEqual(plain(api.open('status')), { mode: 'pill', rows: [['Any status', ''], ['Inbox', ''], ['In Progress', '✓'], ['Completed', ''], ['Later', '']] },
     'a command opens the same Status rows and active tick as the pill');
   assert.equal(api.pick('Inbox').mode, 'pill', 'a multi-select filter stays in its pill sublevel');
@@ -3725,7 +3725,7 @@ async function runEditPinsCheck() {
   assert.deepEqual(plain(api.marks()), ['doc', 'other'], 'the marks every row draws come from that one list');
   assert.deepEqual(plain(api.page().map((r) => [r.icon, r.label, !!r.keepOpen])),
     [['pinned', 'Sidebar', true], ['pinDate', 'Today · ' + today, true], ['pinDate', '2099-01-01', true],
-      ['meeting', 'Leadership sync', true], ['space', 'Studio', true], ['pinDate', 'Pin to tomorrow', true], ['pin', 'Pin to meeting …', true]],
+      ['meeting', 'Leadership sync', true], ['space', 'Studio', true], ['pinDate', 'Pin to tomorrow', true], ['meetingPin', 'Pin to meeting …', true]],
     'every pin is a row — sidebar, dates in order with today named, then the meetings and spaces it hangs on — and under them only the pins that can still be made: not today, which is already on, but tomorrow and another meeting');
   assert.deepEqual(plain(api.page().map((r) => r.hint)).slice(3, 5), ['Meeting', 'Space'], 'a hub pin says which kind it is, since its title alone does not');
   assert.deepEqual(plain(api.page().map((r) => r.group)).filter((g, i, all) => all.indexOf(g) === i), ['Pinned · ↩ unpins', 'Pin it'], 'the pins under one header that says what Enter does, what can still be pinned under another');
@@ -7109,7 +7109,7 @@ async function runDiscussWithCheck() {
   `);
 
   // 1. A document is offered the row; a meeting is not, because the type applies to documents.
-  assert.deepEqual(plain(api.row()), { label: 'Discuss with \u2026', hint: 'Discussion Task', icon: 'member', keepOpen: true },
+  assert.deepEqual(plain(api.row()), { label: 'Discuss with \u2026', hint: 'Discussion Task', icon: 'discuss', keepOpen: true },
     'the row says what it will do: the name, and the type the document gets');
   for (const id of ['tana:event:01j0event00000000000000000', 'tana:type:01j0type000000000000000000', 'tana:space:01j0space00000000000000000', 'b12']) {
     api.node({ id, tags: [] });

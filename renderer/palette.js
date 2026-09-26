@@ -154,7 +154,7 @@ function paletteRows(q, typed = q) {
   if (palDoc && tana.currentMeeting && tana.pinTo && isRealId(palDoc.id)) {
     loadMeeting();
     const doc = palDoc, live = meetingNow;
-    rows.push({ id: 'pinToMeeting', group: docGroup, icon: 'pin', label: 'Pin to current meeting',
+    rows.push({ id: 'pinToMeeting', group: docGroup, icon: 'meetingPin', label: 'Pin to current meeting',
       hint: live.pending ? 'Checking…' : live.meeting ? demoText(live.meeting.title || 'Current meeting', live.meeting.id) : live.error || 'No active meeting',
       disabled: !(live && live.meeting), run: () => pinToMeeting(doc) });
   }
@@ -162,7 +162,7 @@ function paletteRows(q, typed = q) {
   // needs no live meeting, so it is never disabled — a workspace with no meetings at all says so on that page.
   if (palDoc && tana.searchPreview && tana.pinTo && isRealId(palDoc.id)) {
     const doc = palDoc;
-    rows.push({ id: 'pinToSelectedMeeting', group: docGroup, icon: 'pin', label: 'Pin to meeting …', hint: 'Choose a meeting',
+    rows.push({ id: 'pinToSelectedMeeting', group: docGroup, icon: 'meetingPin', label: 'Pin to meeting …', hint: 'Choose a meeting',
       keepOpen: true, run: () => openMeetingPicker(doc) });
   }
   // Everywhere this node is pinned, on one page, with each of them one press from being taken off. Offered whether
@@ -212,7 +212,7 @@ function paletteRows(q, typed = q) {
   // discussed with. A meeting is not offered it — the type applies to documents.
   if (palDoc && tana.discussWith && isRealId(palDoc.id) && DOC_KIND.test(palDoc.id)) {
     const doc = palDoc;
-    rows.push({ id: 'discussWith', group: docGroup, icon: 'member', label: 'Discuss with …', hint: 'Discussion Task',
+    rows.push({ id: 'discussWith', group: docGroup, icon: 'discuss', label: 'Discuss with …', hint: 'Discussion Task',
       keepOpen: true, run: () => openDiscussPalette(doc) });
   }
   // And what a type looks like. The glyph belongs to the type, so every document of that type is drawn with it: its
@@ -304,7 +304,7 @@ function paletteRows(q, typed = q) {
   if (!zoom || onSearchPage() || onTypePage()) rows.push({ id: 'filter', group: 'View options', icon: 'filter', label: 'Filter rows by text', run: () => { filterShown = true; filterRow.hidden = false; render(); filterEl.focus(); } });
   // The app's own rows, in four groups: Actions (getting in, making and finding things, undoing, syncing), Navigate
   // (moving between places), Window (windows, panes, the sidebar) and Settings (how it looks, what it hides, accounts).
-  if (signedOut) rows.push({ id: 'login', group: 'Actions', label: 'Log in to Tana', run: () => tana.login().catch(showError) });
+  if (signedOut) rows.push({ id: 'login', group: 'Actions', icon: 'tana', label: 'Log in to Tana', run: () => tana.login().catch(showError) });
   if (tana.creationOptions) rows.push({ id: 'create', group: 'Actions', icon: 'createNew', label: 'Create new …', keepOpen: true, run: openCreationPalette, sub: async () => { creationChoices = (await tana.creationOptions()).options || []; return creationRows(''); } });
   // the keys the outline answers to, as rows: each has a default combo in DEFAULT_HOTKEYS and can be re-recorded
   rows.push({ id: 'search', group: 'Actions', icon: 'search', label: 'Search Tana', keepOpen: true, run: () => togglePalette('search') });
@@ -328,9 +328,9 @@ function paletteRows(q, typed = q) {
   if (tana.archivedTypes) rows.push({ id: 'archivedTypes', group: 'Navigate', icon: 'type', label: 'Archived types', keepOpen: true, run: openArchivedPalette });
   rows.push({ id: 'newWindow', group: 'Window', icon: 'createNew', label: 'New window', run: () => tana.newWindow() });
   // the new right half opens on this page: it reads the right half's view and place, so this page is stored there first
-  rows.push({ id: 'splitView', group: 'Window', icon: 'rail', label: 'Toggle split view', run: () => { localStorage.setItem('view:2', view); rememberPlace('place:2'); tana.splitWindow(); } });
-  rows.push({ id: 'otherPane', group: 'Window', icon: 'rail', label: 'Go to the other half', run: () => tana.otherPane() });
-  rows.push({ id: 'swapPanes', group: 'Window', icon: 'rail', label: 'Swap panes', run: () => tana.swapPanes() });
+  rows.push({ id: 'splitView', group: 'Window', icon: 'splitPanes', label: 'Toggle split panes', run: () => { localStorage.setItem('view:2', view); rememberPlace('place:2'); tana.splitWindow(); } });
+  rows.push({ id: 'otherPane', group: 'Window', icon: 'otherPane', label: 'Go to the other half', run: () => tana.otherPane() });
+  rows.push({ id: 'swapPanes', group: 'Window', icon: 'swapPanes', label: 'Swap panes', run: () => tana.swapPanes() });
   // Always reachable, unlike "Focus the sidebar": once the sidebar is hidden there would otherwise be no way back to it.
   if (!railToggle.hidden) rows.push({ id: 'railToggle', group: 'Window', icon: railHidden ? 'railShow' : 'railHide', label: railHidden ? 'Show sidebar' : 'Hide sidebar', run: () => toggleRail() });
   rows.push({ id: 'reload', group: 'Window', icon: 'reload', label: 'Reload', run: () => location.reload() });

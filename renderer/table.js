@@ -140,7 +140,7 @@ function tableRows() {
   const body = t.rows.length - (header(0) ? 1 : 0), width = Math.max(...t.rows.map((row) => row.length));
   const off = { rowBefore: header(r), rowUp: header(r) || r === 0 || header(r - 1), rowDown: header(r) || r === t.rows.length - 1, deleteRow: header(r) || body <= 1,
     columnLeft: c === 0, columnRight: c >= width - 1, deleteColumn: width <= 1 };
-  return TABLE_ROWS.map(([op, label]) => ({ id: 'table:' + op, group: 'Table', icon: op.startsWith('delete') ? 'trash' : undefined, label, disabled: !!off[op], run: () => tableAction(item, at, op) }));
+  return TABLE_ROWS.map(([op, label]) => ({ id: 'table:' + op, group: 'Table', icon: op.startsWith('delete') ? 'trash' : 'table', label, disabled: !!off[op], run: () => tableAction(item, at, op) }));
 }
 function tableAction(item, cellId, op) {
   saveCell(cellId); // what is typed in the cell is written first, so the operation acts on what is on screen

@@ -81,7 +81,7 @@ function editPinRows(q) {
   // pinned, because a document can hang on more than one meeting.
   if (tana.searchPreview && tana.pinTo && isRealId(palDoc.id)) {
     const doc = palDoc;
-    adds.push({ group: 'Pin it', icon: 'pin', label: 'Pin to meeting …', hint: 'Choose a meeting', keepOpen: true, run: () => openMeetingPicker(doc, () => openPinsPalette(doc)) });
+    adds.push({ group: 'Pin it', icon: 'meetingPin', label: 'Pin to meeting …', hint: 'Choose a meeting', keepOpen: true, run: () => openMeetingPicker(doc, () => openPinsPalette(doc)) });
   }
   // one query over both halves, so typing narrows what can be pinned as well as what is; with no pin left on screen
   // the page says which of the two silences that is — none match what was typed, or there are none at all
