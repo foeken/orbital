@@ -45,6 +45,8 @@ function timelineGroups(list) {
   return days.map((g) => ({ ...g, title: timelineDay(g.id), collapsed: timelineFolded.has(g.id),
     toggle: () => { if (!timelineFolded.delete(g.id)) timelineFolded.add(g.id); render(true); } }));
 }
+// The rule closes the blocks at the top — Today's Tasks, then Upcoming meetings when there are any — before the history
+const timelineTopEnds = (n, next) => !!(n.timeline?.today || n.timeline?.upcoming) && !next?.timeline?.upcoming;
 function timelineDividerEl() {
   const el = document.createElement('div'); el.className = 'tl-divider'; el.setAttribute('aria-hidden', 'true'); return el;
 }

@@ -21,7 +21,7 @@ const db = require('../db');
 const { STATE_TYPES } = require('../sdk/node');
 const { pinnedDates } = require('./pins');
 const { NOT_CONNECTED, S, iso, isMcp, send, summaryCache } = require('./state');
-const { graphRow, isAllDay, members, rememberNodeHue, toNode } = require('./rows');
+const { graphRow, hm, isAllDay, members, rememberNodeHue, toNode } = require('./rows');
 const { notifySilencedIds, notifyWatchedIds } = require('./documents');
 const { inboxFrom } = require('./views');
 const { writeUpOf } = require('./related');
@@ -82,13 +82,15 @@ const meetingSig = (row) => { const ev = row.calendarEvent || {}; return JSON.st
 // Who is on a meeting, as the graph gives it: the roster (calendarEvent.roster), or the calendar's own attendee list
 const attendeesOf = (ev) => (Array.isArray(ev.roster) && ev.roster.length ? ev.roster : Array.isArray(ev.attendees) ? ev.attendees : []).filter((a) => a && typeof a === 'object');
 const duration = (ms) => { const m = Math.round(ms / 6e4), h = Math.floor(m / 60); return m < 60 ? m + ' min' : h + ' h' + (m % 60 ? ' ' + (m % 60) + ' min' : ''); };
-// A meeting's grey line: how long it is, then who else is on it (rooms and you left out), four names and an ellipsis
-function meetingNote(ev, me, myEmail) {
+// A meeting's grey line: how long it is (or, for one still to come, when: "14:00–15:00"), then who else is on it
+// (rooms and you left out), four names and an ellipsis
+function meetingNote(ev, me, myEmail, when = false) {
   const start = Date.parse(ev.startTime || ''), end = Date.parse(ev.endTime || '');
   const names = [...new Set(attendeesOf(ev).filter((a) => a.role !== 'resource' && a.identityUri !== me && !(myEmail && String(a.email || '').toLowerCase() === myEmail))
     .map((a) => a.displayName || String(a.email || '').split('@')[0]).filter(Boolean))];
   const people = names.slice(0, 4).join(', ') + (names.length > 4 ? ', …' : '');
-  return [end > start ? duration(end - start) : '', people].filter(Boolean).join(' · ') || null;
+  const time = !(end > start) ? '' : when ? hm(new Date(start)) + '–' + hm(new Date(end)) : duration(end - start);
+  return [time, people].filter(Boolean).join(' · ') || null;
 }
 function watchMeetings(me, since) {
   const end = new Date(); end.setHours(24, 0, 0, 0);
@@ -157,8 +159,10 @@ async function rows() {
     events.push({ kind: 'inbox', uri: n.id, title: n.title, at: Date.parse(n.createTime), actor, icon, tone: 'new', node: n });
   }
   // Meetings: the ones you are in that started in the window, up to now, each opening the meeting (which forwards to
-  // its write-up, renderer/edit.js followSummary). A refusal costs the meetings only.
-  const { nodes: meetings = [] } = await graph.listNodes({ nodeTypes: ['event'], hasParticipantUris: [me], eventStartTimeMin: new Date(since).toISOString(), eventStartTimeMax: new Date().toISOString(),
+  // its write-up, renderer/edit.js followSummary), and the rest of today's for the Upcoming meetings block. One ask to
+  // the end of today; a refusal costs the meetings only.
+  const endOfToday = new Date(); endOfToday.setHours(24, 0, 0, 0);
+  const { nodes: meetings = [] } = await graph.listNodes({ nodeTypes: ['event'], hasParticipantUris: [me], eventStartTimeMin: new Date(since).toISOString(), eventStartTimeMax: endOfToday.toISOString(),
     sortOptions: [{ field: 'SORT_FIELD_EVENT_START_TIME', direction: 'SORT_DIRECTION_DESCENDING' }], limit: Math.min(500, 25 * pages) }).catch(() => ({}));
   const myEmail = String((S.me.user && S.me.user.email) || '').toLowerCase();
   const shown = meetings.filter((n) => { const ev = n.calendarEvent || {}, at = Date.parse(ev.startTime || ''); return at > since && at <= Date.now() && !isAllDay(ev.startTime, ev.endTime, ev.allDay); });
@@ -174,6 +178,15 @@ async function rows() {
     events.push({ kind: 'meeting', uri: n.id, title: n.title, at: Date.parse(ev.startTime), icon: 'meeting', tone: bare ? 'faint' : 'meeting', note: meetingNote(ev, me, myEmail) });
   }
   watchMeetings(me, since);
+  // Upcoming meetings: today's still to start, earliest first, under Today's Tasks as a block of their own. Each opens
+  // the meeting; its grey line says when and who (renderer/views.js subtextOf, node.subtext). No meetings, no block.
+  const upcoming = meetings.filter((n) => { const ev = n.calendarEvent || {}; return Date.parse(ev.startTime || '') > Date.now() && !isAllDay(ev.startTime, ev.endTime, ev.allDay); })
+    .sort((a, b) => Date.parse(a.calendarEvent.startTime) - Date.parse(b.calendarEvent.startTime))
+    .map((n) => ({ id: n.id, text: n.title || 'Untitled', title: n.title || 'Untitled', kind: 'document', icon: 'meeting', editable: false, hasChildren: false,
+      subtext: meetingNote(n.calendarEvent, me, myEmail, true) }));
+  const upcomingText = 'Upcoming meetings';
+  const upcomingRow = upcoming.length ? [{ id: PAGE + ':upcoming', text: upcomingText, segments: [{ text: upcomingText }], kind: 'block', block: 'bullet', icon: 'meeting',
+    editable: false, hasChildren: true, children: upcoming, createdAt: iso(Date.now()), unread: false, timeline: { uri: null, time: 'Next', tone: 'new', upcoming: true } }] : [];
   const now = Date.now(), date = new Date(now).toLocaleDateString('sv-SE');
   const pinDatesById = new Map(Object.entries(await pinnedDates()));
   const pinnedIds = [...pinDatesById].filter(([, dates]) => dates.some((pinnedDate) => pinnedDate <= date)).map(([id]) => id);
@@ -199,7 +212,7 @@ async function rows() {
     if (e.kind === 'inbox' && last && last.kind === 'inbox' && last.actor === e.actor && day(last.at) === day(e.at)) last.tasks.push(e);
     else merged.push(e.kind === 'inbox' ? { ...e, tasks: [e] } : e);
   }
-  return [todayRow, ...merged.map((e) => {
+  return [todayRow, ...upcomingRow, ...merged.map((e) => {
     const title = e.title || 'Untitled';
     let segments, note = null, change = null, detail = null, children = [];
     // who, in plain text, then what they did in bold, then the node: "Kevin Favier **completed** ~~Plan the offsite~~".

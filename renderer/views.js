@@ -376,6 +376,7 @@ function pinnedOn(n) {
 // "Lives in" only has an answer for a document shared with a space, which is the only place a row learns a space name.
 function subtextOf(node, taskInfo) {
   const bits = [];
+  if (node.subtext) bits.push(demoText(node.subtext, node.id)); // a line main wrote for the row: an upcoming meeting's time and people (main/timeline.js)
   if (node.proposal) bits.push(demoText(node.proposal.note, node.id)); // where it was proposed, first: it is why the row is on the Proposals page
   if (node.timeline && node.timeline.note) bits.push(demoText(node.timeline.note, node.timeline.uri)); // Tana's words for an edit, or where a new task came from
   const pinned = pinnedOn(node); if (pinned) bits.push(pinned);

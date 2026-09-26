@@ -2509,7 +2509,9 @@ async function main() {
     const going = { id: 'tana:event:' + ulid(), title: 'Board prep', calendarEvent: { startTime: ago(3.5 * H), endTime: ago(-1 * H) } }; // still going: as it is
     const summed = { id: 'tana:event:' + ulid(), title: 'Weekly', calendarEvent: { startTime: ago(4.5 * H), endTime: ago(4 * H), tagline: 'Weekly: roadmap agreed' } };
     const writeUps = [{ id: 'tana:text:' + ulid(), title: 'Weekly: roadmap agreed', ownerUri: summed.id }, { id: 'tana:text:' + ulid(), title: 'Agenda', ownerUri: meeting.id }]; // an agenda is no write-up
-    let meetingsAsked = null;
+    // still to come today (a second from now, so the end of the day cannot overtake it), shown only once asked for below
+    const soon = { id: 'tana:event:' + ulid(), title: 'Standup', calendarEvent: { startTime: new Date(Date.now() + 1000).toISOString(), endTime: new Date(Date.now() + 1000 + 15 * 6e4).toISOString(), roster: [person('Ann Bakker')] } };
+    let meetingsAsked = null, soonToo = false;
     let liveDoc = null; const sent = [], historyAsks = [];
     const summaries = new Map([[watched.id, [
       { title: 'Task status changed to Completed', authors: [COLLEAGUE], endTime: ago(0.05 * H) }, // the same move the node's state already tells
@@ -2527,7 +2529,7 @@ async function main() {
             if (p.nodeIds && (p.nodeTypes || []).includes('chat')) return { nodes: [{ id: MCP_CHAT, title: 'MCP: Nedap Compliance', invocationContext: { intent: 'mcp' } }, { id: AI_CHAT, title: 'Chat for Weekly', invocationContext: { intent: 'meeting' } }].filter((c) => p.nodeIds.includes(c.id)) };
             if (p.nodeIds && (p.nodeTypes || []).includes('text')) return { nodes: [pinnedEditable, pinnedReadOnly, completedOverdue].filter((n) => p.nodeIds.includes(n.id)) };
             if (p.nodeIds) return { nodes: [] };
-            if ((p.nodeTypes || []).includes('event')) { meetingsAsked = p; return { nodes: [going, meeting, summed, allDay] }; }
+            if ((p.nodeTypes || []).includes('event')) { meetingsAsked = p; return { nodes: [...(soonToo ? [soon] : []), going, meeting, summed, allDay] }; }
             if (p.ownerIds) return { nodes: writeUps.filter((n) => p.ownerIds.includes(n.ownerUri)) };
             if ((p.createdBy || []).includes(ME)) return { nodes: [watched, kept] };
             if ((p.assignedTo || []).includes(ME)) return { nodes: [byHand, viaMcp, viaMcpToo, fromRob, viaAi, old] };
@@ -2554,8 +2556,8 @@ async function main() {
       ['Rob Jansen edited Contract renewal', 'Moved the deadline to Friday', 'updated', 'edit', false, []],
       ["Tana's AI added a task to your Inbox", null, 'tana', 'new', false, ['Share the transcript']],
     ], 'a timeline, newest first: who, then what they did, then the node; an edit\'s change quoted under it; new tasks from one source in a row are one quiet entry; a completion told once, from the node\'s own state; a meeting at its start time, quiet once it is over with no write-up, all-day ones left out; yours alone, by hand, or weeks old stay out');
-    assert.deepEqual(JSON.parse(JSON.stringify([meetingsAsked.hasParticipantUris, Date.parse(meetingsAsked.eventStartTimeMax) <= Date.now(), Date.parse(meetingsAsked.eventStartTimeMin) === (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime() - 2 * 24 * H; })()])), [[ME], true, true],
-      'the meetings asked for are yours, from the start of the day before yesterday up to now');
+    assert.deepEqual(JSON.parse(JSON.stringify([meetingsAsked.hasParticipantUris, Date.parse(meetingsAsked.eventStartTimeMax) === (() => { const d = new Date(); d.setHours(24, 0, 0, 0); return d.getTime(); })(), Date.parse(meetingsAsked.eventStartTimeMin) === (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime() - 2 * 24 * H; })()])), [[ME], true, true],
+      'the meetings asked for are yours, from the start of the day before yesterday to the end of today');
     // Kept current (#210): the read left a live query open over your meetings; the server's answers re-read the page
     // when a meeting's title or time moves, or one comes or goes, and not when only something else about it changed
     const liveQuery = liveDoc.data.toJSON().query;
@@ -2587,6 +2589,16 @@ async function main() {
     summaries.get(watched.id).push({ title: 'Signed by both parties', authors: [COLLEAGUE], endTime: ago(-1000) });
     const next = await read();
     assert.deepEqual(next.filter((r) => r[4]).map((r) => r[1]), ['Signed by both parties'], 'what came after your last visit is marked new, and only that');
+    // Today's meetings still to come: a block of their own under Today's Tasks, earliest first, each saying when and who
+    soonToo = true;
+    const withSoon = await backend.timelinePage.rows();
+    const hm = (ms) => { const d = new Date(ms); return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0'); };
+    assert.deepEqual(JSON.parse(JSON.stringify([withSoon[1].text, withSoon[1].timeline.time, withSoon[1].timeline.upcoming, withSoon[1].children.map((c) => [c.id, c.text, c.icon, c.subtext])])),
+      ['Upcoming meetings', 'Next', true, [[soon.id, 'Standup', 'meeting', hm(Date.parse(soon.calendarEvent.startTime)) + '–' + hm(Date.parse(soon.calendarEvent.endTime)) + ' · Ann Bakker']]],
+      'a meeting later today sits under Upcoming meetings, after Today\'s Tasks, saying when and who');
+    assert.ok(!withSoon.slice(2).some((r) => r.timeline.uri === soon.id), 'and not among what happened');
+    soonToo = false;
+    assert.ok(!(await backend.timelinePage.rows()).some((r) => r.timeline.upcoming), 'with none to come the block is not drawn');
     // Three days a page: four days back is not on the first one, and one page older brings it in
     summaries.get(watched.id).push({ title: 'Renamed the task', authors: [COLLEAGUE], endTime: ago(4 * 24 * H) });
     assert.ok(!(await read()).some((r) => r[1] === 'Renamed the task'), 'the Timeline opens on today and the two days before');
