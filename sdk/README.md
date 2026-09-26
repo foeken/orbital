@@ -13,7 +13,8 @@ Docs, in reading order:
 Wire protocol: [docs/PLATFORM-PROTOCOL.md](../docs/PLATFORM-PROTOCOL.md). Pins: [docs/PINNING.md](../docs/PINNING.md).
 
 ```js
-const { createTanaClient, readNode, setTitle } = require('./sdk');
+const { createTanaClient } = require('./sdk');
+const { readNode, setTitle } = require('./sdk/node');
 const content = require('./sdk/content');
 const client = createTanaClient({ getAccessToken, orgId, peerId, storageId });
 await client.sync.connect();
