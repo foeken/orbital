@@ -374,7 +374,7 @@ function menuRows(d) {
   return d.search ? rows.slice(0, MENU_CAP) : rows;
 }
 function menuEl(d) {
-  const rows = menuRows(d), el = document.createElement('div'); el.className = 'menu';
+  const rows = menuRows(d), el = document.createElement('div'); el.className = 'menu' + (d.search ? ' search' : '');
   el.dataset.for = d.id; // which pill it hangs from, so a redraw can tell a new menu from the same one (menuMotion)
   const typed = (menu.q || '').trim();
   // A long list (a link field's targets) shows where the typing goes before anything is typed; the keys stay the pill's,
