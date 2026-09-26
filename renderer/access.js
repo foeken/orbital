@@ -39,8 +39,7 @@ function visibilityRows(q) {
   ].filter(Boolean).filter((row) => fuzzyMatch(row.label, q));
 }
 function openVisibilityPalette(doc) {
-  palDoc = doc; palMode = 'visibility'; palRows = []; palIndex = 0; palette.hidden = false;
-  palInput.placeholder = 'Choose visibility'; palInput.value = ''; loadAccess(doc.id); loadTaskMeta(doc.id); renderPalette(); palInput.focus();
+  palDoc = doc; showPage('visibility', 'Choose visibility'); loadAccess(doc.id); loadTaskMeta(doc.id); renderPalette(); palInput.focus();
 }
 // A document that is already shared with selected people opens at that list: the mode is settled, the people are what
 // changes. Anything else (and a doc whose participants or sharing rules say the list cannot be edited) starts at the
@@ -57,7 +56,7 @@ function openVisibilityPeople(doc) {
   if (!meta) return;
   visibilityPeople = new Set(meta.participants.map((p) => p.uri).filter((id) => id && id !== me()?.id));
   visibilityRoles = new Map(meta.participants.map((p) => [p.uri, p.role]).filter(([id]) => id && id !== me()?.id));
-  palMode = 'visibilityPeople'; palRows = []; palIndex = 0; palInput.placeholder = 'Select people'; palInput.value = '';
+  showPage('visibilityPeople', 'Select people');
   loadMembers(); renderPalette(); palInput.focus();
 }
 function visibilityPeopleRows(q) {
@@ -84,9 +83,7 @@ async function moveTargets(doc) {
   return nodes.map((node) => ({ icon: node.icon, label: demoText(node.text, node.id), disabled: !node.selectable, keepOpen: true, run: () => { openMovePalette(doc); previewMoveToSpace(doc, node); } }));
 }
 function openMovePalette(doc) {
-  clearTimeout(palTimer); palTimer = null; ++palSeq;
-  palDoc = doc; palMode = 'spaces'; palRows = []; palIndex = 0; palBusy = false; palette.hidden = false;
-  palInput.placeholder = 'Move to …'; palInput.value = ''; searchSpacesNow(); palInput.focus();
+  palDoc = doc; showPage('spaces', 'Move to …'); searchSpacesNow(); palInput.focus();
 }
 function audienceLabel(audience) { return audienceInfo(audience)?.label || 'Audience cannot be verified'; }
 function previewMoveToSpace(doc, space) {

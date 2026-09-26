@@ -251,8 +251,7 @@ function assigneeRows(q, doc = palDoc) {
 }
 function openAssigneePalette(doc, ctx) {
   palTaskCtx = ctx || null;
-  palDoc = doc; palMode = 'assignees'; palRows = []; palIndex = 0; palBusy = false;
-  palette.hidden = false; palInput.placeholder = 'Assign task to…'; palInput.value = '';
+  palDoc = doc; showPage('assignees', 'Assign task to…');
   loadMembers(); loadTaskMeta(doc.id); renderPalette(); palInput.focus();
 }
 function taskActionContext() {
@@ -303,8 +302,7 @@ function statusRows(q, ctx = palTaskCtx) {
   }));
 }
 function openStatusPalette(ctx) {
-  palTaskCtx = ctx; palMode = 'status'; palRows = []; palIndex = 0; palBusy = false;
-  palette.hidden = false; palInput.placeholder = 'Set status to…'; palInput.value = '';
+  palTaskCtx = ctx; showPage('status', 'Set status to…');
   renderPalette(); palInput.focus();
 }
 function manyAssigneeRows(q, ctx = palTaskCtx) {
@@ -315,8 +313,7 @@ function manyAssigneeRows(q, ctx = palTaskCtx) {
   return memberRows(q, (uri) => apply(uri ? [uri] : []));
 }
 function openManyAssigneePalette(ctx) {
-  palTaskCtx = ctx; palMode = 'assigneesMany'; palRows = []; palIndex = 0; palBusy = false;
-  palette.hidden = false; palInput.placeholder = ctx.multi ? 'Assign tasks to…' : 'Assign to…'; palInput.value = '';
+  palTaskCtx = ctx; showPage('assigneesMany', ctx.multi ? 'Assign tasks to…' : 'Assign to…');
   loadMembers(); renderPalette(); palInput.focus();
 }
 function taskActionRows(group = 'Actions') {

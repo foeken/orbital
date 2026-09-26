@@ -102,9 +102,7 @@ function openCellChooser(node, key, def, back) {
 function openFieldPage(ctx, rows, placeholder, back, text = '', keys = null) {
   fieldCtx = ctx; fieldPage = rows; fieldKeys = keys;
   fieldBack = back || (() => closePalette());
-  anchorPalette(null); promptEditor(false);
-  palMode = 'field'; palRows = []; palIndex = 0; palBusy = false; palette.hidden = false;
-  palInput.placeholder = placeholder; palInput.value = text;
+  anchorPalette(null); showPage('field', placeholder, text);
   renderPalette(); palInput.focus();
 }
 function optionRows(q) {
