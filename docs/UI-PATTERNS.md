@@ -291,9 +291,9 @@ The full contract is [OUTLINER.md](OUTLINER.md). These are the rules a new featu
   says what was done, in the past tense, and names the thing: "Link copied", "Classified as Decision Record".
 - **Where errors go.** An action runs through `run()`, and a failure becomes the red toast (`showError`). A palette page
   built on `loadList` shows a failed read as a disabled note row in place of its rows; other pages that read (Set icon
-  and the Pin to today picker, for example) send it to the toast and keep what they last had, or nothing. The Create
-  task card, a page of its own, keeps a failed create on the card (`.terror`) so the press can be repeated. The red line
-  under the title (`#error`) belongs to the session alone: it asks for a new login. A notice never goes to `#error`.
+  and the Pin to today picker, for example) send it to the toast instead. The Create task card, a page of its own, keeps
+  a failed create on the card (`.terror`) so the press can be repeated. The red line under the title (`#error`) belongs
+  to the session alone: it asks for a new login. A notice never goes to `#error`.
 - **Focus after an action.** Closing the palette puts the caret back on the row that had it (`closePalette`). A menu
   dismissed with Escape gives focus back to its own button (renderer/pills.js, toolbar.js). A choice made in the
   toolbar's style menu puts the text selection back instead (`applyBlockType`), so typing goes on. A new row takes the
