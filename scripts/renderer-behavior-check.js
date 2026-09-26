@@ -63,6 +63,10 @@ const withShims = (src) => {
       + ' globalThis.promptEditor ??= () => {}; globalThis.palette ??= { hidden: true }; globalThis.palInput ??= { value: "", placeholder: "", focus() {} };\n'
       + 'globalThis.showPage ??= ' + source.match(/^function showPage\(.*?^\}/ms)[0] + ';\n' + src;
   }
+  // the palette's own lookups run only while it is shown (#274): a harness that never declares it has it open
+  if (/\bpalette\.hidden\b/.test(src)) src = 'globalThis.palette ??= { hidden: false };\n' + src;
+  // a key waiting on main notes the palette generation it was pressed in (runAction, #274)
+  if (/\bpalSeq\b/.test(src)) src = 'globalThis.palSeq ??= 0;\n' + src;
   // fields that hold choices or links (renderer/fields.js): a palette harness without that file has no field focused
   if (/\bfieldRows\(/.test(src) && !/function fieldRows\(/.test(src)) src = 'globalThis.fieldRows ??= () => [];\n' + src;
   if (/\b(fieldReturn|fieldLinkCtx|palField|fieldAt|focusField)\b/.test(src) && !/let fieldReturn\b/.test(src)) src = 'globalThis.fieldReturn ??= null; globalThis.fieldLinkCtx ??= null; globalThis.palField ??= null; globalThis.fieldAt ??= () => null; globalThis.focusField ??= () => {};\n' + src;
@@ -1578,7 +1582,7 @@ async function runSyncShortcutCheck() {
     const searchesLoaded = true, localStorage = { setItem() {} }, onSearchPage = () => false;
     const selectionRows = () => [{ id: 'delete', group: 'Current node', label: 'Delete' }, { id: 'sensitive', group: 'Current node', label: 'Mark as sensitive' }, { id: 'zoomIn', group: 'Current node', label: 'Zoom in' }, { id: 'status', group: 'Current node', label: 'Set status' }];
     const pillCommandRows = () => [{ id: 'pill:type', group: 'View options', label: 'Filter by type' }], taskActionRows = () => [];
-    const tana = { refresh: async () => {}, todayNode: async () => {}, weekNode: async () => {}, nodeLink: async () => {}, accessOptions: async () => {}, filters: {}, sensitiveIds: () => {}, creationOptions: async () => {}, discussWith: async () => {} }, run = () => {};
+    const tana = { refresh: async () => {}, todayNode: async () => {}, weekNode: async () => {}, nodeLink: async () => {}, accessOptions: async () => {}, filters: {}, sensitiveIds: () => {}, creationOptions: async () => {}, discussWith: async () => {}, pin: async () => {}, pinState: async () => ({}) }, run = () => {};
     const openDiscussPalette = () => {};
     const authed = true, authChecking = false, signedOut = true, theme = 'light', hotkeys = {}, themePref = 'light';
     const palDoc = { id: 'tana:text:01j0doc000000000000000000' }, pinInfo = { docId: palDoc.id, sidebar: false, dates: [] };
@@ -1589,7 +1593,7 @@ async function runSyncShortcutCheck() {
     const railToggle = { hidden: false }, railHidden = false; // sidebar visible here, so both the focus row and the toggle row are built
     const went = []; // Go to Home runs the real goHome, so where it sends you is observable here
     const pinCalls = []; // what a date-pin row asks of api.pin/api.unpin: the op, the target and the day
-    const openCreationPalette = () => {}, openHiddenPalette = () => {}, toggleSensitiveVisibility = () => {}, followSystem = () => {}, openVisibilityPalette = () => {}, openMovePalette = () => {}, pinAction = (...args) => pinCalls.push(args), copyText = () => {}, togglePalette = () => {}, navigate = () => {}, history = () => {}, focusRail = () => {}, setZoom = () => {}, goTo = (id) => went.push(id), setView = (id) => went.push('view:' + id), openDoc = () => {}, filterEl = {}, render = () => {}, zoomFactor = 1, BASE_ZOOM = 1;
+    const openCreationPalette = () => {}, openHiddenPalette = () => {}, toggleSensitiveVisibility = () => {}, followSystem = () => {}, openVisibilityPalette = () => {}, openMovePalette = () => {}, toggleDatePin = (doc, date) => pinCalls.push([doc.id, date]), copyText = () => {}, togglePalette = () => {}, navigate = () => {}, history = () => {}, focusRail = () => {}, setZoom = () => {}, goTo = (id) => went.push(id), setView = (id) => went.push('view:' + id), openDoc = () => {}, filterEl = {}, render = () => {}, zoomFactor = 1, BASE_ZOOM = 1;
     ${sourceBetween('const NODE_ROW_ORDER', 'function paletteRows')}
     ${sourceBetween('const homeSearch =', 'function sensitiveHidden')}
     const visibilityRows = () => [], moveTargets = async () => [], previewMoveToSpace = () => {};
@@ -1602,7 +1606,7 @@ async function runSyncShortcutCheck() {
        choose: (id, list) => { home = id; searches = list || []; } });
   `);
   assert.deepEqual(plain(order.labels('')), [
-    'Current node: Zoom in', 'Current node: Set status', 'Current node: Discuss with …', 'Current node: Pin to today', 'Current node: Pin to tomorrow', 'Current node: Move to …', 'Current node: Move to Library',
+    'Current node: Zoom in', 'Current node: Set status', 'Current node: Discuss with …', 'Current node: Pin to today', 'Current node: Pin to tomorrow', 'Current node: Pin to date …', 'Current node: Edit pins', 'Current node: Move to …', 'Current node: Move to Library',
     'Current node: Mark as sensitive', 'Current node: Edit visibility', 'Current node: Copy link', 'Current node: Delete',
     'Views: Today', 'Views: This week', 'Views: Inbox', 'Views: Library',
     'View options: Filter by type', 'View options: Filter rows by text',
@@ -1612,13 +1616,14 @@ async function runSyncShortcutCheck() {
     'Settings: Larger text', 'Settings: Smaller text', 'Settings: Reset text size', 'Settings: Toggle dark mode', 'Settings: Edit hidden items', 'Settings: Toggle sensitive visibility', 'Settings: Toggle demo mode',
     'Help: Help',
   ], 'the palette lists its rows in one fixed, meaningful order');
-  // The two date pins differ only in the day they name: today's row passes no date (main defaults to today), the
-  // tomorrow row passes the next local day, and each label follows whether that day is already pinned.
-  assert.deepEqual(plain(order.datePin('pinToday')), ['Pin to today', 'pin', 'today'], 'Pin to today pins the default day');
-  assert.deepEqual(plain(order.datePin('pinTomorrow')), ['Pin to tomorrow', 'pin', 'today', '2026-09-14'], 'Pin to tomorrow pins the next local day');
+  // The two date pins differ only in the day they name, and each label follows whether that day is already pinned;
+  // the press toggles that day (toggleDatePin, which reads the pins again: runClosedPaletteKeysCheck).
+  const DOC_ID = 'tana:text:01j0doc000000000000000000';
+  assert.deepEqual(plain(order.datePin('pinToday')), ['Pin to today', DOC_ID, '2026-09-13'], 'Pin to today toggles today\'s pin on this node');
+  assert.deepEqual(plain(order.datePin('pinTomorrow')), ['Pin to tomorrow', DOC_ID, '2026-09-14'], 'Pin to tomorrow toggles the next local day');
   order.pinnedOn(['2026-09-14']);
-  assert.deepEqual(plain(order.datePin('pinTomorrow')), ['Unpin from tomorrow', 'unpin', 'today', '2026-09-14'], 'and unpins that same day once it is pinned');
-  assert.deepEqual(plain(order.datePin('pinToday')), ['Pin to today', 'pin', 'today'], 'while a pin on tomorrow leaves today\'s row offering to pin');
+  assert.deepEqual(plain(order.datePin('pinTomorrow')), ['Unpin from tomorrow', DOC_ID, '2026-09-14'], 'and says unpin once that day is pinned');
+  assert.deepEqual(plain(order.datePin('pinToday')), ['Pin to today', DOC_ID, '2026-09-13'], 'while a pin on tomorrow leaves today\'s row offering to pin');
   order.pinnedOn([]);
   // Nothing matched: one row that carries the query into Cmd+S, under the "No results" heading.
   assert.deepEqual(plain(order.labels('zzqq')), ['No results: Search Tana for \u201Czzqq\u201D'],
@@ -3369,6 +3374,133 @@ async function runPinToMeetingCheck() {
   await api.settle();
   assert.deepEqual(plain(api.page().map((r) => [r.label, r.disabled])), [['Not connected to Tana', true]], 'and a list that could not be read says why instead of reading as no meetings');
   console.log('ok  Pin to current meeting names the live meeting and re-reads it at the press; Pin to meeting opens a page ordered next-first from the event windows, filtered without reordering, pinning through the same shared write, stepping back on escape and honest when empty or broken');
+}
+// A key recorded against a Cmd+K row fires with the palette closed (#273, #274): the date pins and Pin to current
+// meeting act on the node under the caret with state read at the press, and the lookups only the open palette's
+// hints and unkeyable rows need (the current call, sharing, watch state) are not made for a key.
+async function runClosedPaletteKeysCheck() {
+  const DOC = 'tana:text:01j0doc000000000000000000', OTHER = 'tana:text:01j0doc100000000000000000', EVENT = 'tana:event:01j0event00000000000000000';
+  const api = vm.runInNewContext(`
+    const views = [], pinTree = [], pinRows = () => [], searches = [], typeListCache = null, searchesLoaded = true;
+    let home = 'library', view = 'library';
+    const localStorage = { setItem() {} }, onSearchPage = () => false;
+    const selectionRows = () => [], pillCommandRows = () => [], taskActionRows = () => [];
+    const palette = { hidden: true };
+    let palDoc = null, palField = null, meetingNow;
+    let pinInfo = { docId: '${OTHER}', sidebar: false, dates: [] }; // the node Cmd+K was last opened on
+    let palSeq = 0, openOnMeta = false, focus = '${DOC}', moveFocus = false; const currentDoc = () => ({ id: focus }), fieldAt = () => null, document = { activeElement: null, documentElement: { dataset: {} } };
+    const isRealId = () => true, localDate = (offset = 0) => (offset ? '2026-09-19' : '2026-09-18'), setTheme = () => {};
+    const sectionOf = () => null, visibleTags = () => [], goTo = () => {}, setView = () => {}, openDoc = () => {};
+    let palMode = 'cmd', palRows = [], palIndex = 0;
+    const palInput = { placeholder: '', value: '', focus() {} };
+    const zoom = null, railEl = { hidden: false }, navBack = [], navForward = [], sensitiveVisible = false;
+    const railToggle = { hidden: false }, railHidden = false;
+    const authed = true, authChecking = false, signedOut = false, theme = 'light', hotkeys = {}, themePref = 'light';
+    const openCreationPalette = () => {}, openHiddenPalette = () => {}, toggleSensitiveVisibility = () => {}, followSystem = () => {};
+    const openVisibilityPalette = () => {}, openMovePalette = () => {}, copyText = () => {};
+    const togglePalette = () => {}, navigate = () => {}, history = () => {}, focusRail = () => {}, setZoom = () => {};
+    const filterEl = {}, zoomFactor = 1, BASE_ZOOM = 1, previewMoveToSpace = () => {}, taskMetaById = new Map();
+    // Selected people … is greyed until the participants are in, as the real page is (renderer/access.js)
+    const visibilityRows = (q, doc = palDoc) => [{ label: 'Selected people …', disabled: !taskMetaById.has(doc.id), run: () => { writes.push(['people', doc.id]); openVisibilityPeople(doc); } }];
+    let visibilityPeople = null, visibilityRoles = null; const me = () => null, loadMembers = () => {};
+    const moveTargets = async (doc) => [{ label: 'Studio', run: () => writes.push(['move', doc.id, 'Studio']) }];
+    const renderPalette = () => {}, closePalette = () => {}, promptEditor = () => {}, loadPinned = () => {};
+    const groupBy = () => 'none', holdRow = () => {}, isTask = () => true;
+    const errors = []; let queue = Promise.resolve();
+    const showError = (e) => { if (e) errors.push((e && e.message) || String(e)); };
+    const run = (fn) => (queue = queue.then(fn).then((v) => { showError(null); return v; }, showError));
+    const render = () => {}, relatedBy = new Map(), relatedStale = new Set(), queryRow = () => null, CSS = { escape: (id) => id }, selectionFrozen = false, renderSoon = () => {};
+    const connected = true, accessById = new Map(), accessLoading = new Set(), notifyById = new Map(), notifyLoading = new Set();
+    const calls = { current: 0, access: 0, notify: 0 }, writes = [], pinned = new Set();
+    let answer = null;
+    const tana = { refresh: async () => {}, filters: {}, related: async () => ({ pinned: [] }),
+      currentMeeting: async () => { calls.current++; return answer; },
+      pinTo: async (hub, id) => { writes.push(['pinTo', hub, id]); },
+      accessOptions: async () => { calls.access++; return { move: true, sharing: true }; },
+      taskMeta: async () => { calls.meta = (calls.meta || 0) + 1; if (openOnMeta) { palSeq++; palMode = 'cmd'; palette.hidden = openOnMeta === 'closed'; } if (moveFocus) { focus = '${OTHER}'; palDoc = { id: focus }; } return { participants: [] }; },
+      notifyState: async () => { calls.notify++; return { on: false }; },
+      pinState: async () => ({ sidebar: false, dates: [...pinned] }),
+      pin: async (id, target, date) => { writes.push(['pin', id, date]); pinned.add(date); },
+      unpin: async (id, target, date) => { writes.push(['unpin', id, date]); pinned.delete(date); } };
+    ${functionSource('loadRelated')}
+    ${functionSource('refreshRelated')}
+    ${sourceBetween('const docRow =', 'const NODE_ROW_ORDER')}
+    ${sourceBetween('const NODE_ROW_ORDER', 'function paletteRows')}
+    ${sourceBetween('const homeSearch =', 'function sensitiveHidden')}
+    ${functionSource('paletteRows')}
+    ${functionSource('runAction')}
+    ${functionSource('loadMeeting')}
+    ${functionSource('pinToMeeting')}
+    ${functionSource('pinDocToMeeting')}
+    ${functionSource('loadAccess')}
+    ${functionSource('loadNotify')}
+    ${functionSource('holdDatePin')}
+    ${functionSource('toggleDatePin')}
+    ${functionSource('loadPins')}
+    ${functionSource('openVisibilityPeople')}
+    ({ key: async (id) => { const handled = runAction(id); for (let i = 0; i < 6; i++) await Promise.resolve(); await queue; return handled; },
+       meeting: (next) => { answer = next; },
+       open: () => { palette.hidden = false; palDoc = currentDoc(); meetingNow = undefined; paletteRows(''); palette.hidden = true; },
+       state: () => ({ writes: [...writes], errors: [...errors], calls: { ...calls } }),
+       page: () => ({ open: !palette.hidden, mode: palMode, doc: palDoc && palDoc.id }),
+       opens: (on) => { openOnMeta = on; palette.hidden = true; palMode = 'cmd'; },
+       race: (on) => { moveFocus = on; palette.hidden = true; focus = '${DOC}'; },
+       reset: () => { writes.length = 0; errors.length = 0; calls.current = calls.access = calls.notify = 0; accessById.clear(); notifyById.clear(); taskMetaById.clear(); delete calls.meta; } });
+  `);
+
+  // 1. The date pins: on a node Cmd+K was never opened on, the key pins that node, and pressed again takes it off.
+  assert.equal(await api.key('pinToday'), true, 'Pin to today has a row for a key on any real node, not only the one Cmd+K last read');
+  assert.deepEqual(plain(api.state().writes), [['pin', DOC, '2026-09-18']], 'and pins the node under the caret to today');
+  await api.key('pinToday');
+  assert.deepEqual(plain(api.state().writes.at(-1)), ['unpin', DOC, '2026-09-18'], 'a second press reads the pins again and takes today off');
+  await api.key('pinTomorrow');
+  assert.deepEqual(plain(api.state().writes.at(-1)), ['pin', DOC, '2026-09-19'], 'Pin to tomorrow pins the next local day');
+
+  // 2. Pin to current meeting before Cmd+K ever looked for a meeting: the press looks, and pins.
+  api.reset();
+  api.meeting({ id: EVENT, title: 'Bingo' });
+  assert.equal(await api.key('pinToMeeting'), true, 'the key finds its row');
+  assert.deepEqual(plain(api.state()), { writes: [['pinTo', EVENT, DOC]], errors: [], calls: { current: 1, access: 0, notify: 0 } },
+    'and pins the node on the meeting it looks up at the press, the only lookup made');
+  // 3. After Cmd+K was opened outside a meeting, the key still works once you are in one.
+  api.meeting(null); api.open(); api.meeting({ id: EVENT, title: 'Bingo' }); api.reset();
+  await api.key('pinToMeeting');
+  assert.deepEqual(plain(api.state().writes), [['pinTo', EVENT, DOC]], 'a stale "no meeting" from the last palette does not swallow the key');
+  api.meeting(null); api.reset();
+  await api.key('pinToMeeting');
+  assert.deepEqual(plain([api.state().writes, api.state().errors]), [[], ['No active meeting to pin to']], 'and with no meeting the press says so');
+
+  // 4. Any other key asks nothing of Tana on the palette's behalf; the open palette still asks for its hints.
+  api.reset();
+  await api.key('back');
+  assert.deepEqual(plain(api.state().calls), { current: 0, access: 0, notify: 0 }, 'a key with the palette closed looks up no call, sharing or watch state');
+  api.open();
+  assert.deepEqual(plain(api.state().calls), { current: 1, access: 1, notify: 1 }, 'the open palette does, for the rows and hints it draws');
+  // 5. A key on a choice folded under Move to … asks for this node's access itself, once, and then moves it.
+  api.reset();
+  assert.equal(await api.key('move>Studio'), true, 'a folded Move to key is answered while the access is asked for');
+  assert.deepEqual(plain(api.state().writes), [['move', DOC, 'Studio']], 'and moves the node once the access is in');
+  assert.equal(api.state().calls.access, 1, 'asking for it once, for this key');
+  api.reset();
+  await api.key('visibility>Selected people …');
+  assert.deepEqual(plain([api.state().writes, api.state().calls.access, api.state().calls.meta]), [[['people', DOC]], 1, 1],
+    'a folded visibility key waits for the access and the participants its choice needs, then runs on its first press');
+  assert.deepEqual(plain(api.page()), { open: true, mode: 'visibilityPeople', doc: DOC }, 'and the people page it opens is shown, not drawn into the closed palette');
+  // Focus moves to another node while the participants are asked: the key still acts on the node it was pressed on.
+  api.reset(); api.race(true);
+  await api.key('visibility>Selected people …');
+  api.race(false);
+  assert.deepEqual(plain([api.state().writes, api.page().doc]), [[['people', DOC]], DOC], 'the choice is the one built for the node the key was pressed on, whatever has the focus when the answer lands');
+  // Cmd+K opened while the participants are asked: the key lets its choice go rather than taking the palette over.
+  api.reset(); api.opens(true);
+  await api.key('visibility>Selected people …');
+  api.opens(false);
+  assert.deepEqual(plain([api.state().writes, api.page().mode]), [[], 'cmd'], 'a palette opened meanwhile keeps its page');
+  api.reset(); api.opens('closed');
+  await api.key('visibility>Selected people …');
+  api.opens(false);
+  assert.deepEqual(plain([api.state().writes, api.page().open]), [[], false], 'and a palette opened and closed again meanwhile is not reopened by the key');
+  console.log('ok  keys with the palette closed: date pins and Pin to current meeting act on the node under the caret with state read at the press, and no palette-only lookup is made');
 }
 function runCmdPillsCheck() {
   // The pills now serve two kinds of page, so pillDefs asks which one it is on. These harnesses are all about views,
@@ -6634,7 +6766,7 @@ async function runToastCheck() {
   console.log('ok  toast: notices and errors fade at the foot of the window and leave the relogin line alone');
 }
 
-const checks = [runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck,runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck];
+const checks = [runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck,runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck];
 // The chips under a zoomed title, driven through the shipped line itself: a typed document shows its type whatever
 // kind it is, and the kind chip (task, doc, meeting, space, chat…) stays out of the header, as it always did for a task.
 function runZoomTypeChipCheck() {

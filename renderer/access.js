@@ -25,17 +25,18 @@ function applySharing(doc, selection) {
   });
 }
 function banSvg() { return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18"><g stroke-linecap="round" stroke-width="1" fill="none" stroke="currentColor" stroke-linejoin="round"><line x1="3.873" y1="14.127" x2="14.118" y2="3.882"></line><circle cx="9" cy="9" r="7.25"></circle></g></svg>'; }
-function visibilityRows(q) {
-  if (!palDoc) return [];
-  const access = accessById.get(palDoc.id);
+// doc: the document the rows are for; the page's own, unless a folded level built for another asks (renderer/palette.js)
+function visibilityRows(q, doc = palDoc) {
+  if (!doc) return [];
+  const access = accessById.get(doc.id);
   if (!access?.sharing) return [{ group: 'Visibility', ...(access?.reason ? { svg: banSvg() } : {}), label: access?.reason || 'Checking permission…', disabled: true }];
-  loadTaskMeta(palDoc.id);
-  const hasParticipants = taskMetaById.has(palDoc.id);
+  loadTaskMeta(doc.id);
+  const hasParticipants = taskMetaById.has(doc.id);
   const rules = new Set(access.rules || []), inherit = audienceInfo(access.inheritAudience);
   return [
-    rules.has('me') && { group: 'Visibility', icon: 'lock', label: 'Only me', keepOpen: true, run: () => applySharing(palDoc, { rule: 'me' }) },
-    rules.has('people') && { group: 'Visibility', icon: 'userLock', label: 'Selected people …', disabled: !hasParticipants, keepOpen: true, run: () => openVisibilityPeople(palDoc) },
-    rules.has('inherit') && { group: 'Visibility', icon: 'houseLock', label: inherit ? 'Inherit: ' + inherit.label : 'Inherit location audience', keepOpen: true, run: () => applySharing(palDoc, { rule: 'inherit', token: access.sharingToken }) },
+    rules.has('me') && { group: 'Visibility', icon: 'lock', label: 'Only me', keepOpen: true, run: () => applySharing(doc, { rule: 'me' }) },
+    rules.has('people') && { group: 'Visibility', icon: 'userLock', label: 'Selected people …', disabled: !hasParticipants, keepOpen: true, run: () => openVisibilityPeople(doc) },
+    rules.has('inherit') && { group: 'Visibility', icon: 'houseLock', label: inherit ? 'Inherit: ' + inherit.label : 'Inherit location audience', keepOpen: true, run: () => applySharing(doc, { rule: 'inherit', token: access.sharingToken }) },
   ].filter(Boolean).filter((row) => fuzzyMatch(row.label, q));
 }
 function openVisibilityPalette(doc) {
@@ -56,7 +57,8 @@ function openVisibilityPeople(doc) {
   if (!meta) return;
   visibilityPeople = new Set(meta.participants.map((p) => p.uri).filter((id) => id && id !== me()?.id));
   visibilityRoles = new Map(meta.participants.map((p) => [p.uri, p.role]).filter(([id]) => id && id !== me()?.id));
-  showPage('visibilityPeople', 'Select people');
+  palDoc = doc; // the page's rows and Apply read it (visibilityPeopleRows)
+  showPage('visibilityPeople', 'Select people'); // shows the palette: a key recorded on Selected people … arrives with it closed
   loadMembers(); renderPalette(); palInput.focus();
 }
 function visibilityPeopleRows(q) {

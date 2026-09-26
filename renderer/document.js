@@ -36,6 +36,16 @@ function loadPins() {
 }
 function holdDatePin(doc) { if (doc && groupBy() === 'responsibility' && isTask(doc)) holdRow(doc); }
 function pinAction(op, target, date) { if (target === 'today' && typeof holdDatePin === 'function') holdDatePin(palDoc); run(async () => { await tana[op](pinInfo.docId, target, date); loadPins(); }); } // date: a local YYYY-MM-DD for the 'today' target; omitted means today
+// ⌘K Pin to today / tomorrow and their keys: pin that day, or take the pin off when it is there. Whether it is there
+// is read at the press, since a key fires with the palette closed and pinInfo is then another node's (#273).
+function toggleDatePin(doc, date) {
+  holdDatePin(doc);
+  return run(async () => {
+    const state = await tana.pinState(doc.id);
+    await tana[state && (state.dates || []).includes(date) ? 'unpin' : 'pin'](doc.id, 'today', date);
+    loadPins();
+  });
+}
 // A pin on a meeting or a space is a write to that hub's own pinnedItems rather than to your sidebar or pin-map, so
 // it goes through api.unpinFrom. Both sidebars are re-read: the item leaves a section of the hub's page as it goes.
 function unpinFromHub(hubId) {
