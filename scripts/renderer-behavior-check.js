@@ -8371,14 +8371,16 @@ async function runHelpOnceCheck() {
     const pref = (key, fallback) => (key in prefs ? prefs[key] : fallback);
     const setPref = (key, value) => { prefs[key] = value; };
     const openHelp = () => { opened++; prefs.helpSeen = true; };
+    const palette = { hidden: false }; let closedPalette = 0; const closePalette = () => { closedPalette++; palette.hidden = true; };
     ${functionSource('helpOnce')}
-    ({ go: async () => { await helpOnce(); await helpOnce(); return { opened, seen: !!prefs.helpSeen }; } });
+    ({ go: async () => { await helpOnce(); await helpOnce(); return { opened, seen: !!prefs.helpSeen }; }, closedPalette: () => closedPalette });
   `, { tana: claimHelp ? { claimHelp } : {} });
   const main = (seen) => { let asked = 0, shown = 0; const claim = async () => { asked++; await null; if (seen) return false; seen = true; shown++; return true; }; claim.asked = () => asked; claim.shown = () => shown; return claim; };
-  const fresh = main(false), both = await Promise.all([pane(fresh).go(), pane(fresh).go()]);
+  const fresh = main(false), panes = [pane(fresh), pane(fresh)], both = await Promise.all(panes.map((p) => p.go()));
   assert.equal(fresh.shown(), 1, 'two windows coming up at once: main shows the tour in one of them');
   assert.deepEqual(both.map((b) => b.opened), [0, 0], 'and no page opens one of its own beside it');
   assert.equal(both.filter((b) => b.seen).length, 1, 'the page it was shown over notes it as seen');
+  assert.deepEqual(panes.map((p) => p.closedPalette()), both.map((b) => (b.seen ? 1 : 0)), 'and closes a palette it had open, as opening the tour itself would');
   const seen = main(true); await pane(seen).go();
   assert.equal(seen.shown(), 0, 'seen on another machine: main says no, so a new one does not show it again');
   assert.deepEqual(plain(await pane(async () => { throw new Error('gone'); }).go()), { opened: 0, seen: false }, 'a claim that fails shows nothing and spends nothing: the next launch asks again');

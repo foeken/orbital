@@ -1159,8 +1159,11 @@ async function main() {
     assert.equal(settings.prefs().helpSeen, undefined, 'so nothing is marked');
     const survivor = { isDestroyed: () => false };
     covered.win.panes = [{ webContents: survivor, setVisible() {}, setBounds() {} }]; // the half that asked closed under Create task (⌘W): the other is the main half now
-    await backend.handlers.get('overlay:close')({ sender: task.webContents }, {});
+    const heard = [];
+    right.send = (channel, result) => { told.push(channel); heard.push(result); };
+    await backend.handlers.get('overlay:close')({ sender: task.webContents }, { palette: true }); // closed with ⌘K
     assert.deepEqual(told, ['overlay:closed'], 'Create task\u2019s half hears it closed');
+    assert.equal(heard[0].palette, false, 'without the palette its ⌘K asked for: the tour opens instead, and nothing is left open under it');
     assert.ok(covered.win.overlay && covered.win.overlay !== task, 'and main opens the tour over the window at once');
     assert.equal(covered.win.overlay.opener, survivor, 'for the page that is the main half now, even though the one that asked has gone');
     assert.equal(settings.prefs().helpSeen, true, 'marked in that same step');

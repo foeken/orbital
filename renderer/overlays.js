@@ -21,7 +21,9 @@ function openHelp() {
 async function helpOnce() {
   if (SIDE || !connected || pref('helpSeen', false)) return;
   if (!tana.claimHelp) return openHelp(); // the in-file mock: nobody to ask
-  if (await tana.claimHelp(theme).catch(() => false)) setPref('helpSeen', true); // main opened it and marked it; this page's copy follows
+  if (!(await tana.claimHelp(theme).catch(() => false))) return;
+  setPref('helpSeen', true); // main opened it and marked it; this page's copy follows
+  if (!palette.hidden) closePalette(); // what openOverlay does when the page opens it: no palette left under the tour
 }
 const helpBtn = $('navHelp');
 helpBtn.onmousedown = (e) => e.preventDefault(); // the caret stays in its row

@@ -126,14 +126,15 @@ function closeOverlay(win, result = {}) {
   if (!win.isDestroyed()) win.contentView.removeChildView(view);
   if (!view.webContents.isDestroyed()) view.webContents.close();
   const opener = view.opener;
-  if (opener && !opener.isDestroyed()) {
-    opener.focus();
-    opener.send('overlay:closed', { palette: result.palette === true, note: typeof result.note === 'string' ? result.note.slice(0, 200) : undefined });
-  }
   // a first start this overlay was covering (firstHelp): now there is room for it, whichever half opened this one, over
-  // whichever page is the main half now (the one that asked may have closed meanwhile, ⌘W under Create task)
+  // whichever page is the main half now (the one that asked may have closed meanwhile, ⌘W under Create task). First, so
+  // a ⌘K that closed Create task does not leave the palette open under the tour.
   const pending = win.helpPending; win.helpPending = null;
-  if (pending && !win.isDestroyed() && win.panes[0]) firstHelp(win.panes[0].webContents, pending.theme);
+  const help = !!pending && !win.isDestroyed() && !!win.panes[0] && firstHelp(win.panes[0].webContents, pending.theme);
+  if (opener && !opener.isDestroyed()) {
+    if (!help) opener.focus(); // the tour has the keys now
+    opener.send('overlay:closed', { palette: result.palette === true && !help, note: typeof result.note === 'string' ? result.note.slice(0, 200) : undefined });
+  }
 }
 const frontPane = () => S.win && !S.win.isDestroyed() ? (S.win.panes.find((p) => p.webContents === S.pane) || S.win.panes[0])?.webContents : null;
 function createWindow() {
