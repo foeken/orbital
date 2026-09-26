@@ -3441,7 +3441,8 @@ async function runClosedPaletteKeysCheck() {
     const palette = { hidden: true };
     let palDoc = null, palField = null, meetingNow;
     let pinInfo = { docId: '${OTHER}', sidebar: false, dates: [] }; // the node Cmd+K was last opened on
-    let palSeq = 0, openOnMeta = false, focus = '${DOC}', moveFocus = false; const currentDoc = () => ({ id: focus }), fieldAt = () => null, document = { activeElement: null, documentElement: { dataset: {} } };
+    let palSeq = 0, openOnMeta = false, focus = '${DOC}', focusIcon, moveFocus = false; const currentDoc = () => ({ id: focus, icon: focusIcon }), fieldAt = () => null, document = { activeElement: null, documentElement: { dataset: {} } };
+    let meetingCtx = null, infos = 0; const demoText = (s) => s, openMeetingPage = (mode) => { writes.push(['page', mode]); };
     const isRealId = () => true, localDate = (offset = 0) => (offset ? '2026-09-19' : '2026-09-18'), setTheme = () => {};
     const sectionOf = () => null, visibleTags = () => [], goTo = () => {}, setView = () => {}, openDoc = () => {};
     let palMode = 'cmd', palRows = [], palIndex = 0;
@@ -3472,6 +3473,7 @@ async function runClosedPaletteKeysCheck() {
       accessOptions: async () => { calls.access++; return { move: true, sharing: true }; },
       taskMeta: async () => { calls.meta = (calls.meta || 0) + 1; if (openOnMeta) { palSeq++; palMode = 'cmd'; palette.hidden = openOnMeta === 'closed'; } if (moveFocus) { focus = '${OTHER}'; palDoc = { id: focus }; } return { participants: [] }; },
       notifyState: async () => { calls.notify++; return { on: false }; },
+      meetingInfo: async () => { infos++; return { editable: true, allDay: false, location: '', attendees: [] }; }, editMeeting: async () => ({}),
       pinState: async () => ({ sidebar: false, dates: [...pinned] }),
       pin: async (id, target, date) => { writes.push(['pin', id, date]); pinned.add(date); },
       unpin: async (id, target, date) => { writes.push(['unpin', id, date]); pinned.delete(date); } };
@@ -3491,6 +3493,9 @@ async function runClosedPaletteKeysCheck() {
     ${functionSource('toggleDatePin')}
     ${functionSource('loadPins')}
     ${functionSource('openVisibilityPeople')}
+    ${functionSource('meetingOf')}
+    ${functionSource('loadMeetingCtx')}
+    ${functionSource('meetingRows')}
     ({ key: async (id) => { const handled = runAction(id); for (let i = 0; i < 6; i++) await Promise.resolve(); await queue; return handled; },
        meeting: (next) => { answer = next; },
        open: () => { palette.hidden = false; palDoc = currentDoc(); meetingNow = undefined; paletteRows(''); palette.hidden = true; },
@@ -3498,7 +3503,9 @@ async function runClosedPaletteKeysCheck() {
        page: () => ({ open: !palette.hidden, mode: palMode, doc: palDoc && palDoc.id }),
        opens: (on) => { openOnMeta = on; palette.hidden = true; palMode = 'cmd'; },
        race: (on) => { moveFocus = on; palette.hidden = true; focus = '${DOC}'; },
-       reset: () => { writes.length = 0; errors.length = 0; calls.current = calls.access = calls.notify = 0; accessById.clear(); notifyById.clear(); taskMetaById.clear(); delete calls.meta; } });
+       onMeeting: (on) => { focusIcon = on ? 'meeting' : undefined; },
+       infos: () => infos,
+       reset: () => { writes.length = 0; errors.length = 0; calls.current = calls.access = calls.notify = 0; accessById.clear(); notifyById.clear(); taskMetaById.clear(); delete calls.meta; meetingCtx = null; infos = 0; } });
   `);
 
   // 1. The date pins: on a node Cmd+K was never opened on, the key pins that node, and pressed again takes it off.
@@ -3553,6 +3560,15 @@ async function runClosedPaletteKeysCheck() {
   await api.key('visibility>Selected people …');
   api.opens(false);
   assert.deepEqual(plain([api.state().writes, api.page().open]), [[], false], 'and a palette opened and closed again meanwhile is not reopened by the key');
+  // 6. A meeting's own rows (Change time, Change location, Add attendee) wait on main saying it may be changed: with the
+  // palette closed, a key on one asks that once and opens its page on the first press; any other key asks nothing (#391).
+  api.reset(); api.onMeeting(true);
+  await api.key('pinToday');
+  assert.equal(api.infos(), 0, 'another key pressed on a meeting makes no meeting lookup');
+  api.reset();
+  assert.equal(await api.key('meetingTime'), true, 'a Change time key is answered on its first press, not left to the browser');
+  assert.deepEqual(plain([api.state().writes, api.infos()]), [[['page', 'meetingTime']], 1], 'and opens the page once main has said this meeting may be changed, asking once');
+  api.onMeeting(false);
   console.log('ok  keys with the palette closed: date pins and Pin to current meeting act on the node under the caret with state read at the press, and no palette-only lookup is made');
 }
 function runCmdPillsCheck() {
