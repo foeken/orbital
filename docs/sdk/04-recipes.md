@@ -1,9 +1,6 @@
 # SDK recipes
 
-Every recipe has a CLI twin: `node scripts/platform-cli.js <cmd>` — run it with node, never with `./node_modules/.bin/electron`, which aborts in AppKit inside an agent sandbox instead of refusing cleanly (docs/ELECTRON-SANDBOX.md); the file re-execs Electron itself for the cookie session and shares userData with the app. Run it with no command for the grouped usage line, which marks the writing commands.
-
-Reads: `login | whoami | list [--state open|all] | search <q> | types | fields [<type uri>] | meetings [--days n] | chatlist [--limit n] [--owned] | get <id> | outline <id> | rawdoc <id> [--containers 1] | graphnode <id> | edges <id> | listkind <nodeType> | changes <id> | image <uri> | pins [--dates] | watch <id…>`.
-Writes (never against data you were not asked to change): `create <title> [--kind doc|task|meeting] | delete <id> | restore <id> | set-title <id> <title> | set-state <id> <state> | addfield <type uri> <title> | settype <id> <type uri|none> | pin/unpin <id> <sidebar|today> | pinto/unpinfrom <event|space id> <id> | upload <image file> <doc id> [--after <block id>]`.
+Every recipe has a CLI twin: `node scripts/platform-cli.js <cmd>` — run it with node, never with `./node_modules/.bin/electron`, which aborts in AppKit inside an agent sandbox instead of refusing cleanly (docs/ELECTRON-SANDBOX.md); the file re-execs Electron itself for the cookie session and shares userData with the app. Run it with no command for the full list, grouped by what it touches and marking every command that writes: that list is the only one kept up to date, so it is not copied here.
 
 Read-only diagnostics for questions about what the app shows, all safe against real data:
 
@@ -11,7 +8,7 @@ Read-only diagnostics for questions about what the app shows, all safe against r
 |---|---|
 | `inspect <id…>` | The graph node, owner chain, data map and resolved audience for one document: the whole input to a visibility label and a tag colour. |
 | `audiences [--limit n] [--mine 0] [--kind text\|event]` | The visibility label the app would show for a whole set of documents, with a count per label. Use it to find every remaining `unknown`. |
-| `refs <id>` | Embed blocks of a document resolved through `main.js`'s real `outlineWithReferences`. |
+| `refs <id>` | Embed blocks of a document resolved through the app's real `outlineWithReferences` (main/documents.js). |
 | `rows <query>` | Search results as the Nodes the renderer receives (icon, hue, tags). |
 | `pinrows` | The sidebar pin tree as the renderer receives it: the only path where a space becomes a row. |
 | `graphnode <id>` | The raw graph Node JSON for one id: attributes, typeDef, calendarEvent, appearance — everything `inspect` summarises away. |
@@ -40,7 +37,7 @@ const { nodes: events } = await client.graph.listNodes({ nodeTypes: ['event'], h
   eventStartTimeMin: startISO, eventStartTimeMax: endISO, limit: 300,
   sortOptions: [{ field: 'SORT_FIELD_EVENT_START_TIME', direction: 'SORT_DIRECTION_ASCENDING' }] });
 ```
-Or via the view builder: `viewParams({ types: ['tasks'], states: ['proposed', 'open'], assignee: 'me' }, me)` is the filter the Library preset carries, and `viewParams({ types: ['meetings'], participant: 'me', window: 'recent' }, me)` the one a meetings search stores (docs/VIEWS.md).
+Or via the view builder: `viewParams({ types: ['tasks'], states: ['proposed', 'open'], assignee: 'me' }, me)` asks for my open tasks (the Library preset is `VIEW_PRESETS.library`: every state, anyone, completed within 3 days), and `viewParams({ types: ['meetings'], participant: 'me', window: 'recent' }, me)` the one a meetings search stores (docs/VIEWS.md).
 
 ## Read and edit a document live
 
@@ -75,7 +72,7 @@ const parsed = parseQuery('sam #task');
 const params = searchParams(parsed, needsTypes(parsed) ? typesByLowerTitle : new Map());
 const { nodes } = await client.graph.listNodes({ ...params, limit: 40 });
 ```
-There is no server-side title match: rank exact/prefix/contains title hits above full-text hits yourself (main.js does).
+There is no server-side title match: rank exact/prefix/contains title hits above full-text hits yourself (main/views.js `search` does).
 
 ## Where does a document live?
 
@@ -135,4 +132,4 @@ content.insertImage(doc, afterBlockId, uri);
 
 ## Testing without Tana
 
-`scripts/sdk-check.js` shows the patterns: two `Document`s wired `local-update → applyRemote` converge without a server; a fake `SyncService` built with `createRouterTransport` from `@connectrpc/connect` exercises connect/bootstrap/live/resync/create/close; `scripts/fixtures/task-snapshot.b64` is a real task snapshot (`LoroDoc.fromSnapshot`).
+`scripts/sdk-check.js` shows the patterns: two `Document`s wired `local-update → applyRemote` converge without a server; a fake `SyncService` built with `createRouterTransport` from `@connectrpc/connect` exercises connect/bootstrap/live/resync/create/close; `scripts/fixtures/task-snapshot.b64` is a synthetic task snapshot with a real one's shape (`LoroDoc.fromSnapshot`; rebuilt by `scripts/fixtures/make-task-snapshot.js`). `scripts/livequery-check.js` and `scripts/presence-check.js` do the same for live queries and presence.

@@ -29,6 +29,8 @@ Also exports the client's parts: `createTransport`, `GraphClient`, `HistoryClien
 
 Enums are passed by name (`'SORT_FIELD_UPDATE_TIME'`, `'LIST_NODES_MODE_WITH_COUNT'`). Timestamps are RFC 3339 strings.
 
+`unary(client, service, name, params)` is the one unary read behind all three clients (`GraphClient`, `HistoryClient`, `SearchClient`): protobuf JSON in and out, retried once after 250 ms when the fetch itself failed.
+
 ## `sdk/history.js` — `class HistoryClient(transport)`
 
 `listChanges({ uri, withinId?, limit? })` → `{ parent?, summaries: [{ id, level, title, description, authors, sources, startTime, endTime, expandable, changeType }] }`: the change summaries Tana's own Changes panel shows for a node, `summaries` always an array. `withinId` asks for the summaries inside an expandable one; nothing here writes.
@@ -42,12 +44,14 @@ Enums are passed by name (`'SORT_FIELD_UPDATE_TIME'`, `'LIST_NODES_MODE_WITH_COU
 `openLiveQuery(sync, query, { label = 'orbital', onRows })` → handle, once the server has taken the query. It creates a throwaway `tana:liveQuery:<ulid>` document holding the query, subscribes it as ephemeral (as Tana's own client does), and the server writes the answer into `data.result.nodes` and rewrites it whenever the answer changes, as ordinary live updates on the stream already open. `onRows` is attached as a `rows` listener before anything is read: a warm server answers inside the bootstrap, so the initial answer is emitted before the handle resolves, and a listener added afterwards never hears it.
 
 - `query`: lists `uris types ownerUris entityTypeUris stateTypes chatInvocationIntents stateChangedBy stateWorkflowUris stateWorkflowStateIds assignedTo createdBy recurrenceIds occurrenceKeys orderBy exactParticipantUris hasParticipantUris useFields` and scalars `stateEnteredAtMin/Max createdAtMin/Max eventStartTimeMin/Max eventEndTimeMin/Max unassigned limit includeProposals includeArchived archivedOnly modifiedByUserHash uniqueByParticipants restricted linkShared`. Times are epoch ms; `orderBy` entries are field names, `-createdAt` for descending. Any other key throws before anything is subscribed. `externalIds` and `attributeFilters` are always written empty.
-- `handle.state()` → `{ status: 'pending' | 'ready' | 'stale' | 'error', nodes, error }`: pending while `resultForVersion` is 0, stale while it trails `queryVersion` (Tana's rule).
+- `handle.state()` → `{ status: 'pending' | 'ready' | 'stale' | 'error', nodes, error }`: pending while `resultForVersion` is 0, stale while it trails `queryVersion` (Tana's rule). `statusOf(data)` is that rule on a query document's data map.
 - `handle.on('rows', { added, removed, changed, initial })`: every time the answer moves; `initial` marks the first answer, `removed` is uris, `changed` means a row's title, state, state entry time, type, assignees, archive, `updatedAt` or owner changed (`updatedAt` and the owner because a query used as a trigger cannot say everything its list filters on).
 - `handle.on('error', e)`: the server refused the query (emitted only when something listens).
 - `handle.close()`: unsubscribes. `handle.id` is the query document's uri.
 
 A row: `{ uri, type, title, entityType, createdAt, updatedAt, ownerUri, state: { type, enteredAt, changedBy }, assignedTo, participants, calendarEvent, archivedAt, … }`. Verified live 2026-09-22 (`platform-cli livequery`): a task created elsewhere arrived as an `added` row within seconds, and left as `removed` when deleted.
+
+`LISTS`, `SCALARS` (a node query's keys) and `SIDE_LISTS`, `SIDE_SCALARS` (an edge query side's) are the accepted keys above; `sdk/query.js` `liveTrigger` cuts a ListNodes request down to them.
 
 `openEdgeQuery(sync, query, { label = 'orbital', onRows })` → the same handle over edges (Tana's EdgeQueryResource): `queryType: 'edges'`, answer in `data.result.edges`.
 
@@ -82,7 +86,7 @@ Outbound: local ops are batched 5 ms, one in-flight `liveDocumentUpdate` per doc
 
 ## `sdk/presence.js` — who is in a document, and where
 
-`openPresence(sync, documentId, { timeout = 30000, viewing = false })` → handle, once the document's presence channel is subscribed. Tana's editor shares carets over an ephemeral channel named by the document uri: every peer keeps one entry in a Loro `EphemeralStore` keyed by its peer id, and changes travel as that store's own update bytes. Nothing is stored anywhere.
+`openPresence(sync, documentId, { timeout = TIMEOUT_MS, viewing = false })` → handle, once the document's presence channel is subscribed (`TIMEOUT_MS` 30000, how long an unrefreshed entry lives; `HEARTBEAT_MS` 10000, the viewing heartbeat). Tana's editor shares carets over an ephemeral channel named by the document uri: every peer keeps one entry in a Loro `EphemeralStore` keyed by its peer id, and changes travel as that store's own update bytes. Nothing is stored anywhere.
 
 - `handle.peers({ exceptUserHash }?)` → `[{ peer, userHash, user: { name, color } | null, scope, hasCursor, anchorBlock, focusBlock, anchor, focus }]` for everyone in the document except this connection. `anchorBlock`/`focusBlock` are `{ blockId, offset }` or null; `anchor`/`focus` are Loro `Cursor` bytes (`Cursor.decode` + `doc.getCursorPos`) or null. `exceptUserHash` also leaves out your own other tabs and devices.
 - `handle.editing(opts?)` → the peers with a caret in the document, i.e. someone is editing it right now.
@@ -91,6 +95,7 @@ Outbound: local ops are batched 5 ms, one in-flight `liveDocumentUpdate` per doc
 - `{ viewing: true }`: also sends the viewing heartbeat every 10 s (and after a reconnect), as Tana does for the document on screen.
 - `handle.close()`: clears our entry, unsubscribes, forgets everyone.
 - `userHashOf(peerId)`: the user part of a peer id (its top bits, `sync.derivePeerId`), so an entry says which user it is without a lookup; two tabs of one person share it.
+- `readEntry(peerId, state)`: one raw `EphemeralStore` entry in the shape `peers()` returns.
 
 Verified live 2026-09-22 (`platform-cli presence`, two sessions on a scratch document): the watcher saw the other session arrive with its label and caret block, and leave when it closed.
 
@@ -110,8 +115,10 @@ These helpers are the app's verified native capability boundary. Ownership is an
 | `canDelete(document, userUri, ctx, restoring?)` | Checks supported, non-deleted kind, write access and calendar-event organizer rules. Restore checks a copy with `deletedAt` removed and never mutates the document. |
 | `canArchive(document, userUri, ctx)` | A type (Tana's archive set is `['type']`) with write access. The same check answers archive and unarchive. |
 | `canEditEvent(document, userUri, ctx)` | Whether a meeting's time, place or people may be changed: Tana's own gate (`Dk`), unrestricted or the user is an organizer (`admin`/`editor`), on top of `canWrite`; and, as Tana's `updateEvent` refuses, not a synced event whose calendar copy is not the organizer's (`externalId` with `origin` other than `'tana'` and no `ownerIsOrganizer`). |
+| `everyoneOnly(graph, nodes)` | The graph nodes everyone in the org can see (#253): not restricted themselves and nothing restricted above them but the org root. One owner chain per distinct owner; an unowned (Library) node counts as open. The view filter's `audience: 'everyone'`. |
+| `LIBRARY` | `{ id: null, title: 'Library' }`: the move target for "no owner". |
 
-`main.js` calls these helpers for access mutations and for native document actions. The renderer's `editable` flag is only a companion UI capability and does not replace server authorization.
+`main/documents.js` calls these helpers for access mutations and for native document actions. The renderer's `editable` flag is only a companion UI capability and does not replace server authorization.
 
 ## `sdk/document.js` — `class Document extends EventEmitter`
 
@@ -147,7 +154,9 @@ These helpers are the app's verified native capability boundary. Ownership is an
 | `setSearchQuery(document, query)` | Rewrites a saved search's `query` root container. Every key is assigned rather than patched — lists replaced whole, flags set or deleted — so a filter dropped from a save cannot linger. Objects and arrays under `workflowStates` and `attributes` are written as Loro maps and lists, the shape Tana's schema declares, so a Tana-authored search keeps it; `toJSON()` reads them back unchanged. Throws unless the document's `type` is `search`. |
 | `setSearchView(document, view)` | The same for the `view` root beside it: `sortBy`, `groupBy`, `sortBy` in Tana's form (`field` ascending, `-field` descending; Orbital's newest-first Updated/Created are written `-updated`/`-created` and read back with `searchSort`), `display` (Tana's record `{ key: { shown, order } }`, read back with `searchDisplay`) and `completedWithin`. It says how the rows are arranged, not which rows the search finds. |
 | `readSearch(document)` | `{ query, view }`: both roots as JSON (`view` `{}` when absent), what the two writers above stored. They are root containers of their own, so `readNode` never sees them; an empty `query` means the search is unreadable, not unconstrained. |
+| `searchSort(sortBy)` / `searchDisplay(display)` | Read `setSearchView`'s values back: the sort key without its minus, and the shown display keys in order (undefined for none). |
 | `STATE_TYPES` | `['proposed', 'open', 'closed', 'not_now']`. |
+| `COMPLETED_WINDOWS` | `[3, 7, 30, 'all']`: how many days a completed task stays listed (`completedWithin`). |
 
 The native title contract is a plain metadata string. `setTitle` cannot store mention nodes; profiles and unsupported kinds are read-only, and events currently remain read-only because the organizer/calendar write capability is outside the graph contract.
 
@@ -174,6 +183,8 @@ Outline node: `{ id: blockId, text, kind: 'block', block?: type, heading?: level
 | `insertChild(document, id, text)` → newId or null | First child (creates the nested bulletList/listItem; wraps a bare paragraph into a listItem). Null for headings/quotes/code. |
 | `insertBefore(document, id, text)` → newId | Sibling before `id` (same level, same listItem rules as `insertAfter`). What Enter at the very start of a node does: the node keeps its text and children. |
 | `split(document, id, before, after, asChild)` → newId | Enter inside a node: `setText(id, before)` plus the insert of `after` as the next sibling (or the first child when `asChild`) in **one** transaction, so one undo puts the node back whole. `before`/`after` are strings or segments; segments with mentions or marks are written back over the plain insert. |
+| `join(document, id, intoId, value)` | Backspace at the start of a row, the reverse of `split`: `setText(intoId, value)` and `remove(id)` in one transaction. Refuses a row that has children. |
+| `insertTable(document, id \| null)` → cell id | "/" Table as Tana's slash menu makes one: a header row and two body rows of three cells after `id`; returns the first header cell. |
 | `remove(document, id)` | Removes the node and its children; prunes emptied lists. |
 | `indent(document, id)` / `outdent(document, id)` | Under the previous sibling / after the parent. No-ops at the edges; only paragraphs and listItems can be moved. |
 | `move(document, id, 'up' | 'down')` | Swap with the neighbouring sibling (lists move as a whole). |
@@ -184,6 +195,8 @@ Outline node: `{ id: blockId, text, kind: 'block', block?: type, heading?: level
 | `toggleCheckbox(document, id)` | Paragraph or heading only. `checked` lives on the `listItem`, so a bare paragraph is wrapped first (keeping its blockId, marks and mentions); it never touches the document's own task state. |
 | `assignBlockIds(document)` | Gives every block that arrived without a `blockId` one, in a single transaction and with no op at all for a document that has them all. Blocks Tana's own agent writes can have none, and a row with no id cannot be edited, split or linked. |
 | `BLOCK_TYPES` | `['paragraph', 'heading1', 'heading2', 'heading3', 'bullet', 'numbered', 'code', 'quote']` — what `setBlockType` accepts. |
+| `newId()` | A fresh 8-character block id (Crockford base32, Tana's alphabet). |
+| `inlineGroups(value, plain?)`, `writeInline(list, groups, marked)`, `styleDoc(document)` | The two halves of `setText` and the mark-style setup before it, exported for `sdk/fields.js`, which writes a field value's paragraph the same way. Not for app code. |
 
 All operations run inside `document.transact`, so each is one undo step and one live update. Containers are copied and deleted (Loro cannot move containers); text runs keep their marks via `toDelta/applyDelta`. A direction other than `'up'`/`'down'` throws rather than defaulting to down.
 
@@ -212,10 +225,11 @@ A link, member or date value is one paragraph per reference, each holding a lone
 | `setFieldTargets(typeDocument, attribute, targets)` → targets | Replaces a link field's target types (Tana's `configureAsLink` with targets); `[]` lets it link to anything again. Throws on a field that is not a link field. |
 | `setFieldKind(typeDocument, attribute, { type, cardinality })` → definition | Changes what a field is (`type`; `null` makes it plain text) and how many values it holds. A kind keeps only what it uses: the choices go when it stops being an options field (which always gets its list), the targets when it stops being a link. Values already written are left alone. |
 | `parseKey(key)` | The helper behind those. `valueLines` and `valueText` (a value's lines and its flat text) stay inside the module: `readFields` already hands out `lines` and `text`, and nothing outside it needs them raw. |
+| `FIELD_ID` | The regexp for the id a field view answers to, `<document uri>\|<type uri>?attribute=<key>`; main/documents.js parses it, so the format is written once. |
 
 ## App mutation and history boundary
 
-The SDK's `Document.undo()`/`redo()` only undo local CRDT transactions for that document. `main.js` adds a global stack across documents and routes renderer Cmd+Z, Cmd+Shift+Z and Cmd+Y through it. Native delete/restore is a separate `documentAction` command: the main process checks `access.canDelete`, requires a `documentActionResponse`, and records the action so undo of delete restores and undo of restore deletes. A failed action is not removed from history. Restore visibility and document state arrive through the server's live update. Archive/unarchive go the same way, checked with `access.canArchive`; undo of one runs the other.
+The SDK's `Document.undo()`/`redo()` only undo local CRDT transactions for that document. `main/documents.js` adds a global stack across documents and routes renderer Cmd+Z, Cmd+Shift+Z and Cmd+Y through it. Native delete/restore is a separate `documentAction` command: the main process checks `access.canDelete`, requires a `documentActionResponse`, and records the action so undo of delete restores and undo of restore deletes. A failed action is not removed from history. Restore visibility and document state arrive through the server's live update. Archive/unarchive go the same way, checked with `access.canArchive`; undo of one runs the other.
 
 ## `sdk/query.js`
 
@@ -224,12 +238,15 @@ The SDK's `Document.undo()`/`redo()` only undo local CRDT transactions for that 
 | `parseQuery(query)` → `{ text, tags }` | Extracts `#word` tokens. |
 | `searchParams(parsed, typesByLowerTitle, limit = 20)` → ListNodes params or null | Default nodeTypes `['text', 'event', 'user-profile', 'space', 'search']`, `textQuery`, TEXT_RANK sort; `#task` → text + all four states, `#meeting` → event, `#member` → user-profile, `#space` → space, `#<Type>` → `entityTypes`; unknown type or empty query → null. |
 | `needsTypes(parsed)` | True when a non-kind tag needs the type map. |
-| `viewParams(filter, me, limit = 1000)` → ListNodes params | The one query behind every view (docs/VIEWS.md). A filter is `{ types, states, assignee, text, participant, window, completedWithin }`, all optional; `types` null or empty means every listable kind (never an unconstrained query: `nodeTypes: []` is no filter to the graph). `states` and `assignee` are applied only while `tasks` is among the kinds, which is exactly when those pills are shown. Meetings alone sort by event start, everything else by update time; `participant: 'me'` and `window: 'recent'` are events the user is in, from 7 days ago to 7 days ahead. `completedWithin` (7, 30 or `'all'`) is asked for nowhere — the request has no field for the age of a state — so it is applied to the answer instead, by `completedInWindow`. Throws on an invalid filter. |
+| `viewParams(filter, me, limit = 1000)` → ListNodes params | The one query behind every view (docs/VIEWS.md). A filter is `{ types, states, assignee, text, participant, window, completedWithin, fields, audience }`, all optional; `types` holds kinds and `tana:type:` uris, and null or empty means every listable kind (never an unconstrained query: `nodeTypes: []` is no filter to the graph). `states` and `assignee` are applied only while `tasks` is among the kinds, which is exactly when those pills are shown. Meetings alone sort by event start, everything else by update time; `participant: 'me'` and `window: 'recent'` are events the user is in, from 7 days ago to 7 days ahead. `fields` (`{ '<type>?attribute=<key>': { textMatches \| refs \| date } }`) becomes `attributeFilters`, and only while `types` is one workspace type alone. `audience: 'everyone'` asks `restricted: false`, which the caller narrows with `access.everyoneOnly`. `completedWithin` (`COMPLETED_WINDOWS`: 3, 7, 30 or `'all'`) is asked for nowhere — the request has no field for the age of a state — so it is applied to the answer instead, by `completedInWindow`. Throws on an invalid filter. |
+| `completedInWindow(node, within, now?)` / `completedWindow(within)` | Whether a graph node survives `completedWithin`: anything that is not a closed task does; a closed one only when its `state.enteredAt` is within that many days. `completedWindow` normalises the value (unset or stale → 7). |
 | `validViewFilter(f)` | Shape check for a stored filter: known keys only, kinds from `VIEW_KINDS`, states from `STATE_TYPES`, assignee one of `me | anyone | unassigned | <user-profile uri>`. |
+| `filterToSearchQuery(filter, me)` / `searchQueryToFilter(query, me)` | A view filter as a saved search's stored query and back, so "save as search" keeps what the pills show and the pills can edit a saved search. Lossy on purpose: `participant: 'me'` is stored as your uri, `window: 'recent'` as a concrete range, and whatever no pill can show is dropped on the way back. |
+| `liveTrigger(params)` | A ListNodes request cut down to what a live query can say (`livequery.LISTS`), newest change first: a superset of the search, used to hear when a saved search's answer may have moved. |
 | `searchQueryParams(query, me, limit = 1000, now = Date.now(), spaces = [])` → ListNodes params | A saved search's stored `query` as the graph request, the way Tana's own runner builds it. Pass the org's space nodes as `spaces` whenever `ownerUris` names a space: a scoped space then also covers every space beneath it (`searchOwners`). |
 | `searchOwners(ownerUris, spaces)` | Tana's scope widening (`C$e`/`oy`): each space becomes itself plus all its descendants at any depth; a space whose `archivedAt` is set is left out of the tree, cutting off what sits under it; non-space owners stay as they are, anything that is not a Tana uri is dropped, and every owner appears once. Pure: `spaces` are graph nodes `{ id, ownerUri, archivedAt }` the caller listed. |
 | `VIEW_PRESETS`, `VIEW_KINDS` | The three presets (`inbox`, `library`, `types`) and the eleven kinds (`meetings tasks docs chats canvases agents skills searches spaces people types`). No view is a kind page any more — each one chooses what it lists, and a stored filter is used exactly as it is given — and the pages that were a fixed query over one kind are saved searches instead. Both directions come from one kind → node type table in the module (`KIND_NODE_TYPE`), so a new listable kind is one entry there; sdk-check round-trips every kind through a saved search. |
-| `hideRules(patterns)` / `isHidden(title, rules)` | Hidden titles: case-insensitive whole-title match, or a prefix when the pattern ends in `*`; a bare `*` is dropped; at most 200 patterns of 200 characters. Applied to every list and search in main.js. |
+| `hideRules(patterns)` / `isHidden(title, rules)` | Hidden titles: case-insensitive whole-title match, or a prefix when the pattern ends in `*`; a bare `*` is dropped; at most 200 patterns of 200 characters. Applied to every list and search in main/views.js. |
 
 ## `sdk/pins.js` (all `async (sync, userUri, …)`)
 
@@ -243,7 +260,7 @@ Items pinned *on* an event or a space are a different thing (docs/PINNING.md sec
 
 ## `sdk/events.js` — editing a meeting
 
-Tana's event wrapper, write for write (bundle of 2026-09-23); gate calls with `access.canEditEvent`. `setTime(doc, start, end)` writes both epoch-ms times and deletes `allDay` · `setTimezone` / `setLocation` / `setDescription(doc, text | undefined)` set or delete the key · `addAttendees(doc, [{ email?, userUri? }], byUri)` copies a calendar event's legacy `data.attendees`/`data.organizer` into the root `attendees` roster first (Tana's `seedRosterFromLegacyAttendees`), then writes one line per person — `email:<lowercased>` when there is an email, else `tana:<ulid>` with `identityUri` — as `{ role: 'required', cutype: 'individual', source: 'tana' }` merged into any existing line, and gives a `tana:user-profile:` an `attendee` participant grant stamped `changedBy` (an existing grant is kept); a bad entry throws before anything is written · `attendees(doc)` → roster lines plus legacy entries not already on it. `data.syncStatus` (`pending | synced | failed`) and `data.syncError` are the server's report of the calendar write-back; no client writes them.
+Tana's event wrapper, write for write (bundle of 2026-09-23); gate calls with `access.canEditEvent`. `setTime(doc, start, end)` writes both epoch-ms times and deletes `allDay` · `setTimezone` / `setLocation` / `setDescription(doc, text | undefined)` set or delete the key · `lineKey(email)` → `email:<address>`, trimmed and lowercased as Tana does, undefined without an address · `addAttendees(doc, [{ email?, userUri? }], byUri)` copies a calendar event's legacy `data.attendees`/`data.organizer` into the root `attendees` roster first (Tana's `seedRosterFromLegacyAttendees`), then writes one line per person — `email:<lowercased>` when there is an email, else `tana:<ulid>` with `identityUri` — as `{ role: 'required', cutype: 'individual', source: 'tana' }` merged into any existing line, and gives a `tana:user-profile:` an `attendee` participant grant stamped `changedBy` (an existing grant is kept); a bad entry throws before anything is written · `attendees(doc)` → roster lines plus legacy entries not already on it. `data.syncStatus` (`pending | synced | failed`) and `data.syncError` are the server's report of the calendar write-back; no client writes them.
 
 ## `sdk/calls.js` — who is in a meeting, and what it left behind
 
@@ -259,9 +276,11 @@ This is the only way to tell *joined* from *invited*: see [02-data-model.md](02-
 
 ## `sdk/inbox.js` — notifications
 
-Tana keeps each user's notifications in one `tana:user-inbox:<user-profile ULID>` document (`inboxUri(userUri)`, Tana's `gy()`): roots `data { type: 'user-inbox', updatedAt }` and `notifications`, a map of LoroMaps `{ id, notificationType, sourceUri, createdAt, actorUri?, title?, body?, readAt?, threadUri? }` (schema `npe`, wrapper `Ah`/`VSe` in the bundle of 2026-09-22; live: 80 items, keys as listed). Types seen in the bundle: `document-access event-access task-assignment comment-mention comment-reply incoming-call type-archived type-unarchived ai-usage-warning chat-message`.
+Tana keeps each user's notifications in one `tana:user-inbox:<user-profile ULID>` document (`inboxUri(userUri)`, Tana's `gy()`): roots `data { type: 'user-inbox', updatedAt }` and `notifications`, a map of LoroMaps `{ id, notificationType, sourceUri, createdAt, actorUri?, title?, body?, readAt?, threadUri?, due?, firedAt? }` (schema `npe`, wrapper `Ah`/`VSe` in the bundle of 2026-09-22; live: 80 items, keys as listed). Types seen in the bundle: `document-access event-access task-assignment comment-mention comment-reply comment-reminder incoming-call type-archived type-unarchived ai-usage-warning chat-message`.
 
-`open(sync, userUri)` subscribes it (never creates it: Tana's client does that when none exists) · `items(doc)` → newest first · `unreadCount(doc)` · `markAsRead(doc, id)` · `markAsUnread(doc, id)` (deletes `readAt`) · `markAsReadBySourceUri(doc, uri)` · `markAllAsRead(doc)`. Each write is one transaction, sets `readAt` to now on every item it reads, bumps `data.updatedAt` only when an item changed, and returns whether one did — Tana's own rules. Live: the document's `change` events carry every write, from anywhere.
+A `comment-reminder` (issue #160) is written ahead of time with `due: { type: 'plain' | 'zoned', datetime: 'YYYY-MM-DDTHH:mm', timezone? }` and stays out of every read, count and "mark all" until it is due; Tana's client then writes `firedAt`, which this module leaves to Tana. `shown(n, now?)` is that rule, `when(n)` the moment a notification sits at in the list (`firedAt`, else due, else `createdAt`), and `nextDue(doc, now?)` the next moment a waiting reminder comes due (`Infinity` for none), since no live update arrives then.
+
+`open(sync, userUri)` subscribes it (never creates it: Tana's client does that when none exists) · `items(doc)` → the shown ones, newest first · `unreadCount(doc)` · `markAsRead(doc, id)` · `markAsUnread(doc, id)` (deletes `readAt`) · `markAsReadBySourceUri(doc, uri)` · `markAllAsRead(doc)`. Each write is one transaction, sets `readAt` to now on every item it reads, bumps `data.updatedAt` only when an item changed, and returns whether one did — Tana's own rules. Live: the document's `change` events carry every write, from anywhere.
 
 `phrase(n, actorName?, title?)` → Tana's sentence (`Wqt`) as `[{ text, emphasis? }]` ("Sam added you to **Plan**", "You were added to a meeting", anything unknown reads as a message); `title` overrides the stored one, which Tana does for `type-archived`/`type-unarchived` (`retitled(type)`) so a renamed type shows its current name. `detail(n)` → the line Tana writes after it (`Gqt`): the body (a task's title), markdown flattened, trailing punctuation dropped, `''` for calls and type changes. `scripts/platform-cli.js inbox` prints your inbox read-only.
 
@@ -284,7 +303,7 @@ A change Tana's AI suggests from a chat waits for someone to accept it. It lives
 
 ## `sdk/chat.js`
 
-`chatRows(messages, { authorName, aiName = 'Tana AI' })` → read-only outline rows for a chat's `data.messages` (docs/CHATS.md): one author row per message with its markdown blocks as children, `[label](tana:…)` links as mention segments, attachments and proposals as reference rows, progress text including "Waiting for your input", terminal status and error rows, and pending `askUserQuestion` prompts with their options. `blocks(text)`, `segments(text)` and `plain(segments)` are the markdown helpers behind it. Pure and Electron-free.
+`chatRows(messages, { authorName = () => undefined, aiName = 'Tana AI' })` → read-only outline rows for a chat's `data.messages` (docs/CHATS.md): one author row per message with its markdown blocks as children, `[label](tana:…)` links as mention segments, attachments and proposals as reference rows, progress text including "Waiting for your input", terminal status and error rows, and pending `askUserQuestion` prompts with their options. `authorName(uri)` names a human author. `blocks(text)`, `segments(text)` and `plain(segments)` are the markdown helpers behind it, and `hm(ms)` the `H:MM` time a message row shows. Pure and Electron-free.
 
 ## `sdk/assets.js`
 

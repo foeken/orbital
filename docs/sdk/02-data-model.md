@@ -4,7 +4,7 @@ Everything below was read from live documents, the graph API and the web client'
 
 ## 1. Identity
 
-- **URIs**: `tana:<kind>:<ulid>` where the ULID is 26 lowercase Crockford-base32 chars (48-bit ms timestamp + 80 random bits; `node.js ulid()`). Kinds seen: `text`, `event`, `space`, `user-profile`, `type`, `chat`, `canvas`, `agent`, `skill`, `search`, `artifact`, `call`, `image`, `asset`, `collection`, `pin-map`, `org`, `calendar-subscription`. Provider-synced events may carry non-ULID ids (e.g. `tana:event:33q68…`, 26 chars but not time-ordered).
+- **URIs**: `tana:<kind>:<ulid>` where the ULID is 26 lowercase Crockford-base32 chars (48-bit ms timestamp + 80 random bits; `node.js ulid()`). Kinds seen: `text`, `event`, `space`, `user-profile`, `guest-profile`, `contact`, `type`, `workflow`, `chat`, `canvas`, `agent`, `skill`, `search`, `artifact`, `call`, `transcript`, `screen-share`, `image`, `asset`, `collection`, `pin-map`, `org`, `calendar-subscription`, `liveQuery`, `user-inbox`. Provider-synced events may carry non-ULID ids (e.g. `tana:event:33q68…`, 26 chars but not time-ordered).
 - **Org**: the sync stream wants the WorkOS id (`org_…`, JWT claim `org_id`); the org *document* is `tana:org:<ulid>` (`orgDocUri` from the session).
 - **User**: `tana:user-profile:<ulid>`; the ULID equals the session's `userExternalId` (also JWT claim `urn:tana:user:id`).
 - **Blocks** inside content have an 8-char Crockford base32 `blockId` in `attributes` (`0123456789abcdefghjkmnpqrstvwxyz`, no i/l/o/u); field keys and chat message ids are validated against the same alphabet.
@@ -27,7 +27,7 @@ Type (`tana:type:…`): `name`, `description`, `instructions`, `workflowUri`, `a
 
 Workflow (`tana:workflow:…`, a type's `workflowUri`): `type: 'workflow'`, `ownerUri` (the type's space), `states` — a LoroList of `{ id, name }` maps in board order, ids are UUIDs (live, 2026-09-23: one workflow, one state "In Progress"). A task in a column is `stateType: 'open'` plus `stateWorkflowUri`/`stateWorkflowStateId`; Tana labels it with the state's name, falling back to the plain label when the id is gone.
 
-Org (`tana:org:…`): only `name`, `language`, `workosOrgId`, `voicePresetId` and `memberUserProfileDocUris` (WorkOS user id → `tana:user-profile:` uri) live in `data`. The rest of the workspace settings are **root containers beside `data`**: `featurePolicy`, `approvedMcpServers`, `integrations`, `brand` (verified read-only 2026-09-13 on `tana:org:01examplel0000000000000000`). `access.canWrite` reads membership from `data`; `access.orgWideAllowed` and public link sharing read `featurePolicy` from the root, where an absent key means enabled. Not a document index.
+Org (`tana:org:…`): only `name`, `language`, `workosOrgId`, `voicePresetId` and `memberUserProfileDocUris` (WorkOS user id → `tana:user-profile:` uri) live in `data`. The rest of the workspace settings are **root containers beside `data`**: `featurePolicy`, `approvedMcpServers`, `integrations`, `brand` (verified read-only 2026-09-13 on `tana:org:01examplel0000000000000000`). `access.canWrite` reads membership from `data`; sharing to the whole org (`orgWideAllowed`, internal to access.js) and public link sharing read `featurePolicy` from the root, where an absent key means enabled. Not a document index.
 
 ### `appearance` (LoroMap, optional root)
 
