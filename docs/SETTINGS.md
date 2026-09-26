@@ -60,7 +60,9 @@ not, and takes the oldest: two machines that each created one before the graph l
 document at their next launch rather than keeping one each for ever, and the one that loses merges its keys in (the
 rule below). A title alone is not proof: only a document carrying the mark it was created with (root `ext:orbital:doc`,
 written at creation because an empty root is never stored) or a key in either root counts, so a note of yours that is
-also called Orbital is never taken over. A document in Tana's trash is never written to: the oldest one still standing is used, and with none a new
+also called Orbital is never taken over; a document an older build made before any key existed gets the mark from the
+machine that uses it. The one a machine gives up is noted in the synced `settingsOld` list and kept out of every list, like
+the current one. A document in Tana's trash is never written to: the oldest one still standing is used, and with none a new
 one is created and filled from this machine. Restoring the old one from the trash makes it the oldest again, so the next
 launch goes back to it.
 

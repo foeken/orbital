@@ -1144,6 +1144,7 @@ async function main() {
     assert.notEqual(fresh.id, first.id, 'deleted in Tana: the next Work View makes a fresh one');
     assert.equal(settings.get('myTasks'), fresh.id, 'and remembers that one');
     settings.set('myTasks', undefined);
+    await settings.flush(); // before the next block's database: a write still on its way would land its pointer there
     console.log('ok  My Tasks is remembered by id: a rename, a hidden title, a colleague\u2019s or a second machine\u2019s copy never makes or picks another');
   }
   // The Help tour's first start is opened by main (help:claim): once, over the first page that asks, only after this
@@ -1233,6 +1234,9 @@ async function main() {
     assert.equal(JSON.parse(theirs.loro.getMap(settings.ROOT).get('pref:home')), 'library', 'and pushes up the ones only this machine had');
     assert.ok(sent.some(([channel, prefs]) => channel === 'settings:changed' && prefs.theme === 'dark'), 'and the open page is told, rather than keeping the defaults until the next launch');
     assert.deepEqual(note.loro.getMap(settings.ROOT).toJSON(), {}, 'an older note that only shares the title is never taken over');
+    assert.deepEqual(JSON.parse(JSON.stringify(settings.get('settingsOld'))), [mine], 'the document this machine gave up is remembered, and synced');
+    const shown = await backend.S.client.graph.listNodes({ nodeTypes: ['text'], textQuery: settings.TITLE });
+    assert.deepEqual(JSON.parse(JSON.stringify(shown.nodes.map((n) => n.id))), [note.id], 'so neither settings document is listed anywhere, while your own note called Orbital is');
     theirs.transact((l) => l.getMap('data').set('deletedAt', 123));
     connect();
     await settings.hydrate(); await settings.flush();
@@ -1252,6 +1256,14 @@ async function main() {
     cache.open(':memory:'); listed = [{ id: bare, title: settings.TITLE, createTime: '2026-09-26T10:00:00Z' }];
     connect(); await settings.hydrate();
     assert.equal(settings.settingsDocId(), bare, 'and the next machine takes that one rather than making a second');
+    // An older build's document, made before any key was written: no key, no mark. The machine that knows it marks it.
+    const legacy = new Document('tana:text:' + ulid());
+    legacy.transact((l) => initDocument(l, settings.TITLE, ME));
+    docs.set(legacy.id, legacy);
+    cache.open(':memory:'); cache.setSetting(settings.POINTER, legacy.id); listed = [];
+    connect(); await settings.hydrate();
+    assert.equal(settings.settingsDocId(), legacy.id, 'the machine that made it keeps using it');
+    assert.ok(Object.keys(legacy.loro.getMap('ext:orbital:doc').toJSON()).length, 'and marks it, so the next machine takes it for ours rather than for a note');
     console.log('ok  settings document: two machines settle on the oldest, a deleted one is replaced, the page hears what the document changed');
   }
   // What stayed of quick add when the panel went (issue #232): the meeting this user has joined (⌘K Pin to current

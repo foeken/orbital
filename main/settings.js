@@ -37,7 +37,8 @@ const MARK = 'ext:orbital:doc'; // written at creation, so a document that holds
 // choice about your own content, so it follows you, while the key that pays for it stays put. Neither has UI yet —
 // unset means the defaults in main/ai.js.
 // myTasks is which saved search the Work View's right half is (main/views.js myTasks), by id so a rename keeps it.
-const SYNCED = [/^viewFilter:/, /^hiddenTitles$/, /^hideMcp$/, /^typeIcons$/, /^typeHues$/, /^notify$/, /^codex$/, /^codexPrompt$/, /^codexHosts$/, /^codexTask$/, /^sensitive$/, /^aiModel$/, /^aiEffort$/, /^myTasks$/, /^pref:/];
+// settingsOld: settings documents another one took over from (open), kept out of every list like the current one.
+const SYNCED = [/^viewFilter:/, /^hiddenTitles$/, /^hideMcp$/, /^typeIcons$/, /^typeHues$/, /^notify$/, /^codex$/, /^codexPrompt$/, /^codexHosts$/, /^codexTask$/, /^sensitive$/, /^aiModel$/, /^aiEffort$/, /^myTasks$/, /^settingsOld$/, /^pref:/];
 const isSynced = (key) => SYNCED.some((rule) => rule.test(key));
 
 let cache = null; // key -> value, the answer every read gets
@@ -98,14 +99,23 @@ async function open() {
       if (settled) return use(doc);
       settled = true;
       const oldest = await discover();
-      return use(oldest && oldest.id !== known ? oldest : doc);
+      if (!oldest || oldest.id === known) return use(doc);
+      // the one this machine used is still an app document, not a note of yours: it stays out of the lists (views.js listed)
+      set('settingsOld', [...new Set([...(Array.isArray(get('settingsOld')) ? get('settingsOld') : []), known])]);
+      return use(oldest);
     }
   }
   settled = true;
   const found = await discover();
   return found ? use(found) : create();
 }
-function use(doc) { docId = doc.id; db.setSetting(POINTER, doc.id); describe(doc); return doc; }
+function use(doc) {
+  docId = doc.id; db.setSetting(POINTER, doc.id); describe(doc);
+  // one an older build made before any key was written carries neither a key nor the mark: without one it is a note to
+  // the next machine, which would make a second document
+  if (!holdsSettings(doc)) { try { doc.transact((loro) => loro.getMap(MARK).set('app', 'orbital')); } catch (e) { report(e); } }
+  return doc;
+}
 async function discover() {
   try {
     // past hidden titles and Hide MCP: those keep it out of the lists, and must not make a second one
