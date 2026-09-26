@@ -106,6 +106,7 @@ const withShims = (src) => {
   // subtextOf guard below, which then supplies what it calls.
   if (/\bsubtextEl\(/.test(src) && !/function subtextEl\(/.test(src)) src = functionSource('subtextEl') + '\nglobalThis.shownFieldValues ??= (node) => (node.fields ? displayKeys().flatMap((k) => node.fields[k] || []) : []);\n' + src;
   // a type's page (renderer/nodes.js): a harness that is not about one is never on one
+  if (/\bfieldType\(/.test(src) && !/const fieldType =/.test(src)) src = 'globalThis.fieldType ??= () => (onTypePage() ? zoom.docId : null);\n' + src; // nor on a page narrowed to one type
   if (/\b(isTypeDoc|onTypePage|isTypeId|opensOnClick)\b/.test(src) && !/const isTypeId =/.test(src)) src = "globalThis.isTypeId ??= (id) => /^tana:type:[^|?]+$/.test(String(id || '')); globalThis.isTypeDoc ??= (node) => !!node && isTypeId(node.id); globalThis.onTypePage ??= () => false; globalThis.opensOnClick ??= (item) => isTypeDoc(item.node) && !String(item.docId || '').includes('|tana:type:');\n" + src;
   if (/\bSEARCH_ID\b/.test(src) && !/const SEARCH_ID =/.test(src)) src = "globalThis.SEARCH_ID ??= 'tana:search:';\n" + src;
   if (/\beditingType\b/.test(src) && !/let editingType\b/.test(src)) src = 'globalThis.editingType ??= null;\n' + src; // no type's fields being edited
@@ -2412,8 +2413,8 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
       reset: () => filters.set('library', { types: ['tasks'], states: ['open'], assignee: 'me' }) });
   `);
   const anyType = api.pick('type', 'Any type');
-  assert.deepEqual(plain(anyType), { open: false, filter: { types: null, states: ['open'], assignee: 'me' } },
-    '"Any type" is a single choice: it applies and closes');
+  assert.deepEqual(plain(anyType), { open: false, filter: { types: null, states: ['open'], assignee: 'me', fields: null } },
+    '"Any type" is a single choice: it applies and closes, and lets go of the last type\'s field filters');
   api.reset();
   assert.equal(api.pick('type', 'Meetings').open, true, 'a tickable type keeps the multi-select menu open');
   api.reset();

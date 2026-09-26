@@ -176,8 +176,8 @@ function fieldRows(group) {
     rows.push({ id: 'fieldValue', group, icon: ctx.field.type === 'options' ? 'options' : 'link', label: ctx.field.type === 'options' ? 'Select value …' : 'Link to …',
       hint: ctx.field.label || '', keepOpen: true, run: () => openChooser(ctx, openCommandPalette) });
   }
-  // a table row on a type's page: its choice columns, the keyboard's way to what a click on the cell does
-  const row = palDoc && tableView() && onTypePage() && (kids.get(zoom.docId) || []).find((n) => n.id === palDoc.id);
+  // a table row on a page of one type (fieldType): its choice columns, the keyboard's way to what a click on the cell does
+  const row = palDoc && tableView() && fieldType() && shownDocs().find((n) => n.id === palDoc.id);
   if (row) for (const k of tableKeys()) {
     const def = pickableDef(row, k);
     const options = def && def.type === 'options';
