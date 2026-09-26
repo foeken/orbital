@@ -9,7 +9,7 @@ const { createTanaSession } = require('./tana-session');
 const { userDataDir } = require('./userdata');
 const updater = require('./updater');
 const access = require('./sdk/access');
-const { readNode, setTitle, setState, taskMeta, audienceMetadata, setAssignees, setSearchQuery, setSearchView, searchDisplay, searchSort } = require('./sdk/node');
+const { readNode, setTitle, setState, taskMeta, audienceMetadata, setAssignees, setSearchQuery, setSearchView, readSearch, searchDisplay, searchSort } = require('./sdk/node');
 const { completedWindow, filterToSearchQuery, isHidden, searchQueryToFilter, validViewFilter } = require('./sdk/query');
 const content = require('./sdk/content');
 const { isDateUri } = require('./sdk/dates');
@@ -358,15 +358,15 @@ ipcMain.handle('search:list', () => searchList());
 // renderer scripts cannot require, and main already holds the canonical filter for every view.
 ipcMain.handle('search:create', (_e, id, title) => searchCreate(id, title));
 ipcMain.handle('search:myTasks', (_e, findOnly) => myTasks(findOnly === true));
-// The same filter vocabulary in both directions, so the pills that edit a view can edit a saved search. The query
-// lives in a root container of its own, which readNode never sees, so reading takes it off the document directly.
-// Writing replaces it wholesale rather than patching: what the pills are showing is what the document ends up saying.
+// The same filter vocabulary in both directions, so the pills that edit a view can edit a saved search (readSearch
+// and setSearchQuery/setSearchView). Writing replaces it wholesale rather than patching: what the pills are showing
+// is what the document ends up saying.
 ipcMain.handle('search:filter', (_e, id) => op(id, (doc) => {
-  const arrangement = doc.loro.getMap('view').toJSON() || {}; // how it is shown lives beside the query, not inside it
+  const { query, view: arrangement } = readSearch(doc); // how it is shown lives beside the query, not inside it
   return {
     // the completed window is the app's own, so it is stored beside the query and handed back as part of the filter
     // the pills edit; absent, it reads as the default the pill shows the first time Completed is asked for
-    filter: { ...searchQueryToFilter(doc.loro.getMap('query').toJSON(), S.me && S.me.userUri), completedWithin: completedWindow(arrangement.completedWithin), audience: arrangement.audience === 'everyone' ? 'everyone' : null },
+    filter: { ...searchQueryToFilter(query, S.me && S.me.userUri), completedWithin: completedWindow(arrangement.completedWithin), audience: arrangement.audience === 'everyone' ? 'everyone' : null },
     sort: searchSort(arrangement.sortBy),
     group: arrangement.groupBy,
     // Tana's record of key -> { shown, order } (or the comma-joined string earlier builds wrote)

@@ -127,7 +127,7 @@ A saved search (`tana:search:…`) is a document, not a fourth preset: it has no
 `setViewFilter`, and no row cache (`search:list` never calls `db.replaceSection`, so it does not touch
 `S.activeView` or the refresh loop). `search:list` (`tana.searches()`) lists them read-only, newest first,
 for Cmd+K's `Searches` group; opening one goes through `outline:children` → `searchChildren(id)`, which
-reads the document's own stored `query` container and runs it through `graph.listNodes` directly —
+reads the document's own stored `query` container (`readSearch`, sdk/node.js) and runs it through `graph.listNodes` directly —
 bypassing `viewParams`, the presets and the cache entirely. Saving one is an explicit press rather than
 a write per keystroke: the pills' filter goes through `filterToSearchQuery` into `setSearchQuery`, and
 the arrangement — sort, grouping, the facts a row shows and the completed window — into `setSearchView`
