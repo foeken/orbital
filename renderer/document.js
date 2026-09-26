@@ -90,8 +90,7 @@ function editPinRows(q) {
   return rows;
 }
 function openPinsPalette(doc) {
-  palDoc = doc; palMode = 'pins'; palRows = []; palIndex = 0; palette.hidden = false;
-  palInput.placeholder = 'Edit pins'; palInput.value = '';
+  palDoc = doc; showPage('pins', 'Edit pins');
   pinInfo = null; loadPins(); renderPalette(); palInput.focus();
 }
 // ---- Pin to date: a day typed in words, read by a fixed set of rules rather than a model ----
@@ -144,8 +143,7 @@ function pinDateRows(typed) {
     run: () => { if (typeof holdDatePin === 'function') holdDatePin(doc); return run(async () => { await tana.pin(doc.id, 'today', date); loadPins(); }); } }];
 }
 function openPinDatePalette(doc) {
-  pinDateDoc = doc; palMode = 'pinDate'; palRows = []; palIndex = 0; palette.hidden = false;
-  palInput.placeholder = 'Pin to date\u2026'; palInput.value = '';
+  pinDateDoc = doc; showPage('pinDate', 'Pin to date\u2026');
   renderPalette(); palInput.focus();
 }
 function invalidatePinCaches(id) {

@@ -56,6 +56,13 @@ const withShims = (src) => {
   // Cmd+K's meeting rows and pages (renderer/meeting.js): a palette harness without that file offers none
   if (/\bmeetingRows\(/.test(src) && !/function meetingRows\(/.test(src)) src = 'globalThis.meetingRows ??= () => [];\n' + src;
   if (/\bMEETING_PAGES\b/.test(src) && !/const MEETING_PAGES =/.test(src)) src = 'globalThis.MEETING_PAGES ??= {};\n' + src;
+  // Every palette page opens through showPage (renderer/palette.js, #275): the real one, over whatever of the palette's
+  // state the harness declares (its own lets win; the rest start empty here).
+  if (/\bshowPage\(/.test(src) && !/function showPage\(/.test(src)) {
+    src = 'globalThis.clearTimeout ??= () => {}; globalThis.palTimer ??= null; globalThis.palSeq ??= 0; globalThis.palEnter ??= null; globalThis.palBusy ??= false; globalThis.palRows ??= []; globalThis.palIndex ??= 0; globalThis.palMode ??= "cmd";'
+      + ' globalThis.promptEditor ??= () => {}; globalThis.palette ??= { hidden: true }; globalThis.palInput ??= { value: "", placeholder: "", focus() {} };\n'
+      + 'globalThis.showPage ??= ' + source.match(/^function showPage\(.*?^\}/ms)[0] + ';\n' + src;
+  }
   // fields that hold choices or links (renderer/fields.js): a palette harness without that file has no field focused
   if (/\bfieldRows\(/.test(src) && !/function fieldRows\(/.test(src)) src = 'globalThis.fieldRows ??= () => [];\n' + src;
   if (/\b(fieldReturn|fieldLinkCtx|palField|fieldAt|focusField)\b/.test(src) && !/let fieldReturn\b/.test(src)) src = 'globalThis.fieldReturn ??= null; globalThis.fieldLinkCtx ??= null; globalThis.palField ??= null; globalThis.fieldAt ??= () => null; globalThis.focusField ??= () => {};\n' + src;
@@ -2273,6 +2280,20 @@ function runPaletteSkipCheck() {
   }
   assert.deepEqual(plain(typing('search')), { renders: 0, asked: ['searchNow'], palIndex: 0, palEnter: null }, 'the document search asks Tana, debounced');
   assert.deepEqual(plain(typing('setIcon').asked), ['searchIconsNow'], 'and Set icon asks main for its glyphs');
+
+  // Every page opens through showPage (#275), so none inherits what the last one left running: Escape from Set icon
+  // with an icon search still debounced used to land on the command page with the timer live and busy still set.
+  const page = vm.runInNewContext(`
+    let palTimer = 7, palSeq = 3, palEnter = 'pick', palBusy = true, palRows = [{}], palIndex = 2, palMode = 'setIcon', pillCtx = 'x';
+    const cleared = [], clearTimeout = (id) => cleared.push(id), promptEditor = () => {}, palette = { hidden: false }, palInput = { value: 'st', placeholder: '', focus() {} };
+    const refreshChatGPTStatus = () => {}, renderPalette = () => {};
+    ${functionSource('showPage')}
+    ${functionSource('openCommandPalette')}
+    openCommandPalette();
+    ({ cleared, palTimer, palSeq, palEnter, palBusy, palRows, palIndex, palMode, pillCtx, value: palInput.value, placeholder: palInput.placeholder });
+  `);
+  assert.deepEqual(plain(page), { cleared: [7], palTimer: null, palSeq: 4, palEnter: null, palBusy: false, palRows: [], palIndex: 0, palMode: 'cmd', pillCtx: null, value: '', placeholder: 'Run a command' },
+    'a page starts clean: the last page\'s timer cleared, its answers outdated, nothing busy or waiting on Enter');
 }
 
 // Formatting: marks survive the DOM round trip, and toggling one over a selection rewrites only that range.
@@ -7974,7 +7995,7 @@ async function runMeetingEditCheck() {
     const demoMode = false, demoPersonName = (id) => id, demoText = (value) => value, memberName = (uri) => ((members || []).find((m) => m.id === uri) || {}).title || uri;
     ${functionSource('fuzzyMatch')}
     ${sourceBetween('const WEEKDAYS =', 'const PIN_DATE_GROUP')}
-    ${fs.readFileSync(require.resolve('../renderer/meeting.js'), 'utf8').replace("'use strict';", '')}
+    ${withShims(fs.readFileSync(require.resolve('../renderer/meeting.js'), 'utf8').replace("'use strict';", ''))}
     const tick = () => new Promise(setImmediate);
     ({
       cmd: async (doc, canEdit = true, wholeDay = false) => { editable = canEdit; allDay = wholeDay; meetingCtx = null; calls.length = 0; meetingRows(doc, 'Current node'); await tick(); await tick(); return meetingRows(doc, 'Current node').map((r) => [r.id, r.label, r.hint]); },

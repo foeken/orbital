@@ -103,8 +103,7 @@ function editMeetingNow(change, stay) {
   });
 }
 function openMeetingPage(mode, placeholder) {
-  palMode = mode; palRows = []; palIndex = 0; palBusy = false; palette.hidden = false;
-  palInput.placeholder = placeholder; palInput.value = '';
+  showPage(mode, placeholder);
   if (mode === 'meetingAttendee') loadAttendeePool();
   renderPalette(); palInput.focus();
 }

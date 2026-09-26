@@ -481,7 +481,8 @@ assert.match(styleSheet, /\.palette\.anchored:not\(\[hidden\]\) \{/, 'the @ drop
 // would be answered with "No results" under the row offering to write it. The field pages (renderer/fields.js) say
 // what they found, or why they have nothing, in rows of their own.
 assert.match(source, /palMode !== 'agentPrompt' && palMode !== 'discuss' && palMode !== 'field' && \(palMode === 'cmd'/, 'the no-results line skips the pages whose row is what was typed');
-assert.match(source, /function openAgentPrompt\(doc\) \{[\s\S]{0,400}palInput\.value = '';/, 'opening the prompt page clears the query behind it');
+assert.match(source, /function openAgentPrompt\(doc\) \{[\s\S]{0,400}showPage\('agentPrompt', ''\);/, 'opening the prompt page clears the query behind it');
+assert.match(source, /function showPage\(mode, placeholder, value = ''\) \{[^}]*palInput\.value = value;/, 'a page starts with the field holding only what it was opened with');
 // The agent badge sits at the end of the row — after the body, which is the flexible part of the line — and its
 // sweep is opt-in: a reduced-motion setting leaves it still, like every other animation here.
 assert.match(source, /line\.append\(body\);[\s\S]{0,240}if \(codexIds\.has\(display\.id\)\) line\.append\(codexBadgeEl\(display\.id, display\.done\)\)/,

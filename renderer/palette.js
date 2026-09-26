@@ -413,13 +413,19 @@ function pillRowsFor(def, q) {
     } }];
   });
 }
+// Every page of the palette starts here (#275): what the last page left behind — its rows, a search still debounced or
+// in flight, an Enter waiting on it, busy, the prompt editor — is let go of, and the page is up with its field.
+// The caller sets its own context, starts its own read, and draws.
+function showPage(mode, placeholder, value = '') {
+  clearTimeout(palTimer); palTimer = null; ++palSeq; palEnter = null; promptEditor(false);
+  palMode = mode; palRows = []; palIndex = 0; palBusy = false; palette.hidden = false;
+  palInput.placeholder = placeholder; palInput.value = value;
+}
 function openPillPalette(id) {
-  pillCtx = id; palMode = 'pill'; palRows = []; palIndex = 0;
-  palInput.placeholder = 'Choose ' + id; palInput.value = ''; renderPalette(); palInput.focus();
+  showPage('pill', 'Choose ' + id); pillCtx = id; renderPalette(); palInput.focus();
 }
 function openCommandPalette() {
-  pillCtx = null; promptEditor(false); palMode = 'cmd'; palRows = []; palIndex = 0;
-  palInput.placeholder = 'Run a command'; palInput.value = ''; refreshChatGPTStatus(); renderPalette(); palInput.focus();
+  showPage('cmd', 'Run a command'); pillCtx = null; refreshChatGPTStatus(); renderPalette(); palInput.focus();
 }
 function backPalette() {
   const SECOND_LEVEL = new Set(['setType', 'classify', 'trash', 'archived', 'discuss', 'setIcon', 'setHue', 'openaiKey', 'chatgpt', 'pins', 'pinDate', 'create', 'hidden', 'hosts', 'agentLink', ...Object.keys(MEETING_PAGES)]); // pages opened from the command page
@@ -437,8 +443,7 @@ function backPalette() {
   else closePalette();
 }
 function openOpenAIKeyPalette() {
-  palMode = 'openaiKey'; palRows = []; palIndex = 0; palette.hidden = false;
-  promptEditor(false); palInput.type = 'password'; palInput.placeholder = 'Paste OpenAI API key'; palInput.value = '';
+  showPage('openaiKey', 'Paste OpenAI API key'); palInput.type = 'password';
   renderPalette(); palInput.focus();
 }
 function refreshChatGPTStatus() {
@@ -447,8 +452,7 @@ function refreshChatGPTStatus() {
     .then(() => { chatgptAuthLoading = null; if (!palette.hidden && (palMode === 'cmd' || palMode === 'chatgpt')) renderPalette(); });
 }
 function startChatGPTLogin() {
-  palMode = 'chatgpt'; palRows = []; palIndex = 0; palette.hidden = false;
-  promptEditor(false); palInput.type = 'text'; palInput.placeholder = 'ChatGPT account'; palInput.value = '';
+  showPage('chatgpt', 'ChatGPT account');
   renderPalette(); palInput.focus();
   run(async () => {
     const result = await tana.chatgptLogin();
@@ -504,10 +508,7 @@ function trashRows(q) {
   return rows;
 }
 function openTrashPalette() {
-  palMode = 'trash'; palRows = []; palIndex = 0; palette.hidden = false;
-  promptEditor(false);
-  palInput.placeholder = 'Restore something deleted';
-  palInput.value = '';
+  showPage('trash', 'Restore something deleted');
   trashList = null; renderPalette(); palInput.focus();
   run(async () => { const list = await tana.deletedList(); trashList = Array.isArray(list) ? list : []; if (palMode === 'trash') renderPalette(); });
 }
@@ -522,10 +523,7 @@ function archivedRows(q) {
   return rows;
 }
 function openArchivedPalette() {
-  palMode = 'archived'; palRows = []; palIndex = 0; palette.hidden = false;
-  promptEditor(false);
-  palInput.placeholder = 'Unarchive a type';
-  palInput.value = '';
+  showPage('archived', 'Unarchive a type');
   archivedList = null; renderPalette(); palInput.focus();
   run(async () => { const list = await tana.archivedTypes(); archivedList = Array.isArray(list) ? list : []; if (palMode === 'archived') renderPalette(); });
 }
@@ -549,10 +547,7 @@ function hostRows(q) {
   return rows;
 }
 function openHostsPalette() {
-  palMode = 'hosts'; palRows = []; palIndex = 0; palette.hidden = false;
-  promptEditor(false);
-  palInput.placeholder = 'Name  ssh-address  /path/to/codex';
-  palInput.value = '';
+  showPage('hosts', 'Name  ssh-address  /path/to/codex');
   hostList = null; renderPalette(); palInput.focus();
   hostsApply(() => tana.codexHosts());
 }
@@ -571,9 +566,7 @@ function agentLinkRows(q) {
   }) }];
 }
 function openAgentLink(doc) {
-  palMode = 'agentLink'; palRows = []; palIndex = 0; palette.hidden = false; agentLinkDoc = doc;
-  promptEditor(false);
-  palInput.placeholder = 'codex://threads/…'; palInput.value = '';
+  showPage('agentLink', 'codex://threads/…'); agentLinkDoc = doc;
   renderPalette(); palInput.focus();
 }
 // ---- assigning a node to the local agent: the prompt page, one level down in Cmd+K ----
@@ -590,9 +583,8 @@ function promptEditor(on) {
   if (!on) { palText.value = ''; agentCtx = null; palInput.type = 'text'; }
 }
 function openAgentPrompt(doc) {
-  palMode = 'agentPrompt'; palRows = []; palIndex = 0; palette.hidden = false;
+  showPage('agentPrompt', ''); // the query that found "Assign to Agent" is not a query here, and would bold letters in the row
   promptEditor(true); // shows the editor, empty; leaving the page clears it and the context with it
-  palInput.value = ''; // the query that found "Assign to Agent" is not a query here, and would bold letters in the row
   agentCtx = { id: doc.id, doc }; // the row itself, so the assignment can hold it where it sits
   agentModel = ''; // every assignment chooses again; Codex's own default until it does
   agentHost = 'local'; // this machine unless the page says otherwise
@@ -688,8 +680,7 @@ function hiddenRows(q) {
   return rows;
 }
 function openHiddenPalette() {
-  palMode = 'hidden'; palRows = []; palIndex = 0; palette.hidden = false;
-  palInput.placeholder = 'Type a title to hide'; palInput.value = '';
+  showPage('hidden', 'Type a title to hide');
   hiddenList = null; renderPalette(); palInput.focus();
   hiddenApply(() => tana.filters());
 }
@@ -698,8 +689,7 @@ function creationRows(q) {
   return creationChoices.filter((choice) => fuzzyMatch(choice.title, q)).map((choice) => ({ group: choice.kind === 'custom' ? 'Workspace types' : 'Create new', icon: choice.icon, label: choice.title, hint: choice.selectable ? '' : choice.reason || 'Unavailable', disabled: !choice.selectable, keepOpen: true, run: () => startCreation(choice) }));
 }
 function openCreationPalette() {
-  palMode = 'create'; palRows = []; palIndex = 0; palette.hidden = false;
-  palInput.placeholder = 'Choose what to create'; palInput.value = ''; renderPalette(); palInput.focus();
+  showPage('create', 'Choose what to create'); renderPalette(); palInput.focus();
   loadCreationChoices();
 }
 // the create choices feed both the Cmd+K "Create new …" list and the "/" menu
@@ -804,8 +794,7 @@ function meetingPickRows(q) {
   return rows;
 }
 function openMeetingPicker(doc, back) {
-  pinMeetingDoc = doc; pinMeetingBack = back || openCommandPalette; palMode = 'pinMeeting'; palRows = []; palIndex = 0; palette.hidden = false;
-  palInput.placeholder = 'Pin to which meeting?'; palInput.value = '';
+  pinMeetingDoc = doc; pinMeetingBack = back || openCommandPalette; showPage('pinMeeting', 'Pin to which meeting?');
   loadMeetingList(); renderPalette(); palInput.focus();
 }
 // ---- Set type: the types this document can be given, and "No type", which takes the one it has off ----
@@ -845,8 +834,7 @@ function typeRows(q) {
   return rows;
 }
 function openTypePalette(doc) {
-  typeCtx = doc; palMode = 'setType'; palRows = []; palIndex = 0; palBusy = false; palette.hidden = false;
-  palInput.placeholder = 'Set type to…'; palInput.value = '';
+  typeCtx = doc; showPage('setType', 'Set type to…');
   loadTypeList(doc); renderPalette(); palInput.focus();
 }
 // ---- Classify type: the model weighs the types Set type would offer, "No type" among them ----
@@ -857,8 +845,7 @@ const CLASSIFY_GROUP = 'Classify type';
 const CLASSIFY_SURE = 0.8; // ponytail: the model's own odds, uncalibrated; raise it if it applies types you would not
 let classifyCtx = null, classifyAI = null; // the document, and { state: 'thinking'|'ready'|'failed', current, choices, error }
 function openClassifyPalette(doc) {
-  classifyCtx = doc; palMode = 'classify'; palRows = []; palIndex = 0; palBusy = false; palette.hidden = false;
-  palInput.placeholder = 'Classify type…'; palInput.value = '';
+  classifyCtx = doc; showPage('classify', 'Classify type…');
   const mine = classifyAI = { state: 'thinking' };
   tana.classifyType(doc.id).then(
     (answer) => { mine.state = 'ready'; mine.current = (answer && answer.current) || null; mine.choices = (answer && answer.choices) || []; },
@@ -939,8 +926,7 @@ function applyDiscussWith(doc, who) {
   run(async () => { await tana.discussWith(doc.id, who); closePalette(); });
 }
 function openDiscussPalette(doc) {
-  discussCtx = doc; palMode = 'discuss'; palRows = []; palIndex = 0; palBusy = false; palette.hidden = false;
-  palInput.placeholder = 'Discuss with…'; palInput.value = '';
+  discussCtx = doc; showPage('discuss', 'Discuss with…');
   loadDiscussSuggestion(doc); renderPalette(); palInput.focus();
 }
 // ---- Set icon: the Nucleo UI set built into the app, searched in main, a page of results at a time ----
@@ -970,8 +956,7 @@ function iconPickRows() {
   return rows;
 }
 function openIconPalette(doc) {
-  iconCtx = doc; palMode = 'setIcon'; palRows = []; palIndex = 0; palBusy = true; iconList = []; palette.hidden = false;
-  palInput.placeholder = 'Search icons…'; palInput.value = '';
+  iconCtx = doc; showPage('setIcon', 'Search icons…'); palBusy = true; iconList = [];
   searchIconsNow(); renderPalette(); palInput.focus();
 }
 // The rows redraw themselves: main rebuilds the cached rows with the new name and announces it, which reloads the
@@ -1010,8 +995,7 @@ function huePickRows(q) {
   return rows;
 }
 function openHuePalette(doc) {
-  hueCtx = doc; palMode = 'setHue'; palRows = []; palIndex = 0; palBusy = false; palette.hidden = false;
-  palInput.placeholder = 'Choose a colour or type a hue…'; palInput.value = '';
+  hueCtx = doc; showPage('setHue', 'Choose a colour or type a hue…');
   renderPalette(); palInput.focus();
 }
 // Written into this app's settings, so everything wearing the type follows here and Tana keeps its own colour. Main
@@ -1187,13 +1171,11 @@ function togglePalette(mode, link, pin) {
   anchorPalette(link && link.rect);
   pinCtx = pin || null;
   if (mode !== 'slash') slashCtx = null;
-  promptEditor(false); // ⌘K over the prompt page leaves it, without assigning
-  palMode = mode; palRows = []; palIndex = 0; palBusy = false; palEnter = null; clearTimeout(palTimer); palTimer = null;
+  // ⌘K over the prompt page leaves it, without assigning
+  showPage(mode, mode === 'search' ? 'Search Tana' : mode === 'pinToday' ? 'Search open tasks assigned to you' : mode === 'slash' ? 'Choose a block type or create' : 'Run a command', link ? link.text : '');
   // meetingNow is cleared, not kept: every open re-reads the meeting, because "the meeting I am in" lasts minutes.
   fieldLinkCtx = null;
   if (mode === 'cmd') { palDoc = currentDoc(); palField = fieldAt(document.activeElement); fieldReturn = palField && palField.key; palTaskCtx = null; meetingNow = undefined; meetingCtx = null; loadPins(); loadWorkspaceTypes(true); subCache.clear(); refreshChatGPTStatus(); }
-  palInput.placeholder = mode === 'search' ? 'Search Tana' : mode === 'pinToday' ? 'Search open tasks assigned to you' : mode === 'slash' ? 'Choose a block type or create' : 'Run a command';
-  palInput.value = link ? link.text : '';
   if (mode === 'search') searchNow(); else renderPalette();
   palInput.focus();
 }
