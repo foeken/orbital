@@ -4036,6 +4036,7 @@ async function runEditPinsCheck() {
       picker: () => (picker ? { doc: picker.doc, back: typeof picker.back } : null),
       escape: () => { picker.back(); return palMode; },
       openFor: (id, answer) => { states.set(id, answer); openPinsPalette({ id }); },
+      answer: (next) => { state = next; },
       slow: () => { let go; slowA = new Promise((resolve) => { go = resolve; }); return () => go(); }, // the next read of A answers when released
     });
   `, { setImmediate, Date, Promise });
@@ -4094,6 +4095,11 @@ async function runEditPinsCheck() {
   later();
   await new Promise(setImmediate); await new Promise(setImmediate);
   assert.deepEqual(plain(api.page().map((r) => r.label)), ['Not connected'], 'and so does a late answer from an earlier read of the same document: only the latest read counts');
+  // A re-read after a pin is written (pinAction) that fails replaces the rows it read before with the failure.
+  await api.open({ sidebar: true, dates: [] });
+  api.answer({ fail: 'Not connected' });
+  await api.press('', 0); // unpins the sidebar, then reads the pins again
+  assert.deepEqual(plain(api.page().map((r) => r.label)), ['Not connected'], 'a failed re-read shows the failure, not the pins read before it');
   console.log('ok  Edit pins: the page opens with this document\u2019s pins, names today, unpins each of them, offers the sidebar, date and meeting pins that can be made, and the row marks come from one list');
 }
 

@@ -38,6 +38,7 @@ function loadPins() {
   }, (e) => {
     if (mine !== pinRead) return;
     pinFailed = { docId: doc.id, message: (e && e.message) || String(e) };
+    if (pinInfo && pinInfo.docId === doc.id) pinInfo = null; // what it said before is no longer known to hold: the page shows the failure
     showError(e);
     if (!palette.hidden && palMode === 'pins') renderPalette();
   });
