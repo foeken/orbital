@@ -56,7 +56,7 @@ function openVisibilityPeople(doc) {
   if (!meta) return;
   visibilityPeople = new Set(meta.participants.map((p) => p.uri).filter((id) => id && id !== me()?.id));
   visibilityRoles = new Map(meta.participants.map((p) => [p.uri, p.role]).filter(([id]) => id && id !== me()?.id));
-  showPage('visibilityPeople', 'Select people');
+  showPage('visibilityPeople', 'Select people'); // shows the palette: a key recorded on Selected people … arrives with it closed
   loadMembers(); renderPalette(); palInput.focus();
 }
 function visibilityPeopleRows(q) {

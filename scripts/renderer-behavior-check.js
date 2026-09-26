@@ -3399,7 +3399,8 @@ async function runClosedPaletteKeysCheck() {
     const togglePalette = () => {}, navigate = () => {}, history = () => {}, focusRail = () => {}, setZoom = () => {};
     const filterEl = {}, zoomFactor = 1, BASE_ZOOM = 1, previewMoveToSpace = () => {}, taskMetaById = new Map();
     // Selected people … is greyed until the participants are in, as the real page is (renderer/access.js)
-    const visibilityRows = () => [{ label: 'Selected people …', disabled: !taskMetaById.has(palDoc.id), run: () => writes.push(['people', palDoc.id]) }];
+    const visibilityRows = () => [{ label: 'Selected people …', disabled: !taskMetaById.has(palDoc.id), run: () => { writes.push(['people', palDoc.id]); openVisibilityPeople(palDoc); } }];
+    let visibilityPeople = null, visibilityRoles = null; const me = () => null, loadMembers = () => {};
     const moveTargets = async (doc) => [{ label: 'Studio', run: () => writes.push(['move', doc.id, 'Studio']) }];
     const renderPalette = () => {}, closePalette = () => {}, promptEditor = () => {}, loadPinned = () => {};
     const groupBy = () => 'none', holdRow = () => {}, isTask = () => true;
@@ -3434,10 +3435,12 @@ async function runClosedPaletteKeysCheck() {
     ${functionSource('holdDatePin')}
     ${functionSource('toggleDatePin')}
     ${functionSource('loadPins')}
+    ${functionSource('openVisibilityPeople')}
     ({ key: async (id) => { const handled = runAction(id); for (let i = 0; i < 6; i++) await Promise.resolve(); await queue; return handled; },
        meeting: (next) => { answer = next; },
        open: () => { palette.hidden = false; palDoc = currentDoc(); meetingNow = undefined; paletteRows(''); palette.hidden = true; },
        state: () => ({ writes: [...writes], errors: [...errors], calls: { ...calls } }),
+       page: () => ({ open: !palette.hidden, mode: palMode }),
        reset: () => { writes.length = 0; errors.length = 0; calls.current = calls.access = calls.notify = 0; accessById.clear(); notifyById.clear(); taskMetaById.clear(); delete calls.meta; } });
   `);
 
@@ -3478,6 +3481,7 @@ async function runClosedPaletteKeysCheck() {
   await api.key('visibility>Selected people …');
   assert.deepEqual(plain([api.state().writes, api.state().calls.access, api.state().calls.meta]), [[['people', DOC]], 1, 1],
     'a folded visibility key waits for the access and the participants its choice needs, then runs on its first press');
+  assert.deepEqual(plain(api.page()), { open: true, mode: 'visibilityPeople' }, 'and the people page it opens is shown, not drawn into the closed palette');
   console.log('ok  keys with the palette closed: date pins and Pin to current meeting act on the node under the caret with state read at the press, and no palette-only lookup is made');
 }
 function runCmdPillsCheck() {
