@@ -17,6 +17,10 @@ const MOTION = (() => {
 let handAt = -Infinity;
 if (typeof addEventListener === 'function') for (const type of ['keydown', 'pointerdown']) addEventListener(type, () => { handAt = performance.now(); }, true);
 const acted = (within = 1000) => performance.now() - handAt < within;
+// ponytail: above a handful, the list changed rather than an item moving in, out or on (filtering, a reload, a new
+// set of rows), and it neither reads as an arrival or an edit nor is worth a few hundred ghost rows or flashes — each
+// flash forces a layout (playOnce), 486 ms for a 639-row landing. Raise if it feels shy.
+const BULK = 25;
 // Press, for a button the press itself draws again (a pill, a toolbar button): the new one arrives at full size, and
 // the spring back the old one would have played (styles.css Press) is handed to it instead. The Press buttons are the
 // ones styles.css marks with --press, so the list stays there alone; data-id finds the new copy. A press in a menu
@@ -268,8 +272,11 @@ function motionAfter(root, was) {
     }
   }
   // Someone else's edit: a row whose words or state changed while your hands were elsewhere lights up once. Your own
-  // edits come with a key or a press just before them, so they never do.
-  if (!acted(3000)) for (const el of nodes) { const was2 = was.bodies.get(el.dataset.key); if (was2 != null && was2 !== el.dataset.body) flash(el, 'here'); }
+  // edits come with a key or a press just before them, so they never do. Many at once is the page landing (BULK).
+  if (!acted(3000)) {
+    const changed = nodes.filter((el) => { const was2 = was.bodies.get(el.dataset.key); return was2 != null && was2 !== el.dataset.body; });
+    if (changed.length <= BULK) for (const el of changed) flash(el, 'here');
+  }
   // Inbox zero: the last rows of a view just left, and what is left is the note saying so.
   if (nodes.some((el) => el.classList.contains('leaving'))) rowsLeftAt = performance.now();
   const note = !zoom && root.querySelector(':scope > .empty-note');
