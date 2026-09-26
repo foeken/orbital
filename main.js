@@ -267,9 +267,11 @@ ipcMain.on('prefs:snapshot', (e) => { e.returnValue = settings.prefs(); });
 // The Help tour's first start (renderer/overlays.js helpOnce): yes once, to whichever page asks first, and only once this
 // session has read the settings document — the snapshot above is this machine's last copy, which on a new machine knows
 // nothing yet. Every window's main page asks when the connection comes up, so the check and the mark are one step here.
-ipcMain.handle('help:claim', async () => {
+// A window already covered (Create task open) cannot show it: no, and nothing marked, and the page asks again when that
+// overlay closes (renderer/overlays.js).
+ipcMain.handle('help:claim', async (e) => {
   await settingsReady();
-  if (settings.prefs().helpSeen) return false;
+  if (settings.prefs().helpSeen || paneWindow(e && e.sender)?.overlay) return false;
   settings.setPref('helpSeen', true);
   return true;
 });

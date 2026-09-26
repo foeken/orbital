@@ -7,7 +7,8 @@ function openOverlay(page) {
   if (tana.openOverlay) tana.openOverlay(page, theme);
 }
 // ⌘K closed it (the key the tour teaches): the palette opens here. A note is the task Create task made.
-if (tana.onOverlayClosed) tana.onOverlayClosed((result) => { if (result.palette) togglePalette('cmd'); if (result.note) showNote(result.note); });
+// A first start that found Create task open asks again now (helpOnce): main declined it without marking the tour seen.
+if (tana.onOverlayClosed) tana.onOverlayClosed((result) => { if (result.palette) togglePalette('cmd'); if (result.note) showNote(result.note); helpOnce(); });
 // Help: from ⌘K Help, the ? button after Home and ⌘K (renderCrumbs), and once by itself on a first start (helpOnce,
 // renderer/app.js); helpSeen is a synced preference, so that is once per person.
 function openHelp() {
@@ -19,7 +20,7 @@ function openHelp() {
 // been read, and yes to one page only. Over the login the tour taught a window nobody could use yet, a new machine went
 // by its own empty copy and showed it to you again, and every open window showed it at once.
 async function helpOnce() {
-  if (SIDE || pref('helpSeen', false)) return;
+  if (SIDE || !connected || pref('helpSeen', false)) return;
   if (tana.claimHelp ? await tana.claimHelp().catch(() => true) : true) openHelp(); // a claim that fails still opens it, rather than never
 }
 const helpBtn = $('navHelp');

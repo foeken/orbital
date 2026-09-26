@@ -8364,8 +8364,8 @@ checks.push(runFitSoonCheck);
 // of the preferences when the settings document in Tana says it was seen elsewhere.
 async function runHelpOnceCheck() {
   // each page has its own copy of the preferences; main's claim (main.js help:claim, checked in sdk-check) is shared
-  const pane = (claimHelp, side = '') => vm.runInNewContext(`
-    const SIDE = ${JSON.stringify(side)}, prefs = {};
+  const pane = (claimHelp, side = '', connected = true) => vm.runInNewContext(`
+    const SIDE = ${JSON.stringify(side)}, connected = ${connected}, prefs = {};
     let opened = 0;
     const pref = (key, fallback) => (key in prefs ? prefs[key] : fallback);
     const openHelp = () => { opened++; prefs.helpSeen = true; };
@@ -8380,6 +8380,9 @@ async function runHelpOnceCheck() {
   const quiet = main(false);
   assert.equal(await pane(quiet, ':2').go(), 0, 'the right half of the Work View stays quiet');
   assert.equal(quiet.asked(), 0, 'and does not claim it from the main half');
+  assert.equal(await pane(quiet, '', false).go(), 0, 'signed out or not yet connected: no tour, over the login');
+  assert.equal(quiet.asked(), 0, 'and no claim, which main could only answer from this machine\u2019s own copy');
+  assert.match(source, /tana\.onOverlayClosed\(\(result\) => \{[^\n]*helpOnce\(\); \}\);/, 'an overlay closing asks again, for a first start that found Create task open');
   assert.doesNotMatch(source, /then\(restorePlace\)\.then\(helpOnce\)/, 'boot no longer opens it before there is a connection, over the login');
   assert.match(source, /restorePlace\(\)\.finally\(\(\) => \{ placed = true; loadView\(\); renderSoon\(\); helpOnce\(\); \}\)/, 'it opens once connected, over the page the launch came back to');
   console.log('ok  Help tour first start: after login, once across windows, and not again on a machine that has not read your settings yet');

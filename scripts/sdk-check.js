@@ -1131,6 +1131,14 @@ async function main() {
     cache.open(':memory:'); backend.settings.reset();
     backend.settings.setPref('helpSeen', true);
     assert.equal(await claim(), false, 'seen before, on this machine or in the settings document: no tour');
+    cache.open(':memory:'); backend.settings.reset();
+    const page = { webContents: {} }, win = { panes: [page], overlay: {}, isDestroyed: () => false };
+    backend.S.windows.add(win);
+    assert.equal(await claim({ sender: page.webContents }), false, 'a window with Create task open cannot show it');
+    assert.equal(backend.settings.prefs().helpSeen, undefined, 'so nothing is marked, and the page asks again when that closes');
+    win.overlay = null;
+    assert.equal(await claim({ sender: page.webContents }), true, 'which then gets it');
+    backend.S.windows.delete(win);
     console.log('ok  help:claim: the first-start tour goes to one page, once');
   }
   // What stayed of quick add when the panel went (issue #232): the meeting this user has joined (⌘K Pin to current
