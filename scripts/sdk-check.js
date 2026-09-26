@@ -1217,7 +1217,7 @@ async function main() {
     const connect = () => { settings.reset(); live.clear(); backend.testRuntime({ me: { userUri: ME, orgDocUri: 'tana:org:01examplek0000000000000000' }, win, client: { sync, graph: { listNodes: async (p) => { if (p.textQuery === settings.TITLE) asked = p; return { nodes: p.textQuery === settings.TITLE ? listed : [] }; } } } }); }; // a launch: a new client, nothing subscribed yet
     const theirs = new Document('tana:text:' + ulid()); // the other machine's, made a second earlier
     const third = 'tana:text:' + ulid(); // one a third machine already gave up to it
-    theirs.transact((l) => { initDocument(l, settings.TITLE, ME); l.getMap(settings.ROOT).set('pref:theme', JSON.stringify('dark')); l.getMap(settings.ROOT).set('settingsOld', JSON.stringify([third])); });
+    theirs.transact((l) => { initDocument(l, settings.TITLE, ME); l.getMap(settings.ROOT).set('pref:theme', JSON.stringify('dark')); l.getMap('ext:orbital:old').set(third, true); });
     docs.set(theirs.id, theirs);
     const note = new Document('tana:text:' + ulid()); // a note of yours that happens to be called Orbital, older than both
     note.transact((l) => initDocument(l, settings.TITLE, ME));
@@ -1250,8 +1250,8 @@ async function main() {
     assert.deepEqual([linked.id, shared.id, note.id].filter((id) => released.includes(id) && !live.has(id)), [linked.id, shared.id, note.id], 'and each one looked at and turned down is let go again');
     assert.ok(!tried.some((id) => id.startsWith('tana:org:')), 'and an open one is turned down on its own flag, without loading the org or an owner chain to ask about it');
     assert.ok(released.includes(mine) && !live.has(mine) && live.has(theirs.id), 'as is the one this machine gave up, while the one it took stays live');
-    assert.deepEqual(JSON.parse(JSON.stringify(settings.get('settingsOld'))), [third, mine], 'the document this machine gave up is remembered, and synced, beside the one another machine gave up');
-    assert.deepEqual(JSON.parse(theirs.loro.getMap(settings.ROOT).get('settingsOld')), [third, mine], 'in the document too');
+    assert.deepEqual(Object.keys(theirs.loro.getMap('ext:orbital:old').toJSON()).sort(), [third, mine].sort(), 'the document this machine gave up is noted in the one it took, one key each beside the one another machine gave up, so concurrent notes merge');
+    assert.deepEqual(JSON.parse(JSON.stringify(settings.appDocIds())).sort(), [theirs.id, third, mine].sort(), 'and every one of them is an app document the lists leave out');
     const shown = await backend.S.client.graph.listNodes({ nodeTypes: ['text'], textQuery: settings.TITLE });
     assert.deepEqual(JSON.parse(JSON.stringify(shown.nodes.map((n) => n.id))), [note.id, shared.id, linked.id], 'so neither settings document is listed anywhere, while the notes that are only called Orbital are');
     theirs.transact((l) => l.getMap('data').set('deletedAt', 123));

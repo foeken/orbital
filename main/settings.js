@@ -27,6 +27,7 @@ const OLD_TITLE = 'Tana Companion'; // what it was called before the rename: a w
 const POINTER = 'settingsDoc'; // local, never synced: this machine's note of which document that is
 const ROOT = 'ext:orbital'; // the root container the keys live in
 const OLD_ROOT = 'settings'; // where they lived before: moved into ROOT on the next hydrate
+const OLD_DOCS = 'ext:orbital:old'; // settings documents this one took over from, one key each (open)
 const MARK = 'ext:orbital:doc'; // written at creation, so a document that holds no key yet is still known for ours
 
 // What follows you between machines, and what cannot. A window's size belongs to the screen it was sized on; the
@@ -38,8 +39,7 @@ const MARK = 'ext:orbital:doc'; // written at creation, so a document that holds
 // choice about your own content, so it follows you, while the key that pays for it stays put. Neither has UI yet —
 // unset means the defaults in main/ai.js.
 // myTasks is which saved search the Work View's right half is (main/views.js myTasks), by id so a rename keeps it.
-// settingsOld: settings documents another one took over from (open), kept out of every list like the current one.
-const SYNCED = [/^viewFilter:/, /^hiddenTitles$/, /^hideMcp$/, /^typeIcons$/, /^typeHues$/, /^notify$/, /^codex$/, /^codexPrompt$/, /^codexHosts$/, /^codexTask$/, /^sensitive$/, /^aiModel$/, /^aiEffort$/, /^myTasks$/, /^settingsOld$/, /^pref:/];
+const SYNCED = [/^viewFilter:/, /^hiddenTitles$/, /^hideMcp$/, /^typeIcons$/, /^typeHues$/, /^notify$/, /^codex$/, /^codexPrompt$/, /^codexHosts$/, /^codexTask$/, /^sensitive$/, /^aiModel$/, /^aiEffort$/, /^myTasks$/, /^pref:/];
 const isSynced = (key) => SYNCED.some((rule) => rule.test(key));
 
 let cache = null; // key -> value, the answer every read gets
@@ -102,12 +102,10 @@ async function open() {
       settled = true;
       const oldest = await discover();
       if (!oldest || oldest.id === known) return use(doc);
-      // the one this machine used is still an app document, not a note of yours: it stays out of the lists (views.js listed)
-      // with what the winner already lists: a third machine giving its own up must not drop the second one's
-      const list = (value) => (Array.isArray(value) ? value : []);
-      const old = [...new Set([...list(decode(oldest.loro.getMap(ROOT).get('settingsOld'))), ...list(get('settingsOld')), known])];
-      oldest.transact((loro) => loro.getMap(ROOT).set('settingsOld', encode(old))); // now, not queued: hydrate reads this document next
-      set('settingsOld', old);
+      // the one this machine used is still an app document, not a note of yours: it stays out of the lists (appDocIds), with
+      // those it had taken over itself. One key per document, so two machines giving theirs up at once both keep theirs.
+      const given = [known, ...Object.keys(doc.loro.getMap(OLD_DOCS).toJSON() || {})];
+      oldest.transact((loro) => { const map = loro.getMap(OLD_DOCS); for (const id of given) map.set(id, true); });
       if (!had) S.client.sync.unsubscribe(known).catch(() => {}); // given up: no live copy of it, and its changes are not ours to route
       return use(oldest);
     }
@@ -234,6 +232,11 @@ const PREF = 'pref:';
 const prefs = () => Object.fromEntries(Object.entries(load()).filter(([key]) => key.startsWith(PREF)).map(([key, value]) => [key.slice(PREF.length), value]));
 const setPref = (key, value) => { if (typeof key !== 'string' || !key || key.includes(':')) throw new Error('Not a preference name'); return set(PREF + key, value); };
 const settingsDocId = () => docId;
+// Every settings document of yours the lists must leave out: the one in use and those it took over from (open).
+const appDocIds = () => {
+  const doc = docId && S.client && S.client.sync.getDocument(docId);
+  return [docId, ...(doc ? Object.keys(doc.loro.getMap(OLD_DOCS).toJSON() || {}) : [])].filter(Boolean);
+};
 const reset = () => { cache = null; docId = null; opening = null; settled = false; }; // tests, and a second login
 // A setting one page writes reaches every other page and window at once: applyRemote announces only what another
 // machine changed, since this machine's own write comes back from Tana as nothing new. The writer is left out, because
@@ -253,4 +256,4 @@ function tellOthers(sender, docId) {
 // the preferences now, asked for once the page listens for settings:changed (renderer/app.js; preload's prefs:snapshot is the load-time copy)
 const ipc = { 'prefs:now': () => prefs() };
 
-module.exports = { get, set, prefs, setPref, flush, hydrate, applyRemote, synced, settingsDocId, isSynced, reset, tellOthers, ipc, TITLE, ROOT, POINTER, PREF };
+module.exports = { get, set, prefs, setPref, flush, hydrate, applyRemote, synced, settingsDocId, appDocIds, isSynced, reset, tellOthers, ipc, TITLE, ROOT, POINTER, PREF };
