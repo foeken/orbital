@@ -1258,15 +1258,12 @@ async function main() {
     theirs.transact((l) => l.getMap('data').set('deletedAt', 123));
     connect();
     await settings.hydrate(); await settings.flush();
-    assert.equal(settings.settingsDocId(), mine, 'deleted in Tana: a document in the trash is not written to; the oldest one still standing is');
-    assert.ok(!live.has(theirs.id), 'and the deleted one is not kept live');
-    assert.equal(JSON.parse(docs.get(mine).loro.getMap(settings.ROOT).get('pref:theme')), 'dark', 'and it gets what this machine remembers');
-    docs.get(mine).transact((l) => l.getMap('data').set('deletedAt', 124));
-    connect();
-    await settings.hydrate(); await settings.flush();
     const next = settings.settingsDocId();
-    assert.ok(next && next !== theirs.id && next !== mine, 'with every one deleted, a new one is made');
+    assert.ok(next && next !== theirs.id && next !== mine, 'deleted in Tana: a document in the trash is not written to, nor a copy it took over (it holds what was true before): a new one is made');
+    assert.ok(!live.has(theirs.id), 'and the deleted one is not kept live');
     assert.equal(JSON.parse(docs.get(next).loro.getMap(settings.ROOT).get('pref:theme')), 'dark', 'written from what this machine remembers');
+    assert.equal(docs.get(mine).loro.getMap(settings.ROOT).get('pref:theme'), undefined, 'the copy given up earlier is left as it was');
+    assert.deepEqual(Object.keys(docs.get(next).loro.getMap('ext:orbital:old').toJSON()).sort(), [third, mine].sort(), 'and what the deleted one had taken over goes along, so those copies stay out of the lists');
     // A machine with nothing to say yet makes a document with no key in it; another machine must still take it for ours.
     cache.open(':memory:'); listed = [];
     connect(); await settings.hydrate(); await settings.flush();

@@ -97,24 +97,33 @@ async function open() {
   if (typeof known === 'string' && known) {
     const had = known !== docId && !!S.client.sync.getDocument(known); // held by something else before this looked: that stays
     const doc = await S.client.sync.subscribe(known).catch(() => null);
+    // the copies this one took over hold what was true before: never taken again, and still left out of the lists
+    const gaveUp = doc ? Object.keys(doc.loro.getMap(OLD_DOCS).toJSON() || {}) : [];
     if (doc && !isDeleted(readNode(doc))) {
       if (settled) return use(doc);
       settled = true;
-      const oldest = await discover();
+      const oldest = await discover(new Set(gaveUp));
       if (!oldest || oldest.id === known) return use(doc);
       // the one this machine used is still an app document, not a note of yours: it stays out of the lists (appDocIds), with
       // those it had taken over itself. One key per document, so two machines giving theirs up at once both keep theirs.
-      const given = [known, ...Object.keys(doc.loro.getMap(OLD_DOCS).toJSON() || {})];
-      oldest.transact((loro) => { const map = loro.getMap(OLD_DOCS); for (const id of given) map.set(id, true); });
+      carry(oldest, [known, ...gaveUp]);
       if (!had) S.client.sync.unsubscribe(known).catch(() => {}); // given up: no live copy of it, and its changes are not ours to route
       return use(oldest);
     }
     if (doc && !had) S.client.sync.unsubscribe(known).catch(() => {}); // deleted in Tana: nothing to keep live
+    if (doc) { // deleted in Tana: the next one standing or a new one, never a copy it took over, and its list goes along
+      settled = true;
+      const found = await discover(new Set(gaveUp));
+      const next = found ? use(found) : await create();
+      if (next) carry(next, gaveUp);
+      return next;
+    }
   }
   settled = true;
   const found = await discover();
   return found ? use(found) : create();
 }
+const carry = (doc, ids) => { if (ids.length) doc.transact((loro) => { const map = loro.getMap(OLD_DOCS); for (const id of ids) map.set(id, true); }); };
 function use(doc) {
   docId = doc.id; db.setSetting(POINTER, doc.id); describe(doc);
   // one an older build made before any key was written carries neither a key nor the mark: without one it is a note to
@@ -122,7 +131,7 @@ function use(doc) {
   if (!holdsSettings(doc)) { try { doc.transact((loro) => loro.getMap(MARK).set('app', 'orbital')); } catch (e) { report(e); } }
   return doc;
 }
-async function discover() {
+async function discover(skip = new Set()) {
   try {
     // past hidden titles and Hide MCP: those keep it out of the lists, and must not make a second one
     const listNodes = S.client.graph.listNodesUnhidden || S.client.graph.listNodes;
@@ -136,6 +145,7 @@ async function discover() {
       const mine = nodes.filter((n) => (n.title || '').trim().toLowerCase() === title.toLowerCase())
         .sort((a, b) => String(a.createTime || '').localeCompare(String(b.createTime || '')));
       for (const node of mine) {
+        if (skip.has(node.id)) continue;
         const had = !!S.client.sync.getDocument(node.id); // somebody else's subscription stays, whatever this decides
         const doc = await S.client.sync.subscribe(node.id).catch(() => null);
         if (doc && !isDeleted(readNode(doc)) && holdsSettings(doc) && await onlyMine(doc)) return doc;
