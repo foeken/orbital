@@ -869,6 +869,7 @@ function runEditabilityCheck() {
   assert.deepEqual(plain(runKey(true, ' ')).zoomed, 0, 'and an editable row keeps Space for typing');
   // A type row opens on a click, so the keys do the same, even though the type itself can be edited (on its page)
   for (const key of ['Enter', ' ']) assert.deepEqual(plain(runKey(true, key, false, false, 'tana:type:01j0goal000000000000000000')), { mutation: 0, zoomed: 1, opened: 0, prevented: true }, JSON.stringify(key) + ' on a type row opens it and creates nothing');
+  assert.deepEqual(plain(runKey(true, 'Enter', false, true, 'tana:type:01j0goal000000000000000000')), { mutation: 0, zoomed: 0, opened: 0, prevented: false }, 'while ⌘Enter on it is left to a recorded shortcut');
   // A read-only row swallowed every ⌘ combo but ⌘K and ⌘S, so ⌘F (and ⌘Z, ⌘C, ⌘[) did nothing while the caret sat
   // on one and started working again after a click elsewhere. The shortcuts are the document handler's to run.
   assert.equal(runKey(false, 'f', false, true).prevented, false, '⌘F on a read-only row reaches the document handler');
