@@ -3311,7 +3311,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   assert.deepEqual(plain(api.commands('tasks')), [
     ['pill:status', 'Filter by status', 'In Progress', 'status'], ['pill:assigned', 'Filter by assignee', 'Anyone', 'assigned'],
     ['pill:sort', 'Sort by', 'Default', 'sort'], ['pill:group', 'Group by', 'None', 'group'],
-    ['pill:display', 'Display', 'Status, Assigned, Updated', 'field'],
+    ['pill:display', 'Display', 'Status, Assigned, …', 'field'],
     ['cleanup', 'Clean up', 'Nothing to clean up', 'cleanup'], // always listed, off until a row is held in place
     ['tableView', 'Switch to table', null, 'table'], // the header's Outliner/Table switch, on every page with pills
   ], 'Cmd+K names the current Tasks view options for what they do, with the value as the hint and each its supplied icon (Tasks groups by Status until told otherwise), and Tasks is a kind page with no type to pick');
@@ -4154,9 +4154,9 @@ async function runRestorePlaceCheck() {
   `);
   assert.equal(api.remember({ docId: 'tana:text:a', nodeId: 'n1', from: 'Search' }), JSON.stringify({ docId: 'tana:text:a', nodeId: 'n1', from: 'Search' }),
     'the node you are looking at is remembered as the place to reopen');
-  assert.equal(api.remember(null), null, 'a view is not a zoom: the stored place is cleared rather than left stale');
+  assert.equal(api.remember(null), '{}', 'a view with nothing zoomed is a place too: stored as {}, so a reload stays on it instead of opening Home');
   api.remember({ docId: 'tana:text:a', nodeId: null });
-  assert.equal(api.remember({ docId: 'draft:7', nodeId: null }), null, 'a draft id would mean nothing after a restart, so it replaces nothing');
+  assert.equal(api.remember({ docId: 'draft:7', nodeId: null }), '{}', 'a draft id would mean nothing after a restart, so it stores the view behind it');
   api.seed([{ id: 'tana:text:a', text: 'Weekly notes', icon: 'doc' }]);
   assert.equal(api.remember({ docId: 'tana:text:a', nodeId: null }), JSON.stringify({ docId: 'tana:text:a', nodeId: null, title: 'Weekly notes', icon: 'doc' }),
     'the page\'s own title and glyph ride along, which is what lets the next launch draw it before anything is fetched');
@@ -4747,12 +4747,13 @@ function runCodexAssignCheck() {
 // path rather than a second one, restartable, and — the part that was reported as "I can hardly see it" — not cut
 // off by its own answer. The redraw builds a new pill, so an answer that lands in 80 ms used to replace the icon a
 // tenth of the way round. The query still goes out first; only the redraw waits.
-// ---- a saved search folds its pills away behind the header button (renderer/pills.js) ----
+// ---- every page with pills folds them away behind the header button (renderer/pills.js) ----
 // Two things here are worth a check rather than an eye: the row may only go once the last pill has finished leaving,
 // and unsaved edits have to hold it open whatever the button was last set to, or Save would be out of reach.
 function runPillsFoldCheck() {
   const api = vm.runInNewContext(`
-    let dirty = false, redrawn = 0, reduced = false;
+    let dirty = false, redrawn = 0, reduced = false, page = 'tana:search:x';
+    const pillKey = () => page, onSearchPage = () => page.startsWith('tana:search:'), onTypePage = () => page.startsWith('tana:type:');
     const log = [];
     const matchMedia = (query) => ({ matches: reduced && query.includes('reduce') });
     const mkEl = (id) => {
@@ -4805,11 +4806,23 @@ function runPillsFoldCheck() {
       cleanupEnd: () => { cleanupEl.fire('animationend'); return { hidden: cleanupEl.hidden, in: cleanupEl.classList.contains('in'), out: cleanupEl.classList.contains('out') }; },
       setDirty: (value) => { dirty = value; },
       setReduced: (value) => { reduced = value; },
+      setPage: (value) => { page = value; },
     });
   `);
   assert.equal(api.open(), false, 'a saved search opens with its pills folded away: the query is already its title');
-  assert.equal(plain(api.toggleFor(true)).label, 'Show search options', 'and the button beside back and forward says what it will do');
-  assert.equal(plain(api.toggleFor(false)).button, true, 'off a saved search there is nothing to fold, so the button is not there');
+  assert.equal(plain(api.toggleFor(true)).label, 'Show view options', 'and the button beside back and forward says what it will do');
+  assert.equal(plain(api.toggleFor(false)).button, true, 'a page without pills has nothing to fold, so the button is not there');
+  api.setPage('tana:type:x');
+  assert.equal(api.open(), false, 'a type page opens with its pills folded too');
+  api.setPage('library');
+  assert.equal(api.open(), true, 'a view opens with its pills shown: they are how it is aimed');
+  assert.equal(api.press().shown, false, 'and the button folds them there as well');
+  api.setPage('inbox');
+  assert.equal(api.open(), true, 'each page keeps its own choice, so folding the Library leaves the Inbox as it was');
+  api.setPage('library');
+  assert.equal(api.open(), false, 'and the Library stays folded when you come back to it');
+  api.press();
+  api.setPage('tana:search:x');
   // Closing: the pills leave one after another and the row goes only when the last of them is gone. Hiding it on the
   // press would take the animation off screen halfway through.
   const folding = plain(api.fold());
@@ -4843,7 +4856,7 @@ function runPillsFoldCheck() {
   assert.equal(api.press().shown, true, 'pressing it there cannot take Save off the screen: the edit still holds the row open');
   api.setDirty(false);
   assert.equal(api.open(), false, 'but the press was recorded, so the row folds away the moment the edit is saved');
-  assert.equal(plain(api.toggleFor(true)).stored.pillsOpen, false, 'the choice is a preference, so it follows you between machines');
+  assert.deepEqual(plain(api.toggleFor(true)).stored.openPills, { library: true, 'tana:search:x': false }, 'the choice is a preference, so it follows you between machines');
   // Reduced motion: nothing animates, so nothing is waited for either.
   api.setReduced(true);
   api.unfold();
@@ -5796,6 +5809,7 @@ async function runHomeCheck() {
   // A launch with nothing to restore opens Home; an explicit place wins
   assert.deepEqual(plain(api.seed(null)), { docId: SEARCH, nodeId: null }, 'a launch with no place to restore opens Home');
   assert.deepEqual(plain(api.seed({ docId: OTHER, nodeId: null })), { docId: OTHER, nodeId: null }, 'and a place to restore is left alone');
+  assert.deepEqual(plain(api.seed({})), {}, 'and a view left unzoomed (the Library, Types) reopens as that view, not Home');
 
   // One route Home, whatever page asks for it: the anchor crumb, Back with no history and the Cmd+K row all call this.
   api.view('library');

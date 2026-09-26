@@ -64,7 +64,9 @@ function pillDefs() {
   defs.push({ id: 'sort', label: 'Sort', command: 'Sort by', icon: 'sort', value: SORTS.find(([id]) => id === sortBy())[1], rows: () => sortList().map(([id, label]) => ({ label, checked: sortBy() === id, run: () => setSortBy(id) })) });
   defs.push({ id: 'group', label: 'Group', command: 'Group by', icon: 'group', value: groupList().find(([id]) => id === groupBy())[1], rows: () => groupList().filter(([id]) => id !== 'responsibility' || tasksInFilter(f)).map(([id, label]) => ({ label, checked: groupBy() === id, run: () => setGroupBy(id) })) });
   // what each row shows of itself; multi-select, so the menu stays open to tick more, like the type and status lists
-  defs.push({ id: 'display', label: 'Display', command: 'Display', icon: 'field', value: names(displayList(), displayKeys()) || 'Nothing', rows: () => displayList().map(([id, label]) => ({ label, keepOpen: true, checked: displayOn(id), run: () => setDisplay(id) })) });
+  // the first two it shows and an ellipsis for the rest, so ticking more does not stretch the pill across the bar
+  const shown = displayList().filter(([id]) => displayOn(id)).map(([, label]) => label);
+  defs.push({ id: 'display', label: 'Display', command: 'Display', icon: 'field', value: shown.slice(0, 2).join(', ') + (shown.length > 2 ? ', …' : '') || 'Nothing', rows: () => displayList().map(([id, label]) => ({ label, keepOpen: true, checked: displayOn(id), run: () => setDisplay(id) })) });
   return defs;
 }
 // One pill per field with a closed set of values, filtering in Tana's own terms (sdk/query.js attributeFilters,
@@ -150,7 +152,7 @@ function cleanupNow() {
 function renderPills(show) {
   const box = $('pills'), search = !!show && onSearchPage();
   pillsDrawn = !!show; // what "this page has pills" means for everyone else: the row itself may be folded away
-  renderPillsToggle(search);
+  renderPillsToggle(!!show);
   // Offered wherever the pills are, folded or not, and on a view as well: a row kept in place by a status change is
   // exactly when it is wanted (needsCleanup, renderer/views.js).
   renderCleanupBtn(!!show && needsCleanup(shownDocs()));
@@ -158,11 +160,11 @@ function renderPills(show) {
   // re-asking the stored query would quietly replace them with something else.
   renderRefreshBtn(search && !searchRows.has(zoom.docId));
   renderTableBtn(!!show);
-  if (search && !pillsShown()) return foldPills(box);
-  // Folded until now, so the pills come in rather than appear. Only on a saved search, and only for a press on the
-  // button: the movement is what answers that press. A view's pills are the view, and a page you have just arrived
-  // at — a reload, a link, the Library — is drawn as it stands rather than assembling itself in front of you.
-  const arriving = search && pillsPressed && (box.hidden || box.classList.contains('out'));
+  if (show && !pillsShown()) return foldPills(box);
+  // Folded until now, so the pills come in rather than appear. Only for a press on the button: the movement is what
+  // answers that press, and a page you have just arrived at — a reload, a link, the Library — is drawn as it stands
+  // rather than assembling itself in front of you.
+  const arriving = pillsPressed && (box.hidden || box.classList.contains('out'));
   box.classList.remove('out');
   const defs = show ? pillDefs() : [];
   box.hidden = !defs.length;
@@ -197,25 +199,24 @@ function renderPills(show) {
   const active = box.querySelector('.menu .mrow.active');
   if (active) active.scrollIntoView({ block: 'nearest', inline: 'nearest', container: 'nearest' });
 }
-// The pills of a saved search fold away behind a button beside back and forward. A view's pills are the view, so
-// they stay; a saved search is a page read far more often than it is re-aimed, and its query is already its title.
-// Unsaved edits hold the row open whatever the button says, or Save would be behind something that does not
-// mention it. The choice follows you between machines, like the sidebar's.
+// Every page with pills can fold them away behind a button beside back and forward, and each page remembers its own
+// choice. A view (the Library, the Inbox) opens with them shown, because its pills are how it is aimed; a saved search
+// and a type page open with them folded, because each is read far more often than it is re-aimed and its title
+// already says what it lists. Unsaved edits hold the row open whatever the button says, or Save would be behind
+// something that does not mention it. The choice follows you between machines, like the sidebar's.
 const pillsToggle = $('pillsToggle');
-let pillsOpen = pref('pillsOpen', false) === true;
 let pillsPressed = false; // the row moves for a press on the button, and for nothing else
 let pillsDrawn = false;   // the page the pills belong to, which a folded row no longer says (renderer/render.js, renderer/tasks.js)
-const pillsShown = () => pillsOpen || searchDirty();
+const pillsShown = () => (pref('openPills', {})[pillKey()] ?? !(onSearchPage() || onTypePage())) || searchDirty();
 pillsToggle.onclick = () => {
-  pillsOpen = !pillsShown();
-  setPref('pillsOpen', pillsOpen);
+  setPref('openPills', { ...pref('openPills', {}), [pillKey()]: !pillsShown() });
   pillsPressed = true;
   try { renderPills(true); } finally { pillsPressed = false; } // renderPills is synchronous, so the flag lasts exactly this draw
 };
 function renderPillsToggle(available) {
   pillsToggle.hidden = !available;
   if (!available) return;
-  const open = pillsShown(), label = open ? 'Hide search options' : 'Show search options';
+  const open = pillsShown(), label = open ? 'Hide view options' : 'Show view options';
   pillsToggle.title = label;
   pillsToggle.setAttribute('aria-label', label);
   pillsToggle.setAttribute('aria-pressed', String(open));

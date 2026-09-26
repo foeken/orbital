@@ -6,12 +6,13 @@ one fetch path, one cache, one loader and one set of pills. Tasks, Meetings, Cha
 views too until each turned out to be what a saved search already is — a fixed query over one kind —
 and moved there (section 6).
 
-On a **saved search** that one set of pills folds away behind a button beside back and forward
-(`pillsOpen`, a preference; renderer/pills.js): its query is already its title, and the pills are
-wanted while it is being re-aimed rather than every time it is read. A view keeps its pills in front
-of it, an unsaved edit holds the row open — Save is one of the pills in it — and Cmd+K lists every
-pill either way. **Refresh** is a header button beside that one rather than a pill: it asks the query
-rather than describing it, so folding the pills away must not take it with them.
+On **every page with pills** that one set folds away behind a settings button beside back and forward
+(`openPills`, a preference keyed by page; renderer/pills.js). A view (Library, Inbox) opens with them
+shown; a saved search and a type page open with them folded, because their title already says what
+they list and the pills are wanted while re-aiming rather than every time they are read. Each page
+keeps its own choice, an unsaved edit holds the row open — Save is one of the pills in it — and Cmd+K
+lists every pill either way. **Refresh** is a header button beside that one rather than a pill: it asks
+the query rather than describing it, so folding the pills away must not take it with them.
 
 This file is the contract between the main process (`sdk/query.js`, `main.js`, `preload.js`) and the
 renderer. It replaces the per-view paths: `taskParams`/`libraryQueries`/`MEETINGS_QUERY`/`inbox()`/

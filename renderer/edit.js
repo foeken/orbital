@@ -308,11 +308,13 @@ const navPlace = () => ({ view, zoom: zoom && { ...zoom }, key: JSON.stringify([
 // tana.path, and naming its documents would mean fetching each one. A draft id means nothing after a restart.
 // A page of the app's own (Notifications, Proposals, Timeline) is a place too: its id is orbital:…, never a Tana id,
 // and a reload has to land back on it rather than on whatever was stored before it.
+// So is a view with nothing zoomed (the Library, Types, a view's own list): it is stored as {} rather than removed,
+// because "nothing stored" is what makes a launch open Home, and a reload on the Library used to land there.
 const isPlaceId = (id) => isRealId(id) || String(id || '').startsWith('orbital:');
 function rememberPlace(key = 'place' + SIDE) {
   const doc = zoom ? docOf(zoom.docId) : null; // a row the app does not have simply stores no title: the next launch opens on the view, as before
   if (zoom && isPlaceId(zoom.docId)) localStorage.setItem(key, JSON.stringify({ docId: zoom.docId, nodeId: zoom.nodeId || null, from: zoom.from, title: doc ? doc.text : undefined, icon: doc ? doc.icon : undefined }));
-  else localStorage.removeItem(key);
+  else localStorage.setItem(key, '{}'); // the view itself (view + SIDE holds which one)
 }
 function noteNavigation() {
   const here = navPlace();
