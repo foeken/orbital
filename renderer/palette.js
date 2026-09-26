@@ -1095,6 +1095,7 @@ function openTodayTaskSearch(node) {
 }
 function renderPalette() {
   const q = palInput.value.trim();
+  swapPanel(palList, palMode); // a mode changed while open slides its list across
   if (palMode === 'cmd') palRows = paletteRows(q.toLowerCase(), q);
   else if (palMode === 'create') palRows = creationRows(q.toLowerCase());
   else if (palMode === 'slash') palRows = slashRows(q.toLowerCase());
@@ -1196,6 +1197,7 @@ function anchorPalette(rect) {
   if (up) card.style.bottom = (innerHeight - rect.top + 6) + 'px'; else card.style.top = (rect.bottom + 6) + 'px';
 }
 function closePalette() {
+  swapPanel(null, null);
   palette.hidden = true; clearTimeout(palTimer); palTimer = null; cancelLink(); pinCtx = null; pillCtx = null; fieldLinkCtx = null; promptEditor(false); returnFocus();
   const field = fieldReturn; fieldReturn = null;
   if (field && !focused()) focusField(field); // a field that holds choices is no row: returnFocus cannot find it

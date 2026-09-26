@@ -147,14 +147,18 @@ function animateRows(before) {
   // set of rows), and it neither reads as an arrival nor is worth a few hundred ghost rows. Raise if it feels shy.
   const BULK = 25;
   if (arrived.length > BULK || gone.length > BULK) return;
-  for (const el of arrived) el.classList.add('entering');
+  // An arrival plays once: the class goes when it ends, or every later render — which puts reused rows back with
+  // replaceChildren, restarting whatever animation they carry — would play it again.
+  for (const el of arrived) { el.classList.add('entering'); el.onanimationend = (e) => { if (e.target === el) el.classList.remove('entering'); }; }
   for (const key of gone) {
     const el = before.get(key);
     const next = old.slice(old.indexOf(key) + 1).find((k) => keys.has(k)); // back where it was: before the first row that outlived it
     if (!el.classList.contains('leaving')) { // one that is already on its way out: the renders that keep coming must not cut it short
       el.classList.add('leaving'); el.classList.remove('selected', 'entering'); // a row that just arrived and left again only leaves
       for (const t of el.querySelectorAll('[contenteditable]')) t.removeAttribute('contenteditable');
-      setTimeout(() => el.remove(), 500); // not animationend: reduced motion runs no animation and the row must still go
+      // not animationend: a render meanwhile restarts it. The last one gone draws the view again, so an emptied view
+      // says so (and Inbox zero gets its moment, renderer/motion.js motionAfter) instead of standing blank.
+      setTimeout(() => { el.remove(); settleEmpty(outline); }, 500);
     }
     outline.insertBefore(el, (next && nodeElOf(next)) || null);
   }
@@ -216,32 +220,45 @@ function strikeTop(text) {
   return { top: snap(lead + m.fontBoundingBoxAscent * 2 / 3 - thick / 2 + STRIKE_NUDGE), lh, thick: snap(thick) };
 }
 const STRIKE_NUDGE = 0;
-function playTick(check, text, at) {
-  if (!check || !text || check.dataset.tick === String(at) || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  check.dataset.tick = String(at);
+// Unchecking plays it backwards, more quietly: the box gives a little and the strike draws back off the words.
+function playTick(check, text, at, undo) {
+  const mark = (undo ? 'undo:' : '') + at;
+  if (!check || !text || check.dataset.tick === mark || !motionOK()) return;
+  check.dataset.tick = mark;
   const ring = (px, a) => '0 0 0 ' + px + 'px rgba(111, 174, 130, ' + a + ')';
   // one stroke per line (a line-high tile repeated down), so a wrapped title is struck on every line, where the line-through will be
   const { top, lh, thick } = strikeTop(text);
   const strike = (w) => ({ backgroundImage: 'linear-gradient(transparent ' + top + 'px, currentColor ' + top + 'px ' + (top + thick) + 'px, transparent 0)', backgroundRepeat: 'repeat-y', backgroundSize: w + ' ' + lh + 'px', textDecorationColor: 'transparent' });
-  const anims = [
+  const anims = undo ? [
+    check.animate([{ transform: 'scale(.82)' }, { transform: 'scale(1)' }], { duration: MOTION.base, easing: MOTION.spring }),
+    text.animate([strike('100%'), strike('0')], { duration: MOTION.quick, easing: MOTION.in }),
+  ] : [
     check.animate([{ transform: 'scale(1)', boxShadow: ring(0, .6) }, { transform: 'scale(.8)', offset: .25 }, { transform: 'scale(1.18)', boxShadow: ring(7, .25), offset: .6 }, { transform: 'scale(1)', boxShadow: ring(12, 0) }],
-      { duration: 550, easing: 'cubic-bezier(.34, 1.56, .64, 1)' }),
-    check.animate([{ backgroundSize: '100% 100%, 100% 100%' }, { backgroundSize: '0% 100%, 100% 100%' }], { duration: 260, delay: 120, easing: 'ease-out', fill: 'backwards' }),
-    text.animate([strike('0'), strike('100%')], { duration: 400, delay: 180, easing: 'ease-in-out', fill: 'backwards' }),
+      { duration: MOTION.slow + MOTION.stagger * 4, easing: MOTION.spring }),
+    check.animate([{ backgroundSize: '100% 100%, 100% 100%' }, { backgroundSize: '0% 100%, 100% 100%' }], { duration: MOTION.base, delay: MOTION.stagger * 4, easing: MOTION.out, fill: 'backwards' }),
+    text.animate([strike('0'), strike('100%')], { duration: MOTION.slow, delay: MOTION.quick, easing: MOTION.move, fill: 'backwards' }),
   ];
   for (const a of anims) a.currentTime = Date.now() - at;
 }
 // At the end of a render: every place a task completed here is drawn (its row, its sidebar row, the page head).
 function playTicks() {
-  if (!justDone.size) return;
+  if (!justDone.size && !justUndone.size) return;
   const now = Date.now();
   for (const [id, at] of justDone) if (now - at > TICK_MS) justDone.delete(id);
+  for (const [id, at] of justUndone) if (now - at > TICK_MS) justUndone.delete(id);
   for (const el of outline.querySelectorAll('.node.done')) { // a task row, or a line that is one mention of a task
     const item = items.get(el.dataset.key), n = item && (referenceTarget(item.node) || item.node);
     if (n && justDone.has(n.id)) playTick(el.querySelector(':scope > .line > .check'), el.querySelector(':scope > .line .text'), justDone.get(n.id));
   }
   for (const row of railEl.querySelectorAll('.rrow.done[data-id]')) if (justDone.has(row.dataset.id)) playTick(row.querySelector('.check'), row.querySelector('.rtitle'), justDone.get(row.dataset.id));
   if (zoom && !zoom.nodeId && justDone.has(zoom.docId) && titleEl.classList.contains('done')) playTick(titleCheck, titleEl, justDone.get(zoom.docId));
+  if (!justUndone.size) return;
+  for (const el of outline.querySelectorAll('.node:not(.done)')) {
+    const item = items.get(el.dataset.key), n = item && (referenceTarget(item.node) || item.node);
+    if (n && justUndone.has(n.id)) playTick(el.querySelector(':scope > .line > .check'), el.querySelector(':scope > .line .text'), justUndone.get(n.id), true);
+  }
+  for (const row of railEl.querySelectorAll('.rrow:not(.done)[data-id]')) if (justUndone.has(row.dataset.id)) playTick(row.querySelector('.check'), row.querySelector('.rtitle'), justUndone.get(row.dataset.id), true);
+  if (zoom && !zoom.nodeId && justUndone.has(zoom.docId) && !titleEl.classList.contains('done')) playTick(titleCheck, titleEl, justUndone.get(zoom.docId), true);
 }
 function render(force = false) {
   if (force !== true && (editingRow() || selectionFrozen)) { renderDeferred = true; markFalling(); refreshRowChrome(); if (pillsDrawn) renderPills(true); return; }
@@ -317,6 +334,7 @@ function renderOutline() {
   // a live update must not eat a selection: the formatting toolbar acts on it, and a re-render lands mid-toggle
   const savedSel = saved && document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('text') ? selectionOffsets(document.activeElement) : null;
   rendered.clear(); docCache.clear();
+  const was = motionBefore(outline); // where every row stood and what it said, for the moves after (renderer/motion.js)
   let trail = null;
   if (zoom) { trail = resolveZoom(); if (!trail) zoom = null; }
   const parent = trail && trail.at(-1);
@@ -434,6 +452,7 @@ function renderOutline() {
     outline.append(note);
   }
   applySel();
+  motionAfter(outline, was);
   for (const key of items.keys()) if (!rendered.has(key)) items.delete(key);
   // Putting the caret back is preserving state, not navigating: a render that only rebuilt the rows must not scroll
   // the page to wherever the caret happens to be. Clicking a task's box while another row held the caret rebuilt the
@@ -619,6 +638,7 @@ function codexBadgeEl(id, done = !!docOf(id)?.done) {
   // The task itself being finished outranks whatever the agent state was: the badge becomes history, a grey outline
   // with a grey glyph, so a completed row says "there was a thread" without competing with the live ones.
   el.className = 'cbadge ' + state + (done ? ' closed' : '');
+  badgeMoved(el, id, state + (done ? ':closed' : '')); // a state that just changed pops, shines or shakes
   // A badge with a task behind it is the way into that task; a pending one has nowhere to go, so it stays a plain
   // image rather than a button that does nothing. Only linked nodes have a status entry at all, which is the same
   // fact — no second list to keep in step.
@@ -668,13 +688,22 @@ function codexHeader() {
 function openImage(node) {
   if (demoMode || document.querySelector('.lightbox')) return; // demo mode shows no picture, and the cache may still hold one
   const uri = node.image.uri, from = document.activeElement;
+  // the picture grows out of the row it was opened from and goes back into it (renderer/motion.js growFrom)
+  const thumb = from && from.querySelector ? from.querySelector('img') : null, at = () => (thumb && thumb.isConnected ? thumb.getBoundingClientRect() : null);
   const box = document.createElement('div'); box.className = 'lightbox'; box.tabIndex = -1;
   const img = document.createElement('img');
-  const close = () => { box.remove(); if (from && from.focus) from.focus(); };
+  const close = () => {
+    if (box.classList.contains('out')) return;
+    if (!motionOK()) { box.remove(); if (from && from.focus) from.focus(); return; }
+    box.classList.add('out');
+    growFrom(img, at(), 0, true).then(() => box.remove());
+    if (from && from.focus) from.focus();
+  };
   box.onclick = close;
   // its own keys: Escape, Space and Enter close it, and nothing reaches the outline behind it
   box.onkeydown = (e) => { e.stopPropagation(); if (['Escape', ' ', 'Enter'].includes(e.key)) { e.preventDefault(); close(); } };
   box.append(img);
+  img.onload = () => growFrom(img, at());
   document.body.append(box);
   box.focus();
   Promise.resolve(images.get(uri) ?? tana.image(uri)).then((url) => { images.set(uri, url); img.src = url; }, (e) => { close(); showError(e); });
@@ -712,6 +741,7 @@ function nodeEl(node, docId, parent) {
   el.className = 'node ' + node.kind + (reference ? ' reference' : '') + (fullref ? ' fullref' : '') + (gone ? ' gone' : '') + blockClass + (heading ? ' h' + heading : '') + (display.done ? ' done' : '') + (has ? ' has' : '') + (has && !opened ? ' collapsed' : '') + (node.draft || node.upload ? ' draft' : '') + ((node.notification || node.timeline) && node.unread ? ' unread' : '') + (node.timeline ? ' tl tl-' + node.timeline.tone : '') + (node.timeline?.today ? ' tl-today' : '');
   if (node.start != null) el.style.counterSet = 'ol ' + (node.start - 1); // a numbered list counting from its own start (sdk/content.js); the row's increment makes it start
   el.dataset.key = item.key;
+  el.dataset.body = [display.text, display.done ? 1 : 0, display.stateType || ''].join('\n'); // what an edit elsewhere would change (motionAfter)
   const line = document.createElement('div'); line.className = 'line';
   const chev = document.createElement('button'); chev.className = 'chev'; chev.tabIndex = -1;
   chev.onmousedown = (e) => e.preventDefault();

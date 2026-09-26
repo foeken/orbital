@@ -41,8 +41,8 @@ if (tana.proposalAnswer && tana.onStatus) tana.onStatus((s) => {
 function answerProposal(node, approve) {
   const p = node.proposal;
   if (!p || !tana.proposalAnswer || (approve && !p.approvable)) return;
-  kids.set(PROPOSALS_PAGE, (kids.get(PROPOSALS_PAGE) || []).filter((n) => n !== node));
-  renderSoon(true);
+  // it leaves green for a yes and red for a no, and is taken off the page once it has gone (renderer/motion.js)
+  dismissRow(rowFor(node.id), approve ? 'in' : 'out', () => { kids.set(PROPOSALS_PAGE, (kids.get(PROPOSALS_PAGE) || []).filter((n) => n !== node)); renderSoon(true); });
   run(async () => {
     try {
       const warnings = await tana.proposalAnswer(p.chatUri, p.proposedUri, approve);

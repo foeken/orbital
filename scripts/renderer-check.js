@@ -498,11 +498,15 @@ for (const [state, label] of [['pending', 'Agent pending'], ['working', 'Agent w
 // under reduced motion the rule is not even declared, which leaves the plain green tag.
 const sheen = styleSheet.match(/@media \(prefers-reduced-motion: no-preference\) \{ \.cbadge\.working::after \{[^\n]*\}/);
 assert.ok(sheen, 'the scan sweep is drawn on .cbadge::after, behind the reduced-motion gate');
-// and on working alone: every other state is still, whatever the colour says
+// and on working alone: every other state is still, whatever the colour says. A state that has just changed may mark
+// the moment once (styles.css .cbadge.done.shine, renderer/motion.js badgeMoved) — what it may not do is keep moving.
 for (const state of ['pending', 'waiting', 'done', 'broken']) {
-  assert.doesNotMatch(styleSheet, new RegExp('\\.cbadge\\.' + state + '[^\\n]*animation:'), state + ' does not animate');
+  assert.doesNotMatch(styleSheet, new RegExp('\\.cbadge\\.' + state + '[^\\n]*animation:[^\\n]*infinite'), state + ' does not keep animating');
 }
-assert.match(sheen[0], /animation: cbadge-sweep (2\.[5-9]|3(\.0)?)s/, 'it crosses the badge every two and a half to three seconds');
+// the sweep is paced by the Ambient rhythm (styles.css --dur-loop), twice over
+const loop = Number((styleSheet.match(/--dur-loop: (\d+)ms/) || [])[1]);
+assert.match(sheen[0], /animation: cbadge-sweep calc\(var\(--dur-loop\) \* 2\)/, 'the sweep keeps the ambient rhythm');
+assert.ok(loop * 2 >= 2500 && loop * 2 <= 3000, 'it crosses the badge every two and a half to three seconds');
 assert.match(styleSheet, /\.cbadge \{[^\n]*overflow: hidden/, 'and is clipped to the badge, so it reads as a sweep across it rather than a streak over the row');
 // Transform only: a sweep that moved the badge, resized it or faded the whole tag would be the thing this replaced.
 const sweep = styleSheet.match(/@keyframes cbadge-sweep \{[\s\S]*?\n/)[0];
@@ -520,16 +524,17 @@ assert.match(turn, /transform: rotate\(360deg\)/, 'and it is one full turn');
 // A header button that is offered on some pages and not others has to be able to disappear: .navbtn sets its own
 // display, which wins over the browser's rule for [hidden] and left Refresh and the fold button as blank slots.
 assert.match(styleSheet, /\.navbtn\[hidden\] \{ display: none; \}/, 'a withheld header button is gone rather than empty');
-// Clean up arrives with a pop and shrinks away again rather than appearing and disappearing between two frames,
-// and both are opt-in: under reduced motion neither rule is declared and pills.js hides it on the spot.
-const btnMotion = styleSheet.match(/@media \(prefers-reduced-motion: no-preference\) \{\n  \.navbtn\.in \{[^}]*\}\n  \.navbtn\.out \{[^}]*\}\n\}/);
-assert.ok(btnMotion, 'a header button that comes and goes pops in and shrinks away, only where motion is welcome');
-assert.match(btnMotion[0], /animation: btn-in [\d.]+s/, 'the arrival is one shot');
-assert.match(btnMotion[0], /animation: btn-out [\d.]+s[^;]*forwards/, 'and the departure holds where it ends, so nothing flashes back before it is hidden');
+// Clean up arrives with a pop and shrinks away again rather than appearing and disappearing between two frames: the
+// shared Pop keyframes, whose durations reduced motion sets to nought (styles.css :root), while pills.js hides it on the spot.
+const btnMotion = styleSheet.match(/\.navbtn\.in \{[^}]*\}\n\.navbtn\.out \{[^}]*\}/);
+assert.ok(btnMotion, 'a header button that comes and goes pops in and shrinks away');
+assert.match(btnMotion[0], /animation: pop-in var\(--dur-[a-z]+\)[^;]*backwards/, 'the arrival is one shot');
+assert.match(btnMotion[0], /animation: pop-out var\(--dur-[a-z]+\)[^;]*forwards/, 'and the departure holds where it ends, so nothing flashes back before it is hidden');
+assert.match(styleSheet, /@media \(prefers-reduced-motion: reduce\) \{ :root \{ --dur-quick: 0ms; --dur-base: 0ms;/, 'and where motion is not welcome every duration is nought');
 // Every render builds the pills again, so the arrival is marked on each pill rather than on the row: with it on the
 // row, a redraw landing while they were still coming in handed the mark to the new pills and played it all again.
 assert.match(source, /el\.style\.setProperty\('--i', i\); if \(arriving\) el\.classList\.add\('in'\)/, 'a pill knows it is arriving; the row does not');
-assert.match(styleSheet, /\.pills > \.pill\.in \{ animation: pill-in/, 'and that is what the entrance is drawn from');
+assert.match(styleSheet, /\.pills > \.pill\.in \{ animation: pop-in/, 'and that is what the entrance is drawn from');
 // Only the press moves the row: a view's pills are the view, and a page just arrived at — a reload, a link, the
 // Library — is drawn as it stands rather than assembling itself in front of you.
 assert.match(source, /const arriving = pillsPressed && \(box\.hidden \|\| box\.classList\.contains\('out'\)\)/, 'only a pressed fold animates the pills in');

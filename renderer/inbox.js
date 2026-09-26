@@ -29,10 +29,12 @@ function setNotificationRead(node, read) {
   node.unread = !read;
   inboxUnread = Math.max(0, inboxUnread + (read ? -1 : 1));
   renderSoon(true);
+  if (read) popRead([node.id]);
   run(async () => { inboxUnread = await tana.inboxSetRead(node.id, read); });
 }
 function markAllNotificationsRead() {
   if (!tana.inboxMarkAll) return;
+  popRead((kids.get(INBOX_PAGE) || []).filter((n) => n.unread).map((n) => n.id)); // each dot in turn, down the page
   for (const n of kids.get(INBOX_PAGE) || []) n.unread = false;
   inboxUnread = 0;
   renderSoon(true);

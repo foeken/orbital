@@ -47,7 +47,23 @@ const BACK_ROW = { people: true, title: 'Assign to someone else…' };
 const HOSTS_ROW = { hosts: true, title: 'Run on…' }; // from the model list into the machines
 const MODELS_ROW = { models: true, title: 'Choose a model…' }; // and back again
 const qtext = (e) => String((e && e.message) || e || '');
-function qsetError(text) { qerror.textContent = text || ''; qerror.hidden = !text; }
+function qsetError(text) { qerror.textContent = text || ''; qerror.hidden = !text; if (text) qplay(qerror, 'shake'); }
+// The motion the outliner has (styles.css Motion: surface-in, surface-out, shake), for this window's own panel: one
+// class played once, restartable, and nothing at all where motion is not welcome.
+const qpanel = document.getElementById('qpanel');
+const qmoving = () => typeof matchMedia === 'function' && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+function qplay(el, name) {
+  if (!el || !el.classList || !el.classList.remove || !qmoving()) return;
+  el.classList.remove(name);
+  void el.offsetWidth;
+  el.classList.add(name);
+}
+// a created task: the panel leaves, then the window closes behind it
+function qleave(close) {
+  if (!qpanel || !qmoving() || typeof getComputedStyle !== 'function') return close();
+  qplay(qpanel, 'out');
+  setTimeout(close, parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--dur-quick')) || 160);
+}
 // Demo mode (Cmd+K in the outliner, remembered in this app's localStorage): the panel reads nothing from Tana to show
 // and writes nothing to it. Asked at every open and every submit, since the outliner can switch it while this panel lives.
 const QDEMO = 'Demo mode is on: nothing is saved to Tana';
@@ -203,7 +219,7 @@ async function qsubmit() {
     qagent = null;
     qshowAssignee();
     if (qopen) qcloseChooser();
-    if (qapi.quickClose) qapi.quickClose();
+    if (qapi.quickClose) qleave(() => qapi.quickClose());
     return result;
   } catch (e) {
     qsetError(qtext(e));
@@ -255,4 +271,4 @@ qtitle.focus();
 qloadContext();
 // Every press of the shortcut re-opens on the same window: focus the title again and re-read the meeting, keeping
 // whatever was typed before.
-if (qapi && qapi.onQuickOpen) qapi.onQuickOpen(() => { qsetError(''); qtitle.focus(); qloadContext(); });
+if (qapi && qapi.onQuickOpen) qapi.onQuickOpen(() => { qsetError(''); if (qpanel && qpanel.classList && qpanel.classList.remove) qpanel.classList.remove('out'); qplay(qpanel, 'in'); qtitle.focus(); qloadContext(); });

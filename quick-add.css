@@ -19,6 +19,12 @@ body.quick { background: transparent; display: block; }
 .qrow { display: flex; align-items: center; gap: 10px; }
 .qmeeting { flex: 1; min-width: 0; font-size: 13px; color: #85898c; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .qmeeting.live { color: #2e7d4f; }
+/* the meeting is live: a dot before its name breathes, as the recorder's does (styles.css Motion, Ambient) */
+.qmeeting.live::before { content: ''; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: currentColor; vertical-align: 1px; }
+@media (prefers-reduced-motion: no-preference) { .qmeeting.live::before { animation: breathe var(--dur-loop) ease-in-out infinite; } }
+/* The panel arrives with the shortcut and leaves with the task it made (Surface); a refusal shakes its reason (quick-add.js). */
+.qpanel.in { animation: surface-in var(--dur-base) var(--ease-out); }
+.qpanel.out { animation: surface-out var(--dur-quick) var(--ease-in) forwards; }
 .qmeeting.none { color: #9aa0a3; }
 /* The same pill the outliner uses for its own filters, down to the colours: neutral until something is chosen, then
    the app accent (styles.css .pill). The icon is the app's own member/robot glyph at the 14px the sidebar uses. */

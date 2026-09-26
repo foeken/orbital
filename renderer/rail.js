@@ -19,7 +19,7 @@ function toggleRail() {
   setPref('railHidden', railHidden);
   // Cmd+K closes the palette before running the row, which puts the caret back in the row being edited, so a plain
   // render would be deferred until the caret left. Showing or hiding the sidebar cannot drop that row, so it forces.
-  render(true);
+  slideRail(!railHidden, () => render(true)); // it slides out and back in (renderer/motion.js)
 }
 railToggle.addEventListener('click', toggleRail);
 // The button only appears when there is a sidebar to toggle; its glyph is the direction it will move the panel.
@@ -131,6 +131,7 @@ function toggleRelated(node) {
   const done = node.done ? 0 : 1;
   node.done = done; node.stateType = done ? 'closed' : 'open';
   if (done) justDone.set(node.id, Date.now());
+  else justUndone.set(node.id, Date.now());
   patchCopies(node.id, { done, stateType: node.stateType });
   run(async () => { await tana.setDone(node.id, !!done); });
   render(true);
@@ -284,7 +285,7 @@ function renderRail(parent) {
     head.className = 'rhead' + (railClosed.has(label) ? ' closed' : '');
     head.tabIndex = -1; head.innerHTML = CHEV; head.append(label);
     head.setAttribute('aria-expanded', railClosed.has(label) ? 'false' : 'true'); // the caret is a disclosure, and says so
-    head.onclick = () => toggleRailSection(label);
+    head.onclick = () => foldSection(head, () => toggleRailSection(label), () => [...railEl.querySelectorAll('.rhead')].find((h) => h.textContent === label));
     railEl.append(head);
     return !railClosed.has(label);
   };

@@ -145,6 +145,7 @@ function pillCommandRows() {
 // A view's rows are re-asked by the refresh loop, so letting go is enough there. A saved search is asked only when
 // it is opened, so a row that no longer answers its query would sit there until the page is left: ask again.
 function cleanupNow() {
+  armGlide(); // the rows held in place slide to where they belong now
   releaseHeld();
   if ((onSearchPage() && !searchRows.has(zoom.docId)) || onTypePage()) { const id = zoom.docId; return run(async () => { await reload(id); render(true); }); }
   render(true);
@@ -169,6 +170,7 @@ function renderPills(show) {
   box.hidden = !defs.length;
   const focusedId = box.contains(document.activeElement) && document.activeElement.closest('.pill') ? document.activeElement.closest('.pill').dataset.id : null;
   if (menu && !defs.some((d) => d.id === menu.id)) menu = null;
+  const oldMenu = box.querySelector('.pill > .menu:not(.out)'); // the menu this redraw replaces: it may be leaving (menuMotion)
   box.replaceChildren(...defs.map((d) => {
     const pill = document.createElement('div'); pill.className = 'pill' + (d.active ? ' active' : '') + (menu && menu.id === d.id ? ' open' : ''); pill.tabIndex = 0; pill.dataset.id = d.id; pill.setAttribute('role', 'button');
     if (d.toggle) pill.setAttribute('aria-pressed', String(!!d.active));
@@ -191,6 +193,7 @@ function renderPills(show) {
   // whole entrance played a second time. A rebuilt pill is simply a pill, so there is nothing to replay.
   [...box.children].forEach((el, i) => { el.style.setProperty('--i', i); if (arriving) el.classList.add('in'); });
   if (arriving && !box.hidden) unfoldPills(box);
+  if (oldMenu || menu) menuMotion(oldMenu, box.querySelector('.pill > .menu:not(.out)'), oldMenu && [...box.children].find((p) => p.dataset.id === oldMenu.dataset.for));
   const again = focusedId && box.querySelector('.pill[data-id="' + focusedId + '"]');
   if (again) again.focus();
   const open = box.querySelector('.menu'); // stop before the window edge; the rows scroll inside
@@ -295,19 +298,7 @@ function saveSearchPill() {
 }
 // Clean up: let go of the rows a status change kept in place and draw the view the way it is now. Like the last pill,
 // Right moves on to the first row.
-// One shot of a class: the turn a press gives before its answer arrives, the pop a button makes when it turns up.
-// Restartable, which is the whole reason it is a function: dropping the class and re-adding it in the same frame
-// does nothing at all, so the reflow read in between is what lets a second run start instead of being swallowed by
-// the one still going. Under reduced motion the rules these classes select are not declared, so the class is
-// dropped and never re-added and the element simply is where it is.
-const stillPreferred = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-function playOnce(el, name) {
-  if (!el || !el.classList) return;
-  el.classList.remove(name); // dropped before anything is asked: these elements are not rebuilt, so a class left on one would be
-  if (stillPreferred()) return;
-  void el.offsetWidth;
-  el.classList.add(name);
-}
+// playOnce and stillPreferred, the one-shot class and the reduced-motion question, are renderer/motion.js's.
 // Refresh: ask this saved search's query again. Its rows are subscribed (main/related.js), so an edit elsewhere
 // reaches the rows it is already showing — but a row that has since started or stopped answering the query is only
 // learned by asking again, which nothing else on this page does. It sits beside the fold button rather than among
@@ -372,6 +363,7 @@ function menuRows(d) {
 }
 function menuEl(d) {
   const rows = menuRows(d), el = document.createElement('div'); el.className = 'menu';
+  el.dataset.for = d.id; // which pill it hangs from, so a redraw can tell a new menu from the same one (menuMotion)
   const typed = (menu.q || '').trim();
   if (typed) { const h = document.createElement('div'); h.className = 'mhead'; h.textContent = typed; el.append(h); }
   const pick = rows.filter((r) => r.label); // navigable rows
