@@ -61,20 +61,21 @@ function readFields(document) {
   });
 }
 
+// A type's field definitions, template.attributes as JSON ([] when it has none).
+function definitions(typeDocument) {
+  const template = typeDocument.data.get('template');
+  return ((template && typeof template.toJSON === 'function' ? template.toJSON() : template) || {}).attributes || [];
+}
 // the titles a type gives its fields: { key: title }
 function templateTitles(typeDocument) {
-  const template = typeDocument.data.get('template');
-  const defs = (template && typeof template.toJSON === 'function' ? template.toJSON() : template) || {};
   const out = {};
-  for (const def of defs.attributes || []) if (def && def.key) out[def.key] = def.title || def.key;
+  for (const def of definitions(typeDocument)) if (def && def.key) out[def.key] = def.title || def.key;
   return out;
 }
 // One field's definition as the type holds it — { key, title, type?, cardinality?, to?: [{ uri, title? }],
 // options?: [{ label }] } — or null. `attribute` is the template key (the part after "?attribute=").
 function fieldDefinition(typeDocument, attribute) {
-  const template = typeDocument.data.get('template');
-  const defs = (template && typeof template.toJSON === 'function' ? template.toJSON() : template) || {};
-  return (defs.attributes || []).find((def) => def && def.key === attribute) || null;
+  return definitions(typeDocument).find((def) => def && def.key === attribute) || null;
 }
 
 // ---- option labels and link targets, by Tana's rules (shared-*.js of 2026-09-22: ol/sl/cl/due, Ep/Ube) ----
@@ -254,6 +255,21 @@ function rebuild(children, lines) {
     return addBlock(item.runs, 'paragraph').runs;
   });
 }
+// A field's value tree, made the way Tana writes an empty one when the document has none yet: a 'doc' with empty
+// attributes and children, under data.attributes[key]. Run inside a transact.
+function valueTree(loro, key) {
+  const data = loro.getMap('data');
+  let attrs = data.get('attributes');
+  if (!attrs || typeof attrs.setContainer !== 'function') attrs = data.setContainer('attributes', new LoroMap());
+  let value = attrs.get(key);
+  if (!value || typeof value.setContainer !== 'function') {
+    value = attrs.setContainer(key, new LoroMap());
+    value.set('nodeName', 'doc');
+    value.setContainer('attributes', new LoroMap());
+    value.setContainer('children', new LoroList());
+  }
+  return value;
+}
 // Replace a field's value — plain text, segments with references, or an array of those, which is a line each.
 // A line is written into the block that held it, whatever that block is, so editing a value that is a bulleted
 // list leaves it bulleted; lines beyond what the value had are added as paragraphs, and lines taken away take
@@ -280,16 +296,7 @@ function setFieldText(document, key, text, { field, typeOf } = {}) {
   const lines = given.map(({ words, block }) => ({ ...content.inlineGroups(words), block }));
   content.styleDoc(document);
   document.transact((loro) => {
-    const data = loro.getMap('data');
-    let attrs = data.get('attributes');
-    if (!attrs || typeof attrs.setContainer !== 'function') attrs = data.setContainer('attributes', new LoroMap());
-    let value = attrs.get(key);
-    if (!value || typeof value.setContainer !== 'function') {
-      value = attrs.setContainer(key, new LoroMap());
-      value.set('nodeName', 'doc');
-      value.setContainer('attributes', new LoroMap());
-      value.setContainer('children', new LoroList());
-    }
+    const value = valueTree(loro, key);
     let children = value.get('children');
     if (!children || typeof children.insertContainer !== 'function') children = value.setContainer('children', new LoroList());
     // Words changing is the common case and is written into the blocks that are already there, so a value keeps
@@ -338,18 +345,7 @@ function fieldView(document, key, { create = false } = {}) {
     const value = found();
     if (value) return value;
     let made = null;
-    document.transact((loro) => {
-      const data = loro.getMap('data');
-      let attrs = data.get('attributes');
-      if (!attrs || typeof attrs.setContainer !== 'function') attrs = data.setContainer('attributes', new LoroMap());
-      made = attrs.get(key);
-      if (!made || typeof made.setContainer !== 'function') {
-        made = attrs.setContainer(key, new LoroMap());
-        made.set('nodeName', 'doc');
-        made.setContainer('attributes', new LoroMap());
-        made.setContainer('children', new LoroList());
-      }
-    });
+    document.transact((loro) => { made = valueTree(loro, key); });
     return made;
   };
   return {
