@@ -654,7 +654,7 @@ assert.match(source, /setCaret\(target, e\.clientY <= box\.bottom \? caretAt\(ta
 // The glyph, the label and the value all begin at the top of the field's first line: a baseline cannot align them
 // now that the value is rows rather than one line box, which left the label sitting below the name beside it.
 assert.match(styleSheet, /\.fields \{[^}]*align-items: start; \}/, 'the three columns of a field start together');
-assert.match(styleSheet, /\.fields \.flabel \{ color: #888; line-height: 20px; \}/, 'and the label carries a row\u2019s line height, so its first line is a row\u2019s first line');
+assert.match(styleSheet, /\.fields \.flabel \{ color: [^;]+; line-height: 20px; \}/, 'and the label carries a row\u2019s line height, so its first line is a row\u2019s first line');
 assert.match(styleSheet, /\.fields \.fvalues \.chev, \.fields \.fvalues \.bullet \{ height: 22px; \}/, 'a field row is as tall as its words, bullet included');
 // The space above a row is padding, not margin: a margin on the first row inside a children container collapses
 // through it, which left exactly one row — the first child — sitting flush under its parent.

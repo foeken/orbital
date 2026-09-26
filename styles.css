@@ -25,10 +25,14 @@ html { --nucleo-stroke-width: 1; }
      overshoot once and stop dead. What a pressed button springs back on (Press). */
   --ease-settle: linear(0, 0.049, 0.172, 0.337, 0.517, 0.691, 0.844, 0.969, 1.061, 1.122, 1.154, 1.163, 1.154, 1.134, 1.107, 1.077, 1.049, 1.024, 1.004, 0.989, 0.98, 0.975, 0.973, 0.975, 0.978, 0.983, 0.988, 0.992, 0.996, 0.999, 1.002, 1.003, 1);
   --flash-in: rgba(52, 168, 83, .16); --flash-out: rgba(217, 48, 37, .16); --flash-here: rgba(80, 143, 187, .2);
+  /* secondary text (meta, subtext, headings, hints, placeholders, done rows): the one grey for words, at WCAG AA —
+     5.7:1 on white, 4.6:1 on a grey pill under the pointer. Icons keep their lighter greys (3:1 is theirs); disabled rows too. */
+  --muted: #666;
   interpolate-size: allow-keywords; /* heights go to and from auto (a row arriving, a section closing) without measuring */
 }
 @media (prefers-reduced-motion: reduce) { :root { --dur-quick: 0ms; --dur-base: 0ms; --dur-slow: 0ms; --dur-flash: 0ms; --stagger: 0ms; --loader-wait: 0ms; } }
 [data-theme="dark"] { --flash-in: rgba(90, 190, 120, .2); --flash-out: rgba(240, 90, 80, .2); --flash-here: rgba(110, 168, 220, .22); }
+[data-theme="dark"] { --muted: #a0a5a8; } /* 6.8:1 on the page, 6:1 on menus and ⌘K, 5.6:1 on the grey pills, 4.6:1 on the active ⌘K row */
 /* A type's colour is Tana's `appearance.hue`, and it is an **OKLCH** hue, not an HSL one: the Organization type's
    232 draws as #58aad2 in Tana, which is oklch(0.7 0.1 232) — read as an HSL angle the same number lands 42° away
    and half as light (a navy #2b336f instead of that blue). So every hued rule below is oklch(L C var(--hue)), with
@@ -85,7 +89,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .pagehead { display: flex; align-items: flex-start; }
 .pagehead h1 { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .pagehead .check { width: 22px; height: 22px; margin: 11px 12px 0 0; border-radius: 6px; }
-.pagehead h1.done { color: #999; text-decoration: line-through; }
+.pagehead h1.done { color: var(--muted); text-decoration: line-through; }
 .pagehead .cbadge { margin-top: 12px; } /* the title's first line, not its top edge */
 /* the type chip line under a zoomed title: a block, so it lines up with the title, and it may wrap. The 6px a chip
    carries is the gap from whatever precedes it, which at the start of this line is nothing — so the first chip
@@ -130,7 +134,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
    label beside it sits on the same baseline. */
 .fields .ricon { width: 14px; height: 14px; color: #8a8a8a; align-self: start; margin-top: 3px; }
 .fields .ricon svg { display: block; width: 14px; height: 14px; }
-.fields .flabel { color: #888; line-height: 20px; }
+.fields .flabel { color: var(--muted); line-height: 20px; }
 /* The value is the outline's own rows, drawn in the fields block: a field is a line or three, not a page, so the
    rows sit tighter than they do below. They keep their gutter, though — the expand caret is drawn to the left of
    the bullet, and pulling the rows flush with the label put it on top of the label. */
@@ -169,10 +173,10 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .fields .fchoice > .fhint { margin-left: 6px; }
 .fields .fchoice:focus { outline: none; box-shadow: 0 0 0 2px var(--focus); }
 .fields .fchip { padding: 0 6px; border-radius: 4px; background: rgba(0, 0, 0, 0.05); line-height: 20px; }
-.fields .fchip.gone { color: #999; text-decoration: line-through; }
+.fields .fchip.gone { color: var(--muted); text-decoration: line-through; }
 .fields .fchip.wrong::after { content: ' ⚠'; color: #c8841c; }
-.fields .fhint, .fields .fkind { color: #aaa; line-height: 22px; }
-.fields .fkind { color: #888; padding: 0 6px; border-radius: 4px; background: rgba(0, 0, 0, 0.05); }
+.fields .fhint, .fields .fkind { color: var(--muted); line-height: 22px; }
+.fields .fkind { color: var(--muted); padding: 0 6px; border-radius: 4px; background: rgba(0, 0, 0, 0.05); }
 /* a row's field values on its grey line (renderer/views.js subtextEl): the same chip, a step quieter */
 [data-theme="dark"] .fields .fchip, [data-theme="dark"] .fields .fkind { background: rgba(255, 255, 255, 0.08); }
 /* ==== Table view (renderer/views.js) ==== */
@@ -209,7 +213,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .outline.table-view > .node > .line > .body > .text, .outline.table-view .cell { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .outline.table-view .cell.pick { min-height: 18px; cursor: pointer; } /* an options value: a click picks it (renderer/fields.js openCellChooser) */
 .outline.table-view > .node { border-bottom: 1px solid #f0f0f0; }
-.outline.table-view > .thead { margin-top: 16px; padding: 0 var(--slot) 6px 70px; border-bottom: 1px solid #ececec; color: #999; font-size: 13px; line-height: 18px; user-select: none; } /* 65 + the body's own 5; --slot: the badge's; 16px: clear of the title above */
+.outline.table-view > .thead { margin-top: 16px; padding: 0 var(--slot) 6px 70px; border-bottom: 1px solid #ececec; color: var(--muted); font-size: 13px; line-height: 18px; user-select: none; } /* 65 + the body's own 5; --slot: the badge's; 16px: clear of the title above */
 .outline.table-view > .thead > span { position: relative; min-width: 0; }
 .outline.table-view > .thead .tlabel { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 /* in the middle of the 16px gap after its column, as wide as the gap so it is easy to catch */
@@ -271,11 +275,11 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
    (container-type): without it the table drew over the menu until the spring settled. */
 .pills { position: relative; z-index: 5; display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 32px 12px; }
 .pills[hidden] { display: none; }
-.pill { position: relative; border: 0; border-radius: 999px; padding: 6px 14px; background: #e8f1fb; color: #4f8ad9; font-weight: 600; font-size: 15px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+.pill { position: relative; border: 0; border-radius: 999px; padding: 6px 14px; background: #e8f1fb; color: #2765b7; font-weight: 600; font-size: 15px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
 /* ...and the same spring would put the pills of a second line over the menu, so the pill carrying one (arriving or
    leaving) sits above its neighbours */
 .pill:has(> .menu) { z-index: 1; }
-.pill b { color: #2b6fcf; font-weight: 700; }
+.pill b { color: #2257a3; font-weight: 700; } /* label 4.7:1, value 5.7:1 on the pill, hovered or open (AA); the same hue, a step darker */
 .pill svg { width: 16px; height: 16px; }
 /* Refresh is a header button beside the fold one (renderer/pills.js), and it answers the press before the query
    does: one turn of the glyph, on transform alone, and only where motion is welcome — under reduced motion the
@@ -297,13 +301,13 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 .pill:hover, .pill.open { background: #d9e8fa; }
 .pill:focus { outline: none; box-shadow: 0 0 0 2px var(--focus); }
 /* Sort and Group arrange the rows the view already has, so they sit beside the filters in grey rather than filter blue */
-.pill[data-id="sort"], .pill[data-id="group"], .pill[data-id="display"] { background: #f1f1f1; color: #777; }
+.pill[data-id="sort"], .pill[data-id="group"], .pill[data-id="display"] { background: #f1f1f1; color: var(--muted); }
 .pill[data-id="sort"] b, .pill[data-id="group"] b, .pill[data-id="display"] b { color: #444; }
 .pill[data-id="sort"]:hover, .pill[data-id="sort"].open, .pill[data-id="group"]:hover, .pill[data-id="group"].open,
 .pill[data-id="display"]:hover, .pill[data-id="display"].open { background: #e6e6e6; }
 /* Saving a query — keeping this one, or keeping a view's as a new search — makes something rather than narrowing
    something, so it reads green instead of filter blue, and says what it does in words rather than a glyph. */
-.pill.save, .pill.savesearch { background: #e6f4ea; color: #2e7d4f; }
+.pill.save, .pill.savesearch { background: #e6f4ea; color: #2b7449; } /* 4.6:1 hovered (AA) */
 .pill.save:hover, .pill.savesearch:hover { background: #d7ecdd; }
 .pill.save:focus, .pill.savesearch:focus { box-shadow: 0 0 0 2px #a8d8ba; }
 .menu { position: absolute; left: 0; top: calc(100% + 6px); z-index: 5; min-width: 260px; max-height: min(400px, calc(100dvh - 96px)); overflow-y: auto; overscroll-behavior-y: contain; padding: 8px; background: var(--surface); border-radius: 10px; box-shadow: var(--shadow-menu); font-weight: 400; color: #1a1a1a; text-align: left; }
@@ -319,11 +323,11 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 .menu .mrow.disabled { color: #aaa; cursor: default; } /* offered but not available here, e.g. Text on a child node */
 .menu .mrow.disabled:hover { background: none; }
 .menu .mrow.disabled .micon { color: #bbb; }
-.menu .mhead { padding: 10px 12px 4px; font-size: 13px; font-weight: 600; color: #999; user-select: none; }
+.menu .mhead { padding: 10px 12px 4px; font-size: 13px; font-weight: 600; color: var(--muted); user-select: none; }
 /* a searchable menu's typing line (renderer/pills.js menuEl): pinned above the rows it narrows */
 .menu .msearch { position: sticky; top: -8px; z-index: 1; display: flex; align-items: center; gap: 12px; margin: -8px -8px 6px; padding: 14px 20px 10px; background: inherit; border-bottom: 1px solid #ececec; font-size: 16px; user-select: none; }
-.menu .msearch.empty { color: #999; }
-.menu .msearch .micon { flex: none; width: 18px; height: 18px; color: #999; }
+.menu .msearch.empty { color: var(--muted); }
+.menu .msearch .micon { flex: none; width: 18px; height: 18px; color: var(--muted); }
 .menu .msearch .micon svg { display: block; width: 18px; height: 18px; }
 /* where the typing goes: the pill has the focus and takes the keys (renderer/pills.js pillKeys), so the caret is drawn */
 /* right after what is typed, or at the start of the placeholder, as an input's own caret sits (the gap is 12px) */
@@ -361,7 +365,7 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 .splitgrip:is(:hover, .on, .dragging) .splitpill { display: grid; }
 .splitpill svg { width: 16px; height: 16px; }
 .rail .rhead { display: flex; align-items: center; gap: 6px; width: 100%; border: 0; background: none; margin-top: 18px; padding: 10px 6px 4px; cursor: pointer;
-  font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #999; }
+  font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
 .rail .rhead:first-child { margin-top: 0; } /* the three groups read as separate blocks, the first one starts at the top */
 .rail .rhead svg { width: 12px; height: 12px; transition: transform var(--dur-quick) var(--ease-out); }
 .rail .rhead.closed svg { transform: rotate(-90deg); }
@@ -390,9 +394,9 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 .rail .rrow.rchange:hover { background: none; }
 .rail .rrow.rchange .ricon { align-self: flex-start; margin-top: 1px; }
 .rail .rrow .rtext { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0; }
-.rail .rrow .rsub { font-size: 12px; line-height: 16px; color: #8a8a8a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rail .rrow .rsub { font-size: 12px; line-height: 16px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rail .rrow .rtitle { flex: 1; min-width: 0; font-size: 14px; line-height: 19px; color: #1a1a1a; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-.rail .rrow.done .rtitle { color: #999; text-decoration: line-through; }
+.rail .rrow.done .rtitle { color: var(--muted); text-decoration: line-through; }
 
 /* ==== Rows: line, chevron, marker, dragging (renderer/render.js, drag.js) ==== */
 .line { display: flex; align-items: flex-start; line-height: 24px; padding: 3px 0; }
@@ -511,9 +515,9 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 .tl-detail strong { display: block; color: #333; font-weight: 600; }
 [data-theme="dark"] .tl-detail strong { color: #d4d6d8; }
 [data-theme="dark"] .tl-detail { border-left-color: #45484b; background: #242628; color: #b4b6b8; }
-.node:is(.tl-new, .tl-faint) > .line .text { color: #8a8a8a; }
+.node:is(.tl-new, .tl-faint) > .line .text { color: var(--muted); }
 .node:is(.tl-today, .tl-upcoming) > .line .text { color: inherit; } /* Today's Tasks and Upcoming meetings read as titles, their markers still quiet */
-.node.tl-done > .line .text s, .node.tl-done > .line .text del { color: #8a8a8a; }
+.node.tl-done > .line .text s, .node.tl-done > .line .text del { color: var(--muted); }
 .node.tl > .line > .body > .subtext { margin-top: 2px; }
 /* a group's rows hang under its words (block + t-bullet: the list rule it overrides): a task by its box, which makes its
    type glyph redundant, anything else by its type's glyph */
@@ -574,9 +578,9 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 /* a read-only row takes focus but shows no caret, so the ring is the only sign the keyboard is on it (images ring their own <img>) */
 .text[tabindex]:not(.image):focus { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
 .check + .body { padding-left: 0; }
-.document.done > .line .text { color: #999; text-decoration: line-through; }
-.meta { margin-left: 8px; color: #999; font-size: 14px; white-space: nowrap; user-select: none; }
-.subtext { color: #999; font-size: 14px; line-height: 18px; user-select: none; } /* the space a node is shared with */
+.document.done > .line .text { color: var(--muted); text-decoration: line-through; }
+.meta { margin-left: 8px; color: var(--muted); font-size: 14px; white-space: nowrap; user-select: none; }
+.subtext { color: var(--muted); font-size: 14px; line-height: 18px; user-select: none; } /* the space a node is shared with */
 /* the row's facts, moved down by fitRowMeta when the title left them no room: already grey and 14px, so they only
    need the 8px that separated them from the title taken back off */
 .subtext .tmeta { margin-left: 0; }
@@ -608,7 +612,7 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
   .text.upload { animation: breathe var(--dur-loop) ease-in-out infinite; }
 }
 .text.image:focus img, .selected .text.image img { outline: 2px solid #b5d0ee; outline-offset: 2px; }
-.text.upload { display: inline-block; padding: 6px 10px; border-radius: 6px; background: #f1f1f1; color: #8a8a8a; cursor: default; } /* renderer/upload.js: a file on its way up */
+.text.upload { display: inline-block; padding: 6px 10px; border-radius: 6px; background: #f1f1f1; color: var(--muted); cursor: default; } /* renderer/upload.js: a file on its way up */
 /* no caret shows beside a lone mention chip or in a read-only reference row, so the focus is drawn around them instead */
 /* A lone chip (Tana's full-reference presentation) keeps its caret: renderSegs anchors a position before it, so the
    caret can be put there and typing prepends text, which is what turns the block into an inline reference. */
@@ -626,7 +630,7 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
    the same line as every other guide, dashed — a background-painted one was tried for a longer dash and gave itself
    away: a border snaps to device pixels and a 1px background column does not, so it came out wider and washed out. */
 .node.fullref > .children { border-left-style: dashed; }
-.node.fullref.done > .line .text { color: #999; text-decoration: line-through; }
+.node.fullref.done > .line .text { color: var(--muted); text-decoration: line-through; }
 :is(.text, .fvalue) .mention { color: #508fbb; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 /* a reference that knows what it points at draws its icon in front, in the link's own colour; the underline is
    moved onto the label so it runs under the words rather than under the icon */
@@ -646,11 +650,11 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 /* A mention of a node that has been deleted: the words stay — they are what was written — struck through, in the
    ordinary text colour behind a trash glyph, and the pointer goes back to the caret, since there is nowhere to go.
    The strike is declared on both shapes for the same reason the underline is: .mlabel redeclares the decoration. */
-:is(.text, .fvalue) .mention.gone, :is(.text, .fvalue) .mention.gone .mlabel { color: #999; text-decoration: line-through; text-decoration-color: #999; cursor: text; }
-:is(.text, .fvalue) .mention.gone:hover { color: #999; }
+:is(.text, .fvalue) .mention.gone, :is(.text, .fvalue) .mention.gone .mlabel { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--muted); cursor: text; }
+:is(.text, .fvalue) .mention.gone:hover { color: var(--muted); }
 /* and a whole row that references something deleted (a reference row, or a lone chip): the same struck-through grey,
    with the trash glyph as its bullet */
-.node.gone > .line .text { color: #999; text-decoration: line-through; }
+.node.gone > .line .text { color: var(--muted); text-decoration: line-through; }
 /* one trash glyph, not two: on such a row the bullet is already the trash, and the row's whole text is the chip that
    would draw a second one right beside it. Inside a line of other words a chip keeps its own glyph — there is no
    bullet standing for it there. */
@@ -667,7 +671,7 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 .node.t-numbered { counter-increment: ol; }
 .node.t-numbered > .line > .bullet::before {
   content: counter(ol) "."; left: 0; top: 0; width: 18px; height: 24px; border-radius: 0;
-  background: none; color: #777; font-size: 12px; line-height: 24px; text-align: center;
+  background: none; color: var(--muted); font-size: 12px; line-height: 24px; text-align: center;
 }
 .node.t-numbered > .line > .bullet:hover::before { background: none; color: #1a1a1a; }
 .node.t-code > .line .text { display: block; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px; background: #f5f5f5; border-radius: 6px; padding: 6px 10px; }
@@ -691,7 +695,7 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 .text.table .cellimg.demo { width: 120px; height: 68px; background: #f1f1f1; cursor: default; } /* demo mode: where a picture is, not the picture */
 .text.table th { background: #f6f6f6; font-weight: 600; }
 .text.table .cell { outline: none; min-height: 1.4em; white-space: pre-wrap; cursor: text; }
-.text.table .more { color: #888; }
+.text.table .more { color: var(--muted); }
 .text.table th:focus-within, .text.table td:focus-within { box-shadow: inset 0 0 0 2px #b5d0ee; }
 .text.table:focus table, .selected .text.table table { outline: 2px solid #b5d0ee; outline-offset: 2px; }
 .h1 > .line .text { font-size: 24px; font-weight: 700; line-height: 30px; }
@@ -757,8 +761,8 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 /* ==== Children, empty notes, group headings (renderer/render.js, views.js) ==== */
 .children { margin-left: 33px; padding-left: 0; border-left: 1px solid #ececec; }
 .children > .node.fullref > .line > .bullet { margin-right: 4px; } /* give the full-reference icon more room before its status or title */
-.children.loading { color: #aaa; font-style: italic; padding: 3px 0 3px 22px; }
-.empty-note { color: #aaa; font-size: 16px; padding: 8px 40px; }
+.children.loading { color: var(--muted); font-style: italic; padding: 3px 0 3px 22px; }
+.empty-note { color: var(--muted); font-size: 16px; padding: 8px 40px; }
 /* The last row just left the view (renderer/motion.js motionAfter): the note says so with a tick, and pops (Pop). */
 .empty-note.cleared { display: flex; align-items: center; gap: 10px; color: #5a9670; font-weight: 600; transform-origin: 40px 50%; animation: pop-in var(--dur-slow) var(--ease-spring) backwards; }
 .empty-note.cleared::before { content: '✓'; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: #5a9670; color: #fff; font-size: 13px; }
@@ -766,7 +770,7 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
    clicking it (or Enter/Space on it) folds its own section away, and the triangle follows aria-expanded */
 /* 3px left and a 9px gap put the 12px chevron's centre on x=9, where a row's own chevron sits (its 14px circle is at
    left: 2px in a 24px gutter), and still start the heading's word at x=24, where a row's icon does */
-.ghead { display: flex; align-items: center; gap: 9px; width: 100%; margin-top: 18px; padding: 10px 6px 10px 3px; border: 0; background: none; font: inherit; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #999; text-align: left; cursor: pointer; user-select: none; }
+.ghead { display: flex; align-items: center; gap: 9px; width: 100%; margin-top: 18px; padding: 10px 6px 10px 3px; border: 0; background: none; font: inherit; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); text-align: left; cursor: pointer; user-select: none; }
 /* pointing right while the section is folded, a quarter turn down while it is open */
 .ghead svg { flex: none; width: 12px; height: 12px; transition: transform var(--dur-quick) var(--ease-out); }
 .ghead[aria-expanded="true"] svg { transform: rotate(90deg); }
@@ -774,15 +778,15 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 .ghead:focus { outline: none; box-shadow: 0 0 0 2px var(--focus); border-radius: 3px; }
 .ghead:first-child { margin-top: 0; }
 /* the tail of a trimmed section (Tracking): a quiet link where the next row's text would start, not a row itself */
-.gmore { display: block; margin: 2px 0 0; padding: 4px 0 4px 47px; border: 0; background: none; font: inherit; font-size: 14px; color: #8a8a8a; text-align: left; cursor: pointer; }
+.gmore { display: block; margin: 2px 0 0; padding: 4px 0 4px 47px; border: 0; background: none; font: inherit; font-size: 14px; color: var(--muted); text-align: left; cursor: pointer; }
 .gmore:hover { color: #508fbb; }
 .gmore.tl-older { margin: 18px 0 8px; padding-left: 127px; } /* under the rail, in line with the entries' words */
 .gmore.tl-add { padding-left: 6px; } /* inside the today row, aligned with task titles */
 .gmore.tl-add-inline { display: inline-block; margin: 0; padding: 0; }
-.tl-empty { color: #8a8a8a; font-size: 14px; }
+.tl-empty { color: var(--muted); font-size: 14px; }
 .gmore:focus { outline: none; box-shadow: 0 0 0 2px #b7d2f5; border-radius: 3px; }
 /* offered beside "Nothing here yet" only while a filter is narrowing the view; a real button, so Tab and Enter reach it */
-.clearfilters { border: 0; background: none; color: #aaa; font: inherit; font-size: 16px; padding: 0; margin-left: 10px; text-decoration: underline; cursor: pointer; }
+.clearfilters { border: 0; background: none; color: var(--muted); font: inherit; font-size: 16px; padding: 0; margin-left: 10px; text-decoration: underline; cursor: pointer; }
 .clearfilters:hover { color: #1a1a1a; }
 .clearfilters:focus { outline: none; box-shadow: 0 0 0 2px var(--focus); border-radius: 3px; }
 /* ==== Loading (renderer/loading.js) ==== */
@@ -800,7 +804,7 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 @keyframes shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 @keyframes breathe { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
 
-.filtered { padding: 18px 10px 8px 16px; color: #999; font-weight: 600; } /* lines up with the title, filter and pills */
+.filtered { padding: 18px 10px 8px 16px; color: var(--muted); font-weight: 600; } /* lines up with the title, filter and pills */
 
 /* ==== Selection toolbar (renderer/toolbar.js) ==== */
 /* selection toolbar: floats over a non-empty selection inside an editable node (style dropdown, B I S code, @) */
@@ -815,7 +819,7 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 .tbtn { position: relative; display: flex; align-items: center; gap: 4px; min-width: 30px; height: 28px; padding: 0 8px; border: 0; border-radius: 6px; background: none; color: #444; font-size: 15px; cursor: pointer; }
 .tbtn:hover { background: #f0f0f0; }
 .tbtn:focus { outline: none; box-shadow: 0 0 0 2px #b7d2f5; }
-.tbtn.on { background: #e8f1fb; color: #2b6fcf; }
+.tbtn.on { background: #e8f1fb; color: #2257a3; }
 .tbtn.b { font-weight: 700; }
 .tbtn.i { font-style: italic; }
 .tbtn.s { text-decoration: line-through; }
@@ -823,11 +827,11 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 .tbtn.c svg { width: 13px; height: 13px; display: block; }
 .tbtn.style { font-size: 14px; }
 .tbtn.style.open { background: #f0f0f0; }
-.tbtn .tcaret { display: flex; color: #888; }
+.tbtn .tcaret { display: flex; color: var(--muted); }
 .tbtn .tcaret svg { width: 10px; height: 10px; }
 .toolbar .menu { top: calc(100% + 6px); min-width: 190px; font-size: 15px; }
 /* a text glyph standing in for an icon (block types have no icon in the set): H1, •, 1., </>, ❝, — */
-.glyph { display: block; width: 100%; text-align: center; font-size: 10px; font-weight: 700; line-height: 16px; color: #8a8a8a; }
+.glyph { display: block; width: 100%; text-align: center; font-size: 10px; font-weight: 700; line-height: 16px; color: var(--muted); }
 .glyph.icon { display: flex; align-items: center; justify-content: center; }
 .glyph.icon svg { width: 13px; height: 13px; display: block; }
 .palette .row.active .glyph, .menu .mrow.active .glyph { color: #555; }
@@ -874,18 +878,18 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 /* what the task will be and who it is for, under the field; a click or ⇥ there chooses someone else */
 .palette:has(#taskPicks:not([hidden])) input { border-bottom: 0; } /* the picks line takes the field's divider; "Assign to…" gives it back */
 .palette:has(#taskTypes[hidden]) .tpicks { border-bottom: 0; } /* nothing under it to divide off */
-.palette .tpicks { display: flex; align-items: center; gap: 4px; padding: 0 20px 12px; border-bottom: 1px solid #eee; font-size: 13px; color: #8a8a8a; cursor: pointer; user-select: none; }
+.palette .tpicks { display: flex; align-items: center; gap: 4px; padding: 0 20px 12px; border-bottom: 1px solid #eee; font-size: 13px; color: var(--muted); cursor: pointer; user-select: none; }
 .palette .tpicks[hidden] { display: none; }
 .palette .tpicks b { font-weight: 500; color: #555; }
 .palette .tpicks kbd { margin-left: auto; }
-[data-theme="dark"] .palette .tpicks { border-bottom-color: #3a3f41; color: #858b8e; }
+[data-theme="dark"] .palette .tpicks { border-bottom-color: #3a3f41; color: var(--muted); }
 [data-theme="dark"] .palette .tpicks b { color: #c9c9c9; }
-.palette input::placeholder { color: #999; }
+.palette input::placeholder { color: var(--muted); }
 /* the prompt page: the same field the palette always shows, with room for a few lines (↩ is a newline here) */
 .palette .ptext { border: 0; outline: none; resize: none; font: inherit; font-size: 17px; line-height: 24px; color: #1a1a1a; padding: 16px 20px; border-bottom: 1px solid #eee; background: #fff; }
-.palette .ptext::placeholder { color: #999; }
+.palette .ptext::placeholder { color: var(--muted); }
 .palette .list { overflow-y: auto; padding: 8px 8px 14px; } /* the last row keeps clear of the card edge */
-.palette .group { font-size: 13px; color: #999; padding: 10px 12px 4px; user-select: none; }
+.palette .group { font-size: 13px; color: var(--muted); padding: 10px 12px 4px; user-select: none; }
 .palette .row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 8px; font-size: 15px; cursor: pointer; user-select: none; }
 #task .row:hover { background: #f6f6f6; } /* ⌘K itself has no hover: the pointer moves its active row (renderer/palette.js) */
 .palette .row.active { background: #f0f0f0; }
@@ -896,7 +900,7 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 .palette .ricon { flex: none; width: 16px; height: 16px; color: #8a8a8a; }
 .palette .ricon svg { display: block; width: 16px; height: 16px; }
 .palette .ricon.dot::before { content: ""; display: block; width: 6px; height: 6px; margin: 5px; border-radius: 50%; background: #555; }
-.palette .ricon.right { color: #aaa; }
+.palette .ricon.right { color: var(--muted); }
 .palette .ricon.hue { color: oklch(0.7 0.1 var(--hue)); } /* hued nodes: same icon colour as .bullet.icon.hue */
 /* A row waiting on a model: the glyph works rather than a spinner appearing beside it, so the row keeps its shape
    and turns into the answer in place. The whole mark turns slowly, the way its two arcs already suggest, while its
@@ -923,7 +927,7 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 @keyframes sparkle-settle { from { transform: rotate(-160deg) scale(.5); opacity: .2; } 70% { transform: rotate(6deg) scale(1.08); opacity: 1; } }
 @keyframes sparkle-said { from { opacity: 0; transform: translateX(-6px); } }
 .palette .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.palette .hint { color: #999; font-size: 14px; white-space: nowrap; }
+.palette .hint { color: var(--muted); font-size: 14px; white-space: nowrap; }
 .palette kbd { font: inherit; font-size: 13px; color: #666; background: #f1f1f1; border-radius: 6px; padding: 1px 8px; }
 .palette .row.active kbd { background: #e4e4e4; }
 /* @ linking: the same palette as a dropdown under the caret (anchorPalette places and sizes the card), no scrim */
@@ -950,7 +954,7 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 .recorder .card {
   width: 100%; max-width: 620px; padding: 36px 36px 28px; background: var(--surface); border-radius: 12px; box-shadow: var(--shadow-card);
 }
-.recorder .rlabel { font-size: 13px; color: #999; }
+.recorder .rlabel { font-size: 13px; color: var(--muted); }
 .recorder h2 { margin: 2px 0 18px; font-size: 20px; font-weight: 600; letter-spacing: -0.2px; }
 .recorder .rbox { height: 200px; border: 1px solid #ddd; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 14px; }
 .recorder .keys { display: flex; gap: 14px; font-size: 44px; color: #666; }
@@ -977,19 +981,19 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 /* the same step the light theme takes, the other way up: the prose sits back from the headings, not under them */
 [data-theme="dark"] .text { color: #ccd0d3; }
 [data-theme="dark"] .titlebar h1, [data-theme="dark"] .h1 > .line .text, [data-theme="dark"] .h2 > .line .text, [data-theme="dark"] .h3 > .line .text { color: #e8eaec; }
-[data-theme="dark"] .titlebar h1.done { color: #777d80; }
+[data-theme="dark"] .titlebar h1.done { color: var(--muted); }
 [data-theme="dark"] .error { color: #ed8b83; }
 
 [data-theme="dark"] .filter input { background: #282b2d; color: #c9c9c9; }
 [data-theme="dark"] .filter input:focus { background: #303437; }
-[data-theme="dark"] .filter .clear { color: #9a9fa1; }
+[data-theme="dark"] .filter .clear { color: var(--muted); }
 [data-theme="dark"] .filter .clear:hover { background: #3a3e40; }
 
 [data-theme="dark"] .pill { background: #263842; color: #9cc9e8; }
 [data-theme="dark"] .pill b { color: #b9dcf2; }
 [data-theme="dark"] .pill:hover, [data-theme="dark"] .pill.open { background: #314955; }
 [data-theme="dark"] .pill:focus { box-shadow: 0 0 0 2px #58768a; }
-[data-theme="dark"] .pill[data-id="sort"], [data-theme="dark"] .pill[data-id="group"], [data-theme="dark"] .pill[data-id="display"] { background: #2a2d2f; color: #9a9fa1; }
+[data-theme="dark"] .pill[data-id="sort"], [data-theme="dark"] .pill[data-id="group"], [data-theme="dark"] .pill[data-id="display"] { background: #2a2d2f; color: var(--muted); }
 [data-theme="dark"] .pill[data-id="sort"] b, [data-theme="dark"] .pill[data-id="group"] b, [data-theme="dark"] .pill[data-id="display"] b { color: #c9c9c9; }
 [data-theme="dark"] .pill[data-id="sort"]:hover, [data-theme="dark"] .pill[data-id="sort"].open,
 [data-theme="dark"] .pill[data-id="group"]:hover, [data-theme="dark"] .pill[data-id="group"].open,
@@ -1006,7 +1010,7 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 [data-theme="dark"] .menu .mrow.active:hover { background: #344047; }
 [data-theme="dark"] .menu .mrow .micon { color: #aeb4b6; }
 [data-theme="dark"] .menu .mrow .tick { color: #c9c9c9; }
-[data-theme="dark"] .menu .mhead { color: #858b8e; }
+[data-theme="dark"] .menu .mhead { color: var(--muted); }
 [data-theme="dark"] .menu .mdiv { background: #3a3f41; }
 [data-theme="dark"] .menu .msearch { border-color: #3a3f41; }
 
@@ -1027,9 +1031,9 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 [data-theme="dark"] .check { background: #3a3e40; --check-on: #5b976c; }
 [data-theme="dark"] .check:hover:not(:checked) { background: #474c4e; }
 [data-theme="dark"] .check.inbox:not(:checked) { background: #5d6467; }
-[data-theme="dark"] .document.done > .line .text { color: #777d80; }
-[data-theme="dark"] .meta, [data-theme="dark"] .filtered, [data-theme="dark"] .empty-note { color: #858b8e; }
-[data-theme="dark"] .clearfilters { color: #858b8e; }
+[data-theme="dark"] .document.done > .line .text { color: var(--muted); }
+[data-theme="dark"] .meta, [data-theme="dark"] .filtered, [data-theme="dark"] .empty-note { color: var(--muted); }
+[data-theme="dark"] .clearfilters { color: var(--muted); }
 [data-theme="dark"] .clearfilters:hover { color: #e6e8e9; }
 [data-theme="dark"] .chip.grey { background: #303436; color: #b7bcbe; }
 [data-theme="dark"] .chip.gold { background: #4b4024; color: #e4c968; }
@@ -1046,8 +1050,8 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 [data-theme="dark"] :is(.text, .fvalue) .mention.hue:hover { color: oklch(0.88 0.1 var(--hue)); }
 [data-theme="dark"] :is(.text, .fvalue) .mention[data-icon="meeting"]:not(.hue):not(.gone), [data-theme="dark"] :is(.text, .fvalue) .mention[data-icon="meeting"]:not(.hue):not(.gone) .mlabel { color: #e4c968; text-decoration-color: #5a4d25; }
 [data-theme="dark"] :is(.text, .fvalue) .mention[data-icon="meeting"]:not(.hue):not(.gone):hover { color: #f0dc8e; }
-[data-theme="dark"] :is(.text, .fvalue) .mention.gone, [data-theme="dark"] :is(.text, .fvalue) .mention.gone .mlabel, [data-theme="dark"] :is(.text, .fvalue) .mention.gone:hover { color: #8a8a8a; text-decoration-color: #8a8a8a; }
-[data-theme="dark"] .node.gone > .line .text { color: #8a8a8a; }
+[data-theme="dark"] :is(.text, .fvalue) .mention.gone, [data-theme="dark"] :is(.text, .fvalue) .mention.gone .mlabel, [data-theme="dark"] :is(.text, .fvalue) .mention.gone:hover { color: var(--muted); text-decoration-color: var(--muted); }
+[data-theme="dark"] .node.gone > .line .text { color: var(--muted); }
 [data-theme="dark"] .text code { background: #303436; }
 [data-theme="dark"] .text a.link { color: #7fb8dd; }
 [data-theme="dark"] .text a.link:hover { color: #b5ddf4; }
@@ -1070,7 +1074,7 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 [data-theme="dark"] .palette .row.active .glyph, [data-theme="dark"] .menu .mrow.active .glyph { color: #d0d2d2; }
 [data-theme="dark"] .selected { background: #2d4149; }
 [data-theme="dark"] .children { border-left-color: #34393b; }
-[data-theme="dark"] .children.loading { color: #858b8e; }
+[data-theme="dark"] .children.loading { color: var(--muted); }
 
 [data-theme="dark"] .skeleton canvas { color: #e8eaec; }
 [data-theme="dark"] .login button { border-color: #454b4e; background: #2a2d2f; color: #c9c9c9; }
@@ -1078,22 +1082,22 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 [data-theme="dark"] .login button:hover { background: #363a3c; }
 
 [data-theme="dark"] .palette input { color: #c9c9c9; border-bottom-color: #3a3f41; background: #242729; }
-[data-theme="dark"] .palette input::placeholder { color: #858b8e; }
+[data-theme="dark"] .palette input::placeholder { color: var(--muted); }
 [data-theme="dark"] .palette .ptext { color: #c9c9c9; border-bottom-color: #3a3f41; background: #242729; }
-[data-theme="dark"] .palette .ptext::placeholder { color: #858b8e; }
-[data-theme="dark"] .palette .group, [data-theme="dark"] .recorder .rlabel { color: #858b8e; }
+[data-theme="dark"] .palette .ptext::placeholder { color: var(--muted); }
+[data-theme="dark"] .palette .group, [data-theme="dark"] .recorder .rlabel { color: var(--muted); }
 [data-theme="dark"] #task .row:hover { background: #2d3538; }
 [data-theme="dark"] .palette .row.active { background: #343a3d; }
 [data-theme="dark"] .palette .ricon { color: #aeb4b6; }
-[data-theme="dark"] .palette .ricon.right { color: #858b8e; }
+[data-theme="dark"] .palette .ricon.right { color: var(--muted); }
 [data-theme="dark"] .palette .ricon.hue { color: oklch(0.8 0.1 var(--hue)); }
 [data-theme="dark"] .palette .row.disabled { color: #7e8487; }
 [data-theme="dark"] .palette .row.disabled .ricon { color: #5d6467; }
-[data-theme="dark"] .rail .rhead { color: #858b8e; }
-[data-theme="dark"] .ghead { color: #858b8e; }
+[data-theme="dark"] .rail .rhead { color: var(--muted); }
+[data-theme="dark"] .ghead { color: var(--muted); }
 [data-theme="dark"] .ghead:hover { color: #c3c8ca; }
 [data-theme="dark"] .ghead:focus { box-shadow: 0 0 0 2px #58768a; }
-[data-theme="dark"] .gmore { color: #858b8e; }
+[data-theme="dark"] .gmore { color: var(--muted); }
 [data-theme="dark"] .gmore:hover { color: #8fc1e1; }
 [data-theme="dark"] .gmore:focus { box-shadow: 0 0 0 2px #58768a; }
 [data-theme="dark"] .rail .rrow:hover { background: #24282a; }
@@ -1106,16 +1110,16 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 [data-theme="dark"] .splitgrip:not(.left):is(:hover, .on, .dragging)::before { background: #4a5053; }
 [data-theme="dark"] .splitpill { border-color: #34373a; background: #232628; color: #9aa0a3; }
 [data-theme="dark"] .rail .rrow .rtitle { color: #e6e8e9; }
-[data-theme="dark"] .rail .rrow .rsub { color: #858b8e; }
-[data-theme="dark"] .rail .rrow.done .rtitle { color: #858b8e; }
+[data-theme="dark"] .rail .rrow .rsub { color: var(--muted); }
+[data-theme="dark"] .rail .rrow.done .rtitle { color: var(--muted); }
 [data-theme="dark"] .rail .rrow.rmeta .rtitle { color: #a8adaf; }
 [data-theme="dark"] .meta .hiddenfrom, [data-theme="dark"] .rail .rrow.rmeta[data-id="meta:hiddenFrom"] .ricon { color: #f0506e; }
 [data-theme="dark"] .fields { border-color: #3a3f41; }
 [data-theme="dark"] .fields .field, [data-theme="dark"] .fields .fvalue { color: #e6e8e9; }
-[data-theme="dark"] .fields .flabel, [data-theme="dark"] .fields .ricon { color: #858b8e; }
+[data-theme="dark"] .fields .flabel, [data-theme="dark"] .fields .ricon { color: var(--muted); }
 [data-theme="dark"] .fields a { color: #7fb8dd; }
-[data-theme="dark"] .subtext { color: #858b8e; }
-[data-theme="dark"] .palette .hint { color: #858b8e; }
+[data-theme="dark"] .subtext { color: var(--muted); }
+[data-theme="dark"] .palette .hint { color: var(--muted); }
 [data-theme="dark"] .meta.pending { color: #454b4e; }
 [data-theme="dark"] .cbadge { --cbadge-sheen: rgba(200, 225, 255, .45); }
 [data-theme="dark"] .cbadge.pending { background: #33383a; color: #b6bbbd; }
@@ -1207,7 +1211,7 @@ body.overlaypage, [data-theme="dark"] body.overlaypage { background: transparent
 @starting-style { .help[open] { opacity: 0; } .help[open] .card { opacity: 0; transform: translateY(-8px) scale(.97); } }
 .help .card { position: relative; width: 100%; max-width: 600px; overflow: hidden; background: #fff; border-radius: 14px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, .18), 0 0 0 1px rgba(0, 0, 0, .05); transition: transform var(--dur-base) var(--ease-out), opacity var(--dur-base) var(--ease-out); }
-.help .hclose { position: absolute; top: 10px; right: 10px; z-index: 2; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 6px; background: none; color: #999; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.help .hclose { position: absolute; top: 10px; right: 10px; z-index: 2; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--muted); cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .help .hclose:hover { background: rgba(0, 0, 0, .06); color: #555; }
 .help i { display: contents; }
 .help .hclose svg { width: 16px; height: 16px; }
