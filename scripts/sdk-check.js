@@ -1847,6 +1847,16 @@ async function main() {
     answers[7](Promise.reject(new Error('unavailable'))); await savedRead.catch(() => {}); answers[6]({ nodes: beforeSave }); await oldRead;
     await new Promise(setImmediate);
     assert.equal(subscribes.includes(beforeSave[0].id), false, 'a read of the query from before a Save keeps no head, even when the read after it failed');
+    // The same when the Save changed only the completed window, which lives beside the query in the view map
+    const beforeWindow = [{ id: 'tana:text:' + ulid(), title: 'Old window' }];
+    const windowRead = backend.handlers.get('outline:children')(null, searchId);
+    while (answers.length < 9) await new Promise(setImmediate);
+    goodDoc.transact((l) => l.getMap('view').set('completedWithin', 7));
+    const windowSaved = backend.handlers.get('outline:children')(null, searchId);
+    while (answers.length < 10) await new Promise(setImmediate);
+    answers[9](Promise.reject(new Error('unavailable'))); await windowSaved.catch(() => {}); answers[8]({ nodes: beforeWindow }); await windowRead;
+    await new Promise(setImmediate);
+    assert.equal(subscribes.includes(beforeWindow[0].id), false, 'nor does a read from before a Save that changed only the completed window');
 
     const brokenDoc = new Document('tana:search:' + ulid());
     brokenDoc.transact((l) => initDocument(l, 'Broken search', ME)); // no query container at all
