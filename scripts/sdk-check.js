@@ -1060,6 +1060,65 @@ async function main() {
     assert.deepEqual(rows.nodes.map((n) => n.title), ['A real note'], 'the settings document is kept out of every list, like a hidden title');
     console.log('ok  settings document: created or found by name, JSON per key, machine-local settings left behind, and a new machine opens with your choices');
   }
+  // My Tasks, the Work View's right half, is one saved search that the synced settings remember by id. A rename, a hidden
+  // title, a colleague's search of the same name or a second machine starting at the same moment must not make a
+  // second one or pick the wrong one; only a deletion makes a fresh one.
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const settings = backend.settings; settings.reset();
+    const docs = new Map(), searches = [];
+    let settingsListed = [];
+    let clock = Date.parse('2026-09-26T08:00:00Z');
+    const sync = {
+      subscribe: async (id, init) => {
+        if (!docs.has(id)) {
+          if (!init) throw new Error('unavailable');
+          const d = new Document(id); d.transact(init); docs.set(id, d);
+          if (id.startsWith('tana:search:')) searches.push({ id, title: readNode(d).title, createdBy: ME, createTime: new Date(clock += 1000).toISOString() });
+        }
+        return docs.get(id);
+      },
+      getDocument: (id) => docs.get(id), unsubscribe: async () => {},
+    };
+    const listNodes = async (p) => {
+      if (p.nodeIds) return { nodes: searches.filter((n) => p.nodeIds.includes(n.id)) };
+      if (p.textQuery === settings.TITLE) return { nodes: settingsListed };
+      if (p.nodeTypes && p.nodeTypes.join() === 'search') return { nodes: [...searches].reverse().filter((n) => !p.createdBy || p.createdBy.includes(n.createdBy)) }; // newest first, as the graph sorts by default
+      return { nodes: [] };
+    };
+    const launch = () => { backend.testRuntime({ me: { userUri: ME }, win: null, client: { sync, graph: { listNodes } } }); return backend.handlers.get('search:myTasks')(null, false); };
+    const first = await launch();
+    assert.equal(searches.length, 1, 'a first launch makes My Tasks');
+    await settings.flush();
+    assert.equal((await launch()).id, first.id, 'and the next launch finds it');
+    searches[0].title = 'Mine';
+    assert.equal((await launch()).id, first.id, 'renamed in Tana, it is still the Work View\u2019s search');
+    assert.equal(searches.length, 1, 'and no second My Tasks is made beside it');
+    await settings.flush();
+    settingsListed = [{ id: settings.settingsDocId(), title: settings.TITLE, createTime: '2026-09-26T07:00:00Z' }];
+    cache.open(':memory:'); settings.reset(); // a new machine, asking the moment sync connects, before start() has read the settings document
+    assert.equal((await launch()).id, first.id, 'a new machine reads which one it is from the settings document before it looks by title');
+    assert.equal(searches.length, 1, 'rather than making another beside the renamed one');
+    searches[0].title = 'My Tasks';
+    settings.set('myTasks', undefined); // a machine that has not heard which one it is yet
+    settings.set('hiddenTitles', ['My Tasks']);
+    assert.equal((await launch()).id, first.id, 'a hidden title keeps it out of the lists, not out of the Work View');
+    assert.equal(searches.length, 1, 'so hiding it makes no copy on every launch');
+    settings.set('hiddenTitles', []);
+    settings.set('myTasks', undefined);
+    searches.push({ id: 'tana:search:' + ulid(), title: 'My Tasks', createdBy: ME, createTime: new Date(clock += 1000).toISOString() });
+    assert.equal((await launch()).id, first.id, 'two made at once by two machines: both settle on the oldest');
+    settings.set('myTasks', undefined);
+    searches.splice(1); searches.unshift({ id: 'tana:search:' + ulid(), title: 'My Tasks', createdBy: 'tana:user-profile:01examplej0000000000000000', createTime: '2026-09-01T00:00:00Z' });
+    assert.equal((await launch()).id, first.id, 'a colleague\u2019s My Tasks is theirs, not the Work View\u2019s');
+    searches.shift();
+    searches[0].deletedAt = Date.now();
+    const fresh = await launch();
+    assert.notEqual(fresh.id, first.id, 'deleted in Tana: the next Work View makes a fresh one');
+    assert.equal(settings.get('myTasks'), fresh.id, 'and remembers that one');
+    settings.set('myTasks', undefined);
+    console.log('ok  My Tasks is remembered by id: a rename, a hidden title, a colleague\u2019s or a second machine\u2019s copy never makes or picks another');
+  }
   // What stayed of quick add when the panel went (issue #232): the meeting this user has joined (⌘K Pin to current
   // meeting), a task from its title alone (⌘K Create task), and the one agent handoff, driven through its real path.
   {
