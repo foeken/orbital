@@ -60,19 +60,19 @@ function openAIKeyRows() {
 // needs and the palette already knows how to take one line. Main validates and stores; nothing is run here.
 const HOSTS_GROUP = 'Codex hosts · type "Name ssh-address /path/to/codex" to add one, ↩ on a host removes it';
 let hostList = null; // loadList's answer, then each write's
-const hostsApply = (call) => run(async () => { hostList = await call(); agentHosts = hostList; renderPalette(); });
-// The hosts, with what is typed offered as a new one first; the list is short and never narrowed, so the page is a typed one.
-const hostRows = (q, typed) => listRows(HOSTS_GROUP, hostList, '', 'No other machines yet', (list) => {
-  const rows = list.filter((h) => h.id !== 'local').map((h) => ({ group: HOSTS_GROUP, icon: 'host', label: h.title,
-    hint: '↩ removes it · its tasks stay', keepOpen: true, run: () => hostsApply(() => tana.removeCodexHost(h.id)) }));
-  const parts = typed.trim().split(/\s+/);
+const hostsApply = (call) => run(async () => { hostList = await call(); agentHosts = hostList; listReads.delete('hosts'); renderPalette(); });
+// What is typed is offered as a new host first, whether or not the list is in yet; the list is short and never
+// narrowed, so the page is a typed one.
+function hostRows(q, typed) {
+  const parts = typed.trim().split(/\s+/), add = [];
   if (parts.length >= 3) {
     const [title, ssh, bin] = [parts.slice(0, parts.length - 2).join(' '), parts[parts.length - 2], parts[parts.length - 1]];
-    rows.unshift({ group: HOSTS_GROUP, icon: 'createNew', label: 'Add "' + title + '" on ' + ssh, hint: bin, keepOpen: true,
+    add.push({ group: HOSTS_GROUP, icon: 'createNew', label: 'Add "' + title + '" on ' + ssh, hint: bin, keepOpen: true,
       run: () => run(async () => { await tana.addCodexHost(title, ssh, bin); palInput.value = ''; hostsApply(() => tana.codexHosts()); }) });
   }
-  return rows;
-});
+  return [...add, ...listRows(HOSTS_GROUP, hostList, add.length ? typed : '', 'No other machines yet', (list) => list.filter((h) => h.id !== 'local').map((h) => ({ group: HOSTS_GROUP, icon: 'host', label: h.title,
+    hint: '↩ removes it · its tasks stay', keepOpen: true, run: () => hostsApply(() => tana.removeCodexHost(h.id)) })))];
+}
 function openHostsPalette() {
   loadList('hosts', () => tana.codexHosts(), (list) => { hostList = list; if (Array.isArray(list)) agentHosts = list; });
   openPage('hosts', 'Name  ssh-address  /path/to/codex', { rows: hostRows, back: BACK_TO_COMMANDS, typed: true });

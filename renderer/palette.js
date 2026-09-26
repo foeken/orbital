@@ -458,10 +458,14 @@ function backPalette() { (palPage.back || closePalette)(); }
 // The list is null while the read is out, then what main answered, or the Error it failed with. The page draws its rows
 // once it is in, and otherwise one line saying why there are none: Loading…, the failure, or its empty line for a list
 // with nothing in it. A query that matches nothing leaves the rows empty, and the palette's own "No results" says so.
+// Only the latest read of a page is kept: a page left and opened again before its first answer came would otherwise let
+// that older answer land last. A write that answers with the list (hiddenApply, hostsApply) retires the read too.
+const listReads = new Map(); // mode -> the read in flight
 function loadList(mode, read, keep) {
+  const mine = {}; listReads.set(mode, mine);
   keep(null);
   Promise.resolve().then(read).then((list) => (Array.isArray(list) ? list : []), (e) => (e instanceof Error ? e : new Error(String(e))))
-    .then((list) => { keep(list); if (palMode === mode && !palette.hidden) renderPalette(); });
+    .then((list) => { if (listReads.get(mode) !== mine) return; listReads.delete(mode); keep(list); if (palMode === mode && !palette.hidden) renderPalette(); });
 }
 function listRows(group, list, q, empty, toRows) {
   const note = (label) => [{ group, label, disabled: true }];
@@ -497,12 +501,12 @@ function openArchivedPalette() {
 // The rule lives in the group header because that is the one line in the palette that wraps.
 const HIDDEN_GROUP = 'Hidden items · whole title, case-insensitive; end with * to match a prefix';
 let hiddenList = null; // loadList's answer, then each write's
-const hiddenApply = (call) => run(async () => { hiddenList = await call(); renderPalette(); }); // resolves once the views have refreshed
-// What is typed is offered as a title to hide, first; the list below is narrowed by it.
-const hiddenRows = (q, typed) => listRows(HIDDEN_GROUP, hiddenList, '', 'Nothing is hidden yet', (list) => [
+const hiddenApply = (call) => run(async () => { hiddenList = await call(); listReads.delete('hidden'); renderPalette(); }); // resolves once the views have refreshed
+// What is typed is offered as a title to hide, first, whether or not the list is in yet; the list below is narrowed by it.
+const hiddenRows = (q, typed) => [
   ...(typed ? [{ group: HIDDEN_GROUP, icon: 'createNew', label: 'Hide "' + typed + '"', hint: typed.endsWith('*') ? 'Prefix' : 'Exact', keepOpen: true, run: () => { palInput.value = ''; hiddenApply(() => tana.addFilter(typed)); } }] : []),
-  ...list.filter((pattern) => pattern.toLowerCase().includes(q))
-    .map((pattern) => ({ group: HIDDEN_GROUP, icon: 'any', label: pattern, hint: (pattern.endsWith('*') ? 'Prefix' : 'Exact') + ' · ↩ unhides', keepOpen: true, run: () => hiddenApply(() => tana.removeFilter(pattern)) }))]);
+  ...listRows(HIDDEN_GROUP, hiddenList, typed, 'Nothing is hidden yet', (list) => list.filter((pattern) => pattern.toLowerCase().includes(q))
+    .map((pattern) => ({ group: HIDDEN_GROUP, icon: 'any', label: pattern, hint: (pattern.endsWith('*') ? 'Prefix' : 'Exact') + ' · ↩ unhides', keepOpen: true, run: () => hiddenApply(() => tana.removeFilter(pattern)) })))];
 function openHiddenPalette() {
   loadList('hidden', () => tana.filters(), (list) => { hiddenList = list; });
   openPage('hidden', 'Type a title to hide', { rows: hiddenRows, back: BACK_TO_COMMANDS });
