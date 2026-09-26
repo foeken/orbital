@@ -732,7 +732,7 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 /* Cmd+K "Preview loading animation" (renderer/loading.js): the page as it looks while a view loads, until Esc */
 .loading-preview .skeleton.gone { display: block; opacity: 1; }
 .loading-preview :is(#outline, #filtered, #loginBox) { display: none; }
-.skeleton canvas { display: block; width: 100%; height: 100%; color: #1c2024; }
+.skeleton canvas { display: block; width: 100%; height: 100%; color: #1c2024; mask-image: linear-gradient(to bottom, #000 30%, transparent 85%); } /* it thins out down the page */
 @keyframes shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 @keyframes breathe { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
 

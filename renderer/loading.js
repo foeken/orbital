@@ -30,19 +30,19 @@ let previewLoading = () => {};
     const k = [w, h, cx, cy, tx, ty, sx, sy].join();
     if (k === key) return page;
     const items = [], bar = (x, y, bw, bh, a, start, dur) => { items.push({ x, y, w: bw, h: bh, a, start, dur }); return start + dur; };
-    bar(cx, cy, 48, 8, 0.1, 0, 0.3); bar(cx + 58, cy, 72, 8, 0.1, 0.06, 0.3);
-    let end = bar(tx, ty, 176, 24, 0.14, 0.04, 0.45);
+    bar(cx, cy, 48, 8, 0.1, 0, 0.5); bar(cx + 58, cy, 72, 8, 0.1, 0.12, 0.5);
+    let end = bar(tx, ty, 176, 24, 0.14, 0.1, 0.8);
     const avail = Math.max(120, Math.min(w - sx - 47 - 40, 600));
-    let y = sy, s = 0.3;
+    let y = sy, s = 0.6;
     for (const r of ROWS) {
       if (y > h) break;
       const x = sx + r.depth * 24;
-      if (r.head) { y += y > sy ? 18 : 0; end = bar(sx + 24, y + 14, 56 + r.w * 64, 8, 0.08, s, 0.3); y += 35; s += 0.05; continue; }
-      items.push({ glyph: r.glyph, x: x + 24, y: y + 7, a: 0.26, start: s, dur: 0.25 });
+      if (r.head) { y += y > sy ? 18 : 0; end = bar(sx + 24, y + 14, 56 + r.w * 64, 8, 0.08, s, 0.5); y += 35; s += 0.12; continue; }
+      items.push({ glyph: r.glyph, x: x + 24, y: y + 7, a: 0.26, start: s, dur: 0.4 });
       const bw = Math.max(40, avail * r.w);
-      end = bar(x + 47, y + 10, bw, 10, 0.11, s + 0.04, 0.4);
-      if (r.meta) end = bar(x + 47 + bw + 10, y + 10, avail * r.meta, 10, 0.065, s + 0.12, 0.35);
-      y += 30; s += 0.055;
+      end = bar(x + 47, y + 10, bw, 10, 0.11, s + 0.08, 0.8);
+      if (r.meta) end = bar(x + 47 + bw + 10, y + 10, avail * r.meta, 10, 0.065, s + 0.4, 0.5);
+      y += 30; s += 0.14;
     }
     key = k;
     return (page = { items, end });
@@ -68,21 +68,23 @@ let previewLoading = () => {};
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
       if (t >= 0) {
-        const { items, end } = layout(w, h);
-        // once built, a soft band of light runs over it, left to right; before that every part is at its own strength
-        const col = (getComputedStyle(canvas).color.match(/[\d.]+/g) || [0, 0, 0]).slice(0, 3).join(','), since = t - end - 0.3;
-        let paint = 'rgba(' + col + ',0.7)';
-        if (!still && since > 0) {
-          const bx = ((since % 2.2) / 2.2) * (w + 600) - 300, g = ctx.createLinearGradient(bx - 220, 0, bx + 220, 0);
-          g.addColorStop(0, 'rgba(' + col + ',0.7)'); g.addColorStop(0.5, 'rgba(' + col + ',1)'); g.addColorStop(1, 'rgba(' + col + ',0.7)');
-          paint = g;
-        }
-        ctx.fillStyle = ctx.strokeStyle = paint; ctx.lineWidth = 1.5;
+        const { items } = layout(w, h);
+        // every bar carries a band of light running left to right through it, the rows lower down a step behind the
+        // ones above, so the page reads as still loading; the glyphs keep a steady strength
+        const col = (getComputedStyle(canvas).color.match(/[\d.]+/g) || [0, 0, 0]).slice(0, 3).join(','), base = 'rgba(' + col + ',0.55)';
+        const sweep = (it) => {
+          if (still) return base;
+          const ph = (((t / 1.8 - it.y / 900) % 1) + 1) % 1, bx = it.x - 160 + ph * (it.w + 320), g = ctx.createLinearGradient(bx - 120, 0, bx + 120, 0);
+          g.addColorStop(0, base); g.addColorStop(0.5, 'rgba(' + col + ',1)'); g.addColorStop(1, base);
+          return g;
+        };
+        ctx.strokeStyle = base; ctx.lineWidth = 1.5;
         for (const it of items) {
           const p = (t - it.start) / it.dur;
           if (p <= 0) continue;
-          ctx.globalAlpha = (it.a / 0.7) * clamp(p * 2.5);
-          if (it.glyph != null) { glyph(it.glyph, it.x, it.y + 3 * (1 - ease(p))); continue; }
+          ctx.globalAlpha = (it.a / 0.55) * clamp(p * 2.5);
+          if (it.glyph != null) { ctx.fillStyle = base; glyph(it.glyph, it.x, it.y + 3 * (1 - ease(p))); continue; }
+          ctx.fillStyle = sweep(it);
           ctx.beginPath(); ctx.roundRect(it.x, it.y, Math.max(it.h, it.w * ease(p)), it.h, it.h / 2); ctx.fill();
         }
         ctx.globalAlpha = 1;
