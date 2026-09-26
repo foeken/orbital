@@ -114,8 +114,9 @@ function watchMeetings(me, since) {
 }
 
 // The page is five reads that do not wait on each other — what happened to the nodes you watch, what agents moved,
-// what landed in your Inbox, your meetings, today's pins — so they run side by side, and each is handed to progress (the page asking, over
-// timeline:part) the moment it lands, merged with whatever is in already; the answer is the whole page. At a launch
+// what landed in your Inbox, your meetings, today's pins — so they run side by side, and the page asking is shown what
+// can be drawn top down without anything landing between rows already there (progress, timeline:part; pageOf); the
+// answer is the whole page. At a launch
 // Tana is answering a thousand other reads, each hop takes a second rather than 40 ms, and one after another they
 // kept the page empty for five (live 2026-09-26).
 async function rows(progress) {
@@ -243,7 +244,12 @@ async function rows(progress) {
   }
   const got = {};
   const page = () => pageOf(got, seen, now, date);
-  await Promise.all([['watched', watched], ['agents', agents], ['inbox', inbox], ['meetings', meetingsPart], ['today', today]].map(([k, read]) => read().then((v) => { got[k] = v; if (progress) progress(page()); })));
+  let shown = 0; // rows the page asking has been sent: a part that adds none sends nothing
+  await Promise.all([['watched', watched], ['agents', agents], ['inbox', inbox], ['meetings', meetingsPart], ['today', today]].map(([k, read]) => read().then((v) => {
+    got[k] = v;
+    const p = page();
+    if (progress && p.length > shown) { shown = p.length; progress(p); }
+  })));
   watchMeetings(me, since);
   // The page is read again at the next moment a meeting moves: one starting (out of Upcoming meetings, into the timeline)
   // or one under way ending (its Join button goes, and without a summary it turns quiet). The read it causes sets the next.
@@ -252,16 +258,19 @@ async function rows(progress) {
   if (next < Infinity) startTimer = setTimeout(() => send('outline:changed', PAGE), next - Date.now() + 1000); // a second in, so it has happened
   return page();
 }
-// The page from the parts in so far: Today's Tasks once its pins are read, Upcoming meetings, then every event newest first
+// The page from the parts in so far, in two steps so nothing lands between rows already drawn: Today's Tasks and
+// Upcoming meetings once both are read, then every event newest first once all four sources of them are. The events
+// interleave by time, so any one source alone would drop rows between the others' as they came in.
 function pageOf(got, seen, now, date) {
-  const upcoming = got.meetings ? got.meetings.upcoming : [];
+  const top = !!(got.today && got.meetings), all = top && !!(got.watched && got.agents && got.inbox);
+  const upcoming = top ? got.meetings.upcoming : [];
   const upcomingText = 'Upcoming meetings';
   const upcomingRow = upcoming.length ? [{ id: PAGE + ':upcoming', text: upcomingText, segments: [{ text: upcomingText }], kind: 'block', block: 'bullet', icon: 'meeting',
     editable: false, hasChildren: true, children: upcoming, createdAt: iso(now), unread: false, timeline: { uri: null, time: '', tone: 'new', upcoming: true } }] : []; // no time of its own: it sits under Today's Now
   const todayText = "Today's Tasks";
-  const todayRow = got.today ? [{ id: PAGE + ':today:' + date, text: todayText, segments: [{ text: todayText }], kind: 'block', block: 'bullet', icon: 'todayTasks',
+  const todayRow = top ? [{ id: PAGE + ':today:' + date, text: todayText, segments: [{ text: todayText }], kind: 'block', block: 'bullet', icon: 'todayTasks',
     editable: false, hasChildren: true, children: got.today, createdAt: iso(now), unread: false, timeline: { uri: null, time: 'Now', tone: 'new', today: true } }] : [];
-  const events = [...(got.watched || []), ...(got.agents || []), ...(got.inbox || []), ...(got.meetings ? got.meetings.events : [])];
+  const events = all ? [...got.watched, ...got.agents, ...got.inbox, ...got.meetings.events] : [];
   // New tasks in a row from one source on one day are one entry, timed by the newest of them
   const day = (at) => new Date(at).toDateString();
   const merged = [];
