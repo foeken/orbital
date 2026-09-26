@@ -360,7 +360,7 @@ function renderOutline() {
     outline.replaceChildren(...(groups
       ? groups.flatMap((g) => [...(g.title ? [groupHeadEl(g)] : []), ...(g.collapsed ? [] : g.nodes.flatMap((n, i) => [childEl(n, parent), ...(timelineTopEnds(n, g.nodes[i + 1]) ? [timelineDividerEl()] : [])])), ...(g.more ? [groupMoreEl(g)] : [])])
       : list.map((n) => childEl(n, parent))));
-    if (parent.docId === TIMELINE_PAGE && tana.timelinePages && kids.get(TIMELINE_PAGE) && timelinePages < TIMELINE_MAX_PAGES) outline.append(timelineOlderEl()); // three days a page: more as the end comes into view
+    if (parent.docId === TIMELINE_PAGE && tana.timelinePages && kids.get(TIMELINE_PAGE) && !timelinePartial && timelinePages < TIMELINE_MAX_PAGES) outline.append(timelineOlderEl()); // three days a page: more as the end comes into view, once the first page is whole
     animView = null; // a zoom replaced every row, and a zoomed row is keyed docId/nodeId while a view row is keyed by
     // its document id, so on the way back nothing would match and the whole view would flash as if it had just arrived
     // A node opens at its top, however far down the draft tail the caret goes (the caretOnOpen block below parks it
@@ -438,7 +438,16 @@ function renderOutline() {
   $('filtered').textContent = [hidden ? hidden + ' items filtered out' : '', cut ? 'Showing the first 1,000 results' : ''].filter(Boolean).join(' · ');
   // Cached rows remain usable while auth and sync reconnect; reserve the skeleton for an empty outline.
   const loading = asking || (!parent && !outline.children.length && (authChecking || !rootsLoaded || !filters.has(view) || (authed && !connected)));
-  $('skeleton').classList.toggle('gone', !loading);
+  // Only the first page builds itself (renderer/loading.js); one opened later, or a reconnect, waits blank for its
+  // rows. Signed out is not landed: the page after the login is still the first. Nor is the view under a place still
+  // being restored (a first launch's My Tasks half is found only once connected): the loader stays over it, and the
+  // outline under it is hidden (styles.css). Offline with nothing to restore, the cached rows show as they are.
+  // A Timeline landing in parts is drawn as it comes, the loader building on under what is in (its .tail).
+  const placing = !placed && (!!savedPlace || connected), tail = !loading && !!parent && parent.docId === TIMELINE_PAGE && timelinePartial;
+  // signed out: the login is the page, and the loader waits for the first page after it (booted stays false)
+  $('skeleton').classList.toggle('gone', booted || signedOut || !(loading || placing || tail));
+  $('skeleton').classList.toggle('tail', tail);
+  if (!loading && !placing && !tail && authed) booted = true;
   // the same rule as "No content" above: a view with every section folded away has no rows and is not empty
   if (!parent && !list.length && !outline.children.length && !loading && !filterEl.value) { // an empty view says so; a filtered-out list is explained by the count below it
     const note = document.createElement('div');

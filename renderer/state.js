@@ -135,6 +135,8 @@ const displayPref = { ...pref('display', {}) }; // page key -> which of a row's 
 // its document id, which is why these are kept whole rather than filtered like the arrangement above.
 const collapsedGroups = new Set(pref('collapsedGroups', []));
 let rootsLoaded = false, connected = false; // for the loading skeleton: shown while the view has no rows and roots/library/connection are still pending
+let booted = false; // the first page has landed: the loading page is built on a launch or a Reload only, never again after
+let placed = false; // the launch's one connected restorePlace has settled (renderer/app.js), so the page on screen is the one it lands on
 // font size: native page zoom (⇧⌘+ / ⇧⌘− / ⌘0), persisted. Default is one step below native.
 const BASE_ZOOM = 0.91;
 let zoomFactor = Number(localStorage.getItem('zoom')) || BASE_ZOOM;

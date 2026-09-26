@@ -1586,7 +1586,7 @@ async function runSyncShortcutCheck() {
     'Actions: Log in to Tana', 'Actions: Create new …', 'Actions: Search Tana', 'Actions: Undo', 'Actions: Redo', 'Actions: Sync',
     'Navigate: Go back', 'Navigate: Go forward', 'Navigate: Go to Home', 'Navigate: Set as Home', 'Navigate: Set Work View as Home', 'Navigate: Focus the sidebar',
     'Window: New window', 'Window: Toggle split panes', 'Window: Go to the other half', 'Window: Swap panes', 'Window: Hide sidebar', 'Window: Reload',
-    'Settings: Larger text', 'Settings: Smaller text', 'Settings: Reset text size', 'Settings: Toggle dark mode', 'Settings: Preview loading animation', 'Settings: Edit hidden items', 'Settings: Toggle sensitive visibility', 'Settings: Toggle demo mode',
+    'Settings: Larger text', 'Settings: Smaller text', 'Settings: Reset text size', 'Settings: Toggle dark mode', 'Settings: Edit hidden items', 'Settings: Toggle sensitive visibility', 'Settings: Toggle demo mode',
   ], 'the palette lists its rows in one fixed, meaningful order');
   // The two date pins differ only in the day they name: today's row passes no date (main defaults to today), the
   // tomorrow row passes the next local day, and each label follows whether that day is already pinned.
@@ -4293,7 +4293,7 @@ async function runRestorePlaceCheck() {
   assert.equal(api.state().docId, null, 'and a corrupt entry is simply not a place, rather than a broken launch');
   assert.match(source, /loadRoots\(\)\.then\(render, showError\)\.then\(restorePlace\)/,
     'and boot reopens that place once the views have loaded, so the restore has somewhere to land');
-  assert.match(source, /if \(connected && !wasConnected\) \{ taskMetaFailed\.clear\(\); loadSearches\(\); loadWorkspaceTypes\(\); loadPinned\(true\); restorePlace\(\)\.finally\(\(\) => loadView\(\)\); \}/,
+  assert.match(source, /if \(connected && !wasConnected\) \{ taskMetaFailed\.clear\(\); loadSearches\(\); loadWorkspaceTypes\(\); loadPinned\(true\); restorePlace\(\)\.finally\(\(\) => \{ placed = true; loadView\(\); renderSoon\(\); \}\); \}/,
     'the connection coming up runs the restore that boot was too early for, and the view behind it is fetched after that page, not ahead of it');
 }
 

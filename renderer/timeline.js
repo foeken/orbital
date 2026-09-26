@@ -68,6 +68,15 @@ const TIMELINE_MAX_PAGES = 120;
 // Without it an empty or sparse Timeline kept its end in view and read on, page after page, to the last.
 let timelinePages = 1, timelineLoading = false, timelineDry = false;
 if (tana.timelinePages) tana.timelinePages(1).catch(() => {});
+// The page arrives in parts (main/timeline.js rows): while its first read is still out, each part is the page so far,
+// drawn at once with the loader building on under it (renderer/loading.js). A part never stands in for a page that is
+// already there — a re-read or three more days keep what is on screen until the whole answer is in (nodes.js reload).
+let timelinePartial = false;
+if (tana.onTimelinePart) tana.onTimelinePart((rows) => {
+  if (!(kids.get(TIMELINE_PAGE) === null || timelinePartial)) return;
+  kids.set(TIMELINE_PAGE, rows); timelinePartial = true;
+  if (zoom?.docId === TIMELINE_PAGE) renderSoon(true);
+});
 function timelineOlder(scrolled) {
   if (timelineLoading || timelinePages >= TIMELINE_MAX_PAGES || (scrolled === true && timelineDry)) return;
   timelineLoading = true; renderSoon();
