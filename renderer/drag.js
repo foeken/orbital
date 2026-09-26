@@ -43,7 +43,9 @@ const rowDepth = (host, el) => { let d = 0; for (let p = el.parentElement; p && 
 function dropHost(x, y) {
   const el = document.elementFromPoint(x, y);
   if (!el || !el.closest) return null;
-  return el.closest('.fvalues') || (outline.parentElement.contains(el) ? outline : null);
+  // the rest of the scroll area is the outline's (the space under its last row), but not the fields above it, which
+  // share that area: a field's label or border is no place to drop a row
+  return el.closest('.fvalues') || (outline.parentElement.contains(el) && !el.closest('#fields') ? outline : null);
 }
 // Which level the pointer is asking for at a gap. Counted from the row above it, one step per level, and held
 // between the row below it (nothing may sit shallower than the row it lands in front of) and one level inside the
