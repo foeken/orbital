@@ -54,7 +54,7 @@ await client.close();
 ```js
 const { createTransport, GraphClient, SyncConnection } = require('./sdk');
 const transport = createTransport({ getAccessToken });             // auth, request ids, the 401 retry
-const graph = new GraphClient(transport);                          // reads only: no orgId, no peerId, no stream
+const graph = new GraphClient(transport);                          // reads only: no orgId, no peerId, no ServerSync
 const sync = new SyncConnection({ transport, orgId, peerId });     // documents, without graph, history or search
 ```
 
