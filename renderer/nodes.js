@@ -276,15 +276,14 @@ function sensitiveHidden(id) {
 }
 function blurSensitive(el, ...ids) {
   const present = ids.filter(isRealId);
-  sensitiveEls.set(el, present);
+  // The ids ride on the element, so refreshSensitive finds what is on screen by asking the page: a registry of its
+  // own kept every row a render had thrown away alive until the next toggle (#262).
+  if (present.length) el.dataset.sensitive = present.join(' '); else delete el.dataset.sensitive;
   el.classList.toggle('sensitive', present.some(sensitiveHidden));
   return el;
 }
 function refreshSensitive() {
-  for (const [el, ids] of sensitiveEls) {
-    if (!el.isConnected) sensitiveEls.delete(el);
-    else el.classList.toggle('sensitive', ids.some(sensitiveHidden));
-  }
+  for (const el of document.querySelectorAll('[data-sensitive]')) el.classList.toggle('sensitive', el.dataset.sensitive.split(' ').some(sensitiveHidden));
 }
 function loadSensitive() {
   if (!sensitiveLoading) sensitiveLoading = Promise.resolve(tana.sensitiveIds ? tana.sensitiveIds() : [])
