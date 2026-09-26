@@ -135,7 +135,7 @@ function pillCommandRows() {
     const now = needsCleanup(shownDocs());
     rows.push({ id: 'cleanup', group: 'View options', icon: 'cleanup', label: 'Clean up', hint: now ? '' : 'Nothing to clean up', disabled: !now, run: cleanupNow });
   }
-  if (onTypePage()) rows.push({ id: 'tableView', group: 'View options', icon: 'table', label: tableView() ? 'Show as list' : 'Show as table', run: () => setTableView(!tableView()) });
+  if (listPage()) rows.push({ id: 'tableView', group: 'View options', icon: tableView() ? 'outline' : 'table', label: tableLabel(), run: () => setTableView(!tableView()) });
   return rows;
 }
 // Let go of the rows a status change kept in place and draw the page the way it is now. The header pill and the
@@ -157,6 +157,7 @@ function renderPills(show) {
   // Not while the pills are staging an unsaved filter: those rows are a preview of what Save would store, and
   // re-asking the stored query would quietly replace them with something else.
   renderRefreshBtn(search && !searchRows.has(zoom.docId));
+  renderTableBtn(!!show);
   if (search && !pillsShown()) return foldPills(box);
   // Folded until now, so the pills come in rather than appear. Only on a saved search, and only for a press on the
   // button: the movement is what answers that press. A view's pills are the view, and a page you have just arrived
