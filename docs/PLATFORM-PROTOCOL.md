@@ -410,4 +410,3 @@ loro-crdt 1.x (the app's exact pin is not visible; 1.16 decodes its snapshots an
 * Server-side maximum message size, and the semantics of `want_live`, `request_document`, `sync_document`, `incomplete_sync`
   (all unused by this client).
 * Whether `x-session-id` is required; the browser sends it only when it has one.
-* The internal schema of the `content` map beyond `{nodeName, attributes, children}` (editor-owned; edit bodies through the MCP API instead).
