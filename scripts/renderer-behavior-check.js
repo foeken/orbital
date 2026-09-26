@@ -59,6 +59,8 @@ const withShims = (src) => {
   if (/\bMEETING_PAGES\b/.test(src) && !/const MEETING_PAGES =/.test(src)) src = 'globalThis.MEETING_PAGES ??= {};\n' + src;
   // Every palette page opens through showPage (renderer/palette.js, #275): the real one, over whatever of the palette's
   // state the harness declares (its own lets win; the rest start empty here).
+  // A page that lists one read from main (renderer/palette.js, #362): the real reader and the real rows around it
+  if (/\b(listRows|loadList)\(/.test(src) && !/function listRows\(/.test(src)) src = 'globalThis.palette ??= { hidden: false }; globalThis.renderPalette ??= () => {};\n' + 'globalThis.listReads ??= new Map(); globalThis.queue ??= Promise.resolve();\n' + source.match(/^function loadList\(.*?^\}/ms)[0].replace('function loadList', 'globalThis.loadList ??= function loadList') + ';\n' + source.match(/^function listRows\(.*?^\}/ms)[0].replace('function listRows', 'globalThis.listRows ??= function listRows') + ';\n' + src;
   // A page carries its rows and back step (palPage), and openPage is showPage drawn and focused.
   if (/\b(showPage|openPage|backPalette)\(/.test(src) && !/function showPage\(/.test(src)) {
     src = 'globalThis.clearTimeout ??= () => {}; globalThis.palTimer ??= null; globalThis.palSeq ??= 0; globalThis.palEnter ??= null; globalThis.palBusy ??= false; globalThis.palRows ??= []; globalThis.palIndex ??= 0; globalThis.palMode ??= "cmd"; globalThis.palPage ??= {}; globalThis.palReturn ??= null; globalThis.focused ??= () => null; globalThis.returnTarget ??= () => focused();'
@@ -7487,7 +7489,7 @@ async function runSetHueCheck() {
   assert.deepEqual(plain(api.page('green').map((r) => r.label)), ['Green'], 'typing a name narrows the list');
   assert.deepEqual(plain(api.page('268').map((r) => [r.label, r.hue])), [['Hue 268', 268]], 'a number is the hue itself, so all 360 are reachable');
   assert.deepEqual(plain(api.page('240').map((r) => r.label)), ['Blue'], 'one the list already holds is that row, not a duplicate');
-  assert.deepEqual(plain(api.page('400').map((r) => [r.label, r.disabled])), [['No colour matches', true]], 'and a hue that is not one says so');
+  assert.deepEqual(plain(api.page('400')), [], 'and a hue that is not one leaves the list empty, for the palette\'s one "No results" line (#362)');
 
   // 4. Choosing is one call, and the palette closes behind it.
   api.page().find((r) => r.label === 'Violet').run();
@@ -7643,14 +7645,14 @@ async function runRecentlyDeletedCheck() {
     const showError = (e) => { if (e) errors.push((e && e.message) || String(e)); };
     const run = (fn) => (queue = queue.then(fn).then((v) => { showError(null); return v; }, showError));
     const render = () => {};
-    const opened = [], restored = [];
+    const opened = [], restored = [], order = [];
     const goTo = (id) => { opened.push(id); };
     let answer = async () => [
       { id: '${GONE}', title: 'Weekly plan', deletedAt: new Date(Date.now() - 2 * 36e5).toISOString() },
       { id: 'tana:text:01j0gone100000000000000000', title: 'Scratch note', deletedAt: new Date(Date.now() - 3 * 864e5).toISOString() },
     ];
     const tana = { refresh: async () => {}, filters: {}, sensitiveIds: () => {},
-      deletedList: () => answer(), restoreDocument: async (id) => { restored.push(id); },
+      deletedList: () => { order.push('read'); return answer(); }, restoreDocument: async (id) => { restored.push(id); },
       archivedTypes: async () => [{ id: 'tana:type:01j0arch000000000000000000', title: 'Old project', archivedAt: new Date(Date.now() - 864e5).toISOString() }],
       unarchiveDocument: async (id) => { restored.push(id); } };
     ${functionSource('fuzzyMatch')}
@@ -7671,7 +7673,10 @@ async function runRecentlyDeletedCheck() {
        mode: () => palMode,
        escape: () => backPalette(),
        empty: () => { answer = async () => []; },
-       settle: async () => { await queue; await Promise.resolve(); },
+       fail: () => { answer = async () => { throw new Error('Not connected'); }; },
+       writeThenOpen: async () => { order.length = 0; run(async () => { for (let i = 0; i < 5; i++) await Promise.resolve(); order.push('write'); }); paletteRows('').find((r) => r.id === 'recentlyDeleted').run(); await queue; for (let i = 0; i < 6; i++) await Promise.resolve(); return [...order]; },
+       hold: () => { const held = []; answer = () => new Promise((resolve) => held.push((title) => resolve([{ id: '${GONE}', title, deletedAt: new Date().toISOString() }]))); return held; },
+       settle: async () => { await queue; for (let i = 0; i < 6; i++) await Promise.resolve(); },
        state: () => ({ restored: [...restored], opened: [...opened], errors: [...errors], closed, placeholder: palInput.placeholder }) });
   `);
 
@@ -7699,6 +7704,20 @@ async function runRecentlyDeletedCheck() {
   api.row().run();
   await api.settle();
   assert.deepEqual(plain(api.page().map((r) => [r.label, r.disabled])), [['Nothing deleted recently', true]], 'an empty list says so');
+  assert.deepEqual(plain(api.page('zz')), [], 'a query leaves the answer to the palette\'s one "No results" line, not a second line saying the list is empty (#362)');
+  api.fail();
+  api.row().run();
+  await api.settle();
+  assert.deepEqual(plain(api.page().map((r) => [r.label, r.disabled])), [['Not connected', true]], 'a read that failed says why, instead of Loading… for as long as the page is open (#362)');
+  assert.deepEqual(plain(api.page('zz').map((r) => [r.label, r.note])), [['Not connected', true]], 'with a query too, as a note, which keeps the palette\'s "No results" from appearing under it');
+  assert.match(source, /\|\| r\.node \|\| r\.note\) && !palPage\.typed/, 'renderPalette draws no "No results" under a note');
+  assert.deepEqual(plain(await api.writeThenOpen()), ['write', 'read'], 'a delete or restore still queued lands before the page reads its list');
+  const held = api.hold();
+  api.row().run(); api.row().run(); await api.settle(); // opened again before the first read answered
+  held[1]('Newer'); await api.settle();
+  held[0]('Older'); await api.settle();
+  assert.deepEqual(plain(api.page().map((r) => r.label)), ['Newer'], 'an older read that lands last is dropped: the page keeps the answer to its latest open');
+  api.empty(); api.row().run(); await api.settle();
   api.escape();
   assert.equal(api.mode(), 'cmd', 'escape on the page goes back to the command page');
   // #36 Cmd+K "Archived types": the same page shape over main's includeArchived query; Enter unarchives and opens it

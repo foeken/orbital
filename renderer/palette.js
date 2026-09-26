@@ -6,7 +6,7 @@ const palette = $('palette'), palInput = $('paletteInput'), palText = $('palette
 let palMode = 'cmd', palPage = {}, palRows = [], palIndex = 0, palBusy = false, palSeq = 0, palTimer, creationChoices = [];
 let palEnter = null; // an Enter pressed while a search was still running: 'pick' or 'create', applied when the rows land
 let meetingNow; // the active meeting as last read: undefined = not asked this open, { meeting } or { error } after
-let meetingList = null, meetingListError = null, pinMeetingDoc = null; // the meeting picker: rows, why it has none, and the node being pinned
+let meetingList = null, pinMeetingDoc = null; // the meeting picker: loadList's answer, and the node being pinned
 let todayPickerNode = null, todayPickerResults = null;
 // Enter chooses: the highlighted row, or for an @ selection ⌘↩ always creates. While the search is still out, the
 // choice is kept and made the moment the rows arrive, so the first Enter after "@" is never lost.
@@ -455,52 +455,63 @@ function openCommandPalette() {
 }
 // Escape: the page says where it came from; a page that says nothing (the command page, search) closes.
 function backPalette() { (palPage.back || closePalette)(); }
+// ---- a page that lists one read from main: Recently deleted, Archived types, Hidden items, Codex hosts, the meeting picker ----
+// The list is null while the read is out, then what main answered, or the Error it failed with. The page draws its rows
+// once it is in, and otherwise one line saying why there are none: Loading…, the failure, or its empty line for a list
+// with nothing in it. A query that matches nothing leaves the rows empty, and the palette's own "No results" says so.
+// Only the latest read of a page is kept: a page left and opened again before its first answer came would otherwise let
+// that older answer land last. A write that answers with the list (hiddenApply, hostsApply) retires the read too.
+// The read waits for the actions already queued (run): a delete or restore still in flight is in the list it reads.
+const listReads = new Map(); // mode -> the read in flight
+function loadList(mode, read, keep) {
+  const mine = {}; listReads.set(mode, mine);
+  keep(null);
+  queue.then(read).then((list) => (Array.isArray(list) ? list : []), (e) => (e instanceof Error ? e : new Error(String(e))))
+    .then((list) => { if (listReads.get(mode) !== mine) return; listReads.delete(mode); keep(list); if (palMode === mode && !palette.hidden) renderPalette(); });
+}
+function listRows(group, list, q, empty, toRows) {
+  const note = (label) => [{ group, label, disabled: true, note: true }]; // says why there are no rows, so no "No results" under it
+  if (!list) return note('Loading…');
+  if (list instanceof Error) return note(list.message);
+  const rows = toRows(list);
+  return rows.length || q || !empty ? rows : note(empty);
+}
 // ---- recently deleted: undo without the undo stack ----
 // A delete here is Tana's soft delete: the document keeps everything it had and only its deletedAt is set, so
 // restoring it is one call with its id. What nothing can answer is which ids those are — a deleted document leaves
 // the graph, so no list, search or query names it again — and the undo stack only reaches back through this
 // session, in order. So main writes down every deletion it sees (db.js) and this page reads that list back.
 const TRASH_GROUP = 'Recently deleted · ↩ restores it';
-let trashList = null; // null while the list is in flight
-function trashRows(q) {
-  const rows = (trashList || []).filter((d) => fuzzyMatch(d.title, q)).map((d) => ({ group: TRASH_GROUP, icon: 'trash', label: demoText(d.title, d.id),
-    hint: agoText(d.deletedAt), keepOpen: true, run: () => run(async () => { await tana.restoreDocument(d.id); closePalette(); goTo(d.id); }) }));
-  if (!rows.length) rows.push({ group: TRASH_GROUP, label: trashList ? 'Nothing deleted recently' : 'Loading…', disabled: true });
-  return rows;
-}
+let trashList = null; // loadList's answer
+const trashRows = (q) => listRows(TRASH_GROUP, trashList, q, 'Nothing deleted recently', (list) => list.filter((d) => fuzzyMatch(d.title, q)).map((d) => ({ group: TRASH_GROUP, icon: 'trash', label: demoText(d.title, d.id),
+  hint: agoText(d.deletedAt), keepOpen: true, run: () => run(async () => { await tana.restoreDocument(d.id); closePalette(); goTo(d.id); }) })));
 function openTrashPalette() {
-  trashList = null; openPage('trash', 'Restore something deleted', { rows: trashRows, back: BACK_TO_COMMANDS });
-  run(async () => { const list = await tana.deletedList(); trashList = Array.isArray(list) ? list : []; if (palMode === 'trash') renderPalette(); });
+  loadList('trash', () => tana.deletedList(), (list) => { trashList = list; });
+  openPage('trash', 'Restore something deleted', { rows: trashRows, back: BACK_TO_COMMANDS });
 }
 // ---- archived types: Tana archives a type instead of deleting it (it leaves every list and picker; its documents keep
 // it). An archived type is still in the graph behind includeArchived, so main answers from there, not from a local list.
 const ARCHIVED_GROUP = 'Archived types · ↩ unarchives it';
-let archivedList = null; // null while the list is in flight
-function archivedRows(q) {
-  const rows = (archivedList || []).filter((d) => fuzzyMatch(d.title, q)).map((d) => ({ group: ARCHIVED_GROUP, icon: typeGlyph(d.id), label: d.title,
-    hint: agoText(d.archivedAt), keepOpen: true, run: () => run(async () => { await tana.unarchiveDocument(d.id); closePalette(); goTo(d.id); }) }));
-  if (!rows.length) rows.push({ group: ARCHIVED_GROUP, label: archivedList ? 'No archived types' : 'Loading…', disabled: true });
-  return rows;
-}
+let archivedList = null; // loadList's answer
+const archivedRows = (q) => listRows(ARCHIVED_GROUP, archivedList, q, 'No archived types', (list) => list.filter((d) => fuzzyMatch(d.title, q)).map((d) => ({ group: ARCHIVED_GROUP, icon: typeGlyph(d.id), label: d.title,
+  hint: agoText(d.archivedAt), keepOpen: true, run: () => run(async () => { await tana.unarchiveDocument(d.id); closePalette(); goTo(d.id); }) })));
 function openArchivedPalette() {
-  archivedList = null; openPage('archived', 'Unarchive a type', { rows: archivedRows, back: BACK_TO_COMMANDS });
-  run(async () => { const list = await tana.archivedTypes(); archivedList = Array.isArray(list) ? list : []; if (palMode === 'archived') renderPalette(); });
+  loadList('archived', () => tana.archivedTypes(), (list) => { archivedList = list; });
+  openPage('archived', 'Unarchive a type', { rows: archivedRows, back: BACK_TO_COMMANDS });
 }
 // ---- hidden items (api.filters): titles every view and search skips, edited from Cmd+K ----
 // The rule lives in the group header because that is the one line in the palette that wraps.
 const HIDDEN_GROUP = 'Hidden items · whole title, case-insensitive; end with * to match a prefix';
-let hiddenList = null; // null while api.filters() is in flight
-const hiddenApply = (call) => run(async () => { hiddenList = await call(); renderPalette(); }); // resolves once the views have refreshed
-function hiddenRows(q, typed) {
-  const rows = (hiddenList || []).filter((pattern) => pattern.toLowerCase().includes(q))
-    .map((pattern) => ({ group: HIDDEN_GROUP, icon: 'any', label: pattern, hint: (pattern.endsWith('*') ? 'Prefix' : 'Exact') + ' · ↩ unhides', keepOpen: true, run: () => hiddenApply(() => tana.removeFilter(pattern)) }));
-  if (typed) rows.unshift({ group: HIDDEN_GROUP, icon: 'createNew', label: 'Hide "' + typed + '"', hint: typed.endsWith('*') ? 'Prefix' : 'Exact', keepOpen: true, run: () => { palInput.value = ''; hiddenApply(() => tana.addFilter(typed)); } });
-  if (!rows.length) rows.push({ group: HIDDEN_GROUP, label: hiddenList ? 'Nothing is hidden yet' : 'Loading…', disabled: true });
-  return rows;
-}
+let hiddenList = null; // loadList's answer, then each write's
+const hiddenApply = (call) => run(async () => { hiddenList = await call(); listReads.delete('hidden'); renderPalette(); }); // resolves once the views have refreshed
+// What is typed is offered as a title to hide, first, whether or not the list is in yet; the list below is narrowed by it.
+const hiddenRows = (q, typed) => [
+  ...(typed ? [{ group: HIDDEN_GROUP, icon: 'createNew', label: 'Hide "' + typed + '"', hint: typed.endsWith('*') ? 'Prefix' : 'Exact', keepOpen: true, run: () => { palInput.value = ''; hiddenApply(() => tana.addFilter(typed)); } }] : []),
+  ...listRows(HIDDEN_GROUP, hiddenList, typed, 'Nothing is hidden yet', (list) => list.filter((pattern) => pattern.toLowerCase().includes(q))
+    .map((pattern) => ({ group: HIDDEN_GROUP, icon: 'any', label: pattern, hint: (pattern.endsWith('*') ? 'Prefix' : 'Exact') + ' · ↩ unhides', keepOpen: true, run: () => hiddenApply(() => tana.removeFilter(pattern)) })))];
 function openHiddenPalette() {
-  hiddenList = null; openPage('hidden', 'Type a title to hide', { rows: hiddenRows, back: BACK_TO_COMMANDS });
-  hiddenApply(() => tana.filters());
+  loadList('hidden', () => tana.filters(), (list) => { hiddenList = list; });
+  openPage('hidden', 'Type a title to hide', { rows: hiddenRows, back: BACK_TO_COMMANDS });
 }
 function creationRows(q) {
   if (palBusy) return [{ group: 'Create new', label: 'Loading choices…', disabled: true }];
@@ -591,26 +602,11 @@ const byNextFirst = (now) => (a, b) => {
   const ahead = (m) => (m.end ? Date.parse(m.end) : eventStart(m)) >= now; // in progress counts as ahead, not past
   return (ahead(b) - ahead(a)) || (ahead(a) ? eventStart(a) - eventStart(b) : eventStart(b) - eventStart(a));
 };
-function loadMeetingList() {
-  meetingList = null; meetingListError = null; // null while in flight: the page says Loading…
-  tana.searchPreview(MEETING_FILTER).then(
-    // sorted once, here: the page is ordered by time and a query only filters it, so matches never reorder — and
-    // every open loads again, so the order is always against the current time rather than the one it was drawn with.
-    (rows) => { meetingList = (Array.isArray(rows) ? rows : []).sort(byNextFirst(Date.now())); },
-    (e) => { meetingList = []; meetingListError = (e && e.message) || String(e); },
-  ).then(() => { if (palMode === 'pinMeeting') renderPalette(); });
-}
-function meetingPickRows(q) {
-  if (meetingListError) return [{ group: MEETING_GROUP, label: meetingListError, disabled: true }];
-  if (!meetingList) return [{ group: MEETING_GROUP, label: 'Loading…', disabled: true }];
-  const doc = pinMeetingDoc;
-  const rows = meetingList.filter((m) => fuzzyMatch(String(m.text ?? m.title ?? ''), q))
-    .map((m) => ({ ...docRow(m, undefined, () => run(() => pinDocToMeeting(m.id, doc.id))), group: MEETING_GROUP }));
-  // With something typed, an empty list is the palette’s own "No results" line; with nothing typed it means there
-  // are no meetings to offer at all, which is worth saying.
-  if (!rows.length && !q) rows.push({ group: MEETING_GROUP, label: 'No meetings in the last week or the week ahead', disabled: true });
-  return rows;
-}
+// sorted once, here: the page is ordered by time and a query only filters it, so matches never reorder — and every
+// open loads again, so the order is always against the current time rather than the one it was drawn with.
+const loadMeetingList = () => loadList('pinMeeting', () => tana.searchPreview(MEETING_FILTER), (list) => { meetingList = Array.isArray(list) ? list.sort(byNextFirst(Date.now())) : list; });
+const meetingPickRows = (q) => listRows(MEETING_GROUP, meetingList, q, 'No meetings in the last week or the week ahead', (list) => list.filter((m) => fuzzyMatch(String(m.text ?? m.title ?? ''), q))
+  .map((m) => ({ ...docRow(m, undefined, () => run(() => pinDocToMeeting(m.id, pinMeetingDoc.id))), group: MEETING_GROUP })));
 function openMeetingPicker(doc, back) {
   // opened from the command page and from Edit pins, so Escape steps back to whichever asked (the command page by default)
   pinMeetingDoc = doc; loadMeetingList();
@@ -692,7 +688,7 @@ function classifyRows(q) {
     rows.push({ group: CLASSIFY_GROUP, icon: c.uri ? typeGlyph(c.uri) : 'none', label: c.title, hint: current ? odds + ' \u2713' : odds,
       disabled: current, keepOpen: true, run: () => applyType(doc, c.uri) });
   }
-  if (!rows.length) rows.push({ group: CLASSIFY_GROUP, label: 'No type matches', disabled: true });
+  if (!rows.length && !q) rows.push({ group: CLASSIFY_GROUP, label: 'No type matches', disabled: true }); // with a query, the palette's "No results"
   return rows;
 }
 
@@ -764,14 +760,14 @@ function searchIconsNow() {
     palBusy = false; renderPalette();
   }, (e) => { if (seq === palSeq) { palBusy = false; iconList = []; showError(e); renderPalette(); } });
 }
-function iconPickRows() {
+function iconPickRows(q) {
   const doc = iconCtx;
   if (!doc) return [];
   const rows = [];
   if (typeGlyphs.has(doc.id)) rows.push({ group: ICON_GROUP, icon: 'none', label: 'No icon', hint: 'Back to the generic glyph', keepOpen: true, run: () => applyIcon(doc, null) });
   for (const icon of iconList) rows.push({ group: ICON_GROUP, icon: icon.name, label: icon.label,
     hint: typeGlyphs.get(doc.id) === icon.name ? '✓' : '', keepOpen: true, run: () => applyIcon(doc, icon.name) });
-  if (!rows.length) rows.push({ group: ICON_GROUP, label: palBusy ? 'Loading…' : 'No icon matches', disabled: true });
+  if (!rows.length && (palBusy || !q)) rows.push({ group: ICON_GROUP, label: palBusy ? 'Loading…' : 'No icon matches', disabled: true }); // a query that finds none: "No results"
   return rows;
 }
 function openIconPalette(doc) {
@@ -810,7 +806,6 @@ function huePickRows(q) {
   }
   if (fuzzyMatch('Grey', q)) rows.push({ group: HUE_GROUP, icon: glyph, label: 'Grey', hint: doc.hue == null ? '✓' : 'No tint, whatever Tana says', keepOpen: true, run: () => applyHue(doc, 'grey') });
   if (fuzzyMatch("Tana's colour", q)) rows.push({ group: HUE_GROUP, icon: 'none', label: "Tana's colour", hint: 'Forget the override', keepOpen: true, run: () => applyHue(doc, null) });
-  if (!rows.length) rows.push({ group: HUE_GROUP, label: 'No colour matches', disabled: true });
   return rows;
 }
 function openHuePalette(doc) {
@@ -947,7 +942,7 @@ function renderPalette() {
   });
   // "No results" belongs under a list that was searched and found nothing. A typed page is not a list: the agent
   // prompt, "Discuss with …", a meeting's time or place and a field turn what is typed into their row.
-  if (!palRows.some((r) => palMode === 'cmd' || palMode === 'slash' || palMode === 'hidden' || r.node) && !palPage.typed && (palMode === 'cmd' || palMode === 'slash' || (q && !palBusy))) { const n = document.createElement('div'); n.className = 'group'; n.textContent = 'No results'; els.push(n); }
+  if (!palRows.some((r) => palMode === 'cmd' || palMode === 'slash' || palMode === 'hidden' || r.node || r.note) && !palPage.typed && (palMode === 'cmd' || palMode === 'slash' || (q && !palBusy))) { const n = document.createElement('div'); n.className = 'group'; n.textContent = 'No results'; els.push(n); }
   palList.replaceChildren(...els);
   const active = palList.querySelector('.row.active');
   if (active) active.scrollIntoView({ block: 'nearest' });
