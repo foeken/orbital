@@ -1161,6 +1161,12 @@ function renderPalette() {
     if (r.hint) { const h = document.createElement('span'); h.className = 'hint'; h.textContent = demoMeta(r.node, r.hint); blurSensitive(h, r.node && r.node.id); row.append(h); }
     row.onmousedown = (e) => e.preventDefault();
     row.onclick = () => runRow(r);
+    // the pointer moves the one highlight, as ↑/↓ do (and past the same rows): a pointer that only rests there does not
+    row.onmousemove = () => {
+      if (palIndex === i || (r.disabled && !r.id)) return;
+      palList.querySelector('.row.active')?.classList.remove('active');
+      row.classList.add('active'); palIndex = i;
+    };
     els.push(row);
   });
   // "No results" belongs under a list that was searched and found nothing. Two pages are not lists: the agent
