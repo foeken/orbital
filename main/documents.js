@@ -959,7 +959,7 @@ const ipc = {
   // Watching a node for changes: on by default where you were given access to the document itself and are not its
   // assignee. null clears the choice and falls back to that rule, so "default" stays a live answer rather than a copy.
   'notify:state': (_e, id) => notifyState(id),
-  'notify:set': (_e, id, on) => setNotify(id, on),
+  'notify:set': (e, id, on) => { const state = setNotify(id, on); settings.tellOthers(e?.sender, id); return state; }, // the choice is stored before setNotify's first await
   // Assigned to the local Codex agent: an app-local mark, not a Tana assignee (see main/documents.js).
   'codex:list': () => codexIds(),
   'doc:accessOptions': (_e, id) => op(id, async doc => access.capabilities(doc, S.me.userUri, await accessContext())),

@@ -105,7 +105,10 @@ tana.onChanged((docId, info) => {
       const row = shownDocs().find((n) => n.id === docId);
       if (row) holdRow(row);
     }
-    if (!info || info.meta !== false) { taskMetaById.delete(docId); if (typeof taskMetaFailed !== 'undefined') taskMetaFailed.delete(docId); }
+    // the watch state goes with it: its default follows the assignees, and another page's watch choice arrives this way
+    if (!info || info.meta !== false) { taskMetaById.delete(docId); notifyById.delete(docId); if (typeof taskMetaFailed !== 'undefined') taskMetaFailed.delete(docId); }
+    // and a node linked to an agent task asks what its task is doing: another page may have relinked it to another task
+    if (info && info.meta && (agentStates.has(docId) || agentTaskHosts.has(docId))) loadAgentStates();
     // The sidebar is read once per page and left alone while the page is edited: its sections are relations, and
     // typing in a document changes none of them (a task row in it is patched by patchCopies, not re-fetched).
     // Only a metadata change — assignees, audience, participants, which main is already comparing for this flag —
@@ -187,6 +190,16 @@ if (tana.onSettings) tana.onSettings((next) => {
   if (nextTheme !== themePref) showTheme(nextTheme);
   sensitiveLoading = null; loadSensitive().then(refreshSensitive); // the sensitive marks and the MCP switch are settings too, kept outside the preferences
   if (tana.mcpHidden) tana.mcpHidden().then((on) => { mcpHidden = !!on; }, () => {});
+  loadFilters(); // and so are the views' filters, the agent marks and the watch choices (main/settings.js tellOthers)
+  // a mark or a task that moved asks for the task's state and host too, or its badge waits pending for the 30 s poll;
+  // only then, since that read starts a Codex app-server child. Both: another machine writes the mark before the task.
+  const before = JSON.stringify([[...codexIds].sort(), [...agentTaskHosts].sort()]);
+  codexLoading = null;
+  Promise.all([loadCodex(), tana.codexTaskHosts ? tana.codexTaskHosts() : {}]).then(([, hosts]) => {
+    const next = JSON.stringify([[...codexIds].sort(), Object.entries(hosts || {}).sort()]);
+    if (next !== before) loadAgentStates();
+  }, () => {});
+  notifyById.clear();
   renderSoon();
 });
 if (tana.onSystemTheme) tana.onSystemTheme((t) => { if (themePref === 'system') applyTheme(t); }); // macOS appearance changes re-theme a running window

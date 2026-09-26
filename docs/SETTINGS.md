@@ -71,7 +71,9 @@ The renderer's preferences are the same store under a `pref:` prefix. preload re
 (`prefs:snapshot`), so `renderer/prefs.js` has them before the first paint and a launch is already yours rather than
 the defaults with your choices arriving a moment later; `setPref` writes one key through main. When another machine
 changes something, main sends `settings:changed` and `renderer/app.js` applies it to what is already on screen —
-theme, Home, hotkeys, the arrangements and the folded sections.
+theme, Home, hotkeys, the arrangements and the folded sections, and it reads the views' filters, the agent marks and
+the watch choices again. A write from another page or window of this machine arrives the same way
+(`settings.tellOthers`, main/settings.js), except to the page that made it.
 
 One trap, paid for once: `contextBridge` **freezes** everything it exposes, so `window.api.prefs` is a frozen
 object and the store must keep a *copy* of it (`{ ...window.api.prefs }`). Writing into the bridge's own object

@@ -492,10 +492,11 @@ const ipc = {
     return viewRows(id, filter);
   },
   'view:filter': (_e, id) => viewFilter(id),
-  'view:setFilter': (_e, id, filter) => {
+  'view:setFilter': (e, id, filter) => {
     const stored = setViewFilter(id, filter);
     if (id === S.activeView) S.activeFilter = stored;
     for (const v of S.windowViews.values()) if (v.id === id) v.filter = stored; // every window showing it
+    settings.tellOthers(e?.sender); // and every other page's copy: one left with the old filter wrote it back with its next pill
     return stored;
   },
   'search': (_e, query, scope) => search(query, scope),

@@ -1083,6 +1083,7 @@ async function runStalePaletteInvalidationCheck() {
     let searches = [{ id: searchId, title: 'saved' }, { id: keptId, title: 'beta' }];
     const TIMELINE_PAGE = 'orbital:timeline';
     let zoom = { docId: keptId };
+    const agentStates = new Map(), agentTaskHosts = new Map(), loadAgentStates = () => {};
     const taskMetaById = new Map(), kids = new Map(), extra = new Map(), fresh = new Map();
     const loadRoots = async () => {};
     const reload = async () => {};
@@ -6751,6 +6752,41 @@ function runPrefsStoreCheck() {
   console.log('ok  preferences: the store writes into its own copy, not the frozen bridge object, so a choice sticks, reaches main and lets what follows it run');
 }
 
+// Another page stored a view filter, a watch choice or an agent mark (main/settings.js tellOthers): this page's copies
+// follow. A page left with the old filter drew stale pills and wrote that filter back over the new one with its next pill.
+async function runSettingsElsewhereCheck() {
+  const api = vm.runInNewContext(`
+    let handler = null, home = null, themePref = 'light', sensitiveLoading = null, mcpHidden = false, codexLoading = null, zoom = null, view = 'library';
+    let listed = 0, codexReads = 0, stateReads = 0, stored = {}, codexIds = new Set(), marks = [], hosts = {};
+    const agentTaskHosts = new Map();
+    const tana = { onSettings: (cb) => { handler = cb; }, viewFilter: async (id) => stored[id], codexTaskHosts: async () => hosts };
+    const views = [{ id: 'library' }, { id: 'inbox' }];
+    const filters = new Map([['library', { states: ['open'] }], ['inbox', { states: ['proposed'] }]]);
+    const notifyById = new Map([['tana:text:a', { on: false }]]);
+    const hotkeys = {}, groupPref = {}, sortPref = {}, displayPref = {}, collapsedGroups = new Set(), SEARCH_ID = 'tana:search:';
+    const onTypePage = () => false, isTypeId = () => false, typeFilter = () => ({}), reload = async () => {}, mergePrefs = () => {}, pref = (k, d) => d;
+    const renderSoon = () => {}, showError = (e) => { throw e; }, showTheme = () => {}, loadSensitive = async () => {}, refreshSensitive = () => {};
+    const widenFilter = (id, f) => f, loadView = () => { listed++; };
+    const loadCodex = () => { codexReads++; codexIds = new Set(marks); return (codexLoading = Promise.resolve()); };
+    const loadAgentStates = () => { stateReads++; agentTaskHosts.clear(); for (const [id, host] of Object.entries(hosts)) agentTaskHosts.set(id, host); };
+    ${functionSource('loadFilters')}
+    ${sourceBetween('if (tana.onSettings) tana.onSettings(', 'if (tana.onSystemTheme)')}
+    ({
+      change: async (next, agents = marks, tasks = hosts) => { stored = next; marks = agents; hosts = tasks; handler({}); for (let i = 0; i < 8; i++) await Promise.resolve(); },
+      state: () => ({ library: filters.get('library'), listed, codexReads, stateReads, watch: notifyById.size }),
+    });
+  `);
+  await api.change({ library: { states: ['closed'] }, inbox: { states: ['proposed'] } }, ['tana:text:a']);
+  assert.deepEqual(plain(api.state()), { library: { states: ['closed'] }, listed: 1, codexReads: 1, stateReads: 1, watch: 0 },
+    'the filter another page stored replaces this page’s copy and lists the view again; the agent marks, a new mark’s task state and the watch states are read afresh');
+  await api.change({ library: { states: ['closed'] }, inbox: { states: ['proposed'] } });
+  assert.deepEqual([api.state().listed, api.state().stateReads], [1, 1], 'a settings change that leaves this view’s filter and the marks alone lists nothing and starts no Codex read');
+  // Another machine writes the mark first and the task it became later: the second change moves only the task
+  await api.change({ library: { states: ['closed'] }, inbox: { states: ['proposed'] } }, ['tana:text:a'], { 'tana:text:a': 'local' });
+  assert.equal(api.state().stateReads, 2, 'a task that arrives after its mark reads the state again');
+  console.log('ok  settings from another page: view filters, agent marks and watch states follow, and the view is listed again only when its filter moved');
+}
+
 
 // A click that misses the words still belongs to the row, and a row is bigger than its text: the padding around
 // it, and the blank line a soft break leaves inside it. Layout is the input here, so the geometry and the
@@ -6843,7 +6879,7 @@ async function runToastCheck() {
   console.log('ok  toast: notices and errors fade at the foot of the window and leave the relogin line alone');
 }
 
-const checks = [runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck,runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck];
+const checks = [runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck,runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck];
 // The chips under a zoomed title, driven through the shipped line itself: a typed document shows its type whatever
 // kind it is, and the kind chip (task, doc, meeting, space, chat…) stays out of the header, as it always did for a task.
 function runZoomTypeChipCheck() {
@@ -7006,6 +7042,7 @@ async function runLiveUpdateBurstCheck() {
     const taskMetaById = new Map(), taskMetaFailed = new Map(), relatedBy = new Map(), kids = new Map();
     const outlinesOf = (docId) => [...kids.keys()].filter((id) => id === docId || id.startsWith(docId + '|'));
     const patchDoc = async (id) => { patched.push(id); }, reload = async (id) => { reloaded.push(id); }, loadPins = () => {}, refreshRelated = () => {};
+    const agentStates = new Map([['tana:text:01j0agent000000000000000000', 'working']]), agentTaskHosts = new Map(), statusReads = [], loadAgentStates = () => statusReads.push(1);
     const loadRoots = async () => 'rows'; // a resolved value, which is what .then(renderSoon) hands the queue
     const showError = (error) => { throw error; };
     const tana = { onChanged: (fn) => { listener = fn; } };
@@ -7018,6 +7055,7 @@ async function runLiveUpdateBurstCheck() {
       patched: () => patched.splice(0),
       open: (id) => { kids.set(id, []); kids.set(id + '|tana:type:t?attribute=a', []); },
       page: (id) => { zoom = { docId: id }; },
+      statusReads: () => statusReads.splice(0).length,
     });
   `);
 
@@ -7045,6 +7083,12 @@ async function runLiveUpdateBurstCheck() {
   assert.deepEqual(plain(api.reloaded()), ['orbital:timeline']);
   api.flush();
   assert.deepEqual(plain(api.drawn()), [false], 'and the force does not leak into the frame after it');
+  // A node linked to an agent task whose metadata moved (another page relinked it) asks what its task is doing now;
+  // any other node's metadata, or a linked node's plain edit, starts no status read
+  api.change('tana:text:01j0agent000000000000000000', { meta: true }); api.change('tana:text:01j0other000000000000000000', { meta: true });
+  api.change('tana:text:01j0agent000000000000000000', { meta: false });
+  assert.equal(api.statusReads(), 1, 'a linked node\u2019s metadata change reads its task\u2019s status, and nothing else does');
+  await new Promise(setImmediate); api.flush(); api.drawn(); api.reloaded(); api.patched();
 
   api.page('library'); api.change(null);
   await new Promise(setImmediate);

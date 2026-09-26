@@ -167,9 +167,21 @@ function migrate(doc) {
   });
 }
 // A change to the document, wherever it came from: the other machine's, or our own write coming back.
+// A watch choice and an agent task are each about one document, and a page draws them with that document (the bell,
+// the Tracking section, the agent badge), so every document whose entry another machine moved is announced as a
+// metadata change of its own, as tellOthers does for this machine's other pages.
+const PER_DOCUMENT = ['notify', 'codexTask'];
 function applyRemote(id) {
   if (!docId || id !== docId) return false;
-  return hydrate().then((changed) => { if (changed) send('settings:changed', prefs()); return changed; }).catch((e) => { report(e); return false; });
+  const before = PER_DOCUMENT.map((key) => load()[key] || {});
+  return hydrate().then((changed) => {
+    if (!changed) return changed;
+    send('settings:changed', prefs());
+    const moved = new Set();
+    PER_DOCUMENT.forEach((key, i) => { const was = before[i], now = load()[key] || {}; for (const doc of Object.keys({ ...was, ...now })) if (JSON.stringify(was[doc]) !== JSON.stringify(now[doc])) moved.add(doc); });
+    for (const doc of moved) send('outline:changed', doc, { meta: true });
+    return changed;
+  }).catch((e) => { report(e); return false; });
 }
 
 const synced = () => Object.fromEntries(Object.entries(load()).filter(([key]) => isSynced(key)));
@@ -180,5 +192,19 @@ const prefs = () => Object.fromEntries(Object.entries(load()).filter(([key]) => 
 const setPref = (key, value) => { if (typeof key !== 'string' || !key || key.includes(':')) throw new Error('Not a preference name'); return set(PREF + key, value); };
 const settingsDocId = () => docId;
 const reset = () => { cache = null; docId = null; opening = null; }; // tests, and a second login
+// A setting one page writes reaches every other page and window at once: applyRemote announces only what another
+// machine changed, since this machine's own write comes back from Tana as nothing new. The writer is left out, because
+// it already holds the value and an older snapshot arriving late would undo a newer choice there. Every handler that
+// writes a setting a page keeps a copy of calls this (#228: preferences, sensitive marks, the MCP switch; view
+// filters, watch choices and agent marks were left out and a stale page wrote its old filter back). docId: the
+// document a choice is about, whose metadata the other pages read again, since that is where its watch state and its
+// agent badge are drawn.
+function tellOthers(sender, docId) {
+  const next = prefs();
+  for (const w of S.windows || []) if (!w.isDestroyed()) for (const p of w.panes) if (p.webContents !== sender && !p.webContents.isDestroyed()) {
+    p.webContents.send('settings:changed', next);
+    if (docId) p.webContents.send('outline:changed', docId, { meta: true });
+  }
+}
 
-module.exports = { get, set, prefs, setPref, flush, hydrate, applyRemote, synced, settingsDocId, isSynced, reset, TITLE, ROOT, POINTER, PREF };
+module.exports = { get, set, prefs, setPref, flush, hydrate, applyRemote, synced, settingsDocId, isSynced, reset, tellOthers, TITLE, ROOT, POINTER, PREF };

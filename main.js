@@ -14,7 +14,7 @@ const agent = require('./main/agent');
 const ai = require('./main/ai');
 const { S, VIEWS, errText, idKind, isSearch, isSpace, today, redoStack, report, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
 const { cachedNodeHue, graphRow, rememberNodeHue, rememberType, toNode } = require('./main/rows');
-const { accessContext, archivedTypes, chatOutline, createDocument, creationOptions, discussWith, documentAction, followSummary, history, setCodex, onChange, op, outlineWithReferences, setSensitive, setType, setTypeHue, typeCandidates, typeChoices, typeList } = require('./main/documents');
+const { accessContext, archivedTypes, chatOutline, codexIds, createDocument, creationOptions, discussWith, documentAction, followSummary, history, setCodex, onChange, op, outlineWithReferences, setSensitive, setType, setTypeHue, typeCandidates, typeChoices, typeList } = require('./main/documents');
 const { changesOf, related, searchChildren, spaceChildren, summaryChanges, unwatchRelated, watchRelated } = require('./main/related');
 const { announceNewInbox, watchInbox, inboxCount, listFilter, refresh, search, searchCreate, searchTitle, setMcpHidden, settingsReady, start, viewFilter, viewRows } = require('./main/views');
 const { nodePin, pinTree, weekNode, weekTitle } = require('./main/pins');
@@ -291,13 +291,7 @@ function firstHelp(wc, theme) {
   return true;
 }
 ipcMain.handle('help:claim', async (e, theme) => { await settingsReady(); return firstHelp(e && e.sender, theme); });
-// A setting one page writes reaches every other page and window at once: settings.applyRemote announces only what
-// another machine changed, since this machine's own write comes back from Tana as nothing new. The writer is left
-// out, because it already holds the value and an older snapshot arriving late would undo a newer choice there.
-const tellOthers = (sender) => {
-  const synced = settings.prefs();
-  for (const w of S.windows) if (!w.isDestroyed()) for (const p of w.panes) if (p.webContents !== sender && !p.webContents.isDestroyed()) p.webContents.send('settings:changed', synced);
-};
+const { tellOthers } = settings; // a setting one page writes reaches the others (main/settings.js)
 ipcMain.handle('prefs:set', (e, key, value) => { const stored = settings.setPref(key, value); tellOthers(e?.sender); return stored; });
 ipcMain.handle('openai:setKey', (_e, key) => {
   if (typeof key !== 'string' || !key.trim()) throw new Error('OpenAI API key cannot be empty');
@@ -395,23 +389,40 @@ async function assignToAgent(id, prompt, model, host) {
   if (plan.queue) queueToTask(plan.threadId, plan.queue);
   return result;
 }
-ipcMain.handle('codex:set', async (_e, id, on, prompt, model, host) => {
+ipcMain.handle('codex:set', async (e, id, on, prompt, model, host) => {
   // Unassigning lets go of the link as well: the next assignment is a new task, not a return to the old one. The
   // Codex task itself is left alone — it is the user's, with its own history — and so is the Tana context.
   // Letting go of the link lets go of the writer with it: a child still holding that thread is what makes Codex
   // refuse to open it. The Codex task itself is untouched — not deleted, not archived — so its history stays.
-  if (!on) { const result = await setCodex(id, false, prompt); agent.clearCodexTask(id); await agent.releaseTask(id); return result; }
-  return assignToAgent(id, prompt, model, host);
+  // The agent mark is a setting the other pages draw (the badge, the Agent section): they hear of it once the change
+  // has gone through, so a handoff that failed, which the page that asked shows as unassigned, shows so everywhere.
+  let result;
+  if (!on) { result = await setCodex(id, false, prompt); agent.clearCodexTask(id); await agent.releaseTask(id); }
+  else {
+    // A handoff that fails leaves no mark behind on a node that had none: the mark is a synced setting, so it would
+    // reach the other machines and the next launch as a pending badge for work nobody took. It is taken back the way
+    // an unassign takes it, the Codex task (if one was made) and the context in the node left alone; a node that was
+    // already assigned keeps its assignment.
+    const was = codexIds().includes(id);
+    try { result = await assignToAgent(id, prompt, model, host); }
+    catch (error) {
+      if (!was && codexIds().includes(id)) { await setCodex(id, false); agent.clearCodexTask(id); await agent.releaseTask(id).catch(() => {}); }
+      throw error;
+    }
+  }
+  tellOthers(e?.sender, id); // the node too: a relink keeps the mark and the host, and only its task moved
+  return result;
 });
 // Linking a node to a Codex task that already exists (#143): the link Codex copies, codex://threads/<id>, or the bare
 // id. The node takes the local agent mark the way an assignment does, as a task on this machine, where a pasted
 // link can only have come from; no task is started and nothing is written to the node.
-ipcMain.handle('codex:link', async (_e, id, link) => {
+ipcMain.handle('codex:link', async (e, id, link) => {
   if (typeof id !== 'string' || !/^tana:[a-z-]+:[0-9a-z]{26}$/.test(id)) throw new Error('Not a Tana node');
   const threadId = String(link || '').trim().replace(/^codex:\/\/threads\//i, '').replace(/\/$/, '');
   if (!agent.THREAD_ID.test(threadId)) throw new Error('Paste a Codex task link: codex://threads/…');
   const result = await setCodex(id, true);
   agent.setCodexTask(id, threadId, 'local');
+  tellOthers(e?.sender, id);
   return result;
 });
 // The current request, delivered to the task this node already has. Best effort on purpose: the task is open in

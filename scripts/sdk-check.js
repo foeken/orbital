@@ -1029,7 +1029,7 @@ async function main() {
     assert.equal((await backend.handlers.get('sensitive:list')(null)).join(), '', 'and unmarking takes it out again');
     // A setting one page writes reaches the other page of a split and every other window at once, since the write
     // coming back from Tana is nothing new to main; the page that wrote it hears nothing (issue #228).
-    const heard = [], pane = (name) => ({ webContents: { isDestroyed: () => false, send: (channel, synced) => heard.push([name, channel, synced && synced.theme]) } });
+    const heard = [], pane = (name) => ({ webContents: { isDestroyed: () => false, send: (channel, synced) => heard.push([name, channel, typeof synced === 'string' ? synced : synced && synced.theme]) } });
     const left = pane('left'), right = pane('right'), other = pane('other');
     backend.S.windows.add({ isDestroyed: () => false, panes: [left, right] }).add({ isDestroyed: () => false, panes: [other] });
     await backend.handlers.get('prefs:set')({ sender: left.webContents }, 'theme', 'dark');
@@ -1037,6 +1037,33 @@ async function main() {
     heard.length = 0;
     await backend.handlers.get('sensitive:set')({ sender: right.webContents }, marked, false);
     assert.deepEqual(heard.map(([name]) => name), ['left', 'other'], 'a sensitive mark tells the other pages too');
+    // So does every other setting a page keeps a copy of: a view's filter (a page left with the old one drew stale
+    // pills and wrote it back with its next one), a watch choice, whose document the others read again for its bell,
+    // and an agent mark, which draws the badge and the Agent section.
+    const others = () => heard.splice(0).filter(([, channel]) => channel !== 'sync:status'); // the failed state read reports its status
+    others(); // what the sensitive mark sent
+    await backend.handlers.get('view:setFilter')({ sender: left.webContents }, 'library', { states: ['closed'] });
+    assert.deepEqual(others().map(([name, channel]) => name + ' ' + channel), ['right settings:changed', 'other settings:changed'], 'a view filter tells the other pages');
+    const watchedDoc = 'tana:text:' + ulid();
+    await backend.handlers.get('notify:set')({ sender: right.webContents }, watchedDoc, true).catch(() => {}); // the state read after the write needs a document this runtime lacks
+    assert.deepEqual(others().map(([name, channel, value]) => [name, channel === 'outline:changed' ? value : channel]), [['left', 'settings:changed'], ['left', watchedDoc], ['other', 'settings:changed'], ['other', watchedDoc]],
+      'a watch choice tells the other pages, and has them read that document’s metadata again');
+    await backend.handlers.get('codex:link')({ sender: left.webContents }, watchedDoc, '00000000-0000-4000-8000-000000000000');
+    assert.deepEqual(others().map(([name, channel]) => name + ' ' + channel), ['right settings:changed', 'right outline:changed', 'other settings:changed', 'other outline:changed'],
+      'an agent mark tells the other pages too, with the node, since a relink moves only its task');
+    // A watch choice another machine made reaches every page as that document's metadata change, as a local one does.
+    const remoteWatch = 'tana:text:' + ulid(), settingsDoc = docs.get(settings.settingsDocId());
+    await settings.flush(); // this machine's writes are in the document before another machine's land on top
+    settingsDoc.transact((loro) => loro.getMap(settings.ROOT).set('notify', JSON.stringify({ ...settings.get('notify'), [remoteWatch]: true })));
+    await settings.applyRemote(settingsDoc.id);
+    assert.deepEqual(others().filter(([, channel]) => channel === 'outline:changed').map(([name, , value]) => [name, value]), [['left', remoteWatch], ['right', remoteWatch], ['other', remoteWatch]],
+      'a watch choice from another machine has every page read that document again');
+    // So does an agent task another machine linked or relinked: the mark and the host can stay the same while the task moves.
+    settingsDoc.transact((loro) => loro.getMap(settings.ROOT).set('codexTask', JSON.stringify({ ...settings.get('codexTask'), [watchedDoc]: { host: 'local', threadId: '00000000-0000-4000-8000-000000000001' } })));
+    await settings.applyRemote(settingsDoc.id);
+    assert.deepEqual(others().filter(([, channel]) => channel === 'outline:changed').map(([name, , value]) => [name, value]), [['left', watchedDoc], ['right', watchedDoc], ['other', watchedDoc]],
+      'an agent task relinked on another machine has every page read that node again');
+    for (const key of ['viewFilter:library', 'notify', 'codex', 'codexPrompt', 'codexTask']) settings.set(key, undefined);
     backend.S.windows.clear(); settings.setPref('theme', undefined); await settings.flush();
     // Signed out, both halves of a split are the same login button: the left one fills the window, the right one hides.
     const box = () => ({ setBounds(b) { this.bounds = b; }, setVisible(v) { this.visible = v; } }), split = { getContentBounds: () => ({ width: 1000, height: 600 }), panes: [box(), box()] };
@@ -2885,6 +2912,10 @@ async function main() {
     backend.electron.shell.refuse = true;
     await assert.rejects(() => backend.handlers.get('codex:set')(null, task.id, true, 'Try again'),
       'an assignment that cannot open Codex fails rather than claiming delegation');
+    // ...and leaves no mark behind: the mark is a synced setting, so another machine and the next launch would show a
+    // pending badge for a handoff the page that asked reported as failed.
+    assert.equal(await assigned(), '', 'a failed handoff takes back the mark it made');
+    assert.equal(backend.agent.codexTaskFor(task.id), null, 'and the task link');
     backend.electron.shell.refuse = false;
     // Unassigning opens nothing at all: it takes the assignment away and leaves the task and the context alone.
     const openedBefore = backend.opened.length;
