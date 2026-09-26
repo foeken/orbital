@@ -49,7 +49,7 @@ function parseMeetingTime(text, start, length, now = new Date()) {
   const e0 = m && m[3] ? at(+m[3], +(m[4] || 0)) : s0 + length;
   return Number.isFinite(s0) && Number.isFinite(e0) && e0 > s0 ? { start: s0, end: e0 } : null;
 }
-function meetingTimeRows(typed) {
+function meetingTimeRows(q, typed) {
   const info = meetingCtx && meetingCtx.info, words = (typed || '').trim(), group = 'Change time';
   if (!info) return [];
   if (!words) return [{ group, icon: 'calendar', label: 'Type a day and/or a time: 14:00, tomorrow 9:30, fri 10:00-11:30', disabled: true }];
@@ -57,7 +57,7 @@ function meetingTimeRows(typed) {
   if (!when) return [{ group, icon: 'calendar', label: 'No time in \u201C' + words + '\u201D', disabled: true }];
   return [{ group, icon: 'calendar', label: meetingSpan(when.start, when.end), hint: '\u21A9', run: () => editMeetingNow({ start: when.start, end: when.end }) }];
 }
-function meetingLocationRows(typed) {
+function meetingLocationRows(q, typed) {
   const info = meetingCtx && meetingCtx.info, words = (typed || '').trim(), group = 'Change location';
   if (!info) return [];
   if (words) return [{ group, icon: 'globe', label: 'Set location to \u201C' + words + '\u201D', hint: '\u21A9', run: () => editMeetingNow({ location: words }) }];
@@ -74,8 +74,8 @@ function loadAttendeePool() {
 }
 // Tana's suggestions first (people you meet, with their email), then the org's members they do not already name.
 // Whoever is on the meeting already — by grant, by profile or by email — is not offered again, as in Tana's picker.
-function meetingAttendeeRows(typed) {
-  const info = meetingCtx && meetingCtx.info, words = (typed || '').trim(), q = words.toLowerCase(), group = 'Add attendee';
+function meetingAttendeeRows(q, typed) {
+  const info = meetingCtx && meetingCtx.info, words = (typed || '').trim(), group = 'Add attendee';
   if (!info) return [];
   if (!attendeePool) return [{ group, label: 'Loading\u2026', disabled: true }];
   const here = new Set([...(info.participants || []), ...(info.attendees || []).flatMap((a) => [a.identityUri, a.email && a.email.toLowerCase()])].filter(Boolean));
@@ -103,8 +103,6 @@ function editMeetingNow(change, stay) {
   });
 }
 function openMeetingPage(mode, placeholder) {
-  showPage(mode, placeholder);
   if (mode === 'meetingAttendee') loadAttendeePool();
-  renderPalette(); palInput.focus();
+  openPage(mode, placeholder, { rows: { meetingTime: meetingTimeRows, meetingLocation: meetingLocationRows, meetingAttendee: meetingAttendeeRows }[mode], back: BACK_TO_COMMANDS, typed: true });
 }
-const MEETING_PAGES = { meetingTime: meetingTimeRows, meetingLocation: meetingLocationRows, meetingAttendee: meetingAttendeeRows };

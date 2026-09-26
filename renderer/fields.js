@@ -18,7 +18,7 @@ const fieldAt = (el) => (el && el.classList && el.classList.contains('fchoice') 
 let palField = null;     // the field ⌘K was opened on
 let fieldReturn = null;  // the field to give the focus back to when the palette closes (it is no row: returnFocus cannot)
 let fieldLinkCtx = null; // the link field the search palette is picking for
-let fieldCtx = null, fieldPage = () => [], fieldBack = () => closePalette(), fieldKeys = null; // the open field page
+let fieldCtx = null; // what the open field page is about
 let editingType = null; // the type page whose field definitions are drawn under its title (renderer/render.js renderFields)
 function focusField(key) { const el = queryRow('.fchoice[data-key="' + CSS.escape(key) + '"]'); if (el) el.focus(); }
 
@@ -100,10 +100,8 @@ function openCellChooser(node, key, def, back) {
 }
 // ---- a field page in the palette: one mode, the rows and the way back given by whoever opens it ----
 function openFieldPage(ctx, rows, placeholder, back, text = '', keys = null) {
-  fieldCtx = ctx; fieldPage = rows; fieldKeys = keys;
-  fieldBack = back || (() => closePalette());
-  anchorPalette(null); showPage('field', placeholder, text);
-  renderPalette(); palInput.focus();
+  fieldCtx = ctx; anchorPalette(null);
+  openPage('field', placeholder, { rows, back, keys, typed: true }, text);
 }
 function optionRows(q) {
   const ctx = fieldCtx, f = ctx.field, group = f.label || 'Value', many = holdsMany(f);
@@ -242,7 +240,7 @@ function choiceKeys(e) {
 // (typeListCache is declared in renderer/pills.js, whose Type pill lists the same types)
 function openTargetsPage(ctx) {
   openFieldPage(ctx, targetRows, 'Link to types…', openCommandPalette);
-  run(async () => { typeListCache = await tana.typeList(); if (palMode === 'field' && fieldPage === targetRows) renderPalette(); });
+  run(async () => { typeListCache = await tana.typeList(); if (palPage.rows === targetRows) renderPalette(); });
 }
 function targetRows(q) {
   const ctx = fieldCtx, to = plainDef(ctx.def.to), group = (ctx.def.title || 'Field') + ' links to';

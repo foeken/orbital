@@ -110,11 +110,11 @@ kbd? }`.
   it. The recorder refuses the combos in `RESERVED` (renderer/palette.js) and any combo another row has. A key the
   outline's own keydown answers to must compare against `hotkeyFor(id)` and `preventDefault`, so the row does not
   run twice.
-- **A palette page** (a second level): an `openXPalette()` that calls `showPage(mode, placeholder)`, sets its own
-  context, starts its read, calls `renderPalette()` and ends with `palInput.focus()` (`showPage` does not move focus,
-  and a recorded key opens the page with the palette closed); a `xRows(q)` that `renderPalette` uses for that `palMode` (or
-  a table of pages like `MEETING_PAGES` in renderer/meeting.js); and the mode in `SECOND_LEVEL` in `backPalette`, so
-  Escape steps back to the command page.
+- **A palette page** (a second level): a `xRows(q, typed)` answering its rows (`q` lowercased, `typed` as typed), and an
+  `openXPalette()` that sets its context, starts its read and calls
+  `openPage(mode, placeholder, { rows: xRows, back: BACK_TO_COMMANDS })` (renderer/palette.js). The page is everything
+  the palette needs: `back` is where Escape goes (closing when absent), `keys(e)` answers a key first, and `typed: true`
+  marks a page whose row is what you type, so no "No results" is drawn under it. Nothing else registers it.
 - Document the row and its key in docs/OUTLINER.md (Palette), and add a harness in
   scripts/renderer-behavior-check.js when the row decides something (`runMultiTaskPaletteCheck`,
   `runReservedComboCheck` and `runPaletteSkipCheck` are examples).

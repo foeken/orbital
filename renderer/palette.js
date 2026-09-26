@@ -3,10 +3,10 @@
 
 // ---- palette: Cmd+K commands (Views, Actions; documents are Cmd+S live search, api.search) ----
 const palette = $('palette'), palInput = $('paletteInput'), palText = $('paletteText'), palList = $('paletteList');
-let palMode = 'cmd', palRows = [], palIndex = 0, palBusy = false, palSeq = 0, palTimer, creationChoices = [];
+let palMode = 'cmd', palPage = {}, palRows = [], palIndex = 0, palBusy = false, palSeq = 0, palTimer, creationChoices = [];
 let palEnter = null; // an Enter pressed while a search was still running: 'pick' or 'create', applied when the rows land
 let meetingNow; // the active meeting as last read: undefined = not asked this open, { meeting } or { error } after
-let meetingList = null, meetingListError = null, pinMeetingDoc = null, pinMeetingBack = null; // the meeting picker: rows, why it has none, the node being pinned, and the page escape returns it to
+let meetingList = null, meetingListError = null, pinMeetingDoc = null; // the meeting picker: rows, why it has none, and the node being pinned
 let todayPickerNode = null, todayPickerResults = null;
 // Enter chooses: the highlighted row, or for an @ selection ⌘↩ always creates. While the search is still out, the
 // choice is kept and made the moment the rows arrive, so the first Enter after "@" is never lost.
@@ -434,33 +434,26 @@ function pillRowsFor(def, q) {
 }
 // Every page of the palette starts here (#275): what the last page left behind — its rows, a search still debounced or
 // in flight, an Enter waiting on it, busy, the prompt editor — is let go of, and the page is up with its field.
-// The caller sets its own context, starts its own read, and draws.
-function showPage(mode, placeholder, value = '') {
+// A page is what the palette asks of it: { rows(q, typed) } draws it on every keystroke (q lowercased, typed as
+// typed), back is where Escape goes (closing the palette when there is none), keys(e) answers a key before the
+// palette does, and typed: true marks a page whose rows are what you type, which has no "No results" to show.
+function showPage(mode, placeholder, page, value = '') {
   clearTimeout(palTimer); palTimer = null; ++palSeq; palEnter = null; promptEditor(false);
-  palMode = mode; palRows = []; palIndex = 0; palBusy = false; palette.hidden = false;
+  palMode = mode; palPage = page || {}; palRows = []; palIndex = 0; palBusy = false; palette.hidden = false;
   palInput.placeholder = placeholder; palInput.value = value;
 }
+// showPage, drawn, with the field focused: the whole of opening most pages, once their context is set. A page that
+// starts something the first draw depends on (Set icon's busy search) calls showPage and draws itself.
+function openPage(mode, placeholder, page, value) { showPage(mode, placeholder, page, value); renderPalette(); palInput.focus(); }
+const BACK_TO_COMMANDS = () => openCommandPalette(); // a page opened from the command page steps back to it
 function openPillPalette(id) {
-  showPage('pill', 'Choose ' + id); pillCtx = id; renderPalette(); palInput.focus();
+  pillCtx = id; openPage('pill', 'Choose ' + id, { rows: pillRows, back: BACK_TO_COMMANDS });
 }
 function openCommandPalette() {
-  showPage('cmd', 'Run a command'); pillCtx = null; refreshChatGPTStatus(); renderPalette(); palInput.focus();
+  pillCtx = null; refreshChatGPTStatus(); openPage('cmd', 'Run a command', { rows: paletteRows });
 }
-function backPalette() {
-  const SECOND_LEVEL = new Set(['setType', 'classify', 'trash', 'archived', 'discuss', 'setIcon', 'setHue', 'openaiKey', 'chatgpt', 'pins', 'pinDate', 'create', 'hidden', 'hosts', 'agentLink', ...Object.keys(MEETING_PAGES)]); // pages opened from the command page
-  if (palMode === 'pill') openCommandPalette();
-  // Escape on the prompt page cancels the whole thing rather than stepping back a level: the page was opened to
-  // answer one question, and abandoning that question is abandoning the assignment. Nothing is written either way.
-  else if (palMode === 'agentPrompt') closePalette();
-  else if (palMode === 'visibilityPeople') openVisibilityPalette(palDoc);
-  // The meeting picker is opened from two places — the command page and Edit pins — so it steps back to whichever
-  // one asked for it rather than to a fixed one (openMeetingPicker's second argument, the command page by default).
-  else if (palMode === 'pinMeeting') pinMeetingBack();
-  else if (palMode === 'field') fieldBack(); // back to where the field page was opened from: the field, or the command page
-  // These pickers were opened from the command page and step back to it, like every other second level here.
-  else if (SECOND_LEVEL.has(palMode)) openCommandPalette();
-  else closePalette();
-}
+// Escape: the page says where it came from; a page that says nothing (the command page, search) closes.
+function backPalette() { (palPage.back || closePalette)(); }
 // ---- recently deleted: undo without the undo stack ----
 // A delete here is Tana's soft delete: the document keeps everything it had and only its deletedAt is set, so
 // restoring it is one call with its id. What nothing can answer is which ids those are — a deleted document leaves
@@ -475,8 +468,7 @@ function trashRows(q) {
   return rows;
 }
 function openTrashPalette() {
-  showPage('trash', 'Restore something deleted');
-  trashList = null; renderPalette(); palInput.focus();
+  trashList = null; openPage('trash', 'Restore something deleted', { rows: trashRows, back: BACK_TO_COMMANDS });
   run(async () => { const list = await tana.deletedList(); trashList = Array.isArray(list) ? list : []; if (palMode === 'trash') renderPalette(); });
 }
 // ---- archived types: Tana archives a type instead of deleting it (it leaves every list and picker; its documents keep
@@ -490,8 +482,7 @@ function archivedRows(q) {
   return rows;
 }
 function openArchivedPalette() {
-  showPage('archived', 'Unarchive a type');
-  archivedList = null; renderPalette(); palInput.focus();
+  archivedList = null; openPage('archived', 'Unarchive a type', { rows: archivedRows, back: BACK_TO_COMMANDS });
   run(async () => { const list = await tana.archivedTypes(); archivedList = Array.isArray(list) ? list : []; if (palMode === 'archived') renderPalette(); });
 }
 // ---- hidden items (api.filters): titles every view and search skips, edited from Cmd+K ----
@@ -499,16 +490,15 @@ function openArchivedPalette() {
 const HIDDEN_GROUP = 'Hidden items · whole title, case-insensitive; end with * to match a prefix';
 let hiddenList = null; // null while api.filters() is in flight
 const hiddenApply = (call) => run(async () => { hiddenList = await call(); renderPalette(); }); // resolves once the views have refreshed
-function hiddenRows(q) {
-  const rows = (hiddenList || []).filter((pattern) => pattern.toLowerCase().includes(q.toLowerCase()))
+function hiddenRows(q, typed) {
+  const rows = (hiddenList || []).filter((pattern) => pattern.toLowerCase().includes(q))
     .map((pattern) => ({ group: HIDDEN_GROUP, icon: 'any', label: pattern, hint: (pattern.endsWith('*') ? 'Prefix' : 'Exact') + ' · ↩ unhides', keepOpen: true, run: () => hiddenApply(() => tana.removeFilter(pattern)) }));
-  if (q) rows.unshift({ group: HIDDEN_GROUP, icon: 'createNew', label: 'Hide "' + q + '"', hint: q.endsWith('*') ? 'Prefix' : 'Exact', keepOpen: true, run: () => { palInput.value = ''; hiddenApply(() => tana.addFilter(q)); } });
+  if (typed) rows.unshift({ group: HIDDEN_GROUP, icon: 'createNew', label: 'Hide "' + typed + '"', hint: typed.endsWith('*') ? 'Prefix' : 'Exact', keepOpen: true, run: () => { palInput.value = ''; hiddenApply(() => tana.addFilter(typed)); } });
   if (!rows.length) rows.push({ group: HIDDEN_GROUP, label: hiddenList ? 'Nothing is hidden yet' : 'Loading…', disabled: true });
   return rows;
 }
 function openHiddenPalette() {
-  showPage('hidden', 'Type a title to hide');
-  hiddenList = null; renderPalette(); palInput.focus();
+  hiddenList = null; openPage('hidden', 'Type a title to hide', { rows: hiddenRows, back: BACK_TO_COMMANDS });
   hiddenApply(() => tana.filters());
 }
 function creationRows(q) {
@@ -516,7 +506,7 @@ function creationRows(q) {
   return creationChoices.filter((choice) => fuzzyMatch(choice.title, q)).map((choice) => ({ group: choice.kind === 'custom' ? 'Workspace types' : 'Create new', icon: choice.icon, label: choice.title, hint: choice.selectable ? '' : choice.reason || 'Unavailable', disabled: !choice.selectable, keepOpen: true, run: () => startCreation(choice) }));
 }
 function openCreationPalette() {
-  showPage('create', 'Choose what to create'); renderPalette(); palInput.focus();
+  openPage('create', 'Choose what to create', { rows: creationRows, back: BACK_TO_COMMANDS });
   loadCreationChoices();
 }
 // the create choices feed both the Cmd+K "Create new …" list and the "/" menu
@@ -621,8 +611,9 @@ function meetingPickRows(q) {
   return rows;
 }
 function openMeetingPicker(doc, back) {
-  pinMeetingDoc = doc; pinMeetingBack = back || openCommandPalette; showPage('pinMeeting', 'Pin to which meeting?');
-  loadMeetingList(); renderPalette(); palInput.focus();
+  // opened from the command page and from Edit pins, so Escape steps back to whichever asked (the command page by default)
+  pinMeetingDoc = doc; loadMeetingList();
+  openPage('pinMeeting', 'Pin to which meeting?', { rows: meetingPickRows, back: back || BACK_TO_COMMANDS });
 }
 // ---- Set type: the types this document can be given, and "No type", which takes the one it has off ----
 // Which types those are is main's answer (main/documents.js typeChoices): a type applies to documents or to meetings,
@@ -661,8 +652,8 @@ function typeRows(q) {
   return rows;
 }
 function openTypePalette(doc) {
-  typeCtx = doc; showPage('setType', 'Set type to…');
-  loadTypeList(doc); renderPalette(); palInput.focus();
+  typeCtx = doc; loadTypeList(doc);
+  openPage('setType', 'Set type to…', { rows: typeRows, back: BACK_TO_COMMANDS });
 }
 // ---- Classify type: the model weighs the types Set type would offer, "No type" among them ----
 // One call per open (main/ai.js classifyType). A type it is sure of is applied at once, as choosing it on Set type
@@ -672,7 +663,7 @@ const CLASSIFY_GROUP = 'Classify type';
 const CLASSIFY_SURE = 0.8; // ponytail: the model's own odds, uncalibrated; raise it if it applies types you would not
 let classifyCtx = null, classifyAI = null; // the document, and { state: 'thinking'|'ready'|'failed', current, choices, error }
 function openClassifyPalette(doc) {
-  classifyCtx = doc; showPage('classify', 'Classify type…');
+  classifyCtx = doc;
   const mine = classifyAI = { state: 'thinking' };
   tana.classifyType(doc.id).then(
     (answer) => { mine.state = 'ready'; mine.current = (answer && answer.current) || null; mine.choices = (answer && answer.choices) || []; },
@@ -686,7 +677,7 @@ function openClassifyPalette(doc) {
     renderPalette(); // the list is up while the type is written, so a refused write leaves it there to choose from
     run(async () => { await tana.setType(doc.id, best.uri); closePalette(); showNote('Classified as ' + sure); });
   });
-  renderPalette(); palInput.focus();
+  openPage('classify', 'Classify type…', { rows: classifyRows, back: BACK_TO_COMMANDS });
 }
 function classifyRows(q) {
   const doc = classifyCtx, ai = classifyAI;
@@ -725,7 +716,7 @@ function loadDiscussSuggestion(doc) {
     (e) => { mine.state = 'failed'; mine.error = (e && e.message) || String(e); mine.arriving = true; },
   ).then(() => { if (discussAI === mine && palMode === 'discuss') renderPalette(); }); // a page left in the meantime is not redrawn
 }
-function discussRows(typed) {
+function discussRows(q, typed) {
   const doc = discussCtx, words = (typed || '').trim();
   if (!doc) return [];
   // Same glyph on the placeholder as on the row it becomes, so the line does not step sideways once there is
@@ -753,8 +744,8 @@ function applyDiscussWith(doc, who) {
   run(async () => { await tana.discussWith(doc.id, who); closePalette(); });
 }
 function openDiscussPalette(doc) {
-  discussCtx = doc; showPage('discuss', 'Discuss with…');
-  loadDiscussSuggestion(doc); renderPalette(); palInput.focus();
+  discussCtx = doc; loadDiscussSuggestion(doc);
+  openPage('discuss', 'Discuss with…', { rows: discussRows, back: BACK_TO_COMMANDS, typed: true });
 }
 // ---- Set icon: the Nucleo UI set built into the app, searched in main, a page of results at a time ----
 // The set is not in the renderer: main holds it (3.5k glyphs, half a megabyte gzipped) and answers with the page
@@ -783,7 +774,7 @@ function iconPickRows() {
   return rows;
 }
 function openIconPalette(doc) {
-  iconCtx = doc; showPage('setIcon', 'Search icons…'); palBusy = true; iconList = [];
+  iconCtx = doc; showPage('setIcon', 'Search icons…', { rows: iconPickRows, back: BACK_TO_COMMANDS }); palBusy = true; iconList = [];
   searchIconsNow(); renderPalette(); palInput.focus();
 }
 // The rows redraw themselves: main rebuilds the cached rows with the new name and announces it, which reloads the
@@ -822,8 +813,7 @@ function huePickRows(q) {
   return rows;
 }
 function openHuePalette(doc) {
-  hueCtx = doc; showPage('setHue', 'Choose a colour or type a hue…');
-  renderPalette(); palInput.focus();
+  hueCtx = doc; openPage('setHue', 'Choose a colour or type a hue…', { rows: huePickRows, back: BACK_TO_COMMANDS });
 }
 // Written into this app's settings, so everything wearing the type follows here and Tana keeps its own colour. Main
 // rebuilds the rows and announces them, the same way the icon does; the node in hand is patched so the page it
@@ -917,34 +907,7 @@ function openTodayTaskSearch(node) {
 function renderPalette() {
   const q = palInput.value.trim();
   swapPanel(palList, palMode); // a mode changed while open slides its list across
-  if (palMode === 'cmd') palRows = paletteRows(q.toLowerCase(), q);
-  else if (palMode === 'create') palRows = creationRows(q.toLowerCase());
-  else if (palMode === 'slash') palRows = slashRows(q.toLowerCase());
-  else if (palMode === 'assignees') palRows = assigneeRows(q.toLowerCase());
-  else if (palMode === 'assigneesMany') palRows = manyAssigneeRows(q.toLowerCase());
-  else if (palMode === 'status') palRows = statusRows(q.toLowerCase());
-  else if (palMode === 'visibility') palRows = visibilityRows(q.toLowerCase());
-  else if (palMode === 'visibilityPeople') palRows = visibilityPeopleRows(q.toLowerCase());
-  else if (palMode === 'hidden') palRows = hiddenRows(q);
-  else if (palMode === 'pins') palRows = editPinRows(q.toLowerCase());
-  else if (palMode === 'pinDate') palRows = pinDateRows(q);
-  else if (palMode === 'pinToday') palRows = todayPickerRows(q);
-  else if (Object.hasOwn(MEETING_PAGES, palMode)) palRows = MEETING_PAGES[palMode](q);
-  else if (palMode === 'pinMeeting') palRows = meetingPickRows(q.toLowerCase());
-  else if (palMode === 'setType') palRows = typeRows(q.toLowerCase());
-  else if (palMode === 'classify') palRows = classifyRows(q.toLowerCase());
-  else if (palMode === 'discuss') palRows = discussRows(q);
-  else if (palMode === 'setIcon') palRows = iconPickRows();
-  else if (palMode === 'setHue') palRows = huePickRows(q.toLowerCase());
-  else if (palMode === 'hosts') palRows = hostRows(q);
-  else if (palMode === 'agentLink') palRows = agentLinkRows(q);
-  else if (palMode === 'trash') palRows = trashRows(q.toLowerCase());
-  else if (palMode === 'archived') palRows = archivedRows(q.toLowerCase());
-  else if (palMode === 'agentPrompt') palRows = agentPromptRows();
-  else if (palMode === 'openaiKey') palRows = openAIKeyRows();
-  else if (palMode === 'chatgpt') palRows = chatgptRows(q.toLowerCase());
-  else if (palMode === 'pill') palRows = pillRows(q.toLowerCase());
-  else if (palMode === 'field') palRows = fieldPage(q.toLowerCase(), q);
+  if (palPage.rows) palRows = palPage.rows(q.toLowerCase(), q); // search and Move to … set theirs when main answers
   palIndex = Math.max(0, Math.min(palIndex, palRows.length - 1));
   const els = [];
   palRows.forEach((r, i) => {
@@ -981,9 +944,9 @@ function renderPalette() {
     };
     els.push(row);
   });
-  // "No results" belongs under a list that was searched and found nothing. Two pages are not lists: the agent
-  // prompt and "Discuss with …" turn what is typed into their one row, so there is nothing for them to not find.
-  if (!palRows.some((r) => palMode === 'cmd' || palMode === 'slash' || palMode === 'hidden' || r.node) && palMode !== 'agentPrompt' && palMode !== 'discuss' && palMode !== 'field' && (palMode === 'cmd' || palMode === 'slash' || (q && !palBusy && !Object.hasOwn(MEETING_PAGES, palMode)))) { const n = document.createElement('div'); n.className = 'group'; n.textContent = 'No results'; els.push(n); }
+  // "No results" belongs under a list that was searched and found nothing. A typed page is not a list: the agent
+  // prompt, "Discuss with …", a meeting's time or place and a field turn what is typed into their row.
+  if (!palRows.some((r) => palMode === 'cmd' || palMode === 'slash' || palMode === 'hidden' || r.node) && !palPage.typed && (palMode === 'cmd' || palMode === 'slash' || (q && !palBusy))) { const n = document.createElement('div'); n.className = 'group'; n.textContent = 'No results'; els.push(n); }
   palList.replaceChildren(...els);
   const active = palList.querySelector('.row.active');
   if (active) active.scrollIntoView({ block: 'nearest' });
@@ -1006,7 +969,8 @@ function togglePalette(mode, link, pin) {
   pinCtx = pin || null;
   if (mode !== 'slash') slashCtx = null;
   // ⌘K over the prompt page leaves it, without assigning
-  showPage(mode, mode === 'search' ? 'Search Tana' : mode === 'pinToday' ? 'Search open tasks assigned to you' : mode === 'slash' ? 'Choose a block type or create' : 'Run a command', link ? link.text : '');
+  showPage(mode, mode === 'search' ? 'Search Tana' : mode === 'pinToday' ? 'Search open tasks assigned to you' : mode === 'slash' ? 'Choose a block type or create' : 'Run a command',
+    { cmd: { rows: paletteRows }, slash: { rows: slashRows }, pinToday: { rows: todayPickerRows } }[mode] || {}, link ? link.text : '');
   // meetingNow is cleared, not kept: every open re-reads the meeting, because "the meeting I am in" lasts minutes.
   fieldLinkCtx = null;
   if (mode === 'cmd') { palDoc = currentDoc(); palField = fieldAt(document.activeElement); fieldReturn = palField && palField.key; palTaskCtx = null; meetingNow = undefined; meetingCtx = null; loadPins(); loadWorkspaceTypes(true); subCache.clear(); refreshChatGPTStatus(); }
@@ -1068,7 +1032,7 @@ palInput.addEventListener('input', () => {
 });
 palInput.addEventListener('keydown', (e) => {
   const mod = e.metaKey || e.ctrlKey;
-  if (palMode === 'field' && fieldKeys && fieldKeys(e)) { e.preventDefault(); e.stopPropagation(); } // a field page's own keys (Edit choices: ⌘⌫, ⇧⌘↑/↓)
+  if (palPage.keys && palPage.keys(e)) { e.preventDefault(); e.stopPropagation(); } // a page's own keys (Edit choices: ⌘⌫, ⇧⌘↑/↓)
   else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); backPalette(); }
   else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && palRows.length) { e.preventDefault(); e.stopPropagation(); movePalIndex(e.key === 'ArrowDown' ? 1 : -1); }
   else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); chooseRow(mod); }

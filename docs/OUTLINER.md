@@ -393,9 +393,9 @@ and fold in for any query ("inb" → Set status to Inbox). Move to … offers th
 state, reached with Set status to Inbox. Assign to sets the assignee outright; Edit assignees toggles them one by
 one.
 
-**Pages.** A row that opens a page of its own (`keepOpen`) goes through `showPage`, which lets go of what the last
-page left behind; Escape steps back to the command page (`backPalette`) or, for a page opened from elsewhere, to the
-page that opened it. The pages are described with their features: Set type, Classify type, Set icon, Set colour,
+**Pages.** A row that opens a page of its own (`keepOpen`) goes through `openPage`/`showPage`, which lets go of what
+the last page left behind and takes the new page's rows and back step; Escape (`backPalette`) goes where the page says:
+the command page, or for a page opened from elsewhere, the page that opened it. The pages are described with their features: Set type, Classify type, Set icon, Set colour,
 Discuss with (§11); Edit pins, Pin to date, Pin to meeting (§9); Recently deleted, Archived types (§14); Change time /
 location, Add attendee ([MEETINGS.md](MEETINGS.md)); the agent pages (renderer/agent.js, §11).
 

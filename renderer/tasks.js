@@ -241,8 +241,8 @@ function assigneeRows(q, doc = palDoc) {
 }
 function openAssigneePalette(doc, ctx) {
   palTaskCtx = ctx || null;
-  palDoc = doc; showPage('assignees', 'Assign task to…');
-  loadMembers(); loadTaskMeta(doc.id); renderPalette(); palInput.focus();
+  palDoc = doc; loadMembers(); loadTaskMeta(doc.id);
+  openPage('assignees', 'Assign task to…', { rows: (q) => assigneeRows(q) });
 }
 function taskActionContext() {
   const keys = selKeys(), fromSelection = keys.length > 0;
@@ -292,8 +292,7 @@ function statusRows(q, ctx = palTaskCtx) {
   }));
 }
 function openStatusPalette(ctx) {
-  palTaskCtx = ctx; showPage('status', 'Set status to…');
-  renderPalette(); palInput.focus();
+  palTaskCtx = ctx; openPage('status', 'Set status to…', { rows: (q) => statusRows(q) });
 }
 function manyAssigneeRows(q, ctx = palTaskCtx) {
   if (!ctx?.docs.length) return [];
@@ -303,8 +302,7 @@ function manyAssigneeRows(q, ctx = palTaskCtx) {
   return memberRows(q, (uri) => apply(uri ? [uri] : []));
 }
 function openManyAssigneePalette(ctx) {
-  palTaskCtx = ctx; showPage('assigneesMany', ctx.multi ? 'Assign tasks to…' : 'Assign to…');
-  loadMembers(); renderPalette(); palInput.focus();
+  palTaskCtx = ctx; loadMembers(); openPage('assigneesMany', ctx.multi ? 'Assign tasks to…' : 'Assign to…', { rows: (q) => manyAssigneeRows(q) });
 }
 function taskActionRows(group = 'Actions') {
   const ctx = taskActionContext();
