@@ -58,7 +58,7 @@ const graph = new GraphClient(transport);                          // reads only
 const sync = new SyncConnection({ transport, orgId, peerId });     // documents, without graph, history or search
 ```
 
-`HistoryClient` and `SearchClient` take a transport the same way. Everything above the sync connection is a function of a `SyncConnection` you pass in (`openLiveQuery(sync, …)`, `openPresence(sync, …)`), so live queries and presence cost nothing unless opened, and every helper is required from its own module (`sdk/node`, `sdk/content`, …), not from the index.
+`HistoryClient` and `SearchClient` take a transport the same way. Everything above the sync connection is a function of a `SyncConnection` you pass in (`openLiveQuery(sync, …)`, `openPresence(sync, …)`), so live queries and presence cost nothing unless opened, and each helper is required from the module that owns it (`sdk/node`, `sdk/content`, …), which is what every caller in the app does.
 
 ## Adding a Tana service call or descriptor
 
