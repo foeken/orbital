@@ -130,8 +130,10 @@ async function discover() {
     const listNodes = S.client.graph.listNodesUnhidden || S.client.graph.listNodes;
     // The current name first, so a workspace carrying both settles on the one this app writes.
     for (const title of [TITLE, OLD_TITLE]) {
-      // oldest first from the graph, so a crowd of newer notes with the same title cannot push the oldest past the limit
-      const { nodes } = await listNodes({ nodeTypes: ['text'], textQuery: title, createdBy: [S.me.userUri], limit: 100,
+      // oldest first from the graph, so a crowd of newer notes with the same title cannot push the oldest past the limit.
+      // ponytail: textQuery is full text and ListNodes has no title filter or paging, so 1,000 older documents of yours
+      // that mention the word could still hide it; the restricted/exactParticipantUris filters would narrow that, once verified live.
+      const { nodes } = await listNodes({ nodeTypes: ['text'], textQuery: title, createdBy: [S.me.userUri], limit: 1000,
         sortOptions: [{ field: 'SORT_FIELD_CREATE_TIME', direction: 'SORT_DIRECTION_ASCENDING' }] });
       const mine = nodes.filter((n) => (n.title || '').trim().toLowerCase() === title.toLowerCase())
         .sort((a, b) => String(a.createTime || '').localeCompare(String(b.createTime || '')));

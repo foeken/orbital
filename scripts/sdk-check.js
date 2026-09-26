@@ -1213,7 +1213,8 @@ async function main() {
       getDocument: (id) => (live.has(id) ? docs.get(id) : undefined), unsubscribe: async (id) => { live.delete(id); released.push(id); },
     };
     const win = { isDestroyed: () => false, webContents: { send: (channel, value) => sent.push([channel, value]) } };
-    const connect = () => { settings.reset(); live.clear(); backend.testRuntime({ me: { userUri: ME }, win, client: { sync, graph: { listNodes: async (p) => ({ nodes: p.textQuery === settings.TITLE ? listed : [] }) } } }); }; // a launch: a new client, nothing subscribed yet
+    let asked = null;
+    const connect = () => { settings.reset(); live.clear(); backend.testRuntime({ me: { userUri: ME }, win, client: { sync, graph: { listNodes: async (p) => { if (p.textQuery === settings.TITLE) asked = p; return { nodes: p.textQuery === settings.TITLE ? listed : [] }; } } } }); }; // a launch: a new client, nothing subscribed yet
     const theirs = new Document('tana:text:' + ulid()); // the other machine's, made a second earlier
     const third = 'tana:text:' + ulid(); // one a third machine already gave up to it
     theirs.transact((l) => { initDocument(l, settings.TITLE, ME); l.getMap(settings.ROOT).set('pref:theme', JSON.stringify('dark')); l.getMap(settings.ROOT).set('settingsOld', JSON.stringify([third])); });
@@ -1238,6 +1239,8 @@ async function main() {
     connect(); sent.length = 0;
     await settings.hydrate(); await settings.flush();
     assert.equal(settings.settingsDocId(), theirs.id, 'the next launch settles on the oldest, pointer or not, so the two machines stop drifting apart');
+    assert.deepEqual([asked.limit, asked.sortOptions[0].field, asked.sortOptions[0].direction], [1000, 'SORT_FIELD_CREATE_TIME', 'SORT_DIRECTION_ASCENDING'],
+      'asked of the graph oldest first and as many as a list takes: the title is a full-text query, so other notes that mention it share the answer');
     assert.equal(settings.get('pref:theme'), 'dark', 'it takes the choices made on the other machine');
     assert.equal(JSON.parse(theirs.loro.getMap(settings.ROOT).get('pref:home')), 'library', 'and pushes up the ones only this machine had');
     assert.ok(sent.some(([channel, prefs]) => channel === 'settings:changed' && prefs.theme === 'dark'), 'and the open page is told, rather than keeping the defaults until the next launch');
