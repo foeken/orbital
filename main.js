@@ -29,7 +29,7 @@ const meetings = require('./main/meetings');
 // ipc = { 'channel': (event, ...args) => … }. preload.js names each channel for the page. What main.js registers
 // itself is Electron's: windows, overlays, shell (the Codex handoff opens Codex through it), app paths, and settings
 // sent to the other pages; plus outline:children, which routes between several modules.
-for (const m of [require('./main/documents'), require('./main/views'), require('./main/pins'), inbox, proposalsPage, timelinePage, require('./main/presence'), meetings, require('./main/images'), icons, require('./main/related'), require('./main/rows')]) {
+for (const m of [require('./main/documents'), require('./main/views'), require('./main/pins'), inbox, proposalsPage, timelinePage, require('./main/presence'), meetings, require('./main/images'), icons, require('./main/related'), require('./main/rows'), settings]) {
   for (const [channel, handle] of Object.entries(m.ipc)) ipcMain.handle(channel, handle);
 }
 

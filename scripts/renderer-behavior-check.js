@@ -8435,15 +8435,16 @@ checks.push(runRowChromeCheck);
 // A settings:changed sent before the page listened is lost (the first connect's read of the settings document can land
 // while the page loads), so the page asks for the preferences once more after it starts listening.
 async function runLateSettingsCheck() {
-  const run = (snapshot, now) => vm.runInNewContext(`
+  const run = (snapshot, now, meanwhile) => vm.runInNewContext(`
     const prefs = ${JSON.stringify(snapshot)}, applied = [];
     const applySettings = (next) => applied.push(next);
-    const tana = { prefsNow: async () => (${JSON.stringify(now)}) };
+    const tana = { prefsNow: async () => { Object.assign(prefs, ${JSON.stringify(meanwhile || {})}); return ${JSON.stringify(now)}; } };
     ${sourceLine('if (tana.prefsNow)')}
     ({ applied: async () => { await null; await null; return applied; } });
   `);
   assert.deepEqual(plain(await run({}, { theme: 'dark', home: 'library' }).applied()), [{ theme: 'dark', home: 'library' }], 'a new machine\u2019s choices, read after the page loaded, are applied');
   assert.deepEqual(plain(await run({ theme: 'dark' }, { theme: 'dark' }).applied()), [], 'and nothing is applied when nothing changed');
+  assert.deepEqual(plain(await run({ theme: 'light' }, { theme: 'light', home: 'library' }, { theme: 'dark' }).applied()), [], 'a choice made while the answer was on its way is newer, so the answer does not undo it');
   assert.match(source, /if \(tana\.onSettings\) tana\.onSettings\(applySettings\);\n(?:\/\/[^\n]*\n)*if \(tana\.prefsNow\)/, 'it asks after it starts listening, so no change can fall between the two');
   console.log('ok  settings: a change sent before the page listened is still applied');
 }

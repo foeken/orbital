@@ -219,4 +219,7 @@ function tellOthers(sender, docId) {
   }
 }
 
-module.exports = { get, set, prefs, setPref, flush, hydrate, applyRemote, synced, settingsDocId, isSynced, reset, tellOthers, TITLE, ROOT, POINTER, PREF };
+// the preferences now, asked for once the page listens for settings:changed (renderer/app.js; preload's prefs:snapshot is the load-time copy)
+const ipc = { 'prefs:now': () => prefs() };
+
+module.exports = { get, set, prefs, setPref, flush, hydrate, applyRemote, synced, settingsDocId, isSynced, reset, tellOthers, ipc, TITLE, ROOT, POINTER, PREF };

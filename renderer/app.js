@@ -205,7 +205,8 @@ function applySettings(next) {
 if (tana.onSettings) tana.onSettings(applySettings);
 // settings:changed is not kept for a page that is not listening yet, and the first connect's read of the settings
 // document can land while this one is still loading: whatever changed since preload's snapshot is asked for once more.
-if (tana.prefsNow) tana.prefsNow().then((now) => { if (JSON.stringify(now) !== JSON.stringify(prefs)) applySettings(now); }, () => {});
+// A choice made here while the answer was on its way is newer than it, so the answer is dropped then.
+if (tana.prefsNow) { const asked = JSON.stringify(prefs); tana.prefsNow().then((now) => { const held = JSON.stringify(prefs); if (held === asked && JSON.stringify(now) !== held) applySettings(now); }, () => {}); }
 if (tana.onSystemTheme) tana.onSystemTheme((t) => { if (themePref === 'system') applyTheme(t); }); // macOS appearance changes re-theme a running window
 if (themePref === 'system') showTheme('system');
 loadRoots().then(render, showError).then(restorePlace).then(loadFilters);
