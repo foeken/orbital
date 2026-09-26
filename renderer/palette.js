@@ -1164,6 +1164,7 @@ function renderPalette() {
     // the pointer moves the one highlight, as ↑/↓ do (and past the same rows): a pointer that only rests there does not
     row.onmousemove = () => {
       if (palIndex === i || (r.disabled && !r.id)) return;
+      if (palRows[i] !== r) return renderPalette(); // the rows changed under the drawn list (invalidateNode): draw them again first
       palList.querySelector('.row.active')?.classList.remove('active');
       row.classList.add('active'); palIndex = i;
     };
