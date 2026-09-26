@@ -15,6 +15,9 @@ html { --nucleo-stroke-width: 1; }
   --dur-quick: 160ms; --dur-base: 240ms; --dur-slow: 420ms; --dur-flash: 800ms; --dur-loop: 1400ms; --stagger: 30ms;
   --ease-out: cubic-bezier(.2, .8, .2, 1); --ease-in: cubic-bezier(.4, 0, 1, 1);
   --ease-spring: cubic-bezier(.34, 1.56, .64, 1); --ease-move: cubic-bezier(.3, 0, .2, 1);
+  /* a damped spring (ratio .5), sampled: it overshoots a sixth of the way and settles, where a cubic curve can only
+     overshoot once and stop dead. What a pressed button springs back on (Press). */
+  --ease-settle: linear(0, 0.049, 0.172, 0.337, 0.517, 0.691, 0.844, 0.969, 1.061, 1.122, 1.154, 1.163, 1.154, 1.134, 1.107, 1.077, 1.049, 1.024, 1.004, 0.989, 0.98, 0.975, 0.973, 0.975, 0.978, 0.983, 0.988, 0.992, 0.996, 0.999, 1.002, 1.003, 1);
   --flash-in: rgba(52, 168, 83, .16); --flash-out: rgba(217, 48, 37, .16); --flash-here: rgba(80, 143, 187, .2);
   interpolate-size: allow-keywords; /* heights go to and from auto (a row arriving, a section closing) without measuring */
 }
@@ -1036,11 +1039,17 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 @keyframes ring-in { from { box-shadow: 0 0 0 7px transparent; } }
 @keyframes dot-read { from { background: #0090ff; transform: scale(1.6); } }
 
-/* Press: every button answers the finger by giving a little, and springs back. One rule, so a new button kind joins it here. */
+/* Press: every button answers the finger by easing down a little, and settles back on a spring when let go. The
+   press itself is quick but eased, so it follows the finger rather than snapping; the release is slower, since that is
+   where the spring shows. One rule, so a new button kind joins it here. */
+/* --press marks these for renderer/motion.js, which hands the spring to a button a press draws again; it does not
+   inherit, so what sits inside a button (a pill's menu) is not one. A press inside a pill's menu is the menu's, so the
+   pill does not shrink under it. */
+@property --press { syntax: '<number>'; inherits: false; initial-value: 0; }
 :is(.navbtn, .railtoggle, .pill, .tbtn, .pbutton, .check, .chev, .gmore, .clearfilters, .login button, .recorder button, .cbadge[role="button"], .filter .clear) {
-  transition: transform var(--dur-quick) var(--ease-spring); }
-:is(.navbtn, .railtoggle, .pill, .tbtn, .pbutton, .check, .chev, .gmore, .clearfilters, .login button, .recorder button, .cbadge[role="button"], .filter .clear):active:not(:disabled) {
-  transform: scale(.92); transition-duration: 60ms; }
+  --press: 1; transition: transform var(--dur-slow) var(--ease-settle); }
+:is(.navbtn, .railtoggle, .pill, .tbtn, .pbutton, .check, .chev, .gmore, .clearfilters, .login button, .recorder button, .cbadge[role="button"], .filter .clear):active:not(:disabled):not(:has(.menu:active)) {
+  transform: scale(.95); transition: transform var(--dur-quick) var(--ease-out); }
 
 /* Surface for what is built again on every key: a pill's menu and the toolbar's style menu (renderer/motion.js
    menuMotion). One arriving grows from its button; one no longer wanted shrinks away over it. */

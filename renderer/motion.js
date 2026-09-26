@@ -10,13 +10,33 @@ const MOTION = (() => {
   const ms = (name, d) => parseFloat(cs.getPropertyValue(name)) || d;
   const ease = (name) => cs.getPropertyValue('--ease-' + name).trim() || 'ease';
   return { quick: ms('--dur-quick', 160), base: ms('--dur-base', 240), slow: ms('--dur-slow', 420), flash: ms('--dur-flash', 800), stagger: ms('--stagger', 30),
-    out: ease('out'), in: ease('in'), spring: ease('spring'), move: ease('move') };
+    out: ease('out'), in: ease('in'), spring: ease('spring'), move: ease('move'), settle: ease('settle') };
 })();
 // A move answers a hand: a key or a press in the moment before. A reload, a live update or a page drawing itself is not
 // moved, so nothing on screen shifts on its own — the rule the saved-search pills taught (renderer/pills.js).
 let handAt = -Infinity;
 if (typeof addEventListener === 'function') for (const type of ['keydown', 'pointerdown']) addEventListener(type, () => { handAt = performance.now(); }, true);
 const acted = (within = 1000) => performance.now() - handAt < within;
+// Press, for a button the press itself draws again (a pill, a toolbar button): the new one arrives at full size, and
+// the spring back the old one would have played (styles.css Press) is handed to it instead. The Press buttons are the
+// ones styles.css marks with --press, so the list stays there alone; data-id finds the new copy. A press in a menu
+// hanging from a button is the menu's.
+let pressed = null;
+if (typeof addEventListener === 'function') {
+  addEventListener('pointerdown', (e) => {
+    const el = e.target.closest && !e.target.closest('.menu') && e.target.closest('[data-id]');
+    pressed = el && getComputedStyle(el).getPropertyValue('--press').trim() === '1' ? { el, id: el.dataset.id, kind: el.classList[0] } : null;
+  }, true);
+  addEventListener('pointerup', () => {
+    const p = pressed;
+    pressed = null;
+    if (p) requestAnimationFrame(() => {
+      if (p.el.isConnected) return; // still there: its own transition springs it back
+      const again = [...document.querySelectorAll('.' + p.kind)].find((el) => el.dataset.id === p.id);
+      play(again, [{ transform: 'scale(.95)' }, { transform: 'none' }], { duration: MOTION.slow, easing: MOTION.settle });
+    });
+  }, true);
+}
 function play(el, frames, opts) {
   return motionOK() && el && el.animate ? el.animate(frames, { fill: 'backwards', ...opts }).finished.catch(() => {}) : Promise.resolve();
 }
