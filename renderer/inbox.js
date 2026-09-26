@@ -59,7 +59,7 @@ function notificationsViewRow() {
 // pressed with the palette closed). Two rows with a fixed meaning each rather than one whose label flips, so either
 // can be given a key.
 function notificationRows() {
-  const selected = selKeys(), at = palReturn || focused(), keys = selected.length ? selected : at ? [at.key] : [];
+  const selected = selKeys(), at = palReturn || focused(), keys = selected.length ? selected : at && at.key ? [at.key] : [];
   const nodes = keys.map((key) => items.get(key)?.node).filter((n) => n && n.notification);
   if (!nodes.length || !tana.inboxSetRead) return [];
   const group = selected.length ? 'Selection' : 'Current node', unread = nodes.filter((n) => n.unread), read = nodes.filter((n) => !n.unread);

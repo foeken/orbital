@@ -61,7 +61,7 @@ const withShims = (src) => {
   // state the harness declares (its own lets win; the rest start empty here).
   // A page carries its rows and back step (palPage), and openPage is showPage drawn and focused.
   if (/\b(showPage|openPage|backPalette)\(/.test(src) && !/function showPage\(/.test(src)) {
-    src = 'globalThis.clearTimeout ??= () => {}; globalThis.palTimer ??= null; globalThis.palSeq ??= 0; globalThis.palEnter ??= null; globalThis.palBusy ??= false; globalThis.palRows ??= []; globalThis.palIndex ??= 0; globalThis.palMode ??= "cmd"; globalThis.palPage ??= {}; globalThis.palReturn ??= null; globalThis.focused ??= () => null;'
+    src = 'globalThis.clearTimeout ??= () => {}; globalThis.palTimer ??= null; globalThis.palSeq ??= 0; globalThis.palEnter ??= null; globalThis.palBusy ??= false; globalThis.palRows ??= []; globalThis.palIndex ??= 0; globalThis.palMode ??= "cmd"; globalThis.palPage ??= {}; globalThis.palReturn ??= null; globalThis.focused ??= () => null; globalThis.returnTarget ??= () => focused();'
       + ' globalThis.promptEditor ??= () => {}; globalThis.palette ??= { hidden: true }; globalThis.palInput ??= { value: "", placeholder: "", focus() {} }; globalThis.renderPalette ??= () => {};\n'
       + 'globalThis.showPage ??= ' + source.match(/^function showPage\(.*?^\}/ms)[0] + ';\n'
       + 'globalThis.openPage ??= ' + source.match(/^function openPage\(.*$/m)[0] + ';\n'
@@ -2337,15 +2337,19 @@ function runPaletteSkipCheck() {
     'a page starts clean: the last page\'s timer cleared, its answers outdated, nothing busy or waiting on Enter');
   // A page that opens the palette itself (a recorded key on Set status, a row's meta) remembers the caret, as ⌘K does,
   // so closing it puts the caret back instead of leaving the focus on the page body (#376). An open palette keeps its own.
-  const opens = (hidden, had) => vm.runInNewContext(`
+  const opens = (hidden, had, caret = true) => vm.runInNewContext(`
     let palTimer = null, palSeq = 0, palEnter = null, palBusy = false, palRows = [], palIndex = 0, palMode = 'cmd', palPage = {}, palReturn = ${JSON.stringify(had)};
-    const clearTimeout = () => {}, promptEditor = () => {}, palette = { hidden: ${hidden} }, palInput = { value: '', placeholder: '' }, focused = () => ({ key: 'row', offset: 2 });
+    const clearTimeout = () => {}, promptEditor = () => {}, palette = { hidden: ${hidden} }, palInput = { value: '', placeholder: '' }, focused = () => (${caret} ? { key: 'row', offset: 2 } : null);
+    const railRow = { dataset: { id: 'meta:assignees' } }, railEl = { contains: (el) => el === railRow }, document = { activeElement: railRow };
+    ${sourceLine('const returnTarget')}
     ${functionSource('showPage')}
     showPage('status', 'Set status to…', {});
     palReturn;
   `);
   assert.deepEqual(plain(opens(true, null)), { key: 'row', offset: 2 }, 'a page opened with the palette closed remembers where the caret was');
   assert.deepEqual(plain(opens(false, { key: 'first' })), { key: 'first' }, 'a page opened from the palette keeps the place ⌘K remembered');
+  assert.deepEqual(plain(opens(true, null, false)), { rail: 'meta:assignees' }, 'and one opened from a sidebar row (Edit assignees, visibility) goes back to that row');
+  assert.doesNotMatch(functionSource('openVisibility'), /palette\.hidden = false/, 'openVisibility leaves opening the palette to showPage, which must see it closed');
 }
 
 // Formatting: marks survive the DOM round trip, and toggling one over a selection rewrites only that range.

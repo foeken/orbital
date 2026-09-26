@@ -83,7 +83,7 @@ function proposalsViewRow() {
 // Cmd+K: the proposals selected, or the one the caret is on. Approve stays listed, disabled, when none of them can be
 // approved here, so its key still has a row to be recorded against.
 function proposalRows() {
-  const selected = selKeys(), at = palReturn || focused(), keys = selected.length ? selected : at ? [at.key] : [];
+  const selected = selKeys(), at = palReturn || focused(), keys = selected.length ? selected : at && at.key ? [at.key] : [];
   const nodes = keys.map((key) => items.get(key)?.node).filter((n) => n && n.proposal);
   if (!nodes.length || !tana.proposalAnswer) return [];
   const group = selected.length ? 'Selection' : 'Current node', approvable = nodes.filter((n) => n.proposal.approvable);
