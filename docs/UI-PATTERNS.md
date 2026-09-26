@@ -54,6 +54,7 @@ function huePickRows(q, typed) { … } // every page's rows: q lowercased, typed
   that `showPage` moves on, and compare it when the answer lands:
 
   ```js
+  typeCtx = doc; typeList = null; // the first draw says Loading…, never the last document's choices
   openPage('setType', 'Set type to…', { rows: typeRows, back: BACK_TO_COMMANDS });
   const seq = palSeq;
   tana.docTypes(doc.id).then((list) => { if (seq !== palSeq) return; typeList = list; renderPalette(); });
@@ -85,12 +86,17 @@ just to report. `showNote(text)` is the same toast, not red, for a result worth 
 shows an error you already hold.
 
 ```js
+keepOpen: true, // the palette stays up until the write is in; the row closes it itself
 run: () => run(async () => {
   await tana.setType(doc.id, uri);
   closePalette();
   showNote('Classified as ' + title);
 }),
 ```
+
+A row that closes the palette only after its write keeps it open (`keepOpen: true`), as above. A row that does not
+(`runRow` closes it before `run`) must not call `closePalette()` again when the write lands: by then another palette
+may be open.
 
 `run` must not be nested inside another `run`: the queue would wait for itself.
 
