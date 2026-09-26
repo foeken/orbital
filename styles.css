@@ -795,7 +795,8 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 .glyph.icon svg { width: 13px; height: 13px; display: block; }
 .palette .row.active .glyph, .menu .mrow.active .glyph { color: #555; }
 .filtered:empty { display: none; }
-.login { display: flex; justify-content: center; padding: 120px 0; }
+.login { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 120px 0; }
+.login p { margin: 0; max-width: 360px; text-align: center; color: #666; font-size: 14px; line-height: 1.5; }
 .login[hidden] { display: none; }
 .login button { border: 1px solid #ddd; background: #fff; border-radius: 8px; padding: 8px 18px; font-size: 15px; cursor: pointer; }
 .login button:hover { background: #f0f0f0; }
@@ -1038,6 +1039,7 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 
 [data-theme="dark"] .skeleton canvas { color: #e8eaec; }
 [data-theme="dark"] .login button { border-color: #454b4e; background: #2a2d2f; color: #c9c9c9; }
+[data-theme="dark"] .login p { color: #9a9a9a; }
 [data-theme="dark"] .login button:hover { background: #363a3c; }
 
 [data-theme="dark"] .palette { background: rgba(0, 0, 0, .52); }
