@@ -246,7 +246,7 @@ the full set. State classes are set by the renderer, pseudo-classes by the brows
 | Table | `.outline.table-view` with `.thead`, `.cell`, `.tgrip`; a table block is `.text.table` | `.cell.pick`, `.tgrip.dragging` |
 | Agent badge | `.cbadge` | `.pending`, `.working`, `.waiting`, `.done`, `.broken`, `.unavailable`, `.closed`; `[role="button"]` when it opens something |
 | Proposal buttons | `.pbuttons > .pbutton.approve` / `.pbutton.reject` (renderer/proposals.js) | `:hover`, `:disabled` |
-| Empty and loading | `.empty-note` ("Nothing here yet"), `.children.loading`, `.skeleton` (renderer/loading.js) | `.empty-note.cleared`; `.skeleton.gone` once the rows have landed, `.skeleton.tail` while the Timeline is still landing in parts (renderer/render.js sets both) |
+| Empty and loading | `.empty-note` ("Nothing here yet"), `.children.loading`, `.skeleton` (renderer/loading.js) | `.empty-note.cleared`; `.skeleton.gone` once the rows have landed, `.skeleton.tail` while the Timeline is still landing in parts, `body.building` while the loader covers the whole page (renderer/render.js sets all three) |
 | Toast | `.toast`, only through `showNote` / `showError` | `.show`, `.error` |
 | Button | `.button`, `.button.primary` for the one that goes on (a dialog's footer: the key recorder, Help) | `:hover`, `:disabled` on a plain `.button` only: `.primary` has no disabled look, so a button that can be disabled (the recorder's Save) stays plain |
 | Dialog | a scrim element with a `.card` inside: `.palette`, `.recorder`, `.help` | `[hidden]` on `.palette` and `.recorder`; `.help` is a `<dialog>`, so `[open]` (`showModal()` / `close()`). The palette and the recorder arrive and leave with the Surface motion; Help only arrives, and `close()` removes it at once |

@@ -480,6 +480,11 @@ for (const rule of [/\.toolbar \{/, /\.tbtn \{/, /\.text code \{/, /\.text a\.li
 // a closed palette must hide even while it still carries the @ dropdown class (#240): same weight, later rule wins. The
 // dropdown's missing scrim may hold while it fades out (#185), but a display of its own would outweigh .palette[hidden].
 assert.doesNotMatch(styleSheet, /\.palette\.anchored \{[^}]*display/, 'the @ dropdown layout must not outweigh .palette[hidden]');
+// A :has() on the page itself is matched again on every DOM change anywhere under it: body:has(#skeleton…) made a ⌘K
+// key on 1,000 rows cost 16 ms instead of 1.7 ms (#430). Whatever the page needs to know goes on it as a class.
+assert.doesNotMatch(styleSheet, /(^|[\s,>~+(])(html|body|:root)(\.[\w-]+|\[[^\]]*\])*:has\(/m, 'no :has() on html, body or :root: set a class where the state changes');
+assert.match(source, /document\.body\.classList\.toggle\('building', /, 'renderer/render.js marks the page under the loader (styles.css body.building)');
+assert.match(html, /<body class="building">/, 'and the page starts under it, as #skeleton does, before the first render');
 // A type's colour is an OKLCH hue in Tana (Organization's 232 is #58aad2 = oklch(0.7 0.1 232)); as an HSL angle the
 // same number is 42° away and half as light. And it must be written into the rule: a custom property substitutes
 // its own var() where it is declared, so `--hue-color: oklch(… var(--hue))` on <html> — which has no --hue —

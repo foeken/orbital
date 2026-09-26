@@ -456,8 +456,12 @@ function renderOutline() {
   // A Timeline landing in parts is drawn as it comes, the loader building on under what is in (its .tail).
   const placing = !placed && (!!savedPlace || connected), tail = !loading && !!parent && parent.docId === TIMELINE_PAGE && timelinePartial;
   // signed out: the login is the page, and the loader waits for the first page after it (booted stays false)
-  $('skeleton').classList.toggle('gone', booted || signedOut || !(loading || placing || tail));
+  const loaderOff = booted || signedOut || !(loading || placing || tail);
+  $('skeleton').classList.toggle('gone', loaderOff);
   $('skeleton').classList.toggle('tail', tail);
+  // the page under a whole-page loader is hidden (styles.css body.building); a class, since body:has(#skeleton…)
+  // restyled the whole page on every DOM change (a ⌘K key on 1,000 rows: 16 ms)
+  document.body.classList.toggle('building', !loaderOff && !tail);
   if (!loading && !placing && !tail && authed) booted = true;
   // the same rule as "No content" above: a view with every section folded away has no rows and is not empty
   if (!parent && !list.length && !outline.children.length && !loading && !filterEl.value) { // an empty view says so; a filtered-out list is explained by the count below it
