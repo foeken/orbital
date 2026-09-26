@@ -472,13 +472,15 @@ function loadSearchFilter(docId) {
     render();
   }, (e) => { searchFilters.delete(docId); showError(e); });
 }
-const clearFilter = (f = {}) => ({ types: null, states: null, assignee: 'anyone', text: '', participant: f.participant || null, window: f.window || null });
+const clearFilter = (f = {}) => ({ types: null, states: null, assignee: 'anyone', text: '', fields: null, participant: f.participant || null, window: f.window || null });
 const sameList = (a, b) => JSON.stringify(a ? [...a].sort() : a) === JSON.stringify(b ? [...b].sort() : b);
+const sameFields = (a, b) => { const json = (f) => JSON.stringify(Object.entries(f || {}).sort(([x], [y]) => x.localeCompare(y))); return json(a) === json(b); };
 function sameFilter(a = {}, b = {}) {
   return sameList(a.types || null, b.types || null) && sameList(a.states || null, b.states || null)
     && (a.assignee || 'anyone') === (b.assignee || 'anyone') && String(a.text || '') === String(b.text || '')
     && completedWindow(a) === completedWindow(b) // unset reads as the default, so a stored 7 and an unset one are one filter
-    && (a.participant || null) === (b.participant || null) && (a.window || null) === (b.window || null);
+    && (a.participant || null) === (b.participant || null) && (a.window || null) === (b.window || null)
+    && sameFields(a.fields, b.fields);
 }
 function viewFiltered() {
   const filter = filters.get(view);

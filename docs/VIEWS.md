@@ -161,6 +161,14 @@ each, the way a saved search's row reads. The field
 definitions are not drawn there (a list, not the type's edit view): ⌘K Edit fields shows them under the title. An open type page is kept current by a live query over its instances
 (`watchRelated`), as a saved search is.
 
+**One type picked elsewhere.** A saved search or the Library whose Type pill holds one workspace type and nothing else
+lists that type's instances too, so it gets the same field pills, field groupings, Display fields and editable choice
+cells (`fieldType` in renderer/views.js). Display keeps the page's own starting choice rather than the type page's.
+The field filter is part of the filter (`fields`): the Library sends it as `attributeFilters` (`viewParams`), a saved
+search stores it as the query's `attributes` and reads it back on load (`searchQueryToFilter`), so Save keeps it and
+changing it marks the search unsaved. Field values only apply while that one type is the whole Type selection
+(`typeFields` in sdk/query.js), and any change of the Type pill clears them.
+
 **Outliner or Table.** Every page with pills — a view, a saved search, a type's page — can be drawn as a table: the
 switch at the top right of the header, or ⌘K Switch to table / Switch to outliner (one row, id `tableView`, so a
 recorded key keeps working). The rows stay the outline's rows, laid out as a grid with a column per fact Display

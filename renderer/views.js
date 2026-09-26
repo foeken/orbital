@@ -82,9 +82,12 @@ const groupOf = (k) => { const g = groupPref[k] ?? arranged(k, 'group'); return 
 const noTasks = () => onTypePage() && !(kids.get(zoom.docId) || []).some(isTask);
 const TASK_ONLY = ['status', 'assignee'];
 const isFieldKey = (key) => String(key).includes('?attribute=');
-const groupList = () => (onTypePage()
-  ? [...GROUPS.filter(([id]) => id !== 'type' && !(noTasks() && TASK_ONLY.includes(id))), ...typeDefs().filter((d) => ['options', 'link', 'member'].includes(d.type)).map((d) => [fieldKey(d), d.title || 'Untitled field'])]
-  : GROUPS);
+// A saved search or the Library narrowed to one workspace type offers that type's fields the same way (fieldType).
+const groupList = () => {
+  if (!fieldType()) return GROUPS;
+  const byField = typeDefs().filter((d) => ['options', 'link', 'member'].includes(d.type)).map((d) => [fieldKey(d), d.title || 'Untitled field']);
+  return onTypePage() ? [...GROUPS.filter(([id]) => id !== 'type' && !(noTasks() && TASK_ONLY.includes(id))), ...byField] : [...GROUPS, ...byField];
+};
 const fieldOrder = (key) => ((typeDefs().find((d) => fieldKey(d) === key) || {}).options || []).map((o) => o.label);
 const fieldFallback = (key) => 'No ' + ((groupList().find(([k]) => k === key) || [])[1] || 'value');
 // Responsibility is about your tasks, and leaves out every row that is not yours: with no tasks in the filter (only
@@ -266,14 +269,23 @@ const DISPLAY = [['type', 'Type'], ['space', 'Lives in'], ['status', 'Status'], 
 const DISPLAY_DEFAULT = ['status', 'assigned', 'updated'];
 // On a type's page every field it defines can be shown too, keyed by its attribute key; the ones with a closed set of
 // values (the ones that get a pill) and the last change are shown until you choose otherwise, as Tana's type page does.
-const typeDefs = () => (onTypePage() && (relatedBy.get(zoom.docId) || {}).definitions) || [];
-const fieldKey = (def) => zoom.docId + '?attribute=' + def.key;
+// A saved search or a view whose Type pill has picked one workspace type alone lists that type's instances too, so its
+// fields join the pills, Group and Display there as well (they start hidden: the page keeps the arrangement it had).
+const fieldType = () => {
+  if (onTypePage()) return zoom.docId;
+  const t = (filters.get(pillKey()) || {}).types;
+  return t && t.length === 1 && isTypeId(t[0]) && listPage() ? t[0] : null;
+};
+const typeDefs = () => { const t = fieldType(); if (t) loadRelated(t); return (t && (relatedBy.get(t) || {}).definitions) || []; };
+const fieldKey = (def) => fieldType() + '?attribute=' + def.key;
 const PILL_FIELDS = ['options', 'link', 'member', 'date'];
 const displayList = () => [...typeDefs().map((d) => [fieldKey(d), d.title || 'Untitled field']), ...DISPLAY.filter(([id]) => !(noTasks() && ['status', 'assigned'].includes(id)))];
 const displayKeys = () => {
   const k = pillKey(), chosen = displayPref[k] ?? arranged(k, 'display');
-  // a field the type no longer defines is dropped: the menu cannot offer it, so nothing could turn it off
-  if (Array.isArray(chosen)) return onTypePage() ? chosen.filter((k) => !isFieldKey(k) || typeDefs().some((d) => fieldKey(d) === k)) : chosen;
+  // a field the type no longer defines (or another type's, once the Type pill moved) is dropped: the menu cannot offer
+  // it, so nothing could turn it off. Until the definitions are in, the page's own type's keys are kept as they are.
+  const t = fieldType(), defs = t && (relatedBy.get(t) || {}).definitions;
+  if (Array.isArray(chosen)) return chosen.filter((k) => !isFieldKey(k) || (defs ? defs.some((d) => fieldKey(d) === k) : !!t && k.startsWith(t + '?')));
   return onTypePage() ? [...typeDefs().filter((d) => PILL_FIELDS.includes(d.type)).map(fieldKey), 'updated'] : DISPLAY_DEFAULT;
 };
 const displayOn = (id) => displayKeys().includes(id);

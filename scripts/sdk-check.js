@@ -3292,6 +3292,12 @@ async function main() {
     assert.deepEqual(searchQueryParams(filterToSearchQuery(fielded, ME), ME).attributeFilters, { [STATUS]: { textMatches: [{ value: 'On track', mode: 'MODE_EQUALS' }, { value: 'Unknown', mode: 'MODE_EQUALS' }] } },
       'the pills reach the graph as one field with its labels ORed');
     assert.deepEqual(searchQueryToFilter({ entityTypeUris: [RISK] }, ME).types, [RISK], 'and reads it back into the pill');
+    // The Library and a saved search narrowed to that one type get its field pills too: the view asks for them, a
+    // saved query keeps them both ways, and beside another type (or a kind) they apply to nothing.
+    assert.deepEqual(viewParams({ ...VIEW_PRESETS.library, ...fielded }, ME).attributeFilters, searchQueryParams(filterToSearchQuery(fielded, ME), ME).attributeFilters);
+    assert.deepEqual(searchQueryToFilter(filterToSearchQuery(fielded, ME), ME).fields, fielded.fields);
+    assert.equal(viewParams({ ...fielded, types: [RISK, 'tasks'] }, ME).attributeFilters, undefined);
+    assert.equal(filterToSearchQuery({ ...fielded, types: [RISK, 'tana:type:01m1e3nthqj48b8drqb1fmma9e'] }, ME).attributes, undefined);
     // #148: the live query that re-reads an open saved search covers what it lists: kinds, type, state and assignee
     // carried over, text and owners dropped (a live query cannot say them), newest change first.
     assert.deepEqual(liveTrigger(searchQueryParams({ types: ['text'], entityTypeUris: [RISK], stateTypes: ['open'], assignedToViewer: true, textQuery: 'db', ownerUris: ['tana:space:01jspace000000000000000000'] }, ME)),

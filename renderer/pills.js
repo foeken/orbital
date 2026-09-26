@@ -21,23 +21,26 @@ function pillDefs() {
   const typeName = (uri) => ((typeListCache || []).find((t) => t.uri === uri) || {}).title || '…';
   // A kind page (Tasks, Meetings, Chats, People) is that kind: only the Library and the Inbox pick their kinds.
   // A saved search is never a kind page — choosing what it lists is the whole point of it.
-  // A type's page is that type, so its pills are its fields instead (fieldPill below).
-  if (onTypePage()) {
+  // A type's page is that type, so it has no Type pill: its pills are its fields (fieldPill below).
+  // Field filters belong to one type, so a change of type lets go of them.
+  if (!onTypePage() && (onSearchPage() || !(views.find((v) => v.id === view) || {}).kind)) defs.push({ id: 'type', command: 'Filter by type', value: [names(TYPES, kinds), ...typed.map(typeName)].filter(Boolean).join(', ') || 'Any type', icon: one ? one[2] : typed.length === 1 && !kinds.length ? typeGlyph(typed[0]) : 'any', rows: () => (loadWorkspaceTypes(), [
+    { label: 'Any type', reset: true, icon: 'any', checked: !f.types, run: () => save({ types: null, fields: null }) },
+    ...TYPES.map((t) => (t ? { label: t[1], icon: t[2], keepOpen: true, checked: kinds.includes(t[0]), run: () => save({ types: toggleIn(kindIds, kinds.length ? kinds : null, t[0]), fields: null }) } : { div: true })), // multi-select: the menu stays open to tick more
+    ...(typeListCache && typeListCache.length ? [{ head: 'Workspace types' }, ...typeListCache.map((t) => ({ label: t.title || 'Untitled type', icon: typeGlyph(t.uri), keepOpen: true, checked: typed.includes(t.uri), run: () => save({ types: toggleIn(typeListCache.map((x) => x.uri), typed.length ? typed : null, t.uri), fields: null }) }))] : []),
+  ]) });
+  // One workspace type (a type's page, or a search or view picking that type alone): its fields get pills.
+  const ft = fieldType();
+  if (ft) {
     const pills = typeDefs().map((def) => fieldPill(def, f, save)).filter(Boolean);
     defs.push(...pills);
     // A filter on a field that no longer gets a pill (retyped, removed, lost its link targets) keeps one to clear it
     // with, or the page would stay narrowed by something nobody can see. Only once the definitions are in.
-    if ((relatedBy.get(zoom.docId) || {}).definitions) for (const key of Object.keys(f.fields || {})) {
+    if ((relatedBy.get(ft) || {}).definitions) for (const key of Object.keys(f.fields || {})) {
       if (pills.some((p) => fieldKey({ key: p.id.slice(6) }) === key)) continue;
       const title = (typeDefs().find((d) => fieldKey(d) === key) || {}).title || 'Removed field';
       defs.push({ id: 'field:' + key.split('?attribute=')[1], label: title, command: 'Clear filter on ' + title, icon: 'field', value: 'Filtered', rows: () => [{ label: 'Any', reset: true, checked: false, run: () => putField(f, save, key, null) }] });
     }
   }
-  else if (onSearchPage() || !(views.find((v) => v.id === view) || {}).kind) defs.push({ id: 'type', command: 'Filter by type', value: [names(TYPES, kinds), ...typed.map(typeName)].filter(Boolean).join(', ') || 'Any type', icon: one ? one[2] : typed.length === 1 && !kinds.length ? typeGlyph(typed[0]) : 'any', rows: () => (loadWorkspaceTypes(), [
-    { label: 'Any type', reset: true, icon: 'any', checked: !f.types, run: () => save({ types: null }) },
-    ...TYPES.map((t) => (t ? { label: t[1], icon: t[2], keepOpen: true, checked: kinds.includes(t[0]), run: () => save({ types: toggleIn(kindIds, kinds.length ? kinds : null, t[0]) }) } : { div: true })), // multi-select: the menu stays open to tick more
-    ...(typeListCache && typeListCache.length ? [{ head: 'Workspace types' }, ...typeListCache.map((t) => ({ label: t.title || 'Untitled type', icon: typeGlyph(t.uri), keepOpen: true, checked: typed.includes(t.uri), run: () => save({ types: toggleIn(typeListCache.map((x) => x.uri), typed.length ? typed : null, t.uri) }) }))] : []),
-  ]) });
   if (tasksInFilter(f)) {
     defs.push({ id: 'status', label: 'Status', command: 'Filter by status', icon: 'status', value: names(STATES, f.states) || 'Any', rows: () => [
       { label: 'Any status', reset: true, checked: !f.states, run: () => save({ states: null }) },
