@@ -116,7 +116,7 @@ These helpers are the app's verified native capability boundary. Ownership is an
 | `everyoneOnly(graph, nodes)` | The graph nodes everyone in the org can see (#253): not restricted themselves and nothing restricted above them but the org root. One owner chain per distinct owner; an unowned (Library) node counts as open. The view filter's `audience: 'everyone'`. |
 | `LIBRARY` | `{ id: null, title: 'Library' }`: the move target for "no owner". |
 
-The sharing and move IPC handlers in `main.js` call these helpers for access mutations, and `main/documents.js` for native document actions. The renderer's `editable` flag is only a companion UI capability and does not replace server authorization.
+`main/documents.js` calls these helpers from its access IPC handlers (sharing, move) and for native document actions. The renderer's `editable` flag is only a companion UI capability and does not replace server authorization.
 
 ## `sdk/document.js` — `class Document extends EventEmitter`
 
