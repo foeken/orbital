@@ -60,17 +60,23 @@ S.windowViews = new Map(); // webContents id -> { id, filter }: the view that pa
 const MIN_PANE = 320; // neither half is dragged narrower than this (renderer/app.js splitGrip)
 const SPLIT_LINE = { light: '#ececec', dark: '#2b2f31' }; // the window behind the pages, in the page's theme; the line itself is the right half's (styles.css .splitgrip)
 const paneWindow = (wc) => [...S.windows].find((w) => w.panes.some((p) => p.webContents === wc));
+// Signed out, every page is the same login button, so the window shows its left page alone and the right one waits
+// hidden; the split stays saved and comes back after login (relayout).
+const signedOut = () => S.status.authChecking === false && S.status.authenticated === false;
+const isSplit = (win) => win.panes.length > 1 && !signedOut();
 // each page's side ('' left or alone, '2' right) and whether it is half of a split: the grip on its inner edge (renderer/app.js)
-const tellSides = (win) => win.panes.forEach((p, i) => { p.side = i ? '2' : ''; if (!p.webContents.isDestroyed()) p.webContents.send('window:side', p.side, win.panes.length > 1); });
+const tellSides = (win) => win.panes.forEach((p, i) => { p.side = i ? '2' : ''; if (!p.webContents.isDestroyed()) p.webContents.send('window:side', p.side, isSplit(win)); });
 // win.splitAt: the left half's share of the width, dragged by the grip and saved with the window (even by default)
 function layout(win) {
   const { width, height } = win.getContentBounds(), [left, right] = win.panes;
-  if (!right) return left && left.setBounds({ x: 0, y: 0, width, height });
+  if (right) right.setVisible(isSplit(win));
+  if (!isSplit(win)) return left && left.setBounds({ x: 0, y: 0, width, height });
   const min = Math.min(MIN_PANE, Math.floor(width / 2));
   const w = Math.max(min, Math.min(width - min, Math.round(width * (win.splitAt ?? 0.5))));
   left.setBounds({ x: 0, y: 0, width: w, height });
   right.setBounds({ x: w, y: 0, width: width - w, height });
 }
+const relayout = () => { for (const w of S.windows) if (!w.isDestroyed()) { layout(w); tellSides(w); } };
 function addPane(win, side) {
   const pane = new WebContentsView({ webPreferences: { preload: path.join(__dirname, 'preload.js') } });
   pane.side = side; // '2': the right half, which keeps its own view and place (renderer/state.js SIDE)
@@ -115,16 +121,12 @@ function createWindow() {
   win.on('resize', () => layout(win));
   win.on('close', saveBounds);
   win.on('focus', () => { S.win = win; refresh(); });
-  // The quick-add panel is a window of its own, and a hidden one still counts as open: without this, closing the
-  // outliner after the panel had been summoned once would leave the app running invisibly instead of quitting.
   win.on('closed', () => {
     // right half first: the left one closing first would leave the right one alone for a moment, and removePane would
     // hand it the left half's keys, so it saved its page over the left one's and a restart opened both on it
     for (const p of [...win.panes].reverse()) removePane(win, p);
     S.windows.delete(win);
     if (S.win === win) { S.win = [...S.windows].at(-1) || null; S.pane = frontPane(); }
-    if (S.windows.size) return;
-    const panel = quick.panelState.win; if (panel && !panel.isDestroyed()) panel.destroy();
   });
 }
 // ⌥⌘N (issue #159): a second page beside the one that asked, opening where it was (the renderer stores its place
@@ -243,7 +245,7 @@ ipcMain.handle('window:otherPane', (e) => { const other = paneWindow(e.sender)?.
 // A restart adds both halves before either loads, so a restored right half knows it is one.
 ipcMain.on('window:getSide', (e) => {
   const win = paneWindow(e.sender);
-  e.returnValue = { side: win?.panes.find((p) => p.webContents === e.sender)?.side || '', split: win?.panes.length > 1 };
+  e.returnValue = { side: win?.panes.find((p) => p.webContents === e.sender)?.side || '', split: Boolean(win && isSplit(win)) };
 });
 // Cmd+K Work View (renderer/timeline.js): the page asking has stored both halves' places. A new right half reads its
 // own at load; a half already open is told to go to its own.
@@ -617,14 +619,14 @@ ipcMain.handle('sync:login', async () => {
     await start();
   } catch (e) {
     report(e);
-  }
+  } finally { relayout(); }
 });
 
 if (process.env.TANA_MAIN_TEST) {
   module.exports = { resolveInitialAuth, graphRow, cachedNodeHue, rememberType, VIEWS, toNode, outlineWithReferences, chatOutline, op, onChange, documentAction, archivedTypes, createDocument, creationOptions, typeChoices, typeCandidates, setType, setTypeHue, discussWith, ai, icons, settings, search, viewFilter, searchCreate, searchTitle, viewRows, spaceChildren, start, refresh, related, watchRelated, callOf, weekTitle, weekNode,
     statusSnapshot: () => ({ ...S.status }), rememberNodeHue, restoredBounds, today,
     undo: () => history(undoStack, redoStack, 'undo', 'canUndo'), redo: () => history(redoStack, undoStack, 'redo', 'canRedo'), visibleGraphNodes, pinTree, changesOf, summaryChanges, followSummary, announceNewInbox, watchInbox, timelinePage,
-    nodePin,
+    nodePin, layout,
     quickContext: quick.quickContext, quickCreate: quick.quickCreate, togglePanel: quick.togglePanel, registerShortcut: quick.registerShortcut, QUICK_ACCELERATOR: quick.ACCELERATOR,
     assignToAgent, // the one handoff both entry points use, so a check can drive the panel through the real path
     accessContext, inboxCount, S,
@@ -653,7 +655,12 @@ if (process.env.TANA_MAIN_TEST) {
       if (kind === 'summary' && clickedEdits.has(id)) return;
       if (kind === 'edit') clickedEdits.delete(id);
       const note = new Notification({ id, title, subtitle, body, silent: kind === 'summary' });
-      note.on('click', () => { if (id) clickedEdits.add(id); const wc = frontPane(); if (wc) { S.win.show(); S.win.focus(); wc.focus(); wc.send('notify:open', docId); } }); // the page used last, not all of them
+      note.on('click', () => { // the page used last, not all of them; a new window when the last one was closed
+        if (id) clickedEdits.add(id);
+        let wc = frontPane();
+        if (!wc) { createWindow(); wc = frontPane(); return wc.once('did-finish-load', () => wc.send('notify:open', docId)); }
+        S.win.show(); S.win.focus(); wc.focus(); wc.send('notify:open', docId);
+      });
       note.show();
     };
     S.userData = app.getPath('userData');
@@ -661,11 +668,16 @@ if (process.env.TANA_MAIN_TEST) {
     S.session = createTanaSession();
     createMenu();
     createWindow();
+    // Closing the last window keeps the app in the Dock, as a Mac app does (Cmd+Q quits); the Dock icon opens a new
+    // one, and brings the window forward while there is one. Registered once the first window exists, so a click
+    // during launch cannot open a window before the database is.
+    app.on('activate', () => { if (!S.windows.size) createWindow(); });
     // The global shortcut is registered once the app is ready and released at quit; a refusal (another app holds the
     // combo) lands in the status the window shows rather than leaving a key that quietly does nothing.
     quick.registerShortcut(globalShortcut, toggleQuickPanel);
     const auth = await resolveInitialAuth(S.session);
     setStatus({ authChecking: false, authenticated: auth.authenticated, error: auth.error ? errText(auth.error) : null });
+    relayout();
     if (auth.authenticated) {
       try { await start(); }
       catch (e) { setStatus({ error: errText(e) }); }
@@ -679,7 +691,7 @@ if (process.env.TANA_MAIN_TEST) {
     setInterval(() => updater.check(), 24 * 60 * 60 * 1000);
   });
 
-  app.on('window-all-closed', () => app.quit());
+  app.on('window-all-closed', () => {}); // stay in the Dock (activate above)
   app.on('before-quit', () => { if (S.client) S.client.close().catch(() => {}); agent.stopOwnedTasks(); ai.stop(); }); // no writer outlives the app that spawned it
   app.on('will-quit', () => globalShortcut.unregisterAll());
 }

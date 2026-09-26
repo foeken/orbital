@@ -971,6 +971,14 @@ async function main() {
     await backend.handlers.get('sensitive:set')({ sender: right.webContents }, marked, false);
     assert.deepEqual(heard.map(([name]) => name), ['left', 'other'], 'a sensitive mark tells the other pages too');
     backend.S.windows.clear(); settings.setPref('theme', undefined); await settings.flush();
+    // Signed out, both halves of a split are the same login button: the left one fills the window, the right one hides.
+    const box = () => ({ setBounds(b) { this.bounds = b; }, setVisible(v) { this.visible = v; } }), split = { getContentBounds: () => ({ width: 1000, height: 600 }), panes: [box(), box()] };
+    const auth = { ...backend.S.status };
+    Object.assign(backend.S.status, { authChecking: false, authenticated: false }); backend.layout(split);
+    assert.deepEqual([split.panes[0].bounds.width, split.panes[1].visible], [1000, false], 'signed out: the login fills the window');
+    Object.assign(backend.S.status, { authenticated: true }); backend.layout(split);
+    assert.deepEqual([split.panes[0].bounds.width, split.panes[1].visible], [500, true], 'signed in: the split comes back');
+    Object.assign(backend.S.status, auth);
     // A node's link opens it in Tana on the route Tana itself picks for its kind (issue #88).
     backend.testRuntime({ me: { orgDocUri: 'tana:org:01ks7rqsrqjn7vwyjhx75r6jg0' } });
     const link = (kind) => backend.handlers.get('doc:link')(null, 'tana:' + kind + ':01m2nrv0v6qj2brghq04t8wv87');
