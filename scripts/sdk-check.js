@@ -191,6 +191,8 @@ async function main() {
       const typeDoc = make('type');
       typeDoc.transact((l) => l.getMap('data').set('template', { attributes: [{ key: 'gcx3bvn5', title: 'Fase' }] }));
       assert.deepEqual(fields.templateTitles(typeDoc), { gcx3bvn5: 'Fase' }, 'field names come from the type template');
+      assert.deepEqual(fields.definitions(typeDoc), [{ key: 'gcx3bvn5', title: 'Fase' }], 'and so do the definitions main lists on a type page');
+      assert.deepEqual(fields.definitions(make('type')), [], 'a type without a template defines nothing');
       { // defining a field: one more map in template.attributes, in the container layout a real type carries
         const real = make('type');
         const key = fields.addField(real, { title: 'Discuss with', type: 'member', cardinality: 'single' });

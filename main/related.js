@@ -108,7 +108,7 @@ async function attributeTitles(typeUri) {
 // rather than cached with the titles: the subscribed type document is live.
 async function fieldDefs(typeUri) {
   let defs;
-  try { const t = (await S.client.sync.subscribe(typeUri)).data.get('template'); defs = ((t && typeof t.toJSON === 'function' ? t.toJSON() : t) || {}).attributes || []; } catch { return []; }
+  try { defs = fields.definitions(await S.client.sync.subscribe(typeUri)); } catch { return []; }
   defs = defs.filter((d) => d && d.key);
   await resolveTypes(defs.flatMap((d) => (d.to || []).map((t) => t.uri)));
   return defs.map((d) => (d.to ? { ...d, to: d.to.map((t) => ({ ...t, name: typeTitles.get(t.uri) || t.title || '' })) } : d));
