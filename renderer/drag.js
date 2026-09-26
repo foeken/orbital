@@ -26,7 +26,8 @@ const dragListable = (n) => ['bullet', 'numbered'].includes(n.block) || (!isAtom
 const dragEmpty = (item) => !isAtomic(item.node) && !String(item.node.text || '').trim() && !hasKids(item);
 // A document row can be dragged too, but it never moves: what lands is a reference to it (dragRef).
 // Not on the Timeline (renderer/timeline.js): a record of what happened, not an outline, so nothing on it is picked up
-const canDragItem = (item) => !!item && !item.node.draft && !item.node.timeline && !item.parent?.node?.timeline
+// except the tasks under Today's Tasks, which can be dragged into My Tasks (dropOnGroup below).
+const canDragItem = (item) => !!item && !item.node.draft && !item.node.timeline && (!item.parent?.node?.timeline || !!item.parent.node.timeline.today)
   && (item.node.kind === 'document' ? !!tana.insertMention && isRealId(item.node.id) && !isGone(item.node.id)
     : !!tana.moveTo && item.node.kind === 'block' && canEditStructure(item) && !dragEmpty(item));
 // What a drop writes, decided by what was picked up rather than by a modifier: a document cannot move into an
@@ -140,15 +141,83 @@ function endDrag() {
   for (const el of eachRow('.node.dragging')) el.classList.remove('dragging');
   dragKey = null;
   showDrop(null);
+  showGroupDrop(null);
+}
+
+// ---- a task dropped on a group (#169) ----
+// In My Tasks grouped by Responsibility, and on the Timeline's Today's Tasks, a drop between rows is not a place in
+// an outline: it is a group, and landing in one means changing what the task is. The writes are read off the task
+// as it stands rather than off the group it left, so a drop from the other pane — its own renderer, which only the
+// dataTransfer crosses — decides the same way. Each group adds what it needs and takes away what would keep the
+// task elsewhere, in the order responsibilityOf reads them: Agent, then a day pin. null: it cannot go there.
+const TASK_DRAG_TYPE = 'application/x-orbital-task'; // { id, text, kind, icon, createdBy, stateType }, set for a task
+const GROUP_STATES = { 'My inbox': 'proposed', Mine: 'open', 'My completed': 'closed', 'My later': 'not_now' };
+function groupDropWrites(target, t, me, today) {
+  const mine = !!me && t.createdBy === me, assigned = t.assignees.includes(me);
+  const clear = [...(t.agent ? [['agent', false]] : []), ...t.dates.map((date) => ['unpin', date])];
+  if (target === 'Today') return t.dates.some((date) => date <= today) ? [] : [['pin', today]];
+  if (target === 'Pinned') return [...(t.dates.length ? [] : [['pin', today]]), ...(t.stateType === 'closed' ? [['state', 'open']] : [])];
+  if (target === 'Agent') return t.agent ? [] : [['agent', true]];
+  if (!mine) return null; // every other group is about tasks you made
+  if (target === 'Unassigned') return [...clear, ...(t.assignees.length ? [['assign', []]] : [])];
+  if (target === 'Tracking') return t.assignees.length && !assigned ? [...clear, ...(t.watched ? [] : [['watch', true]])] : null;
+  const state = GROUP_STATES[target];
+  if (!state) return null;
+  // taken over: you become its only assignee, and the watch that followed it for somebody else is forgotten
+  return [...clear, ...(assigned && t.assignees.length === 1 ? [] : [['assign', [me]]]), ...(t.stateType === state ? [] : [['state', state]]), ...(t.watched && !assigned ? [['watch', null]] : [])];
+}
+const GROUP_WRITES = {
+  agent: (id) => tana.setCodex(id, false), // the Codex task stays; its link goes, as ⌘K Unassign from Agent does
+  pin: (id, date) => tana.pin(id, 'today', date),
+  unpin: (id, date) => tana.unpin(id, 'today', date),
+  assign: (id, uris) => tana.setAssignees(id, uris),
+  state: (id, state) => tana.setState(id, state),
+  watch: (id, on) => tana.setNotify(id, on),
+};
+function dropOnGroup(task, target) {
+  run(async () => {
+    const [meta, pins] = await Promise.all([tana.taskMeta(task.id), tana.pinState(task.id)]);
+    const writes = groupDropWrites(target, { ...task, assignees: meta.assignees, watched: meta.watched, dates: pins.dates, agent: codexIds.has(task.id) }, me()?.id, localDate());
+    if (!writes) throw new Error('This task can\u2019t go under ' + target);
+    if (writes.some(([op, on]) => op === 'agent' && on)) return openAgentPrompt(task); // it needs a prompt: nothing is written until it is sent
+    for (const [op, arg] of writes) await GROUP_WRITES[op](task.id, arg);
+    if (writes.some(([op]) => op === 'agent')) { codexIds.delete(task.id); agentStates.delete(task.id); patchCodex(task.id); }
+    try { taskMetaById.set(task.id, await tana.taskMeta(task.id)); } catch { taskMetaById.delete(task.id); }
+    notifyById.delete(task.id);
+    if (held) held.groups.delete(task.id); // a row held in place by an earlier click would stay put: this one is meant to move
+    loadPinned(true);
+    render(true);
+  });
+}
+// The group under the pointer: Today's Tasks on the Timeline, or the section of My Tasks it is in, heading and rows.
+function groupAt(x, y) {
+  const hit = document.elementFromPoint(x, y);
+  if (!hit || !hit.closest || !outline.parentElement.contains(hit)) return null;
+  for (let el = hit.closest('.node'); el; el = el.parentElement.closest('.node')) if (items.get(el.dataset.key)?.node.timeline?.today) return { id: 'Today', el };
+  if (groupBy() !== 'responsibility') return null;
+  let head = null;
+  for (const h of outline.querySelectorAll('.ghead')) { if (h.getBoundingClientRect().top > y) break; head = h; }
+  const id = head && head.dataset.group;
+  return RESPONSIBILITY.includes(id) && id !== 'Assigned by others' ? { id, el: head } : null;
+}
+let groupDropEl = null;
+function showGroupDrop(target) {
+  const el = target ? target.el : null;
+  if (el === groupDropEl) return;
+  if (groupDropEl) groupDropEl.classList.remove('drop-into');
+  groupDropEl = el;
+  if (el) el.classList.add('drop-into');
 }
 document.addEventListener('dragstart', (e) => {
-  const grip = e.target && e.target.closest ? e.target.closest('.bullet[draggable="true"]') : null;
+  const grip = e.target && e.target.closest ? e.target.closest('.bullet[draggable="true"], .line[draggable="true"]') : null;
   const row = grip && grip.closest('.node'), item = row && items.get(row.dataset.key);
   if (!item || !canDragItem(item)) return;
   flush(item.key); // what was typed into it is written first: the move carries the row as it stands
   dragKey = item.key;
   e.dataTransfer.effectAllowed = item.node.kind === 'document' ? 'link' : 'move';
   e.dataTransfer.setData(DRAG_TYPE, item.key);
+  const n = item.node;
+  if (isTask(n) && isRealId(n.id)) e.dataTransfer.setData(TASK_DRAG_TYPE, JSON.stringify({ id: n.id, text: n.text || '', kind: n.kind, icon: n.icon, createdBy: n.createdBy, stateType: stateOf(n) }));
   e.dataTransfer.setDragImage(dragLine(row), 8, 10);
   row.classList.add('dragging');
 });
@@ -159,14 +228,16 @@ document.addEventListener('dragover', (e) => {
     if (plan) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }
     return;
   }
-  if (!dragKey) return; // somebody else's drag — text out of a row, a file onto the window — is left alone
+  const task = e.dataTransfer.types.includes(TASK_DRAG_TYPE); // a task, maybe from the other pane, where dragKey is not set
+  if (!dragKey && !task) return; // somebody else's drag — text out of a row, a file onto the window — is left alone
   // ponytail: every dragover measures every row on screen; a page of a few hundred rows is one cheap layout read.
   // If a very long page ever drags heavily, take the rects at dragstart and add the scroll delta.
-  const plan = dropPlan(e.clientX, e.clientY);
+  const plan = dragKey ? dropPlan(e.clientX, e.clientY) : null, group = !plan && task ? groupAt(e.clientX, e.clientY) : null;
   showDrop(plan);
-  if (!plan) return;
+  showGroupDrop(group);
+  if (!plan && !group) return;
   e.preventDefault(); // only a place that can take the row accepts the drop
-  e.dataTransfer.dropEffect = plan.ref ? 'link' : 'move';
+  e.dataTransfer.dropEffect = plan && !plan.ref ? 'move' : 'link';
 });
 document.addEventListener('drop', (e) => {
   if (!dragKey && e.dataTransfer.types.includes('Files')) {
@@ -177,11 +248,13 @@ document.addEventListener('drop', (e) => {
     if (files.length) uploadImages(plan.docId, plan.afterId, files).catch(showError);
     return;
   }
-  if (!dragKey) return;
+  const raw = e.dataTransfer.getData(TASK_DRAG_TYPE);
+  if (!dragKey && !raw) return;
   e.preventDefault();
-  const plan = dropPlan(e.clientX, e.clientY), key = dragKey;
+  const plan = dragKey ? dropPlan(e.clientX, e.clientY) : null, group = !plan && raw ? groupAt(e.clientX, e.clientY) : null, key = dragKey;
   endDrag();
   if (plan) applyDrop(key, plan);
+  else if (group) dropOnGroup(JSON.parse(raw), group.id);
 });
 document.addEventListener('dragend', endDrag);
-document.addEventListener('dragleave', (e) => { if (!dragKey && !e.relatedTarget) showDrop(null); }); // files dragged back out of the window
+document.addEventListener('dragleave', (e) => { if (e.relatedTarget) return; showGroupDrop(null); if (!dragKey) showDrop(null); }); // dragged back out of the window, or into the other pane
