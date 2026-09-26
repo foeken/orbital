@@ -189,7 +189,10 @@ if (tana.onSettings) tana.onSettings((next) => {
   sensitiveLoading = null; loadSensitive().then(refreshSensitive); // the sensitive marks and the MCP switch are settings too, kept outside the preferences
   if (tana.mcpHidden) tana.mcpHidden().then((on) => { mcpHidden = !!on; }, () => {});
   loadFilters(); // and so are the views' filters, the agent marks and the watch choices (main/settings.js tellOthers)
-  codexLoading = null; loadCodex();
+  // a mark that moved asks for its task's state and host too, or its badge waits pending for the 30 s poll; only then,
+  // since that read starts a Codex app-server child
+  const agents = [...codexIds].sort().join();
+  codexLoading = null; loadCodex().then(() => { if ([...codexIds].sort().join() !== agents) loadAgentStates(); });
   notifyById.clear();
   renderSoon();
 });

@@ -6748,8 +6748,8 @@ function runPrefsStoreCheck() {
 // follow. A page left with the old filter drew stale pills and wrote that filter back over the new one with its next pill.
 async function runSettingsElsewhereCheck() {
   const api = vm.runInNewContext(`
-    let handler = null, home = null, themePref = 'light', sensitiveLoading = null, mcpHidden = false, codexLoading = 'loaded', zoom = null, view = 'library';
-    let listed = 0, codexReads = 0, stored = {};
+    let handler = null, home = null, themePref = 'light', sensitiveLoading = null, mcpHidden = false, codexLoading = null, zoom = null, view = 'library';
+    let listed = 0, codexReads = 0, stateReads = 0, stored = {}, codexIds = new Set(), marks = [];
     const tana = { onSettings: (cb) => { handler = cb; }, viewFilter: async (id) => stored[id] };
     const views = [{ id: 'library' }, { id: 'inbox' }];
     const filters = new Map([['library', { states: ['open'] }], ['inbox', { states: ['proposed'] }]]);
@@ -6758,19 +6758,20 @@ async function runSettingsElsewhereCheck() {
     const onTypePage = () => false, isTypeId = () => false, typeFilter = () => ({}), reload = async () => {}, mergePrefs = () => {}, pref = (k, d) => d;
     const renderSoon = () => {}, showError = (e) => { throw e; }, showTheme = () => {}, loadSensitive = async () => {}, refreshSensitive = () => {};
     const widenFilter = (id, f) => f, loadView = () => { listed++; };
-    const loadCodex = () => { codexReads++; codexLoading = 'loaded'; };
+    const loadCodex = () => { codexReads++; codexIds = new Set(marks); return (codexLoading = Promise.resolve()); };
+    const loadAgentStates = () => { stateReads++; };
     ${functionSource('loadFilters')}
     ${sourceBetween('if (tana.onSettings) tana.onSettings(', 'if (tana.onSystemTheme)')}
     ({
-      change: async (next) => { stored = next; handler({}); for (let i = 0; i < 5; i++) await Promise.resolve(); },
-      state: () => ({ library: filters.get('library'), listed, codexReads, watch: notifyById.size }),
+      change: async (next, agents = marks) => { stored = next; marks = agents; handler({}); for (let i = 0; i < 5; i++) await Promise.resolve(); },
+      state: () => ({ library: filters.get('library'), listed, codexReads, stateReads, watch: notifyById.size }),
     });
   `);
+  await api.change({ library: { states: ['closed'] }, inbox: { states: ['proposed'] } }, ['tana:text:a']);
+  assert.deepEqual(plain(api.state()), { library: { states: ['closed'] }, listed: 1, codexReads: 1, stateReads: 1, watch: 0 },
+    'the filter another page stored replaces this page’s copy and lists the view again; the agent marks, a new mark’s task state and the watch states are read afresh');
   await api.change({ library: { states: ['closed'] }, inbox: { states: ['proposed'] } });
-  assert.deepEqual(plain(api.state()), { library: { states: ['closed'] }, listed: 1, codexReads: 1, watch: 0 },
-    'the filter another page stored replaces this page’s copy and lists the view again; the agent marks and watch states are read afresh');
-  await api.change({ library: { states: ['closed'] }, inbox: { states: ['proposed'] } });
-  assert.equal(api.state().listed, 1, 'a settings change that leaves this view’s filter alone does not list it again');
+  assert.deepEqual([api.state().listed, api.state().stateReads], [1, 1], 'a settings change that leaves this view’s filter and the marks alone lists nothing and starts no Codex read');
   console.log('ok  settings from another page: view filters, agent marks and watch states follow, and the view is listed again only when its filter moved');
 }
 
