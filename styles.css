@@ -461,9 +461,10 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 /* The Timeline's glyphs are one grey, the markers' own: a row under an entry keeps its glyph and drops its colour — a
    meeting's gold, a type's hue — so the page stays monochrome */
 .node.tl > .children .bullet.icon svg, .node.tl > .children .bullet.icon:hover svg { color: #8e9297; }
-/* Join (renderer/timeline.js): a small outlined pill after a meeting's title, as monochrome as the rest of the page */
-.tl-join { margin-left: 10px; padding: 0 9px; border: 1px solid #d6d9dc; border-radius: 10px; background: #fff; color: #1c2024; font: inherit; font-size: 12px; line-height: 18px; vertical-align: 2px; cursor: pointer; }
-.tl-join:hover { background: #f1f2f3; border-color: #c4c8cc; }
+/* Join (renderer/timeline.js): the video glyph after a meeting's title, in the page's grey until it is pointed at */
+.tl-join { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 22px; margin-left: 6px; padding: 0; border: 0; border-radius: 4px; background: none; color: #8e9297; vertical-align: -5px; cursor: pointer; }
+.tl-join svg { width: 18px; height: 18px; }
+.tl-join:hover { background: #ececec; color: #1c2024; }
 .node.tl > .children .meta { display: none; } /* assigned to you and private: true of every one, so said by none */
 .node.tl .cbadge { display: none; } /* the local agent's badge is a fact about the task, not about what happened to it */
 .node.tl .line, .node.tl .line .text { cursor: pointer; } /* every row here opens something: a click is not a place for a caret */
@@ -473,8 +474,8 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 [data-theme="dark"] .node.tl::before { border-left-color: #34373a; }
 [data-theme="dark"] .tl-divider::before { border-top-color: #34373a; }
 [data-theme="dark"] .node.tl > .line > .bullet.icon svg { background: #1b1d1e; color: #8a8f95; }
-[data-theme="dark"] .tl-join { background: #242628; border-color: #3a3d40; color: #e8eaec; }
-[data-theme="dark"] .tl-join:hover { background: #2e3134; }
+[data-theme="dark"] .tl-join { color: #8a8f95; }
+[data-theme="dark"] .tl-join:hover { background: #2e3134; color: #e8eaec; }
 [data-theme="dark"] .node.tl > .children .bullet.icon svg, [data-theme="dark"] .node.tl > .children .bullet.icon:hover svg { color: #8a8f95; }
 [data-theme="dark"] .node.tl-done > .line > .bullet.icon svg { color: #fff; background: none; }
 [data-theme="dark"] .node:is(.tl-new, .tl-faint) > .line > .bullet.icon svg { color: #5a5d60; }

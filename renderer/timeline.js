@@ -47,11 +47,13 @@ function timelineGroups(list) {
 }
 // The rule closes the blocks at the top — Today's Tasks, then Upcoming meetings when there are any — before the history
 const timelineTopEnds = (n, next) => !!(n.timeline?.today || n.timeline?.upcoming) && !next?.timeline?.upcoming;
-// Join: a meeting still to come or under way goes straight to its call (main/timeline.js join, the calendar's link).
+// Join: a meeting still to come or under way goes straight to its call (main/timeline.js join, the calendar's link), from a
+// video glyph after its title (Nucleo's, as the meeting sidebar's call row has it).
 // Its own click: the row around it opens the meeting.
 function timelineJoinEl(node) {
   const b = document.createElement('button');
-  b.type = 'button'; b.className = 'tl-join'; b.tabIndex = -1; b.textContent = 'Join'; b.title = 'Join the call';
+  b.type = 'button'; b.className = 'tl-join'; b.tabIndex = -1; b.title = 'Join the call'; b.setAttribute('aria-label', 'Join the call'); // icon only, so the name has to come from here
+  const svg = iconNode('video'); if (svg) b.append(svg);
   b.onmousedown = (e) => e.preventDefault();
   b.onclick = (e) => { e.stopPropagation(); run(() => tana.openExternal(node.join)); };
   return b;
