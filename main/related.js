@@ -6,6 +6,7 @@ const { openEdgeQuery, openLiveQuery, EDGE_TYPES } = require('../sdk/livequery')
 const { completedInWindow, filterToSearchQuery, liveTrigger, searchQueryParams, validViewFilter } = require('../sdk/query');
 const { everyoneOnly } = require('../sdk/access');
 const { readSearch } = require('../sdk/node');
+const { callOf, writeUpOf } = require('../sdk/events');
 const { DOC_URI, LIVE_ROWS, NOT_CONNECTED, PIN_HUBS, PLAIN_KINDS, S, idKind, isSpace, send, summaryCache, typeAttrTitles, typeTitles } = require('./state');
 const { graphRow, rememberNodeHue, resolveTypes, toNode } = require('./rows');
 const { canWriteDoc, op, readOnDemand, resolveReferences, subscribe } = require('./documents');
@@ -124,14 +125,7 @@ async function fieldsOf(id) {
   try { await resolveReferences(out.flatMap((f) => (f.lines && f.lines.length ? f.lines.map((line) => ({ segments: line.segments })) : [{ segments: f.segments }]))); } catch { /* a reference stays a bare link */ }
   return out;
 }
-// The write-up of an event has no edge of its own: it is the document the event owns whose title is the event's
-// tagline (Tana generates both together, and it carries the generated appearance.imageUri). Verified in English
-// and Dutch, so the rule is not language-bound. One place: both related() and the navigation redirect use it.
-const writeUpOf = (event, owned) => {
-  const ev = (event && event.calendarEvent) || {};
-  const plain = owned.filter((n) => !(n.state && n.state.type) && idKind(n.id) === 'text' && (n.title || '').trim());
-  return (ev.tagline && plain.find((n) => n.title === ev.tagline)) || plain.find((n) => n.appearance && n.appearance.imageUri) || null;
-};
+// The write-up rule is sdk/events.js writeUpOf; one place, both related() and the navigation redirect use it.
 // A write-up can be moved out of its meeting into a space, and the meeting then owns it no longer (live 2026-09-26,
 // "Datadog & Nedap - executive alignment"). The tagline still names it, so with nothing owned it is looked up by that
 // exact title; only by that: any document can carry a sketch, so the sketch rule stays with what the meeting owns.
@@ -155,22 +149,6 @@ async function summaryUri(id) {
   // Tana writes the summary after the meeting, so "no write-up yet" is a state to re-check, not an answer to cache.
   if (found) summaryCache.set(id, found.id);
   return found ? found.id : null;
-}
-// The meeting's call link. A calendar location holds the join url for an online meeting (Tana Meet, Google Meet,
-// Zoom), a room or address for a physical one, and often both in one semicolon-separated string, so take the first
-// http(s) url out of it rather than the whole field. When the location names the room only ('Teams meeting',
-// '+Main Building 5-R1 Stairs - Zoom') the provider still carries the join url in calendarEvent.actionUrl, which
-// held nothing but Zoom and Teams join links across the calendar (read-only survey, 2026-09-14).
-// The label is the human part of the url; a Teams join path is a couple of hundred characters of ids, so a path that
-// long is dropped and the host speaks for itself.
-function callOf(ev) {
-  const found = typeof ev.location === 'string' ? ev.location.match(/https?:\/\/[^\s;,]+/i) : null;
-  const url = found ? found[0].replace(/[).,;]+$/, '') : typeof ev.actionUrl === 'string' ? ev.actionUrl : '';
-  if (!/^https?:\/\//i.test(url)) return undefined;
-  try {
-    const u = new URL(url), label = (u.host + u.pathname).replace(/\/+$/, '');
-    return { url, label: label.length > 60 ? u.host : label };
-  } catch { return undefined; }
 }
 
 // The fallback history, from the graph node alone, used when the change-summary service has nothing to say.
@@ -409,4 +387,4 @@ const ipc = {
   'search:preview': (_e, filter) => searchPreview(filter),
 };
 
-module.exports = { spaceChildren, searchChildren, searchPreview, attributeTitles, fieldsOf, writeUpOf, summaryUri, callOf, changesOf, summaryChanges, historyOf, backlinkGroups, related, watchRelated, unwatchRelated, watchedPages, withSearchHeads, ipc };
+module.exports = { spaceChildren, searchChildren, searchPreview, attributeTitles, fieldsOf, summaryUri, changesOf, summaryChanges, historyOf, backlinkGroups, related, watchRelated, unwatchRelated, watchedPages, withSearchHeads, ipc };

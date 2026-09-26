@@ -256,9 +256,11 @@ Sidebar sections, Tana's own writes (`J_` in the bundle of 2026-09-23, docs/PINN
 
 Items pinned *on* an event or a space are a different thing (docs/PINNING.md section 4) and take the document itself, synchronously: `items(doc)` → `[{ uri, mode? }]` · `pinItem(doc, uri, mode?)` (dedup on uri; a re-pin with a mode updates it in place) · `unpinItem(doc, uri)` (every copy); `items` reads a duplicate as its first copy.
 
-## `sdk/events.js` — editing a meeting
+## `sdk/events.js` — a meeting: editing it, its write-up and its join link
 
 Tana's event wrapper, write for write (bundle of 2026-09-23); gate calls with `access.canEditEvent`. `setTime(doc, start, end)` writes both epoch-ms times and deletes `allDay` · `setTimezone` / `setLocation` / `setDescription(doc, text | undefined)` set or delete the key · `lineKey(email)` → `email:<address>`, trimmed and lowercased as Tana does, undefined without an address · `addAttendees(doc, [{ email?, userUri? }], byUri)` copies a calendar event's legacy `data.attendees`/`data.organizer` into the root `attendees` roster first (Tana's `seedRosterFromLegacyAttendees`), then writes one line per person — `email:<lowercased>` when there is an email, else `tana:<ulid>` with `identityUri` — as `{ role: 'required', cutype: 'individual', source: 'tana' }` merged into any existing line, and gives a `tana:user-profile:` an `attendee` participant grant stamped `changedBy` (an existing grant is kept); a bad entry throws before anything is written · `attendees(doc)` → roster lines plus legacy entries not already on it. `data.syncStatus` (`pending | synced | failed`) and `data.syncError` are the server's report of the calendar write-back; no client writes them.
+
+Two pure rules over graph nodes, used by main/related.js and the CLI: `writeUpOf(event, owned)` → the owned text document (not a task) titled with `calendarEvent.tagline`, else the one with a generated `appearance.imageUri`, else null (docs/MEETINGS.md; looking one up by title once it has left the meeting needs the graph and stays in main, `writeUpFor`) · `callOf(calendarEvent)` → `{ url, label }` or undefined: the first http(s) url in `location`, else `actionUrl`; the label is host and path, the host alone past 60 characters.
 
 ## `sdk/calls.js` — who is in a meeting, and what it left behind
 
