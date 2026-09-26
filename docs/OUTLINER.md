@@ -354,6 +354,11 @@ keeps its state behind it. A row that cannot run is greyed and skipped by ↑/�
 commands, never documents: a query that matches no command gives one row, "Search Tana for “…”", which opens Cmd+S
 with the query running.
 
+**In a split window** (issue #409) the card and its scrim cover the whole window, centred over both halves, and
+everything the palette does stays with the half that opened it: its rows, the node it acts on, its keys and where the
+caret goes back to. That holds for every page opened through `showPage` (⌘K and its pages, ⌘S, the key recorder); the
+@ link search and the "/" menu belong to their spot in the half and stay in it. How it is drawn: Split view below.
+
 **Groups**, in order: Selection (with a multi-selection; the page's own rows follow as Current page) or Current node,
 Table, Views (`VIEW_ORDER`: Work View, Timeline, Today, This week, Inbox, Notifications, Proposals, Library, Types),
 Searches, Types, View options, Actions, Navigate, Window, Settings, Help.
@@ -854,6 +859,16 @@ nothing about them as documents. Each is a place the app remembers, so ⌘R on o
   from the screen, keeps each half at least 320px and saves `splitAt` with the window), a double click evens it out,
   and over either grip both halves draw their half of the swap pill (`window:splitHover`). A restart brings the split
   back, each half on its own view and place; a half with nothing stored opens the Work View.
+- **The palette over both halves** (issue #409). The palette is the opener's own page: while it is open, main lays that
+  page over the whole window, above the other half (main.js `coverWindow`, `window:cover`, synchronous so the first
+  frame knows the half), and tells it its half, `{ x, width }`, again on every layout (a resize) until it lets go.
+  The page keeps drawing itself in its half (styles.css `html.cover`: the body offset and sized to the half, the split
+  line and the toast at the half's edges) and is see-through beside it (panes have a transparent background), so the
+  other half shows under the scrim and keeps drawing live updates. The class follows the page's own width, on once it
+  is wider than its half and off once it is back, so no frame shows the page out of place while main resizes it. A
+  click on the scrim over the other half is a click on the opener's scrim and closes the palette; the page lets go
+  once the scrim has faded (`MOTION.quick`). A page alone in its window is answered null and nothing changes. A Help
+  tour or Create task stays above it.
 
 ### Overlays
 

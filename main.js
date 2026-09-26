@@ -68,22 +68,43 @@ const signedOut = () => S.status.authChecking === false && S.status.authenticate
 const isSplit = (win) => win.panes.length > 1 && !signedOut();
 // each page's side ('' left or alone, '2' right) and whether it is half of a split: the grip on its inner edge (renderer/app.js)
 const tellSides = (win) => win.panes.forEach((p, i) => { p.side = i ? '2' : ''; if (!p.webContents.isDestroyed()) p.webContents.send('window:side', p.side, isSplit(win)); });
-// win.splitAt: the left half's share of the width, dragged by the grip and saved with the window (even by default)
+// win.splitAt: the left half's share of the width, dragged by the grip and saved with the window (even by default).
+// Answers each shown page's half, { x, width }. win.cover is the page whose palette is open over the whole window
+// (issue #409, coverWindow): it is laid over all of it, and told its half, which it keeps drawing itself in.
 function layout(win) {
-  const { width, height } = win.getContentBounds(), [left, right] = win.panes;
+  const { width, height } = win.getContentBounds();
   if (win.overlay) win.overlay.setBounds({ x: 0, y: 0, width, height }); // the Help tour or Create task covers both halves (openOverlay)
   win.panes.forEach((p, i) => p.setVisible(i === 0 || isSplit(win))); // every time: a hidden right half can become the left one
-  if (!isSplit(win)) return left && left.setBounds({ x: 0, y: 0, width, height });
   const min = Math.min(MIN_PANE, Math.floor(width / 2));
   const w = Math.max(min, Math.min(width - min, Math.round(width * (win.splitAt ?? 0.5))));
-  left.setBounds({ x: 0, y: 0, width: w, height });
-  right.setBounds({ x: w, y: 0, width: width - w, height });
+  const halves = !isSplit(win) ? [{ x: 0, width }].slice(0, win.panes.length) : [{ x: 0, width: w }, { x: w, width: width - w }];
+  halves.forEach((half, i) => {
+    const p = win.panes[i], cover = p === win.cover;
+    p.setBounds(cover ? { x: 0, y: 0, width, height } : { ...half, y: 0, height });
+    if (cover && !p.webContents.isDestroyed()) p.webContents.send('window:cover', half);
+  });
+  return halves;
+}
+// ⌘K, ⌘S and the other palette pages over both halves of a split (issue #409): the page that opens one asks to cover
+// the window, and is laid over all of it, above the other half, see-through beside its own half (renderer/palette.js
+// coverWindow). Everything the palette does stays in that page. Answers its half, or null when there is nothing to
+// cover (a page alone fills its window already). A Help tour or Create task open meanwhile stays above it.
+function coverWindow(wc, on) {
+  const win = paneWindow(wc), pane = win && win.panes.find((p) => p.webContents === wc);
+  if (!pane || (on ? !isSplit(win) : win.cover !== pane)) return null;
+  win.cover = on ? pane : null;
+  if (on) { win.contentView.addChildView(pane); if (win.overlay) win.contentView.addChildView(win.overlay); } // added again: on top
+  const halves = layout(win);
+  return on ? halves[win.panes.indexOf(pane)] : null;
 }
 const relayout = () => { for (const w of S.windows) if (!w.isDestroyed()) { layout(w); tellSides(w); } };
 function addPane(win, side) {
   const pane = new WebContentsView({ webPreferences: { preload: path.join(__dirname, 'preload.js') } });
+  pane.setBackgroundColor('#00000000'); // see-through where the page draws nothing: beside its half while it covers the window (coverWindow)
   pane.side = side; // '2': the right half, which keeps its own view and place (renderer/state.js SIDE)
   pane.webContents.on('focus', () => { S.win = win; S.pane = pane.webContents; });
+  // a Reload (⌘K runs it as the palette closes) or a crash: the page comes back with no palette, so it covers nothing
+  for (const name of ['did-start-loading', 'render-process-gone']) pane.webContents.on(name, () => coverWindow(pane.webContents, false));
   win.panes.push(pane); win.contentView.addChildView(pane); layout(win);
   tellSides(win);
   pane.webContents.loadFile(path.join(__dirname, 'index.html'));
@@ -94,6 +115,7 @@ function addPane(win, side) {
 function removePane(win, pane) {
   const wc = pane.webContents, key = wc.id;
   win.panes = win.panes.filter((p) => p !== pane);
+  if (win.cover === pane) win.cover = null;
   if (!win.isDestroyed()) { win.contentView.removeChildView(pane); layout(win); }
   tellSides(win); // the half left alone is the window's page
   if (win.saveBounds && !win.isDestroyed()) win.saveBounds();
@@ -229,6 +251,8 @@ ipcMain.handle('window:workView', (e) => {
 // The X at the end of the right half's header (renderer/app.js): that half closes, as Cmd+W closes it. Only in a
 // split: a page alone never closes its window from here.
 ipcMain.handle('window:closePane', (e) => { const win = paneWindow(e.sender); if (win && win.panes.length > 1) closeFront(win, e.sender); });
+// synchronous, so the palette's first frame already knows where its page's half is (renderer/palette.js coverWindow)
+ipcMain.on('window:cover', (e, on) => { e.returnValue = coverWindow(e.sender, on === true); });
 ipcMain.handle('overlay:open', (e, page, theme) => { openOverlay(e.sender, page, theme); });
 ipcMain.handle('overlay:close', (e, result) => { closeOverlay([...S.windows].find((w) => w.overlay && w.overlay.webContents === e.sender), result && typeof result === 'object' ? result : {}); });
 // A page's header is a window drag region, where the page hears nothing of the mouse, so a page the pointer has left

@@ -28,6 +28,8 @@ contextBridge.exposeInMainWorld('api', {
   otherPane: () => ipcRenderer.invoke('window:otherPane'), // the keyboard to the other half of a split
   swapPanes: () => ipcRenderer.invoke('window:swapPanes'), // the two halves of a split change sides
   closePane: () => ipcRenderer.invoke('window:closePane'), // this half of a split closes (the X on the right half)
+  coverWindow: (on) => ipcRenderer.sendSync('window:cover', on === true), // the palette over the whole window: this half's { x, width } while it covers it, null when there is nothing to cover
+  onCover: (cb) => ipcRenderer.on('window:cover', (_e, half) => cb(half)), // the window or the split changed while covered: this half's { x, width } now
   watchPointer: () => ipcRenderer.send('window:watchPointer'), // the pointer left the page: main watches the cursor over the drag region
   onPointerOut: (cb) => ipcRenderer.on('window:pointerOut', () => cb()), // and says when it has left this half
   workView: () => ipcRenderer.invoke('window:workView'), // Cmd+K Work View: the right half opened, or the other half sent to its stored place
