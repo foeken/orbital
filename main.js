@@ -9,16 +9,14 @@ const db = require('./db');
 const { createTanaSession } = require('./tana-session');
 const { userDataDir } = require('./userdata');
 const updater = require('./updater');
-const access = require('./sdk/access');
-const { readNode, setTitle, setState, taskMeta, audienceMetadata, setAssignees, setSearchQuery, setSearchView, readSearch, searchDisplay, searchSort } = require('./sdk/node');
+const { readNode, setSearchQuery, setSearchView, readSearch, searchDisplay, searchSort } = require('./sdk/node');
 const { completedWindow, filterToSearchQuery, isHidden, searchQueryToFilter, validViewFilter } = require('./sdk/query');
-const content = require('./sdk/content');
 const { isDateUri } = require('./sdk/dates');
 const agent = require('./main/agent');
 const ai = require('./main/ai');
-const { NOT_CONNECTED, S, VIEWS, docStates, errText, idKind, isSearch, isSpace, metaSigs, today, truncatedViews, redoStack, report, scheduleRefresh, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
+const { S, VIEWS, errText, idKind, isSearch, isSpace, today, truncatedViews, redoStack, report, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
 const { cachedNodeHue, graphRow, rememberNodeHue, rememberType, toNode } = require('./main/rows');
-const { accessContext, addTypeField, archivedTypes, chatOutline, codexIds, createDocument, creationOptions, taskTypes, creatorOf, defineField, discussWith, documentAction, followSummary, history, info, linkShared, metaSig, moveBlock, moveTarget, mut, mutTasks, notifyOn, notifyState, referenceIn, setCodex, setField, setNotify, onChange, op, outlineWithReferences, sensitiveIds, setSensitive, setType, setTypeHue, typeCandidates, typeChoices, typeList } = require('./main/documents');
+const { accessContext, archivedTypes, chatOutline, createDocument, creationOptions, discussWith, documentAction, followSummary, history, mut, setCodex, onChange, op, outlineWithReferences, setSensitive, setType, setTypeHue, typeCandidates, typeChoices, typeList } = require('./main/documents');
 const { callOf, changesOf, related, searchChildren, spaceChildren, summaryChanges, unwatchRelated, watchRelated } = require('./main/related');
 const { announceNewInbox, hiddenRules, watchInbox, inboxCount, listFilter, mcpHidden, myTasks, preset, refresh, search, searchCreate, searchList, searchTitle, setHidden, setMcpHidden, setViewFilter, start, viewFilter, viewRows } = require('./main/views');
 const { nodePin, pinState, pinTree, pinnedDates, pinnedUris, setPin, todayNode, weekNode, weekTitle } = require('./main/pins');
@@ -33,7 +31,7 @@ const meetings = require('./main/meetings');
 // ipc = { 'channel': (event, ...args) => … }. preload.js names each channel for the page. What main.js registers
 // itself is Electron's (windows, overlays, shell, app paths, settings sent to other pages), reads several modules at
 // once (outline:children), or has not moved to its module yet (#335).
-for (const m of [inbox, proposalsPage, timelinePage, require('./main/presence'), meetings, require('./main/images'), icons, require('./main/related'), require('./main/rows')]) {
+for (const m of [require('./main/documents'), inbox, proposalsPage, timelinePage, require('./main/presence'), meetings, require('./main/images'), icons, require('./main/related'), require('./main/rows')]) {
   for (const [channel, handle] of Object.entries(m.ipc)) ipcMain.handle(channel, handle);
 }
 
@@ -219,21 +217,6 @@ ipcMain.handle('view:setFilter', (_e, id, filter) => {
 });
 // events start with an empty content map (no doc node yet); readOutline needs the children list
 ipcMain.handle('outline:children', (e, id) => (id === inbox.PAGE ? inbox.rows() : id === proposalsPage.PAGE ? proposalsPage.rows() : id === timelinePage.PAGE ? timelinePage.rows((part) => { if (!e.sender.isDestroyed()) e.sender.send('timeline:part', part); }) : isSearch(id) ? searchChildren(id) : isSpace(id) ? spaceChildren(id) : op(id, (doc) => (idKind(id) === 'chat' ? chatOutline(doc) : doc.content.get('children') ? outlineWithReferences(doc) : []))));
-ipcMain.handle('doc:info', (_e, id) => op(id, info));
-ipcMain.handle('doc:creationOptions', () => creationOptions());
-ipcMain.handle('doc:taskTypes', () => taskTypes()); // Create task's picker: the workflow types a task can be made with
-// A document's type: the choices it can be given (with the ones it cannot, and why), and the change itself.
-ipcMain.handle('doc:types', (_e, id) => typeChoices(id));
-ipcMain.handle('doc:setType', (_e, id, typeUri) => setType(id, typeUri ?? null));
-// Fields that hold choices or links (issue #33): a value checked the way Tana checks it, a field's definition on its
-// type, a new field, and every type a link field could point at.
-ipcMain.handle('field:set', (_e, id, key, value) => setField(id, key, value));
-ipcMain.handle('field:define', (_e, typeUri, attribute, change) => defineField(typeUri, attribute, change || {}));
-ipcMain.handle('field:add', (_e, typeUri, def) => addTypeField(typeUri, def));
-ipcMain.handle('types:list', () => typeList());
-// A type's colour: the one `appearance` field Tana keeps, written on the type itself, so every document wearing
-// it follows. setTypeHue rebuilds the rows and announces them itself, since no change event carries appearance.
-ipcMain.handle('doc:setTypeHue', (_e, typeUri, hue) => setTypeHue(typeUri, hue ?? null));
 // The renderer's preferences, from the same store: a synchronous snapshot at load (preload reads it before the
 // first paint) and one write per change.
 // the menu shows ⌘N but leaves the key to the renderer's New window row (DEFAULT_HOTKEYS), so it can be re-recorded
@@ -348,7 +331,6 @@ async function autoTypeIcons() {
   } catch (e) { console.warn('type icons:', errText(e)); } // a missing glyph is not worth an error in the window
 }
 ai.onSignedIn = autoTypeIcons; // and a ChatGPT sign-in the same
-ipcMain.handle('doc:create', (_e, title, opts) => createDocument(title, opts || {}));
 ipcMain.handle('search', (_e, query, scope) => search(query, scope));
 ipcMain.handle('search:list', () => searchList());
 // The renderer sends a view id, never a query: the filter→query vocabulary lives in sdk/query, which classic
@@ -377,43 +359,6 @@ ipcMain.handle('search:setFilter', (_e, id, filter, sort, group, display) => {
     setSearchView(doc, { sortBy: sort, groupBy: group, display, completedWithin: filter.completedWithin, audience: filter.audience }); // saved together: one press, one state of the page
   });
 });
-ipcMain.handle('history:undo', () => history(undoStack, redoStack, 'undo', 'canUndo'));
-ipcMain.handle('history:redo', () => history(redoStack, undoStack, 'redo', 'canRedo'));
-ipcMain.handle('doc:delete', (_e, id) => documentAction(id, 'softDelete'));
-ipcMain.handle('doc:restore', (_e, id) => documentAction(id, 'restore'));
-ipcMain.handle('doc:archive', (_e, id) => documentAction(id, 'archive'));
-ipcMain.handle('doc:unarchive', (_e, id) => documentAction(id, 'unarchive'));
-ipcMain.handle('types:archived', () => archivedTypes());
-ipcMain.handle('deleted:list', () => db.deletedList()); // local: the graph does not list deleted documents
-// A page writing text it has just typed says so (typed): while the write is applied it is S.writer, and the change it
-// makes reaches that page marked as its own (main/documents.js onChange, sendChanged), so the page is not read again
-// and rebuilt under the caret on every save (#265). The write and its announcement are one synchronous call
-// (transact → change → onChange), so nothing else can run in between.
-const typed = (e, own, fn) => { if (own !== true || !e) return fn(); S.writer = e.sender; try { return fn(); } finally { S.writer = null; } };
-ipcMain.handle('doc:setTitle', (e, id, title, own) => mut(id, (doc) => typed(e, own, () => { setTitle(doc, title); })));
-ipcMain.handle('doc:setDone', (_e, id, done) => mut(id, (doc) => {
-  setState(doc, done ? 'closed' : 'open', S.me.userUri);
-  docStates.set(id, done ? 'closed' : 'open');
-  scheduleRefresh(2000); // a closed task drops off the open list
-}));
-// The state is recorded here, where it is known, rather than left to whatever reads the document next: the refresh
-// two seconds from now asks the search index, which can still be answering with the state from before this write.
-ipcMain.handle('doc:setState', (_e, id, state) => mutTasks([id], (doc) => setState(doc, state, S.me.userUri)).then((count) => { docStates.set(id, state); scheduleRefresh(2000); return count; }));
-ipcMain.handle('doc:setStateMany', (_e, ids, state) => mutTasks(ids, (doc) => setState(doc, state, S.me.userUri)).then((count) => { for (const id of ids) docStates.set(id, state); scheduleRefresh(2000); return count; }));
-// linkSharing lives on the graph node, never in the document, so public-to-the-internet needs its own lookup
-ipcMain.handle('doc:taskMeta', (_e, id) => op(id, async doc => {
-  const n = readNode(doc);
-  metaSigs.set(id, metaSig(n)); // from here on, only a change to these fields invalidates the renderer's copy
-  // watched rides along: the creator is a graph fact, already cached for anything a view has listed
-  return { ...taskMeta(doc), ...await audienceMetadata(doc, S.me.userUri, S.client.graph, S.client.sync), linkShared: await linkShared(id), watched: notifyOn(n, await creatorOf(id)) };
-}));
-// Access has native capability checks independent of the outliner's editable-body support.
-// Watching a node for changes: on by default where you were given access to the document itself and are not its
-// assignee. null clears the choice and falls back to that rule, so "default" stays a live answer rather than a copy.
-ipcMain.handle('notify:state', (_e, id) => notifyState(id));
-ipcMain.handle('notify:set', (_e, id, on) => setNotify(id, on));
-// Assigned to the local Codex agent: an app-local mark, not a Tana assignee (see main/documents.js).
-ipcMain.handle('codex:list', () => codexIds());
 // Assigning hands the node to a Codex task: the context is written, the local mark is stored, and then the work is
 // opened — a new composer carrying the self-registration prompt, or the task this node already has, told what
 // changed. openExternal failing raises, so the renderer shows why and the node keeps no badge it has not earned.
@@ -504,55 +449,6 @@ function queueToTask(threadId, message) {
 // one), and a split window used to start two at once for the same answer (issue #267).
 let agentStatusRead = null;
 ipcMain.handle('codex:status', () => (agentStatusRead ||= agent.readAgentStatuses(agent.codexTasks()).finally(() => { agentStatusRead = null; })));
-ipcMain.handle('doc:accessOptions', (_e, id) => op(id, async doc => access.capabilities(doc, S.me.userUri, await accessContext())));
-ipcMain.handle('doc:setSharing', (_e, id, selection) => mut(id, async doc => {
-  await access.setSharing(doc, S.me.userUri, selection, await accessContext()); scheduleRefresh(2000);
-}, true));
-ipcMain.handle('spaces:search', async (_e, query = '') => {
-  if (typeof query !== 'string' || query.length > 500) throw new Error('Invalid space query');
-  if (!S.client) throw new Error(NOT_CONNECTED);
-  const { nodes } = await S.client.graph.listNodes({ nodeTypes: ['space'], textQuery: query.trim(), limit: 50 });
-  const ctx = await accessContext();
-  const spaces = await Promise.all(nodes.map(async n => ({ ...toNode(graphRow(n)), selectable: await access.canWrite(n, S.me.userUri, ctx) })));
-  // "Library" moves a document out of every space; it is a target, not a space, so it is added here rather than queried.
-  const library = { id: 'library', title: 'Library', text: 'Library', kind: 'document', icon: 'library', editable: false, selectable: true };
-  return 'library'.startsWith(query.trim().toLowerCase()) || !query.trim() ? [library, ...spaces] : spaces;
-});
-ipcMain.handle('doc:previewMove', (_e, id, spaceId) => op(id, async doc => access.previewMove(doc, await moveTarget(spaceId), S.me.userUri, await accessContext())));
-ipcMain.handle('doc:moveToSpace', (_e, id, spaceId, token) => mut(id, async doc => {
-  const result = await access.moveToSpace(doc, await moveTarget(spaceId), S.me.userUri, await accessContext(), token);
-  send('outline:changed', null); scheduleRefresh(2000); return result;
-}, true));
-ipcMain.handle('doc:setAssignees', (_e, id, uris) => mut(id, (doc) => {
-  setAssignees(doc, uris, S.me.userUri);
-  scheduleRefresh(2000); // reassignment may add or remove this task from the active filter
-}));
-ipcMain.handle('doc:setAssigneesMany', (_e, ids, uris) => mutTasks(ids, (doc) => setAssignees(doc, uris, S.me.userUri)).then((count) => { scheduleRefresh(2000); return count; }));
-ipcMain.handle('block:setText', (e, id, nodeId, value, own) => mut(id, (doc) => typed(e, own, () => { content.setText(doc, nodeId, value); }))); // value: string or segments
-ipcMain.handle('block:setCell', (e, id, cellId, value, own) => mut(id, (doc) => typed(e, own, () => { content.setCellText(doc, cellId, value); }))); // one table cell's text, same value as setText
-ipcMain.handle('block:tableOp', (_e, id, cellId, op) => mut(id, (doc) => content.tableOp(doc, cellId, op))); // a row or column around a cell (content.TABLE_OPS); returns the cell for the caret
-ipcMain.handle('block:setBlockType', (_e, id, nodeId, type) => mut(id, (doc) => { content.setBlockType(doc, nodeId, type); })); // type: one of content.BLOCK_TYPES
-ipcMain.handle('block:insertDivider', (_e, id, nodeId) => mut(id, (doc) => content.insertDivider(doc, nodeId))); // nodeId null appends at the end
-ipcMain.handle('block:insertTable', (_e, id, nodeId) => mut(id, (doc) => content.insertTable(doc, nodeId))); // "/" Table: 3x3 with a header row after nodeId; returns its first cell
-ipcMain.handle('block:insertAfter', (_e, id, nodeId, text, block) => mut(id, (doc) => content.insertAfter(doc, nodeId, text, false, block)));
-ipcMain.handle('block:insertBefore', (_e, id, nodeId, text) => mut(id, (doc) => content.insertBefore(doc, nodeId, text)));
-ipcMain.handle('block:split', (_e, id, nodeId, before, after, asChild) => mut(id, (doc) => content.split(doc, nodeId, before, after, asChild))); // one undo step for both halves
-ipcMain.handle('block:join', (_e, id, nodeId, intoId, value) => mut(id, (doc) => content.join(doc, nodeId, intoId, value))); // its reverse: the row above takes the words, one undo step
-ipcMain.handle('block:insertChild', (_e, id, nodeId, text) => mut(id, (doc) => content.insertChild(doc, nodeId, text)));
-ipcMain.handle('block:removeMany', (_e, id, nodeIds) => mut(id, doc => content.removeMany(doc, nodeIds)));
-ipcMain.handle('block:moveMany', (_e, id, nodeIds, direction) => mut(id, doc => content.moveMany(doc, nodeIds, direction)));
-ipcMain.handle('block:indentMany', (_e, id, nodeIds) => mut(id, doc => content.indentMany(doc, nodeIds)));
-ipcMain.handle('block:outdentMany', (_e, id, nodeIds) => mut(id, doc => content.outdentMany(doc, nodeIds)));
-ipcMain.handle('block:remove', (_e, id, nodeId) => mut(id, (doc) => { content.remove(doc, nodeId); }));
-ipcMain.handle('block:indent', (_e, id, nodeId) => mut(id, (doc) => { content.indent(doc, nodeId); }));
-ipcMain.handle('block:outdent', (_e, id, nodeId) => mut(id, (doc) => { content.outdent(doc, nodeId); }));
-ipcMain.handle('block:move', (_e, id, nodeId, direction) => mut(id, (doc) => { content.move(doc, nodeId, direction); }));
-// A drag names the place outright: the row lands behind afterId, or at the top of parentId, or at the top of toId's
-// own rows. toId is the outline it lands in, which is the page or one of its fields (main/documents.js moveBlock).
-ipcMain.handle('block:moveTo', (_e, id, nodeId, toId, parentId, afterId) => moveBlock(id, nodeId, toId, parentId, afterId));
-// The same place, with a link landing in it instead of the row itself (main/documents.js referenceIn).
-ipcMain.handle('block:insertMention', (_e, toId, uri, label, parentId, afterId) => referenceIn(toId, uri, label, parentId, afterId));
-ipcMain.handle('block:toggleCheckbox', (_e, id, nodeId) => mut(id, (doc) => { content.toggleCheckbox(doc, nodeId); }));
 ipcMain.handle('pins:state', (_e, id) => pinState(id));
 ipcMain.handle('pins:ids', () => pinnedUris()); // which documents carry a pin at all, for the mark on a row
 ipcMain.handle('pins:dates', () => pinnedDates()); // { uri: ['YYYY-MM-DD'] }, for the Pinned section
@@ -560,26 +456,12 @@ ipcMain.handle('pins:pin', (_e, id, target, date) => setPin(id, target, true, da
 ipcMain.handle('pins:unpin', (_e, id, target, date) => setPin(id, target, false, date));
 ipcMain.handle('pins:pinTo', (_e, hubId, uri) => nodePin(hubId, uri, true)); // pin a document on a meeting/space
 ipcMain.handle('pins:unpinFrom', (_e, hubId, uri) => nodePin(hubId, uri, false));
-ipcMain.handle('sensitive:list', () => sensitiveIds()); // the synced setting sensitive:set writes; db's table is only its migration source
 ipcMain.handle('sensitive:set', (e, id, on) => { const stored = setSensitive(id, on); tellOthers(e?.sender); return stored; });
-// "Discuss with …": one call for the type and the field, because both are the same decision (main/documents.js)
-ipcMain.handle('doc:discussWith', (_e, id, who) => discussWith(id, who));
 // and what the title suggests that name is (main/ai.js). ChatGPT auth takes priority over the local API key.
 ipcMain.handle('ai:discussWith', (_e, title) => ai.suggestDiscussWith(title, globalThis.fetch, app.getPath('userData')));
 // "Classify type": the types this document may have, weighed by the model; the write stays doc:setType's
 ipcMain.handle('ai:classifyType', async (_e, id) => ai.classifyType(await typeCandidates(id), globalThis.fetch, app.getPath('userData')));
 ipcMain.handle('doc:exportPdf', (_e, id) => require('./main/pdf').exportPdf(id, S.win));
-// The web link for a node, the same url home.tana.inc opens: /o/<org>/<route>/<encoded node uri>. The route is Tana's
-// per kind (its link resolver beside JP.type.url, shared bundle of 2026-09-23): a type, a person, a meeting and a space
-// have pages of their own, and /l/ — every other document — shows a type as raw JSON (issue #88).
-const LINK_ROUTES = { type: 't', 'user-profile': 'u', event: 'e', space: 's' };
-ipcMain.handle('doc:link', (_e, id) => {
-  // the path segment is the org *document* ulid (tana:org:01ks7…), not the WorkOS org id in S.me.orgId
-  const org = (S.me && S.me.orgDocUri || '').split(':').pop();
-  if (!org) throw new Error(NOT_CONNECTED);
-  if (!/^tana:[a-z-]+:[0-9a-z]{26}$/.test(id)) throw new Error('Not a Tana document id');
-  return 'https://home.tana.inc/o/' + org + '/' + (LINK_ROUTES[id.split(':')[1]] || 'l') + '/' + encodeURIComponent(id);
-});
 // A link in node text opens in the user's browser; only http(s), never a file or custom scheme.
 ipcMain.handle('shell:open', (_e, url) => {
   if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) throw new Error('Only http(s) links can be opened');
