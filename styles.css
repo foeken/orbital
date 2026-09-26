@@ -407,6 +407,9 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .node.tl-today::before { top: 26px; }
 .tl-divider { position: relative; height: 17px; }
 .tl-divider::before { content: ''; position: absolute; inset: 8px 0 auto; border-top: 1px solid #e6e6e6; }
+/* the line is the space between today and the day before it: the heading under it gives up its own top margin, or the
+   line sits twice as far from the heading as from the rows above it (#190) */
+.tl-divider + .ghead { margin-top: 0; }
 .ghead + .node.tl { margin-top: 10px; } /* room under a day's heading */
 .node.tl > .line { position: relative; padding: 14px 0 14px 102px; } /* room around each entry: inside it, so the rail runs on */
 .node.tl > .line > .chev { width: 0; }
