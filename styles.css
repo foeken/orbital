@@ -462,7 +462,7 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
    meeting's gold, a type's hue — so the page stays monochrome */
 .node.tl > .children .bullet.icon svg, .node.tl > .children .bullet.icon:hover svg { color: #8e9297; }
 /* Join (renderer/timeline.js): "· Join" after a meeting's title, in the page's grey, the word underlined */
-.tl-joinwrap { margin-left: 6px; color: #8e9297; }
+.tl-joinwrap { margin-left: 6px; color: #8e9297; font-size: 14px; } /* the grey line's size, a step under the title */
 .tl-join { margin-left: 6px; padding: 0; border: 0; background: none; font: inherit; color: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .tl-join:hover { color: #1c2024; }
 .node.tl > .children .meta { display: none; } /* assigned to you and private: true of every one, so said by none */
