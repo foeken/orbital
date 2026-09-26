@@ -10,22 +10,6 @@ const { graphRow, rememberNodeHue, resolveTypes, toNode } = require('./rows');
 const { canWriteDoc, op, readOnDemand, resolveReferences, subscribe } = require('./documents');
 const { rows: proposalRows } = require('./proposals');
 
-const crumbIcon = (id) => ({ space: 'space', event: 'meeting', 'user-profile': 'member', chat: 'chat', agent: 'agent' })[idKind(id)] || 'doc';
-async function pathOf(id) {
-  if (!S.client) throw new Error(NOT_CONNECTED);
-  const { entries = [] } = await S.client.graph.getOwnerChain(id);
-  // The workspace (tana:org:) owns every type but is no place to open: as a crumb it led to an empty page.
-  const owners = entries.map((e) => e.uri).filter((u) => u !== id && idKind(u) !== 'org').reverse();
-  const library = { id: 'library', title: 'Library', icon: 'library' }; // every location starts at the Library view
-  if (!owners.length) return [library];
-  await resolveTypes(owners); // same title cache: any node id -> title
-  // A space inside a space adds no location information, so only the innermost space is shown, with whatever it contains.
-  const innermost = owners.map(isSpace).lastIndexOf(true);
-  const shown = innermost === -1 ? owners : owners.slice(innermost);
-  // No hue here on purpose: the crumb bar is one quiet grey line, and a coloured icon in it only shouts.
-  return [library, ...shown.map((u) => ({ id: u, title: typeTitles.get(u) || u, icon: crumbIcon(u) }))];
-}
-
 // A space's "content" is the documents it owns (graph query), returned as document Nodes.
 async function spaceChildren(id) {
   if (!S.client) throw new Error(NOT_CONNECTED); // a space opened before the connection is a startup state, not an error (#97)
@@ -416,4 +400,4 @@ function watchRelated(id, key = 'main') {
 }
 
 const watchedPages = () => [...watching.values()].map((w) => w.id); // each page's document, whose sidebar is on screen
-module.exports = { crumbIcon, pathOf, spaceChildren, searchChildren, searchPreview, attributeTitles, fieldsOf, writeUpOf, summaryUri, callOf, changesOf, summaryChanges, historyOf, backlinkGroups, related, watchRelated, unwatchRelated, watchedPages, withSearchHeads };
+module.exports = { spaceChildren, searchChildren, searchPreview, attributeTitles, fieldsOf, writeUpOf, summaryUri, callOf, changesOf, summaryChanges, historyOf, backlinkGroups, related, watchRelated, unwatchRelated, watchedPages, withSearchHeads };

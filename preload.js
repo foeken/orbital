@@ -11,7 +11,6 @@ contextBridge.exposeInMainWorld('api', {
   // Native embed blocks keep their id; type:reference, reference:{uri,label?,node?}. Target actions use reference.uri.
   children: (docId) => ipcRenderer.invoke('outline:children', docId),
   node: (docId) => ipcRenderer.invoke('doc:info', docId),
-  path: (docId) => ipcRenderer.invoke('doc:path', docId),
   related: (docId) => ipcRenderer.invoke('doc:related', docId), // meeting context: {summary,tagline,call?,pinned[],outcomes[],proposals[],notes[],backlinks[]}
   // The page on screen (null: none): main keeps its backlinks and its hub's pins live, and says 'related:changed' when one moves
   relatedWatch: (docId) => ipcRenderer.invoke('doc:watchRelated', docId),
@@ -63,7 +62,6 @@ contextBridge.exposeInMainWorld('api', {
   codexHosts: () => ipcRenderer.invoke('codex:hosts'), // [{ id, title }] — names only
   addCodexHost: (title, ssh, bin) => ipcRenderer.invoke('codex:hostAdd', title, ssh, bin), // validated in main; nothing is run here
   removeCodexHost: (id) => ipcRenderer.invoke('codex:hostRemove', id), // the machine is forgotten; its tasks are not touched
-  codexTaskHost: (docId) => ipcRenderer.invoke('codex:taskHost', docId), // which machine this node's task runs on
   codexTaskHosts: () => ipcRenderer.invoke('codex:taskHosts'), // nodeId -> host, for every linked node
   linkCodexTask: (docId, link) => ipcRenderer.invoke('codex:link', docId, link), // an existing Codex task, pasted as codex://threads/<id>
   openCodexTask: (docId) => ipcRenderer.invoke('codex:open', docId), // open the Codex task this node is linked to
@@ -167,7 +165,6 @@ contextBridge.exposeInMainWorld('api', {
   moveTo: (docId, nodeId, toDocId, parentId, afterId) => ipcRenderer.invoke('block:moveTo', docId, nodeId, toDocId, parentId ?? null, afterId ?? null),
   // the same place, with a reference to uri landing in it: a document dragged into an outline, or an Alt-drag
   insertMention: (toDocId, uri, label, parentId, afterId) => ipcRenderer.invoke('block:insertMention', toDocId, uri, label ?? '', parentId ?? null, afterId ?? null),
-  pins: () => ipcRenderer.invoke('pins:list'),
   pinState: (docId) => ipcRenderer.invoke('pins:state', docId), // { sidebar, dates: ['YYYY-MM-DD'], hubs: [{ id, title, kind }] }: the meetings/spaces it is pinned on come with it
   pinIds: () => ipcRenderer.invoke('pins:ids'), // every pinned document id (sidebar + dates), for the pin mark on a row
   pinDates: () => ipcRenderer.invoke('pins:dates'), // { docId: ['YYYY-MM-DD'] } for every document pinned to a date
@@ -188,7 +185,6 @@ contextBridge.exposeInMainWorld('api', {
   // Case-insensitive; a pattern matches the whole title, or its start when it ends with '*' ("Block*", "Lunch").
   // All four resolve to the stored list (string[]) after the views have refreshed.
   filters: () => ipcRenderer.invoke('filters:list'),
-  setFilters: (patterns) => ipcRenderer.invoke('filters:set', patterns), // string[]; replaces the list
   addFilter: (pattern) => ipcRenderer.invoke('filters:add', pattern),
   removeFilter: (pattern) => ipcRenderer.invoke('filters:remove', pattern), // matched case-insensitively
   // MCP chats: hidden from every list and search while on (a chat opened directly still opens). Both resolve to the

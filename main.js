@@ -15,12 +15,12 @@ const content = require('./sdk/content');
 const { isDateUri } = require('./sdk/dates');
 const agent = require('./main/agent');
 const ai = require('./main/ai');
-const { NOT_CONNECTED, S, VIEWS, docStates, errText, idKind, isSearch, isSpace, metaSigs, pathCache, today, truncatedViews, redoStack, report, scheduleRefresh, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
+const { NOT_CONNECTED, S, VIEWS, docStates, errText, idKind, isSearch, isSpace, metaSigs, today, truncatedViews, redoStack, report, scheduleRefresh, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
 const { cachedNodeHue, graphRow, members, rememberNodeHue, rememberType, toNode } = require('./main/rows');
 const { accessContext, addTypeField, archivedTypes, chatOutline, codexIds, createDocument, creationOptions, taskTypes, creatorOf, defineField, discussWith, documentAction, followSummary, history, info, linkShared, metaSig, moveBlock, moveTarget, mut, mutTasks, notifyOn, notifyState, referenceIn, setCodex, setField, setNotify, onChange, op, outlineWithReferences, sensitiveIds, setSensitive, setType, setTypeHue, typeCandidates, typeChoices, typeList } = require('./main/documents');
-const { callOf, changesOf, pathOf, related, searchChildren, searchPreview, spaceChildren, summaryChanges, summaryUri, unwatchRelated, watchRelated } = require('./main/related');
+const { callOf, changesOf, related, searchChildren, searchPreview, spaceChildren, summaryChanges, summaryUri, unwatchRelated, watchRelated } = require('./main/related');
 const { announceNewInbox, hiddenRules, watchInbox, inboxCount, listFilter, mcpHidden, myTasks, preset, refresh, search, searchCreate, searchList, searchTitle, setHidden, setMcpHidden, setViewFilter, start, viewFilter, viewRows } = require('./main/views');
-const { nodePin, pinState, pinTree, pinned, pinnedDates, pinnedUris, setPin, todayNode, weekNode, weekTitle } = require('./main/pins');
+const { nodePin, pinState, pinTree, pinnedDates, pinnedUris, setPin, todayNode, weekNode, weekTitle } = require('./main/pins');
 const { image, insertImage, cancelUpload } = require('./main/images');
 const inbox = require('./main/inbox');
 const proposalsPage = require('./main/proposals');
@@ -28,8 +28,6 @@ const timelinePage = require('./main/timeline');
 const icons = require('./main/icons');
 const settings = require('./main/settings');
 const meetings = require('./main/meetings');
-
-ipcMain.handle('doc:path', async (_e, id) => { try { const p = await pathOf(id); pathCache.set(id, p); return p; } catch (e) { report(e); return pathCache.get(id) || []; } });
 
 // A failed S.session probe is unknown, not a confirmed sign-out. The renderer keeps the login button hidden while authChecking.
 async function resolveInitialAuth(s) {
@@ -431,7 +429,6 @@ ipcMain.handle('codex:hosts', () => agent.hosts());
 // than stored: the renderer can name a host, never reach past this boundary with a command.
 ipcMain.handle('codex:hostAdd', (_e, title, ssh, bin) => agent.addHost({ title, ssh, bin }));
 ipcMain.handle('codex:hostRemove', (_e, id) => agent.removeHost(id));
-ipcMain.handle('codex:taskHost', (_e, id) => { const link = agent.taskLink(id); return link ? link.host : null; });
 // Which machine each linked node's task is on, read with the statuses so the UI knows what it may offer to open.
 ipcMain.handle('codex:taskHosts', () => Object.fromEntries(Object.keys(agent.codexTasks()).map((id) => [id, (agent.taskLink(id) || {}).host]).filter(([, host]) => host)));
 // The badge's destination: the task this node is linked to, opened by id the same way creating one does. The renderer
@@ -529,7 +526,7 @@ ipcMain.handle('spaces:search', async (_e, query = '') => {
 ipcMain.handle('doc:previewMove', (_e, id, spaceId) => op(id, async doc => access.previewMove(doc, await moveTarget(spaceId), S.me.userUri, await accessContext())));
 ipcMain.handle('doc:moveToSpace', (_e, id, spaceId, token) => mut(id, async doc => {
   const result = await access.moveToSpace(doc, await moveTarget(spaceId), S.me.userUri, await accessContext(), token);
-  pathCache.delete(id); send('outline:changed', null); scheduleRefresh(2000); return result;
+  send('outline:changed', null); scheduleRefresh(2000); return result;
 }, true));
 ipcMain.handle('doc:setAssignees', (_e, id, uris) => mut(id, (doc) => {
   setAssignees(doc, uris, S.me.userUri);
@@ -563,7 +560,6 @@ ipcMain.handle('block:moveTo', (_e, id, nodeId, toId, parentId, afterId) => move
 // The same place, with a link landing in it instead of the row itself (main/documents.js referenceIn).
 ipcMain.handle('block:insertMention', (_e, toId, uri, label, parentId, afterId) => referenceIn(toId, uri, label, parentId, afterId));
 ipcMain.handle('block:toggleCheckbox', (_e, id, nodeId) => mut(id, (doc) => { content.toggleCheckbox(doc, nodeId); }));
-ipcMain.handle('pins:list', () => pinned());
 ipcMain.handle('pins:state', (_e, id) => pinState(id));
 ipcMain.handle('pins:ids', () => pinnedUris()); // which documents carry a pin at all, for the mark on a row
 ipcMain.handle('pins:dates', () => pinnedDates()); // { uri: ['YYYY-MM-DD'] }, for the Pinned section
@@ -624,7 +620,6 @@ ipcMain.handle('members', () => members());
 ipcMain.handle('meeting:current', () => meetings.currentMeeting());
 // Hidden titles: the user's list of patterns, applied to every list and search (see listFilter/sdk-query isHidden).
 ipcMain.handle('filters:list', () => hiddenRules());
-ipcMain.handle('filters:set', (_e, patterns) => setHidden(patterns));
 ipcMain.handle('filters:add', (_e, pattern) => setHidden([...hiddenRules(), pattern]));
 ipcMain.handle('filters:remove', (_e, pattern) => setHidden(hiddenRules().filter((p) => p.toLowerCase() !== String(pattern ?? '').trim().toLowerCase())));
 // MCP chats: one switch over every list and search, applied in the same listFilter the hidden titles go through.
