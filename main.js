@@ -130,9 +130,10 @@ function closeOverlay(win, result = {}) {
     opener.focus();
     opener.send('overlay:closed', { palette: result.palette === true, note: typeof result.note === 'string' ? result.note.slice(0, 200) : undefined });
   }
-  // a first start this overlay was covering (firstHelp): now there is room for it, whichever half opened this one
+  // a first start this overlay was covering (firstHelp): now there is room for it, whichever half opened this one, over
+  // whichever page is the main half now (the one that asked may have closed meanwhile, ⌘W under Create task)
   const pending = win.helpPending; win.helpPending = null;
-  if (pending && !win.isDestroyed()) firstHelp(pending.wc, pending.theme);
+  if (pending && !win.isDestroyed() && win.panes[0]) firstHelp(win.panes[0].webContents, pending.theme);
 }
 const frontPane = () => S.win && !S.win.isDestroyed() ? (S.win.panes.find((p) => p.webContents === S.pane) || S.win.panes[0])?.webContents : null;
 function createWindow() {
@@ -279,7 +280,7 @@ ipcMain.on('prefs:snapshot', (e) => { e.returnValue = settings.prefs(); });
 function firstHelp(wc, theme) {
   if (!settings.settingsDocId() || settings.prefs().helpSeen || !wc || wc.isDestroyed()) return false;
   const win = paneWindow(wc);
-  if (win && win.overlay) { win.helpPending = { wc, theme }; return false; }
+  if (win && win.overlay) { win.helpPending = { theme }; return false; } // the window's, not the page's: closeOverlay aims it
   if (!openOverlay(wc, 'help', theme)) return false;
   settings.setPref('helpSeen', true);
   return true;

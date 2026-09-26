@@ -1157,9 +1157,12 @@ async function main() {
     const covered = pageOf(task);
     assert.equal(await covered.ask(), false, 'a window with Create task open cannot show it yet');
     assert.equal(settings.prefs().helpSeen, undefined, 'so nothing is marked');
+    const survivor = { isDestroyed: () => false };
+    covered.win.panes = [{ webContents: survivor, setVisible() {}, setBounds() {} }]; // the half that asked closed under Create task (⌘W): the other is the main half now
     await backend.handlers.get('overlay:close')({ sender: task.webContents }, {});
     assert.deepEqual(told, ['overlay:closed'], 'Create task\u2019s half hears it closed');
-    assert.ok(covered.win.overlay && covered.win.overlay !== task, 'and main opens the tour over the window at once, for the half that asked');
+    assert.ok(covered.win.overlay && covered.win.overlay !== task, 'and main opens the tour over the window at once');
+    assert.equal(covered.win.overlay.opener, survivor, 'for the page that is the main half now, even though the one that asked has gone');
     assert.equal(settings.prefs().helpSeen, true, 'marked in that same step');
     backend.S.windows.delete(covered.win);
     console.log('ok  help:claim: the first-start tour goes to one page, once');
