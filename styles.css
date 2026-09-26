@@ -848,7 +848,7 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 .palette .row.active { background: #f0f0f0; }
 /* rows that cannot run (info lines, unavailable choices): readable, but plainly not a target */
 .palette .row.disabled { color: #8a8a8a; cursor: default; }
-.palette .row.disabled:hover { background: none; }
+.palette .row.disabled:not(.active):hover { background: none; } /* a recordable disabled row can be the active one */
 .palette .row.disabled .ricon { color: #c0c0c0; }
 .palette .ricon { flex: none; width: 16px; height: 16px; color: #8a8a8a; }
 .palette .ricon svg { display: block; width: 16px; height: 16px; }
