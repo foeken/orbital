@@ -4744,12 +4744,13 @@ function runCodexAssignCheck() {
 // path rather than a second one, restartable, and — the part that was reported as "I can hardly see it" — not cut
 // off by its own answer. The redraw builds a new pill, so an answer that lands in 80 ms used to replace the icon a
 // tenth of the way round. The query still goes out first; only the redraw waits.
-// ---- a saved search folds its pills away behind the header button (renderer/pills.js) ----
+// ---- every page with pills folds them away behind the header button (renderer/pills.js) ----
 // Two things here are worth a check rather than an eye: the row may only go once the last pill has finished leaving,
 // and unsaved edits have to hold it open whatever the button was last set to, or Save would be out of reach.
 function runPillsFoldCheck() {
   const api = vm.runInNewContext(`
-    let dirty = false, redrawn = 0, reduced = false;
+    let dirty = false, redrawn = 0, reduced = false, page = 'tana:search:x';
+    const pillKey = () => page, onSearchPage = () => page.startsWith('tana:search:'), onTypePage = () => page.startsWith('tana:type:');
     const log = [];
     const matchMedia = (query) => ({ matches: reduced && query.includes('reduce') });
     const mkEl = (id) => {
@@ -4802,11 +4803,23 @@ function runPillsFoldCheck() {
       cleanupEnd: () => { cleanupEl.fire('animationend'); return { hidden: cleanupEl.hidden, in: cleanupEl.classList.contains('in'), out: cleanupEl.classList.contains('out') }; },
       setDirty: (value) => { dirty = value; },
       setReduced: (value) => { reduced = value; },
+      setPage: (value) => { page = value; },
     });
   `);
   assert.equal(api.open(), false, 'a saved search opens with its pills folded away: the query is already its title');
-  assert.equal(plain(api.toggleFor(true)).label, 'Show search options', 'and the button beside back and forward says what it will do');
-  assert.equal(plain(api.toggleFor(false)).button, true, 'off a saved search there is nothing to fold, so the button is not there');
+  assert.equal(plain(api.toggleFor(true)).label, 'Show view options', 'and the button beside back and forward says what it will do');
+  assert.equal(plain(api.toggleFor(false)).button, true, 'a page without pills has nothing to fold, so the button is not there');
+  api.setPage('tana:type:x');
+  assert.equal(api.open(), false, 'a type page opens with its pills folded too');
+  api.setPage('library');
+  assert.equal(api.open(), true, 'a view opens with its pills shown: they are how it is aimed');
+  assert.equal(api.press().shown, false, 'and the button folds them there as well');
+  api.setPage('inbox');
+  assert.equal(api.open(), true, 'each page keeps its own choice, so folding the Library leaves the Inbox as it was');
+  api.setPage('library');
+  assert.equal(api.open(), false, 'and the Library stays folded when you come back to it');
+  api.press();
+  api.setPage('tana:search:x');
   // Closing: the pills leave one after another and the row goes only when the last of them is gone. Hiding it on the
   // press would take the animation off screen halfway through.
   const folding = plain(api.fold());
@@ -4840,7 +4853,7 @@ function runPillsFoldCheck() {
   assert.equal(api.press().shown, true, 'pressing it there cannot take Save off the screen: the edit still holds the row open');
   api.setDirty(false);
   assert.equal(api.open(), false, 'but the press was recorded, so the row folds away the moment the edit is saved');
-  assert.equal(plain(api.toggleFor(true)).stored.pillsOpen, false, 'the choice is a preference, so it follows you between machines');
+  assert.deepEqual(plain(api.toggleFor(true)).stored.openPills, { library: true, 'tana:search:x': false }, 'the choice is a preference, so it follows you between machines');
   // Reduced motion: nothing animates, so nothing is waited for either.
   api.setReduced(true);
   api.unfold();
