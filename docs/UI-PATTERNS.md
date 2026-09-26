@@ -192,8 +192,8 @@ It gets no colour, shadow, layer or duration of its own.
 
 ### Tokens (styles.css, top)
 
-Each token is set once for light and once for dark (`[data-theme="dark"]`). A rule written with tokens needs no
-dark twin.
+The colour and shadow tokens are set once for light and once for dark (`[data-theme="dark"]`), so a rule written with
+them needs no dark twin. Motion and layers are one value for both themes, and `--hue` is set on the element itself.
 
 | Token | Light / dark | For |
 |---|---|---|
@@ -233,7 +233,7 @@ the top of the file. State classes are set by the renderer, pseudo-classes by th
 | A row's facts | `.tmeta` holding `.ticon` glyphs (#372); `.meta.pending` while they load | `[role="button"]` makes one clickable |
 | Chip | `.chip.grey`, `.chip.gold` (meetings), `.chip.hue` with `--hue` (`chipEl`) | |
 | Pill | `.pills > .pill`, the value in `<b>`; grey for arranging (`data-id` sort, group, display); green `.save` for making something | `:hover`, `.open` (its menu is showing), `:focus`, `.in` (arriving). Leaving is on the row: `.pills.out`, with `.sliding` / `.folding` while it folds |
-| Menu | `.menu > .mrow > .micon, .mlabel, .tick`; `.mhead`, `.mdiv`, `.msearch`; `.menu.search` for long lists of titles | `.mrow.active` (keyboard), `:hover`, `.mrow.disabled`; `.menu.up` when it opens upwards |
+| Menu | `.menu > .mrow > .micon, .mlabel, .tick`; `.mhead`, `.mdiv`, `.msearch`; `.menu.search` for long lists of titles | `.mrow.active` (keyboard), `:hover`, `.mrow.disabled` (the toolbar's style menu sets it; pill menus have no disabled row); `.menu.up` when it opens upwards |
 | Palette | `.palette > .card > input, .list > .group, .row > .ricon, .label, .hint, kbd` | `.row.active`, `.row.disabled`, `.ricon.thinking`, `.row.arrive`; `.palette.anchored` is the @ dropdown |
 | Header button | `.navbtn` holding an svg | `:hover`, `:disabled` (still shown, faint), `[hidden]`, `.in` / `.out` |
 | Toolbar | `.toolbar > .tbtn` | `.on` (the mark is set), `:hover`, `:focus`, `.style.open` |
