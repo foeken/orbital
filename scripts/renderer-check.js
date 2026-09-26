@@ -4,31 +4,27 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
+const { analyze } = require('eslint-scope'); // comes with eslint
 const { source, tops } = require('./renderer-source');
 // The renderer is classic scripts sharing one global scope, loaded in the order index.html lists them. Two things
 // break that silently at load time: a name declared twice (a SyntaxError that stops the second file), and a
 // top-level statement that runs immediately and reaches for something a later file declares (a ReferenceError).
-// What a function body reaches is fine: it runs after every file has loaded. Both are read off the parsed top level.
+// What a function body reaches is fine: it runs after every file has loaded. Both are read off the parsed files, the
+// second through eslint's scope analysis, so a loop variable or catch parameter named like a later global is its own.
 {
   const seen = new Map();
   for (const { file, names } of tops) for (const name of names) {
     assert.ok(!seen.has(name), name + ' is declared in both ' + seen.get(name) + ' and ' + file);
     seen.set(name, file);
   }
-  const FUNCTIONS = new Set(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression']);
-  // the names an expression evaluates now: not a function's body, not a property name
-  const reached = (node, out = []) => {
-    if (!node || typeof node.type !== 'string' || FUNCTIONS.has(node.type)) return out;
-    if (node.type === 'Identifier') out.push(node);
-    for (const [key, value] of Object.entries(node)) {
-      if (key === 'loc' || (!node.computed && ((node.type === 'MemberExpression' && key === 'property') || (node.type === 'Property' && key === 'key')))) continue;
-      for (const child of [value].flat()) if (child && typeof child.type === 'string') reached(child, out);
-    }
-    return out;
-  };
-  tops.forEach(({ file, body }, i) => {
+  // a reference runs later when some scope around it is a function's (or a class field's, which runs on construction)
+  const deferred = (scope) => { for (let s = scope; s; s = s.upper) if (s.type === 'function' || s.type === 'class-field-initializer') return true; return false; };
+  tops.forEach(({ file, ast }, i) => {
     const later = new Set(tops.slice(i + 1).flatMap((t) => t.names));
-    for (const id of body.flatMap((statement) => reached(statement))) assert.ok(!later.has(id.name), file + ':' + id.loc.start.line + ' reaches "' + id.name + '" at load, before ' + seen.get(id.name) + ' has loaded');
+    // through: the references this file does not resolve itself, which is every name another file declares
+    for (const { identifier: id, from } of analyze(ast, { ecmaVersion: 2024, sourceType: 'script' }).globalScope.through) {
+      assert.ok(!later.has(id.name) || deferred(from), file + ':' + id.loc.start.line + ' reaches "' + id.name + '" at load, before ' + seen.get(id.name) + ' has loaded');
+    }
   });
 }
 const match = source.match(/function authView\(s\) \{[\s\S]*?\n\}/);
