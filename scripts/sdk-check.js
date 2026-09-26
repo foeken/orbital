@@ -5306,6 +5306,18 @@ async function main() {
   assert.equal(readNode(server.created.get(DRAINED)).title, 'created and released at once', 'the queued create reached the server');
   assert.equal(server.commands.at(-1), 'unsubscribeDocument', 'and the document was released afterwards');
   assert.equal(sync.getDocument(DRAINED), undefined);
+  // Asked for again while its release still waits on a send: the release lets it be. It used to go on and detach the
+  // document the second subscribe had just been handed, so it heard nothing more and its next edits went nowhere.
+  const KEPT = 'tana:text:' + ulid();
+  const kept = await sync.subscribe(KEPT, (l) => initDocument(l, 'kept', ME));
+  setTitle(kept, 'released while sending');
+  const releasing = sync.unsubscribe(KEPT);
+  assert.equal(await sync.subscribe(KEPT), kept, 'the release is still flushing, so the same document answers');
+  await releasing;
+  assert.equal(sync.getDocument(KEPT), kept, 'and it stays subscribed');
+  setTitle(kept, 'edited after the release');
+  for (let i = 0; i < 40 && readNode(server.created.get(KEPT)).title !== 'edited after the release'; i++) await new Promise((r) => setTimeout(r, 10));
+  assert.equal(readNode(server.created.get(KEPT)).title, 'edited after the release', 'its edits still reach the server');
   // Write denied (Tana's access-revoked -> "write denied"): a refused live send re-bootstraps to probe read access; the
   // probe's catch-up is refused too, so the document stays open and readable, marked, and sends nothing more.
   const DENIED = 'tana:text:' + ulid();

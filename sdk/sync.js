@@ -114,7 +114,10 @@ class SyncConnection extends EventEmitter {
       this.docs.set(id, entry);
       if (init) document.transact(init);
       if (this.connected) this._bootstrap(entry);
-    } else if (entry.state === 'paused' && this.connected) this._bootstrap(entry); // asking again resumes, like Tana's retryRequest
+    } else {
+      entry.releasing = false; // asked for again while an unsubscribe waits on a send: that unsubscribe lets it be
+      if (entry.state === 'paused' && this.connected) this._bootstrap(entry); // asking again resumes, like Tana's retryRequest
+    }
     return entry.ready.promise;
   }
 
@@ -140,6 +143,7 @@ class SyncConnection extends EventEmitter {
   async unsubscribe(id) {
     const entry = this.docs.get(id);
     if (!entry) return;
+    entry.releasing = true;
     // Tana's release flushes the batch and waits for sends already on the wire before it unsubscribes: an unsubscribe
     // racing a live update could otherwise reach the server first and the edit would be dropped.
     clearTimeout(entry.timer);
@@ -149,7 +153,7 @@ class SyncConnection extends EventEmitter {
     // lost its content without this. The drain ends with the bootstrap, however it ends: a failure is not retried.
     if (entry.state === 'bootstrapping' && entry.queue.length) { entry.drain = deferred(); await entry.drain.promise; }
     while (entry.state === 'live' && (entry.inflight || entry.queue.length)) await (entry.inflight || this._flush(entry));
-    if (this.docs.get(id) !== entry) return;
+    if (this.docs.get(id) !== entry || !entry.releasing) return;
     const { sessionId } = entry;
     this._detach(entry, new Error('unsubscribed ' + id), false);
     if (sessionId && this.connected) {
