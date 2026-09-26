@@ -6,8 +6,9 @@ touch them. Read [AGENTS.md](../AGENTS.md) first for the map and the working rul
 Two rules hold everywhere:
 
 - **Code goes to the file that owns the concern.** Tana-side knowledge is `sdk/` (Electron-free, checked offline),
-  the app's use of Tana is a module in `main/`, `main.js` is only the process boundary (windows, menu, the IPC
-  table, boot), and each renderer concern is one file in `renderer/`. A new concern is a new file; a new piece of an
+  the app's use of Tana is a module in `main/` together with the IPC handlers that reach it, `main.js` is only the
+  process boundary (windows, menu, boot, registering the modules' handlers), and each renderer concern is one file in
+  `renderer/`. A new concern is a new file; a new piece of an
   existing one goes in that file.
 - **Dependencies point one way.** `sdk/` requires neither `main/` nor electron. A `main/` module requires only the
   modules before it in the order AGENTS.md lists; when an earlier one has to reach a later one, the later one sets a
@@ -16,10 +17,14 @@ Two rules hold everywhere:
 
 ## An IPC call
 
-1. **main.js** — `ipcMain.handle('<area>:<verb>', (e, ...args) => module.fn(...args))`. The channel is named by area
-   and verb (`doc:setTitle`, `block:split`, `pins:pin`, `meeting:edit`, `window:split`). The renderer is input
-   from outside the process: check ids and shapes here (`DOC_URI` in main/state.js, the regexes in
-   `customCreation`), and keep the logic in the `main/` module that owns it, so the handler stays one line.
+1. **The owning `main/` module** — an entry in its exported `ipc` table, beside the function it calls:
+   `ipc = { '<area>:<verb>': (e, ...args) => fn(...args), … }` (main/inbox.js is a small example). main.js registers
+   every table in one loop; a module that has no table yet exports one and joins that loop. Handlers not yet moved to
+   a table (documents, views, pins, and `outline:children`, which routes between modules) stay in main.js with their
+   siblings, as do Electron's own (windows, overlays, `shell`). The channel is named by area and verb
+   (`doc:setTitle`, `block:split`, `pins:pin`, `meeting:edit`, `window:split`). The renderer is input from outside
+   the process: check ids and shapes in the handler (`DOC_URI` in main/state.js, the regexes in `customCreation`),
+   and keep the logic in the function, so the handler stays one line.
 2. **preload.js** — one method on `window.api`, named for what it does, with a comment giving the shape of its answer:
    `meetingInfo: (docId) => ipcRenderer.invoke('meeting:info', docId), // { editable, start, end, … }`.
 3. **Renderer** — call it as `tana.meetingInfo(id)` (renderer/state.js). Never declare a top-level `api`, and never
@@ -32,9 +37,16 @@ Two rules hold everywhere:
 6. **Push instead of pull** — main sends with `send('<area>:changed', …)` (main/state.js: every page of every
    window) or `e.sender.send(…)` (the page that asked); preload adds `onX: (cb) => ipcRenderer.on('<area>:changed',
    (_e, v) => cb(v))`; the renderer subscribes once at load, in the file that owns the concern (live document changes
-   are renderer/app.js). A document change goes through `sendChanged` so the page that typed it hears it as `own`.
-7. **Check** — `scripts/sdk-check.js` loads main.js with a fake electron and keeps every handler:
+   are renderer/app.js).
+7. **Text the page already shows** — a write of text the renderer typed takes the sender and an `own` flag and runs
+   inside `typed(e, own, fn)` (main.js), as `doc:setTitle`, `block:setText` and `block:setCell` do, with preload
+   passing `own === true`. `typed` sets `S.writer` for the length of the write, so `sendChanged` tells that page the
+   change is its own and the page does not re-read and rebuild itself under the caret (#265); a handler that drops
+   `e` sends every page a plain change.
+8. **Check** — `scripts/sdk-check.js` loads main.js with a fake electron and keeps every handler, so a test calls
    `backend.handlers.get('<area>:<verb>')(null, ...args)` (the field checks around `outline:children` are an example).
+   It also fails when preload.js calls a channel main does not answer, when a handler has no caller, and when two
+   handlers claim one channel.
 
 ## A main-process module
 
@@ -42,8 +54,8 @@ Two rules hold everywhere:
 2. Require only modules earlier in the order (AGENTS.md map). Reassigned shared state (the client, the user, the
    windows) is read from `S`; shared caches are the Maps exported by main/state.js. A new Tana capability goes into
    `sdk/` first and the module uses it.
-3. Export plain functions. main.js requires the module and wires its IPC; boot-time work is started from main.js's
-   boot sequence.
+3. Export plain functions, and the module's `ipc` table when it answers the renderer (then add it to the loop in
+   main.js that registers the tables). Boot-time work is started from main.js's boot sequence.
 4. Add it to the AGENTS.md map at its place in the order, and give it checks in scripts/sdk-check.js, which runs
    main.js and every `main/` module in one vm context.
 
