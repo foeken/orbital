@@ -842,6 +842,7 @@ function nodeEl(node, docId, parent) {
   chev.onclick = () => setOpen(item, !expanded);
   if (expanded) {
     const wrap = document.createElement('div'); wrap.className = 'children';
+    wrap.dataset.outline = childHost.docId; // whose outline is drawn open here, rows or none (renderer/app.js forgetReleased)
     if (childHost.node.kind === 'document' && !inField(childHost.docId)) {
       const fields = document.createElement('div'); fields.className = 'fields inline-fields';
       fields.dataset.docId = childHost.docId;

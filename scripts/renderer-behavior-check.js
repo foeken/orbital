@@ -2708,6 +2708,7 @@ async function runRailPinCheck() {
   assert.deepEqual(plain(picker.calls), [['event', 'doc', 'chosen']], 'a search result uses the pin context instead of navigating');
 
   const refresh = vm.runInNewContext(`
+    let releases = 0; const releasedDocs = new Map(), releasedSince = () => false; // what main let go of (app.js forgetReleased): nothing, here
     const relatedBy = new Map([['event', {}], ['doc', {}]]), calls = [];
     const queryRow = () => null, CSS = { escape: (id) => id }, selectionFrozen = false;
     const relatedStale = new Set(), connected = true, isRealId = () => true, renderSoon = () => {};
@@ -3289,6 +3290,7 @@ async function runPinToMeetingCheck() {
   const DOC = 'tana:text:01j0doc000000000000000000';
   const NOW = Date.now(); // the page orders against the clock, so the fixtures are built from one
   const api = vm.runInNewContext(`
+    let releases = 0; const releasedDocs = new Map(), releasedSince = () => false; // what main let go of (app.js forgetReleased): nothing, here
     const views = [], pinTree = [], pinRows = () => [], searches = [], typeListCache = null, searchesLoaded = true;
     let home = 'library', view = 'library';
     const localStorage = { setItem() {} }, onSearchPage = () => false;
@@ -3445,6 +3447,7 @@ async function runPinToMeetingCheck() {
 async function runClosedPaletteKeysCheck() {
   const DOC = 'tana:text:01j0doc000000000000000000', OTHER = 'tana:text:01j0doc100000000000000000', EVENT = 'tana:event:01j0event00000000000000000';
   const api = vm.runInNewContext(`
+    let releases = 0; const releasedDocs = new Map(), releasedSince = () => false; // what main let go of (app.js forgetReleased): nothing, here
     const views = [], pinTree = [], pinRows = () => [], searches = [], typeListCache = null, searchesLoaded = true;
     let home = 'library', view = 'library';
     const localStorage = { setItem() {} }, onSearchPage = () => false;
@@ -5533,6 +5536,7 @@ async function runAccessReadinessCheck() {
 async function runRailReadinessCheck() {
   const context = {};
   vm.runInNewContext(`
+    let releases = 0; const releasedDocs = new Map(), releasedSince = () => false; // what main let go of (app.js forgetReleased): nothing, here
     const asked = [], relatedBy = new Map();
     const relatedStale = new Set();
     let connected = false;
@@ -6858,6 +6862,7 @@ async function runStagedSearchReloadCheck() {
     const answers = []; // every read still out, stored query or preview, in the order it was asked
     const ask = () => new Promise((resolve) => answers.push(resolve));
     const tana = { children: ask, searchPreview: ask };
+    let releases = 0; const releasedDocs = new Map(), renderSoon = () => {}; // what main let go of (app.js forgetReleased): nothing, here
     ${sourceBetween('const reloadSeq =', 'async function reload(')}
     ${functionSource('reload')}
     ${functionSource('previewRows')}
@@ -7025,7 +7030,101 @@ async function runToastCheck() {
   console.log('ok  toast: notices and errors fade at the foot of the window and leave the relogin line alone');
 }
 
-const checks = [runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck, runStagedSearchReloadCheck];
+// Main lets go of documents it no longer keeps live (#289) and says which (#389): the page forgets the outlines it keeps
+// for them, a field's outline with its document's, and reads again at once the one it is drawing.
+async function runReleasedOutlineCheck() {
+  const api = await vm.runInNewContext(`
+    // B|…: a choice field of B, drawn as chips (no rows, no children wrapper) while B is expanded
+    // Q holds a copy of A (a reference): stale with it, and not on screen, so forgotten; S cites nothing released
+    const kids = new Map([['A', ['old']], ['A|tana:type:t?attribute=x', ['field']], ['B', ['on screen']], ['B|tana:type:t?attribute=c', ['chip']], ['C', ['still live']], ['D', ['collapsed']], ['R', ['referenced']], ['E', []],
+      ['Q', [{ id: 'q1', children: [{ id: 'q2', reference: { uri: 'A', node: { id: 'A', title: 'old title' } } }] }]], ['S', [{ id: 's1', reference: { uri: 'C' } }]],
+      ['SP', [{ id: 'A', kind: 'document', text: 'old title' }]], // a space listing A as a row of its own: stale with it
+      // saved searches listing A: one on screen with unsaved pill edits (its preview is asked again), one off screen (its
+      // arrival runs the query again anyway, so it is left alone)
+      ['tana:search:s', [{ id: 'A' }]], ['tana:search:off', [{ id: 'A' }]]]);
+    const searchRows = new Map([['tana:search:s', '{"types":["x"]}']]), previewed = [];
+    const previewRows = (id) => { previewed.push(id); }, isSearchDoc = (n) => n.id.startsWith('tana:search:'), isTypeDoc = (n) => n.id.startsWith('tana:type:');
+    let releases = 0; const releasedDocs = new Map();
+    // E is the target of an expanded full reference with no rows: drawn open, empty (render.js marks the children)
+    const outline = { querySelectorAll: (sel) => (sel === '.children[data-outline]' ? [{ dataset: { outline: 'E' } }] : []) };
+    const zoom = null, reloaded = [];
+    // B is a document row drawn expanded (a row of its outline is drawn); D is listed too, but collapsed; R is the target
+    // of an expanded full reference, whose rows are built against R from a block of another page (render.js childHost)
+    const items = new Map([['k1', { key: 'k1', docId: 'B', node: { kind: 'document', id: 'B' } }], ['k1b', { key: 'k1b', docId: 'B', node: { kind: 'block', id: 'b1' } }],
+      ['k2', { key: 'k2', docId: 'D', node: { kind: 'document', id: 'D' } }], ['k3', { key: 'k3', docId: 'P', node: { kind: 'block', id: 'ref' } }], ['k3r', { key: 'k3r', docId: 'R', node: { kind: 'block', id: 'r1' } }],
+      ['k4', { key: 'k4', docId: 'tana:search:s', node: { kind: 'document', id: 'A' } }]]); // the search's row, drawn
+    const open = new Map([['k1', true], ['k3', true]]); // B's row and the reference are open
+    const relatedBy = new Map([['A', { fields: [] }], ['notes', { pinHub: 'H' }], ['C', { pinHub: 'X' }], ['lists', { notes: [{ id: 'N' }] }]]), relatedStale = new Set();
+    const forced = [], reload = async (id) => { reloaded.push(id); if (id === 'E') throw new Error('not connected'); }, renderSoon = (force) => { forced.push(!!force); }; // E's read fails
+    ${sourceLine('const outlinesOf =')}
+    ${functionSource('railGroups')}
+    ${functionSource('forgetReleased')}
+    forgetReleased(['A', 'B', 'D', 'R', 'E', 'H', 'N']);
+    Promise.resolve().then(() => null).then(() => ({ kids: [...kids.keys()], reloaded, previewed, stale: [...relatedStale], forced: forced.some(Boolean) }));
+  `);
+  assert.deepEqual(plain(api), { kids: ['B', 'B|tana:type:t?attribute=c', 'C', 'R', 'S', 'tana:search:s', 'tana:search:off'], reloaded: ['B', 'B|tana:type:t?attribute=c', 'R', 'E'], previewed: ['tana:search:s'], stale: ['A', 'notes', 'lists'], forced: false },
+    'a released document\u2019s outlines are forgotten, an expanded one (a row, a full reference, an empty one) is read again with its fields and a collapsed one is not, one whose read fails is forgotten so the loading path asks again, the rest are kept; its sidebar, that of a page whose meeting was released and one listing it, are read again on the next visit');
+  assert.match(source, /tana\.onReleased\(forgetReleased\)/, 'and the page listens for what main lets go of');
+  // A read that began before the release and answers after it does not put the forgotten rows back (renderer/nodes.js reload).
+  const late = await vm.runInNewContext(`
+    const kids = new Map(), isTypeId = () => false, TIMELINE_PAGE = 'orbital:timeline', syncUploads = (id, rows) => rows, releasedDocs = new Map();
+    let releases = 0, timelinePartial = false, redraws = 0; const answers = [], calls = [], renderSoon = () => { redraws++; };
+    // the five reads below are answered by hand; a read again after them answers at once with what the document holds now
+    const now = { Y: [{ id: 'fresh' }], W: [{ id: 'w1' }, { id: 'w2', reference: { uri: 'A2' } }] };
+    const tana = { children: (id) => { calls.push(id); return calls.length <= 5 ? new Promise((resolve) => { answers.push(resolve); }) : Promise.resolve(now[id]); } };
+    const SEARCH_ID = 'tana:search:', searchRows = new Map(), searchFilters = new Map();
+    ${sourceBetween('const reloadSeq = new Map();', '// Whether a read begun at release')}
+    ${functionSource('releasedSince')}
+    ${sourceLine('const rowIds =')}
+    ${functionSource('reload')}
+    // forgotten: X's read was out when main let go of it, and the page forgot it
+    const reading = reload('X');
+    releases++; releasedDocs.set('X', releases); kids.delete('X');
+    answers[0](['stale']);
+    // drawn: Y keeps its rows and is read again at once; the fresh read answers first, the older one after it
+    kids.set('Y', [{ id: 'y1' }]);
+    const older = reload('Y');
+    releases++; releasedDocs.set('Y', releases);
+    const fresh = reload('Y');
+    answers[2]([{ id: 'fresh' }]); answers[1]([{ id: 'stale' }]);
+    // loading: Z's first read is out when A, which Z references, is let go; its answer is not cached and loading asks again
+    kids.set('Z', null);
+    const loading = reload('Z');
+    releases++; releasedDocs.set('A', releases);
+    answers[3]([{ id: 'z1', reference: { uri: 'A', node: { id: 'A' } } }]);
+    // cached: W's update adds a reference to A2, let go while it is read; W is read again and the update lands
+    kids.set('W', [{ id: 'w1' }]);
+    const updating = reload('W');
+    releases++; releasedDocs.set('A2', releases);
+    answers[4]([{ id: 'w1' }, { id: 'w2', reference: { uri: 'A2' } }]);
+    Promise.all([reading, older, fresh, loading, updating]).then(() => [kids.has('X'), kids.get('Y').map((r) => r.id), kids.has('Z'), redraws > 0, calls.slice(5), kids.get('W').length]);
+  `);
+  assert.deepEqual(plain(late), [false, ['fresh'], false, true, ['Y', 'W'], 2], 'a read begun before the release does not cache rows that name a released document, forgotten, drawn or still loading; loading asks again, and cached rows are read again so the update lands');
+  // The other writes of read rows check their answer the same way: a staged search preview asks again, and a sidebar
+  // read (a refresh of one already shown included) is marked to be read again at the next draw.
+  const writes = await vm.runInNewContext(`
+    const kids = new Map(), releasedDocs = new Map(), searchRows = new Map(), relatedBy = new Map([['page', { notes: [] }]]), relatedStale = new Set();
+    let releases = 0; const previews = [], relateds = [];
+    const searchFilters = new Map([['S', { filter: { types: ['a'] } }]]), filters = new Map([['S', { types: ['b'] }]]), sameFilter = () => false;
+    const tana = { searchPreview: () => new Promise((resolve) => { previews.push(resolve); }), related: () => new Promise((resolve) => { relateds.push(resolve); }) };
+    const render = () => {}, showError = () => {}, reload = async () => {}, connected = true, isRealId = () => true, zoom = null, items = new Map();
+    const editingRow = () => false, selectionFrozen = false, renderFields = () => {}, renderRail = () => {}, renderSoon = () => {}, queryRow = () => null, CSS = { escape: (s) => s };
+    ${sourceBetween('const reloadSeq = new Map();', '// Whether a read begun at release')}
+    ${functionSource('releasedSince')}
+    ${sourceLine('const rowIds =')}
+    ${functionSource('previewRows')}
+    ${functionSource('railGroups')}
+    ${functionSource('loadRelated')}
+    previewRows('S');
+    relatedStale.add('page'); loadRelated('page'); // a refresh of a sidebar already shown
+    releases++; releasedDocs.set('A', releases); // main lets A go while both are out
+    previews[0]([{ id: 'A' }]); relateds[0]({ notes: [{ id: 'A' }] });
+    Promise.resolve().then(() => null).then(() => [previews.length, kids.has('S'), relatedStale.has('page')]);
+  `);
+  assert.deepEqual(plain(writes), [2, false, true], 'a preview naming a released document is asked again rather than cached, and a sidebar read naming one is read again at the next draw');
+  console.log('ok  released documents: the page forgets their outlines and reads again the one it draws, so none stays stale');
+}
+const checks = [runReleasedOutlineCheck, runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck, runStagedSearchReloadCheck];
 // The chips under a zoomed title, driven through the shipped line itself: a typed document shows its type whatever
 // kind it is, and the kind chip (task, doc, meeting, space, chat…) stays out of the header, as it always did for a task.
 function runZoomTypeChipCheck() {

@@ -379,14 +379,25 @@ const landedPreview = new Map(); // saved search id -> the staged filter (as tex
 const lands = (docId, seq) => { if (seq <= (landedRead.get(docId) || 0)) return false; landedRead.set(docId, seq); return true; };
 // The stored filter a saved search's page was last loaded or saved with (searchFilters), as text; null while unknown.
 const storedFilter = (docId) => { const saved = searchFilters.get(docId); return saved ? JSON.stringify(saved.filter) : null; };
+// Whether a read begun at release `since` names a document main has let go of since (app.js forgetReleased): its rows
+// would hear no more changes, so they are not kept. Every write of read rows asks it: reload, previewRows, loadRelated.
+function releasedSince(since, ids) { return ids.some((id) => (releasedDocs.get(id) || 0) > since); }
+const rowIds = (list, out = []) => { for (const row of list || []) if (row) { out.push(row.id); if (row.reference) out.push(row.reference.uri); rowIds(row.children, out); } return out; };
 async function reload(docId) {
   const seq = nextRead(docId), search = String(docId).startsWith(SEARCH_ID), asked = search ? storedFilter(docId) : null;
   // A type page asks its filter; an answer to a filter the pills have since moved on from is dropped, or clicking
   // through a menu quickly could leave the page on an older choice than the pills show.
   if (isTypeId(docId)) { const asked = typeFilter(docId), rows = await tana.searchPreview(asked); if (filters.get(docId) === asked && lands(docId, seq)) kids.set(docId, rows); return; } // and a newer read of the same filter wins
   let rows;
+  const since = releases;
   // the whole page is in, or the read failed: no later part of it stands in for the page either way (renderer/timeline.js)
   try { rows = await tana.children(docId); } finally { if (docId === TIMELINE_PAGE) timelinePartial = false; }
+  // Begun before main let go of this document, or of one its rows list or reference: not cached; a newer read brings
+  // them, or the next draw asks again (#406 review).
+  if (releasedSince(since, rowIds(rows, [docId.split('|')[0]]))) {
+    if (kids.get(docId) == null) { kids.delete(docId); renderSoon(); return; } // loading: let the loading path ask again
+    return reload(docId); // cached: those rows stay until a read begun after the release lands (it subscribes what it names)
+  }
   // A saved search's stored answer is its rows only while it still answers the stored filter (a Save since replaced
   // it) and no staged pills are on screen; then the newest such answer wins. lands() last: a refused answer claims nothing.
   if (search) { const now = storedFilter(docId); if ((asked && now && asked !== now) || searchRows.has(docId) || !lands(docId, seq)) return; landedPreview.delete(docId); }
@@ -481,12 +492,15 @@ function previewRows(docId) {
   const asked = JSON.stringify(staged);
   if (searchRows.get(docId) === asked) return; // these rows already answer this filter
   searchRows.set(docId, asked);
-  // a read still out, the stored query or an earlier preview, answers what the page showed before these pills
-  // an answer lands only for the pills still on screen and when no newer read has landed; only the newest read asked
-  // reports a failure, and one that answered puts its staged filter back beside its rows
-  const seq = nextRead(docId);
-  tana.searchPreview(staged).then((rows) => { if (JSON.stringify(filters.get(docId)) === asked && lands(docId, seq)) { searchRows.set(docId, asked); landedPreview.set(docId, asked); kids.set(docId, rows); render(); } },
-    (e) => { if (reloadSeq.get(docId) === seq && landedPreview.get(docId) !== asked) { searchRows.delete(docId); showError(e); } }); // rows for these pills already in: a failed retry changes nothing
+  const seq = nextRead(docId), since = releases;
+  tana.searchPreview(staged).then((rows) => {
+    if (JSON.stringify(filters.get(docId)) !== asked) return;
+    // names what main let go of while it was out: asked again, unless a newer read is already out (#406 review)
+    if (releasedSince(since, rowIds(rows))) { if (reloadSeq.get(docId) === seq) { searchRows.delete(docId); previewRows(docId); } return; }
+    // an answer lands only for the pills still on screen and when no newer read has landed; only the newest read asked
+    // reports a failure, and one that answered puts its staged filter back beside its rows
+    if (lands(docId, seq)) { searchRows.set(docId, asked); landedPreview.set(docId, asked); kids.set(docId, rows); render(); }
+  }, (e) => { if (reloadSeq.get(docId) === seq && landedPreview.get(docId) !== asked) { searchRows.delete(docId); showError(e); } }); // rows for these pills already in: a failed retry changes nothing
 }
 function setSearchF(patch) {
   const id = pillKey();

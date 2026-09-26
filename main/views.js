@@ -85,8 +85,11 @@ async function viewRows(id, filter) {
     // ...and neither is a document an on-demand read is still waiting for: unsubscribing a bootstrap in flight
     // rejects it as 'unsubscribed <id>' under the reader (main/state.js reading).
     const held = (nodeId) => shown.has(nodeId) || watched.has(nodeId) || deletedNodes.has(nodeId) || history.has(nodeId) || reading.has(nodeId) || onScreen.has(nodeId);
-    for (const nodeId of subscribed) if (!held(nodeId)) { subscribed.delete(nodeId); docStates.delete(nodeId); S.client.sync.unsubscribe(nodeId).catch(() => {}); }
-    releaseOnDemand(held); // what reads opened, oldest first, past LIVE_ROWS of them (main/documents.js)
+    const gone = [];
+    for (const nodeId of subscribed) if (!held(nodeId)) { subscribed.delete(nodeId); docStates.delete(nodeId); S.client.sync.unsubscribe(nodeId).catch(() => {}); gone.push(nodeId); }
+    gone.push(...releaseOnDemand(held)); // what reads opened, oldest first, past LIVE_ROWS of them (main/documents.js)
+    // No change to these reaches a page any more: an outline a page keeps for one would go stale unnoticed (#389)
+    if (gone.length) send('outline:released', gone);
   }
   if (result.truncated) truncatedViews.add(id); else truncatedViews.delete(id);
   return { nodes: rows.map(toNode), truncated: !!result.truncated };
