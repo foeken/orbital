@@ -83,9 +83,21 @@ function curtain(els, opening, done) {
   if (!motionOK() || !els.length) return done && done();
   const rects = els.map((el) => el.getBoundingClientRect()), top = rects[0].top, h = Math.max(...rects.map((r) => r.bottom)) - top;
   if (h < 1) return done && done();
-  // only what is on screen at some point of the move — each travels between r.top - h and r.top, whichever way it
+  // How far the rows below really move: not the region's box, since a margin at its end reaches past the box and
+  // collapses differently once the region is gone — the difference was the jolt at the end of a collapse. Measured by
+  // taking the region out for one layout, so the rows land exactly where the redraw puts them.
+  const next = below(els.at(-1)).find((el) => el.getBoundingClientRect().height);
+  let d = h;
+  if (next) {
+    const open = next.getBoundingClientRect().top, shown = els.map((el) => el.style.display);
+    for (const el of els) el.style.display = 'none';
+    d = open - next.getBoundingClientRect().top;
+    els.forEach((el, i) => { el.style.display = shown[i]; });
+  }
+  if (d < 1) return done && done();
+  // only what is on screen at some point of the move — each travels between r.top - d and r.top, whichever way it
   // goes — so rows far below go to their place unseen and cost nothing
-  const followers = below(els.at(-1)).filter((el) => { const r = el.getBoundingClientRect(); return r.height && r.bottom > 0 && r.top - h < innerHeight; });
+  const followers = below(els.at(-1)).filter((el) => { const r = el.getBoundingClientRect(); return r.height && r.bottom > 0 && r.top - d < innerHeight; });
   const timing = { duration: opening ? MOTION.base : MOTION.quick, easing: MOTION.move, fill: opening ? 'backwards' : 'forwards' };
   // the clip reaches a little past the sides and top, so list markers, chevrons and focus rings are not cut
   const clip = (hidden) => 'inset(-4px -60px ' + hidden + 'px -60px)';
@@ -93,11 +105,11 @@ function curtain(els, opening, done) {
   const anims = els.map((el, i) => {
     // each piece of the region opens while the edge crosses it: one keyframe where the edge reaches its top, one where
     // it passes its bottom, on the same eased progress the rows below move on
-    const at = (rects[i].top - top) / h, end = Math.min(1, (rects[i].bottom - top) / h), hi = rects[i].height;
+    const at = Math.min(1, (rects[i].top - top) / d), end = Math.min(1, (rects[i].bottom - top) / d), hi = rects[i].height;
     const frames = [{ offset: 0, clipPath: clip(hi) }, ...(at > 0 ? [{ offset: at, clipPath: clip(hi) }] : []), ...(end < 1 ? [{ offset: end, clipPath: clip(0) }] : []), { offset: 1, clipPath: clip(0) }];
     return el.animate(opening ? frames : flip(frames), timing);
   });
-  const slid = [{ transform: 'translateY(' + -h + 'px)' }, { transform: 'none' }];
+  const slid = [{ transform: 'translateY(' + -d + 'px)' }, { transform: 'none' }];
   for (const el of followers) anims.push(el.animate(opening ? slid : [...slid].reverse(), timing));
   settleAt = performance.now() + timing.duration + 40;
   if (done) Promise.all(anims.map((a) => a.finished.catch(() => {}))).then(() => { done(); for (const a of anims) a.cancel(); });
@@ -110,15 +122,25 @@ const turnFrom = (el, from) => { if (el && from !== undefined) play(el, [{ trans
 let revealing = null;
 function foldRow(key, opening, done) {
   glideUntil = 0; // what opens or closes moves the rows below it itself: a glide on top would move them twice
-  const land = () => {
-    done();
-    const again = nodeElOf(key);
-    if (again && motionOK()) play(again.querySelector(':scope > .line > .chev'), [{ transform: 'rotate(' + (opening ? -90 : 90) + 'deg)' }, { transform: 'none' }], { duration: MOTION.base, easing: MOTION.out });
-    if (opening) { revealing = { key, until: performance.now() + 1500 }; revealOpened(); }
-  };
-  if (opening) return land();
-  const row = nodeElOf(key);
-  curtain([row && row.querySelector(':scope > .children')], false, land);
+  const row = nodeElOf(key), chev = row && row.querySelector(':scope > .line > .chev');
+  // the chevron answers the click at once, and the redraw finds it already pointing the new way
+  if (chev && motionOK()) chev.animate([{ transform: 'none' }, { transform: 'rotate(' + (opening ? 90 : -90) + 'deg)' }], { duration: MOTION.base, easing: MOTION.out, fill: 'forwards' });
+  if (!opening) return curtain([row && row.querySelector(':scope > .children')], false, done);
+  const open = () => { settleAt = 0; done(); revealing = { key, until: performance.now() + 1500 }; revealOpened(); };
+  // A document opens onto its fields and its children, both read from Tana. Wait a moment for them, so the block opens
+  // in one move instead of the fields landing after it and pushing the rows below a second time; an answer slower
+  // than that opens on its own when it lands (motionAfter, revealOpened).
+  const item = items.get(key), doc = item && (referenceTarget(item.node) || item.node), own = !!item && doc === item.node;
+  // (what loadRelated would never ask for is not waited for either)
+  const unasked = doc && (!tana.related || !isRealId(doc.id));
+  const ready = () => !doc || doc.kind !== 'document' || ((unasked || relatedBy.get(doc.id) != null) && (!own || kids.get(doc.id) != null));
+  if (!motionOK() || !connected || ready()) return open();
+  loadRelated(doc.id);
+  if (own) ensureLoaded(item);
+  const until = performance.now() + 400;
+  settleAt = until; // the renders those answers ask for wait too (renderSoon), or they would draw the row closed again under the turned chevron
+  const wait = () => (ready() || performance.now() > until ? open() : requestAnimationFrame(wait));
+  requestAnimationFrame(wait);
 }
 function revealOpened() {
   if (!revealing) return;
@@ -181,6 +203,7 @@ function motionBefore(root) {
   return {
     page: root.dataset.key + '|' + view,
     bodies: new Map(nodes.map((el) => [el.dataset.key, el.dataset.body])),
+    fieldsWaiting: new Set([...root.querySelectorAll('.inline-fields[hidden]')].map((el) => el.dataset.docId)),
     rects: performance.now() < glideUntil ? new Map(nodes.map((el) => [el.dataset.key, el.getBoundingClientRect()])) : null,
   };
 }
@@ -189,6 +212,8 @@ function motionAfter(root, was) {
   if (!was || !motionOK()) return;
   const nodes = [...root.querySelectorAll('.node[data-key]')], same = was.page === root.dataset.key + '|' + view;
   if (!same) return;
+  // the fields of a row just opened, landing after it did: they open in place as the row did
+  if (acted(5000)) for (const el of root.querySelectorAll('.inline-fields:not([hidden])')) if (was.fieldsWaiting.has(el.dataset.docId)) curtain([el], true);
   if (was.rects) {
     const moved = new Map();
     for (const el of nodes) {
