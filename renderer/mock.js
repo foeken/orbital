@@ -457,7 +457,6 @@ function mockApi() {
       if (nativeKind !== 'doc') unlisted.push(n);
       return info(n);
     },
-    pins: async () => sidebar.map((id) => info(all.find((d) => d.id === id))),
     // the third kind of pin: the meetings and spaces this document hangs on, which are pins on those documents
     pinState: async (docId) => ({
       sidebar: sidebar.includes(docId), dates: datePins[docId] || [],

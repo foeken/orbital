@@ -1508,7 +1508,6 @@ async function main() {
       const failure = await backend.handlers.get(name)(null, DOC, 'title').then(() => null, (e) => String(e.message || e));
       assert.equal(failure, 'not connected to Tana', name + ' must fail benignly before the connection is ready');
     }
-    assert.equal((await backend.handlers.get('doc:path')(null, DOC)).length, 0, 'the location falls back to its cache');
     assert.equal((await backend.handlers.get('search')(null, 'anything')).length, 0);
     const emptyLibrary = await backend.handlers.get('view:list')(null, 'library');
     assert.equal(emptyLibrary.nodes.length, 0);
@@ -3028,10 +3027,6 @@ async function main() {
     await backend.refresh();
     assert.ok(cache.get(taskId), 'a later refresh replaces the stale cache with a newly discovered task');
 
-    // typeTitles is one id -> title cache: the space in this document's location must not become a searchable type.
-    assert.equal((await backend.handlers.get('doc:path')(null, openId)).map((c) => c.title).join(' > '), 'Library > Deal');
-    // The crumb bar stays one quiet grey line: a crumb carries no hue, however colourful the node is.
-    assert.equal((await backend.handlers.get('doc:path')(null, openId)).every((c) => c.hue === undefined), true, 'a crumb carries no colour of its own');
     queries.length = 0;
     assert.equal((await backend.handlers.get('search')(null, '#deal')).length, 0, 'a space sharing a type title is not a type filter');
     assert.deepEqual(queries, [], 'an unknown #type runs no query at all');
@@ -3263,7 +3258,9 @@ async function main() {
     const ALL = 'Block (Really) | Lunch | Lunch roster | Remote / WFH (non-blocking)';
     assert.equal(await listed(), ALL);
 
-    assert.equal(await rules('filters:set', [' Block* ', 'lunch', 'BLOCK*']), 'Block* | lunch');
+    assert.equal(await rules('filters:add', ' Block* '), 'Block*', 'a pattern is trimmed');
+    assert.equal(await rules('filters:add', 'lunch'), 'Block* | lunch');
+    assert.equal(await rules('filters:add', 'BLOCK*'), 'Block* | lunch', 'and one already there, in any case, is not added twice');
     assert.equal(cache.setting('hiddenTitles').join(' | '), 'Block* | lunch', 'the list is persisted, so it survives a restart');
     assert.equal(await listed(), 'Lunch roster | Remote / WFH (non-blocking)', 'exact stays exact: "Lunch roster" is not "Lunch"');
     assert.equal(cache.get(block), undefined, 'a hidden row cannot come back from the SQLite cache');

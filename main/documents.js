@@ -5,7 +5,7 @@ const content = require('../sdk/content');
 const chat = require('../sdk/chat');
 const { readNode, editable, setEntityType, contentText, ulid, initDocument, STATE_TYPES } = require('../sdk/node');
 const fields = require('../sdk/fields');
-const { DOC_URI, KINDS, LIVE_ROWS, NOT_CONNECTED, PLAIN_KINDS, S, TAG, deletedNodes, docStates, editability, errText, hueLoaded, idKind, isDeleted, metaSigs, nodeCreators, nodeHues, nodeMeta, now, pathCache, reading, redoStack, report, scheduleRefresh, send, sendChanged, subscribed, summaryCache, typeAttrTitles, typeHues, typeTitles, undoStack, visibleGraphNodes } = require('./state');
+const { DOC_URI, KINDS, LIVE_ROWS, NOT_CONNECTED, PLAIN_KINDS, S, TAG, deletedNodes, docStates, editability, errText, hueLoaded, idKind, isDeleted, metaSigs, nodeCreators, nodeHues, nodeMeta, now, reading, redoStack, report, scheduleRefresh, send, sendChanged, subscribed, summaryCache, typeAttrTitles, typeHues, typeTitles, undoStack, visibleGraphNodes } = require('./state');
 const { eventMeta, graphRow, hueOf, hueWithType, kindRow, memberRow, members, nodeTag, plainRow, rememberNodeHue, rememberType, resolveHue, resolveTypes, toNode, typeTag, typeUriOf } = require('./rows');
 const settings = require('./settings');
 
@@ -420,7 +420,7 @@ function invalidateDeleted(id) {
   const open = S.client && S.client.sync.getDocument(id);
   db.noteDeleted(id, (open && readNode(open).title) || (db.get(id) || {}).title);
   db.remove(id);
-  nodeHues.delete(id); hueLoaded.delete(id); editability.delete(id); pathCache.delete(id); nodeMeta.delete(id);
+  nodeHues.delete(id); hueLoaded.delete(id); editability.delete(id); nodeMeta.delete(id);
   typeTitles.delete(id); typeHues.delete(id);
   summaryCache.delete(id);
   for (const [event, writeUp] of summaryCache) if (writeUp === id) summaryCache.delete(event); // a deleted write-up is no redirect target

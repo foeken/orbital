@@ -76,7 +76,6 @@ function setStatus(patch) {
   send('sync:status', S.status);
 }
 
-const pathCache = new Map(); // docId -> path (refreshed on every info() call; cheap enough per open)
 const metaSigs = new Map(); // docId -> the metadata signature the renderer last read (documents.js onChange)
 const truncatedViews = new Set(); // view ids whose last query hit the row cap, so roots can say so without a second query
 const summaryCache = new Map(); // event uri -> write-up uri or null
@@ -90,4 +89,4 @@ function scheduleRefresh(ms) {
   S.refreshTimer = setTimeout(() => S.refresh && S.refresh(), ms);
 }
 
-module.exports = { VIEWS, TAG, KINDS, PLAIN_KINDS, PIN_HUBS, DOC_URI, LIVE_ROWS, S, subscribed, reading, deletedNodes, isDeleted, visibleGraphNodes, typeTitles, typeHues, nodeHues, nodeCreators, editability, nodeMeta, docStates, iso, errText, NOT_CONNECTED, notReady, report, now, isSpace, isSearch, idKind, memberTitle, isMcp, send, sendChanged, today, setStatus, pathCache, metaSigs, truncatedViews, summaryCache, typeAttrTitles, hueLoaded, undoStack, redoStack, scheduleRefresh };
+module.exports = { VIEWS, TAG, KINDS, PLAIN_KINDS, PIN_HUBS, DOC_URI, LIVE_ROWS, S, subscribed, reading, deletedNodes, isDeleted, visibleGraphNodes, typeTitles, typeHues, nodeHues, nodeCreators, editability, nodeMeta, docStates, iso, errText, NOT_CONNECTED, notReady, report, now, isSpace, isSearch, idKind, memberTitle, isMcp, send, sendChanged, today, setStatus, metaSigs, truncatedViews, summaryCache, typeAttrTitles, hueLoaded, undoStack, redoStack, scheduleRefresh };

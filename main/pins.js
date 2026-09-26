@@ -37,11 +37,6 @@ async function pinnedNode(uri) {
   if (doc && isDeleted(readNode(doc))) { onChange(uri); return undefined; }
   return doc ? info(doc).catch(() => undefined) : undefined;
 }
-async function pinned() {
-  if (!S.client) return [];
-  const uris = await pins.listSidebar(S.client.sync, S.me.userUri);
-  return (await Promise.all(uris.map(pinnedNode))).filter(Boolean);
-}
 async function pinTree() {
   if (!S.client) return [];
   const fill = async (entry) => {
@@ -73,8 +68,8 @@ async function pinState(id) {
   ]);
   return { sidebar, dates, hubs };
 }
-// Every uri this user has pinned, sidebar or date, for the pin mark a row draws. Ids only: pinned() subscribes and
-// reads each pinned document, which is a bootstrap per pin and far more than "is this one pinned". A pointer this
+// Every uri this user has pinned, sidebar or date, for the pin mark a row draws. Ids only: reading each
+// pinned document would be a bootstrap per pin, and far more than "is this one pinned". A pointer this
 // account has never had (nothing pinned yet) is an empty half, not an error.
 async function pinnedUris() {
   if (!S.client) return [];
@@ -132,4 +127,4 @@ async function todayNode(offset = 0, findOnly = false) {
   return created.id;
 }
 
-module.exports = { weekTitle, weekNode, pinTarget, pinnedNode, pinned, pinnedUris, pinnedDates, pinHubs, pinTree, pinState, setPin, nodePin, todayNode };
+module.exports = { weekTitle, weekNode, pinTarget, pinnedNode, pinnedUris, pinnedDates, pinHubs, pinTree, pinState, setPin, nodePin, todayNode };
