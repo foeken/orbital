@@ -19,6 +19,7 @@
 const { EventEmitter } = require('node:events');
 const { LoroMap, LoroList } = require('loro-crdt');
 const { ulid } = require('./node');
+const { files } = require('./proto/descriptors');
 
 // Every list the query map carries, written empty when not given, as Tana's client does (NodeQueryResource #b).
 const LISTS = ['uris', 'types', 'ownerUris', 'entityTypeUris', 'stateTypes', 'chatInvocationIntents', 'stateChangedBy', 'stateWorkflowUris',
@@ -51,9 +52,10 @@ function statusOf(data) {
 // moves a row in or out of the list may change nothing else the row carries (PR #152 review).
 const rowSig = (row) => JSON.stringify([row.title, row.state && row.state.type, row.state && row.state.enteredAt, row.entityType, row.assignedTo, row.archivedAt, row.updatedAt, row.ownerUri]);
 
-// The edge types Tana's client knows (the EdgeType enum in shared-*.js); an edge query names them by number.
-const EDGE_TYPES = { LINKS_TO: 1, CREATED_IN: 2, BELONGS_TO: 3, ATTRIBUTE_LINKS_TO: 4, INSTANCE_OF: 5, ASSIGNED_TO: 6, SUBTASK_OF: 7, PART_OF_WORKFLOW: 8,
-  HAS_PROPOSAL: 9, CREATED_BY: 10, EDITED_BY: 11, UPDATED_IN: 12, USES_AGENT: 13, HAS_PIN: 14, ATTENDEE_OF: 15, ATTENDED: 16, PROPOSES_CHANGE_TO: 17, COMMENTS_ON: 18 };
+// The edge types Tana's client knows, by name (LINKS_TO: 1, … COMMENTS_ON: 18): the graph descriptor's EdgeType enum,
+// which is the one Tana's client uses too, so a re-extracted descriptor brings new ones along. An edge query names them by number.
+const EDGE_TYPES = Object.fromEntries(files.graph.enums.find((e) => e.name === 'EdgeType').values
+  .filter((v) => v.number).map((v) => [v.localName, v.number]));
 // One side of an edge (subject: where it starts, object: where it ends), EdgeQueryResource #g.
 const SIDE_LISTS = ['uris', 'types', 'ownerUris', 'entityTypeUris', 'stateTypes', 'stateChangedBy', 'stateWorkflowUris', 'stateWorkflowStateIds', 'assignedTo'];
 const SIDE_SCALARS = ['stateEnteredAtMin', 'stateEnteredAtMax'];
