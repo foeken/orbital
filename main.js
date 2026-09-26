@@ -255,6 +255,21 @@ ipcMain.handle('window:workView', (e) => {
 // The X at the end of the right half's header (renderer/app.js): that half closes, as Cmd+W closes it. Only in a
 // split: a page alone never closes its window from here.
 ipcMain.handle('window:closePane', (e) => { const win = paneWindow(e.sender); if (win && win.panes.length > 1) closeFront(win, e.sender); });
+// A page's header is a window drag region, where the page hears nothing of the mouse, so a page the pointer has left
+// asks for the cursor to be watched here: every 100 ms until it is outside that half, and then it is told
+// (renderer/app.js pointer-in, which shows the top row).
+ipcMain.on('window:watchPointer', (e) => {
+  const wc = e.sender, win = paneWindow(wc), pane = win && win.panes.find((p) => p.webContents === wc);
+  if (!pane) return;
+  clearInterval(pane.pointerTimer);
+  pane.pointerTimer = setInterval(() => {
+    if (win.isDestroyed() || wc.isDestroyed()) return clearInterval(pane.pointerTimer);
+    const { x, y } = screen.getCursorScreenPoint(), c = win.getContentBounds(), b = pane.getBounds();
+    if (x >= c.x + b.x && x < c.x + b.x + b.width && y >= c.y + b.y && y < c.y + b.y + b.height) return;
+    clearInterval(pane.pointerTimer);
+    wc.send('window:pointerOut');
+  }, 100);
+});
 // Cmd+K Swap panes: the halves change sides, and each takes the other's side marker, so a restart keeps them there
 ipcMain.handle('window:swapPanes', (e) => {
   const win = paneWindow(e.sender);

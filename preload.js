@@ -28,6 +28,8 @@ contextBridge.exposeInMainWorld('api', {
   otherPane: () => ipcRenderer.invoke('window:otherPane'), // the keyboard to the other half of a split
   swapPanes: () => ipcRenderer.invoke('window:swapPanes'), // the two halves of a split change sides
   closePane: () => ipcRenderer.invoke('window:closePane'), // this half of a split closes (the X on the right half)
+  watchPointer: () => ipcRenderer.send('window:watchPointer'), // the pointer left the page: main watches the cursor over the drag region
+  onPointerOut: (cb) => ipcRenderer.on('window:pointerOut', () => cb()), // and says when it has left this half
   workView: () => ipcRenderer.invoke('window:workView'), // Cmd+K Work View: the right half opened, or the other half sent to its stored place
   onToPlace: (cb) => ipcRenderer.on('window:toPlace', () => cb()), // go to the place stored for this side (the Work View has just stored it)
   splitDrag: (phase) => ipcRenderer.send('window:splitDrag', phase), // the split grip: 'start', 'move' (main reads the cursor) or 'even'

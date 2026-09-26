@@ -60,6 +60,13 @@ splitGrip.addEventListener('pointerdown', (e) => {
   splitGrip.addEventListener('pointermove', move); splitGrip.addEventListener('pointerup', up);
 });
 splitGrip.addEventListener('dblclick', () => tana.splitDrag('even'));
+// Whether the pointer is over this page, for the top row (styles.css html.pointer-in). The header is a window drag
+// region, and over it the page hears nothing of the mouse, so a pointer leaving the page may only have gone up into
+// the header: main watches the cursor from there and says when it has really left this half.
+const pointerIn = (on) => document.documentElement.classList.toggle('pointer-in', on);
+document.addEventListener('pointerover', () => pointerIn(true));
+document.documentElement.addEventListener('pointerleave', () => (tana.watchPointer ? tana.watchPointer() : pointerIn(false)));
+if (tana.onPointerOut) tana.onPointerOut(() => pointerIn(false));
 // The right half closes from an X at the far right of its header, after every other button (index.html).
 const closePaneBtn = $('navClosePane');
 closePaneBtn.hidden = SIDE !== ':2';
