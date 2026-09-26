@@ -1163,13 +1163,13 @@ function renderPalette() {
   const active = palList.querySelector('.row.active');
   if (active) active.scrollIntoView({ block: 'nearest' });
 }
-// opens the palette in mode, closes it when already open in that mode; opening one mode closes the other.
-// link = @ linking context; pin = relationship pin context. Both reuse search results.
 // ⌘K as a button beside back and forward, for whoever has not met the key yet: the same toggle the key runs.
 const paletteBtn = $('navPalette');
 paletteBtn.onmousedown = (e) => e.preventDefault(); // the caret stays in its row, so closing the palette puts it back
 paletteBtn.onclick = () => togglePalette('cmd');
 { const svg = iconNode('command'); if (svg) paletteBtn.append(svg); }
+// opens the palette in mode, closes it when already open in that mode; opening one mode closes the other.
+// link = @ linking context; pin = relationship pin context. Both reuse search results.
 function togglePalette(mode, link, pin) {
   const show = palette.hidden || palMode !== mode || !!link || !!pin;
   cancelLink(); pinCtx = null; pillCtx = null;
