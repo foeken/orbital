@@ -98,7 +98,8 @@ function fieldPill(def, f, save) {
   if (!PILL_FIELDS.includes(def.type) || (def.type === 'link' && !(def.to || []).length)) return null; // a link to anything has no list to pick from
   const key = fieldKey(def), now = (f.fields || {})[key] || {}, title = def.title || 'Untitled field';
   const put = (value) => putField(f, save, key, value);
-  const pill = { id: 'field:' + def.key, label: title, command: 'Filter by ' + title, icon: 'field' };
+  // a link or member field can point at hundreds of nodes, so its menu says it can be searched (menuEl)
+  const pill = { id: 'field:' + def.key, label: title, command: 'Filter by ' + title, icon: 'field', search: def.type === 'link' || def.type === 'member' };
   if (def.type === 'date') {
     const preset = now.date && now.date.preset;
     return { ...pill, value: (DATE_PRESETS.find(([p]) => p === preset) || [])[1] || 'Any', rows: () => [
@@ -367,8 +368,14 @@ function menuEl(d) {
   const rows = menuRows(d), el = document.createElement('div'); el.className = 'menu';
   el.dataset.for = d.id; // which pill it hangs from, so a redraw can tell a new menu from the same one (menuMotion)
   const typed = (menu.q || '').trim();
-  if (typed) { const h = document.createElement('div'); h.className = 'mhead'; h.textContent = typed; el.append(h); }
+  // A long list (a link field's targets) shows where the typing goes before anything is typed; the keys stay the pill's
+  if (d.search) {
+    const s = document.createElement('div'); s.className = 'msearch' + (typed ? '' : ' empty');
+    const i = document.createElement('span'); i.className = 'micon'; i.innerHTML = iconSvg('search');
+    s.append(i, typed || 'Search ' + (d.label || 'options') + '…'); el.append(s);
+  } else if (typed) { const h = document.createElement('div'); h.className = 'mhead'; h.textContent = typed; el.append(h); }
   const pick = rows.filter((r) => r.label); // navigable rows
+  if (d.search && typed && !pick.length) { const n = document.createElement('div'); n.className = 'mhead'; n.textContent = 'No matches'; el.append(n); }
   menu.index = Math.max(0, Math.min(menu.index, pick.length - 1));
   for (const r of rows) {
     const row = document.createElement('div');

@@ -297,6 +297,11 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 .menu .mrow.disabled:hover { background: none; }
 .menu .mrow.disabled .micon { color: #bbb; }
 .menu .mhead { padding: 10px 12px 4px; font-size: 13px; font-weight: 600; color: #999; user-select: none; }
+/* a searchable menu's typing line (renderer/pills.js menuEl): pinned above the rows it narrows */
+.menu .msearch { position: sticky; top: -8px; z-index: 1; display: flex; align-items: center; gap: 12px; margin: -8px -8px 6px; padding: 14px 20px 10px; background: inherit; border-bottom: 1px solid #ececec; font-size: 16px; user-select: none; }
+.menu .msearch.empty { color: #999; }
+.menu .msearch .micon { flex: none; width: 18px; height: 18px; color: #999; }
+.menu .msearch .micon svg { display: block; width: 18px; height: 18px; }
 .menu .mdiv { height: 1px; margin: 6px 4px; background: #e6e6e6; }
 
 .scroll { position: relative; flex: 1; overflow-y: auto; padding: 4px 32px 40px 16px; } /* 4px at the top: the first row's focus ring (2px, 2px out) is drawn outside the row, and a scroll box clips at its edge; relative: the loading animation fills it */
@@ -948,6 +953,7 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 [data-theme="dark"] .menu .mrow .tick { color: #c9c9c9; }
 [data-theme="dark"] .menu .mhead { color: #858b8e; }
 [data-theme="dark"] .menu .mdiv { background: #3a3f41; }
+[data-theme="dark"] .menu .msearch { border-color: #3a3f41; }
 
 [data-theme="dark"] .chev::before { border-color: #555b5e; background: #282b2d; }
 [data-theme="dark"] .chev::after { border-color: #adb1b2; }
