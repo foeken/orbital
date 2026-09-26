@@ -7694,6 +7694,8 @@ async function runRecentlyDeletedCheck() {
   api.row().run();
   await api.settle();
   assert.deepEqual(plain(api.page().map((r) => [r.label, r.disabled])), [['Not connected', true]], 'a read that failed says why, instead of Loading… for as long as the page is open (#362)');
+  assert.deepEqual(plain(api.page('zz').map((r) => [r.label, r.note])), [['Not connected', true]], 'with a query too, as a note, which keeps the palette\'s "No results" from appearing under it');
+  assert.match(source, /\|\| r\.node \|\| r\.note\) && !palPage\.typed/, 'renderPalette draws no "No results" under a note');
   assert.deepEqual(plain(await api.writeThenOpen()), ['write', 'read'], 'a delete or restore still queued lands before the page reads its list');
   const held = api.hold();
   api.row().run(); api.row().run(); await api.settle(); // opened again before the first read answered

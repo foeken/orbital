@@ -469,7 +469,7 @@ function loadList(mode, read, keep) {
     .then((list) => { if (listReads.get(mode) !== mine) return; listReads.delete(mode); keep(list); if (palMode === mode && !palette.hidden) renderPalette(); });
 }
 function listRows(group, list, q, empty, toRows) {
-  const note = (label) => [{ group, label, disabled: true }];
+  const note = (label) => [{ group, label, disabled: true, note: true }]; // says why there are no rows, so no "No results" under it
   if (!list) return note('Loading…');
   if (list instanceof Error) return note(list.message);
   const rows = toRows(list);
@@ -941,7 +941,7 @@ function renderPalette() {
   });
   // "No results" belongs under a list that was searched and found nothing. A typed page is not a list: the agent
   // prompt, "Discuss with …", a meeting's time or place and a field turn what is typed into their row.
-  if (!palRows.some((r) => palMode === 'cmd' || palMode === 'slash' || palMode === 'hidden' || r.node) && !palPage.typed && (palMode === 'cmd' || palMode === 'slash' || (q && !palBusy))) { const n = document.createElement('div'); n.className = 'group'; n.textContent = 'No results'; els.push(n); }
+  if (!palRows.some((r) => palMode === 'cmd' || palMode === 'slash' || palMode === 'hidden' || r.node || r.note) && !palPage.typed && (palMode === 'cmd' || palMode === 'slash' || (q && !palBusy))) { const n = document.createElement('div'); n.className = 'group'; n.textContent = 'No results'; els.push(n); }
   palList.replaceChildren(...els);
   const active = palList.querySelector('.row.active');
   if (active) active.scrollIntoView({ block: 'nearest' });
