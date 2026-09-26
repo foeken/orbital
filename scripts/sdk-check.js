@@ -2993,15 +2993,18 @@ async function main() {
   {
     const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
     const docs = new Map();
+    const creators = new Map(), lagging = new Set(); let searchFails = false; // who made each document; made but not in the text index yet
     const sync = {
-      subscribe: async (id, init) => { if (!docs.has(id)) { const d = new Document(id); if (init) d.transact(init); docs.set(id, d); } return docs.get(id); },
+      subscribe: async (id, init) => { if (!docs.has(id)) { const d = new Document(id); if (init) d.transact(init); docs.set(id, d); creators.set(id, ME); } return docs.get(id); },
       getDocument: (id) => docs.get(id),
     };
     const titleOf = (d) => readNode(d).title || '';
     const listNodes = async (p) => {
       if (p.nodeIds) return { nodes: p.nodeIds.map((id) => docs.has(id) ? { id, title: titleOf(docs.get(id)) } : { id }) };
+      if (searchFails) throw new Error('deadline exceeded');
       const q = String(p.textQuery || '').toLowerCase();
-      return { nodes: [...docs.values()].filter((d) => titleOf(d).toLowerCase().includes(q)).map((d) => ({ id: d.id, title: titleOf(d) })) };
+      return { nodes: [...docs.values()].filter((d) => titleOf(d).toLowerCase().includes(q) && !lagging.has(d.id) && (!p.createdBy || p.createdBy.includes(creators.get(d.id))))
+        .map((d) => ({ id: d.id, title: titleOf(d) })) };
     };
     backend.testRuntime({ me: { userUri: ME }, win: { isDestroyed: () => false, webContents: { send: () => {} } }, client: { sync, graph: { listNodes } } });
 
@@ -3028,6 +3031,21 @@ async function main() {
     assert.equal((await backend.weekNode(new Date(2026, 8, 16), true)).id, first.id, 'a lookup finds the existing week node');
     await assert.rejects(backend.weekNode(new Date(2028, 0, 12), true), /Demo mode is on/, 'and refuses a missing one');
     assert.equal(docs.size, 3, 'without creating it');
+    // Yours only, and never a second one (#393): a colleague's node with the title is theirs; a search that fails is an
+    // error, not "there is none"; and one made here a moment ago is found before the text index lists it.
+    const theirs = new Document('tana:text:' + ulid()); theirs.transact((l) => initDocument(l, 'Week 40 (2026)', 'tana:user-profile:colleague'));
+    docs.set(theirs.id, theirs); creators.set(theirs.id, 'tana:user-profile:colleague');
+    const mine40 = await backend.weekNode(new Date(2026, 8, 28));
+    assert.notEqual(mine40.id, theirs.id, 'a colleague\u2019s week node with the same title is not taken for yours');
+    searchFails = true;
+    const before = docs.size;
+    await assert.rejects(backend.weekNode(new Date(2026, 9, 5)), /deadline exceeded/, 'a failed search fails the week node');
+    await assert.rejects(backend.handlers.get('doc:todayNode')(null, '2026-10-05', false), /deadline exceeded/, 'and the day node');
+    assert.equal(docs.size, before, 'and neither makes one');
+    searchFails = false;
+    const made = await backend.weekNode(new Date(2026, 9, 5));
+    lagging.add(made.id); // not in the text index yet
+    assert.equal((await backend.weekNode(new Date(2026, 9, 6))).id, made.id, 'a week node made moments ago is found before the index lists it');
     console.log('ok  week node: one plain document per ISO week, reused by every day in it');
   }
 
