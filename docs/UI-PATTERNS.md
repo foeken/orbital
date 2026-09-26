@@ -57,6 +57,25 @@ function huePickRows(q, typed) { … } // every page's rows: q lowercased, typed
   tana.docTypes(doc.id).then((list) => { if (seq !== palSeq) return; typeList = list; renderPalette(); });
   ```
 
+### A page that lists one read: `loadList` and `listRows` (renderer/palette.js)
+
+The read runs once per open, after the actions already queued through `run`, and only the latest read of a page is
+kept. While there are no rows, the page shows one note: Loading…, the error, or its empty line for an empty list with
+nothing typed. A query that matches nothing is the palette's own "No results", which is never drawn under a note.
+
+```js
+let trashList = null;
+const trashRows = (q) => listRows(TRASH_GROUP, trashList, q, 'Nothing deleted recently',
+  (list) => list.filter((d) => fuzzyMatch(d.title, q)).map((d) => ({ group: TRASH_GROUP, label: d.title, run: … })));
+function openTrashPalette() {
+  loadList('trash', () => tana.deletedList(), (list) => { trashList = list; });
+  openPage('trash', 'Restore something deleted', { rows: trashRows, back: BACK_TO_COMMANDS });
+}
+```
+
+A write that answers with the new list sets it and calls `listReads.delete(mode)`, so a read still in flight cannot
+overwrite it (`hiddenApply` in renderer/palette.js).
+
 ### Doing something: `run`, `showError`, `showNote` (renderer/nodes.js)
 
 `run(fn)` queues an async action behind the ones before it. A throw becomes the red toast, so an action never catches
