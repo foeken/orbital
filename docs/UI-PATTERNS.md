@@ -21,7 +21,8 @@ Everything the palette lists is a plain object. The full field list and ordering
 - A note is a row nobody can run: `{ group, label: 'Loading…', disabled: true }`. ↑/↓ step over it.
 - `docRow(node, hint, run)` (renderer/palette.js) makes a document into a row, with its icon, type chips and date.
 - `fuzzyMatch(label, q)` (renderer/palette.js) is the palette's matcher: filter a page's list with it, as in
-  `list.filter((x) => fuzzyMatch(x.title, q))`, and the bold letters and ranking agree with ⌘K.
+  `list.filter((x) => fuzzyMatch(x.title, q))`, and the bold letters agree with ⌘K. It filters only: a page keeps
+  its rows in the order it returns them, and only the command page ranks by match (`rankRows`).
 - `memberRows(q, pick, ticked)` (renderer/tasks.js) makes a list of people plus Unassigned, each row calling
   `pick(uri)` and ticked where `ticked(uri)` says so.
 
@@ -45,8 +46,15 @@ function huePickRows(q, typed) { … } // every page's rows: q lowercased, typed
   drawn under it.
 - A page that must start something before its first draw (Set icon's busy search) calls `showPage` with the same
   arguments, then `renderPalette()` and `palInput.focus()` itself.
-- An answer that arrives later checks `palMode` (`if (palMode === 'setHue') renderPalette()`), so it never draws
-  into a page that has been left.
+- An answer that arrives later must check that it still belongs to the page on screen. `palMode` alone is not
+  enough, because the same page may have been left and opened again for another document. Take the generation
+  that `showPage` moves on, and compare it when the answer lands:
+
+  ```js
+  openPage('setType', 'Set type to…', { rows: typeRows, back: BACK_TO_COMMANDS });
+  const seq = palSeq;
+  tana.docTypes(doc.id).then((list) => { if (seq !== palSeq) return; typeList = list; renderPalette(); });
+  ```
 
 ### Doing something: `run`, `showError`, `showNote` (renderer/nodes.js)
 
@@ -111,10 +119,11 @@ wired by hand.
 ### Pills and their menus (renderer/pills.js)
 
 A pill is a definition in `pillDefs()`, and its menu is the rows it answers. ⌘K offers the same rows through
-`pillRowsFor`, so a pill needs nothing extra to be keyboard-reachable.
+`pillRowsFor`, under the pill's `command` (its ⌘K row label, required), so a pill needs nothing extra to be
+keyboard-reachable. `label` is the word on the pill before its `value`.
 
 ```js
-defs.push({ id: 'status', icon: 'status', value: 'Open', rows: () => [
+defs.push({ id: 'status', label: 'Status', command: 'Filter by status', icon: 'status', value: 'Open', rows: () => [
   { label: 'Any status', reset: true, checked: !f.states, run: () => save({ states: null }) },
   { head: 'States' }, { label: 'Open', icon: 'status', keepOpen: true, checked: true, run: … }, { div: true },
 ] });
