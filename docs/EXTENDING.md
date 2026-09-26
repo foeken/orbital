@@ -170,7 +170,7 @@ A kind is the `<kind>` of `tana:<kind>:<ulid>` (AGENTS.md lists the ones Tana ha
 
 What it may do is not guessed. Rows of a kind that `sdk/node.js` `editable()` does not list stay read-only, and main's
 `mut` refuses writes to them; sharing, moving, deleting and archiving are `sdk/access.js` `KINDS`, `DELETABLE`,
-`ARCHIVABLE` and `LINK_SHAREABLE`. Change those only from verified Tana behaviour.
+`ARCHIVABLE` and `LINK_SHAREABLE`, and `ORGANIZED` puts org-wide sharing under the org's creation policy. Change those only from verified Tana behaviour.
 
 To create one: a `kind` branch in `sdk/node.js` `initDocument` (seed exactly the keys Tana writes; read a real one with
 `platform-cli rawdoc`), its id prefix in `main/state.js` `KINDS` (`createDocument` refuses a kind without one), and
