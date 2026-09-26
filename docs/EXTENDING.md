@@ -151,6 +151,44 @@ machines; a choice about this screen or this machine does not.
   `onSettings` handler in renderer/app.js (theme, Home, hotkeys and the arrangements are the examples).
 - Add the key to the table in docs/SETTINGS.md.
 
+## A document kind
+
+A kind is the `<kind>` of `tana:<kind>:<ulid>` (AGENTS.md lists the ones Tana has). To have the views list it:
+
+1. **sdk/query.js** — one entry in `KIND_NODE_TYPE` (view kind → node type). `VIEW_KINDS` and the reverse
+   `NODE_TYPE_KIND` are derived from it, so the filter accepts it and a saved search reads it back; sdk-check
+   round-trips every kind through a saved search. Leave it out of `ANY_KINDS` if it is not library content (spaces,
+   people and types are asked for by name), and add its node type to `searchParams` if ⌘S should find it.
+2. **main/state.js** — `PLAIN_KINDS`, which gives its rows the icon named after the kind and a kind tag. The SVG itself
+   is an entry in `scripts/build-icons.js` `WANT` (which writes `icons.js`) or in `renderer/nodes.js` `LIB_ICONS`,
+   the two tables `iconSvg` looks in.
+3. **renderer/views.js** — its choice in the Type pill, `TYPES`.
+4. **renderer/mock.js** — a row, and the kind in `kindOf`, which otherwise files it under docs.
+
+What it may do is not guessed. Rows of a kind that `sdk/node.js` `editable()` does not list stay read-only, and main's
+`mut` refuses writes to them; sharing, moving, deleting and archiving are `sdk/access.js` `KINDS`, `DELETABLE`,
+`ARCHIVABLE` and `LINK_SHAREABLE`. Change those only from verified Tana behaviour.
+
+To create one: a `kind` branch in `sdk/node.js` `initDocument` (seed exactly the keys Tana writes; read a real one with
+`platform-cli rawdoc`), its id prefix in `main/state.js` `KINDS` (`createDocument` refuses a kind without one), and
+an entry in `main/documents.js` `creationOptions` and the mock's `creationOptions` for Cmd+K and "/" to offer it.
+
+## An outline block
+
+1. **sdk/content.js** — how it reads: `node()` builds the outline node and `blockType` names it; a block that holds no
+   words is in `ATOMS`.
+   - A type the outliner can switch to: its name in `BLOCK_TYPES` and its container and leaf in `setLeaf`. A new
+     ProseMirror node that carries words also goes in `TEXT_BLOCKS`, or `setText` and `setBlockType` refuse it once a
+     row has become one; a new holder (like `blockquote` around a quote) goes in `rehome` too.
+   - A block that is inserted (like a divider or a table): an `insert…` function beside `insertDivider`, then an IPC
+     call for it as above (the `block:insert…` handlers in main/documents.js, preload.js, `DEMO_WRITES`, the mock),
+     and its "/" row and dispatch in renderer/toolbar.js.
+2. **renderer/nodes.js** — a switchable type's label in `BLOCK_TYPES` (what `blockTypeOf` and the "/" menu read) and
+   its glyph in `BLOCK_GLYPH`.
+3. **renderer/render.js** draws it; styles.css styles it.
+4. **scripts/sdk-check.js** — its outline section: the read, the write, and two Documents wired
+   `local-update → applyRemote` converging.
+
 ## The checks to extend
 
 `npm run lint` and `npm run check` must pass before every push; CI runs both on Node 22.
