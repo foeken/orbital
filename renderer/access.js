@@ -48,7 +48,7 @@ function openVisibilityPalette(doc) {
 function openVisibility(doc, scope) {
   const access = accessById.get(doc.id);
   if (scope !== 'people' || !taskMetaById.has(doc.id) || !(access?.rules || []).includes('people')) return openVisibilityPalette(doc);
-  palDoc = doc; palette.hidden = false;
+  palDoc = doc; // the palette opens in showPage, which notes where the focus was while it is still closed (#376)
   loadAccess(doc.id); // Apply still goes through the same sharing rules
   openVisibilityPeople(doc);
 }

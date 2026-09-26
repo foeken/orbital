@@ -61,7 +61,7 @@ const withShims = (src) => {
   // state the harness declares (its own lets win; the rest start empty here).
   // A page carries its rows and back step (palPage), and openPage is showPage drawn and focused.
   if (/\b(showPage|openPage|backPalette)\(/.test(src) && !/function showPage\(/.test(src)) {
-    src = 'globalThis.clearTimeout ??= () => {}; globalThis.palTimer ??= null; globalThis.palSeq ??= 0; globalThis.palEnter ??= null; globalThis.palBusy ??= false; globalThis.palRows ??= []; globalThis.palIndex ??= 0; globalThis.palMode ??= "cmd"; globalThis.palPage ??= {};'
+    src = 'globalThis.clearTimeout ??= () => {}; globalThis.palTimer ??= null; globalThis.palSeq ??= 0; globalThis.palEnter ??= null; globalThis.palBusy ??= false; globalThis.palRows ??= []; globalThis.palIndex ??= 0; globalThis.palMode ??= "cmd"; globalThis.palPage ??= {}; globalThis.palReturn ??= null; globalThis.focused ??= () => null; globalThis.returnTarget ??= () => focused();'
       + ' globalThis.promptEditor ??= () => {}; globalThis.palette ??= { hidden: true }; globalThis.palInput ??= { value: "", placeholder: "", focus() {} }; globalThis.renderPalette ??= () => {};\n'
       + 'globalThis.showPage ??= ' + source.match(/^function showPage\(.*?^\}/ms)[0] + ';\n'
       + 'globalThis.openPage ??= ' + source.match(/^function openPage\(.*$/m)[0] + ';\n'
@@ -2335,6 +2335,21 @@ function runPaletteSkipCheck() {
   `);
   assert.deepEqual(plain(page), { cleared: [7], palTimer: null, palSeq: 4, palEnter: null, palBusy: false, palRows: [], palIndex: 0, palMode: 'cmd', pillCtx: null, value: '', placeholder: 'Run a command' },
     'a page starts clean: the last page\'s timer cleared, its answers outdated, nothing busy or waiting on Enter');
+  // A page that opens the palette itself (a recorded key on Set status, a row's meta) remembers the caret, as ⌘K does,
+  // so closing it puts the caret back instead of leaving the focus on the page body (#376). An open palette keeps its own.
+  const opens = (hidden, had, caret = true) => vm.runInNewContext(`
+    let palTimer = null, palSeq = 0, palEnter = null, palBusy = false, palRows = [], palIndex = 0, palMode = 'cmd', palPage = {}, palReturn = ${JSON.stringify(had)};
+    const clearTimeout = () => {}, promptEditor = () => {}, palette = { hidden: ${hidden} }, palInput = { value: '', placeholder: '' }, focused = () => (${caret} ? { key: 'row', offset: 2 } : null);
+    const railRow = { dataset: { id: 'meta:assignees' } }, railEl = { contains: (el) => el === railRow }, document = { activeElement: railRow };
+    ${sourceLine('const returnTarget')}
+    ${functionSource('showPage')}
+    showPage('status', 'Set status to…', {});
+    palReturn;
+  `);
+  assert.deepEqual(plain(opens(true, null)), { key: 'row', offset: 2 }, 'a page opened with the palette closed remembers where the caret was');
+  assert.deepEqual(plain(opens(false, { key: 'first' })), { key: 'first' }, 'a page opened from the palette keeps the place ⌘K remembered');
+  assert.deepEqual(plain(opens(true, null, false)), { rail: 'meta:assignees' }, 'and one opened from a sidebar row (Edit assignees, visibility) goes back to that row');
+  assert.doesNotMatch(functionSource('openVisibility'), /palette\.hidden = false/, 'openVisibility leaves opening the palette to showPage, which must see it closed');
 }
 
 // Formatting: marks survive the DOM round trip, and toggling one over a selection rewrites only that range.
@@ -4783,10 +4798,10 @@ function runCodexAssignCheck() {
     // the palette's own furniture: the single-line field, the editor that replaces it on the prompt page, and the card
     const palette = { hidden: true };
     const palInput = { hidden: false, value: '', focus() {} };
-    const focused = { el: null };
-    const palText = { name: 'editor', hidden: true, value: '', focus() { focused.el = palText; } };
-    const palList = { name: 'rows', tabIndex: 0, focus() { focused.el = palList; }, querySelectorAll: () => [] };
-    const document_activeElement = () => focused.el;
+    const focusedEl = { el: null }; // where the fake focus is (not the app's focused(), which showPage asks)
+    const palText = { name: 'editor', hidden: true, value: '', focus() { focusedEl.el = palText; } };
+    const palList = { name: 'rows', tabIndex: 0, focus() { focusedEl.el = palList; }, querySelectorAll: () => [] };
+    const document_activeElement = () => focusedEl.el;
     const agentModels = ['gpt-5.6-sol', 'anthropic/claude-opus-5'];
     let agentModel = '';
     const runRow = (r) => { if (r && !r.disabled) r.run(); };
@@ -4816,7 +4831,7 @@ function runCodexAssignCheck() {
     const render = (force) => renders.push(force === true ? 'forced' : 'deferred');
     const reload = async (id) => { kids.set(id, copy(served.get(id))); }; // what main answers with now
     const iconNode = () => ({ setAttribute() {} });
-    const document = { documentElement: { dataset: {} }, get activeElement() { return focused.el; }, createElement: (tagName) => ({ tagName, attrs: {}, children: [], className: '',
+    const document = { documentElement: { dataset: {} }, get activeElement() { return focusedEl.el; }, createElement: (tagName) => ({ tagName, attrs: {}, children: [], className: '',
       setAttribute(name, value) { this.attrs[name] = value; }, append(...kids) { this.children.push(...kids); } }) };
     const views = [], pinRows = () => [], selectionRows = () => [];
     const pillCommandRows = () => [], searches = [], typeListCache = null, goTo = () => {};
@@ -4880,9 +4895,9 @@ function runCodexAssignCheck() {
         return { row: row ? row.label : null, disabled: !!(row && row.disabled), role: el.attrs.role, label: el.attrs['aria-label'] }; },
       pressBadge: async (viaKey) => { openedTasks.length = 0; const el = codexBadgeEl(DOC); const e = { key: 'Enter', preventDefault() {}, stopPropagation() {} }; if (viaKey) el.onkeydown(e); else el.onclick(e); await tick(); return [...openedTasks]; },
       // ⇥ from the editor to the model rows and back, with the rows driven by the keys the list answers to
-      where: () => (focused.el ? focused.el.name : null),
-      tab: () => { palRows = agentPromptRows(); agentPromptKey(key('Tab')); return { focus: focused.el && focused.el.name, group: palRows[palIndex] && palRows[palIndex].group, label: palRows[palIndex] && palRows[palIndex].label }; },
-      rows: (name) => { const handled = agentRowsKey(key(name)); return { handled, focus: focused.el && focused.el.name, label: palRows[palIndex] && palRows[palIndex].label, model: agentModel }; },
+      where: () => (focusedEl.el ? focusedEl.el.name : null),
+      tab: () => { palRows = agentPromptRows(); agentPromptKey(key('Tab')); return { focus: focusedEl.el && focusedEl.el.name, group: palRows[palIndex] && palRows[palIndex].group, label: palRows[palIndex] && palRows[palIndex].label }; },
+      rows: (name) => { const handled = agentRowsKey(key(name)); return { handled, focus: focusedEl.el && focusedEl.el.name, label: palRows[palIndex] && palRows[palIndex].label, model: agentModel }; },
       zoomInto: (id) => { zoom = id ? { docId: id, nodeId: null } : null; renders.length = 0; codexHeader(); return state(); },
     });
   `);

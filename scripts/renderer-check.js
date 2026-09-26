@@ -502,7 +502,7 @@ assert.match(styleSheet, /\.tmeta > \.ticon:not\(:first-child\) \{ margin-left: 
 assert.match(source, /&& !palPage\.typed && \(palMode === 'cmd'/, 'the no-results line skips the pages whose row is what was typed');
 for (const typed of [/showPage\('agentPrompt', '', \{ rows: agentPromptRows, typed: true \}\)/, /openPage\('discuss', 'Discuss with…', \{ rows: discussRows, back: BACK_TO_COMMANDS, typed: true \}\)/, /openPage\('field', placeholder, \{ rows, back, keys, typed: true \}, text\)/, /openPage\(mode, placeholder, \{ rows: \{ meetingTime[^\n]*typed: true \}\)/]) assert.match(source, typed, 'and those pages say so');
 assert.match(source, /function openAgentPrompt\(doc\) \{[\s\S]{0,400}showPage\('agentPrompt', '', \{/, 'opening the prompt page clears the query behind it');
-assert.match(source, /function showPage\(mode, placeholder, page, value = ''\) \{[^\n]*\n[^\n]*\n[^\n]*\n  palInput\.placeholder = placeholder; palInput\.value = value;\n\}/, 'a page starts with the field holding only what it was opened with');
+assert.match(source, /function showPage\(mode, placeholder, page, value = ''\) \{\n(?:[^\n]*\n)*?  palInput\.placeholder = placeholder; palInput\.value = value;\n\}/, 'a page starts with the field holding only what it was opened with');
 // The agent badge sits at the end of the row — after the body, which is the flexible part of the line — and its
 // sweep is opt-in: a reduced-motion setting leaves it still, like every other animation here.
 assert.match(source, /line\.append\(body\);[\s\S]{0,240}if \(codexIds\.has\(display\.id\)\) line\.append\(codexBadgeEl\(display\.id, display\.done\)\)/,

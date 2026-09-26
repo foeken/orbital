@@ -439,6 +439,7 @@ function pillRowsFor(def, q) {
 // palette does, and typed: true marks a page whose rows are what you type, which has no "No results" to show.
 function showPage(mode, placeholder, page, value = '') {
   clearTimeout(palTimer); palTimer = null; ++palSeq; palEnter = null; promptEditor(false);
+  if (palette.hidden && !palReturn) palReturn = returnTarget(); // opened with the palette closed (a recorded key, a row's meta): closing comes back here (#376)
   palMode = mode; palPage = page || {}; palRows = []; palIndex = 0; palBusy = false; palette.hidden = false;
   palInput.placeholder = placeholder; palInput.value = value;
 }
@@ -963,7 +964,7 @@ function togglePalette(mode, link, pin) {
   cancelLink(); pinCtx = null; pillCtx = null;
   palette.hidden = !show;
   if (!show) return closePalette(); // closing the way every other close does, so a field that opened it gets its focus back
-  if (!palReturn) palReturn = focused(); // switching modes keeps the original return target
+  if (!palReturn) palReturn = returnTarget(); // switching modes keeps the original return target
   linkCtx = link || null;
   anchorPalette(link && link.rect);
   pinCtx = pin || null;
@@ -999,7 +1000,16 @@ function closePalette() {
 }
 // back to the node that had the caret when the palette opened (the @ link path places its own caret); with nothing to
 // return to (a row selection, the sidebar) the hidden input must not keep the keys, so it lets go of the focus
-function returnFocus() { const r = palReturn; palReturn = null; if (r && !focused()) (r.cell ? placeCell(r.key, r.cell, r.offset) : placeCaret(r.key, r.offset)); else if (document.activeElement === palInput) palInput.blur(); }
+// Where the focus goes back to when the palette closes: the caret's row, or the sidebar row the palette was opened from
+// (a sidebar row is no caret: it is found again by its id, since the sidebar may have been drawn again meanwhile).
+const returnTarget = () => focused() || (railEl.contains(document.activeElement) && document.activeElement.dataset.id ? { rail: document.activeElement.dataset.id } : null);
+function returnFocus() {
+  const r = palReturn; palReturn = null;
+  const railRow = r && r.rail && railEl.querySelector('.rrow[data-id="' + CSS.escape(r.rail) + '"]');
+  if (railRow) railRow.focus();
+  else if (r && r.key && !focused()) (r.cell ? placeCell(r.key, r.cell, r.offset) : placeCaret(r.key, r.offset));
+  else if (document.activeElement === palInput) palInput.blur();
+}
 function runRow(r) { if (!r || r.disabled) return; if (!r.keepOpen) closePalette(); r.run(); }
 // Up/Down step over rows that cannot run (info lines, unavailable choices) so the keyboard never lands on a dead row.
 // A disabled row with a stable id is not dead: Cmd+Shift+K records a shortcut against it, which is how Clean up gets
