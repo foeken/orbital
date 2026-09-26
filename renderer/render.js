@@ -179,7 +179,11 @@ function markFalling() {
 // selected, a live change from another device or a sidebar click shows at once instead of when the caret leaves. The
 // rows are read fresh: docCache can still hold rows a loadRoots has replaced since the last full render.
 function refreshRowChrome() {
-  const fresh = (id) => allDocs().find((d) => d.id === id) || extra.get(id);
+  // One lookup table per call: allDocs() builds every view's rows afresh, and asking it once per row on screen cost a
+  // frame and more on a list of a thousand (#263). The first copy wins, as find() answered.
+  const byId = new Map();
+  for (const d of allDocs()) if (!byId.has(d.id)) byId.set(d.id, d);
+  const fresh = (id) => byId.get(id) || extra.get(id);
   for (const el of outline.querySelectorAll('.node')) {
     const item = items.get(el.dataset.key), check = el.querySelector(':scope > .line > .check');
     if (!item || !check) continue;

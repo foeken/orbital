@@ -8022,6 +8022,33 @@ async function runFieldChoiceCheck() {
   console.log('ok  field choices: options pick one or toggle many, a dropped label is shown but never written, links replace or add');
 }
 checks.push(runFieldChoiceCheck);
+// A deferred render still brings every checkbox up to date (refreshRowChrome), from the rows the views hold now: the
+// first copy of a document wins, as it always did, and the lookup is one table per call rather than a rebuild of every
+// view's rows per row on screen (#263).
+function runRowChromeCheck() {
+  const api = vm.runInNewContext(`
+    const el = (key) => { const classes = new Set(); return { dataset: { key }, classes, classList: { toggle: (n, on) => (on ? classes.add(n) : classes.delete(n)) } }; };
+    const rowOf = (key) => { const row = el(key), check = el(); row.check = check; row.querySelector = () => check; return row; };
+    const rows = [rowOf('tana:text:a'), rowOf('tana:text:b')];
+    const outline = { querySelectorAll: () => rows };
+    const railEl = { querySelectorAll: () => [] };
+    const stale = (id) => ({ id, kind: 'document', done: 0, stateType: 'open' });
+    const items = new Map(rows.map((r) => [r.dataset.key, { node: stale(r.dataset.key) }]));
+    let built = 0;
+    const views = [{ nodes: [{ ...stale('tana:text:a'), done: 1, stateType: 'closed' }, stale('tana:text:b')] }, { nodes: [stale('tana:text:a')] }];
+    const allDocs = () => { built++; return views.flatMap((s) => s.nodes); };
+    const extra = new Map(), relatedBy = new Map(), zoom = null, titleCheck = { hidden: true };
+    const referenceTarget = () => null, isTask = () => true, acceptsFirst = () => false, railGroups = () => [], playTicks = () => {};
+    ${functionSource('refreshRowChrome')}
+    refreshRowChrome();
+    ({ checked: rows.map((r) => r.check.checked), done: rows.map((r) => r.classes.has('done')), built });
+  `);
+  assert.deepEqual(plain(api.checked), [true, false], 'the box follows the fresh row, the first copy found winning over a later, stale one');
+  assert.deepEqual(plain(api.done), [true, false], 'and so does the struck-through row');
+  assert.equal(api.built, 1, 'every view\'s rows are gathered once per call, not once per row on screen');
+  console.log('ok  deferred render: row chrome from one lookup of the fresh rows');
+}
+checks.push(runRowChromeCheck);
 process.exitCode = 1;
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);
