@@ -241,7 +241,7 @@ State classes are set by the renderer, pseudo-classes by the browser.
 | Badge | `.cbadge` (the agent), `.pbutton.approve` / `.reject` | `.pending`, `.working`, `.waiting`, `.done`, `.broken`, `.unavailable`, `.closed` |
 | Empty and loading | `.empty-note` ("Nothing here yet"), `.children.loading`, `.skeleton` (renderer/loading.js) | `.empty-note.cleared` |
 | Toast | `.toast`, only through `showNote` / `showError` | `.show`, `.error` |
-| Dialog | a scrim element with a `.card` inside: `.palette`, `.recorder`, `.help` | `[hidden]`, with the Surface motion |
+| Dialog | a scrim element with a `.card` inside: `.palette`, `.recorder`, `.help` | `[hidden]` on `.palette` and `.recorder`; `.help` is a `<dialog>`, so `[open]` (`showModal()` / `close()`). Surface motion either way |
 | Lightbox | `.lightbox` | `.out` while it closes |
 
 A button of any kind joins the Press rule in styles.css (the `:is(.navbtn, .pill, …)` list), so it eases down under
@@ -277,13 +277,13 @@ The full contract is [OUTLINER.md](OUTLINER.md). These are the rules a new featu
   `✓` marks the current choice. A placeholder says what to type ("Search Tana", "Choose a colour or type a hue…"). A
   notice says what was done, in the past tense, and names the thing: "Link copied", "Classified as Decision Record".
 - **Errors go to one place.** An action runs through `run()`, and a failure becomes the red toast (`showError`). The red
-  line under the title (`#error`) is for the page's own state (signed out, a failed load) and clears on the next
-  success. Nothing writes an error into a row, and a notice never goes to `#error`.
+  line under the title (`#error`) belongs to the session alone: it asks for a new login. Nothing writes an error into a
+  row, and a notice never goes to `#error`.
 - **Focus after an action.** Closing the palette or a menu puts the caret back on the row that had it (`closePalette`).
   A new row takes the caret. Nothing leaves focus on `body`.
-- **Empty and loading.** A list with no rows says "Nothing here yet" (`.empty-note`) and offers Clear filters when a filter
-  hides rows. #357 adds what would fill the page. A palette page with no match says "No results". Only a launch or a
-  Reload shows the loading animation (after 300 ms). Later loads wait blank, and a row still coming says "Loading…"
+- **Empty and loading.** A list with no rows says "Nothing here yet" (`.empty-note`) and offers Clear filters when a
+  filter hides rows. #357 adds what would fill the page. A palette page with no match says "No results". Only a launch
+  or a Reload shows the loading animation (after 300 ms). Later loads wait blank, and a row still coming says "Loading…"
   (`.children.loading`, a `disabled` palette row). A row that cannot run is shown greyed with the reason as its hint,
   not hidden.
 - **Read-only is visible.** A row with `editable === false` never gets an editor. It takes focus with a ring, and main
