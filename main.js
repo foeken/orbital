@@ -57,24 +57,26 @@ function restoredBounds(saved, workAreas) {
 // in. The first window takes the saved bounds; the one closed last saves them.
 S.windows = new Set();
 S.windowViews = new Map(); // webContents id -> { id, filter }: the view that page shows
-const SPLIT_GAP = 1; // the hairline between two pages: the window's own background showing through
 const MIN_PANE = 320; // neither half is dragged narrower than this (renderer/app.js splitGrip)
-const SPLIT_LINE = { light: '#ececec', dark: '#2b2f31' }; // the sidebar's border (styles.css .rail), in the page's theme
+const SPLIT_LINE = { light: '#ececec', dark: '#2b2f31' }; // the window behind the pages, in the page's theme; the line itself is the right half's (styles.css .splitgrip)
 const paneWindow = (wc) => [...S.windows].find((w) => w.panes.some((p) => p.webContents === wc));
+// each page's side ('' left or alone, '2' right) and whether it is half of a split: the grip on its inner edge (renderer/app.js)
+const tellSides = (win) => win.panes.forEach((p, i) => { p.side = i ? '2' : ''; if (!p.webContents.isDestroyed()) p.webContents.send('window:side', p.side, win.panes.length > 1); });
 // win.splitAt: the left half's share of the width, dragged by the grip and saved with the window (even by default)
 function layout(win) {
   const { width, height } = win.getContentBounds(), [left, right] = win.panes;
   if (!right) return left && left.setBounds({ x: 0, y: 0, width, height });
-  const min = Math.min(MIN_PANE, Math.floor((width - SPLIT_GAP) / 2));
-  const w = Math.max(min, Math.min(width - SPLIT_GAP - min, Math.round((width - SPLIT_GAP) * (win.splitAt ?? 0.5))));
+  const min = Math.min(MIN_PANE, Math.floor(width / 2));
+  const w = Math.max(min, Math.min(width - min, Math.round(width * (win.splitAt ?? 0.5))));
   left.setBounds({ x: 0, y: 0, width: w, height });
-  right.setBounds({ x: w + SPLIT_GAP, y: 0, width: width - w - SPLIT_GAP, height });
+  right.setBounds({ x: w, y: 0, width: width - w, height });
 }
 function addPane(win, side) {
   const pane = new WebContentsView({ webPreferences: { preload: path.join(__dirname, 'preload.js') } });
   pane.side = side; // '2': the right half, which keeps its own view and place (renderer/state.js SIDE)
   pane.webContents.on('focus', () => { S.win = win; S.pane = pane.webContents; });
   win.panes.push(pane); win.contentView.addChildView(pane); layout(win);
+  tellSides(win);
   pane.webContents.loadFile(path.join(__dirname, 'index.html'));
   if (win.saveBounds) win.saveBounds();
   return pane;
@@ -84,8 +86,7 @@ function removePane(win, pane) {
   const wc = pane.webContents, key = wc.id;
   win.panes = win.panes.filter((p) => p !== pane);
   if (!win.isDestroyed()) { win.contentView.removeChildView(pane); layout(win); }
-  const left = win.panes.length === 1 && win.panes[0];
-  if (left && left.side) { left.side = ''; left.webContents.send('window:side', ''); } // the right half, alone now, is the window's page
+  tellSides(win); // the half left alone is the window's page
   if (win.saveBounds && !win.isDestroyed()) win.saveBounds();
   S.windowViews.delete(key); unwatchRelated(key);
   if (S.pane === wc) S.pane = win.panes[0]?.webContents || null;
@@ -242,7 +243,7 @@ ipcMain.handle('window:otherPane', (e) => { const other = paneWindow(e.sender)?.
 // A restart adds both halves before either loads, so a restored right half knows it is one.
 ipcMain.on('window:getSide', (e) => {
   const win = paneWindow(e.sender);
-  e.returnValue = { side: win?.panes.find((p) => p.webContents === e.sender)?.side || '' };
+  e.returnValue = { side: win?.panes.find((p) => p.webContents === e.sender)?.side || '', split: win?.panes.length > 1 };
 });
 // Cmd+K Work View (renderer/timeline.js): the page asking has stored both halves' places. A new right half reads its
 // own at load; a half already open is told to go to its own.
@@ -276,7 +277,7 @@ ipcMain.handle('window:swapPanes', (e) => {
   if (!win || win.panes.length < 2) return;
   win.panes.reverse();
   if (win.splitAt != null) win.splitAt = 1 - win.splitAt; // each half keeps its width
-  win.panes.forEach((p, i) => { p.side = i ? '2' : ''; p.webContents.send('window:side', p.side); });
+  tellSides(win);
   layout(win);
   win.saveSoon();
 });
@@ -286,12 +287,14 @@ ipcMain.handle('window:swapPanes', (e) => {
 ipcMain.on('window:splitDrag', (e, phase) => {
   const win = paneWindow(e.sender);
   if (!win || win.panes.length < 2) return;
-  const b = win.getContentBounds(), room = b.width - SPLIT_GAP, x = screen.getCursorScreenPoint().x - b.x;
+  const b = win.getContentBounds(), room = b.width, x = screen.getCursorScreenPoint().x - b.x;
   if (phase === 'start') { win.dragOffset = x - win.panes[0].getBounds().width; return; }
   if (phase === 'even') win.splitAt = undefined;
   else { const min = Math.min(MIN_PANE, Math.floor(room / 2)); win.splitAt = Math.max(min, Math.min(room - min, x - (win.dragOffset || 0))) / room; }
   layout(win); win.saveSoon();
 });
+// The pointer is over one half's grip: the other half draws its half of the swap pill too, so the two meet on the line
+ipcMain.on('window:splitHover', (e, on) => { for (const p of paneWindow(e.sender)?.panes || []) if (p.webContents !== e.sender) p.webContents.send('window:splitHover', on); });
 // a page says which theme it drew itself in (renderer/theme.js), and the line between split pages follows it
 ipcMain.on('window:theme', (e, theme) => { const win = paneWindow(e.sender); if (win) win.setBackgroundColor(SPLIT_LINE[theme] || SPLIT_LINE.light); });
 // Demo mode lives in the outliner (renderer/state.js); main only needs to know it is on, so no banner shows a real title.
