@@ -3200,6 +3200,33 @@ async function main() {
     console.log('ok  reads past LIVE_ROWS are let go oldest first, never the page on screen or an undoable one');
   }
 
+  // A change to what the rows are built from — a type's icon or colour — refreshes after it. A refresh already running
+  // may have built its rows before the change, and answering the change with that run left the old icon in the cache
+  // the page then reloads from (#390).
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const TYPE = 'tana:type:' + ulid(), row = { id: 'tana:text:' + ulid(), title: 'Typed', entityType: TYPE, updateTime: '2026-09-26T10:00:00Z' };
+    let hold = null, counting = null;
+    backend.testRuntime({ me: { userUri: ME }, activeView: 'library', win: null, client: {
+      sync: { subscribe: async (id, init) => { if (!init) return null; const d = new Document(id); d.transact(init); return d; }, getDocument: () => undefined, unsubscribe: async () => {} },
+      graph: { listNodes: async (p) => {
+        if (p.limit === 1 && !p.nodeIds) { if (hold) { const wait = hold; hold = null; counting(); await wait; } return { totalCount: 0, nodes: [] }; } // the badge: the refresh's last read
+        return { nodes: p.nodeIds ? [] : [row] };
+      }, listEdges: async () => ({ edges: [] }) },
+    } });
+    backend.S.badge = () => {}; // as main.js sets it at launch
+    await backend.handlers.get('view:list')(null, 'library');
+    let release; hold = new Promise((resolve) => { release = resolve; });
+    const counted = new Promise((resolve) => { counting = resolve; });
+    const running = backend.refresh(); // a refresh that has built its rows and waits on the badge
+    await counted;
+    const chosen = backend.handlers.get('icons:setType')(null, TYPE, 'nc-rocket');
+    release();
+    await running; await chosen;
+    assert.equal(cache.get(row.id).icon, 'nc-rocket', 'an icon chosen while a refresh runs is on the cached rows once the choice is answered');
+    console.log('ok  a change to what rows are built from refreshes after itself, not with the run already under way');
+  }
+
   // A read in flight holds its document. The refresh sweep lets go of the rows a view no longer lists, and letting go
   // of a bootstrap somebody is waiting for rejects it as 'unsubscribed <id>' under the reader — which is exactly what
   // a doc:info for a row of the view you just left reported, in red, whenever a view change raced it.

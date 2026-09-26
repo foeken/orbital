@@ -294,7 +294,7 @@ ipcMain.handle('chatgpt:cancel', () => ai.cancelChatGPTLogin(app.getPath('userDa
 ipcMain.handle('chatgpt:logout', () => ai.logoutChatGPT(app.getPath('userData')));
 ipcMain.handle('icons:setType', async (_e, typeUri, name) => {
   const chosen = icons.setTypeIcon(typeUri, name ?? null);
-  await refresh(); // the cached rows carry the icon name, so they are rebuilt before anything is told to redraw
+  await refresh({ after: true }); // the cached rows carry the icon name, so they are rebuilt before anything is told to redraw
   send('outline:changed', null);
   return chosen;
 });
@@ -304,7 +304,7 @@ async function autoTypeIcons() {
   try {
     const types = (await typeList()).filter((t) => t.title.trim());
     const added = await icons.fillTypeIcons(types, (missing, labels) => ai.pickTypeIcons(missing, labels, globalThis.fetch, app.getPath('userData')));
-    if (added) { await refresh(); send('outline:changed', null); }
+    if (added) { await refresh({ after: true }); send('outline:changed', null); }
   } catch (e) { console.warn('type icons:', errText(e)); } // a missing glyph is not worth an error in the window
 }
 ai.onSignedIn = autoTypeIcons; // and a ChatGPT sign-in the same
