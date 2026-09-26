@@ -2748,6 +2748,49 @@ async function main() {
     mine2.onChange(byMe.id, { origin: 'remote' });
     await settle();
     assert.deepEqual(afterMine, [], 'a task you completed yourself before quitting is not announced back to you');
+    // Issue #427: at launch the first document to bootstrap — the app's own settings document, before the views have
+    // subscribed anything — pruned the stored pairs down to itself, so the watched tasks behind it had nothing to be
+    // compared with and their catch-up banners never fired.
+    const task = (title, state) => {
+      const d = new Document('tana:text:' + ulid());
+      d.transact((l) => initDocument(l, title, ME, { kind: 'task' }));
+      setAssignees(d, [COLLEAGUE], ME);
+      docs.set(d.id, d); creators.set(d.id, ME);
+      cache.setSetting('notifySeen', { ...cache.setting('notifySeen'), [d.id]: [title, 'open'] });
+      if (state) setState(d, state, COLLEAGUE);
+      return d;
+    };
+    const finished = task('Review the budget', 'closed'), idle = task('Still open');
+    const byHand = 'tana:text:' + ulid(), forgotten = 'tana:text:' + ulid(); // watched by hand, listed nowhere; followed by nothing
+    cache.setSetting('notifySeen', { ...cache.setting('notifySeen'), [byHand]: ['Mine to watch', 'open'], [forgotten]: ['Long gone', 'open'] });
+    cache.setSetting('notify', { ...cache.setting('notify'), [byHand]: true });
+    const appDoc = new Document('tana:text:' + ulid());
+    appDoc.transact((l) => initDocument(l, 'Orbital', ME, { kind: 'doc' }));
+    docs.set(appDoc.id, appDoc);
+    const graphBefore = runtime.client.graph.listNodes;
+    runtime.client.graph.listNodes = async (p) => (p.createdBy
+      ? { nodes: [{ id: finished.id, assignedTo: [COLLEAGUE], state: { type: 'closed' } }, { id: idle.id, assignedTo: [COLLEAGUE], state: { type: 'open' } }] }
+      : graphBefore(p));
+    const warm = mainHelpers(); warm.testRuntime(runtime);
+    const warmBanners = []; warm.S.notify = (id, title, body) => warmBanners.push([id, body]);
+    const kept = (...ids) => ids.filter((id) => id in cache.setting('notifySeen'));
+    warm.onChange(appDoc.id, { origin: 'remote' }); // arrives before the first refresh has subscribed anything
+    await settle();
+    assert.deepEqual(kept(finished.id, idle.id, byHand, forgotten), [finished.id, idle.id, byHand, forgotten],
+      'the first document to arrive at launch prunes none of the stored pairs');
+    await warm.refresh();
+    warm.onChange(finished.id, { origin: 'remote' });
+    warm.onChange(idle.id, { origin: 'remote' });
+    await settle();
+    assert.deepEqual(warmBanners, [[finished.id, 'Now Completed by Sam Rivera']],
+      'the watched task completed while the app was closed is announced once, the unchanged one not at all');
+    assert.deepEqual(kept(finished.id, idle.id, byHand, forgotten), [finished.id, idle.id, byHand],
+      'the refresh prunes only what nothing follows any more: a node watched by hand keeps its pair');
+    warm.onChange(finished.id, { origin: 'remote' });
+    await warm.refresh(); // announced and closed, the rule lets it go now, and the prune with it
+    await settle();
+    assert.equal(warmBanners.length, 1, 'and not again');
+    runtime.client.graph.listNodes = graphBefore;
     // Another tab from the same user has a different nonce but the same user hash in its peer id.
     const ownPeer = '65536', otherOwnPeer = '65537', colleaguePeer = '131072';
     const remoteTask = new Document('tana:text:' + ulid(), { peerId: ownPeer });
