@@ -1209,6 +1209,8 @@ body.helppage, [data-theme="dark"] body.helppage { background: transparent; } /*
 .hv-link { padding-top: 70px; }
 .hv-link > .hv-line { position: relative; width: 380px; }
 .hv-link .hv-chip { color: #508fbb; text-decoration: underline; text-underline-offset: 2px; display: inline-block; overflow: hidden; vertical-align: bottom; } /* overflow moves an inline-block's baseline to its bottom edge */
+.hv-link .hv-typed::after { content: ''; } /* the box the typing animation writes into: without a content of its own it is never made */
+.hv-link .hv-caret { display: inline-block; vertical-align: -3px; } /* after the chip, so it follows the "@Fou" and then the link */
 .hv-link .hv-drop-menu { position: absolute; left: calc(50% + 12px); top: 106px; width: 210px; padding: 5px 0; background: #fff; border-radius: 9px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, .1), 0 0 0 1px rgba(0, 0, 0, .05); opacity: 0; }
 .hv-link .hv-drop-menu .hv-row { margin: 0 5px; height: 30px; }
@@ -1288,7 +1290,7 @@ body.helppage, [data-theme="dark"] body.helppage { background: transparent; } /*
 @keyframes hv-tick { 0%, 61% { background: var(--hv-box); } 62%, 94% { background: #6fae82; } 97%, 100% { background: var(--hv-box); } }
 @keyframes hv-tick-mark { 0%, 61% { opacity: 0; transform: scale(.4); } 64% { opacity: 1; transform: scale(1.15); } 67%, 94% { opacity: 1; transform: none; } 97%, 100% { opacity: 0; } }
 @keyframes hv-strike { 0%, 61% { color: var(--hv-ink); text-decoration-color: transparent; } 64%, 94% { color: #999; text-decoration-color: #999; } 97%, 100% { color: var(--hv-ink); text-decoration-color: transparent; } }
-@keyframes hv-type-at { 0%, 9.9% { content: ''; } 10%, 15.9% { content: '@'; } 16%, 19.9% { content: '@F'; } 20%, 23.9% { content: '@Fo'; } 24%, 43.9% { content: '@Fou'; } 44%, 100% { content: ''; } }
+@keyframes hv-type-at { 0%, 7.9% { content: ''; } 8%, 17.9% { content: '@'; } 18%, 21.9% { content: '@F'; } 22%, 25.9% { content: '@Fo'; } 26%, 43.9% { content: '@Fou'; } 44%, 100% { content: ''; } }
 @keyframes hv-link-menu { 0%, 12% { opacity: 0; transform: translateY(-4px); } 15%, 42% { opacity: 1; transform: none; } 45%, 100% { opacity: 0; transform: none; } }
 @keyframes hv-link-chip { 0%, 44% { opacity: 0; max-width: 0; } 45% { max-width: 100px; opacity: 0; transform: scale(.6); } 50%, 92% { opacity: 1; max-width: 100px; transform: none; } 97%, 100% { opacity: 0; max-width: 100px; } }
 @keyframes hv-day-tl { 0%, 3% { opacity: 0; transform: translateY(6px); } 10%, 94% { opacity: 1; transform: none; } 100% { opacity: 0; } }
