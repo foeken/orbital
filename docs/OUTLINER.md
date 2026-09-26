@@ -826,8 +826,9 @@ nothing about them as documents. Each is a place the app remembers, so ⌘R on o
 ### Work View, windows and split view
 
 - **Work View** (`workView`, renderer/timeline.js; the default Home): the Timeline on the left and My Tasks on the
-  right (`api.myTasks`: your saved search called My Tasks, or one made from the My Tasks preset with the Library's
-  arrangement). Cmd+K Work View stores both halves' places and main opens the right half or sends the other half to
+  right (`api.myTasks`: the search the synced `myTasks` setting names, so a rename in Tana keeps it; else your own
+  saved search called My Tasks, the oldest if two machines each made one, hidden title or not; else one made from the My
+  Tasks preset with the Library's arrangement, and remembered. Only a deletion in Tana makes a fresh one). Cmd+K Work View stores both halves' places and main opens the right half or sends the other half to
   its place (`window:workView`). A first launch opens it split.
 - **Windows** (issue #137). File › New Window, ⌘N or Cmd+K New window opens another outliner window 24px down and right
   of the front one. Each window has its own view and page; a new one starts where you last were. What main pushes

@@ -35,7 +35,8 @@ const OLD_ROOT = 'settings'; // where they lived before: moved into ROOT on the 
 // aiModel/aiEffort are which model the AI rows use ("Discuss with", "Classify type") and how hard it thinks (main/ai.js): a
 // choice about your own content, so it follows you, while the key that pays for it stays put. Neither has UI yet —
 // unset means the defaults in main/ai.js.
-const SYNCED = [/^viewFilter:/, /^hiddenTitles$/, /^hideMcp$/, /^typeIcons$/, /^typeHues$/, /^notify$/, /^codex$/, /^codexPrompt$/, /^codexHosts$/, /^codexTask$/, /^sensitive$/, /^aiModel$/, /^aiEffort$/, /^pref:/];
+// myTasks is which saved search the Work View's right half is (main/views.js myTasks), by id so a rename keeps it.
+const SYNCED = [/^viewFilter:/, /^hiddenTitles$/, /^hideMcp$/, /^typeIcons$/, /^typeHues$/, /^notify$/, /^codex$/, /^codexPrompt$/, /^codexHosts$/, /^codexTask$/, /^sensitive$/, /^aiModel$/, /^aiEffort$/, /^myTasks$/, /^pref:/];
 const isSynced = (key) => SYNCED.some((rule) => rule.test(key));
 
 let cache = null; // key -> value, the answer every read gets
