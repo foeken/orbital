@@ -2559,7 +2559,7 @@ async function main() {
       'the meetings asked for are yours, from the start of the day before yesterday to the end of today');
     // Join: a meeting under way carries its call link, one that is over does not
     const joins = new Map((await backend.timelinePage.rows()).map((r) => [r.timeline.uri, r.join]));
-    assert.deepEqual([joins.get(going.id), joins.get(meeting.id)], ['https://teams.example/join/1', undefined], 'a meeting under way has a Join to its call, one that is over has none');
+    assert.deepEqual([joins.get(going.id), joins.get(meeting.id)], [going.id, undefined], 'a meeting under way is joined from Tana (its own id, opened there), one that is over is not');
     // Kept current (#210): the read left a live query open over your meetings; the server's answers re-read the page
     // when a meeting's title or time moves, or one comes or goes, and not when only something else about it changed
     const liveQuery = liveDoc.data.toJSON().query;
@@ -2604,7 +2604,7 @@ async function main() {
     assert.deepEqual(JSON.parse(JSON.stringify([withSoon[1].text, withSoon[1].timeline.time, withSoon[1].timeline.upcoming, withSoon[1].children.map((c) => [c.id, c.text, c.icon, c.subtext])])),
       ['Upcoming meetings', '', true, [[soon.id, 'Standup', 'meeting', hm(Date.parse(soon.calendarEvent.startTime)) + '–' + hm(Date.parse(soon.calendarEvent.endTime)) + ' · Ann Bakker']]],
       'a meeting later today sits under Upcoming meetings, after Today\'s Tasks, saying when and who');
-    assert.equal(withSoon[1].children[0].join, 'https://meet.example/abc', 'and joins its call: the link in its location first, as the meeting\'s sidebar has it');
+    assert.equal(withSoon[1].children[0].join, soon.id, 'and is joined from Tana too');
     assert.ok(!withSoon.slice(2).some((r) => r.timeline.uri === soon.id), 'and not among what happened');
     soonToo = false;
     assert.ok(!(await backend.timelinePage.rows()).some((r) => r.timeline.upcoming), 'with none to come the block is not drawn');

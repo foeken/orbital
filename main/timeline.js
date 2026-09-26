@@ -24,7 +24,6 @@ const { NOT_CONNECTED, S, iso, isMcp, send } = require('./state');
 const { graphRow, hm, isAllDay, members, rememberNodeHue, toNode } = require('./rows');
 const { notifySilencedIds, notifyWatchedIds } = require('./documents');
 const { inboxFrom } = require('./views');
-const { callOf } = require('./related');
 const { openLiveQuery } = require('../sdk/livequery');
 
 const PAGE = 'orbital:timeline';
@@ -82,7 +81,7 @@ let live = null, liveClient = null, liveKey = null;
 // the timeline on its own. One timer, set by every read (the read it causes sets the one after it).
 let startTimer = null;
 // the tagline and summary too: a summary landing is heard, and the entry brightens
-const meetingSig = (row) => { const ev = row.calendarEvent || {}; return JSON.stringify([row.title, ev.startTime, ev.endTime, ev.allDay, ev.tagline, ev.summary, ev.location, ev.actionUrl, attendeesOf(ev).map((a) => [a.displayName, a.email, a.role, a.identityUri])]); }; // all meetingNote reads of them
+const meetingSig = (row) => { const ev = row.calendarEvent || {}; return JSON.stringify([row.title, ev.startTime, ev.endTime, ev.allDay, ev.tagline, ev.summary, attendeesOf(ev).map((a) => [a.displayName, a.email, a.role, a.identityUri])]); }; // all meetingNote reads of them
 // Who is on a meeting, as the graph gives it: the roster (calendarEvent.roster), or the calendar's own attendee list
 const attendeesOf = (ev) => (Array.isArray(ev.roster) && ev.roster.length ? ev.roster : Array.isArray(ev.attendees) ? ev.attendees : []).filter((a) => a && typeof a === 'object');
 const duration = (ms) => { const m = Math.round(ms / 6e4), h = Math.floor(m / 60); return m < 60 ? m + ' min' : h + ' h' + (m % 60 ? ' ' + (m % 60) + ' min' : ''); };
@@ -176,16 +175,16 @@ async function rows() {
   // owns it (live 2026-09-26, "Datadog & Nedap - executive alignment").
   for (const n of shown) {
     const ev = n.calendarEvent || {}, going = Date.parse(ev.endTime || '') > Date.now(), bare = !going && !String(ev.tagline || ev.summary || '').trim();
-    // still under way: a Join button to its call (main/related.js callOf, the link the meeting's sidebar offers)
+    // still under way: joined from Tana (row.join, the meeting's id: renderer/timeline.js opens it there)
     events.push({ kind: 'meeting', uri: n.id, title: n.title, at: Date.parse(ev.startTime), icon: 'meeting', tone: bare ? 'faint' : 'meeting', note: meetingNote(ev, me, myEmail),
-      join: going ? (callOf(ev) || {}).url : undefined, end: going ? Date.parse(ev.endTime) : undefined });
+      join: going ? n.id : undefined, end: going ? Date.parse(ev.endTime) : undefined });
   }
   watchMeetings(me, since);
   // Upcoming meetings: today's still to start, earliest first, under Today's Tasks as a block of their own. Each opens
   // the meeting; its grey line says when and who (renderer/views.js subtextOf, node.subtext). No meetings, no block.
   const upcoming = meetings.filter((n) => { const ev = n.calendarEvent || {}; return Date.parse(ev.startTime || '') > Date.now() && !isAllDay(ev.startTime, ev.endTime, ev.allDay); })
     .sort((a, b) => Date.parse(a.calendarEvent.startTime) - Date.parse(b.calendarEvent.startTime))
-    .map((n) => ({ id: n.id, text: n.title || 'Untitled', title: n.title || 'Untitled', kind: 'document', icon: 'meeting', editable: false, hasChildren: false, start: n.calendarEvent.startTime, join: (callOf(n.calendarEvent) || {}).url,
+    .map((n) => ({ id: n.id, text: n.title || 'Untitled', title: n.title || 'Untitled', kind: 'document', icon: 'meeting', editable: false, hasChildren: false, start: n.calendarEvent.startTime, join: n.id,
       subtext: meetingNote(n.calendarEvent, me, myEmail, true) }));
   const upcomingText = 'Upcoming meetings';
   // The page is read again at the next moment a meeting moves: one starting (out of Upcoming meetings, into the timeline)

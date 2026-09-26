@@ -47,16 +47,15 @@ function timelineGroups(list) {
 }
 // The rule closes the blocks at the top — Today's Tasks, then Upcoming meetings when there are any — before the history
 const timelineTopEnds = (n, next) => !!(n.timeline?.today || n.timeline?.upcoming) && !next?.timeline?.upcoming;
-// Join: a meeting still to come or under way goes straight to its call (main/timeline.js join, the calendar's link), from
-// "· Join" after its title: the word underlined, the dot not. Its own click: the row around it opens the meeting.
+// Join: a meeting still to come or under way is joined from Tana, so its Tana glyph after the title opens the meeting
+// there (row.join, the meeting's id; main/timeline.js). Its own click: the row around it opens the meeting here.
 function timelineJoinEl(node) {
-  const wrap = document.createElement('span'), b = document.createElement('button');
-  wrap.className = 'tl-joinwrap'; wrap.append('·');
-  b.type = 'button'; b.className = 'tl-join'; b.tabIndex = -1; b.textContent = 'Join'; b.title = 'Join the call';
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'tl-join'; b.tabIndex = -1; b.title = 'Join in Tana'; b.setAttribute('aria-label', 'Join in Tana'); // icon only, so the name has to come from here
+  const svg = iconNode('tana'); if (svg) b.append(svg);
   b.onmousedown = (ev) => ev.preventDefault();
-  b.onclick = (ev) => { ev.stopPropagation(); run(() => tana.openExternal(node.join)); };
-  wrap.append(b);
-  return wrap;
+  b.onclick = (ev) => { ev.stopPropagation(); run(async () => tana.openExternal(await tana.nodeLink(node.join))); };
+  return b;
 }
 function timelineDividerEl() {
   const el = document.createElement('div'); el.className = 'tl-divider'; el.setAttribute('aria-hidden', 'true'); return el;
