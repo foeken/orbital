@@ -942,9 +942,12 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 .recorder .rwarn { margin-top: 10px; font-size: 13px; color: #d0433a; } /* a combo the app already owns, or another row has */
 .recorder .rwarn[hidden] { display: none; }
 .recorder .spacer { flex: 1; }
-.recorder button { border: 0; border-radius: 6px; background: #f1f1f1; color: #1a1a1a; font: inherit; font-size: 13px; padding: 4px 10px; cursor: pointer; }
-.recorder button:hover { background: #e6e6e6; }
-.recorder button:disabled { color: #b5b5b5; cursor: default; background: #f1f1f1; }
+/* A dialog's button (the key recorder, the Help tour's footer): grey, or .primary for the one that goes on */
+.button { border: 0; border-radius: 7px; background: #f1f1f1; color: #1a1a1a; font: inherit; font-size: 13.5px; padding: 6px 14px; cursor: pointer; outline-offset: 2px; }
+.button:hover { background: #e6e6e6; }
+.button:disabled { color: #b5b5b5; cursor: default; background: #f1f1f1; }
+.button.primary { background: #1c2024; color: #fff; }
+.button.primary:hover { background: #3a3f44; }
 
 
 /* Dark theme contract: renderer sets document.documentElement.dataset.theme = "dark". */
@@ -1108,9 +1111,11 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 [data-theme="dark"] .recorder .rbox { border-color: #454b4e; }
 [data-theme="dark"] .recorder .keys { color: #adb1b2; }
 [data-theme="dark"] .recorder .rwarn { color: #f08a7e; }
-[data-theme="dark"] .recorder button { background: #303436; color: #c9c9c9; }
-[data-theme="dark"] .recorder button:hover { background: #3b4144; }
-[data-theme="dark"] .recorder button:disabled { color: #777d80; background: #303436; }
+[data-theme="dark"] .button { background: #303436; color: #c9c9c9; }
+[data-theme="dark"] .button:hover { background: #3b4144; }
+[data-theme="dark"] .button:disabled { color: #777d80; background: #303436; }
+[data-theme="dark"] .button.primary { background: #e2e4e4; color: #1b1d1e; }
+[data-theme="dark"] .button.primary:hover { background: #fff; }
 
 /* Presence (renderer/presence.js): others' carets in the page on screen, one colour per person (--hue from their user hash). */
 .node > .line:has(> .pcaret) { position: relative; } /* only lines that carry a marker */
@@ -1142,9 +1147,9 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
    inherit, so what sits inside a button (a pill's menu) is not one. A press inside a pill's menu is the menu's, so the
    pill does not shrink under it. */
 @property --press { syntax: '<number>'; inherits: false; initial-value: 0; }
-:is(.navbtn, .pill, .tbtn, .pbutton, .chev, .gmore, .clearfilters, .login button, .recorder button, .cbadge[role="button"], .filter .clear) {
+:is(.navbtn, .pill, .tbtn, .pbutton, .chev, .gmore, .clearfilters, .login button, .button, .cbadge[role="button"], .filter .clear) {
   --press: 1; transition: transform var(--dur-slow) var(--ease-settle); }
-:is(.navbtn, .pill, .tbtn, .pbutton, .chev, .gmore, .clearfilters, .login button, .recorder button, .cbadge[role="button"], .filter .clear):active:not(:disabled):not(:has(.menu:active)) {
+:is(.navbtn, .pill, .tbtn, .pbutton, .chev, .gmore, .clearfilters, .login button, .button, .cbadge[role="button"], .filter .clear):active:not(:disabled):not(:has(.menu:active)) {
   transform: scale(.95); transition: transform var(--dur-quick) var(--ease-out); }
 
 /* Surface for what is built again on every key: a pill's menu and the toolbar's style menu (renderer/motion.js
@@ -1199,12 +1204,7 @@ body.overlaypage, [data-theme="dark"] body.overlaypage { background: transparent
 .help .hdots { display: flex; gap: 6px; }
 .help .hdots button { width: 7px; height: 7px; padding: 0; border: 0; border-radius: 4px; background: #d8d8d8; cursor: pointer; transition: width var(--dur-base) var(--ease-out), background-color var(--dur-base) var(--ease-out); }
 .help .hdots button.on { width: 20px; background: #508fbb; }
-.help .hfoot > button { border: 0; border-radius: 7px; background: #f1f1f1; color: #1a1a1a; font-size: 13.5px; padding: 6px 14px; cursor: pointer; outline-offset: 2px; }
-.help .hfoot > button:hover { background: #e6e6e6; }
-.help .hfoot > button:disabled { visibility: hidden; }
-.help .hfoot > button.primary { background: #1c2024; color: #fff; }
-.help .hfoot > button.primary:hover { background: #3a3f44; }
-.help .hfoot > button:active:not(:disabled) { transform: scale(.95); }
+.help .hfoot > .button:disabled { visibility: hidden; } /* Back on the first page: its place kept, nothing to press */
 
 /* the stage and the few things drawn on it: a palette card, outline rows, a task box, a keycap */
 .hv { --hv-loop: 6s; --hv-ink: #1a1a1a; --hv-box: #e4e4e4; --hv-active: #f0f0f0; --hv-run: #d6e6f3; position: relative; height: 240px; overflow: hidden; background: #f5f6f7; display: flex; justify-content: center; align-items: flex-start; padding-top: 22px; font-size: 14px; color: #1a1a1a; }
@@ -1354,9 +1354,6 @@ body.overlaypage, [data-theme="dark"] body.overlaypage { background: transparent
 [data-theme="dark"] .help .hclose:hover { background: rgba(255, 255, 255, .08); color: #c9c9c9; }
 [data-theme="dark"] .help .hdots button { background: #454b4e; }
 [data-theme="dark"] .help .hdots button.on { background: #6ea8d6; }
-[data-theme="dark"] .help .hfoot > button { background: #303436; color: #c9c9c9; }
-[data-theme="dark"] .help .hfoot > button:hover { background: #3b4144; }
-[data-theme="dark"] .help .hfoot > button.primary { background: #e2e4e4; color: #1b1d1e; }
 [data-theme="dark"] .hv { --hv-ink: #d0d2d2; --hv-box: #454b4e; --hv-active: #343a3d; --hv-run: #2f4a5f; background: #1d2022; color: #d0d2d2; }
 [data-theme="dark"] .hv :is(.hv-pal, .hv-pane, .hv-quick, .hv-rec, .hv-drop-menu, .hv-press), [data-theme="dark"] .hv-keys kbd { background: #2b2f31; color: #d0d2d2; box-shadow: 0 0 0 1px rgba(255, 255, 255, .08); }
 [data-theme="dark"] .hv .hv-input { border-bottom-color: #3a3f42; }
