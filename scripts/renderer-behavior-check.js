@@ -5551,7 +5551,7 @@ async function runRailReadinessCheck() {
     const tana = { related: async (id) => { asked.push(id); return { pinned: [] }; } };
     ${functionSource('loadRelated')}
     ${functionSource('refreshRelated')}
-    Object.assign(globalThis, { ask: (id) => loadRelated(id), refresh: (id) => refreshRelated(id), connect: () => { connected = true; },
+    Object.assign(globalThis, { ask: (id) => loadRelated(id), refresh: (id, always) => refreshRelated(id, always), connect: () => { connected = true; },
       state: () => ({ asked, cached: [...relatedBy.keys()], payload: relatedBy.get('tana:text:01j0task0000000000000000') || null }) });
   `, context);
   context.ask('tana:text:01j0task0000000000000000');
@@ -5587,6 +5587,10 @@ async function runRailReadinessCheck() {
   context.connect();
   context.ask('draftdoc:2');
   assert.deepEqual(plain(context.state().asked), [], 'and never about a local draft id');
+  // A change to a document whose sidebar this page never read (every document a view subscribes announces its first
+  // bootstrap as one) asks nothing: at boot that was 188 related reads, ~700 ListNodes, before anything was opened.
+  context.refresh('tana:text:01j0never00000000000000000');
+  assert.deepEqual(plain(context.state().asked), [], 'a change re-reads only a sidebar this page has read');
   context.ask('tana:text:01j0task0000000000000000');
   context.ask('tana:text:01j0task0000000000000000');
   await new Promise(setImmediate);
@@ -5600,6 +5604,10 @@ async function runRailReadinessCheck() {
   await new Promise(setImmediate);
   assert.deepEqual(plain(context.state().asked), ['tana:text:01j0task0000000000000000', 'tana:text:01j0task0000000000000000'],
     'the re-read happens once: a render during it does not ask a third time');
+  // main's push is about the page on screen, whose first read may have failed and left nothing cached: it reads anyway
+  context.refresh('tana:text:01j0never00000000000000000', true);
+  await new Promise(setImmediate);
+  assert.ok(context.state().asked.includes('tana:text:01j0never00000000000000000'), 'a push about the watched page reads it even with nothing cached');
   // The same rule for a saved search's stored query: main reads it through op(), so asking before the connection
   // threw "not connected to Tana" — and this one put it on screen as well as in the log. Boot reaches it because
   // restorePlace draws the reopened page before connecting.
