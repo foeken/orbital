@@ -48,7 +48,8 @@ window.addEventListener('beforeunload', () => {
 });
 // This page changed sides (swapped, or the right half left alone): it saves its view and place under its new side's
 // keys from now on. A Reload asks main again (api.side), so it reads the same ones.
-if (tana.onSide) tana.onSide((side, split) => { SIDE = side ? ':' + side : ''; closePaneBtn.hidden = SIDE !== ':2'; showSplitGrip(split); localStorage.setItem('view' + SIDE, view); rememberPlace(); });
+// A page that becomes the main half (the other one closed) asks for the first-start tour: the one that asked may be gone.
+if (tana.onSide) tana.onSide((side, split) => { SIDE = side ? ':' + side : ''; closePaneBtn.hidden = SIDE !== ':2'; showSplitGrip(split); localStorage.setItem('view' + SIDE, view); rememberPlace(); if (!SIDE) helpOnce(); });
 // The Work View, asked for in the other half: it stored this half's place, and this half goes there (renderer/timeline.js)
 if (tana.onToPlace) tana.onToPlace(() => {
   const place = readStoredPlace();

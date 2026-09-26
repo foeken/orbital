@@ -8389,6 +8389,7 @@ async function runHelpOnceCheck() {
   assert.deepEqual(plain(await pane(quiet, '', false).go()), { opened: 0, seen: false }, 'signed out or not yet connected: no tour, over the login');
   assert.equal(quiet.asked(), 0, 'and no claim, which main could only answer from this machine\u2019s own copy');
   assert.doesNotMatch(source, /tana\.onOverlayClosed\(\(result\) => \{[^\n]*helpOnce\(\)/, 'a first start that found Create task open is main\u2019s to finish (closeOverlay), not the half that hears the close');
+  assert.match(source, /tana\.onSide\(\(side, split\) => \{[^\n]*if \(!SIDE\) helpOnce\(\); \}\);/, 'a page that becomes the main half asks, in case the half that asked closed on the way');
   assert.doesNotMatch(source, /then\(restorePlace\)\.then\(helpOnce\)/, 'boot no longer opens it before there is a connection, over the login');
   assert.match(source, /restorePlace\(\)\.finally\(\(\) => \{ placed = true; loadView\(\); renderSoon\(\); helpOnce\(\); \}\)/, 'it opens once connected, over the page the launch came back to');
   console.log('ok  Help tour first start: after login, once across windows, and not again on a machine that has not read your settings yet');
