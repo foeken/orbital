@@ -142,8 +142,8 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
    checkbox has the same title column as a task, and a table grouped by type has one set of columns, not one per group.
    The fact columns are one fixed width each, measured against the outline (a container). The last column is the row's
    icons (visibility, pinned, link, watched — renderer/tasks.js taskMetaEl without the name, which has its own column):
-   74px holds all four, right-aligned so they end the row as they do in the outline. */
-.outline.table-view { container-type: inline-size; --tcols: minmax(0, 1fr) repeat(var(--cols), min(160px, calc(60cqw / var(--cols)))) 74px; } /* px: the header's type is smaller than a row's */
+   90px holds all four 10px apart, right-aligned so they end the row as they do in the outline. */
+.outline.table-view { container-type: inline-size; --tcols: minmax(0, 1fr) repeat(var(--cols), min(160px, calc(60cqw / var(--cols)))) 90px; } /* px: the header's type is smaller than a row's */
 .outline.table-view > .node > .line > .body, .outline.table-view > .thead { display: grid; grid-template-columns: var(--tcols); column-gap: 16px; align-items: center; }
 /* The local agent's badge ends a row (renderer/render.js codexBadgeEl). Taking its width from that row's grid shifted
    every column on it, so each row keeps the badge's slot at its right end, empty or not, and the badge is put in it. */
@@ -153,6 +153,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .outline.table-view > .node > .line > .body > .subtext { display: contents; }
 .outline.table-view > .node > .line > .body > :not(.text, .subtext, .tmeta) { display: none; }
 .outline.table-view > .node > .line > .body > .tmeta { order: 1; grid-column: -2; margin: 0; text-align: right; line-height: 18px; }
+.outline.table-view > .node > .line > .body > .tmeta > * + * { margin-left: 10px !important; } /* over taskMetaEl's inline 6px: alone in a column they read as cramped */
 .outline.table-view > .node > .line > .body > .text, .outline.table-view .cell { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .outline.table-view > .node { border-bottom: 1px solid #f0f0f0; }
 .outline.table-view > .thead { padding: 0 40px 6px 70px; border-bottom: 1px solid #ececec; color: #999; font-size: 13px; line-height: 18px; user-select: none; } /* 65 + the body's own 5; 40: the badge's slot */
