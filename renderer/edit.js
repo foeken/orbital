@@ -238,7 +238,7 @@ function zoomTo(item) {
   if (item.node.kind === 'document') recordRecent(item.node);
   let top = item; while (top.parent && top.parent.docId === item.docId) top = top.parent; // the item's document row (itself, or an ancestor in the same document)
   const same = zoom && zoom.docId === item.docId;
-  const via = same ? zoom.via : top.parent && zoom ? [...(zoom.via || []), zoom] : undefined; // a document inside a zoomed space: the space stays in the crumb
+  const via = same ? zoom.via : top.parent && zoom ? [...(zoom.via || []), zoom] : undefined; // a document inside a zoomed space: the space it was opened from, kept in the place Back returns to
   if (via && !docOf(item.docId)) extra.set(item.docId, top.node);
   turnPage('in', () => { zoom = { docId: item.docId, nodeId: item.node.kind === 'document' ? null : item.node.id, from: same ? zoom.from : undefined, via }; render(true); }); // the page rises into place (renderer/motion.js)
   followSummary(item.docId);
@@ -304,8 +304,8 @@ const navBack = [], navForward = [];
 let navHere = null, navigating = false, navReplace = false; // navReplace: the next place stands in for the current one (a meeting forwarding to its write-up)
 const navPlace = () => ({ view, zoom: zoom && { ...zoom }, key: JSON.stringify([view, zoom && zoom.docId, zoom && zoom.nodeId, zoom && (zoom.via || []).map((v) => v.docId)]) });
 // The place to reopen at the next launch: the document, the node, and the document's own title and glyph — enough
-// for the next launch to draw the page before anything is fetched. The crumb trail (zoom.via) rebuilds itself from
-// tana.path, and naming its documents would mean fetching each one. A draft id means nothing after a restart.
+// for the next launch to draw the page before anything is fetched. zoom.via is left out: naming its documents would
+// mean fetching each one. A draft id means nothing after a restart.
 // A page of the app's own (Notifications, Proposals, Timeline) is a place too: its id is orbital:…, never a Tana id,
 // and a reload has to land back on it rather than on whatever was stored before it.
 // So is a view with nothing zoomed (the Library, Types, a view's own list): it is stored as {} rather than removed,

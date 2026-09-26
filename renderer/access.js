@@ -110,7 +110,7 @@ function moveToSpace(doc, space, token) {
   run(async () => {
     try {
       await tana.moveToSpace(doc.id, space.id, token);
-      paths.delete(doc.id); extra.set(doc.id, asDoc(doc)); closePalette(); await loadRoots(); render();
+      extra.set(doc.id, asDoc(doc)); closePalette(); await loadRoots(); render();
     } catch (e) {
       showError(e);
       if (/preview.*again|explicitly confirm|access changed/i.test(String(e.message || e))) openMovePalette(doc);
