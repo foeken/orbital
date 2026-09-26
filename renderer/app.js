@@ -175,7 +175,7 @@ if (tana.onSettings) tana.onSettings((next) => {
 });
 if (tana.onSystemTheme) tana.onSystemTheme((t) => { if (themePref === 'system') applyTheme(t); }); // macOS appearance changes re-theme a running window
 if (themePref === 'system') showTheme('system');
-loadRoots().then(render, showError).then(restorePlace).then(loadFilters);
+loadRoots().then(render, showError).then(restorePlace).then(helpOnce).then(loadFilters); // the tour opens over the page it came back to
 // Cmd+K only: never blocks the first paint. Boot almost always races the sync connect (main creates the window
 // before S.client exists, so main/views.js:searchList answers []), so this alone would usually leave the group
 // empty; showStatus's connect edge above re-runs it once a client actually exists. Called here too so a session

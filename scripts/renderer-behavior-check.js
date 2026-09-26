@@ -1587,6 +1587,7 @@ async function runSyncShortcutCheck() {
     'Navigate: Go back', 'Navigate: Go forward', 'Navigate: Go to Home', 'Navigate: Set as Home', 'Navigate: Set Work View as Home', 'Navigate: Focus the sidebar',
     'Window: New window', 'Window: Toggle split panes', 'Window: Go to the other half', 'Window: Swap panes', 'Window: Hide sidebar', 'Window: Reload',
     'Settings: Larger text', 'Settings: Smaller text', 'Settings: Reset text size', 'Settings: Toggle dark mode', 'Settings: Edit hidden items', 'Settings: Toggle sensitive visibility', 'Settings: Toggle demo mode',
+    'Help: Help',
   ], 'the palette lists its rows in one fixed, meaningful order');
   // The two date pins differ only in the day they name: today's row passes no date (main defaults to today), the
   // tomorrow row passes the next local day, and each label follows whether that day is already pinned.
@@ -5781,7 +5782,8 @@ async function runHomeCheck() {
     ${functionSource('renderCrumbs')}
     const bar = document.createElement('nav');
     const cmdBtn = document.createElement('button'); // the ⌘K button index.html puts in the bar
-    const $ = (id) => (id === 'crumbs' ? bar : id === 'navPalette' ? cmdBtn : null);
+    const helpBtn = document.createElement('button'); // and the ? after it
+    const $ = (id) => (id === 'crumbs' ? bar : id === 'navPalette' ? cmdBtn : id === 'navHelp' ? helpBtn : null);
     const blurSensitive = () => {}, iconSvg = () => '', zoomTo = () => {};
     const viewOf = () => ({ title: 'Library' }), docOf = () => null;
     const OTHER_DOC = 'tana:text:01j0note0000000000000000';
@@ -5799,7 +5801,7 @@ async function runHomeCheck() {
       crumbs: (docId = OTHER_DOC) => {
         zoom = { docId, nodeId: null };
         renderCrumbs();
-        return bar.childNodes.map((kid) => (kid === cmdBtn ? '[⌘K]' : kid.tagName === 'button' ? '[Home]' : kid.textContent)).join(' ');
+        return bar.childNodes.map((kid) => (kid === cmdBtn ? '[⌘K]' : kid === helpBtn ? '[?]' : kid.tagName === 'button' ? '[Home]' : kid.textContent)).join(' ');
       },
       back: () => navigate(-1), push: (place) => { navBack.push(place); navHere = { view, zoom, key: 'here' }; },
       seed: (place) => { savedPlace = place; ${seed} return savedPlace; },
@@ -5841,7 +5843,7 @@ async function runHomeCheck() {
   assert.equal(api.target(), null, 'a note is not a place to come back to, so it does not offer itself as Home');
 
   // The bar is Home then ⌘K and nothing else: no location behind them, however deep the page
-  assert.equal(api.crumbs(), '[Home] [⌘K]', 'the bar over a document is the Home button, then ⌘K, and no breadcrumbs');
+  assert.equal(api.crumbs(), '[Home] [⌘K] [?]', 'the bar over a document is the Home button, then ⌘K and Help, and no breadcrumbs');
 
   // Back with nothing to go back to lands on Home; a real prior place still wins
   api.back();
@@ -5871,7 +5873,7 @@ async function runHomeCheck() {
     'a deleted Home falls back to the Library and the stale preference is repaired, not left behind');
   api.view('library');
   assert.equal(api.crumb().tag, 'button', 'and with the Library as Home the button still shows, rather than disappearing with the choice');
-  assert.equal(api.crumbs(), '[Home] [⌘K]', 'and the bar is the same two buttons');
+  assert.equal(api.crumbs(), '[Home] [⌘K] [?]', 'and the bar is the same three buttons');
   // The bar used to be hidden on a view page, which has no location; it now carries the two buttons on every page.
   assert.doesNotMatch(source, /nav\.hidden =/, 'the bar is never hidden: Home and ⌘K on every page, a view page (the Library, Inbox, Tasks) included');
   assert.deepEqual(plain(api.seed(null)), TIMELINE, 'a Library Home changes nothing about a first launch either');

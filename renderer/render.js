@@ -565,11 +565,11 @@ function homeCrumb() {
   b.onclick = () => goHome();
   return b;
 }
-// The bar over the title: Home, then ⌘K, and nothing else — the page title says where you are. Home is always
+// The bar over the title: Home, then ⌘K and Help, and nothing else — the page title says where you are. Home is always
 // shown, even on Home itself or with the Library as Home: one fixed way back beats a button that comes and goes.
 function renderCrumbs() {
   const nav = $('crumbs');
-  nav.replaceChildren(...[homeCrumb(), $('navPalette')].filter(Boolean)); // ⌘K: renderer/palette.js; Home: null only while a Home search loads
+  nav.replaceChildren(...[homeCrumb(), $('navPalette'), $('navHelp')].filter(Boolean)); // ⌘K: renderer/palette.js; ?: renderer/help.js; Home: null only while a Home search loads
 }
 
 // a child row: document children (inside a space) are their own document, so their key, children and edits go by their own id

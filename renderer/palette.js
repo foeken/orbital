@@ -360,6 +360,7 @@ function paletteRows(q, typed = q) {
     hint: chatgptAuth?.signedIn ? (chatgptAuth.email || 'Signed in') : chatgptAuth?.available === false ? 'Status unavailable' : chatgptAuth ? 'Not signed in · preferred over API key' : 'Checking sign-in',
     keepOpen: true, run: chatgptCommand });
   if (tana.setOpenAIKey) rows.push({ id: 'openaiKey', group: 'Settings', icon: 'openaiKey', label: 'Set OpenAI API key', hint: 'Stored locally', keepOpen: true, run: openOpenAIKeyPalette });
+  rows.push({ id: 'help', group: 'Help', icon: 'help', label: 'Help', hint: 'The basics and the keys', run: () => openHelp() }); // renderer/help.js
   // A second level is folded in once the query's first two letters reach its row, as a prefix or as the first words'
   // initials ("mo" or "mt" for Move to …, "as" or "at" for Assign to), and loaded once per palette opening. The spaces
   // and the four statuses are short fixed lists, so "Move to …" and "Set status" (`subAlways`) load them as the palette
