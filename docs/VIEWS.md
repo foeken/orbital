@@ -14,10 +14,10 @@ keeps its own choice, an unsaved edit holds the row open — Save is one of the 
 lists every pill either way. **Refresh** is a header button beside that one rather than a pill: it asks
 the query rather than describing it, so folding the pills away must not take it with them.
 
-This file is the contract between the main process (`sdk/query.js`, `main.js`, `preload.js`) and the
-renderer. It replaces the per-view paths: `taskParams`/`libraryQueries`/`MEETINGS_QUERY`/`inbox()`/
-`chats()`/`library()` on one side and `loadLibrary`/`loadChats`/`loadInbox`/`loadMembers`-as-a-view,
-`taskF`/`libF` on the other.
+This file is the contract between the main process and the renderer. In main, `sdk/query.js` holds the filter
+vocabulary, the presets and the query builder, `main/views.js` runs, caches and refreshes a view, and `main.js`
+and `preload.js` expose it (§5). In the renderer, `renderer/nodes.js` loads a view, `renderer/views.js` groups
+and sorts its rows and `renderer/pills.js` draws the pills.
 
 ## 1. Filter
 
@@ -87,8 +87,7 @@ truncation note the Library already shows still tells the user when there is mor
 - A type row keeps the space it lives in as its `meta`, read from the graph node's own `spaceUri` and resolved to a
   title by the `nodeIds` lookup `resolveTypes` already makes; a type with no space reads as `Library`.
 - Every view caches its rows in SQLite under its own id (`db.replaceSection(viewId, rows)`), so any
-  view opens instantly from cache and stays readable while auth or sync reconnect. Today only tasks
-  and meetings do.
+  view opens instantly from cache and stays readable while auth or sync reconnect.
 - `outline:roots` returns `[{ id, title, icon, nodes }]` for the views from that cache.
 - The refresh loop refreshes the **active** view (the last one listed) and subscribes the first
   `LIVE_ROWS` (100, main/state.js) of its rows, with the undo-history retention from #178 unchanged.
@@ -96,7 +95,9 @@ truncation note the Library already shows still tells the user when there is mor
   the renderer as a change, so a Library of several hundred rows opened with a subscription storm on the
   one sync connection — the page lagged and the read for whatever was opened next queued behind it. The
   tail keeps its cached row and is re-read by the next refresh. `searchChildren` (main/related.js) caps
-  its rows the same way.
+  its rows the same way. A document a read subscribed on its own (a zoom, `doc:info`, a row's task metadata
+  as it scrolls into view) is capped at the same number and let go oldest first (main/documents.js
+  `onDemand`, #269); a read still waiting on its bootstrap holds the document, so no sweep drops it.
 - **Nothing polls** (#148): what runs a refresh is a push. Each open view has a live query (sdk/livequery.js,
   `watchViews` in main/views.js, opened and closed whenever a view is read, so a changed filter moves it at once), built from the view's own
   ListNodes params by `liveTrigger` (sdk/query.js): the same kinds, types, states and people, less what a live
@@ -104,8 +105,9 @@ truncation note the Library already shows still tells the user when there is mor
   the rows. The tasks you made for others (the watch rule) and the Inbox badge ride live queries the same way
   (`watchMine`, `watchInbox`), and an open saved search gets one from `watchRelated` (main/related.js), rebuilt
   when its stored query changes. A timer still refreshes every 5 minutes (main.js) as the backstop for a push
-  that never came. A live query that matches nothing stays pending instead of answering empty, which is why every
-  trigger counts its first answer too.
+  that never came, and a window gaining focus refreshes unless the last refresh finished within
+  `FOCUS_FRESH_MS` (30 s, main.js). A live query that matches nothing stays pending instead of answering
+  empty, which is why every trigger counts its first answer too.
 
 ## 5. IPC
 
@@ -135,17 +137,18 @@ in the same action (`main.js`).
 
 ## 7. Renderer
 
-- One `views` list (was `sections`), one `filters` map keyed by view id, one `loadView(id)`.
+- One `views` list, one `filters` map keyed by view id, one `loadView(id)` (renderer/nodes.js).
 - Pills are built from the filter for every view: Type, Status and Assigned to (when tasks are in
   scope), Sort and Group. They stay Cmd+K reachable as they are now.
-- "Clear filters" resets to `{ types: null, states: null, assignee: 'anyone', text: '' }` and keeps
-  `participant`/`window`, so clearing Meetings still means the user's own calendar. A view offers
-  the link only when its filter differs from that.
-- Keep: the today marker and date meta in Meetings, `DRAFT_KIND` (Enter drafts a task in Tasks and a
-  meeting in Meetings), read-only member rows, sensitive redaction, the row enter/leave animation,
-  drafts surviving a refresh, and every keyboard rule in OUTLINER.md.
+- "Clear filters" (`clearFilter`, renderer/nodes.js) resets to `{ types: null, states: null, assignee:
+  'anyone', text: '', fields: null, audience: null }` and keeps `participant`/`window`, so a filter that asks
+  for your own meetings still does after it. A view offers the link only when its filter differs from that.
+- Enter on a collapsed row in a view, or with nothing focused in an empty one, drafts a plain document below
+  it (`draftDoc`, renderer/render.js): every view drafts a doc. Drafts survive a refresh and are dropped when you
+  navigate away empty. Member rows stay read-only, sensitive rows stay redacted, rows animate in and out, and
+  every keyboard rule in OUTLINER.md holds.
 
-## 8. Notifications is not a view either
+## 8. Type pages and tables
 
 A **type's page** (`tana:type:…`, opened from the Types view or anywhere else) is the list of that type's instances,
 drawn like a saved search: the same pills, sort, grouping, Display and ⌘F. Its rows are `searchPreview({ types: [type],
@@ -187,6 +190,7 @@ the columns, ←/→ make the highlighted one 20px narrower or wider while nothi
 page key and column in the synced `tableWidths` preference; Title takes what the others leave, and the icons column and
 the agent badge's slot are only there when a row on the page has them.
 
+## 9. Notifications, Proposals and Timeline are pages, not views
 
 Notifications (issue #18, docs/OUTLINER.md) is listed with the views in Cmd+K but is a page, like a saved search: it has no
 filter, no pills and no row cache. Its rows are `outline:children('orbital:notifications')` — Tana's `tana:user-inbox`
@@ -194,3 +198,8 @@ document read by main/inbox.js — and it never touches `S.activeView` or the re
 
 Proposals (issue #19) is the same kind of page: `outline:children('orbital:proposals')` is the AI proposals still pending,
 read from the chat graph nodes by main/proposals.js on every arrival, with no filter, pills or row cache.
+
+The Timeline (issue #135) is a third: `outline:children('orbital:timeline')` is rebuilt by main/timeline.js from
+Tana on every read, sent in parts on `timeline:part` while the rest is read, and kept current by its own live
+query over your meetings. Each of the three is an `orbital:` id the renderer knows from boot (`extra` with
+`appPage: true`), so `goTo`, Back and Recent reach it without asking main for a node.
