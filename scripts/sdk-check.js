@@ -1244,6 +1244,14 @@ async function main() {
     const next = settings.settingsDocId();
     assert.ok(next && next !== theirs.id && next !== mine, 'with every one deleted, a new one is made');
     assert.equal(JSON.parse(docs.get(next).loro.getMap(settings.ROOT).get('pref:theme')), 'dark', 'written from what this machine remembers');
+    // A machine with nothing to say yet makes a document with no key in it; another machine must still take it for ours.
+    cache.open(':memory:'); listed = [];
+    connect(); await settings.hydrate(); await settings.flush();
+    const bare = settings.settingsDocId();
+    assert.ok(bare && bare !== next && !Object.keys(docs.get(bare).loro.getMap(settings.ROOT).toJSON()).length, 'a new install with no choices makes a document that holds no key');
+    cache.open(':memory:'); listed = [{ id: bare, title: settings.TITLE, createTime: '2026-09-26T10:00:00Z' }];
+    connect(); await settings.hydrate();
+    assert.equal(settings.settingsDocId(), bare, 'and the next machine takes that one rather than making a second');
     console.log('ok  settings document: two machines settle on the oldest, a deleted one is replaced, the page hears what the document changed');
   }
   // What stayed of quick add when the panel went (issue #232): the meeting this user has joined (⌘K Pin to current

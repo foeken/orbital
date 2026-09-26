@@ -58,7 +58,9 @@ Each machine notes the document's uri locally, so a write costs no lookup. Once 
 that note, a new one or a cleared cache — the app also looks for it by title among your own documents, hidden title or
 not, and takes the oldest: two machines that each created one before the graph listed the other's settle on the same
 document at their next launch rather than keeping one each for ever, and the one that loses merges its keys in (the
-rule below). A document in Tana's trash is never written to: the oldest one still standing is used, and with none a new
+rule below). A title alone is not proof: only a document carrying the mark it was created with (root `ext:orbital:doc`,
+written at creation because an empty root is never stored) or a key in either root counts, so a note of yours that is
+also called Orbital is never taken over. A document in Tana's trash is never written to: the oldest one still standing is used, and with none a new
 one is created and filled from this machine. Restoring the old one from the trash makes it the oldest again, so the next
 launch goes back to it.
 

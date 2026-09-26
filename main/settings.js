@@ -26,6 +26,7 @@ const OLD_TITLE = 'Tana Companion'; // what it was called before the rename: a w
 const POINTER = 'settingsDoc'; // local, never synced: this machine's note of which document that is
 const ROOT = 'ext:orbital'; // the root container the keys live in
 const OLD_ROOT = 'settings'; // where they lived before: moved into ROOT on the next hydrate
+const MARK = 'ext:orbital:doc'; // written at creation, so a document that holds no key yet is still known for ours
 
 // What follows you between machines, and what cannot. A window's size belongs to the screen it was sized on; the
 // agent's task ids belong to the machine that ran them; where you happened to be belongs to the machine you were at.
@@ -123,13 +124,13 @@ async function discover() {
   return null;
 }
 // A title is not proof: a note of yours called "Orbital" must never be taken over and filled with every synced key.
-// Ours holds at least one key in its root (or the root older builds wrote); one that never held any is worth nothing.
-const holdsSettings = (doc) => [ROOT, OLD_ROOT].some((root) => Object.keys(doc.loro.getMap(root).toJSON() || {}).length > 0);
+// Ours carries the mark it was made with, or (made by an older build) at least one key in either root.
+const holdsSettings = (doc) => [MARK, ROOT, OLD_ROOT].some((root) => Object.keys(doc.loro.getMap(root).toJSON() || {}).length > 0);
 async function create() {
   const id = 'tana:text:' + ulid();
   const doc = await S.client.sync.subscribe(id, (loro) => {
     initDocument(loro, TITLE, S.me.userUri);
-    loro.getMap(ROOT); // the container exists from birth, so a second machine can tell this document from a note
+    loro.getMap(MARK).set('app', 'orbital'); // an empty root is never stored: this is how a second machine tells it from a note
   }).catch((e) => { report(e); return null; });
   if (!doc) return null;
   return use(doc);
