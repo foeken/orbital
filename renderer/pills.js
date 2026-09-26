@@ -99,7 +99,7 @@ function fieldPill(def, f, save) {
   const key = fieldKey(def), now = (f.fields || {})[key] || {}, title = def.title || 'Untitled field';
   const put = (value) => putField(f, save, key, value);
   // a link or member field can point at hundreds of nodes, so its menu says it can be searched (menuEl)
-  const pill = { id: 'field:' + def.key, label: title, command: 'Filter by ' + title, icon: 'field', search: def.type !== 'options' };
+  const pill = { id: 'field:' + def.key, label: title, command: 'Filter by ' + title, icon: 'field', search: def.type === 'link' || def.type === 'member' };
   if (def.type === 'date') {
     const preset = now.date && now.date.preset;
     return { ...pill, value: (DATE_PRESETS.find(([p]) => p === preset) || [])[1] || 'Any', rows: () => [
