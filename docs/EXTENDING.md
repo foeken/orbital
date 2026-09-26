@@ -183,7 +183,8 @@ an entry in `main/documents.js` `creationOptions` and the mock's `creationOption
      holder is a change to sdk/content.js of its own: every walk and wrap there tests `isList`/`isQuote`/`isHolder`, `LISTS` or the
      `'blockquote'` name (reading, ids, lookup, wrapping, rehoming), so find them all with
      `rg "isList|isQuote|isHolder|LISTS|'blockquote'" sdk/content.js`.
-   - A block that is inserted (like a divider or a table): an `insert…` function beside `insertDivider`, then an IPC
+   - A block that is inserted (like a divider or a table): an `insert…` function beside `insertDivider`, exported from sdk/content.js and listed in
+     docs/sdk/03-api-reference.md, then an IPC
      call for it as above (the `block:insert…` handlers in main/documents.js, preload.js, `DEMO_WRITES`, the mock),
      and its "/" row and dispatch in renderer/toolbar.js.
 2. **renderer/nodes.js** — a switchable type's label in `BLOCK_TYPES` (what `blockTypeOf` and the "/" menu read) and
