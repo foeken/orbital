@@ -473,7 +473,7 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
    meeting's gold, a type's hue — so the page stays monochrome */
 .node.tl > .children .bullet.icon svg, .node.tl > .children .bullet.icon:hover svg { color: #8e9297; }
 /* Join (renderer/timeline.js): the Tana glyph after a meeting's title, in the page's grey until it is pointed at */
-.tl-join { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 22px; margin-left: 4px; padding: 0; border: 0; border-radius: 4px; background: none; color: #8e9297; vertical-align: -5px; cursor: pointer; }
+.tl-join { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 22px; margin-left: 4px; padding: 0; border: 0; border-radius: 4px; background: none; color: #8e9297; vertical-align: -3px; cursor: pointer; }
 .tl-join svg { width: 16px; height: 16px; }
 .tl-join:hover { background: #ececec; color: #1c2024; }
 .node.tl > .children .meta { display: none; } /* assigned to you and private: true of every one, so said by none */
