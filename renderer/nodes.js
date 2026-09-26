@@ -196,6 +196,10 @@ function iconNode(icon) {
   if (t === undefined) { const tpl = document.createElement('template'); tpl.innerHTML = iconSvg(icon); t = tpl.content.firstElementChild; iconTemplates.set(icon, t); }
   return t ? t.cloneNode(true) : null;
 }
+// The glyph appended to el, which it answers; a name with no glyph appends nothing. Every icon in the UI is drawn
+// this way or through iconNode (scripts/renderer-check.js): a new span is addIcon(span, 'field'), a button that
+// swaps its glyph is b.replaceChildren() and then addIcon(b, name).
+function addIcon(el, icon) { const svg = icon ? iconNode(icon) : null; if (svg) el.append(svg); return el; }
 const isTask = (node) => node.kind === 'document' && node.icon === 'task';
 // A member is a fact about other nodes, not a page: nothing zooms into one (bullet, Space, Zoom in). A type opens as
 // the list of its instances (renderer/render.js).

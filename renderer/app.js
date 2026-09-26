@@ -61,7 +61,7 @@ if (tana.onToPlace) tana.onToPlace(() => {
 // it swaps the panes, as Cmd+K "Swap panes" does, and is neither a drag nor a double click on the line.
 const splitGrip = $('splitGrip');
 const splitPill = splitGrip.firstElementChild;
-{ const svg = iconNode('swapPanes'); if (svg) splitPill.append(svg); }
+addIcon(splitPill, 'swapPanes');
 keyTitle(splitPill, 'Swap panes', 'swapPanes');
 splitPill.addEventListener('pointerdown', (e) => e.stopPropagation()); // not the start of a drag
 splitPill.onmousedown = (e) => e.preventDefault(); // the caret stays in its row
@@ -92,7 +92,7 @@ const closePaneBtn = $('navClosePane');
 closePaneBtn.hidden = SIDE !== ':2';
 closePaneBtn.title = 'Close this pane ⌘W';
 closePaneBtn.setAttribute('aria-label', 'Close this pane'); // icon only, so the name has to come from here
-{ const svg = iconNode('closePane'); if (svg) closePaneBtn.append(svg); }
+addIcon(closePaneBtn, 'closePane');
 closePaneBtn.onmousedown = (e) => e.preventDefault(); // the caret stays where it is: beforeunload flushes what it was typing
 closePaneBtn.onclick = () => tana.closePane();
 tana.onChanged((docId, info) => {

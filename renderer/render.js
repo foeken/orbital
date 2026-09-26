@@ -532,7 +532,7 @@ function renderFields(parent, force = false, el = $('fields')) {
   for (const def of defs) el.append(definitionEl(parent, def));
   for (const field of fields) {
     const row = document.createElement('div'); row.className = 'field';
-    const icon = document.createElement('span'); icon.className = 'ricon'; icon.innerHTML = iconSvg('field');
+    const icon = document.createElement('span'); icon.className = 'ricon'; addIcon(icon, 'field');
     row.append(icon);
     // the type names its fields; an unreadable type leaves the value to speak for itself
     if (field.label) { const label = document.createElement('span'); label.className = 'flabel'; label.textContent = field.label; row.append(label); }
@@ -571,8 +571,7 @@ function homeCrumb() {
   if (!name) return null; // only while a Home search is still loading
   const b = document.createElement('button');
   b.className = 'navbtn'; b.tabIndex = -1;
-  const icon = iconNode('home');
-  if (icon) b.append(icon);
+  addIcon(b, 'home');
   b.setAttribute('aria-label', 'Go to Home: ' + name); // the role; the name it points at is in the label and tooltip
   b.title = 'Go to Home: ' + name;
   b.onmousedown = (e) => e.preventDefault(); // the caret stays where it is, as with the other header buttons
@@ -717,7 +716,7 @@ function nodeEl(node, docId, parent) {
   const clickOpens = opensOnClick(item);
   if (opens) bullet.title = 'Zoom in'; else bullet.classList.add('still'); // a member or a type has no page: the bullet is only a glyph
   const bulletIcon = gone ? 'trash' : iconOf(display);
-  if (bulletIcon) { bullet.classList.add('icon', bulletIcon); const svg = iconNode(bulletIcon); if (svg) bullet.append(svg); }
+  if (bulletIcon) addIcon(bullet, bulletIcon).classList.add('icon', bulletIcon);
   if (display.hue != null) { bullet.classList.add('hue'); bullet.style.setProperty('--hue', String(display.hue)); } // type hue tints the icon and the plain bullet alike, a task's type glyph included
   // the grab: a row is picked up by its own marker (renderer/drag.js); a task under Today's Tasks shows a box in its
   // place, so the whole read-only line is the handle there
