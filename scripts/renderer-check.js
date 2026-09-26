@@ -53,7 +53,8 @@ assert.match(source, /function openAIKeyRows\(\)[\s\S]*tana\.setOpenAIKey\(key\)
 assert.doesNotMatch(source, /mod && e\.key === 'r'/);
 assert.match(source, /t\.hue != null \? t\.hue : nodeHue/);
 assert.match(source, /display\.hue != null/);
-assert.match(source, /const rowHue = r\.node \? r\.node\.hue : r\.hue;/);
+// Cmd+K glyphs are monochrome: only a row that sets its own hue (the Set colour page) is tinted, never a node's type colour
+assert.match(source, /const rowHue = r\.hue;/);
 // a recently viewed row keeps the hue it was recorded with, so its icon is the colour it is everywhere else
 assert.match(source, /const entry = \{ id: n\.id,[^}]*hue: n\.hue \}/);
 assert.match(source, /if \(rowHue != null\) \{ icon\.classList\.add\('hue'\)/);
