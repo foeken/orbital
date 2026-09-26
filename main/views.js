@@ -4,10 +4,11 @@ const path = require('node:path');
 const { peerIdentity } = require('../tana-session');
 const { createTanaClient } = require('../sdk');
 const { everyoneOnly } = require('../sdk/access');
-const { liveTrigger, parseQuery, searchParams, needsTypes, viewParams, completedInWindow, filterToSearchQuery, validViewFilter, VIEW_PRESETS, hideRules, isHidden } = require('../sdk/query');
-const { LIVE_ROWS, NOT_CONNECTED, S, deletedNodes, docStates, errText, idKind, isDeleted, isMcp, memberTitle, now, reading, truncatedViews, typeTitles, redoStack, report, scheduleRefresh, send, setStatus, subscribed, undoStack, visibleGraphNodes } = require('./state');
+const { liveTrigger, parseQuery, searchParams, needsTypes, viewParams, completedInWindow, completedWindow, filterToSearchQuery, searchQueryToFilter, validViewFilter, VIEW_PRESETS, hideRules, isHidden } = require('../sdk/query');
+const { readSearch, searchDisplay, searchSort, setSearchQuery, setSearchView } = require('../sdk/node');
+const { LIVE_ROWS, NOT_CONNECTED, S, VIEWS, deletedNodes, docStates, errText, idKind, isDeleted, isMcp, memberTitle, now, reading, truncatedViews, typeTitles, redoStack, report, scheduleRefresh, send, setStatus, subscribed, undoStack, visibleGraphNodes } = require('./state');
 const { graphRow, members, rememberNodeHue, resolveTypes, toNode, typesByTitle } = require('./rows');
-const { codexIds, createDocument, creatorOf, document, historyIds, notifySilencedIds, notifyWatchedIds, onChange, releaseOnDemand, subscribe } = require('./documents');
+const { codexIds, createDocument, creatorOf, document, historyIds, mut, op, notifySilencedIds, notifyWatchedIds, onChange, releaseOnDemand, subscribe } = require('./documents');
 const { watchedPages, withSearchHeads } = require('./related');
 const presence = require('./presence');
 const settings = require('./settings');
@@ -455,4 +456,63 @@ async function setMcpHidden(on) {
 // Subscribing on demand (zoom, create, metadata) does not put a document in a view: the refresh lets go of those
 // oldest first past LIVE_ROWS of them, under the same rule as its own rows (main/documents.js releaseOnDemand).
 
-module.exports = { announceNewInbox, inboxFrom, watchInbox, watchMine, preset, viewFilter, setViewFilter, hiddenRules, mcpHidden, viewRows, inboxCount, search, searchList, searchCreate, searchTitle, myTasks, start, refresh, doRefresh, listFilter, setHidden, setMcpHidden };
+// What the renderer asks this module (preload.js names each channel for the page; main.js registers the table).
+const ipc = {
+  'outline:roots': async () => {
+    const rows = db.list();
+    const rules = hiddenRules(); // a row cached before the rule was added is hidden here too, refresh or no refresh
+    return VIEWS.map((view) => ({ ...view, truncated: truncatedViews.has(view.id), nodes: (rows[view.id] || []).filter((r) => !isHidden(r.title, rules)).map(toNode) }));
+  },
+  'view:list': async (e, id, filter) => {
+    preset(id); // validate before changing which view the refresh loop owns
+    S.activeView = id;
+    S.activeFilter = filter;
+    if (e && e.sender && S.windows.size) S.windowViews.set(e.sender.id, { id, filter }); // this window's view (the checks call with no event)
+    await S.refreshing;
+    return viewRows(id, filter);
+  },
+  'view:filter': (_e, id) => viewFilter(id),
+  'view:setFilter': (_e, id, filter) => {
+    const stored = setViewFilter(id, filter);
+    if (id === S.activeView) S.activeFilter = stored;
+    for (const v of S.windowViews.values()) if (v.id === id) v.filter = stored; // every window showing it
+    return stored;
+  },
+  'search': (_e, query, scope) => search(query, scope),
+  'search:list': () => searchList(),
+  // The renderer sends a view id, never a query: the filter→query vocabulary lives in sdk/query, which classic
+  // renderer scripts cannot require, and main already holds the canonical filter for every view.
+  'search:create': (_e, id, title) => searchCreate(id, title),
+  'search:myTasks': (_e, findOnly) => myTasks(findOnly === true),
+  // The same filter vocabulary in both directions, so the pills that edit a view can edit a saved search (readSearch
+  // and setSearchQuery/setSearchView). Writing replaces it wholesale rather than patching: what the pills are showing
+  // is what the document ends up saying.
+  'search:filter': (_e, id) => op(id, (doc) => {
+    const { query, view: arrangement } = readSearch(doc); // how it is shown lives beside the query, not inside it
+    return {
+      // the completed window is the app's own, so it is stored beside the query and handed back as part of the filter
+      // the pills edit; absent, it reads as the default the pill shows the first time Completed is asked for
+      filter: { ...searchQueryToFilter(query, S.me && S.me.userUri), completedWithin: completedWindow(arrangement.completedWithin), audience: arrangement.audience === 'everyone' ? 'everyone' : null },
+      sort: searchSort(arrangement.sortBy),
+      group: arrangement.groupBy,
+      // Tana's record of key -> { shown, order } (or the comma-joined string earlier builds wrote)
+      display: searchDisplay(arrangement.display),
+    };
+  }),
+  'search:setFilter': (_e, id, filter, sort, group, display) => {
+    if (!validViewFilter(filter)) throw new Error('invalid view filter'); // never let a bad filter empty a saved search
+    return mut(id, (doc) => {
+      setSearchQuery(doc, filterToSearchQuery(filter, S.me && S.me.userUri));
+      setSearchView(doc, { sortBy: sort, groupBy: group, display, completedWithin: filter.completedWithin, audience: filter.audience }); // saved together: one press, one state of the page
+    });
+  },
+  // Hidden titles: the user's list of patterns, applied to every list and search (see listFilter/sdk-query isHidden).
+  'filters:list': () => hiddenRules(),
+  'filters:add': (_e, pattern) => setHidden([...hiddenRules(), pattern]),
+  'filters:remove': (_e, pattern) => setHidden(hiddenRules().filter((p) => p.toLowerCase() !== String(pattern ?? '').trim().toLowerCase())),
+  // MCP chats: one switch over every list and search, applied in the same listFilter the hidden titles go through.
+  'mcp:hidden': () => mcpHidden(),
+  'sync:refresh': () => refresh(),
+};
+
+module.exports = { announceNewInbox, inboxFrom, watchInbox, watchMine, preset, viewFilter, setViewFilter, hiddenRules, mcpHidden, viewRows, inboxCount, search, searchList, searchCreate, searchTitle, myTasks, start, refresh, doRefresh, listFilter, setHidden, setMcpHidden, ipc };
