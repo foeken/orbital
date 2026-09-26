@@ -4737,6 +4737,7 @@ async function runSearchPageRowUpdateCheck() {
     ${sourceBetween('// The rows the page in front of you shows', 'function setGroupBy')}
     Object.assign(globalThis, {
       patch: () => patchDoc(TASK),
+      patchUnlisted: () => patchDoc('tana:text:01j0unlisted00000000000000'),
       drop: () => invalidateNode(TASK),
       rows: () => (kids.get(SEARCH) || []).map((node) => [node.id, node.text, node.stateType]),
       shown: () => shownDocs().map((node) => node.id),
@@ -4747,6 +4748,8 @@ async function runSearchPageRowUpdateCheck() {
   await context.patch();
   assert.deepEqual(plain(context.rows()), [[TASK, 'new title', 'closed']], 'a change to a document a saved search lists patches the row that page is showing');
   assert.equal(context.loads(), 0, 'and the row was found there, so nothing falls back to reloading every view');
+  await context.patchUnlisted();
+  assert.equal(context.loads(), 0, 'a document no list shows reloads nothing either: a list it joins is reloaded by the global refresh its live query brings');
   assert.deepEqual(plain(context.shown()), [TASK], 'Clean up asks what is on screen: on a search page that is the rows its query returned');
   context.drop();
   assert.deepEqual(plain(context.rows()), [], 'a deleted document leaves the saved search that listed it');
@@ -6248,6 +6251,9 @@ async function runHomeCheck() {
 // A reload used to leave every linked task grey: the status read was gated on the set of assigned ids, which is
 // filled asynchronously and is still empty when the first load runs. Main knows the links; the renderer must ask.
 function runAgentStatusBootCheck() {
+  // Asked at boot, not per list reload: reloads come in bursts, and each status read starts a Codex app-server child
+  assert.match(source, /^loadAgentStates\(\);/m, 'the page asks what each linked Codex task is doing once as it loads');
+  assert.doesNotMatch(functionSource('loadRoots'), /loadAgentStates/, 'and a reload of the lists does not ask again');
   const api = vm.runInNewContext(`
     const asked = [];
     const codexIds = new Set(); // still empty: loadCodex has not answered yet, which is the boot order

@@ -445,7 +445,9 @@ async function main() {
     assert.equal(await backend.documentAction(DOC,'softDelete'),DOC);
     assert.equal(cache.get(DOC),undefined);assert.ok(events.some(([channel])=>channel==='outline:removed'));
     failRestore=true;await assert.rejects(backend.undo(),/mock restore failed/);failRestore=false;
+    events.length=0;
     assert.equal(await backend.undo(),DOC,'failed undo stays available for retry');
+    assert.ok(events.some(([channel,id])=>channel==='outline:changed'&&id===null),'a restore tells every page to reload its lists, which is how the row comes back');
     assert.deepEqual(local.toJSON(),original,'restore preserves original identity, content and ACL');
     await backend.redo();assert.equal(readNode(local).deletedAt,123);
     await backend.documentAction(DOC,'restore');assert.deepEqual(local.toJSON(),original);
@@ -3428,6 +3430,32 @@ async function main() {
     await backend.handlers.get('view:list')(null, 'library', { types: ['tasks', 'docs'], states: null, assignee: 'anyone' });
     assert.deepEqual(unsubscribed, [pushedOut], 'a row pushed past the cap is unsubscribed, so the live set stays bounded');
     console.log('ok  a wide view subscribes the head of its list, not every row in it');
+  }
+
+  // A document that joins a view (created, moved or reassigned, here or anywhere) moves that view's live query; main
+  // answers with a refresh and the global outline:changed(null), which reloads every page's lists. The renderer counts
+  // on this: it no longer reloads every list for each changed document no list shows yet (renderer/app.js patchDoc).
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const rows = [{ id: 'tana:text:' + ulid(), title: 'Listed', updateTime: '2026-09-13T10:00:00Z' }];
+    const joined = { id: 'tana:text:' + ulid(), title: 'Joined', updateTime: '2026-09-14T10:00:00Z' };
+    const live = [], sent = [];
+    backend.testRuntime({ me: { userUri: ME }, activeView: 'library', win: { isDestroyed: () => false, webContents: { send: (...args) => sent.push(args) } }, client: {
+      sync: { subscribe: async (id, init) => { if (!init) return null; const d = new Document(id); d.transact(init); live.push(d); return d; }, getDocument: () => null, unsubscribe: async () => {} },
+      graph: { listNodes: async (p) => (p.nodeIds || p.createdBy || (p.nodeTypes || []).some((k) => k !== 'text') ? { nodes: [] } : { nodes: rows }) },
+    } });
+    await backend.handlers.get('view:list')(null, 'library', { types: ['tasks', 'docs'], states: null, assignee: 'anyone' });
+    await new Promise(setImmediate);
+    assert.equal(live.length, 1, 'the view is read with its live query');
+    rows.unshift(joined);
+    const before = backend.timers.length;
+    live[0].transact((loro) => { const data = loro.getMap('data'), nodes = data.get('result').setContainer('nodes', new LoroList()); nodes.push({ uri: joined.id, title: joined.title }); data.set('state', 'ready'); data.set('resultForVersion', 1); });
+    const due = backend.timers.slice(before).filter((t) => t.ms === 500); // main lets a burst of answers settle first
+    assert.equal(due.length, 1, 'its answer schedules one refresh');
+    await due[0].fn();
+    assert.ok(sent.some(([channel, id]) => channel === 'outline:changed' && id === null), 'its answer refreshes the lists and tells every page');
+    assert.ok(cache.get(joined.id), 'with the row that joined in them');
+    console.log('ok  a document joining a view reaches every page as the global refresh');
   }
 
   // Reads subscribe too — a zoom, doc:info, each row's doc:taskMeta as it scrolls into view — and they used to hold
