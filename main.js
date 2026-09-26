@@ -19,7 +19,7 @@ const { NOT_CONNECTED, S, VIEWS, docStates, errText, idKind, isSearch, isSpace, 
 const { cachedNodeHue, graphRow, members, rememberNodeHue, rememberType, toNode } = require('./main/rows');
 const { accessContext, addTypeField, archivedTypes, chatOutline, codexIds, createDocument, creationOptions, creatorOf, defineField, discussWith, documentAction, followSummary, history, info, linkShared, metaSig, moveBlock, moveTarget, mut, mutTasks, notifyOn, notifyState, referenceIn, setCodex, setField, setNotify, onChange, op, outlineWithReferences, sensitiveIds, setSensitive, setType, setTypeHue, typeCandidates, typeChoices, typeList } = require('./main/documents');
 const { callOf, changesOf, pathOf, related, searchChildren, searchPreview, spaceChildren, summaryChanges, summaryUri, unwatchRelated, watchRelated } = require('./main/related');
-const { announceNewInbox, hiddenRules, watchInbox, inboxCount, listFilter, mcpHidden, preset, refresh, search, searchCreate, searchList, searchTitle, setHidden, setMcpHidden, setViewFilter, start, viewFilter, viewRows } = require('./main/views');
+const { announceNewInbox, hiddenRules, watchInbox, inboxCount, listFilter, mcpHidden, myTasks, preset, refresh, search, searchCreate, searchList, searchTitle, setHidden, setMcpHidden, setViewFilter, start, viewFilter, viewRows } = require('./main/views');
 const { nodePin, pinState, pinTree, pinned, pinnedDates, pinnedUris, setPin, todayNode, weekNode, weekTitle } = require('./main/pins');
 const { image, insertImage, cancelUpload } = require('./main/images');
 const inbox = require('./main/inbox');
@@ -105,7 +105,9 @@ function createWindow() {
   const saveSoon = () => { clearTimeout(boundsTimer); boundsTimer = setTimeout(saveBounds, 500); };
   if (!front && saved && Number.isFinite(saved.splitAt)) win.splitAt = saved.splitAt;
   S.windows.add(win); S.win = win; S.pane = addPane(win, '').webContents;
-  if (!front && saved && saved.split) addPane(win, '2'); // the split comes back with the frame it was saved with
+  // the split comes back with the frame it was saved with, and a first launch (nothing saved) opens split: the Work View,
+  // the Timeline beside My Tasks (renderer/edit.js reads which half it is)
+  if (!front && (!saved || saved.split)) addPane(win, '2');
   win.saveBounds = saveBounds; win.saveSoon = saveSoon; // a split opened, closed or dragged is saved too
   if (!front && saved && saved.maximized) win.maximize();
   for (const name of ['resize', 'move', 'maximize', 'unmaximize']) win.on(name, saveSoon);
@@ -236,11 +238,19 @@ ipcMain.handle('window:new', () => { createWindow(); });
 ipcMain.handle('window:split', (e) => { toggleSplit(e.sender); });
 // ⌘\: the keys go to the other half of a split (nothing to do in a window with one page)
 ipcMain.handle('window:otherPane', (e) => { const other = paneWindow(e.sender)?.panes.find((p) => p.webContents !== e.sender); if (other) other.webContents.focus(); });
-// asked by preload.js on every load, a Reload included: which side this page is ('' left or alone, '2' the right half)
-// and whether it is half of a split. A restart adds both halves before either loads, so a restored split says so.
+// asked by preload.js on every load, a Reload included: which side this page is ('' left or alone, '2' the right half).
+// A restart adds both halves before either loads, so a restored right half knows it is one.
 ipcMain.on('window:getSide', (e) => {
   const win = paneWindow(e.sender);
-  e.returnValue = { side: win?.panes.find((p) => p.webContents === e.sender)?.side || '', split: !!win && win.panes.length > 1 };
+  e.returnValue = { side: win?.panes.find((p) => p.webContents === e.sender)?.side || '' };
+});
+// Cmd+K Work View (renderer/timeline.js): the page asking has stored both halves' places. A new right half reads its
+// own at load; a half already open is told to go to its own.
+ipcMain.handle('window:workView', (e) => {
+  const win = paneWindow(e.sender);
+  if (!win) return;
+  if (win.panes.length < 2) addPane(win, '2');
+  else for (const p of win.panes) if (p.webContents !== e.sender) p.webContents.send('window:toPlace');
 });
 // Cmd+K Swap panes: the halves change sides, and each takes the other's side marker, so a restart keeps them there
 ipcMain.handle('window:swapPanes', (e) => {
@@ -301,6 +311,7 @@ ipcMain.handle('search:list', () => searchList());
 // The renderer sends a view id, never a query: the filter→query vocabulary lives in sdk/query, which classic
 // renderer scripts cannot require, and main already holds the canonical filter for every view.
 ipcMain.handle('search:create', (_e, id, title) => searchCreate(id, title));
+ipcMain.handle('search:myTasks', () => myTasks());
 // The same filter vocabulary in both directions, so the pills that edit a view can edit a saved search. The query
 // lives in a root container of its own, which readNode never sees, so reading takes it off the document directly.
 // Writing replaces it wholesale rather than patching: what the pills are showing is what the document ends up saying.

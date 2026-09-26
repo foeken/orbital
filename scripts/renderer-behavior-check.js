@@ -4151,7 +4151,9 @@ async function runRestorePlaceCheck() {
     const followSummary = (docId) => summaries.push(docId);
     // Answers at once unless a case parks it: a fetch that never settles would hang the check, and an unsettled
     // check empties the event loop and exits silently rather than failing.
-    const tana = { node: () => { fetches++;
+    let asked = 0, added = [];
+    const addSearch = (n) => added.push(n.id);
+    const tana = { myTasks: () => { asked++; return Promise.resolve({ id: 'tana:search:mine', text: 'My Tasks' }); }, node: () => { fetches++;
       if (nodeMode === 'fail') return Promise.reject(new Error('no longer readable'));
       if (nodeMode === 'park') return new Promise((resolve) => { nodeResolve = () => resolve({ title: 'Fetched' }); });
       return Promise.resolve({ title: 'Fetched' }); } };
@@ -4162,6 +4164,8 @@ async function runRestorePlaceCheck() {
     ({
       remember: (z) => { zoom = z; rememberPlace(); return storage.has('place') ? storage.get('place') : null; },
       store: (value) => { storage.set('place', value); savedPlace = readStoredPlace(); }, // left by the last session, read at load
+      firstRight: () => { savedPlace = { myTasks: true }; }, // renderer/edit.js: a first launch's right half
+      myTasks: () => ({ asked, added: [...added] }),
       seedPlace: () => { ${seed[0]} },
       clear: () => { storage.delete('place'); savedPlace = readStoredPlace(); },
       firstPaint: () => { zoom = null; rememberPlace(); }, // what the boot render records: the view it drew, with no zoom
@@ -4218,6 +4222,17 @@ async function runRestorePlaceCheck() {
   api.seedPlace();
   await api.start();
   assert.equal(api.state().docId, null, 'a page deleted since the last session takes its stub down again and the launch lands on the view');
+
+  // A first launch's right half is My Tasks, which has no id until main has found or made it: it asks once connected
+  api.reset(); api.seed([]); api.offline(); api.firstRight();
+  await api.start();
+  assert.deepEqual(plain([api.state().docId, api.myTasks().asked]), [null, 0], 'the right half of a first launch waits for the connection before asking for My Tasks');
+  api.online();
+  await api.start();
+  assert.deepEqual(plain([api.state().docId, api.myTasks()]), ['tana:search:mine', { asked: 1, added: ['tana:search:mine'] }],
+    'then opens the search main found or made, listed in Cmd+K at once');
+  await api.start();
+  assert.equal(api.myTasks().asked, 1, 'once per launch');
 
   api.reset(); api.seed([{ id: 'tana:text:a' }]);
   api.store(JSON.stringify({ docId: 'tana:text:a', nodeId: 'n1', from: 'Search' }));
@@ -5740,10 +5755,9 @@ function runRailChangesCheck() {
 // Stored as the target's own id, so a rename in Tana shows through and a deletion is something the app can see.
 async function runHomeCheck() {
   const homeInit = source.match(/let home = pref\('home', 'library'\);/)[0];
-  const seed = source.match(/if \(!savedPlace && isRealId\(home\) && !IN_SPLIT\) savedPlace = [^\n]*/)[0];
+  const seed = source.match(/if \(!savedPlace\) savedPlace = SIDE [^\n]*/)[0];
   const api = vm.runInNewContext(FAKE_DOM + `
     const SIDE = ''; // renderer/state.js: a page on its own, not the right half of a split
-    const IN_SPLIT = false;
     const stored = {};
     const localStorage = { getItem: (k) => (k in stored ? stored[k] : null), setItem: (k, v) => { stored[k] = v; }, removeItem: (k) => { delete stored[k]; } };
     const prefs = {}; const pref = (k, fb) => (k in prefs ? prefs[k] : fb); const setPref = (k, v) => { prefs[k] = v; stored[k] = v; };
@@ -5827,8 +5841,9 @@ async function runHomeCheck() {
   api.back();
   assert.deepEqual(plain(api.went()), [], 'with a real prior place, Back is the history it always was');
 
-  // A launch with nothing to restore opens Home; an explicit place wins
-  assert.deepEqual(plain(api.seed(null)), { docId: SEARCH, nodeId: null }, 'a launch with no place to restore opens Home');
+  // A first launch (nothing stored) opens on the Work View's Timeline, whatever Home is; an explicit place wins
+  const TIMELINE = { docId: 'orbital:timeline', nodeId: null, title: 'Timeline', icon: 'timeline' };
+  assert.deepEqual(plain(api.seed(null)), TIMELINE, 'a launch with no place to restore opens the Work View: the Timeline in the left half');
   assert.deepEqual(plain(api.seed({ docId: OTHER, nodeId: null })), { docId: OTHER, nodeId: null }, 'and a place to restore is left alone');
   assert.deepEqual(plain(api.seed({})), {}, 'and a view left unzoomed (the Library, Types) reopens as that view, not Home');
 
@@ -5849,7 +5864,7 @@ async function runHomeCheck() {
   assert.equal(api.crumbs(), '[Home] [⌘K]', 'and the bar is the same two buttons');
   // The bar used to be hidden on a view page, which has no location; it now carries the two buttons on every page.
   assert.doesNotMatch(source, /nav\.hidden =/, 'the bar is never hidden: Home and ⌘K on every page, a view page (the Library, Inbox, Tasks) included');
-  assert.equal(api.seed(null), null, 'a Library Home needs no restore target: it is the view a launch already opens');
+  assert.deepEqual(plain(api.seed(null)), TIMELINE, 'a Library Home changes nothing about a first launch either');
   api.view('inbox');
   api.home();
   assert.deepEqual(plain(api.went()), ['view:library'], 'and once it has fallen back, Home is the Library view — no dead saved search is opened');

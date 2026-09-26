@@ -389,12 +389,11 @@ function readStoredPlace() {
 // Read at load, before the first paint: renderOutline records the place it drew, and on boot that is the view with no
 // zoom, which clears the stored place. Reading it here means the first render can no longer erase what we reopen.
 let savedPlace = readStoredPlace();
-// Nothing to restore: a launch opens Home. The Library needs nothing here (it is the view already), and a saved
-// search is opened exactly the way a stored place is — it waits for the connection, is fetched if no view lists it,
-// and silently leaves you on the view if it cannot be read, which is the fallback a deleted Home needs anyway.
-// Half of a split is the exception: it reopens the view it was on, or two halves left on lists would both come
-// back on Home and show the same page.
-if (!savedPlace && isRealId(home) && !IN_SPLIT) savedPlace = { docId: home, nodeId: null };
+// Nothing stored for this half: a first launch, which opens on the Work View (renderer/timeline.js) — the Timeline
+// here, and My Tasks in the right half main opens beside it. Every later render stores a place, so from then on a
+// launch reopens the last one. My Tasks has no id until main has found or made it, so that half asks once connected
+// (restorePlace). The Timeline's id is written out: renderer/timeline.js, which declares it, loads after this file.
+if (!savedPlace) savedPlace = SIDE ? { myTasks: true } : { docId: 'orbital:timeline', nodeId: null, title: 'Timeline', icon: 'timeline' };
 // The page itself, before the first paint. A launch used to draw the view behind the place it was about to reopen
 // and replace it once the connection came up, which read as the Library flashing past on every start; the stored
 // title and glyph are enough for the header, and the rows say Loading… until there is a connection to ask. Only
@@ -405,7 +404,14 @@ if (savedPlace && isPlaceId(savedPlace.docId) && savedPlace.title != null) {
   zoom = { docId: savedPlace.docId, nodeId: savedPlace.nodeId || null, from: savedPlace.from };
 }
 async function restorePlace() {
-  const saved = savedPlace;
+  let saved = savedPlace;
+  if (saved && saved.myTasks) { // a first launch's right half: My Tasks, found or made once there is a connection to ask
+    if (!connected && !zoom) return;
+    savedPlace = null;
+    if (zoom) return; // somewhere else already
+    try { const n = await tana.myTasks(); addSearch(n); saved = { docId: n.id, nodeId: null }; } catch { return; } // the view it is on is the fallback
+    if (zoom) return;
+  }
   // Somewhere else already — a link, a notification — wins. The page seeded above is this same place, so it does not.
   if (!saved || !isPlaceId(saved.docId) || (zoom && zoom.docId !== saved.docId)) { savedPlace = null; return; }
   // Boot draws the cached roots before the sync client exists, so reopening the page now would ask for its children

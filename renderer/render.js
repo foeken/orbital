@@ -393,12 +393,15 @@ function renderOutline() {
   if (tableView() && list.length) { outline.style.setProperty('--cols', Math.max(1, tableKeys().length)); outline.prepend(tableHeadEl()); } // a list page shown as a table (renderer/views.js)
   // "No content" is about a page with nothing on it, so it goes by what was just drawn rather than by the row count:
   // a grouped page with every section folded away has no rows and is not empty — its headings are right there.
+  // Empty is an answer the page has been given: no entry at all means it has not been asked yet, which is where a
+  // launch starts — the page it reopens is drawn before there is a connection to ask with (renderer/edit.js). Until
+  // then it shows the loading animation, as a view does, rather than a line saying so.
+  let asking = false;
   if (parent && !list.length && !outline.children.length) {
+    asking = !(kids.has(parent.docId) && kids.get(parent.docId) !== null);
     const note = document.createElement('div');
-    // Empty is an answer the page has been given: no entry at all means it has not been asked yet, which is where a
-    // launch starts — the page it reopens is drawn before there is a connection to ask with (renderer/edit.js).
-    note.className = 'empty-note'; note.textContent = kids.has(parent.docId) && kids.get(parent.docId) !== null ? 'No content' : 'Loading…';
-    outline.append(note);
+    note.className = 'empty-note'; note.textContent = 'No content';
+    if (!asking) outline.append(note);
   }
   // the page title is the zoom target itself: documents use setTitle, blocks use setText through the same debounce
   const editable = !demoMode && parent && !isAtomic(parent.node) && !isReference(parent.node) && canEditText(parent); // demo text is never typed into, so a mask is never saved
@@ -434,7 +437,7 @@ function renderOutline() {
   const cut = parent ? onTypePage() && (kids.get(zoom.docId) || []).length >= 1000 : truncated.has(view);
   $('filtered').textContent = [hidden ? hidden + ' items filtered out' : '', cut ? 'Showing the first 1,000 results' : ''].filter(Boolean).join(' · ');
   // Cached rows remain usable while auth and sync reconnect; reserve the skeleton for an empty outline.
-  const loading = !parent && !outline.children.length && (authChecking || !rootsLoaded || !filters.has(view) || (authed && !connected));
+  const loading = asking || (!parent && !outline.children.length && (authChecking || !rootsLoaded || !filters.has(view) || (authed && !connected)));
   $('skeleton').classList.toggle('gone', !loading);
   // the same rule as "No content" above: a view with every section folded away has no rows and is not empty
   if (!parent && !list.length && !outline.children.length && !loading && !filterEl.value) { // an empty view says so; a filtered-out list is explained by the count below it

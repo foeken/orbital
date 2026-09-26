@@ -179,6 +179,21 @@ async function searchCreate(id, title) {
   const name = typeof title === 'string' && title.trim() ? title.trim() : searchTitle(id, filter);
   return createDocument(name, { kind: 'search', query });
 }
+// My Tasks, the right half of the Work View (renderer/timeline.js): the saved search of that name if you have one,
+// else one made from the My Tasks preset (VIEW_PRESETS.library) and shown the way the Library shows it. The one made
+// here is remembered for the session, because the graph's index lags a creation and would not list it yet.
+let myTasksAsk = null, myTasksMade = null;
+function myTasks() {
+  myTasksAsk ||= (async () => {
+    const found = (await searchList()).find((n) => /^my tasks$/i.test(String(n.text || n.title || '').trim()));
+    if (found) return found;
+    if (myTasksMade && !deletedNodes.has(myTasksMade.id)) return myTasksMade;
+    const filter = preset('library');
+    return (myTasksMade = await createDocument('My Tasks', { kind: 'search', query: filterToSearchQuery(filter, S.me && S.me.userUri),
+      view: { sortBy: 'updated', groupBy: 'responsibility', display: ['status', 'assigned'], completedWithin: filter.completedWithin } })); // renderer/views.js VIEW_ARRANGEMENT
+  })().finally(() => { myTasksAsk = null; }); // one question at a time: two halves asking at once make one search
+  return myTasksAsk;
+}
 
 async function start() {
   // A second login must not leave the previous stream, its listeners and its subscriptions running: the stale S.client
@@ -422,4 +437,4 @@ async function setMcpHidden(on) {
 // ponytail: on-demand subscriptions last for the S.session; drop the oldest if a long S.session ever holds too many.
 
 
-module.exports = { announceNewInbox, inboxFrom, watchInbox, watchMine, preset, viewFilter, setViewFilter, hiddenRules, mcpHidden, viewRows, inboxCount, search, searchList, searchCreate, searchTitle, start, refresh, doRefresh, listFilter, setHidden, setMcpHidden };
+module.exports = { announceNewInbox, inboxFrom, watchInbox, watchMine, preset, viewFilter, setViewFilter, hiddenRules, mcpHidden, viewRows, inboxCount, search, searchList, searchCreate, searchTitle, myTasks, start, refresh, doRefresh, listFilter, setHidden, setMcpHidden };

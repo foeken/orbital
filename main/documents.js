@@ -324,7 +324,7 @@ async function createDocument(title, opts = {}) {
   // birth because searchChildren reads an empty one as unreadable and refuses to run it.
   if (config.kind === 'search') {
     if (!opts.query || typeof opts.query !== 'object' || Array.isArray(opts.query)) throw new Error('A saved search needs a query');
-    config = {...config, query: opts.query};
+    config = {...config, query: opts.query, view: opts.view}; // view: how its rows are arranged (sdk/node.js writeSearchView)
   } else if (opts.query !== undefined) throw new Error('Only a saved search carries a query');
   if (!Object.hasOwn(KINDS, config.kind)) throw new Error('Unsupported creation kind'); // 'constructor' is a truthy lookup, not a kind
   const id = KINDS[config.kind] + ulid();

@@ -6,7 +6,7 @@ const tana = window.api ? readOnlyInDemo(window.api) : readOnlyInDemo(mockApi())
 // whatever asked for it (a key, Cmd+K, a checkbox, a drop). Reads, navigation and the app's own settings still work.
 const DEMO_WRITES = new Set(['editMeeting', 'setNotify', 'inboxSetRead', 'inboxMarkAll', 'proposalAnswer', 'linkCodexTask', 'discussWith',
   'deleteDocument', 'restoreDocument', 'archiveDocument', 'unarchiveDocument', 'setType', 'setField', 'defineField', 'addField', 'setTypeIcon',
-  'setTypeHue', 'createDocument', 'createSearch', 'setSearchFilter', 'setTitle', 'setDone', 'setState', 'setStateMany', 'toggleCheckbox',
+  'setTypeHue', 'createDocument', 'createSearch', 'myTasks', 'setSearchFilter', 'setTitle', 'setDone', 'setState', 'setStateMany', 'toggleCheckbox',
   'setSharing', 'moveToSpace', 'setAssignees', 'setAssigneesMany', 'setText', 'setCell', 'tableOp', 'setBlockType', 'insertDivider',
   'insertImage', 'insertTable', 'insertAfter', 'insertBefore', 'split', 'join', 'insertChild', 'removeMany', 'moveMany', 'indentMany',
   'outdentMany', 'remove', 'indent', 'outdent', 'move', 'moveTo', 'insertMention', 'pin', 'unpin', 'pinTo', 'unpinFrom', 'setSensitive',
@@ -40,7 +40,6 @@ let home = pref('home', 'library');
 // The right half of a split (main.js addPane, api.side) keeps its own view and place, so a restart reopens both halves
 // where they were; main says so when a page changes sides (onSide in renderer/app.js).
 let SIDE = typeof window !== 'undefined' && window.api && window.api.side ? ':' + window.api.side : '';
-const IN_SPLIT = typeof window !== 'undefined' && !!(window.api && window.api.inSplit);
 let view = localStorage.getItem('view' + SIDE) || 'library'; // active view id; the outline shows one view at a time
 // Views that no longer exist. A stored one would leave the app on a page with no filter, no rows and no way back,
 // so it lands in the Library, which lists every kind those pages used to list one of.

@@ -24,7 +24,7 @@ function ulid(now = Date.now()) {
 // task fields); 'task': plus the open state assigned to byUri; 'meeting': a 'tana:event:' document laid out like a
 // Tana-created event (tana:event:01exampley0000000000000000, without the calendar-provider fields), starting at
 // the next half hour for 30 minutes.
-function initDocument(loro, title, byUri, { kind = 'doc', now = Date.now(), entityTypeUri, ownerUri, query } = {}) {
+function initDocument(loro, title, byUri, { kind = 'doc', now = Date.now(), entityTypeUri, ownerUri, query, view } = {}) {
   if (!['doc', 'task', 'meeting', 'chat', 'search', 'type'].includes(kind)) throw new Error('unknown kind ' + kind);
   if (entityTypeUri !== undefined && (!/^tana:type:[0-9a-z]{26}$/.test(entityTypeUri) || kind === 'chat')) throw new Error('Invalid custom type');
   if (ownerUri !== undefined && !/^tana:space:[0-9a-z]{26}$/.test(ownerUri)) throw new Error('Invalid type home space');
@@ -59,7 +59,7 @@ function initDocument(loro, title, byUri, { kind = 'doc', now = Date.now(), enti
     // The query is written here rather than after creation: searchChildren treats an empty query map as an
     // unreadable document and refuses to run it, so a search created without one would be born broken.
     writeSearchQuery(loro, query);
-    loro.getMap('view');
+    writeSearchView(loro, view);
     return; // no sharedPinDates, no assignedToUris, no outline content
   }
   data.setContainer('sharedPinDates', new LoroList());

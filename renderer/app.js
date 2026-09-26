@@ -46,6 +46,8 @@ window.addEventListener('beforeunload', () => {
 // This page changed sides (swapped, or the right half left alone): it saves its view and place under its new side's
 // keys from now on. A Reload asks main again (api.side), so it reads the same ones.
 if (tana.onSide) tana.onSide((side) => { SIDE = side ? ':' + side : ''; splitGrip.hidden = SIDE !== ':2'; localStorage.setItem('view' + SIDE, view); rememberPlace(); });
+// The Work View, asked for in the other half: it stored this half's place, and this half goes there (renderer/timeline.js)
+if (tana.onToPlace) tana.onToPlace(() => { const place = readStoredPlace(); if (place && isPlaceId(place.docId)) goTo(place.docId); });
 // The line between the halves is dragged from a grip on the right half's left edge; main reads the cursor and moves
 // the line (main.js window:splitDrag), and a double click evens the halves out again.
 const splitGrip = $('splitGrip');

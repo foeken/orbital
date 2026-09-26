@@ -246,6 +246,8 @@ function mockApi() {
       searchQueries[n.id] = { filter: structuredClone(f) }; // the query it was saved with, in the vocabulary the channel deals in
       return info(n);
     },
+    // main/views.js myTasks: the search of that name, made on the Library's filter the first time
+    myTasks: async () => { const n = all.find((d) => d.text === 'My Tasks' && d.id.startsWith('tana:search:')); if (n) return info(n); const made = { id: 'tana:search:mockmytasks', text: 'My Tasks', kind: 'document', hasChildren: true, editable: true, tags: [{ label: 'search', color: 'grey' }] }; created[made.id] = made; content[made.id] = []; all.push(made); searchQueries[made.id] = { filter: structuredClone(filters.library) }; return info(made); },
     // A saved search's stored query as the filter the pills speak, and back. The real channel translates through
     // sdk/query; the mock keeps the filter as it was given, since what it has to match is the channel's shape, not
     // the document's. A sample search that predates any save opens on the Library's filter rather than on nothing.
@@ -495,6 +497,7 @@ function mockApi() {
     splitWindow: async () => {},
     otherPane: async () => {},
     swapPanes: async () => {},
+    workView: async () => {},
     splitDrag: () => {},
     openExternal: async (url) => { if (!/^https?:\/\//i.test(url)) throw new Error('Only http(s) links can be opened'); return url; },
     todayNode: async (offset = 0) => { const d = new Date(); d.setDate(d.getDate() + (typeof offset === 'number' ? offset : 0)); const date = typeof offset === 'string' ? offset : d.toLocaleDateString('sv-SE'); const found = all.find((d2) => d2.text === date); if (found) return found.id; const n = { id: 'mockday' + date, text: date, kind: 'document', hasChildren: true, editable: true, icon: 'doc', tags: [{ label: 'doc', color: 'grey' }] }; content[n.id] = []; all.push(n); views[0].nodes.unshift(n); datePins[n.id] = [date]; emit(null); return n.id; },

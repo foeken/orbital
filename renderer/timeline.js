@@ -16,6 +16,20 @@ function openTimeline(node) {
 function timelineViewRow() {
   return { id: 'timeline', group: 'Views', icon: 'timeline', label: 'Timeline', run: () => goTo(TIMELINE_PAGE) };
 }
+// The Work View (Cmd+K, and where a first launch opens, renderer/edit.js): the Timeline on the left and My Tasks on
+// the right of one window. Both halves' places are stored first; main then opens the right half, which reads its own
+// at load, or sends a half already open to its own (onToPlace, renderer/app.js). This half goes to its own.
+async function openWorkView() {
+  const tasks = await tana.myTasks(); // yours, or made the first time (main/views.js myTasks)
+  addSearch(tasks);
+  const places = { '': { docId: TIMELINE_PAGE, nodeId: null, title: 'Timeline', icon: 'timeline' }, ':2': { docId: tasks.id, nodeId: null, title: tasks.text || tasks.title, icon: tasks.icon } };
+  for (const [side, place] of Object.entries(places)) localStorage.setItem('place' + side, JSON.stringify(place));
+  await tana.workView();
+  await goTo(places[SIDE].docId);
+}
+function workViewRow() {
+  return { id: 'workView', group: 'Views', icon: 'splitPanes', label: 'Work View', hint: 'Timeline and My Tasks', run: () => run(openWorkView) };
+}
 // Sections by local day: Today, Yesterday, then the date. Folded for as long as the window is open, like a group.
 const timelineFolded = new Set();
 const dayKey = (iso) => new Date(iso).toLocaleDateString('sv-SE');
