@@ -20,7 +20,14 @@ Read in this order: this file → [02-data-model.md](02-data-model.md) → [03-a
 | Pins | `pins.js` | Sidebar (collection tree) and date (pin-map) pins, exactly as the web client writes them; items pinned on an event or a space (`pinnedItems`). |
 | Live queries | `livequery.js` | A query the server keeps answering: new, changed and removed rows (nodes, or edges such as backlinks and pins) pushed as they happen, without polling or subscribing each node. |
 | Presence | `presence.js` | Who is in a document right now and where their caret is, from the document's ephemeral channel; and being seen there yourself. |
-| Meetings | `calls.js` | Who is in a meeting *now*, from the live `sessions` of its `tana:call:` document, and who was in it earlier, from `data.sessionLog`; what the call left behind (recordings, presented documents, guests, raised hands, reactions, the write-up); its transcript, segments in time order plus the wrap-up's sections. |
+| Calls | `calls.js` | Who is in a meeting *now*, from the live `sessions` of its `tana:call:` document, and who was in it earlier, from `data.sessionLog`; what the call left behind (recordings, presented documents, guests, raised hands, reactions, the write-up); its transcript, segments in time order plus the wrap-up's sections. |
+| Meeting edits | `events.js` | Time, timezone, location, description and the attendee roster, written as Tana's event wrapper writes them. |
+| Change history | `history.js` | `ChangeSummaryService.ListChanges`: the change summaries Tana's Changes panel shows. Read-only. |
+| Semantic search | `search.js` | `SearchService.SemanticSearch`: the related results beside a text search. |
+| Chats | `chat.js` | A chat's `data.messages` as read-only outline rows. |
+| Dates | `dates.js` | `tana:plaindate:` / `tana:zoneddate:` mention uris: parse, make, label. |
+| Notifications | `inbox.js` | The `tana:user-inbox:` document: items, unread count, read/unread writes, comment reminders. |
+| AI proposals | `proposals.js` | Pending proposals from the chat graph; approve a proposed new document, reject any proposal. |
 | Assets | `assets.js` | Image bytes for a `tana:image:` uri (two-hop CDN fetch); upload a file and seed the `tana:image:` document for it. |
 | Schemas | `proto/descriptors.js` | Protobuf descriptors extracted from Tana's bundle, loaded at runtime (no codegen). |
 
@@ -29,7 +36,7 @@ Read in this order: this file → [02-data-model.md](02-data-model.md) → [03-a
 - `sdk/*` imports only `node:*`, `@bufbuild/protobuf`, `@connectrpc/connect(-web)`, `loro-crdt` and sibling modules. Never Electron, never app files.
 - Auth is injected: every network-facing function takes `getAccessToken({ refresh })`. Who owns the cookie session (the app's `tana-session.js`) is not the SDK's business.
 - The SDK knows Tana's model (documents, states, events, pins), not the app's views. The view presets and their one query builder live in `query.js` so the CLI and the app cannot drift apart; treat that as the boundary's soft edge (docs/VIEWS.md).
-- Everything app-specific (SQLite cache, IPC, custom icons, breadcrumbs) lives in `main.js`.
+- Everything app-specific lives outside `sdk/`: the main process in `main.js` (the process boundary) and `main/` (everything that knows Tana on the app's behalf: caches, IPC handlers, icons, breadcrumbs), and the SQLite cache in `db.js`.
 
 ## Entry point
 
@@ -68,4 +75,22 @@ const sync = new SyncConnection({ transport, orgId, peerId });     // documents,
 
 ## Verification
 
-`npm run check` runs `scripts/sdk-check.js` (offline: proto round-trips, documents, outline ops, undo, query builders, pins, image fetch against fakes, and the full sync lifecycle against an in-process fake `SyncService`) and `scripts/db-check.js`. Live behaviour is exercised with `scripts/platform-cli.js` (see recipes).
+`npm run check` runs the SDK's offline checks: `scripts/sdk-check.js` (proto round-trips, documents, outline ops, undo, query builders, pins, image fetch against fakes, and the full sync lifecycle against an in-process fake `SyncService`), `scripts/livequery-check.js` (the query the server receives, the status rule, the row diff) and `scripts/presence-check.js` (presence and the ephemeral channel commands), beside the app's own checks. Live behaviour is exercised with `scripts/platform-cli.js` (see recipes).
+
+## Extending the SDK
+
+Each kind of addition has one home. Add it there, document it in the module's section of [03-api-reference.md](03-api-reference.md), and cover it in the check named.
+
+| Adding | Where | Check |
+|---|---|---|
+| A unary call on a service we already load | A method on its client class (`graph.js` `GraphClient`, `history.js`, `search.js`) going through `unary(client, service, name, params)`, which does the JSON mapping and the one retry. Normalise omitted repeated fields to `[]` there. | `scripts/sdk-check.js`: a `createRouterTransport` fake serving the method, as the `GraphClient` checks do. |
+| A new service | Its descriptor in `proto/descriptors.js` (a `fileDesc` blob from the bundle, see [05-gotchas.md](05-gotchas.md) Protocol, added to `files` and exported as `<Name>Service`), a small client class in a file of its own shaped like `history.js`, and one line in `index.js` `createTanaClient`. | Add its request to the proto round-trips in `sdk-check.js` (sync and graph are there), plus a fake-transport check of the class. |
+| A new sync command or stream frame | `sync.js` `SyncConnection` only; its wire shape goes in [../PLATFORM-PROTOCOL.md](../PLATFORM-PROTOCOL.md). | The fake `SyncService` lifecycle in `sdk-check.js` (ephemeral channels: `presence-check.js`). |
+| A new document kind that Orbital creates | A `kind` branch in `node.js` `initDocument`, seeding exactly the keys Tana's own client writes (read them from a real document with `platform-cli.js rawdoc`). A kind that can be deleted or moved also goes in `KINDS` in `access.js`. The app side is `KINDS` in main/state.js. | `sdk-check.js` asserts the seeded data map key by key, as it does for the task, meeting, chat, search and type kinds. |
+| Reading or writing a document's data map | A pure function of `(document, …)` in the module that owns that kind: tasks and titles in `node.js`, meetings in `events.js`, calls in `calls.js`, pins in `pins.js`, the inbox in `inbox.js`. Each write is one `document.transact`. | `sdk-check.js` on a local `Document`, with no server needed. |
+| A field type or field rule | `fields.js`: `FIELD_TYPES` and `addField` for the definition, `setFieldText` for the value checks, both using Tana's wording. | `sdk-check.js` field sections. |
+| An outline operation | `content.js`, one `document.transact` per user action so that it is one undo step. Copy and delete containers rather than moving them (Loro cannot move them). A field value is an outline too (`fields.fieldView`), so the op works there for free. | `sdk-check.js`: two `Document`s wired `local-update → applyRemote` must converge. |
+| A live-query key | `LISTS`/`SCALARS` (or `SIDE_*`) in `livequery.js`. Unknown keys throw on purpose. | `livequery-check.js`. |
+| A query or view filter key | `query.js`: `FILTER_KEYS`, `validViewFilter`, `viewParams`, and both saved-search conversions. | `sdk-check.js` query sections (round-trip of `filterToSearchQuery`/`searchQueryToFilter`). |
+
+Sibling requires point one way: `index` wires `transport`, `graph`, `history`, `search`, `sync` and `document`; `history` and `search` lean on `graph`'s `unary`; `sync` on `document`; `access`, `content`, `events`, `livequery` and `query` on `node`; `fields` on `content` and `dates`; `proposals` on `content`. The rest stand alone. A module that takes a `sync` or `graph` argument, rather than requiring one, stays usable with a fake. Keep it that way, so no cycle can form.
