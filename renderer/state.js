@@ -96,7 +96,6 @@ let members = null;
 // sidebar width — revealing them on your own laptop should not unblur them on a shared one.
 let sensitiveIds = null, sensitiveVisible = localStorage.getItem('sensitiveVisible') === '1', sensitiveLoading = null;
 let mcpHidden = false; // the Cmd+K switch: MCP chats out of every list and search; main owns it, read once at boot
-const sensitiveEls = new Map(); // rendered surface -> document ids; lets a toggle update live DOM without rebuilding it
 const taskMetaById = new Map(), taskMetaLoading = new Set(), taskMetaFailed = new Map(); // docId -> { until, wait }: a failed metadata read backs off, it is never given up on
 const META_RETRY_MS = 500, META_RETRY_MAX = 30000;
 const accessById = new Map(), accessLoading = new Set();

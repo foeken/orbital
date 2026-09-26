@@ -293,21 +293,26 @@ function runSensitiveBlurCheck() {
   }
   const api = vm.runInNewContext(`
     let sensitiveIds = null, sensitiveVisible = false;
-    const sensitiveEls = new Map();
     const isRealId = (id) => typeof id === 'string' && id.startsWith('tana:');
     ${functionSource('sensitiveHidden')}
     ${functionSource('blurSensitive')}
     ${functionSource('refreshSensitive')}
-    const makeEl = () => { const classes = new Set(); return { isConnected: true, classes, classList: {
+    // the page: what refreshSensitive can reach is what is on it, found by the ids blurSensitive left on each element
+    const page = new Set();
+    const document = { querySelectorAll: (selector) => (selector === '[data-sensitive]' ? [...page].filter((el) => 'sensitive' in el.dataset) : []) };
+    const makeEl = () => { const classes = new Set(); const el = { dataset: {}, classes, classList: {
       toggle: (name, on) => on ? classes.add(name) : classes.delete(name),
-    } }; };
-    const secret = makeEl(), ordinary = makeEl();
+    } }; page.add(el); return el; };
+    const secret = makeEl(), ordinary = makeEl(), reused = makeEl();
     ({
       mount: () => { blurSensitive(secret, 'tana:text:secret'); blurSensitive(ordinary, 'library', 'tana:text:public'); },
       blurred: () => ({ secret: secret.classes.has('sensitive'), ordinary: ordinary.classes.has('sensitive') }),
       load: (ids) => { sensitiveIds = new Set(ids); },
       show: (on) => { sensitiveVisible = on; refreshSensitive(); },
       refresh: refreshSensitive,
+      detach: () => page.delete(secret),
+      reuse: () => { blurSensitive(reused, 'tana:text:secret'); blurSensitive(reused, 'library'); },
+      reusedBlurred: () => reused.classes.has('sensitive'),
     });
   `);
   api.mount();
@@ -319,6 +324,16 @@ function runSensitiveBlurCheck() {
   assert.deepEqual(plain(api.blurred()), { secret: false, ordinary: false }, 'the session toggle reveals every marked document');
   api.show(false);
   assert.deepEqual(plain(api.blurred()), { secret: true, ordinary: false }, 'the session toggle hides them again');
+  // Nothing is kept beside the page (#262): a row a render threw away is not reached by the next toggle, and an
+  // element drawn again for something else (the page title) drops the ids it carried.
+  api.detach();
+  api.show(true);
+  assert.deepEqual(plain(api.blurred()), { secret: true, ordinary: false }, 'a detached row is not held or touched by a toggle');
+  api.show(false);
+  api.reuse();
+  assert.equal(api.reusedBlurred(), false, 'an element redrawn with no document ids is not blurred');
+  api.refresh();
+  assert.equal(api.reusedBlurred(), false, 'and a refresh does not blur it by the ids it carried before');
 
   // And the choice outlives the session: state.js reads it at load and the toggle writes it back, in localStorage
   // rather than in the preferences that follow you between machines.
