@@ -2704,6 +2704,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   // Built twice: once for the session, and once more seeded with what the first one wrote, which is a relaunch.
   const makeApi = (stored) => vm.runInNewContext(`
     let view = 'tasks', groupPref = {}, sortPref = {};
+    let taskDragging = false; // renderer/drag.js: a task dragged over the pane draws the empty sections too
     ${FAKE_DOM}
     const filters = new Map([['tasks', { types: ['tasks'], states: ['open'], assignee: 'me' }]]);
     const views = [{ id: 'tasks', kind: true }, { id: 'library' }];
@@ -2738,6 +2739,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     ({ pillDefs, groupRows, groupsOf, sortRows, pageRows, SORTS, SORT_KEY, holdRow, releaseHeld, needsCleanup,
        setGroupBy, toggleGroup, groupHeadEl, groupMoreEl, widenFilter, savedPatch: () => savedPatch, filter: () => filters.get(view),
        RESPONSIBILITY,
+       dragging: (on) => { taskDragging = on; },
        asked: () => asked,
        meta: (id, m) => taskMetaById.set(id, m),
        stored: () => ({ ...store }),
@@ -2794,6 +2796,10 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     'Responsibility runs Unassigned, Tracking, Agent, then your own work by its state — My inbox, Mine, My completed, My later — and ends with what somebody else handed you');
   assert.deepEqual(titles(agents, 'responsibility'), [['Agent', ['ta1', 'ta2', 'ta3']]],
     'a node handed to the local agent is in the Agent section and in no other: whoever Tana has it assigned to, and even with no metadata read yet — asking for it by name is enough to list it');
+  api.dragging(true);
+  assert.deepEqual(titles(agents, 'responsibility').map(([title]) => title), ['Unassigned', 'Tracking', 'Agent', 'My inbox', 'Pinned', 'Mine', 'My completed', 'My later'],
+    'while a task is dragged, every section a drop can land in is drawn, empty or not');
+  api.dragging(false);
   const pinnedTask = { id: 'tp1', icon: 'task', tags: [], createdBy: 'sam' };
   assert.deepEqual(titles([...responsibility, pinnedTask], 'responsibility').map(([title, ids]) => title + ':' + ids.join()).slice(2, 5),
     ['My inbox:t8', 'Pinned:tp1', 'Mine:t10'],
@@ -7858,6 +7864,7 @@ function runGroupDropCheck() {
   assert.deepEqual(at('Mine', { assignees: [ME], dates: ['2026-09-30', DAY], agent: true }), [['agent', false], ['unpin', '2026-09-30'], ['unpin', DAY]], 'leaving Pinned or Agent lets go of every pin and the agent');
   assert.deepEqual(at('My completed', { assignees: [ME] }), [['state', 'closed']], 'a status group sets the status');
   assert.deepEqual(at('Pinned', { dates: [DAY], stateType: 'closed' }), [['state', 'open']], 'a completed pinned task dropped on Pinned reopens');
+  assert.deepEqual(at('Pinned', { agent: true }), [['agent', false], ['pin', DAY]], 'and one with the agent leaves it, since Agent comes first');
   assert.deepEqual(at('Tracking', { assignees: [OTHER] }), [['watch', true]], 'Tracking watches a task you handed over');
   assert.equal(at('Tracking', { assignees: [ME] }), null, 'but cannot say who to hand yours to');
   assert.deepEqual(at('Unassigned', { assignees: [ME] }), [['assign', []]], 'Unassigned clears the assignees');

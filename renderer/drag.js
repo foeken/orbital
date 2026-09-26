@@ -142,6 +142,7 @@ function endDrag() {
   dragKey = null;
   showDrop(null);
   showGroupDrop(null);
+  setTaskDragging(false);
 }
 
 // ---- a task dropped on a group (#169) ----
@@ -150,14 +151,14 @@ function endDrag() {
 // as it stands rather than off the group it left, so a drop from the other pane — its own renderer, which only the
 // dataTransfer crosses — decides the same way. Each group adds what it needs and takes away what would keep the
 // task elsewhere, in the order responsibilityOf reads them: Agent, then a day pin. null: it cannot go there.
-const TASK_DRAG_TYPE = 'application/x-orbital-task'; // { id, text, kind, icon, createdBy, stateType }, set for a task
+const TASK_DRAG_TYPE = 'application/x-orbital-task'; // { id, text, kind, icon, createdBy, stateType, writable }, set for a task
 const GROUP_STATES = { 'My inbox': 'proposed', Mine: 'open', 'My completed': 'closed', 'My later': 'not_now' };
 function groupDropWrites(target, t, me, today) {
   const mine = !!me && t.createdBy === me, assigned = t.assignees.includes(me);
-  const clear = [...(t.agent ? [['agent', false]] : []), ...t.dates.map((date) => ['unpin', date])];
+  const unagent = t.agent ? [['agent', false]] : [], clear = [...unagent, ...t.dates.map((date) => ['unpin', date])];
   // on Today already: pinned to it, or an open task pinned to a day before it (main/timeline.js ages completed ones out)
   if (target === 'Today') return t.dates.includes(today) || (t.stateType !== 'closed' && t.dates.some((date) => date < today)) ? [] : [['pin', today]];
-  if (target === 'Pinned') return [...(t.dates.length ? [] : [['pin', today]]), ...(t.stateType === 'closed' ? [['state', 'open']] : [])];
+  if (target === 'Pinned') return [...unagent, ...(t.dates.length ? [] : [['pin', today]]), ...(t.stateType === 'closed' ? [['state', 'open']] : [])];
   if (target === 'Agent') return t.agent ? [] : [['agent', true]];
   if (!mine) return null; // every other group is about tasks you made
   if (target === 'Unassigned') return [...clear, ...(t.assignees.length ? [['assign', []]] : [])];
@@ -180,6 +181,8 @@ function dropOnGroup(task, target) {
     const [meta, pins] = await Promise.all([tana.taskMeta(task.id), tana.pinState(task.id)]);
     const writes = groupDropWrites(target, { ...task, assignees: meta.assignees, watched: meta.watched, dates: pins?.dates || [], agent: codexIds.has(task.id) }, me()?.id, localDate());
     if (!writes) throw new Error('This task can\u2019t go under ' + target);
+    // who has it and its status are the document's, which a read-only task refuses: refused here, before a pin lands
+    if (!task.writable && writes.some(([op]) => op === 'assign' || op === 'state')) throw new Error('This task is read-only: it can\u2019t go under ' + target);
     if (writes.some(([op, on]) => op === 'agent' && on)) return openAgentPrompt(task); // it needs a prompt: nothing is written until it is sent
     for (const [op, arg] of writes) await GROUP_WRITES[op](task.id, arg);
     if (writes.some(([op]) => op === 'agent')) { codexIds.delete(task.id); agentStates.delete(task.id); patchCodex(task.id); }
@@ -209,6 +212,17 @@ function showGroupDrop(target) {
   groupDropEl = el;
   if (el) el.classList.add('drop-into');
 }
+// While a task is dragged over a pane, its empty Responsibility sections are drawn too (groupRows), so there is a
+// heading to drop the first task into. Ended by the drop, the drag's end, or a second without a dragover here —
+// which fires every few hundred ms while the pointer is over the pane, even when it is still.
+let taskDragging = false, taskDragTimer = null;
+function setTaskDragging(on) {
+  clearTimeout(taskDragTimer);
+  if (on) taskDragTimer = setTimeout(() => setTaskDragging(false), 1000);
+  if (taskDragging === on) return;
+  taskDragging = on;
+  if (groupBy() === 'responsibility') renderSoon(true);
+}
 document.addEventListener('dragstart', (e) => {
   const grip = e.target && e.target.closest ? e.target.closest('.bullet[draggable="true"], .line[draggable="true"]') : null;
   const row = grip && grip.closest('.node'), item = row && items.get(row.dataset.key);
@@ -218,7 +232,8 @@ document.addEventListener('dragstart', (e) => {
   e.dataTransfer.effectAllowed = item.node.kind === 'document' ? 'link' : 'move';
   e.dataTransfer.setData(DRAG_TYPE, item.key);
   const n = item.node;
-  if (isTask(n) && isRealId(n.id)) e.dataTransfer.setData(TASK_DRAG_TYPE, JSON.stringify({ id: n.id, text: n.text || '', kind: n.kind, icon: n.icon, createdBy: n.createdBy, stateType: stateOf(n) }));
+  // writable: a task under Today's Tasks is a read-only row whose box says whether the task itself can be edited
+  if (isTask(n) && isRealId(n.id)) e.dataTransfer.setData(TASK_DRAG_TYPE, JSON.stringify({ id: n.id, text: n.text || '', kind: n.kind, icon: n.icon, createdBy: n.createdBy, stateType: stateOf(n), writable: n.editable === true || n.checkable === true }));
   e.dataTransfer.setDragImage(dragLine(row), 8, 10);
   row.classList.add('dragging');
 });
@@ -231,6 +246,7 @@ document.addEventListener('dragover', (e) => {
   }
   const task = e.dataTransfer.types.includes(TASK_DRAG_TYPE); // a task, maybe from the other pane, where dragKey is not set
   if (!dragKey && !task) return; // somebody else's drag — text out of a row, a file onto the window — is left alone
+  if (task) setTaskDragging(true);
   // ponytail: every dragover measures every row on screen; a page of a few hundred rows is one cheap layout read.
   // If a very long page ever drags heavily, take the rects at dragstart and add the scroll delta.
   const plan = dragKey ? dropPlan(e.clientX, e.clientY) : null, group = !plan && task ? groupAt(e.clientX, e.clientY) : null;

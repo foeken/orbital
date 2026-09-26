@@ -157,6 +157,8 @@ function groupKey(n, by) {
 // the "nothing here" group last. Only groups with rows are returned.
 function groupRows(list, by) {
   const buckets = new Map();
+  // a task being dragged needs somewhere to land, empty sections included (renderer/drag.js setTaskDragging)
+  if (by === 'responsibility' && taskDragging) for (const k of RESPONSIBILITY) if (k !== 'Assigned by others') buckets.set(k, []);
   // no key means this grouping has no section for the row (Responsibility, above): it is left out, and since a
   // grouped page takes its flat list from the sections, it leaves the keyboard order too.
   for (const n of list) { const k = groupKey(n, by); if (!k) continue; if (!buckets.has(k)) buckets.set(k, []); buckets.get(k).push(n); }

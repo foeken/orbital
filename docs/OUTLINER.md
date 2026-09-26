@@ -812,13 +812,17 @@ section needs and takes away what would keep the task elsewhere, in the order `r
 | Tracking | Off the agent, every day pin removed, watched | unless you made it and it is someone else's |
 | Agent | the Assign to Agent prompt; nothing until it is sent | — |
 | My inbox, Mine, My completed, My later | Off the agent, every day pin removed, you as the only assignee, the status; a watch on a task you were not assigned is forgotten | a task you did not make |
-| Pinned | Pinned to today unless pinned to a day already; a completed task reopens | — |
+| Pinned | Off the agent, pinned to today unless pinned to a day already; a completed task reopens | — |
 | Assigned by others | — | always: it is about who made it |
 | Today's Tasks | Pinned to today unless it is on Today already | anything but a task |
 
 So watched to Pinned pins it and keeps the watch, and watched to Mine takes it over and stops watching. A drop in
 its own section writes nothing, and a drop a little to the right, inside a task, is still a reference to it. The
 tasks under Today's Tasks show a box where the marker would be, so their whole read-only line is what is grabbed.
+A task you cannot edit is refused before anything is written wherever the drop would change its assignees or
+status, so a refused drop leaves no pin behind. While a task is dragged over a pane grouped by Responsibility, its
+empty sections are drawn as well (`setTaskDragging`, cleared by the drop, the drag's end, or a second without a
+dragover), so the first task can land in one.
 
 ## Export to PDF
 
