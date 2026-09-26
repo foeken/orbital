@@ -56,7 +56,8 @@ Pick the smallest that fits:
 - **A new preset of the one view**: an entry in `VIEWS` (main/state.js: id, title, icon) and in `VIEW_PRESETS`
   (sdk/query.js), its id in `VIEW_ORDER` (renderer/palette.js), and optionally a starting arrangement in
   `VIEW_ARRANGEMENT` (renderer/views.js). The cache, the pills, the live refresh and the Cmd+K row come with it.
-  Update docs/VIEWS.md §2.
+  renderer/mock.js hard-codes its own `views` and `filters`, so add the view and its preset there too, or the page
+  is missing when the UI runs without main. Update docs/VIEWS.md §2.
 - **An app page** — rows that are not a Tana node's children, like Notifications, Proposals and the Timeline:
   1. **main/<page>.js** exporting `PAGE = 'orbital:<page>'` and `rows()`, which answers `Node[]` (read-only rows,
      built with `graphRow`/`toNode` from main/rows.js when they are documents).
@@ -69,7 +70,9 @@ Pick the smallest that fits:
   5. **Live** — main sends a channel when the page's source changes; the renderer reloads the page whenever it
      holds cached rows for it (`if (kids.get(PAGE)) reload(PAGE)`, as renderer/inbox.js does), on screen or not,
      because a later `goTo(PAGE)` reuses those rows without asking main again.
-  6. **index.html** for the new renderer file (below), and docs/VIEWS.md §9.
+  6. **renderer/mock.js** — rows for `PAGE` in its `content` map and mock versions of the page's own api calls and
+     events, as it has for Notifications, Proposals and the Timeline; without them the page is blank with no main.
+  7. **index.html** for the new renderer file (below), and docs/VIEWS.md §9.
 
 ## A palette row or a built-in key
 
@@ -96,7 +99,8 @@ kbd? }`.
   outline's own keydown answers to must compare against `hotkeyFor(id)` and `preventDefault`, so the row does not
   run twice.
 - **A palette page** (a second level): an `openXPalette()` that calls `showPage(mode, placeholder)`, sets its own
-  context, starts its read and calls `renderPalette()`; a `xRows(q)` that `renderPalette` uses for that `palMode` (or
+  context, starts its read, calls `renderPalette()` and ends with `palInput.focus()` (`showPage` does not move focus,
+  and a recorded key opens the page with the palette closed); a `xRows(q)` that `renderPalette` uses for that `palMode` (or
   a table of pages like `MEETING_PAGES` in renderer/meeting.js); and the mode in `SECOND_LEVEL` in `backPalette`, so
   Escape steps back to the command page.
 - Document the row and its key in docs/OUTLINER.md (Palette), and add a harness in
