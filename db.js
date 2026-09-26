@@ -9,6 +9,12 @@ const DESC = new Set(['inbox', 'tasks', 'library', 'chats']);
 function open(path) {
   db = new DatabaseSync(path);
   generation++;
+  // WAL: a small write is one append instead of a journal file created, synced and deleted (0.5 -> under 0.1 ms).
+  // NORMAL is safe with WAL: a crash loses nothing, a power cut at most the last writes to a cache and a mirror of
+  // settings Tana also holds. Another process holding the file (scripts/codex-host.js) can keep it from switching;
+  // then it stays in the mode it has until the next open.
+  try { db.exec('PRAGMA journal_mode = WAL'); } catch { /* busy: the old journal still works */ }
+  db.exec('PRAGMA synchronous = NORMAL');
   db.exec('DROP TABLE IF EXISTS tasks'); // pre-sections schema; the cache is rebuilt on the next refresh
   // One row per (view, document): the views overlap heavily — a task is in Inbox, Tasks and Library at once — and
   // keying on the id alone let whichever view fetched last steal the row out of the others' caches.

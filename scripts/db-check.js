@@ -10,6 +10,8 @@ const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tana-db-')), 'task
 new DatabaseSync(file).exec('CREATE TABLE tasks (id TEXT PRIMARY KEY, title TEXT NOT NULL, done INTEGER NOT NULL DEFAULT 0, updatedAt TEXT NOT NULL)');
 db.open(file);
 db.open(file); // idempotent
+// WAL: a setting write at startup is an append, not a rollback journal created, synced and deleted each time.
+assert.strictEqual(new DatabaseSync(file).prepare('PRAGMA journal_mode').get().journal_mode, 'wal', 'the database is in WAL mode');
 assert.strictEqual(new DatabaseSync(file).prepare("SELECT name FROM sqlite_master WHERE name = 'tasks'").get(), undefined, 'old table dropped');
 
 db.replaceSection('tasks', [

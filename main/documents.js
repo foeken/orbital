@@ -573,7 +573,9 @@ async function followSummary(id, title, wait = () => pause(SUMMARY_EVERY_MS)) {
 // while the app was closed used to be lost outright — which is how a completion at 09:01 goes unmentioned by an app
 // started at 09:27. Pruned to what is still subscribed on every write, so it cannot grow into a history of
 // everything ever opened.
-// ponytail: one small write per node at launch and per move after that; batch it if it ever shows up in a profile.
+// ponytail: one small write per node at launch and per move after that: 54 at a launch, 3-4 ms in all under WAL
+// (db.js, measured 2026-09-27). Bootstraps arrive one per tick, so batching per tick saved nothing; batch on a timer
+// if the map grows.
 let seenPairs = null;
 let caughtUp = 0; // catch-up banners spent this launch
 const CATCH_UP_MAX = 3; // coming back to a busy week is not a reason to bury the screen
