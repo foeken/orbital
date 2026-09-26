@@ -19,7 +19,7 @@ function applySharing(doc, selection) {
     } catch (e) {
       if (typeof showError === 'function') showError(e);
       if (/reload|access changed/i.test(String(e.message || e))) {
-        accessById.delete(doc.id); taskMetaById.delete(doc.id); notifyById.delete(doc.id); palMode = 'visibility'; loadAccess(doc.id); loadTaskMeta(doc.id); renderPalette();
+        accessById.delete(doc.id); taskMetaById.delete(doc.id); notifyById.delete(doc.id); openVisibilityPalette(doc);
       }
     }
   });
@@ -40,7 +40,7 @@ function visibilityRows(q, doc = palDoc) {
   ].filter(Boolean).filter((row) => fuzzyMatch(row.label, q));
 }
 function openVisibilityPalette(doc) {
-  palDoc = doc; showPage('visibility', 'Choose visibility'); loadAccess(doc.id); loadTaskMeta(doc.id); renderPalette(); palInput.focus();
+  palDoc = doc; loadAccess(doc.id); loadTaskMeta(doc.id); openPage('visibility', 'Choose visibility', { rows: (q) => visibilityRows(q) });
 }
 // A document that is already shared with selected people opens at that list: the mode is settled, the people are what
 // changes. Anything else (and a doc whose participants or sharing rules say the list cannot be edited) starts at the
@@ -58,8 +58,8 @@ function openVisibilityPeople(doc) {
   visibilityPeople = new Set(meta.participants.map((p) => p.uri).filter((id) => id && id !== me()?.id));
   visibilityRoles = new Map(meta.participants.map((p) => [p.uri, p.role]).filter(([id]) => id && id !== me()?.id));
   palDoc = doc; // the page's rows and Apply read it (visibilityPeopleRows)
-  showPage('visibilityPeople', 'Select people'); // shows the palette: a key recorded on Selected people … arrives with it closed
-  loadMembers(); renderPalette(); palInput.focus();
+  loadMembers(); // the page shows the palette: a key recorded on Selected people … arrives with it closed
+  openPage('visibilityPeople', 'Select people', { rows: visibilityPeopleRows, back: () => openVisibilityPalette(palDoc) });
 }
 function visibilityPeopleRows(q) {
   if (!palDoc) return [];

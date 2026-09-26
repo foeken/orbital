@@ -58,10 +58,13 @@ const withShims = (src) => {
   if (/\bMEETING_PAGES\b/.test(src) && !/const MEETING_PAGES =/.test(src)) src = 'globalThis.MEETING_PAGES ??= {};\n' + src;
   // Every palette page opens through showPage (renderer/palette.js, #275): the real one, over whatever of the palette's
   // state the harness declares (its own lets win; the rest start empty here).
-  if (/\bshowPage\(/.test(src) && !/function showPage\(/.test(src)) {
-    src = 'globalThis.clearTimeout ??= () => {}; globalThis.palTimer ??= null; globalThis.palSeq ??= 0; globalThis.palEnter ??= null; globalThis.palBusy ??= false; globalThis.palRows ??= []; globalThis.palIndex ??= 0; globalThis.palMode ??= "cmd";'
-      + ' globalThis.promptEditor ??= () => {}; globalThis.palette ??= { hidden: true }; globalThis.palInput ??= { value: "", placeholder: "", focus() {} };\n'
-      + 'globalThis.showPage ??= ' + source.match(/^function showPage\(.*?^\}/ms)[0] + ';\n' + src;
+  // A page carries its rows and back step (palPage), and openPage is showPage drawn and focused.
+  if (/\b(showPage|openPage|backPalette)\(/.test(src) && !/function showPage\(/.test(src)) {
+    src = 'globalThis.clearTimeout ??= () => {}; globalThis.palTimer ??= null; globalThis.palSeq ??= 0; globalThis.palEnter ??= null; globalThis.palBusy ??= false; globalThis.palRows ??= []; globalThis.palIndex ??= 0; globalThis.palMode ??= "cmd"; globalThis.palPage ??= {};'
+      + ' globalThis.promptEditor ??= () => {}; globalThis.palette ??= { hidden: true }; globalThis.palInput ??= { value: "", placeholder: "", focus() {} }; globalThis.renderPalette ??= () => {};\n'
+      + 'globalThis.showPage ??= ' + source.match(/^function showPage\(.*?^\}/ms)[0] + ';\n'
+      + 'globalThis.openPage ??= ' + source.match(/^function openPage\(.*$/m)[0] + ';\n'
+      + 'globalThis.BACK_TO_COMMANDS ??= () => openCommandPalette();\n' + src;
   }
   // the palette's own lookups run only while it is shown (#274): a harness that never declares it has it open
   if (/\bpalette\.hidden\b/.test(src)) src = 'globalThis.palette ??= { hidden: false };\n' + src;
@@ -1334,13 +1337,16 @@ async function runVisibilityPickerCheck() {
     const openCommandPalette = () => { palMode = 'cmd'; };
     const openVisibilityPalette = () => { palMode = 'visibility'; };
     const closePalette = () => { closed = true; };
+    // the two pages as their openers define them (renderer/access.js): where Escape goes is theirs to say
+    const PAGES = { visibilityPeople: ${source.match(/openPage\('visibilityPeople', 'Select people', (\{[^\n]*\})\);/)[1]}, visibility: ${source.match(/openPage\('visibility', 'Choose visibility', (\{[^\n]*\})\);/)[1]} };
+    let palPage = PAGES.visibilityPeople;
     ${functionSource('backPalette')}
     ${applySharing}
     ${visibilityPeopleRows}
     ({
       rows: () => visibilityPeopleRows(''),
       back: () => backPalette(),
-      mode: (next) => { palMode = next; closed = false; },
+      mode: (next) => { palMode = next; palPage = PAGES[next]; closed = false; },
       state: () => ({ calls, selected: [...visibilityPeople], palMode, closed }),
     });
   `);
@@ -2291,7 +2297,7 @@ function runPaletteSkipCheck() {
   const page = vm.runInNewContext(`
     let palTimer = 7, palSeq = 3, palEnter = 'pick', palBusy = true, palRows = [{}], palIndex = 2, palMode = 'setIcon', pillCtx = 'x';
     const cleared = [], clearTimeout = (id) => cleared.push(id), promptEditor = () => {}, palette = { hidden: false }, palInput = { value: 'st', placeholder: '', focus() {} };
-    const refreshChatGPTStatus = () => {}, renderPalette = () => {};
+    const refreshChatGPTStatus = () => {}, renderPalette = () => {}, paletteRows = () => [];
     ${functionSource('showPage')}
     ${functionSource('openCommandPalette')}
     openCommandPalette();
@@ -3402,7 +3408,7 @@ async function runClosedPaletteKeysCheck() {
     const filterEl = {}, zoomFactor = 1, BASE_ZOOM = 1, previewMoveToSpace = () => {}, taskMetaById = new Map();
     // Selected people … is greyed until the participants are in, as the real page is (renderer/access.js)
     const visibilityRows = (q, doc = palDoc) => [{ label: 'Selected people …', disabled: !taskMetaById.has(doc.id), run: () => { writes.push(['people', doc.id]); openVisibilityPeople(doc); } }];
-    let visibilityPeople = null, visibilityRoles = null; const me = () => null, loadMembers = () => {};
+    let visibilityPeople = null, visibilityRoles = null; const me = () => null, loadMembers = () => {}, visibilityPeopleRows = () => [];
     const moveTargets = async (doc) => [{ label: 'Studio', run: () => writes.push(['move', doc.id, 'Studio']) }];
     const renderPalette = () => {}, closePalette = () => {}, promptEditor = () => {}, loadPinned = () => {};
     const groupBy = () => 'none', holdRow = () => {}, isTask = () => true;
@@ -3526,7 +3532,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     const closePalette = () => {}; // the real runRow closes the palette before it runs a row
     const setViewF = (patch) => { filters.set(view, { ...filters.get(view), ...patch }); render(); };
     const palInput = { value: '', placeholder: '', focus() {} };
-    const renderPalette = () => { renders++; };
+    const renderPalette = () => { renders++; }, paletteRows = () => [];
     ${definitions}
     ${functionSource('pillRows')}
     ${functionSource('pillRowsFor')}
@@ -3601,7 +3607,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   `);
   assert.deepEqual(plain(pillArrows.right(true)), { caret: null, focused: 'next pill' }, 'Right moves along the pills');
   assert.deepEqual(plain(pillArrows.right(false)), { caret: ['first node', 0], focused: null }, 'and from the last pill to the first node');
-  assert.match(functionSource('backPalette'), /palMode === 'pill'[\s\S]*openCommandPalette\(\)/, 'Escape from a pill returns one palette level');
+  assert.match(functionSource('openPillPalette'), /openPage\('pill', 'Choose ' \+ id, \{ rows: pillRows, back: BACK_TO_COMMANDS \}\)/, 'Escape from a pill returns one palette level');
 }
 // Opening a node has to leave a row to type in, without creating anything in Tana until it is typed into.
 function runDraftTailCheck() {
@@ -3872,8 +3878,8 @@ async function runHiddenItemsCheck() {
     ${sourceBetween('const HIDDEN_GROUP =', 'function openHiddenPalette')}
     ${functionSource('openHiddenPalette')}
     ({
-      rows: (list, q) => { hiddenList = list; palInput.value = q; return hiddenRows(q); },
-      runRow: async (list, q, index) => { hiddenList = list; stored = [...list]; palInput.value = q; const row = hiddenRows(q)[index]; calls.length = 0; await row.run(); return { calls: [...calls], list: hiddenList, typed: palInput.value }; },
+      rows: (list, q) => { hiddenList = list; palInput.value = q; return hiddenRows(q.toLowerCase(), q); },
+      runRow: async (list, q, index) => { hiddenList = list; stored = [...list]; palInput.value = q; const row = hiddenRows(q.toLowerCase(), q)[index]; calls.length = 0; await row.run(); return { calls: [...calls], list: hiddenList, typed: palInput.value }; },
       open: async (list) => { stored = [...list]; calls.length = 0; openHiddenPalette(); await new Promise(setImmediate); return { palMode, placeholder: palInput.placeholder, hidden: palette.hidden, calls: [...calls], list: hiddenList }; },
     });
   `, { setImmediate });
@@ -7043,9 +7049,9 @@ async function runDiscussWithCheck() {
     ({ row: () => { const r = paletteRows('').find((x) => x.id === 'discussWith'); return r && { label: r.label, hint: r.hint, icon: r.icon, keepOpen: r.keepOpen }; },
        open: () => paletteRows('').find((x) => x.id === 'discussWith').run(),
        node: (next) => { palDoc = next; },
-       page: (q) => { palInput.value = q || ''; return discussRows(q || '').map((r) => [r.label, r.hint || '', r.icon || '', !!r.disabled]); },
-       landing: (q) => { palInput.value = q || ''; return discussRows(q || '').map((r) => !!r.arrive); },
-       choose: (q, i = 0) => { palInput.value = q || ''; discussRows(q || '')[i].run(); },
+       page: (q) => { palInput.value = q || ''; return discussRows((q || '').toLowerCase(), q || '').map((r) => [r.label, r.hint || '', r.icon || '', !!r.disabled]); },
+       landing: (q) => { palInput.value = q || ''; return discussRows((q || '').toLowerCase(), q || '').map((r) => !!r.arrive); },
+       choose: (q, i = 0) => { palInput.value = q || ''; discussRows((q || '').toLowerCase(), q || '')[i].run(); },
        fails: (message) => { writeFails = message || null; },
        suggest: async (value, fails) => { suggestFails = fails || null; settle.value = value; settle(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); },
        asked: () => [...asked],
@@ -8134,8 +8140,8 @@ async function runMeetingEditCheck() {
       asked: () => JSON.parse(JSON.stringify(calls)),
       parse: (text) => { const t = parseMeetingTime(text, start, 18e5, new Date(2026, 8, 22, 12)); return t && [new Date(t.start).toString().slice(0, 21), (t.end - t.start) / 6e4]; },
       open: async (mode) => { openMeetingPage(mode, 'x'); await tick(); await tick(); return palMode; },
-      rows: (typed) => MEETING_PAGES[palMode](typed).map((r) => [r.label, r.hint || '', !!r.disabled]),
-      press: async (typed, i) => { calls.length = 0; closed = 0; palette.hidden = false; const r = MEETING_PAGES[palMode](typed)[i]; if (!r.keepOpen) closePalette(); r.run(); await tick(); await tick(); return { calls: JSON.parse(JSON.stringify(calls)), closed }; },
+      rows: (typed) => palPage.rows(typed.toLowerCase(), typed).map((r) => [r.label, r.hint || '', !!r.disabled]),
+      press: async (typed, i) => { calls.length = 0; closed = 0; palette.hidden = false; const r = palPage.rows(typed.toLowerCase(), typed)[i]; if (!r.keepOpen) closePalette(); r.run(); await tick(); await tick(); return { calls: JSON.parse(JSON.stringify(calls)), closed }; },
     });
   `, { setImmediate, Date, Promise });
 
@@ -8183,7 +8189,7 @@ async function runMeetingEditCheck() {
   assert.deepEqual(plain(api.rows('')).map((r) => r[0]), ['Dana', 'Tomas'], 'and whoever was just added leaves the list');
 
   assert.match(source, /rows\.push\(\.\.\.meetingRows\(palDoc, docGroup\)\)/, 'Cmd+K lists the rows');
-  assert.match(source, /else if \(Object\.hasOwn\(MEETING_PAGES, palMode\)\) palRows = MEETING_PAGES\[palMode\]\(q\);/, 'renders the pages');
+  assert.match(source, /if \(palPage\.rows\) palRows = palPage\.rows\(q\.toLowerCase\(\), q\);/, 'renders the pages');
   assert.match(source, /meetingCtx = null; loadPins\(\)/, 'and asks again each time it opens');
   console.log('ok  meeting edits: rows only when editable, typed time and place, attendee suggestions and members');
 }

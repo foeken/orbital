@@ -100,8 +100,8 @@ function editPinRows(q) {
   return rows;
 }
 function openPinsPalette(doc) {
-  palDoc = doc; showPage('pins', 'Edit pins');
-  pinInfo = null; loadPins(); renderPalette(); palInput.focus();
+  palDoc = doc; pinInfo = null; loadPins();
+  openPage('pins', 'Edit pins', { rows: editPinRows, back: BACK_TO_COMMANDS });
 }
 // ---- Pin to date: a day typed in words, read by a fixed set of rules rather than a model ----
 // The page shows the day it read before Enter, so what gets pinned is always what was on screen, with no key, no
@@ -141,7 +141,7 @@ function parseDay(text, now = new Date()) {
 }
 const PIN_DATE_GROUP = 'Pin to date';
 let pinDateDoc = null;
-function pinDateRows(typed) {
+function pinDateRows(q, typed) {
   const doc = pinDateDoc, words = (typed || '').trim(), date = parseDay(words);
   if (!doc) return [];
   if (!words) return [{ group: PIN_DATE_GROUP, icon: 'pinDate', label: 'Type a day: sunday, in 3 days, 12 oct, 12/10', disabled: true }];
@@ -153,8 +153,7 @@ function pinDateRows(typed) {
     run: () => { if (typeof holdDatePin === 'function') holdDatePin(doc); return run(async () => { await tana.pin(doc.id, 'today', date); loadPins(); }); } }];
 }
 function openPinDatePalette(doc) {
-  pinDateDoc = doc; showPage('pinDate', 'Pin to date\u2026');
-  renderPalette(); palInput.focus();
+  pinDateDoc = doc; openPage('pinDate', 'Pin to date\u2026', { rows: pinDateRows, back: BACK_TO_COMMANDS });
 }
 function invalidatePinCaches(id) {
   if (pinInfo && pinInfo.docId === id) pinInfo = null;

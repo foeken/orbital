@@ -6,8 +6,7 @@
 // ---- ChatGPT sign-in and the OpenAI API key ----
 let chatgptAuth = null, chatgptAuthLoading = null;
 function openOpenAIKeyPalette() {
-  showPage('openaiKey', 'Paste OpenAI API key'); palInput.type = 'password';
-  renderPalette(); palInput.focus();
+  openPage('openaiKey', 'Paste OpenAI API key', { rows: openAIKeyRows, back: BACK_TO_COMMANDS }); palInput.type = 'password';
 }
 function refreshChatGPTStatus() {
   if (!tana.chatgptStatus || chatgptAuthLoading) return;
@@ -15,12 +14,11 @@ function refreshChatGPTStatus() {
     .then(() => { chatgptAuthLoading = null; if (!palette.hidden && (palMode === 'cmd' || palMode === 'chatgpt')) renderPalette(); });
 }
 function startChatGPTLogin() {
-  showPage('chatgpt', 'ChatGPT account');
-  renderPalette(); palInput.focus();
+  openPage('chatgpt', 'ChatGPT account', { rows: chatgptRows, back: BACK_TO_COMMANDS });
   run(async () => {
     const result = await tana.chatgptLogin();
     if (result.userCode) chatgptAuth = { ...(chatgptAuth || {}), available: true, signedIn: false, loggingIn: true, userCode: result.userCode, error: null };
-    else { chatgptAuth = result; palMode = 'cmd'; }
+    else { chatgptAuth = result; if (palMode === 'chatgpt' && !palette.hidden) return openCommandPalette(); }
     renderPalette();
   });
 }
@@ -63,10 +61,10 @@ function openAIKeyRows() {
 const HOSTS_GROUP = 'Codex hosts · type "Name ssh-address /path/to/codex" to add one, ↩ on a host removes it';
 let hostList = null; // null while the list is in flight
 const hostsApply = (call) => run(async () => { hostList = await call(); agentHosts = hostList; renderPalette(); });
-function hostRows(q) {
+function hostRows(q, typed) {
   const rows = (hostList || []).filter((h) => h.id !== 'local').map((h) => ({ group: HOSTS_GROUP, icon: 'host', label: h.title,
     hint: '↩ removes it · its tasks stay', keepOpen: true, run: () => hostsApply(() => tana.removeCodexHost(h.id)) }));
-  const parts = q.trim().split(/\s+/);
+  const parts = typed.trim().split(/\s+/);
   if (parts.length >= 3) {
     const [title, ssh, bin] = [parts.slice(0, parts.length - 2).join(' '), parts[parts.length - 2], parts[parts.length - 1]];
     rows.unshift({ group: HOSTS_GROUP, icon: 'createNew', label: 'Add "' + title + '" on ' + ssh, hint: bin, keepOpen: true,
@@ -76,8 +74,7 @@ function hostRows(q) {
   return rows;
 }
 function openHostsPalette() {
-  showPage('hosts', 'Name  ssh-address  /path/to/codex');
-  hostList = null; renderPalette(); palInput.focus();
+  hostList = null; openPage('hosts', 'Name  ssh-address  /path/to/codex', { rows: hostRows, back: BACK_TO_COMMANDS });
   hostsApply(() => tana.codexHosts());
 }
 // ---- linking a node to a Codex task that already exists (#143) ----
@@ -85,9 +82,9 @@ function openHostsPalette() {
 // again and stores it as a task on this machine; the badge and Go to Agent task then work as for any assignment.
 const CODEX_LINK = /^(?:codex:\/\/threads\/)?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/?$/i;
 let agentLinkDoc = null; // the node the pasted link is for, while this page is up
-function agentLinkRows(q) {
-  const group = 'Link Agent task · paste a codex://threads/… link', m = q.trim().match(CODEX_LINK), doc = agentLinkDoc;
-  if (!m) return [{ group, icon: 'robot', label: q.trim() ? 'Not a Codex task link' : 'Paste the task link from Codex', disabled: true }];
+function agentLinkRows(q, typed) {
+  const group = 'Link Agent task · paste a codex://threads/… link', m = typed.trim().match(CODEX_LINK), doc = agentLinkDoc;
+  if (!m) return [{ group, icon: 'robot', label: typed.trim() ? 'Not a Codex task link' : 'Paste the task link from Codex', disabled: true }];
   return [{ group, icon: 'robot', label: 'Link to Codex task ' + m[1].slice(0, 8) + '…', keepOpen: true, run: () => run(async () => {
     await tana.linkCodexTask(doc.id, m[1]);
     codexIds.add(doc.id); agentTaskHosts.set(doc.id, 'local');
@@ -95,8 +92,7 @@ function agentLinkRows(q) {
   }) }];
 }
 function openAgentLink(doc) {
-  showPage('agentLink', 'codex://threads/…'); agentLinkDoc = doc;
-  renderPalette(); palInput.focus();
+  agentLinkDoc = doc; openPage('agentLink', 'codex://threads/…', { rows: agentLinkRows, back: BACK_TO_COMMANDS });
 }
 // ---- assigning a node to the local agent: the prompt page, one level down in Cmd+K ----
 // "Assign to Agent" does not assign: it advances to this page, where the palette's single-line field is swapped for a
@@ -112,7 +108,9 @@ function promptEditor(on) {
   if (!on) { palText.value = ''; agentCtx = null; palInput.type = 'text'; }
 }
 function openAgentPrompt(doc) {
-  showPage('agentPrompt', ''); // the query that found "Assign to Agent" is not a query here, and would bold letters in the row
+  // No back: Escape cancels the whole thing rather than stepping back a level. The page was opened to answer one
+  // question, and abandoning that question is abandoning the assignment. Nothing is written either way.
+  showPage('agentPrompt', '', { rows: agentPromptRows, typed: true }); // the query that found "Assign to Agent" is not a query here, and would bold letters in the row
   promptEditor(true); // shows the editor, empty; leaving the page clears it and the context with it
   agentCtx = { id: doc.id, doc }; // the row itself, so the assignment can hold it where it sits
   agentModel = ''; // every assignment chooses again; Codex's own default until it does
