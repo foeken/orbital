@@ -8,8 +8,6 @@
 // asked for.
 // One colour at a few strengths (styles.css .skeleton canvas), so it follows the theme. Nothing is drawn for the
 // first WAIT, so a quick load never blinks it; one still, built frame where motion is not welcome.
-// Cmd+K "Preview loading animation" shows it over the page until Esc, which builds the rows in as a load would.
-let previewLoading = () => {};
 (() => {
   const box = document.getElementById('skeleton'), canvas = box && box.querySelector && box.querySelector('canvas');
   if (!canvas || !canvas.getContext) return;
@@ -27,7 +25,7 @@ let previewLoading = () => {};
     const c = canvas.getBoundingClientRect();
     const at = (el, dx, dy) => { const r = el && el.getBoundingClientRect(); return r && r.width + r.height ? [Math.round(r.left - c.left + dx), Math.round(r.top - c.top + dy)] : null; };
     const [cx, cy] = at(document.getElementById('crumbs'), 0, 4) || [32, 52], [tx, ty] = at(document.getElementById('title'), 0, 9) || [32, 84];
-    const tail = box.classList.contains('tail') && !previewing(), last = tail && document.getElementById('outline').lastElementChild;
+    const tail = box.classList.contains('tail'), last = tail && document.getElementById('outline').lastElementChild;
     let [sx, sy] = at(document.querySelector('.scroll'), 16, 4) || [16, 140];
     if (last) sy = Math.round(last.getBoundingClientRect().bottom - c.top + 16);
     const k = [w, h, cx, cy, tx, ty, sx, sy, tail].join();
@@ -107,11 +105,10 @@ let previewLoading = () => {};
       .forEach((el, i) => play(el, [{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { duration: MOTION.slow, easing: MOTION.out, delay: i * 35 }));
     for (const el of rows) risen.add(keyOf(el));
   }
-  const previewing = () => document.body.classList.contains('loading-preview');
   const sync = () => {
-    const now = !box.classList.contains('gone') || previewing();
+    const now = !box.classList.contains('gone');
     if (on && !now) buildIn();
-    if (now && !on) { t0 = 0; if (previewing()) risen.clear(); } // a preview ends in the build-in a load does
+    if (now && !on) t0 = 0;
     on = now;
     if (on && !frame) frame = requestAnimationFrame(draw);
   };
@@ -121,10 +118,6 @@ let previewLoading = () => {};
     new MutationObserver(() => { if (on && box.classList.contains('tail')) buildIn(); }).observe(document.getElementById('outline'), { childList: true });
     new MutationObserver(() => { if (on && !frame) frame = requestAnimationFrame(draw); }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] }); // the still frame repaints in the new colour
   }
-  // (focus leaves the page too: a menu command such as Paste goes to whatever has focus, keys or not)
-  previewLoading = (show) => { if (show && document.activeElement && document.activeElement.blur) document.activeElement.blur(); document.body.classList.toggle('loading-preview', show); sync(); };
-  // Esc ends a preview before anything else hears it, and no other key reaches the page hidden behind it
-  addEventListener('keydown', (e) => { if (!previewing()) return; e.preventDefault(); e.stopImmediatePropagation(); if (e.key === 'Escape') previewLoading(false); }, true);
   // after the last renderer script: a frame drawn earlier reads the page state (zoom) before it exists and dies
   if (document.readyState === 'loading') addEventListener('DOMContentLoaded', sync); else sync();
 })();

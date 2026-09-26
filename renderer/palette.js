@@ -345,7 +345,6 @@ function paletteRows(q, typed = q) {
   rows.push({ id: 'textReset', group: 'Settings', icon: 'textReset', label: 'Reset text size', kbd: '⌘0', run: () => setZoom(BASE_ZOOM) });
   const dark = typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark';
   rows.push({ id: 'theme', group: 'Settings', icon: 'darkLight', label: 'Toggle ' + (dark ? 'light' : 'dark') + ' mode', run: () => setTheme(dark ? 'light' : 'dark') });
-  rows.push({ id: 'previewLoading', group: 'Settings', icon: 'planet', label: 'Preview loading animation', hint: 'Esc hides it', run: () => previewLoading(true) });
   if (tana.systemTheme) rows.push({ id: 'systemTheme', group: 'Settings', icon: 'darkLight', label: 'Toggle system dark/light mode', hint: themePref === 'system' ? 'Following macOS' : '', run: () => followSystem(themePref !== 'system') });
   // the list of titles hidden from every view and from search, edited in the palette itself
   if (tana.filters) rows.push({ id: 'hidden', group: 'Settings', icon: 'hiddenItems', label: 'Edit hidden items', keepOpen: true, run: openHiddenPalette });
