@@ -1,11 +1,12 @@
 'use strict';
+// The client and its parts. Every helper that works on a Document, a graph node or the sync connection is required
+// from its own module (sdk/node, sdk/content, sdk/livequery, …), which is what every caller does.
 const { createTransport } = require('./transport');
 const { GraphClient } = require('./graph');
 const { HistoryClient } = require('./history');
 const { SearchClient } = require('./search');
 const { SyncConnection, derivePeerId } = require('./sync');
 const { Document } = require('./document');
-const node = require('./node');
 
 function createTanaClient({ baseUrl, getAccessToken, orgId, peerId, storageId, logger = console, clientName } = {}) {
   if (!orgId || !peerId) throw new Error('createTanaClient: orgId and peerId are required');
@@ -17,4 +18,4 @@ function createTanaClient({ baseUrl, getAccessToken, orgId, peerId, storageId, l
   return { transport, graph, history, search, sync, close: () => sync.close() };
 }
 
-module.exports = { createTanaClient, createTransport, GraphClient, HistoryClient, SearchClient, SyncConnection, Document, derivePeerId, ...node };
+module.exports = { createTanaClient, createTransport, GraphClient, HistoryClient, SearchClient, SyncConnection, Document, derivePeerId };

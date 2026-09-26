@@ -8,7 +8,7 @@ All modules are CommonJS. "Node" below means the plain graph JSON node; "Documen
 createTanaClient({ baseUrl?, getAccessToken, orgId, peerId, storageId?, logger?, clientName? })
   → { transport, graph: GraphClient, history: HistoryClient, search: SearchClient, sync: SyncConnection, close(): Promise }
 ```
-Also re-exports `createTransport`, `GraphClient`, `HistoryClient`, `SearchClient`, `SyncConnection`, `Document`, `derivePeerId` and everything in `node.js`. `access` (`capabilities`, `setSharing`, `previewMove`, `moveToSpace`, `canWrite`, `canDelete`, `canArchive`, `audienceOf`) and `calls` (`callSessions`, `inCall`, `joinedAt`, `attended`, `currentCalls`) are required from their own modules (`sdk/access`, `sdk/calls`), which is what every caller does.
+Also exports the client's parts: `createTransport`, `GraphClient`, `HistoryClient`, `SearchClient`, `SyncConnection`, `Document` and `derivePeerId`. That is the whole index. Every helper is required from its own module — `sdk/node` (`readNode`, `setTitle`, …), `sdk/content`, `sdk/livequery`, `sdk/presence`, `sdk/access`, `sdk/calls` and the rest — which is what every caller does; a new helper goes in the module that owns it and is not added here.
 
 ## `sdk/transport.js`
 
