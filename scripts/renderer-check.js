@@ -16,15 +16,18 @@ const { source, tops } = require('./renderer-source');
     assert.ok(!seen.has(name), name + ' is declared in both ' + seen.get(name) + ' and ' + file);
     seen.set(name, file);
   }
-  // a reference runs later inside a function or an instance field (on construction); a static field runs at load
-  const staticValues = (n, out = new Set()) => {
+  // A reference runs later inside a function or an instance field (on construction). What runs at load anyway: a
+  // static field, and a function called where it is written (an IIFE). A function handed to something that calls it
+  // at once (forEach) or called by name from top-level code is not told apart: this check assumes callbacks run later.
+  const runsNow = (n, out = new Set()) => {
     if (n && n.type === 'PropertyDefinition' && n.static) out.add(n.value);
-    for (const [key, value] of Object.entries(n || {})) if (key !== 'loc' && key !== 'range') for (const c of [value].flat()) if (c && typeof c.type === 'string') staticValues(c, out);
+    if (n && (n.type === 'CallExpression' || n.type === 'NewExpression')) out.add(n.callee);
+    for (const [key, value] of Object.entries(n || {})) if (key !== 'loc' && key !== 'range') for (const c of [value].flat()) if (c && typeof c.type === 'string') runsNow(c, out);
     return out;
   };
   tops.forEach(({ file, ast, scope }, i) => {
-    const statics = staticValues(ast);
-    const deferred = (s) => { for (; s; s = s.upper) if (s.type === 'function' || (s.type === 'class-field-initializer' && !statics.has(s.block))) return true; return false; };
+    const now = runsNow(ast);
+    const deferred = (s) => { for (; s; s = s.upper) if ((s.type === 'function' || s.type === 'class-field-initializer') && !now.has(s.block)) return true; return false; };
     const later = new Set(tops.slice(i + 1).flatMap((t) => t.names));
     // through: the references this file does not resolve itself, which is every name another file declares
     for (const { identifier: id, from } of scope.through) {
