@@ -436,7 +436,7 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 .node.tl-done > .line > .bullet.icon svg, .node.tl-done > .line > .bullet.icon:hover svg { width: 12px; height: 12px; left: 4px; top: 4px; color: #fff; background: none; }
 .node.tl-done > .line > .bullet.icon svg g { stroke-width: 2.5; } /* the check drawn at 12px: heavier than the line icons' 1, so it reads */
 /* line glyphs (the edit's pen, an agent's robot, Tana's prism) are drawn at their own 18px in the 20px marker's place */
-.node.tl > .line > .bullet.icon:is(.updated, .robot, .tana) svg { width: 18px; height: 18px; left: 0; top: 3px; }
+.node.tl > .line > .bullet.icon:is(.updated, .robot, .tana, .meeting) svg { width: 18px; height: 18px; left: 0; top: 3px; }
 .node.tl-new > .line > .bullet.icon svg, .node.tl-new > .line > .bullet.icon:hover svg { color: #c4c4c4; }
 .node.tl-new > .line > .bullet.icon:is(.robot, .tana) svg { color: #aeb1b5; }
 .node.tl > .line > .body { margin-left: 11px; } /* room between the rail and what happened: 16px with the body padding */

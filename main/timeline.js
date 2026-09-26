@@ -7,6 +7,7 @@
 // Like Notifications the page is not a Tana document and has an id of its own.
 //   watched: a written change summary (the sidebar's Changes, sdk/history.js) somebody other than you had a hand in
 //   inbox:   a task assigned to you that someone else, an MCP client or Tana's AI created (views.js inboxFrom)
+//   meeting: a meeting you are in that has started, at its start time (all-day ones mark a day, not a moment)
 // A row is one event, not a node: a node changed three times is three rows, so a row's id is its own and the node it
 // is about rides along in row.timeline.uri, which is what opening it goes to.
 // The page reads as a timeline (renderer/timeline.js, styles.css .tl-*): a time, a marker on a rail, and what happened.
@@ -20,7 +21,7 @@ const db = require('../db');
 const { STATE_TYPES } = require('../sdk/node');
 const { pinnedDates } = require('./pins');
 const { NOT_CONNECTED, S, iso, isMcp } = require('./state');
-const { graphRow, members, rememberNodeHue, toNode } = require('./rows');
+const { graphRow, isAllDay, members, rememberNodeHue, toNode } = require('./rows');
 const { notifySilencedIds, notifyWatchedIds } = require('./documents');
 const { inboxFrom } = require('./views');
 
@@ -115,6 +116,14 @@ async function rows() {
     const icon = actor === 'An AI agent' ? 'robot' : actor === "Tana's AI" ? 'tana' : 'tlNew';
     events.push({ kind: 'inbox', uri: n.id, title: n.title, at: Date.parse(n.createTime), actor, icon, tone: 'new', node: n });
   }
+  // Meetings: the ones you are in that started in the window, up to now, each opening the meeting (which forwards to
+  // its write-up, renderer/edit.js followSummary). A refusal costs the meetings only.
+  const { nodes: meetings = [] } = await graph.listNodes({ nodeTypes: ['event'], hasParticipantUris: [me], eventStartTimeMin: new Date(since).toISOString(), eventStartTimeMax: new Date().toISOString(),
+    sortOptions: [{ field: 'SORT_FIELD_EVENT_START_TIME', direction: 'SORT_DIRECTION_DESCENDING' }], limit: Math.min(500, 50 * weeks) }).catch(() => ({}));
+  for (const n of meetings) {
+    const ev = n.calendarEvent || {}, at = Date.parse(ev.startTime || '');
+    if (at > since && at <= Date.now() && !isAllDay(ev.startTime, ev.endTime, ev.allDay)) events.push({ kind: 'meeting', uri: n.id, title: n.title, at, icon: 'meeting', tone: 'meeting' });
+  }
   const now = Date.now(), date = new Date(now).toLocaleDateString('sv-SE');
   const pinDatesById = new Map(Object.entries(await pinnedDates()));
   const pinnedIds = [...pinDatesById].filter(([, dates]) => dates.some((pinnedDate) => pinnedDate <= date)).map(([id]) => id);
@@ -150,6 +159,7 @@ async function rows() {
     const who = { text: e.actor + ' ', ...(person ? { person } : {}) }, what = (verb) => ({ text: verb, marks: { bold: true } });
     if (e.kind === 'edit') { segments = [who, what('edited'), { text: ' ' }, { text: title, content: true }]; change = e.change; detail = e.detail || null; }
     else if (e.kind === 'status') { segments = [who, what(e.verb), { text: ' ' }, { text: title, content: true, marks: e.tone === 'done' ? { strike: true } : {} }]; note = e.note || null; }
+    else if (e.kind === 'meeting') segments = [{ text: title, content: true }]; // the meeting's name is what happened
     else {
       const n = e.tasks.length;
       segments = [{ ...who, text: e.actor }, { text: ' added ' + (n === 1 ? 'a task' : n + ' tasks') + ' to your Inbox' }];
@@ -158,7 +168,7 @@ async function rows() {
     }
     return { id: PAGE + ':' + e.kind + ':' + e.uri + ':' + e.at, text: segments.map((x) => x.text).join(''), segments,
       kind: 'block', block: 'bullet', icon: e.icon, editable: false, hasChildren: children.length > 0, children,
-      createdAt: iso(e.at), unread: (e.tasks || [e]).some((t) => t.at > seen),
+      createdAt: iso(e.at), unread: e.kind !== 'meeting' && (e.tasks || [e]).some((t) => t.at > seen), // a meeting is on your calendar: not news
       // an "added to your Inbox" line opens nothing: the rows under it open themselves, one task or six
       timeline: { uri: e.kind === 'inbox' ? null : e.uri, note, change, detail, tone: e.tone } };
   })];

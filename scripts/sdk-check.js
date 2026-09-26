@@ -2502,6 +2502,9 @@ async function main() {
     const viaAi = { id: id(), title: 'Share the transcript', createdBy: ME, createTime: ago(30 * H) };
     const byHand = { id: id(), title: 'Typed it myself', createdBy: ME, createTime: ago(0.5 * H) };
     const old = { id: id(), title: 'Last month', createdBy: COLLEAGUE, createTime: ago(40 * 24 * H) };
+    const meeting = { id: 'tana:event:' + ulid(), title: 'Leadership sync', calendarEvent: { startTime: ago(3 * H), endTime: ago(2.5 * H) } };
+    const allDay = { id: 'tana:event:' + ulid(), title: 'Offsite', calendarEvent: { startTime: ago(6 * H), endTime: ago(-18 * H), allDay: true } };
+    let meetingsAsked = null;
     const summaries = new Map([[watched.id, [
       { title: 'Task status changed to Completed', authors: [COLLEAGUE], endTime: ago(0.05 * H) }, // the same move the node's state already tells
       { title: 'Added the Q4 numbers from Rob', authors: [COLLEAGUE], endTime: ago(0.2 * H) },
@@ -2518,6 +2521,7 @@ async function main() {
             if (p.nodeIds && (p.nodeTypes || []).includes('chat')) return { nodes: [{ id: MCP_CHAT, title: 'MCP: Nedap Compliance', invocationContext: { intent: 'mcp' } }, { id: AI_CHAT, title: 'Chat for Weekly', invocationContext: { intent: 'meeting' } }].filter((c) => p.nodeIds.includes(c.id)) };
             if (p.nodeIds && (p.nodeTypes || []).includes('text')) return { nodes: [pinnedEditable, pinnedReadOnly, completedOverdue].filter((n) => p.nodeIds.includes(n.id)) };
             if (p.nodeIds) return { nodes: [] };
+            if ((p.nodeTypes || []).includes('event')) { meetingsAsked = p; return { nodes: [meeting, allDay] }; }
             if ((p.createdBy || []).includes(ME)) return { nodes: [watched, kept] };
             if ((p.assignedTo || []).includes(ME)) return { nodes: [byHand, viaMcp, viaMcpToo, fromRob, viaAi, old] };
             return { nodes: [] };
@@ -2535,10 +2539,13 @@ async function main() {
       ['Rob Jansen edited Contract renewal', 'Added the Q4 numbers from Rob', 'updated', 'edit', false, []],
       ['An AI agent added 2 tasks to your Inbox', null, 'robot', 'new', false, ['Answer Jules', 'Plan the pilot']],
       ['Rob Jansen added a task to your Inbox', null, 'tlNew', 'new', false, ['Review the vendor contract']],
+      ['Leadership sync', null, 'meeting', 'meeting', false, []],
       ['Rob Jansen accepted Contract renewal', null, 'tlAccepted', 'accepted', false, []],
       ['Rob Jansen edited Contract renewal', 'Moved the deadline to Friday', 'updated', 'edit', false, []],
       ["Tana's AI added a task to your Inbox", null, 'tana', 'new', false, ['Share the transcript']],
-    ], 'a timeline, newest first: who, then what they did, then the node; an edit\'s change quoted under it; new tasks from one source in a row are one quiet entry; a completion told once, from the node\'s own state; yours alone, by hand, or weeks old stay out');
+    ], 'a timeline, newest first: who, then what they did, then the node; an edit\'s change quoted under it; new tasks from one source in a row are one quiet entry; a completion told once, from the node\'s own state; a meeting at its start time, all-day ones left out; yours alone, by hand, or weeks old stay out');
+    assert.deepEqual(JSON.parse(JSON.stringify([meetingsAsked.hasParticipantUris, Date.parse(meetingsAsked.eventStartTimeMax) <= Date.now(), Date.parse(meetingsAsked.eventStartTimeMin) < Date.now() - 6 * 24 * H])), [[ME], true, true],
+      'the meetings asked for are yours, from the week back up to now');
     assert.deepEqual(JSON.parse(JSON.stringify((await backend.timelinePage.rows())[1].segments)), [{ text: 'Rob Jansen ', person: true }, { text: 'completed', marks: { bold: true } }, { text: ' ' }, { text: 'Contract renewal', content: true, marks: { strike: true } }],
       'the person plain, the verb bold, and a finished node struck through; demo mode masks the name and title and keeps the verb');
     const rows = await backend.timelinePage.rows();
