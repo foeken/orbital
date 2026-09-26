@@ -21,7 +21,8 @@ async function spaceChildren(id) {
   return nodes.map((n) => toNode(graphRow(n)));
 }
 // A saved search's "content" is the rows its stored query returns (sdk/node.js readSearch).
-const searchReads = new Map(); // saved search id -> its newest read: an older one answering later leaves the newer head live
+const searchReads = new Map(); // saved search id -> the number the last read of it was given
+const headRead = new Map(); // saved search id -> the number of the read its head came from
 async function searchChildren(id) {
   if (!S.client) throw new Error(NOT_CONNECTED);
   const seq = (searchReads.get(id) || 0) + 1;
@@ -40,9 +41,11 @@ async function searchChildren(id) {
   // its query answered when the page opened. The same cap applies here, and for the same reason: a search answers
   // up to 1,000 rows, the first LIVE_ROWS of them subscribed. They are reads like any other (main/documents.js
   // releaseOnDemand), held while the search's page is on screen (withSearchHeads) and let go oldest first after that.
-  // Only the newest read decides the head: one from before a Save that lands after it would put the old rows back in
-  // the head and let the sweep release the ones on screen (the renderer drops its rows the same way, renderer/nodes.js).
-  if (searchReads.get(id) === seq) {
+  // The newest read that answered decides the head: one from before a Save that lands after it would put the old rows
+  // back in the head and let the sweep release the ones on screen (the renderer drops its rows the same way,
+  // renderer/nodes.js). A newer read that failed decides nothing, so an older one that answered still keeps its rows live.
+  if (seq > (headRead.get(id) || 0)) {
+    headRead.set(id, seq);
     const head = nodes.slice(0, LIVE_ROWS).map((n) => n.id);
     searchHeads.set(id, head);
     for (const uri of head) subscribe(uri).then((doc) => { if (doc) readOnDemand(uri); });

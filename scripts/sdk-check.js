@@ -1823,6 +1823,13 @@ async function main() {
     answers[1]({ nodes: newer }); await second; answers[0]({ nodes: older }); await first;
     await new Promise(setImmediate);
     assert.deepEqual([subscribes.includes(newer[0].id), subscribes.includes(older[0].id)], [true, false], 'an older read of a search answering after a newer one leaves the newer head live');
+    // ...but a newer read that fails decides nothing: an older one that answered still keeps its head live
+    const kept = [{ id: 'tana:text:' + ulid(), title: 'Answered' }];
+    const third = backend.handlers.get('outline:children')(null, searchId), fourth = backend.handlers.get('outline:children')(null, searchId);
+    while (answers.length < 4) await new Promise(setImmediate);
+    answers[3](Promise.reject(new Error('unavailable'))); await fourth.catch(() => {}); answers[2]({ nodes: kept }); await third;
+    await new Promise(setImmediate);
+    assert.equal(subscribes.includes(kept[0].id), true, 'a newer read that failed leaves an older answered read to keep its head live');
 
     const brokenDoc = new Document('tana:search:' + ulid());
     brokenDoc.transact((l) => initDocument(l, 'Broken search', ME)); // no query container at all
