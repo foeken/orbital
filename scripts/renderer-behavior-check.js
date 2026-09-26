@@ -5780,7 +5780,7 @@ async function runHomeCheck() {
       drop: (id) => { searches = searches.filter((s) => s.id !== id); repairHome(); },
       go: (place) => { zoom = place; }, view: (id) => { view = id; zoom = null; },
       home: () => goHome(),
-      crumb: () => { const el = homeCrumb(); return el && { text: el.textContent, label: el.getAttribute('aria-label'), icon: el.childNodes[0].childNodes[0].dataset.icon, click: el.onclick }; },
+      crumb: () => { const el = homeCrumb(); return el && { text: el.textContent, label: el.getAttribute('aria-label'), kids: el.childNodes.length, click: el.onclick }; },
       // the whole crumb bar, as it reads: the Home anchor, the separators and the location behind them
       crumbs: (location, docId = OTHER_DOC) => {
         zoom = { docId, nodeId: null };
@@ -5809,11 +5809,11 @@ async function runHomeCheck() {
   await api.list([{ id: SEARCH, text: 'Everything of mine' }]);
   assert.equal(api.name(), 'Everything of mine', 'a renamed search shows its current name');
 
-  // The crumb: icon and name in one link, which is the whole target, and it goes Home
+  // The crumb: the word Home in one link, which is the whole target, and it goes Home
   api.go({ docId: OTHER, nodeId: null });
   const crumb = api.crumb();
-  assert.deepEqual([crumb.text, crumb.label, crumb.icon], ['Home', 'Go to Home: Everything of mine', 'home'],
-    'a zoomed page starts with the Home anchor: the house glyph and the word Home, in one link whose label says where it goes');
+  assert.deepEqual([crumb.text, crumb.label, crumb.kids], ['Home', 'Go to Home: Everything of mine', 1],
+    'a zoomed page starts with the Home anchor: the word Home alone, no glyph (the ⌘K button leads the bar), in one link whose label says where it goes');
   crumb.click();
   assert.deepEqual(plain(api.went()), [SEARCH], 'and pressing it opens Home');
   assert.equal(api.crumb().text, 'Home', 'the anchor stays on Home itself: one fixed way back, always in the same place');

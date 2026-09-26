@@ -552,13 +552,11 @@ function crumbWhen(id) {
   }
   return eventWhen.get(id) || null;
 }
-// One link, icon and name together, so the whole thing is the target and the icon is never the only thing to read.
+// One link, the word Home: the ⌘K button ahead of it is the bar's one glyph, so the anchor needs none of its own.
 function homeCrumb() {
   const name = homeName();
   if (!name) return null; // only while a Home search is still loading
   const a = document.createElement('a');
-  const icon = iconNode('home');
-  if (icon) { const ricon = document.createElement('span'); ricon.className = 'ricon home'; ricon.append(icon); a.append(ricon); }
   a.append('Home'); // the label is the role, not the target; the name it points at stays in the tooltip
   a.setAttribute('aria-label', 'Go to Home: ' + name);
   a.title = 'Go to Home: ' + name;
@@ -569,7 +567,7 @@ function renderCrumbs(trail) {
   const nav = $('crumbs');
   const cmd = $('navPalette');
   nav.replaceChildren(...(cmd ? [cmd] : [])); // ⌘K leads the bar, ahead of Home: the one way to everything (renderer/palette.js)
-  // The Home anchor, ahead of the location: the house glyph and the word Home, then a bullet to keep it apart from
+  // The Home anchor, ahead of the location: the word Home, then a bullet to keep it apart from
   // the › chain that follows. It is a shortcut, not an ancestor — the structural path behind it is untouched, so
   // nothing suggests a saved search owns the node. Always shown, even on Home itself or with the Library as Home:
   // one fixed way back beats a link that comes and goes.
