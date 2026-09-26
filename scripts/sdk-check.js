@@ -740,6 +740,30 @@ async function main() {
     await assert.rejects(handler('outline:children')(null,doc.id+'|not-a-field'),/./,'an id that is not a field is not a document either');
     console.log('ok  field values are outlines: every block handler takes "<document>|<field>", children and all, on the document\u2019s own undo stack');
   }
+  // An image lives in the file cache, not in main's memory (issue #271): two asks at once share one fetch, and once
+  // it has settled nothing in memory answers for it any more.
+  {
+    const images = require('../main/images'), { S } = require('../main/state'), nodePath = require('node:path');
+    const dir = fs.mkdtempSync(nodePath.join(require('node:os').tmpdir(), 'orbital-images-'));
+    const saved = { fetch: globalThis.fetch, session: S.session, userData: S.userData };
+    let fetches = 0;
+    globalThis.fetch = async (url) => { fetches++; return String(url).includes('/images/by-uri/')
+      ? { status: 302, headers: { getSetCookie: () => [], get: () => 'https://images.example/x' } }
+      : { ok: true, headers: { get: () => 'image/png' }, arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer }; };
+    S.session = { getAccessToken: async () => 'token' }; S.userData = dir;
+    try {
+      const uri = 'tana:image:' + ulid();
+      const [a, b] = await Promise.all([images.image(uri), images.image(uri)]);
+      assert.deepEqual([a, b], ['data:image/png;base64,AQID', 'data:image/png;base64,AQID']);
+      assert.equal(fetches, 2, 'two asks at once are one load: the locate and the CDN read');
+      assert.equal(await images.image(uri), a, 'a later ask is answered');
+      assert.equal(fetches, 2, 'by the file');
+      fs.rmSync(nodePath.join(dir, 'images'), { recursive: true });
+      assert.equal(await images.image(uri), a);
+      assert.equal(fetches, 4, 'and with the file gone it is fetched again: no map kept the image in memory');
+    } finally { globalThis.fetch = saved.fetch; S.session = saved.session; S.userData = saved.userData; fs.rmSync(dir, { recursive: true, force: true }); }
+    console.log('ok  images: one fetch per load in flight, then the file cache, nothing held in memory');
+  }
   // The suggestion behind that page (main/ai.js): the one call this app makes to a model. A title goes out and a
   // name comes back; nothing is sent without a key, and the key never leaves this machine. fetch is injected, so
   // this check is offline like every other one here.

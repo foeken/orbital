@@ -6,13 +6,17 @@ const { fetchImage, uploadFile, initImage, SIGNED_OUT } = require('../sdk/assets
 const content = require('../sdk/content');
 const { ulid } = require('../sdk/node');
 const { mut, subscribe } = require('./documents');
-const { S, imageCache } = require('./state');
+const { S } = require('./state');
 
-// ---- images: tana:image: uri -> data URL, cached in memory and under userData/images/<sha1(uri)> (the data URL as text)
+// ---- images: tana:image: uri -> data URL, cached under userData/images/<sha1(uri)> (the data URL as text)
+// Only a load in flight is kept here, so two rows asking at once share one fetch; once it settles the file answers.
+// A map of every image ever shown held each one in memory for the session (issue #271), beside the file and the
+// renderer's own cache of 200 (renderer/render.js), which counts on this file cache and not on main's memory.
+const loading = new Map(); // uri -> Promise<data URL>
 function image(uri) {
   if (!S.session) return Promise.reject(new Error('not logged in to Tana'));
-  if (!imageCache.has(uri)) imageCache.set(uri, loadImage(uri).catch((e) => { imageCache.delete(uri); throw e; }));
-  return imageCache.get(uri);
+  if (!loading.has(uri)) loading.set(uri, loadImage(uri).finally(() => loading.delete(uri)));
+  return loading.get(uri);
 }
 async function loadImage(uri) {
   const dir = path.join(S.userData, 'images'), file = path.join(dir, createHash('sha1').update(uri).digest('hex'));
