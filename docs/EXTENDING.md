@@ -177,9 +177,10 @@ an entry in `main/documents.js` `creationOptions` and the mock's `creationOption
 
 1. **sdk/content.js** — how it reads: `node()` builds the outline node and `blockType` names it; a block that holds no
    words is in `ATOMS`.
-   - A type the outliner can switch to: its name in `BLOCK_TYPES` and its container and leaf in `setLeaf`. A new
+   - A type the outliner can switch to: its name in `BLOCK_TYPES`, its leaf in `setLeaf` and its container in the `rehome(…)` call in `setBlockType`. A new
      ProseMirror node that carries words also goes in `TEXT_BLOCKS`, or `setText` and `setBlockType` refuse it once a
-     row has become one; a new holder (like `blockquote` around a quote) goes in `rehome` too.
+     row has become one; a new holder (like `blockquote` around a quote) also goes in `HOLDERS`, is read through in `nodes()` as a
+     quote is, and is named back in `blockType`.
    - A block that is inserted (like a divider or a table): an `insert…` function beside `insertDivider`, then an IPC
      call for it as above (the `block:insert…` handlers in main/documents.js, preload.js, `DEMO_WRITES`, the mock),
      and its "/" row and dispatch in renderer/toolbar.js.
