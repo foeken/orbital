@@ -669,7 +669,7 @@ function agentRowsKey(e) {
   if (palMode !== 'agentPrompt') return false;
   if (e.key === 'Tab') { e.preventDefault(); e.stopPropagation(); palText.focus(); return true; } // back to what you were writing
   if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); backPalette(); return true; }
-  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); e.stopPropagation(); palIndex = nextPalIndex(palRows, palIndex, e.key === 'ArrowDown' ? 1 : -1); renderPalette(); palList.focus(); return true; }
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); e.stopPropagation(); movePalIndex(e.key === 'ArrowDown' ? 1 : -1); palList.focus(); return true; }
   if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); runRow(palRows[palIndex]); return true; }
   return false;
 }
@@ -1229,6 +1229,15 @@ function nextPalIndex(rows, index, step) {
   for (let i = 1; i <= n; i++) { const next = ((index + step * i) % n + n) % n; if (!rows[next].disabled || rows[next].id) return next; }
   return index;
 }
+// ↑/↓ only move the highlight: the rows are the ones already drawn, so the class moves between two of them and nothing
+// is rebuilt (#272). Rows that changed without a redraw (a document removed while the list was up) are drawn again.
+function movePalIndex(step) {
+  const drawn = palList.querySelectorAll('.row');
+  palIndex = nextPalIndex(palRows, palIndex, step);
+  if (drawn.length !== palRows.length) return renderPalette();
+  drawn.forEach((row, i) => row.classList.toggle('active', i === palIndex));
+  drawn[palIndex].scrollIntoView({ block: 'nearest' });
+}
 // pages whose rows are built from what is typed, with nothing to fetch
 const LOCAL_MODES = new Set(['cmd', 'create', 'slash', 'assignees', 'assigneesMany', 'status', 'setType', 'classify', 'discuss', 'setHue', 'visibility', 'visibilityPeople', 'hidden', 'pins', 'pill', 'pinMeeting', 'openaiKey', 'chatgpt', 'hosts', 'agentLink', 'trash', 'archived', 'field', ...Object.keys(MEETING_PAGES)]);
 palInput.addEventListener('input', () => {
@@ -1244,7 +1253,7 @@ palInput.addEventListener('keydown', (e) => {
   const mod = e.metaKey || e.ctrlKey;
   if (palMode === 'field' && fieldKeys && fieldKeys(e)) { e.preventDefault(); e.stopPropagation(); } // a field page's own keys (Edit choices: ⌘⌫, ⇧⌘↑/↓)
   else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); backPalette(); }
-  else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && palRows.length) { e.preventDefault(); e.stopPropagation(); palIndex = nextPalIndex(palRows, palIndex, e.key === 'ArrowDown' ? 1 : -1); renderPalette(); }
+  else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && palRows.length) { e.preventDefault(); e.stopPropagation(); movePalIndex(e.key === 'ArrowDown' ? 1 : -1); }
   else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); chooseRow(mod); }
   else if (mod && e.shiftKey && e.key.toLowerCase() === 'k') { e.preventDefault(); e.stopPropagation(); const r = palRows[palIndex]; if (palMode === 'cmd' && r && r.id) openRecorder(r); }
 });
