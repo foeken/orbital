@@ -2,12 +2,12 @@
 // The filter pills above a view and their menus; Cmd+K renders the same rows.
 
 // Every type in the workspace ({ uri, title, hue }), for the Type pill and a link field's targets (renderer/fields.js).
-// The pill asks once per session; Link to types reads it afresh each time it opens.
+// The pill asks once per session; Link to types and Cmd+K (fresh) read it afresh each time they open.
 let typeListCache = null, typeListAsked = false;
-function loadWorkspaceTypes() {
-  if (typeListCache || typeListAsked || !tana.typeList) return;
+function loadWorkspaceTypes(fresh) {
+  if ((typeListCache && !fresh) || typeListAsked || !tana.typeList) return;
   typeListAsked = true;
-  tana.typeList().then((list) => { typeListCache = list; if (pillsDrawn) renderPills(true); if (!palette.hidden) renderPalette(); }, () => { typeListAsked = false; });
+  tana.typeList().then((list) => { typeListAsked = false; typeListCache = list; if (pillsDrawn) renderPills(true); if (!palette.hidden) renderPalette(); }, () => { typeListAsked = false; });
 }
 
 function pillDefs() {

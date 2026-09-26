@@ -1444,7 +1444,7 @@ function runAuthPaletteCheck() {
     const $ = (id) => id === 'loginBox' ? loginBox : id === 'filtered' ? filtered : {};
     const showError = () => {};
     const render = () => {};
-    const views = [], searches = [];
+    const views = [], searches = [], typeListCache = null;
     const pinTree = [];
     const pinRows = () => [], selectionRows = () => [];
     const pillCommandRows = () => [];
@@ -1489,7 +1489,7 @@ async function runSyncShortcutCheck() {
   // The second level of a row is folded into the first once the first two letters reach it (a prefix or the initials):
   // its rows appear as "<subBase> <choice>" right after the row, loaded once, and the same query then filters them.
   const folded = vm.runInNewContext(`
-    const views = [], searches = [], pinTree = [], pinRows = () => [], pillCommandRows = () => [], taskActionRows = () => [];
+    const views = [], searches = [], typeListCache = null, pinTree = [], pinRows = () => [], pillCommandRows = () => [], taskActionRows = () => [];
     let loads = 0;
     const ran = [], run = (fn) => fn(), goTo = () => {};
     const selectionRows = () => [{ id: 'status', group: 'Current node', label: 'Set status', subBase: 'Set status to', keepOpen: true, run: () => {}, sub: () => { loads++; return [{ label: 'Inbox', run: () => ran.push('Inbox') }, { label: 'In Progress', run: () => ran.push('In Progress') }, { label: 'Later', disabled: true, run: () => {} }]; } }];
@@ -1544,7 +1544,7 @@ async function runSyncShortcutCheck() {
   const order = vm.runInNewContext(`
     const views = [{ id: 'library', title: 'Library', icon: 'library', nodes: [] }, { id: 'inbox', title: 'Inbox', icon: 'inbox', nodes: [] }], pinTree = [], pinRows = () => [];
     // the Library page, so Set as Home is offered: the real helpers decide whether it is already Home
-    let home = 'library', searches = [], view = 'library';
+    let home = 'library', searches = [], typeListCache = null, view = 'library';
     const searchesLoaded = true, localStorage = { setItem() {} }, onSearchPage = () => false;
     const selectionRows = () => [{ id: 'delete', group: 'Current node', label: 'Delete' }, { id: 'sensitive', group: 'Current node', label: 'Mark as sensitive' }, { id: 'zoomIn', group: 'Current node', label: 'Zoom in' }, { id: 'status', group: 'Current node', label: 'Set status' }];
     const pillCommandRows = () => [{ id: 'pill:type', group: 'View options', label: 'Filter by type' }], taskActionRows = () => [];
@@ -1701,7 +1701,7 @@ async function runSyncShortcutCheck() {
 
   const paletteRows = functionSource('paletteRows');
   const rows = vm.runInNewContext(`
-    const views = [], searches = [], pinTree = [], pinRows = () => [], selectionRows = () => [];
+    const views = [], searches = [], typeListCache = null, pinTree = [], pinRows = () => [], selectionRows = () => [];
     const pillCommandRows = () => [];
     const taskActionRows = () => [];
     const tana = { refresh: async () => {} }, run = () => {};
@@ -3128,7 +3128,7 @@ async function runPinToMeetingCheck() {
   const DOC = 'tana:text:01j0doc000000000000000000';
   const NOW = Date.now(); // the page orders against the clock, so the fixtures are built from one
   const api = vm.runInNewContext(`
-    const views = [], pinTree = [], pinRows = () => [], searches = [], searchesLoaded = true;
+    const views = [], pinTree = [], pinRows = () => [], searches = [], typeListCache = null, searchesLoaded = true;
     let home = 'library', view = 'library';
     const localStorage = { setItem() {} }, onSearchPage = () => false;
     const selectionRows = () => [], pillCommandRows = () => [], taskActionRows = () => [];
@@ -3942,10 +3942,10 @@ function runSearchesGroupCheck() {
   const paletteRows = functionSource('paletteRows');
   // A minimal paletteRows harness, matching the one above (runSyncShortcutCheck): only `searches` and `goTo` vary,
   // so a row from the new group and the effect of running it are both observed, not merely a string in the source.
-  const harness = (searchesLiteral) => vm.runInNewContext(`
+  const harness = (searchesLiteral, typesLiteral) => vm.runInNewContext(`
     const calls = [];
     const goTo = (uri) => calls.push(uri);
-    const searches = ${searchesLiteral};
+    const searches = ${searchesLiteral}, typeListCache = ${typesLiteral || "null"}, typeGlyph = (uri) => uri.endsWith("risk") ? "nc-shield" : "type";
     const views = [], pinTree = [], pinRows = () => [], selectionRows = () => [];
     const pillCommandRows = () => [];
     const taskActionRows = () => [];
@@ -3957,7 +3957,9 @@ function runSearchesGroupCheck() {
     const railToggle = { hidden: false }, railHidden = false; // the sidebar toggle row: available, so paletteRows builds it
     ${paletteRows}
     const rows = paletteRows('').filter((r) => r.group === 'Searches');
-    ({ rows: rows.map((r) => ({ id: r.id, label: r.label })), open: (i) => { rows[i].run(); return calls; } });
+    const types = paletteRows('').filter((r) => r.group === 'Types');
+    ({ rows: rows.map((r) => ({ id: r.id, label: r.label })), open: (i) => { rows[i].run(); return calls; },
+       types: types.map((r) => ({ icon: r.icon, hue: r.hue, label: r.label })), openType: (i) => { types[i].run(); return calls; } });
   `);
   // The fixture carries only `title` (no `text`), the shape the in-file mock's info() actually returns
   // (renderer/mock.js), so this also exercises the `s.text || s.title` label fallback, not just the `s.text` path.
@@ -3968,6 +3970,12 @@ function runSearchesGroupCheck() {
 
   const empty = harness('[]');
   assert.deepEqual(plain(empty.rows), [], 'no saved searches means no Searches group at all');
+
+  // Every workspace type is a place too: its own glyph, never its hue, and its page on a press.
+  const typed = harness('[]', "[{ uri: 'tana:type:risk', title: 'Risk', hue: 20 }, { uri: 'tana:type:note', title: 'Note' }]");
+  assert.deepEqual(plain(typed.types), [{ icon: 'nc-shield', label: 'Risk' }, { icon: 'type', label: 'Note' }],
+    'each workspace type is a Types row in its own glyph, monochrome');
+  assert.deepEqual(plain(typed.openType(0)), ['tana:type:risk'], 'choosing a type opens its page via goTo');
 }
 
 // The two header arrows are only as good as the state they draw: a Forward that looks live with nothing ahead, or a
@@ -4261,7 +4269,7 @@ async function runRestorePlaceCheck() {
   assert.equal(api.state().docId, null, 'and a corrupt entry is simply not a place, rather than a broken launch');
   assert.match(source, /loadRoots\(\)\.then\(render, showError\)\.then\(restorePlace\)/,
     'and boot reopens that place once the views have loaded, so the restore has somewhere to land');
-  assert.match(source, /if \(connected && !wasConnected\) \{ taskMetaFailed\.clear\(\); loadSearches\(\); loadPinned\(true\); restorePlace\(\)\.finally\(\(\) => loadView\(\)\); \}/,
+  assert.match(source, /if \(connected && !wasConnected\) \{ taskMetaFailed\.clear\(\); loadSearches\(\); loadWorkspaceTypes\(\); loadPinned\(true\); restorePlace\(\)\.finally\(\(\) => loadView\(\)\); \}/,
     'the connection coming up runs the restore that boot was too early for, and the view behind it is fetched after that page, not ahead of it');
 }
 
@@ -4382,7 +4390,7 @@ function runNotifyToggleCheck() {
     let asked = null;
     const tana = { notifyState: async () => ({}), setNotify: async (id, next) => { asked = next; return { on: next, default: false, explicit: true }; } };
     const views = [], pinTree = [], pinRows = () => [], selectionRows = () => [];
-    const pillCommandRows = () => [], taskActionRows = () => [], searches = [], goTo = () => {};
+    const pillCommandRows = () => [], taskActionRows = () => [], searches = [], typeListCache = null, goTo = () => {};
     const authed = true, authChecking = false, signedOut = false, pinInfo = null, hotkeys = {}, theme = 'light';
     const localDate = () => '2026-09-13', setTheme = () => {};
     const docRow = () => ({}), sectionOf = () => null;
@@ -4529,7 +4537,7 @@ function runCodexAssignCheck() {
     const document = { documentElement: { dataset: {} }, get activeElement() { return focused.el; }, createElement: (tagName) => ({ tagName, attrs: {}, children: [], className: '',
       setAttribute(name, value) { this.attrs[name] = value; }, append(...kids) { this.children.push(...kids); } }) };
     const views = [], pinRows = () => [], selectionRows = () => [];
-    const pillCommandRows = () => [], searches = [], goTo = () => {};
+    const pillCommandRows = () => [], searches = [], typeListCache = null, goTo = () => {};
     const authed = true, authChecking = false, signedOut = false, pinInfo = null, hotkeys = {};
     const localDate = () => '2026-09-18', setTheme = () => {};
     const docRow = () => ({});
@@ -5733,7 +5741,7 @@ async function runHomeCheck() {
     const localStorage = { getItem: (k) => (k in stored ? stored[k] : null), setItem: (k, v) => { stored[k] = v; }, removeItem: (k) => { delete stored[k]; } };
     const prefs = {}; const pref = (k, fb) => (k in prefs ? prefs[k] : fb); const setPref = (k, v) => { prefs[k] = v; stored[k] = v; };
     ${homeInit}
-    let view = 'library', zoom = null, searches = [], searchesLoaded = false, connected = true, went = [], renders = 0;
+    let view = 'library', zoom = null, searches = [], typeListCache = null, searchesLoaded = false, connected = true, went = [], renders = 0;
     let navBack = [], navForward = [], navHere = null, navigating = false, caretOnOpen = false, savedPlace = null;
     const SEARCH_ID = 'tana:search:';
     const isRealId = (id) => typeof id === 'string' && id.startsWith('tana:');
@@ -6882,7 +6890,7 @@ function runZoomTypeChipCheck() {
 async function runSetTypeCheck() {
   const DOC = 'tana:text:01j0doc000000000000000000', BLOCK = 'b12', TYPE_A = 'tana:type:01j0type00000000000000000', TYPE_B = 'tana:type:01j0type10000000000000000';
   const api = vm.runInNewContext(`
-    const views = [], pinTree = [], pinRows = () => [], searches = [], searchesLoaded = true;
+    const views = [], pinTree = [], pinRows = () => [], searches = [], typeListCache = null, searchesLoaded = true;
     let home = 'library', view = 'library';
     const localStorage = { setItem() {} }, onSearchPage = () => false;
     const selectionRows = () => [], pillCommandRows = () => [], taskActionRows = () => [];
@@ -7070,7 +7078,7 @@ async function runLiveUpdateBurstCheck() {
 async function runDiscussWithCheck() {
   const DOC = 'tana:text:01j0doc000000000000000000';
   const api = vm.runInNewContext(`
-    const views = [], pinTree = [], pinRows = () => [], searches = [], searchesLoaded = true;
+    const views = [], pinTree = [], pinRows = () => [], searches = [], typeListCache = null, searchesLoaded = true;
     let home = 'library', view = 'library';
     const localStorage = { setItem() {} }, onSearchPage = () => false;
     const selectionRows = () => [], pillCommandRows = () => [], taskActionRows = () => [];
@@ -7203,7 +7211,7 @@ async function runDiscussWithCheck() {
 async function runClassifyTypeCheck() {
   const DOC = 'tana:text:01j0doc000000000000000000', TYPE_A = 'tana:type:01j0typea00000000000000000', TYPE_B = 'tana:type:01j0typeb00000000000000000';
   const api = vm.runInNewContext(`
-    const views = [], pinTree = [], pinRows = () => [], searches = [], searchesLoaded = true;
+    const views = [], pinTree = [], pinRows = () => [], searches = [], typeListCache = null, searchesLoaded = true;
     let home = 'library', view = 'library';
     const localStorage = { setItem() {} }, onSearchPage = () => false;
     const selectionRows = () => [], pillCommandRows = () => [], taskActionRows = () => [];
@@ -7313,7 +7321,7 @@ async function runClassifyTypeCheck() {
 async function runSetIconCheck() {
   const TYPE = 'tana:type:01j0type000000000000000000', DOC = 'tana:text:01j0doc000000000000000000';
   const api = vm.runInNewContext(`
-    const views = [], pinTree = [], pinRows = () => [], searches = [], searchesLoaded = true;
+    const views = [], pinTree = [], pinRows = () => [], searches = [], typeListCache = null, searchesLoaded = true;
     let home = 'library', view = 'library';
     const localStorage = { setItem() {} }, onSearchPage = () => false;
     const selectionRows = () => [], pillCommandRows = () => [], taskActionRows = () => [];
@@ -7428,7 +7436,7 @@ async function runSetIconCheck() {
 async function runSetHueCheck() {
   const TYPE = 'tana:type:01j0type000000000000000000', DOC = 'tana:text:01j0doc000000000000000000';
   const api = vm.runInNewContext(`
-    const views = [], pinTree = [], pinRows = () => [], searches = [], searchesLoaded = true;
+    const views = [], pinTree = [], pinRows = () => [], searches = [], typeListCache = null, searchesLoaded = true;
     let home = 'library', view = 'library';
     const localStorage = { setItem() {} }, onSearchPage = () => false;
     const selectionRows = () => [], pillCommandRows = () => [], taskActionRows = () => [];
@@ -7483,7 +7491,7 @@ async function runSetHueCheck() {
     'an uncoloured type offers the row in grey');
   api.node({ id: TYPE, tags: [], hue: 268 });
   api.wearing(TYPE, 'nc-rocket');
-  assert.deepEqual(plain([api.row().hint, api.row().icon, api.row().hue]), ['Hue 268', 'nc-rocket', 268], 'and a coloured one wears its own glyph and colour');
+  assert.deepEqual(plain([api.row().hint, api.row().icon, api.row().hue]), ['Hue 268', 'nc-rocket', null], 'and a coloured one wears its own glyph, monochrome, its colour named in the hint');
   for (const id of [DOC, 'tana:event:01j0event00000000000000000', 'tana:space:01j0space00000000000000000', 'b12']) {
     api.node({ id, tags: [] });
     assert.equal(api.row(), undefined, (id.split(':')[1] || 'a block') + ' has no type colour to set');
@@ -7629,7 +7637,7 @@ async function runDeletedNodeCheck() {
 async function runRecentlyDeletedCheck() {
   const GONE = 'tana:text:01j0gone000000000000000000';
   const api = vm.runInNewContext(`
-    const views = [], pinTree = [], pinRows = () => [], searches = [], searchesLoaded = true;
+    const views = [], pinTree = [], pinRows = () => [], searches = [], typeListCache = null, searchesLoaded = true;
     let home = 'library', view = 'library';
     const localStorage = { setItem() {} }, onSearchPage = () => false;
     const selectionRows = () => [], pillCommandRows = () => [], taskActionRows = () => [];

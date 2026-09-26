@@ -134,6 +134,7 @@ async function typeChoices(id) {
 // Every type in the workspace, for the types a link field may point at: the Set type list without the scoping.
 async function typeList() {
   if (!S.client) throw new Error(NOT_CONNECTED);
+  // ponytail: one page of 200 (ListNodes has no paging); a workspace had 10 on 2026-09-26. Page by createTimeMin if one outgrows it.
   const { nodes = [] } = await S.client.graph.listNodes({ nodeTypes: ['type'], limit: 200 });
   nodes.forEach(rememberType);
   return nodes.map((t) => ({ uri: t.id, title: t.title || '', hue: hueOf(t) })).sort((a, b) => a.title.localeCompare(b.title));

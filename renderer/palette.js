@@ -226,7 +226,7 @@ function paletteRows(q, typed = q) {
   // Tana's colour on the type is left alone (docs/SETTINGS.md).
   if (palDoc && tana.setTypeHue && TYPE_NODE.test(palDoc.id)) {
     const doc = palDoc;
-    rows.push({ id: 'setHue', group: docGroup, icon: typeGlyph(doc.id), hue: doc.hue, label: 'Set colour',
+    rows.push({ id: 'setHue', group: docGroup, icon: typeGlyph(doc.id), label: 'Set colour',
       hint: doc.hue == null ? 'Grey' : 'Hue ' + doc.hue, keepOpen: true, run: () => openHuePalette(doc) });
   }
   // Watching this node: the label says what pressing it does, so it carries no id — a hotkey whose meaning flips
@@ -296,6 +296,8 @@ function paletteRows(q, typed = q) {
   rows.push(...viewRows.sort((a, b) => viewRank(a) - viewRank(b)));
   // Saved searches are places too: their own heading, under the views, each opening the search document
   rows.push(...searches.map((s) => ({ id: 'search:' + s.id, group: 'Searches', icon: 'search', label: s.text || s.title || 'Untitled search', run: () => goTo(s.id) })));
+  // So is every workspace type: its page lists its documents. Drawn in its own glyph, without its hue.
+  rows.push(...(typeListCache || []).map((t) => ({ id: 'type:' + t.uri, group: 'Types', icon: typeGlyph(t.uri), label: t.title || 'Untitled type', run: () => goTo(t.uri) })));
   rows.push(...pillCommandRows());
   // ⌘F arrives as runAction('filter'), which only fires if this row exists right now — so a saved search page has to
   // offer it, or the key falls through to the browser exactly as it did before.
@@ -687,7 +689,7 @@ function openHiddenPalette() {
 }
 function creationRows(q) {
   if (palBusy) return [{ group: 'Create new', label: 'Loading choices…', disabled: true }];
-  return creationChoices.filter((choice) => fuzzyMatch(choice.title, q)).map((choice) => ({ group: choice.kind === 'custom' ? 'Workspace types' : 'Create new', icon: choice.icon, hue: choice.hue, label: choice.title, hint: choice.selectable ? '' : choice.reason || 'Unavailable', disabled: !choice.selectable, keepOpen: true, run: () => startCreation(choice) }));
+  return creationChoices.filter((choice) => fuzzyMatch(choice.title, q)).map((choice) => ({ group: choice.kind === 'custom' ? 'Workspace types' : 'Create new', icon: choice.icon, label: choice.title, hint: choice.selectable ? '' : choice.reason || 'Unavailable', disabled: !choice.selectable, keepOpen: true, run: () => startCreation(choice) }));
 }
 function openCreationPalette() {
   palMode = 'create'; palRows = []; palIndex = 0; palette.hidden = false;
@@ -827,7 +829,7 @@ function typeRows(q) {
   for (const t of typeList.options) {
     if (!fuzzyMatch(t.title || '', q)) continue;
     const current = t.uri === typeList.current;
-    rows.push({ group: TYPE_GROUP, icon: typeGlyph(t.uri), hue: t.hue, label: t.title || 'Untitled type',
+    rows.push({ group: TYPE_GROUP, icon: typeGlyph(t.uri), label: t.title || 'Untitled type',
       hint: current ? '✓' : t.selectable ? '' : t.reason || 'Lives in another space',
       disabled: !t.selectable || current, keepOpen: true, run: () => applyType(doc, t.uri) });
   }
@@ -873,7 +875,7 @@ function classifyRows(q) {
   for (const c of ai.choices) {
     if (!fuzzyMatch(c.title || '', q)) continue;
     const odds = Math.round(c.p * 100) + '%', current = (c.uri || null) === ai.current;
-    rows.push({ group: CLASSIFY_GROUP, icon: c.uri ? typeGlyph(c.uri) : 'none', hue: c.hue, label: c.title, hint: current ? odds + ' \u2713' : odds,
+    rows.push({ group: CLASSIFY_GROUP, icon: c.uri ? typeGlyph(c.uri) : 'none', label: c.title, hint: current ? odds + ' \u2713' : odds,
       disabled: current, keepOpen: true, run: () => applyType(doc, c.uri) });
   }
   if (!rows.length) rows.push({ group: CLASSIFY_GROUP, label: 'No type matches', disabled: true });
@@ -1131,7 +1133,7 @@ function renderPalette() {
     // a row names its glyph, or hands over the markup itself (the "/" menu's block glyphs, the refusal ban)
     const icon = document.createElement('span'); icon.className = 'ricon' + (r.node ? ' ' + (r.icon || 'dot') : ''); icon.innerHTML = r.icon ? iconSvg(r.icon) : r.svg || '';
     if (r.spin) icon.classList.add('thinking'); // a row waiting on an answer: its glyph breathes while it waits
-    const rowHue = r.node ? r.node.hue : r.hue; // documents and "Create new …" type choices both carry the type hue
+    const rowHue = r.hue; // only the Set colour page carries one: every other glyph is monochrome
     if (rowHue != null) { icon.classList.add('hue'); icon.style.setProperty('--hue', String(rowHue)); }
     const label = document.createElement('span'); label.className = 'label';
     const match = r.match || (q ? fuzzyMatch(r.label, q.toLowerCase()) : null); // every level: the letters the query matched, in bold
@@ -1175,7 +1177,7 @@ function togglePalette(mode, link, pin) {
   palMode = mode; palRows = []; palIndex = 0; palBusy = false; palEnter = null; clearTimeout(palTimer); palTimer = null;
   // meetingNow is cleared, not kept: every open re-reads the meeting, the same rule the quick-add panel follows.
   fieldLinkCtx = null;
-  if (mode === 'cmd') { palDoc = currentDoc(); palField = fieldAt(document.activeElement); fieldReturn = palField && palField.key; palTaskCtx = null; meetingNow = undefined; meetingCtx = null; loadPins(); subCache.clear(); refreshChatGPTStatus(); }
+  if (mode === 'cmd') { palDoc = currentDoc(); palField = fieldAt(document.activeElement); fieldReturn = palField && palField.key; palTaskCtx = null; meetingNow = undefined; meetingCtx = null; loadPins(); loadWorkspaceTypes(true); subCache.clear(); refreshChatGPTStatus(); }
   palInput.placeholder = mode === 'search' ? 'Search Tana' : mode === 'pinToday' ? 'Search open tasks assigned to you' : mode === 'slash' ? 'Choose a block type or create' : 'Run a command';
   palInput.value = link ? link.text : '';
   if (mode === 'search') searchNow(); else renderPalette();
