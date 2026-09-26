@@ -151,6 +151,52 @@ machines; a choice about this screen or this machine does not.
   `onSettings` handler in renderer/app.js (theme, Home, hotkeys and the arrangements are the examples).
 - Add the key to the table in docs/SETTINGS.md.
 
+## A document kind
+
+A kind is the `<kind>` of `tana:<kind>:<ulid>` (AGENTS.md lists the ones Tana has). To have the views list it:
+
+1. **sdk/query.js** — one entry in `KIND_NODE_TYPE` (view kind → node type). `VIEW_KINDS` and the reverse
+   `NODE_TYPE_KIND` are derived from it, so the filter accepts it and a saved search reads it back; sdk-check
+   round-trips every kind through a saved search. Leave it out of `ANY_KINDS` if it is not library content (spaces,
+   people and types are asked for by name), and add its node type to `searchParams` if ⌘S should find it. sdk-check pins the exact lists these make (`VIEW_KINDS`,
+   the library's and ⌘S's node types): update those assertions with it.
+2. **main/state.js** — `PLAIN_KINDS`, which gives its rows the icon named after the kind and a kind tag, and also keeps
+   its documents out of a meeting's or space's sidebar notes and outcomes (main/related.js `related`); if they belong
+   there, that filter needs a set of its own. The SVG itself
+   is an entry in `scripts/build-icons.js` `WANT` (which writes `icons.js`) or in `renderer/nodes.js` `LIB_ICONS`,
+   the two tables `iconSvg` looks in.
+3. **renderer/views.js** — its choice in the Type pill, `TYPES`.
+4. **renderer/mock.js** — a row, and the kind in `kindOf`, which otherwise files it under docs.
+
+What it may do is not guessed. Rows of a kind that `sdk/node.js` `editable()` does not list stay read-only, and main's
+`mut` refuses writes to them; sharing, moving, deleting and archiving are `sdk/access.js` `KINDS`, `DELETABLE`,
+`ARCHIVABLE` and `LINK_SHAREABLE`. Change those only from verified Tana behaviour.
+
+To create one: a `kind` branch in `sdk/node.js` `initDocument` (seed exactly the keys Tana writes; read a real one with
+`platform-cli rawdoc`), its id prefix in `main/state.js` `KINDS` (`createDocument` refuses a kind without one), and
+an entry in `main/documents.js` `creationOptions` and the mock's `creationOptions` for Cmd+K and "/" to offer it.
+
+## An outline block
+
+1. **sdk/content.js** — how it reads: `node()` builds the outline node and `blockType` names it; a block that holds no
+   words is in `ATOMS`.
+   - A type the outliner can switch to: its name in `BLOCK_TYPES`, its leaf in `setLeaf` and its container in the `rehome(…)` call in `setBlockType`. A new
+     ProseMirror node that carries words also goes in `TEXT_BLOCKS`, or `setText` and `setBlockType` refuse it once a
+     row has become one; the container must be one Tana already has (`bulletList`, `orderedList` or `blockquote`). A new
+     holder is a change to sdk/content.js of its own: every walk and wrap there tests `isList`/`isQuote`/`isHolder`, `LISTS` or the
+     `'blockquote'` name (reading, ids, lookup, wrapping, rehoming), so find them all with
+     `rg "isList|isQuote|isHolder|LISTS|'blockquote'" sdk/content.js`.
+   - A block that is inserted (like a divider or a table): an `insert…` function beside `insertDivider`, exported from sdk/content.js and listed in
+     docs/sdk/03-api-reference.md, then an IPC
+     call for it as above (the `block:insert…` handlers in main/documents.js, preload.js, `DEMO_WRITES`, the mock),
+     and its "/" row and dispatch in renderer/toolbar.js.
+2. **renderer/nodes.js** — a switchable type's label in `BLOCK_TYPES` (what `blockTypeOf` and the "/" menu read) and
+   its glyph in `BLOCK_GLYPH`. A block with no words of its own also goes in `isAtomic` (else keys type and split into it), and, when
+   `node()` marks it `editable: false`, in `canEditStructure` (else it cannot be moved or deleted).
+3. **renderer/render.js** draws it; styles.css styles it.
+4. **scripts/sdk-check.js** — its outline section: the read, the write, and two Documents wired
+   `local-update → applyRemote` converging.
+
 ## The checks to extend
 
 `npm run lint` and `npm run check` must pass before every push; CI runs both on Node 22.
