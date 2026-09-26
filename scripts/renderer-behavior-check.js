@@ -4055,6 +4055,9 @@ function runRailToggleCheck() {
   // the same instrument runSearchesGroupCheck uses for the boot statement it cannot reach.
   assert.match(source, /railEl\.hidden = railGrip\.hidden = railOff\(empty\);/,
     'renderRail actually asks railOff, so the preference reaches the sidebar rather than sitting in a helper nobody calls');
+  // A saved search is a list: the same anchor keeps it without a sidebar, and so without the button that shows one.
+  assert.match(source, /!String\(parent\.docId\)\.startsWith\(SEARCH_ID\) \? parent\.docId : null;/,
+    'renderRail gives a saved search no sidebar and no sidebar button');
 }
 
 // A saved search is a query you can edit, so the pills serve it too, keyed by the document rather than the view.

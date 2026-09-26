@@ -259,10 +259,11 @@ function railPinAction(pinHub, docId) {
   return row;
 }
 // Pinned, Outcomes, Proposals and References for the zoomed document; a writable pin hub keeps Pinned available when empty.
+// A saved search is a list, like the views: no sidebar, and so no button to show one (issue #234).
 function renderRail(parent) {
   const active = document.activeElement, keep = active && active.classList && active.classList.contains('rrow') ? active.dataset.id : null;
   railEl.replaceChildren();
-  const docId = parent && parent.node.kind === 'document' && !parent.node.draft ? parent.docId : null;
+  const docId = parent && parent.node.kind === 'document' && !parent.node.draft && !String(parent.docId).startsWith(SEARCH_ID) ? parent.docId : null;
   watchRail(docId);
   if (!docId) { railEl.hidden = railGrip.hidden = true; renderRailToggle(false); return; }
   loadRelated(docId);
