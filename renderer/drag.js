@@ -235,8 +235,10 @@ document.addEventListener('dragstart', (e) => {
   e.dataTransfer.effectAllowed = item.node.kind === 'document' ? 'link' : 'move';
   e.dataTransfer.setData(DRAG_TYPE, item.key);
   const n = item.node;
-  // writable: a task under Today's Tasks is a read-only row whose box says whether the task itself can be edited
-  if (isTask(n) && isRealId(n.id)) e.dataTransfer.setData(TASK_DRAG_TYPE, JSON.stringify({ id: n.id, text: n.text || '', kind: n.kind, icon: n.icon, createdBy: n.createdBy, stateType: stateOf(n), writable: n.editable === true || n.checkable === true }));
+  // writable: unknown (null) counts as writable, as everywhere else in the renderer (canEditNode); a task under
+  // Today's Tasks is a read-only row whose box says whether the task itself can be edited
+  const writable = item.parent?.node?.timeline?.today ? n.checkable === true : n.editable !== false;
+  if (isTask(n) && isRealId(n.id)) e.dataTransfer.setData(TASK_DRAG_TYPE, JSON.stringify({ id: n.id, text: n.text || '', kind: n.kind, icon: n.icon, createdBy: n.createdBy, stateType: stateOf(n), writable }));
   e.dataTransfer.setDragImage(dragLine(row), 8, 10);
   row.classList.add('dragging');
 });
