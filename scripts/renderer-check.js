@@ -173,7 +173,7 @@ assert.match(source, /who\.textContent = summary\.assignees/);
 assert.match(source, /clickable\(who, \(\) => openAssigneePalette\(node\)\)/);
 assert.match(source, /clickable\(icon, \(\) => openVisibility\(node, summary\.scope\)\)/);
 assert.match(source, /summary\.assignees === 'Unassigned'/);
-assert.match(source, /iconNode\('unassigned'\)/);
+assert.match(source, /iconEl\('unassigned', null\)/);
 assert.match(source, /icon: 'unassigned', label: 'Unassigned'/);
 assert.doesNotMatch(source, /return 'Assigned to ' \+ assignees/);
 assert.match(source, /label: 'Edit assignees'/);
@@ -485,6 +485,12 @@ assert.doesNotMatch(styleSheet, /hsl\(var\(--hue\)/, 'hued rules draw in OKLCH, 
 assert.doesNotMatch(styleSheet, /--[\w-]+\s*:[^;}]*var\(--hue\)/, 'a custom property must not hold the hue colour: it resolves where it is declared, not where it is used');
 assert.match(styleSheet, /\.bullet\.icon\.hue svg[^{]*\{ color: oklch\(0\.7 0\.1 var\(--hue\)\); \}/, 'a hued glyph is Tana\u2019s own colour for that hue');
 assert.match(styleSheet, /\.palette\.anchored:not\(\[hidden\]\) \{/, 'the @ dropdown layout applies only while the palette is shown');
+// Looks live in styles.css (#370). The renderer writes to style only what it computes — a position, a width, a hue, a
+// counter — or clears it; a fixed look set from JS is one the stylesheet then has to fight with !important.
+// (display = 'none' is motion.js measuring a region with it taken out for one layout, and put back at once.)
+assert.doesNotMatch(source, /\.style\.cssText \+?= (?!'';)/, 'the renderer sets no inline cssText: give the element a class in styles.css');
+assert.doesNotMatch(source, /\.style\.(?!display\b)[a-zA-Z]+ = '[^']+';/, 'the renderer sets no fixed inline style: give the element a class in styles.css');
+assert.match(styleSheet, /\.tmeta > \.ticon:not\(:first-child\) \{ margin-left: 6px; \}/, 'a row\u2019s facts stand 6px apart, the first one against the .meta span\u2019s own 8px');
 // The agent prompt page is an editor, not a list to search: it never says "No results" under its one row, and the
 // query that found "Assign to Agent" is cleared on the way in, or its letters would show as bold in that row.
 // "Discuss with …" is the same shape — what is typed *is* the row — so it is skipped too, or every name typed
