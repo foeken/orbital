@@ -1,7 +1,8 @@
 'use strict';
 // Electron main: the process boundary. Everything that knows Tana lives in main/ (state, rows, documents, related,
-// views, pins, images); this file owns the window, the menu, the IPC table and the boot sequence, plus the test hook
-// that scripts/sdk-check.js and the CLI use to drive the same modules without a window.
+// views, pins, images, and each one's ipc table); this file owns the window, the menu, the boot sequence and the
+// registering of those tables, plus the test hook that scripts/sdk-check.js and the CLI use to drive the same
+// modules without a window.
 const { app, BaseWindow, Menu, Notification, WebContentsView, ipcMain, nativeTheme, screen, shell } = require('electron');
 const path = require('node:path');
 const db = require('./db');
@@ -16,18 +17,25 @@ const { isDateUri } = require('./sdk/dates');
 const agent = require('./main/agent');
 const ai = require('./main/ai');
 const { NOT_CONNECTED, S, VIEWS, docStates, errText, idKind, isSearch, isSpace, metaSigs, today, truncatedViews, redoStack, report, scheduleRefresh, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
-const { cachedNodeHue, graphRow, members, rememberNodeHue, rememberType, toNode } = require('./main/rows');
+const { cachedNodeHue, graphRow, rememberNodeHue, rememberType, toNode } = require('./main/rows');
 const { accessContext, addTypeField, archivedTypes, chatOutline, codexIds, createDocument, creationOptions, taskTypes, creatorOf, defineField, discussWith, documentAction, followSummary, history, info, linkShared, metaSig, moveBlock, moveTarget, mut, mutTasks, notifyOn, notifyState, referenceIn, setCodex, setField, setNotify, onChange, op, outlineWithReferences, sensitiveIds, setSensitive, setType, setTypeHue, typeCandidates, typeChoices, typeList } = require('./main/documents');
-const { callOf, changesOf, related, searchChildren, searchPreview, spaceChildren, summaryChanges, summaryUri, unwatchRelated, watchRelated } = require('./main/related');
+const { callOf, changesOf, related, searchChildren, spaceChildren, summaryChanges, unwatchRelated, watchRelated } = require('./main/related');
 const { announceNewInbox, hiddenRules, watchInbox, inboxCount, listFilter, mcpHidden, myTasks, preset, refresh, search, searchCreate, searchList, searchTitle, setHidden, setMcpHidden, setViewFilter, start, viewFilter, viewRows } = require('./main/views');
 const { nodePin, pinState, pinTree, pinnedDates, pinnedUris, setPin, todayNode, weekNode, weekTitle } = require('./main/pins');
-const { image, insertImage, cancelUpload } = require('./main/images');
 const inbox = require('./main/inbox');
 const proposalsPage = require('./main/proposals');
 const timelinePage = require('./main/timeline');
 const icons = require('./main/icons');
 const settings = require('./main/settings');
 const meetings = require('./main/meetings');
+
+// A main/ module that answers the renderer keeps its channels beside the code they call, as a table it exports:
+// ipc = { 'channel': (event, ...args) => … }. preload.js names each channel for the page. What main.js registers
+// itself is Electron's (windows, overlays, shell, app paths, settings sent to other pages), reads several modules at
+// once (outline:children), or has not moved to its module yet (#335).
+for (const m of [inbox, proposalsPage, timelinePage, require('./main/presence'), meetings, require('./main/images'), icons, require('./main/related'), require('./main/rows')]) {
+  for (const [channel, handle] of Object.entries(m.ipc)) ipcMain.handle(channel, handle);
+}
 
 // A failed S.session probe is unknown, not a confirmed sign-out. The renderer keeps the login button hidden while authChecking.
 async function resolveInitialAuth(s) {
@@ -211,13 +219,6 @@ ipcMain.handle('view:setFilter', (_e, id, filter) => {
 });
 // events start with an empty content map (no doc node yet); readOutline needs the children list
 ipcMain.handle('outline:children', (e, id) => (id === inbox.PAGE ? inbox.rows() : id === proposalsPage.PAGE ? proposalsPage.rows() : id === timelinePage.PAGE ? timelinePage.rows((part) => { if (!e.sender.isDestroyed()) e.sender.send('timeline:part', part); }) : isSearch(id) ? searchChildren(id) : isSpace(id) ? spaceChildren(id) : op(id, (doc) => (idKind(id) === 'chat' ? chatOutline(doc) : doc.content.get('children') ? outlineWithReferences(doc) : []))));
-// Notifications (main/inbox.js): the page's rows come through outline:children above; these are its count and writes.
-ipcMain.handle('inbox:unread', () => inbox.unread());
-ipcMain.handle('inbox:setRead', (_e, id, read) => inbox.setRead(id, !!read));
-ipcMain.handle('inbox:markAll', () => inbox.markAll());
-// Proposals (main/proposals.js): its rows come through outline:children too; this is the one write, approve or reject.
-ipcMain.handle('timeline:pages', (_e, n) => timelinePage.setPages(n)); // how many pages of three days back the Timeline reads (main/timeline.js)
-ipcMain.handle('proposals:answer', (_e, chatUri, proposedUri, approve) => proposalsPage.answer(chatUri, proposedUri, !!approve));
 ipcMain.handle('doc:info', (_e, id) => op(id, info));
 ipcMain.handle('doc:creationOptions', () => creationOptions());
 ipcMain.handle('doc:taskTypes', () => taskTypes()); // Create task's picker: the workflow types a task can be made with
@@ -233,10 +234,6 @@ ipcMain.handle('types:list', () => typeList());
 // A type's colour: the one `appearance` field Tana keeps, written on the type itself, so every document wearing
 // it follows. setTypeHue rebuilds the rows and announces them itself, since no change event carries appearance.
 ipcMain.handle('doc:setTypeHue', (_e, typeUri, hue) => setTypeHue(typeUri, hue ?? null));
-// A type's own glyph: the built-in Nucleo set to search, the glyphs currently chosen (sent with every roots load so
-// no row is drawn before the glyph it names exists), and the choice itself. App-local: Tana has nowhere to keep it.
-ipcMain.handle('icons:search', (_e, query) => icons.searchIcons(query));
-ipcMain.handle('icons:types', () => icons.typeIcons());
 // The renderer's preferences, from the same store: a synchronous snapshot at load (preload reads it before the
 // first paint) and one write per change.
 // the menu shows ⌘N but leaves the key to the renderer's New window row (DEFAULT_HOTKEYS), so it can be re-recorded
@@ -373,8 +370,6 @@ ipcMain.handle('search:filter', (_e, id) => op(id, (doc) => {
     display: searchDisplay(arrangement.display),
   };
 }));
-// What the pills would find if they were saved. A staged edit has to change the rows, or the pills read as broken.
-ipcMain.handle('search:preview', (_e, filter) => searchPreview(filter));
 ipcMain.handle('search:setFilter', (_e, id, filter, sort, group, display) => {
   if (!validViewFilter(filter)) throw new Error('invalid view filter'); // never let a bad filter empty a saved search
   return mut(id, (doc) => {
@@ -538,8 +533,6 @@ ipcMain.handle('block:setCell', (e, id, cellId, value, own) => mut(id, (doc) => 
 ipcMain.handle('block:tableOp', (_e, id, cellId, op) => mut(id, (doc) => content.tableOp(doc, cellId, op))); // a row or column around a cell (content.TABLE_OPS); returns the cell for the caret
 ipcMain.handle('block:setBlockType', (_e, id, nodeId, type) => mut(id, (doc) => { content.setBlockType(doc, nodeId, type); })); // type: one of content.BLOCK_TYPES
 ipcMain.handle('block:insertDivider', (_e, id, nodeId) => mut(id, (doc) => content.insertDivider(doc, nodeId))); // nodeId null appends at the end
-ipcMain.handle('block:insertImage', (_e, id, nodeId, file, uploadId) => insertImage(id, nodeId, file, uploadId)); // file { bytes, filename, mimeType }: upload, image document, block after nodeId
-ipcMain.handle('block:cancelUpload', (_e, uploadId) => cancelUpload(uploadId));
 ipcMain.handle('block:insertTable', (_e, id, nodeId) => mut(id, (doc) => content.insertTable(doc, nodeId))); // "/" Table: 3x3 with a header row after nodeId; returns its first cell
 ipcMain.handle('block:insertAfter', (_e, id, nodeId, text, block) => mut(id, (doc) => content.insertAfter(doc, nodeId, text, false, block)));
 ipcMain.handle('block:insertBefore', (_e, id, nodeId, text) => mut(id, (doc) => content.insertBefore(doc, nodeId, text)));
@@ -569,25 +562,12 @@ ipcMain.handle('pins:pinTo', (_e, hubId, uri) => nodePin(hubId, uri, true)); // 
 ipcMain.handle('pins:unpinFrom', (_e, hubId, uri) => nodePin(hubId, uri, false));
 ipcMain.handle('sensitive:list', () => sensitiveIds()); // the synced setting sensitive:set writes; db's table is only its migration source
 ipcMain.handle('sensitive:set', (e, id, on) => { const stored = setSensitive(id, on); tellOthers(e?.sender); return stored; });
-ipcMain.handle('doc:related', (_e, id) => related(id)); // { summary, tagline, pinned[], outcomes[], proposals[], notes[], backlinks[] }
-ipcMain.handle('doc:watchRelated', (e, id) => watchRelated(id, e && e.sender ? e.sender.id : 'main')); // the page on screen (null: none): its sidebar's edges pushed as 'related:changed'
-ipcMain.handle('meeting:info', (_e, id) => meetings.meetingInfo(id));
-ipcMain.handle('meeting:edit', (_e, id, change) => meetings.editMeeting(id, change));
-ipcMain.handle('meeting:suggestions', () => meetings.attendeeSuggestions());
-ipcMain.handle('doc:summaryUri', (_e, id) => summaryUri(id)); // where a meeting should actually open, or null
 // "Discuss with …": one call for the type and the field, because both are the same decision (main/documents.js)
 ipcMain.handle('doc:discussWith', (_e, id, who) => discussWith(id, who));
 // and what the title suggests that name is (main/ai.js). ChatGPT auth takes priority over the local API key.
 ipcMain.handle('ai:discussWith', (_e, title) => ai.suggestDiscussWith(title, globalThis.fetch, app.getPath('userData')));
 // "Classify type": the types this document may have, weighed by the model; the write stays doc:setType's
 ipcMain.handle('ai:classifyType', async (_e, id) => ai.classifyType(await typeCandidates(id), globalThis.fetch, app.getPath('userData')));
-// Presence (main/presence.js): the renderer opens a room per document on screen, names the one being viewed, and says
-// where its caret is.
-const presence = require('./main/presence');
-ipcMain.handle('presence:open', (_e, id) => presence.open(id));
-ipcMain.handle('presence:close', (_e, id) => presence.close(id));
-ipcMain.handle('presence:view', (e, id) => presence.view(id, e.sender.id)); // per page: one half going away cannot end the other's heartbeat
-ipcMain.handle('presence:set', (_e, id, at) => presence.set(id, at && typeof at.blockId === 'string' ? { blockId: at.blockId, anchor: Number(at.anchor) || 0, focus: Number(at.focus) || 0 } : null));
 ipcMain.handle('doc:exportPdf', (_e, id) => require('./main/pdf').exportPdf(id, S.win));
 // The web link for a node, the same url home.tana.inc opens: /o/<org>/<route>/<encoded node uri>. The route is Tana's
 // per kind (its link resolver beside JP.type.url, shared bundle of 2026-09-23): a type, a person, a meeting and a space
@@ -614,10 +594,6 @@ ipcMain.handle('doc:weekNode', async (_e, findOnly) => (await weekNode(new Date(
 const systemTheme = () => (nativeTheme && nativeTheme.shouldUseDarkColors ? 'dark' : 'light');
 ipcMain.handle('theme:system', () => systemTheme());
 if (nativeTheme) nativeTheme.on('updated', () => send('theme:system', systemTheme()));
-ipcMain.handle('image', (_e, uri) => image(uri));
-ipcMain.handle('members', () => members());
-// The meeting this user has joined right now, for the outliner's Pin to current meeting row (main/meetings.js).
-ipcMain.handle('meeting:current', () => meetings.currentMeeting());
 // Hidden titles: the user's list of patterns, applied to every list and search (see listFilter/sdk-query isHidden).
 ipcMain.handle('filters:list', () => hiddenRules());
 ipcMain.handle('filters:add', (_e, pattern) => setHidden([...hiddenRules(), pattern]));

@@ -59,4 +59,12 @@ async function rows() {
 async function setRead(id, read) { const d = await doc(); (read ? inbox.markAsRead : inbox.markAsUnread)(d, id); return inbox.unreadCount(d); }
 async function markAll() { const d = await doc(); inbox.markAllAsRead(d); return inbox.unreadCount(d); }
 
-module.exports = { PAGE, rows, unread, setRead, markAll };
+// What the renderer asks this module (preload.js names each channel for the page; main.js registers the table).
+const ipc = {
+  // the page's rows come through outline:children (main.js); these are its count and writes
+  'inbox:unread': () => unread(),
+  'inbox:setRead': (_e, id, read) => setRead(id, !!read),
+  'inbox:markAll': () => markAll(),
+};
+
+module.exports = { PAGE, rows, unread, setRead, markAll, ipc };

@@ -307,4 +307,9 @@ function pageOf(got, seen, now, date) {
   })];
 }
 
-module.exports = { PAGE, rows, said, statusOf, setPages };
+// What the renderer asks this module (preload.js names each channel for the page; main.js registers the table).
+const ipc = {
+  'timeline:pages': (_e, n) => setPages(n), // how many pages of three days back the Timeline reads
+};
+
+module.exports = { PAGE, rows, said, statusOf, setPages, ipc };

@@ -80,4 +80,10 @@ async function answer(chatUri, proposedUri, approve) {
   return result.warnings || [];
 }
 
-module.exports = { PAGE, rows, answer };
+// What the renderer asks this module (preload.js names each channel for the page; main.js registers the table).
+const ipc = {
+  // its rows come through outline:children (main.js) too; this is the one write, approve or reject
+  'proposals:answer': (_e, chatUri, proposedUri, approve) => answer(chatUri, proposedUri, !!approve),
+};
+
+module.exports = { PAGE, rows, answer, ipc };

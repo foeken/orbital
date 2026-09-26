@@ -184,4 +184,9 @@ function members() {
   return S.membersLoaded;
 }
 
-module.exports = { rememberMeta, rememberType, ownHue, hueOf, typeHue, rememberNodeHue, nodeTag, cachedNodeHue, WEEKDAY, MONTH, hm, eventMeta, isAllDay, resolveTypes, typeTag, typeUriOf, hueWithType, resolveHue, plainRow, memberRow, kindRow, typesByTitle, taskRow, meetingRow, toNode, graphRow, members };
+// What the renderer asks this module (preload.js names each channel for the page; main.js registers the table).
+const ipc = {
+  'members': () => members(),
+};
+
+module.exports = { rememberMeta, rememberType, ownHue, hueOf, typeHue, rememberNodeHue, nodeTag, cachedNodeHue, WEEKDAY, MONTH, hm, eventMeta, isAllDay, resolveTypes, typeTag, typeUriOf, hueWithType, resolveHue, plainRow, memberRow, kindRow, typesByTitle, taskRow, meetingRow, toNode, graphRow, members, ipc };

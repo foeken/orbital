@@ -400,4 +400,13 @@ function watchRelated(id, key = 'main') {
 }
 
 const watchedPages = () => [...watching.values()].map((w) => w.id); // each page's document, whose sidebar is on screen
-module.exports = { spaceChildren, searchChildren, searchPreview, attributeTitles, fieldsOf, writeUpOf, summaryUri, callOf, changesOf, summaryChanges, historyOf, backlinkGroups, related, watchRelated, unwatchRelated, watchedPages, withSearchHeads };
+// What the renderer asks this module (preload.js names each channel for the page; main.js registers the table).
+const ipc = {
+  'doc:related': (_e, id) => related(id), // { summary, tagline, pinned[], outcomes[], proposals[], notes[], backlinks[] }
+  'doc:watchRelated': (e, id) => watchRelated(id, e && e.sender ? e.sender.id : 'main'), // the page on screen (null: none): its sidebar's edges pushed as 'related:changed'
+  'doc:summaryUri': (_e, id) => summaryUri(id), // where a meeting should actually open, or null
+  // what the pills would find if they were saved: a staged edit has to change the rows, or the pills read as broken
+  'search:preview': (_e, filter) => searchPreview(filter),
+};
+
+module.exports = { spaceChildren, searchChildren, searchPreview, attributeTitles, fieldsOf, writeUpOf, summaryUri, callOf, changesOf, summaryChanges, historyOf, backlinkGroups, related, watchRelated, unwatchRelated, watchedPages, withSearchHeads, ipc };
