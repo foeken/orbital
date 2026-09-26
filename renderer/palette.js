@@ -765,7 +765,8 @@ function iconPickRows(q) {
   const doc = iconCtx;
   if (!doc) return [];
   const rows = [];
-  if (typeGlyphs.has(doc.id)) rows.push({ group: ICON_GROUP, icon: 'none', label: 'No icon', hint: 'Back to the generic glyph', keepOpen: true, run: () => applyIcon(doc, null) });
+  // narrowed with the rest, as Unassigned is (memberRows): leading whatever was typed, Enter after "calendar" took the icon off
+  if (typeGlyphs.has(doc.id) && fuzzyMatch('No icon', q)) rows.push({ group: ICON_GROUP, icon: 'none', label: 'No icon', hint: 'Back to the generic glyph', keepOpen: true, run: () => applyIcon(doc, null) });
   for (const icon of iconList) rows.push({ group: ICON_GROUP, icon: icon.name, label: icon.label,
     hint: typeGlyphs.get(doc.id) === icon.name ? '✓' : '', keepOpen: true, run: () => applyIcon(doc, icon.name) });
   if (!rows.length && (palBusy || !q)) rows.push({ group: ICON_GROUP, label: palBusy ? 'Loading…' : 'No icon matches', disabled: true }); // a query that finds none: "No results"

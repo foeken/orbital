@@ -7351,7 +7351,7 @@ async function runSetIconCheck() {
        search: (q) => { palInput.value = q; searchIconsNow(); },
        // what typing does (the input listener): busy at once, main asked after the debounce; Enter pressed in between
        typeThenEnter: (q) => { palInput.value = q; palIndex = 0; palBusy = true; chooseRow(false); searchIconsNow(); },
-       page: () => iconPickRows(),
+       page: (q) => iconPickRows(q),
        mode: () => palMode,
        escape: () => backPalette(),
        known: (name) => customIcons.has(name),
@@ -7422,6 +7422,14 @@ async function runSetIconCheck() {
   api.typeThenEnter('calendar');
   await api.settle();
   assert.deepEqual(plain(api.state().written.slice(before)), [[TYPE, 'nc-calendar']], 'Enter while main is still answering waits, and applies the icon that was typed');
+  // A type that wears one leads with "No icon", but only for words that could mean it: typed "calendar", Enter applies calendar.
+  api.wearing(TYPE, 'nc-rocket');
+  api.answer([{ name: 'nc-calendar', label: 'calendar', svg }]);
+  api.typeThenEnter('calendar');
+  await api.settle();
+  assert.deepEqual(plain(api.state().written.at(-1)), [TYPE, 'nc-calendar'], 'on a type that wears an icon, Enter after typing applies the typed one rather than taking it off');
+  assert.deepEqual(plain(api.page('no').map((r) => r.label)), ['No icon', 'calendar'], 'and "No icon" still answers to its own name');
+  api.wearing(TYPE, null);
   console.log('ok  Set icon: offered on a type, the page searches main\u2019s set and registers what it draws, the current glyph is ticked and removable, one call per choice');
 }
 
