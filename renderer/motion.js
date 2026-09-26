@@ -212,28 +212,25 @@ function motionAfter(root, was) {
 }
 
 // ---- Page: going somewhere ----
-// The page changes at once — every caller expects it changed when this returns — and then lands: the title grows out
-// of the row it was opened from (or slides in the way you went), and the rest follows it, one part after another.
-// Back and forward slide by direction; a view switch only fades. Only for a hand: a reload, a notification click from
-// outside the window and a restored place are drawn as they stand.
+// The page changes at once — every caller expects it changed when this returns — and then lands: the title comes in
+// the way you went and the rest follows it, one part after another. Back and forward slide by direction, opening a
+// page rises into place, a view switch only fades. Only for a hand: a reload, a notification click from outside the
+// window and a restored place are drawn as they stand.
 let turning = false;
-function turnPage(dir, from, update) {
+function turnPage(dir, update) {
   if (turning || !motionOK() || !acted()) return update();
-  const src = typeof from === 'string' ? textEl(from) : from;
-  const rect = src && src.getBoundingClientRect(), size = src && parseFloat(getComputedStyle(src).fontSize);
   turning = true;
   try { update(); } finally { turning = false; }
-  const title = document.getElementById('title'), x = dir === 'back' ? -16 : dir === 'fwd' ? 16 : 0, y = dir === 'in' ? 8 : 0;
-  if (rect && rect.width) growFrom(title, rect, size / parseFloat(getComputedStyle(title).fontSize));
-  else play(title, [{ opacity: 0, transform: 'translate(' + x + 'px, ' + y / 2 + 'px)' }, { opacity: 1, transform: 'none' }], { duration: MOTION.base, easing: MOTION.out });
-  ['crumbs', 'taskInfo', 'fields', 'pills', 'outline', 'rail'].forEach((id, i) => {
+  const x = dir === 'back' ? -16 : dir === 'fwd' ? 16 : 0, y = dir === 'in' ? 8 : 0;
+  ['title', 'crumbs', 'taskInfo', 'fields', 'pills', 'outline', 'rail'].forEach((id, i) => {
     const still = id === 'rail'; // the sidebar is beside the page, not ahead of it: it fades
-    play(document.getElementById(id), [{ opacity: 0, transform: still ? 'none' : 'translate(' + x + 'px, ' + y + 'px)' }, { opacity: 1, transform: 'none' }],
-      { duration: MOTION.base, easing: MOTION.out, delay: (rect ? 2 : 0) * MOTION.stagger + i * MOTION.stagger });
+    const lift = id === 'title' ? y / 2 : y; // the title leads, travelling less than what follows it
+    play(document.getElementById(id), [{ opacity: 0, transform: still ? 'none' : 'translate(' + x + 'px, ' + lift + 'px)' }, { opacity: 1, transform: 'none' }],
+      { duration: MOTION.base, easing: MOTION.out, delay: Math.max(0, i - 1) * MOTION.stagger });
   });
 }
-// An element grows out of where something else stood (a row's title into the page title, a picture out of its row),
-// or back into it. scale is the size it starts at; the width ratio unless the caller knows better.
+// An element grows out of where something else stood (a picture out of its row), or back into it. scale is the size
+// it starts at; the width ratio unless the caller knows better.
 function growFrom(el, rect, scale, back) {
   if (!el || !rect || !motionOK()) return Promise.resolve();
   const r = el.getBoundingClientRect();

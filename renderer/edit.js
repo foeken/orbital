@@ -241,8 +241,7 @@ function zoomTo(item) {
   const same = zoom && zoom.docId === item.docId;
   const via = same ? zoom.via : top.parent && zoom ? [...(zoom.via || []), zoom] : undefined; // a document inside a zoomed space: the space stays in the crumb
   if (via && !docOf(item.docId)) extra.set(item.docId, top.node);
-  // the row's title grows into the page title (renderer/motion.js turnPage)
-  turnPage('in', item.key, () => { zoom = { docId: item.docId, nodeId: item.node.kind === 'document' ? null : item.node.id, from: same ? zoom.from : undefined, via }; render(true); });
+  turnPage('in', () => { zoom = { docId: item.docId, nodeId: item.node.kind === 'document' ? null : item.node.id, from: same ? zoom.from : undefined, via }; render(true); }); // the page rises into place (renderer/motion.js)
   followSummary(item.docId);
 }
 function openReference(node) {
@@ -268,7 +267,7 @@ function toggleReference(node) {
   render(true);
   run(() => tana.setDone(target.id, done));
 }
-function setView(id) { turnPage('swap', null, () => { dropDrafts(); releaseHeld(); view = id; localStorage.setItem('view' + SIDE, id); zoom = null; sel = null; menu = null; loadView(id); render(true); }); }
+function setView(id) { turnPage('swap', () => { dropDrafts(); releaseHeld(); view = id; localStorage.setItem('view' + SIDE, id); zoom = null; sel = null; menu = null; loadView(id); render(true); }); }
 // zoom into a document, switching to its view first when it belongs to another one; from = breadcrumb root instead of the view
 function openDoc(docId, from) {
   // Every zoom of a document comes through here, whichever route asked for it — a row, a pin, the rail, a crumb, a
@@ -280,7 +279,7 @@ function openDoc(docId, from) {
   if (s && s.id !== view) { releaseHeld(); view = s.id; localStorage.setItem('view' + SIDE, view); }
   const doc = allDocs().find((d) => d.id === docId) || extra.get(docId);
   if (doc) recordRecent(doc);
-  turnPage('in', null, () => { zoom = { docId, nodeId: null, from }; render(true); });
+  turnPage('in', () => { zoom = { docId, nodeId: null, from }; render(true); });
   followSummary(docId);
 }
 // An event has no content of its own, so a meeting opens at its write-up. Every zoom passes through here, so the
@@ -353,7 +352,7 @@ function navigate(dir) {
   const left = dir < 0 && navHere && navHere.zoom ? navHere.zoom.docId : null; // Back lands on the page that listed it: that row lights up
   navigating = true;
   try {
-    turnPage(dir < 0 ? 'back' : 'fwd', null, () => {
+    turnPage(dir < 0 ? 'back' : 'fwd', () => {
       flushAll(); dropDrafts();
       if (place.view !== view) { view = place.view; localStorage.setItem('view' + SIDE, view); }
       zoom = place.zoom && { ...place.zoom };
