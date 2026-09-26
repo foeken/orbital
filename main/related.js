@@ -64,7 +64,11 @@ const searchHeads = new Map(); // saved search id -> page -> the ids of the head
 const withSearchHeads = (ids) => [...ids, ...ids.flatMap((id) => [...(searchHeads.get(id) || new Map()).values()].flat())];
 // A page that closed holds no head (main.js removePane). One that only moved on keeps its last one, which counts only
 // while another page shows that search, and is replaced when it opens the search again.
-const dropSearchHeads = (page) => { for (const heads of searchHeads.values()) heads.delete(page); };
+const dropSearchHeads = (page) => {
+  for (const heads of searchHeads.values()) heads.delete(page);
+  // and a read it still has out keeps no head when it answers: page ids are never reused, so the mark stays
+  for (const read of searchReads.keys()) if (read.startsWith(page + '\n')) headRead.set(read, Infinity);
+};
 // The rows a filter would find, without storing it: what a saved search shows while its pills are being edited.
 // It asks the graph exactly what Save would store — filterToSearchQuery, then the same searchQueryParams the stored
 // query goes through — so the preview and the saved result cannot disagree. Saving is then only a write, never a

@@ -1857,6 +1857,14 @@ async function main() {
     answers[9](Promise.reject(new Error('unavailable'))); await windowSaved.catch(() => {}); answers[8]({ nodes: beforeWindow }); await windowRead;
     await new Promise(setImmediate);
     assert.equal(subscribes.includes(beforeWindow[0].id), false, 'nor does a read from before a Save that changed only the completed window');
+    // A page that closes with a read still out: the read's answer recreates no head for it
+    const closing = [{ id: 'tana:text:' + ulid(), title: 'Closed pane' }];
+    const lateRead = backend.handlers.get('outline:children')({ sender: { id: 301 } }, searchId);
+    while (answers.length < 11) await new Promise(setImmediate);
+    backend.dropSearchHeads(301); // main.js removePane
+    answers[10]({ nodes: closing }); await lateRead;
+    await new Promise(setImmediate);
+    assert.equal(subscribes.includes(closing[0].id), false, 'a read answering after its page closed keeps no head');
 
     const brokenDoc = new Document('tana:search:' + ulid());
     brokenDoc.transact((l) => initDocument(l, 'Broken search', ME)); // no query container at all

@@ -6868,6 +6868,7 @@ async function runStagedSearchReloadCheck() {
       answer: async (i, rows) => { answers[i](rows); for (let n = 0; n < 5; n++) await Promise.resolve(); },
       rows: (id) => kids.get(id),
       staged: (id) => searchRows.has(id),
+      unstage: (id) => { searchRows.delete(id); filters.set(id, searchFilters.get(id).filter); },
       errors: () => errors.splice(0),
     });
   `);
@@ -6911,6 +6912,17 @@ async function runStagedSearchReloadCheck() {
   assert.equal(api.rows(moved), undefined, 'a preview for pills that have since changed is not installed');
   await api.answer(14, ['rows for B']);
   assert.deepEqual(plain(api.rows(moved)), ['rows for B'], 'the preview for the pills on screen is');
+  // Stored A read out, staged B's preview fails, Save writes B and its read fails too: A's answer is not B's rows
+  const ab = 'tana:search:01j0abab0000000000000000';
+  api.stage(ab); api.unstage(ab); // saved A on the page, nothing staged
+  const aRead = api.reload(ab); // 16 (15 was the stage's preview)
+  api.stage(ab, ['closed']); // 17
+  await api.answer(17, Promise.reject(new Error('unavailable')));
+  const bSave = api.save(ab); // 18
+  await api.answer(18, Promise.reject(new Error('unavailable'))); await bSave.catch(() => {});
+  await api.answer(16, ['rows for A']); await aRead;
+  assert.notDeepEqual(plain(api.rows(ab) || null), ['rows for A'], 'a stored answer for the filter a Save replaced is not installed under the saved pills');
+  api.errors();
   console.log('ok  a saved search keeps the rows of its newest read: staged pills, a second preview and a Save all retire the reads still out');
 }
 

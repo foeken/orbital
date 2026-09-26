@@ -376,15 +376,19 @@ const nextRead = (docId) => { const seq = (reloadSeq.get(docId) || 0) + 1; reloa
 // that failed decides nothing, so an older answer for the same filter still lands.
 const landedRead = new Map();
 const lands = (docId, seq) => { if (seq <= (landedRead.get(docId) || 0)) return false; landedRead.set(docId, seq); return true; };
+// The stored filter a saved search's page was last loaded or saved with (searchFilters), as text; null while unknown.
+const storedFilter = (docId) => { const saved = searchFilters.get(docId); return saved ? JSON.stringify(saved.filter) : null; };
 async function reload(docId) {
-  const seq = nextRead(docId);
+  const seq = nextRead(docId), search = String(docId).startsWith(SEARCH_ID), asked = search ? storedFilter(docId) : null;
   // A type page asks its filter; an answer to a filter the pills have since moved on from is dropped, or clicking
   // through a menu quickly could leave the page on an older choice than the pills show.
   if (isTypeId(docId)) { const asked = typeFilter(docId), rows = await tana.searchPreview(asked); if (filters.get(docId) === asked && lands(docId, seq)) kids.set(docId, rows); return; } // and a newer read of the same filter wins
   let rows;
   // the whole page is in, or the read failed: no later part of it stands in for the page either way (renderer/timeline.js)
   try { rows = await tana.children(docId); } finally { if (docId === TIMELINE_PAGE) timelinePartial = false; }
-  if (String(docId).startsWith(SEARCH_ID) && !lands(docId, seq)) return;
+  // A saved search's stored answer is its rows only while it still answers the stored filter (a Save since replaced
+  // it) and no staged pills are on screen; then the newest such answer wins. lands() last: a refused answer claims nothing.
+  if (search) { const now = storedFilter(docId); if ((asked && now && asked !== now) || searchRows.has(docId) || !lands(docId, seq)) return; }
   kids.set(docId, syncUploads(docId, rows)); // uploads still running keep their placeholders
 }
 // A document's rows are not only the ones on its page: every field it has is an outline of that document too,
