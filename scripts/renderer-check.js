@@ -4,7 +4,6 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-const { analyze } = require('eslint-scope'); // comes with eslint
 const { source, tops } = require('./renderer-source');
 // The renderer is classic scripts sharing one global scope, loaded in the order index.html lists them. Two things
 // break that silently at load time: a name declared twice (a SyntaxError that stops the second file), and a
@@ -17,12 +16,12 @@ const { source, tops } = require('./renderer-source');
     assert.ok(!seen.has(name), name + ' is declared in both ' + seen.get(name) + ' and ' + file);
     seen.set(name, file);
   }
-  // a reference runs later when some scope around it is a function's (or a class field's, which runs on construction)
-  const deferred = (scope) => { for (let s = scope; s; s = s.upper) if (s.type === 'function' || s.type === 'class-field-initializer') return true; return false; };
-  tops.forEach(({ file, ast }, i) => {
+  // a reference runs later only inside a function; a class field is not exempt, since a static one runs at load
+  const deferred = (scope) => { for (let s = scope; s; s = s.upper) if (s.type === 'function') return true; return false; };
+  tops.forEach(({ file, scope }, i) => {
     const later = new Set(tops.slice(i + 1).flatMap((t) => t.names));
     // through: the references this file does not resolve itself, which is every name another file declares
-    for (const { identifier: id, from } of analyze(ast, { ecmaVersion: 2024, sourceType: 'script' }).globalScope.through) {
+    for (const { identifier: id, from } of scope.through) {
       assert.ok(!later.has(id.name) || deferred(from), file + ':' + id.loc.start.line + ' reaches "' + id.name + '" at load, before ' + seen.get(id.name) + ' has loaded');
     }
   });
