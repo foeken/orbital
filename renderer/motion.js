@@ -43,13 +43,17 @@ function play(el, frames, opts) {
 // One shot of a class: the turn a press gives before its answer arrives, the pop a button makes when it turns up.
 // Restartable, which is the whole reason it is a function: dropping the class and re-adding it in the same frame
 // does nothing at all, so the reflow read in between is what lets a second run start instead of being swallowed by
-// the one still going. Under reduced motion the class is dropped and never re-added: the element is where it is.
+// the one still going. The class goes again when its animation ends: left on, it played again whenever the element
+// was shown again — Refresh turned on every arrival at a saved search once it had been pressed. Under reduced
+// motion the class is dropped and never re-added: the element is where it is.
 function playOnce(el, name) {
   if (!el || !el.classList) return;
   el.classList.remove(name); // dropped before anything is asked: these elements are not rebuilt, so a class left on one would be
   if (stillPreferred()) return;
   void el.offsetWidth;
   el.classList.add(name);
+  const end = (e) => { if (e && e.target !== el) return; el.removeEventListener('animationend', end); el.classList.remove(name); };
+  if (el.addEventListener) el.addEventListener('animationend', end);
 }
 // Flash: a tint that says "this changed" and fades — green arriving, red leaving, blue for "here".
 function flash(el, kind = 'here') {
@@ -233,7 +237,7 @@ function motionAfter(root, was) {
   // Inbox zero: the last rows of a view just left, and what is left is the note saying so.
   if (nodes.some((el) => el.classList.contains('leaving'))) rowsLeftAt = performance.now();
   const note = !zoom && root.querySelector(':scope > .empty-note');
-  if (note && !nodes.length && performance.now() - rowsLeftAt < 1500 && !note.querySelector('button')) { note.textContent = 'All clear'; playOnce(note, 'cleared'); rowsLeftAt = -Infinity; }
+  if (note && !nodes.length && performance.now() - rowsLeftAt < 1500 && !note.querySelector('button')) { note.textContent = 'All clear'; note.classList.add('cleared'); rowsLeftAt = -Infinity; }
 }
 
 // ---- Page: going somewhere ----
@@ -307,8 +311,6 @@ function popRead(ids) {
   if (!motionOK() || !ids.length) return;
   requestAnimationFrame(() => ids.forEach((id, i) => { const el = rowFor(id); if (el) { el.style.setProperty('--i', i); playOnce(el, 'read-now'); } }));
 }
-// the ticks a click just took back: renders in the next moment play the tick in reverse (render.js playTicks)
-const justUndone = new Map();
 // a mention just linked lights up in its row (renderer/toolbar.js linkTo)
 function popMention(key, uri) {
   for (const m of textEl(key)?.querySelectorAll('.mention') || []) if (m.dataset.uri === uri) playOnce(m, 'pop');

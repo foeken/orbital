@@ -801,7 +801,10 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .palette kbd { font: inherit; font-size: 13px; color: #666; background: #f1f1f1; border-radius: 6px; padding: 1px 8px; }
 .palette .row.active kbd { background: #e4e4e4; }
 /* @ linking: the same palette as a dropdown under the caret (anchorPalette places and sizes the card), no scrim */
-.palette.anchored:not([hidden]) { display: block; padding: 0; background: none; } /* :not([hidden]): the same weight as .palette[hidden] would keep a closed dropdown on screen */
+/* No scrim, open or closing: a dropdown fading out must not bring the Cmd+K scrim back for the length of its fade.
+   Only the display waits on :not([hidden]), the same weight as .palette[hidden], which would keep it on screen. */
+.palette.anchored { padding: 0; background: none; }
+.palette.anchored:not([hidden]) { display: block; }
 .palette.anchored .card { position: absolute; border-radius: 10px; box-shadow: 0 8px 30px rgba(0, 0, 0, .16), 0 0 0 1px rgba(0, 0, 0, .06); }
 .palette.anchored input { font-size: 15px; padding: 10px 14px; }
 .palette.anchored .list { padding: 6px 6px 8px; }
@@ -958,7 +961,7 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .login button:hover { background: #363a3c; }
 
 [data-theme="dark"] .palette { background: rgba(0, 0, 0, .52); }
-[data-theme="dark"] .palette.anchored:not([hidden]) { background: none; }
+[data-theme="dark"] .palette.anchored { background: none; }
 [data-theme="dark"] .recorder { background: rgba(0, 0, 0, .52); }
 [data-theme="dark"] .palette .card, [data-theme="dark"] .recorder .card { background: #242729; box-shadow: 0 12px 40px rgba(0, 0, 0, .5), 0 0 0 1px rgba(255, 255, 255, .08); }
 [data-theme="dark"] .palette input { color: #c9c9c9; border-bottom-color: #3a3f41; background: #242729; }
@@ -1041,14 +1044,15 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 
 /* Press: every button answers the finger by easing down a little, and settles back on a spring when let go. The
    press itself is quick but eased, so it follows the finger rather than snapping; the release is slower, since that is
-   where the spring shows. One rule, so a new button kind joins it here. */
+   where the spring shows. One rule, so a new button kind joins it here. A task's box is not one: its tick is its own
+   squash and pop (renderer/render.js playTick), and a press before it only held it back. */
 /* --press marks these for renderer/motion.js, which hands the spring to a button a press draws again; it does not
    inherit, so what sits inside a button (a pill's menu) is not one. A press inside a pill's menu is the menu's, so the
    pill does not shrink under it. */
 @property --press { syntax: '<number>'; inherits: false; initial-value: 0; }
-:is(.navbtn, .railtoggle, .pill, .tbtn, .pbutton, .check, .chev, .gmore, .clearfilters, .login button, .recorder button, .cbadge[role="button"], .filter .clear) {
+:is(.navbtn, .railtoggle, .pill, .tbtn, .pbutton, .chev, .gmore, .clearfilters, .login button, .recorder button, .cbadge[role="button"], .filter .clear) {
   --press: 1; transition: transform var(--dur-slow) var(--ease-settle); }
-:is(.navbtn, .railtoggle, .pill, .tbtn, .pbutton, .check, .chev, .gmore, .clearfilters, .login button, .recorder button, .cbadge[role="button"], .filter .clear):active:not(:disabled):not(:has(.menu:active)) {
+:is(.navbtn, .railtoggle, .pill, .tbtn, .pbutton, .chev, .gmore, .clearfilters, .login button, .recorder button, .cbadge[role="button"], .filter .clear):active:not(:disabled):not(:has(.menu:active)) {
   transform: scale(.95); transition: transform var(--dur-quick) var(--ease-out); }
 
 /* Surface for what is built again on every key: a pill's menu and the toolbar's style menu (renderer/motion.js

@@ -218,7 +218,6 @@ function toggleDone(item, direct) {
   if (!accept) item.node.done = item.node.done ? 0 : 1;
   item.node.stateType = item.node.done ? 'closed' : 'open'; // what setDone makes of it: an unchecked Inbox task comes back In Progress, not dashed
   if (item.node.done) justDone.set(item.docId, Date.now());
-  else if (!accept) justUndone.set(item.docId, Date.now());
   if (zoom && zoom.docId === item.docId) extra.set(item.docId, item.node); // the page stays open when the task leaves the filtered view
   render(true);
   run(() => (accept ? tana.setState(item.docId, 'open') : tana.setDone(item.docId, item.node.done)));
@@ -263,7 +262,6 @@ function toggleReference(node) {
   node.reference.node = { ...node.reference.node, done };
   extra.set(target.id, { ...target, done });
   if (done) justDone.set(target.id, Date.now());
-  else justUndone.set(target.id, Date.now());
   render(true);
   run(() => tana.setDone(target.id, done));
 }

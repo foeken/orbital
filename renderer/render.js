@@ -220,45 +220,34 @@ function strikeTop(text) {
   return { top: snap(lead + m.fontBoundingBoxAscent * 2 / 3 - thick / 2 + STRIKE_NUDGE), lh, thick: snap(thick) };
 }
 const STRIKE_NUDGE = 0;
-// Unchecking plays it backwards, more quietly: the box gives a little and the strike draws back off the words.
-function playTick(check, text, at, undo) {
-  const mark = (undo ? 'undo:' : '') + at;
-  if (!check || !text || check.dataset.tick === mark || !motionOK()) return;
-  check.dataset.tick = mark;
+// Unchecking is instant: taking a tick back is a correction, not something to celebrate. The tick keeps its own timing,
+// tuned by eye: on the shared curves the strike lingered at its end and the whole thing read as slower.
+function playTick(check, text, at) {
+  if (!check || !text || check.dataset.tick === String(at) || !motionOK()) return;
+  check.dataset.tick = String(at);
   const ring = (px, a) => '0 0 0 ' + px + 'px rgba(111, 174, 130, ' + a + ')';
   // one stroke per line (a line-high tile repeated down), so a wrapped title is struck on every line, where the line-through will be
   const { top, lh, thick } = strikeTop(text);
   const strike = (w) => ({ backgroundImage: 'linear-gradient(transparent ' + top + 'px, currentColor ' + top + 'px ' + (top + thick) + 'px, transparent 0)', backgroundRepeat: 'repeat-y', backgroundSize: w + ' ' + lh + 'px', textDecorationColor: 'transparent' });
-  const anims = undo ? [
-    check.animate([{ transform: 'scale(.82)' }, { transform: 'scale(1)' }], { duration: MOTION.base, easing: MOTION.spring }),
-    text.animate([strike('100%'), strike('0')], { duration: MOTION.quick, easing: MOTION.in }),
-  ] : [
+  const anims = [
     check.animate([{ transform: 'scale(1)', boxShadow: ring(0, .6) }, { transform: 'scale(.8)', offset: .25 }, { transform: 'scale(1.18)', boxShadow: ring(7, .25), offset: .6 }, { transform: 'scale(1)', boxShadow: ring(12, 0) }],
-      { duration: MOTION.slow + MOTION.stagger * 4, easing: MOTION.spring }),
-    check.animate([{ backgroundSize: '100% 100%, 100% 100%' }, { backgroundSize: '0% 100%, 100% 100%' }], { duration: MOTION.base, delay: MOTION.stagger * 4, easing: MOTION.out, fill: 'backwards' }),
-    text.animate([strike('0'), strike('100%')], { duration: MOTION.slow, delay: MOTION.quick, easing: MOTION.move, fill: 'backwards' }),
+      { duration: 550, easing: 'cubic-bezier(.34, 1.56, .64, 1)' }),
+    check.animate([{ backgroundSize: '100% 100%, 100% 100%' }, { backgroundSize: '0% 100%, 100% 100%' }], { duration: 260, delay: 120, easing: 'ease-out', fill: 'backwards' }),
+    text.animate([strike('0'), strike('100%')], { duration: 400, delay: 180, easing: 'ease-in-out', fill: 'backwards' }),
   ];
   for (const a of anims) a.currentTime = Date.now() - at;
 }
 // At the end of a render: every place a task completed here is drawn (its row, its sidebar row, the page head).
 function playTicks() {
-  if (!justDone.size && !justUndone.size) return;
+  if (!justDone.size) return;
   const now = Date.now();
   for (const [id, at] of justDone) if (now - at > TICK_MS) justDone.delete(id);
-  for (const [id, at] of justUndone) if (now - at > TICK_MS) justUndone.delete(id);
   for (const el of outline.querySelectorAll('.node.done')) { // a task row, or a line that is one mention of a task
     const item = items.get(el.dataset.key), n = item && (referenceTarget(item.node) || item.node);
     if (n && justDone.has(n.id)) playTick(el.querySelector(':scope > .line > .check'), el.querySelector(':scope > .line .text'), justDone.get(n.id));
   }
   for (const row of railEl.querySelectorAll('.rrow.done[data-id]')) if (justDone.has(row.dataset.id)) playTick(row.querySelector('.check'), row.querySelector('.rtitle'), justDone.get(row.dataset.id));
   if (zoom && !zoom.nodeId && justDone.has(zoom.docId) && titleEl.classList.contains('done')) playTick(titleCheck, titleEl, justDone.get(zoom.docId));
-  if (!justUndone.size) return;
-  for (const el of outline.querySelectorAll('.node:not(.done)')) {
-    const item = items.get(el.dataset.key), n = item && (referenceTarget(item.node) || item.node);
-    if (n && justUndone.has(n.id)) playTick(el.querySelector(':scope > .line > .check'), el.querySelector(':scope > .line .text'), justUndone.get(n.id), true);
-  }
-  for (const row of railEl.querySelectorAll('.rrow:not(.done)[data-id]')) if (justUndone.has(row.dataset.id)) playTick(row.querySelector('.check'), row.querySelector('.rtitle'), justUndone.get(row.dataset.id), true);
-  if (zoom && !zoom.nodeId && justUndone.has(zoom.docId) && !titleEl.classList.contains('done')) playTick(titleCheck, titleEl, justUndone.get(zoom.docId), true);
 }
 function render(force = false) {
   if (force !== true && (editingRow() || selectionFrozen)) { renderDeferred = true; markFalling(); refreshRowChrome(); if (pillsDrawn) renderPills(true); return; }
