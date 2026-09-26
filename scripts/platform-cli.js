@@ -1049,7 +1049,7 @@ commands.boot = async () => {
   process.env.TANA_MAIN_TEST = '1';
   require('../db').open(path.join(app.getPath('temp'), 'tana-cli-boot.sqlite'));
   const main = require('../main');
-  main.testRuntime({ session, win: null });
+  main.testRuntime({ session, win: null, userData: app.getPath('temp') }); // start() keeps its peer.json there
   const noise = [], real = { warn: console.warn, error: console.error };
   for (const level of ['warn', 'error']) console[level] = (...a) => noise.push(level + ': ' + a.map(String).join(' ').slice(0, 300));
   const started = Date.now();
