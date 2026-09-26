@@ -201,7 +201,7 @@ dark twin.
 | `--scrim` | 12% / 52% black | behind a dialog (⌘K, the key recorder, Help) |
 | `--shadow-menu` | | a menu or dropdown (`.menu`, the @ dropdown) |
 | `--shadow-card` | | a dialog's card (⌘K, the recorder, Help) |
-| `--focus` | `#b5d0ee` / `#58768a` | every keyboard focus ring: `outline: 2px solid var(--focus); outline-offset: 2px` on a row or block, `box-shadow: 0 0 0 2px var(--focus)` on a button |
+| `--focus` | `#b5d0ee` / `#58768a` | the focus ring of anything new: `outline: 2px solid var(--focus); outline-offset: 2px` on a row or block, `box-shadow: 0 0 0 2px var(--focus)` on a button. A few older rules still write the colour out, with dark twins (`.gmore`, `.tbtn`, image and table focus; #379), and the agent badge keeps a stronger `#4f8ad9` on purpose |
 | `--muted` | (PR #305) | secondary words: facts, hints, headings, placeholders, done rows. Until #305 lands, the greys it replaces are `#999` light and `#858b8e` dark |
 | `--z-toolbar` 9 < `--z-palette` 10 < `--z-recorder` 11 < `--z-toast` 12 < `--z-drag` 15 < `--z-lightbox` 20 | | what stacks over the page. Small local numbers (1, 2, 5) only order siblings inside one component |
 | `--dur-quick` / `--dur-base` / `--dur-slow` / `--dur-flash` / `--dur-loop`, `--stagger`, `--ease-*` | | every transition and animation. Reduced motion sets the durations to 0, so a rule that uses them needs no guard. An endless loop goes behind `@media (prefers-reduced-motion: no-preference)` |
@@ -279,8 +279,9 @@ The full contract is [OUTLINER.md](OUTLINER.md). These are the rules a new featu
 - **Errors go to one place.** An action runs through `run()`, and a failure becomes the red toast (`showError`). The red
   line under the title (`#error`) belongs to the session alone: it asks for a new login. Nothing writes an error into a
   row, and a notice never goes to `#error`.
-- **Focus after an action.** Closing the palette or a menu puts the caret back on the row that had it (`closePalette`).
-  A new row takes the caret. Nothing leaves focus on `body`.
+- **Focus after an action.** Closing the palette puts the caret back on the row that had it (`closePalette`). A
+  pill's or the toolbar's menu gives focus back to its own button (renderer/pills.js, toolbar.js). A new row takes the
+  caret. Nothing leaves focus on `body`.
 - **Empty and loading.** A list with no rows says "Nothing here yet" (`.empty-note`) and offers Clear filters when a
   filter hides rows. #357 adds what would fill the page. A palette page with no match says "No results". Only a launch
   or a Reload shows the loading animation (after 300 ms). Later loads wait blank, and a row still coming says "Loading…"
