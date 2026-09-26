@@ -69,7 +69,7 @@ const tellSides = (win) => win.panes.forEach((p, i) => { p.side = i ? '2' : ''; 
 // win.splitAt: the left half's share of the width, dragged by the grip and saved with the window (even by default)
 function layout(win) {
   const { width, height } = win.getContentBounds(), [left, right] = win.panes;
-  if (right) right.setVisible(isSplit(win));
+  win.panes.forEach((p, i) => p.setVisible(i === 0 || isSplit(win))); // every time: a hidden right half can become the left one
   if (!isSplit(win)) return left && left.setBounds({ x: 0, y: 0, width, height });
   const min = Math.min(MIN_PANE, Math.floor(width / 2));
   const w = Math.max(min, Math.min(width - min, Math.round(width * (win.splitAt ?? 0.5))));
@@ -138,10 +138,10 @@ function toggleSplit(wc) {
   const pane = addPane(win, '2');
   pane.webContents.once('did-finish-load', () => pane.webContents.focus()); // keyboard first: the new page takes the keys
 }
-// Cmd+W closes the page you are in when there are two, and the window otherwise.
+// Cmd+W closes the page you are in when there are two on screen, and the window otherwise (signed out, one shows).
 function closeFront(win, wc = S.pane) {
   if (!win) return;
-  const pane = win.panes && win.panes.length > 1 && win.panes.find((p) => p.webContents === wc);
+  const pane = win.panes && isSplit(win) && win.panes.find((p) => p.webContents === wc);
   if (pane) removePane(win, pane); else win.close();
 }
 
