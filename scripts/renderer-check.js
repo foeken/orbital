@@ -4,31 +4,34 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-const { source, files } = require('./renderer-source');
+const { source, tops } = require('./renderer-source');
 // The renderer is classic scripts sharing one global scope, loaded in the order index.html lists them. Two things
 // break that silently at load time: a name declared twice (a SyntaxError that stops the second file), and a
 // top-level statement that runs immediately and reaches for something a later file declares (a ReferenceError).
-// Statements that only register callbacks are fine: those run after every file has loaded.
+// What a function body reaches is fine: it runs after every file has loaded. Both are read off the parsed files, the
+// second through eslint's scope analysis, so a loop variable or catch parameter named like a later global is its own.
 {
-  // every name a top-level line declares, the later ones of a const/let list included ("const palette = …, palList = …")
-  const declared = (text) => text.split('\n').flatMap((line) => {
-    const first = line.match(/^(?:const|let|async function|function) ([A-Za-z_$][\w$]*)/);
-    if (!first) return [];
-    return [first[1], ...(/^(?:const|let) /.test(line) ? [...line.matchAll(/, ([A-Za-z_$][\w$]*) = /g)].map((m) => m[1]) : [])];
-  });
-  const perFile = files.map((f) => ({ f, text: fs.readFileSync(require.resolve('../' + f), 'utf8') }));
   const seen = new Map();
-  for (const { f, text } of perFile) for (const name of declared(text)) {
-    assert.ok(!seen.has(name), name + ' is declared in both ' + seen.get(name) + ' and ' + f);
-    seen.set(name, f);
+  for (const { file, names } of tops) for (const name of names) {
+    assert.ok(!seen.has(name), name + ' is declared in both ' + seen.get(name) + ' and ' + file);
+    seen.set(name, file);
   }
-  perFile.forEach(({ f, text }, i) => {
-    const later = new Set(perFile.slice(i + 1).flatMap(({ text }) => declared(text)));
-    for (const line of text.split('\n')) {
-      if (!/^[A-Za-z_$[(]/.test(line) || /^(?:const|let|async function|function|class) /.test(line)) continue;
-      // a line that registers a callback runs the callback later, but what it registers on is reached now
-      const now = /=>|function/.test(line) ? line.slice(0, line.indexOf('(')) : line;
-      for (const [, name] of now.matchAll(/\b([A-Za-z_$][\w$]*)\b/g)) assert.ok(!later.has(name), f + ' runs "' + line.slice(0, 60) + '" before ' + seen.get(name) + ' has loaded');
+  // A reference runs later inside a function or an instance field (on construction). What runs at load anyway: a
+  // static field, and a function called where it is written (an IIFE). A function handed to something that calls it
+  // at once (forEach) or called by name from top-level code is not told apart: this check assumes callbacks run later.
+  const runsNow = (n, out = new Set()) => {
+    if (n && n.type === 'PropertyDefinition' && n.static) out.add(n.value);
+    if (n && (n.type === 'CallExpression' || n.type === 'NewExpression')) out.add(n.callee);
+    for (const [key, value] of Object.entries(n || {})) if (key !== 'loc' && key !== 'range') for (const c of [value].flat()) if (c && typeof c.type === 'string') runsNow(c, out);
+    return out;
+  };
+  tops.forEach(({ file, ast, scope }, i) => {
+    const now = runsNow(ast);
+    const deferred = (s) => { for (; s; s = s.upper) if ((s.type === 'function' || s.type === 'class-field-initializer') && !now.has(s.block)) return true; return false; };
+    const later = new Set(tops.slice(i + 1).flatMap((t) => t.names));
+    // through: the references this file does not resolve itself, which is every name another file declares
+    for (const { identifier: id, from } of scope.through) {
+      assert.ok(!later.has(id.name) || deferred(from), file + ':' + id.loc.start.line + ' reaches "' + id.name + '" at load, before ' + seen.get(id.name) + ' has loaded');
     }
   });
 }
