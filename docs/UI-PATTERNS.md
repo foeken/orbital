@@ -225,7 +225,8 @@ task's picks line) belong to one component each and are not for reuse:
 ### Component classes
 
 styles.css keeps each component under one header, `/* ==== Name (renderer file) ==== */`, and lists them in order at
-the top of the file. State classes are set by the renderer, pseudo-classes by the browser.
+the top of the file. The table gives the states a new use most often needs; the component's section in styles.css has
+the full set. State classes are set by the renderer, pseudo-classes by the browser.
 
 | Component | Classes | States |
 |---|---|---|
@@ -243,7 +244,7 @@ the top of the file. State classes are set by the renderer, pseudo-classes by th
 | Table | `.outline.table-view` with `.thead`, `.cell`, `.tgrip`; a table block is `.text.table` | `.cell.pick`, `.tgrip.dragging` |
 | Agent badge | `.cbadge` | `.pending`, `.working`, `.waiting`, `.done`, `.broken`, `.unavailable`, `.closed`; `[role="button"]` when it opens something |
 | Proposal buttons | `.pbuttons > .pbutton.approve` / `.pbutton.reject` (renderer/proposals.js) | `:hover`, `:disabled` |
-| Empty and loading | `.empty-note` ("Nothing here yet"), `.children.loading`, `.skeleton` (renderer/loading.js) | `.empty-note.cleared` |
+| Empty and loading | `.empty-note` ("Nothing here yet"), `.children.loading`, `.skeleton` (renderer/loading.js) | `.empty-note.cleared`; `.skeleton.gone` once the rows have landed, `.skeleton.tail` while the Timeline is still landing in parts (renderer/render.js sets both) |
 | Toast | `.toast`, only through `showNote` / `showError` | `.show`, `.error` |
 | Button | `.button`, `.button.primary` for the one that goes on (a dialog's footer: the key recorder, Help) | `:hover`, `:disabled` on a plain `.button` only: `.primary` has no disabled look, so a button that can be disabled (the recorder's Save) stays plain |
 | Dialog | a scrim element with a `.card` inside: `.palette`, `.recorder`, `.help` | `[hidden]` on `.palette` and `.recorder`; `.help` is a `<dialog>`, so `[open]` (`showModal()` / `close()`). The palette and the recorder arrive and leave with the Surface motion; Help only arrives, and `close()` removes it at once |
@@ -263,7 +264,7 @@ and the same list with `:active`), so it eases down under the pointer like the o
    `.cbadge` pairs for status. Sizes come from the scales above, and moves from the motion tokens.
 3. A rule written only with tokens needs no dark twin. A literal colour does: add its twin to the dark theme block, or
    better, use a token.
-4. Give it every state the table lists for its kind. Keyboard focus is `var(--focus)`, never a new blue.
+4. Give it the states the table lists for its kind, and read its section in styles.css for the rest. Keyboard focus is `var(--focus)`, never a new blue.
 
 ```css
 /* a made-up example: a date chip that floats under a row (renderer/<its file>.js) */
