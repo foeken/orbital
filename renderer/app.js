@@ -45,17 +45,23 @@ window.addEventListener('beforeunload', () => {
 });
 // This page changed sides (swapped, or the right half left alone): it saves its view and place under its new side's
 // keys from now on. A Reload asks main again (api.side), so it reads the same ones.
-if (tana.onSide) tana.onSide((side) => { SIDE = side ? ':' + side : ''; splitGrip.hidden = closePaneBtn.hidden = SIDE !== ':2'; localStorage.setItem('view' + SIDE, view); rememberPlace(); });
+if (tana.onSide) tana.onSide((side, split) => { SIDE = side ? ':' + side : ''; closePaneBtn.hidden = SIDE !== ':2'; showSplitGrip(split); localStorage.setItem('view' + SIDE, view); rememberPlace(); });
 // The Work View, asked for in the other half: it stored this half's place, and this half goes there (renderer/timeline.js)
 if (tana.onToPlace) tana.onToPlace(() => {
   const place = readStoredPlace();
   if (!place || !isPlaceId(place.docId)) return;
   goTo(place.docId).then(() => { if (String(place.docId).startsWith(SEARCH_ID)) addSearch({ text: place.title, ...extra.get(place.docId), id: place.docId }); }); // listed in Cmd+K at once, as restorePlace does
 });
-// The line between the halves is dragged from a grip on the right half's left edge; main reads the cursor and moves
-// the line (main.js window:splitDrag), and a double click evens the halves out again.
+// The line between the halves is dragged from a grip on each half's inner edge; main reads the cursor and moves the
+// line (main.js window:splitDrag), and a double click evens the halves out again. Over either grip both halves draw
+// their half of the swap pill (main.js window:splitHover), so it sits whole on the line.
 const splitGrip = $('splitGrip');
-splitGrip.hidden = SIDE !== ':2';
+{ const svg = iconNode('swapPanes'); if (svg) splitGrip.firstElementChild.append(svg); }
+function showSplitGrip(split) { splitGrip.hidden = !split; splitGrip.classList.toggle('left', SIDE !== ':2'); splitGrip.classList.remove('on'); }
+showSplitGrip(tana.paneSplit === true);
+splitGrip.addEventListener('pointerenter', () => tana.splitHover?.(true));
+splitGrip.addEventListener('pointerleave', () => tana.splitHover?.(false));
+if (tana.onSplitHover) tana.onSplitHover((on) => splitGrip.classList.toggle('on', on));
 splitGrip.addEventListener('pointerdown', (e) => {
   e.preventDefault();
   splitGrip.classList.add('dragging'); splitGrip.setPointerCapture(e.pointerId); tana.splitDrag('start');
