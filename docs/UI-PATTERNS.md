@@ -204,7 +204,7 @@ them needs no dark twin. Motion and layers are one value for both themes, and `-
 | `--focus` | `#b5d0ee` / `#58768a` | every keyboard focus ring: `outline: 2px solid var(--focus); outline-offset: 2px` on a row or block, `box-shadow: 0 0 0 2px var(--focus)` on a button. Two exceptions, on purpose: the green save pills ring green, and the agent badge rings a stronger `#4f8ad9` on its coloured tag |
 | `--muted` | `#666` / `#a0a5a8` | secondary words: facts, hints, headings, placeholders, done rows. It meets WCAG AA on the page, on menus and on grey pills. Icons keep their lighter greys, and disabled rows too |
 | `--z-toolbar` 9 < `--z-palette` 10 < `--z-recorder` 11 < `--z-toast` 12 < `--z-drag` 15 < `--z-lightbox` 20 | | what stacks over the page. Small local numbers (1, 2, 5) only order siblings inside one component |
-| `--dur-quick` / `--dur-base` / `--dur-slow` / `--dur-flash` / `--dur-loop`, `--stagger`, `--ease-*` | | every transition and animation of a new component. Two keep clocks of their own on purpose: a caret's `blink` (1s) and the Help tour's choreography (`--hv-loop` 6s, the moon's 7s). Reduced motion sets the finite ones (`--dur-quick` to `--dur-flash`, `--stagger`) to 0, so a move built on them needs no guard. `--dur-loop` is not zeroed: an endless loop always goes behind `@media (prefers-reduced-motion: no-preference)` |
+| `--dur-quick` / `--dur-base` / `--dur-slow` / `--dur-flash` / `--dur-loop`, `--stagger`, `--ease-*`, `--loader-wait` (300ms before the loader shows) | | every transition and animation of a new component. Some keep clocks of their own on purpose, for example a caret's `blink` (1s) and the Help tour's choreography (`--hv-loop` 6s, the moon's 7s). Reduced motion sets the finite ones (`--dur-quick` to `--dur-flash`, `--stagger`) to 0, so a move built on them needs no guard. `--dur-loop` is not zeroed: an endless loop always goes behind `@media (prefers-reduced-motion: no-preference)` |
 | `--hue` | set per element by the renderer | one hue for one element: a type's colour, or a person's in presence. Always used as `oklch(L C var(--hue))`, and each component picks its own L and C per theme (a glyph goes 0.7 → 0.8 in dark, a chip's background 0.95 → 0.33). A new hued element copies the L and C of the component it resembles |
 | `--flash-in` / `--flash-out` / `--flash-here` | | the tint of a row arriving, leaving or found again (`flash()`) |
 
@@ -285,9 +285,10 @@ The full contract is [OUTLINER.md](OUTLINER.md). These are the rules a new featu
   marks the current choice. A placeholder says what to type ("Search Tana", "Choose a colour or type a hue…"). A notice
   says what was done, in the past tense, and names the thing: "Link copied", "Classified as Decision Record".
 - **Where errors go.** An action runs through `run()`, and a failure becomes the red toast (`showError`). A palette page
-  built on `loadList` shows a failed read as a disabled note row in place of its rows; the other pages that read (Create
-  new …, Set icon) send it to the toast and draw an empty list. The red line under the title (`#error`) belongs to the
-  session alone: it asks for a new login. A notice never goes to `#error`.
+  built on `loadList` shows a failed read as a disabled note row in place of its rows; other pages that read (Create new
+  …, Set icon, the Pin to today picker, for example) send it to the toast and draw an empty list. The Create task card,
+  a page of its own, keeps a failed create on the card (`.terror`) so the press can be repeated. The red line
+  under the title (`#error`) belongs to the session alone: it asks for a new login. A notice never goes to `#error`.
 - **Focus after an action.** Closing the palette puts the caret back on the row that had it (`closePalette`). A pill's
   or the toolbar's menu gives focus back to its own button (renderer/pills.js, toolbar.js). A new row takes the caret.
   With nothing to go back to, focus goes back to the page itself, where ↑/↓ pick up the first or last row.
