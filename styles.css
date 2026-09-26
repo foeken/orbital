@@ -251,11 +251,11 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
    (container-type): without it the table drew over the menu until the spring settled. */
 .pills { position: relative; z-index: 5; display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 32px 12px; }
 .pills[hidden] { display: none; }
-.pill { position: relative; border: 0; border-radius: 999px; padding: 6px 14px; background: #e8f1fb; color: #4f8ad9; font-weight: 600; font-size: 15px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+.pill { position: relative; border: 0; border-radius: 999px; padding: 6px 14px; background: #e8f1fb; color: #2765b7; font-weight: 600; font-size: 15px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
 /* ...and the same spring would put the pills of a second line over the menu, so the pill carrying one (arriving or
    leaving) sits above its neighbours */
 .pill:has(> .menu) { z-index: 1; }
-.pill b { color: #2b6fcf; font-weight: 700; }
+.pill b { color: #2257a3; font-weight: 700; } /* label 4.7:1, value 5.7:1 on the pill, hovered or open (AA); the same hue, a step darker */
 .pill svg { width: 16px; height: 16px; }
 /* Refresh is a header button beside the fold one (renderer/pills.js), and it answers the press before the query
    does: one turn of the glyph, on transform alone, and only where motion is welcome — under reduced motion the
@@ -284,7 +284,7 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 .pill[data-id="display"]:hover, .pill[data-id="display"].open { background: #e6e6e6; }
 /* Saving a query — keeping this one, or keeping a view's as a new search — makes something rather than narrowing
    something, so it reads green instead of filter blue, and says what it does in words rather than a glyph. */
-.pill.save, .pill.savesearch { background: #e6f4ea; color: #2e7d4f; }
+.pill.save, .pill.savesearch { background: #e6f4ea; color: #2b7449; } /* 4.6:1 hovered (AA) */
 .pill.save:hover, .pill.savesearch:hover { background: #d7ecdd; }
 .pill.save:focus, .pill.savesearch:focus { box-shadow: 0 0 0 2px #a8d8ba; }
 .menu { position: absolute; left: 0; top: calc(100% + 6px); z-index: 5; min-width: 260px; max-height: min(400px, calc(100dvh - 96px)); overflow-y: auto; overscroll-behavior-y: contain; padding: 8px; background: #fff; border-radius: 10px; box-shadow: 0 8px 30px rgba(0, 0, 0, .16), 0 0 0 1px rgba(0, 0, 0, .06); font-weight: 400; color: #1a1a1a; text-align: left; }
@@ -783,7 +783,7 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 .tbtn { position: relative; display: flex; align-items: center; gap: 4px; min-width: 30px; height: 28px; padding: 0 8px; border: 0; border-radius: 6px; background: none; color: #444; font-size: 15px; cursor: pointer; }
 .tbtn:hover { background: #f0f0f0; }
 .tbtn:focus { outline: none; box-shadow: 0 0 0 2px #b7d2f5; }
-.tbtn.on { background: #e8f1fb; color: #2b6fcf; }
+.tbtn.on { background: #e8f1fb; color: #2257a3; }
 .tbtn.b { font-weight: 700; }
 .tbtn.i { font-style: italic; }
 .tbtn.s { text-decoration: line-through; }
