@@ -184,7 +184,8 @@ an entry in `main/documents.js` `creationOptions` and the mock's `creationOption
      call for it as above (the `block:insert…` handlers in main/documents.js, preload.js, `DEMO_WRITES`, the mock),
      and its "/" row and dispatch in renderer/toolbar.js.
 2. **renderer/nodes.js** — a switchable type's label in `BLOCK_TYPES` (what `blockTypeOf` and the "/" menu read) and
-   its glyph in `BLOCK_GLYPH`.
+   its glyph in `BLOCK_GLYPH`. A block with no words of its own also goes in `isAtomic` (else keys type and split into it), and, when
+   `node()` marks it `editable: false`, in `canEditStructure` (else it cannot be moved or deleted).
 3. **renderer/render.js** draws it; styles.css styles it.
 4. **scripts/sdk-check.js** — its outline section: the read, the write, and two Documents wired
    `local-update → applyRemote` converging.
