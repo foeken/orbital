@@ -144,9 +144,6 @@ function animateRows(before) {
   const old = [...before.keys()];
   const arrived = rows.filter((el) => !before.has(el.dataset.key) && !el.classList.contains('draft'));
   const gone = old.filter((key) => !keys.has(key) && !key.startsWith('draft'));
-  // ponytail: above a handful, the list changed rather than an item moving in or out (filtering, a reload, a new
-  // set of rows), and it neither reads as an arrival nor is worth a few hundred ghost rows. Raise if it feels shy.
-  const BULK = 25;
   if (arrived.length > BULK || gone.length > BULK) return;
   // An arrival plays once: the class goes when it ends, or every later render — which puts reused rows back with
   // replaceChildren, restarting whatever animation they carry — would play it again.

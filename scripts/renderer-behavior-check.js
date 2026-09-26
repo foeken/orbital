@@ -52,6 +52,8 @@ const withShims = (src) => {
   if (/\binField\(/.test(src) && !/const inField =/.test(src)) src = sourceLine('const inField') + '\n' + src;
   // a date mention's day (renderer/segments.js): the real one, since chips and clicks both ask it
   if (/\bdayOfUri\(/.test(src) && !/const dayOfUri =/.test(src)) src = sourceLine('const dayOfUri').replace('const dayOfUri =', 'globalThis.dayOfUri ??=') + '\n' + src;
+  // how many rows changing at once is a new list rather than an edit (renderer/motion.js): the real number
+  if (/\bBULK\b/.test(src) && !/const BULK =/.test(src)) src = sourceLine('const BULK').replace('const BULK =', 'globalThis.BULK ??=') + '\n' + src;
   if (/\brenderFields\(/.test(src) && !/function renderFields\(|const renderFields =/.test(src)) src = 'globalThis.renderFields ??= () => {};\n' + src;
   if (/\bloadRelated\(/.test(src) && !/function loadRelated\(|const loadRelated =/.test(src)) src = 'globalThis.loadRelated ??= () => {};\n' + src;
   // Cmd+K's meeting rows and pages (renderer/meeting.js): a palette harness without that file offers none
@@ -8823,6 +8825,25 @@ function runCoverCheck() {
   console.log('ok  palette over both halves: asked once, drawn in its half only at the whole window\u2019s size, let go after the fade; @ and / stay in the half');
 }
 checks.push(runCoverCheck);
+// A row someone else changed lights up once; a render that changes many at once is the page landing, and flashing
+// each of them forced a layout per row (639 rows: about a second of script before the Library showed).
+function runLandingFlashCheck() {
+  const flashed = (changed) => vm.runInNewContext(`
+    const flashed = [], view = 'library', zoom = null, performance = { now: () => 1e6 };
+    const revealOpened = () => {}, motionOK = () => true, acted = () => false, curtain = () => {}, flash = (el) => flashed.push(el.dataset.key);
+    const rows = Array.from({ length: 40 }, (_, i) => ({ dataset: { key: 'k' + i, body: i < ${changed} ? 'new' : 'old' }, classList: { contains: () => false } }));
+    const root = { dataset: { key: 'root' }, querySelectorAll: (s) => (s === '.node[data-key]' ? rows : []), querySelector: () => null };
+    let rowsLeftAt = -Infinity;
+    ${sourceLine('const BULK')}
+    ${functionSource('motionAfter')}
+    motionAfter(root, { page: 'root|library', bodies: new Map(rows.map((el) => [el.dataset.key, 'old'])), fieldsWaiting: new Set(), rects: null });
+    flashed;
+  `);
+  assert.deepEqual([...flashed(1)], ['k0'], 'an edit elsewhere to one row lights that row up');
+  assert.deepEqual([...flashed(26)], [], 'more than BULK rows changed at once is a landing: none flashes');
+  console.log('ok  landing: one changed row flashes, a whole list changed at once does not');
+}
+checks.push(runLandingFlashCheck);
 process.exitCode = 1;
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);
