@@ -3397,7 +3397,9 @@ async function runClosedPaletteKeysCheck() {
     const openCreationPalette = () => {}, openHiddenPalette = () => {}, toggleSensitiveVisibility = () => {}, followSystem = () => {};
     const openVisibilityPalette = () => {}, openMovePalette = () => {}, copyText = () => {};
     const togglePalette = () => {}, navigate = () => {}, history = () => {}, focusRail = () => {}, setZoom = () => {};
-    const filterEl = {}, zoomFactor = 1, BASE_ZOOM = 1, visibilityRows = () => [], previewMoveToSpace = () => {};
+    const filterEl = {}, zoomFactor = 1, BASE_ZOOM = 1, previewMoveToSpace = () => {}, taskMetaById = new Map();
+    // Selected people … is greyed until the participants are in, as the real page is (renderer/access.js)
+    const visibilityRows = () => [{ label: 'Selected people …', disabled: !taskMetaById.has(palDoc.id), run: () => writes.push(['people', palDoc.id]) }];
     const moveTargets = async (doc) => [{ label: 'Studio', run: () => writes.push(['move', doc.id, 'Studio']) }];
     const renderPalette = () => {}, closePalette = () => {}, promptEditor = () => {}, loadPinned = () => {};
     const groupBy = () => 'none', holdRow = () => {}, isTask = () => true;
@@ -3411,7 +3413,8 @@ async function runClosedPaletteKeysCheck() {
     const tana = { refresh: async () => {}, filters: {}, related: async () => ({ pinned: [] }),
       currentMeeting: async () => { calls.current++; return answer; },
       pinTo: async (hub, id) => { writes.push(['pinTo', hub, id]); },
-      accessOptions: async () => { calls.access++; return { move: true }; },
+      accessOptions: async () => { calls.access++; return { move: true, sharing: true }; },
+      taskMeta: async () => { calls.meta = (calls.meta || 0) + 1; return { participants: [] }; },
       notifyState: async () => { calls.notify++; return { on: false }; },
       pinState: async () => ({ sidebar: false, dates: [...pinned] }),
       pin: async (id, target, date) => { writes.push(['pin', id, date]); pinned.add(date); },
@@ -3435,7 +3438,7 @@ async function runClosedPaletteKeysCheck() {
        meeting: (next) => { answer = next; },
        open: () => { palette.hidden = false; palDoc = currentDoc(); meetingNow = undefined; paletteRows(''); palette.hidden = true; },
        state: () => ({ writes: [...writes], errors: [...errors], calls: { ...calls } }),
-       reset: () => { writes.length = 0; errors.length = 0; calls.current = calls.access = calls.notify = 0; accessById.clear(); notifyById.clear(); } });
+       reset: () => { writes.length = 0; errors.length = 0; calls.current = calls.access = calls.notify = 0; accessById.clear(); notifyById.clear(); taskMetaById.clear(); delete calls.meta; } });
   `);
 
   // 1. The date pins: on a node Cmd+K was never opened on, the key pins that node, and pressed again takes it off.
@@ -3471,6 +3474,10 @@ async function runClosedPaletteKeysCheck() {
   assert.equal(await api.key('move>Studio'), true, 'a folded Move to key is answered while the access is asked for');
   assert.deepEqual(plain(api.state().writes), [['move', DOC, 'Studio']], 'and moves the node once the access is in');
   assert.equal(api.state().calls.access, 1, 'asking for it once, for this key');
+  api.reset();
+  await api.key('visibility>Selected people …');
+  assert.deepEqual(plain([api.state().writes, api.state().calls.access, api.state().calls.meta]), [[['people', DOC]], 1, 1],
+    'a folded visibility key waits for the access and the participants its choice needs, then runs on its first press');
   console.log('ok  keys with the palette closed: date pins and Pin to current meeting act on the node under the caret with state read at the press, and no palette-only lookup is made');
 }
 function runCmdPillsCheck() {

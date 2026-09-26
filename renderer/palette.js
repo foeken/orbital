@@ -277,11 +277,14 @@ function paletteRows(q, typed = q) {
     else rows.push({ rank: 'codexOpen', group: docGroup, icon: 'host', label: 'Agent task is on ' + ((agentHosts.find((h) => h.id === where) || {}).title || where), disabled: true, run: () => {} });
   }
   if (palDoc && tana.accessOptions) {
-    if (!palette.hidden) loadAccess(palDoc.id); // Edit visibility and Move carry no id, so no key needs them (#274)
+    if (!palette.hidden) loadAccess(palDoc.id); // for the open palette only (#274): a key on a choice folded under these asks in runAction
     const access = accessById.get(palDoc.id);
-    if (access?.sharing) rows.push({ rank: 'visibility', group: docGroup, icon: 'lock', label: 'Edit visibility', run: () => openVisibilityPalette(palDoc), sub: () => visibilityRows('') });
+    // Selected people … is greyed until the participants are in, so the folded level waits for them (as Edit
+    // assignees' does): a key recorded on it then works on its first press
+    const doc = palDoc;
+    if (access?.sharing) rows.push({ rank: 'visibility', group: docGroup, icon: 'lock', label: 'Edit visibility', run: () => openVisibilityPalette(doc),
+      sub: async () => { if (tana.taskMeta && !taskMetaById.has(doc.id)) taskMetaById.set(doc.id, await tana.taskMeta(doc.id)); return visibilityRows(''); } });
     if (access?.move) { // Library is a row of its own and the spaces are the folded level of "Move to …"; the Inbox is Set status to Inbox
-      const doc = palDoc;
       rows.push({ rank: 'move', group: docGroup, icon: 'space', label: 'Move to …', keepOpen: true, subAlways: true, run: () => openMovePalette(doc), sub: () => moveTargets(doc) });
       if (access.ownerUri) rows.push({ rank: 'moveLibrary', group: docGroup, icon: 'library', label: 'Move to Library', keepOpen: true, run: () => { openMovePalette(doc); previewMoveToSpace(doc, { id: 'library', text: 'Library' }); } });
     }
