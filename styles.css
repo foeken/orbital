@@ -151,7 +151,13 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 .outline.table-view > .node > .line > .body { flex: 0 1 calc(100% - 65px - 40px); margin: 0 40px 0 auto; }
 .outline.table-view > .node > .line > .cbadge { position: absolute; top: 3px; right: 0; }
 .outline.table-view > .node > .line > .body > .subtext { display: contents; }
-.outline.table-view > .node > .line > .body > :not(.text, .subtext, .tmeta) { display: none; }
+.outline.table-view > .node > .line > .body > :not(.text, .subtext, .meta) { display: none; }
+/* a row's own grey words (a meeting's date and time, renderer/render.js metaText) go under its title, in the title's
+   cell: a second grid row in column 1, so the columns beside it stay where they are */
+.outline.table-view > .node > .line > .body > .meta:not(.tmeta) { grid-column: 1; grid-row: 2; margin: 0; line-height: 18px; overflow: hidden; text-overflow: ellipsis; }
+/* on the title's line, not centred on both; the title placed too, or the grid seats the row-1 cells first and it lands last */
+.outline.table-view > .node > .line > .body > .text { grid-column: 1; grid-row: 1; }
+.outline.table-view > .node > .line > .body .cell, .outline.table-view > .node > .line > .body > .tmeta { grid-row: 1; }
 .outline.table-view > .node > .line > .body > .tmeta { order: 1; grid-column: -2; margin: 0; text-align: right; line-height: 18px; }
 .outline.table-view > .node > .line > .body > .tmeta > .mtext { display: none; }
 .outline.table-view > .node > .line > .body > .tmeta > :not(.mtext) ~ :not(.mtext) { margin-left: 10px !important; } /* over taskMetaEl's inline 6px: alone in a column they read as cramped */
