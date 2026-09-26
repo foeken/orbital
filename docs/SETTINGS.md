@@ -57,6 +57,9 @@ Each machine notes the document's uri locally, so it costs one lookup per machin
 a cleared cache — the app finds it by title among your own documents, oldest first, so two machines that both created
 one at the same moment settle on the same document rather than drifting apart. Nothing is found: it is created.
 
+Which keys are synced is one list, `SYNCED` in main/settings.js: every `pref:` key and the named ones above. A key
+written through `settings.set` that matches no rule stays in SQLite on this machine (`openaiApiKey` is one).
+
 On connect, the document decides: a key it holds replaces what this machine remembered, and a key only this machine
 has is pushed up. That is what makes the first run on an existing install a migration with no migration step. Between
 machines, Loro's last-write-wins per key applies — two machines changing *different* settings both keep theirs.
