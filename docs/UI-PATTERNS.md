@@ -197,11 +197,11 @@ dark twin.
 
 | Token | Light / dark | For |
 |---|---|---|
-| `--surface` | `#fff` / `#242729` | the neutral floating surfaces: menus, the toolbar, ⌘K's and the recorder's cards. Help's card still writes the same white and shadow out, with a dark twin (#378). The toast is the exception on purpose: it is inverted (dark in light, light in dark) |
+| `--surface` | `#fff` / `#242729` | the neutral floating surfaces: menus, the toolbar, ⌘K's, the recorder's and Help's cards. The toast is the exception on purpose: it is inverted (dark in light, light in dark) |
 | `--scrim` | 12% / 52% black | behind a dialog (⌘K, the key recorder, Help) |
 | `--shadow-menu` | | a menu or dropdown (`.menu`, the @ dropdown) |
-| `--shadow-card` | | a dialog's card (⌘K, the recorder; Help's as above) |
-| `--focus` | `#b5d0ee` / `#58768a` | the focus ring of anything new: `outline: 2px solid var(--focus); outline-offset: 2px` on a row or block, `box-shadow: 0 0 0 2px var(--focus)` on a button. Not every ring uses it yet (#379): `.gmore`, `.tbtn` and image and table focus write the colour out with dark twins, the dark `.pill:focus` and `.ghead:focus` restate it, and `.button` keeps the browser's ring. On purpose: the green save pills ring green, and the agent badge rings a stronger `#4f8ad9` |
+| `--shadow-card` | | a dialog's card (⌘K, the recorder, Help) |
+| `--focus` | `#b5d0ee` / `#58768a` | every keyboard focus ring: `outline: 2px solid var(--focus); outline-offset: 2px` on a row or block, `box-shadow: 0 0 0 2px var(--focus)` on a button. Two exceptions, on purpose: the green save pills ring green, and the agent badge rings a stronger `#4f8ad9` on its coloured tag |
 | `--muted` | `#666` / `#a0a5a8` | secondary words: facts, hints, headings, placeholders, done rows. It meets WCAG AA on the page, on menus and on grey pills. Icons keep their lighter greys, and disabled rows too |
 | `--z-toolbar` 9 < `--z-palette` 10 < `--z-recorder` 11 < `--z-toast` 12 < `--z-drag` 15 < `--z-lightbox` 20 | | what stacks over the page. Small local numbers (1, 2, 5) only order siblings inside one component |
 | `--dur-quick` / `--dur-base` / `--dur-slow` / `--dur-flash` / `--dur-loop`, `--stagger`, `--ease-*` | | every transition and animation. Reduced motion sets the finite ones (`--dur-quick` to `--dur-flash`, `--stagger`) to 0, so a move built on them needs no guard. `--dur-loop` is not zeroed: an endless loop always goes behind `@media (prefers-reduced-motion: no-preference)` |
