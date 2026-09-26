@@ -269,9 +269,9 @@ and the same list with `:active`), so it eases down under the pointer like the o
 
 The full contract is [OUTLINER.md](OUTLINER.md). These are the rules a new feature most often gets wrong.
 
-- **Keyboard first.** Everything works from the keyboard before a mouse affordance is added. A page, menu or overlay
-  answers ↑/↓, Enter and Escape. A command is a palette row, so ⌘K finds it and ⇧⌘K can give it a key
-  (`DEFAULT_HOTKEYS`). New keys are written up in OUTLINER.md.
+- **Keyboard first.** Everything works from the keyboard before a mouse affordance is added. A list (a page, a menu, the
+  palette) answers ↑/↓, Enter and Escape. The Help tour pages with ←/→ instead. A command is a palette row, so ⌘K finds
+  it and ⇧⌘K can give it a key (`DEFAULT_HOTKEYS`). New keys are written up in OUTLINER.md.
 - **Wording.** A row is sentence case and starts with a verb: "Pin to today", "Set status", "Move to Library". A row
   that opens a further page ends in " …" ("Move to …", "Pin to date …"). A hint says the current value ("Inbox"), and
   `✓` marks the current choice. A placeholder says what to type ("Search Tana", "Choose a colour or type a hue…"). A
@@ -279,14 +279,15 @@ The full contract is [OUTLINER.md](OUTLINER.md). These are the rules a new featu
 - **Errors go to one place.** An action runs through `run()`, and a failure becomes the red toast (`showError`). The red
   line under the title (`#error`) belongs to the session alone: it asks for a new login. Nothing writes an error into a
   row, and a notice never goes to `#error`.
-- **Focus after an action.** Closing the palette puts the caret back on the row that had it (`closePalette`). A
-  pill's or the toolbar's menu gives focus back to its own button (renderer/pills.js, toolbar.js). A new row takes the
-  caret. Nothing leaves focus on `body`.
-- **Empty and loading.** A list with no rows says "Nothing here yet" (`.empty-note`) and offers Clear filters when a
-  filter hides rows. #357 adds what would fill the page. A palette page with no match says "No results". Only a launch
-  or a Reload shows the loading animation (after 300 ms). Later loads wait blank, and a row still coming says "Loading…"
-  (`.children.loading`, a `disabled` palette row). A row that cannot run is shown greyed with the reason as its hint,
-  not hidden.
+- **Focus after an action.** Closing the palette puts the caret back on the row that had it (`closePalette`). A pill's
+  or the toolbar's menu gives focus back to its own button (renderer/pills.js, toolbar.js). A new row takes the caret.
+  With nothing to go back to, focus goes back to the page itself, where ↑/↓ pick up the first or last row.
+- **Empty and loading.** A page with no rows says so in its own words (`.empty-note`; `emptyText` in
+  renderer/render.js): "No notifications yet.", "Nothing matches." with the Create task key, or "Nothing here yet" with
+  Clear filters when a filter hides rows. A new page adds its line to `emptyText`. A palette page with no match says "No
+  results". Only a launch or a Reload shows the loading animation (after 300 ms). Later loads wait blank, and a row
+  still coming says "Loading…" (`.children.loading`, a `disabled` palette row). A row that cannot run is shown greyed
+  with the reason as its hint, not hidden.
 - **Read-only is visible.** A row with `editable === false` never gets an editor. It takes focus with a ring, and main
   refuses the write as well.
 
