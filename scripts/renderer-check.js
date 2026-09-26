@@ -155,7 +155,7 @@ assert.match(source, /const wasConnected = connected;[\s\S]*?if \(connected && !
 // a global change (a refresh, a pin, a filter) reloads the cached rows, which the refresh loop wrote before saying so;
 // it must not run the active view's query a second time, and a single document's change patches its row alone
 assert.match(source, /const work = \[loadRoots\(\)\];[\s\S]*?Promise\.all\(work\)\.then\(renderSoon, showError\)/);
-assert.match(source, /if \(zoom\?\.docId === TIMELINE_PAGE \|\| \(zoom && listPage\(\)\)\) work\.push\(reload\(zoom\.docId\)\)/, 'global changes reload the Timeline, a saved search or a type page when it is open');
+assert.match(source, /if \(id === TIMELINE_PAGE \|\| \(zoom && listPage\(\)\)\) \{\s*if \(searchRows\.delete\(id\)\) previewRows\(id\);[^\n]*\n\s*else work\.push\(reload\(id\)\);/, 'global changes reload the Timeline, a saved search or a type page when it is open, a staged search through its preview');
 assert.doesNotMatch(source.slice(source.indexOf('tana.onChanged((docId, info) => {'), source.indexOf('function removeStale')), /loadView\(\)/, 'no second query per refresh');
 assert.match(source, /const work = \[patchDoc\(docId\)\];/);
 // Forced, so a zoom whose parked caret defers an ordinary render still redraws — and coalesced, because a view

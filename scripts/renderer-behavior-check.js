@@ -7099,6 +7099,7 @@ async function runLiveUpdateBurstCheck() {
     const TIMELINE_PAGE = 'orbital:timeline';
     let zoom = { docId: TIMELINE_PAGE };
     const SEARCH_ID = 'tana:search:', isTypeId = (id) => String(id).startsWith('tana:type:');
+    const searchRows = new Map(), previewed = [], previewRows = (id) => { previewed.push(id); };
     ${sourceLine('const onSearchPage =')}
     ${sourceLine('const onTypePage =')}
     ${sourceLine('const listPage =')}
@@ -7119,6 +7120,8 @@ async function runLiveUpdateBurstCheck() {
       open: (id) => { kids.set(id, []); kids.set(id + '|tana:type:t?attribute=a', []); },
       page: (id) => { zoom = { docId: id }; },
       statusReads: () => statusReads.splice(0).length,
+      stage: (id) => { searchRows.set(id, '{}'); },
+      previewed: () => previewed.splice(0),
     });
   `);
 
@@ -7160,6 +7163,11 @@ async function runLiveUpdateBurstCheck() {
     assert.deepEqual(plain(api.reloaded()), [page], 'a global change reloads an open ' + page.split(':')[1] + ' page, whose rows loadRoots does not reach');
     api.flush(); api.drawn();
   }
+  // A saved search with unsaved pill edits shows their preview: that is what is asked again, not the stored query
+  api.page('tana:search:01j0search0000000000000000'); api.stage('tana:search:01j0search0000000000000000'); api.change(null);
+  await new Promise(setImmediate);
+  assert.deepEqual([plain(api.reloaded()), plain(api.previewed())], [[], ['tana:search:01j0search0000000000000000']], 'a staged saved search is previewed again rather than overwritten with its stored rows');
+  api.flush(); api.drawn();
   api.page('tana:text:01j0note000000000000000000'); api.change(null);
   await new Promise(setImmediate);
   assert.deepEqual(plain(api.reloaded()), [], 'a document page is not a list: its outline is left to its own changes');
