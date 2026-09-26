@@ -46,7 +46,9 @@ async function searchChildren(id, page = 'main') {
   // The newest read that answered decides the head: one from before a Save that lands after it would put the old rows
   // back in the head and let the sweep release the ones on screen (the renderer drops its rows the same way,
   // renderer/nodes.js). A newer read that failed decides nothing, so an older one that answered still keeps its rows live.
-  if (seq > (headRead.get(read) || 0)) {
+  // And only for the query as it is stored now: an older read that answered after a Save asked the query before it.
+  const same = await op(id, readSearch).then((now) => JSON.stringify(now.query) === JSON.stringify(query), () => false);
+  if (same && seq > (headRead.get(read) || 0)) {
     headRead.set(read, seq);
     const head = nodes.slice(0, LIVE_ROWS).map((n) => n.id);
     if (!searchHeads.has(id)) searchHeads.set(id, new Map());

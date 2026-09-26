@@ -1837,6 +1837,16 @@ async function main() {
     answers[5]({ nodes: inB }); await readB; answers[4]({ nodes: inA }); await readA;
     await new Promise(setImmediate);
     assert.deepEqual([subscribes.includes(inA[0].id), subscribes.includes(inB[0].id)], [true, true], 'two windows showing one search each keep their own head live');
+    // A read from before a Save answering after the Save's own read failed: it asked the old query, so it keeps no head
+    const beforeSave = [{ id: 'tana:text:' + ulid(), title: 'Old query' }];
+    const oldRead = backend.handlers.get('outline:children')(null, searchId);
+    while (answers.length < 7) await new Promise(setImmediate);
+    goodDoc.transact((l) => l.getMap('query').set('assignedToViewer', false)); // the Save
+    const savedRead = backend.handlers.get('outline:children')(null, searchId);
+    while (answers.length < 8) await new Promise(setImmediate);
+    answers[7](Promise.reject(new Error('unavailable'))); await savedRead.catch(() => {}); answers[6]({ nodes: beforeSave }); await oldRead;
+    await new Promise(setImmediate);
+    assert.equal(subscribes.includes(beforeSave[0].id), false, 'a read of the query from before a Save keeps no head, even when the read after it failed');
 
     const brokenDoc = new Document('tana:search:' + ulid());
     brokenDoc.transact((l) => initDocument(l, 'Broken search', ME)); // no query container at all
