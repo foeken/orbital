@@ -21,10 +21,10 @@ function weekTitle(d) {
 // The day and week nodes are yours: found among the documents you made, since a colleague's node with the same title is
 // theirs, and a search that fails is an error rather than "there is none", which made a second one in your Tana. The
 // text index lists a new document seconds late, so one made here is remembered for the session (#393).
-const madeHere = new Map(); // user + title -> the node made on this machine
+const madeHere = new Map(); // user + title -> the node made on this machine, reused while it still carries that title
 async function ownNode(title, textQuery) {
-  const made = madeHere.get(S.me.userUri + ' ' + title);
-  if (made && !deletedNodes.has(made.id)) return made;
+  const made = madeHere.get(S.me.userUri + ' ' + title), doc = made && S.client.sync.getDocument(made.id);
+  if (doc && !deletedNodes.has(made.id) && (readNode(doc).title || '').trim().toLowerCase() === title.toLowerCase()) return made;
   const { nodes = [] } = await S.client.graph.listNodes({ textQuery, nodeTypes: ['text'], createdBy: [S.me.userUri], limit: 20 });
   // An existing node wins over a new one, case-insensitively: "week 38 (2026)" must not gain a second one beside it.
   return nodes.find((n) => (n.title || '').trim().toLowerCase() === title.toLowerCase()) || null;

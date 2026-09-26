@@ -3046,6 +3046,8 @@ async function main() {
     const made = await backend.weekNode(new Date(2026, 9, 5));
     lagging.add(made.id); // not in the text index yet
     assert.equal((await backend.weekNode(new Date(2026, 9, 6))).id, made.id, 'a week node made moments ago is found before the index lists it');
+    setTitle(docs.get(made.id), 'Holiday plans'); // renamed while still unindexed: no longer this week's node
+    assert.notEqual((await backend.weekNode(new Date(2026, 9, 6))).id, made.id, 'but not once it has been renamed');
     console.log('ok  week node: one plain document per ISO week, reused by every day in it');
   }
 
