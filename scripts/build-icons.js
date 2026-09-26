@@ -43,7 +43,8 @@ WANT.created = path.join(__dirname, '..', 'build', 'icons', 'file-plus.svg');
 // A saved search folds its pills away behind this, beside back and forward (renderer/pills.js)
 WANT.options = path.join(__dirname, '..', 'build', 'icons', 'sliders-vertical.svg');
 WANT.openaiKey = path.join(__dirname, '..', 'build', 'icons', 'key-4.svg');
-// OpenAI's ChatGPT Blossom from openai/openai-cookbook; the builder maps its supplied black fill to currentColor.
+// OpenAI's ChatGPT Blossom from openai/openai-cookbook; the builder maps its supplied black fill to currentColor. Its
+// viewBox is cropped to the mark (about 83% of the box, like the Nucleo glyphs): the original drew it at half size.
 WANT.chatgpt = path.join(__dirname, '..', 'build', 'icons', 'chatgpt.svg');
 // A node pinned to the sidebar or to a date: the tack, distinct from the map-marker 'pin' the meeting rows use
 WANT.pinned = path.join(__dirname, '..', 'build', 'icons', 'pin-tack.svg');
@@ -68,7 +69,7 @@ WANT.tlLater = path.join(__dirname, '..', 'build', 'icons', 'circle-arrow-down-o
 WANT.tlInbox = path.join(__dirname, '..', 'build', 'icons', 'circle-arrow-left-outline.svg');
 WANT.tlNew = path.join(__dirname, '..', 'build', 'icons', 'circle-dotted.svg'); // outline: a new task is the quietest entry
 // Cmd+K rows for the keys the outline answers to
-for (const [name, file] of [['expand', 'v-shaped-arrow-down'], ['collapse', 'v-shaped-arrow-up'], ['undo', 'undo'], ['redo', 'redo'], ['textLarger', 'text-size-increase'], ['textSmaller', 'text-size-decrease'], ['textReset', 'text'], ['rail', 'sidebar-right-4'], ['railShow', 'sidebar-right-show'], ['railHide', 'sidebar-right-hide'], ['back', 'arrow-left'], ['forward', 'arrow-right'], ['zoomIn', 'magnifier-3'], ['search', 'file-search'], ['filter', 'filter-2']]) WANT[name] = path.join(__dirname, '..', 'build', 'icons', file + '.svg');
+for (const [name, file] of [['expand', 'v-shaped-arrow-down'], ['collapse', 'v-shaped-arrow-up'], ['undo', 'undo'], ['redo', 'redo'], ['textLarger', 'text-size-increase'], ['textSmaller', 'text-size-decrease'], ['textReset', 'text'], ['rail', 'sidebar-right-4'], ['railShow', 'sidebar-right-show'], ['railHide', 'sidebar-right-hide'], ['back', 'arrow-left'], ['forward', 'arrow-right'], ['zoomIn', 'magnifier-3'], ['search', 'magnifier'], ['filter', 'filter-2'], ['discuss', 'msg'], ['meetingPin', 'calendar-pin'], ['splitPanes', 'split-view'], ['otherPane', 'layout-move-to-right'], ['swapPanes', 'arrows-opposite-direction-x']]) WANT[name] = path.join(__dirname, '..', 'build', 'icons', file + '.svg');
 WANT.outline = path.join(__dirname, '..', 'build', 'icons', 'unordered-list.svg'); // the header's Outliner/Table switch while a list is a table
 const out = {};
 for (const [name, file] of Object.entries(WANT)) {
