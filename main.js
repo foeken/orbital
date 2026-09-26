@@ -9,17 +9,15 @@ const db = require('./db');
 const { createTanaSession } = require('./tana-session');
 const { userDataDir } = require('./userdata');
 const updater = require('./updater');
-const { readNode, setSearchQuery, setSearchView, readSearch, searchDisplay, searchSort } = require('./sdk/node');
-const { completedWindow, filterToSearchQuery, isHidden, searchQueryToFilter, validViewFilter } = require('./sdk/query');
-const { isDateUri } = require('./sdk/dates');
+const { readNode } = require('./sdk/node');
 const agent = require('./main/agent');
 const ai = require('./main/ai');
-const { S, VIEWS, errText, idKind, isSearch, isSpace, today, truncatedViews, redoStack, report, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
+const { S, VIEWS, errText, idKind, isSearch, isSpace, today, redoStack, report, send, setStatus, undoStack, visibleGraphNodes } = require('./main/state');
 const { cachedNodeHue, graphRow, rememberNodeHue, rememberType, toNode } = require('./main/rows');
-const { accessContext, archivedTypes, chatOutline, createDocument, creationOptions, discussWith, documentAction, followSummary, history, mut, setCodex, onChange, op, outlineWithReferences, setSensitive, setType, setTypeHue, typeCandidates, typeChoices, typeList } = require('./main/documents');
+const { accessContext, archivedTypes, chatOutline, createDocument, creationOptions, discussWith, documentAction, followSummary, history, setCodex, onChange, op, outlineWithReferences, setSensitive, setType, setTypeHue, typeCandidates, typeChoices, typeList } = require('./main/documents');
 const { callOf, changesOf, related, searchChildren, spaceChildren, summaryChanges, unwatchRelated, watchRelated } = require('./main/related');
-const { announceNewInbox, hiddenRules, watchInbox, inboxCount, listFilter, mcpHidden, myTasks, preset, refresh, search, searchCreate, searchList, searchTitle, setHidden, setMcpHidden, setViewFilter, start, viewFilter, viewRows } = require('./main/views');
-const { nodePin, pinState, pinTree, pinnedDates, pinnedUris, setPin, todayNode, weekNode, weekTitle } = require('./main/pins');
+const { announceNewInbox, watchInbox, inboxCount, listFilter, refresh, search, searchCreate, searchTitle, setMcpHidden, start, viewFilter, viewRows } = require('./main/views');
+const { nodePin, pinTree, weekNode, weekTitle } = require('./main/pins');
 const inbox = require('./main/inbox');
 const proposalsPage = require('./main/proposals');
 const timelinePage = require('./main/timeline');
@@ -29,9 +27,9 @@ const meetings = require('./main/meetings');
 
 // A main/ module that answers the renderer keeps its channels beside the code they call, as a table it exports:
 // ipc = { 'channel': (event, ...args) => … }. preload.js names each channel for the page. What main.js registers
-// itself is Electron's (windows, overlays, shell, app paths, settings sent to other pages), reads several modules at
-// once (outline:children), or has not moved to its module yet (#335).
-for (const m of [require('./main/documents'), inbox, proposalsPage, timelinePage, require('./main/presence'), meetings, require('./main/images'), icons, require('./main/related'), require('./main/rows')]) {
+// itself is Electron's: windows, overlays, shell (the Codex handoff opens Codex through it), app paths, and settings
+// sent to the other pages; plus outline:children, which routes between several modules.
+for (const m of [require('./main/documents'), require('./main/views'), require('./main/pins'), inbox, proposalsPage, timelinePage, require('./main/presence'), meetings, require('./main/images'), icons, require('./main/related'), require('./main/rows')]) {
   for (const [channel, handle] of Object.entries(m.ipc)) ipcMain.handle(channel, handle);
 }
 
@@ -194,27 +192,6 @@ function createMenu() {
   ]));
 }
 
-// Run fn on the subscribed Document; the ops transact synchronously, so the result is in Loro (and sent) on resolve.
-ipcMain.handle('outline:roots', async () => {
-  const rows = db.list();
-  const rules = hiddenRules(); // a row cached before the rule was added is hidden here too, refresh or no refresh
-  return VIEWS.map((view) => ({ ...view, truncated: truncatedViews.has(view.id), nodes: (rows[view.id] || []).filter((r) => !isHidden(r.title, rules)).map(toNode) }));
-});
-ipcMain.handle('view:list', async (e, id, filter) => {
-  preset(id); // validate before changing which view the refresh loop owns
-  S.activeView = id;
-  S.activeFilter = filter;
-  if (e && e.sender && S.windows.size) S.windowViews.set(e.sender.id, { id, filter }); // this window's view (the checks call with no event)
-  await S.refreshing;
-  return viewRows(id, filter);
-});
-ipcMain.handle('view:filter', (_e, id) => viewFilter(id));
-ipcMain.handle('view:setFilter', (_e, id, filter) => {
-  const stored = setViewFilter(id, filter);
-  if (id === S.activeView) S.activeFilter = stored;
-  for (const v of S.windowViews.values()) if (v.id === id) v.filter = stored; // every window showing it
-  return stored;
-});
 // events start with an empty content map (no doc node yet); readOutline needs the children list
 ipcMain.handle('outline:children', (e, id) => (id === inbox.PAGE ? inbox.rows() : id === proposalsPage.PAGE ? proposalsPage.rows() : id === timelinePage.PAGE ? timelinePage.rows((part) => { if (!e.sender.isDestroyed()) e.sender.send('timeline:part', part); }) : isSearch(id) ? searchChildren(id) : isSpace(id) ? spaceChildren(id) : op(id, (doc) => (idKind(id) === 'chat' ? chatOutline(doc) : doc.content.get('children') ? outlineWithReferences(doc) : []))));
 // The renderer's preferences, from the same store: a synchronous snapshot at load (preload reads it before the
@@ -331,34 +308,6 @@ async function autoTypeIcons() {
   } catch (e) { console.warn('type icons:', errText(e)); } // a missing glyph is not worth an error in the window
 }
 ai.onSignedIn = autoTypeIcons; // and a ChatGPT sign-in the same
-ipcMain.handle('search', (_e, query, scope) => search(query, scope));
-ipcMain.handle('search:list', () => searchList());
-// The renderer sends a view id, never a query: the filter→query vocabulary lives in sdk/query, which classic
-// renderer scripts cannot require, and main already holds the canonical filter for every view.
-ipcMain.handle('search:create', (_e, id, title) => searchCreate(id, title));
-ipcMain.handle('search:myTasks', (_e, findOnly) => myTasks(findOnly === true));
-// The same filter vocabulary in both directions, so the pills that edit a view can edit a saved search (readSearch
-// and setSearchQuery/setSearchView). Writing replaces it wholesale rather than patching: what the pills are showing
-// is what the document ends up saying.
-ipcMain.handle('search:filter', (_e, id) => op(id, (doc) => {
-  const { query, view: arrangement } = readSearch(doc); // how it is shown lives beside the query, not inside it
-  return {
-    // the completed window is the app's own, so it is stored beside the query and handed back as part of the filter
-    // the pills edit; absent, it reads as the default the pill shows the first time Completed is asked for
-    filter: { ...searchQueryToFilter(query, S.me && S.me.userUri), completedWithin: completedWindow(arrangement.completedWithin), audience: arrangement.audience === 'everyone' ? 'everyone' : null },
-    sort: searchSort(arrangement.sortBy),
-    group: arrangement.groupBy,
-    // Tana's record of key -> { shown, order } (or the comma-joined string earlier builds wrote)
-    display: searchDisplay(arrangement.display),
-  };
-}));
-ipcMain.handle('search:setFilter', (_e, id, filter, sort, group, display) => {
-  if (!validViewFilter(filter)) throw new Error('invalid view filter'); // never let a bad filter empty a saved search
-  return mut(id, (doc) => {
-    setSearchQuery(doc, filterToSearchQuery(filter, S.me && S.me.userUri));
-    setSearchView(doc, { sortBy: sort, groupBy: group, display, completedWithin: filter.completedWithin, audience: filter.audience }); // saved together: one press, one state of the page
-  });
-});
 // Assigning hands the node to a Codex task: the context is written, the local mark is stored, and then the work is
 // opened — a new composer carrying the self-registration prompt, or the task this node already has, told what
 // changed. openExternal failing raises, so the renderer shows why and the node keeps no badge it has not earned.
@@ -449,13 +398,6 @@ function queueToTask(threadId, message) {
 // one), and a split window used to start two at once for the same answer (issue #267).
 let agentStatusRead = null;
 ipcMain.handle('codex:status', () => (agentStatusRead ||= agent.readAgentStatuses(agent.codexTasks()).finally(() => { agentStatusRead = null; })));
-ipcMain.handle('pins:state', (_e, id) => pinState(id));
-ipcMain.handle('pins:ids', () => pinnedUris()); // which documents carry a pin at all, for the mark on a row
-ipcMain.handle('pins:dates', () => pinnedDates()); // { uri: ['YYYY-MM-DD'] }, for the Pinned section
-ipcMain.handle('pins:pin', (_e, id, target, date) => setPin(id, target, true, date));
-ipcMain.handle('pins:unpin', (_e, id, target, date) => setPin(id, target, false, date));
-ipcMain.handle('pins:pinTo', (_e, hubId, uri) => nodePin(hubId, uri, true)); // pin a document on a meeting/space
-ipcMain.handle('pins:unpinFrom', (_e, hubId, uri) => nodePin(hubId, uri, false));
 ipcMain.handle('sensitive:set', (e, id, on) => { const stored = setSensitive(id, on); tellOthers(e?.sender); return stored; });
 // and what the title suggests that name is (main/ai.js). ChatGPT auth takes priority over the local API key.
 ipcMain.handle('ai:discussWith', (_e, title) => ai.suggestDiscussWith(title, globalThis.fetch, app.getPath('userData')));
@@ -467,23 +409,11 @@ ipcMain.handle('shell:open', (_e, url) => {
   if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) throw new Error('Only http(s) links can be opened');
   return shell.openExternal(url);
 });
-// The node for today: a document titled with today's date, pinned to today. Created and pinned when missing,
-// so "Show today node" always lands somewhere. Matching is by exact title, the same string the pin uses.
-// A 'YYYY-MM-DD' day instead of the offset is the page a date mention opens.
-ipcMain.handle('doc:todayNode', (_e, offset, findOnly) => todayNode(isDateUri('tana:plaindate:' + offset) ? offset : offset === 1 ? 1 : 0, findOnly === true));
-ipcMain.handle('doc:weekNode', async (_e, findOnly) => (await weekNode(new Date(), findOnly === true)).id);
 // macOS appearance, for the renderer's "follow the system" theme: current value on demand, plus live changes
 const systemTheme = () => (nativeTheme && nativeTheme.shouldUseDarkColors ? 'dark' : 'light');
 ipcMain.handle('theme:system', () => systemTheme());
 if (nativeTheme) nativeTheme.on('updated', () => send('theme:system', systemTheme()));
-// Hidden titles: the user's list of patterns, applied to every list and search (see listFilter/sdk-query isHidden).
-ipcMain.handle('filters:list', () => hiddenRules());
-ipcMain.handle('filters:add', (_e, pattern) => setHidden([...hiddenRules(), pattern]));
-ipcMain.handle('filters:remove', (_e, pattern) => setHidden(hiddenRules().filter((p) => p.toLowerCase() !== String(pattern ?? '').trim().toLowerCase())));
-// MCP chats: one switch over every list and search, applied in the same listFilter the hidden titles go through.
-ipcMain.handle('mcp:hidden', () => mcpHidden());
 ipcMain.handle('mcp:setHidden', async (e, on) => { const stored = await setMcpHidden(on); tellOthers(e?.sender); return stored; });
-ipcMain.handle('sync:refresh', () => refresh());
 ipcMain.handle('sync:status', () => S.status);
 ipcMain.handle('sync:login', async () => {
   try {

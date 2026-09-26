@@ -1,6 +1,7 @@
 'use strict';
 const pins = require('../sdk/pins');
 const { readNode } = require('../sdk/node');
+const { isDateUri } = require('../sdk/dates');
 const { DOC_URI, NOT_CONNECTED, PIN_HUBS, S, deletedNodes, idKind, isDeleted, scheduleRefresh, send, today } = require('./state');
 const { canWriteDoc, createDocument, document, info, onChange } = require('./documents');
 
@@ -127,4 +128,20 @@ async function todayNode(offset = 0, findOnly = false) {
   return created.id;
 }
 
-module.exports = { weekTitle, weekNode, pinTarget, pinnedNode, pinnedUris, pinnedDates, pinHubs, pinTree, pinState, setPin, nodePin, todayNode };
+// What the renderer asks this module (preload.js names each channel for the page; main.js registers the table).
+const ipc = {
+  'pins:state': (_e, id) => pinState(id),
+  'pins:ids': () => pinnedUris(), // which documents carry a pin at all, for the mark on a row
+  'pins:dates': () => pinnedDates(), // { uri: ['YYYY-MM-DD'] }, for the Pinned section
+  'pins:pin': (_e, id, target, date) => setPin(id, target, true, date),
+  'pins:unpin': (_e, id, target, date) => setPin(id, target, false, date),
+  'pins:pinTo': (_e, hubId, uri) => nodePin(hubId, uri, true), // pin a document on a meeting/space
+  'pins:unpinFrom': (_e, hubId, uri) => nodePin(hubId, uri, false),
+  // The node for today: a document titled with today's date, pinned to today. Created and pinned when missing,
+  // so "Show today node" always lands somewhere. Matching is by exact title, the same string the pin uses.
+  // A 'YYYY-MM-DD' day instead of the offset is the page a date mention opens.
+  'doc:todayNode': (_e, offset, findOnly) => todayNode(isDateUri('tana:plaindate:' + offset) ? offset : offset === 1 ? 1 : 0, findOnly === true),
+  'doc:weekNode': async (_e, findOnly) => (await weekNode(new Date(), findOnly === true)).id,
+};
+
+module.exports = { weekTitle, weekNode, pinTarget, pinnedNode, pinnedUris, pinnedDates, pinHubs, pinTree, pinState, setPin, nodePin, todayNode, ipc };
