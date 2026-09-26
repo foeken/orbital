@@ -2316,13 +2316,20 @@ function runPaletteSkipCheck() {
     const searchSpacesNow = function searchSpacesNow() {}, todayPickerSearchNow = function todayPickerSearchNow() {};
     let listener; const palInput = { addEventListener: (type, fn) => { if (type === 'input') listener = fn; } };
     ${sourceBetween("palInput.addEventListener('input'", "palInput.addEventListener('keydown'")}
-    (mode) => { palMode = mode; renders = 0; asked.length = 0; listener(); return { renders, asked: [...asked], palIndex, palEnter }; };
+    const typeOn = (mode) => { palMode = mode; renders = 0; asked.length = 0; listener(); return { renders, asked: [...asked], palIndex, palEnter }; };
+    typeOn.seq = () => palSeq;
+    typeOn;
   `);
   for (const mode of ['pinDate', 'moveConfirm', 'cmd', 'field', 'meetingTime']) {
     assert.deepEqual(plain(typing(mode)), { renders: 1, asked: [], palIndex: 0, palEnter: null }, mode + ': typing redraws the page from the words and asks main nothing');
   }
   assert.deepEqual(plain(typing('search')), { renders: 0, asked: ['searchNow'], palIndex: 0, palEnter: null }, 'the document search asks Tana, debounced');
   assert.deepEqual(plain(typing('setIcon').asked), ['searchIconsNow'], 'and Set icon asks main for its glyphs');
+  for (const mode of ['search', 'spaces', 'setIcon', 'pinToday']) {
+    const seq = typing.seq();
+    typing(mode);
+    assert.ok(typing.seq() > seq, mode + ': typing retires the answer to the words before, so it cannot settle an Enter meant for these (#397)');
+  }
 
   // Every page opens through showPage (#275), so none inherits what the last one left running: Escape from Set icon
   // with an icon search still debounced used to land on the command page with the timer live and busy still set.

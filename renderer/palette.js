@@ -1031,10 +1031,12 @@ function movePalIndex(step) {
 // missing from it (Pin to date) ignored every key and sent a search nobody read (#297).
 palInput.addEventListener('input', () => {
   palIndex = 0; palEnter = null; // typing on supersedes an Enter that was waiting for the previous query
-  if (palMode === 'setIcon') { palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchIconsNow, 150); return renderPalette(); }
-  if (palMode === 'spaces') { palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchSpacesNow, 150); return; }
+  // palSeq++ on each: an answer to the words before, landing during the debounce, would draw its rows and settle the
+  // Enter waiting for these words with them (#397 review)
+  if (palMode === 'setIcon') { palSeq++; palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchIconsNow, 150); return renderPalette(); }
+  if (palMode === 'spaces') { palSeq++; palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchSpacesNow, 150); return; }
   if (palMode === 'pinToday') { palSeq++; palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(todayPickerSearchNow, 150); return; }
-  if (palMode === 'search') { palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchNow, 150); return; }
+  if (palMode === 'search') { palSeq++; palBusy = true; clearTimeout(palTimer); palTimer = setTimeout(searchNow, 150); return; }
   renderPalette();
 });
 palInput.addEventListener('keydown', (e) => {
