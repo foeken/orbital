@@ -720,6 +720,7 @@ function nodeEl(node, docId, parent) {
   // A row in a field does not open as a page: a field is a list of values, and its rows are read and edited where
   // they are. A reference in one still opens what it points at — that is the chip's own click, not the bullet's.
   const opens = reference || fullref || (zoomable(node) && !field);
+  const clickOpens = opensOnClick(item);
   if (opens) bullet.title = 'Zoom in'; else bullet.classList.add('still'); // a member or a type has no page: the bullet is only a glyph
   const bulletIcon = gone ? 'trash' : iconOf(display);
   if (bulletIcon) { bullet.classList.add('icon', bulletIcon); const svg = iconNode(bulletIcon); if (svg) bullet.append(svg); }
@@ -775,7 +776,7 @@ function nodeEl(node, docId, parent) {
     text.classList.add('table'); text.tabIndex = -1;
     text.append(tableEl(item));
   } else {
-    if (!demoMode && canEditText(item)) text.contentEditable = 'plaintext-only'; else text.tabIndex = -1;
+    if (!demoMode && !clickOpens && canEditText(item)) text.contentEditable = 'plaintext-only'; else text.tabIndex = -1;
     text.spellcheck = false;
     // a full reference reads its label from the target, like the rest of the row, so a rename in Tana shows through
     renderSegs(text, pending.has(item.key) ? pending.get(item.key).segs : reference ? [{ text: referenceLabel(node) }] : fullref ? [{ mention: { uri: node.reference.uri, label: referenceLabel(node) } }] : segsOf(node), display.id);
@@ -816,6 +817,8 @@ function nodeEl(node, docId, parent) {
   // as does a task listed under one, as itself: goTo reads the real node, where zoomTo would open the read-only copy the
   // Timeline lists, filed under the Timeline in the crumb — a page that looked like the task and could not be edited
   else if (parent?.node?.timeline) line.onclick = (e) => { if (!e.metaKey && !e.shiftKey && !e.target.closest('.chev, .check, .bullet')) goTo(node.id); };
+  else if (clickOpens) line.onclick = (e) => { if (!e.metaKey && !e.shiftKey && !e.target.closest('.chev, .bullet')) zoomTo(item); };
+  if (clickOpens) el.classList.add('opens');
   // a reference row: the bullet opens the target, a click selects the row, and a click on the selected row starts
   // editing it — a native embed takes the caret where it was clicked, while a full reference has nothing to click
   // into (its text is one chip), so the caret goes to the end, which is where Enter on the selection puts it too

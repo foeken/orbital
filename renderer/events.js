@@ -57,7 +57,7 @@ onRows('keydown', (e) => {
     else if (mod) return; // ⌘K / ⌘S / ⌘Z … reach the document handler
     return e.preventDefault();
   }
-  if (!canEditItem(item)) {
+  if (!canEditItem(item) || opensOnClick(item)) {
     if (isReference(item.node) && canEditStructure(item)) {
       const vert = e.key === 'ArrowUp' || e.key === 'ArrowDown', dir = e.key === 'ArrowUp' ? 'up' : 'down';
       const editing = canEditText(item);
@@ -75,7 +75,7 @@ onRows('keydown', (e) => {
     else if (item.node.notification && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openNotification(item.node); } // renderer/inbox.js: read, and open what it is about
     else if (item.node.timeline && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openTimeline(item.node); } // renderer/timeline.js: the node the event is about
     else if (item.parent?.node?.timeline && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); goTo(item.node.id); } // a task listed under a Timeline entry opens as itself (see render.js)
-    else if (e.key === ' ') { e.preventDefault(); if (isReference(item.node)) openReference(item.node); else if (zoomable(item.node)) zoomTo(item); } // Space zooms into a read-only row, since typing into it is not an option; a member or type has no page
+    else if (!mod && (e.key === ' ' || (e.key === 'Enter' && opensOnClick(item)))) { e.preventDefault(); if (isReference(item.node)) openReference(item.node); else if (zoomable(item.node)) zoomTo(item); } // Space zooms into a read-only row, since typing into it is not an option; a member has no page; Enter opens a type row as its click does; a ⌘ combo is a recorded shortcut's
     else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && e.shiftKey && !mod) { e.preventDefault(); extendSel(item, e.key === 'ArrowUp' ? -1 : 1); }
     else if (e.key === 'ArrowUp' && !mod && atEdge(el, 'up')) { e.preventDefault(); moveTo(el, -1, off); }
     else if (e.key === 'ArrowDown' && !mod && atEdge(el, 'down')) { e.preventDefault(); moveTo(el, 1, off); }

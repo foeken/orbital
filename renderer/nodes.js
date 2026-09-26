@@ -120,6 +120,8 @@ const rowsIn = (root) => [...root.querySelectorAll('.node:not(.leaving) .text, .
 // A field value's rows are addressed "<document>|<type>?attribute=<key>" (docs/OUTLINER.md): the outline's own
 // rows, drawn under the title, where a row is one line of a list rather than a page in its own right.
 const inField = (docId) => typeof docId === 'string' && docId.includes('|tana:type:');
+// A type row opens on a click or Enter anywhere on it: its page is where it is renamed (renderer/render.js, events.js)
+const opensOnClick = (item) => isTypeDoc(item.node) && !inField(item.docId);
 // `texts()` is the outline's own rows: what "the first node" means, and the list every structural step works in —
 // removing a row, merging into the one above, selecting a range. A field's rows are their own list for the same
 // reason: they are a different outline, and Backspace at the start of the page's first row must not reach into
