@@ -162,5 +162,8 @@ function toggleDemoMode() {
   localStorage.setItem('demoMode', demoMode ? '1' : '0');
   render(true);
 }
-window.addEventListener('storage', (e) => { if (e.key === 'demoMode' && (e.newValue === '1') !== demoMode) { applyDemoMode(e.newValue === '1'); render(true); } });
+window.addEventListener('storage', (e) => {
+  if (e.key === 'demoMode' && (e.newValue === '1') !== demoMode) { applyDemoMode(e.newValue === '1'); render(true); }
+  if (e.key === 'zoom' && tana.zoom) { zoomFactor = Number(e.newValue) || BASE_ZOOM; tana.zoom(zoomFactor); } // the text size, set in another page
+});
 const outline = $('outline'), filterEl = $('filter'), filterRow = $('filterRow');

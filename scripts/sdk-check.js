@@ -960,6 +960,17 @@ async function main() {
     assert.equal((await backend.handlers.get('sensitive:list')(null)).join(), marked, 'the mark is read back from where it was written');
     assert.equal(await backend.handlers.get('sensitive:set')(null, marked, false), false);
     assert.equal((await backend.handlers.get('sensitive:list')(null)).join(), '', 'and unmarking takes it out again');
+    // A setting one page writes reaches the other page of a split and every other window at once, since the write
+    // coming back from Tana is nothing new to main; the page that wrote it hears nothing (issue #228).
+    const heard = [], pane = (name) => ({ webContents: { isDestroyed: () => false, send: (channel, synced) => heard.push([name, channel, synced && synced.theme]) } });
+    const left = pane('left'), right = pane('right'), other = pane('other');
+    backend.S.windows.add({ isDestroyed: () => false, panes: [left, right] }).add({ isDestroyed: () => false, panes: [other] });
+    await backend.handlers.get('prefs:set')({ sender: left.webContents }, 'theme', 'dark');
+    assert.deepEqual(heard, [['right', 'settings:changed', 'dark'], ['other', 'settings:changed', 'dark']]);
+    heard.length = 0;
+    await backend.handlers.get('sensitive:set')({ sender: right.webContents }, marked, false);
+    assert.deepEqual(heard.map(([name]) => name), ['left', 'other'], 'a sensitive mark tells the other pages too');
+    backend.S.windows.clear(); settings.setPref('theme', undefined); await settings.flush();
     // A node's link opens it in Tana on the route Tana itself picks for its kind (issue #88).
     backend.testRuntime({ me: { orgDocUri: 'tana:org:01ks7rqsrqjn7vwyjhx75r6jg0' } });
     const link = (kind) => backend.handlers.get('doc:link')(null, 'tana:' + kind + ':01m2nrv0v6qj2brghq04t8wv87');
