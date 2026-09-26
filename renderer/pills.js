@@ -196,9 +196,9 @@ function renderPills(show) {
   if (oldMenu || menu) menuMotion(oldMenu, box.querySelector('.pill > .menu:not(.out)'), oldMenu && [...box.children].find((p) => p.dataset.id === oldMenu.dataset.for));
   const again = focusedId && box.querySelector('.pill[data-id="' + focusedId + '"]');
   if (again) again.focus();
-  const open = box.querySelector('.menu'); // stop before the window edge; the rows scroll inside
+  const open = box.querySelector('.menu:not(.out)'); // stop before the window edge; the rows scroll inside (not a menu on its way out)
   if (open) open.style.maxHeight = Math.min(360, innerHeight - open.getBoundingClientRect().top - 12) + 'px';
-  const active = box.querySelector('.menu .mrow.active');
+  const active = box.querySelector('.menu:not(.out) .mrow.active');
   if (active) active.scrollIntoView({ block: 'nearest', inline: 'nearest', container: 'nearest' });
 }
 // Every page with pills can fold them away behind a button beside back and forward, and each page remembers its own

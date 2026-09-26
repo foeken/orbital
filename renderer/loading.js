@@ -208,8 +208,9 @@ let previewLoading = () => {};
   if (typeof MutationObserver === 'function') new MutationObserver(run).observe(box, { attributes: true, attributeFilter: ['class'] });
   // a theme change repaints it: the still frame draws only once, in the colour it had then
   if (typeof MutationObserver === 'function') new MutationObserver(run).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-  previewLoading = (on) => { document.body.classList.toggle('loading-preview', on); t0 = last = 0; run(); };
-  // Esc ends a preview before anything else hears it
-  addEventListener('keydown', (e) => { if (e.key === 'Escape' && previewing()) { e.preventDefault(); e.stopImmediatePropagation(); previewLoading(false); } }, true);
+  // (focus leaves the page too: a menu command such as Paste goes to whatever has focus, keys or not)
+  previewLoading = (on) => { if (on && document.activeElement && document.activeElement.blur) document.activeElement.blur(); document.body.classList.toggle('loading-preview', on); t0 = last = 0; run(); };
+  // Esc ends a preview before anything else hears it, and no other key reaches the page hidden behind it
+  addEventListener('keydown', (e) => { if (!previewing()) return; e.preventDefault(); e.stopImmediatePropagation(); if (e.key === 'Escape') previewLoading(false); }, true);
   run();
 })();
