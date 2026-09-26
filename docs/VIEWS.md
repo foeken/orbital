@@ -146,8 +146,9 @@ in the same action (`main.js`).
 - "Clear filters" (`clearFilter`, renderer/nodes.js) resets to `{ types: null, states: null, assignee:
   'anyone', text: '', fields: null, audience: null }` and keeps `participant`/`window`, so a filter that asks
   for your own meetings still does after it. A view offers the link only when its filter differs from that.
-- Enter on a collapsed row in a view, or with nothing focused in an empty one, drafts a plain document below
-  it (`draftDoc`, renderer/render.js): every view drafts a doc. Drafts survive a refresh and are dropped when you
+- Enter on a collapsed, editable document row in a view (a type row opens its type page instead, and a read-only
+  row ignores it), or with nothing focused in an empty view, drafts a plain document below it (`draftDoc`,
+  renderer/render.js): every view drafts a doc. Drafts survive a refresh and are dropped when you
   navigate away empty. Member rows stay read-only, sensitive rows stay redacted, rows animate in and out, and
   every keyboard rule in OUTLINER.md holds.
 
