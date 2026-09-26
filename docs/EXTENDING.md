@@ -66,8 +66,9 @@ Pick the smallest that fits:
      `<page>ViewRow()` answering `{ id, group: 'Views', icon, label, hint, run: () => goTo(PAGE) }`.
   4. **renderer/palette.js** — push that row with the other view rows in `paletteRows`, guarded by the api it needs,
      and add its id to `VIEW_ORDER`.
-  5. **Live** — main sends a channel when the page's source changes; the renderer reloads it only when
-     `zoom?.docId === PAGE`.
+  5. **Live** — main sends a channel when the page's source changes; the renderer reloads the page whenever it
+     holds cached rows for it (`if (kids.get(PAGE)) reload(PAGE)`, as renderer/inbox.js does), on screen or not,
+     because a later `goTo(PAGE)` reuses those rows without asking main again.
   6. **index.html** for the new renderer file (below), and docs/VIEWS.md §9.
 
 ## A palette row or a built-in key
@@ -88,7 +89,8 @@ kbd? }`.
   Settings, Help.
 - **Order**: a row about the current node gets a place in `NODE_ROW_ORDER`, a view row in `VIEW_ORDER` (both
   renderer/palette.js); an app row is pushed where it belongs in its group.
-- **A built-in key**: an entry `id: '⌘X'` in `DEFAULT_HOTKEYS` (renderer/state.js). The document keydown handler
+- **A built-in key**: an entry `<row id>: '⌘X'` in `DEFAULT_HOTKEYS` (renderer/state.js), keyed by the row's id as
+  `createTask: '⇧⌘Space'` is. The document keydown handler
   finds the row by combo and runs it through `runAction`, so the key shows as the row's chip and ⇧⌘K can re-record
   it. The recorder refuses the combos in `RESERVED` (renderer/palette.js) and any combo another row has. A key the
   outline's own keydown answers to must compare against `hotkeyFor(id)` and `preventDefault`, so the row does not
