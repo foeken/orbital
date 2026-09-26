@@ -107,6 +107,7 @@ contextBridge.exposeInMainWorld('api', {
   // The preferences that follow you between machines (main/settings.js), read synchronously so renderer/prefs.js has
   // them before the first paint, and written through one at a time.
   prefs: ipcRenderer.sendSync('prefs:snapshot'),
+  settingsReady: () => ipcRenderer.invoke('settings:ready'), // the same, once this session has read the settings document from Tana
   setPref: (key, value) => ipcRenderer.invoke('prefs:set', key, value),
   setOpenAIKey: (key) => ipcRenderer.invoke('openai:setKey', key),
   chatgptStatus: () => ipcRenderer.invoke('chatgpt:status'),

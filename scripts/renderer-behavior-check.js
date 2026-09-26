@@ -4568,7 +4568,7 @@ async function runRestorePlaceCheck() {
   assert.equal(api.state().docId, null, 'and a corrupt entry is simply not a place, rather than a broken launch');
   assert.match(source, /loadRoots\(\)\.then\(render, showError\)\.then\(restorePlace\)/,
     'and boot reopens that place once the views have loaded, so the restore has somewhere to land');
-  assert.match(source, /if \(connected && !wasConnected\) \{ taskMetaFailed\.clear\(\); loadSearches\(\); loadWorkspaceTypes\(\); loadPinned\(true\); restorePlace\(\)\.finally\(\(\) => \{ placed = true; loadView\(\); renderSoon\(\); \}\); \}/,
+  assert.match(source, /if \(connected && !wasConnected\) \{ taskMetaFailed\.clear\(\); loadSearches\(\); loadWorkspaceTypes\(\); loadPinned\(true\); restorePlace\(\)\.finally\(\(\) => \{ placed = true; loadView\(\); renderSoon\(\); helpOnce\(\); \}\); \}/,
     'the connection coming up runs the restore that boot was too early for, and the view behind it is fetched after that page, not ahead of it');
 }
 
@@ -8360,6 +8360,27 @@ function runFitSoonCheck() {
   console.log('ok  metadata answers: one row-meta fit per frame');
 }
 checks.push(runFitSoonCheck);
+// The Help tour's first start (renderer/overlays.js helpOnce): not over the login, and not by this machine's empty copy
+// of the preferences when the settings document in Tana says it was seen elsewhere.
+async function runHelpOnceCheck() {
+  const run = (synced, side = '') => vm.runInNewContext(`
+    const SIDE = ${JSON.stringify(side)}, prefs = {};
+    let opened = 0;
+    const pref = (key, fallback) => (key in prefs ? prefs[key] : fallback);
+    const openHelp = () => { opened++; prefs.helpSeen = true; };
+    const tana = { settingsReady: async () => { if (${JSON.stringify(synced)} === 'fail') throw new Error('offline'); return ${JSON.stringify(synced)}; } };
+    ${functionSource('helpOnce')}
+    ({ go: async () => { await helpOnce(); await helpOnce(); return opened; } });
+  `);
+  assert.equal(await run({ helpSeen: true }).go(), 0, 'seen on another machine: a new one does not show it again');
+  assert.equal(await run({}).go(), 1, 'never seen: it opens, once');
+  assert.equal(await run('fail').go(), 1, 'a settings read that fails still opens it, rather than never');
+  assert.equal(await run({}, ':2').go(), 0, 'the right half of the Work View stays quiet');
+  assert.doesNotMatch(source, /then\(restorePlace\)\.then\(helpOnce\)/, 'boot no longer opens it before there is a connection, over the login');
+  assert.match(source, /restorePlace\(\)\.finally\(\(\) => \{ placed = true; loadView\(\); renderSoon\(\); helpOnce\(\); \}\)/, 'it opens once connected, over the page the launch came back to');
+  console.log('ok  Help tour first start: after login, and not again on a machine that has not read your settings yet');
+}
+checks.push(runHelpOnceCheck);
 process.exitCode = 1;
 Promise.allSettled(checks.map((check) => Promise.resolve().then(check))).then((results) => {
   const failures = results.filter((result) => result.status === 'rejected').map((result) => result.reason);

@@ -862,8 +862,10 @@ main lays two pages over the whole window, both halves of a split included, as a
 keeps its caret and gets the keys back when the overlay closes, with what it had to say (`onOverlayClosed`).
 
 - **Help** (help.html): six pages of the basics, each with a CSS loop of the keys at work. Opened by Cmd+K Help, the ?
-  in the header row, and once by itself on a first start (`helpOnce`, the `helpSeen` preference). ⌘K closes it and
-  opens the palette.
+  in the header row, and once by itself on a first start (`helpOnce`, the `helpSeen` preference): after login, once
+  the connection is up and the page the launch came back to is drawn, and only when the settings document in Tana does
+  not say it was seen (`api.settingsReady`, which waits for main's first read of it), so it neither covers the login nor
+  shows again on a new machine. ⌘K closes it and opens the palette.
 - **Create task** (task.html; `createTask`, ⇧⌘Space, issues #232, #237, #241): the palette's card with a title field
   and, under it, the type — plain Task first, then the workflow types main offers (`api.taskTypes`: types with a board
   of states, `data.workflowUri`, that this user may create in); ↑/↓ choose. A line under the field says what the task

@@ -16,7 +16,7 @@ const { S, VIEWS, errText, idKind, isSearch, isSpace, today, redoStack, report, 
 const { cachedNodeHue, graphRow, rememberNodeHue, rememberType, toNode } = require('./main/rows');
 const { accessContext, archivedTypes, chatOutline, createDocument, creationOptions, discussWith, documentAction, followSummary, history, setCodex, onChange, op, outlineWithReferences, setSensitive, setType, setTypeHue, typeCandidates, typeChoices, typeList } = require('./main/documents');
 const { changesOf, related, searchChildren, spaceChildren, summaryChanges, unwatchRelated, watchRelated } = require('./main/related');
-const { announceNewInbox, watchInbox, inboxCount, listFilter, refresh, search, searchCreate, searchTitle, setMcpHidden, start, viewFilter, viewRows } = require('./main/views');
+const { announceNewInbox, watchInbox, inboxCount, listFilter, refresh, search, searchCreate, searchTitle, setMcpHidden, settingsReady, start, viewFilter, viewRows } = require('./main/views');
 const { nodePin, pinTree, weekNode, weekTitle } = require('./main/pins');
 const inbox = require('./main/inbox');
 const proposalsPage = require('./main/proposals');
@@ -264,6 +264,9 @@ ipcMain.on('window:theme', (e, theme) => { const win = paneWindow(e.sender); if 
 // Demo mode lives in the outliner (renderer/state.js); main only needs to know it is on, so no banner shows a real title.
 ipcMain.on('app:demoMode', (_e, on) => { S.demo = on === true; });
 ipcMain.on('prefs:snapshot', (e) => { e.returnValue = settings.prefs(); });
+// The preferences once this session has read the settings document: the snapshot above is this machine's last copy,
+// which on a new machine knows nothing yet (renderer/overlays.js helpOnce).
+ipcMain.handle('settings:ready', async () => { await settingsReady(); return settings.prefs(); });
 // A setting one page writes reaches every other page and window at once: settings.applyRemote announces only what
 // another machine changed, since this machine's own write comes back from Tana as nothing new. The writer is left
 // out, because it already holds the value and an older snapshot arriving late would undo a newer choice there.

@@ -20,7 +20,7 @@ function showStatus(s) {
   // The page you are on before the page behind it: the restore asks for one document's children, the view for a
   // list of up to a thousand rows and the subscriptions that go with it, and on one connection the second used to
   // go first. Any later reconnect finds the place already spent, so this is boot order only.
-  if (connected && !wasConnected) { taskMetaFailed.clear(); loadSearches(); loadWorkspaceTypes(); loadPinned(true); restorePlace().finally(() => { placed = true; loadView(); renderSoon(); }); } // the types too: a key recorded on a Cmd+K type row finds it before Cmd+K opens
+  if (connected && !wasConnected) { taskMetaFailed.clear(); loadSearches(); loadWorkspaceTypes(); loadPinned(true); restorePlace().finally(() => { placed = true; loadView(); renderSoon(); helpOnce(); }); } // the types too: a key recorded on a Cmd+K type row finds it before Cmd+K opens; the tour opens over the page it came back to
   $('loginBox').hidden = !state.showLogin;
   const relogin = !!(state.error && !state.authenticated && !state.signedOut);
   $('errorText').textContent = relogin ? state.error : ''; $('error').hidden = $('errorLogin').hidden = !relogin;
@@ -190,7 +190,7 @@ if (tana.onSettings) tana.onSettings((next) => {
 });
 if (tana.onSystemTheme) tana.onSystemTheme((t) => { if (themePref === 'system') applyTheme(t); }); // macOS appearance changes re-theme a running window
 if (themePref === 'system') showTheme('system');
-loadRoots().then(render, showError).then(restorePlace).then(helpOnce).then(loadFilters); // the tour opens over the page it came back to
+loadRoots().then(render, showError).then(restorePlace).then(loadFilters);
 // Cmd+K only: never blocks the first paint. Boot almost always races the sync connect (main creates the window
 // before S.client exists, so main/views.js:searchList answers []), so this alone would usually leave the group
 // empty; showStatus's connect edge above re-runs it once a client actually exists. Called here too so a session
