@@ -438,7 +438,10 @@ function renderOutline() {
   $('filtered').textContent = [hidden ? hidden + ' items filtered out' : '', cut ? 'Showing the first 1,000 results' : ''].filter(Boolean).join(' · ');
   // Cached rows remain usable while auth and sync reconnect; reserve the skeleton for an empty outline.
   const loading = asking || (!parent && !outline.children.length && (authChecking || !rootsLoaded || !filters.has(view) || (authed && !connected)));
-  $('skeleton').classList.toggle('gone', !loading);
+  // Only the first page builds itself (renderer/loading.js); one opened later, or a reconnect, waits blank for its
+  // rows. Signed out is not landed: the page after the login is still the first.
+  $('skeleton').classList.toggle('gone', !loading || booted);
+  if (!loading && authed) booted = true;
   // the same rule as "No content" above: a view with every section folded away has no rows and is not empty
   if (!parent && !list.length && !outline.children.length && !loading && !filterEl.value) { // an empty view says so; a filtered-out list is explained by the count below it
     const note = document.createElement('div');

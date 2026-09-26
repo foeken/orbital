@@ -720,11 +720,11 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 .clearfilters { border: 0; background: none; color: #aaa; font: inherit; font-size: 16px; padding: 0; margin-left: 10px; text-decoration: underline; cursor: pointer; }
 .clearfilters:hover { color: #1a1a1a; }
 .clearfilters:focus { outline: none; box-shadow: 0 0 0 2px #b7d2f5; border-radius: 3px; }
-/* Loading (Ambient): renderer/loading.js draws it on the canvas, which fills the whole page — a knowledge system with
-   gravity: a dotted core in a spiral disk, nodes on tilted orbits, links that form and break. Monochrome: one colour,
-   the page's own text colour, at many strengths, so the theme reaches it. It shows itself only when loading takes a
-   moment (the delay below) and fades as the rows arrive. The header steps aside for it after the same delay, so a quick
-   load never blinks it, and comes back as the rows do; the error line stays, since it may be what the page waits on. */
+/* Loading (Build): renderer/loading.js draws it on the canvas, which fills the whole page — the page building itself
+   in pixel art where the real header and rows will be, on a launch or a Reload only. One colour, the page's own text
+   colour, at a few strengths, so the theme reaches it. It draws nothing for the first 300ms, so a quick load never
+   blinks it, and fades as the rows arrive. The header steps aside for it after the same delay and comes back as the
+   rows do; the error line stays, since it may be what the page waits on. */
 .skeleton { position: absolute; inset: 0; pointer-events: none; transition: opacity var(--dur-base) var(--ease-out), display var(--dur-base) allow-discrete; }
 .skeleton.gone { display: none; opacity: 0; pointer-events: none; }
 :where(.titlebar > :not(#error), #pills, #filterRow, #fields) { transition: opacity var(--dur-base) var(--ease-out); }
@@ -732,9 +732,7 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 /* Cmd+K "Preview loading animation" (renderer/loading.js): the page as it looks while a view loads, until Esc */
 .loading-preview .skeleton.gone { display: block; opacity: 1; }
 .loading-preview :is(#outline, #filtered, #loginBox) { display: none; }
-.skeleton canvas { display: block; width: 100%; height: 100%; color: #1c2024;
-  mask-image: radial-gradient(ellipse 70% 70% at 50% 50%, #000 55%, transparent 100%); animation: loader-in var(--dur-slow) var(--ease-out) var(--loader-wait, 300ms) backwards; } /* no wait under reduced motion: the still frame shows at once */
-@keyframes loader-in { from { opacity: 0; } }
+.skeleton canvas { display: block; width: 100%; height: 100%; color: #1c2024; }
 @keyframes shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 @keyframes breathe { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
 
