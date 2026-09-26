@@ -75,7 +75,7 @@ nothing typed. A query that matches nothing is the palette's own "No results", w
 ```js
 let trashList = null;
 const trashRows = (q) => listRows(TRASH_GROUP, trashList, q, 'Nothing deleted recently',
-  (list) => list.filter((d) => fuzzyMatch(d.title, q)).map((d) => ({ group: TRASH_GROUP, label: d.title, run: … })));
+  (list) => list.filter((d) => fuzzyMatch(d.title, q)).map((d) => ({ group: TRASH_GROUP, label: demoText(d.title, d.id), run: … })));
 function openTrashPalette() {
   loadList('trash', () => tana.deletedList(), (list) => { trashList = list; });
   openPage('trash', 'Restore something deleted', { rows: trashRows, back: BACK_TO_COMMANDS });
