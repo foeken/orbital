@@ -11,6 +11,7 @@ const { pipeline } = require('node:stream/promises');
 const { Readable } = require('node:stream');
 const settings = require('./settings');
 const agent = require('./agent');
+const { signedBy } = require('../updater');
 const { send } = require('./state');
 
 // The fast AI, for both pages: Terra with a little reasoning. Measured on 2026-09-24 through a ChatGPT sign-in against
@@ -49,9 +50,9 @@ async function downloadServer(userData) {
     await pipeline(Readable.fromWeb(res.body), fs.createWriteStream(path.join(dir, 'server.tar.gz')));
     await run('/usr/bin/tar', ['-xzf', path.join(dir, 'server.tar.gz'), '-C', dir, name]);
     const bin = path.join(dir, name);
-    await run('/usr/bin/codesign', ['--verify', '--strict', bin]); // intact and signed, or this throws
-    const { stderr } = await run('/usr/bin/codesign', ['-dv', bin]);
-    if (!new RegExp('^TeamIdentifier=' + OPENAI_TEAM + '$', 'm').test(stderr)) throw new Error('The ChatGPT sign-in download is not signed by OpenAI');
+    // Intact, and a Developer ID signature of OpenAI's team chained to Apple; anything else is deleted unrun.
+    await run('/usr/bin/codesign', ['--verify', '--strict', '-R', signedBy(OPENAI_TEAM), bin])
+      .catch(() => { throw new Error('The ChatGPT sign-in download is not signed by OpenAI'); });
     fs.renameSync(bin, ownServer(userData));
     return ownServer(userData);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
