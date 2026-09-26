@@ -197,12 +197,12 @@ dark twin.
 
 | Token | Light / dark | For |
 |---|---|---|
-| `--surface` | `#fff` / `#242729` | anything that floats over the page: menus, the toolbar, ⌘K's and the recorder's cards. Help's card still writes its white and shadow out, with a dark twin, until #305 lands (#378) |
+| `--surface` | `#fff` / `#242729` | anything that floats over the page: menus, the toolbar, ⌘K's and the recorder's cards. Help's card still writes its white and shadow out, with a dark twin (#378) |
 | `--scrim` | 12% / 52% black | behind a dialog (⌘K, the key recorder, Help) |
 | `--shadow-menu` | | a menu or dropdown (`.menu`, the @ dropdown) |
 | `--shadow-card` | | a dialog's card (⌘K, the recorder; Help's as above) |
 | `--focus` | `#b5d0ee` / `#58768a` | the focus ring of anything new: `outline: 2px solid var(--focus); outline-offset: 2px` on a row or block, `box-shadow: 0 0 0 2px var(--focus)` on a button. Not every ring uses it yet (#379): `.gmore`, `.tbtn` and image and table focus write the colour out with dark twins, the dark `.pill:focus` and `.ghead:focus` restate it, and `.button` keeps the browser's ring. On purpose: the green save pills ring green, and the agent badge rings a stronger `#4f8ad9` |
-| `--muted` | (PR #305) | secondary words: facts, hints, headings, placeholders, done rows. Until #305 lands, the greys it replaces are `#999` light and `#858b8e` dark |
+| `--muted` | `#666` / `#a0a5a8` | secondary words: facts, hints, headings, placeholders, done rows. It meets WCAG AA on the page, on menus and on grey pills. Icons keep their lighter greys, and disabled rows too |
 | `--z-toolbar` 9 < `--z-palette` 10 < `--z-recorder` 11 < `--z-toast` 12 < `--z-drag` 15 < `--z-lightbox` 20 | | what stacks over the page. Small local numbers (1, 2, 5) only order siblings inside one component |
 | `--dur-quick` / `--dur-base` / `--dur-slow` / `--dur-flash` / `--dur-loop`, `--stagger`, `--ease-*` | | every transition and animation. Reduced motion sets the durations to 0, so a rule that uses them needs no guard. An endless loop goes behind `@media (prefers-reduced-motion: no-preference)` |
 | `--hue` | set per element by the renderer | a type's colour, always `oklch(L C var(--hue))`. The dark theme only raises L (0.7 → 0.8 for glyphs) |
@@ -212,7 +212,7 @@ Sizes are small fixed scales rather than tokens. Use a size from the scale and n
 
 - **Font sizes**: 12 (chips, uppercase headings), 13 (crumbs, the error line, toasts, palette group names, `kbd`),
   14 (a row's facts and grey line, hints, sidebar titles), 15 (pills, palette rows, toolbar), 16 (body text, menu
-  rows), 17 (the palette field). Headings are 20 and 24, and the page title is 34. Weights are 400, 600 (labels,
+  rows), 17 (the palette field); a dialog's `.button` is 13.5, its own size. Headings are 20 and 24, and the page title is 34. Weights are 400, 600 (labels,
   headings) and 700 (bold, a pill's value).
 - **Radii**: 3 (a focus ring's corners), 4 (chips, small icon buttons), 6 (buttons, badges, code, images), 8 (rows
   in a menu or ⌘K, inputs, toasts), 10 (menus), 12 (dialog cards), `999px` for a pill, `50%` for a dot.
@@ -242,7 +242,7 @@ the top of the file. State classes are set by the renderer, pseudo-classes by th
 | Empty and loading | `.empty-note` ("Nothing here yet"), `.children.loading`, `.skeleton` (renderer/loading.js) | `.empty-note.cleared` |
 | Toast | `.toast`, only through `showNote` / `showError` | `.show`, `.error` |
 | Button | `.button`, `.button.primary` for the one that goes on (a dialog's footer: the key recorder, Help) | `:hover`, `:disabled` |
-| Dialog | a scrim element with a `.card` inside: `.palette`, `.recorder`, `.help` | `[hidden]` on `.palette` and `.recorder`; `.help` is a `<dialog>`, so `[open]` (`showModal()` / `close()`). Surface motion either way |
+| Dialog | a scrim element with a `.card` inside: `.palette`, `.recorder`, `.help` | `[hidden]` on `.palette` and `.recorder`; `.help` is a `<dialog>`, so `[open]` (`showModal()` / `close()`). The palette and the recorder arrive and leave with the Surface motion; Help only arrives, and `close()` removes it at once |
 | Lightbox | `.lightbox` | `.out` while it closes |
 
 A new kind of button is added by hand to both selector lists of the Press rule in styles.css (`:is(.navbtn, .pill, …)`
