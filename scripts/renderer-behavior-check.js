@@ -4269,7 +4269,7 @@ async function runRestorePlaceCheck() {
   assert.equal(api.state().docId, null, 'and a corrupt entry is simply not a place, rather than a broken launch');
   assert.match(source, /loadRoots\(\)\.then\(render, showError\)\.then\(restorePlace\)/,
     'and boot reopens that place once the views have loaded, so the restore has somewhere to land');
-  assert.match(source, /if \(connected && !wasConnected\) \{ taskMetaFailed\.clear\(\); loadSearches\(\); loadPinned\(true\); restorePlace\(\)\.finally\(\(\) => loadView\(\)\); \}/,
+  assert.match(source, /if \(connected && !wasConnected\) \{ taskMetaFailed\.clear\(\); loadSearches\(\); loadWorkspaceTypes\(\); loadPinned\(true\); restorePlace\(\)\.finally\(\(\) => loadView\(\)\); \}/,
     'the connection coming up runs the restore that boot was too early for, and the view behind it is fetched after that page, not ahead of it');
 }
 
