@@ -95,7 +95,7 @@ function settingsDoc() {
 async function open() {
   const known = db.setting(POINTER);
   if (typeof known === 'string' && known) {
-    const had = !!S.client.sync.getDocument(known); // held by something else before this looked: that stays
+    const had = known !== docId && !!S.client.sync.getDocument(known); // held by something else before this looked: that stays
     const doc = await S.client.sync.subscribe(known).catch(() => null);
     if (doc && !isDeleted(readNode(doc))) {
       if (settled) return use(doc);
@@ -111,6 +111,7 @@ async function open() {
       if (!had) S.client.sync.unsubscribe(known).catch(() => {}); // given up: no live copy of it, and its changes are not ours to route
       return use(oldest);
     }
+    if (doc && !had) S.client.sync.unsubscribe(known).catch(() => {}); // deleted in Tana: nothing to keep live
   }
   settled = true;
   const found = await discover();

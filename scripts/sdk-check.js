@@ -1254,6 +1254,7 @@ async function main() {
     connect();
     await settings.hydrate(); await settings.flush();
     assert.equal(settings.settingsDocId(), mine, 'deleted in Tana: a document in the trash is not written to; the oldest one still standing is');
+    assert.ok(!live.has(theirs.id), 'and the deleted one is not kept live');
     assert.equal(JSON.parse(docs.get(mine).loro.getMap(settings.ROOT).get('pref:theme')), 'dark', 'and it gets what this machine remembers');
     docs.get(mine).transact((l) => l.getMap('data').set('deletedAt', 124));
     connect();
