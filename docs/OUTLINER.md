@@ -799,6 +799,33 @@ duplicated the link. A modifier that is inert in most drags is a worse thing to 
 what you grabbed, so the rule is the one sentence above. A reference never lands in the document it points at, and
 unlike a move it may cross documents, since linking is exactly what it is for.
 
+**A task dropped on a group changes what it is** (#169). In a view grouped by Responsibility, and on the Timeline's
+Today's Tasks, a drop between rows is a group rather than a place: the section under the pointer (its heading is
+outlined while a task is over it, `groupAt`), or the Today block. The writes are read off the task as it stands, so
+the answer does not depend on the section it left, and a task dragged from the other pane — its own renderer, which
+only the dataTransfer's `application/x-orbital-task` crosses — lands the same way. `groupDropWrites` adds what the
+section needs and takes away what would keep the task elsewhere, in the order `responsibilityOf` reads them:
+
+| Drop into | Writes | Refused |
+|---|---|---|
+| Unassigned | Off the agent, every day pin removed, no assignees | a task you did not make |
+| Tracking | Off the agent, every day pin removed, watched | unless you made it and it is someone else's |
+| Agent | the Assign to Agent prompt; nothing until it is sent | — |
+| My inbox, Mine, My completed, My later | Off the agent, every day pin removed, you as the only assignee, the status; a watch on a task you were not assigned is forgotten | a task you did not make |
+| Pinned | Off the agent, pinned to today unless pinned to a day already; a completed task reopens | — |
+| Assigned by others | — | always: it is about who made it |
+| Today's Tasks | Pinned to today unless it is on Today already | anything but a task |
+
+So watched to Pinned pins it and keeps the watch, and watched to Mine takes it over and stops watching. A drop in
+its own section writes nothing. A drop inside a task — a reference to the dragged one under it — is offered only
+once that task is expanded (`dropDepth`): a closed task shows no rows to land among, so beside it the drop is on
+its group, which is what it looked like. The
+tasks under Today's Tasks show a box where the marker would be, so their whole read-only line is what is grabbed.
+A task you cannot edit is refused before anything is written wherever the drop would change its assignees or
+status, so a refused drop leaves no pin behind. While a task is dragged over a pane grouped by Responsibility, its
+empty sections are drawn as well (`setTaskDragging`, cleared by the drop, the drag's end, or a second without a
+dragover), so the first task can land in one.
+
 ## Export to PDF
 
 ⌘K → **Export to PDF** is available for the current text document, including read-only documents. Pending edits are queued before export. The native Save dialog defaults to the document title; cancellation writes nothing. Export reads the complete main outline, including collapsed children, without expanding references into other documents or including app controls, sidebar or typed metadata fields. Electron prints a separate sandboxed page as A4 with fixed light typography, lists, headings, inline marks, images and page margins. Image loading and PDF failures surface through the normal command error path. `node scripts/pdf-check.js` checks escaping and structure; an unsandboxed `electron scripts/pdf-check.js --render` generates three synthetic visual samples under `/tmp/orbital-pdf-examples`.

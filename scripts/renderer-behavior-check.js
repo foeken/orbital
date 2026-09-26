@@ -2704,6 +2704,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   // Built twice: once for the session, and once more seeded with what the first one wrote, which is a relaunch.
   const makeApi = (stored) => vm.runInNewContext(`
     let view = 'tasks', groupPref = {}, sortPref = {};
+    let taskDragging = false; // renderer/drag.js: a task dragged over the pane draws the empty sections too
     ${FAKE_DOM}
     const filters = new Map([['tasks', { types: ['tasks'], states: ['open'], assignee: 'me' }]]);
     const views = [{ id: 'tasks', kind: true }, { id: 'library' }];
@@ -2738,6 +2739,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     ({ pillDefs, groupRows, groupsOf, sortRows, pageRows, SORTS, SORT_KEY, holdRow, releaseHeld, needsCleanup,
        setGroupBy, toggleGroup, groupHeadEl, groupMoreEl, widenFilter, savedPatch: () => savedPatch, filter: () => filters.get(view),
        RESPONSIBILITY,
+       dragging: (on) => { taskDragging = on; },
        asked: () => asked,
        meta: (id, m) => taskMetaById.set(id, m),
        stored: () => ({ ...store }),
@@ -2794,6 +2796,10 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     'Responsibility runs Unassigned, Tracking, Agent, then your own work by its state — My inbox, Mine, My completed, My later — and ends with what somebody else handed you');
   assert.deepEqual(titles(agents, 'responsibility'), [['Agent', ['ta1', 'ta2', 'ta3']]],
     'a node handed to the local agent is in the Agent section and in no other: whoever Tana has it assigned to, and even with no metadata read yet — asking for it by name is enough to list it');
+  api.dragging(true);
+  assert.deepEqual(titles(agents, 'responsibility').map(([title]) => title), ['Unassigned', 'Tracking', 'Agent', 'My inbox', 'Pinned', 'Mine', 'My completed', 'My later'],
+    'while a task is dragged, every section a drop can land in is drawn, empty or not');
+  api.dragging(false);
   const pinnedTask = { id: 'tp1', icon: 'task', tags: [], createdBy: 'sam' };
   assert.deepEqual(titles([...responsibility, pinnedTask], 'responsibility').map(([title, ids]) => title + ':' + ids.join()).slice(2, 5),
     ['My inbox:t8', 'Pinned:tp1', 'Mine:t10'],
@@ -7827,7 +7833,7 @@ function runDropPlanCheck() {
   //    read-only row, and never an empty line, which has nothing to take hold of.
   assert.deepEqual([api.canDrag('a'), api.canDrag('h'), api.canDrag('row-doc'), api.canDrag('e'), api.canDrag('blank')], [true, true, true, false, false],
     'a read-only row and an empty line are not dragged; a document row is');
-  assert.match(source, /if \(canDragItem\(item\)\) bullet\.draggable = true;/, 'and it is the row\u2019s own marker that carries it');
+  assert.match(source, /if \(canDragItem\(item\)\) \(parent\?\.node\?\.timeline\?\.today \? line : bullet\)\.draggable = true;/, 'and it is the row\u2019s own marker that carries it, or the line of a task under Today\u2019s Tasks');
   // Chromium begins a drag from the mousedown default, so the marker that can be dragged must not prevent it —
   // this is the line that decides whether a drag starts at all.
   assert.match(source, /bullet\.onmousedown = \(e\) => \{ if \(!bullet\.draggable\) e\.preventDefault\(\); \};/, 'a draggable marker lets the press through');
@@ -7838,12 +7844,37 @@ function runDropPlanCheck() {
   assert.deepEqual(linked.ref, { uri: 'tana:text:01docrow00000000000000000', label: 'row-doc' }, 'a dragged document lands as a reference to itself');
   assert.equal(linked.afterId, 'c');
   assert.equal(plain(api.plan('row-doc', 20, 136)).docId, 'd2', 'and a reference may land in another document');
+  assert.equal(api.plan('a', 100, 236), null, 'nothing lands inside a document row until it is expanded');
 
   // 9. What was picked up decides the write, and nothing else does: a block moves even when it is a row that
   //    points at a document, because the row is the thing being dragged.
   assert.equal(plain(api.plan('link', 30, 80)).ref, null, 'a row that points at a document still moves: it is a block like any other');
   assert.equal(plain(api.plan('link', 30, 80)).afterId, 'c');
   console.log('ok  drag and drop: one gap reads as several places, x chooses the level and the line marks it, documents land as references, blocks move, and nothing lands read-only, empty, in another document, in a view or inside itself');
+}
+
+// A task dropped on a group (renderer/drag.js groupDropWrites, #169): the writes that put it there, read off the task.
+function runGroupDropCheck() {
+  const writes = vm.runInNewContext(`${sourceLine('const GROUP_STATES =')}\n${functionSource('groupDropWrites')}\ngroupDropWrites`);
+  const ME = 'me', OTHER = 'other', DAY = '2026-09-26';
+  const task = (o) => ({ createdBy: ME, assignees: [], watched: false, dates: [], agent: false, stateType: 'open', ...o });
+  const at = (target, o) => plain(writes(target, task(o), ME, DAY));
+  const tracked = { assignees: [OTHER], watched: true };
+  assert.deepEqual(at('Pinned', tracked), [['pin', DAY]], 'watched to Pinned pins it to today and keeps the watch');
+  assert.deepEqual(at('Mine', tracked), [['assign', [ME]], ['watch', null]], 'watched to Mine takes it over and forgets the watch');
+  assert.deepEqual(at('Mine', { assignees: [ME], dates: ['2026-09-30', DAY], agent: true }), [['agent', false], ['unpin', '2026-09-30'], ['unpin', DAY]], 'leaving Pinned or Agent lets go of every pin and the agent');
+  assert.deepEqual(at('My completed', { assignees: [ME] }), [['state', 'closed']], 'a status group sets the status');
+  assert.deepEqual(at('Pinned', { dates: [DAY], stateType: 'closed' }), [['state', 'open']], 'a completed pinned task dropped on Pinned reopens');
+  assert.deepEqual(at('Pinned', { agent: true }), [['agent', false], ['pin', DAY]], 'and one with the agent leaves it, since Agent comes first');
+  assert.deepEqual(at('Tracking', { assignees: [OTHER] }), [['watch', true]], 'Tracking watches a task you handed over');
+  assert.equal(at('Tracking', { assignees: [ME] }), null, 'but cannot say who to hand yours to');
+  assert.deepEqual(at('Unassigned', { assignees: [ME] }), [['assign', []]], 'Unassigned clears the assignees');
+  assert.equal(at('Mine', { createdBy: OTHER, assignees: [ME] }), null, 'a task someone else made stays under Assigned by others');
+  assert.deepEqual(at('Today', { dates: ['2026-09-20'] }), [], 'Today leaves a task already on it alone');
+  assert.deepEqual(at('Today', { dates: ['2026-09-20'], stateType: 'closed' }), [['pin', DAY]], 'but pins a completed one that has aged off it');
+  assert.deepEqual(at('Agent', {}), [['agent', true]], 'Agent asks for a prompt');
+  assert.deepEqual(at('Mine', { assignees: [ME] }), [], 'a drop in its own group writes nothing');
+  console.log('ok  group drop: each group writes what puts a task there, lets go of what held it elsewhere, and refuses what a drop cannot say');
 }
 
 // Tables (renderer/table.js): a table row draws Tana's grid — header cells, spans, a resized width — with each cell's
@@ -7963,6 +7994,7 @@ async function runTableCheck() {
 // Red until the checks actually settle: an async check left awaiting something that never resolves empties the event
 // loop, and node would exit 0 without a word — a silent pass for a check that never finished.
 checks.push(runDropPlanCheck);
+checks.push(runGroupDropCheck);
 // Notifications (issue #18; renderer/inbox.js). A row is Tana's own: a click opens what it is about and marks it read,
 // the way Tana's list does; its bullet and Cmd+K flip read and unread for the rows you are on; Mark all as read
 // clears the page. Every change is drawn before main answers, and the count follows it. A source with no page here

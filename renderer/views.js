@@ -157,6 +157,8 @@ function groupKey(n, by) {
 // the "nothing here" group last. Only groups with rows are returned.
 function groupRows(list, by) {
   const buckets = new Map();
+  // a task being dragged needs somewhere to land, empty sections included (renderer/drag.js setTaskDragging)
+  if (by === 'responsibility' && taskDragging) for (const k of RESPONSIBILITY) if (k !== 'Assigned by others') buckets.set(k, []);
   // no key means this grouping has no section for the row (Responsibility, above): it is left out, and since a
   // grouped page takes its flat list from the sections, it leaves the keyboard order too.
   for (const n of list) { const k = groupKey(n, by); if (!k) continue; if (!buckets.has(k)) buckets.set(k, []); buckets.get(k).push(n); }
@@ -376,6 +378,7 @@ function pageRows(list, q) {
 function groupHeadEl(g) {
   const el = document.createElement('button');
   el.type = 'button'; el.className = 'ghead';
+  el.dataset.group = g.id; // what a task dropped under it joins (renderer/drag.js groupAt)
   const chev = iconNode('chevronRight'); // the icon set's own chevron, turned a quarter down by CSS while the section is open
   // a field's heading is one of its values, which demo mode masks on the rows too (subtextEl)
   el.append(...(chev ? [chev] : []), document.createTextNode(isFieldKey(groupBy()) ? demoText(g.title, g.id) : g.title));
