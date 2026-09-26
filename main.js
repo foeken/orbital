@@ -16,7 +16,7 @@ const { S, VIEWS, errText, idKind, isSearch, isSpace, today, redoStack, report, 
 const { cachedNodeHue, graphRow, rememberNodeHue, rememberType, toNode } = require('./main/rows');
 const { accessContext, archivedTypes, chatOutline, createDocument, creationOptions, discussWith, documentAction, followSummary, history, setCodex, onChange, op, outlineWithReferences, setSensitive, setType, setTypeHue, typeCandidates, typeChoices, typeList } = require('./main/documents');
 const { changesOf, related, searchChildren, spaceChildren, summaryChanges, unwatchRelated, watchRelated } = require('./main/related');
-const { announceNewInbox, watchInbox, inboxCount, listFilter, refresh, search, searchCreate, searchTitle, setMcpHidden, start, viewFilter, viewRows } = require('./main/views');
+const { announceNewInbox, watchInbox, inboxCount, listFilter, refresh, search, searchCreate, searchTitle, setMcpHidden, settingsReady, start, viewFilter, viewRows } = require('./main/views');
 const { nodePin, pinTree, weekNode, weekTitle } = require('./main/pins');
 const inbox = require('./main/inbox');
 const proposalsPage = require('./main/proposals');
@@ -110,13 +110,14 @@ function removePane(win, pane) {
 const OVERLAYS = { help: 'help.html', task: 'task.html' };
 function openOverlay(wc, page, theme) {
   const win = paneWindow(wc);
-  if (!win || win.overlay || !Object.hasOwn(OVERLAYS, page)) return;
+  if (!win || win.overlay || !Object.hasOwn(OVERLAYS, page)) return false;
   const view = new WebContentsView({ webPreferences: { preload: path.join(__dirname, 'preload.js') } });
   view.setBackgroundColor('#00000000');
   view.opener = wc;
   win.overlay = view; win.contentView.addChildView(view); layout(win);
   view.webContents.once('did-finish-load', () => view.webContents.focus());
   view.webContents.loadFile(path.join(__dirname, OVERLAYS[page]), { query: { theme: theme === 'dark' ? 'dark' : 'light' } });
+  return true;
 }
 function closeOverlay(win, result = {}) {
   const view = win && win.overlay;
@@ -125,9 +126,19 @@ function closeOverlay(win, result = {}) {
   if (!win.isDestroyed()) win.contentView.removeChildView(view);
   if (!view.webContents.isDestroyed()) view.webContents.close();
   const opener = view.opener;
-  if (!opener || opener.isDestroyed()) return;
-  opener.focus();
-  opener.send('overlay:closed', { palette: result.palette === true, note: typeof result.note === 'string' ? result.note.slice(0, 200) : undefined });
+  // a first start this overlay was covering (firstHelp): now there is room for it, whichever half opened this one, over
+  // whichever page is the main half now (the one that asked may have closed meanwhile, ⌘W under Create task). First, so
+  // a ⌘K that closed Create task does not leave the palette open under the tour.
+  const pending = win.helpPending; win.helpPending = null;
+  const help = !!pending && !win.isDestroyed() && !!win.panes[0] && firstHelp(win.panes[0].webContents, pending.theme);
+  const note = typeof result.note === 'string' ? result.note.slice(0, 200) : undefined;
+  if (opener && !opener.isDestroyed()) {
+    if (!help) opener.focus(); // the tour has the keys now
+    opener.send('overlay:closed', { palette: result.palette === true && !help, note: help ? undefined : note });
+  }
+  if (help && note) win.overlay.later = { opener, note }; // the task's toast waits for the tour: under it, it would be gone first
+  const later = view.later; // this was that tour: the toast it held back is due now
+  if (later && later.opener && !later.opener.isDestroyed()) later.opener.send('overlay:closed', { palette: false, note: later.note });
 }
 const frontPane = () => S.win && !S.win.isDestroyed() ? (S.win.panes.find((p) => p.webContents === S.pane) || S.win.panes[0])?.webContents : null;
 function createWindow() {
@@ -264,6 +275,22 @@ ipcMain.on('window:theme', (e, theme) => { const win = paneWindow(e.sender); if 
 // Demo mode lives in the outliner (renderer/state.js); main only needs to know it is on, so no banner shows a real title.
 ipcMain.on('app:demoMode', (_e, on) => { S.demo = on === true; });
 ipcMain.on('prefs:snapshot', (e) => { e.returnValue = settings.prefs(); });
+// The Help tour's first start (renderer/overlays.js helpOnce), opened here, by main, once. Only after this session has
+// read the settings document — the snapshot above is this machine's last copy, which on a new machine knows nothing yet,
+// so a read that failed declines rather than trusting it — and only over a page still open in a window nothing covers
+// (Create task open: main opens it when that closes, firstHelp). helpSeen is marked only once the tour is really opening:
+// one step, so two windows, Create task or a page closing on the way can neither show it twice nor spend it unseen.
+// A window Create task covers keeps the ask (helpPending) and closeOverlay opens it once that closes: the close is told
+// only to the half that opened Create task, which is not always the one that asked.
+function firstHelp(wc, theme) {
+  if (!settings.settingsDocId() || settings.prefs().helpSeen || !wc || wc.isDestroyed()) return false;
+  const win = paneWindow(wc);
+  if (win && win.overlay) { win.helpPending = { theme }; return false; } // the window's, not the page's: closeOverlay aims it
+  if (!openOverlay(wc, 'help', theme)) return false;
+  settings.setPref('helpSeen', true);
+  return true;
+}
+ipcMain.handle('help:claim', async (e, theme) => { await settingsReady(); return firstHelp(e && e.sender, theme); });
 // A setting one page writes reaches every other page and window at once: settings.applyRemote announces only what
 // another machine changed, since this machine's own write comes back from Tana as nothing new. The writer is left
 // out, because it already holds the value and an older snapshot arriving late would undo a newer choice there.

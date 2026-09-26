@@ -228,7 +228,13 @@ function myTasks(findOnly) {
   return myTasksAsk;
 }
 
+// This session's first read of the settings document: what must not go by this machine's last copy alone waits for it
+// (the Help tour's first start, renderer/overlays.js helpOnce, through settings:ready). Settled whether it worked or not.
+let settingsRead = Promise.resolve();
+const settingsReady = () => settingsRead;
 async function start() {
+  let read;
+  settingsRead = new Promise((resolve) => { read = resolve; });
   // A second login must not leave the previous stream, its listeners and its subscriptions running: the stale S.client
   // would keep emitting changes, and the new one would skip every id the old subscription set still claims.
   // The new S.client's documents start with empty Loro undo managers, so the steps recorded against the old ones are dead.
@@ -247,7 +253,7 @@ async function start() {
   await S.client.sync.connect();
   // The settings document decides before anything is listed: a view's filter, the hidden titles and the MCP switch
   // are all read on the way into the first refresh, and on a new machine this is also what pushes them up.
-  try { await settings.hydrate(); } catch (e) { report(e); }
+  try { await settings.hydrate(); } catch (e) { report(e); } finally { read(); }
   // Watched nodes are live from boot, listed or not: a deleted or unreachable one is simply not watched any more.
   for (const id of new Set([...notifyWatchedIds(), ...codexIds()])) S.client.sync.subscribe(id).catch(() => {});
   watchInbox().catch(report); // new Inbox tasks, pushed by Tana as they land
@@ -528,4 +534,4 @@ const ipc = {
   'sync:refresh': () => refresh(),
 };
 
-module.exports = { announceNewInbox, inboxFrom, watchInbox, watchMine, preset, viewFilter, setViewFilter, hiddenRules, mcpHidden, viewRows, inboxCount, search, searchList, searchCreate, searchTitle, myTasks, start, refresh, doRefresh, listFilter, setHidden, setMcpHidden, ipc };
+module.exports = { announceNewInbox, inboxFrom, watchInbox, watchMine, preset, viewFilter, setViewFilter, hiddenRules, mcpHidden, viewRows, inboxCount, search, searchList, searchCreate, searchTitle, myTasks, start, settingsReady, refresh, doRefresh, listFilter, setHidden, setMcpHidden, ipc };

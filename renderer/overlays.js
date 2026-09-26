@@ -14,8 +14,17 @@ function openHelp() {
   if (!pref('helpSeen', false)) setPref('helpSeen', true);
   openOverlay('help');
 }
-// A first start, from the main half: the right half of the Work View opens beside it and stays quiet
-function helpOnce() { if (!SIDE && !pref('helpSeen', false)) openHelp(); }
+// A first start, from the main half: the right half of the Work View opens beside it and stays quiet. Only once signed
+// in and connected (renderer/app.js), and only if main says so (help:claim): it answers once the settings document has
+// been read, and yes to one page only. Over the login the tour taught a window nobody could use yet, a new machine went
+// by its own empty copy and showed it to you again, and every open window showed it at once.
+async function helpOnce() {
+  if (SIDE || !connected || pref('helpSeen', false)) return;
+  if (!tana.claimHelp) return openHelp(); // the in-file mock: nobody to ask
+  if (!(await tana.claimHelp(theme).catch(() => false))) return;
+  setPref('helpSeen', true); // main opened it and marked it; this page's copy follows
+  if (!palette.hidden) closePalette(); // what openOverlay does when the page opens it: no palette left under the tour
+}
 const helpBtn = $('navHelp');
 helpBtn.onmousedown = (e) => e.preventDefault(); // the caret stays in its row
 helpBtn.onclick = openHelp;
