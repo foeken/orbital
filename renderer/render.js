@@ -552,25 +552,27 @@ function crumbWhen(id) {
   }
   return eventWhen.get(id) || null;
 }
-// One link, the word Home: the ⌘K button ahead of it is the bar's one glyph, so the anchor needs none of its own.
+// Home as a button beside ⌘K, the same size and look: the two lead the bar, and the location follows them.
 function homeCrumb() {
   const name = homeName();
   if (!name) return null; // only while a Home search is still loading
-  const a = document.createElement('a');
-  a.append('Home'); // the label is the role, not the target; the name it points at stays in the tooltip
-  a.setAttribute('aria-label', 'Go to Home: ' + name);
-  a.title = 'Go to Home: ' + name;
-  a.onclick = () => goHome();
-  return a;
+  const b = document.createElement('button');
+  b.className = 'navbtn'; b.tabIndex = -1;
+  const icon = iconNode('home');
+  if (icon) b.append(icon);
+  b.setAttribute('aria-label', 'Go to Home: ' + name); // the role; the name it points at is in the label and tooltip
+  b.title = 'Go to Home: ' + name;
+  b.onmousedown = (e) => e.preventDefault(); // the caret stays where it is, as with the other header buttons
+  b.onclick = () => goHome();
+  return b;
 }
 function renderCrumbs(trail) {
   const nav = $('crumbs');
   const cmd = $('navPalette');
   nav.replaceChildren(...(cmd ? [cmd] : [])); // ⌘K leads the bar, ahead of Home: the one way to everything (renderer/palette.js)
-  // The Home anchor, ahead of the location: the word Home, then a bullet to keep it apart from
-  // the › chain that follows. It is a shortcut, not an ancestor — the structural path behind it is untouched, so
+  // The Home button, after ⌘K and ahead of the location. It is a shortcut, not an ancestor — the structural path behind it is untouched, so
   // nothing suggests a saved search owns the node. Always shown, even on Home itself or with the Library as Home:
-  // one fixed way back beats a link that comes and goes.
+  // one fixed way back beats a button that comes and goes.
   const homeEl = homeCrumb();
   if (homeEl) nav.append(homeEl);
   if (!trail) return;
@@ -580,12 +582,11 @@ function renderCrumbs(trail) {
   const root = zoom.via ? zoom.via[0] : zoom, rootId = root.docId;
   const path = paths.get(rootId);
   if (connected && !path && tana.path && isRealId(rootId)) { paths.set(rootId, []); tana.path(rootId).then((p) => { paths.set(rootId, p); if (zoom && (zoom.via ? zoom.via[0] : zoom).docId === rootId) renderSoon(); }).catch(() => {}); }
-  // Separators are decided as crumbs go in rather than by index: the first one after the Home anchor is the • that
-  // keeps the shortcut apart from the › chain, the rest are ›, and a location that filters down to nothing leaves
-  // no dangling separator behind.
+  // Separators are decided as crumbs go in rather than by index: › between crumbs, none after the buttons (they
+  // stand apart already), and a location that filters down to nothing leaves no dangling separator behind.
   let crumbs = 0;
   const addCrumb = (a) => {
-    if (crumbs || homeEl) { const sep = document.createElement('span'); sep.className = 'sep'; sep.textContent = crumbs ? '›' : '•'; nav.append(sep); }
+    if (crumbs) { const sep = document.createElement('span'); sep.className = 'sep'; sep.textContent = '›'; nav.append(sep); }
     crumbs++;
     nav.append(a);
   };

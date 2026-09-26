@@ -80,7 +80,11 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 [data-theme="dark"] .text a.url { color: #7fb8dd; }
 .crumbs a:hover { color: #1a1a1a; } /* hover reads as contrast alone: an underline sits badly under the icon and the date */
 .crumbs .sep { margin: 0 6px; color: #bbb; }
-.crumbs #navPalette { display: inline-flex; vertical-align: middle; margin: -4px 8px -4px -3px; position: relative; top: -1px; } /* in the line without making it taller; -3px: the glyph, not its box, on the title's edge; -1px: its glyph centred on Home and level with the buttons top right (measured) */
+/* ⌘K and Home: in the line without making it taller, 2px apart as the buttons top right are; -3px: the first glyph,
+   not its box, on the title's edge; -1px: level with the buttons top right (measured); 8px before the location */
+.crumbs .navbtn { display: inline-flex; vertical-align: middle; margin: -4px 2px -4px 0; position: relative; top: -1px; }
+.crumbs .navbtn:first-child { margin-left: -3px; }
+.crumbs button:last-of-type { margin-right: 8px; }
 /* a meeting crumb's date: a secondary detail beside the label, quieter than the crumb text itself */
 .crumbs .cdate { margin-left: 6px; color: #bbb; }
 .error { font-size: 13px; color: #c0392b; margin-top: 6px; }
