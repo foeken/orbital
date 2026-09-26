@@ -1086,6 +1086,7 @@ async function runStalePaletteInvalidationCheck() {
     const TIMELINE_PAGE = 'orbital:timeline';
     let zoom = { docId: keptId };
     const agentStates = new Map(), agentTaskHosts = new Map(), loadAgentStates = () => {};
+    const listPage = () => false; // a document is zoomed here, never a list page
     const taskMetaById = new Map(), kids = new Map(), extra = new Map(), fresh = new Map();
     const loadRoots = async () => {};
     const reload = async () => {};
@@ -6845,6 +6846,93 @@ async function runSettingsElsewhereCheck() {
   console.log('ok  settings from another page: view filters, agent marks and watch states follow, and the view is listed again only when its filter moved');
 }
 
+// A saved search re-read from its stored query (a global change, a return, Clean up, its live query) while the pills
+// get staged: the preview installs its rows first, and the stored answer landing after must not replace them.
+async function runStagedSearchReloadCheck() {
+  const api = vm.runInNewContext(`
+    const TIMELINE_PAGE = 'orbital:timeline', SEARCH_ID = 'tana:search:'; let timelinePartial = false;
+    const kids = new Map(), searchRows = new Map(), filters = new Map(), searchFilters = new Map();
+    const errors = [], isTypeId = (id) => String(id).startsWith('tana:type:'), syncUploads = (id, rows) => rows, render = () => {}, showError = (e) => errors.push(String(e.message || e));
+    const typeFilter = (id) => { if (!filters.has(id)) filters.set(id, { types: [id] }); return filters.get(id); };
+    const sameFilter = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    const answers = []; // every read still out, stored query or preview, in the order it was asked
+    const ask = () => new Promise((resolve) => answers.push(resolve));
+    const tana = { children: ask, searchPreview: ask };
+    ${sourceBetween('const reloadSeq =', 'async function reload(')}
+    ${functionSource('reload')}
+    ${functionSource('previewRows')}
+    ({
+      reload,
+      stage: (id, states = ['closed']) => { searchFilters.set(id, { filter: { states: ['open'] } }); filters.set(id, { states }); searchRows.delete(id); previewRows(id); },
+      save: (id) => { searchFilters.set(id, { filter: { states: ['closed'] } }); searchRows.delete(id); return reload(id); }, // what Save does (renderer/pills.js)
+      answer: async (i, rows) => { answers[i](rows); for (let n = 0; n < 5; n++) await Promise.resolve(); },
+      rows: (id) => kids.get(id),
+      staged: (id) => searchRows.has(id),
+      unstage: (id) => { searchRows.delete(id); filters.set(id, searchFilters.get(id).filter); },
+      errors: () => errors.splice(0),
+    });
+  `);
+  const id = 'tana:search:01j0staged000000000000000';
+  const old = api.reload(id); // 0
+  api.stage(id); await api.answer(1, ['preview']);
+  await api.answer(0, ['old']); await old;
+  assert.deepEqual(plain(api.rows(id)), ['preview'], 'a stored-query answer that lands after the pills were staged leaves the preview rows');
+  // Clean, staged, saved: the page is clean again when the first read lands, and that read is still from before the Save
+  const other = 'tana:search:01j0saved0000000000000000';
+  const before = api.reload(other); // 2
+  api.stage(other); await api.answer(3, ['preview']);
+  const saved = api.save(other); // 4
+  await api.answer(4, ['saved']); await saved; await api.answer(2, ['before the save']); await before;
+  assert.deepEqual(plain(api.rows(other)), ['saved'], 'and a read from before a Save that lands after it does not put the old rows back');
+  // A preview asked again (a global change) while the first is out: the first answer, landing last, is not the page's
+  const third = 'tana:search:01j0twice0000000000000000';
+  api.stage(third); api.stage(third); // 5, 6
+  await api.answer(6, ['fresh preview']); await api.answer(5, ['stale preview']);
+  assert.deepEqual(plain(api.rows(third)), ['fresh preview'], 'an older preview landing after a newer one leaves the newer rows');
+  // Any other page takes each answer as it lands: the Timeline's paging waits on its reload and counts the rows after
+  const first = api.reload('orbital:timeline'), second = api.reload('orbital:timeline'); // 7, 8
+  await api.answer(7, ['older page']); await first;
+  assert.deepEqual(plain(api.rows('orbital:timeline')), ['older page'], 'a page that is no saved search installs an answer even while a newer read is out');
+  await api.answer(8, ['newer page']); await second;
+  // A type page's two reads of one unchanged filter: the older answering last does not replace the newer rows
+  const type = 'tana:type:01j0type000000000000000000';
+  const typeFirst = api.reload(type), typeSecond = api.reload(type); // 9, 10
+  await api.answer(10, ['newer type rows']); await typeSecond; await api.answer(9, ['older type rows']); await typeFirst;
+  assert.deepEqual(plain(api.rows(type)), ['newer type rows'], 'an older read of a type page answering last leaves the newer rows');
+  // A preview asked twice for the same pills (a global change) whose second ask fails first: the first answer still lands
+  const dup = 'tana:search:01j0dup00000000000000000000';
+  api.stage(dup); api.stage(dup); // 11, 12
+  await api.answer(12, Promise.reject(new Error('unavailable'))); await api.answer(11, ['preview']);
+  assert.deepEqual([plain(api.rows(dup)), api.staged(dup)], [['preview'], true], 'a preview whose newer duplicate failed still lands, staged');
+  assert.deepEqual(plain(api.errors()), ['unavailable'], 'and the failure is said once');
+  // The pills moved on (A, then B) before A's preview answered: A's rows are not installed under B's pills
+  const moved = 'tana:search:01j0moved0000000000000000';
+  api.stage(moved, ['closed']); api.stage(moved, ['not_now']); // 13, 14
+  await api.answer(13, ['rows for A']);
+  assert.equal(api.rows(moved), undefined, 'a preview for pills that have since changed is not installed');
+  await api.answer(14, ['rows for B']);
+  assert.deepEqual(plain(api.rows(moved)), ['rows for B'], 'the preview for the pills on screen is');
+  // Stored A read out, staged B's preview fails, Save writes B and its read fails too: A's answer is not B's rows
+  const ab = 'tana:search:01j0abab0000000000000000';
+  api.stage(ab); api.unstage(ab); // saved A on the page, nothing staged
+  const aRead = api.reload(ab); // 16 (15 was the stage's preview)
+  api.stage(ab, ['closed']); // 17
+  await api.answer(17, Promise.reject(new Error('unavailable')));
+  const bSave = api.save(ab); // 18
+  await api.answer(18, Promise.reject(new Error('unavailable'))); await bSave.catch(() => {});
+  await api.answer(16, ['rows for A']); await aRead;
+  assert.notDeepEqual(plain(api.rows(ab) || null), ['rows for A'], 'a stored answer for the filter a Save replaced is not installed under the saved pills');
+  api.errors();
+  // The first preview answers, then its newer duplicate fails: the page keeps its preview, still staged, and says nothing
+  const retry = 'tana:search:01j0retry000000000000000';
+  api.stage(retry); api.stage(retry); // 19, 20
+  await api.answer(19, ['preview']); await api.answer(20, Promise.reject(new Error('unavailable')));
+  assert.deepEqual([plain(api.rows(retry)), api.staged(retry), plain(api.errors())], [['preview'], true, []], 'a failed retry of a preview that already answered leaves it staged and quiet');
+  console.log('ok  a saved search keeps the rows of its newest read: staged pills, a second preview and a Save all retire the reads still out');
+}
+
+
+
 
 // A click that misses the words still belongs to the row, and a row is bigger than its text: the padding around
 // it, and the blank line a soft break leaves inside it. Layout is the input here, so the geometry and the
@@ -6937,7 +7025,7 @@ async function runToastCheck() {
   console.log('ok  toast: notices and errors fade at the foot of the window and leave the relogin line alone');
 }
 
-const checks = [runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck,runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck];
+const checks = [runToastCheck, runInlineFieldsCheck, runCaretAtPointCheck, runPrefsStoreCheck, runSettingsElsewhereCheck, runImageViewCheck, runRailReadinessCheck, runDeletedNodeCheck, runRecentlyDeletedCheck, runEditPinsCheck, runLinkTargetsLoadCheck, runSetIconCheck, runDiscussWithCheck, runClassifyTypeCheck, runSetHueCheck, runLiveUpdateBurstCheck, runSetTypeCheck, runZoomTypeChipCheck, runStyleMenuFitCheck, runEmptyRowAboveCheck, runJoinAboveCheck, runDefaultModeCheck, runNavButtonsCheck, runRowMetaFitCheck, runPinToMeetingCheck, runClosedPaletteKeysCheck, runAgentStatusBootCheck, runRailChangesCheck, runPasteLinkCheck, runPasteImageCheck, runPasteDraftCheck, runReferenceCaretCheck, runCreateTaskFlowCheck, runDraftDocumentDeleteCheck, runAccessReadinessCheck, runRefreshSpinCheck, runCodexAssignCheck, runNotifyToggleCheck, runNotifyBellCheck, runCurrentNodeStatusCheck, runRestorePlaceCheck, runSearchPillsCheck, runPillsFoldCheck, runDraftTailCheck, runRailToggleCheck, runCaretOnOpenScrollCheck, runTypingRenderStabilityCheck, runDraftMaterialiseFocusCheck, runDraftBlurOrderCheck, runRecentRowsCheck, runRowChangeAnimationCheck, runFallingRowCheck, runZoomedBlockTitleSaveCheck, runSensitiveBlurCheck, runSelectionChecks, runMultiTaskPaletteCheck, runAssignedDropdown, runEditabilityCheck, runCheckboxCheck, runCheckboxInheritanceCheck, runTaskChildCheckboxScopeCheck, runStalePaletteInvalidationCheck, runReferenceEmbedRenderCheck, runRowAlignmentCheck, runRowAudienceCheck, runHiddenItemsCheck, runMemberLoadCheck, runVisibilityPickerCheck, runLinkPaletteCheck, runAuthPaletteCheck, runSyncShortcutCheck, runReservedComboCheck, runHistoryCheck, runZoomShortcutCheck, runZoomDeleteCheck, runAssigneeCloseCheck, runPendingSplitDraftCheck, runTaskMetaRetryCheck, runPaletteSkipCheck, runFormattingChecks, runSlashMenuCheck, runFilterShortcutFocusCheck, runFilterMenuCloseCheck, runSidebarRowsCheck, runRailPinCheck, runSidebarHoverCheck, runSidebarAlignmentCheck, runClearFiltersCheck, runUnifiedViewsCheck, runSortGroupCheck, runCmdPillsCheck, runSearchesGroupCheck, runSearchPageRowUpdateCheck, runHomeCheck, runStagedSearchReloadCheck];
 // The chips under a zoomed title, driven through the shipped line itself: a typed document shows its type whatever
 // kind it is, and the kind chip (task, doc, meeting, space, chat…) stays out of the header, as it always did for a task.
 function runZoomTypeChipCheck() {
@@ -7097,6 +7185,11 @@ async function runLiveUpdateBurstCheck() {
     let listener;
     const TIMELINE_PAGE = 'orbital:timeline';
     let zoom = { docId: TIMELINE_PAGE };
+    const SEARCH_ID = 'tana:search:', isTypeId = (id) => String(id).startsWith('tana:type:');
+    const searchRows = new Map(), previewed = [], previewRows = (id) => { previewed.push(id); };
+    ${sourceLine('const onSearchPage =')}
+    ${sourceLine('const onTypePage =')}
+    ${sourceLine('const listPage =')}
     const taskMetaById = new Map(), taskMetaFailed = new Map(), relatedBy = new Map(), kids = new Map();
     const outlinesOf = (docId) => [...kids.keys()].filter((id) => id === docId || id.startsWith(docId + '|'));
     const patchDoc = async (id) => { patched.push(id); }, reload = async (id) => { reloaded.push(id); }, loadPins = () => {}, refreshRelated = () => {};
@@ -7114,6 +7207,8 @@ async function runLiveUpdateBurstCheck() {
       open: (id) => { kids.set(id, []); kids.set(id + '|tana:type:t?attribute=a', []); },
       page: (id) => { zoom = { docId: id }; },
       statusReads: () => statusReads.splice(0).length,
+      stage: (id) => { searchRows.set(id, '{}'); },
+      previewed: () => previewed.splice(0),
     });
   `);
 
@@ -7148,6 +7243,22 @@ async function runLiveUpdateBurstCheck() {
   assert.equal(api.statusReads(), 1, 'a linked node\u2019s metadata change reads its task\u2019s status, and nothing else does');
   await new Promise(setImmediate); api.flush(); api.drawn(); api.reloaded(); api.patched();
 
+  // A saved search or a type's page is a list of its own the same way: a hidden title or the MCP switch changes its rows
+  for (const page of ['tana:search:01j0search0000000000000000', 'tana:type:01j0type000000000000000000']) {
+    api.page(page); api.change(null);
+    await new Promise(setImmediate);
+    assert.deepEqual(plain(api.reloaded()), [page], 'a global change reloads an open ' + page.split(':')[1] + ' page, whose rows loadRoots does not reach');
+    api.flush(); api.drawn();
+  }
+  // A saved search with unsaved pill edits shows their preview: that is what is asked again, not the stored query
+  api.page('tana:search:01j0search0000000000000000'); api.stage('tana:search:01j0search0000000000000000'); api.change(null);
+  await new Promise(setImmediate);
+  assert.deepEqual([plain(api.reloaded()), plain(api.previewed())], [[], ['tana:search:01j0search0000000000000000']], 'a staged saved search is previewed again rather than overwritten with its stored rows');
+  api.flush(); api.drawn();
+  api.page('tana:text:01j0note000000000000000000'); api.change(null);
+  await new Promise(setImmediate);
+  assert.deepEqual(plain(api.reloaded()), [], 'a document page is not a list: its outline is left to its own changes');
+  api.flush(); api.drawn();
   api.page('library'); api.change(null);
   await new Promise(setImmediate);
   assert.deepEqual(plain(api.reloaded()), [], 'global changes leave the timeline query alone while another page is open');

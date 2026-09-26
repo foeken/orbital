@@ -1812,6 +1812,59 @@ async function main() {
     // A view subscribes every row it lists, which is what makes an edit someone else makes appear in it. These rows
     // are listed the same way and were left unsubscribed, so a saved search showed only what its query said on open.
     assert.deepEqual(found.map((n) => subscribes.includes(n.id)), [true, true], 'a saved search subscribes the rows it lists, so a change made elsewhere reaches them');
+    // Two reads of one search out at once (a refresh and a Save): the older one answering last must not take the head
+    const answers = [], older = [{ id: 'tana:text:' + ulid(), title: 'Before the save' }], newer = [{ id: 'tana:text:' + ulid(), title: 'Saved' }];
+    backend.testRuntime({ me: { userUri: ME }, win: null, client: {
+      sync: { subscribe: async (id) => { subscribes.push(id); return goodDoc; } },
+      graph: { listNodes: () => new Promise((resolve) => answers.push(resolve)) },
+    } });
+    const first = backend.handlers.get('outline:children')(null, searchId), second = backend.handlers.get('outline:children')(null, searchId);
+    while (answers.length < 2) await new Promise(setImmediate);
+    answers[1]({ nodes: newer }); await second; answers[0]({ nodes: older }); await first;
+    await new Promise(setImmediate);
+    assert.deepEqual([subscribes.includes(newer[0].id), subscribes.includes(older[0].id)], [true, false], 'an older read of a search answering after a newer one leaves the newer head live');
+    // ...but a newer read that fails decides nothing: an older one that answered still keeps its head live
+    const kept = [{ id: 'tana:text:' + ulid(), title: 'Answered' }];
+    const third = backend.handlers.get('outline:children')(null, searchId), fourth = backend.handlers.get('outline:children')(null, searchId);
+    while (answers.length < 4) await new Promise(setImmediate);
+    answers[3](Promise.reject(new Error('unavailable'))); await fourth.catch(() => {}); answers[2]({ nodes: kept }); await third;
+    await new Promise(setImmediate);
+    assert.equal(subscribes.includes(kept[0].id), true, 'a newer read that failed leaves an older answered read to keep its head live');
+    // One search open in two windows: each keeps the head its own newest read answered, whichever window asked last
+    const inA = [{ id: 'tana:text:' + ulid(), title: 'A' }], inB = [{ id: 'tana:text:' + ulid(), title: 'B' }];
+    const readA = backend.handlers.get('outline:children')({ sender: { id: 101 } }, searchId), readB = backend.handlers.get('outline:children')({ sender: { id: 102 } }, searchId);
+    while (answers.length < 6) await new Promise(setImmediate);
+    answers[5]({ nodes: inB }); await readB; answers[4]({ nodes: inA }); await readA;
+    await new Promise(setImmediate);
+    assert.deepEqual([subscribes.includes(inA[0].id), subscribes.includes(inB[0].id)], [true, true], 'two windows showing one search each keep their own head live');
+    // A read from before a Save answering after the Save's own read failed: it asked the old query, so it keeps no head
+    const beforeSave = [{ id: 'tana:text:' + ulid(), title: 'Old query' }];
+    const oldRead = backend.handlers.get('outline:children')(null, searchId);
+    while (answers.length < 7) await new Promise(setImmediate);
+    goodDoc.transact((l) => l.getMap('query').set('assignedToViewer', false)); // the Save
+    const savedRead = backend.handlers.get('outline:children')(null, searchId);
+    while (answers.length < 8) await new Promise(setImmediate);
+    answers[7](Promise.reject(new Error('unavailable'))); await savedRead.catch(() => {}); answers[6]({ nodes: beforeSave }); await oldRead;
+    await new Promise(setImmediate);
+    assert.equal(subscribes.includes(beforeSave[0].id), false, 'a read of the query from before a Save keeps no head, even when the read after it failed');
+    // The same when the Save changed only the completed window, which lives beside the query in the view map
+    const beforeWindow = [{ id: 'tana:text:' + ulid(), title: 'Old window' }];
+    const windowRead = backend.handlers.get('outline:children')(null, searchId);
+    while (answers.length < 9) await new Promise(setImmediate);
+    goodDoc.transact((l) => l.getMap('view').set('completedWithin', 7));
+    const windowSaved = backend.handlers.get('outline:children')(null, searchId);
+    while (answers.length < 10) await new Promise(setImmediate);
+    answers[9](Promise.reject(new Error('unavailable'))); await windowSaved.catch(() => {}); answers[8]({ nodes: beforeWindow }); await windowRead;
+    await new Promise(setImmediate);
+    assert.equal(subscribes.includes(beforeWindow[0].id), false, 'nor does a read from before a Save that changed only the completed window');
+    // A page that closes with a read still out: the read's answer recreates no head for it
+    const closing = [{ id: 'tana:text:' + ulid(), title: 'Closed pane' }];
+    const lateRead = backend.handlers.get('outline:children')({ sender: { id: 301 } }, searchId);
+    while (answers.length < 11) await new Promise(setImmediate);
+    backend.dropSearchHeads(301); // main.js removePane
+    answers[10]({ nodes: closing }); await lateRead;
+    await new Promise(setImmediate);
+    assert.equal(subscribes.includes(closing[0].id), false, 'a read answering after its page closed keeps no head');
 
     const brokenDoc = new Document('tana:search:' + ulid());
     brokenDoc.transact((l) => initDocument(l, 'Broken search', ME)); // no query container at all

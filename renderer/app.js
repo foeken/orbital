@@ -131,7 +131,14 @@ tana.onChanged((docId, info) => {
   } else {
     loadPins();
     const work = [loadRoots()];
-    if (zoom?.docId === TIMELINE_PAGE) work.push(reload(TIMELINE_PAGE));
+    // A zoomed page that lists documents holds its own rows (kids), which loadRoots does not reach: the Timeline, a saved
+    // search, a type's page. A hidden title, the MCP switch or a type's icon changes them as much as the views (#153 did
+    // the Timeline; a search or type page kept the rows just hidden until it was opened again).
+    const id = zoom?.docId;
+    if (id === TIMELINE_PAGE || (zoom && listPage())) {
+      if (searchRows.delete(id)) previewRows(id); // unsaved pill edits: their preview is asked again, as on a return (edit.js)
+      else work.push(reload(id));
+    }
     Promise.all(work).then(renderSoon, showError);
   }
 });
