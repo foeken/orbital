@@ -1,11 +1,11 @@
 'use strict';
 // Loading (Build): what the page shows while its first rows are on their way, on a launch or a Reload only
-// (render.js: booted); a page opened later waits blank, its rows a moment away. The page builds itself in pixel art
-// where the real one will be: the crumbs and the title, then the rows one by one, each marker a small pixel glyph (a
-// task's box, a document, a meeting, a bullet) and a bar for its text streaming in left to right, a cursor block at
-// its front. Built, a pixel shimmer runs over it until the rows land; then it fades and the real rows build in the
-// same way, top to bottom (buildIn). Motion otherwise answers a hand (renderer/motion.js); this is the one page that
-// draws itself in, once per launch, because that was asked for.
+// (render.js: booted); a page opened later waits blank, its rows a moment away. The page builds itself where the real
+// one will be: the crumbs and the title, then the rows one by one, each marker a small outlined glyph (a task's box,
+// a document, a meeting, a bullet) and a rounded bar for its text growing in from the left. Built, a soft shimmer runs
+// over it until the rows land; then it fades and the real rows rise in, top to bottom (buildIn). Motion otherwise
+// answers a hand (renderer/motion.js); this is the one page that draws itself in, once per launch, because that was
+// asked for.
 // One colour at a few strengths (styles.css .skeleton canvas), so it follows the theme. Nothing is drawn for the
 // first WAIT, so a quick load never blinks it; one still, built frame where motion is not welcome.
 // Cmd+K "Preview loading animation" shows it over the page until Esc, which builds the rows in as a load would.
@@ -14,22 +14,14 @@ let previewLoading = () => {};
   const box = document.getElementById('skeleton'), canvas = box && box.querySelector && box.querySelector('canvas');
   if (!canvas || !canvas.getContext) return;
   const ctx = canvas.getContext('2d');
-  const P = 4, WAIT = 0.3, AMAX = 0.6, LV = 16; // P: one pixel of the art in CSS px, so a 16px glyph is 4×4
-  const GLYPHS = [
-    ['####', '#..#', '#..#', '####'], // a task
-    ['###.', '#.##', '#..#', '####'], // a document, its corner folded
-    ['#..#', '####', '#..#', '####'], // a meeting
-    ['.##.', '####', '####', '.##.'], // a bullet
-  ];
+  const WAIT = 0.3, clamp = (v) => Math.max(0, Math.min(1, v)), ease = (v) => 1 - Math.pow(1 - clamp(v), 3);
   const seeded = (seed) => () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   // the page: the same one on every launch, section headings now and then, some rows a level in, some with meta
   const rnd = seeded(20260926);
   const ROWS = Array.from({ length: 48 }, (_, i) => ({ head: i === 0 || (i > 2 && rnd() < 0.12), glyph: Math.floor(rnd() * 4), depth: rnd() < 0.2 ? 1 : 0, w: 0.25 + 0.5 * rnd(), meta: rnd() < 0.35 ? 0.06 + 0.1 * rnd() : 0 }));
   ROWS.forEach((r, i) => { if (i && ROWS[i - 1].head) r.head = false; });
-  const bar = (cols, rows) => Array.from({ length: rows }, (_, j) => (rows > 2 && (j === 0 || j === rows - 1) ? '.' + '#'.repeat(cols - 2) + '.' : '#'.repeat(cols))); // rows > 2: the corners off
   let page = null, key = '';
-  // Where each part goes, measured off the real page (its header is laid out while hidden), with every block's
-  // strength and the moment it lands: left to right across its part, a little ragged.
+  // Where each part goes, measured off the real page (its header is laid out while hidden), and when it comes in.
   function layout(w, h) {
     const c = canvas.getBoundingClientRect();
     const at = (el, dx, dy) => { const r = el && el.getBoundingClientRect(); return r && r.width + r.height ? [Math.round(r.left - c.left + dx), Math.round(r.top - c.top + dy)] : null; };
@@ -37,34 +29,32 @@ let previewLoading = () => {};
     const [sx, sy] = at(document.querySelector('.scroll'), 16, 4) || [16, 140];
     const k = [w, h, cx, cy, tx, ty, sx, sy].join();
     if (k === key) return page;
-    const blocks = [], bars = [], jitter = seeded(7);
-    const add = (x, y, bitmap, a, start, dur, cursor) => {
-      const cols = bitmap[0].length;
-      bitmap.forEach((line, j) => { for (let i = 0; i < cols; i++) if (line[i] === '#') blocks.push(x + i * P, y + j * P, a, start + (i / cols) * dur + jitter() * 0.05); });
-      if (cursor) bars.push([x, y, cols, bitmap.length, start, dur]);
-      return start + dur;
-    };
-    let end = add(cx, cy, bar(12, 2), 0.1, 0, 0.18);
-    end = Math.max(end, add(cx + 15 * P, cy, bar(18, 2), 0.1, 0.08, 0.22));
-    end = Math.max(end, add(tx, ty, bar(44, 6), 0.18, 0.05, 0.4, true));
+    const items = [], bar = (x, y, bw, bh, a, start, dur) => { items.push({ x, y, w: bw, h: bh, a, start, dur }); return start + dur; };
+    bar(cx, cy, 48, 8, 0.1, 0, 0.3); bar(cx + 58, cy, 72, 8, 0.1, 0.06, 0.3);
+    let end = bar(tx, ty, 176, 24, 0.14, 0.04, 0.45);
     const avail = Math.max(120, Math.min(w - sx - 47 - 40, 600));
     let y = sy, s = 0.3;
     for (const r of ROWS) {
       if (y > h) break;
       const x = sx + r.depth * 24;
-      if (r.head) { y += y > sy ? 18 : 0; end = add(sx + 24, y + 13, bar(14 + Math.round(r.w * 16), 2), 0.1, s, 0.15); y += 35; s += 0.06; continue; }
-      add(x + 24, y + 7, GLYPHS[r.glyph], 0.3, s, 0.08);
-      const cols = Math.max(8, Math.round((avail * r.w) / P)), dur = 0.1 + cols * 0.002;
-      end = add(x + 47, y + 9, bar(cols, 3), 0.13, s + 0.06, dur, true);
-      if (r.meta) end = add(x + 47 + (cols + 3) * P, y + 9, bar(Math.round((avail * r.meta) / P), 3), 0.075, end, 0.1);
-      y += 30; s += 0.07;
+      if (r.head) { y += y > sy ? 18 : 0; end = bar(sx + 24, y + 14, 56 + r.w * 64, 8, 0.08, s, 0.3); y += 35; s += 0.05; continue; }
+      items.push({ glyph: r.glyph, x: x + 24, y: y + 7, a: 0.26, start: s, dur: 0.25 });
+      const bw = Math.max(40, avail * r.w);
+      end = bar(x + 47, y + 10, bw, 10, 0.11, s + 0.04, 0.4);
+      if (r.meta) end = bar(x + 47 + bw + 10, y + 10, avail * r.meta, 10, 0.065, s + 0.12, 0.35);
+      y += 30; s += 0.055;
     }
     key = k;
-    return (page = { blocks, bars, end });
+    return (page = { items, end });
   }
-  // blocks sorted into strengths, one path each
-  const buckets = Array.from({ length: LV }, () => []);
-  const put = (x, y, a) => { if (a > 0.004) buckets[Math.min(LV - 1, Math.floor((a / AMAX) * LV))].push(x, y); };
+  function glyph(g, x, y) { // 16px, the size of a row's icon
+    ctx.beginPath();
+    if (g === 0) ctx.roundRect(x + 2, y + 2, 12, 12, 3); // a task
+    else if (g === 1) { ctx.roundRect(x + 3, y + 1.5, 10, 13, 2); ctx.moveTo(x + 6, y + 6); ctx.lineTo(x + 10, y + 6); ctx.moveTo(x + 6, y + 9.5); ctx.lineTo(x + 10, y + 9.5); } // a document
+    else if (g === 2) { ctx.roundRect(x + 1.5, y + 2.5, 13, 12, 3); ctx.moveTo(x + 1.5, y + 6.5); ctx.lineTo(x + 14.5, y + 6.5); } // a meeting
+    else { ctx.arc(x + 8, y + 8, 3, 0, Math.PI * 2); ctx.fill(); return; } // a bullet
+    ctx.stroke();
+  }
   let frame = 0, t0 = 0, on = false;
   function draw(now) {
     frame = 0;
@@ -78,38 +68,33 @@ let previewLoading = () => {};
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
       if (t >= 0) {
-        const { blocks: B, bars, end } = layout(w, h);
-        // a block lands bright and settles; once all have, a band of light runs over them, a block at a time
-        const since = t - end - 0.3, band = !still && since > 0 ? ((since % 2.4) / 2.4) * (w + h + 400) - 200 : -1e4;
-        for (let i = 0; i < B.length; i += 4) {
-          const age = t - B[i + 3];
-          if (age < 0) continue;
-          const d = (B[i] + B[i + 1] * 0.6 - band) / 80;
-          put(B[i], B[i + 1], B[i + 2] * (age < 0.2 ? 3 - age * 10 : 1) + 0.08 * Math.exp(-d * d));
+        const { items, end } = layout(w, h);
+        // once built, a soft band of light runs over it, left to right; before that every part is at its own strength
+        const col = (getComputedStyle(canvas).color.match(/[\d.]+/g) || [0, 0, 0]).slice(0, 3).join(','), since = t - end - 0.3;
+        let paint = 'rgba(' + col + ',0.7)';
+        if (!still && since > 0) {
+          const bx = ((since % 2.2) / 2.2) * (w + 600) - 300, g = ctx.createLinearGradient(bx - 220, 0, bx + 220, 0);
+          g.addColorStop(0, 'rgba(' + col + ',0.7)'); g.addColorStop(0.5, 'rgba(' + col + ',1)'); g.addColorStop(1, 'rgba(' + col + ',0.7)');
+          paint = g;
         }
-        for (const [x, y, cols, rows, start, dur] of bars) { // the cursor at the front of a bar still being built
-          const p = (t - start) / dur;
-          if (p >= 0 && p < 1) for (let j = 0; j < rows; j++) put(x + Math.floor(p * cols) * P, y + j * P, 0.4);
+        ctx.fillStyle = ctx.strokeStyle = paint; ctx.lineWidth = 1.5;
+        for (const it of items) {
+          const p = (t - it.start) / it.dur;
+          if (p <= 0) continue;
+          ctx.globalAlpha = (it.a / 0.7) * clamp(p * 2.5);
+          if (it.glyph != null) { glyph(it.glyph, it.x, it.y + 3 * (1 - ease(p))); continue; }
+          ctx.beginPath(); ctx.roundRect(it.x, it.y, Math.max(it.h, it.w * ease(p)), it.h, it.h / 2); ctx.fill();
         }
-        ctx.fillStyle = getComputedStyle(canvas).color;
-        buckets.forEach((b, k) => {
-          if (!b.length) return;
-          ctx.globalAlpha = ((k + 0.5) / LV) * AMAX;
-          ctx.beginPath();
-          for (let i = 0; i < b.length; i += 2) ctx.rect(b[i], b[i + 1], P, P);
-          ctx.fill(); b.length = 0;
-        });
         ctx.globalAlpha = 1;
         if (still) return;
       }
     }
     frame = requestAnimationFrame(draw);
   }
-  // the real rows arriving: each wipes in left to right in pixel steps, one after another down the page
+  // the real rows arriving: each rises in a little after the one above it
   function buildIn() {
     const rows = [...document.querySelectorAll('#outline > *')].filter((el) => el.getBoundingClientRect().top < innerHeight).slice(0, 40);
-    rows.forEach((el, i) => play(el, [{ clipPath: 'inset(-4px 100% -4px -48px)', opacity: 0.4 }, { clipPath: 'inset(-4px -8px -4px -48px)', opacity: 1 }],
-      { duration: 300, easing: 'steps(8, jump-end)', delay: i * 40 }));
+    rows.forEach((el, i) => play(el, [{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { duration: MOTION.slow, easing: MOTION.out, delay: i * 35 }));
   }
   const previewing = () => document.body.classList.contains('loading-preview');
   const sync = () => {
