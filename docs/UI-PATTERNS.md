@@ -197,26 +197,28 @@ dark twin.
 
 | Token | Light / dark | For |
 |---|---|---|
-| `--surface` | `#fff` / `#242729` | anything that floats over the page: menus, the toolbar, ⌘K's and the recorder's cards. Help's card still writes its white and shadow out, with a dark twin (#378) |
+| `--surface` | `#fff` / `#242729` | the neutral floating surfaces: menus, the toolbar, ⌘K's and the recorder's cards. Help's card still writes the same white and shadow out, with a dark twin (#378). The toast is the exception on purpose: it is inverted (dark in light, light in dark) |
 | `--scrim` | 12% / 52% black | behind a dialog (⌘K, the key recorder, Help) |
 | `--shadow-menu` | | a menu or dropdown (`.menu`, the @ dropdown) |
 | `--shadow-card` | | a dialog's card (⌘K, the recorder; Help's as above) |
 | `--focus` | `#b5d0ee` / `#58768a` | the focus ring of anything new: `outline: 2px solid var(--focus); outline-offset: 2px` on a row or block, `box-shadow: 0 0 0 2px var(--focus)` on a button. Not every ring uses it yet (#379): `.gmore`, `.tbtn` and image and table focus write the colour out with dark twins, the dark `.pill:focus` and `.ghead:focus` restate it, and `.button` keeps the browser's ring. On purpose: the green save pills ring green, and the agent badge rings a stronger `#4f8ad9` |
 | `--muted` | `#666` / `#a0a5a8` | secondary words: facts, hints, headings, placeholders, done rows. It meets WCAG AA on the page, on menus and on grey pills. Icons keep their lighter greys, and disabled rows too |
 | `--z-toolbar` 9 < `--z-palette` 10 < `--z-recorder` 11 < `--z-toast` 12 < `--z-drag` 15 < `--z-lightbox` 20 | | what stacks over the page. Small local numbers (1, 2, 5) only order siblings inside one component |
-| `--dur-quick` / `--dur-base` / `--dur-slow` / `--dur-flash` / `--dur-loop`, `--stagger`, `--ease-*` | | every transition and animation. Reduced motion sets the durations to 0, so a rule that uses them needs no guard. An endless loop goes behind `@media (prefers-reduced-motion: no-preference)` |
-| `--hue` | set per element by the renderer | a type's colour, always `oklch(L C var(--hue))`. The dark theme only raises L (0.7 → 0.8 for glyphs) |
+| `--dur-quick` / `--dur-base` / `--dur-slow` / `--dur-flash` / `--dur-loop`, `--stagger`, `--ease-*` | | every transition and animation. Reduced motion sets the finite ones (`--dur-quick` to `--dur-flash`, `--stagger`) to 0, so a move built on them needs no guard. `--dur-loop` is not zeroed: an endless loop always goes behind `@media (prefers-reduced-motion: no-preference)` |
+| `--hue` | set per element by the renderer | one hue for one element: a type's colour, or a person's in presence. Always used as `oklch(L C var(--hue))`, and each component picks its own L and C per theme (a glyph goes 0.7 → 0.8 in dark, a chip's background 0.95 → 0.33). A new hued element copies the L and C of the component it resembles |
 | `--flash-in` / `--flash-out` / `--flash-here` | | the tint of a row arriving, leaving or found again (`flash()`) |
 
-Sizes are small fixed scales rather than tokens. Use a size from the scale and nothing in between:
+Sizes are small scales rather than tokens. Pick from the common values below. The few other values in the file (the
+Help tour's 14.5 and 21/650 type and 5px key caps, presence's 12.5 label and 5px bubble, the 500 weight in Create
+task's picks line) belong to one component each and are not for reuse:
 
 - **Font sizes**: 12 (chips, uppercase headings), 13 (crumbs, the error line, toasts, palette group names, `kbd`), 14
   (a row's facts and grey line, hints, sidebar titles), 15 (pills, palette rows, toolbar), 16 (body text, menu rows),
   17 (the palette field); a dialog's `.button` is 13.5, its own size. Headings are 20 and 24, and the page title is
   34. Weights are 400, 600 (labels, headings) and 700 (bold, a pill's value).
-- **Radii**: 3 (a focus ring's corners), 4 (chips, small icon buttons), 6 (buttons, badges, code, images), 8 (rows in
-  a menu or ⌘K, inputs, toasts), 7 (a dialog's `.button`), 10 (menus), 12 (dialog cards; Help's is 14), `999px` for a
-  pill, `50%` for a dot.
+- **Radii**: 3 (a focus ring's corners), 4 (chips, small icon buttons), 6 (buttons, badges, code, images), 7 (a
+  dialog's `.button`), 8 (rows in a menu or ⌘K, inputs, toasts), 10 (menus), 12 (dialog cards; Help's is 14), `999px`
+  for a pill, `50%` for a dot.
 - **Spacing**: the page's side gutter is 32px (`.titlebar`, `.filter`, `.pills`, `.scroll`). A row is a 24px line
   with 3px above and below. A menu has 8px of padding and rows of 8px 12px.
 
@@ -276,10 +278,11 @@ The full contract is [OUTLINER.md](OUTLINER.md). These are the rules a new featu
   palette) answers ↑/↓, Enter and Escape. The Help tour pages with ←/→ instead. A command is a palette row, so ⌘K finds
   it and ⇧⌘K can give it a key (`DEFAULT_HOTKEYS`). New keys are written up in OUTLINER.md.
 - **Wording.** Rows are sentence case. A command row starts with a verb: "Pin to today", "Set status", "Move to
-  Library". A row that opens a further page ends in " …" ("Move to …", "Pin to date …"). A place or a choice is named as
-  it is (a view's title, "Any status", a member). A hint says the current value ("Inbox") or why a row cannot run, and
-  `✓` marks the current choice. A placeholder says what to type ("Search Tana", "Choose a colour or type a hue…"). A
-  notice says what was done, in the past tense, and names the thing: "Link copied", "Classified as Decision Record".
+  Library". Some rows that ask something before they act end in " …" ("Move to …", "Pin to date …") and others do not
+  ("Set type", "Search Tana"); a new row follows the rows beside it in its group. A place or a choice is named as it is
+  (a view's title, "Any status", a member). A hint says the current value ("Inbox") or why a row cannot run, and `✓`
+  marks the current choice. A placeholder says what to type ("Search Tana", "Choose a colour or type a hue…"). A notice
+  says what was done, in the past tense, and names the thing: "Link copied", "Classified as Decision Record".
 - **Where errors go.** An action runs through `run()`, and a failure becomes the red toast (`showError`). A palette page
   whose read failed says so as a disabled note row, in place of its rows (see the async page pattern above). The red
   line under the title (`#error`) belongs to the session alone: it asks for a new login. A notice never goes to
