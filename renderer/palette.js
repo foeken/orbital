@@ -460,11 +460,12 @@ function backPalette() { (palPage.back || closePalette)(); }
 // with nothing in it. A query that matches nothing leaves the rows empty, and the palette's own "No results" says so.
 // Only the latest read of a page is kept: a page left and opened again before its first answer came would otherwise let
 // that older answer land last. A write that answers with the list (hiddenApply, hostsApply) retires the read too.
+// The read waits for the actions already queued (run): a delete or restore still in flight is in the list it reads.
 const listReads = new Map(); // mode -> the read in flight
 function loadList(mode, read, keep) {
   const mine = {}; listReads.set(mode, mine);
   keep(null);
-  Promise.resolve().then(read).then((list) => (Array.isArray(list) ? list : []), (e) => (e instanceof Error ? e : new Error(String(e))))
+  queue.then(read).then((list) => (Array.isArray(list) ? list : []), (e) => (e instanceof Error ? e : new Error(String(e))))
     .then((list) => { if (listReads.get(mode) !== mine) return; listReads.delete(mode); keep(list); if (palMode === mode && !palette.hidden) renderPalette(); });
 }
 function listRows(group, list, q, empty, toRows) {
