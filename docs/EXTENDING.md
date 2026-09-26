@@ -128,6 +128,9 @@ machines; a choice about this screen or this machine does not.
 | Main | `settings.get(key)` / `settings.set(key, value)` (main/settings.js) | `db.setting(key)` / `db.setSetting(key, value)` (db.js) |
 
 - Values are JSON and reads are synchronous. A preference key has no `:` in it.
+- A main-process key follows you only if it matches `SYNCED` in main/settings.js; add a rule there for a new one.
+  A key that is not listed is kept in SQLite on this machine, even though it is read with `settings.get` (that is how
+  `openaiApiKey` stays put). Every `pref:` key is synced already.
 - A preference another machine changes arrives as `settings:changed`; apply it to what is on screen in the
   `onSettings` handler in renderer/app.js (theme, Home, hotkeys and the arrangements are the examples).
 - Add the key to the table in docs/SETTINGS.md.
