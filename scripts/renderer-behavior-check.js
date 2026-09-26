@@ -6923,6 +6923,11 @@ async function runStagedSearchReloadCheck() {
   await api.answer(16, ['rows for A']); await aRead;
   assert.notDeepEqual(plain(api.rows(ab) || null), ['rows for A'], 'a stored answer for the filter a Save replaced is not installed under the saved pills');
   api.errors();
+  // The first preview answers, then its newer duplicate fails: the page keeps its preview, still staged, and says nothing
+  const retry = 'tana:search:01j0retry000000000000000';
+  api.stage(retry); api.stage(retry); // 19, 20
+  await api.answer(19, ['preview']); await api.answer(20, Promise.reject(new Error('unavailable')));
+  assert.deepEqual([plain(api.rows(retry)), api.staged(retry), plain(api.errors())], [['preview'], true, []], 'a failed retry of a preview that already answered leaves it staged and quiet');
   console.log('ok  a saved search keeps the rows of its newest read: staged pills, a second preview and a Save all retire the reads still out');
 }
 
