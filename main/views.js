@@ -399,6 +399,7 @@ function listed() {
 function listFilter(c) {
   if (!c || !c.graph) return;
   const listNodes = c.graph.listNodes.bind(c.graph);
+  c.graph.listNodesUnhidden = listNodes; // past Hidden titles and Hide MCP: for reads that are not a list you see (main/timeline.js)
   const answer = async (params) => {
     const result = await listNodes(params);
     // Compare the count with the raw response: local delete/title filters must not masquerade as server truncation.
