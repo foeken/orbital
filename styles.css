@@ -797,6 +797,7 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
   opacity: 0; visibility: hidden; transform: translate(-50%, 6px) scale(.96); pointer-events: none;
   transition: opacity var(--dur-quick) var(--ease-in), transform var(--dur-quick) var(--ease-in), visibility 0s linear var(--dur-quick); }
 .toast.show { opacity: 1; visibility: visible; transform: translate(-50%, 0); transition: opacity var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-spring); }
+.toast.error, [data-theme="dark"] .toast.error { background: #c0392b; color: #fff; }
 .palette .card {
   width: 100%; max-width: 620px; max-height: min(70vh, 440px); display: flex; flex-direction: column; overflow: hidden;
   background: #fff; border-radius: 12px; box-shadow: 0 12px 40px rgba(0, 0, 0, .18), 0 0 0 1px rgba(0, 0, 0, .05);

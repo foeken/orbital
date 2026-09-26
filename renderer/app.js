@@ -2,6 +2,7 @@
 // Status, live updates from main, and boot.
 
 // ---- status ----
+let statusError = null; // the status repeats its error on every update; the toast shows it once
 function authView(s) {
   const checking = s.authChecking === true, authenticated = s.authenticated === true;
   const signedOut = s.authChecking === false && s.authenticated === false;
@@ -21,9 +22,11 @@ function showStatus(s) {
   // go first. Any later reconnect finds the place already spent, so this is boot order only.
   if (connected && !wasConnected) { taskMetaFailed.clear(); loadSearches(); loadWorkspaceTypes(); loadPinned(true); restorePlace().finally(() => { placed = true; loadView(); renderSoon(); }); } // the types too: a key recorded on a Cmd+K type row finds it before Cmd+K opens
   $('loginBox').hidden = !state.showLogin;
-  $('errorLogin').hidden = !(state.error && !state.authenticated && !state.signedOut);
+  const relogin = !!(state.error && !state.authenticated && !state.signedOut);
+  $('errorText').textContent = relogin ? state.error : ''; $('error').hidden = $('errorLogin').hidden = !relogin;
   outline.hidden = $('filtered').hidden = !state.showOutline;
-  showError(state.error);
+  if (!relogin && state.error && state.error !== statusError) showError(state.error);
+  statusError = state.error;
   render(); // auth/connection state drives the skeleton; a newly visible outline applies the view's opening scroll
 }
 $('login').onclick = () => tana.login().catch(showError);
