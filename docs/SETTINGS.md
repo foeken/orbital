@@ -61,9 +61,12 @@ document at their next launch rather than keeping one each for ever, and the one
 rule below). A title alone is not proof: only a document carrying the mark it was created with (root `ext:orbital:doc`,
 written at creation because an empty root is never stored) or a key in either root counts, so a note of yours that is
 also called Orbital is never taken over; a document an older build made before any key existed gets the mark from the
-machine that uses it. The one a machine gives up is noted in the synced `settingsOld` list and kept out of every list, like
-the current one. A document in Tana's trash is never written to: the oldest one still standing is used, and with none a new
-one is created and filled from this machine. Restoring the old one from the trash makes it the oldest again, so the next
+machine that uses it. A document found by title must also be yours alone: restricted, you its only participant, no public
+link (`audienceOf` in sdk/access.js). The one a machine gives up is noted in the one it takes (root `ext:orbital:old`, one
+key per document, so two machines giving theirs up at once both keep theirs) and kept out of every list, like the current
+one (`appDocIds`). A document in Tana's trash is never written to: the oldest one still standing is used, never a copy the
+deleted one had taken over (it holds what was true before), and the deleted one's list goes along; with none a new one
+is created and filled from this machine. Restoring the old one from the trash makes it the oldest again, so the next
 launch goes back to it.
 
 Which keys are synced is one list, `SYNCED` in main/settings.js: every `pref:` key and the named ones above. A key
