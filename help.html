@@ -1,0 +1,109 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; img-src 'self' data:">
+<title>Help</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<!-- The Help tour (help.js): a transparent page main lays over the whole window, both halves of a split (main.js openHelp) -->
+<body class="helppage">
+<dialog id="help" class="help" aria-label="Help">
+  <div class="card">
+    <button id="helpClose" class="hclose" tabindex="-1" title="Close Esc" aria-label="Close help"><i data-icon="closePane"></i></button>
+    <div class="hpages">
+      <section class="hpage">
+        <div class="hv hv-welcome" aria-hidden="true">
+          <div class="hv-orbit">
+            <div class="hv-tilt"><svg viewBox="0 0 160 160"><ellipse cx="80" cy="80" rx="70" ry="22" stroke-width="1.5"></ellipse></svg></div>
+            <div class="hv-planet"></div>
+            <div class="hv-tilt hv-front"><svg viewBox="0 0 160 160"><path d="M10,80 A70,22 0 0 0 150,80" stroke-width="1.5"></path></svg></div>
+            <div class="hv-tilt hv-moonbox"><span class="hv-moon"></span></div>
+          </div>
+          <div class="hv-keys"><kbd>⌘K</kbd><kbd>⌘S</kbd><kbd>?</kbd></div>
+        </div>
+        <h2>Welcome to Orbital</h2>
+        <p>Your Tana as one fast outline, driven from the keyboard. This tour takes a minute. Open it again any time with the <b>?</b> button top left, or <b>Help</b> in <kbd>⌘K</kbd>.</p>
+      </section>
+      <section class="hpage">
+        <div class="hv hv-cmd" aria-hidden="true">
+          <div class="hv-pal">
+            <div class="hv-input"><span class="hv-typed"></span><span class="hv-caret"></span></div>
+            <div class="hv-row hv-keep hv-active"><i data-icon="pinDate"></i>Pin to today</div>
+            <div class="hv-row hv-drop"><i data-icon="inbox"></i>Move to Inbox</div>
+            <div class="hv-row hv-drop"><i data-icon="status"></i>Set status</div>
+            <div class="hv-row hv-keep"><i data-icon="pinDate"></i>Pin to tomorrow</div>
+            <div class="hv-row hv-drop"><i data-icon="search"></i>Search Tana</div>
+          </div>
+          <div class="hv-toast">Pinned to today</div>
+          <kbd class="hv-press hv-at0">⌘K</kbd><kbd class="hv-press hv-at55">↩</kbd>
+        </div>
+        <h2>⌘K runs everything</h2>
+        <p>Press <kbd>⌘K</kbd> anywhere and type a few letters of what you want: “pin” finds <b>Pin to today</b>, “mti” finds <b>Move to Inbox</b>. <kbd>↑</kbd> <kbd>↓</kbd> choose, <kbd>↩</kbd> runs. The list follows your caret, so on a task it offers that task’s status, assignee and pins. Not sure what something is called? Open <kbd>⌘K</kbd> and browse.</p>
+      </section>
+      <section class="hpage">
+        <div class="hv hv-outline" aria-hidden="true">
+          <div class="hv-line hv-task"><span class="hv-check"></span><span class="hv-title">Prepare the board meeting</span></div>
+          <div class="hv-line hv-child"><span class="hv-dot"></span>Draft the agenda</div>
+          <div class="hv-line hv-child hv-new"><span class="hv-dot"></span><span class="hv-typed"></span></div>
+          <kbd class="hv-press hv-at5">↩</kbd><kbd class="hv-press hv-at35">⇥</kbd><kbd class="hv-press hv-at60">⌘↩</kbd>
+        </div>
+        <h2>Write in an outline</h2>
+        <ul class="hkeys">
+          <li><kbd>↩</kbd> new row</li>
+          <li><kbd>⇥</kbd> <kbd>⇧⇥</kbd> indent, outdent</li>
+          <li><kbd>⌘↩</kbd> complete a task</li>
+          <li><kbd>⌘↑</kbd> <kbd>⌘↓</kbd> fold, unfold</li>
+          <li>Click a bullet to zoom in</li>
+          <li><kbd>⌘[</kbd> <kbd>⌘]</kbd> back, forward</li>
+        </ul>
+      </section>
+      <section class="hpage">
+        <div class="hv hv-link" aria-hidden="true">
+          <div class="hv-line"><span class="hv-dot"></span><span>Discuss the budget with <span class="hv-typed"></span><span class="hv-chip">Foundry</span></span></div>
+          <div class="hv-drop-menu">
+            <div class="hv-row hv-active"><i data-icon="space"></i>Foundry</div>
+            <div class="hv-row"><i data-icon="doc"></i>Foundry budget 2027</div>
+          </div>
+          <kbd class="hv-press hv-at10">@</kbd><kbd class="hv-press hv-at42">↩</kbd>
+        </div>
+        <h2>Find and link anything</h2>
+        <ul class="hkeys">
+          <li><kbd>⌘S</kbd> search all of Tana</li>
+          <li><kbd>@</kbd> in a row links a page, person or meeting</li>
+          <li><kbd>/</kbd> adds a heading, table or image</li>
+          <li><kbd>⌘F</kbd> filters the list you are on</li>
+        </ul>
+      </section>
+      <section class="hpage">
+        <div class="hv hv-day" aria-hidden="true">
+          <div class="hv-pane"><b>Timeline</b><div class="hv-tl">Anna finished <i>Hiring plan</i></div><div class="hv-tl">Tana added 2 tasks to your Inbox</div><div class="hv-tl">Team sync at 14:00</div></div>
+          <div class="hv-pane"><b>My Tasks</b><div class="hv-line hv-task"><span class="hv-check"></span><span class="hv-title">Review the roadmap</span></div><div class="hv-line hv-task"><span class="hv-check hv-inbox"></span><span class="hv-title">Reply to legal</span></div><div class="hv-line hv-task hv-new"><span class="hv-check hv-inbox"></span><span class="hv-title">Call the supplier</span></div></div>
+          <div class="hv-quick"><span class="hv-typed"></span><span class="hv-caret"></span></div>
+          <kbd class="hv-press hv-at30">⌘⇧Space</kbd><kbd class="hv-press hv-at50">↩</kbd>
+        </div>
+        <h2>Plan your day</h2>
+        <p>Home is the <b>Work View</b>: the Timeline, with what changed and what came in, beside My Tasks. New tasks land in your Inbox; tick one to accept it and tick again when it is done. <kbd>⌃⇧D</kbd> opens Today, and <kbd>⌘⇧Space</kbd> adds a task from any app.</p>
+      </section>
+      <section class="hpage">
+        <div class="hv hv-keys-demo" aria-hidden="true">
+          <div class="hv-pal"><div class="hv-row hv-active"><i data-icon="pinDate"></i>Pin to today<kbd class="hv-own">⌃⌥P</kbd></div></div>
+          <div class="hv-rec"><span>⌃</span><span>⌥</span><span>P</span></div>
+          <kbd class="hv-press hv-at10">⇧⌘K</kbd>
+        </div>
+        <h2>Make the keys yours</h2>
+        <p>Highlight any row in <kbd>⌘K</kbd> and press <kbd>⇧⌘K</kbd> to give it your own shortcut. <kbd>⌘N</kbd> opens another window, <kbd>⌥⌘N</kbd> splits this one in two and <kbd>⌘\</kbd> jumps between the halves. <b>Set as Home</b> in <kbd>⌘K</kbd> chooses where the house button takes you.</p>
+      </section>
+    </div>
+    <footer class="hfoot">
+      <div id="helpDots" class="hdots"></div>
+      <span class="spacer"></span>
+      <button id="helpBack">Back</button>
+      <button id="helpNext" class="primary">Next</button>
+    </footer>
+  </div>
+</dialog>
+<script src="icons.js"></script>
+<script src="help.js"></script>
+</body>
+</html>

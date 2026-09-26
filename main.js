@@ -65,6 +65,7 @@ const tellSides = (win) => win.panes.forEach((p, i) => { p.side = i ? '2' : ''; 
 // win.splitAt: the left half's share of the width, dragged by the grip and saved with the window (even by default)
 function layout(win) {
   const { width, height } = win.getContentBounds(), [left, right] = win.panes;
+  if (win.help) win.help.setBounds({ x: 0, y: 0, width, height }); // the Help tour covers both halves (openHelp)
   if (!right) return left && left.setBounds({ x: 0, y: 0, width, height });
   const min = Math.min(MIN_PANE, Math.floor(width / 2));
   const w = Math.max(min, Math.min(width - min, Math.round(width * (win.splitAt ?? 0.5))));
@@ -94,6 +95,28 @@ function removePane(win, pane) {
   // the 400 ms edit timer and lets go of its presence room and heartbeat before it is gone
   if (!wc.isDestroyed()) wc.close({ waitForBeforeUnload: true });
 }
+// The Help tour (help.html, issue #230): a transparent page of its own laid over the whole window, so it sits above both
+// halves of a split rather than inside the one that asked. Added last, it is on top; closing it hands the keys back to
+// the page that asked, whose caret is where it was, and opens that page's palette when ⌘K is what closed it.
+function openHelp(wc, theme) {
+  const win = paneWindow(wc);
+  if (!win || win.help) return;
+  const view = new WebContentsView({ webPreferences: { preload: path.join(__dirname, 'preload.js') } });
+  view.setBackgroundColor('#00000000');
+  view.opener = wc;
+  win.help = view; win.contentView.addChildView(view); layout(win);
+  view.webContents.once('did-finish-load', () => view.webContents.focus());
+  view.webContents.loadFile(path.join(__dirname, 'help.html'), { query: { theme: theme === 'dark' ? 'dark' : 'light' } });
+}
+function closeHelp(win, palette) {
+  const view = win && win.help;
+  if (!view) return;
+  win.help = null;
+  if (!win.isDestroyed()) win.contentView.removeChildView(view);
+  if (!view.webContents.isDestroyed()) view.webContents.close();
+  const opener = view.opener;
+  if (opener && !opener.isDestroyed()) { opener.focus(); if (palette) opener.send('help:palette'); }
+}
 const frontPane = () => S.win && !S.win.isDestroyed() ? (S.win.panes.find((p) => p.webContents === S.pane) || S.win.panes[0])?.webContents : null;
 function createWindow() {
   const saved = db.setting('window'), front = S.windows.size ? S.win : null;
@@ -118,6 +141,7 @@ function createWindow() {
   // The quick-add panel is a window of its own, and a hidden one still counts as open: without this, closing the
   // outliner after the panel had been summoned once would leave the app running invisibly instead of quitting.
   win.on('closed', () => {
+    closeHelp(win);
     // right half first: the left one closing first would leave the right one alone for a moment, and removePane would
     // hand it the left half's keys, so it saved its page over the left one's and a restart opened both on it
     for (const p of [...win.panes].reverse()) removePane(win, p);
@@ -256,6 +280,8 @@ ipcMain.handle('window:workView', (e) => {
 // The X at the end of the right half's header (renderer/app.js): that half closes, as Cmd+W closes it. Only in a
 // split: a page alone never closes its window from here.
 ipcMain.handle('window:closePane', (e) => { const win = paneWindow(e.sender); if (win && win.panes.length > 1) closeFront(win, e.sender); });
+ipcMain.handle('help:open', (e, theme) => { openHelp(e.sender, theme); });
+ipcMain.handle('help:close', (e, palette) => { closeHelp([...S.windows].find((w) => w.help && w.help.webContents === e.sender), palette === true); });
 // A page's header is a window drag region, where the page hears nothing of the mouse, so a page the pointer has left
 // asks for the cursor to be watched here: every 100 ms until it is outside that half, and then it is told
 // (renderer/app.js pointer-in, which shows the top row).

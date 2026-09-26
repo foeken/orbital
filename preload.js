@@ -38,6 +38,9 @@ contextBridge.exposeInMainWorld('api', {
   splitHover: (on) => ipcRenderer.send('window:splitHover', on === true), // the pointer is over this half's split grip
   onSplitHover: (cb) => ipcRenderer.on('window:splitHover', (_e, on) => cb(on === true)), // or over the other half's
   windowTheme: (theme) => ipcRenderer.send('window:theme', theme), // 'light' | 'dark': the line between split pages matches the page
+  openHelp: (theme) => ipcRenderer.invoke('help:open', theme), // the Help tour over this whole window (main.js openHelp), drawn in this page's theme
+  helpClose: (palette) => ipcRenderer.invoke('help:close', palette === true), // help.html only: the tour closed; true when ⌘K closed it
+  onHelpPalette: (cb) => ipcRenderer.on('help:palette', () => cb()), // and the page that asked opens the palette
   openExternal: (url) => ipcRenderer.invoke('shell:open', url), // http(s) link from node text, in the default browser
   exportPdf: (docId) => ipcRenderer.invoke('doc:exportPdf', docId),
   nodeLink: (docId) => ipcRenderer.invoke('doc:link', docId), // the home.tana.inc url for a node
