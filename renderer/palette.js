@@ -37,7 +37,7 @@ const NODE_ROW_ORDER = ['fieldValue', 'fieldKind', 'fieldCount', 'fieldChoices',
   'archive', 'delete'];
 const DOC_KIND = /^tana:text:/; // the Discussion Task type applies to documents, so a meeting is not offered that row
 const nodeRank = (r) => { const i = NODE_ROW_ORDER.indexOf(r.rank || r.id); return i < 0 ? NODE_ROW_ORDER.length : i; };
-const VIEW_ORDER = ['timeline', 'today', 'week', 'inbox', 'notifications', 'proposals', 'library', 'types'];
+const VIEW_ORDER = ['workView', 'timeline', 'today', 'week', 'inbox', 'notifications', 'proposals', 'library', 'types'];
 // Matching a row, tiered the way Raycast ranks a title (its manual: aliases first, then the title's fuzzy score, which
 // favours the first letters of words). Best first:
 //   0  the label starts with the query      "in"    → **In**box
@@ -292,6 +292,7 @@ function paletteRows(q, typed = q) {
   if (tana.inboxUnread) viewRows.push(notificationsViewRow()); // Tana's notifications, what came in from other people
   if (tana.proposalAnswer) viewRows.push(proposalsViewRow()); // what Tana's AI proposed and is waiting on you to accept
   if (tana.children) viewRows.push(timelineViewRow()); // what happened to what you watch, and what landed in your Inbox
+  if (tana.workView) viewRows.push(workViewRow()); // the Timeline beside My Tasks
   const viewRank = (r) => { const i = VIEW_ORDER.indexOf(r.id.replace(/^view:/, '')); return i < 0 ? VIEW_ORDER.length : i; };
   rows.push(...viewRows.sort((a, b) => viewRank(a) - viewRank(b)));
   // Saved searches are places too: their own heading, under the views, each opening the search document
@@ -325,6 +326,8 @@ function paletteRows(q, typed = q) {
   // On the page that already is Home it stays, disabled and saying so, rather than disappearing or pretending to act.
   const homeNext = homeTarget();
   if (homeNext) rows.push({ id: 'setHome', group: 'Navigate', icon: 'home', label: 'Set as Home', hint: homeNext === homeId() ? 'Current' : '', disabled: homeNext === homeId(), run: () => setHome(homeNext) });
+  // The Work View is not a page you stand on, so it is offered from anywhere (and is the Home you start with)
+  rows.push({ id: 'setHomeWorkView', group: 'Navigate', icon: 'home', label: 'Set Work View as Home', hint: homeId() === 'workView' ? 'Current' : '', disabled: homeId() === 'workView', run: () => setHome('workView') });
   if (!railEl.hidden) rows.push({ id: 'rail', group: 'Navigate', icon: 'rail', label: 'Focus the sidebar', run: () => focusRail() });
   if (tana.deletedList) rows.push({ id: 'recentlyDeleted', group: 'Navigate', icon: 'trash', label: 'Recently deleted', keepOpen: true, run: openTrashPalette });
   if (tana.archivedTypes) rows.push({ id: 'archivedTypes', group: 'Navigate', icon: 'type', label: 'Archived types', keepOpen: true, run: openArchivedPalette });

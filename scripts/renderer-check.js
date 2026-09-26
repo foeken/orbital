@@ -148,7 +148,8 @@ assert.match(source, /const work = \[patchDoc\(docId\)\];/);
 // Forced, so a zoom whose parked caret defers an ordinary render still redraws — and coalesced, because a view
 // announces one of these per document it subscribes and each forced redraw is a whole outline.
 assert.match(source, /Promise\.all\(work\)\.then\(\(\) => renderSoon\(true\), showError\)/, 'a live document update redraws a zoom even while its parked caret would defer an ordinary render');
-assert.match(source, /const loading = !parent && !outline\.children\.length/);
+// a zoomed page with no answer yet shows the same animation a view does, rather than a line saying "Loading…"
+assert.match(source, /const loading = asking \|\| \(!parent && !outline\.children\.length/);
 assert.match(source, /tana\.setAssignees\(doc\.id, assignees\)/);
 assert.match(source, /const AUDIENCES = \{/);
 assert.match(source, /'only-me': \{ icon: 'lock', label: 'Visible only to you' \}/);

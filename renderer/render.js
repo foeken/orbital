@@ -321,7 +321,7 @@ function rowSig(n) {
     n.updatedAt, n.createdAt, n.createdBy, n.fields, // the subtext's times, author and field values: they arrive after the row and a reused row would still show none
     sensitiveHidden(n.id), isPinned(n.id), meta || (taskMetaLoading.has(n.id) ? 'loading' : null), members ? members.length : 0, open.get(n.id), pending.has(n.id),
     displayKeys().join(','), codexIds.has(n.id), agentStateOf(n.id), agentTaskHosts.get(n.id), pinnedOn(n), n.table,
-    n.proposal ? n.proposal.note : null, tableView()]); // which facts the row shows, and as a list or a table: without this a reused row would keep the old ones, a proposal's buttons included
+    n.proposal ? n.proposal.note : null, n.subtext, n.join, tableView()]); // which facts the row shows, and as a list or a table: without this a reused row would keep the old ones, a proposal's buttons included
 }
 function renderOutline() {
   const saved = focused();
@@ -358,9 +358,9 @@ function renderOutline() {
     }
     list = withDraftTail(list, parent); // an open node always has a row to type in; a read-only one (every chat) never does
     outline.replaceChildren(...(groups
-      ? groups.flatMap((g) => [...(g.title ? [groupHeadEl(g)] : []), ...(g.collapsed ? [] : g.nodes.flatMap((n) => [childEl(n, parent), ...(n.timeline?.today ? [timelineDividerEl()] : [])])), ...(g.more ? [groupMoreEl(g)] : [])])
+      ? groups.flatMap((g) => [...(g.title ? [groupHeadEl(g)] : []), ...(g.collapsed ? [] : g.nodes.flatMap((n, i) => [childEl(n, parent), ...(timelineTopEnds(n, g.nodes[i + 1]) ? [timelineDividerEl()] : [])])), ...(g.more ? [groupMoreEl(g)] : [])])
       : list.map((n) => childEl(n, parent))));
-    if (parent.docId === TIMELINE_PAGE && tana.timelineWeeks && kids.get(TIMELINE_PAGE)) outline.append(timelineOlderEl()); // a week a page: one more, at the end
+    if (parent.docId === TIMELINE_PAGE && tana.timelinePages && kids.get(TIMELINE_PAGE) && timelinePages < TIMELINE_MAX_PAGES) outline.append(timelineOlderEl()); // three days a page: more as the end comes into view
     animView = null; // a zoom replaced every row, and a zoomed row is keyed docId/nodeId while a view row is keyed by
     // its document id, so on the way back nothing would match and the whole view would flash as if it had just arrived
     // A node opens at its top, however far down the draft tail the caret goes (the caretOnOpen block below parks it
@@ -393,12 +393,15 @@ function renderOutline() {
   if (tableView() && list.length) { outline.style.setProperty('--cols', Math.max(1, tableKeys().length)); outline.style.setProperty('--fcols', tableCols()); outline.prepend(tableHeadEl()); } // a list page shown as a table (renderer/views.js)
   // "No content" is about a page with nothing on it, so it goes by what was just drawn rather than by the row count:
   // a grouped page with every section folded away has no rows and is not empty — its headings are right there.
+  // Empty is an answer the page has been given: no entry at all means it has not been asked yet, which is where a
+  // launch starts — the page it reopens is drawn before there is a connection to ask with (renderer/edit.js). Until
+  // then it shows the loading animation, as a view does, rather than a line saying so.
+  let asking = false;
   if (parent && !list.length && !outline.children.length) {
+    asking = !signedOut && !(kids.has(parent.docId) && kids.get(parent.docId) !== null); // signed out, nothing is on its way: the login shows
     const note = document.createElement('div');
-    // Empty is an answer the page has been given: no entry at all means it has not been asked yet, which is where a
-    // launch starts — the page it reopens is drawn before there is a connection to ask with (renderer/edit.js).
-    note.className = 'empty-note'; note.textContent = kids.has(parent.docId) && kids.get(parent.docId) !== null ? 'No content' : 'Loading…';
-    outline.append(note);
+    note.className = 'empty-note'; note.textContent = 'No content';
+    if (!asking) outline.append(note);
   }
   // the page title is the zoom target itself: documents use setTitle, blocks use setText through the same debounce
   const editable = !demoMode && parent && !isAtomic(parent.node) && !isReference(parent.node) && canEditText(parent); // demo text is never typed into, so a mask is never saved
@@ -434,7 +437,7 @@ function renderOutline() {
   const cut = parent ? onTypePage() && (kids.get(zoom.docId) || []).length >= 1000 : truncated.has(view);
   $('filtered').textContent = [hidden ? hidden + ' items filtered out' : '', cut ? 'Showing the first 1,000 results' : ''].filter(Boolean).join(' · ');
   // Cached rows remain usable while auth and sync reconnect; reserve the skeleton for an empty outline.
-  const loading = !parent && !outline.children.length && (authChecking || !rootsLoaded || !filters.has(view) || (authed && !connected));
+  const loading = asking || (!parent && !outline.children.length && (authChecking || !rootsLoaded || !filters.has(view) || (authed && !connected)));
   $('skeleton').classList.toggle('gone', !loading);
   // the same rule as "No content" above: a view with every section folded away has no rows and is not empty
   if (!parent && !list.length && !outline.children.length && !loading && !filterEl.value) { // an empty view says so; a filtered-out list is explained by the count below it
@@ -676,7 +679,7 @@ function nodeEl(node, docId, parent) {
   const heading = headingOf(node); // a heading arrives as node.heading or as the heading1-3 block type
   // an image draws a marker only where a list row would: on its own it is the picture and nothing else
   const blockClass = node.kind === 'block' ? ' t-' + (isDivider(node) ? 'divider' : isImage(node) ? (node.block || 'image') : blockTypeOf(node)) : '';
-  el.className = 'node ' + node.kind + (reference ? ' reference' : '') + (fullref ? ' fullref' : '') + (gone ? ' gone' : '') + blockClass + (heading ? ' h' + heading : '') + (display.done ? ' done' : '') + (has ? ' has' : '') + (has && !opened ? ' collapsed' : '') + (node.draft || node.upload ? ' draft' : '') + ((node.notification || node.timeline) && node.unread ? ' unread' : '') + (node.timeline ? ' tl tl-' + node.timeline.tone : '') + (node.timeline?.today ? ' tl-today' : '');
+  el.className = 'node ' + node.kind + (reference ? ' reference' : '') + (fullref ? ' fullref' : '') + (gone ? ' gone' : '') + blockClass + (heading ? ' h' + heading : '') + (display.done ? ' done' : '') + (has ? ' has' : '') + (has && !opened ? ' collapsed' : '') + (node.draft || node.upload ? ' draft' : '') + ((node.notification || node.timeline) && node.unread ? ' unread' : '') + (node.timeline ? ' tl tl-' + node.timeline.tone : '') + (node.timeline?.today ? ' tl-today' : '') + (node.timeline?.upcoming ? ' tl-upcoming' : '');
   if (node.start != null) el.style.counterSet = 'ol ' + (node.start - 1); // a numbered list counting from its own start (sdk/content.js); the row's increment makes it start
   el.dataset.key = item.key;
   el.dataset.body = [display.text, display.done ? 1 : 0, display.stateType || ''].join('\n'); // what an edit elsewhere would change (motionAfter)
@@ -751,7 +754,8 @@ function nodeEl(node, docId, parent) {
     text.classList.toggle('chiponly', chipOnly(text));
   }
   body.append(text);
-  const metaText = node.notification ? agoText(node.createdAt) : node.timeline ? node.timeline.time || timelineTime(node.createdAt) : node.proposal ? agoText(node.proposal.proposedAt) : demoMeta(display, display.meta); // a notification says when it came in, a proposal when it was made
+  if (node.join && tana.openExternal && tana.nodeLink) body.append(timelineJoinEl(node)); // a meeting to come or under way, on the Timeline
+  const metaText = node.notification ? agoText(node.createdAt) : node.timeline ? node.timeline.time ?? timelineTime(node.createdAt) : node.proposal ? agoText(node.proposal.proposedAt) : demoMeta(display, display.meta); // a notification says when it came in, a proposal when it was made
   if (metaText) { const m = document.createElement('span'); m.className = 'meta'; m.textContent = metaText; body.append(m); }
   // every row describes who can see it, not only task rows; the fetch waits until the row is on screen
   const taskInfo = taskSummary(display, true) || documentSummary(display, true);

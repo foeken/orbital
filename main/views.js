@@ -179,6 +179,32 @@ async function searchCreate(id, title) {
   const name = typeof title === 'string' && title.trim() ? title.trim() : searchTitle(id, filter);
   return createDocument(name, { kind: 'search', query });
 }
+// My Tasks, the right half of the Work View (renderer/timeline.js): the saved search of that name if you have one,
+// else one made from the My Tasks preset (VIEW_PRESETS.library) and shown the way the Library shows it. The one made
+// here is remembered for the session and its client (another login is another account), because the graph's index
+// lags a creation and would not list it yet. findOnly (demo mode) never makes one.
+let myTasksAsk = null, myTasksMade = null;
+async function findMyTasks() {
+  if (!S.client) throw new Error(NOT_CONNECTED);
+  // every saved search, not searchList: that one is capped and leaves hidden titles out, so it cannot prove there is none
+  const { nodes = [] } = await S.client.graph.listNodes({ nodeTypes: ['search'], limit: 1000 });
+  const found = nodes.find((n) => /^my tasks$/i.test(String(n.title || '').trim()));
+  if (found) return toNode(graphRow(found));
+  return myTasksMade && myTasksMade.client === S.client && !deletedNodes.has(myTasksMade.node.id) ? myTasksMade.node : null;
+}
+function myTasks(findOnly) {
+  if (findOnly) return findMyTasks().then((n) => { if (!n) throw new Error('There is no My Tasks search yet'); return n; });
+  myTasksAsk ||= (async () => {
+    const found = await findMyTasks();
+    if (found) return found;
+    const filter = preset('library'), client = S.client;
+    const node = await createDocument('My Tasks', { kind: 'search', query: filterToSearchQuery(filter, S.me && S.me.userUri),
+      view: { sortBy: 'updated', groupBy: 'responsibility', display: ['status', 'assigned'], completedWithin: filter.completedWithin } }); // renderer/views.js VIEW_ARRANGEMENT
+    myTasksMade = { client, node };
+    return node;
+  })().finally(() => { myTasksAsk = null; }); // one question at a time: two halves asking at once make one search
+  return myTasksAsk;
+}
 
 async function start() {
   // A second login must not leave the previous stream, its listeners and its subscriptions running: the stale S.client
@@ -422,4 +448,4 @@ async function setMcpHidden(on) {
 // ponytail: on-demand subscriptions last for the S.session; drop the oldest if a long S.session ever holds too many.
 
 
-module.exports = { announceNewInbox, inboxFrom, watchInbox, watchMine, preset, viewFilter, setViewFilter, hiddenRules, mcpHidden, viewRows, inboxCount, search, searchList, searchCreate, searchTitle, start, refresh, doRefresh, listFilter, setHidden, setMcpHidden };
+module.exports = { announceNewInbox, inboxFrom, watchInbox, watchMine, preset, viewFilter, setViewFilter, hiddenRules, mcpHidden, viewRows, inboxCount, search, searchList, searchCreate, searchTitle, myTasks, start, refresh, doRefresh, listFilter, setHidden, setMcpHidden };

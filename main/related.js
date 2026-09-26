@@ -45,11 +45,11 @@ async function searchChildren(id) {
   // unreadable, not that the user saved an unconstrained search — and searchQueryParams({}) would otherwise fall
   // back to "every listable kind", silently showing the wrong rows as if they were this search's results.
   if (!query || !Object.keys(query).length) throw new Error('this saved search has no readable query');
-  const nodes = await searchRows(query, view.completedWithin);
+  const nodes = await searchRows(query, view.completedWithin, 1000); // a view's 1,000, as its preview asks: My Tasks lists every task and groups afterwards
   // A view keeps the head of its list live (views.js), which is what makes a change someone else makes show up in
   // it. These rows are listed the same way and were not subscribed at all, so a saved search only ever showed what
   // its query answered when the page opened. The same cap applies here, and for the same reason: a search answers
-  // up to 200 rows, and these subscriptions are never swept. sync.subscribe is idempotent, and these ids stay out
+  // up to 1,000 rows, the first LIVE_ROWS of them subscribed, and these subscriptions are never swept. sync.subscribe is idempotent, and these ids stay out
   // of `subscribed` — that set belongs to the view refresh, which unsubscribes what the active view no longer lists.
   // ponytail: they stay subscribed for the rest of the session, like every other on-demand subscription.
   nodes.slice(0, LIVE_ROWS).forEach((n) => subscribe(n.id));
@@ -141,6 +141,16 @@ const writeUpOf = (event, owned) => {
   const plain = owned.filter((n) => !(n.state && n.state.type) && idKind(n.id) === 'text' && (n.title || '').trim());
   return (ev.tagline && plain.find((n) => n.title === ev.tagline)) || plain.find((n) => n.appearance && n.appearance.imageUri) || null;
 };
+// A write-up can be moved out of its meeting into a space, and the meeting then owns it no longer (live 2026-09-26,
+// "Datadog & Nedap - executive alignment"). The tagline still names it, so with nothing owned it is looked up by that
+// exact title; only by that: any document can carry a sketch, so the sketch rule stays with what the meeting owns.
+async function writeUpFor(event, owned) {
+  const found = writeUpOf(event, owned), tagline = event && event.calendarEvent && event.calendarEvent.tagline;
+  if (found || !tagline || !S.client) return found;
+  const { nodes = [] } = await S.client.graph.listNodes({ nodeTypes: ['text'], textQuery: tagline, limit: 20 }).catch(() => ({}));
+  const named = nodes.filter((n) => n.title === tagline && !(n.state && n.state.type) && idKind(n.id) === 'text');
+  return named.length === 1 ? named[0] : null; // two pages of that title (a recurring meeting, a reused name): no telling which
+}
 // The uri a meeting should open at, or null when it is not an event or has no write-up yet.
 async function summaryUri(id) {
   if (!S.client) throw new Error(NOT_CONNECTED);
@@ -150,7 +160,7 @@ async function summaryUri(id) {
     S.client.graph.listNodes({ nodeIds: [id], limit: 1 }).catch(() => ({ nodes: [] })),
     S.client.graph.listNodes({ ownerIds: [id], limit: 200 }).catch(() => ({ nodes: [] })),
   ]);
-  const found = writeUpOf(selfNodes[0], owned);
+  const found = await writeUpFor(selfNodes[0], owned);
   // Tana writes the summary after the meeting, so "no write-up yet" is a state to re-check, not an answer to cache.
   if (found) summaryCache.set(id, found.id);
   return found ? found.id : null;
@@ -303,7 +313,7 @@ async function related(id) {
   // never list the open document itself, an untitled draft, or something already shown as a pin
   const pinnedIds = new Set(pinIds);
   const owns = (owned.nodes || []).filter((n) => !PLAIN_KINDS.has(idKind(n.id)) && n.id !== id && !pinnedIds.has(n.id) && (n.title || '').trim());
-  const writeUp = writeUpOf(event, owned.nodes || []); // one rule for the rail and for navigation
+  const writeUp = await writeUpFor(event, owned.nodes || []); // one rule for the rail and for navigation
   const proposals = idKind(hub) === 'event' && writeUp && id === writeUp.id ? proposalRows(hub).catch(() => []) : Promise.resolve([]);
   const pendingProposals = await proposals;
   return {

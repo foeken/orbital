@@ -7,6 +7,7 @@
 // Like Notifications the page is not a Tana document and has an id of its own.
 //   watched: a written change summary (the sidebar's Changes, sdk/history.js) somebody other than you had a hand in
 //   inbox:   a task assigned to you that someone else, an MCP client or Tana's AI created (views.js inboxFrom)
+//   meeting: a meeting you are in that has started, at its start time (all-day ones mark a day, not a moment)
 // A row is one event, not a node: a node changed three times is three rows, so a row's id is its own and the node it
 // is about rides along in row.timeline.uri, which is what opening it goes to.
 // The page reads as a timeline (renderer/timeline.js, styles.css .tl-*): a time, a marker on a rail, and what happened.
@@ -19,10 +20,11 @@
 const db = require('../db');
 const { STATE_TYPES } = require('../sdk/node');
 const { pinnedDates } = require('./pins');
-const { NOT_CONNECTED, S, iso, isMcp } = require('./state');
-const { graphRow, members, rememberNodeHue, toNode } = require('./rows');
+const { NOT_CONNECTED, S, iso, isMcp, send } = require('./state');
+const { graphRow, hm, isAllDay, members, rememberNodeHue, toNode } = require('./rows');
 const { notifySilencedIds, notifyWatchedIds } = require('./documents');
 const { inboxFrom } = require('./views');
+const { openLiveQuery } = require('../sdk/livequery');
 
 const PAGE = 'orbital:timeline';
 // Inbox to In Progress is a task being taken on, so it reads as accepted, the way Tana's own box accepts it first
@@ -47,15 +49,18 @@ const beyondStatus = (text) => (/ and /i.test(text) ? text : null);
 // karaoke and games, across Nedap …"): the summary's description, when it says more than its title
 const detailOf = (s, headline) => { const d = typeof s.description === 'string' ? s.description.trim() : ''; return d && d !== headline ? d : null; };
 const andList = (xs) => (xs.length > 1 ? xs.slice(0, -1).join(', ') + ' and ' + xs.at(-1) : xs[0]);
-// A week a page: the Timeline opens on the last seven days and reaches one week further back per click on its button
-// (renderer/timeline.js), which sets weeks here and reads the page again. What is asked of Tana grows with it, so the
-// older weeks have something to show: more summaries per watched node, more of your newest tasks.
-// ponytail: every older week is a full re-read of all the weeks before it (about half a second a read); fetch only the
-// new week if anyone ever pages far back.
+// Three days a page: the Timeline opens on today and the two days before it, and scrolling to its end reaches three
+// days further back (renderer/timeline.js), which sets pages here and reads the page again. What is asked of Tana grows
+// with it, so the older days have something to show: more summaries per watched node, more of your newest tasks.
+// ponytail: every older page is a full re-read of all the pages before it; fetch only the new days if that gets slow.
 const AT_ONCE = 12;
-let weeks = 1;
-const setWeeks = (n) => (weeks = Math.max(1, Math.min(52, Math.floor(Number(n)) || 1)));
-let markFrom = null; // the last visit, as read when this one began: an older week keeps the same new marks
+const DAYS = 3, MAX_PAGES = 120;
+let pages = 1;
+const setPages = (n) => (pages = Math.max(1, Math.min(MAX_PAGES, Math.floor(Number(n)) || 1)));
+// whole local days: today and the ones before it, so the oldest section on the page is never half a day
+// (by the calendar, not in 24-hour steps: a day across a clock change is 23 or 25 hours)
+const sinceOf = () => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - (DAYS * pages - 1)); return d.getTime(); };
+let markFrom = null; // the last visit, as read when this one began: an older page keeps the same new marks
 // A summary's title only repeating the node's says nothing (followSummary makes the same call): its description then.
 function said(s, title) {
   const own = (title || '').trim().toLowerCase();
@@ -67,10 +72,49 @@ async function pool(list, fn) {
   await Promise.all(Array.from({ length: Math.min(AT_ONCE, list.length) }, async () => { while (i < list.length) { const x = list[i++]; out.push(await fn(x)); } }));
   return out;
 }
+// The meetings on the page stay current (#210): a live query over the meetings it lists, to the end of today, and a
+// meeting added or gone, renamed or moved, re-reads the page (renderer/app.js). Nothing else about a meeting is news
+// here, and Tana touches events often (a reply, a synced calendar), so only what the page shows of one counts.
+// Opened by a read, and again when the client, the pages or the day change; a refusal leaves the page as it was.
+let live = null, liveClient = null, liveKey = null;
+// The next upcoming meeting's start: the page is read again just after it, so the meeting leaves Upcoming meetings for
+// the timeline on its own. One timer, set by every read (the read it causes sets the one after it).
+let startTimer = null;
+// the tagline and summary too: a summary landing is heard, and the entry brightens
+const meetingSig = (row) => { const ev = row.calendarEvent || {}; return JSON.stringify([row.title, ev.startTime, ev.endTime, ev.allDay, ev.tagline, ev.summary, attendeesOf(ev).map((a) => [a.displayName, a.email, a.role, a.identityUri])]); }; // all meetingNote reads of them
+// Who is on a meeting, as the graph gives it: the roster (calendarEvent.roster), or the calendar's own attendee list
+const attendeesOf = (ev) => (Array.isArray(ev.roster) && ev.roster.length ? ev.roster : Array.isArray(ev.attendees) ? ev.attendees : []).filter((a) => a && typeof a === 'object');
+const duration = (ms) => { const m = Math.round(ms / 6e4), h = Math.floor(m / 60); return m < 60 ? m + ' min' : h + ' h' + (m % 60 ? ' ' + (m % 60) + ' min' : ''); };
+// A meeting's grey line: how long it is (or, for one still to come, when: "14:00–15:00"), then who else is on it
+// (rooms and you left out), four names and an ellipsis
+function meetingNote(ev, me, myEmail, when = false) {
+  const start = Date.parse(ev.startTime || ''), end = Date.parse(ev.endTime || '');
+  const names = [...new Set(attendeesOf(ev).filter((a) => a.role !== 'resource' && a.identityUri !== me && !(myEmail && String(a.email || '').toLowerCase() === myEmail))
+    .map((a) => a.displayName || String(a.email || '').split('@')[0]).filter(Boolean))];
+  const people = names.slice(0, 4).join(', ') + (names.length > 4 ? ', …' : '');
+  const time = !(end > start) ? '' : when ? hm(new Date(start)) + '–' + hm(new Date(end)) : duration(end - start);
+  return [time, people].filter(Boolean).join(' · ') || null;
+}
+function watchMeetings(me, since) {
+  const end = new Date(); end.setHours(24, 0, 0, 0);
+  const key = [me, pages, end.getTime()].join(' ');
+  if (live && liveClient === S.client && liveKey === key) return;
+  if (live) live.then((h) => h && h.close().catch(() => {}));
+  liveClient = S.client; liveKey = key;
+  const sigs = new Map(); // uri -> what the page shows of it
+  const onRows = ({ added, removed, changed, initial }) => {
+    const moved = !initial && (added.length > 0 || removed.some((uri) => sigs.has(uri)) || changed.some((row) => sigs.get(row.uri) !== meetingSig(row)));
+    for (const row of [...added, ...changed]) sigs.set(row.uri, meetingSig(row));
+    for (const uri of removed) sigs.delete(uri);
+    if (moved) send('outline:changed', PAGE);
+  };
+  const opened = live = openLiveQuery(S.client.sync, { types: ['event'], hasParticipantUris: [me], eventStartTimeMin: since, eventStartTimeMax: end.getTime(), orderBy: ['-updatedAt'], limit: 200 },
+    { label: 'Orbital timeline meetings', onRows }).then((h) => { h.on('error', () => { if (live === opened) live = null; }); return h; }, () => { if (live === opened) live = null; return null; }); // refused, now or later: the next read asks again
+}
 
 async function rows() {
   if (!S.client || !S.me) throw new Error(NOT_CONNECTED);
-  const me = S.me.userUri, since = Date.now() - weeks * 7 * 864e5, graph = S.client.graph;
+  const me = S.me.userUri, since = sinceOf(), graph = S.client.graph;
   const names = new Map((await members().catch(() => [])).map((m) => [m.id, m.title]));
   // Watched: what the watch rule follows (made by you, not assigned to you; closed ones too, since finishing one is
   // news) and what you switched on, less what you switched off. Titles come with the rule's own answer.
@@ -82,12 +126,14 @@ async function rows() {
   for (const id of silenced) nodes.delete(id);
   const events = [];
   const who = (uris) => andList(uris.map((a) => names.get(a) || 'Someone'));
-  await pool([...nodes.values()], async (n) => {
+  // a node nobody has touched since the window opened has nothing in it to tell, so its history is not asked for:
+  // that is most of them on a short window, and one ListChanges each was most of the page's time
+  await pool([...nodes.values()].filter((n) => !n.updateTime || Date.parse(n.updateTime) > since), async (n) => {
     const st = n.state || {}, moved = Date.parse(st.enteredAt || '');
     const latest = st.changedBy && st.changedBy !== me && moved > since && VERB[st.type] ? { state: st.type, at: moved } : null;
     if (latest) events.push({ kind: 'status', uri: n.id, title: n.title, at: moved, actor: who([st.changedBy]), verb: VERB[st.type], icon: ICON[st.type], tone: TONE[st.type] });
     let summaries = [];
-    try { summaries = (await S.client.history.listChanges({ uri: n.id, limit: Math.min(50, 10 * weeks) })).summaries || []; } catch { return; } // one refusal costs that node only
+    try { summaries = (await S.client.history.listChanges({ uri: n.id, limit: Math.min(50, 10 * pages) })).summaries || []; } catch { return; } // one refusal costs that node only
     for (const s of summaries) {
       const at = Date.parse(s.endTime || s.startTime || ''), others = (s.authors || []).filter((a) => a !== me);
       const text = said(s, n.title);
@@ -100,7 +146,7 @@ async function rows() {
     }
   });
   // Inbox: the newest tasks assigned to you, whatever state they are in now, and the chat each was created in
-  const { nodes: tasks } = await graph.listNodes({ nodeTypes: ['text'], assignedTo: [me], sortOptions: [{ field: 'SORT_FIELD_CREATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }], limit: Math.min(500, 50 * weeks) });
+  const { nodes: tasks } = await graph.listNodes({ nodeTypes: ['text'], assignedTo: [me], sortOptions: [{ field: 'SORT_FIELD_CREATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }], limit: Math.min(1000, 100 * pages) });
   const recent = tasks.filter((n) => Date.parse(n.createTime || '') > since);
   const mine = recent.filter((n) => !n.createdBy || n.createdBy === me).map((n) => n.id);
   const createdIn = new Map(mine.length ? ((await graph.listEdges({ fromNodeIds: mine, edgeTypes: ['EDGE_TYPE_CREATED_IN'] }).catch(() => ({}))).edges || []).map((e) => [e.fromNodeId, e.toNodeId]) : []);
@@ -115,6 +161,39 @@ async function rows() {
     const icon = actor === 'An AI agent' ? 'robot' : actor === "Tana's AI" ? 'tana' : 'tlNew';
     events.push({ kind: 'inbox', uri: n.id, title: n.title, at: Date.parse(n.createTime), actor, icon, tone: 'new', node: n });
   }
+  // Meetings: the ones you are in that started in the window, up to now, each opening the meeting (which forwards to
+  // its write-up, renderer/edit.js followSummary), and the rest of today's for the Upcoming meetings block. One ask to
+  // the end of today; a refusal costs the meetings only.
+  const endOfToday = new Date(); endOfToday.setHours(24, 0, 0, 0);
+  const { nodes: meetings = [] } = await graph.listNodes({ nodeTypes: ['event'], hasParticipantUris: [me], eventStartTimeMin: new Date(since).toISOString(), eventStartTimeMax: endOfToday.toISOString(),
+    sortOptions: [{ field: 'SORT_FIELD_EVENT_START_TIME', direction: 'SORT_DIRECTION_DESCENDING' }], limit: Math.min(1000, 100 * pages) }).catch(() => ({}));
+  const myEmail = String((S.me.user && S.me.user.email) || '').toLowerCase();
+  const shown = meetings.filter((n) => { const ev = n.calendarEvent || {}, at = Date.parse(ev.startTime || ''); return at >= since && at <= Date.now() && !isAllDay(ev.startTime, ev.endTime, ev.allDay); });
+  // A meeting that is over and left no summary is drawn quiet, like a new-task line; one with a summary, or still
+  // going, as it is. The summary is Tana's own, on the event: calendarEvent.tagline and .summary, written when the
+  // write-up is. Not the write-up document itself: that can be moved into a space, and then the meeting no longer
+  // owns it (live 2026-09-26, "Datadog & Nedap - executive alignment").
+  for (const n of shown) {
+    const ev = n.calendarEvent || {}, going = Date.parse(ev.endTime || '') > Date.now(), bare = !going && !String(ev.tagline || ev.summary || '').trim();
+    // still under way: joined from Tana (row.join, the meeting's id: renderer/timeline.js opens it there)
+    events.push({ kind: 'meeting', uri: n.id, title: n.title, at: Date.parse(ev.startTime), icon: 'meeting', tone: bare ? 'faint' : 'meeting', note: meetingNote(ev, me, myEmail),
+      join: going ? n.id : undefined, end: going ? Date.parse(ev.endTime) : undefined });
+  }
+  watchMeetings(me, since);
+  // Upcoming meetings: today's still to start, earliest first, under Today's Tasks as a block of their own. Each opens
+  // the meeting; its grey line says when and who (renderer/views.js subtextOf, node.subtext). No meetings, no block.
+  const upcoming = meetings.filter((n) => { const ev = n.calendarEvent || {}; return Date.parse(ev.startTime || '') > Date.now() && !isAllDay(ev.startTime, ev.endTime, ev.allDay); })
+    .sort((a, b) => Date.parse(a.calendarEvent.startTime) - Date.parse(b.calendarEvent.startTime))
+    .map((n) => ({ id: n.id, text: n.title || 'Untitled', title: n.title || 'Untitled', kind: 'document', icon: 'meeting', editable: false, hasChildren: false, start: n.calendarEvent.startTime, join: n.id,
+      subtext: meetingNote(n.calendarEvent, me, myEmail, true) }));
+  const upcomingText = 'Upcoming meetings';
+  // The page is read again at the next moment a meeting moves: one starting (out of Upcoming meetings, into the timeline)
+  // or one under way ending (its Join button goes, and without a summary it turns quiet). The read it causes sets the next.
+  clearTimeout(startTimer);
+  const next = Math.min(...upcoming.map((m) => Date.parse(m.start)), ...events.filter((e) => e.end).map((e) => e.end));
+  if (next < Infinity) startTimer = setTimeout(() => send('outline:changed', PAGE), next - Date.now() + 1000); // a second in, so it has happened
+  const upcomingRow = upcoming.length ? [{ id: PAGE + ':upcoming', text: upcomingText, segments: [{ text: upcomingText }], kind: 'block', block: 'bullet', icon: 'meeting',
+    editable: false, hasChildren: true, children: upcoming, createdAt: iso(Date.now()), unread: false, timeline: { uri: null, time: '', tone: 'new', upcoming: true } }] : []; // no time of its own: it sits under Today's Now
   const now = Date.now(), date = new Date(now).toLocaleDateString('sv-SE');
   const pinDatesById = new Map(Object.entries(await pinnedDates()));
   const pinnedIds = [...pinDatesById].filter(([, dates]) => dates.some((pinnedDate) => pinnedDate <= date)).map(([id]) => id);
@@ -130,7 +209,7 @@ async function rows() {
   const todayRow = { id: PAGE + ':today:' + date, text: todayText, segments: [{ text: todayText }], kind: 'block', block: 'bullet', icon: 'todayTasks',
     editable: false, hasChildren: true, children, createdAt: iso(now), unread: false, timeline: { uri: null, time: 'Now', tone: 'new', today: true } };
   // What is new is what came after your last visit, which this visit then becomes. The first visit marks nothing.
-  if (weeks === 1 || markFrom === null) { markFrom = Number(db.setting('timelineSeen')) || Infinity; db.setSetting('timelineSeen', Date.now()); }
+  if (pages === 1 || markFrom === null) { markFrom = Number(db.setting('timelineSeen')) || Infinity; db.setSetting('timelineSeen', Date.now()); }
   const seen = markFrom;
   // New tasks in a row from one source on one day are one entry, timed by the newest of them
   const day = (at) => new Date(at).toDateString();
@@ -140,7 +219,7 @@ async function rows() {
     if (e.kind === 'inbox' && last && last.kind === 'inbox' && last.actor === e.actor && day(last.at) === day(e.at)) last.tasks.push(e);
     else merged.push(e.kind === 'inbox' ? { ...e, tasks: [e] } : e);
   }
-  return [todayRow, ...merged.map((e) => {
+  return [todayRow, ...upcomingRow, ...merged.map((e) => {
     const title = e.title || 'Untitled';
     let segments, note = null, change = null, detail = null, children = [];
     // who, in plain text, then what they did in bold, then the node: "Kevin Favier **completed** ~~Plan the offsite~~".
@@ -150,6 +229,7 @@ async function rows() {
     const who = { text: e.actor + ' ', ...(person ? { person } : {}) }, what = (verb) => ({ text: verb, marks: { bold: true } });
     if (e.kind === 'edit') { segments = [who, what('edited'), { text: ' ' }, { text: title, content: true }]; change = e.change; detail = e.detail || null; }
     else if (e.kind === 'status') { segments = [who, what(e.verb), { text: ' ' }, { text: title, content: true, marks: e.tone === 'done' ? { strike: true } : {} }]; note = e.note || null; }
+    else if (e.kind === 'meeting') { segments = [{ text: title, content: true }]; note = e.note; } // the meeting's name is what happened, how long and who under it
     else {
       const n = e.tasks.length;
       segments = [{ ...who, text: e.actor }, { text: ' added ' + (n === 1 ? 'a task' : n + ' tasks') + ' to your Inbox' }];
@@ -158,10 +238,10 @@ async function rows() {
     }
     return { id: PAGE + ':' + e.kind + ':' + e.uri + ':' + e.at, text: segments.map((x) => x.text).join(''), segments,
       kind: 'block', block: 'bullet', icon: e.icon, editable: false, hasChildren: children.length > 0, children,
-      createdAt: iso(e.at), unread: (e.tasks || [e]).some((t) => t.at > seen),
+      createdAt: iso(e.at), unread: e.kind !== 'meeting' && (e.tasks || [e]).some((t) => t.at > seen), // a meeting is on your calendar: not news
       // an "added to your Inbox" line opens nothing: the rows under it open themselves, one task or six
-      timeline: { uri: e.kind === 'inbox' ? null : e.uri, note, change, detail, tone: e.tone } };
+      join: e.join, timeline: { uri: e.kind === 'inbox' ? null : e.uri, note, change, detail, tone: e.tone } };
   })];
 }
 
-module.exports = { PAGE, rows, said, statusOf, setWeeks };
+module.exports = { PAGE, rows, said, statusOf, setPages };

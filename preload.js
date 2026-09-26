@@ -1,9 +1,8 @@
 const { contextBridge, ipcRenderer, webFrame } = require('electron');
-const pane = ipcRenderer.sendSync('window:getSide'); // { side, split }: this page's place in its window (main.js)
+const pane = ipcRenderer.sendSync('window:getSide'); // { side }: this page's place in its window (main.js)
 
 contextBridge.exposeInMainWorld('api', {
   side: pane.side, // '' the left or only page, '2' the right half of a split (renderer/state.js SIDE)
-  inSplit: pane.split, // half of a split when it loaded: it reopens its own view, not Home (renderer/edit.js)
   zoom: (factor) => { webFrame.setZoomFactor(factor); return webFrame.getZoomFactor(); },
   systemTheme: () => ipcRenderer.invoke('theme:system'), // 'dark' | 'light' right now
   onSystemTheme: (fn) => ipcRenderer.on('theme:system', (_e, theme) => fn(theme)), // macOS appearance changed
@@ -28,6 +27,11 @@ contextBridge.exposeInMainWorld('api', {
   splitWindow: () => ipcRenderer.invoke('window:split'), // a second page beside this one in the same window, or back to this one alone
   otherPane: () => ipcRenderer.invoke('window:otherPane'), // the keyboard to the other half of a split
   swapPanes: () => ipcRenderer.invoke('window:swapPanes'), // the two halves of a split change sides
+  closePane: () => ipcRenderer.invoke('window:closePane'), // this half of a split closes (the X on the right half)
+  watchPointer: () => ipcRenderer.send('window:watchPointer'), // the pointer left the page: main watches the cursor over the drag region
+  onPointerOut: (cb) => ipcRenderer.on('window:pointerOut', () => cb()), // and says when it has left this half
+  workView: () => ipcRenderer.invoke('window:workView'), // Cmd+K Work View: the right half opened, or the other half sent to its stored place
+  onToPlace: (cb) => ipcRenderer.on('window:toPlace', () => cb()), // go to the place stored for this side (the Work View has just stored it)
   splitDrag: (phase) => ipcRenderer.send('window:splitDrag', phase), // the split grip: 'start', 'move' (main reads the cursor) or 'even'
   onSide: (cb) => ipcRenderer.on('window:side', (_e, side) => cb(side)), // this page's side changed: '' the left or only page, '2' the right half
   windowTheme: (theme) => ipcRenderer.send('window:theme', theme), // 'light' | 'dark': the line between split pages matches the page
@@ -45,7 +49,7 @@ contextBridge.exposeInMainWorld('api', {
   // Tana AI proposals (main/proposals.js). Its rows are children('orbital:proposals'); approve true accepts one, false
   // rejects it, resolving to the warnings a rejection leaves behind.
   proposalAnswer: (chatUri, proposedUri, approve) => ipcRenderer.invoke('proposals:answer', chatUri, proposedUri, approve),
-  timelineWeeks: (n) => ipcRenderer.invoke('timeline:weeks', n), // how many weeks back children('orbital:timeline') reads; resolves to the number it took
+  timelinePages: (n) => ipcRenderer.invoke('timeline:pages', n), // how many pages of three days back children('orbital:timeline') reads; resolves to the number it took
   codexIds: () => ipcRenderer.invoke('codex:list'), // nodes handed to the local Codex agent; app-local, not a Tana assignee
   setCodex: (docId, on, prompt, model, host) => ipcRenderer.invoke('codex:set', docId, on, prompt, model, host), // prompt, model and the machine it runs on are per assignment
   codexModels: (host) => ipcRenderer.invoke('codex:models', host), // the models that host offers
@@ -111,6 +115,7 @@ contextBridge.exposeInMainWorld('api', {
   search: (query, scope) => ipcRenderer.invoke('search', query, scope), // scope: { types } or { members } for a link field
   searches: () => ipcRenderer.invoke('search:list'), // saved search documents, newest first
   createSearch: (viewId, title) => ipcRenderer.invoke('search:create', viewId, title), // saves that view's current filter as a saved search; returns the Node to zoom
+  myTasks: (findOnly) => ipcRenderer.invoke('search:myTasks', findOnly), // the saved search called My Tasks, made the first time it is asked for (findOnly: never made); returns its Node
   searchFilter: (docId) => ipcRenderer.invoke('search:filter', docId), // { filter, sort, group }: the stored query as a filter, plus how its rows are arranged
   setSearchFilter: (docId, filter, sort, group, display) => ipcRenderer.invoke('search:setFilter', docId, filter, sort, group, display), // the query, the arrangement and what rows show, together
   searchPreview: (filter) => ipcRenderer.invoke('search:preview', filter), // the rows that filter would find, without storing it

@@ -28,11 +28,12 @@ function mainHelpers(childProcess) {
   const handlers = new Map();
   // opened: every url main asked the OS to open, so a check can see whether assigning actually handed the work over
   const opened = [];
+  const timers = []; // every timer main set, never run on its own: a check can look at when one is due and run it by hand
   const electron = { app: {}, BrowserWindow: function () {}, Menu: {}, ipcMain: { handle: (name, fn) => handlers.set(name, fn), on: () => {} },
     shell: { openExternal: async (url) => { if (electron.shell.refuse) throw new Error('no handler for codex://'); opened.push(url); } } };
   const context = vm.createContext({
     Buffer, console, URL, // URL is a global in Electron's main process
-    setTimeout: () => 0, clearTimeout: () => {}, // no refresh/network timers in offline main helpers
+    setTimeout: (fn, ms) => timers.push({ fn, ms }), clearTimeout: () => {}, // no refresh/network timers in offline main helpers
     process: { env: { ...process.env, TANA_MAIN_TEST: '1' } },
   });
   const cache = new Map(), ours = (file) => file === nodePath.join(root, 'main.js') || file.startsWith(nodePath.join(root, 'main') + nodePath.sep);
@@ -48,7 +49,7 @@ function mainHelpers(childProcess) {
   };
   // the agent module itself as well: creating a task spawns a real app-server, which a check stubs out by replacing
   // that one function on the module main.js holds
-  return { ...load(nodePath.join(root, 'main.js')), handlers, opened, electron, agent: load(nodePath.join(root, 'main', 'agent.js')) };
+  return { ...load(nodePath.join(root, 'main.js')), handlers, opened, timers, electron, agent: load(nodePath.join(root, 'main', 'agent.js')) };
 }
 
 async function main() {
@@ -2502,6 +2503,16 @@ async function main() {
     const viaAi = { id: id(), title: 'Share the transcript', createdBy: ME, createTime: ago(30 * H) };
     const byHand = { id: id(), title: 'Typed it myself', createdBy: ME, createTime: ago(0.5 * H) };
     const old = { id: id(), title: 'Last month', createdBy: COLLEAGUE, createTime: ago(40 * 24 * H) };
+    const person = (displayName, extra = {}) => ({ displayName, email: displayName.split(' ')[0].toLowerCase() + '@example.com', role: 'required', ...extra });
+    const meeting = { id: 'tana:event:' + ulid(), title: 'Leadership sync', calendarEvent: { startTime: ago(3 * H), endTime: ago(2.5 * H), roster: [
+      person('Me Myself', { identityUri: ME }), person('Board Room', { role: 'resource' }), person('Ann Bakker'), person('Bo Smit'), person('Cas de Vries'), person('Dee Jansen'), person('Eva Mol')] } };
+    const allDay = { id: 'tana:event:' + ulid(), title: 'Offsite', calendarEvent: { startTime: ago(6 * H), endTime: ago(-18 * H), allDay: true } };
+    const going = { id: 'tana:event:' + ulid(), title: 'Board prep', calendarEvent: { startTime: ago(3.5 * H), endTime: ago(-1 * H), actionUrl: 'https://teams.example/join/1' } }; // still going: as it is
+    const summed = { id: 'tana:event:' + ulid(), title: 'Weekly', calendarEvent: { startTime: ago(4.5 * H), endTime: ago(4 * H), summary: 'The roadmap was agreed.' } }; // Tana's summary on the event, wherever its write-up now lives
+    // still to come today (a second from now, so the end of the day cannot overtake it), shown only once asked for below
+    const soon = { id: 'tana:event:' + ulid(), title: 'Standup', calendarEvent: { startTime: new Date(Date.now() + 1000).toISOString(), endTime: new Date(Date.now() + 1000 + 15 * 6e4).toISOString(), roster: [person('Ann Bakker')], location: 'https://meet.example/abc; Room 5', actionUrl: 'https://teams.example/join/2' } };
+    let meetingsAsked = null, soonToo = false;
+    let liveDoc = null; const sent = [], historyAsks = [];
     const summaries = new Map([[watched.id, [
       { title: 'Task status changed to Completed', authors: [COLLEAGUE], endTime: ago(0.05 * H) }, // the same move the node's state already tells
       { title: 'Added the Q4 numbers from Rob', authors: [COLLEAGUE], endTime: ago(0.2 * H) },
@@ -2510,7 +2521,7 @@ async function main() {
       { title: 'Contract renewal', description: 'Moved the deadline to Friday', authors: [ME, COLLEAGUE], endTime: ago(5 * H) }, // title repeats the node's
       { title: 'Ancient change', authors: [COLLEAGUE], endTime: ago(30 * 24 * H) },
     ]]]);
-    backend.testRuntime({ me: { userUri: ME }, win: { isDestroyed: () => false, webContents: { send: () => {} } },
+    backend.testRuntime({ me: { userUri: ME }, win: { isDestroyed: () => false, webContents: { send: (...args) => sent.push(args) } },
       client: {
         graph: {
           listNodes: async (p) => {
@@ -2518,14 +2529,16 @@ async function main() {
             if (p.nodeIds && (p.nodeTypes || []).includes('chat')) return { nodes: [{ id: MCP_CHAT, title: 'MCP: Nedap Compliance', invocationContext: { intent: 'mcp' } }, { id: AI_CHAT, title: 'Chat for Weekly', invocationContext: { intent: 'meeting' } }].filter((c) => p.nodeIds.includes(c.id)) };
             if (p.nodeIds && (p.nodeTypes || []).includes('text')) return { nodes: [pinnedEditable, pinnedReadOnly, completedOverdue].filter((n) => p.nodeIds.includes(n.id)) };
             if (p.nodeIds) return { nodes: [] };
+            if ((p.nodeTypes || []).includes('event')) { meetingsAsked = p; return { nodes: [...(soonToo ? [soon] : []), going, meeting, summed, allDay] }; }
             if ((p.createdBy || []).includes(ME)) return { nodes: [watched, kept] };
             if ((p.assignedTo || []).includes(ME)) return { nodes: [byHand, viaMcp, viaMcpToo, fromRob, viaAi, old] };
             return { nodes: [] };
           },
           listEdges: async ({ fromNodeIds }) => ({ edges: [[viaMcp.id, MCP_CHAT], [viaMcpToo.id, MCP_CHAT], [viaAi.id, AI_CHAT]].filter(([f]) => fromNodeIds.includes(f)).map(([fromNodeId, toNodeId]) => ({ fromNodeId, toNodeId, type: 'EDGE_TYPE_CREATED_IN' })) }),
         },
-        history: { listChanges: async ({ uri }) => ({ summaries: summaries.get(uri) || [] }) },
-        sync: { getDocument: (uri) => liveDocs.get(uri) || null, subscribe: async (uri) => uri === ME ? profile : uri === pinMapUri ? pinMap : null },
+        history: { listChanges: async ({ uri }) => { historyAsks.push(uri); return { summaries: summaries.get(uri) || [] }; } },
+        sync: { getDocument: (uri) => liveDocs.get(uri) || null, unsubscribe: async () => {},
+          subscribe: async (uri, init) => { if (uri.startsWith('tana:liveQuery:')) { liveDoc = new Document(uri); liveDoc.transact(init); return liveDoc; } return uri === ME ? profile : uri === pinMapUri ? pinMap : null; } },
       } });
     // through JSON: rows are built in the main-process vm, whose arrays fail a deep compare on their prototype alone
     const read = async () => JSON.parse(JSON.stringify((await backend.timelinePage.rows()).map((r) => [r.text, r.timeline.change || r.timeline.note, r.icon || null, r.timeline.tone, r.unread, r.children.map((c) => c.text)])));
@@ -2535,10 +2548,36 @@ async function main() {
       ['Rob Jansen edited Contract renewal', 'Added the Q4 numbers from Rob', 'updated', 'edit', false, []],
       ['An AI agent added 2 tasks to your Inbox', null, 'robot', 'new', false, ['Answer Jules', 'Plan the pilot']],
       ['Rob Jansen added a task to your Inbox', null, 'tlNew', 'new', false, ['Review the vendor contract']],
+      ['Leadership sync', '30 min · Ann Bakker, Bo Smit, Cas de Vries, Dee Jansen, …', 'meeting', 'faint', false, []],
+      ['Board prep', '4 h 30 min', 'meeting', 'meeting', false, []],
       ['Rob Jansen accepted Contract renewal', null, 'tlAccepted', 'accepted', false, []],
+      ['Weekly', '30 min', 'meeting', 'meeting', false, []],
       ['Rob Jansen edited Contract renewal', 'Moved the deadline to Friday', 'updated', 'edit', false, []],
       ["Tana's AI added a task to your Inbox", null, 'tana', 'new', false, ['Share the transcript']],
-    ], 'a timeline, newest first: who, then what they did, then the node; an edit\'s change quoted under it; new tasks from one source in a row are one quiet entry; a completion told once, from the node\'s own state; yours alone, by hand, or weeks old stay out');
+    ], 'a timeline, newest first: who, then what they did, then the node; an edit\'s change quoted under it; new tasks from one source in a row are one quiet entry; a completion told once, from the node\'s own state; a meeting at its start time, quiet once it is over with no summary, all-day ones left out; yours alone, by hand, or weeks old stay out');
+    assert.deepEqual(JSON.parse(JSON.stringify([meetingsAsked.hasParticipantUris, Date.parse(meetingsAsked.eventStartTimeMax) === (() => { const d = new Date(); d.setHours(24, 0, 0, 0); return d.getTime(); })(), Date.parse(meetingsAsked.eventStartTimeMin) === (() => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - 2); return d.getTime(); })()])), [[ME], true, true],
+      'the meetings asked for are yours, from the start of the day before yesterday to the end of today');
+    // Join: a meeting under way carries its call link, one that is over does not
+    const joins = new Map((await backend.timelinePage.rows()).map((r) => [r.timeline.uri, r.join]));
+    assert.deepEqual([joins.get(going.id), joins.get(meeting.id)], [going.id, undefined], 'a meeting under way is joined from Tana (its own id, opened there), one that is over is not');
+    // Kept current (#210): the read left a live query open over your meetings; the server's answers re-read the page
+    // when a meeting's title or time moves, or one comes or goes, and not when only something else about it changed
+    const liveQuery = liveDoc.data.toJSON().query;
+    assert.deepEqual(JSON.parse(JSON.stringify([liveQuery.types, liveQuery.hasParticipantUris, liveQuery.eventStartTimeMin === (() => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - 2); return d.getTime(); })(), liveQuery.eventStartTimeMax > Date.now()])), [['event'], [ME], true, true],
+      'the live query is your meetings from the start of the day before yesterday to the end of today');
+    const answerLive = (rows, version) => liveDoc.transact((loro) => {
+      const data = loro.getMap('data'), nodes = data.get('result').setContainer('nodes', new LoroList());
+      for (const row of rows) nodes.push(row);
+      data.set('state', 'ready'); data.set('resultForVersion', version);
+    });
+    const liveRow = (title, updatedAt) => ({ uri: meeting.id, type: 'event', title, calendarEvent: meeting.calendarEvent, updatedAt });
+    const pageSends = () => sent.filter(([channel, id]) => channel === 'outline:changed' && id === 'orbital:timeline').length;
+    answerLive([liveRow('Leadership sync', 1)], 1); answerLive([liveRow('Leadership sync', 2)], 2);
+    assert.equal(pageSends(), 0, 'the first answer and an edit that moves nothing the page shows re-read nothing');
+    answerLive([liveRow('Leadership offsite', 3)], 3);
+    assert.equal(pageSends(), 1, 'a renamed meeting re-reads the page');
+    answerLive([], 4);
+    assert.equal(pageSends(), 2, 'and so does a meeting that is gone');
     assert.deepEqual(JSON.parse(JSON.stringify((await backend.timelinePage.rows())[1].segments)), [{ text: 'Rob Jansen ', person: true }, { text: 'completed', marks: { bold: true } }, { text: ' ' }, { text: 'Contract renewal', content: true, marks: { strike: true } }],
       'the person plain, the verb bold, and a finished node struck through; demo mode masks the name and title and keeps the verb');
     const rows = await backend.timelinePage.rows();
@@ -2552,12 +2591,35 @@ async function main() {
     summaries.get(watched.id).push({ title: 'Signed by both parties', authors: [COLLEAGUE], endTime: ago(-1000) });
     const next = await read();
     assert.deepEqual(next.filter((r) => r[4]).map((r) => r[1]), ['Signed by both parties'], 'what came after your last visit is marked new, and only that');
-    // A week a page: ten days back is not on the first one, and one step older brings it in
-    summaries.get(watched.id).push({ title: 'Renamed the task', authors: [COLLEAGUE], endTime: ago(10 * 24 * H) });
-    assert.ok(!(await read()).some((r) => r[1] === 'Renamed the task'), 'the Timeline opens on the last week');
-    assert.equal(backend.timelinePage.setWeeks(2), 2, 'one week older');
-    assert.ok((await read()).some((r) => r[1] === 'Renamed the task'), 'brings the week before it in');
-    backend.timelinePage.setWeeks(1);
+    // Today's meetings still to come: a block of their own under Today's Tasks, earliest first, each saying when and who
+    soonToo = true;
+    const timersBefore = backend.timers.length;
+    const withSoon = await backend.timelinePage.rows();
+    // and when it starts it moves into the timeline on its own: a timer for just after its start reads the page again
+    const due = backend.timers.slice(timersBefore).filter((t) => t.ms > 1000 && t.ms <= 2000);
+    assert.equal(due.length, 1, 'a timer is set for a second after the next meeting starts');
+    const sendsBefore = pageSends(); due[0].fn();
+    assert.equal(pageSends(), sendsBefore + 1, 'and when it goes off the Timeline is read again, which moves the meeting out of Upcoming meetings');
+    const hm = (ms) => { const d = new Date(ms); return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0'); };
+    assert.deepEqual(JSON.parse(JSON.stringify([withSoon[1].text, withSoon[1].timeline.time, withSoon[1].timeline.upcoming, withSoon[1].children.map((c) => [c.id, c.text, c.icon, c.subtext])])),
+      ['Upcoming meetings', '', true, [[soon.id, 'Standup', 'meeting', hm(Date.parse(soon.calendarEvent.startTime)) + '–' + hm(Date.parse(soon.calendarEvent.endTime)) + ' · Ann Bakker']]],
+      'a meeting later today sits under Upcoming meetings, after Today\'s Tasks, saying when and who');
+    assert.equal(withSoon[1].children[0].join, soon.id, 'and is joined from Tana too');
+    assert.ok(!withSoon.slice(2).some((r) => r.timeline.uri === soon.id), 'and not among what happened');
+    soonToo = false;
+    assert.ok(!(await backend.timelinePage.rows()).some((r) => r.timeline.upcoming), 'with none to come the block is not drawn');
+    // Three days a page: four days back is not on the first one, and one page older brings it in
+    summaries.get(watched.id).push({ title: 'Renamed the task', authors: [COLLEAGUE], endTime: ago(4 * 24 * H) });
+    assert.ok(!(await read()).some((r) => r[1] === 'Renamed the task'), 'the Timeline opens on today and the two days before');
+    assert.equal(backend.timelinePage.setPages(2), 2, 'three days older');
+    assert.ok((await read()).some((r) => r[1] === 'Renamed the task'), 'brings the three days before it in');
+    backend.timelinePage.setPages(1);
+    // A node nobody has touched since the window opened is not asked for its history: that was most of the page's time
+    watched.updateTime = ago(5 * 24 * H);
+    historyAsks.length = 0; await read();
+    assert.ok(!historyAsks.includes(watched.id), 'a watched node last updated before the window is not asked for its changes');
+    watched.updateTime = ago(0.1 * H); historyAsks.length = 0; await read();
+    assert.ok(historyAsks.includes(watched.id), 'and one updated inside it is');
     console.log('ok  timeline: what changed and what finished first, new Inbox tasks grouped and quiet, newest first, new since the last visit');
   }
 
@@ -2869,9 +2931,14 @@ async function main() {
     documents.set(delegatedId, delegated);
     let watchedTasks = [{ id: delegatedId, title: 'Talk to Peter', state: { type: 'open' }, assignedTo: [OTHER_USER], createdBy: ME }];
     let writeUp = [], ownerQueries = 0;
+    const movedEventId = 'tana:event:' + ulid(), movedId = 'tana:text:' + ulid(), MOVED = 'The one where we reset the conversation';
+    const twiceEventId = 'tana:event:' + ulid(), TWICE = 'Weekly sync notes';
     const listNodes = async (p) => {
       if (p.ownerIds) { ownerQueries++; return { nodes: p.ownerIds[0] === eventId ? writeUp : [] }; }
-      if (p.nodeIds) return { nodes: p.nodeIds.map((id) => (id === eventId ? { id, calendarEvent: { tagline: 'Notes' } } : { id, title: id === spaceId ? 'Deal' : 'Node', ...(id === spaceId ? { appearance: { hue: 200 } } : {}) })) };
+      // a write-up moved into a space: its meeting owns it no longer, and only its title (the tagline) still points at it
+      if (p.textQuery === TWICE) return { nodes: [{ id: 'tana:text:' + ulid(), title: TWICE }, { id: 'tana:text:' + ulid(), title: TWICE }] }; // a recurring meeting's name, twice
+      if (p.textQuery === MOVED) return { nodes: [{ id: 'tana:text:' + ulid(), title: 'Sketched, but some other page', appearance: { imageUri: 'tana:image:x' } }, { id: movedId, title: MOVED, ownerUri: spaceId }] };
+      if (p.nodeIds) return { nodes: p.nodeIds.map((id) => (id === eventId ? { id, calendarEvent: { tagline: 'Notes' } } : id === movedEventId ? { id, calendarEvent: { tagline: MOVED } } : id === twiceEventId ? { id, calendarEvent: { tagline: TWICE } } : { id, title: id === spaceId ? 'Deal' : 'Node', ...(id === spaceId ? { appearance: { hue: 200 } } : {}) })) };
       if (p.createdBy) return { nodes: watchedTasks }; // the watch query, which asks by maker rather than by view
       const [kind] = p.nodeTypes || [];
       if (kind === 'user-profile') return { nodes: [] };
@@ -2930,6 +2997,9 @@ async function main() {
     const settled = ownerQueries;
     assert.equal(await backend.handlers.get('doc:summaryUri')(null, eventId), writeUpId);
     assert.equal(ownerQueries, settled, 'the write-up it did find is cached');
+    assert.equal(await backend.handlers.get('doc:summaryUri')(null, movedEventId), movedId,
+      'a write-up moved out of its meeting into a space is found by its title, the tagline, and a sketched page with another title is not it');
+    assert.equal(await backend.handlers.get('doc:summaryUri')(null, twiceEventId), null, 'and with two pages of that title there is no telling which: none');
 
     cache.setSetting('viewFilter:inbox', { states: ['open', 'nonsense'], assignee: 'sam' });
     const stored = await backend.handlers.get('view:filter')(null, 'inbox');

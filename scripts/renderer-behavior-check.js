@@ -114,7 +114,7 @@ const withShims = (src) => {
   if (/\b(displayOn|displayKeys|subtextOf)\b/.test(src) && !/const displayKeys =/.test(src) && !/function subtextOf\(/.test(src)) {
     src = functionSource('agoText') + '\n' + functionSource('subtextOf') + '\n' + src;
     // pinnedOn needs the grouping (views.js) and the date pins (state.js); no row here is in a Pinned section
-    src = "globalThis.displayKeys ??= () => ['status', 'assigned', 'updated']; globalThis.displayOn ??= (id) => globalThis.displayKeys().includes(id); globalThis.pinnedOn ??= () => '';\n" + src;
+    src = "globalThis.displayKeys ??= () => ['status', 'assigned', 'updated']; globalThis.displayOn ??= (id) => globalThis.displayKeys().includes(id); globalThis.pinnedOn ??= () => ''; globalThis.me ??= () => (globalThis.members || []).find((m) => m.me);\n" + src;
   }
   // The watch-state cache lives in state.js, which most slices do not take. A slice that only clears it — a sharing
   // change can flip whether a node is watched — should not fail for want of the map itself.
@@ -1514,7 +1514,7 @@ async function runSyncShortcutCheck() {
     ({ rows: async (q) => { paletteRows(q); await Promise.resolve(); await Promise.resolve(); return paletteRows(q).map((r) => r.label); }, loads: () => loads,
        ids: (q) => paletteRows(q).map((r) => r.id), press: async (id) => { const hit = runAction(id); await Promise.resolve(); return [hit, ran.splice(0)]; } });
   `);
-  assert.deepEqual(plain(await folded.rows('s')), ['Sync', 'Search Tana', 'Set status', 'Swap panes', 'Hide sidebar', 'Toggle split panes', 'Smaller text', 'Reset text size', 'Filter rows by text'],
+  assert.deepEqual(plain(await folded.rows('s')), ['Sync', 'Search Tana', 'Set status', 'Swap panes', 'Hide sidebar', 'Toggle split panes', 'Smaller text', 'Reset text size', 'Set Work View as Home', 'Filter rows by text'],
     'one letter: the first level only, the groups whose best row starts with it first (the shortest such row leading), a letter inside a word last');
   assert.deepEqual(plain(await folded.rows('sesp')), ['Set status to In Progress'], 'two letters in: the level below is folded in and the query reaches into it');
   assert.deepEqual(plain(await folded.rows('seinb')), ['Set status to Inbox'], 'a disabled choice is left out, the others are single rows');
@@ -1584,7 +1584,7 @@ async function runSyncShortcutCheck() {
     'Views: Today', 'Views: This week', 'Views: Inbox', 'Views: Library',
     'View options: Filter by type', 'View options: Filter rows by text',
     'Actions: Log in to Tana', 'Actions: Create new …', 'Actions: Search Tana', 'Actions: Undo', 'Actions: Redo', 'Actions: Sync',
-    'Navigate: Go back', 'Navigate: Go forward', 'Navigate: Go to Home', 'Navigate: Set as Home', 'Navigate: Focus the sidebar',
+    'Navigate: Go back', 'Navigate: Go forward', 'Navigate: Go to Home', 'Navigate: Set as Home', 'Navigate: Set Work View as Home', 'Navigate: Focus the sidebar',
     'Window: New window', 'Window: Toggle split panes', 'Window: Go to the other half', 'Window: Swap panes', 'Window: Hide sidebar', 'Window: Reload',
     'Settings: Larger text', 'Settings: Smaller text', 'Settings: Reset text size', 'Settings: Toggle dark mode', 'Settings: Preview loading animation', 'Settings: Edit hidden items', 'Settings: Toggle sensitive visibility', 'Settings: Toggle demo mode',
   ], 'the palette lists its rows in one fixed, meaningful order');
@@ -2812,20 +2812,20 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     { id: 'ta3', tags: [], createdBy: 'sam' },
   ];
   assert.deepEqual(titles([...responsibility, ...agents], 'responsibility'),
-    [['Unassigned', ['t6']], ['Tracking', ['t1']], ['Agent', ['ta1', 'ta2', 'ta3']], ['My inbox', ['t8']], ['Mine', ['t10']], ['My completed', ['t2']], ['My later', ['t9']], ['Assigned by others', ['t5']]],
-    'Responsibility runs Unassigned, Tracking, Agent, then your own work by its state — My inbox, Mine, My completed, My later — and ends with what somebody else handed you');
+    [['Unassigned', ['t6']], ['Agent', ['ta1', 'ta2', 'ta3']], ['My inbox', ['t8']], ['Mine', ['t10']], ['Tracking', ['t1']], ['My later', ['t9']], ['My completed', ['t2']], ['Assigned by others', ['t5']]],
+    'Responsibility runs Unassigned, Agent, My inbox, Mine, then Tracking under your own work, then My later and My completed, and ends with what somebody else handed you');
   assert.deepEqual(titles(agents, 'responsibility'), [['Agent', ['ta1', 'ta2', 'ta3']]],
     'a node handed to the local agent is in the Agent section and in no other: whoever Tana has it assigned to, and even with no metadata read yet — asking for it by name is enough to list it');
   api.dragging(true);
-  assert.deepEqual(titles(agents, 'responsibility').map(([title]) => title), ['Unassigned', 'Tracking', 'Agent', 'My inbox', 'Pinned', 'Mine', 'My completed', 'My later'],
+  assert.deepEqual(titles(agents, 'responsibility').map(([title]) => title), ['Unassigned', 'Agent', 'My inbox', 'Pinned', 'Mine', 'Tracking', 'My later', 'My completed'],
     'while a task is dragged, every section a drop can land in is drawn, empty or not');
   api.dragging(false);
   const pinnedTask = { id: 'tp1', icon: 'task', tags: [], createdBy: 'sam' };
-  assert.deepEqual(titles([...responsibility, pinnedTask], 'responsibility').map(([title, ids]) => title + ':' + ids.join()).slice(2, 5),
+  assert.deepEqual(titles([...responsibility, pinnedTask], 'responsibility').map(([title, ids]) => title + ':' + ids.join()).slice(1, 4),
     ['My inbox:t8', 'Pinned:tp1', 'Mine:t10'],
     'a task pinned to a day sits in Pinned, under My inbox and above Mine, whoever has it and with no metadata read');
   assert.deepEqual(titles(responsibility, 'responsibility'),
-    [['Unassigned', ['t6']], ['Tracking', ['t1']], ['My inbox', ['t8']], ['Mine', ['t10']], ['My completed', ['t2']], ['My later', ['t9']], ['Assigned by others', ['t5']]],
+    [['Unassigned', ['t6']], ['My inbox', ['t8']], ['Mine', ['t10']], ['Tracking', ['t1']], ['My later', ['t9']], ['My completed', ['t2']], ['Assigned by others', ['t5']]],
     'and with nothing handed to the agent the other sections are exactly as they were');
   // Tracking follows the bell, not the hand-off: silencing a task you gave away takes it out of the section, the
   // same watch state (an explicit choice, else the default rule) the row's own bell is drawn from.
@@ -2849,8 +2849,8 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   assert.deepEqual([soon.nodes.map((n) => n.id).sort(), soon.more], [['tq1', 'tq3', 'tq4'], 2],
     'Pinned opens on what is pinned within the coming week or already past, and a task pinned only further ahead waits behind the link');
   assert.deepEqual(sections.map((g) => [g.title, g.nodes.map((n) => n.id)]),
-    [['Unassigned', ['t6']], ['Tracking', ['t1']], ['My inbox', ['t8']], ['Mine', ['t10']], ['My completed', ['t2']], ['My later', ['t9']], ['Assigned by others', ['t5']]],
-    'the sections run Unassigned, Tracking, My inbox, Mine, My completed, My later, Assigned by others, and end there');
+    [['Unassigned', ['t6']], ['My inbox', ['t8']], ['Mine', ['t10']], ['Tracking', ['t1']], ['My later', ['t9']], ['My completed', ['t2']], ['Assigned by others', ['t5']]],
+    'the sections run Unassigned, My inbox, Mine, Tracking, My later, My completed, Assigned by others, and end there');
   assert.ok(sections.every((g) => g.nodes.length && g.note === undefined),
     'no section is drawn empty, and none carries a line of its own');
   assert.equal(plain(api.pageRows(responsibility, '')).list.length, 7,
@@ -3508,6 +3508,7 @@ function runRowAudienceCheck() {
     const loadTaskMeta = (id) => { fetched.push(id); };
     const isPinned = () => false; // the pin mark has its own check; here the audience icons are the subject
     const loadMembers = () => {}, memberName = (uri) => (uri === 'tana:user-profile:sam' ? 'Sam' : uri); // the real one answers with the uri until the member list lands
+    const ME_URI = 'tana:user-profile:me', me = () => ({ id: ME_URI }); // you, as the member list marks you (renderer/tasks.js)
     const isRealId = (id) => typeof id === 'string' && id.startsWith('tana:');
     const tana = { taskMeta: () => {} };
     const document = { createElement: (tagName) => {
@@ -3575,6 +3576,7 @@ function runRowAudienceCheck() {
   assert.equal(row(made, spaceMeta).sub, 'Created by Sam', 'Created by names the maker even when Created is off');
   api.display(['status', 'assigned', 'updated', 'created', 'creator']);
   assert.equal(row(made, spaceMeta).sub, 'Created 2 days ago by Sam', 'and with Created on it is one phrase, not two');
+  assert.equal(row({ ...made, createdBy: 'tana:user-profile:me' }, spaceMeta).sub, 'Created 2 days ago', 'and made by you it says no name: your own work needs no byline');
   assert.equal(row(doc, spaceMeta).sub, null, 'a row the graph gave no creator for says nothing at all');
   api.display(['status', 'assigned', 'updated']);
   // Type is the same shape: the chips are a fact about the row, shown only while the pill asks for them.
@@ -4151,7 +4153,9 @@ async function runRestorePlaceCheck() {
     const followSummary = (docId) => summaries.push(docId);
     // Answers at once unless a case parks it: a fetch that never settles would hang the check, and an unsettled
     // check empties the event loop and exits silently rather than failing.
-    const tana = { node: () => { fetches++;
+    let asked = 0, added = [];
+    const addSearch = (n) => added.push(n.id);
+    const tana = { myTasks: () => { asked++; return Promise.resolve({ id: 'tana:search:mine', text: 'My Tasks' }); }, node: () => { fetches++;
       if (nodeMode === 'fail') return Promise.reject(new Error('no longer readable'));
       if (nodeMode === 'park') return new Promise((resolve) => { nodeResolve = () => resolve({ title: 'Fetched' }); });
       return Promise.resolve({ title: 'Fetched' }); } };
@@ -4162,6 +4166,8 @@ async function runRestorePlaceCheck() {
     ({
       remember: (z) => { zoom = z; rememberPlace(); return storage.has('place') ? storage.get('place') : null; },
       store: (value) => { storage.set('place', value); savedPlace = readStoredPlace(); }, // left by the last session, read at load
+      firstRight: () => { savedPlace = { myTasks: true }; }, // renderer/edit.js: a first launch's right half
+      myTasks: () => ({ asked, added: [...added] }),
       seedPlace: () => { ${seed[0]} },
       clear: () => { storage.delete('place'); savedPlace = readStoredPlace(); },
       firstPaint: () => { zoom = null; rememberPlace(); }, // what the boot render records: the view it drew, with no zoom
@@ -4218,6 +4224,17 @@ async function runRestorePlaceCheck() {
   api.seedPlace();
   await api.start();
   assert.equal(api.state().docId, null, 'a page deleted since the last session takes its stub down again and the launch lands on the view');
+
+  // A first launch's right half is My Tasks, which has no id until main has found or made it: it asks once connected
+  api.reset(); api.seed([]); api.offline(); api.firstRight();
+  await api.start();
+  assert.deepEqual(plain([api.state().docId, api.myTasks().asked]), [null, 0], 'the right half of a first launch waits for the connection before asking for My Tasks');
+  api.online();
+  await api.start();
+  assert.deepEqual(plain([api.state().docId, api.myTasks()]), ['tana:search:mine', { asked: 1, added: ['tana:search:mine'] }],
+    'then opens the search main found or made, listed in Cmd+K at once');
+  await api.start();
+  assert.equal(api.myTasks().asked, 1, 'once per launch');
 
   api.reset(); api.seed([{ id: 'tana:text:a' }]);
   api.store(JSON.stringify({ docId: 'tana:text:a', nodeId: 'n1', from: 'Search' }));
@@ -5739,11 +5756,10 @@ function runRailChangesCheck() {
 // ---- Home: the Library or a saved search, as the anchor a zoomed page crumbs back to and where Back lands ----
 // Stored as the target's own id, so a rename in Tana shows through and a deletion is something the app can see.
 async function runHomeCheck() {
-  const homeInit = source.match(/let home = pref\('home', 'library'\);/)[0];
-  const seed = source.match(/if \(!savedPlace && isRealId\(home\) && !IN_SPLIT\) savedPlace = [^\n]*/)[0];
+  const homeInit = source.match(/let home = pref\('home', 'workView'\);/)[0];
+  const seed = source.match(/if \(!savedPlace\) savedPlace = SIDE [^\n]*/)[0];
   const api = vm.runInNewContext(FAKE_DOM + `
     const SIDE = ''; // renderer/state.js: a page on its own, not the right half of a split
-    const IN_SPLIT = false;
     const stored = {};
     const localStorage = { getItem: (k) => (k in stored ? stored[k] : null), setItem: (k, v) => { stored[k] = v; }, removeItem: (k) => { delete stored[k]; } };
     const prefs = {}; const pref = (k, fb) => (k in prefs ? prefs[k] : fb); const setPref = (k, v) => { prefs[k] = v; stored[k] = v; };
@@ -5751,6 +5767,7 @@ async function runHomeCheck() {
     let view = 'library', zoom = null, searches = [], typeListCache = null, searchesLoaded = false, connected = true, went = [], renders = 0;
     let navBack = [], navForward = [], navHere = null, navigating = false, caretOnOpen = false, savedPlace = null;
     const SEARCH_ID = 'tana:search:';
+    const TIMELINE_PAGE = 'orbital:timeline', run = (fn) => fn(), openWorkView = () => { went.push('workView'); }; // renderer/timeline.js
     const isRealId = (id) => typeof id === 'string' && id.startsWith('tana:');
     const onSearchPage = () => !!zoom && !zoom.nodeId && String(zoom.docId || '').startsWith(SEARCH_ID);
     const render = () => { renders++; }, renderSoon = render, flushAll = () => {}, dropDrafts = () => {};
@@ -5790,8 +5807,15 @@ async function runHomeCheck() {
   `);
 
   const SEARCH = 'tana:search:01j0myt00000000000000000', OTHER = 'tana:text:01j0note0000000000000000';
-  // Nothing chosen: the Library, and nothing written to say so
-  assert.deepEqual([api.id(), api.name(), plain(api.stored())], ['library', 'Library', {}], 'with no preference Home is the Library, and nothing is stored until something is chosen');
+  // Nothing chosen: the Work View, and nothing written to say so
+  assert.deepEqual([api.id(), api.name(), plain(api.stored())], ['workView', 'Work View', {}], 'with no preference Home is the Work View, and nothing is stored until something is chosen');
+  api.home();
+  assert.deepEqual(plain(api.went()), ['workView'], 'going Home opens the Work View, as its Cmd+K row does');
+  api.go({ docId: 'orbital:timeline', nodeId: null });
+  assert.equal(api.at(), true, 'and the left half is Home on the Timeline');
+  api.go({ docId: OTHER, nodeId: null });
+  assert.equal(api.at(), false, 'and not anywhere else');
+  api.view('library');
   await api.list([{ id: SEARCH, text: 'My Tasks' }]);
   assert.equal(api.target(), 'library', 'the Library page offers itself as Home');
   api.set(SEARCH);
@@ -5827,8 +5851,9 @@ async function runHomeCheck() {
   api.back();
   assert.deepEqual(plain(api.went()), [], 'with a real prior place, Back is the history it always was');
 
-  // A launch with nothing to restore opens Home; an explicit place wins
-  assert.deepEqual(plain(api.seed(null)), { docId: SEARCH, nodeId: null }, 'a launch with no place to restore opens Home');
+  // A first launch (nothing stored) opens on the Work View's Timeline, whatever Home is; an explicit place wins
+  const TIMELINE = { docId: 'orbital:timeline', nodeId: null, title: 'Timeline', icon: 'timeline' };
+  assert.deepEqual(plain(api.seed(null)), TIMELINE, 'a launch with no place to restore opens the Work View: the Timeline in the left half');
   assert.deepEqual(plain(api.seed({ docId: OTHER, nodeId: null })), { docId: OTHER, nodeId: null }, 'and a place to restore is left alone');
   assert.deepEqual(plain(api.seed({})), {}, 'and a view left unzoomed (the Library, Types) reopens as that view, not Home');
 
@@ -5849,7 +5874,7 @@ async function runHomeCheck() {
   assert.equal(api.crumbs(), '[Home] [⌘K]', 'and the bar is the same two buttons');
   // The bar used to be hidden on a view page, which has no location; it now carries the two buttons on every page.
   assert.doesNotMatch(source, /nav\.hidden =/, 'the bar is never hidden: Home and ⌘K on every page, a view page (the Library, Inbox, Tasks) included');
-  assert.equal(api.seed(null), null, 'a Library Home needs no restore target: it is the view a launch already opens');
+  assert.deepEqual(plain(api.seed(null)), TIMELINE, 'a Library Home changes nothing about a first launch either');
   api.view('inbox');
   api.home();
   assert.deepEqual(plain(api.went()), ['view:library'], 'and once it has fallen back, Home is the Library view — no dead saved search is opened');

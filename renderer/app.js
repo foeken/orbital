@@ -45,7 +45,13 @@ window.addEventListener('beforeunload', () => {
 });
 // This page changed sides (swapped, or the right half left alone): it saves its view and place under its new side's
 // keys from now on. A Reload asks main again (api.side), so it reads the same ones.
-if (tana.onSide) tana.onSide((side) => { SIDE = side ? ':' + side : ''; splitGrip.hidden = SIDE !== ':2'; localStorage.setItem('view' + SIDE, view); rememberPlace(); });
+if (tana.onSide) tana.onSide((side) => { SIDE = side ? ':' + side : ''; splitGrip.hidden = closePaneBtn.hidden = SIDE !== ':2'; localStorage.setItem('view' + SIDE, view); rememberPlace(); });
+// The Work View, asked for in the other half: it stored this half's place, and this half goes there (renderer/timeline.js)
+if (tana.onToPlace) tana.onToPlace(() => {
+  const place = readStoredPlace();
+  if (!place || !isPlaceId(place.docId)) return;
+  goTo(place.docId).then(() => { if (String(place.docId).startsWith(SEARCH_ID)) addSearch({ text: place.title, ...extra.get(place.docId), id: place.docId }); }); // listed in Cmd+K at once, as restorePlace does
+});
 // The line between the halves is dragged from a grip on the right half's left edge; main reads the cursor and moves
 // the line (main.js window:splitDrag), and a double click evens the halves out again.
 const splitGrip = $('splitGrip');
@@ -58,7 +64,24 @@ splitGrip.addEventListener('pointerdown', (e) => {
   splitGrip.addEventListener('pointermove', move); splitGrip.addEventListener('pointerup', up);
 });
 splitGrip.addEventListener('dblclick', () => tana.splitDrag('even'));
+// Whether the pointer is over this page, for the top row (styles.css html.pointer-in). The header is a window drag
+// region, and over it the page hears nothing of the mouse, so a pointer leaving the page may only have gone up into
+// the header: main watches the cursor from there and says when it has really left this half.
+const pointerIn = (on) => document.documentElement.classList.toggle('pointer-in', on);
+document.addEventListener('pointerover', () => pointerIn(true));
+document.documentElement.addEventListener('pointerleave', () => (tana.watchPointer ? tana.watchPointer() : pointerIn(false)));
+if (tana.onPointerOut) tana.onPointerOut(() => pointerIn(false));
+// The right half closes from an X at the far right of its header, after every other button (index.html).
+const closePaneBtn = $('navClosePane');
+closePaneBtn.hidden = SIDE !== ':2';
+closePaneBtn.title = 'Close this pane ⌘W';
+closePaneBtn.setAttribute('aria-label', 'Close this pane'); // icon only, so the name has to come from here
+{ const svg = iconNode('closePane'); if (svg) closePaneBtn.append(svg); }
+closePaneBtn.onmousedown = (e) => e.preventDefault(); // the caret stays where it is: beforeunload flushes what it was typing
+closePaneBtn.onclick = () => tana.closePane();
 tana.onChanged((docId, info) => {
+  // The Timeline's meetings moved (main/timeline.js): the page is read again where it is on screen, and on arrival elsewhere
+  if (docId === TIMELINE_PAGE) { if (zoom?.docId === TIMELINE_PAGE) reload(TIMELINE_PAGE).then(() => renderSoon(true), showError); return; }
   if (docId) {
     // A newer update would reorder this row under Updated; keep the layout the user is looking at until Clean up.
     if (typeof sortBy === 'function' && (sortBy() === 'updated' || (typeof groupBy === 'function' && groupBy() === 'updated'))) {
@@ -126,7 +149,7 @@ tana.onStatus(showStatus);
 if (tana.onSettings) tana.onSettings((next) => {
   const openType = onTypePage() ? zoom.docId : null, wasFields = openType && JSON.stringify((filters.get(openType) || {}).fields || null);
   mergePrefs(next);
-  home = pref('home', 'library');
+  home = pref('home', 'workView');
   for (const key of Object.keys(hotkeys)) delete hotkeys[key];
   Object.assign(hotkeys, pref('hotkeys', {}));
   for (const [store, key] of [[groupPref, 'groupBy'], [sortPref, 'sortBy'], [displayPref, 'display']]) {
