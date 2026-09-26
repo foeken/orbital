@@ -536,7 +536,8 @@ week, Last month and Older.
   fills with the type's icon name (main/rows.js). A task and a meeting keep their own. The page searches the Nucleo UI
   set in the app (`build/nucleo-ui.json.gz`, 3503 glyphs with tags), which stays in main (main/icons.js): the renderer
   asks `api.searchIcons(q)` for a page of 60, registers those glyphs by name and draws them; **No icon** takes it off.
-  The choice is app-local, in SQLite, as a name (`typeIcons`, type uri → Nucleo label), never markup, and the glyphs a
+  The choice is this app's own, kept as a name in the synced `typeIcons` setting (type uri → Nucleo label, so it
+  follows you, docs/SETTINGS.md), never as markup in Tana, and the glyphs a
   type wears arrive with the roots, so a row is never drawn before its markup exists. On each start, and when a
   ChatGPT sign-in completes or an API key is saved, the fast AI picks one for every titled type with no choice yet
   (`autoTypeIcons` in main.js, `pickTypeIcons` in main/ai.js, `icons.fillTypeIcons` keeping only names in the set); a
@@ -958,5 +959,4 @@ empty sidebar hidden; a collapsed section is remembered (`railClosed`), and ever
   is edited, so Changes says what it said when the page opened.
 - **Keys**: Cmd+K **Focus the sidebar** (`rail`, no default key; record one with ⇧⌘K) enters it, ↑/↓ move, Enter opens, Space toggles a task, ← folds
   the focused row's section and → unfolds it, Escape or ⌘← returns the caret to the document.
-
 
