@@ -103,7 +103,7 @@ async function fieldDefs(typeUri) {
 // A field of its type carries its kind too: { type, cardinality, options, to }, as fieldDefs reads them.
 async function fieldsOf(id) {
   let document;
-  try { document = await S.client.sync.subscribe(id); } catch { return []; }
+  try { document = await S.client.sync.subscribe(id); readOnDemand(id); } catch { return []; } // a read: let go past LIVE_ROWS like any other (#395)
   const rows = fields.readFields(document);
   const typeUri = document.data.get('entityTypeUri');
   const out = [];
@@ -266,7 +266,8 @@ async function related(id) {
   const mentionIds = [...new Set(mentionEdges.map((e) => e.fromNodeId))];
   // HAS_PIN is derived server-side from the hub's own pinnedItems, so read that list too: a pin this app just wrote
   // is in the document before the edge exists, and the hub says whether a new one may be added at all.
-  const hubDoc = PIN_HUBS.has(idKind(hub)) ? await S.client.sync.subscribe(hub).catch(() => null) : null;
+  // a read as well: a write-up's meeting and a space are read by nothing else, and were held for the session (#395)
+  const hubDoc = PIN_HUBS.has(idKind(hub)) ? await S.client.sync.subscribe(hub).then((doc) => { readOnDemand(hub); return doc; }, () => null) : null;
   const canPin = hubDoc ? await canWriteDoc(hubDoc).catch(() => false) : false;
   const pinIds = [...new Set([...(hubDoc ? pins.items(hubDoc).map((p) => p.uri) : []), ...(edges.edges || []).map((e) => e.toNodeId).filter(Boolean)])];
   const list = (ids) => (ids.length ? S.client.graph.listNodes({ nodeIds: ids, limit: ids.length }).then((r) => r.nodes) : Promise.resolve([]));

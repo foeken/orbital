@@ -3301,6 +3301,29 @@ async function main() {
     console.log('ok  a change to what rows are built from refreshes after itself, not with the run already under way');
   }
 
+  // The sidebar read (related) subscribes the page and its hub — a write-up's meeting, a space itself — which nothing
+  // else reads: those are reads too, let go past LIVE_ROWS, or every meeting and space opened stayed live (#395).
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const { LIVE_ROWS } = require('../main/state');
+    const docs = new Map(), unsubscribed = [];
+    const add = (id, title) => { const d = new Document(id); d.transact((l) => initDocument(l, title, ME)); docs.set(id, d); return id; };
+    const space = add('tana:space:' + ulid(), 'A space'), meeting = add('tana:event:' + ulid(), 'A meeting');
+    const writeUp = add('tana:text:' + ulid(), 'Notes');
+    const read = Array.from({ length: LIVE_ROWS + 5 }, (_, i) => add('tana:text:' + ulid(), 'Row ' + i));
+    const node = (id) => ({ id, title: readNode(docs.get(id)).title, ...(id === writeUp ? { ownerUri: meeting } : {}) });
+    backend.testRuntime({ me: { userUri: ME }, activeView: 'library', win: null, client: {
+      sync: { subscribe: async (id) => docs.get(id) || null, getDocument: (id) => docs.get(id), unsubscribe: async (id) => { unsubscribed.push(id); } },
+      graph: { listNodes: async (p) => ({ nodes: (p.nodeIds || []).filter((id) => docs.has(id)).map(node) }), listEdges: async () => ({ edges: [] }), getOwnerChain: async () => ({ entries: [] }) },
+    } });
+    await backend.handlers.get('doc:related')(null, space);
+    await backend.handlers.get('doc:related')(null, writeUp);
+    for (const id of read) await backend.handlers.get('doc:info')(null, id);
+    await backend.handlers.get('view:list')(null, 'library');
+    assert.deepEqual([space, meeting].map((id) => unsubscribed.includes(id)), [true, true], 'a space and a write-up\u2019s meeting read by the sidebar are let go with the oldest reads');
+    console.log('ok  the sidebar\'s reads of a page and its meeting or space are let go past LIVE_ROWS');
+  }
+
   // A read in flight holds its document. The refresh sweep lets go of the rows a view no longer lists, and letting go
   // of a bootstrap somebody is waiting for rejects it as 'unsubscribed <id>' under the reader — which is exactly what
   // a doc:info for a row of the view you just left reported, in red, whenever a view change raced it.
