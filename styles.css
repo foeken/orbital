@@ -30,6 +30,20 @@ html { --nucleo-stroke-width: 1; }
    one `--hue-color` token on <html>: a custom property substitutes its own var() where it is *declared*, and
    <html> has no `--hue` (the renderer sets it per element), so such a token computes invalid and every hued thing
    on the page loses its colour entirely. */
+/* Theme tokens: the surface everything floating is drawn on (menus, the toolbar, ⌘K, the dialogs), the scrim behind a
+   dialog, their two shadows, the focus colour, and the layers that stack over the page. The dark theme below gives
+   the same names its own values, so a rule written with them needs no dark twin. docs/UI-PATTERNS.md lists them. */
+:root {
+  --surface: #fff; --scrim: rgba(0, 0, 0, .12); --focus: #b5d0ee;
+  --shadow-menu: 0 8px 30px rgba(0, 0, 0, .16), 0 0 0 1px rgba(0, 0, 0, .06); /* a menu, a dropdown */
+  --shadow-card: 0 12px 40px rgba(0, 0, 0, .18), 0 0 0 1px rgba(0, 0, 0, .05); /* a dialog's card */
+  --z-toolbar: 9; --z-palette: 10; --z-recorder: 11; --z-toast: 12; --z-drag: 15; --z-lightbox: 20; /* over the page, lowest first */
+}
+[data-theme="dark"] {
+  --surface: #242729; --scrim: rgba(0, 0, 0, .52); --focus: #58768a;
+  --shadow-menu: 0 8px 30px rgba(0, 0, 0, .45), 0 0 0 1px rgba(255, 255, 255, .08);
+  --shadow-card: 0 12px 40px rgba(0, 0, 0, .5), 0 0 0 1px rgba(255, 255, 255, .08);
+}
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
   font-size: 16px; color: #1a1a1a; background: #fff;
@@ -256,8 +270,7 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 /* Refresh is a header button beside the fold one (renderer/pills.js), and it answers the press before the query
    does: one turn of the glyph, on transform alone, and only where motion is welcome — under reduced motion the
    class selects nothing and the icon stands still. */
-@media (prefers-reduced-motion: no-preference) { .navbtn svg.spin { animation: pill-spin calc(var(--dur-slow) * 2) var(--ease-move); transform-origin: 50% 50%; } }
-@keyframes pill-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: no-preference) { .navbtn svg.spin { animation: turn calc(var(--dur-slow) * 2) var(--ease-move); transform-origin: 50% 50%; } }
 /* A saved search folds its pills away behind the header button (renderer/pills.js). They arrive and leave one after
    another, left to right -- --i is the pill's place in the row -- and the row's own height follows them, so what is
    under it slides rather than jumping the moment the last pill has gone. The height travels to and from auto
@@ -283,7 +296,7 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 .pill.save, .pill.savesearch { background: #e6f4ea; color: #2e7d4f; }
 .pill.save:hover, .pill.savesearch:hover { background: #d7ecdd; }
 .pill.save:focus, .pill.savesearch:focus { box-shadow: 0 0 0 2px #a8d8ba; }
-.menu { position: absolute; left: 0; top: calc(100% + 6px); z-index: 5; min-width: 260px; max-height: min(400px, calc(100dvh - 96px)); overflow-y: auto; overscroll-behavior-y: contain; padding: 8px; background: #fff; border-radius: 10px; box-shadow: 0 8px 30px rgba(0, 0, 0, .16), 0 0 0 1px rgba(0, 0, 0, .06); font-weight: 400; color: #1a1a1a; text-align: left; }
+.menu { position: absolute; left: 0; top: calc(100% + 6px); z-index: 5; min-width: 260px; max-height: min(400px, calc(100dvh - 96px)); overflow-y: auto; overscroll-behavior-y: contain; padding: 8px; background: var(--surface); border-radius: 10px; box-shadow: var(--shadow-menu); font-weight: 400; color: #1a1a1a; text-align: left; }
 .menu.up { top: auto; bottom: calc(100% + 6px); } /* no room under the button: the menu opens upwards instead */
 .menu .mrow { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 8px; font-size: 16px; cursor: pointer; user-select: none; }
 .menu .mrow.active { background: #d6e6fa; }
@@ -314,8 +327,7 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 .menu.search .msearch .micon, .menu.search .msearch .micon svg { width: 15px; height: 15px; }
 .menu.search .mrow { font-size: 14px; padding: 6px 10px; }
 .pill:focus .menu .msearch .mcaret { display: block; }
-@media (prefers-reduced-motion: no-preference) { .menu .msearch .mcaret { animation: mcaret-blink 1s steps(1) infinite; } }
-@keyframes mcaret-blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: no-preference) { .menu .msearch .mcaret { animation: blink 1s steps(1) infinite; } }
 .menu .mdiv { height: 1px; margin: 6px 4px; background: #e6e6e6; }
 
 .scroll { position: relative; flex: 1; overflow-y: auto; padding: 4px 32px 40px 16px; } /* 4px at the top: the first row's focus ring (2px, 2px out) is drawn outside the row, and a scroll box clips at its edge; relative: the loading animation fills it */
@@ -437,7 +449,7 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 /* Where it will land, at the level it will land on: a line across the outline from that level's left edge, with a
    dot on the end the row will start at. Fixed, because it is drawn from what the rows measure on screen. */
 /* It glides from gap to gap rather than jumping (Glide); shown again after a drop it starts where it is put. */
-#dropline { position: fixed; z-index: 15; height: 2px; margin-top: -1px; border-radius: 2px; background: #5b9bd5; pointer-events: none;
+#dropline { position: fixed; z-index: var(--z-drag); height: 2px; margin-top: -1px; border-radius: 2px; background: #5b9bd5; pointer-events: none;
   transition: left var(--dur-quick) var(--ease-move), top var(--dur-quick) var(--ease-move), width var(--dur-quick) var(--ease-move); }
 #dropline::before { content: ''; position: absolute; left: -5px; top: -3px; width: 8px; height: 8px; border-radius: 50%; background: inherit; }
 .drop-into { border-radius: 6px; box-shadow: 0 0 0 2px #5b9bd5; animation: ring-in var(--dur-base) var(--ease-spring); } /* the group a task dropped here joins (renderer/drag.js groupAt) */
@@ -547,7 +559,7 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 .text { display: inline; outline: none; white-space: pre-wrap; overflow-wrap: anywhere; color: #3c3e42; }
 .text:empty { display: inline-block; min-width: 1px; min-height: 1lh; vertical-align: top; } /* an empty node still has a box, so the caret shows */
 /* a read-only row takes focus but shows no caret, so the ring is the only sign the keyboard is on it (images ring their own <img>) */
-.text[tabindex]:not(.image):focus { outline: 2px solid #b5d0ee; outline-offset: 2px; border-radius: 3px; }
+.text[tabindex]:not(.image):focus { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
 .check + .body { padding-left: 0; }
 .document.done > .line .text { color: #999; text-decoration: line-through; }
 .meta { margin-left: 8px; color: #999; font-size: 14px; white-space: nowrap; user-select: none; }
@@ -587,7 +599,7 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 /* no caret shows beside a lone mention chip or in a read-only reference row, so the focus is drawn around them instead */
 /* A lone chip (Tana's full-reference presentation) keeps its caret: renderSegs anchors a position before it, so the
    caret can be put there and typing prepends text, which is what turns the block into an inline reference. */
-.text.chiponly:focus .mention, .selected .text.chiponly .mention, .reference .text:not([contenteditable]):focus { outline: 2px solid #b5d0ee; outline-offset: 2px; border-radius: 3px; }
+.text.chiponly:focus .mention, .selected .text.chiponly .mention, .reference .text:not([contenteditable]):focus { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
 /* A resolved full reference stands in for the node it points at — its box, its status, its tags — so the focus and
    the selection are drawn around the whole row rather than around the chip alone. */
 .node.fullref .text.chiponly .mention { outline: none; }
@@ -596,7 +608,7 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 .node.fullref :is(.text, .fvalue) .mention { color: inherit; text-decoration: none; }
 /* the row's own line, not `:focus-within` on the row: the children below it are another document's, and a caret
    down there is not the caret on the reference */
-.node.fullref > .line:focus-within, .selected.node.fullref > .line { outline: 2px solid #b5d0ee; outline-offset: 2px; border-radius: 4px; }
+.node.fullref > .line:focus-within, .selected.node.fullref > .line { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
 /* what hangs under a reference belongs to the node it points at, not to this outline: the guide line says so. It is
    the same line as every other guide, dashed — a background-painted one was tried for a longer dash and gave itself
    away: a border snaps to device pixels and a 1px background column does not, so it came out wider and washed out. */
@@ -650,7 +662,7 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 /* divider: an atomic block, focusable like an image so the keyboard can still reach and delete it */
 /* a full view of an image, over everything: Space on the row or a click on it, and a click anywhere closes it */
 /* The scrim fades in over the page and the picture grows out of its row (renderer/render.js openImage); closing plays it back. */
-.lightbox { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; background: rgba(20, 22, 24, .72); cursor: zoom-out; outline: none;
+.lightbox { position: fixed; inset: 0; z-index: var(--z-lightbox); display: flex; align-items: center; justify-content: center; background: rgba(20, 22, 24, .72); cursor: zoom-out; outline: none;
   transition: opacity var(--dur-base) var(--ease-out); }
 @starting-style { .lightbox { opacity: 0; } }
 .lightbox.out { opacity: 0; transition-duration: var(--dur-quick); transition-timing-function: var(--ease-in); }
@@ -658,7 +670,7 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 .text.image img { cursor: zoom-in; }
 .text.divider { display: block; cursor: default; }
 .text.divider hr { border: 0; border-top: 1px solid #dcdcdc; margin: 10px 0; }
-.text.divider:focus hr, .selected .text.divider hr { border-top-color: #b5d0ee; }
+.text.divider:focus hr, .selected .text.divider hr { border-top-color: var(--focus); }
 /* a table block (renderer/table.js): the row focuses like an image, the cells are where the caret goes */
 .text.table { display: block; cursor: default; overflow-x: auto; }
 .text.table table { border-collapse: collapse; margin: 4px 0; }
@@ -776,7 +788,7 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 .filtered { padding: 18px 10px 8px 16px; color: #999; font-weight: 600; } /* lines up with the title, filter and pills */
 
 /* selection toolbar: floats over a non-empty selection inside an editable node (style dropdown, B I S code, @) */
-.toolbar { position: fixed; z-index: 9; display: flex; align-items: center; gap: 2px; padding: 4px; background: #fff; border-radius: 8px; box-shadow: 0 6px 24px rgba(0, 0, 0, .18), 0 0 0 1px rgba(0, 0, 0, .06); }
+.toolbar { position: fixed; z-index: var(--z-toolbar); display: flex; align-items: center; gap: 2px; padding: 4px; background: var(--surface); border-radius: 8px; box-shadow: 0 6px 24px rgba(0, 0, 0, .18), 0 0 0 1px rgba(0, 0, 0, .06); }
 .toolbar[hidden] { display: none; }
 /* Surface: it rises in over a selection and sinks away; from one selection to the next it glides (Glide) rather than
    jumping. A toolbar arriving from nothing starts where it is put, since there is no earlier place to glide from. */
@@ -810,21 +822,24 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 .login button:hover { background: #f0f0f0; }
 
 /* command palette (Cmd+K) */
-.palette { position: fixed; inset: 0; z-index: 10; background: rgba(0, 0, 0, .12); display: flex; justify-content: center; align-items: flex-start; padding: 12vh 24px 0; }
-.palette[hidden] { display: none; }
+/* ⌘K and the key recorder over it share a scrim, and arrive and leave alike (Surface, below) */
+.palette, .recorder { position: fixed; inset: 0; display: flex; justify-content: center; align-items: flex-start; padding: 12vh 24px 0; background: var(--scrim); }
+.palette { z-index: var(--z-palette); }
+.recorder { z-index: var(--z-recorder); }
+.palette[hidden], .recorder[hidden] { display: none; }
 /* Surface: the scrim fades and the card rises in; closing, both go quicker. Every mode is the same element shown and
    hidden, so all of them — Cmd+K, Search, Assign, Set status, the @ dropdown — arrive and leave alike. Switching mode
    while it is open slides the list across instead (renderer/motion.js swapPanel). */
-.palette { transition: opacity var(--dur-base) var(--ease-out), display var(--dur-base) allow-discrete; }
-.palette[hidden] { opacity: 0; pointer-events: none; transition-duration: var(--dur-quick); transition-timing-function: var(--ease-in); }
-@starting-style { .palette:not([hidden]) { opacity: 0; } }
+.palette, .recorder { transition: opacity var(--dur-base) var(--ease-out), display var(--dur-base) allow-discrete; }
+.palette[hidden], .recorder[hidden] { opacity: 0; pointer-events: none; transition-duration: var(--dur-quick); transition-timing-function: var(--ease-in); }
+@starting-style { .palette:not([hidden]), .recorder:not([hidden]) { opacity: 0; } }
 .palette .card { transform-origin: 50% 0; transition: transform var(--dur-base) var(--ease-out), opacity var(--dur-base) var(--ease-out); }
 .palette[hidden] .card { opacity: 0; transform: translateY(-4px) scale(.98); transition-duration: var(--dur-quick); transition-timing-function: var(--ease-in); }
 @starting-style { .palette:not([hidden]) .card { opacity: 0; transform: translateY(-8px) scale(.97); } }
 .palette.anchored .card { transform-origin: 0 0; }
 .palette .list.swap { animation: swap-in var(--dur-base) var(--ease-out); }
 /* A notice (showNote, renderer/toolbar.js): a toast at the foot of the window, above the palette, fading on its own */
-.toast { position: fixed; left: 50%; bottom: 24px; z-index: 12; max-width: min(480px, calc(100vw - 48px)); padding: 8px 14px; border-radius: 8px;
+.toast { position: fixed; left: 50%; bottom: 24px; z-index: var(--z-toast); max-width: min(480px, calc(100vw - 48px)); padding: 8px 14px; border-radius: 8px;
   background: #1f2328; color: #fff; font-size: 13px; line-height: 1.4; box-shadow: 0 6px 24px rgba(0, 0, 0, .18);
   opacity: 0; visibility: hidden; transform: translate(-50%, 6px) scale(.96); pointer-events: none;
   transition: opacity var(--dur-quick) var(--ease-in), transform var(--dur-quick) var(--ease-in), visibility 0s linear var(--dur-quick); }
@@ -832,7 +847,7 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 .toast.error, [data-theme="dark"] .toast.error { background: #c0392b; color: #fff; }
 .palette .card {
   width: 100%; max-width: 620px; max-height: min(70vh, 440px); display: flex; flex-direction: column; overflow: hidden;
-  background: #fff; border-radius: 12px; box-shadow: 0 12px 40px rgba(0, 0, 0, .18), 0 0 0 1px rgba(0, 0, 0, .05);
+  background: var(--surface); border-radius: 12px; box-shadow: var(--shadow-card);
 }
 .palette input { border: 0; outline: none; font: inherit; font-size: 17px; color: #1a1a1a; padding: 16px 20px; border-bottom: 1px solid #eee; }
 /* Create task (task.html): the palette's card, with a line saying why the task could not be made */
@@ -871,13 +886,12 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
    turning is visible without competing with the stars. Still — and readable — where motion is not welcome. */
 .palette .ricon.thinking { color: #8a8a8a; }
 @media (prefers-reduced-motion: no-preference) {
-  .palette .ricon.thinking svg { animation: sparkle-orbit calc(var(--dur-loop) * 2) linear infinite; transform-origin: 50% 50%; }
+  .palette .ricon.thinking svg { animation: turn calc(var(--dur-loop) * 2) linear infinite; transform-origin: 50% 50%; }
   .palette .ricon.thinking svg path { transform-origin: 50% 50%; transform-box: fill-box; animation: sparkle-twinkle var(--dur-loop) ease-in-out infinite; }
   .palette .ricon.thinking svg path:nth-child(2) { animation-delay: calc(var(--dur-loop) / 3); }
   .palette .ricon.thinking svg path:nth-child(5) { animation-delay: calc(var(--dur-loop) * 2 / 3); }
   .palette .ricon.thinking svg path:nth-child(3), .palette .ricon.thinking svg path:nth-child(4) { animation: sparkle-trail calc(var(--dur-loop) * 2) ease-in-out infinite; }
 }
-@keyframes sparkle-orbit { to { transform: rotate(360deg); } }
 @keyframes sparkle-twinkle { 0%, 100% { opacity: .25; transform: scale(.55) rotate(-25deg); } 45% { opacity: 1; transform: scale(1.2) rotate(0deg); } }
 @keyframes sparkle-trail { 0%, 100% { opacity: .15; } 50% { opacity: .75; } }
 /* And the landing: the answer takes the turning glyph's place, so it comes out of the spin and settles rather than
@@ -898,7 +912,7 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
    Only the display waits on :not([hidden]), the same weight as .palette[hidden], which would keep it on screen. */
 .palette.anchored { padding: 0; background: none; }
 .palette.anchored:not([hidden]) { display: block; }
-.palette.anchored .card { position: absolute; border-radius: 10px; box-shadow: 0 8px 30px rgba(0, 0, 0, .16), 0 0 0 1px rgba(0, 0, 0, .06); }
+.palette.anchored .card { position: absolute; border-radius: 10px; box-shadow: var(--shadow-menu); }
 .palette.anchored input { font-size: 15px; padding: 10px 14px; }
 .palette.anchored .list { padding: 6px 6px 8px; }
 .palette.anchored .group { font-size: 12px; padding: 8px 10px 4px; }
@@ -906,21 +920,15 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 .palette.anchored .hint { font-size: 13px; }
 
 /* hotkey recorder (Cmd+Shift+K on a Cmd+K row) */
-.recorder { position: fixed; inset: 0; z-index: 11; display: flex; justify-content: center; align-items: flex-start; padding: 12vh 24px 0; background: rgba(0, 0, 0, .12); } /* same scrim as the palette it opens over */
-.recorder[hidden] { display: none; }
-/* Surface, the same arrival and leaving as the palette it opens over; the keys pop in as they are pressed (Pop), and
+/* Surface: the card arrives as the palette's does; the keys pop in as they are pressed (Pop), and
    a combination the app already owns shakes its warning (the refusal pattern). */
-.recorder { transition: opacity var(--dur-base) var(--ease-out), display var(--dur-base) allow-discrete; }
-.recorder[hidden] { opacity: 0; pointer-events: none; transition-duration: var(--dur-quick); transition-timing-function: var(--ease-in); }
-@starting-style { .recorder:not([hidden]) { opacity: 0; } }
 .recorder .card { transform-origin: 50% 0; transition: transform var(--dur-base) var(--ease-out); }
 .recorder[hidden] .card { transform: translateY(-4px) scale(.98); transition-duration: var(--dur-quick); }
 @starting-style { .recorder:not([hidden]) .card { transform: translateY(-8px) scale(.97); } }
 .recorder .keys > span { animation: pop-in var(--dur-base) var(--ease-spring) backwards; }
 .recorder .rwarn:not([hidden]) { animation: shake var(--dur-slow) var(--ease-out); }
 .recorder .card {
-  width: 100%; max-width: 620px; padding: 36px 36px 28px; background: #fff; border-radius: 12px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, .18), 0 0 0 1px rgba(0, 0, 0, .05);
+  width: 100%; max-width: 620px; padding: 36px 36px 28px; background: var(--surface); border-radius: 12px; box-shadow: var(--shadow-card);
 }
 .recorder .rlabel { font-size: 13px; color: #999; }
 .recorder h2 { margin: 2px 0 18px; font-size: 20px; font-weight: 600; letter-spacing: -0.2px; }
@@ -965,7 +973,7 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 [data-theme="dark"] .pill.save, [data-theme="dark"] .pill.savesearch { background: #233a2c; color: #8fcfa6; }
 [data-theme="dark"] .pill.save:hover, [data-theme="dark"] .pill.savesearch:hover { background: #2c4736; }
 [data-theme="dark"] .pill.save:focus, [data-theme="dark"] .pill.savesearch:focus { box-shadow: 0 0 0 2px #46705a; }
-[data-theme="dark"] .menu { background: #242729; color: #c9c9c9; box-shadow: 0 8px 30px rgba(0, 0, 0, .45), 0 0 0 1px rgba(255, 255, 255, .08); }
+[data-theme="dark"] .menu { color: #c9c9c9; }
 [data-theme="dark"] .toast { background: #e8eaeb; color: #1a1a1a; box-shadow: 0 6px 24px rgba(0, 0, 0, .45); }
 [data-theme="dark"] .menu .mrow.active { background: #344047; }
 [data-theme="dark"] .menu .mrow.disabled { color: #6a7073; }
@@ -1008,8 +1016,6 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 [data-theme="dark"] .text.table .cellimg.demo { background: #303436; }
 [data-theme="dark"] .text.upload { background: #303436; color: #8d9396; }
 [data-theme="dark"] .text.image:focus img, [data-theme="dark"] .selected .text.image img { outline-color: #58768a; }
-[data-theme="dark"] .text.chiponly:focus .mention, [data-theme="dark"] .selected .text.chiponly .mention, [data-theme="dark"] .reference .text:not([contenteditable]):focus { outline-color: #58768a; }
-[data-theme="dark"] .node.fullref > .line:focus-within, [data-theme="dark"] .selected.node.fullref > .line { outline-color: #58768a; }
 [data-theme="dark"] :is(.text, .fvalue) .mention { color: #8fc1e1; }
 [data-theme="dark"] :is(.text, .fvalue) .mention, [data-theme="dark"] :is(.text, .fvalue) .mention .mlabel { text-decoration-color: #445662; } /* dimmer than the words, as the light tint is paler than them */
 [data-theme="dark"] :is(.text, .fvalue) .mention:hover { color: #b5ddf4; }
@@ -1027,12 +1033,11 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 [data-theme="dark"] .node.t-code > .line .text { background: #282b2d; }
 [data-theme="dark"] .node.t-quote > .line .text { border-left-color: #454b4e; color: #a8adaf; }
 [data-theme="dark"] .text.divider hr { border-top-color: #3a3f41; }
-[data-theme="dark"] .text.divider:focus hr, [data-theme="dark"] .selected .text.divider hr { border-top-color: #58768a; }
 [data-theme="dark"] .text.table th, [data-theme="dark"] .text.table td { border-color: #3a3f41; }
 [data-theme="dark"] .text.table th { background: #2a2e30; }
 [data-theme="dark"] .text.table th:focus-within, [data-theme="dark"] .text.table td:focus-within { box-shadow: inset 0 0 0 2px #58768a; }
 [data-theme="dark"] .text.table:focus table, [data-theme="dark"] .selected .text.table table { outline-color: #58768a; }
-[data-theme="dark"] .toolbar { background: #242729; box-shadow: 0 6px 24px rgba(0, 0, 0, .5), 0 0 0 1px rgba(255, 255, 255, .08); }
+[data-theme="dark"] .toolbar { box-shadow: 0 6px 24px rgba(0, 0, 0, .5), 0 0 0 1px rgba(255, 255, 255, .08); }
 [data-theme="dark"] .tbtn { color: #c9c9c9; }
 [data-theme="dark"] .tbtn:hover, [data-theme="dark"] .tbtn.style.open { background: #2f3436; }
 [data-theme="dark"] .tbtn:focus { box-shadow: 0 0 0 2px #58768a; }
@@ -1040,7 +1045,6 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 [data-theme="dark"] .tbtn .tcaret { color: #9a9fa1; }
 [data-theme="dark"] .glyph { color: #aeb4b6; }
 [data-theme="dark"] .palette .row.active .glyph, [data-theme="dark"] .menu .mrow.active .glyph { color: #d0d2d2; }
-[data-theme="dark"] .text[tabindex]:not(.image):focus { outline-color: #58768a; }
 [data-theme="dark"] .selected { background: #2d4149; }
 [data-theme="dark"] .children { border-left-color: #34393b; }
 [data-theme="dark"] .children.loading { color: #858b8e; }
@@ -1050,10 +1054,7 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 [data-theme="dark"] .login p { color: #9a9a9a; }
 [data-theme="dark"] .login button:hover { background: #363a3c; }
 
-[data-theme="dark"] .palette { background: rgba(0, 0, 0, .52); }
-[data-theme="dark"] .palette.anchored { background: none; }
-[data-theme="dark"] .recorder { background: rgba(0, 0, 0, .52); }
-[data-theme="dark"] .palette .card, [data-theme="dark"] .recorder .card { background: #242729; box-shadow: 0 12px 40px rgba(0, 0, 0, .5), 0 0 0 1px rgba(255, 255, 255, .08); }
+[data-theme="dark"] .palette.anchored .card { box-shadow: var(--shadow-card); } /* ponytail: the dark @ dropdown wears a dialog's shadow, the light one a menu's; kept as it was */
 [data-theme="dark"] .palette input { color: #c9c9c9; border-bottom-color: #3a3f41; background: #242729; }
 [data-theme="dark"] .palette input::placeholder { color: #858b8e; }
 [data-theme="dark"] .palette .ptext { color: #c9c9c9; border-bottom-color: #3a3f41; background: #242729; }
@@ -1131,6 +1132,8 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 @keyframes row-out { from { background-color: var(--tint); } 45% { opacity: 0; height: auto; } to { opacity: 0; height: 0; margin-top: 0; margin-bottom: 0; background-color: transparent; } }
 @keyframes shake { 20% { transform: translateX(-4px); } 40% { transform: translateX(4px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(2px); } }
 @keyframes ring-in { from { box-shadow: 0 0 0 7px transparent; } }
+@keyframes turn { to { transform: rotate(360deg); } }
+@keyframes blink { 50% { opacity: 0; } } /* a caret: the pill menu's search, the help tour's typing */
 @keyframes dot-read { from { background: #0090ff; transform: scale(1.6); } }
 
 /* Press: every button answers the finger by easing down a little, and settles back on a spring when let go. The
@@ -1170,7 +1173,7 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
    under no-preference, all one --hv-loop long, so a keycap's delay lines it up with the scene it presses in. */
 body.overlaypage, [data-theme="dark"] body.overlaypage { background: transparent; } /* help.html, task.html: only the scrim and the card over the window's pages */
 .help { position: fixed; inset: 0; width: auto; height: auto; max-width: none; max-height: none; margin: 0; padding: 9vh 24px 0; border: 0;
-  background: rgba(0, 0, 0, .12); color: inherit; justify-content: center; align-items: flex-start; -webkit-app-region: no-drag; }
+  background: var(--scrim); color: inherit; justify-content: center; align-items: flex-start; -webkit-app-region: no-drag; }
 .help[open] { display: flex; }
 .help::backdrop { background: none; }
 .help { transition: opacity var(--dur-base) var(--ease-out); }
@@ -1285,7 +1288,7 @@ body.overlaypage, [data-theme="dark"] body.overlaypage { background: transparent
   .hpage.on .hv-at5 { animation-delay: .3s; } .hpage.on .hv-at10 { animation-delay: .6s; } .hpage.on .hv-at30 { animation-delay: 1.8s; }
   .hpage.on .hv-at35 { animation-delay: 2.1s; } .hpage.on .hv-at42 { animation-delay: 2.52s; } .hpage.on .hv-at50 { animation-delay: 3s; }
   .hpage.on .hv-at55 { animation-delay: 3.3s; } .hpage.on .hv-at60 { animation-delay: 3.6s; }
-  .hpage.on .hv-caret { animation: hv-blink 1s steps(1) infinite; }
+  .hpage.on .hv-caret { animation: blink 1s steps(1) infinite; }
   /* 1 */
   .hpage.on .hv-moon { animation: hv-moon 7s linear infinite; }
   .hpage.on .hv-moonbox { animation: hv-moon-z 7s linear infinite; }
@@ -1322,7 +1325,6 @@ body.overlaypage, [data-theme="dark"] body.overlaypage { background: transparent
   .hpage.on .hv-rec span:nth-child(2) { animation-delay: .36s; } .hpage.on .hv-rec span:nth-child(3) { animation-delay: .72s; }
   .hpage.on .hv-own { animation: hv-keys-own var(--hv-loop) var(--ease-spring) infinite both; }
 }
-@keyframes hv-blink { 50% { opacity: 0; } }
 @keyframes hv-press { 0% { opacity: 0; transform: translateY(8px) scale(.9); } 3% { opacity: 1; transform: none; } 6% { transform: translateY(2px) scale(.92); box-shadow: 0 0 0 rgba(0, 0, 0, .14); } 10% { transform: none; } 17% { opacity: 1; } 22%, 100% { opacity: 0; } }
 @keyframes hv-moon { from { offset-distance: 0%; } to { offset-distance: 100%; } }
 @keyframes hv-moon-z { 0%, 49.9% { z-index: 3; } 50%, 100% { z-index: 0; } }
@@ -1347,11 +1349,10 @@ body.overlaypage, [data-theme="dark"] body.overlaypage { background: transparent
 @keyframes hv-keys-pop { 0%, 26% { opacity: 0; transform: scale(.5); } 30%, 100% { opacity: 1; transform: none; } }
 @keyframes hv-keys-own { 0%, 58% { opacity: 0; transform: scale(.5); } 62%, 94% { opacity: 1; transform: none; } 98%, 100% { opacity: 0; } }
 
-[data-theme="dark"] .help { background: rgba(0, 0, 0, .52); }
-[data-theme="dark"] .help .card { background: #242729; box-shadow: 0 12px 40px rgba(0, 0, 0, .5), 0 0 0 1px rgba(255, 255, 255, .08); }
 [data-theme="dark"] .help h2, [data-theme="dark"] .help p b { color: #e2e4e4; }
 [data-theme="dark"] .help :is(p, .hkeys) { color: #adb1b2; }
 [data-theme="dark"] .help kbd { background: #303436; color: #c9c9c9; box-shadow: inset 0 -1px 0 rgba(0, 0, 0, .3); }
+[data-theme="dark"] .help .card { background: #242729; box-shadow: 0 12px 40px rgba(0, 0, 0, .5), 0 0 0 1px rgba(255, 255, 255, .08); }
 [data-theme="dark"] .help .hclose:hover { background: rgba(255, 255, 255, .08); color: #c9c9c9; }
 [data-theme="dark"] .help .hdots button { background: #454b4e; }
 [data-theme="dark"] .help .hdots button.on { background: #6ea8d6; }

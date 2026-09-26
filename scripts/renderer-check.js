@@ -542,9 +542,9 @@ for (const property of ['width', 'height', 'margin', 'padding', 'font-size', 'op
 assert.doesNotMatch(styleSheet, /\.cbadge \{[^\n]*animation:/, 'the badge itself never animates: only the sheen inside it does');
 // The Refresh button's single turn is opt-in the same way: under reduced motion the rule the class selects is not
 // declared, so the glyph stays where it is. Transform only, so a turning icon cannot move anything around it.
-assert.match(styleSheet, /@media \(prefers-reduced-motion: no-preference\) \{ \.navbtn svg\.spin \{ animation: pill-spin/,
+assert.match(styleSheet, /@media \(prefers-reduced-motion: no-preference\) \{ \.navbtn svg\.spin \{ animation: turn /,
   'the Refresh icon turns only where motion is welcome');
-const turn = styleSheet.match(/@keyframes pill-spin \{[^\n]*\}/)[0];
+const turn = styleSheet.match(/@keyframes turn \{[^\n]*\}/)[0];
 assert.match(turn, /transform: rotate\(360deg\)/, 'and it is one full turn');
 // A header button that is offered on some pages and not others has to be able to disappear: .navbtn sets its own
 // display, which wins over the browser's rule for [hidden] and left Refresh and the fold button as blank slots.
@@ -586,7 +586,7 @@ assert.ok(icons.ICONS.chatgpt && icons.ICONS.chatgpt.includes('currentColor'), '
 // What a model suggested is drawn with its own glyph, so a row the app worked out is never mistaken for one you
 // typed or one Tana knows, and the glyph breathes only where motion is welcome.
 assert.ok(icons.ICONS.sparkle && icons.ICONS.sparkle.includes('currentColor'), 'the suggestion row uses the supplied sparkle glyph');
-assert.match(styleSheet, /@media \(prefers-reduced-motion: no-preference\) \{\s*\.palette \.ricon\.thinking svg \{ animation: sparkle-orbit/, 'the waiting glyph turns behind the reduced-motion gate');
+assert.match(styleSheet, /@media \(prefers-reduced-motion: no-preference\) \{\s*\.palette \.ricon\.thinking svg \{ animation: turn /, 'the waiting glyph turns behind the reduced-motion gate');
 assert.match(styleSheet, /\.palette \.ricon\.thinking svg path \{ transform-origin: 50% 50%; transform-box: fill-box;/, 'and each star twinkles around its own centre, not the icon\u2019s');
 // The answer takes that glyph's place rather than replacing it between two frames: the row it arrives in settles
 // out of the spin, and the row carries the class that says so.
