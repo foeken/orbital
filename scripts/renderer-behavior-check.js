@@ -6852,7 +6852,8 @@ async function runStagedSearchReloadCheck() {
   const api = vm.runInNewContext(`
     const TIMELINE_PAGE = 'orbital:timeline', SEARCH_ID = 'tana:search:'; let timelinePartial = false;
     const kids = new Map(), searchRows = new Map(), filters = new Map(), searchFilters = new Map();
-    const isTypeId = () => false, typeFilter = () => ({}), syncUploads = (id, rows) => rows, render = () => {}, showError = (e) => { throw e; };
+    const isTypeId = (id) => String(id).startsWith('tana:type:'), syncUploads = (id, rows) => rows, render = () => {}, showError = (e) => { throw e; };
+    const typeFilter = (id) => { if (!filters.has(id)) filters.set(id, { types: [id] }); return filters.get(id); };
     const sameFilter = (a, b) => JSON.stringify(a) === JSON.stringify(b);
     const answers = []; // every read still out, stored query or preview, in the order it was asked
     const ask = () => new Promise((resolve) => answers.push(resolve));
@@ -6890,6 +6891,11 @@ async function runStagedSearchReloadCheck() {
   await api.answer(7, ['older page']); await first;
   assert.deepEqual(plain(api.rows('orbital:timeline')), ['older page'], 'a page that is no saved search installs an answer even while a newer read is out');
   await api.answer(8, ['newer page']); await second;
+  // A type page's two reads of one unchanged filter: the older answering last does not replace the newer rows
+  const type = 'tana:type:01j0type000000000000000000';
+  const typeFirst = api.reload(type), typeSecond = api.reload(type); // 9, 10
+  await api.answer(10, ['newer type rows']); await typeSecond; await api.answer(9, ['older type rows']); await typeFirst;
+  assert.deepEqual(plain(api.rows(type)), ['newer type rows'], 'an older read of a type page answering last leaves the newer rows');
   console.log('ok  a saved search keeps the rows of its newest read: staged pills, a second preview and a Save all retire the reads still out');
 }
 

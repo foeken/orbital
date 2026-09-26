@@ -366,9 +366,9 @@ async function loadRoots() {
   }
   for (const d of drafts) { const s = views.find((x) => x.id === d.view); if (s) s.nodes.splice(d.i, 0, d.node); }
 }
-// saved search id -> its newest read: an answer from an older read that lands later is dropped. A preview of staged
+// saved search or type page id -> its newest read: an answer from an older read that lands later is dropped. A preview of staged
 // pills (previewRows) takes a number too, so a search staged, or staged and saved, while its stored query was out keeps
-// the rows that answer what it shows now. Only saved searches: every other page takes each answer as it lands, which
+// the rows that answer what it shows now. Only those two: every other page takes each answer as it lands, which
 // what waits on a reload (the Timeline's paging) counts on.
 const reloadSeq = new Map();
 const nextRead = (docId) => { const seq = (reloadSeq.get(docId) || 0) + 1; reloadSeq.set(docId, seq); return seq; };
@@ -376,7 +376,7 @@ async function reload(docId) {
   const seq = nextRead(docId);
   // A type page asks its filter; an answer to a filter the pills have since moved on from is dropped, or clicking
   // through a menu quickly could leave the page on an older choice than the pills show.
-  if (isTypeId(docId)) { const asked = typeFilter(docId), rows = await tana.searchPreview(asked); if (filters.get(docId) === asked) kids.set(docId, rows); return; }
+  if (isTypeId(docId)) { const asked = typeFilter(docId), rows = await tana.searchPreview(asked); if (filters.get(docId) === asked && reloadSeq.get(docId) === seq) kids.set(docId, rows); return; } // and a newer read of the same filter wins
   let rows;
   // the whole page is in, or the read failed: no later part of it stands in for the page either way (renderer/timeline.js)
   try { rows = await tana.children(docId); } finally { if (docId === TIMELINE_PAGE) timelinePartial = false; }
