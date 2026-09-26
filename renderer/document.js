@@ -31,8 +31,13 @@ function loadPins() {
   if (!doc || !tana.pinState || doc.appPage) { pinInfo = null; return; } // a page of the app's own (Notifications) has no pins
   tana.pinState(doc.id).then((s) => {
     pinInfo = s ? { docId: doc.id, ...s } : null;
+    pinFailed = null;
     if (!palette.hidden && (palMode === 'cmd' || palMode === 'pins')) renderPalette();
-  }, showError);
+  }, (e) => {
+    pinFailed = { docId: doc.id, message: (e && e.message) || String(e) };
+    showError(e);
+    if (!palette.hidden && palMode === 'pins') renderPalette();
+  });
 }
 function holdDatePin(doc) { if (doc && groupBy() === 'responsibility' && isTask(doc)) holdRow(doc); }
 function pinAction(op, target, date) { if (target === 'today' && typeof holdDatePin === 'function') holdDatePin(palDoc); run(async () => { await tana[op](pinInfo.docId, target, date); loadPins(); }); } // date: a local YYYY-MM-DD for the 'today' target; omitted means today
@@ -71,7 +76,10 @@ function pinResult(ctx, node) {
 const PIN_GROUP = 'Pinned · ↩ unpins';
 const pinDateLabel = (date) => { const near = date === localDate() ? 'Today' : date === localDate(1) ? 'Tomorrow' : date === localDate(-1) ? 'Yesterday' : ''; return near ? near + ' · ' + date : date; };
 function editPinRows(q) {
-  if (!pinInfo || !palDoc || pinInfo.docId !== palDoc.id) return [{ group: PIN_GROUP, label: 'Loading…', disabled: true }];
+  if (!pinInfo || !palDoc || pinInfo.docId !== palDoc.id) {
+    const failed = pinFailed && palDoc && pinFailed.docId === palDoc.id; // a read that failed says why, and stops saying Loading… (#394)
+    return [{ group: PIN_GROUP, label: failed ? pinFailed.message : 'Loading…', disabled: true, note: true }];
+  }
   const listed = [];
   if (pinInfo.sidebar) listed.push({ group: PIN_GROUP, icon: 'pinned', label: 'Sidebar', keepOpen: true, run: () => pinAction('unpin', 'sidebar') });
   for (const date of [...pinInfo.dates].sort()) listed.push({ group: PIN_GROUP, icon: 'pinDate', label: pinDateLabel(date), keepOpen: true, run: () => pinAction('unpin', 'today', date) });
@@ -100,7 +108,7 @@ function editPinRows(q) {
   return rows;
 }
 function openPinsPalette(doc) {
-  palDoc = doc; pinInfo = null; loadPins();
+  palDoc = doc; pinInfo = null; pinFailed = null; loadPins();
   openPage('pins', 'Edit pins', { rows: editPinRows, back: BACK_TO_COMMANDS });
 }
 // ---- Pin to date: a day typed in words, read by a fixed set of rules rather than a model ----
