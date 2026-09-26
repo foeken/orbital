@@ -6821,9 +6821,11 @@ async function runSettingsElsewhereCheck() {
     const onTypePage = () => false, isTypeId = () => false, typeFilter = () => ({}), reload = async () => {}, mergePrefs = () => {}, pref = (k, d) => d;
     const renderSoon = () => {}, showError = (e) => { throw e; }, showTheme = () => {}, loadSensitive = async () => {}, refreshSensitive = () => {};
     const widenFilter = (id, f) => f, loadView = () => { listed++; };
+    let railHidden = false; const railClosed = new Set(); // the sidebar's, which applySettings reads again too
     const loadCodex = () => { codexReads++; codexIds = new Set(marks); return (codexLoading = Promise.resolve()); };
     const loadAgentStates = () => { stateReads++; agentTaskHosts.clear(); for (const [id, host] of Object.entries(hosts)) agentTaskHosts.set(id, host); };
     ${functionSource('loadFilters')}
+    ${functionSource('applySettings')} // the handler is a named function since the page also calls it after catchUpSettings
     ${sourceBetween('if (tana.onSettings) tana.onSettings(', 'if (tana.onSystemTheme)')}
     ({
       change: async (next, agents = marks, tasks = hosts) => { stored = next; marks = agents; hosts = tasks; handler({}); for (let i = 0; i < 8; i++) await Promise.resolve(); },
@@ -8486,6 +8488,27 @@ function runRowChromeCheck() {
 checks.push(runRowChromeCheck);
 // A burst of metadata answers patches one row each, and each asks for the fit: it runs once in the next frame for all
 // of them, not once per answer, which forced a layout of the whole outline every time (#264).
+// A settings:changed sent before the page listened is lost (the first connect's read of the settings document can land
+// while the page loads), so the page asks for the preferences once more after it starts listening.
+async function runLateSettingsCheck() {
+  const run = (snapshot, now, meanwhile) => vm.runInNewContext(`
+    const prefs = ${JSON.stringify(snapshot)}, applied = [];
+    const applySettings = (next) => applied.push(next);
+    const tana = { prefsNow: async () => { Object.assign(prefs, ${JSON.stringify(meanwhile || {})}); return ${JSON.stringify(now)}; } };
+    ${functionSource('catchUpSettings')}
+    catchUpSettings();
+    ({ applied: async () => { await null; await null; return applied; } });
+  `);
+  assert.deepEqual(plain(await run({}, { theme: 'dark', home: 'library' }).applied()), [{ theme: 'dark', home: 'library' }], 'a new machine\u2019s choices, read after the page loaded, are applied');
+  assert.deepEqual(plain(await run({ theme: 'dark' }, { theme: 'dark' }).applied()), [], 'and nothing is applied when nothing changed');
+  assert.deepEqual(plain(await run({ theme: 'light' }, { theme: 'light', home: 'library' }, { theme: 'dark' }).applied()), [{ theme: 'dark', home: 'library' }],
+    'a choice made while the answer was on its way is newer, so it keeps its value, and the rest of the answer still applies');
+  assert.match(source, /if \(tana\.onSettings\) tana\.onSettings\(applySettings\);\nif \(tana\.prefsNow\) catchUpSettings\(\);/, 'it asks after it starts listening, so no change can fall between the two');
+  assert.match(functionSource('applySettings'), /railHidden = pref\('railHidden', false\) === true; railClosed\.clear\(\); for \(const key of pref\('railClosed', \[\]\)\) railClosed\.add\(key\);/,
+    'and what it applies reaches the sidebar too, whose shown state and folded sections were copied at load');
+  console.log('ok  settings: a change sent before the page listened is still applied');
+}
+checks.push(runLateSettingsCheck);
 function runFitSoonCheck() {
   const api = vm.runInNewContext(`
     let fits = 0;

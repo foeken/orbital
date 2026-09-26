@@ -172,7 +172,7 @@ tana.onStatus(showStatus);
 // Another page, window or machine changed a setting: take the new set and apply it where it is already on screen.
 // Everything a preference feeds is visible from here, which is why the applying lives in this file and not beside
 // the store. Nothing here writes back: the change is already stored, and a write would bounce between the pages.
-if (tana.onSettings) tana.onSettings((next) => {
+function applySettings(next) {
   const openType = onTypePage() ? zoom.docId : null, wasFields = openType && JSON.stringify((filters.get(openType) || {}).fields || null);
   mergePrefs(next);
   home = pref('home', 'workView');
@@ -186,6 +186,7 @@ if (tana.onSettings) tana.onSettings((next) => {
   for (const id of [...filters.keys()]) if (isTypeId(id)) filters.delete(id);
   if (openType && JSON.stringify(typeFilter(openType).fields || null) !== wasFields) reload(openType).then(() => renderSoon(true), showError);
   collapsedGroups.clear(); for (const key of pref('collapsedGroups', [])) collapsedGroups.add(key);
+  railHidden = pref('railHidden', false) === true; railClosed.clear(); for (const key of pref('railClosed', [])) railClosed.add(key); // the sidebar's, copied at load (renderer/rail.js)
   const nextTheme = ['dark', 'system', 'light'].includes(pref('theme')) ? pref('theme') : 'light';
   if (nextTheme !== themePref) showTheme(nextTheme);
   sensitiveLoading = null; loadSensitive().then(refreshSensitive); // the sensitive marks and the MCP switch are settings too, kept outside the preferences
@@ -201,7 +202,23 @@ if (tana.onSettings) tana.onSettings((next) => {
   }, () => {});
   notifyById.clear();
   renderSoon();
-});
+}
+// settings:changed is not kept for a page that is not listening yet, and the first connect's read of the settings
+// document can land while this one is still loading: whatever changed since preload's snapshot is asked for once more.
+// A key changed here while the answer was on its way is newer than it and keeps the page's value; the rest applies.
+function catchUpSettings() {
+  const asked = JSON.parse(JSON.stringify(prefs));
+  return tana.prefsNow().then((now) => {
+    const next = { ...now };
+    for (const key of new Set([...Object.keys(asked), ...Object.keys(prefs)])) {
+      if (JSON.stringify(prefs[key]) === JSON.stringify(asked[key])) continue;
+      if (key in prefs) next[key] = prefs[key]; else delete next[key];
+    }
+    if (JSON.stringify(next) !== JSON.stringify(prefs)) applySettings(next);
+  }, () => {});
+}
+if (tana.onSettings) tana.onSettings(applySettings);
+if (tana.prefsNow) catchUpSettings();
 if (tana.onSystemTheme) tana.onSystemTheme((t) => { if (themePref === 'system') applyTheme(t); }); // macOS appearance changes re-theme a running window
 if (themePref === 'system') showTheme('system');
 loadRoots().then(render, showError).then(restorePlace).then(loadFilters);

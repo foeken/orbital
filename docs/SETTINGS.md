@@ -3,7 +3,7 @@
 Everything this app decides *about your content* lives in one document in Tana, so the choices you make on one
 machine are the choices the app opens with on the next. Machine-only secrets are the exception: they stay in the
 local SQLite settings table. The document is created by the app, titled **Orbital**, and its first line says so.
-Deleting it in Tana puts every synced choice back to its default; nothing else breaks.
+Deleting it in Tana loses nothing: the app writes a new one from what the machine remembers (see Finding it, below).
 
 ## Why a document of our own
 
@@ -54,9 +54,20 @@ handed over. Only opening it stays local, as it always was.
 
 ## Finding it, and merging
 
-Each machine notes the document's uri locally, so it costs one lookup per machine. Without that note — a new machine,
-a cleared cache — the app finds it by title among your own documents, oldest first, so two machines that both created
-one at the same moment settle on the same document rather than drifting apart. Nothing is found: it is created.
+Each machine notes the document's uri locally, so a write costs no lookup. Once a launch — and on a machine without
+that note, a new one or a cleared cache — the app also looks for it by title among your own documents, hidden title or
+not, and takes the oldest: two machines that each created one before the graph listed the other's settle on the same
+document at their next launch rather than keeping one each for ever, and the one that loses merges its keys in (the
+rule below). A title alone is not proof: only a document carrying the mark it was created with (root `ext:orbital:doc`,
+written at creation because an empty root is never stored) or a key in either root counts, so a note of yours that is
+also called Orbital is never taken over; a document an older build made before any key existed gets the mark from the
+machine that uses it. A document found by title must also be yours alone: restricted, you its only participant, no public
+link (`audienceOf` in sdk/access.js). The one a machine gives up is noted in the one it takes (root `ext:orbital:old`, one
+key per document, so two machines giving theirs up at once both keep theirs) and kept out of every list, like the current
+one (`appDocIds`). A document in Tana's trash is never written to: the oldest one still standing is used, never a copy the
+deleted one had taken over (it holds what was true before), and the deleted one's list goes along; with none a new one
+is created and filled from this machine. Restoring the old one from the trash makes it the oldest again, so the next
+launch goes back to it.
 
 Which keys are synced is one list, `SYNCED` in main/settings.js: every `pref:` key and the named ones above. A key
 written through `settings.set` that matches no rule stays in SQLite on this machine (`openaiApiKey` is one).
@@ -64,6 +75,9 @@ written through `settings.set` that matches no rule stays in SQLite on this mach
 On connect, the document decides: a key it holds replaces what this machine remembered, and a key only this machine
 has is pushed up. That is what makes the first run on an existing install a migration with no migration step. Between
 machines, Loro's last-write-wins per key applies — two machines changing *different* settings both keep theirs.
+Whatever the document changed is sent to the open pages (`settings:changed`), the first connect included: they read
+their preferences from SQLite at load, which on a new machine is still empty, so without it a first launch kept the
+defaults until the next one.
 
 ## The renderer's half
 
@@ -74,6 +88,9 @@ changes something, main sends `settings:changed` and `renderer/app.js` applies i
 theme, Home, hotkeys, the arrangements and the folded sections, and it reads the views' filters, the agent marks and
 the watch choices again. A write from another page or window of this machine arrives the same way
 (`settings.tellOthers`, main/settings.js), except to the page that made it.
+Electron does not keep that message for a page that is not listening yet, and the first connect's read of the document
+can land while the page is still loading, so once the page listens it asks again (`prefsNow`) and applies whatever
+differs from its snapshot.
 
 One trap, paid for once: `contextBridge` **freezes** everything it exposes, so `window.api.prefs` is a frozen
 object and the store must keep a *copy* of it (`{ ...window.api.prefs }`). Writing into the bridge's own object

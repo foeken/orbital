@@ -108,6 +108,7 @@ contextBridge.exposeInMainWorld('api', {
   // them before the first paint, and written through one at a time.
   prefs: ipcRenderer.sendSync('prefs:snapshot'),
   claimHelp: (theme) => ipcRenderer.invoke('help:claim', theme), // main opens the Help tour over this window, once, if the settings document says it was never seen; true when it did
+  prefsNow: () => ipcRenderer.invoke('prefs:now'), // the same, now: what a settings:changed sent before the page listened carried
   setPref: (key, value) => ipcRenderer.invoke('prefs:set', key, value),
   setOpenAIKey: (key) => ipcRenderer.invoke('openai:setKey', key),
   chatgptStatus: () => ipcRenderer.invoke('chatgpt:status'),

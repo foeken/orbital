@@ -424,8 +424,8 @@ const withMeetingChats = (p) => !!p && !p.nodeIds && !p.includeOwnedChats && !(p
   && Array.isArray(p.nodeTypes) && p.nodeTypes.includes('chat');
 const byUpdateTime = (p) => !!p.sortOptions && !!p.sortOptions[0] && p.sortOptions[0].field === 'SORT_FIELD_UPDATE_TIME' && p.sortOptions[0].direction === 'SORT_DIRECTION_DESCENDING';
 function listed() {
-  const rules = hiddenRules(), hideMcp = mcpHidden(), settingsDoc = settings.settingsDocId();
-  return (n) => n.id !== settingsDoc && !isHidden(memberTitle(n), rules) && !(hideMcp && isMcp(n));
+  const rules = hiddenRules(), hideMcp = mcpHidden(), appDocs = new Set(settings.appDocIds()); // the settings document, and any it took over from
+  return (n) => !appDocs.has(n.id) && !isHidden(memberTitle(n), rules) && !(hideMcp && isMcp(n));
 }
 function listFilter(c) {
   if (!c || !c.graph) return;

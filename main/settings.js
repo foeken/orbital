@@ -18,14 +18,17 @@
 // Offline, the first two still work and the third catches up on the next connect.
 const db = require('../db');
 const content = require('../sdk/content');
-const { initDocument, ulid } = require('../sdk/node');
-const { S, report, send } = require('./state');
+const { initDocument, readNode, ulid } = require('../sdk/node');
+const { audienceOf } = require('../sdk/access');
+const { S, isDeleted, report, send } = require('./state');
 
 const TITLE = 'Orbital'; // how a machine that has never seen the document finds it
 const OLD_TITLE = 'Tana Companion'; // what it was called before the rename: a workspace whose node was never renamed by hand is still found, rather than given a second document
 const POINTER = 'settingsDoc'; // local, never synced: this machine's note of which document that is
 const ROOT = 'ext:orbital'; // the root container the keys live in
 const OLD_ROOT = 'settings'; // where they lived before: moved into ROOT on the next hydrate
+const OLD_DOCS = 'ext:orbital:old'; // settings documents this one took over from, one key each (open)
+const MARK = 'ext:orbital:doc'; // written at creation, so a document that holds no key yet is still known for ours
 
 // What follows you between machines, and what cannot. A window's size belongs to the screen it was sized on; the
 // agent's task ids belong to the machine that ran them; where you happened to be belongs to the machine you were at.
@@ -43,6 +46,7 @@ let cache = null; // key -> value, the answer every read gets
 let pending = Promise.resolve(); // writes in order, so two changes to one key cannot land the other way round
 let cacheGen = -1; // which database the cache was filled from (db.generation): a new one is a new set of answers
 let docId = null; // the settings document, once it is known
+let settled = false; // this session has looked for the oldest settings document once, pointer or not (open)
 
 // SQLite is the mirror the app opens with: every synced key is written to it as well, so a launch with no network
 // still knows what you chose, and so a first run on a new machine has something to push up.
@@ -79,9 +83,10 @@ async function write(key, value) {
   });
 }
 
-// Find it, or make it. The pointer is local so this costs one lookup per machine; without one (a new machine, or a
-// cleared cache) the document is found by its title among your own documents, oldest first — two machines that
-// created one at the same moment therefore settle on the same one rather than drifting apart.
+// Find it, or make it. The pointer is local, so a write costs no lookup; the document is found by its title among your
+// own documents, oldest first, on a machine without one and once a session on every other — two machines that each
+// made one before either could see the other's would otherwise keep a document each for ever. One deleted in Tana is
+// not written to: the oldest still standing is used, or a new one, which hydrate fills from what this machine has.
 let opening = null;
 function settingsDoc() {
   if (!S.client) return Promise.resolve(null);
@@ -90,43 +95,93 @@ function settingsDoc() {
 async function open() {
   const known = db.setting(POINTER);
   if (typeof known === 'string' && known) {
+    const had = known !== docId && !!S.client.sync.getDocument(known); // held by something else before this looked: that stays
     const doc = await S.client.sync.subscribe(known).catch(() => null);
-    if (doc) { docId = known; describe(doc); return doc; }
+    // the copies this one took over hold what was true before: never taken again, and still left out of the lists
+    const gaveUp = doc ? Object.keys(doc.loro.getMap(OLD_DOCS).toJSON() || {}) : [];
+    if (doc && !isDeleted(readNode(doc))) {
+      if (settled) return use(doc);
+      settled = true;
+      const oldest = await discover(new Set(gaveUp));
+      if (!oldest || oldest.id === known) return use(doc);
+      // the one this machine used is still an app document, not a note of yours: it stays out of the lists (appDocIds), with
+      // those it had taken over itself. One key per document, so two machines giving theirs up at once both keep theirs.
+      carry(oldest, [known, ...gaveUp]);
+      // and what it holds that the winner does not: another machine may have written it there since this one last looked,
+      // which this machine's mirror cannot know. The winner keeps its own value where both have one.
+      const held = doc.loro.getMap(ROOT).toJSON() || {};
+      oldest.transact((loro) => { const map = loro.getMap(ROOT); for (const [key, text] of Object.entries(held)) if (map.get(key) === undefined) map.set(key, text); });
+      if (!had) S.client.sync.unsubscribe(known).catch(() => {}); // given up: no live copy of it, and its changes are not ours to route
+      return use(oldest);
+    }
+    if (doc && !had) S.client.sync.unsubscribe(known).catch(() => {}); // deleted in Tana: nothing to keep live
+    if (doc) { // deleted in Tana: the next one standing or a new one, never a copy it took over, and its list goes along
+      settled = true;
+      const found = await discover(new Set(gaveUp));
+      const next = found ? use(found) : await create();
+      if (next) carry(next, gaveUp);
+      return next;
+    }
   }
+  settled = true;
   const found = await discover();
-  if (found) { docId = found.id; db.setSetting(POINTER, found.id); describe(found); return found; }
-  return create();
+  return found ? use(found) : create();
 }
-async function discover() {
+const carry = (doc, ids) => { if (ids.length) doc.transact((loro) => { const map = loro.getMap(OLD_DOCS); for (const id of ids) map.set(id, true); }); };
+function use(doc) {
+  docId = doc.id; db.setSetting(POINTER, doc.id); describe(doc);
+  // one an older build made before any key was written carries neither a key nor the mark: without one it is a note to
+  // the next machine, which would make a second document
+  if (!holdsSettings(doc)) { try { doc.transact((loro) => loro.getMap(MARK).set('app', 'orbital')); } catch (e) { report(e); } }
+  return doc;
+}
+async function discover(skip = new Set()) {
   try {
+    // past hidden titles and Hide MCP: those keep it out of the lists, and must not make a second one
+    const listNodes = S.client.graph.listNodesUnhidden || S.client.graph.listNodes;
     // The current name first, so a workspace carrying both settles on the one this app writes.
     for (const title of [TITLE, OLD_TITLE]) {
-      const { nodes } = await S.client.graph.listNodes({ nodeTypes: ['text'], textQuery: title, createdBy: [S.me.userUri], limit: 20 });
+      // oldest first from the graph, so a crowd of newer notes with the same title cannot push the oldest past the limit.
+      // ponytail: textQuery is full text and ListNodes has no title filter or paging, so 1,000 older documents of yours
+      // that mention the word could still hide it; the restricted/exactParticipantUris filters would narrow that, once verified live.
+      const { nodes } = await listNodes({ nodeTypes: ['text'], textQuery: title, createdBy: [S.me.userUri], limit: 1000,
+        sortOptions: [{ field: 'SORT_FIELD_CREATE_TIME', direction: 'SORT_DIRECTION_ASCENDING' }] });
       const mine = nodes.filter((n) => (n.title || '').trim().toLowerCase() === title.toLowerCase())
         .sort((a, b) => String(a.createTime || '').localeCompare(String(b.createTime || '')));
       for (const node of mine) {
+        // a public link is on the graph node (main/documents.js linkShared), whatever the document's own roots say
+        if (skip.has(node.id) || (node.linkSharing && node.linkSharing.mode)) continue;
+        const had = !!S.client.sync.getDocument(node.id); // somebody else's subscription stays, whatever this decides
         const doc = await S.client.sync.subscribe(node.id).catch(() => null);
-        if (doc) return doc;
+        if (doc && !isDeleted(readNode(doc)) && holdsSettings(doc) && await onlyMine(doc)) return doc;
+        if (doc && !had) S.client.sync.unsubscribe(node.id).catch(() => {}); // not ours: no live copy of it for the session
       }
     }
   } catch (e) { report(e); }
   return null;
 }
+// A title is not proof: a note of yours called "Orbital" must never be taken over and filled with every synced key.
+// Ours carries the mark it was made with, or (made by an older build) at least one key in either root.
+const holdsSettings = (doc) => [MARK, ROOT, OLD_ROOT].some((root) => Object.keys(doc.loro.getMap(root).toJSON() || {}).length > 0);
+// The title and the mark are anybody's to write who can edit a document, and every synced key (the sensitive marks, the
+// agent prompts) would be written into the one taken: only one nobody else can read is taken — only you in its audience
+// (sdk/access.js audienceOf) and no public link, which audienceOf leaves to the linkSharing root.
+// Only a restricted one is asked about at all: audienceOf answers it from the document itself, where an open one would
+// have it load the owner chain and the org, subscriptions nobody lets go of, for an answer that can only be no.
+const onlyMine = async (doc) => readNode(doc).restricted === true && !doc.loro.getMap('linkSharing').get('mode')
+  && (await audienceOf(readNode(doc), S.me.userUri, { sync: S.client.sync, orgDocUri: S.me.orgDocUri })).scope === 'only-me';
 async function create() {
   const id = 'tana:text:' + ulid();
   const doc = await S.client.sync.subscribe(id, (loro) => {
     initDocument(loro, TITLE, S.me.userUri);
-    loro.getMap(ROOT); // the container exists from birth, so a second machine can tell this document from a note
+    loro.getMap(MARK).set('app', 'orbital'); // an empty root is never stored: this is how a second machine tells it from a note
   }).catch((e) => { report(e); return null; });
   if (!doc) return null;
-  docId = id;
-  db.setSetting(POINTER, id);
-  describe(doc);
-  return doc;
+  return use(doc);
 }
 // One line of content, so the document explains itself to whoever opens it in Tana rather than sitting there as an
 // empty note with a curious name. Written only into an empty first line: anything you write there is yours.
-const EXPLAINER = 'Settings for the Orbital app — hidden titles, view filters, type icons and the rest — kept here so they follow you between machines. The app manages this document; deleting it puts those choices back to their defaults.';
+const EXPLAINER = 'Settings for the Orbital app — hidden titles, view filters, type icons and the rest — kept here so they follow you between machines. The app manages this document; if it is deleted, the app writes a new one from what it remembers.';
 function describe(doc) {
   try {
     const [first] = content.readOutline(doc);
@@ -136,7 +191,8 @@ function describe(doc) {
 }
 
 // Sync connected: the document decides. A key it has replaces what this machine remembered; a key only this machine
-// has is pushed up, which is what makes the first run a migration and needs no separate step.
+// has is pushed up, which is what makes the first run a migration and needs no separate step. What it changed is sent
+// to the open pages: they read their preferences at load, from SQLite, which on a new machine is still empty.
 async function hydrate() {
   const doc = await settingsDoc();
   if (!doc) return false;
@@ -153,6 +209,7 @@ async function hydrate() {
   }
   const missing = Object.keys(cache).filter((key) => isSynced(key) && !Object.hasOwn(remote || {}, key));
   if (missing.length) doc.transact((loro) => { const map = loro.getMap(ROOT); for (const key of missing) map.set(key, encode(cache[key])); });
+  if (changed.length) send('settings:changed', prefs());
   return changed.length > 0;
 }
 // A document an older build wrote keeps its keys in the old root: move them across once, the new root winning where
@@ -175,8 +232,7 @@ function applyRemote(id) {
   if (!docId || id !== docId) return false;
   const before = PER_DOCUMENT.map((key) => load()[key] || {});
   return hydrate().then((changed) => {
-    if (!changed) return changed;
-    send('settings:changed', prefs());
+    if (!changed) return changed; // hydrate has sent settings:changed itself
     const moved = new Set();
     PER_DOCUMENT.forEach((key, i) => { const was = before[i], now = load()[key] || {}; for (const doc of Object.keys({ ...was, ...now })) if (JSON.stringify(was[doc]) !== JSON.stringify(now[doc])) moved.add(doc); });
     for (const doc of moved) send('outline:changed', doc, { meta: true });
@@ -191,7 +247,12 @@ const PREF = 'pref:';
 const prefs = () => Object.fromEntries(Object.entries(load()).filter(([key]) => key.startsWith(PREF)).map(([key, value]) => [key.slice(PREF.length), value]));
 const setPref = (key, value) => { if (typeof key !== 'string' || !key || key.includes(':')) throw new Error('Not a preference name'); return set(PREF + key, value); };
 const settingsDocId = () => docId;
-const reset = () => { cache = null; docId = null; opening = null; }; // tests, and a second login
+// Every settings document of yours the lists must leave out: the one in use and those it took over from (open).
+const appDocIds = () => {
+  const doc = docId && S.client && S.client.sync.getDocument(docId);
+  return [docId, ...(doc ? Object.keys(doc.loro.getMap(OLD_DOCS).toJSON() || {}) : [])].filter(Boolean);
+};
+const reset = () => { cache = null; docId = null; opening = null; settled = false; }; // tests, and a second login
 // A setting one page writes reaches every other page and window at once: applyRemote announces only what another
 // machine changed, since this machine's own write comes back from Tana as nothing new. The writer is left out, because
 // it already holds the value and an older snapshot arriving late would undo a newer choice there. Every handler that
@@ -207,4 +268,7 @@ function tellOthers(sender, docId) {
   }
 }
 
-module.exports = { get, set, prefs, setPref, flush, hydrate, applyRemote, synced, settingsDocId, isSynced, reset, tellOthers, TITLE, ROOT, POINTER, PREF };
+// the preferences now, asked for once the page listens for settings:changed (renderer/app.js; preload's prefs:snapshot is the load-time copy)
+const ipc = { 'prefs:now': () => prefs() };
+
+module.exports = { get, set, prefs, setPref, flush, hydrate, applyRemote, synced, settingsDocId, appDocIds, isSynced, reset, tellOthers, ipc, TITLE, ROOT, POINTER, PREF };

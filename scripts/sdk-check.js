@@ -1144,6 +1144,7 @@ async function main() {
     assert.notEqual(fresh.id, first.id, 'deleted in Tana: the next Work View makes a fresh one');
     assert.equal(settings.get('myTasks'), fresh.id, 'and remembers that one');
     settings.set('myTasks', undefined);
+    await settings.flush(); // before the next block's database: a write still on its way would land its pointer there
     console.log('ok  My Tasks is remembered by id: a rename, a hidden title, a colleague\u2019s or a second machine\u2019s copy never makes or picks another');
   }
   // The Help tour's first start is opened by main (help:claim): once, over the first page that asks, only after this
@@ -1198,7 +1199,92 @@ async function main() {
     await backend.handlers.get('overlay:close')({ sender: covered.win.overlay.webContents }, {});
     assert.equal(heard.at(-1).note, 'Task created', 'the toast comes when the tour closes, to the half that made the task');
     backend.S.windows.delete(covered.win);
+    await settings.flush(); // before the next block's database: a write still on its way would land its pointer there
     console.log('ok  help:claim: the first-start tour goes to one page, once');
+  }
+  // Two machines that each made a settings document before either could find the other's, and a document deleted in
+  // Tana: the next launch settles on the oldest one standing, merges this machine's choices into it and tells the page.
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const settings = backend.settings; settings.reset();
+    const docs = new Map(), sent = [], live = new Set(), released = [], tried = [];
+    let listed = [];
+    const sync = {
+      subscribe: async (id, init) => { tried.push(id); if (!docs.has(id)) { if (!init) throw new Error('unavailable'); const d = new Document(id); d.transact(init); docs.set(id, d); } live.add(id); return docs.get(id); },
+      getDocument: (id) => (live.has(id) ? docs.get(id) : undefined), unsubscribe: async (id) => { live.delete(id); released.push(id); },
+    };
+    const win = { isDestroyed: () => false, webContents: { send: (channel, value) => sent.push([channel, value]) } };
+    let asked = null;
+    const connect = () => { settings.reset(); live.clear(); backend.testRuntime({ me: { userUri: ME, orgDocUri: 'tana:org:01examplek0000000000000000' }, win, client: { sync, graph: { listNodes: async (p) => { if (p.textQuery === settings.TITLE) asked = p; return { nodes: p.textQuery === settings.TITLE ? listed : [] }; } } } }); }; // a launch: a new client, nothing subscribed yet
+    const theirs = new Document('tana:text:' + ulid()); // the other machine's, made a second earlier
+    const third = 'tana:text:' + ulid(); // one a third machine already gave up to it
+    theirs.transact((l) => { initDocument(l, settings.TITLE, ME); l.getMap(settings.ROOT).set('pref:theme', JSON.stringify('dark')); l.getMap('ext:orbital:old').set(third, true); });
+    docs.set(theirs.id, theirs);
+    const note = new Document('tana:text:' + ulid()); // a note of yours that happens to be called Orbital, older than both
+    note.transact((l) => initDocument(l, settings.TITLE, ME));
+    docs.set(note.id, note);
+    const shared = new Document('tana:text:' + ulid()); // one called Orbital, marked, but where others can read it: somebody with edit rights made it look like ours
+    shared.transact((l) => { initDocument(l, settings.TITLE, ME); l.getMap('ext:orbital:doc').set('app', 'orbital'); l.getMap('data').set('restricted', false); });
+    docs.set(shared.id, shared);
+    const linked = new Document('tana:text:' + ulid()); // private to you, marked, but readable by anyone with its public link, which only the graph node says
+    linked.transact((l) => { initDocument(l, settings.TITLE, ME); l.getMap('ext:orbital:doc').set('app', 'orbital'); });
+    docs.set(linked.id, linked);
+    connect();
+    settings.setPref('home', 'library');
+    await settings.hydrate(); await settings.flush();
+    const mine = settings.settingsDocId();
+    assert.ok(mine && mine !== theirs.id, 'the index did not list theirs yet, so this machine made its own');
+    listed = [{ id: mine, title: settings.TITLE, createTime: '2026-09-26T09:00:01Z' }, { id: theirs.id, title: settings.TITLE, createTime: '2026-09-26T09:00:00Z' },
+      { id: note.id, title: settings.TITLE, createTime: '2026-01-01T00:00:00Z' }, { id: shared.id, title: settings.TITLE, createTime: '2025-12-01T00:00:00Z' },
+      { id: linked.id, title: settings.TITLE, createTime: '2025-11-01T00:00:00Z', linkSharing: { mode: 'view' } }];
+    // while this machine was away, another one that also uses this machine's document wrote to it
+    docs.get(mine).transact((l) => { const m = l.getMap(settings.ROOT); m.set('hiddenTitles', JSON.stringify(['Lunch'])); m.set('pref:theme', JSON.stringify('light')); });
+    connect(); sent.length = 0;
+    await settings.hydrate(); await settings.flush();
+    assert.equal(settings.settingsDocId(), theirs.id, 'the next launch settles on the oldest, pointer or not, so the two machines stop drifting apart');
+    assert.deepEqual([asked.limit, asked.sortOptions[0].field, asked.sortOptions[0].direction], [1000, 'SORT_FIELD_CREATE_TIME', 'SORT_DIRECTION_ASCENDING'],
+      'asked of the graph oldest first and as many as a list takes: the title is a full-text query, so other notes that mention it share the answer');
+    assert.equal(settings.get('pref:theme'), 'dark', 'it takes the choices made on the other machine');
+    assert.deepEqual(JSON.parse(JSON.stringify(settings.get('hiddenTitles'))), ['Lunch'], 'and keeps what was written to the one it gave up while it was away, where the winner has nothing of its own');
+    assert.equal(JSON.parse(theirs.loro.getMap(settings.ROOT).get('pref:home')), 'library', 'and pushes up the ones only this machine had');
+    assert.ok(sent.some(([channel, prefs]) => channel === 'settings:changed' && prefs.theme === 'dark'), 'and the open page is told, rather than keeping the defaults until the next launch');
+    assert.deepEqual(note.loro.getMap(settings.ROOT).toJSON(), {}, 'an older note that only shares the title is never taken over');
+    assert.deepEqual(shared.loro.getMap(settings.ROOT).toJSON(), {}, 'nor one others can read, mark or not: no synced key is ever written where somebody else sees it');
+    assert.deepEqual(linked.loro.getMap(settings.ROOT).toJSON(), {}, 'nor one with a public link, private as its audience is');
+    assert.deepEqual([shared.id, note.id].filter((id) => released.includes(id) && !live.has(id)), [shared.id, note.id], 'and each one looked at and turned down is let go again');
+    assert.ok(!tried.includes(linked.id), 'one the graph says has a public link is turned down without even being opened');
+    assert.ok(!tried.some((id) => id.startsWith('tana:org:')), 'and an open one is turned down on its own flag, without loading the org or an owner chain to ask about it');
+    assert.ok(released.includes(mine) && !live.has(mine) && live.has(theirs.id), 'as is the one this machine gave up, while the one it took stays live');
+    assert.deepEqual(Object.keys(theirs.loro.getMap('ext:orbital:old').toJSON()).sort(), [third, mine].sort(), 'the document this machine gave up is noted in the one it took, one key each beside the one another machine gave up, so concurrent notes merge');
+    assert.deepEqual(JSON.parse(JSON.stringify(settings.appDocIds())).sort(), [theirs.id, third, mine].sort(), 'and every one of them is an app document the lists leave out');
+    const shown = await backend.S.client.graph.listNodes({ nodeTypes: ['text'], textQuery: settings.TITLE });
+    assert.deepEqual(JSON.parse(JSON.stringify(shown.nodes.map((n) => n.id))), [note.id, shared.id, linked.id], 'so neither settings document is listed anywhere, while the notes that are only called Orbital are');
+    theirs.transact((l) => l.getMap('data').set('deletedAt', 123));
+    connect();
+    await settings.hydrate(); await settings.flush();
+    const next = settings.settingsDocId();
+    assert.ok(next && next !== theirs.id && next !== mine, 'deleted in Tana: a document in the trash is not written to, nor a copy it took over (it holds what was true before): a new one is made');
+    assert.ok(!live.has(theirs.id), 'and the deleted one is not kept live');
+    assert.equal(JSON.parse(docs.get(next).loro.getMap(settings.ROOT).get('pref:theme')), 'dark', 'written from what this machine remembers');
+    assert.equal(docs.get(mine).loro.getMap(settings.ROOT).get('pref:theme'), JSON.stringify('light'), 'the copy given up earlier is left as it was');
+    assert.deepEqual(Object.keys(docs.get(next).loro.getMap('ext:orbital:old').toJSON()).sort(), [third, mine].sort(), 'and what the deleted one had taken over goes along, so those copies stay out of the lists');
+    // A machine with nothing to say yet makes a document with no key in it; another machine must still take it for ours.
+    cache.open(':memory:'); listed = [];
+    connect(); await settings.hydrate(); await settings.flush();
+    const bare = settings.settingsDocId();
+    assert.ok(bare && bare !== next && !Object.keys(docs.get(bare).loro.getMap(settings.ROOT).toJSON()).length, 'a new install with no choices makes a document that holds no key');
+    cache.open(':memory:'); listed = [{ id: bare, title: settings.TITLE, createTime: '2026-09-26T10:00:00Z' }];
+    connect(); await settings.hydrate();
+    assert.equal(settings.settingsDocId(), bare, 'and the next machine takes that one rather than making a second');
+    // An older build's document, made before any key was written: no key, no mark. The machine that knows it marks it.
+    const legacy = new Document('tana:text:' + ulid());
+    legacy.transact((l) => initDocument(l, settings.TITLE, ME));
+    docs.set(legacy.id, legacy);
+    cache.open(':memory:'); cache.setSetting(settings.POINTER, legacy.id); listed = [];
+    connect(); await settings.hydrate();
+    assert.equal(settings.settingsDocId(), legacy.id, 'the machine that made it keeps using it');
+    assert.ok(Object.keys(legacy.loro.getMap('ext:orbital:doc').toJSON()).length, 'and marks it, so the next machine takes it for ours rather than for a note');
+    console.log('ok  settings document: two machines settle on the oldest, a deleted one is replaced, the page hears what the document changed');
   }
   // What stayed of quick add when the panel went (issue #232): the meeting this user has joined (⌘K Pin to current
   // meeting), a task from its title alone (⌘K Create task), and the one agent handoff, driven through its real path.
