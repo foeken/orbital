@@ -6863,7 +6863,7 @@ async function runStagedSearchReloadCheck() {
     ${functionSource('previewRows')}
     ({
       reload,
-      stage: (id) => { searchFilters.set(id, { filter: { states: ['open'] } }); filters.set(id, { states: ['closed'] }); searchRows.delete(id); previewRows(id); },
+      stage: (id, states = ['closed']) => { searchFilters.set(id, { filter: { states: ['open'] } }); filters.set(id, { states }); searchRows.delete(id); previewRows(id); },
       save: (id) => { searchFilters.set(id, { filter: { states: ['closed'] } }); searchRows.delete(id); return reload(id); }, // what Save does (renderer/pills.js)
       answer: async (i, rows) => { answers[i](rows); for (let n = 0; n < 5; n++) await Promise.resolve(); },
       rows: (id) => kids.get(id),
@@ -6904,6 +6904,13 @@ async function runStagedSearchReloadCheck() {
   await api.answer(12, Promise.reject(new Error('unavailable'))); await api.answer(11, ['preview']);
   assert.deepEqual([plain(api.rows(dup)), api.staged(dup)], [['preview'], true], 'a preview whose newer duplicate failed still lands, staged');
   assert.deepEqual(plain(api.errors()), ['unavailable'], 'and the failure is said once');
+  // The pills moved on (A, then B) before A's preview answered: A's rows are not installed under B's pills
+  const moved = 'tana:search:01j0moved0000000000000000';
+  api.stage(moved, ['closed']); api.stage(moved, ['not_now']); // 13, 14
+  await api.answer(13, ['rows for A']);
+  assert.equal(api.rows(moved), undefined, 'a preview for pills that have since changed is not installed');
+  await api.answer(14, ['rows for B']);
+  assert.deepEqual(plain(api.rows(moved)), ['rows for B'], 'the preview for the pills on screen is');
   console.log('ok  a saved search keeps the rows of its newest read: staged pills, a second preview and a Save all retire the reads still out');
 }
 

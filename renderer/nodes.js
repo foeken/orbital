@@ -477,9 +477,10 @@ function previewRows(docId) {
   if (searchRows.get(docId) === asked) return; // these rows already answer this filter
   searchRows.set(docId, asked);
   // a read still out, the stored query or an earlier preview, answers what the page showed before these pills
-  // only the newest read asked reports a failure; one that answered puts its staged filter back beside its rows
+  // an answer lands only for the pills still on screen and when no newer read has landed; only the newest read asked
+  // reports a failure, and one that answered puts its staged filter back beside its rows
   const seq = nextRead(docId);
-  tana.searchPreview(staged).then((rows) => { if (lands(docId, seq)) { searchRows.set(docId, asked); kids.set(docId, rows); render(); } },
+  tana.searchPreview(staged).then((rows) => { if (JSON.stringify(filters.get(docId)) === asked && lands(docId, seq)) { searchRows.set(docId, asked); kids.set(docId, rows); render(); } },
     (e) => { if (reloadSeq.get(docId) === seq) { searchRows.delete(docId); showError(e); } });
 }
 function setSearchF(patch) {
