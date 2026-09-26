@@ -242,9 +242,9 @@ function choiceKeys(e) {
 // already read while it does; a failed read says so instead of Loading… for as long as the page is open (#394).
 let targetTypes = null;
 function openTargetsPage(ctx) {
+  // the read starts before the page is drawn, so its first render shows the pill's copy or Loading…, never the last failure
+  loadList('field', () => tana.typeList(), (list) => { targetTypes = list || typeListCache; if (Array.isArray(list)) typeListCache = list; });
   openFieldPage(ctx, targetRows, 'Link to types…', openCommandPalette);
-  loadList('field', () => tana.typeList(), (list) => { targetTypes = list; if (Array.isArray(list)) typeListCache = list; });
-  if (typeListCache) targetTypes = typeListCache;
 }
 function targetRows(q) {
   const ctx = fieldCtx, to = plainDef(ctx.def.to), group = (ctx.def.title || 'Field') + ' links to';

@@ -29,11 +29,14 @@ function loadPins() {
   const doc = palDoc;
   loadPinned(true); // a pin was just written, or something changed globally: the marks on the rows are re-read with it
   if (!doc || !tana.pinState || doc.appPage) { pinInfo = null; return; } // a page of the app's own (Notifications) has no pins
+  const mine = ++pinRead; // an older read that answers late, for this document or another, changes nothing
   tana.pinState(doc.id).then((s) => {
+    if (mine !== pinRead) return;
     pinInfo = s ? { docId: doc.id, ...s } : null;
-    if (pinFailed && pinFailed.docId === doc.id) pinFailed = null; // a late answer for another document leaves this one's failure standing
+    pinFailed = null;
     if (!palette.hidden && (palMode === 'cmd' || palMode === 'pins')) renderPalette();
   }, (e) => {
+    if (mine !== pinRead) return;
     pinFailed = { docId: doc.id, message: (e && e.message) || String(e) };
     showError(e);
     if (!palette.hidden && palMode === 'pins') renderPalette();

@@ -3467,7 +3467,7 @@ async function runClosedPaletteKeysCheck() {
     let visibilityPeople = null, visibilityRoles = null; const me = () => null, loadMembers = () => {}, visibilityPeopleRows = () => [];
     const moveTargets = async (doc) => [{ label: 'Studio', run: () => writes.push(['move', doc.id, 'Studio']) }];
     const renderPalette = () => {}, closePalette = () => {}, promptEditor = () => {}, loadPinned = () => {};
-    let pinFailed = null; // loadPins keeps a failed read here (renderer/state.js)
+    let pinFailed = null, pinRead = 0; // loadPins keeps a failed read here, and which read is the latest (renderer/state.js)
     const groupBy = () => 'none', holdRow = () => {}, isTask = () => true;
     const errors = []; let queue = Promise.resolve();
     const showError = (e) => { if (e) errors.push((e && e.message) || String(e)); };
@@ -4000,13 +4000,13 @@ async function runEditPinsCheck() {
   const api = vm.runInNewContext(`
     const calls = [];
     let state = { sidebar: false, dates: [] }, ids = ['doc'];
-    let pinInfo = null, pinFailed = null, pinnedIds = null, pinnedLoading = null;
+    let pinInfo = null, pinFailed = null, pinRead = 0, pinnedIds = null, pinnedLoading = null;
     let palDoc = { id: 'doc' }, palMode = 'cmd', palRows = [], palIndex = 3;
     const palette = { hidden: true }, palInput = { value: '', placeholder: '', focus() {} };
     const renderPalette = () => {}, showError = () => {}, run = (fn) => fn();
     const render = () => {}; // the shimmed renderSoon a refreshed mark set asks for
     const tana = {
-      pinState: async (id) => { calls.push(['pinState', id]); if (id === 'A' && slowA) await slowA; const st = states.get(id) || state; if (st && st.fail) throw new Error(st.fail); return st; },
+      pinState: async (id) => { calls.push(['pinState', id]); const st = states.get(id) || state; if (id === 'A' && slowA) { const wait = slowA; slowA = null; await wait; } if (st && st.fail) throw new Error(st.fail); return st; },
       pinIds: async () => { calls.push(['pinIds']); return [...ids]; },
       pin: async (id, target, date) => { calls.push(['pin', id, target, date]); },
       unpin: async (id, target, date) => { calls.push(['unpin', id, target, date]); },
@@ -4036,7 +4036,7 @@ async function runEditPinsCheck() {
       picker: () => (picker ? { doc: picker.doc, back: typeof picker.back } : null),
       escape: () => { picker.back(); return palMode; },
       openFor: (id, answer) => { states.set(id, answer); openPinsPalette({ id }); },
-      slow: () => { let go; slowA = new Promise((resolve) => { go = resolve; }); return () => { slowA = null; go(); }; },
+      slow: () => { let go; slowA = new Promise((resolve) => { go = resolve; }); return () => go(); }, // the next read of A answers when released
     });
   `, { setImmediate, Date, Promise });
 
@@ -4087,6 +4087,13 @@ async function runEditPinsCheck() {
   resume();
   await new Promise(setImmediate); await new Promise(setImmediate);
   assert.deepEqual(plain(api.page().map((r) => r.label)), ['Not connected'], 'a late answer for another document leaves this one\u2019s failure standing');
+  const later = api.slow();
+  api.openFor('A', { sidebar: true, dates: [] });
+  api.openFor('A', { fail: 'Not connected' });
+  await new Promise(setImmediate);
+  later();
+  await new Promise(setImmediate); await new Promise(setImmediate);
+  assert.deepEqual(plain(api.page().map((r) => r.label)), ['Not connected'], 'and so does a late answer from an earlier read of the same document: only the latest read counts');
   console.log('ok  Edit pins: the page opens with this document\u2019s pins, names today, unpins each of them, offers the sidebar, date and meeting pins that can be made, and the row marks come from one list');
 }
 
@@ -4096,20 +4103,22 @@ async function runLinkTargetsLoadCheck() {
   const api = vm.runInNewContext(withShims(`
     let fieldCtx = null, palMode = 'cmd', typeListCache = null, answer = null;
     const openCommandPalette = () => {}, typeGlyph = () => 'type', saveDefinition = () => {};
-    const openFieldPage = (ctx) => { fieldCtx = ctx; palMode = 'field'; };
+    let drawn = null; const openFieldPage = (ctx) => { fieldCtx = ctx; palMode = 'field'; drawn = targetRows('').map((r) => r.label); }; // the page draws as it opens
     const tana = { typeList: async () => { if (answer && answer.fail) throw new Error(answer.fail); return answer; } };
     ${functionSource('fuzzyMatch')}
     ${sourceLine('const plainDef =')}
     ${sourceBetween('let targetTypes', 'function targetRows')}
     ${functionSource('targetRows')}
     ({ rows: (q) => targetRows(q).map((r) => r.label),
-      open: async (next, cached = null) => { answer = next; typeListCache = cached; openTargetsPage({ def: { title: 'Client', to: [] } }); const first = targetRows('').map((r) => r.label);
+      open: async (next, cached = null) => { answer = next; typeListCache = cached; openTargetsPage({ def: { title: 'Client', to: [] } }); const first = drawn;
       for (let i = 0; i < 4; i++) await Promise.resolve(); return [first, targetRows('').map((r) => r.label)]; } })
   `), { Promise });
   assert.deepEqual(plain(await api.open([{ uri: 'tana:type:a', title: 'Person' }])), [['Loading…'], ['Person']], 'the page says Loading… until the types are in');
   assert.deepEqual(plain(await api.open([{ uri: 'tana:type:b', title: 'Company' }], [{ uri: 'tana:type:a', title: 'Person' }])), [['Person'], ['Company']], 'the Type pill\u2019s copy shows while the read is out');
   assert.deepEqual(plain(api.rows('zzqx')), ['No types match'], 'a query that matches no type says so: the page is typed, so the palette draws no No results under it');
   assert.deepEqual(plain(await api.open({ fail: 'Not connected' })), [['Loading…'], ['Not connected']], 'and a failed read says why');
+  assert.deepEqual(plain(await api.open([{ uri: 'tana:type:b', title: 'Company' }], [{ uri: 'tana:type:a', title: 'Person' }])), [['Person'], ['Company']],
+    'reopened after a failure, the page is drawn from the pill\u2019s copy rather than the last failure');
   console.log('ok  Link to types: Loading…, the types, or why they could not be read');
 }
 
