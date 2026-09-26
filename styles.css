@@ -303,9 +303,17 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
   border-left: 1px solid #ececec; background: #fafbfc; padding: 38px 12px 32px; }
 .railgrip { flex: none; width: 5px; margin-right: -1px; cursor: col-resize; z-index: 2; }
 .railgrip:hover, .railgrip.dragging { background: #d8e4f0; }
-/* the right half of a split: its left edge drags the line between the halves (renderer/app.js splitGrip) */
+/* each half of a split: its inner edge drags the line between the halves, which the right half draws (renderer/app.js
+   splitGrip). Hovered, both halves draw their half of the swap pill, 13px either side of the line. */
 .splitgrip { position: fixed; left: 0; top: 0; bottom: 0; width: 5px; cursor: col-resize; z-index: 5; -webkit-app-region: no-drag; }
-.splitgrip:hover, .splitgrip.dragging { background: #d8e4f0; }
+.splitgrip.left { left: auto; right: 0; }
+.splitgrip:not(.left)::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 1px; background: #ececec; }
+.splitgrip:not(.left):is(:hover, .on, .dragging)::before { background: #c8c8c8; }
+.splitpill { position: absolute; top: 50%; left: -13px; width: 26px; height: 28px; margin-top: -14px; box-sizing: border-box; display: none; place-items: center;
+  border: 1px solid #e3e3e3; border-radius: 8px; background: #fff; color: #8a8a8a; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); }
+.splitgrip.left .splitpill { left: auto; right: -13px; }
+.splitgrip:is(:hover, .on, .dragging) .splitpill { display: grid; }
+.splitpill svg { width: 16px; height: 16px; }
 .rail .rhead { display: flex; align-items: center; gap: 6px; width: 100%; border: 0; background: none; margin-top: 18px; padding: 10px 6px 4px; cursor: pointer;
   font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #999; }
 .rail .rhead:first-child { margin-top: 0; } /* the three groups read as separate blocks, the first one starts at the top */
@@ -473,7 +481,7 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
    meeting's gold, a type's hue — so the page stays monochrome */
 .node.tl > .children .bullet.icon svg, .node.tl > .children .bullet.icon:hover svg { color: #8e9297; }
 /* Join (renderer/timeline.js): the Tana glyph after a meeting's title, in the page's grey until it is pointed at */
-.tl-join { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 22px; margin-left: 4px; padding: 0; border: 0; border-radius: 4px; background: none; color: #8e9297; vertical-align: -5px; cursor: pointer; }
+.tl-join { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 22px; margin-left: 4px; padding: 0; border: 0; border-radius: 4px; background: none; color: #8e9297; vertical-align: -3px; cursor: pointer; }
 .tl-join svg { width: 16px; height: 16px; }
 .tl-join:hover { background: #ececec; color: #1c2024; }
 .node.tl > .children .meta { display: none; } /* assigned to you and private: true of every one, so said by none */
@@ -1028,7 +1036,9 @@ body:has(#skeleton:not(.gone, .tail)) :is(#outline, #filtered) { opacity: 0; poi
 [data-theme="dark"] .rail .rrow .ricon.hue { color: oklch(0.8 0.1 var(--hue)); }
 [data-theme="dark"] .rail { border-left-color: #2b2f31; background: #191c1d; }
 [data-theme="dark"] .railgrip:hover, [data-theme="dark"] .railgrip.dragging { background: #2f4658; }
-[data-theme="dark"] .splitgrip:hover, [data-theme="dark"] .splitgrip.dragging { background: #2f4658; }
+[data-theme="dark"] .splitgrip:not(.left)::before { background: #2b2f31; }
+[data-theme="dark"] .splitgrip:not(.left):is(:hover, .on, .dragging)::before { background: #4a5053; }
+[data-theme="dark"] .splitpill { border-color: #34373a; background: #232628; color: #9aa0a3; }
 [data-theme="dark"] .rail .rrow .rtitle { color: #e6e8e9; }
 [data-theme="dark"] .rail .rrow .rsub { color: #858b8e; }
 [data-theme="dark"] .rail .rrow.done .rtitle { color: #858b8e; }

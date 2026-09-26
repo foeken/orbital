@@ -2482,6 +2482,7 @@ async function main() {
   {
     const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
     const COLLEAGUE = 'tana:user-profile:01exampley0000000000000000';
+    cache.setSetting('hideMcp', true); // hides MCP chats from lists, not what agents did from the Timeline
     const ago = (ms) => new Date(Date.now() - ms).toISOString(), H = 36e5;
     const id = () => 'tana:text:' + ulid();
     const pinnedEditable = { id: id(), title: 'Pinned and editable', participants: { [ME]: { type: 'user', role: 'admin' } }, state: { type: 'open' } };
@@ -2497,6 +2498,12 @@ async function main() {
     const watched = { id: id(), title: 'Contract renewal', createdBy: ME, assignedTo: [COLLEAGUE], state: { type: 'closed', enteredAt: ago(0.1 * H), changedBy: COLLEAGUE } };
     const kept = { id: id(), title: 'Mine to do', createdBy: ME, assignedTo: [ME], state: { type: 'open' } }; // assigned to you: not watched
     const MCP_CHAT = 'tana:chat:' + ulid(), AI_CHAT = 'tana:chat:' + ulid();
+    // an agent writes with your login: its completion is yours on the node, and an approved proposal in its chat at that moment
+    const byAgent = { id: id(), title: 'Order more canisters', createdBy: ME, assignedTo: [ME], state: { type: 'closed', enteredAt: ago(0.15 * H), changedBy: ME } };
+    const doneThenEdited = { id: id(), title: 'Finished it myself', createdBy: ME, assignedTo: [ME], state: { type: 'closed', enteredAt: ago(2 * H), changedBy: ME } }; // the agent only edited it later
+    const agentChat = { id: 'tana:chat:' + ulid(), title: 'MCP: Task Completion Status', invocationContext: { intent: 'mcp' }, chat: { proposals: [
+      { proposedUri: id(), baseUri: byAgent.id, operation: 'update', status: 'approved', proposedAt: String(Date.parse(byAgent.state.enteredAt) + 1) },
+      { proposedUri: id(), baseUri: doneThenEdited.id, operation: 'update', status: 'approved', proposedAt: String(Date.now() - 0.3 * H) }] } };
     const fromRob = { id: id(), title: 'Review the vendor contract', createdBy: COLLEAGUE, createTime: ago(2 * H) };
     const viaMcp = { id: id(), title: 'Answer Jules', createdBy: ME, createTime: ago(1 * H) };
     const viaMcpToo = { id: id(), title: 'Plan the pilot', createdBy: ME, createTime: ago(1.2 * H) }; // the same agent, just before: one entry
@@ -2527,7 +2534,8 @@ async function main() {
           listNodes: async (p) => {
             if ((p.nodeTypes || []).includes('user-profile')) return { nodes: [{ id: COLLEAGUE, title: 'Rob Jansen', userProfile: {} }] };
             if (p.nodeIds && (p.nodeTypes || []).includes('chat')) return { nodes: [{ id: MCP_CHAT, title: 'MCP: Nedap Compliance', invocationContext: { intent: 'mcp' } }, { id: AI_CHAT, title: 'Chat for Weekly', invocationContext: { intent: 'meeting' } }].filter((c) => p.nodeIds.includes(c.id)) };
-            if (p.nodeIds && (p.nodeTypes || []).includes('text')) return { nodes: [pinnedEditable, pinnedReadOnly, completedOverdue].filter((n) => p.nodeIds.includes(n.id)) };
+            if ((p.nodeTypes || []).includes('chat')) return { nodes: [agentChat] };
+            if (p.nodeIds && (p.nodeTypes || []).includes('text')) return { nodes: [pinnedEditable, pinnedReadOnly, completedOverdue, byAgent, doneThenEdited].filter((n) => p.nodeIds.includes(n.id)) };
             if (p.nodeIds) return { nodes: [] };
             if ((p.nodeTypes || []).includes('event')) { meetingsAsked = p; return { nodes: [...(soonToo ? [soon] : []), going, meeting, summed, allDay] }; }
             if ((p.createdBy || []).includes(ME)) return { nodes: [watched, kept] };
@@ -2545,6 +2553,7 @@ async function main() {
     assert.deepEqual(await read(), [
       ["Today's Tasks", null, 'todayTasks', 'new', false, ['Pinned and editable', 'Pinned but read-only']],
       ['Rob Jansen completed Contract renewal', null, 'apply', 'done', false, []],
+      ['An AI agent completed Order more canisters', null, 'apply', 'done', false, []],
       ['Rob Jansen edited Contract renewal', 'Added the Q4 numbers from Rob', 'updated', 'edit', false, []],
       ['An AI agent added 2 tasks to your Inbox', null, 'robot', 'new', false, ['Answer Jules', 'Plan the pilot']],
       ['Rob Jansen added a task to your Inbox', null, 'tlNew', 'new', false, ['Review the vendor contract']],
@@ -2585,9 +2594,9 @@ async function main() {
       assert.equal(backend.timelinePage.statusOf(text) || undefined, state, 'a summary says which state it went to: ' + text);
     assert.equal(new Set(rows.map((r) => r.id)).size, rows.length, 'a node changed twice is two rows with ids of their own');
     assert.equal(rows[1].timeline.uri, watched.id, 'and each row opens the node it is about');
-    assert.equal(rows[3].timeline.uri, null, 'except a group, whose tasks open themselves');
+    assert.equal(rows[4].timeline.uri, null, 'except a group, whose tasks open themselves');
     assert.deepEqual(JSON.parse(JSON.stringify(rows[0].children.map((c) => [c.editable, c.checkable]))), [[false, true], [false, false]], 'timeline task text is read-only, and only tasks with confirmed edit access get a checkbox');
-    assert.deepEqual(JSON.parse(JSON.stringify(rows[3].children.map((c) => [c.editable, c.checkable]))), [[false, true], [false, true]], 'inbox task words are read-only there and their boxes tick');
+    assert.deepEqual(JSON.parse(JSON.stringify(rows[4].children.map((c) => [c.editable, c.checkable]))), [[false, true], [false, true]], 'inbox task words are read-only there and their boxes tick');
     summaries.get(watched.id).push({ title: 'Signed by both parties', authors: [COLLEAGUE], endTime: ago(-1000) });
     const next = await read();
     assert.deepEqual(next.filter((r) => r[4]).map((r) => r[1]), ['Signed by both parties'], 'what came after your last visit is marked new, and only that');

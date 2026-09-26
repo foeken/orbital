@@ -1,8 +1,9 @@
 const { contextBridge, ipcRenderer, webFrame } = require('electron');
-const pane = ipcRenderer.sendSync('window:getSide'); // { side }: this page's place in its window (main.js)
+const pane = ipcRenderer.sendSync('window:getSide'); // { side, split }: this page's place in its window (main.js)
 
 contextBridge.exposeInMainWorld('api', {
   side: pane.side, // '' the left or only page, '2' the right half of a split (renderer/state.js SIDE)
+  paneSplit: pane.split === true, // this page is one half of a split
   zoom: (factor) => { webFrame.setZoomFactor(factor); return webFrame.getZoomFactor(); },
   systemTheme: () => ipcRenderer.invoke('theme:system'), // 'dark' | 'light' right now
   onSystemTheme: (fn) => ipcRenderer.on('theme:system', (_e, theme) => fn(theme)), // macOS appearance changed
@@ -33,7 +34,9 @@ contextBridge.exposeInMainWorld('api', {
   workView: () => ipcRenderer.invoke('window:workView'), // Cmd+K Work View: the right half opened, or the other half sent to its stored place
   onToPlace: (cb) => ipcRenderer.on('window:toPlace', () => cb()), // go to the place stored for this side (the Work View has just stored it)
   splitDrag: (phase) => ipcRenderer.send('window:splitDrag', phase), // the split grip: 'start', 'move' (main reads the cursor) or 'even'
-  onSide: (cb) => ipcRenderer.on('window:side', (_e, side) => cb(side)), // this page's side changed: '' the left or only page, '2' the right half
+  onSide: (cb) => ipcRenderer.on('window:side', (_e, side, split) => cb(side, split === true)), // this page's side or split changed: '' the left or only page, '2' the right half
+  splitHover: (on) => ipcRenderer.send('window:splitHover', on === true), // the pointer is over this half's split grip
+  onSplitHover: (cb) => ipcRenderer.on('window:splitHover', (_e, on) => cb(on === true)), // or over the other half's
   windowTheme: (theme) => ipcRenderer.send('window:theme', theme), // 'light' | 'dark': the line between split pages matches the page
   openExternal: (url) => ipcRenderer.invoke('shell:open', url), // http(s) link from node text, in the default browser
   exportPdf: (docId) => ipcRenderer.invoke('doc:exportPdf', docId),

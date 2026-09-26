@@ -7,6 +7,7 @@
 // Like Notifications the page is not a Tana document and has an id of its own.
 //   watched: a written change summary (the sidebar's Changes, sdk/history.js) somebody other than you had a hand in
 //   inbox:   a task assigned to you that someone else, an MCP client or Tana's AI created (views.js inboxFrom)
+//   agent:   a task an MCP client or Tana's AI moved to another state (from the chat it did so in, see below)
 //   meeting: a meeting you are in that has started, at its start time (all-day ones mark a day, not a moment)
 // A row is one event, not a node: a node changed three times is three rows, so a row's id is its own and the node it
 // is about rides along in row.timeline.uri, which is what opening it goes to.
@@ -112,8 +113,8 @@ function watchMeetings(me, since) {
     { label: 'Orbital timeline meetings', onRows }).then((h) => { h.on('error', () => { if (live === opened) live = null; }); return h; }, () => { if (live === opened) live = null; return null; }); // refused, now or later: the next read asks again
 }
 
-// The page is four reads that do not wait on each other — what happened to the nodes you watch, what landed in your
-// Inbox, your meetings, today's pins — so they run side by side, and each is handed to progress (the page asking, over
+// The page is five reads that do not wait on each other — what happened to the nodes you watch, what agents moved,
+// what landed in your Inbox, your meetings, today's pins — so they run side by side, and each is handed to progress (the page asking, over
 // timeline:part) the moment it lands, merged with whatever is in already; the answer is the whole page. At a launch
 // Tana is answering a thousand other reads, each hop takes a second rather than 40 ms, and one after another they
 // kept the page empty for five (live 2026-09-26).
@@ -156,6 +157,29 @@ async function rows(progress) {
           : { kind: 'edit', uri: n.id, title: n.title, at, actor: who(others), icon: 'updated', tone: 'edit', change: text, detail: detailOf(s, text) });
       }
     });
+    return events;
+  }
+  // Agents: an MCP client writes with your login, so the moves it makes read as yours above (state.changedBy, the
+  // summary's authors). The chat it wrote from gives it away: each change is an update proposal there, approved as it
+  // is made (chat.proposals, the field the Proposals page reads; live 2026-09-26: proposedAt 1 ms after the task's
+  // state.enteredAt). A task whose latest move is yours and came with such a proposal was the agent's. A refusal costs
+  // these rows only. Asked past Hide MCP (main/views.js listFilter): that switch hides MCP chats from lists, which are
+  // the very agents looked for here.
+  async function agents() {
+    const silenced = notifySilencedIds(), events = [];
+    const { nodes: agentChats = [] } = await (graph.listNodesUnhidden || ((p) => graph.listNodes(p)))({ nodeTypes: ['chat'], includeOwnedChats: true, limit: Math.min(1000, 200 * pages),
+      sortOptions: [{ field: 'SORT_FIELD_UPDATE_TIME', direction: 'SORT_DIRECTION_DESCENDING' }] }).catch(() => ({}));
+    const proposed = new Map(); // task -> [[proposedAt, chat]]
+    for (const c of agentChats) for (const p of (c.chat && c.chat.proposals) || []) {
+      if (p.operation === 'update' && p.status === 'approved' && p.baseUri && !silenced.has(p.baseUri) && Number(p.proposedAt) > since) proposed.set(p.baseUri, [...(proposed.get(p.baseUri) || []), [Number(p.proposedAt), c]]);
+    }
+    const agentIds = [...proposed.keys()];
+    const { nodes: agentMoved = [] } = agentIds.length ? await graph.listNodes({ nodeIds: agentIds, nodeTypes: ['text'], stateTypes: STATE_TYPES, limit: agentIds.length }).catch(() => ({})) : {};
+    for (const n of agentMoved) {
+      const st = n.state || {}, at = Date.parse(st.enteredAt || '');
+      const hit = st.changedBy === me && at > since && VERB[st.type] && (proposed.get(n.id) || []).find(([t]) => Math.abs(t - at) < 6e4);
+      if (hit) events.push({ kind: 'status', uri: n.id, title: n.title, at, actor: isMcp(hit[1]) ? 'An AI agent' : "Tana's AI", verb: VERB[st.type], icon: ICON[st.type], tone: TONE[st.type] });
+    }
     return events;
   }
   // Inbox: the newest tasks assigned to you, whatever state they are in now, and the chat each was created in
@@ -219,7 +243,7 @@ async function rows(progress) {
   }
   const got = {};
   const page = () => pageOf(got, seen, now, date);
-  await Promise.all([['watched', watched], ['inbox', inbox], ['meetings', meetingsPart], ['today', today]].map(([k, read]) => read().then((v) => { got[k] = v; if (progress) progress(page()); })));
+  await Promise.all([['watched', watched], ['agents', agents], ['inbox', inbox], ['meetings', meetingsPart], ['today', today]].map(([k, read]) => read().then((v) => { got[k] = v; if (progress) progress(page()); })));
   watchMeetings(me, since);
   // The page is read again at the next moment a meeting moves: one starting (out of Upcoming meetings, into the timeline)
   // or one under way ending (its Join button goes, and without a summary it turns quiet). The read it causes sets the next.
@@ -237,7 +261,7 @@ function pageOf(got, seen, now, date) {
   const todayText = "Today's Tasks";
   const todayRow = got.today ? [{ id: PAGE + ':today:' + date, text: todayText, segments: [{ text: todayText }], kind: 'block', block: 'bullet', icon: 'todayTasks',
     editable: false, hasChildren: true, children: got.today, createdAt: iso(now), unread: false, timeline: { uri: null, time: 'Now', tone: 'new', today: true } }] : [];
-  const events = [...(got.watched || []), ...(got.inbox || []), ...(got.meetings ? got.meetings.events : [])];
+  const events = [...(got.watched || []), ...(got.agents || []), ...(got.inbox || []), ...(got.meetings ? got.meetings.events : [])];
   // New tasks in a row from one source on one day are one entry, timed by the newest of them
   const day = (at) => new Date(at).toDateString();
   const merged = [];
