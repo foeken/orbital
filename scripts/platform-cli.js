@@ -462,10 +462,11 @@ const commands = {
     await client.sync.connect();
     const doc = await client.sync.subscribe(typeUri);
     if (doc.data.get('type') !== 'type') throw new Error(typeUri + ' is not a type');
-    const key = require('../sdk/fields').addField(doc, { title, type: flag('type') || undefined, cardinality: args.includes('--multiple') ? 'multiple' : 'single',
+    const sdkFields = require('../sdk/fields');
+    const key = sdkFields.addField(doc, { title, type: flag('type') || undefined, cardinality: args.includes('--multiple') ? 'multiple' : 'single',
       options: flag('options') !== undefined ? flag('options').split('|') : undefined, to: flag('to') !== undefined ? flag('to').split(',') : undefined });
     await new Promise((r) => setTimeout(r, 1500)); // let the live update go out
-    out(key + ' ' + JSON.stringify(doc.data.get('template').toJSON().attributes));
+    out(key + ' ' + JSON.stringify(sdkFields.definitions(doc)));
   },
   // set-hue <type uri> <0-360|none>: the type colour Cmd+K writes, through main's own path (appearance root map)
   async 'set-hue'() {

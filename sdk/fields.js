@@ -390,4 +390,4 @@ function addField(typeDocument, { title, type, cardinality, options, to } = {}) 
   return key;
 }
 
-module.exports = { readFields, templateTitles, fieldDefinition, setFieldText, parseKey, fieldView, addField, setFieldOptions, setFieldTargets, setFieldKind, FIELD_ID };
+module.exports = { readFields, definitions, templateTitles, fieldDefinition, setFieldText, parseKey, fieldView, addField, setFieldOptions, setFieldTargets, setFieldKind, FIELD_ID };
