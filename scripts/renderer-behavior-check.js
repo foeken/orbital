@@ -114,7 +114,7 @@ const withShims = (src) => {
   if (/\b(displayOn|displayKeys|subtextOf)\b/.test(src) && !/const displayKeys =/.test(src) && !/function subtextOf\(/.test(src)) {
     src = functionSource('agoText') + '\n' + functionSource('subtextOf') + '\n' + src;
     // pinnedOn needs the grouping (views.js) and the date pins (state.js); no row here is in a Pinned section
-    src = "globalThis.displayKeys ??= () => ['status', 'assigned', 'updated']; globalThis.displayOn ??= (id) => globalThis.displayKeys().includes(id); globalThis.pinnedOn ??= () => '';\n" + src;
+    src = "globalThis.displayKeys ??= () => ['status', 'assigned', 'updated']; globalThis.displayOn ??= (id) => globalThis.displayKeys().includes(id); globalThis.pinnedOn ??= () => ''; globalThis.me ??= () => (globalThis.members || []).find((m) => m.me);\n" + src;
   }
   // The watch-state cache lives in state.js, which most slices do not take. A slice that only clears it — a sharing
   // change can flip whether a node is watched — should not fail for want of the map itself.
@@ -3508,6 +3508,7 @@ function runRowAudienceCheck() {
     const loadTaskMeta = (id) => { fetched.push(id); };
     const isPinned = () => false; // the pin mark has its own check; here the audience icons are the subject
     const loadMembers = () => {}, memberName = (uri) => (uri === 'tana:user-profile:sam' ? 'Sam' : uri); // the real one answers with the uri until the member list lands
+    const ME_URI = 'tana:user-profile:me', me = () => ({ id: ME_URI }); // you, as the member list marks you (renderer/tasks.js)
     const isRealId = (id) => typeof id === 'string' && id.startsWith('tana:');
     const tana = { taskMeta: () => {} };
     const document = { createElement: (tagName) => {
@@ -3575,6 +3576,7 @@ function runRowAudienceCheck() {
   assert.equal(row(made, spaceMeta).sub, 'Created by Sam', 'Created by names the maker even when Created is off');
   api.display(['status', 'assigned', 'updated', 'created', 'creator']);
   assert.equal(row(made, spaceMeta).sub, 'Created 2 days ago by Sam', 'and with Created on it is one phrase, not two');
+  assert.equal(row({ ...made, createdBy: 'tana:user-profile:me' }, spaceMeta).sub, 'Created 2 days ago', 'and made by you it says no name: your own work needs no byline');
   assert.equal(row(doc, spaceMeta).sub, null, 'a row the graph gave no creator for says nothing at all');
   api.display(['status', 'assigned', 'updated']);
   // Type is the same shape: the chips are a fact about the row, shown only while the pill asks for them.

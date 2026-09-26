@@ -384,7 +384,8 @@ function subtextOf(node, taskInfo) {
   // Who made it joins when it was made rather than repeating the word: "Created 2 days ago by Robin Vega". The name
   // needs the member list, which loads once and re-renders when it lands; until then memberName answers with the uri.
   if (displayOn('creator') && node.createdBy) loadMembers();
-  const by = displayOn('creator') && node.createdBy ? ' by ' + memberName(node.createdBy) : '';
+  // ...and not at all when it is you: your own work needs no byline (the member list says who you are, once loaded)
+  const by = displayOn('creator') && node.createdBy && node.createdBy !== me()?.id ? ' by ' + memberName(node.createdBy) : '';
   if (displayOn('created') && node.createdAt) bits.push('Created ' + agoText(node.createdAt) + by);
   else if (by) bits.push('Created' + by);
   if (displayOn('updated') && node.updatedAt) bits.push('Updated ' + agoText(node.updatedAt));
