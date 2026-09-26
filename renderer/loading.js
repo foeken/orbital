@@ -38,12 +38,12 @@
     for (const r of ROWS) {
       if (y > h) break;
       const x = sx + r.depth * 24;
-      if (r.head) { y += y > sy ? 18 : 0; end = bar(sx + 24, y + 14, 56 + r.w * 64, 8, 0.08, s, 0.5); y += 35; s += 0.12; continue; }
+      if (r.head) { y += y > sy ? 18 : 0; end = bar(sx + 24, y + 14, 56 + r.w * 64, 8, 0.08, s, 0.5); y += 35; s += 0.08; continue; }
       items.push({ glyph: r.glyph, x: x + 24, y: y + 7, a: 0.26, start: s, dur: 0.4 });
       const bw = Math.max(40, avail * r.w);
       end = bar(x + 47, y + 10, bw, 10, 0.11, s + 0.08, 0.8);
       if (r.meta) end = bar(x + 47 + bw + 10, y + 10, avail * r.meta, 10, 0.065, s + 0.4, 0.5);
-      y += 30; s += 0.14;
+      y += 30; s += 0.09;
     }
     key = k;
     return (page = { items, end });
