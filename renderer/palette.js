@@ -1175,7 +1175,7 @@ function togglePalette(mode, link, pin) {
   palMode = mode; palRows = []; palIndex = 0; palBusy = false; palEnter = null; clearTimeout(palTimer); palTimer = null;
   // meetingNow is cleared, not kept: every open re-reads the meeting, the same rule the quick-add panel follows.
   fieldLinkCtx = null;
-  if (mode === 'cmd') { palDoc = currentDoc(); palField = fieldAt(document.activeElement); fieldReturn = palField && palField.key; palTaskCtx = null; meetingNow = undefined; meetingCtx = null; loadPins(); subCache.clear(); }
+  if (mode === 'cmd') { palDoc = currentDoc(); palField = fieldAt(document.activeElement); fieldReturn = palField && palField.key; palTaskCtx = null; meetingNow = undefined; meetingCtx = null; loadPins(); subCache.clear(); refreshChatGPTStatus(); }
   palInput.placeholder = mode === 'search' ? 'Search Tana' : mode === 'pinToday' ? 'Search open tasks assigned to you' : mode === 'slash' ? 'Choose a block type or create' : 'Run a command';
   palInput.value = link ? link.text : '';
   if (mode === 'search') searchNow(); else renderPalette();

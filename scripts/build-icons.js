@@ -43,7 +43,8 @@ WANT.created = path.join(__dirname, '..', 'build', 'icons', 'file-plus.svg');
 // A saved search folds its pills away behind this, beside back and forward (renderer/pills.js)
 WANT.options = path.join(__dirname, '..', 'build', 'icons', 'sliders-vertical.svg');
 WANT.openaiKey = path.join(__dirname, '..', 'build', 'icons', 'key-4.svg');
-// OpenAI's ChatGPT Blossom from openai/openai-cookbook; the builder maps its supplied black fill to currentColor.
+// OpenAI's ChatGPT Blossom from openai/openai-cookbook; the builder maps its supplied black fill to currentColor. Its
+// viewBox is cropped to the mark (about 83% of the box, like the Nucleo glyphs): the original drew it at half size.
 WANT.chatgpt = path.join(__dirname, '..', 'build', 'icons', 'chatgpt.svg');
 // A node pinned to the sidebar or to a date: the tack, distinct from the map-marker 'pin' the meeting rows use
 WANT.pinned = path.join(__dirname, '..', 'build', 'icons', 'pin-tack.svg');

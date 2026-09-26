@@ -232,6 +232,8 @@ function functionSource(name) {
   }
   assert.fail('renderer function ' + name + ' is complete');
 }
+// ⌘K opens through togglePalette('cmd'), not openCommandPalette: without this read the row said "Checking sign-in" forever
+assert.match(functionSource('togglePalette'), /if \(mode === 'cmd'\) \{[^\n]*refreshChatGPTStatus\(\);/, 'opening Cmd+K reads the ChatGPT sign-in status');
 
 const visibleTags = vm.runInNewContext(`
   const isTask = (node) => node.kind === 'document' && node.icon === 'task';
