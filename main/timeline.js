@@ -20,10 +20,11 @@
 const db = require('../db');
 const { STATE_TYPES } = require('../sdk/node');
 const { pinnedDates } = require('./pins');
-const { NOT_CONNECTED, S, iso, isMcp } = require('./state');
+const { NOT_CONNECTED, S, iso, isMcp, send } = require('./state');
 const { graphRow, isAllDay, members, rememberNodeHue, toNode } = require('./rows');
 const { notifySilencedIds, notifyWatchedIds } = require('./documents');
 const { inboxFrom } = require('./views');
+const { openLiveQuery } = require('../sdk/livequery');
 
 const PAGE = 'orbital:timeline';
 // Inbox to In Progress is a task being taken on, so it reads as accepted, the way Tana's own box accepts it first
@@ -67,6 +68,28 @@ async function pool(list, fn) {
   const out = []; let i = 0;
   await Promise.all(Array.from({ length: Math.min(AT_ONCE, list.length) }, async () => { while (i < list.length) { const x = list[i++]; out.push(await fn(x)); } }));
   return out;
+}
+// The meetings on the page stay current (#210): a live query over the meetings it lists, to the end of today, and a
+// meeting added or gone, renamed or moved, re-reads the page (renderer/app.js). Nothing else about a meeting is news
+// here, and Tana touches events often (a reply, a synced calendar), so only what the page shows of one counts.
+// Opened by a read, and again when the client, the weeks or the day change; a refusal leaves the page as it was.
+let live = null, liveClient = null, liveKey = null;
+const meetingSig = (row) => { const ev = row.calendarEvent || {}; return JSON.stringify([row.title, ev.startTime, ev.endTime, ev.allDay]); };
+function watchMeetings(me, since) {
+  const end = new Date(); end.setHours(24, 0, 0, 0);
+  const key = [me, weeks, end.getTime()].join(' ');
+  if (live && liveClient === S.client && liveKey === key) return;
+  if (live) live.then((h) => h && h.close().catch(() => {}));
+  liveClient = S.client; liveKey = key;
+  const sigs = new Map(); // uri -> what the page shows of it
+  const onRows = ({ added, removed, changed, initial }) => {
+    const moved = !initial && (added.length > 0 || removed.some((uri) => sigs.has(uri)) || changed.some((row) => sigs.get(row.uri) !== meetingSig(row)));
+    for (const row of [...added, ...changed]) sigs.set(row.uri, meetingSig(row));
+    for (const uri of removed) sigs.delete(uri);
+    if (moved) send('outline:changed', PAGE);
+  };
+  const opened = live = openLiveQuery(S.client.sync, { types: ['event'], hasParticipantUris: [me], eventStartTimeMin: since, eventStartTimeMax: end.getTime(), orderBy: ['-updatedAt'], limit: 200 },
+    { label: 'Orbital timeline meetings', onRows }).then((h) => { h.on('error', () => {}); return h; }, () => { if (live === opened) live = null; return null; }); // refused: the next read asks again
 }
 
 async function rows() {
@@ -124,6 +147,7 @@ async function rows() {
     const ev = n.calendarEvent || {}, at = Date.parse(ev.startTime || '');
     if (at > since && at <= Date.now() && !isAllDay(ev.startTime, ev.endTime, ev.allDay)) events.push({ kind: 'meeting', uri: n.id, title: n.title, at, icon: 'meeting', tone: 'meeting' });
   }
+  watchMeetings(me, since);
   const now = Date.now(), date = new Date(now).toLocaleDateString('sv-SE');
   const pinDatesById = new Map(Object.entries(await pinnedDates()));
   const pinnedIds = [...pinDatesById].filter(([, dates]) => dates.some((pinnedDate) => pinnedDate <= date)).map(([id]) => id);

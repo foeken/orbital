@@ -76,6 +76,8 @@ closePaneBtn.setAttribute('aria-label', 'Close this pane'); // icon only, so the
 closePaneBtn.onmousedown = (e) => e.preventDefault(); // the caret stays where it is: beforeunload flushes what it was typing
 closePaneBtn.onclick = () => tana.closePane();
 tana.onChanged((docId, info) => {
+  // The Timeline's meetings moved (main/timeline.js): the page is read again where it is on screen, and on arrival elsewhere
+  if (docId === TIMELINE_PAGE) { if (zoom?.docId === TIMELINE_PAGE) reload(TIMELINE_PAGE).then(() => renderSoon(true), showError); return; }
   if (docId) {
     // A newer update would reorder this row under Updated; keep the layout the user is looking at until Clean up.
     if (typeof sortBy === 'function' && (sortBy() === 'updated' || (typeof groupBy === 'function' && groupBy() === 'updated'))) {

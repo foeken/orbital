@@ -2505,6 +2505,7 @@ async function main() {
     const meeting = { id: 'tana:event:' + ulid(), title: 'Leadership sync', calendarEvent: { startTime: ago(3 * H), endTime: ago(2.5 * H) } };
     const allDay = { id: 'tana:event:' + ulid(), title: 'Offsite', calendarEvent: { startTime: ago(6 * H), endTime: ago(-18 * H), allDay: true } };
     let meetingsAsked = null;
+    let liveDoc = null; const sent = [];
     const summaries = new Map([[watched.id, [
       { title: 'Task status changed to Completed', authors: [COLLEAGUE], endTime: ago(0.05 * H) }, // the same move the node's state already tells
       { title: 'Added the Q4 numbers from Rob', authors: [COLLEAGUE], endTime: ago(0.2 * H) },
@@ -2513,7 +2514,7 @@ async function main() {
       { title: 'Contract renewal', description: 'Moved the deadline to Friday', authors: [ME, COLLEAGUE], endTime: ago(5 * H) }, // title repeats the node's
       { title: 'Ancient change', authors: [COLLEAGUE], endTime: ago(30 * 24 * H) },
     ]]]);
-    backend.testRuntime({ me: { userUri: ME }, win: { isDestroyed: () => false, webContents: { send: () => {} } },
+    backend.testRuntime({ me: { userUri: ME }, win: { isDestroyed: () => false, webContents: { send: (...args) => sent.push(args) } },
       client: {
         graph: {
           listNodes: async (p) => {
@@ -2529,7 +2530,8 @@ async function main() {
           listEdges: async ({ fromNodeIds }) => ({ edges: [[viaMcp.id, MCP_CHAT], [viaMcpToo.id, MCP_CHAT], [viaAi.id, AI_CHAT]].filter(([f]) => fromNodeIds.includes(f)).map(([fromNodeId, toNodeId]) => ({ fromNodeId, toNodeId, type: 'EDGE_TYPE_CREATED_IN' })) }),
         },
         history: { listChanges: async ({ uri }) => ({ summaries: summaries.get(uri) || [] }) },
-        sync: { getDocument: (uri) => liveDocs.get(uri) || null, subscribe: async (uri) => uri === ME ? profile : uri === pinMapUri ? pinMap : null },
+        sync: { getDocument: (uri) => liveDocs.get(uri) || null, unsubscribe: async () => {},
+          subscribe: async (uri, init) => { if (uri.startsWith('tana:liveQuery:')) { liveDoc = new Document(uri); liveDoc.transact(init); return liveDoc; } return uri === ME ? profile : uri === pinMapUri ? pinMap : null; } },
       } });
     // through JSON: rows are built in the main-process vm, whose arrays fail a deep compare on their prototype alone
     const read = async () => JSON.parse(JSON.stringify((await backend.timelinePage.rows()).map((r) => [r.text, r.timeline.change || r.timeline.note, r.icon || null, r.timeline.tone, r.unread, r.children.map((c) => c.text)])));
@@ -2546,6 +2548,24 @@ async function main() {
     ], 'a timeline, newest first: who, then what they did, then the node; an edit\'s change quoted under it; new tasks from one source in a row are one quiet entry; a completion told once, from the node\'s own state; a meeting at its start time, all-day ones left out; yours alone, by hand, or weeks old stay out');
     assert.deepEqual(JSON.parse(JSON.stringify([meetingsAsked.hasParticipantUris, Date.parse(meetingsAsked.eventStartTimeMax) <= Date.now(), Date.parse(meetingsAsked.eventStartTimeMin) < Date.now() - 6 * 24 * H])), [[ME], true, true],
       'the meetings asked for are yours, from the week back up to now');
+    // Kept current (#210): the read left a live query open over your meetings; the server's answers re-read the page
+    // when a meeting's title or time moves, or one comes or goes, and not when only something else about it changed
+    const liveQuery = liveDoc.data.toJSON().query;
+    assert.deepEqual(JSON.parse(JSON.stringify([liveQuery.types, liveQuery.hasParticipantUris, liveQuery.eventStartTimeMin < Date.now() - 6 * 24 * H, liveQuery.eventStartTimeMax > Date.now()])), [['event'], [ME], true, true],
+      'the live query is your meetings from the week back to the end of today');
+    const answerLive = (rows, version) => liveDoc.transact((loro) => {
+      const data = loro.getMap('data'), nodes = data.get('result').setContainer('nodes', new LoroList());
+      for (const row of rows) nodes.push(row);
+      data.set('state', 'ready'); data.set('resultForVersion', version);
+    });
+    const liveRow = (title, updatedAt) => ({ uri: meeting.id, type: 'event', title, calendarEvent: meeting.calendarEvent, updatedAt });
+    const pageSends = () => sent.filter(([channel, id]) => channel === 'outline:changed' && id === 'orbital:timeline').length;
+    answerLive([liveRow('Leadership sync', 1)], 1); answerLive([liveRow('Leadership sync', 2)], 2);
+    assert.equal(pageSends(), 0, 'the first answer and an edit that moves nothing the page shows re-read nothing');
+    answerLive([liveRow('Leadership offsite', 3)], 3);
+    assert.equal(pageSends(), 1, 'a renamed meeting re-reads the page');
+    answerLive([], 4);
+    assert.equal(pageSends(), 2, 'and so does a meeting that is gone');
     assert.deepEqual(JSON.parse(JSON.stringify((await backend.timelinePage.rows())[1].segments)), [{ text: 'Rob Jansen ', person: true }, { text: 'completed', marks: { bold: true } }, { text: ' ' }, { text: 'Contract renewal', content: true, marks: { strike: true } }],
       'the person plain, the verb bold, and a finished node struck through; demo mode masks the name and title and keeps the verb');
     const rows = await backend.timelinePage.rows();
