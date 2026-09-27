@@ -332,7 +332,7 @@ it (the chip is written as plain "@Codex") goes through `codex:ask` instead of `
    as `interrupted` with no answer (verified live 2026-09-27: `interrupted` at 3 s, `completed` with the answer at 6 s),
    so only an answer, a completed or failed turn, or `createTask`'s 15-minute cap ends the wait. A finished answer is kept
    in `codexAsks` and not read again.
-5. **Drawn on your side**: under the question, a grey bubble headed "Codex · only visible to you, not saved to Tana", the
+5. **Drawn on your side**: under the question, a grey bubble headed "Codex · only visible for you, on this device", the
    chat's dots while the task works (read every 4 s while any is running), then the answer. The arrow beside a finished
    answer, or Cmd+K Share Codex’s answer to chat for the latest one, posts it to the chat as your message (`chat:send`, `ai: false`): the only way it reaches Tana.
 

@@ -18,7 +18,7 @@ const isChatPage = (parent) => !!parent && !parent.nodeId && String(parent.docId
 // Mac only. chatId -> [{ messageId, state: working|done|failed, text }], read when the chat opens and while one runs.
 const codexAnswers = new Map(), codexPolls = new Set();
 const CODEX_ASK = /(^|\s)@codex\b/i, CODEX_URI = 'orbital:codex'; // the "@" chip, written into the message as plain "@Codex"
-const CODEX_NOTE = 'Only you can see this. It stays on this Mac and is never saved to Tana.';
+const CODEX_NOTE = 'Only visible for you, on this device. Never saved to Tana.';
 
 function chatDotsEl() {
   const el = document.createElement('span'); el.className = 'chat-dots'; el.setAttribute('aria-label', 'Tana is writing');
@@ -183,7 +183,7 @@ if (typeof ResizeObserver === 'function' && outline.parentElement) {
 function codexEl(a, docId) {
   const el = document.createElement('div'), head = document.createElement('div'), row = document.createElement('div'), bubble = document.createElement('div');
   el.className = 'chat-msg mine codex'; head.className = 'codex-head'; row.className = 'codex-row'; bubble.className = 'bubble'; bubble.title = CODEX_NOTE;
-  head.append(...[iconNode('lock')].filter(Boolean), document.createTextNode('Codex · only visible to you, not saved to Tana'));
+  head.append(...[iconNode('lock')].filter(Boolean), document.createTextNode('Codex · only visible for you, on this device'));
   if (a.state === 'working') bubble.append(chatDotsEl());
   else { const text = document.createElement('div'); text.className = 'chat-paragraph'; text.textContent = a.state === 'done' ? demoText(a.text, docId) : 'Codex stopped without an answer'; bubble.append(text); }
   if (a.state === 'done') {

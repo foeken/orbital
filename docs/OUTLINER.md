@@ -909,7 +909,7 @@ empty message or a click on it switches it. Picking a skill switches to To Tana,
 (renderSegs/readSegs); ⌘Z and the other editing keys stay its own rather than reaching the outline. What is typed and not sent is kept per chat while the window is open.
 Opening a chat puts the caret in it. After a send, three dots stand where the answer will be until Tana's answer begins (two minutes
 at most); the answer streams in as live changes to the chat, and a message Tana is still writing with no words yet
-shows the dots in its place. A failed send puts the words back. **@Codex** (offered after Tana in "@") asks a Codex task on this Mac instead: the question is a message to the chat, and the answer shows under it on your side in a grey bubble, "Codex · only visible to you, not saved to Tana", with dots until it arrives; the arrow beside it, or Cmd+K **Share Codex’s answer to chat**, posts it to the chat as your message (docs/CHATS.md §12). **New chat** (Cmd+K, Actions) makes a chat with
+shows the dots in its place. A failed send puts the words back. **@Codex** (offered after Tana in "@") asks a Codex task on this Mac instead: the question is a message to the chat, and the answer shows under it on your side in a grey bubble, "Codex · only visible for you, on this device", with dots until it arrives; the arrow beside it, or Cmd+K **Share Codex’s answer to chat**, posts it to the chat as your message (docs/CHATS.md §12). **New chat** (Cmd+K, Actions) makes a chat with
 Tana that is yours alone (`chat:new`) and opens it.
 
 When Tana's AI asks questions (`row.chat.questions`, docs/CHATS.md §11), the composer gives way to a question card
