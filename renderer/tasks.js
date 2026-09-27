@@ -108,7 +108,7 @@ function taskSummary(node, lazy) {
   if (meta.assignees.length) loadMembers(); // names need the member list; loading it re-renders when it arrives
   const scope = typeof meta.audience === 'string' ? meta.audience : meta.audience?.scope;
   const hiddenFrom = (meta.hiddenFrom || []).map(memberName).join(', '); // assigned, but outside the audience (sdk/node.js)
-  return { assignees: meta.assignees.length ? meta.assignees.map(memberName).join(', ') : 'Unassigned', hiddenFrom, audience: audienceInfo(meta.audience, meta.audienceSpace), scope, unknownAudience: scope === 'unknown', linkShared: !!meta.linkShared, watched: !!meta.watched, pinned: isPinned(node.id) };
+  return { assignees: meta.assignees.length ? meta.assignees.map(memberName).join(', ') : 'Unassigned', hiddenFrom, audience: audienceInfo(meta.audience, meta.audienceSpace), people: meta.people || [], peopleCount: meta.peopleCount, scope, unknownAudience: scope === 'unknown', linkShared: !!meta.linkShared, watched: !!meta.watched, pinned: isPinned(node.id) };
 }
 // the same facts for a document that is not a task: no assignee, but it can be shared or public
 function documentSummary(node, lazy) {
@@ -117,42 +117,70 @@ function documentSummary(node, lazy) {
   if (!meta) { if (!lazy) loadTaskMeta(node.id); return null; }
   const audience = audienceInfo(meta.audience, meta.audienceSpace);
   if (!audience && !meta.linkShared && !meta.watched && !isPinned(node.id)) return null;
-  return { assignees: '', audience, scope: typeof meta.audience === 'string' ? meta.audience : meta.audience?.scope, unknownAudience: false, linkShared: !!meta.linkShared, watched: !!meta.watched, pinned: isPinned(node.id) };
+  return { assignees: '', audience, people: meta.people || [], peopleCount: meta.peopleCount, scope: typeof meta.audience === 'string' ? meta.audience : meta.audience?.scope, unknownAudience: false, linkShared: !!meta.linkShared, watched: !!meta.watched, pinned: isPinned(node.id) };
+}
+// a click on a row's fact opens its picker and leaves the caret where it is, as every other row control does
+function clickable(target, open) {
+  target.setAttribute('role', 'button'); // styles.css gives [role="button"] its pointer
+  target.onmousedown = (e) => { e.preventDefault(); e.stopPropagation(); };
+  target.onclick = (e) => { e.stopPropagation(); open(); };
+}
+// an icon in the 14px slot (styles.css .ticon, which also spaces it from what stands before it); no label means it
+// carries no information of its own (the placeholder)
+function iconEl(name, label, tag = 'span') {
+  const icon = document.createElement(tag); icon.className = 'ticon';
+  const svg = iconNode(name); if (svg) icon.append(svg);
+  if (label) { icon.setAttribute('role', 'img'); icon.setAttribute('aria-label', label); icon.title = label; } else icon.setAttribute('aria-hidden', 'true');
+  return icon;
+}
+// Assigned to someone who cannot see it: the audience icon itself is the warning, in the stylesheet's colour
+// (.hiddenfrom), and says who is shut out. hiddenFrom only comes with a known audience, so there is always one.
+function audienceIcon(summary, node) {
+  const label = summary.audience.label + (summary.hiddenFrom ? ' — not visible to ' + summary.hiddenFrom : '');
+  const icon = iconEl(summary.audience.icon, label);
+  if (summary.hiddenFrom) icon.classList.add('hiddenfrom');
+  if (node && canEditNode(node) && isRealId(node.id) && tana.accessOptions) { icon.title = label + ' — click to edit visibility'; clickable(icon, () => openVisibility(node, summary.scope)); }
+  return icon;
+}
+// Who can see a row, at the start of its subtext (#461): the audience's glyph, a bubble per person and how many.
+// main names them (sdk/node.js audienceMetadata): everyone is the organization's membership, the others the grants.
+function audienceUris(summary) { return (summary && summary.audience && displayOn('assigned') && summary.people) || []; }
+// a guest's profile is not readable (the graph refuses the kind, a subscribe finds no document), so a guest is named as one
+function isGuest(uri) { return uri.startsWith('tana:guest-profile:'); }
+function peopleEl(summary, node) {
+  const uris = audienceUris(summary);
+  if (!uris.length) return null;
+  loadMembers(); // the bubbles' names
+  const face = (uri) => {
+    const f = document.createElement('span'), found = memberName(uri), known = !found.startsWith('tana:');
+    const name = known ? found : isGuest(uri) ? 'Guest' : 'Unknown person';
+    f.className = 'face'; f.textContent = known || isGuest(uri) ? name.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase() : '?';
+    f.setAttribute('role', 'img'); f.setAttribute('aria-label', name); f.title = name;
+    let hue = 0; for (const c of uri) hue = (hue * 31 + c.charCodeAt(0)) % 360; // one colour per person, the same on every row
+    f.style.setProperty('--hue', hue);
+    return f;
+  };
+  const faces = document.createElement('span'); faces.className = 'faces';
+  const count = summary.peopleCount || uris.length; // main sends the first four and how many (main/documents.js doc:taskMeta)
+  faces.append(...uris.slice(0, 4).map(face)); // four bubbles, then "+n"
+  if (count > 4) { const more = document.createElement('span'); more.className = 'face more'; more.textContent = '+' + (count - 4); more.setAttribute('aria-hidden', 'true'); faces.append(more); } // the count after it says how many
+  const el = document.createElement('span'); el.className = 'people';
+  el.append(audienceIcon(summary, node), faces, count === 1 ? '1 person' : count + ' people');
+  return el;
 }
 // node: the row's document, so its facts open the Cmd+K pickers they describe (Edit assignees, Edit visibility)
 function taskMetaEl(summary, docId, node) {
   const el = document.createElement('span');
   el.className = 'meta tmeta' + (summary.pending ? ' pending' : '');
   const writable = node && canEditNode(node) && isRealId(node.id);
-  // a click opens the picker and leaves the caret where it is, as every other row control does
-  const clickable = (target, open) => {
-    target.setAttribute('role', 'button'); // styles.css gives [role="button"] its pointer
-    target.onmousedown = (e) => { e.preventDefault(); e.stopPropagation(); };
-    target.onclick = (e) => { e.stopPropagation(); open(); };
-  };
   // .mtext: the words, which a table row leaves out (its Assigned column has the name; styles.css .table-view)
   const who = document.createElement('span'); who.className = 'mtext'; who.textContent = summary.assignees;
   if (summary.assignees) el.append(who);
   if (summary.assignees && writable && isTask(node) && tana.setAssignees) { who.title = 'Edit assignees'; clickable(who, () => openAssigneePalette(node)); }
-  // an icon in the 14px slot (styles.css .ticon, which also spaces it from what stands before it); no label means it
-  // carries no information of its own (the placeholder)
-  const iconEl = (name, label, tag = 'span') => {
-    const icon = document.createElement(tag); icon.className = 'ticon';
-    const svg = iconNode(name); if (svg) icon.append(svg);
-    if (label) { icon.setAttribute('role', 'img'); icon.setAttribute('aria-label', label); icon.title = label; } else icon.setAttribute('aria-hidden', 'true');
-    return icon;
-  };
   if (summary.pending) el.append(iconEl('pending', null)); // the answer is still on its way: same slot, same size
   if (summary.assignees === 'Unassigned') { const icon = iconEl('unassigned', null); icon.title = 'Unassigned'; who.prepend(icon); }
-  if (summary.audience) {
-    // Assigned to someone who cannot see it: the audience icon itself is the warning, in the stylesheet's colour
-    // (.hiddenfrom), and says who is shut out. hiddenFrom only comes with a known audience, so there is always one.
-    const label = summary.audience.label + (summary.hiddenFrom ? ' — not visible to ' + summary.hiddenFrom : '');
-    const icon = iconEl(summary.audience.icon, label);
-    if (summary.hiddenFrom) icon.classList.add('hiddenfrom');
-    if (writable && tana.accessOptions) { icon.title = label + ' — click to edit visibility'; clickable(icon, () => openVisibility(node, summary.scope)); }
-    el.append(icon);
-  }
+  // a list row says who can see it in its subtext (peopleEl); a table row's subtext is its cells, so there it stays here
+  if (summary.audience && (tableView() || !audienceUris(summary).length)) el.append(audienceIcon(summary, node));
   else if (summary.unknownAudience) { const t = document.createElement('span'); t.className = 'mtext'; t.textContent = ' · Visibility unknown'; el.append(t); }
   // Pinned, in the same slot and with the same behaviour as the audience icon beside it: the glyph says the node is
   // pinned somewhere, and a click opens the page that says where and takes it off. Pins are personal, so a node you
