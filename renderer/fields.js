@@ -68,7 +68,7 @@ function choiceKey(e) {
   else if (e.key.length === 1) { e.preventDefault(); openChooser(ctx, undefined, e.key); } // typing is the start of what to look for
 }
 // A task's assignees, drawn as its first field under the title (renderer/render.js renderFields), in the same row and
-// chips a member field has: a chip per person, "Unassigned" when there is nobody. Not a Tana field, Tana keeps them as
+// people a person field shows: a mention per person, "Unassigned" when there is nobody. Not a Tana field, Tana keeps them as
 // the task's assignedToUris, so it opens the assignee picker the row's facts and Cmd+K use (openAssigneePalette).
 function assigneeFieldEl(parent) {
   const node = parent.node, meta = taskMetaById.get(node.id);
@@ -79,7 +79,8 @@ function assigneeFieldEl(parent) {
   const label = document.createElement('span'); label.className = 'flabel'; label.textContent = 'Assigned to';
   const values = document.createElement('div'); values.className = 'fvalues';
   const el = document.createElement('div'); el.className = 'fvalue fchoice'; el.tabIndex = 0;
-  for (const uri of meta.assignees) { const chip = document.createElement('span'); chip.className = 'fchip'; renderSegs(chip, [{ mention: { uri, label: memberName(uri), icon: 'member' } }]); el.append(chip); }
+  // the people as mentions, drawn as a person in any other field is: a link, no chip behind it
+  if (meta.assignees.length) { const who = document.createElement('span'); renderSegs(who, meta.assignees.flatMap((uri, i) => [...(i ? [{ text: ', ' }] : []), { mention: { uri, label: memberName(uri), icon: 'member' } }])); el.append(who); }
   if (!meta.assignees.length) { const hint = document.createElement('span'); hint.className = 'fhint'; hint.textContent = 'Unassigned'; el.append(hint); }
   const open = canEditNode(node) && tana.setAssignees ? () => openAssigneePalette(node) : null;
   el.onclick = (e) => { if (open && !e.target.closest('.mention')) open(); }; // a chip is a link to the person, as anywhere else
