@@ -53,7 +53,7 @@ assert.deepEqual(state({ authenticated: false, authChecking: false, error: null 
 assert.deepEqual(state({ authenticated: null, authChecking: false, error: 'temporary failure' }), {
   checking: false, authenticated: false, signedOut: false, showLogin: false, showOutline: true, error: 'temporary failure',
 });
-assert.match(source, /if \(signedOut\) rows\.push\(\{ id: 'login'/);
+assert.match(source, /if \(signedOut\) rows\.unshift\(\{ id: 'login'/, 'signed out, logging in is the first ⌘K row');
 assert.match(source, /s\.authChecking === false && s\.authenticated === false/);
 assert.doesNotMatch(source, /id: 'sync', group: 'Actions', icon: 'sync', label: 'Sync', kbd:/);
 assert.match(source, /id: 'openaiKey', group: 'Settings', icon: 'openaiKey', label: 'Set OpenAI API key'/);

@@ -894,11 +894,72 @@ body.building :is(#outline, #filtered) { opacity: 0; pointer-events: none; } /* 
 .glyph.icon svg { width: 13px; height: 13px; display: block; }
 .palette .row.active .glyph, .menu .mrow.active .glyph { color: #555; }
 /* ==== Login ==== */
-.login { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 120px 0; }
-.login p { margin: 0; max-width: 360px; text-align: center; color: #666; font-size: 14px; line-height: 1.5; }
+/* Signed out, the page is a welcome that teaches the one key everything starts from. ⌘K is the planet: two big keycaps
+   in a soft glow, with what Tana holds (tasks, meetings, notes, people, the inbox) circling them as small chips on two
+   orbits. A chip grows on the near half of its orbit, shrinks and fades on the far half and passes behind the keys
+   there. The keycaps press themselves now and then and go down for real under the keys you hold (renderer/app.js
+   loginKeys); the two steps under the words say what ⌘K then does, since the palette lists Log in to Tana first. The
+   button for the mouse waits 15 s, the animation's delay. Under reduced motion the chips stand still where they are. */
+.login { position: relative; isolation: isolate; box-sizing: border-box; min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 24px 0 56px; text-align: center; color: #45484c; }
 .login[hidden] { display: none; }
-.login button { border: 1px solid #ddd; background: #fff; border-radius: 8px; padding: 8px 18px; font-size: 15px; cursor: pointer; }
-.login button:hover { background: #f0f0f0; }
+/* a faint field of dots, brightest behind the keys, and a blue glow there */
+.login::before { content: ''; position: absolute; inset: -4px -32px -40px -16px; pointer-events: none; z-index: -1;
+  background: radial-gradient(circle at 50% 36%, rgba(80, 143, 187, .16), transparent 34%), radial-gradient(rgba(28, 32, 36, .11) 1px, transparent 1.4px) 0 0 / 22px 22px;
+  mask-image: radial-gradient(ellipse 48% 46% at 50% 36%, #000 10%, transparent 80%); }
+.lstage { position: relative; width: min(640px, 100%); height: 300px; flex: none; }
+.lring { position: absolute; left: 50%; top: 50%; width: calc(var(--rx) * 2); height: calc(var(--ry) * 2); translate: -50% -50%; border-radius: 50%;
+  border: 1px solid rgba(80, 143, 187, .22); }
+.lring.r1 { --rx: 29%; --ry: 25%; }
+.lring.r2 { --rx: 46%; --ry: 42%; border-style: dashed; border-color: rgba(80, 143, 187, .18); }
+.lsat { position: absolute; left: 0; top: 0; z-index: 3; display: flex; align-items: center; gap: 7px; padding: 5px 11px 5px 8px; border-radius: 999px;
+  background: var(--surface); box-shadow: 0 0 0 1px rgba(0, 0, 0, .06), 0 4px 14px rgba(0, 0, 0, .08); font-size: 12.5px; font-weight: 500; color: #45484c; white-space: nowrap;
+  offset-path: ellipse(var(--rx) var(--ry) at 50% 50%); offset-rotate: 0deg; offset-distance: calc(var(--k) * 100%); }
+.lsat.o1 { --rx: 29%; --ry: 25%; --t: 26s; }
+.lsat.o2 { --rx: 46%; --ry: 42%; --t: 40s; }
+.lsat.s1 { --k: .08; } .lsat.s2 { --k: .58; } .lsat.s3 { --k: .2; } .lsat.s4 { --k: .53; } .lsat.s5 { --k: .86; }
+.lsat i { flex: none; width: 10px; height: 10px; box-sizing: border-box; }
+.lsat .task { border: 1.5px solid #508fbb; border-radius: 3px; }
+.lsat .meet { border: 1.5px solid #e0a458; border-radius: 50%; }
+.lsat .note { width: 6px; height: 6px; margin: 0 2px; border-radius: 50%; background: #8a8f93; }
+.lsat .person { border-radius: 50%; background: linear-gradient(135deg, #8cc49a, #4f9a68); }
+.lsat .inbox { border: 1.5px solid #b28ad6; border-top-width: 0; border-radius: 0 0 3px 3px; height: 7px; }
+/* ⌘K, the planet */
+.lkeys { position: absolute; left: 50%; top: 50%; translate: -50% -50%; z-index: 2; display: flex; gap: 10px; }
+.lkeys::before { content: ''; position: absolute; inset: -36px -48px; z-index: -1; border-radius: 50%; background: radial-gradient(closest-side, rgba(80, 143, 187, .24), transparent); }
+.lkeys kbd { display: grid; place-items: center; width: 64px; height: 64px; box-sizing: border-box; padding-bottom: 3px; border-radius: 14px; font: inherit; font-size: 28px; line-height: 1;
+  background: linear-gradient(#fff, #f6f7f8); color: #2a2e32;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .07), 0 5px 0 #dfe2e5, 0 5px 0 1px rgba(0, 0, 0, .05), 0 12px 24px rgba(28, 32, 36, .14);
+  transition: transform var(--dur-quick) var(--ease-out), box-shadow var(--dur-quick) var(--ease-out), background var(--dur-quick) var(--ease-out), color var(--dur-quick) var(--ease-out); }
+.lkeys kbd.down { transform: translateY(4px); background: linear-gradient(#5d9bc6, #4a87b2); color: #fff; animation: none;
+  box-shadow: 0 0 0 1px #3f7aa3, 0 1px 0 #3f7aa3, 0 6px 22px rgba(80, 143, 187, .5); }
+.login h2 { margin: 18px 0 8px; font-size: 30px; font-weight: 700; letter-spacing: -.6px; color: #1c2024; }
+.login p { margin: 0; max-width: 400px; font-size: 15px; line-height: 1.6; }
+/* the two steps, as the palette will show them */
+.lsteps { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin: 26px 0 0; padding: 0; list-style: none; font-size: 14px; }
+.lsteps li { display: flex; align-items: center; gap: 8px; padding: 6px 14px 6px 6px; border-radius: 999px; background: var(--surface); box-shadow: 0 0 0 1px rgba(0, 0, 0, .07), 0 2px 8px rgba(0, 0, 0, .04); }
+.lsteps li > span { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: #508fbb; color: #fff; font-size: 12px; font-weight: 600; }
+.lsteps kbd { font: inherit; font-size: 13px; line-height: 1; color: #2a2e32; background: #f1f2f3; border-radius: 5px; padding: 3px 6px; box-shadow: inset 0 -1px 0 rgba(0, 0, 0, .12); }
+.lsteps b { font-weight: 600; color: #1c2024; }
+.login .llater { margin-top: 30px; font-size: 14px; color: var(--muted); animation: login-later var(--dur-slow) var(--ease-out) 15s both; }
+@keyframes login-later { from { opacity: 0; visibility: hidden; translate: 0 6px; } to { opacity: 1; visibility: visible; translate: none; } }
+.login button { margin-left: 8px; border: 0; background: #1c2024; color: #fff; border-radius: 8px; padding: 7px 14px; font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; }
+.login button:hover { background: #33383d; }
+@media (prefers-reduced-motion: no-preference) {
+  .lsat { animation: lsat var(--t) linear infinite; animation-delay: calc(var(--t) * var(--k) * -1); }
+  .lkeys kbd { animation: lpress 4s var(--ease-out) 1.5s infinite; }
+  .lkeys kbd + kbd { animation-delay: 1.62s; }
+}
+/* an ellipse path starts on the right and runs through the bottom (near) half first */
+@keyframes lsat {
+  0% { offset-distance: 0%; z-index: 3; transform: scale(.94); opacity: .95; }
+  25% { transform: scale(1.04); opacity: 1; }
+  50% { z-index: 3; transform: scale(.94); opacity: .95; }
+  50.01% { z-index: 1; }
+  75% { transform: scale(.8); opacity: .5; }
+  100% { offset-distance: 100%; z-index: 1; transform: scale(.94); opacity: .95; }
+}
+@keyframes lpress { 0%, 60%, 80%, 100% { transform: none; } 63%, 76% { transform: translateY(4px); box-shadow: 0 0 0 1px rgba(0, 0, 0, .07), 0 1px 0 #dfe2e5, 0 4px 10px rgba(28, 32, 36, .1); } }
 
 /* ==== Palette and toast (renderer/palette.js; showNote in renderer/nodes.js) ==== */
 /* command palette (Cmd+K) */
@@ -954,6 +1015,7 @@ body.building :is(#outline, #filtered) { opacity: 0; pointer-events: none; } /* 
 .palette .row.disabled { color: #8a8a8a; cursor: default; }
 .palette .row.disabled:not(.active):hover { background: none; } /* a recordable disabled row can be the active one */
 .palette .row.disabled .ricon { color: #c0c0c0; }
+.palette .row.disabled :is(kbd, .hint) { opacity: .55; } /* its key and hint grey with it */
 .palette .ricon { flex: none; width: 16px; height: 16px; color: #8a8a8a; }
 .palette .ricon svg { display: block; width: 16px; height: 16px; }
 .palette .ricon.dot::before { content: ""; display: block; width: 6px; height: 6px; margin: 5px; border-radius: 50%; background: #555; }
@@ -1148,9 +1210,15 @@ html.cover .toast { left: calc(var(--pane-x) + var(--pane-w) / 2); bottom: calc(
 [data-theme="dark"] .children { border-left-color: #34393b; }
 
 [data-theme="dark"] .skeleton canvas { color: #e8eaec; }
-[data-theme="dark"] .login button { border-color: #454b4e; background: #2a2d2f; color: #c9c9c9; }
-[data-theme="dark"] .login p { color: #9a9a9a; }
-[data-theme="dark"] .login button:hover { background: #363a3c; }
+[data-theme="dark"] .login { color: #b7bcbe; }
+[data-theme="dark"] .login :is(h2, .lsteps b) { color: #e6e8e8; }
+[data-theme="dark"] .login::before { background: radial-gradient(circle at 50% 36%, rgba(110, 168, 220, .16), transparent 34%), radial-gradient(rgba(255, 255, 255, .1) 1px, transparent 1.4px) 0 0 / 22px 22px; }
+[data-theme="dark"] .lsat { color: #c9cccd; box-shadow: 0 0 0 1px rgba(255, 255, 255, .08), 0 4px 14px rgba(0, 0, 0, .4); }
+[data-theme="dark"] .lsteps li { box-shadow: 0 0 0 1px rgba(255, 255, 255, .08); }
+[data-theme="dark"] .lsteps kbd { background: #303436; color: #d0d2d2; box-shadow: inset 0 -1px 0 rgba(0, 0, 0, .3); }
+[data-theme="dark"] .lkeys kbd:not(.down) { background: linear-gradient(#34383b, #2b2f31); color: #e0e2e2; box-shadow: 0 0 0 1px rgba(255, 255, 255, .09), 0 5px 0 #16181a, 0 12px 24px rgba(0, 0, 0, .45); }
+[data-theme="dark"] .login button { background: #e6e8e8; color: #1c2024; }
+[data-theme="dark"] .login button:hover { background: #fff; }
 
 [data-theme="dark"] .palette input { color: #c9c9c9; border-bottom-color: #3a3f41; background: #242729; }
 [data-theme="dark"] .palette .ptext { color: #c9c9c9; border-bottom-color: #3a3f41; background: #242729; }

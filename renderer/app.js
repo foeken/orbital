@@ -33,6 +33,17 @@ function showStatus(s) {
 }
 $('login').onclick = () => tana.login().catch(showError);
 $('errorLogin').onclick = () => tana.login().catch(showError);
+// Signed out, the splash's big ⌘ and K keycaps go down under the keys you hold, so pressing them feels like the lesson.
+// Capture phase: the palette's own handler must not keep ⌘K from reaching it. A keyup of K rarely arrives while ⌘ is
+// held on macOS, so K comes up with ⌘ (or when the window loses focus).
+function loginKeys(e) {
+  if ($('loginBox').hidden) return;
+  $('loginCmd').classList.toggle('down', !!e.metaKey);
+  $('loginK').classList.toggle('down', !!e.metaKey && e.type === 'keydown' && e.key.toLowerCase() === 'k');
+}
+document.addEventListener('keydown', loginKeys, true);
+document.addEventListener('keyup', loginKeys, true);
+window.addEventListener('blur', loginKeys);
 
 // ---- live updates ----
 // One document changed (info.meta says whether its assignees, audience or sharing moved — main compares them, so a

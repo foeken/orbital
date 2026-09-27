@@ -1520,6 +1520,8 @@ function runAuthPaletteCheck() {
   assert.equal(api.paletteRows('').some((row) => row.id === 'login'), false, 'failed session probe has no Cmd+K login action');
   api.showStatus({ authenticated: false, authChecking: false });
   assert.deepEqual([api.state().loginHidden, api.state().headHidden], [false, true], 'signed out, the login shows with no view title above it');
+  const out = api.paletteRows('');
+  assert.ok(out.length > 1 && out.every((row) => !row.disabled === (row.id === 'login')), 'signed out, Cmd+K offers only the login; every other row is greyed out');
   api.showStatus({ authenticated: true, authChecking: false });
   assert.equal(api.state().headHidden, false, 'and the title comes back once signed in');
 }
@@ -1605,7 +1607,7 @@ async function runSyncShortcutCheck() {
     const pillCommandRows = () => [{ id: 'pill:type', group: 'View options', label: 'Filter by type' }], taskActionRows = () => [];
     const tana = { refresh: async () => {}, todayNode: async () => {}, weekNode: async () => {}, nodeLink: async () => {}, accessOptions: async () => {}, filters: {}, sensitiveIds: () => {}, creationOptions: async () => {}, discussWith: async () => {}, pin: async () => {}, pinState: async () => ({}) }, run = () => {};
     const openDiscussPalette = () => {};
-    const authed = true, authChecking = false, signedOut = true, theme = 'light', hotkeys = {}, themePref = 'light';
+    const authed = true, authChecking = false, signedOut = false, theme = 'light', hotkeys = {}, themePref = 'light';
     const palDoc = { id: 'tana:text:01j0doc000000000000000000' }, pinInfo = { docId: palDoc.id, sidebar: false, dates: [] };
     const accessById = new Map([[palDoc.id, { sharing: true, move: true, ownerUri: 'tana:space:01j0space00000000000000000' }]]), loadAccess = () => {}, isRealId = () => true;
     const localDate = (offset = 0) => (offset ? '2026-09-14' : '2026-09-13'), setTheme = () => {}, docRow = () => ({}), sectionOf = () => null;
@@ -1634,7 +1636,7 @@ async function runSyncShortcutCheck() {
     'Current node: Mark as sensitive', 'Current node: Edit visibility', 'Current node: Copy link', 'Current node: Delete',
     'Views: Today', 'Views: This week', 'Views: Inbox', 'Views: Library',
     'View options: Filter by type', 'View options: Filter rows by text',
-    'Actions: Log in to Tana', 'Actions: Create new …', 'Actions: Search Tana', 'Actions: Undo', 'Actions: Redo', 'Actions: Sync',
+    'Actions: Create new …', 'Actions: Search Tana', 'Actions: Undo', 'Actions: Redo', 'Actions: Sync',
     'Navigate: Go back', 'Navigate: Go forward', 'Navigate: Go to Home', 'Navigate: Focus the sidebar',
     'Window: New window', 'Window: New pane', 'Window: New tab', 'Window: New floating pane', 'Window: Hide sidebar', 'Window: Reload',
     'Settings: Larger text', 'Settings: Smaller text', 'Settings: Reset text size', 'Settings: Toggle dark mode', 'Settings: Edit hidden items', 'Settings: Toggle sensitive visibility', 'Settings: Toggle demo mode',
