@@ -87,7 +87,9 @@ html.tabbed .titlebar { padding-top: 16px; } /* under a tab bar (shell.js, rende
 html.tabbed.listing:not(.renaming) #pagehead { display: none; } /* a view, saved search or app page is named by its tab (renderer/render.js); Rename on the tab brings it back */
 /* with no heading, the buttons on the right come up to the crumbs' line (the 4px above them .navbtns keeps at the
    48px band) and the gap it left under the crumbs closes */
-html.tabbed.listing:not(.renaming) .navbtns { top: 12px; }
+html.tabbed.listing:not(.renaming) .navbtns { top: 12px; right: 16px; }
+/* and the icons on both sides sit 19px from the pane's edge, the left ones over the section chevrons below */
+html.tabbed.listing:not(.renaming) .titlebar { padding-left: 19px; }
 html.tabbed.listing:not(.renaming) .crumbs { margin-bottom: 4px; }
 .titlebar h1 { margin: 0; font-size: 34px; font-weight: 700; letter-spacing: -0.5px; color: #1c2024; } /* the page title is a heading: the same near-black */
 .titlebar h1[contenteditable] { outline: none; user-select: text; min-height: 1lh; }
