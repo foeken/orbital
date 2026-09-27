@@ -16,7 +16,7 @@ const { S, VIEWS, errText, idKind, isSearch, isSpace, pageOf, today, redoStack, 
 const { cachedNodeHue, graphRow, rememberNodeHue, rememberType, toNode } = require('./main/rows');
 const { accessContext, archivedTypes, chatOutline, codexIds, createDocument, creationOptions, discussWith, documentAction, followSummary, history, setCodex, onChange, op, outlineWithReferences, setSensitive, setType, setTypeHue, typeCandidates, typeChoices, typeList } = require('./main/documents');
 const { changesOf, dropSearchHeads, related, searchChildren, spaceChildren, summaryChanges, unwatchRelated, watchRelated } = require('./main/related');
-const { announceNewInbox, watchInbox, inboxCount, listFilter, refresh, search, searchCreate, searchTitle, setMcpHidden, settingsReady, start, viewFilter, viewRows } = require('./main/views');
+const { announceNewInbox, watchInbox, inboxCount, listFilter, refresh, search, searchCreate, searchTitle, setMcpHidden, settingsReady, start, stop, viewFilter, viewRows } = require('./main/views');
 const { nodePin, pinTree, weekNode, weekTitle } = require('./main/pins');
 const inbox = require('./main/inbox');
 const proposalsPage = require('./main/proposals');
@@ -535,6 +535,13 @@ ipcMain.handle('sync:login', async () => {
   } catch (e) {
     report(e);
   } finally { relayout(); }
+});
+// ⌘K Log out of Tana: the stream closed and the session's cookies cleared, so every window shows the login.
+ipcMain.handle('sync:logout', async () => {
+  stop();
+  await S.session.logout();
+  setStatus({ authenticated: false, connected: false, syncing: false, error: null });
+  relayout();
 });
 
 if (process.env.TANA_MAIN_TEST) {

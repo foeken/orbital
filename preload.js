@@ -223,6 +223,7 @@ contextBridge.exposeInMainWorld('api', {
   redo: () => ipcRenderer.invoke('history:redo'),
   status: () => ipcRenderer.invoke('sync:status'),
   login: () => ipcRenderer.invoke('sync:login'),
+  logout: () => ipcRenderer.invoke('sync:logout'),
   onRemoved: (cb) => ipcRenderer.on('outline:removed', (_e, docId) => cb(docId)), // evict all cached references by id
   onReleased: (cb) => ipcRenderer.on('outline:released', (_e, ids) => cb(ids)), // [docId] main no longer keeps live: forget their outlines
   onChanged: (cb) => ipcRenderer.on('outline:changed', (_e, docId, info) => cb(docId, info)), // info: { meta } for one document; null docId = global

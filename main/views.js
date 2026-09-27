@@ -235,13 +235,17 @@ function myTasks(findOnly) {
 // (the Help tour's first start, renderer/overlays.js helpOnce, through settings:ready). Settled whether it worked or not.
 let settingsRead = Promise.resolve();
 const settingsReady = () => settingsRead;
+// The sync client let go of, on a logout or before a second login: the stale S.client would keep emitting changes, and
+// a new one would skip every id the old subscription set still claims. The undo steps were recorded against its
+// documents' Loro undo managers, so they are dead with it.
+function stop() {
+  if (!S.client) return;
+  const previous = S.client; S.client = null; subscribed.clear(); undoStack.length = 0; redoStack.length = 0; previous.sync.removeAllListeners(); previous.close().catch(() => {});
+}
 async function start() {
   let read;
   settingsRead = new Promise((resolve) => { read = resolve; });
-  // A second login must not leave the previous stream, its listeners and its subscriptions running: the stale S.client
-  // would keep emitting changes, and the new one would skip every id the old subscription set still claims.
-  // The new S.client's documents start with empty Loro undo managers, so the steps recorded against the old ones are dead.
-  if (S.client) { const previous = S.client; S.client = null; subscribed.clear(); undoStack.length = 0; redoStack.length = 0; previous.sync.removeAllListeners(); previous.close().catch(() => {}); }
+  stop();
   S.me = await S.session.info();
   const peer = peerIdentity({ file: path.join(S.userData, 'peer.json'), userExternalId: S.me.userExternalId });
   S.client = createTanaClient({ getAccessToken: (o) => S.session.getAccessToken(o), orgId: S.me.orgId, ...peer, logger: console });
@@ -545,4 +549,4 @@ const ipc = {
   'sync:refresh': () => refresh(),
 };
 
-module.exports = { announceNewInbox, inboxFrom, watchInbox, watchMine, preset, viewFilter, setViewFilter, hiddenRules, mcpHidden, viewRows, inboxCount, search, searchList, searchCreate, searchTitle, myTasks, start, settingsReady, refresh, doRefresh, listFilter, setHidden, setMcpHidden, ipc };
+module.exports = { announceNewInbox, inboxFrom, watchInbox, watchMine, preset, viewFilter, setViewFilter, hiddenRules, mcpHidden, viewRows, inboxCount, search, searchList, searchCreate, searchTitle, myTasks, start, stop, settingsReady, refresh, doRefresh, listFilter, setHidden, setMcpHidden, ipc };

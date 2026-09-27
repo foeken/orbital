@@ -15,7 +15,7 @@ const usable = (doc) => !!doc && typeof doc === 'object' && Object.values(doc.vi
 let aside = start.signedOut && usable(start.doc) ? start.doc : null;
 
 // The page's own background around it, one 1px line between panes in the colour the split line had, and a bright blue
-// as the accent: the focused tab's top line, a hovered divider, a tab's drop slot
+// as the accent: a hovered divider, a tab's drop slot
 const tokens = () => theme === 'dark'
   ? { '--trellis-bg': '#2b2f31', '--trellis-border': '#2b2f31', '--trellis-panel': '#1b1d1e', '--trellis-tabbar': '#232627', '--trellis-accent': '#5aa8ff', '--trellis-gap': '0px', '--trellis-radius': '0px', '--trellis-tabbar-height': '38px' }
   : { '--trellis-bg': '#ececec', '--trellis-border': '#ececec', '--trellis-panel': '#fff', '--trellis-tabbar': '#f6f6f6', '--trellis-accent': '#2f8cf6', '--trellis-gap': '0px', '--trellis-radius': '0px', '--trellis-tabbar-height': '38px' };
@@ -48,12 +48,13 @@ const sourceOf = (win) => pages().find((v) => windowOf(frameOf(v.id)) === win)?.
 const tell = (win) => win?.postMessage({ orbital: 'layout', pages: pages().length }, '*');
 
 // The tab bars along the top drag the window as the header does (-webkit-app-region does not work inside an iframe). A
-// floating panel's bar moves the panel.
+// floating panel's bar moves the panel. The bars along the left edge keep their first tab off the window's edge.
 function mark() {
-  const top = ws.element.getBoundingClientRect().top;
+  const { top, left } = ws.element.getBoundingClientRect();
   for (const bar of ws.element.querySelectorAll('[data-trellis-part="tabbar"]')) {
     const r = bar.getBoundingClientRect(), up = r.height > 0 && r.top - top < 4 && !bar.closest('[data-floating]');
     bar.toggleAttribute('data-top', up);
+    bar.toggleAttribute('data-left', r.height > 0 && r.left - left < 4 && !bar.closest('[data-floating]'));
   }
 }
 // Trellis moves a panel by rewriting its style, and says so (change) before an animated move has landed: a pane dropped

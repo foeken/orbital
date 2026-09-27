@@ -375,6 +375,7 @@ function paletteRows(q, typed = q) {
     hint: chatgptAuth?.signedIn ? (chatgptAuth.email || 'Signed in') : chatgptAuth?.available === false ? 'Status unavailable' : chatgptAuth ? 'Not signed in · preferred over API key' : 'Checking sign-in',
     keepOpen: true, run: chatgptCommand });
   if (tana.setOpenAIKey) rows.push({ id: 'openaiKey', group: 'Settings', icon: 'openaiKey', label: 'Set OpenAI API key', hint: 'Stored locally', keepOpen: true, run: openOpenAIKeyPalette });
+  if (authed && tana.logout) rows.push({ id: 'logout', group: 'Settings', icon: 'tana', label: 'Log out of Tana', keepOpen: true, run: confirmLogout });
   rows.push({ id: 'help', group: 'Help', icon: 'help', label: 'Help', hint: 'The basics and the keys', run: () => openHelp() }); // renderer/overlays.js
   // A second level is folded in once the query's first two letters reach its row, as a prefix or as the first words'
   // initials ("mo" or "mt" for Move to …, "as" or "at" for Assign to), and loaded once per palette opening. The spaces
@@ -464,6 +465,14 @@ function showPage(mode, placeholder, page, value = '') {
 // starts something the first draw depends on (Set icon's busy search) calls showPage and draws itself.
 function openPage(mode, placeholder, page, value) { showPage(mode, placeholder, page, value); renderPalette(); palInput.focus(); }
 const BACK_TO_COMMANDS = () => openCommandPalette(); // a page opened from the command page steps back to it
+// Logging out ends the session for every window on this Mac, so the row asks once more; Escape or Cancel steps back.
+function confirmLogout() {
+  const rows = [
+    { group: 'Log out of Tana?', icon: 'tana', label: 'Log out', hint: 'Every window, until you log in again', run: () => tana.logout().catch(showError) },
+    { group: 'Log out of Tana?', label: 'Cancel', keepOpen: true, run: BACK_TO_COMMANDS },
+  ];
+  openPage('logout', 'Log out of Tana?', { back: BACK_TO_COMMANDS, rows: (q) => (q ? rows.filter((r) => fuzzyMatch(r.label.toLowerCase(), q)) : rows) });
+}
 function openPillPalette(id) {
   pillCtx = id; openPage('pill', 'Choose ' + id, { rows: pillRows, back: BACK_TO_COMMANDS });
 }

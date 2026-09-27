@@ -33,6 +33,8 @@ stored), [MEETINGS.md](MEETINGS.md) (meeting structure, the write-up, editing a 
   as a planet, with Tasks, Meetings, Notes, People and Inbox orbiting them as chips; the keycaps go down under the keys
   held (renderer/app.js `loginKeys`), and two steps say ⌘K, then ↩, because the palette lists "Log in to Tana" first while signed out. A "Log in to Tana" button for the mouse fades in after 15 s
   (styles.css Login). A window of several panes shows its first page alone until login (issue #244).
+  ⌘K "Log out of Tana" (Settings) asks once more on a page of its own, then closes the stream and clears the session
+  (main.js `sync:logout`), which signs out every window.
 
 ## 2. Content model and outline operations
 
