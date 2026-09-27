@@ -978,6 +978,9 @@ function renderPalette() {
 // opens the palette in mode, closes it when already open in that mode; opening one mode closes the other.
 // link = @ linking context; pin = relationship pin context. Both reuse search results.
 function togglePalette(mode, link, pin) {
+  // The Links pane has no outline for Cmd+K or Cmd+S to act on: they open in the page it follows (shell.js), whose rows
+  // (views, Create new …, results) are meant for it (#463 review). A picker one of its own rows opens stays here.
+  if (LINKS && palette.hidden && !link && !pin && (mode === 'cmd' || mode === 'search')) return toShell({ orbital: 'palette', mode });
   const show = palette.hidden || palMode !== mode || !!link || !!pin;
   cancelLink(); pinCtx = null; pillCtx = null;
   palette.hidden = !show;

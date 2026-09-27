@@ -74,7 +74,7 @@ window.addEventListener('message', (e) => {
   if (e.source !== window.parent || e.source === window) return;
   // flushed once every write this page queued has gone to main: an earlier one still out holds back the last characters
   if (e.data?.orbital === 'flush') { leavePage(); const shell = e.source; queue.then(() => shell.postMessage({ orbital: 'flushed' }, '*')); }
-  else if (e.data?.orbital === 'palette') togglePalette('cmd'); // the window header's ⌘K and ? (shell.js), for the page in front
+  else if (e.data?.orbital === 'palette') togglePalette(e.data.mode === 'search' ? 'search' : 'cmd'); // the window header's ⌘K and ? (shell.js), for the page in front, or the Links pane's
   else if (e.data?.orbital === 'help') openHelp();
   else if (e.data?.orbital === 'sensitive') toggleSensitiveVisibility();
   else if (e.data?.orbital === 'layout') { windowPanes = { pages: e.data.pages, links: e.data.links === true }; document.documentElement.classList.toggle('tabbed', e.data.pages > 1); navSent = ''; tellNav(); retell(); }
