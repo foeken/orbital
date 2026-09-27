@@ -1,57 +1,57 @@
 'use strict';
-// The right rail: what a zoomed node is linked to (api.related). Rows here are edges, not nodes: they open, a task row toggles, nothing takes a caret.
-
-// ---- right rail: what a zoomed node is linked to (api.related). These rows are edges, not nodes:
+// The Graph pane (issue #462): what the document on screen is linked to (api.related). Rows here are edges, not nodes:
 // they open, and a task row toggles, but nothing here ever takes a caret (docs/OUTLINER.md §18).
+// A window has at most one: a page the shell opened with links=1 (shell.js), which draws only #rail, full width, for
+// the document of the pane it follows — the focused one. Every other page draws no rail and tells the shell which
+// document it is on (tellDoc), which the shell passes to the Graph pane (follow).
 const railEl = $('rail');
-const railGrip = $('railGrip');
-const RAIL_MIN = 200, RAIL_MAX = 620;
-const railWidth = () => Math.min(RAIL_MAX, Math.max(RAIL_MIN, Number(localStorage.getItem('railWidth')) || 272));
-railEl.style.width = railWidth() + 'px';
-const railToggle = $('railToggle');
-// The sidebar can be put away by hand; the preference persists like the width and the collapsed sections.
-// Hiding wins over content: a sidebar the user closed must not reappear because the next document has pins.
-// Only the "nothing to show" case composes with it — a node with no sidebar at all stays hidden regardless.
-let railHidden = pref('railHidden', false) === true;
-// A pane narrower than this leaves the sidebar out, and its button with it: beside 272px of sidebar the outline would be
-// cramped (issue #444). Crossing it as the pane is resized draws the page again.
-const RAIL_ROOM = 720;
-const railNarrow = () => typeof innerWidth === 'number' && innerWidth < RAIL_ROOM;
-let railWasNarrow = railNarrow();
-if (typeof addEventListener === 'function') addEventListener('resize', () => { if (railNarrow() !== railWasNarrow) { railWasNarrow = !railWasNarrow; renderSoon(); } });
-function railOff(empty) { return railHidden || empty || railNarrow(); }
-function toggleRail() {
-  railHidden = !railHidden;
-  setPref('railHidden', railHidden);
-  // Cmd+K closes the palette before running the row, which puts the caret back in the row being edited, so a plain
-  // render would be deferred until the caret left. Showing or hiding the sidebar cannot drop that row, so it forces.
-  slideRail(!railHidden, () => render(true)); // it slides out and back in (renderer/motion.js)
+const toShell = (msg) => { if (window.frameElement) window.parent.postMessage(msg, '*'); };
+if (LINKS) {
+  document.documentElement.classList.add('links'); // styles.css: the outline column goes, the rail fills the page
+  addEventListener('focus', () => { if (!railEl.contains(document.activeElement)) focusRail(); }); // the keys arrive in its rows (Focus graph, a click on its tab)
+  // With no row to hold the keys (nothing linked, every section folded, rows still coming) Escape gives them back all the
+  // same, before the page's own Escape (renderer/events.js) steps the workspace out instead; a row answers it itself (railMove)
+  document.addEventListener('keydown', (e) => {
+    const at = document.activeElement;
+    if (e.key !== 'Escape' || !(at === document.body || (railEl.contains(at) && !at.classList.contains('rrow')))) return;
+    e.preventDefault(); e.stopImmediatePropagation(); toShell({ orbital: 'open' });
+  }, true);
 }
-railToggle.addEventListener('click', toggleRail);
-// The button only appears when there is a sidebar to toggle; its glyph is the direction it will move the panel.
-function renderRailToggle(available) {
-  railToggle.hidden = !available;
-  if (!available) return;
-  const label = railHidden ? 'Show sidebar' : 'Hide sidebar';
-  keyTitle(railToggle, label, 'railToggle');
-  railToggle.setAttribute('aria-label', label);
-  railToggle.setAttribute('aria-pressed', railHidden ? 'true' : 'false');
-  railToggle.replaceChildren();
-  addIcon(railToggle, railHidden ? 'railShow' : 'railHide');
+// A page tells the shell which document it is on, once per change, with the row it has for it, so the Graph pane can
+// open it without asking main. A view, a saved search, an app page or a draft is none. Focus says which page to follow.
+let toldDoc;
+function tellDoc(docId) {
+  if (docId === toldDoc) return;
+  toldDoc = docId;
+  const doc = docId && docOf(docId);
+  toShell({ orbital: 'doc', docId, doc: doc ? JSON.parse(JSON.stringify(doc)) : null }); // data only: a row is plain, and postMessage throws on anything else
 }
-// drag the grip to resize the sidebar; the width persists like the other view preferences
-railGrip.addEventListener('pointerdown', (e) => {
-  e.preventDefault();
-  const startX = e.clientX, startWidth = railEl.getBoundingClientRect().width;
-  railGrip.classList.add('dragging'); railGrip.setPointerCapture(e.pointerId);
-  const move = (ev) => { railEl.style.width = Math.min(RAIL_MAX, Math.max(RAIL_MIN, startWidth - (ev.clientX - startX))) + 'px'; };
-  const up = () => {
-    railGrip.classList.remove('dragging');
-    railGrip.removeEventListener('pointermove', move); railGrip.removeEventListener('pointerup', up);
-    localStorage.setItem('railWidth', String(Math.round(railEl.getBoundingClientRect().width)));
-  };
-  railGrip.addEventListener('pointermove', move); railGrip.addEventListener('pointerup', up);
-});
+if (!LINKS && typeof addEventListener === 'function') addEventListener('focus', () => toShell({ orbital: 'focus' }));
+// The shell hears a page only once its iframe has loaded (shell.js windowOf), so what the first render told before that
+// was lost; its layout message, sent at that load and after every change, has the title and the document told again.
+function retell() {
+  retellTitle(true); // with the tab glyph it told (renderer/render.js)
+  if (toldDoc !== undefined) { const docId = toldDoc; toldDoc = undefined; tellDoc(docId); }
+}
+// The Graph pane goes where the followed page is: its document, or, for a page on no document, the empty rail. Only
+// this moves it: anywhere else it is asked to go (Cmd+K, a search, a view) is the followed page's move (openDoc, setView).
+// A follow that has to read its document first applies only if no newer one began meanwhile (followSeq): a pane focused
+// while an older read was on its way must not be taken over by it (#463 review).
+let followingNow = false, followSeq = 0;
+async function follow(docId, doc) {
+  if (typeof docId !== 'string' || !docId || docId.startsWith('orbital:')) docId = null; // an app page (Timeline, …) is no document
+  const seq = ++followSeq; // before the check below: back on the document on screen, an older read still on its way is dropped too
+  if ((zoom && !zoom.nodeId ? zoom.docId : null) === docId) return;
+  if (docId && doc && typeof doc === 'object' && !docOf(docId)) extra.set(docId, doc);
+  if (docId && !docOf(docId)) { // no row sent: read the one the followed page is on, as goTo would
+    try { const n = await tana.node(docId); if (!docOf(docId)) extra.set(docId, { ...n, text: n.title || '', hasChildren: true }); } catch { return; } // unreadable: the followed page says why
+    if (seq !== followSeq) return;
+  }
+  followingNow = true;
+  try { if (docId) openDoc(docId); else setView(view); } finally { followingNow = false; }
+}
+// A row opens in the page being followed, which takes the keys; outside the shell (the mock) here.
+const openLink = (id) => (LINKS && window.frameElement ? toShell({ orbital: 'open', id }) : goTo(id));
 const relatedBy = new Map(); // docId -> related payload, or null while the first one is loading
 const relatedStale = new Set(); // ids whose payload is known to be behind: re-read, but keep showing the old one
 const railClosed = new Set(pref('railClosed', []));
@@ -130,7 +130,7 @@ function railRow(node) {
   const freeLines = () => { title.style.webkitLineClamp = ''; };
   row.onmouseenter = holdLines; row.onmouseleave = freeLines;
   row.onfocus = holdLines; row.onblur = freeLines;
-  row.onclick = () => goTo(node.id);
+  row.onclick = () => openLink(node.id);
   row.onkeydown = (e) => railKey(e, node, row);
   return row;
 }
@@ -157,12 +157,12 @@ function railMove(e, row) {
   const rows = railRowEls(), i = rows.indexOf(row);
   if (e.key === 'ArrowDown') { e.preventDefault(); rows[Math.min(rows.length - 1, i + 1)].focus(); return true; }
   if (e.key === 'ArrowUp') { e.preventDefault(); if (i > 0) rows[i - 1].focus(); return true; }
-  if (e.key === 'Escape' || (e.key === 'ArrowLeft' && (e.metaKey || e.ctrlKey))) { e.preventDefault(); const first = texts()[0]; if (first) setCaret(first, 0); else titleEl.focus(); return true; }
+  if (e.key === 'Escape' || (e.key === 'ArrowLeft' && (e.metaKey || e.ctrlKey))) { e.preventDefault(); toShell({ orbital: 'open' }); return true; } // back to the page it follows
   return false;
 }
 function railKey(e, node, row) {
   if (railMove(e, row)) return;
-  if (e.key === 'Enter') { e.preventDefault(); goTo(node.id); }
+  if (e.key === 'Enter') { e.preventDefault(); openLink(node.id); }
   else if (e.key === ' ') { e.preventDefault(); toggleRelated(node); }
   else if (e.key === 'ArrowLeft' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); toggleRailSection(row.dataset.section); } // collapse the section the focused row is in
   else if (e.key === 'ArrowRight' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); if (railClosed.has(row.dataset.section)) toggleRailSection(row.dataset.section); }
@@ -269,13 +269,16 @@ function railPinAction(pinHub, docId) {
   return row;
 }
 // Pinned, Outcomes, Proposals and References for the zoomed document; a writable pin hub keeps Pinned available when empty.
-// A saved search is a list, like the views: no sidebar, and so no button to show one (issue #234).
+// A saved search is a list, like the views: no links (issue #234).
 function renderRail(parent) {
+  const docId = parent && parent.node.kind === 'document' && !parent.node.draft && !String(parent.docId).startsWith(SEARCH_ID) ? parent.docId : null;
+  if (!LINKS) { railEl.hidden = true; return tellDoc(docId); }
   const active = document.activeElement, keep = active && active.classList && active.classList.contains('rrow') ? active.dataset.id : null;
   railEl.replaceChildren();
-  const docId = parent && parent.node.kind === 'document' && !parent.node.draft && !String(parent.docId).startsWith(SEARCH_ID) ? parent.docId : null;
+  railEl.hidden = false;
   watchRail(docId);
-  if (!docId) { railEl.hidden = railGrip.hidden = true; renderRailToggle(false); return; }
+  const note = (text) => { const el = document.createElement('div'); el.className = 'rempty'; el.textContent = text; railEl.append(el); };
+  if (!docId) return note('Open a document to see its graph.');
   loadRelated(docId);
   const data = relatedBy.get(docId);
   // Event views immediately follow their write-up document. Sharing still belongs to the event itself.
@@ -287,9 +290,7 @@ function renderRail(parent) {
   // "Notes" is what api.related calls them; in the sidebar they read as References
   const groups = railGroups(data);
   const changes = (data && data.changes) || [];
-  const empty = !groups.length && !meta.length && !changes.length;
-  railEl.hidden = railGrip.hidden = railOff(empty);
-  renderRailToggle(!empty && !railNarrow()); // there is a sidebar to toggle even while it is hidden, so the button stays reachable (not in a narrow pane, which has no room for it)
+  if (!groups.length && !meta.length && !changes.length) return note(data === undefined || data === null ? '' : 'Nothing links here yet.');
   const sectionHead = (label) => { // every sidebar section collapses the same way, Details included
     const head = document.createElement('button');
     head.className = 'rhead' + (railClosed.has(label) ? ' closed' : '');

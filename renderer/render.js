@@ -273,6 +273,7 @@ const retellTitle = (again) => {
   tellTitle(titleEl.classList.contains('sensitive') ? 'Hidden' : titleEl.textContent, renamable, toldIcon);
 };
 function tellTitle(title, renamable, icon = '') {
+  if (LINKS) { title = 'Graph'; renamable = false; icon = iconNode('graph')?.outerHTML || ''; } // its tab names what it is; the document is the followed page's
   const told = title + '\n' + renamable + '\n' + icon;
   if (told === toldTitle || !window.frameElement) return;
   toldTitle = told; toldIcon = icon;

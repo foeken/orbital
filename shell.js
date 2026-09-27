@@ -29,7 +29,7 @@ const tokens = () => theme === 'dark'
 // Content keeps its layout down to 280 x 200 and scales below that, which is what zooming out shows.
 const types = (tabs) => ({ page: { title: 'Orbital', tabbar: tabs ? 'always' : 'never', minSize: { width: 280, height: 200 },
   menu: (view) => (renamable.has(view.id) ? [{ id: 'rename', label: 'Rename', run: () => rename(view.id) }, 'separator'] : []),
-  iframe: (view) => ({ src: 'index.html?side=' + encodeURIComponent(view.params.side), title: 'Orbital' }) } });
+  iframe: (view) => ({ src: 'index.html?side=' + encodeURIComponent(view.params.side) + (view.params.links ? '&links=1' : ''), title: 'Orbital' }) } });
 
 const ws = createWorkspace(document.getElementById('workspace'), {
   types: types(false),
@@ -50,7 +50,24 @@ const frames = () => [...ws.element.querySelectorAll('iframe')];
 const loaded = new WeakSet();
 const windowOf = (frame) => (frame && loaded.has(frame) ? frame.contentWindow : null);
 const sourceOf = (win) => pages().find((v) => windowOf(frameOf(v.id)) === win)?.id;
-const tell = (win) => win?.postMessage({ orbital: 'layout', pages: pages().length }, '*');
+const tell = (win) => win?.postMessage({ orbital: 'layout', pages: pages().length, links: !!linksView() }, '*');
+// The Graph pane (issue #462, renderer/rail.js): one page per window opened with links=1, showing the links of the
+// document the page it follows is on. It follows the page that last took the keys, never itself; each page says which
+// document it is on (its row too, so the Graph pane opens it without asking main), and a row opened there opens in it.
+const linksView = () => pages().find((v) => v.params.links)?.id;
+const docs = new Map(); // page view id -> { docId, doc } it last told
+let followed = null;
+const others = () => pages().filter((v) => !v.params.links).map((v) => v.id); // the pages a Graph pane can follow
+// The page followed: the last to take the keys, else the one in front, else the first. A restored window may open with
+// the Graph pane in front and no page having taken the keys yet (#463 review).
+function following() {
+  if (!others().includes(followed)) { const front = ws.getSnapshot().focusedView; followed = others().includes(front) ? front : others()[0] || null; }
+  return followed;
+}
+function follow() {
+  const told = docs.get(following()) || { docId: null, doc: null };
+  windowOf(frameOf(linksView()))?.postMessage({ orbital: 'follow', docId: told.docId, doc: told.doc }, '*');
+}
 
 // The tab bars along the top drag the window as the header does (-webkit-app-region does not work inside an iframe). A
 // floating panel's bar moves the panel. The bars along the left edge keep their first tab off the window's edge.
@@ -91,7 +108,8 @@ const guarded = new Set();
 function guard() {
   for (const { id } of pages()) if (!guarded.has(id)) {
     guarded.add(id);
-    ws.view(id).guardClose(async () => { if (pages().length < 2) return false; await flush(frameOf(id)); return true; });
+    // the last page never closes from here, nor the last one a Graph pane follows: main closes the window then (closeFront)
+    ws.view(id).guardClose(async () => { if (pages().length < 2 || (id !== linksView() && others().length < 2)) return false; await flush(frameOf(id)); return true; });
   }
 }
 // The closed page's frame had the keys, and its going leaves them with the shell, where ⌘K and the rest do nothing
@@ -101,7 +119,8 @@ function guard() {
 const drawTabIcons = () => { for (const s of ws.surfaces()) { const g = tabIcons.get(s.view.id) || ''; if (s.icon.dataset.glyph !== g) { s.icon.dataset.glyph = g; s.icon.innerHTML = g; } } };
 ws.on('surfaces', drawTabIcons);
 ws.on('close', (view) => {
-  guarded.delete(view.id); renamable.delete(view.id); tabIcons.delete(view.id);
+  guarded.delete(view.id); renamable.delete(view.id); tabIcons.delete(view.id); docs.delete(view.id);
+  if (followed === view.id) { followed = null; follow(); }
   requestAnimationFrame(() => { if (document.activeElement?.tagName !== 'IFRAME') windowOf(frameOf(ws.getSnapshot().focusedView))?.focus(); });
 });
 
@@ -109,7 +128,7 @@ ws.on('close', (view) => {
 function sync() {
   const tabs = pages().length > 1;
   if (tabs !== many) { many = tabs; ws.update({ types: types(tabs), navigation: tabs ? 'free' : false }); document.body.classList.toggle('many', tabs); headNav.replaceChildren(); navDrawn.delete(HEAD); } // the pages send their buttons again on the layout below, to the tab bars or the header
-  guard(); mark(); place(); frames().forEach((f) => tell(windowOf(f))); // place: a divider or a move shifts a covering page's pane
+  guard(); mark(); place(); drawLinks(); frames().forEach((f) => tell(windowOf(f))); // place: a divider or a move shifts a covering page's pane
 }
 ws.on('change', (doc) => {
   sync();
@@ -138,6 +157,7 @@ ws.element.addEventListener('load', (e) => {
   if (frame.tagName !== 'IFRAME') return;
   loaded.add(frame);
   tell(frame.contentWindow);
+  if (frame === frameOf(linksView())) follow();
   // Trellis selects a new window's first pane without focusing it, so the page in front takes the keys once it is in
   if (frame === frameOf(ws.getSnapshot().focusedView) && document.activeElement?.tagName !== 'IFRAME') frame.contentWindow.focus();
   // Trellis makes a pane the focused one (its tab bold) from a focusin or a press inside it, and neither leaves an
@@ -160,12 +180,18 @@ function focusPage(viewId) {
   ws.focus(viewId);
   windowOf(frameOf(viewId))?.focus();
 }
-// The header's switches (shell.html) act in the page in front, which takes the keys first (renderer/app.js)
-for (const [id, icon, what] of [['headSensitive', null, 'sensitive'], ['headPalette', 'command', 'palette'], ['headHelp', 'help', 'help']]) {
+// The header's switches (shell.html) act in the page in front, which takes the keys first (renderer/app.js); Graph runs
+// its Cmd+K Show/Hide graph row there (renderer/palette.js railToggle), so it opens beside that page.
+for (const [id, icon, msg] of [['headSensitive', null, { orbital: 'sensitive' }], ['headPalette', 'command', { orbital: 'palette' }], ['headHelp', 'help', { orbital: 'help' }], ['headLinks', 'graph', { orbital: 'action', id: 'railToggle' }]]) {
   const button = document.getElementById(id);
   if (icon) button.innerHTML = window.ICONS?.[icon] || ''; // icons.js: our own markup
   button.onmousedown = (e) => e.preventDefault();
-  button.onclick = () => { const win = windowOf(frameOf(ws.getSnapshot().focusedView)); win?.focus(); win?.postMessage({ orbital: what }, '*'); };
+  button.onclick = () => { const win = windowOf(frameOf(ws.getSnapshot().focusedView)); win?.focus(); win?.postMessage(msg, '*'); };
+}
+// The Graph switch shows its state by its look (shell.css): full strength while the window has a Graph pane.
+function drawLinks() {
+  const on = !!linksView(), button = document.getElementById('headLinks'), label = on ? 'Hide graph' : 'Show graph';
+  button.title = label; button.setAttribute('aria-label', label); button.setAttribute('aria-pressed', String(on));
 }
 // The sensitive switch is drawn from the pages' own storage (renderer/document.js): the glyph is the state, an open eye
 // while sensitive items are shown and the crossed one while they are blurred, and it follows a switch from any page.
@@ -204,9 +230,15 @@ async function reloadAll() {
 // document exists: focused while still loading, its window never hears it.
 function open({ id, where, from, focus }) {
   if (typeof id !== 'string' || viewOf(id)) return focusPage(viewOf(id));
+  const links = where === 'links';
+  // one per window: a second one asked for is not opened, and main, which gave it an id, hears the pages as they are
+  if (links && linksView()) { focusPage(linksView()); return bridge.layout({ doc: ws.getDocument(), pages: pages().map((v) => v.params.side) }); }
+  if (links && viewOf(from)) followed = viewOf(from);
   const beside = ws.view(viewOf(from) || '')?.panelId || ws.getSnapshot().focusedPanel;
-  const placement = where === 'float' ? 'float' : !beside ? 'side' : where === 'tab' ? { into: beside } : { beside, edge: where === 'left' ? 'left' : 'right' };
-  const { id: viewId } = ws.open('page', { id: 'page' + id, params: { side: id }, placement, focus: false });
+  // the Graph pane takes about 320px of the pane it opens beside: under Trellis's 280px minimum its content would be scaled down
+  const share = links ? Math.min(0.5, 320 / (frameOf(viewOf(from))?.getBoundingClientRect().width || innerWidth)) : undefined;
+  const placement = where === 'float' ? 'float' : !beside ? 'side' : where === 'tab' ? { into: beside } : { beside, edge: where === 'left' ? 'left' : 'right', ...(links ? { share } : {}) };
+  const { id: viewId } = ws.open('page', { id: 'page' + id, params: links ? { side: id, links: true } : { side: id }, placement, focus: false });
   if (focus) frameOf(viewId)?.addEventListener('load', () => focusPage(viewId), { once: true });
 }
 // A Trellis command a page's key or palette row asked for (maximize, overview, back, forward, next pane or tab), run
@@ -267,6 +299,13 @@ addEventListener('message', (e) => {
   else if (what === 'run') run(String(e.data.command), sourceOf(e.source));
   else if (what === 'reload') reloadAll(); // Cmd+K Reload: the window, every page in it
   else if (what === 'navbtns') drawNav(sourceOf(e.source), String(e.data.html || ''), e.data.on === true);
+  else if (what === 'doc') { const id = sourceOf(e.source); if (!id) return; docs.set(id, { docId: typeof e.data.docId === 'string' ? e.data.docId : null, doc: e.data.doc || null }); if (id === following()) follow(); }
+  else if (what === 'focus') { const id = sourceOf(e.source); if (id && id !== linksView() && id !== followed) { followed = id; follow(); } }
+  else if (what === 'open') { const id = following(), win = windowOf(frameOf(id)); if (!win) return; focusPage(id); if (typeof e.data.id === 'string' || typeof e.data.view === 'string') win.postMessage({ orbital: 'goto', id: e.data.id, view: e.data.view }, '*'); } // from the Graph pane
+  else if (what === 'links') { const id = linksView(); if (id) ws.close(id); } // Cmd+K Hide graph
+  else if (what === 'palette') { const id = following(), win = windowOf(frameOf(id)); if (!win) return; focusPage(id); win.postMessage({ orbital: 'palette', mode: e.data.mode }, '*'); } // Cmd+K or Cmd+S pressed in the Graph pane
+  else if (what === 'action') { const id = following(), win = windowOf(frameOf(id)); if (!win) return; focusPage(id); win.postMessage({ orbital: 'action', id: String(e.data.id) }, '*'); } // any other key pressed there
+  else if (what === 'focusLinks') focusPage(linksView());
 });
 
 // ---- a page's header buttons in its tab bar, or with one page in the window's header ----

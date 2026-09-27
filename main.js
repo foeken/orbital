@@ -122,11 +122,11 @@ function nextPane(page) {
 function addPage(e) {
   const frame = e.senderFrame, win = frame && shellWindow(e.sender);
   if (!win || !frame.parent) return null;
-  let side = '';
-  try { side = new URL(frame.url).searchParams.get('side') || ''; } catch { /* no url: the first page */ }
+  let side = '', links = false;
+  try { const params = new URL(frame.url).searchParams; side = params.get('side') || ''; links = params.get('links') === '1'; } catch { /* no url: the first page */ }
   if (!/^([2-9]|[1-9]\d+)$/.test(side)) side = '';
   if (win.panes.some((p) => p.side === side)) side = freeId();
-  const page = { id: frame.processId + ':' + frame.frameToken, frame, win, side,
+  const page = { id: frame.processId + ':' + frame.frameToken, frame, win, side, links, // links: the window's Graph pane (#462)
     isDestroyed: () => frame.isDestroyed() || frame.detached,
     send: (channel, ...args) => { if (!page.isDestroyed()) frame.send(channel, ...args); },
     // the window's keys to the shell, and the shell's to this page's panel and iframe
@@ -249,7 +249,8 @@ function createWindow() {
 function closeFront(win, page = S.pane) {
   if (!win) return;
   const target = win.panes && (win.panes.includes(page) ? page : win.panes[0]);
-  if (!target || signedOut() || win.pages.length < 2) return win.close();
+  // the last page beside the Graph pane closes the window too: the Graph pane follows it and cannot stand alone (#462)
+  if (!target || signedOut() || win.pages.length < 2 || (!target.links && win.panes.filter((p) => !p.links).length < 2)) return win.close();
   const next = nextPane(target);
   win.pages = win.pages.filter((id) => id !== target.side); // a second ⌘W before the report counts it gone
   tellShell(win, 'close', target.side);
@@ -284,7 +285,8 @@ ipcMain.handle('window:split', (e, where, start) => {
   if (!page || signedOut()) return null;
   const id = freeId();
   setStart(id, { view: null, place: null, ...(start && typeof start === 'object' ? start : {}) }); // an id used before keeps nothing of that page
-  return openPage(page.win, { id, where: ['right', 'tab', 'float'].includes(where) ? where : 'right', from: page.side });
+  // 'links': the window's Graph pane (issue #462), beside the page and leaving it the keys; the shell keeps one per window
+  return openPage(page.win, { id, where: ['right', 'tab', 'float', 'links'].includes(where) ? where : 'right', from: page.side, focus: where !== 'links' });
 });
 // asked by preload.js on every load, a Reload included: this page's id ('' the first page, then '2', '3', ...).
 // This is where a page registers (addPage); an overlay asking is no page and gets the defaults.

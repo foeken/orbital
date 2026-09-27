@@ -1099,12 +1099,29 @@ async function main() {
     const fourth = frame('fourth', '4');
     assert.deepEqual(ask('window:getSide', fourth), { side: '4', start: { view: null, place: null } }, 'a page opened with no start keeps nothing of a closed page with its id');
     assert.equal(backend.S.pane && backend.S.pane.frame, fourth, 'the page \u2325\u2318N opened is the one \u2318W and a notification click aim at');
+    assert.equal(ask('window:split', leftPage, 'links', { view: 'library', place: '{}' }), '5');
+    assert.deepEqual(toShell.splice(0), [['open', { id: '5', where: 'links', from: '', focus: false }]], 'Show graph: the Graph pane opens beside the page that asked, which keeps the keys (issue #462)');
+    const linksFrame = { ...frame('linksPane', '5'), url: 'file:///orbital/index.html?side=5&links=1' };
+    ask('window:getSide', linksFrame);
+    const activeBefore = backend.S.activeView, otherView = activeBefore === 'inbox' ? 'library' : 'inbox';
+    const linksRows = own(await backend.handlers.get('view:list')({ sender: shellWc, senderFrame: linksFrame }, otherView));
+    assert.deepEqual([linksRows, backend.S.windowViews.has('1:linksPane'), backend.S.activeView], [{ nodes: [], truncated: false }, false, activeBefore],
+      'the Graph pane shows no list: nothing is queried, it is no open view and the refresh keeps its view (#463 review)');
     const layoutDoc = { schema: 1, root: { kind: 'panel', views: ['page', 'page2', 'page3'] }, views: {} };
     ask('shell:layout', null, { doc: layoutDoc, pages: ['', '3', '2'] });
     assert.deepEqual([shown.panes.map((p) => p.side).sort(), shown.doc], [['', '2', '3'], layoutDoc], 'a page not in the report is forgotten, and the layout saved');
     const pageFor = (f) => shown.panes.find((p) => p.frame === f);
     backend.closeFront(shown, pageFor(thirdPage));
     assert.deepEqual([toShell.splice(0), shown.pages], [[['close', '3'], ['focus', '2']], ['', '2']], '\u2318W: a page closes in the shell and the next in the layout\u2019s order takes the keys');
+    { // #462: the Graph pane follows a page and cannot stand alone, so \u2318W on the last page beside it closes the window
+      const sent = [], linksWin = { closed: false, close() { this.closed = true; }, shell: { webContents: { isDestroyed: () => false, send: (...args) => sent.push(args.slice(1)) } },
+        pages: ['', '5'], panes: [{ side: '', links: false, focus() {} }, { side: '5', links: true, focus() {} }] };
+      for (const p of linksWin.panes) p.win = linksWin;
+      backend.closeFront(linksWin, linksWin.panes[1]);
+      assert.deepEqual([linksWin.closed, sent], [false, [['close', '5']]], '\u2318W in the Graph pane closes only it');
+      backend.closeFront(linksWin, linksWin.panes[0]);
+      assert.equal(linksWin.closed, true, 'and on the last page beside it, the window');
+    }
     ask('shell:layout', null, { doc: layoutDoc, pages: ['', '2'] });
     told.splice(0);
     // Cmd+K Saved views: the layout this window has, and one to put it back to, saved and reloaded into. 'workView' is

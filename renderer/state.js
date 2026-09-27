@@ -41,9 +41,12 @@ let home = pref('home', 'workView');
 // Every page of a window (shell.js) keeps its own view and place under its id, which never changes while it lives:
 // '' the first page, then '2', '3', ... (main.js addPage, api.side), so a restart reopens each page where it was.
 let SIDE = typeof window !== 'undefined' && window.api && window.api.side ? ':' + window.api.side : '';
-// What the shell says of this page's window after every change (renderer/app.js): how many pages it holds. The pane
-// rows in Cmd+K are offered from it.
-let windowPanes = { pages: 1 };
+// The window's Graph pane (issue #462, renderer/rail.js): a page the shell opened with links=1, which shows only the links
+// of the document the focused pane is on.
+const LINKS = typeof location !== 'undefined' && new URLSearchParams(location.search).get('links') === '1';
+// What the shell says of this page's window after every change (renderer/app.js): how many pages it holds and whether
+// one is the Graph pane. The pane rows in Cmd+K are offered from it.
+let windowPanes = { pages: 1, links: false };
 let view = localStorage.getItem('view' + SIDE) || 'library'; // active view id; the outline shows one view at a time
 // Views that no longer exist. A stored one would leave the app on a page with no filter, no rows and no way back,
 // so it lands in the Library, which lists every kind those pages used to list one of.
@@ -74,7 +77,7 @@ const hotkeys = { ...pref('hotkeys', {}) }; // palette row id -> combo ("⇧⌘M
 // The pane keys (Trellis's commands, run by the shell) keep off what a row's own keydown answers to: ⌥⌘ with ↑ or ↓,
 // and brackets and \ with ⇧ or ⌥; while there are panes they are taken before a row sees them (renderer/palette.js).
 // Close pane has no key of its own: ⌘W closes the pane in front (the File menu).
-const DEFAULT_HOTKEYS = { createTask: '⇧⌘Space', search: '⌘S', filter: '⌘F', copyLink: '⌘C', back: '⌘[', forward: '⌘]', undo: '⌘Z', redo: '⇧⌘Z', expand: '⌘↓', collapse: '⌘↑', toggleDone: '⌘↩', today: '⌃⇧D', reload: '⌘R', newWindow: '⌥⌘N', splitView: '⌘N', otherPane: '⌘/', previousPane: '⇧⌘/', maximizePane: '⌥⌘↓', overview: '⌥⌘↑', zoomBack: '⌥⌘[', zoomForward: '⌥⌘]', nextTab: '⇧⌘]', previousTab: '⇧⌘[', goHome: '⇧⌘H' }; // "Focus the sidebar" is a palette row with no default key
+const DEFAULT_HOTKEYS = { createTask: '⇧⌘Space', search: '⌘S', filter: '⌘F', copyLink: '⌘C', back: '⌘[', forward: '⌘]', undo: '⌘Z', redo: '⇧⌘Z', expand: '⌘↓', collapse: '⌘↑', toggleDone: '⌘↩', today: '⌃⇧D', reload: '⌘R', newWindow: '⌥⌘N', splitView: '⌘N', otherPane: '⌘/', previousPane: '⇧⌘/', maximizePane: '⌥⌘↓', overview: '⌥⌘↑', zoomBack: '⌥⌘[', zoomForward: '⌥⌘]', nextTab: '⇧⌘]', previousTab: '⇧⌘[', goHome: '⇧⌘H' }; // "Focus graph" and "Show/Hide graph" are palette rows with no default key
 const hotkeyFor = (id) => (Object.hasOwn(hotkeys, id) ? hotkeys[id] : DEFAULT_HOTKEYS[id]);
 // A header button's tooltip: what it does and, when it has one, the key that does the same. The label and row id stay
 // on the button so hovering can read the key again (renderer/edit.js), since a key recorded later changes it.

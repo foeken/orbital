@@ -3,13 +3,14 @@
 html, body { margin: 0; height: 100%; overflow: hidden; background: #fff; }
 [data-theme="dark"] { color-scheme: dark; } /* as the page's own (styles.css): an iframe whose color-scheme differs is drawn opaque, and a covering page must be see-through */
 [data-theme="dark"] body { background: #1b1d1e; }
-/* The header holds the traffic lights and, on the right, the app's own switches (sensitive items, ⌘K, Help) and drags the window; the panes fill the rest, their tab bars the
+/* The header holds the traffic lights and, on the right, the app's own switches (sensitive items, ⌘K, Help, Graph) and drags the window; the panes fill the rest, their tab bars the
    full width. Above the header only while a page covers the window (its palette's scrim goes over both). */
 .head { position: fixed; top: 0; left: 0; right: 0; height: 38px; box-sizing: border-box; display: flex; align-items: center; justify-content: flex-end; gap: 2px; padding: 0 12px 0 80px;
   background: #f6f6f6; -webkit-app-region: drag; user-select: none; }
 [data-theme="dark"] .head { background: #232627; }
 .head button { -webkit-app-region: no-drag; display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 4px; background: none; color: #777; opacity: .5; cursor: pointer; }
 .head button:hover { background: #ddd; opacity: 1; }
+#headLinks[aria-pressed="true"] { opacity: 1; } /* the Graph pane is open: its switch at full strength, as a pressed toggle */
 [data-theme="dark"] .head button { color: #aaa; }
 [data-theme="dark"] .head button:hover { background: #3a3f42; }
 .head svg { display: block; width: 18px; height: 18px; }
@@ -78,7 +79,6 @@ body.covered .trellis [data-trellis-part="tabbar"] { -webkit-app-region: no-drag
 .trellis [data-trellis-part="accessory"] button:hover:not(:disabled), .headnav button:hover:not(:disabled) { background: #ddd; opacity: 1; }
 .trellis [data-trellis-part="accessory"] button:disabled, .headnav button:disabled { opacity: .15; cursor: default; }
 .trellis [data-trellis-part="tabbar"]:not(:hover) [data-trellis-part="accessory"]:not([data-pointer]) button { opacity: 0; }
-.trellis [data-trellis-part="accessory"] [data-for="railToggle"], .headnav [data-for="railToggle"] { margin-left: 6px; }
 .trellis [data-trellis-part="accessory"] svg, .headnav svg { display: block; width: 18px; height: 18px; }
 [data-theme="dark"] .trellis [data-trellis-part="accessory"] button, [data-theme="dark"] .headnav button { color: #aaa; }
 [data-theme="dark"] .trellis [data-trellis-part="accessory"] button:hover:not(:disabled), [data-theme="dark"] .headnav button:hover:not(:disabled) { background: #3a3f42; }

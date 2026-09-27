@@ -103,7 +103,7 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   takes a click there as a window drag and the backdrop never hears the click that closes it).
 - **Buttons at the top right** (`.navbtns`, one flex row anchored to the right edge of `.titlebar`, so they stay put as
   the rows under the title come and go): Back and Forward, the sensitive toggle, the pills toggle, the Outliner/Table
-  switch, Clean up, Refresh and the sidebar toggle (a page among others closes from its tab, Panes below). A button that
+  switch, Clean up and Refresh (a page among others closes from its tab, Panes below; the links are a pane, §18). A button that
   does not apply is gone rather than empty, and the others move up to the edge. Back and Forward run `navigate(-1)` and
   `navigate(1)`, the history ⌘[ and ⌘] walk; `renderNav()` runs after `noteNavigation()` on every render, disables
   them when the move does nothing and puts the current combo in the tooltip. Every header button with a Cmd+K row
@@ -397,11 +397,11 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
 - **View options**: the pills by what they do — Filter by type, Filter by status, Filter by assignee, Sort by, Group
   by, each hinting its value — then Clean up, Filter rows by text, Switch to table/outliner and Column widths ….
 - **Actions**: Log in (signed out), Create new …, Create task, Search Tana, Undo, Redo, Mark all as read, Sync.
-- **Navigate**: Go back, Go forward, Go to Home, Set as Home, Focus the sidebar, Recently
+- **Navigate**: Go back, Go forward, Go to Home, Set as Home, Focus graph (with a Graph pane, §18), Recently
   deleted, Archived types.
 - **Window**: New window, New pane, New tab, New floating pane; with more than one page Next / Previous pane, Next / Previous
   tab, Maximize or restore pane, Show all panes, Zoom back / forward and Close pane (its chip ⌘W, the File menu's Close;
-  panes change places by dragging a tab); Show/Hide sidebar, Reload (the window: every pane), Save view…, Remove saved view (its choices also found from the command page).
+  panes change places by dragging a tab); Show/Hide graph (§18), Reload (the window: every pane), Save view…, Remove saved view (its choices also found from the command page).
 - **Saved views** (issue #442): one row per view, the Work View first. A view is the window's layout (Trellis's
   document, `window:layout`, without its zoom: a view opens with every pane shown) and each page's view and place (`view`/`place`, `view:2`/`place:2`, …), under a name,
   in the synced `savedViews` preference. Save view… names the current one, or updates a saved view listed under
@@ -1062,15 +1062,32 @@ structure; an unsandboxed `electron scripts/pdf-check.js --render` writes three 
   (the whole title, or a prefix with a trailing `*`, case-insensitive) that drop matching nodes from every list and
   search. A hidden node opened directly still opens. **Toggle MCP chats** hides MCP chats the same way (docs/CHATS.md).
 
-## 18. The sidebar
+## 18. The Graph pane
 
-A zoomed document shows its relationships in a full-height sidebar beside it (`#rail`, renderer/rail.js), fed by
-`api.related(docId)`: its own scroll, a border, a drag handle on its left edge (200-620px, width in localStorage
-`railWidth`), and a toggle at the top right (Cmd+K Show/Hide sidebar). Its rows are edges, not nodes: they open on
-Enter or a click, a task row toggles on Space, and nothing there takes a caret. An empty section is omitted and an
-empty sidebar hidden; a collapsed section is remembered (`railClosed`), and every head carries `aria-expanded`. A page
-narrower than 720px (`RAIL_ROOM`, a narrow pane) leaves the sidebar and its toggle out, and draws them again once it is
-wide enough (issue #444).
+A document's relationships are shown in the window's **Graph pane** (issue #462, `#rail`, renderer/rail.js), fed by
+`api.related(docId)`: one Trellis pane per window that follows the pane with the keys, so a window of several panes
+has one list of links rather than a sidebar in each. Cmd+K **Show graph** opens it beside the page you are on, about
+320px wide (Trellis scales a pane's content below 280px), and leaves you the keys; **Hide graph** closes it, as its
+tab's X or ⌘W in it do. The rightmost button in the window's header runs the same row for the page in front, its
+glyph the row's (shell.js `drawLinks`). It is a pane like any other: tabbed, floated, maximized or dragged, and kept in the window's
+layout and in a saved view.
+
+How it works: it is an outliner page opened with `links=1` (`api.splitWindow('links')`, main.js `window:split`;
+shell.js `open` keeps one per window and puts `links: true` in the page's params), and `LINKS` (renderer/state.js)
+hides its outline column (styles.css `html.links`) so it draws only the rail, full width; its tab reads "Graph". It
+follows by zooming into the followed page's document, hidden, which is what gives the rail its row, fields and live
+changes; it records no Recent entry and joins no presence room. Every other page draws no rail and tells the shell
+which document it is on, with its row (`tellDoc`: a view, a saved search, an app page or a draft is none), and that it
+took the keys (`{ orbital: 'focus' }`); the shell follows the last page that did, never the Graph pane itself (and in a
+window restored with the Graph pane in front, the page in front or else the first: `following`), and
+sends it `{ orbital: 'follow', docId, doc }` (`follow`: the row opens the document without asking main; none leaves it
+on the view). Each page tells its title and document again on the shell's layout message (`retell`), since what a
+page says before the shell has seen its iframe load is lost. Its rows are edges, not nodes: a click or Enter opens one
+in the followed page, which takes the keys (`openLink`, `{ orbital: 'open', id }`, answered with `goto` there), as
+does a notification opened while it has the keys; a task row toggles on Space, and nothing there takes a caret. A
+document with nothing linked says so; an empty section is omitted; a collapsed section is remembered (`railClosed`),
+and every head carries `aria-expanded`. It never stands alone: the last page beside it does not close from its tab, and
+⌘W there closes the window (main.js `closeFront`, which knows the Graph pane by its `links=1`).
 
 - Tags on sidebar rows collapse to their `#` and hue and show their label on hover or focus, without changing the
   row's height.
@@ -1099,5 +1116,7 @@ wide enough (issue #444).
   Each row shows the kind as a glyph (`CHANGE_ICON`: pen, file-plus, trash; named in its `title`/`aria-label`), what the
   change is about, and "who · when" (`memberName`, `agoText`). Display only. The payload is left alone while the page
   is edited, so Changes says what it said when the page opened.
-- **Keys**: Cmd+K **Focus the sidebar** (`rail`, no default key; record one with ⇧⌘K) enters it, ↑/↓ move, Enter opens, Space toggles a task, ← folds
-  the focused row's section and → unfolds it, Escape or ⌘← returns the caret to the document.
+- **Keys**: Cmd+K **Focus graph** (`rail`, no default key; record one with ⇧⌘K) moves the keys to its first row (as does
+  any way into the pane: ⌘/, a click on its tab), ↑/↓ move, Enter opens, Space toggles a task, ← folds the focused
+  row's section and → unfolds it, Escape or ⌘← gives the keys back to the page it follows. **Show/Hide graph**
+  (`railToggle`) records a key the same way.
