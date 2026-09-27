@@ -73,8 +73,9 @@ for (const [name, file] of [['expand', 'v-shaped-arrow-down'], ['collapse', 'v-s
 WANT.outline = path.join(__dirname, '..', 'build', 'icons', 'unordered-list.svg'); // the header's Outliner/Table switch while a list is a table
 WANT.command = path.join(__dirname, '..', 'build', 'icons', 'command.svg'); // the header button that opens Cmd+K
 WANT.rename = path.join(__dirname, '..', 'build', 'icons', 'rename.svg'); // Cmd+K Rename, as on the page's tab (renderer/palette.js)
-WANT.paperclip = path.join(__dirname, '..', 'build', 'icons', 'paperclip.svg'); // beside an @Codex answer: put it in the message box (renderer/chat.js)
+WANT.toMessage = path.join(__dirname, '..', 'build', 'icons', 'arrow-turn-down.svg'); // Add to message on an @Codex answer: down into the message box (renderer/chat.js)
 WANT.help = path.join(__dirname, '..', 'build', 'icons', 'circle-question.svg'); // the header button beside it that opens Help (renderer/overlays.js)
+WANT.cloudSlash = path.join(__dirname, '..', 'build', 'icons', 'cloud-slash.svg'); // the badge beside an @Codex question and answer: never saved to Tana, kept on this device (renderer/chat.js)
 const out = {};
 for (const [name, file] of Object.entries(WANT)) {
   if (!SRC && !path.isAbsolute(file)) { if (!current[name]) throw new Error(name + ' needs the icon set: node scripts/build-icons.js <dir>'); out[name] = current[name]; continue; }

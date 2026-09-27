@@ -122,7 +122,6 @@ function chatThoughtEl(part, subs, msgId, docId) {
 let chatPendingQ = null; // the questions Tana waits on in the chat drawn last: its card replaces the composer
 function chatEls(list, docId) {
   const rows = list.filter((n) => n.chat), msgs = rows.filter((n) => !n.chat.status), out = [];
-  const lefts = new Set(msgs.filter((n) => !n.chat.mine).map((n) => n.chat.author)); // more than one: names over their runs
   let prev = null;
   // the questions asked of an agent on this device, and their answers, where they were asked among the messages
   const asks = [...(agentAnswers.get(docId) || [])].sort((a, b) => a.at - b.at);
@@ -131,9 +130,8 @@ function chatEls(list, docId) {
     if (n.chat.sentAt) asksUntil(n.chat.sentAt - 1);
     // a status line ("Sam was added to the chat.") stands on its own between the messages, as Tana shows it
     if (n.chat.status) { const line = document.createElement('div'); line.className = 'chat-status'; line.textContent = demoText(n.text, n.chat.author || docId); out.push(line); prev = null; continue; }
-    if (!n.chat.mine && lefts.size > 1 && (!prev || prev.chat.author !== n.chat.author)) {
-      const name = document.createElement('div'); name.className = 'chat-name'; name.textContent = demoText(n.text, n.chat.author); out.push(name);
-    }
+    // who said it, in bold over each run of replies: a person, Tana AI (or Codex, agentAskEls)
+    if (!n.chat.mine && (!prev || prev.chat.author !== n.chat.author)) out.push(chatNameEl(demoText(n.text, n.chat.author)));
     out.push(chatMessageEl(n, docId));
     prev = n;
   }
@@ -185,9 +183,16 @@ if (typeof ResizeObserver === 'function' && outline.parentElement) {
   const seen = new ResizeObserver(keep); seen.observe(outline); seen.observe(sc);
 }
 // ---- the agents' questions and answers ----
-// Two grey bubbles on your side, neither of them in Tana: the question, then under a line that says they are yours
-// alone the dots while the task works and then its answer. The paperclip beside an answer puts it in the message box,
-// to send as your own words.
+// Neither of them in Tana: the question in a grey bubble on your side, then the dots while the task works and then the
+// answer on the other side as a reply, in grey text, under Codex's name; the cloud-slash glyph (its tooltip says why) as a
+// badge on the question bubble's top-right corner and plain after that name. Add to message, after them on the same line
+// once the answer is in, puts it in the message box, to send as your own words.
+const chatNameEl = (text) => { const name = document.createElement('div'); name.className = 'chat-name'; name.textContent = text; return name; };
+function localBadge(bubble) {
+  const badge = document.createElement('span');
+  badge.className = 'agent-badge'; badge.append(...[iconNode('cloudSlash')].filter(Boolean));
+  bubble.append(badge);
+}
 function agentAskEls(a, docId) {
   const q = document.createElement('div'), qb = document.createElement('div');
   q.className = 'chat-msg mine agent-local'; qb.className = 'bubble'; qb.title = AGENT_NOTE;
@@ -195,28 +200,26 @@ function agentAskEls(a, docId) {
   const words = document.createElement('div'); words.className = 'chat-paragraph';
   // the agent it asks stands out: "@Codex" in bold, the rest as typed
   words.append(...demoText(a.question, docId).split(new RegExp('(@' + a.label + '\\b)', 'i')).map((part, i) => { if (!(i % 2)) return part; const b = document.createElement('strong'); b.textContent = part; return b; }));
-  const qhead = document.createElement('div'); qhead.className = 'agent-head'; qhead.append(...[iconNode('lock')].filter(Boolean), document.createTextNode('Only visible for you, on this device'));
-  qb.append(words); q.append(qhead, qb); // the question is as private as its answer, and says so too
-  const el = document.createElement('div'), head = document.createElement('div'), row = document.createElement('div'), bubble = document.createElement('div');
-  el.className = 'chat-msg mine agent-local answer'; head.className = 'agent-head'; row.className = 'agent-row'; bubble.className = 'bubble'; bubble.title = AGENT_NOTE;
+  qb.append(words); localBadge(qb); q.append(qb);
+  const el = document.createElement('div'), bubble = document.createElement('div');
+  el.className = 'chat-msg theirs agent-local answer'; bubble.className = 'bubble'; bubble.title = AGENT_NOTE;
   selectable(el, 'a:' + a.id);
-  // the line over it opens the agent's task that answered, for the work behind the answer
-  if (tana.openAgentAsk) { head.classList.add('opens'); head.title = 'Open the ' + a.label + ' task'; head.onclick = () => openAgentAsk(docId, a.id); }
-  head.append(...[iconNode('lock')].filter(Boolean), document.createTextNode(a.label + ' · only visible for you, on this device'));
   if (a.state === 'working') bubble.append(chatDotsEl());
   else { const text = document.createElement('div'); text.className = 'chat-paragraph'; text.textContent = a.state === 'done' ? demoText(a.text, docId) : a.label + ' stopped without an answer'; bubble.append(text); }
+  el.append(bubble);
+  const name = chatNameEl(a.label); name.classList.add('agent-local'); name.title = AGENT_NOTE; name.append(...[iconNode('cloudSlash')].filter(Boolean)); // plain, after who answered
   if (a.state === 'done') {
-    const clip = document.createElement('button');
-    clip.type = 'button'; clip.className = 'agent-clip'; clip.tabIndex = -1; clip.title = 'Add to your message'; clip.setAttribute('aria-label', 'Add to your message');
-    clip.append(...[iconNode('paperclip')].filter(Boolean));
-    clip.onclick = () => answerToComposer(docId, a.text);
-    row.append(clip);
+    const add = document.createElement('button');
+    add.type = 'button'; add.className = 'agent-add'; add.tabIndex = -1; add.title = 'To send as your own words (Enter)';
+    add.append(...[iconNode('toMessage')].filter(Boolean), 'Add to message');
+    add.onclick = () => answerToComposer(docId, a.text);
+    const dot = document.createElement('span'); dot.className = 'agent-sep'; dot.textContent = '·'; // outside the button, so its underline stops at the words
+    name.append(dot, add);
   }
-  row.append(bubble); el.append(head, row);
-  return [q, el];
+  return [q, name, el];
 }
 // The one way an answer reaches Tana: added after whatever is in the message box, to be sent as your message (the
-// paperclip, or Cmd+K Add …’s answer to message)
+// name line's Add to message, Enter on the answer, or Cmd+K Add …’s answer to message)
 function answerToComposer(docId, text) {
   if (composer.dataset.doc !== docId || chatReadOnly.has(docId)) return;
   const had = composer.classList.contains('empty') ? [] : composerSegs();
@@ -283,7 +286,7 @@ function deleteChatMsg(docId, key) {
 function chatMessageRows(docId) {
   const rows = [], sel = msgEl(chatSel) ? chatSel : null, picked = askOf(docId, sel), group = sel ? 'Message' : 'Actions';
   const answer = sel ? picked && picked.state === 'done' && picked : latestAgentAnswer(docId), ask = sel ? picked : latestAgentAsk(docId);
-  if (tana.askAgent && answer) rows.push({ id: 'agentAnswerToMessage', group, icon: 'paperclip', label: 'Add ' + answer.label + '’s answer to message', hint: 'To send as your own words', run: () => answerToComposer(docId, answer.text) });
+  if (tana.askAgent && answer) rows.push({ id: 'agentAnswerToMessage', group, icon: 'toMessage', label: 'Add ' + answer.label + '’s answer to message', hint: 'To send as your own words', run: () => answerToComposer(docId, answer.text) });
   if (tana.openAgentAsk && ask) rows.push({ id: 'openAgentAsk', group, icon: 'robot', label: 'Open ' + ask.label + ' task', hint: picked ? 'The one behind this question' : 'The one behind the last @' + ask.label + ' answer', run: () => openAgentAsk(docId, ask.id) });
   if (sel && deletableMsg(docId, sel)) rows.push({ id: 'deleteMessage', group, icon: 'trash', label: 'Delete message', hint: picked ? 'The question and its answer, from this device' : 'From the chat, for everyone in it', kbd: '⇧⌘⌫', run: () => deleteChatMsg(docId, sel) });
   return rows;
