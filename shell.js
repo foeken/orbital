@@ -78,7 +78,10 @@ ws.on('change', (doc) => {
   const next = JSON.stringify({ doc, pages: pages().map((v) => v.params.side) });
   if (next !== last) { last = next; bridge.layout(JSON.parse(next)); }
 });
-ws.on('camera', mark);
+ws.on('camera', () => { mark(); place(); }); // a zoom moves the panes under a covering palette too, and no resize says so
+// A tab chosen, or the one Trellis selects after a close, takes the keys: its window's focus is what tells main
+// (preload.js page:focus) which page ⌘W and a notification click aim at.
+ws.on('focus', (viewId) => { const win = windowOf(frameOf(viewId)); if (win && !win.document.hasFocus()) win.focus(); });
 addEventListener('resize', () => requestAnimationFrame(() => { mark(); place(); })); // after Trellis has laid the panels out again
 sync();
 
