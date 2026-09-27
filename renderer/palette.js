@@ -348,7 +348,7 @@ function paletteRows(q, typed = q) {
   rows.push({ id: 'reload', group: 'Window', icon: 'reload', label: 'Reload', run: () => location.reload() });
   if (tana.windowLayout) {
     rows.push({ id: 'saveView', group: 'Window', icon: 'splitPanes', label: 'Save view\u2026', keepOpen: true, run: openSaveViewPalette });
-    if (savedViews().length) rows.push({ id: 'removeSavedView', group: 'Window', icon: 'trash', label: 'Remove saved view', keepOpen: true, run: openRemoveViewPalette, sub: async () => removeViewRows('') });
+    if (savedViews().some((v) => v.id !== WORK_VIEW.id)) rows.push({ id: 'removeSavedView', group: 'Window', icon: 'trash', label: 'Remove saved view', keepOpen: true, run: openRemoveViewPalette, sub: async () => removeViewRows('') });
     for (const v of savedViews()) rows.push({ id: v.id || 'savedView:' + v.name, group: 'Saved views', icon: 'splitPanes', label: v.name, run: () => run(() => openSavedView(v)) });
   }
   // text size stays on the fixed keys (their characters depend on the keyboard layout), so the chips are literal
@@ -1034,9 +1034,13 @@ const shellRun = (command) => { if (window.frameElement) window.parent.postMessa
 // the pages read at load: 'view' and 'place' for page '', 'view:2' and 'place:2' for page '2'. Opening one writes those
 // back and hands main the layout, which reloads the window, so every page comes back where it was when saved. The list
 // follows you (pref savedViews): a view names places, like a saved search does. It starts with the Work View
-// (renderer/timeline.js), which is removed and replaced like any other; replaced by name, a view keeps its id, so Home
+// (renderer/timeline.js), which is replaced like any other and never removed; replaced by name, a view keeps its id, so Home
 // and a key recorded for it still find it.
-const savedViews = () => pref('savedViews', [WORK_VIEW]).filter((v) => v && typeof v.name === 'string' && v.keys && typeof v.keys === 'object');
+// The Work View cannot be removed: a list without it (an older one, another machine's) still starts with it.
+function savedViews() {
+  const list = pref('savedViews', [WORK_VIEW]).filter((v) => v && typeof v.name === 'string' && v.keys && typeof v.keys === 'object');
+  return list.some((v) => v.id === WORK_VIEW.id) ? list : [WORK_VIEW, ...list];
+}
 const PAGE_KEY = /^(view|place)(:[1-9]\d*)?$/;
 async function saveView(name, id) { // id: kept under that id (Set as Home), else found by name
   const doc = await tana.windowLayout(), keys = {};
@@ -1059,7 +1063,7 @@ function saveViewRows(q, typed) {
 }
 function openSaveViewPalette() { openPage('saveView', 'Name this view\u2026', { rows: saveViewRows, back: BACK_TO_COMMANDS, typed: true }); }
 function removeViewRows(q) {
-  return savedViews().filter((v) => v.name.toLowerCase().includes(q)).map((v) => ({ group: 'Remove saved view', icon: 'trash', label: v.name,
+  return savedViews().filter((v) => v.id !== WORK_VIEW.id && v.name.toLowerCase().includes(q)).map((v) => ({ group: 'Remove saved view', icon: 'trash', label: v.name,
     run: () => { setPref('savedViews', savedViews().filter((w) => w.name !== v.name)); showNote('Removed view \u201c' + v.name + '\u201d'); } }));
 }
 function openRemoveViewPalette() { openPage('removeView', 'Remove saved view\u2026', { rows: removeViewRows, back: BACK_TO_COMMANDS }); }

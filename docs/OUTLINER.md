@@ -387,7 +387,7 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
   document, `window:layout`) and each page's view and place (`view`/`place`, `view:2`/`place:2`, …), under a name,
   in the synced `savedViews` preference. Save view… names the current one (a name taken replaces it and keeps its
   id); choosing a row writes the places back and hands main the layout (`window:setLayout`), which saves it and reloads
-  the window, so every page opens where it was saved. Remove saved view takes one off the list, the Work View too.
+  the window, so every page opens where it was saved. Remove saved view takes one off the list, any but the Work View, which is always listed (replaced, never removed).
 - **Settings**: Larger / Smaller / Reset text size, Toggle dark mode, Toggle system dark/light mode, Edit hidden items,
   Toggle sensitive visibility, Toggle MCP chats, Toggle demo mode, Manage Codex hosts, ChatGPT sign-in, Set OpenAI API
   key. **Help**: Help.
