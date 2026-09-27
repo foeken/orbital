@@ -156,6 +156,14 @@ function pickSkill(n) {
   showSkill();
   composerText.focus();
 }
+// A message that was not saved goes back where it was written, in front of anything written there since, whether its
+// chat is still on screen (the composer) or not (its draft), so a failed send never loses words.
+function restoreDraft(docId, draft) {
+  const here = composer.dataset.doc === docId;
+  const later = here ? (composer.classList.contains('empty') ? null : { segs: composerSegs(), skill: chatSkill }) : chatDrafts.get(docId);
+  const merged = later ? { segs: [...draft.segs, { text: '\n' }, ...later.segs], skill: later.skill || draft.skill } : draft;
+  if (here) setComposer(merged); else chatDrafts.set(docId, merged);
+}
 function chatSend() {
   const docId = composer.dataset.doc, draft = { segs: composerSegs(), skill: chatSkill }, skill = chatSkill;
   // a skill on its own asks for it to be run, the way Tana's runSkill words a message with no other words
@@ -170,7 +178,7 @@ function chatSend() {
     let sent;
     // only a message that was not saved comes back to be sent again
     try { sent = await tana.sendChat(docId, text, skill ? [skill.uri] : [], ai === undefined ? {} : { ai }); }
-    catch (e) { chatWaiting.delete(docId); if (composer.dataset.doc === docId && composer.classList.contains('empty')) setComposer(draft); throw e; }
+    catch (e) { chatWaiting.delete(docId); restoreDraft(docId, draft); throw e; }
     if (!sent.responding) chatWaiting.delete(docId);
     await reload(docId);
     if (zoom && zoom.docId === docId) { outline.parentElement.scrollTop = outline.parentElement.scrollHeight; renderSoon(true); }
