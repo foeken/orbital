@@ -421,7 +421,11 @@ function selectionRows() {
   const its = keys.map((key) => items.get(key)).filter(Boolean);
   if (its.length && tana.deleteDocument) {
     const blocksOnly = its.every((it) => it.node.kind === 'block');
-    const able = its.filter((it) => (blocksOnly ? canEditStructure(it) : it.node.kind === 'document' && canEditNode(it.node)));
+    // A chat, canvas or agent has no outline to edit, yet Tana deletes it: for those, main's delete answer decides
+    // (asked while the palette is open, renderer/access.js loadAccess).
+    const docs = its.filter((it) => it.node.kind === 'document' && !canEditNode(it.node));
+    if (!blocksOnly && !palette.hidden) docs.forEach((it) => loadAccess(it.docId));
+    const able = its.filter((it) => (blocksOnly ? canEditStructure(it) : it.node.kind === 'document' && (canEditNode(it.node) || !!accessById.get(it.docId)?.deletable)));
     const skipped = its.length - able.length;
     // ⇧⌘⌫ deletes the node you are on (outline keydown; the zoomed title; a block selection) — say so on the row
     rows.push({ id: 'delete', group, icon: 'trash', label: `Delete${count(able.length, 'item')}`, hint: !skipped ? '' : selected.length ? `${skipped} skipped` : 'Read-only', kbd: selected.length ? undefined : '⇧⌘⌫', disabled: !able.length, run: () => removeSelection(able.map((it) => it.key)) });
@@ -455,7 +459,7 @@ async function removeSelection(keys) {
   sel = null;
   await run(async () => {
     for (const it of its) {
-      if (it.node.kind !== 'document' || !canEditItem(it)) throw new Error('Only writable documents and blocks can be deleted');
+      if (it.node.kind !== 'document' || !(canEditItem(it) || accessById.get(it.docId)?.deletable)) throw new Error('Only writable documents and blocks can be deleted');
       const access = await tana.accessOptions(it.docId);
       if (!access?.deletable) throw new Error(access?.reason || 'This document cannot be deleted');
       await tana.deleteDocument(it.docId); invalidateNode(it.docId);

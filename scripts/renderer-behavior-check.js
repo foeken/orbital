@@ -664,6 +664,10 @@ async function runMultiTaskPaletteCheck() {
     const items = new Map([...rows, ...blocks].map((item) => [item.key, item]));
     // a type page (#36): archived, never deleted; kept out of rows so the selections above do not change
     items.set('tana:type:01j0type000000000000000000', { key: 'tana:type:01j0type000000000000000000', docId: 'tana:type:01j0type000000000000000000', node: { id: 'tana:type:01j0type000000000000000000', kind: 'document', icon: 'type', editable: false } });
+    // chats have no editable outline, yet Tana deletes them: main's access answer decides
+    for (const id of ['chat', 'chat2']) items.set(id, { key: id, docId: id, node: { id, kind: 'document', editable: false } });
+    const palette = { hidden: false }, accessById = new Map([['chat', { deletable: true }]]), asked = [];
+    const loadAccess = (id) => asked.push(id);
     const TYPE_NODE = /^tana:type:[0-9a-z]{26}$/;
     let selected = rows.map((item) => item.key), palDoc = task('palette-task');
     const selKeys = () => selected;
@@ -704,6 +708,7 @@ async function runMultiTaskPaletteCheck() {
       addTo: async (keys, target) => { calls.length = 0; selected = keys; await selectionRows().find((row) => row.id === { today: 'addToday', tomorrow: 'addTomorrow', week: 'addWeek' }[target]).run(); return calls; },
       ids: (keys) => { selected = keys; return selectionRows().map((row) => row.id); },
       del: (keys) => { selected = keys; const row = selectionRows().find((r) => r.id === 'delete'); return [row.label, row.hint || '', !!row.disabled]; },
+      asked: () => asked,
      current: (id) => { selected = []; palDoc = items.get(id).node; return selectionRows().map((row) => [row.group, row.label, row.hint || '', !!row.disabled]); },
       kbd: (id, rowId) => { selected = []; palDoc = items.get(id).node; return selectionRows().find((row) => row.id === rowId).kbd; },
       toggleOpen: (id) => { selected = []; palDoc = items.get(id).node; const before = selectionRows().find((row) => row.id === 'expand' || row.id === 'collapse'); before.run(); const after = selectionRows().find((row) => row.id === 'expand' || row.id === 'collapse'); return [before.label, before.kbd, opened, after.label, after.kbd]; },
@@ -736,6 +741,10 @@ async function runMultiTaskPaletteCheck() {
   assert.deepEqual(plain(context.del(['locked'])), ['Delete 0 items', '1 skipped', true], 'and a selection of nothing deletable disables the row');
   assert.deepEqual(plain(context.del(['doc/b1', 'doc/b2'])), ['Delete 2 items', '', false], 'a selection of blocks is deletable in one step');
   assert.deepEqual(plain(context.del(['t1', 'doc/b1'])), ['Delete 1 item', '1 skipped', false], 'and a block beside a document is skipped: the two removals are different operations');
+  assert.deepEqual(plain(context.del(['chat'])), ['Delete 1 item', '', false], 'a chat is deletable when main says so, though its outline is read-only');
+  assert.deepEqual(plain(context.del(['chat2'])), ['Delete 0 items', '1 skipped', true], 'and waits for that answer before offering it');
+  assert.ok(context.asked().includes('chat2'), 'which the open palette asks for');
+  assert.deepEqual(plain(await context.remove(['chat'])), [['delete', 'chat']], 'and Delete removes the chat');
   assert.deepEqual(plain(context.selection([])), [], 'with nothing selected the palette is about the app again');
   // With nothing selected the same rows act on the current node, without counts and under their own heading.
   assert.deepEqual(plain(context.current('t1')), [

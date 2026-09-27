@@ -162,7 +162,8 @@ function joinAbove(item, el) {
   return true;
 }
 async function removeDocument(item) {
-  if (!canEditItem(item) || !tana.deleteDocument || !tana.accessOptions) return;
+  // Not gated on canEditItem: a chat has no editable outline and is still deletable; accessOptions below decides.
+  if (!tana.deleteDocument || !tana.accessOptions) return;
   // A draft has no Tana id yet: main reads a local one as "not connected to Tana", so asking it whether the node may
   // be deleted fails with a connection error for a node that was never created. Dropping it is the whole delete.
   if (item.node.draft) return dropDraft(item);

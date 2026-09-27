@@ -7,7 +7,7 @@ function loadAccess(docId) {
   // front of the user. Every render asks again, so neither case needs a retry of its own, and a real refusal still shows.
   if (!connected || !tana.accessOptions || !isRealId(docId) || accessById.has(docId) || accessLoading.has(docId)) return;
   accessLoading.add(docId);
-  tana.accessOptions(docId).then((access) => { accessLoading.delete(docId); accessById.set(docId, access); if (!palette.hidden && palDoc?.id === docId) renderPalette(); }, (e) => { accessLoading.delete(docId); showError(e); });
+  tana.accessOptions(docId).then((access) => { accessLoading.delete(docId); accessById.set(docId, access); if (!palette.hidden) renderPalette(); }, (e) => { accessLoading.delete(docId); showError(e); }); // any open palette: a selection's Delete row reads it too
 }
 function applySharing(doc, selection) {
   run(async () => {
