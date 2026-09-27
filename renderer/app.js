@@ -77,7 +77,8 @@ window.addEventListener('message', (e) => {
   else if (e.data?.orbital === 'palette') togglePalette('cmd'); // the window header's ⌘K and ? (shell.js), for the page in front
   else if (e.data?.orbital === 'help') openHelp();
   else if (e.data?.orbital === 'sensitive') toggleSensitiveVisibility();
-  else if (e.data?.orbital === 'layout') { windowPanes = { pages: e.data.pages }; document.documentElement.classList.toggle('tabbed', e.data.pages > 1); }
+  else if (e.data?.orbital === 'layout') { windowPanes = { pages: e.data.pages }; document.documentElement.classList.toggle('tabbed', e.data.pages > 1); navSent = ''; tellNav(); }
+  else if (e.data?.orbital === 'navclick') navRow.querySelector('#' + CSS.escape(String(e.data.id)))?.click(); // a press on its copy in the tab bar
   else if (e.data?.orbital === 'rename' && titleEl.dataset.key) { // Rename on the tab (shell.js): the heading back, its words selected (a key only while it can be typed in; isContentEditable reads false while it is hidden)
     document.documentElement.classList.add('renaming');
     titleEl.focus();
@@ -85,10 +86,23 @@ window.addEventListener('message', (e) => {
   }
 });
 titleEl.addEventListener('blur', () => document.documentElement.classList.remove('renaming'));
+// Under a tab bar (html.tabbed) the header buttons are drawn in this page's tab bar, beside its ⋯ (shell.js navbtns),
+// and the line they sat on above the title goes. The page keeps its own row, laid out but unseen (styles.css), so its
+// animations still end — Clean up hides once its exit has played — and sends its markup on every change, with whether
+// the pointer is here; a press on the copy is a click on the button here (navclick above).
+const navRow = $('navbtns');
+let navSent = '';
+function tellNav() {
+  const on = document.documentElement.classList.contains('pointer-in'), html = navRow.hidden ? '' : navRow.innerHTML; // hidden: the login screen
+  if (window.parent === window || navSent === on + html) return;
+  navSent = on + html;
+  window.parent.postMessage({ orbital: 'navbtns', html, on }, '*');
+}
+new MutationObserver(tellNav).observe(navRow, { subtree: true, childList: true, attributes: true });
 // Whether the pointer is over this page, for the top row (styles.css html.pointer-in). The page is an iframe now, so
 // it hears the pointer leave for anything laid over it too — another page, the line, the shell's drag strip above
 // the crumbs — and the row fades there.
-const pointerIn = (on) => document.documentElement.classList.toggle('pointer-in', on);
+const pointerIn = (on) => { document.documentElement.classList.toggle('pointer-in', on); tellNav(); };
 document.addEventListener('pointerover', () => pointerIn(true));
 document.documentElement.addEventListener('pointerleave', () => pointerIn(false));
 tana.onChanged((docId, info) => {

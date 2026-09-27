@@ -252,6 +252,11 @@ html.tabbed.listing:not(.renaming) .crumbs { margin-bottom: 4px; }
    header is a window drag region, where the page hears nothing of the mouse, so hover ended as the pointer reached
    the buttons (renderer/app.js pointer-in). The fade is the one .titlebar's children already have (below). */
 html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
+/* Under a tab bar the buttons are drawn in the page's tab bar (shell.js navbtns) and the empty line they sat on goes.
+   The row stays laid out, unseen, so its animations still end: Clean up hides once its exit has played. */
+html.tabbed .navbtns { visibility: hidden; }
+html.tabbed #crumbs { display: none; }
+html.tabbed .titlebar { padding-top: 18px; }
 #railToggle { margin-left: 6px; } /* the sidebar's own button, a step apart from the page's */
 .navbtn {
   display: flex; align-items: center; justify-content: center;
