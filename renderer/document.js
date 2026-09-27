@@ -14,6 +14,15 @@ titleEl.addEventListener('keydown', (e) => {
   else if (e.key === 'ArrowDown' && atEdge(titleEl, 'down')) { const first = fieldValues()[0] || texts()[0]; if (first) { e.preventDefault(); flush(item.key); setCaret(first, 0); } } // down through the fields, then the outline
 });
 // the document Cmd+K context actions apply to: the zoomed one, else the document whose node is focused
+// Rename, on the tab (shell.js) and in Cmd+K: the heading back where a page hides it (a chat), its words selected. Only
+// while it can be typed in: titleEl carries a key then (isContentEditable reads false while it is hidden).
+function renameTitle() {
+  if (!titleEl.dataset.key) return false;
+  document.documentElement.classList.add('renaming');
+  titleEl.focus();
+  getSelection().selectAllChildren(titleEl);
+  return true;
+}
 function currentDoc() {
   const f = focused(), item = f && items.get(f.key);
   // A row that is a document in its own right — a task listed in a view, or one referenced from a date page — is the

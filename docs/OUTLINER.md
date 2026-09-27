@@ -956,7 +956,8 @@ chat." shows as a centred status line, as other status lines do.
   bar a view, a saved search or an app page drops its heading, which the tab already names (`html.listing`, issue
   #441); a document keeps its own. A right click on a tab opens the panel menu, led by **Rename** when the page's title
   can be typed in: the shell posts `{ orbital: 'rename' }` and the page shows its heading (`html.renaming`) with its
-  words selected until it loses the focus. ⌘W, a tab's X and the
+  words selected until it loses the focus (renderer/document.js `renameTitle`); Cmd+K **Rename** under Current node does the same, with or
+  without a tab. ⌘W, a tab's X and the
   panel menu's Close close a page; the shell's close guard first asks the page to flush (renderer/app.js
   `leavePage`, also run on pagehide): the pending edit is sent and its presence room left. The last page never closes
   from inside: ⌘W closes the window then. The panel menu has no Hide, since a hidden page would have no way back.

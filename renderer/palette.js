@@ -135,6 +135,8 @@ function paletteRows(q, typed = q) {
   // What acts on the current document (pins, link, icon, visibility, location) sits with the rest of its rows under
   // "Current node"; while a multi-selection owns the top of the palette they are "Current page", right under it.
   const docGroup = selection.length && selection[0].group === 'Selection' ? 'Current page' : 'Current node';
+  // Rename, as on the page's tab: the zoomed page's title, where it can be typed in (renderer/document.js renameTitle)
+  if (palDoc && zoom && palDoc.id === zoom.docId && !zoom.nodeId && (titleEl.dataset || {}).key) rows.push({ id: 'rename', group: docGroup, icon: 'rename', label: 'Rename', run: renameTitle });
   if (palDoc && tana.exportPdf && DOC_KIND.test(palDoc.id)) {
     const doc = palDoc;
     rows.push({ id: 'exportPdf', group: docGroup, icon: 'doc', label: 'Export to PDF', run: () => { flushAll(); run(() => tana.exportPdf(doc.id)); } });
