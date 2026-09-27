@@ -1531,9 +1531,10 @@ async function main() {
     assert.equal(await audience(doc(undefined, meOnly), ME, graph, { subscribe: async () => doc(true, shared) }), 'space');
     assert.equal(await audience(doc(false, meOnly), ME, graph, { subscribe: async () => doc(true, meOnly) }), 'only-me');
     const namedSpace = {id:'tana:space:boundary',data:{toJSON:()=>({title:'Studio LT',restricted:true,participants:shared})}};
-    assert.deepEqual(await audienceMetadata(doc(false,meOnly),ME,graph,{subscribe:async()=>namedSpace}), {audience:'space',audienceSpace:{uri:'tana:space:boundary',title:'Studio LT'}});
-    assert.deepEqual(await audienceMetadata(doc(false,meOnly),ME,graph,{subscribe:async()=>doc(true,shared)}), {audience:'space',audienceSpace:{uri:'tana:space:boundary'}});
-    assert.deepEqual(await audienceMetadata(doc(true,meOnly),ME), {audience:'only-me'});
+    const SAMU = 'tana:user-profile:01examplem0000000000000000'; // shared's other person
+    assert.deepEqual(await audienceMetadata(doc(false,meOnly),ME,graph,{subscribe:async()=>namedSpace}), {audience:'space',audienceSpace:{uri:'tana:space:boundary',title:'Studio LT'},people:[ME,SAMU]});
+    assert.deepEqual(await audienceMetadata(doc(false,meOnly),ME,graph,{subscribe:async()=>doc(true,shared)}), {audience:'space',audienceSpace:{uri:'tana:space:boundary'},people:[ME,SAMU]});
+    assert.deepEqual(await audienceMetadata(doc(true,meOnly),ME), {audience:'only-me',people:[ME]});
     assert.deepEqual(await audienceMetadata(doc(false,meOnly),ME,graph,{subscribe:async()=>{throw new Error('unavailable');}}), {audience:'unknown'});
     // #93: an inherited boundary is as determinate as a direct one. Verified against real data: tasks inside a
     // private meeting, meetings with an external guest, and documents whose only boundary is the organization.
@@ -1541,9 +1542,9 @@ async function main() {
     const boundaryOf = (uri) => ({ getOwnerChain: async () => ({ entries: [{ uri, restricted: true, accessible: true }], effectivelyRestricted: true }) });
     const orgDoc = (members) => ({ id: ORGDOC, data: { toJSON: () => ({ memberUserProfileDocUris: members }) } });
     assert.deepEqual(await audienceMetadata(doc(undefined, {}), ME, boundaryOf(EVENT), { subscribe: async () => doc(true, shared) }),
-      { audience: 'people' }, 'a task inside a meeting shared with several people is selected people, not unknown');
+      { audience: 'people', people: [ME, SAMU] }, 'a task inside a meeting shared with several people is selected people, not unknown');
     assert.deepEqual(await audienceMetadata(doc(true, { ...meOnly, 'tana:guest-profile:01exampleo0000000000000000': { type: 'user', role: 'attendee' } }), ME),
-      { audience: 'people' }, 'an external guest participant is a person, not an unresolved grant');
+      { audience: 'people', people: [ME, 'tana:guest-profile:01exampleo0000000000000000'] }, 'an external guest participant is a person, not an unresolved grant');
     assert.deepEqual(await audienceMetadata(doc(undefined, {}), ME, boundaryOf(ORGDOC), { subscribe: async () => orgDoc({ u: ME }) }),
       { audience: 'everyone' }, 'the organization root is a members-only boundary: everyone in the organization');
     assert.deepEqual(await audienceMetadata(doc(undefined, {}), ME, boundaryOf(ORGDOC), { subscribe: async () => orgDoc({}) }), { audience: 'unknown' });
@@ -1554,12 +1555,12 @@ async function main() {
     // #100: an assignee outside a restricted audience is named, so the row can warn that they cannot see it
     const SAM = 'tana:user-profile:01examplem0000000000000000', OTHER = 'tana:user-profile:01examplep0000000000000000';
     const assigned = (restricted, participants) => ({ id: DOC, data: { toJSON: () => ({ restricted, participants, assignedToUris: [SAM] }) } });
-    assert.deepEqual(await audienceMetadata(assigned(true, meOnly), ME), { audience: 'only-me', hiddenFrom: [SAM] }, 'assigned to Sam, visible only to me');
-    assert.deepEqual(await audienceMetadata(assigned(true, shared), ME), { audience: 'people' }, 'Sam is among the people it is shared with');
+    assert.deepEqual(await audienceMetadata(assigned(true, meOnly), ME), { audience: 'only-me', people: [ME], hiddenFrom: [SAM] }, 'assigned to Sam, visible only to me');
+    assert.deepEqual(await audienceMetadata(assigned(true, shared), ME), { audience: 'people', people: [ME, SAM] }, 'Sam is among the people it is shared with');
     assert.deepEqual(await audienceMetadata(assigned(undefined, {}), ME, boundaryOf(EVENT), { subscribe: async () => doc(true, { ...meOnly, [OTHER]: { type: 'user', role: 'attendee' } }) }),
-      { audience: 'people', hiddenFrom: [SAM] }, 'inside a meeting Sam is not invited to');
+      { audience: 'people', people: [ME, OTHER], hiddenFrom: [SAM] }, 'inside a meeting Sam is not invited to');
     assert.deepEqual(await audienceMetadata(assigned(undefined, { [SAM]: { type: 'user', role: 'editor' } }), ME, boundaryOf(EVENT), { subscribe: async () => doc(true, shared) }),
-      { audience: 'people' }, 'a grant on the document itself counts beside the boundary');
+      { audience: 'people', people: [SAM, ME] }, 'a grant on the document itself counts beside the boundary');
     console.log('ok  audience: direct/inherited restrictions, everyone and unresolved groups');
   }
 

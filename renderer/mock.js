@@ -341,7 +341,8 @@ function mockApi() {
     moveToSpace: async (docId, spaceId, token) => { const doc = all.find((node) => node.id === docId); if (!doc || spaceId !== space.id || token !== 'mock-move') throw new Error('space unavailable'); doc.ownerUri = spaceId; emit(null); },
     taskMeta: async (docId) => {
       if (settling.delete(docId)) throw new Error('document is still settling');
-      return { ...structuredClone(taskDetails.get(docId) || { assignees: [], restricted: undefined, participants: [], audience: 'unknown' }), watched: !!notifyChoices[docId] };
+      const meta = structuredClone(taskDetails.get(docId) || { assignees: [], restricted: undefined, participants: [], audience: 'unknown' });
+      return { ...meta, ...(meta.restricted ? { people: meta.participants.map((p) => p.uri) } : {}), watched: !!notifyChoices[docId] }; // main names a restricted audience's people (sdk/node.js)
     },
     setState: async (docId, state) => { const doc = all.find((d) => d.id === docId && d.icon === 'task'); if (!doc) throw new Error('not a task'); mut(docId, () => { doc.state = state; doc.done = state === 'closed'; }); emit(docId); return 1; },
     setStateMany: async (docIds, state) => { const docs = docIds.map((id) => all.find((d) => d.id === id && d.icon === 'task')); if (docs.some((doc) => !doc)) throw new Error('not a task'); mut(docIds[0], () => { for (const doc of docs) { doc.state = state; doc.done = state === 'closed'; } }); emit(null); return docs.length; },

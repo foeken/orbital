@@ -641,6 +641,15 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 /* the row's facts, moved down by fitRowMeta when the title left them no room: already grey and 14px, so they only
    need the 8px that separated them from the title taken back off */
 .subtext .tmeta { margin-left: 0; }
+/* who can see a row, at the start of its subtext (renderer/tasks.js peopleEl): the audience glyph, a bubble per person, how many */
+.subtext .people { display: inline-flex; align-items: center; gap: 6px; vertical-align: top; }
+.subtext .faces { display: inline-flex; }
+.subtext .face { width: 18px; height: 18px; margin-left: -2px; border-radius: 50%; display: grid; place-items: center; font-size: 8px; font-weight: 650;
+  color: #fff; background: oklch(0.62 0.12 var(--hue)); box-shadow: 0 0 0 1.5px #fff; }
+.subtext .face:first-child { margin-left: 0; }
+.subtext .face.more { background: #e8e8e8; color: #555; }
+[data-theme="dark"] .subtext .face { box-shadow: 0 0 0 1.5px #1b1d1e; }
+[data-theme="dark"] .subtext .face.more { background: #3a3f42; color: #ccc; }
 /* one of a row's facts (renderer/tasks.js taskMetaEl): a 14px glyph, 6px from whatever stands before it. The first
    needs no gap of its own: the 8px the .meta span carries is already there, and 14px reads as a hole. */
 .ticon { display: inline-block; width: 14px; height: 14px; vertical-align: -2px; }

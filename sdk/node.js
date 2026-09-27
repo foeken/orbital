@@ -218,14 +218,16 @@ async function audienceMetadata(document, userUri, graph, sync) {
     if (!participants.length || participants.some(p => p.type !== 'user' || !PERSON_URI.test(p.uri))) return 'unknown';
     return participants.length === 1 && participants[0].uri === userUri ? 'only-me' : 'people';
   };
-  // hiddenFrom: the assignees outside a restricted audience, who were given work they cannot open. The document's own
-  // grants count beside the boundary's, as in access.js audienceOf; everyone and unknown audiences name nobody.
+  // people: who a restricted audience is (#461); hiddenFrom: the assignees outside it, who were given work they cannot
+  // open. The document's own grants count beside the boundary's, as in access.js audienceOf; everyone and unknown
+  // audiences name nobody.
   // ponytail: grants on owners between the document and its boundary are not read; add them if a false mark shows up.
   const hidden = (result, participants = []) => {
     if (!['only-me', 'people', 'space'].includes(result.audience)) return result;
     const seen = new Set([...direct.participants, ...participants].map(p => p.uri));
     const hiddenFrom = direct.assignees.filter(uri => !seen.has(uri));
-    return hiddenFrom.length ? { ...result, hiddenFrom } : result;
+    const people = [...seen].filter(uri => PERSON_URI.test(uri));
+    return hiddenFrom.length ? { ...result, people, hiddenFrom } : { ...result, people };
   };
   if (direct.restricted === true) return hidden({ audience: people(direct.participants) });
   // Native setAudienceRule('inherit') deletes restricted; absence also inherits.

@@ -126,6 +126,9 @@ const withShims = (src) => {
   // subtextEl (renderer/views.js) builds that line with the row's field values ahead of it; sliced in before the
   // subtextOf guard below, which then supplies what it calls.
   if (/\bsubtextEl\(/.test(src) && !/function subtextEl\(/.test(src)) src = functionSource('subtextEl') + '\nglobalThis.shownFieldValues ??= (node) => (node.fields ? displayKeys().flatMap((k) => node.fields[k] || []) : []);\n' + src;
+  // a row's facts share their icon and click helpers with who can see it (renderer/tasks.js peopleEl), which the
+  // subtext leads with; a harness with no member list sees nobody's bubbles
+  if (/\b(clickable|iconEl|audienceIcon|peopleEl)\(/.test(src) && !/function clickable\(/.test(src)) src = sourceBetween('function clickable(', '// node: the row') + '\nglobalThis.loadMembers ??= () => {}; globalThis.memberName ??= (id) => id; globalThis.members ??= null;\n' + src;
   // a type's page (renderer/nodes.js): a harness that is not about one is never on one
   if (/\bfieldType\(/.test(src) && !/const fieldType =/.test(src)) src = 'globalThis.fieldType ??= () => (onTypePage() ? zoom.docId : null);\n' + src; // nor on a page narrowed to one type
   if (/\b(isTypeDoc|onTypePage|isTypeId|opensOnClick)\b/.test(src) && !/const isTypeId =/.test(src)) src = "globalThis.isTypeId ??= (id) => /^tana:type:[^|?]+$/.test(String(id || '')); globalThis.isTypeDoc ??= (node) => !!node && isTypeId(node.id); globalThis.onTypePage ??= () => false; globalThis.opensOnClick ??= (item) => isTypeDoc(item.node) && !String(item.docId || '').includes('|tana:type:');\n" + src;
@@ -3873,6 +3876,7 @@ function runRowAudienceCheck() {
         set innerHTML(value) { this.html = value; }, get innerHTML() { return this.html; },
         get firstElementChild() { return null; },
         append(...kids) { this.children.push(...kids); }, prepend(...kids) { this.children.unshift(...kids); },
+        replaceChildren(...kids) { this.children = kids; },
         set textContent(value) { this.value = value; }, get textContent() { return this.value || ''; } };
     } };
     ${sourceBetween('const isReference =', 'const showError =')}
@@ -3898,7 +3902,9 @@ function runRowAudienceCheck() {
         const info = body.children.find((child) => child.className.split(' ')[0] === 'meta');
         const icons = info ? info.children.filter((icon) => icon.attrs['aria-label'] || icon.attrs['aria-hidden']) : null; // the assignee name span is not an icon
         // the gap is styles.css's .tmeta > .ticon:not(:first-child) (renderer-check pins the rule): 6px after anything
-        return { icons: icons ? icons.map((icon) => icon.attrs['aria-label'] || (icon.children[0] || { attrs: {} }).attrs['data-icon']) : null, gaps: icons ? icons.map((icon) => (icon.className === 'ticon' ? (info.children.indexOf(icon) ? '6px' : '0') : null)) : null, pending: info ? info.className.includes('pending') : null, sub: (body.children.find((child) => child.className === 'subtext') || {}).value || null, chips: body.children.filter((child) => child.className === 'chip').length, fetched: [...fetched], observed: observed.map((watched) => watched.dataset.metaFor) };
+        const sub = body.children.find((child) => child.className === 'subtext') || { children: [] }, people = sub.children.find((child) => child.className === 'people');
+        return { icons: icons ? icons.map((icon) => icon.attrs['aria-label'] || (icon.children[0] || { attrs: {} }).attrs['data-icon']) : null, gaps: icons ? icons.map((icon) => (icon.className === 'ticon' ? (info.children.indexOf(icon) ? '6px' : '0') : null)) : null, pending: info ? info.className.includes('pending') : null, sub: sub.value || null, chips: body.children.filter((child) => child.className === 'chip').length, fetched: [...fetched], observed: observed.map((watched) => watched.dataset.metaFor),
+          people: people ? [people.children[0].attrs['aria-label'], ...people.children[1].children.map((face) => face.value), people.children[2]] : null };
       },
       onScreen: () => { watching(observed.map((target) => ({ isIntersecting: true, target }))); return [...fetched]; },
       display: (keys) => { displayNow = keys; },
@@ -3916,6 +3922,12 @@ function runRowAudienceCheck() {
   assert.deepEqual(row(task, { assignees: ['tana:user-profile:sam'], audience: 'only-me' }).gaps, ['6px'], 'an icon after an assignee name keeps its 6px');
   assert.deepEqual(row(doc, spaceMeta).gaps, ['0'], 'a row with no name in front of the icon does not add a second gap on top of the one the meta span carries');
   assert.deepEqual(row(doc, { assignees: [], audience: 'everyone', linkShared: true }).gaps, ['0', '6px'], 'the icons still stand apart from each other');
+  // #461: an audience that names its people says who under the title (its glyph, a bubble each, how many) and the
+  // glyph leaves the end of the line; one that names nobody (here: no member list for everyone) keeps it there
+  const shared = row(doc, { assignees: [], audience: 'people', people: ['tana:user-profile:me', 'tana:user-profile:sam'] });
+  assert.deepEqual(shared.people, ['Visible to selected people', '?', 'S', '2 people'], 'the subtext leads with the audience, a bubble per person and the count');
+  assert.deepEqual(shared.icons, [], 'and the end of the line no longer repeats the audience');
+  assert.equal(row(doc, { assignees: [], audience: 'everyone' }).people, null, 'no member list yet: no bubbles, and the glyph stays where it was');
   // The space sub-line used to be unconditional; it is now the Display pill's "Lives in", which ships off. Both
   // directions are pinned: wiring it back to always-on would otherwise pass every test in this file.
   assert.equal(row(doc, spaceMeta).sub, null, 'with Lives in off, a space audience does not name the space under the title');
