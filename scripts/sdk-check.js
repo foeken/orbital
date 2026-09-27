@@ -1112,6 +1112,10 @@ async function main() {
     ask('shell:layout', null, { doc: layoutDoc, pages: [''] });
     ask('window:workView', leftPage);
     assert.deepEqual(toShell.splice(0), [['open', { id: '2', where: 'right', from: '', focus: false }]], 'the Work View opens \u20182\u2019 and keeps the keys');
+    ask('window:getSide', rightPage); ask('shell:layout', null, { doc: layoutDoc, pages: ['2'] }); // '' closed, '2' left: the Timeline comes back on its left
+    toShell.splice(0);
+    ask('window:workView', rightPage);
+    assert.deepEqual(toShell.splice(0), [['open', { id: '', where: 'left', from: '2', focus: false }]], 'and opens \u2018\u2019 again when that is the one missing');
     ask('shell:layout', null, { doc: layoutDoc, pages: [''] });
     shown.close = () => { shown.closed = true; };
     backend.closeFront(shown, pageFor(leftPage));

@@ -129,7 +129,7 @@ const flush = (frame) => new Promise((done) => {
 function open({ id, where, from, focus }) {
   if (typeof id !== 'string' || viewOf(id)) return focusPage(viewOf(id));
   const beside = ws.view(viewOf(from) || '')?.panelId || ws.getSnapshot().focusedPanel;
-  const placement = where === 'float' ? 'float' : !beside ? 'side' : where === 'tab' ? { into: beside } : { beside, edge: 'right' };
+  const placement = where === 'float' ? 'float' : !beside ? 'side' : where === 'tab' ? { into: beside } : { beside, edge: where === 'left' ? 'left' : 'right' };
   const { id: viewId } = ws.open('page', { id: 'page' + id, params: { side: id }, placement, focus: false });
   if (focus) frameOf(viewId)?.addEventListener('load', () => focusPage(viewId), { once: true });
 }

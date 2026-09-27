@@ -264,12 +264,13 @@ ipcMain.on('page:gone', (e) => {
   if (page) dropPage(page);
   if (win) for (const p of [...win.panes]) if (p.isDestroyed()) dropPage(p);
 });
-// Cmd+K Work View (renderer/timeline.js): the page asking has stored the places of pages '' and '2'. A '2' not open yet
-// opens to the right and reads its own at load; a page already open is told to go to its own.
+// Cmd+K Work View (renderer/timeline.js): the page asking has stored the places of pages '' and '2'. Whichever is not
+// open opens beside the one asking — '' on its left, '2' on its right, the Timeline beside My Tasks — and reads its
+// own place at load; a page already open is told to go to its own.
 ipcMain.handle('window:workView', (e) => {
   const page = pageOf(e), win = page && page.win;
   if (!win) return;
-  if (!win.pages.includes('2')) openPage(win, { id: '2', from: page.side, focus: false });
+  for (const id of ['', '2']) if (!win.pages.includes(id)) openPage(win, { id, where: id ? 'right' : 'left', from: page.side, focus: false });
   for (const p of win.panes) if (p !== page && (p.side === '' || p.side === '2')) p.send('window:toPlace');
 });
 ipcMain.handle('overlay:open', (e, which, theme) => { openOverlay(pageOf(e), which, theme); });
