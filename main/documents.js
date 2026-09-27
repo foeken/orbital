@@ -188,11 +188,14 @@ async function inviteToChat(id, userUri) {
   if (!member) throw new Error('Invite a member of this workspace');
   const name = member.title || member.text || 'A participant';
   await mut(id, async (doc) => {
+    const ctx = await accessContext();
+    // read after the last await, so this is the list setSharing's own version check starts from (it refuses when the
+    // document moves under it): an invite only ever adds, whatever another client changed meanwhile
     const n = readNode(doc), people = n.participants || {};
     if (n.restricted !== true) throw new Error('This chat is shared through where it lives: share that instead');
     if (people[userUri]) throw new Error(name + ' is already in this chat');
     const kept = Object.entries(people).filter(([uri, p]) => uri !== S.me.userUri && p && p.type === 'user').map(([uri, p]) => ({ uri, role: p.role }));
-    await access.setSharing(doc, S.me.userUri, { rule: 'people', participants: [...kept, { uri: userUri, role: 'editor' }] }, await accessContext());
+    await access.setSharing(doc, S.me.userUri, { rule: 'people', participants: [...kept, { uri: userUri, role: 'editor' }] }, ctx);
     // Tana's two lines (its onParticipantAdded and the multiple-participants notice): the first time the chat is shared,
     // Tana stops answering every message, so the chat says how to ask it
     doc.transact((loro) => {

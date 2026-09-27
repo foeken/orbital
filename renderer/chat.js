@@ -254,14 +254,16 @@ if (tana.onChanged && tana.chatAnswers) tana.onChanged((chatId, info) => {
 // which tells Tana to go on with sensible defaults. The last Continue submits, and Tana carries on from the answers.
 const qcard = $('chatQuestion');
 let qs = null; // { docId, messageId, items, index, cursor, answers: { questionId: { selected: Set, custom } }, busy }
+const qDrafts = new Map(); // messageId -> the card as it was left: picked options and typed words wait, as a draft does
 const qEl = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const qAnswer = (q) => (qs.answers[q.id] ||= { selected: new Set(), custom: '' });
 // true when a card is up for this chat; 'new' the first time these questions show, so the card takes the caret
 // Only for a chat you may write in, known to be (chat:answers): a viewer keeps the read-only composer, which says why.
 function showQuestions(docId, pending) {
-  if (!pending || !chatAi.has(docId) || chatReadOnly.has(docId)) { qs = null; qcard.hidden = true; return false; }
+  if (!pending || !chatAi.has(docId) || chatReadOnly.has(docId)) { if (qs) qDrafts.set(qs.messageId, qs); qs = null; qcard.hidden = true; return false; }
   const fresh = !qs || qs.docId !== docId || qs.messageId !== pending.messageId;
-  if (fresh) qs = { docId, messageId: pending.messageId, items: pending.items, index: 0, cursor: 0, answers: {}, busy: false };
+  if (fresh && qs) qDrafts.set(qs.messageId, qs);
+  if (fresh) qs = { ...(qDrafts.get(pending.messageId) || { index: 0, cursor: 0, answers: {} }), docId, messageId: pending.messageId, items: pending.items, busy: false };
   // drawn anew only when it is new or was away: a live update redrawing it would take the caret out of the free answer
   if (fresh || qcard.hidden) drawQuestion();
   qcard.hidden = false;
@@ -333,6 +335,7 @@ function submitQuestions(skip) {
     let sent;
     try { sent = await tana.answerChat(docId, messageId, answers); }
     catch (e) { if (qs && qs.messageId === messageId) { qs.busy = false; drawQuestion(); } throw e; }
+    qDrafts.delete(messageId); // answered: nothing left to come back to
     if (sent.responding) chatWaiting.set(docId, wait);
     await reload(docId);
     if (zoom && zoom.docId === docId) renderSoon(true);
