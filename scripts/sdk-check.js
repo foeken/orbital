@@ -5325,6 +5325,51 @@ async function main() {
     late(null); await new Promise((r) => setImmediate(r));
     live.length = 0; backend.reliveRefs();
     assert.ok(live.includes(slowUri), 'a target whose old-client bootstrap failed after a new login is still subscribed on the new client');
+    // Its change read back by the renderer (patchDoc: doc:info, patch) is no on-demand read: pushed out, it is let go (#438)
+    const patched = new Document('tana:text:' + ulid()), patchedUri = 'tana:text:' + ulid(), patchedDoc = new Document(patchedUri);
+    patchedDoc.transact(l => initDocument(l, 'patched target', ME));
+    patched.transact(l => { initDocument(l, 'patched reference', ME); const row = l.getMap('content').get('children').get(0); row.set('nodeName', 'embed'); row.get('attributes').set('tanaUri', patchedUri); });
+    sync.subscribe = async (id) => (id === patchedUri ? patchedDoc : {});
+    await backend.outlineWithReferences(patched); await new Promise((r) => setImmediate(r));
+    assert.equal((await backend.handlers.get('doc:info')(null, patchedUri, true)).title, 'patched target');
+    gone.length = 0; await backend.outlineWithReferences(many); await new Promise((r) => setImmediate(r));
+    assert.ok(gone.includes(patchedUri), 'a reference target whose change was read back is still let go when the list pushes it out');
+    // ...and read back after it was pushed out (its change was already on its way), it is not kept: let go once read
+    gone.length = 0; assert.equal((await backend.handlers.get('doc:info')(null, patchedUri, true)).title, 'patched target');
+    assert.ok(gone.includes(patchedUri), 'a change read back for a target already let go does not subscribe it again for good');
+    // A document live for another holder dropRef cannot see (the settings, the inbox, a hub) keeps its subscription
+    sync.getDocument = (id) => (id === patchedUri ? patchedDoc : undefined);
+    gone.length = 0; await backend.handlers.get('doc:info')(null, patchedUri, true);
+    assert.deepEqual(gone, [], 'a change read back of a document already live is never let go by the read');
+    delete sync.getDocument;
+    // Two panes reading the same change back at once: the one that subscribed it may finish first; the last one lets go
+    const opened = new Set(); let settleBoth; const both = new Promise((r) => { settleBoth = () => r(patchedDoc); });
+    sync.getDocument = (id) => (opened.has(id) ? patchedDoc : undefined);
+    sync.subscribe = (id) => { opened.add(id); return both; };
+    gone.length = 0;
+    const first = backend.handlers.get('doc:info')(null, patchedUri, true), second = backend.handlers.get('doc:info')(null, patchedUri, true);
+    settleBoth(); await Promise.all([first, second]);
+    assert.deepEqual(gone, [patchedUri], 'two reads back of the same change let go once, when the last is done');
+    delete sync.getDocument;
+    // A read back that starts while its target is still a live reference, which is pushed out before the read is done:
+    // the let-go the read held up is tried again when it finishes
+    sync.subscribe = async (id) => (id === patchedUri ? patchedDoc : {});
+    await backend.outlineWithReferences(patched); await new Promise((r) => setImmediate(r)); // live, and the oldest
+    let settleRead; const reread = new Promise((r) => { settleRead = () => r(patchedDoc); });
+    sync.getDocument = (id) => (id === patchedUri ? patchedDoc : undefined);
+    sync.subscribe = (id) => (id === patchedUri ? reread : Promise.resolve({}));
+    const inFlight = backend.handlers.get('doc:info')(null, patchedUri, true);
+    gone.length = 0; await backend.outlineWithReferences(many); await new Promise((r) => setImmediate(r)); // pushed out meanwhile
+    const whileRead = gone.includes(patchedUri);
+    settleRead(); await inFlight;
+    assert.deepEqual([whileRead, gone.includes(patchedUri)], [false, true], 'a target pushed out while its change was read back is let go once the read is done');
+    // ...and one whose let-go had already started (unsubscribe waiting on local updates) when its change was read back:
+    // the read's subscribe cancels that let-go, so the read lets it go again once done
+    sync.isLive = () => false; sync.subscribe = async () => patchedDoc;
+    gone.length = 0; await backend.handlers.get('doc:info')(null, patchedUri, true);
+    assert.ok(gone.includes(patchedUri), 'a change read back while its document was being let go lets it go again once read');
+    delete sync.isLive;
+    delete sync.getDocument;
     sync.unsubscribe = async () => {};
     sync.subscribe = plain;
     sync.unsubscribe = async () => {};

@@ -26,11 +26,16 @@ async function outlineWithReferences(doc) {
 // and turned the next page's references away for good.
 // ponytail: LIVE_ROWS / 2 targets across every outline on screen; the newest pages win. Hold per page if that matters.
 const liveRefs = new Map();
+// Documents to let go of once the last read waiting on them is done (document()): subscribed by a change read back, or
+// found with nothing else holding them while a read still waited (so a let-go is never lost to a read in flight)
+const passingReads = new Set();
 let liveRefsClient = null; // the sync client they are live on: a new login starts a new stream, subscribed to none of them
 // Let go of a target nothing holds any more: not a live reference, a view (subscribed), a read, a wait, or a watch
 // start() subscribes outside those (watched by hand, handed to the agent): letting that go would end its notifications
 function dropRef(uri) {
-  if (liveRefs.has(uri) || subscribed.has(uri) || onDemand.has(uri) || reading.has(uri) || notifyWatchedIds().has(uri) || codexIds().includes(uri)) return;
+  if (liveRefs.has(uri) || subscribed.has(uri) || onDemand.has(uri) || notifyWatchedIds().has(uri) || codexIds().includes(uri)) return;
+  if (reading.has(uri)) { passingReads.add(uri); return; } // tried again when that read is done
+  passingReads.delete(uri);
   docStates.delete(uri);
   S.client?.sync?.unsubscribe?.(uri)?.catch(() => {}); // it may settle after a logout, or under the checks' partial clients
 }
@@ -749,14 +754,24 @@ async function document(id, opts = {}) {
   // Held for the length of the wait (main/state.js reading): the refresh sweep must not unsubscribe a bootstrap
   // somebody is awaiting, which rejected the read as 'unsubscribed <id>' whenever a view change raced a doc:info.
   reading.set(id, (reading.get(id) || 0) + 1);
+  // a change read back of a document nobody keeps live (a reference already pushed out) is let go again once the last
+  // read of it is done, whichever read that is (two panes may read the same change back at once)
+  // (a document being let go counts as not live: this read's subscribe cancels that let-go, so the read owes it again)
+  const sync = S.client.sync, live = sync.isLive ? sync.isLive(id) : !!(sync.getDocument && sync.getDocument(id));
+  if (opts.patch && !live) passingReads.add(id);
   try {
     const doc = await subscribe(id); // getDocument can expose an empty handle before bootstrap completes
     if (!doc) throw new Error(S.status.error || 'could not subscribe to ' + id);
-    readOnDemand(id);
+    // A change read back (renderer/app.js patchDoc) holds nothing: whatever made it live — a view, a live reference, an
+    // open page, a watch, the settings or inbox — still does. Counted as a read, a reference's read back kept it in the
+    // on-demand list, whose sweep let it go past LIVE_ROWS and had the pages citing it read it back in again; and one
+    // already pushed out of the list was subscribed again for good (#438).
+    if (!opts.patch) readOnDemand(id);
     return doc;
   } finally {
     const left = (reading.get(id) || 1) - 1;
-    if (left > 0) reading.set(id, left); else reading.delete(id);
+    // only what a read back subscribed: a live document's other holders are not all dropRef's to see
+    if (left > 0) reading.set(id, left); else { reading.delete(id); if (passingReads.delete(id)) dropRef(id); }
   }
 }
 
@@ -972,7 +987,7 @@ const typed = (e, own, fn) => { if (own !== true || !e) return fn(); S.writer = 
 const LINK_ROUTES = { type: 't', 'user-profile': 'u', event: 'e', space: 's' };
 // What the renderer asks this module (preload.js names each channel for the page; main.js registers the table).
 const ipc = {
-  'doc:info': (_e, id) => op(id, info),
+  'doc:info': (_e, id, patch) => op(id, info, { patch: patch === true }),
   'doc:creationOptions': () => creationOptions(),
   'doc:taskTypes': () => taskTypes(), // Create task's picker: the workflow types a task can be made with
   // A document's type: the choices it can be given (with the ones it cannot, and why), and the change itself.

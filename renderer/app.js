@@ -141,7 +141,7 @@ function patchCopies(docId, state) {
 async function patchDoc(docId) {
   if (!tana.node) return loadRoots();
   let fresh;
-  try { fresh = asDoc(await tana.node(docId)); } catch (e) { noteGone(docId, e); return loadRoots(); } // deleted or unreadable: the lists decide
+  try { fresh = asDoc(await tana.node(docId, true)); } catch (e) { noteGone(docId, e); return loadRoots(); } // deleted or unreadable: the lists decide
   deletedIds.delete(docId); // it answered, so it is not gone: an undo of a delete brings the rows and the chips back
   patchCopies(docId, { text: fresh.text, title: fresh.title, done: fresh.done, stateType: fresh.stateType });
   if (extra.has(docId)) Object.assign(extra.get(docId), fresh);
