@@ -1779,6 +1779,12 @@ async function main() {
     backend.testRuntime({ me: { userUri: ME }, win: null, client: { sync: { subscribe: async () => resetDoc, getDocument: () => resetDoc, stateOf: () => 'bootstrapping' }, graph: { listNodes: async () => ({ nodes: [] }) } } });
     resetDoc.transact((l) => l.getMap('data').set('title', 'Edited while away')); backend.onChange(reset, { origin: 'remote' });
     assert.equal((await backend.handlers.get('doc:info')(null, reset)).updatedAt, '2026-09-01T10:00:00Z', 'a catch-up import keeps the graph time');
+    // An edit made here is one whatever state the document is in; and a reset that discards it takes its time back too.
+    resetDoc.transact((l) => l.getMap('data').set('title', 'Edited offline')); backend.onChange(reset, { origin: 'local' });
+    assert.ok((await backend.handlers.get('doc:info')(null, reset)).updatedAt > '2026-09-01T10:00:00Z', 'a local edit is stamped while the document bootstraps');
+    resetDoc.reset(); backend.onChange(reset, { origin: 'remote' });
+    resetDoc.applyRemote([snapshot]); backend.onChange(reset, { origin: 'remote' });
+    assert.equal((await backend.handlers.get('doc:info')(null, reset)).updatedAt, '2026-09-01T10:00:00Z', 'a reset that discards the edit discards its time');
     console.log('ok  rows carry updatedAt/createdAt/stateType, from the graph and from cached view rows');
   }
 

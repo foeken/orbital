@@ -797,10 +797,11 @@ async function notifyWatched(id, doc, n, info) {
   followSummary(id, n.title).catch(() => {});
 }
 // The oplog version each document's last change left. Its first change is the bootstrap, a read; a later one that moved
-// the version while the document was live is an edit (here, or live from another client), and the row says so until
+// the version is an edit when it was made here, or arrived live from another client, and the row says so until
 // the graph's updateTime catches up (rememberMeta). An import while it bootstraps again (a reconnect's catch-up) is
 // no news of when: the graph's time for it stands, rather than the moment it happened to arrive.
 const versions = new WeakMap();
+const stampedOver = new Map(); // docId -> the update time an edit's stamp replaced, put back when a reset discards the edit
 function onChange(docId, info) {
   try {
     // The app's own settings document is not content: it is applied and nothing else hears about it.
@@ -820,11 +821,17 @@ function onChange(docId, info) {
     if (restored) db.unnoteDeleted(docId); // back from the dead: off the Recently deleted list, wherever the restore came from
     // An emptied document (Document.reset on a discard-local resync) starts over: the import after it is a bootstrap again.
     const version = doc.loro && doc.loro.oplogVersion(), seen = versions.get(doc);
-    if (version && !version.length()) versions.delete(doc);
-    else if (version) {
+    if (version && !version.length()) {
+      versions.delete(doc);
+      if (stampedOver.has(docId)) { nodeMeta.set(docId, { ...nodeMeta.get(docId), updatedAt: stampedOver.get(docId) }); stampedOver.delete(docId); }
+    } else if (version) {
       versions.set(doc, version);
-      const live = !S.client.sync.stateOf || S.client.sync.stateOf(docId) === 'live';
-      if (live && seen && seen.compare(version) !== 0) nodeMeta.set(docId, { ...nodeMeta.get(docId), updatedAt: now() });
+      const edit = (info && info.origin === 'local') || !S.client.sync.stateOf || S.client.sync.stateOf(docId) === 'live';
+      if (edit && seen && seen.compare(version) !== 0) {
+        const meta = nodeMeta.get(docId) || {};
+        if (!stampedOver.has(docId)) stampedOver.set(docId, meta.updatedAt);
+        nodeMeta.set(docId, { ...meta, updatedAt: now() });
+      }
     }
     const hueChanged = rememberNodeHue(n);
     const done = n.stateType === 'closed' ? 1 : 0, title = n.title ?? row?.title;
