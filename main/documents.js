@@ -817,9 +817,10 @@ function onChange(docId, info) {
     }
     const restored = deletedNodes.delete(docId);
     if (restored) db.unnoteDeleted(docId); // back from the dead: off the Recently deleted list, wherever the restore came from
+    // An emptied document (Document.reset on a discard-local resync) starts over: the import after it is a bootstrap again.
     const version = doc.loro && doc.loro.oplogVersion(), seen = versions.get(doc);
-    if (version) versions.set(doc, version);
-    if (seen && seen.compare(version) !== 0) nodeMeta.set(docId, { ...nodeMeta.get(docId), updatedAt: now() });
+    if (version && !version.length()) versions.delete(doc);
+    else if (version) { versions.set(doc, version); if (seen && seen.compare(version) !== 0) nodeMeta.set(docId, { ...nodeMeta.get(docId), updatedAt: now() }); }
     const hueChanged = rememberNodeHue(n);
     const done = n.stateType === 'closed' ? 1 : 0, title = n.title ?? row?.title;
     const rowChanged = row && (title !== row.title || done !== row.done || hueChanged);

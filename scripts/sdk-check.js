@@ -1765,6 +1765,16 @@ async function main() {
     madeDoc.transact((l) => initDocument(l, 'Just made', ME, { now: 1790000000000 }));
     backend.testRuntime({ me: { userUri: ME }, win: null, client: { sync: { subscribe: async () => madeDoc, getDocument: () => madeDoc }, graph: { listNodes: async () => ({ nodes: [] }) } } });
     assert.equal((await backend.handlers.get('doc:info')(null, made)).updatedAt, new Date(1790000000000).toISOString(), 'a new document is as new as it was made');
+    // A discard-local resync empties the document and bootstraps it again: a read, not an edit.
+    const reset = 'tana:text:' + ulid(), resetDoc = new Document(reset);
+    resetDoc.transact((l) => initDocument(l, 'Reset', ME, {}));
+    backend.testRuntime({ me: { userUri: ME }, win: null, client: { sync: { subscribe: async () => resetDoc, getDocument: () => resetDoc }, graph: { listNodes: async () => ({ nodes: [] }) } } });
+    backend.rememberNodeHue({ id: reset, title: 'Reset', updateTime: '2026-09-01T10:00:00Z' });
+    backend.onChange(reset, { origin: 'remote' });
+    const snapshot = resetDoc.exportSince();
+    resetDoc.reset(); backend.onChange(reset, { origin: 'remote' });
+    resetDoc.applyRemote([snapshot]); backend.onChange(reset, { origin: 'remote' });
+    assert.equal((await backend.handlers.get('doc:info')(null, reset)).updatedAt, '2026-09-01T10:00:00Z', 'a reset and its bootstrap are no edit');
     console.log('ok  rows carry updatedAt/createdAt/stateType, from the graph and from cached view rows');
   }
 
