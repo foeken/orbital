@@ -41,9 +41,9 @@ let home = pref('home', 'workView');
 // Every page of a window (shell.js) keeps its own view and place under its id, which never changes while it lives:
 // '' the first page, then '2', '3', ... (main.js addPage, api.side), so a restart reopens each page where it was.
 let SIDE = typeof window !== 'undefined' && window.api && window.api.side ? ':' + window.api.side : '';
-// What the shell says of this page's window after every change (renderer/app.js): how many pages it holds, and whether
-// they are two panes side by side (Swap panes). The pane rows in Cmd+K are offered from it.
-let windowPanes = { pages: 1, swap: false };
+// What the shell says of this page's window after every change (renderer/app.js): how many pages it holds. The pane
+// rows in Cmd+K are offered from it.
+let windowPanes = { pages: 1 };
 let view = localStorage.getItem('view' + SIDE) || 'library'; // active view id; the outline shows one view at a time
 // Views that no longer exist. A stored one would leave the app on a page with no filter, no rows and no way back,
 // so it lands in the Library, which lists every kind those pages used to list one of.

@@ -266,11 +266,6 @@ ipcMain.on('page:gone', (e) => {
 });
 ipcMain.handle('overlay:open', (e, which, theme) => { openOverlay(pageOf(e), which, theme); });
 ipcMain.handle('overlay:close', (e, result) => { closeOverlay([...S.windows].find((w) => w.overlay && w.overlay.webContents === e.sender), result && typeof result === 'object' ? result : {}); });
-// Cmd+K Swap panes: two panes side by side change places (the shell decides whether they are), each keeping its id.
-ipcMain.handle('window:swapPanes', (e) => {
-  const win = pageOf(e)?.win;
-  if (win && win.pages.length > 1) tellShell(win, 'swap');
-});
 // Cmd+K Save view and Saved views (issue #442): the layout this window has (null: page '' alone, never rearranged), and
 // one to put it back to; 'workView' is the Work View's, the one a first launch opens (pair). The pages' places are
 // theirs, written by the page that asked (renderer/palette.js); the shell reloads, starts from this layout

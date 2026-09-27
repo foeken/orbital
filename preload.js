@@ -5,7 +5,7 @@ const { contextBridge, ipcRenderer, webFrame } = require('electron');
 if (window.top === window && location.pathname.endsWith('/shell.html')) {
   contextBridge.exposeInMainWorld('shell', {
     state: () => ipcRenderer.sendSync('shell:state'), // { doc: Trellis document | null, theme, signedOut } at its start
-    // 'open' { id, where: 'right' | 'tab' | 'float', from: the asking page's id, focus } | 'close' id | 'focus' id | 'swap'
+    // 'open' { id, where: 'right' | 'tab' | 'float', from: the asking page's id, focus } | 'close' id | 'focus' id
     // | 'theme' 'light' | 'dark' | 'auth' { signedOut }
     onCommand: (cb) => ipcRenderer.on('shell:command', (_e, cmd, arg) => cb(cmd, arg)),
     layout: (layout) => ipcRenderer.send('shell:layout', layout), // { doc, pages: [ids in doc] }: every committed change
@@ -45,7 +45,6 @@ contextBridge.exposeInMainWorld('api', {
   // a new page in this window, taking the keys: 'right' of this one (⌥⌘N, the default), a 'tab' beside it, or 'float'.
   // Answers its id (null signed out), for storing its view and place under before it loads.
   splitWindow: (where) => ipcRenderer.invoke('window:split', where),
-  swapPanes: () => ipcRenderer.invoke('window:swapPanes'), // two pages side by side change places
   windowLayout: () => ipcRenderer.invoke('window:layout'), // this window's layout (Trellis's document), null for one page never rearranged
   setWindowLayout: (doc) => ipcRenderer.invoke('window:setLayout', doc), // true: the window reloads into it
   windowTheme: (theme) => ipcRenderer.send('window:theme', theme), // 'light' | 'dark': the shell's Trellis theme and the window behind it follow the page

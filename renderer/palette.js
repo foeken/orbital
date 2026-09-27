@@ -344,10 +344,9 @@ function paletteRows(q, typed = q) {
   const openPage = (where) => run(async () => { const id = await tana.splitWindow(where); if (id) { localStorage.setItem('view:' + id, view); rememberPlace('place:' + id); } });
   rows.push({ id: 'splitView', group: 'Window', icon: 'splitPanes', label: 'New pane', hint: 'To the right', run: () => openPage('right') });
   rows.push({ id: 'newTab', group: 'Window', icon: 'createNew', label: 'New tab', hint: 'Beside this page', run: () => openPage('tab') });
-  rows.push({ id: 'floatPane', group: 'Window', icon: 'splitPanes', label: 'Float pane', run: () => openPage('float') });
+  rows.push({ id: 'floatPane', group: 'Window', icon: 'splitPanes', label: 'New floating pane', run: () => openPage('float') }); // "Float" in a pane's menu floats that pane
   // With more than one page, the workspace's own moves (shell.js run): Trellis does them, this page only asks
   if (windowPanes.pages > 1) for (const [id, label, command, icon] of PANE_ROWS) rows.push({ id, group: 'Window', icon, label, run: () => shellRun(command) });
-  if (windowPanes.swap) rows.push({ id: 'swapPanes', group: 'Window', icon: 'swapPanes', label: 'Swap panes', run: () => run(() => tana.swapPanes()) });
   // Always reachable, unlike "Focus the sidebar": once the sidebar is hidden there would otherwise be no way back to it.
   if (!railToggle.hidden) rows.push({ id: 'railToggle', group: 'Window', icon: railHidden ? 'railShow' : 'railHide', label: railHidden ? 'Show sidebar' : 'Hide sidebar', run: () => toggleRail() });
   rows.push({ id: 'reload', group: 'Window', icon: 'reload', label: 'Reload', run: () => location.reload() });

@@ -494,7 +494,6 @@ function mockApi() {
     },
     newWindow: async () => {},
     splitWindow: async () => {},
-    swapPanes: async () => {},
     windowLayout: async () => null, setWindowLayout: async () => false, // one page, no shell to lay it out
     openExternal: async (url) => { if (!/^https?:\/\//i.test(url)) throw new Error('Only http(s) links can be opened'); return url; },
     todayNode: async (offset = 0) => { const d = new Date(); d.setDate(d.getDate() + (typeof offset === 'number' ? offset : 0)); const date = typeof offset === 'string' ? offset : d.toLocaleDateString('sv-SE'); const found = all.find((d2) => d2.text === date); if (found) return found.id; const n = { id: 'mockday' + date, text: date, kind: 'document', hasChildren: true, editable: true, icon: 'doc', tags: [{ label: 'doc', color: 'grey' }] }; content[n.id] = []; all.push(n); views[0].nodes.unshift(n); datePins[n.id] = [date]; emit(null); return n.id; },

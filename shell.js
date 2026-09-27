@@ -45,9 +45,7 @@ const frames = () => [...ws.element.querySelectorAll('iframe')];
 const loaded = new WeakSet();
 const windowOf = (frame) => (frame && loaded.has(frame) ? frame.contentWindow : null);
 const sourceOf = (win) => pages().find((v) => windowOf(frameOf(v.id)) === win)?.id;
-// Swap is offered while two panes stand side by side and nothing else is docked
-const pair = (root) => root?.kind === 'split' && root.axis === 'x' && root.children.length === 2 && root.children.every((c) => c.kind === 'panel');
-const tell = (win) => win?.postMessage({ orbital: 'layout', pages: pages().length, swap: pair(ws.getDocument().root) }, '*');
+const tell = (win) => win?.postMessage({ orbital: 'layout', pages: pages().length }, '*');
 
 // The tab bars along the top are the window's drag region (-webkit-app-region does not work inside an iframe), and the
 // one under the traffic lights starts its tabs clear of them. A floating panel's bar moves the panel.
@@ -60,7 +58,7 @@ function mark() {
   }
 }
 // Trellis moves a panel by rewriting its style, and says so (change) before an animated move has landed: a pane dropped
-// at the top, a swap, a zoom. So the bars are marked again on the frame after any panel moves, once per frame.
+// at the top, a drag, a zoom. So the bars are marked again on the frame after any panel moves, once per frame.
 let marking = 0;
 new MutationObserver(() => { marking ||= requestAnimationFrame(() => { marking = 0; mark(); }); })
   .observe(ws.element, { subtree: true, attributes: true, attributeFilter: ['style'] });
@@ -79,7 +77,7 @@ ws.on('close', (view) => { guarded.delete(view.id); renamable.delete(view.id); }
 function sync() {
   const tabs = pages().length > 1;
   if (tabs !== many) { many = tabs; ws.update({ types: types(tabs), navigation: tabs ? 'free' : false }); document.body.classList.toggle('many', tabs); }
-  guard(); mark(); place(); frames().forEach((f) => tell(windowOf(f))); // place: a divider or a swap moves a covering page's pane
+  guard(); mark(); place(); frames().forEach((f) => tell(windowOf(f))); // place: a divider or a move shifts a covering page's pane
 }
 ws.on('change', (doc) => {
   sync();
@@ -160,7 +158,6 @@ bridge.onCommand((cmd, arg) => {
   if (cmd === 'open' && !aside) open(arg || {});
   else if (cmd === 'close') { const id = viewOf(arg); if (id) ws.close(id); }
   else if (cmd === 'focus') focusPage(viewOf(arg));
-  else if (cmd === 'swap') { const doc = ws.getDocument(); if (pair(doc.root)) ws.setDocument({ ...doc, root: { ...doc.root, children: [...doc.root.children].reverse() } }); } // the line stays where it is
   else if (cmd === 'run') run(arg);
   else if (cmd === 'auth') {
     if (arg?.signedOut && !aside) { aside = ws.getDocument(); ws.setDocument(single(), { animate: false }); }

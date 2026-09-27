@@ -379,8 +379,8 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
 - **Actions**: Log in (signed out), Create new …, Create task, Search Tana, Undo, Redo, Mark all as read, Sync.
 - **Navigate**: Go back, Go forward, Go to Home, Set as Home, Set Work View as Home, Focus the sidebar, Recently
   deleted, Archived types.
-- **Window**: New window, New pane, New tab, Float pane; with more than one page Next / Previous pane, Next / Previous
-  tab, Maximize or restore pane, Show all panes, Zoom back / forward, Close pane, and Swap panes while two stand side by side;
+- **Window**: New window, New pane, New tab, New floating pane; with more than one page Next / Previous pane, Next / Previous
+  tab, Maximize or restore pane, Show all panes, Zoom back / forward and Close pane (panes change places by dragging a tab);
   Show/Hide sidebar, Reload, Save view…, Remove saved view (its choices also found from the command page).
 - **Saved views** (issue #442): one row per view, the Work View first. A view is the window's layout (Trellis's
   document, `window:layout`) and each page's view and place (`view`/`place`, `view:2`/`place:2`, …), under a name,
@@ -893,8 +893,8 @@ nothing about them as documents. Each is a place the app remembers, so ⌘R on o
   a plain wheel stays the page's scroll. The pane keys are pressed in a page, which the shell never hears, so each is
   a Cmd+K row that posts `{ orbital: 'run', command }` to the shell (renderer/palette.js `PANE_ROWS`, `shellRun`);
   every Trellis key in the shell itself is off. After every change the shell tells each page how many pages the window
-  holds and whether two stand side by side (`{ orbital: 'layout' }`, renderer/state.js `windowPanes`), which decides
-  those rows and Swap panes, and puts the page under a tab bar (`html.tabbed`: no band kept for the traffic lights).
+  holds (`{ orbital: 'layout' }`, renderer/state.js `windowPanes`), which decides those rows and puts the page under a
+  tab bar (`html.tabbed`: no band kept for the traffic lights).
   **One page** looks as it always did: no tab bar, no navigation, and the window drags from a 40px strip the shell
   lays over the page's empty top band, clear of the traffic lights (`-webkit-app-region` does nothing inside an
   iframe). With more, the tab bars along the top are the drag region, the tabs and buttons excepted, and the one under

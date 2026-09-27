@@ -59,7 +59,7 @@ const withShims = (src) => {
   // Cmd+K's meeting rows and pages (renderer/meeting.js): a palette harness without that file offers none
   if (/\bmeetingRows\(/.test(src) && !/function meetingRows\(/.test(src)) src = 'globalThis.meetingRows ??= () => [];\n' + src;
   // the shell's word on this page's window (renderer/state.js): one page, unless the harness says otherwise
-  if (/\bwindowPanes\b/.test(src) && !/let windowPanes =/.test(src)) src = 'globalThis.windowPanes ??= { pages: 1, swap: false };\n' + src;
+  if (/\bwindowPanes\b/.test(src) && !/let windowPanes =/.test(src)) src = 'globalThis.windowPanes ??= { pages: 1 };\n' + src;
   if (/\bMEETING_PAGES\b/.test(src) && !/const MEETING_PAGES =/.test(src)) src = 'globalThis.MEETING_PAGES ??= {};\n' + src;
   // Every palette page opens through showPage (renderer/palette.js, #275): the real one, over whatever of the palette's
   // state the harness declares (its own lets win; the rest start empty here).
@@ -1636,20 +1636,18 @@ async function runSyncShortcutCheck() {
     'View options: Filter by type', 'View options: Filter rows by text',
     'Actions: Log in to Tana', 'Actions: Create new …', 'Actions: Search Tana', 'Actions: Undo', 'Actions: Redo', 'Actions: Sync',
     'Navigate: Go back', 'Navigate: Go forward', 'Navigate: Go to Home', 'Navigate: Set as Home', 'Navigate: Set Work View as Home', 'Navigate: Focus the sidebar',
-    'Window: New window', 'Window: New pane', 'Window: New tab', 'Window: Float pane', 'Window: Hide sidebar', 'Window: Reload',
+    'Window: New window', 'Window: New pane', 'Window: New tab', 'Window: New floating pane', 'Window: Hide sidebar', 'Window: Reload',
     'Settings: Larger text', 'Settings: Smaller text', 'Settings: Reset text size', 'Settings: Toggle dark mode', 'Settings: Edit hidden items', 'Settings: Toggle sensitive visibility', 'Settings: Toggle demo mode',
     'Help: Help',
   ], 'the palette lists its rows in one fixed, meaningful order');
   // A window of more pages (the shell's word, renderer/app.js) offers the workspace's moves, each a key's row asking
-  // the shell to run Trellis's command; Swap panes only while the shell says two panes stand side by side.
-  order.panes({ pages: 3, swap: false });
+  // the shell to run Trellis's command.
+  order.panes({ pages: 3 });
   assert.deepEqual(plain(order.labels('').filter((l) => l.startsWith('Window: ')).slice(4, -2)), ['Window: Next pane', 'Window: Previous pane', 'Window: Next tab', 'Window: Previous tab',
-    'Window: Maximize or restore pane', 'Window: Show all panes', 'Window: Zoom back', 'Window: Zoom forward', 'Window: Close pane'], 'more pages: the pane rows, and no Swap panes unless the shell says so');
-  order.panes({ pages: 2, swap: true });
-  assert.ok(order.labels('').includes('Window: Swap panes'), 'two panes side by side: Swap panes');
+    'Window: Maximize or restore pane', 'Window: Show all panes', 'Window: Zoom back', 'Window: Zoom forward', 'Window: Close pane'], 'more pages: the pane rows');
   order.row('maximizePane').run(); order.row('otherPane').run(); order.row('overview').run();
   assert.deepEqual(plain(order.posted()), [{ orbital: 'run', command: 'frame.toggle' }, { orbital: 'run', command: 'panel.next' }, { orbital: 'run', command: 'navigation.overview' }], 'each asks the shell to run its command');
-  order.panes({ pages: 1, swap: false });
+  order.panes({ pages: 1 });
   // The two date pins differ only in the day they name, and each label follows whether that day is already pinned;
   // the press toggles that day (toggleDatePin, which reads the pins again: runClosedPaletteKeysCheck).
   const DOC_ID = 'tana:text:01j0doc000000000000000000';
