@@ -90,7 +90,14 @@ async function ask(chatId, agentId, text) {
 // Every question asked in this chat with its answer so far. Finished ones are kept, so only the ones still running
 // cost a read, one read per agent.
 async function replies(chatId) {
-  const asks = asksIn(chatId).filter((x) => x.id && x.question); // an ask from before questions stayed here has nothing to show
+  // ponytail: an ask from before questions stayed on this Mac kept only the id of the question it wrote to the chat;
+  // its words are read back from there once. Drop this when no such ask is left.
+  const old = asksIn(chatId).filter((x) => !x.question && x.messageId);
+  if (old.length) {
+    const said = await op(chatId, async (doc) => { const all = doc.data.get('messages'); return all ? all.toJSON() : []; }).catch(() => []);
+    for (const x of old) { const m = said.find((y) => y && y.id === x.messageId); if (m) Object.assign(x, { id: x.messageId, question: String((m.content && m.content.text) || '') }); }
+  }
+  const asks = asksIn(chatId).filter((x) => x.id && x.question);
   const out = () => asks.map(({ id, question, agent: a, at, state, text }) => ({ id, question, agent: a, label: (AGENTS[a] || {}).label || a, at, state: state || 'working', text: text || '' }));
   const running = asks.filter((x) => !x.state && AGENTS[x.agent]);
   if (!running.length) return out();
@@ -105,6 +112,8 @@ async function replies(chatId) {
   remember(chatId, asks);
   return out();
 }
+// Forget a question and its answer: they were only ever on this device. Its task stays in the agent's own app.
+function forget(chatId, id) { remember(chatId, asksIn(chatId).filter((x) => x.id !== id)); }
 // The task behind a question, opened in its agent's app by id, as the agent badge opens a node's task (main.js
 // codex:open). The page names the question, never a url, so there is nothing here to point somewhere else.
 async function open(chatId, id) {
@@ -119,6 +128,7 @@ const ipc = {
   'chatAgent:list': () => list(),
   'chatAgent:ask': (_e, chatId, agentId, text) => { if (!isChat(chatId)) throw new Error('Not a chat'); return ask(chatId, agentId, text); },
   'chatAgent:replies': (_e, chatId) => (isChat(chatId) ? replies(chatId) : []),
+  'chatAgent:delete': (_e, chatId, id) => { if (isChat(chatId) && typeof id === 'string') forget(chatId, id); },
   'chatAgent:open': (_e, chatId, id) => (isChat(chatId) && typeof id === 'string' ? open(chatId, id) : false),
 };
-module.exports = { AGENTS, list, ask, replies, open, askPrompt, codexAnswer, RULES, KEY, ipc };
+module.exports = { AGENTS, list, ask, replies, forget, open, askPrompt, codexAnswer, RULES, KEY, ipc };

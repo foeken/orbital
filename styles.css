@@ -625,6 +625,9 @@ button.chat-thought-head[aria-expanded="true"]::after { rotate: 135deg; translat
 .agent-head.opens { cursor: pointer; }
 .agent-head.opens:hover { color: inherit; }
 .agent-row { display: flex; align-items: center; justify-content: flex-end; gap: 8px; max-width: min(80%, 660px); }
+.chat-msg[data-key]:focus { outline: none; } /* a message selected by ↑↓ (renderer/chat.js chatKey): the ring goes on what it looks like */
+.chat-msg.mine[data-key]:focus .bubble { box-shadow: 0 0 0 2px var(--focus); }
+.chat-msg.theirs[data-key]:focus { outline: 2px solid var(--focus); outline-offset: 6px; border-radius: 8px; }
 .chat-msg.mine.agent-local .bubble { background: rgba(127, 127, 127, .13); color: inherit; }
 .chat-msg.mine.agent-local.answer .bubble { max-width: 100%; } /* agent-row already holds it to the bubbles' width */
 .agent-clip { flex: none; display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 1px solid rgba(127, 127, 127, .3); border-radius: 50%; background: none; color: var(--muted); cursor: pointer; }

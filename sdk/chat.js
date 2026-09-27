@@ -269,4 +269,17 @@ async function triggerReply({ chatUri, messageId, ownerUri, agentId = TANA_AGENT
   }
 }
 
-module.exports = { chatRows, blocks, segments, plain, hm, pushMessage, addMessage, autoResponds, mentionsTana, pendingQuestions, answerSummary, answerQuestions, triggerReply, deterministicId, TANA_AGENT };
+// Delete one of your own messages, as Tana's "Delete message" does (its deleteMessage: the entry spliced out of the
+// list). Tana offers it on your own messages only, never on the AI's or anyone else's, and neither does this.
+function deleteMessage(loro, { messageId, byUri }) {
+  const messages = loro.getMap('data').get('messages');
+  for (let i = 0; messages instanceof LoroList && i < messages.length; i++) {
+    const m = messages.get(i);
+    if (!(m instanceof LoroMap) || m.get('id') !== messageId) continue;
+    if (m.get('fromUserType') === 'ai' || m.get('fromUserUri') !== byUri) throw new Error('Only your own messages can be deleted');
+    messages.delete(i, 1);
+    return;
+  }
+  throw new Error('That message is not in this chat');
+}
+module.exports = { chatRows, blocks, segments, plain, hm, pushMessage, addMessage, deleteMessage, autoResponds, mentionsTana, pendingQuestions, answerSummary, answerQuestions, triggerReply, deterministicId, TANA_AGENT };

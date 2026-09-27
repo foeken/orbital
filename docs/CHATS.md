@@ -341,6 +341,11 @@ Tana draws as the chat's own agent (§2), so an `ai` message would read as Tana'
    Cmd+K Add Codex’s answer to message for the latest one, adds it to the message box, after anything already there: sent
    from there, it is your message, the only way an answer reaches Tana.
 
+Deleting: a question and its answer go together (`chatAgent:delete`, forgotten from `chatAsks`; the task stays in
+Codex). Your own messages in the chat are deleted as Tana's "Delete message" deletes them, the entry spliced out of
+`data.messages` (sdk/chat.js `deleteMessage`, `chat:delete`), never the AI's or anyone else's. An ask from the build
+that wrote the question to the chat kept only that message's id; its question is read back from the chat once.
+
 The task is kept, not only its answer: clicking the "Codex · …" line over an answer, or Cmd+K Open Codex task for the
 latest question, opens it in Codex (`chatAgent:open`: the page names the question, main opens the agent's `url`, for Codex
 `codex://threads/<id>`, from `chatAsks`, as the agent badge's `codex:open` does for a node).

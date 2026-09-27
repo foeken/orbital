@@ -47,6 +47,7 @@ function chatPartEls(n, docId) {
 function chatMessageEl(n, docId) {
   const c = n.chat, el = document.createElement('div'), bubble = document.createElement('div');
   el.className = 'chat-msg ' + (c.mine ? 'mine' : 'theirs');
+  if (c.id) selectable(el, c.id);
   bubble.className = 'bubble';
   if (c.sentAt) bubble.title = new Date(c.sentAt).toLocaleString();
   const subs = (n.children || []).filter((p) => p.sub); // a subagent's chat: under the thinking line, as in Tana
@@ -190,10 +191,12 @@ if (typeof ResizeObserver === 'function' && outline.parentElement) {
 function agentAskEls(a, docId) {
   const q = document.createElement('div'), qb = document.createElement('div');
   q.className = 'chat-msg mine agent-local'; qb.className = 'bubble'; qb.title = AGENT_NOTE;
+  selectable(q, 'q:' + a.id);
   const words = document.createElement('div'); words.className = 'chat-paragraph'; words.textContent = demoText(a.question, docId);
   qb.append(words); q.append(qb);
   const el = document.createElement('div'), head = document.createElement('div'), row = document.createElement('div'), bubble = document.createElement('div');
   el.className = 'chat-msg mine agent-local answer'; head.className = 'agent-head'; row.className = 'agent-row'; bubble.className = 'bubble'; bubble.title = AGENT_NOTE;
+  selectable(el, 'a:' + a.id);
   // the line over it opens the agent's task that answered, for the work behind the answer
   if (tana.openAgentAsk) { head.classList.add('opens'); head.title = 'Open the ' + a.label + ' task'; head.onclick = () => openAgentAsk(docId, a.id); }
   head.append(...[iconNode('lock')].filter(Boolean), document.createTextNode(a.label + ' · only visible for you, on this device'));
@@ -221,6 +224,65 @@ function answerToComposer(docId, text) {
 }
 const latestAgentAnswer = (docId) => (agentAnswers.get(docId) || []).filter((a) => a.state === 'done').at(-1);
 const latestAgentAsk = (docId) => (agentAnswers.get(docId) || []).at(-1);
+
+// ---- the messages, by keyboard ----
+// ↑ at the start of the message box selects the last message; ↑↓ walk the messages, ↓ past the last one or Esc goes
+// back to the box. The selected message is the one focused (data-key: Tana's message id, or q:/a: and an ask's id for
+// the local ones), and it is what ⌘K's message rows act on: Delete message, and for an agent's answer Add to message
+// (also Enter) and Open task. It is kept across a redraw, which replaces every message.
+let chatSel = null;
+const msgEl = (key) => (key ? outline.querySelector('.chat-msg[data-key="' + CSS.escape(key) + '"]') : null);
+const chatMsgs = () => [...outline.querySelectorAll('.chat-msg[data-key]')];
+const askOf = (docId, key) => (/^[qa]:/.test(key || '') ? (agentAnswers.get(docId) || []).find((a) => a.id === key.slice(2)) : null);
+function chatFocus(key) {
+  const el = msgEl(key);
+  if (el) { el.focus({ preventScroll: true }); el.scrollIntoView({ block: 'nearest' }); }
+  return !!el;
+}
+function toComposer() { chatSel = null; if (!composer.hidden) composerText.focus(); else document.activeElement.blur(); }
+// Yours to delete: a local question or answer (both go), or your own message in the chat when you may write in it
+function deletableMsg(docId, key) {
+  const el = msgEl(key);
+  if (!el || chatShown !== docId) return false;
+  if (askOf(docId, key)) return !!tana.deleteAgentAsk;
+  return el.classList.contains('mine') && !chatReadOnly.has(docId) && !!tana.deleteChatMessage;
+}
+function deleteChatMsg(docId, key) {
+  if (!deletableMsg(docId, key)) return;
+  const a = askOf(docId, key), gone = a ? ['q:' + a.id, 'a:' + a.id] : [key];
+  const keys = chatMsgs().map((el) => el.dataset.key), at = keys.indexOf(gone[0]), rest = keys.filter((k) => !gone.includes(k));
+  chatSel = keys.slice(0, at).filter((k) => !gone.includes(k)).at(-1) || rest[0] || null; // the one above takes the selection
+  run(async () => {
+    if (a) { await tana.deleteAgentAsk(docId, a.id); agentAnswers.set(docId, (agentAnswers.get(docId) || []).filter((x) => x.id !== a.id)); }
+    else { await tana.deleteChatMessage(docId, key); await reload(docId); }
+    renderSoon(true);
+  });
+}
+// ⌘K's rows for the message selected, or with none the latest answer and ask (renderer/palette.js)
+function chatMessageRows(docId) {
+  const rows = [], sel = msgEl(chatSel) ? chatSel : null, picked = askOf(docId, sel);
+  const answer = picked && picked.state === 'done' ? picked : latestAgentAnswer(docId), ask = picked || latestAgentAsk(docId);
+  if (tana.askAgent && answer) rows.push({ id: 'agentAnswerToMessage', group: 'Actions', icon: 'paperclip', label: 'Add ' + answer.label + '’s answer to message', hint: 'To send as your own words', run: () => answerToComposer(docId, answer.text) });
+  if (tana.openAgentAsk && ask) rows.push({ id: 'openAgentAsk', group: 'Actions', icon: 'robot', label: 'Open ' + ask.label + ' task', hint: picked ? 'The one behind this question' : 'The one behind the last @' + ask.label + ' answer', run: () => openAgentAsk(docId, ask.id) });
+  if (sel && deletableMsg(docId, sel)) rows.push({ id: 'deleteMessage', group: 'Actions', icon: 'trash', label: 'Delete message', hint: picked ? 'The question and its answer, from this device' : 'From the chat, for everyone in it', kbd: '⇧⌘⌫', run: () => deleteChatMsg(docId, sel) });
+  return rows;
+}
+// a message ↑↓ can land on, with its keys
+function selectable(el, key) { el.dataset.key = key; el.tabIndex = -1; el.onfocus = () => { chatSel = key; }; el.onkeydown = chatKey; }
+document.addEventListener('mousedown', (e) => { if (!(e.target.closest && e.target.closest('.chat-msg[data-key], #palette'))) chatSel = null; }, true);
+function chatKey(e) {
+  const m = e.currentTarget;
+  if (!chatShown || e.target !== m) return;
+  const mod = e.metaKey || e.ctrlKey, key = m.dataset.key, all = chatMsgs(), i = all.indexOf(m);
+  if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && !mod && !e.shiftKey && !e.altKey) {
+    const next = all[i + (e.key === 'ArrowUp' ? -1 : 1)];
+    if (next) chatFocus(next.dataset.key); else if (e.key === 'ArrowDown') toComposer();
+  } else if (e.key === 'Escape') toComposer();
+  else if (e.key === 'Enter' && !mod && askOf(chatShown, key) && key.startsWith('a:') && askOf(chatShown, key).state === 'done') answerToComposer(chatShown, askOf(chatShown, key).text);
+  else if (e.key === 'Backspace' && mod && e.shiftKey && deletableMsg(chatShown, key)) deleteChatMsg(chatShown, key);
+  else return;
+  e.preventDefault(); e.stopPropagation();
+}
 function openAgentAsk(docId, id) { run(async () => { if (!(await tana.openAgentAsk(docId, id))) throw new Error('That task is not on this device'); }); }
 // Read the chat's answers, and again every few seconds while one is still being worked on. Asked while a read is out
 // (a question just asked), it reads once more when that one is back, which did not know the question yet.
@@ -381,6 +443,8 @@ composerText.addEventListener('keydown', (e) => {
   // Escape only leaves the composer: taken here, before any page or workspace key (events.js, stepOut in a zoomed pane) sees it
   if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); composerText.blur(); return; }
   const mod = e.metaKey || e.ctrlKey;
+  // ↑ at the very start: up into the messages, the newest first (chatKey walks on from there)
+  if (e.key === 'ArrowUp' && !mod && !e.shiftKey && !e.altKey && !beforeCaret() && chatMsgs().length) { e.preventDefault(); e.stopPropagation(); chatFocus(chatMsgs().at(-1).dataset.key); return; }
   if (e.key === 'Enter' && !e.shiftKey && !e.altKey && !e.isComposing) { e.preventDefault(); chatSend(); return; }
   if (e.key === 'Tab' && !e.shiftKey && !mod && chatAi.has(composer.dataset.doc) && !plainOf(composerSegs()).trim() && !composerText.querySelector('.mention')) { e.preventDefault(); switchMode(composer.dataset.doc); return; }
   if (e.key === '@' && !mod) { e.preventDefault(); composerLink(); return; }
@@ -390,6 +454,7 @@ composerText.addEventListener('keydown', (e) => {
   if (!mod || ['z', 'a', 'c', 'x', 'v', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Backspace'].includes(e.key.length === 1 ? e.key.toLowerCase() : e.key)) e.stopPropagation();
 });
 composerText.addEventListener('input', composerChanged);
+composerText.addEventListener('focus', () => { chatSel = null; });
 composerSkill.onclick = () => { chatSkill = null; showSkill(); composerText.focus(); };
 composerMode.onmousedown = (e) => e.preventDefault(); // the caret stays in the composer
 composerMode.onclick = () => switchMode(composer.dataset.doc);
@@ -401,6 +466,7 @@ function chatAfterRender(parent, stick) {
   const was = composer.dataset.doc;
   if (was && was !== docId) { if (!composer.classList.contains('empty')) chatDrafts.set(was, { segs: composerSegs(), skill: chatSkill }); else chatDrafts.delete(was); }
   const opened = chat && docId !== chatShown;
+  if (opened) chatSel = null;
   if (was !== (docId || '')) {
     composer.dataset.doc = docId || ''; setComposer(docId && chatDrafts.get(docId)); showMode();
   }
@@ -420,6 +486,8 @@ function chatAfterRender(parent, stick) {
   if (!chat) return;
   fitBubbles(); // drawn anew each render, so fitted anew
   if (stick) { sc.scrollTop = sc.scrollHeight; chatAtBottom = true; }
+  // the redraw replaced the message that was selected: select it again, unless focus has gone somewhere else meanwhile
+  if (chatSel && palette.hidden && (document.activeElement === document.body || outline.contains(document.activeElement)) && document.activeElement.dataset.key !== chatSel) chatFocus(chatSel);
   if (opened || asking === 'new') requestAnimationFrame(() => { if (palette.hidden && composer.dataset.doc === docId) (asking ? qcard : composerText).focus({ preventScroll: true }); });
 }
 // Access can change while a chat is open (someone shares it with you, or takes it away): a change to its audience or

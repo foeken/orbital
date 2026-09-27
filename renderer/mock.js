@@ -518,6 +518,8 @@ function mockApi() {
     // @Codex (main/chatagents.js): the question is a message to the chat; the answer is local, here after two and a half seconds
     chatAgents: async () => [{ id: 'codex', label: 'Codex', icon: 'robot' }],
     askAgent: async (docId, agent, text) => { const id = 'mockask' + (++seq); (agentAsks[docId] ||= []).push({ id, question: text, at: Date.now() }); return { id }; },
+    deleteAgentAsk: async (docId, id) => { agentAsks[docId] = (agentAsks[docId] || []).filter((a) => a.id !== id); },
+    deleteChatMessage: async (docId, messageId) => { content[docId] = (content[docId] || []).filter((m) => !(m.chat && m.chat.mine && m.chat.id === messageId)); emit(docId); },
     openAgentAsk: async (docId, id) => (agentAsks[docId] || []).some((a) => a.id === id),
     agentReplies: async (docId) => (agentAsks[docId] || []).map((a) => ({ id: a.id, question: a.question, at: a.at, agent: 'codex', label: 'Codex', ...(Date.now() - a.at < 2500 ? { state: 'working', text: '' } : { state: 'done', text: 'Mock answer from Codex, kept on this device.' }) })),
     newChat: async () => {

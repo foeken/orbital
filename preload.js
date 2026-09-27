@@ -146,6 +146,8 @@ contextBridge.exposeInMainWorld('api', {
   askAgent: (id, agent, text) => ipcRenderer.invoke('chatAgent:ask', id, agent, text), // starts that agent's task on this device with the question and the chat; nothing is written to Tana: { id }
   agentReplies: (id) => ipcRenderer.invoke('chatAgent:replies', id), // the questions asked in this chat with their answers, local only: [{ id, question, agent, label, at, state: working|done|failed, text }]
   openAgentAsk: (id, askId) => ipcRenderer.invoke('chatAgent:open', id, askId), // open the task that answered this question in its agent's app: true, or false when it is not on this device
+  deleteAgentAsk: (id, askId) => ipcRenderer.invoke('chatAgent:delete', id, askId), // forget a question and its answer on this device (they were never in Tana)
+  deleteChatMessage: (id, messageId) => ipcRenderer.invoke('chat:delete', id, messageId), // delete one of your own messages from the chat, for everyone, as Tana's Delete message does
   inviteToChat: (id, userUri) => ipcRenderer.invoke('chat:invite', id, userUri), // a workspace member joins the chat as an editor: { name } // a new chat with Tana, yours alone: Node to zoom
   taskTypes: () => ipcRenderer.invoke('doc:taskTypes'), // [{ uri, title, hue }]: the workflow types Create task offers (task.html)
   search: (query, scope) => ipcRenderer.invoke('search', query, scope), // scope: { types } or { members } for a link field

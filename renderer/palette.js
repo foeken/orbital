@@ -319,8 +319,7 @@ function paletteRows(q, typed = q) {
   if (tana.creationOptions) rows.push({ id: 'create', group: 'Actions', icon: 'createNew', label: 'Create new …', keepOpen: true, run: openCreationPalette, sub: async () => { creationChoices = (await tana.creationOptions()).options || []; return creationRows(''); } });
   if (tana.createDocument) rows.push({ id: 'createTask', group: 'Actions', icon: 'task', label: 'Create task', run: () => openTask() }); // ⇧⌘Space: task.html over the window (renderer/overlays.js)
   if (tana.inviteToChat && zoom && isChatPage(zoom)) { const chatId = zoom.docId; rows.push({ id: 'inviteChat', group: 'Actions', icon: 'member', label: 'Invite to chat…', hint: 'Someone from the workspace', keepOpen: true, run: () => openInvitePicker(chatId) }); } // renderer/chat.js
-  if (tana.askAgent && zoom && isChatPage(zoom)) { const answer = latestAgentAnswer(zoom.docId), chatId = zoom.docId; if (answer) rows.push({ id: 'agentAnswerToMessage', group: 'Actions', icon: 'paperclip', label: 'Add ' + answer.label + '’s answer to message', hint: 'To send as your own words', run: () => answerToComposer(chatId, answer.text) }); } // renderer/chat.js
-  if (tana.openAgentAsk && zoom && isChatPage(zoom)) { const ask = latestAgentAsk(zoom.docId), chatId = zoom.docId; if (ask) rows.push({ id: 'openAgentAsk', group: 'Actions', icon: 'robot', label: 'Open ' + ask.label + ' task', hint: 'The one behind the last @' + ask.label + ' answer', run: () => openAgentAsk(chatId, ask.id) }); } // renderer/chat.js
+  if ((tana.askAgent || tana.deleteChatMessage) && zoom && isChatPage(zoom)) rows.push(...chatMessageRows(zoom.docId)); // the selected message's, or the latest answer's (renderer/chat.js)
   if (tana.newChat) rows.push({ id: 'newChat', group: 'Actions', icon: 'chat', label: 'New chat', hint: 'Talk to Tana', run: () => startNewChat() }); // renderer/chat.js
   // the keys the outline answers to, as rows: each has a default combo in DEFAULT_HOTKEYS and can be re-recorded
   rows.push({ id: 'search', group: 'Actions', icon: 'search', label: 'Search Tana', keepOpen: true, run: () => togglePalette('search') });
@@ -1115,13 +1114,15 @@ addEventListener('resize', placeCover);
 // return to (a row selection, the sidebar) the hidden input must not keep the keys, so it lets go of the focus
 // Where the focus goes back to when the palette closes: the caret's row, or the sidebar row the palette was opened from
 // (a sidebar row is no caret: it is found again by its id, since the sidebar may have been drawn again meanwhile).
-const returnTarget = () => focused() || (railEl.contains(document.activeElement) && document.activeElement.dataset.id ? { rail: document.activeElement.dataset.id } : null);
+const returnTarget = () => focused() || (railEl.contains(document.activeElement) && document.activeElement.dataset.id ? { rail: document.activeElement.dataset.id } : null)
+  || (outline.contains(document.activeElement) && document.activeElement.matches('.chat-msg[data-key]') ? { chatMsg: document.activeElement.dataset.key } : null); // a chat's selected message (renderer/chat.js)
 function returnFocus() {
   const r = palReturn; palReturn = null;
   const railRow = r && r.rail && railEl.querySelector('.rrow[data-id="' + CSS.escape(r.rail) + '"]');
   if (railRow) railRow.focus();
   else if (r && r.key && !focused()) (r.cell ? placeCell(r.key, r.cell, r.offset) : placeCaret(r.key, r.offset));
   else if (r && r.composer && !composer.hidden) composerText.focus(); // a chat's composer opened it (renderer/chat.js)
+  else if (r && r.chatMsg && chatFocus(r.chatMsg)) { /* back on the message it was opened over, unless a row deleted it */ }
   else if (document.activeElement === palInput) palInput.blur();
 }
 function runRow(r) { if (!r || r.disabled) return; if (!r.keepOpen) closePalette(); r.run(); }
