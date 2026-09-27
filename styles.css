@@ -593,10 +593,16 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
   border: 1px solid rgba(0, 0, 0, .06); border-radius: 28px; background: var(--surface); box-shadow: 0 6px 28px rgba(0, 0, 0, .07), 0 1px 3px rgba(0, 0, 0, .04); }
 .composer[hidden] { display: none; } /* its flex would otherwise win over [hidden] */
 .composer:focus-within { box-shadow: 0 8px 32px rgba(0, 0, 0, .09), 0 1px 3px rgba(0, 0, 0, .05); }
-.composer textarea { flex: 1 0 100%; field-sizing: content; min-height: 3em; max-height: 40vh; resize: none; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; font-size: 16px; line-height: 1.5; outline: none; }
-.composer textarea::placeholder { color: #9a9a9a; }
+.composer .ctext { flex: 1 0 100%; min-height: 3em; max-height: 40vh; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 16px; line-height: 1.5; outline: none; }
+.composer .ctext:empty::before { content: attr(data-placeholder); color: #9a9a9a; pointer-events: none; }
+.composer .ctext .mention { color: #508fbb; cursor: default; }
+.composer .ctext .mention svg { width: 14px; height: 14px; vertical-align: -2px; margin-right: 3px; }
+/* the skill the message runs ("/" first): a pill in front of the text; clicking it, or Backspace at the start, drops it */
+.composer-skill { flex: none; display: inline-flex; align-items: center; gap: 5px; margin-right: auto; padding: 2px 10px; border-radius: 12px; background: var(--chat-mine); color: var(--chat-mine-text); font-size: 13px; font-weight: 500; cursor: pointer; }
+.composer-skill[hidden] { display: none; }
+.composer-skill svg { width: 14px; height: 14px; }
 .composer-send { flex: none; width: 40px; height: 40px; border: 0; border-radius: 50%; background: var(--chat-send); color: #fff; font-size: 20px; font-weight: 600; line-height: 1; cursor: pointer; }
-.composer:has(textarea:placeholder-shown) .composer-send { opacity: .4; cursor: default; }
+.composer.empty .composer-send { opacity: .4; cursor: default; }
 
 /* ==== Row content: checkbox, text, facts, chips, images, references, marks, blocks ==== */
 .check {
@@ -1041,7 +1047,8 @@ html.cover .toast { left: calc(var(--pane-x) + var(--pane-w) / 2); max-width: mi
 [data-theme="dark"] { --chat-mine: #1e3d7b; --chat-mine-text: #e8eeff; --chat-send: #3d72e0; } /* Codex's dark: a deep saturated blue */
 [data-theme="dark"] .composer { border-color: rgba(255, 255, 255, .07); background: #2a2c2e; box-shadow: 0 4px 20px rgba(0, 0, 0, .25); } /* a lighter card on the page, as Codex draws it */
 [data-theme="dark"] .composer:focus-within { border-color: rgba(255, 255, 255, .11); box-shadow: 0 6px 24px rgba(0, 0, 0, .3); }
-[data-theme="dark"] .composer textarea::placeholder { color: #7d8185; }
+[data-theme="dark"] .composer .ctext:empty::before { color: #7d8185; }
+[data-theme="dark"] .composer .ctext .mention { color: #8fc1e1; }
 [data-theme="dark"] .chat-code { background: rgba(255, 255, 255, .07); }
 [data-theme="dark"] .chat-quote { border-left-color: #44484b; }
 [data-theme="dark"] .chat-divider { border-top-color: #3a3d40; }

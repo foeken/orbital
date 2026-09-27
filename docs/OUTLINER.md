@@ -846,8 +846,12 @@ are within 80 px of it; a short conversation sits at the bottom of the window.
 
 Under it is the composer (`#composer`, a rounded card whose textarea grows with its text and whose round blue button
 sends), the window's last row outside the scroll, so it stays at the bottom whatever the conversation's length or
-scroll: Enter sends (`chat:send`, main/documents.js `sendChat`), Shift+Enter is a new line, Escape leaves it, and ⌘Z and the other editing keys stay the
-textarea's own rather than reaching the outline. What is typed and not sent is kept per chat while the window is open.
+scroll: Enter sends (`chat:send`, main/documents.js `sendChat`), Shift+Enter is a new line, and Escape leaves it.
+**@** opens the link search as a dropdown at the caret and puts the node picked (or created) in as a chip; **/** as the
+first thing typed opens a page of the workspace's skills (`searchPreview` over the skills kind), and the one picked sits
+as a pill in front of the text (Backspace at the start or a click drops it) and goes with the message as its
+attachment. Chips are sent as `[label](tana:…)` links. The field is a `contenteditable` of plain text and chips
+(renderSegs/readSegs); ⌘Z and the other editing keys stay its own rather than reaching the outline. What is typed and not sent is kept per chat while the window is open.
 Opening a chat puts the caret in it. After a send, three dots stand where the answer will be until Tana's answer begins (two minutes
 at most); the answer streams in as live changes to the chat, and a message Tana is still writing with no words yet
 shows the dots in its place. A failed send puts the words back. **New chat** (Cmd+K, Actions) makes a chat with

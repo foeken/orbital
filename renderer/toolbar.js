@@ -17,6 +17,7 @@ function startLink(item, el, [start, end]) {
   togglePalette('search', { item, segs, start, end, text: plainOf(segs).slice(start, end), rect });
 }
 async function linkTo(ctx, mention) {
+  if (ctx.composer) return chatMention(mention); // "@" in a chat's composer (renderer/chat.js)
   const { item, segs, start, end } = ctx;
   const isDoc = item.node.kind === 'document';
   const next = [...splitSegs(segs, start)[0], isDoc ? { text: mention.label } : { mention }, ...splitSegs(segs, end)[1]];
@@ -29,7 +30,7 @@ async function linkTo(ctx, mention) {
 function createAndLink(ctx, title = ctx.text) {
   tana.createDocument(title).then((n) => { extra.set(n.id, { ...n, text: n.title || '', hasChildren: true }); return linkTo(ctx, { label: n.title, uri: n.id, ...(n.icon ? { icon: n.icon } : {}) }); }, showError);
 }
-function cancelLink() { const c = linkCtx; linkCtx = null; if (c) placeCaret(c.item.key, c.end); }
+function cancelLink() { const c = linkCtx; linkCtx = null; if (c && c.composer) composerText.focus(); else if (c) placeCaret(c.item.key, c.end); }
 
 // ---- selection toolbar: marks and block styles for the current selection, like Tana's floating toolbar ----
 // Keyboard first: ⌘B / ⌘I / ⇧⌘S / ⌘E toggle the marks, "@" links, Tab moves into the toolbar (Left/Right between

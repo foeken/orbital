@@ -2,9 +2,10 @@
 // A chat drawn as a conversation, in the Codex app's style (docs/CHATS.md §8, §10): the rows main makes from
 // data.messages (sdk/chat.js chatRows) become messages, oldest at the top: yours in a light blue bubble on the right,
 // Tana's (and anyone else's) as plain text across the page, the thinking line in grey above it. Hovering a message shows
-// when it was sent. Under the conversation sits the composer: Enter sends, Shift+Enter starts a new line, and Tana's AI answers by
-// itself where the chat lets it (main/documents.js sendChat). While it is thinking three dots stand where its answer
-// will be; the answer streams in as live updates to the chat, each one read again like any change to an open page.
+// when it was sent. Under the conversation sits the composer: Enter sends, Shift+Enter starts a new line, "@" links a
+// node and "/" first runs a skill, and Tana's AI answers by itself where the chat lets it (main/documents.js sendChat).
+// While it is thinking three dots stand where its answer will be; the answer streams in as live updates to the chat,
+// each one read again like any change to an open page.
 const composer = $('composer'), composerText = $('composerText'), composerSend = $('composerSend');
 const CHAT_WAIT = 12e4; // how long the dots wait on an answer that has not started to arrive
 let chatShown = null; // the chat drawn last: a chat opened anew goes to its end, and its composer takes the caret
@@ -67,41 +68,115 @@ function chatStick(parent) {
   const sc = outline.parentElement;
   return parent.docId !== chatShown || sc.scrollHeight - sc.scrollTop - sc.clientHeight < 80;
 }
-// After it is drawn: the composer shows under a chat and nowhere else, holding what was typed in each.
+
+// ---- the composer ----
+// A small rich text field (index.html #composerText): typing is plain text, "@" puts a chip for a node in through the
+// palette's link search (renderer/toolbar.js linkTo), and "/" as the first thing typed picks a skill for the message to
+// run, shown as a pill in front. Sent, the chips become Tana's [label](tana:…) links and the skill rides along as the
+// message's attachment, as Tana's own runSkill sends one (docs/CHATS.md §10).
+const composerSkill = $('composerSkill');
+let chatSkill = null; // { uri, label } the message being written runs
+let composerAt = null; // where the caret was when "@" opened the search: the chip goes there
+let skillList = null; // the workspace's skills for the "/" page, read when it opens
+const composerSegs = () => readSegs(composerText);
+function composerChanged() {
+  const empty = !plainOf(composerSegs()).trim();
+  if (empty && !composerText.querySelector('.mention') && composerText.childNodes.length) composerText.replaceChildren(); // :empty shows the placeholder again
+  composer.classList.toggle('empty', empty && !chatSkill);
+}
+function showSkill() {
+  composerSkill.hidden = !chatSkill;
+  composerSkill.replaceChildren(...(chatSkill ? [iconNode('skill'), document.createTextNode(demoText(chatSkill.label, chatSkill.uri))].filter(Boolean) : []));
+  composerChanged();
+}
+function setComposer(draft) {
+  renderSegs(composerText, (draft && draft.segs) || [], composer.dataset.doc);
+  chatSkill = (draft && draft.skill) || null;
+  showSkill();
+}
+// The message as Tana stores it: markdown, a mention as [label](uri), which is also how sdk/chat.js reads one back
+const chatMarkdown = (segs) => segs.map((s) => ('mention' in s ? '[' + String(s.mention.label).replace(/[[\]\n]/g, ' ') + '](' + s.mention.uri + ')' : s.text)).join('').replace(/\u00a0/g, ' ').trim();
+// the text before the caret, to tell "/" typed first from one typed later
+function beforeCaret() {
+  const sel = getSelection();
+  if (!sel.rangeCount || !composerText.contains(sel.anchorNode)) return '';
+  const r = sel.getRangeAt(0).cloneRange(); r.setStart(composerText, 0);
+  return r.toString();
+}
+function composerLink() {
+  const sel = getSelection();
+  composerAt = sel.rangeCount && composerText.contains(sel.anchorNode) ? sel.getRangeAt(0).cloneRange() : null;
+  const box = composerAt && composerAt.getClientRects()[0];
+  const rect = box ? { left: box.left, top: box.top, bottom: box.bottom } : composerText.getBoundingClientRect();
+  togglePalette('search', { composer: true, text: '', rect });
+}
+// The node picked in the "@" search, as a chip where the caret was, with a space after it to type on from
+function chatMention(mention) {
+  const at = composerAt; composerAt = null;
+  const tmp = document.createElement('span'); renderSegs(tmp, [{ mention }], composer.dataset.doc);
+  const chip = tmp.querySelector('.mention'), space = document.createTextNode(' ');
+  composerText.focus();
+  const range = at && composerText.contains(at.startContainer) ? at : document.createRange();
+  if (range !== at) { range.selectNodeContents(composerText); range.collapse(false); }
+  range.deleteContents(); range.insertNode(space); range.insertNode(chip);
+  range.setStartAfter(space); range.collapse(true);
+  getSelection().removeAllRanges(); getSelection().addRange(range);
+  composerChanged();
+}
+// "/" first: the workspace's skills, in ⌘K's card; Escape goes back to the message with nothing picked
+function openSkillPicker() {
+  togglePalette('cmd');
+  loadList('skills', () => tana.searchPreview({ types: ['skills'] }), (list) => { skillList = list; });
+  openPage('skills', 'Choose a skill to run', { rows: (q) => listRows('Skills', skillList, q, 'No skills in this workspace',
+    (list) => list.filter((n) => fuzzyMatch(n.text || n.title || '', q)).map((n) => ({ group: 'Skills', icon: 'skill', label: n.text || n.title || 'Untitled skill', run: () => pickSkill(n) }))) });
+}
+function pickSkill(n) {
+  chatSkill = { uri: n.id, label: n.text || n.title || 'Skill' };
+  showSkill();
+  composerText.focus();
+}
+function chatSend() {
+  const docId = composer.dataset.doc, draft = { segs: composerSegs(), skill: chatSkill }, skill = chatSkill;
+  // a skill on its own asks for it to be run, the way Tana's runSkill words a message with no other words
+  const text = chatMarkdown(draft.segs) || (skill ? 'Run [' + skill.label.replace(/[[\]\n]/g, ' ') + '](' + skill.uri + ')' : '');
+  if (!docId || !text || !tana.sendChat) return;
+  setComposer(null); chatDrafts.delete(docId);
+  chatWaiting.set(docId, Date.now());
+  run(async () => {
+    try { const sent = await tana.sendChat(docId, text, skill ? [skill.uri] : []); if (!sent.responding) chatWaiting.delete(docId); }
+    catch (e) { chatWaiting.delete(docId); if (composer.dataset.doc === docId && composer.classList.contains('empty')) setComposer(draft); throw e; } // the message comes back to be sent again
+    finally { await reload(docId); if (zoom && zoom.docId === docId) { outline.parentElement.scrollTop = outline.parentElement.scrollHeight; renderSoon(true); } }
+  });
+}
+composerText.addEventListener('keydown', (e) => {
+  const mod = e.metaKey || e.ctrlKey;
+  if (e.key === 'Enter' && !e.shiftKey && !e.altKey && !e.isComposing) { e.preventDefault(); chatSend(); return; }
+  if (e.key === '@' && !mod) { e.preventDefault(); composerLink(); return; }
+  if (e.key === '/' && !mod && !chatSkill && !beforeCaret().trim() && tana.searchPreview) { e.preventDefault(); openSkillPicker(); return; }
+  if (e.key === 'Backspace' && chatSkill && !beforeCaret()) { e.preventDefault(); chatSkill = null; showSkill(); return; }
+  // the field's own keys stay its own: ⌘Z undoes typing here rather than the last change to a node; ⌘K and the rest go on
+  if (!mod || ['z', 'a', 'c', 'x', 'v', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Backspace'].includes(e.key.length === 1 ? e.key.toLowerCase() : e.key)) e.stopPropagation();
+  if (e.key === 'Escape') composerText.blur();
+});
+composerText.addEventListener('input', composerChanged);
+composerSkill.onclick = () => { chatSkill = null; showSkill(); composerText.focus(); };
+composerSend.onmousedown = (e) => e.preventDefault(); // the caret stays in the composer
+composerSend.onclick = chatSend;
+// After the page is drawn: the composer shows under a chat and nowhere else, keeping what was written in each.
 function chatAfterRender(parent, stick) {
   const chat = isChatPage(parent), docId = chat ? parent.docId : null, sc = outline.parentElement;
-  if (composer.dataset.doc && composer.dataset.doc !== docId) { if (composerText.value.trim()) chatDrafts.set(composer.dataset.doc, composerText.value); else chatDrafts.delete(composer.dataset.doc); }
+  const was = composer.dataset.doc;
+  if (was && was !== docId) { if (!composer.classList.contains('empty')) chatDrafts.set(was, { segs: composerSegs(), skill: chatSkill }); else chatDrafts.delete(was); }
   const opened = chat && docId !== chatShown;
-  if (composer.dataset.doc !== (docId || '')) composerText.value = (docId && chatDrafts.get(docId)) || '';
-  composer.dataset.doc = docId || ''; composer.hidden = !chat;
+  if (was !== (docId || '')) { composer.dataset.doc = docId || ''; setComposer(docId && chatDrafts.get(docId)); }
+  composer.hidden = !chat;
   sc.classList.toggle('chatting', chat);
   chatShown = docId;
   if (!chat) return;
   if (stick) sc.scrollTop = sc.scrollHeight;
   if (opened) requestAnimationFrame(() => { if (palette.hidden && composer.dataset.doc === docId) composerText.focus({ preventScroll: true }); });
 }
-function chatSend() {
-  const docId = composer.dataset.doc, text = composerText.value.trim();
-  if (!docId || !text || !tana.sendChat) return;
-  composerText.value = ''; chatDrafts.delete(docId);
-  chatWaiting.set(docId, Date.now());
-  run(async () => {
-    try { const sent = await tana.sendChat(docId, text); if (!sent.responding) chatWaiting.delete(docId); }
-    catch (e) { chatWaiting.delete(docId); if (!composerText.value && composer.dataset.doc === docId) composerText.value = text; throw e; } // the words come back to be sent again
-    finally { await reload(docId); if (zoom && zoom.docId === docId) { outline.parentElement.scrollTop = outline.parentElement.scrollHeight; renderSoon(true); } }
-  });
-}
-composerText.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !e.shiftKey && !e.altKey && !e.isComposing) { e.preventDefault(); chatSend(); return; }
-  // the textarea's own keys stay its own: ⌘Z undoes typing here rather than the last change to a node; ⌘K and the rest go on
-  const mod = e.metaKey || e.ctrlKey;
-  if (!mod || ['z', 'a', 'c', 'x', 'v', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Backspace'].includes(e.key.length === 1 ? e.key.toLowerCase() : e.key)) e.stopPropagation();
-  if (e.key === 'Escape') composerText.blur();
-});
-composerSend.onmousedown = (e) => e.preventDefault(); // the caret stays in the composer
-composerSend.onclick = chatSend;
 // ⌘K New chat: a chat with Tana, opened with the caret in its composer
 function startNewChat() {
   return run(async () => { openResult(await tana.newChat()); });
 }
-

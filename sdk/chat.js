@@ -158,7 +158,7 @@ function pushMessage(loro, fields, text, attachments = []) {
 const nowLine = (name, now, timezone) => name + ' — it is now ' + new Intl.DateTimeFormat('en-US', { timeZone: timezone, weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(now)) + ' (' + timezone + ').';
 // A human message. The first one of a day (in the sender's zone) is preceded by the hidden line that tells the AI who
 // is speaking and when, recorded in participantTimeContext so the next message that day goes without. Returns its id.
-function addMessage(loro, { text, byUri, senderName, timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', now = Date.now() }) {
+function addMessage(loro, { text, byUri, senderName, attachments = [], timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', now = Date.now() }) {
   if (!/^tana:user-profile:/.test(byUri || '')) throw new Error('A message needs its sender');
   if (typeof text !== 'string' || !text.trim()) throw new Error('Nothing to send');
   const day = new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(now));
@@ -169,7 +169,7 @@ function addMessage(loro, { text, byUri, senderName, timezone = Intl.DateTimeFor
     const entry = times.setContainer(byUri, new LoroMap());
     entry.set('timezone', timezone); entry.set('lastLocalDate', day);
   }
-  return pushMessage(loro, { sentAt: now, fromUserUri: byUri, fromUserType: 'human' }, text);
+  return pushMessage(loro, { sentAt: now, fromUserUri: byUri, fromUserType: 'human' }, text, attachments);
 }
 // Whether Tana's AI answers a message in this chat by itself (its VKt): not when switched off, and only while you are
 // alone in it. With others in the chat it answers when mentioned (Tana's "Mention @Tana to trigger AI").

@@ -5629,6 +5629,10 @@ async function main() {
     assert.deepEqual([messages[1].id, messages[2].id], [first, second]);
     assert.deepEqual(doc.loro.getMap('participantTimeContext').toJSON(), { [ME]: { timezone: 'Europe/Amsterdam', lastLocalDate: '2026-09-27' } });
     assert.throws(() => doc.transact((l) => chat.addMessage(l, { text: '  ', byUri: ME })), /Nothing to send/);
+    // a skill run from "/" rides along as the message's attachment, as Tana's runSkill sends it
+    doc.transact((l) => chat.addMessage(l, { text: 'Run [Diagram](tana:skill:01examples0000000000000000)', byUri: ME, senderName: 'Robin Vega', attachments: ['tana:skill:01examplet0000000000000000'], timezone: 'Europe/Amsterdam', now: at + 12e4 }));
+    assert.deepEqual(doc.data.get('messages').toJSON().at(-1).attachmentUris, ['tana:skill:01examplet0000000000000000']);
+    doc.data.get('messages').delete(doc.data.get('messages').length - 1, 1);
     const rows = chat.chatRows([...messages, { id: 'ai000001', type: 'message', fromUserType: 'ai', content: { text: '' }, sentAt: at + 7e4 }], { me: ME, streamingId: 'ai000001' });
     assert.deepEqual(rows.map((r) => [r.chat.mine, !!r.chat.streaming]), [[true, false], [true, false], [false, true]], 'the preamble is hidden; the bubbles know whose they are and which one Tana is writing');
     // Tana answers by itself while you are alone in a chat, when mentioned with others in it, and never when switched off

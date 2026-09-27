@@ -114,14 +114,16 @@ async function chatOutline(doc) {
 }
 // Send a message in a chat, and ask Tana's AI to answer it when the chat answers by itself (sdk/chat.js). Not an undo
 // step: a message, once sent, is the conversation. The answer arrives as live updates to the chat, like any change.
-async function sendChat(id, text) {
+// attachments: documents the message carries, as Tana's own runSkill attaches the skill it runs (docs/CHATS.md §10).
+async function sendChat(id, text, attachments = []) {
   if (typeof id !== 'string' || !DOC_URI.test(id) || idKind(id) !== 'chat') throw new Error('Not a chat');
+  if (!Array.isArray(attachments) || !attachments.every((uri) => typeof uri === 'string' && DOC_URI.test(uri))) throw new Error('Attachments are Tana documents');
   if (!S.client || !S.me) throw new Error(NOT_CONNECTED);
   const me = S.me.userUri, user = S.me.user || {};
   const name = (await members().catch(() => [])).find((m) => m.id === me)?.title || [user.firstName || user.first_name, user.lastName || user.last_name].filter(Boolean).join(' ') || user.email;
   const sent = await op(id, (doc) => {
     let messageId;
-    doc.transact((loro) => { messageId = chat.addMessage(loro, { text, byUri: me, senderName: name }); });
+    doc.transact((loro) => { messageId = chat.addMessage(loro, { text, byUri: me, senderName: name, attachments }); });
     const data = doc.data.toJSON();
     return { messageId, ownerUri: data.ownerUri, respond: chat.autoResponds(data, text) };
   });
@@ -1011,7 +1013,7 @@ const ipc = {
   // it follows. setTypeHue rebuilds the rows and announces them itself, since no change event carries appearance.
   'doc:setTypeHue': (_e, typeUri, hue) => setTypeHue(typeUri, hue ?? null),
   'doc:create': (_e, title, opts) => createDocument(title, opts || {}),
-  'chat:send': (_e, id, text) => sendChat(id, text),
+  'chat:send': (_e, id, text, attachments) => sendChat(id, text, attachments || []),
   'chat:new': () => newChat(),
   'history:undo': () => history(undoStack, redoStack, 'undo', 'canUndo'),
   'history:redo': () => history(redoStack, undoStack, 'redo', 'canRedo'),

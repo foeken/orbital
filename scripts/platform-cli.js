@@ -671,7 +671,7 @@ commands.classify = async () => {
     out('   ' + choices.map((c) => c.title + ' ' + Math.round(c.p * 100) + '%').join(', '));
   }
 };
-// chatsend <chat id|new> <text…>: send a message the way the chat page does (main/documents.js chat:new, chat:send) and
+// chatsend <chat id|new> <text…> [--attach <uri>]: send a message the way the chat page does (--attach: a skill to run, as "/" in the composer attaches one; main/documents.js chat:new, chat:send) and
 // print the conversation once Tana's answer has finished streaming (docs/CHATS.md §10). WRITES: a message, and a new
 // chat with "new".
 commands.chatsend = async () => {
@@ -683,7 +683,7 @@ commands.chatsend = async () => {
   const { ipc } = require('../main/documents');
   const id = target === 'new' ? (await ipc['chat:new']()).id : target;
   out('chat ' + id);
-  out(await ipc['chat:send'](null, id, text));
+  out(await ipc['chat:send'](null, id, text, flag('attach') ? [flag('attach')] : []));
   const doc = await client.sync.subscribe(id);
   const done = () => { const d = doc.data.toJSON(), last = (d.messages || []).at(-1); return last && last.fromUserType === 'ai' && last.completedAt && !d.streamingMessageId; };
   for (let s = 0; s < 120 && !done(); s++) await new Promise((r) => setTimeout(r, 1000)); // up to two minutes for the answer
@@ -1107,7 +1107,7 @@ const USAGE = [
   '             set-state <id> <proposed|open|closed|not_now|workflow state> | pin <id> <sidebar|today|shared|mute> | unpin <id> <…same> |',
   '             pinto <event|space id> <id> | unpinfrom <event|space id> <id> | settype <id> <tana:type:...|none> |',
   '             set-hue <type uri> <0-360|none> | discusswith <id> <who…> | setfield <id> <type uri?attribute=key> <line…> |',
-  '             chatsend <chat id|new> <text…>   (a message sent as the chat page sends it, and Tana\'s answer)',
+  '             chatsend <chat id|new> <text…> [--attach <uri>]   (a message sent as the chat page sends it, and Tana\'s answer)',
 ].join('\n');
 
 app.whenReady().then(async () => {
