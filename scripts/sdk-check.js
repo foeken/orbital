@@ -1759,6 +1759,7 @@ async function main() {
     assert.ok((await backend.handlers.get('doc:info')(null, uncached)).updatedAt > '2026-09-17T17:48:39Z', 'an edit after it moves the update time');
     backend.rememberNodeHue({ id: uncached, title: 'Edited elsewhere', updateTime: '2026-09-17T17:48:39Z' }); // a lagging graph row
     assert.ok((await backend.handlers.get('doc:info')(null, uncached)).updatedAt > '2026-09-17T17:48:39Z', 'a lagging graph answer does not take the edit back');
+    assert.ok(backend.toNode({ id: uncached, title: 'x', tags: [], updatedAt: '2026-09-17T17:48:39Z' }).updatedAt > '2026-09-17T17:48:39Z', 'nor does a row built with the graph\'s older time');
     // A document just made here has no graph row yet: its creation time stands in, so a list sorted by update keeps it on top.
     const made = 'tana:text:' + ulid(), madeDoc = new Document(made);
     madeDoc.transact((l) => initDocument(l, 'Just made', ME, { now: 1790000000000 }));
