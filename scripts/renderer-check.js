@@ -165,13 +165,13 @@ assert.match(source, /Promise\.all\(work\)\.then\(\(\) => renderSoon\(true\), sh
 assert.match(source, /const loading = asking \|\| \(!parent && !outline\.children\.length/);
 assert.match(source, /tana\.setAssignees\(doc\.id, assignees\)/);
 assert.match(source, /const AUDIENCES = \{/);
-assert.match(source, /'only-me': \{ icon: 'lock', label: 'Visible only to you' \}/);
+assert.match(source, /'only-me': \{ icon: 'lock', label: 'Visible only to you', word: 'Private' \}/);
 assert.match(source, /people: \{ icon: 'userLock', label: 'Visible to selected people' \}/);
-assert.match(source, /space: \{ icon: 'houseLock', label: 'Visible to space members' \}/);
+assert.match(source, /space: \{ icon: 'houseLock', label: 'Visible to space members', word: 'Space members' \}/);
 assert.match(source, /function audienceInfo\(audience, audienceSpace\) \{/);
 assert.match(source, /const title = audience\?\.title \|\| audienceSpace\?\.title/);
 assert.match(source, /label: 'Visible to members of ' \+ named/);
-assert.match(source, /everyone: \{ icon: 'users', label: 'Visible to everyone' \}/);
+assert.match(source, /everyone: \{ icon: 'users', label: 'Visible to everyone', word: 'Everyone' \}/);
 assert.match(source, /who\.textContent = summary\.assignees/);
 assert.match(source, /clickable\(who, \(\) => openAssigneePalette\(node\)\)/);
 assert.match(source, /clickable\(icon, \(\) => openVisibility\(node, summary\.scope\)\)/);
@@ -263,14 +263,14 @@ const audienceInfo = vm.runInNewContext(`
   const AUDIENCES = {
     'only-me': { icon: 'lock', label: 'Visible only to you' },
     people: { icon: 'userLock', label: 'Visible to selected people' },
-    space: { icon: 'houseLock', label: 'Visible to space members' },
+    space: { icon: 'houseLock', label: 'Visible to space members', word: 'Space members' },
     everyone: { icon: 'users', label: 'Visible to everyone' },
   };
   ${functionSource('audienceInfo')}
   audienceInfo;
 `);
-assert.deepEqual(JSON.parse(JSON.stringify(audienceInfo('space', { uri: 'tana:space:foundry', title: 'Studio LT' }))), { icon: 'houseLock', label: 'Visible to members of Studio LT', space: 'Studio LT' }, 'a resolved space audience names the space in its tooltip and beside the assignee');
-assert.deepEqual(JSON.parse(JSON.stringify(audienceInfo('space'))), { icon: 'houseLock', label: 'Visible to space members' }, 'a missing space title keeps the generic fallback');
+assert.deepEqual(JSON.parse(JSON.stringify(audienceInfo('space', { uri: 'tana:space:foundry', title: 'Studio LT' }))), { icon: 'houseLock', label: 'Visible to members of Studio LT', space: 'Studio LT', word: 'Studio LT' }, 'a resolved space audience names the space in its tooltip, beside the assignee and instead of the faces');
+assert.deepEqual(JSON.parse(JSON.stringify(audienceInfo('space'))), { icon: 'houseLock', label: 'Visible to space members', word: 'Space members' }, 'a missing space title keeps the generic fallback');
 assert.equal(audienceInfo('unknown'), null, 'unknown visibility keeps the existing fallback path');
 
 async function splitTypingCheck() {

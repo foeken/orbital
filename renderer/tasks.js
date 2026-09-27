@@ -21,10 +21,10 @@ function memberName(uri) {
   return member ? member.title || member.text : uri;
 }
 const AUDIENCES = {
-  'only-me': { icon: 'lock', label: 'Visible only to you' },
+  'only-me': { icon: 'lock', label: 'Visible only to you', word: 'Private' }, // word: said instead of the faces (peopleEl, visibilityFieldEl)
   people: { icon: 'userLock', label: 'Visible to selected people' },
-  space: { icon: 'houseLock', label: 'Visible to space members' },
-  everyone: { icon: 'users', label: 'Visible to everyone' },
+  space: { icon: 'houseLock', label: 'Visible to space members', word: 'Space members' }, // audienceInfo names the space
+  everyone: { icon: 'users', label: 'Visible to everyone', word: 'Everyone' },
 };
 function audienceInfo(audience, audienceSpace) {
   const scope = typeof audience === 'string' ? audience : audience?.scope;
@@ -33,7 +33,7 @@ function audienceInfo(audience, audienceSpace) {
   const title = audience?.title || audienceSpace?.title;
   const named = title && demoText(title, audienceSpace?.uri || 'space'); // a space's name is Tana's: masked in demo mode
   // a space audience names the space, so a row can read "Robin Vega · Platform Guild"
-  return scope === 'space' && title ? { ...info, label: 'Visible to members of ' + named, space: named } : info;
+  return scope === 'space' && title ? { ...info, label: 'Visible to members of ' + named, space: named, word: named } : info;
 }
 function loadTaskMeta(docId) {
   // Metadata is supplemental. Calling it before the sync client connects retries on every render.
@@ -154,7 +154,8 @@ function peopleEl(summary, node) {
   // a sensitive node says nothing about who can see it: no glyph, faces or count (back with Toggle sensitive visibility)
   if (!uris.length || (node && sensitiveHidden(node.id))) return null;
   const el = document.createElement('span'); el.className = 'people';
-  el.append(audienceIcon(summary, node), ...facesEls(uris, summary.peopleCount || uris.length));
+  const word = summary.audience.word; // everyone and only you: a word, not the whole organization or your own face
+  el.append(audienceIcon(summary, node), ...(word ? [word] : facesEls(uris, summary.peopleCount || uris.length)));
   return el;
 }
 // A bubble each for the first four people, then the rest: "+n" up to nine people, "and n others" past that. The list

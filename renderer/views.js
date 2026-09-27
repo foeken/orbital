@@ -467,7 +467,8 @@ function subtextOf(node, taskInfo) {
   if (node.proposal) bits.push(demoText(node.proposal.note, node.id)); // where it was proposed, first: it is why the row is on the Proposals page
   if (node.timeline && node.timeline.note) bits.push(demoText(node.timeline.note, node.timeline.uri)); // Tana's words for an edit, or where a new task came from
   const pinned = pinnedOn(node); if (pinned) bits.push(pinned);
-  if (displayOn('space') && taskInfo && taskInfo.audience && taskInfo.audience.space) bits.push(demoText(taskInfo.audience.space, node.id));
+  // ...unless the line already leads with it: who can see it names the space (peopleEl)
+  if (displayOn('space') && taskInfo && taskInfo.audience && taskInfo.audience.space && !(audienceUris(taskInfo).length && !sensitiveHidden(node.id))) bits.push(demoText(taskInfo.audience.space, node.id));
   // Who made it joins when it was made rather than repeating the word: "Created 2 days ago by Robin Vega". The name
   // needs the member list, which loads once and re-renders when it lands; until then memberName answers with the uri.
   if (displayOn('creator') && node.createdBy) loadMembers();

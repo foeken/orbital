@@ -3963,8 +3963,9 @@ function runRowAudienceCheck() {
         // the gap is styles.css's .tmeta > .ticon:not(:first-child) (renderer-check pins the rule): 6px after anything
         const sub = body.children.find((child) => child.className === 'subtext') || { children: [] }, people = sub.children.find((child) => child.className === 'people');
         return { icons: icons ? icons.map((icon) => icon.attrs['aria-label'] || (icon.children[0] || { attrs: {} }).attrs['data-icon']) : null, gaps: icons ? icons.map((icon) => (icon.className === 'ticon' ? (info.children.indexOf(icon) ? '6px' : '0') : null)) : null, pending: info ? info.className.includes('pending') : null, sub: sub.value || null, chips: body.children.filter((child) => child.className === 'chip').length, fetched: [...fetched], observed: observed.map((watched) => watched.dataset.metaFor),
-          people: people ? [people.children[0].attrs['aria-label'], ...people.children[1].children.map((face) => face.value), people.children[2] || null] : null,
-          names: people ? people.children[1].children.map((face) => face.attrs['aria-label'] || null) : null };
+          people: people ? [people.children[0].attrs['aria-label'], ...(typeof people.children[1] === 'string' ? [people.children[1]] : people.children[1].children.map((face) => face.value)), people.children[2] || null] : null, // a string: the audience's word (Everyone, Private)
+          names: people && typeof people.children[1] !== 'string' ? people.children[1].children.map((face) => face.attrs['aria-label'] || null) : null,
+          after: people ? sub.children.filter((child) => typeof child === 'string').join('') : null }; // the words after who can see it
       },
       onScreen: () => { watching(observed.map((target) => ({ isIntersecting: true, target }))); return [...fetched]; },
       display: (keys) => { displayNow = keys; },
@@ -3987,6 +3988,10 @@ function runRowAudienceCheck() {
   // glyph leaves the end of the line; one that names nobody (here: no member list for everyone) keeps it there
   const shared = row(doc, { assignees: [], audience: 'people', people: ['tana:user-profile:me', 'tana:user-profile:sam'] });
   assert.deepEqual(shared.people, ['Visible to selected people', '?', 'S', null], 'the subtext leads with the audience and a bubble per person, and no count after them');
+  assert.deepEqual(row(doc, { assignees: [], audience: 'everyone', people: ['tana:user-profile:me', 'tana:user-profile:sam'], peopleCount: 40 }).people, ['Visible to everyone', 'Everyone', null], 'everyone is the word, not a bubble per member');
+  assert.deepEqual(row(doc, { assignees: [], audience: 'only-me', people: ['tana:user-profile:me'] }).people, ['Visible only to you', 'Private', null], 'only you is Private, not your own bubble');
+  const spacePeople = { ...spaceMeta, people: ['tana:user-profile:me', 'tana:user-profile:sam'] };
+  assert.deepEqual(row(doc, spacePeople).people, ['Visible to members of Studio LT', 'Studio LT', null], 'a space audience is the space name, not a bubble per member');
   api.timeline(true);
   const onTimeline = row(doc, { assignees: [], audience: 'people', people: ['tana:user-profile:me', 'tana:user-profile:sam'] });
   assert.deepEqual([onTimeline.people, onTimeline.icons, row(doc, spaceMeta).icons], [null, [], []], 'the Timeline shows nothing of who can see a row: no faces, no audience icon');
@@ -4004,6 +4009,7 @@ function runRowAudienceCheck() {
   assert.equal(row(doc, spaceMeta).sub, null, 'with Lives in off, a space audience does not name the space under the title');
   api.display(['status', 'assigned', 'updated', 'space']);
   assert.equal(row(doc, spaceMeta).sub, 'Studio LT', 'turning Lives in on names it again, the way the row always did');
+  assert.equal(row(doc, spacePeople).after, '', 'but not a second time when who can see it already names the space');
   api.display(['status', 'assigned', 'updated']);
   assert.equal(row(doc, spaceMeta).sub, null, 'and turning it off takes the line away again');
   // Created by: a name on the same sub-line, joined to the creation time rather than repeating the word.
