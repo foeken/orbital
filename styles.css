@@ -1215,7 +1215,7 @@ body.overlaypage, [data-theme="dark"] body.overlaypage { background: transparent
 .help .hdots { display: flex; gap: 6px; }
 .help .hdots button { width: 7px; height: 7px; padding: 0; border: 0; border-radius: 4px; background: #d8d8d8; cursor: pointer; transition: width var(--dur-base) var(--ease-out), background-color var(--dur-base) var(--ease-out); }
 .help .hdots button.on { width: 20px; background: #508fbb; }
-.help .hact { margin: 18px 28px 0; }
+.help .hact { display: flex; align-items: center; gap: 8px; height: 38px; margin-top: 14px; } /* the button or the account: one height, so the card never moves */
 .help .hfoot > .button:disabled { visibility: hidden; } /* Back on the first page: its place kept, nothing to press */
 
 /* the stage and the few things drawn on it: a palette card, outline rows, a task box, a keycap */
