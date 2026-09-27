@@ -3,7 +3,7 @@
 // saved and which pages exist and says what to do (window.shell: state, onCommand, layout); a page talks to this frame
 // itself for what needs no main: its tab's title, the Trellis commands its keys run, being laid over the whole window
 // while its palette is open (renderer/palette.js coverWindow) and flushing before its iframe goes (renderer/app.js leavePage).
-import { createWorkspace, createDocument, layout as L, DEFAULT_KEYMAP } from './vendor/trellis/index.js';
+import { createWorkspace, createDocument, layout as L, DEFAULT_KEYMAP } from './node_modules/@danfessler/trellis/dist/index.js';
 
 const bridge = window.shell || { state: () => ({ doc: null }), onCommand() {}, layout() {} }; // shell.html opened on its own
 const start = bridge.state();

@@ -33,8 +33,8 @@ if (process.platform === 'darwin') {
   const ignore = new RegExp(require('../package.json').scripts.package.match(/--ignore='([^']+)'/)[1]);
   const shipped = (file) => !ignore.test('/' + path.relative(root, file).split(path.sep).join('/'));
   for (const file of [require.resolve('loro-crdt'), path.join(path.dirname(require.resolve('loro-crdt')), 'loro_wasm_bg.wasm'),
-    'main.js', 'preload.js', 'index.html', 'shell.html', 'shell.js', 'shell.css', 'vendor/trellis/index.js',
-    'vendor/trellis/style.css', 'vendor/trellis/LICENSE.md', 'build/nucleo-ui.json.gz', 'scripts/agent-link.js', 'scripts/codex-host.js', 'scripts/platform-cli.js']) {
+    'main.js', 'preload.js', 'index.html', 'shell.html', 'shell.js', 'shell.css', 'node_modules/@danfessler/trellis/dist/index.js',
+    'node_modules/@danfessler/trellis/dist/style.css', 'node_modules/@danfessler/trellis/LICENSE.md', 'build/nucleo-ui.json.gz', 'scripts/agent-link.js', 'scripts/codex-host.js', 'scripts/platform-cli.js']) {
     assert.ok(shipped(path.resolve(root, file)), file + ' is shipped: the app requires or runs it');
   }
   for (const file of ['node_modules/loro-crdt/web/index.js', 'node_modules/loro-crdt/base64', 'node_modules/loro-crdt/bundler/loro_wasm_bg.wasm',

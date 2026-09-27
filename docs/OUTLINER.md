@@ -861,7 +861,7 @@ nothing about them as documents. Each is a place the app remembers, so ⌘R on o
   page used last (`S.pane`): a notification click opens its node there. Closing the last window keeps the app in the
   Dock (issue #246): ⌘Q quits, the Dock icon opens a window when none is open, and a notification click opens one.
 - **Panes** (issues #159, #435). An outliner window is a `BaseWindow` with one view, shell.html, holding a Trellis
-  workspace (vendor/trellis, shell.js) of any number of pages, each an iframe of `index.html?side=<id>`: '' the first,
+  workspace (`@danfessler/trellis`, shell.js) of any number of pages, each an iframe of `index.html?side=<id>`: '' the first,
   then '2', '3', ..., an id that never changes while the page lives. Main keys a page by its frame, so a page is to
   main what another window is: each has its own view, place, history, filter and sidebar, stored under its id
   (`view:3`, `place:3`; renderer/state.js `SIDE`), so a restart or Reload keeps them. **New pane** (⌥⌘N) opens a
