@@ -155,11 +155,12 @@ function mockApi() {
   // Tana's AI proposals as main/proposals.js hands them over: the proposed documents, read-only, each carrying where it
   // was proposed. Approving or rejecting one takes it off the page; the update is Tana's to approve, as in main.
   const PROPOSALS = 'orbital:proposals';
-  const proposed = (d, hours, operation, where, group) => ({ ...d, id: 'mockproposal' + (++seq), editable: false, proposal: { chatUri: 'tana:chat:mock', proposedUri: 'mockproposal' + seq, operation, group,
+  const proposed = (d, hours, operation, where, group) => ({ ...d, id: 'mockproposal' + (++seq), proposal: { chatUri: 'tana:chat:mock', proposedUri: 'mockproposal' + seq, operation, group,
     approvable: operation === 'create', reason: operation === 'create' ? null : 'Tana merges this change itself: approve it in Tana',
     note: (operation === 'create' ? 'Proposed' : 'Change proposed') + ' in ' + where + (operation === 'create' ? '' : ' · approve in Tana'), proposedAt: new Date(Date.now() - hours * 36e5).toISOString() } });
   content[PROPOSALS] = [proposed(docs[2], 1, 'create', meetings[1].text, 'mine'), proposed(docs[3], 5, 'create', meetings[3].text, 'others'),
     proposed(spaceDocs[0], 30, 'update', 'Private AI chat', 'mine')];
+  { const a = proposed({ id: 'x', text: 'Sync FinOps risk update to Slite', title: 'Sync FinOps risk update to Slite', kind: 'document', icon: 'doc', hasChildren: true }, 2, 'create', 'Slite Risk Document Update', 'mine'); Object.assign(a.proposal, { action: true, systems: ['Slite'], approvable: true }); content[PROPOSALS].unshift(a); } // an action: its approve reads Send to Slite
   // The Timeline as main/timeline.js hands it over: one row per event, newest first, the node it is about in timeline.uri
   const at = (hours) => new Date(Date.now() - hours * 36e5).toISOString();
   const event = (key, hours, tone, icon, segments, note, unread, uri, children = []) => ({ id: 'orbital:timeline:' + key, text: segments.map((x) => x.text).join(''), segments, kind: 'block', block: 'bullet', icon, editable: false,
@@ -192,12 +193,15 @@ function mockApi() {
   const chatPart = (id, p) => { const [, bullet] = /^- (.*)$/.exec(p) || []; return { id, text: bullet ?? p, kind: 'block', editable: false, block: bullet ? 'bullet' : 'paragraph', segments: typeof p === 'string' ? [{ text: bullet ?? p }] : p, hasChildren: false, children: [] }; };
   const chatMsg = (mine, parts, minsAgo, notes = []) => {
     const id = 'm' + (++seq), who = mine ? 'Robin Vega' : 'Tana AI';
-    const children = [...notes.map((t, j) => ({ ...chatPart(id + '.t' + j, t), note: true })), ...parts.map((p, j) => (p && p.reference ? { id: id + '.a' + j, kind: 'block', type: 'reference', editable: false, reference: p.reference, hasChildren: false, children: [] } : chatPart(id + '.b' + j, p)))];
+    const children = [...notes.map((t, j) => ({ ...chatPart(id + '.t' + j, t), note: true, thought: /^Thought for/.test(t) })), ...parts.map((p, j) => (p && p.reference ? { id: id + '.a' + j, kind: 'block', type: 'reference', editable: false, reference: p.reference, hasChildren: false, children: [], ...(p.sub ? { sub: true } : {}) }
+      : p && p.proposal ? { id: id + '.p' + j, kind: 'block', text: '', segments: [], editable: false, hasChildren: false, children: [], proposal: p.proposal } : chatPart(id + '.b' + j, p)))];
     return { id, text: who, kind: 'block', editable: false, segments: [{ text: who }], block: 'heading3', heading: 3, chat: { id, mine, author: mine ? 'tana:user-profile:robin' : 'ai', sentAt: Date.now() - minsAgo * 6e4 }, hasChildren: true, children };
   };
   content['tana:chat:mockchat0'] = [
     chatMsg(true, ['Can you draft the Studio memo for Monday?'], 26 * 60),
-    chatMsg(false, ['Here is a first draft, based on the leadership notes:', '- Studio becomes a way of working, not an entity', '- Two pilots start in October', '- We review both at the offsite', { reference: { uri: 'mockdoc0', label: 'Studio memo (draft)' } }], 26 * 60 - 1, ['Thought for 14 seconds']),
+    chatMsg(false, ['Here is a first draft, based on the leadership notes:', '- Studio becomes a way of working, not an entity', '- Two pilots start in October', '- We review both at the offsite', { reference: { uri: 'mockdoc0', label: 'Studio memo (draft)' } }, { reference: { uri: 'tana:chat:mockchat1', label: 'Subagent: Tana help' }, sub: true },
+      { proposal: { chatUri: 'tana:chat:mockchat0', proposedUri: 'tana:action:mock', target: 'tana:action:mock', operation: 'create', metadata: { type: 'action' }, state: 'pending', title: 'Sync FinOps risk update to Slite', approvable: true, systems: ['Slite'] } },
+      { proposal: { chatUri: 'tana:chat:mockchat0', proposedUri: 'mockdoc0', target: 'mockdoc0', operation: 'create', metadata: {}, state: 'approved', title: 'Studio memo (draft)', icon: 'doc', approvable: false } }], 26 * 60 - 1, ['Thought for 14 seconds']),
     chatMsg(true, ['Make it shorter'], 25 * 60),
     chatMsg(true, ['and a bit friendlier'], 25 * 60 - 1),
     chatMsg(false, ['Done: three short paragraphs, and a warmer opening.'], 25 * 60 - 2),

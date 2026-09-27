@@ -5620,12 +5620,15 @@ async function main() {
     assert.deepEqual(ai.children.slice(1, 5).map((n) => [n.block, n.text]), [['heading2', 'Goals'], ['bullet', 'short term'], ['bullet', 'long term'], ['code', 'let a = **1**']]);
     assert.deepEqual(ai.children[2].segments, [{ text: 'short', marks: { bold: true } }, { text: ' term' }], 'inline markdown becomes marks, and text is the plain rendering');
     assert.equal(ai.children[5].text, 'create · approved');
-    assert.equal(ai.children[5].children[0].reference.uri, proposedUri);
+    assert.deepEqual((({ proposedUri: u, state, title, chatUri, approvable }) => ({ u, state, title, chatUri, approvable }))(ai.children[5].proposal),
+      { u: proposedUri, state: 'approved', title: 'Target ' + proposedUri.split(':')[1], chatUri: doc.id, approvable: false },
+      'a proposal is a card: its document\'s name read with includeProposals, in its chat, and nothing to approve once approved');
+    assert.ok(graphed.some((q) => q.includeProposals && Array.from(q.nodeIds).includes(proposedUri)), 'a draft is only listed with includeProposals');
     assert.equal(ai.children[6].reference.uri, subUri, 'a subagent tool call links its own chat');
     // A mention carries its own label, so nothing is looked up to render the words. Its target is asked for all
     // the same — one batch for the reference rows and every inline mention together, deduplicated by uri — because
     // that is what tells a reference which icon it is.
-    assert.deepEqual(Array.from(graphed.at(-1).nodeIds).sort(), [fileUri, noteUri, proposedUri, subUri].sort());
+    assert.deepEqual(Array.from(graphed.find((q) => !q.includeProposals && Array.from(q.nodeIds || []).includes(fileUri)).nodeIds).sort(), [fileUri, noteUri, subUri].sort());
     assert.deepEqual(doc.toJSON().content, {}, 'reading a chat never writes an outline into it');
     console.log('ok  chat rows: hidden/context skipped, list order, read-only rows, mentions, attachments, proposals and subagent links');
   }
@@ -5687,6 +5690,37 @@ async function main() {
     await proposals.approve(sync, { chatUri: chat.id, proposedUri: note.id, byUri: OTHER });
     assert.equal(note.data.get('stateChangedBy'), undefined, 'a plain document gets no task attribution');
 
+    // An action proposal runs on Tana's server first (its "Send to Slite"), and only then counts as approved; a run
+    // refused writes nothing.
+    {
+      const action = make('tana:action:', (l) => { initDocument(l, 'Sync to Slite', ME); const data = l.getMap('data'); data.set('type', 'action'); data.set('isProposal', true); });
+      const actionChat = make('tana:chat:', (l) => {
+        initDocument(l, 'Slite chat', ME, { kind: 'chat' });
+        const m = l.getMap('data').get('messages').insertContainer(0, new LoroMap());
+        m.set('id', 'ai000002'); m.set('type', 'message'); m.set('fromUserType', 'ai'); m.set('sentAt', 1788262342702);
+        const pr = m.setContainer('proposals', new LoroList()).insertContainer(0, new LoroMap());
+        pr.set('operation', 'create'); pr.set('proposedUri', action.id); pr.set('proposedAt', 1788262392412); pr.setContainer('metadata', new LoroMap()).set('type', 'action');
+      });
+      const untouched = JSON.stringify(actionChat.toJSON()), args = { chatUri: actionChat.id, proposedUri: action.id, byUri: OTHER };
+      await assert.rejects(proposals.approve(sync, args), /in Tana/, 'without a way to run it, an action is not approved');
+      await assert.rejects(proposals.approve(sync, { ...args, execute: async () => { throw new Error('Slite is not connected'); } }), /Slite is not connected/, 'Tana\'s refusal comes back as it is');
+      assert.deepEqual([JSON.stringify(actionChat.toJSON()), action.data.get('isProposal')], [untouched, true], 'and a run refused writes nothing');
+      const ran = [];
+      await proposals.approve(sync, { ...args, execute: async (a) => { ran.push(a); return { success: true }; } });
+      assert.deepEqual(ran, [{ chatUri: actionChat.id, actionUri: action.id }], 'the action is run once, from its chat');
+      const last = actionChat.data.get('messages').toJSON().at(-1);
+      assert.deepEqual([typeof proposals.entries(actionChat)[0].p.approvedAt, action.data.get('isProposal'), action.data.get('createdInUri'), last.content.text, last.excludeFromAIContext],
+        ['number', false, actionChat.id, 'accepted 1 change', false], 'then approved as Tana does, its acceptance kept in the AI\'s context');
+      const calls = [], answers = [{ status: 401 }, { status: 200, json: { success: true, executorChatUri: 'tana:chat:x' } }, { status: 409, json: { success: false, error: 'Connect Slite first' } }];
+      const fetch = async (url, init) => { calls.push([url, JSON.parse(init.body), init.headers.authorization]); const a = answers.shift(); return { status: a.status, ok: a.status < 300, json: async () => a.json || {} }; };
+      const getAccessToken = async ({ refresh }) => (refresh ? 'fresh' : 'stale');
+      const ok = await proposals.executeAction({ chatUri: 'tana:chat:c', actionUri: 'tana:action:a', getAccessToken, fetch, timezone: 'Europe/Amsterdam' });
+      assert.deepEqual([ok.success, calls.map((c) => c[2]), calls[0][0], calls[0][1]], [true, ['Bearer stale', 'Bearer fresh'], 'https://home.tana.inc/api/ai/actions/execute', { chatUri: 'tana:chat:c', actionUri: 'tana:action:a', timezone: 'Europe/Amsterdam' }],
+        'execute posts what Tana\'s client posts, and asks once more with a fresh token after a 401');
+      await assert.rejects(proposals.executeAction({ chatUri: 'tana:chat:c', actionUri: 'tana:action:a', getAccessToken, fetch }), /Connect Slite first/, 'a refusal is Tana\'s own sentence');
+      docs.delete(action.id); docs.delete(actionChat.id);
+    }
+
     const { warnings } = await proposals.reject(sync, { chatUri: chat.id, proposedUri: draft.id });
     assert.deepEqual(warnings, []);
     assert.equal(entry(draft.id), undefined, 'a rejected proposal leaves the chat');
@@ -5727,14 +5761,14 @@ async function main() {
     const rows = await page();
     assert.deepEqual(rows.map((r) => [r.id, r.text, r.editable, r.proposal.approvable, r.proposal.group, r.proposal.note]), [
       [gone, 'Missing document', false, false, 'others', 'Proposed in Studio Offsite · its document is gone'],
-      [pictured.id, 'With a picture', false, true, 'others', 'Proposed in extractOutcome'],
-      [draft.id, 'Draft of base', false, false, 'mine', 'Change proposed in Planning chat · approve in Tana'],
-      [odd.id, 'Odd intent', false, true, 'mine', 'Proposed in Planning chat'],
-      [typed.id, 'Typed elsewhere', false, false, 'mine', 'Proposed in Planning chat · approve in Tana'],
-      [note.id, 'Proposed note', false, true, 'mine', 'Proposed in Routine'],
+      [pictured.id, 'With a picture', null, true, 'others', 'Proposed in extractOutcome'],
+      [draft.id, 'Draft of base', null, false, 'mine', 'Change proposed in Planning chat · approve in Tana'],
+      [odd.id, 'Odd intent', null, true, 'mine', 'Proposed in Planning chat'],
+      [typed.id, 'Typed elsewhere', null, false, 'mine', 'Proposed in Planning chat · approve in Tana'],
+      [note.id, 'Proposed note', null, true, 'mine', 'Proposed in Routine'],
       [inSpace, 'Missing document', false, false, 'others', 'Proposed in Space chat · its document is gone'],
       [theirs, 'Missing document', false, false, 'others', 'Proposed in Their routine · its document is gone'],
-    ], 'pending only, newest first, read-only, named by the chat or its meeting, filed by whether you were in that meeting and whose chat it is, approvable where Orbital can');
+    ], 'pending only, newest first, as editable as the document is (unknown here: the fake graph lists no participants) and a missing one read-only, named by the chat or its meeting, filed by whether you were in that meeting and whose chat it is, approvable where Orbital can');
     assert.deepEqual(participantQueries.map((q) => [[...q.nodeIds].sort(), [...q.hasParticipantUris]]), [[[myMeeting, meeting].sort(), [ME]]],
       'whether you were in a meeting is one graph question for all of them, a subagent chat answering for its parent\'s meeting');
     assert.match(rows.find((r) => r.id === typed.id).proposal.reason, /type's space/, 'and the reason says why not');

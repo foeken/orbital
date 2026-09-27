@@ -28,6 +28,7 @@ html { --nucleo-stroke-width: 1; }
   /* secondary text (meta, subtext, headings, hints, placeholders, done rows): the one grey for words, at WCAG AA —
      5.7:1 on white, 4.6:1 on a grey pill under the pointer. Icons keep their lighter greys (3:1 is theirs); disabled rows too. */
   --muted: #666;
+  --chat-width: 860px; /* a chat's column, its message box and question card: lines the eye can follow (renderer/chat.js) */
   interpolate-size: allow-keywords; /* heights go to and from auto (a row arriving, a section closing) without measuring */
 }
 @media (prefers-reduced-motion: reduce) { :root { --dur-quick: 0ms; --dur-base: 0ms; --dur-slow: 0ms; --dur-flash: 0ms; --stagger: 0ms; --loader-wait: 0ms; } }
@@ -83,7 +84,8 @@ button { font: inherit; }
 button, input, a, [contenteditable], [tabindex], .error, .fields { -webkit-app-region: no-drag; }
 
 .titlebar { padding: 16px 32px 6px; user-select: none; position: relative; } /* the traffic lights are in the window's header (shell.html); 6px: the 4px the scroll area took, so the outline sits where it did */
-html.tabbed.listing:not(.renaming) #pagehead { display: none; } /* a view, saved search or app page is named by its tab (renderer/render.js); Rename on the tab brings it back */
+html.tabbed.listing:not(.renaming) :is(#pagehead, #taskInfo) { display: none; } /* a view, saved search, app page or chat is named by its tab (renderer/render.js), and the chips under a heading go with it; Rename on the tab brings it back */
+html.chatpage:not(.renaming) :is(#pagehead, #taskInfo) { display: none; } /* a chat, with a tab bar or without one: the conversation is the page */
 /* with no heading, the icons on both sides sit 19px from the pane's edge, the left ones over the section chevrons
    below, and the gap the heading left under the crumbs closes */
 html.tabbed.listing:not(.renaming) .navbtns { right: 16px; }
@@ -252,11 +254,12 @@ html.tabbed.listing:not(.renaming) .crumbs { margin-bottom: 4px; }
    header is a window drag region, where the page hears nothing of the mouse, so hover ended as the pointer reached
    the buttons (renderer/app.js pointer-in). The fade is the one .titlebar's children already have (below). */
 html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
-/* Under a tab bar the buttons are drawn in the page's tab bar (shell.js navbtns) and the empty line they sat on goes.
-   The row stays laid out, unseen, so its animations still end: Clean up hides once its exit has played. */
-html.tabbed .navbtns { visibility: hidden; }
-html.tabbed #crumbs { display: none; }
-html.tabbed .titlebar { padding-top: 18px; }
+/* In the window (html.framed) the shell draws the buttons, in the page's tab bar or, with one page, in the window's
+   header (shell.js drawNav), and the empty line they sat on goes. The row stays laid out, unseen, so its animations
+   still end: Clean up hides once its exit has played. */
+html.framed .navbtns { visibility: hidden; }
+html.framed #crumbs { display: none; }
+html.framed .titlebar { padding-top: 18px; }
 .navbtn {
   display: flex; align-items: center; justify-content: center;
   width: 24px; height: 24px; padding: 0; border: 0;
@@ -551,20 +554,54 @@ html.links .app { display: none; }
 /* ==== Chat (renderer/chat.js): a conversation in the Codex app's style, and the composer under it ==== */
 /* Yours in a light blue bubble on the right; Tana's as plain text across the page; the composer a rounded card whose
    round blue button sends. --chat-send is that blue, --chat-mine and --chat-mine-text your bubble (dark twins below). */
-:root { --chat-mine: #e6eefb; --chat-mine-text: #1b2b41; --chat-send: #3b82f6; }
+:root { --chat-mine: #eaf3fd; --chat-mine-text: #1b2b41; --chat-send: #3b82f6; }
 /* a short conversation sits on the composer at the bottom of the window */
 /* the conversation fades out under the header and into the composer, as in Codex: a mask, so it works on any theme */
-.scroll.chatting { display: flex; flex-direction: column; padding-top: 28px; padding-bottom: 24px;
+.scroll.chatting { display: flex; flex-direction: column; padding-top: 28px; padding-bottom: 24px; padding-left: max(48px, calc((100% - var(--chat-width)) / 2)); padding-right: max(48px, calc((100% - var(--chat-width)) / 2)); /* a centred column no wider than --chat-width, never nearer either side than 48px */
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 36px, #000 calc(100% - 28px), transparent 100%); mask-image: linear-gradient(to bottom, transparent 0, #000 36px, #000 calc(100% - 28px), transparent 100%); }
 .scroll.chatting > .outline { flex: 1 0 auto; display: flex; flex-direction: column; justify-content: flex-end; }
 .chat-msg { display: flex; flex-direction: column; margin: 0 0 24px; font-size: 16px; line-height: 1.6; }
 .chat-msg.mine { align-items: flex-end; }
 .chat-msg.theirs { align-items: stretch; }
 .chat-msg .bubble { max-width: 100%; overflow-wrap: anywhere; counter-reset: chat-num; }
-.chat-msg.mine .bubble { max-width: min(80%, 620px); padding: 12px 22px; border-radius: 26px; background: var(--chat-mine); color: var(--chat-mine-text); }
+.chat-msg.mine .bubble { max-width: min(80%, 620px); padding: 12px 22px; border-radius: 13px; background: var(--chat-mine); color: var(--chat-mine-text); }
 .bubble > * + * { margin-top: 8px; }
 .chat-name { font-size: 13px; font-weight: 600; color: var(--muted); margin: 0 0 4px; }
 .chat-note { font-size: 14px; color: var(--muted); margin: 0 0 6px; }
+/* "Thought for 1m 28s ›" as Codex draws its "Worked for": grey, a chevron, and a hairline under it across the message */
+.chat-thought { margin: 0 0 16px; padding: 0 0 12px; border-bottom: 1px solid rgba(0, 0, 0, .08); font-size: 15px; }
+.chat-thought-head { display: flex; align-items: center; gap: 8px; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; }
+/* the chevron only where something folds under the line (renderer/chat.js chatThoughtEl): right, and down while open */
+button.chat-thought-head { cursor: pointer; }
+button.chat-thought-head::after { content: ''; width: 5px; height: 5px; border: solid currentColor; border-width: 1.5px 1.5px 0 0; rotate: 45deg; transition: rotate var(--dur-quick) var(--ease-out); }
+button.chat-thought-head[aria-expanded="true"]::after { rotate: 135deg; translate: 0 -2px; }
+.chat-sub { margin: 8px 0 0; font-size: 14px; }
+.chat-sub[hidden] { display: none; }
+/* a proposal in an answer (renderer/chat.js chatProposalEl): a card with the proposed thing's glyph and name, its kind
+   and state under it in grey, approve and reject at its end (the Proposals page's .pbuttons) */
+.chat-proposal { display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 16px; border: 1px solid rgba(0, 0, 0, .12); border-radius: 13px; cursor: pointer; }
+.chat-proposal:hover { background: rgba(0, 0, 0, .025); } /* it opens what was proposed */
+.bubble > .chat-proposal { margin-top: 16px; } /* a step apart from the words above it; stacked cards keep the bubble's 8px */
+.bubble > .chat-proposal + .chat-proposal { margin-top: 8px; }
+/* an action's approve, which runs it: its words, "Send to Slite", in the approve's grey, green when pointed at */
+.pbutton.send { padding: 3px 12px; border: 1px solid rgba(0, 0, 0, .14); border-radius: 999px; font: inherit; font-size: 14px; font-weight: 500; color: #555; white-space: nowrap; }
+.pbutton.send:hover:not(:disabled) { border-color: transparent; }
+[data-theme="dark"] .pbutton.send { border-color: rgba(255, 255, 255, .16); color: #c9cccf; }
+[data-theme="dark"] .chat-proposal:hover { background: rgba(255, 255, 255, .03); }
+.chat-proposal > span svg { display: block; width: 16px; height: 16px; color: var(--muted); }
+.chat-proposal-text { flex: 1; min-width: 0; }
+.chat-proposal-title { font-weight: 500; overflow-wrap: anywhere; }
+.chat-proposal-sub { font-size: 14px; color: var(--muted); }
+.chat-proposal.rejected .chat-proposal-title { color: var(--muted); text-decoration: line-through; } /* settled: quiet, as a done row is */
+.chat-proposal.approved .chat-proposal-sub { color: #17652f; }
+[data-theme="dark"] .chat-proposal { border-color: rgba(255, 255, 255, .12); }
+[data-theme="dark"] .chat-proposal.approved .chat-proposal-sub { color: #6fae82; }
+/* a subagent's chat under the line: a quiet link in the line's grey, its glyph the size of the text (outside a bubble,
+   the .bubble .mention rules below do not reach it, and an unsized glyph filled the page) */
+.chat-sub .mention { color: inherit; cursor: pointer; }
+.chat-sub .mention:hover { text-decoration: underline; text-underline-offset: 2px; }
+.chat-sub .mention svg { width: 14px; height: 14px; vertical-align: -2px; margin-right: 5px; }
+[data-theme="dark"] .chat-thought { border-bottom-color: rgba(255, 255, 255, .09); }
 .chat-paragraph { white-space: pre-wrap; }
 .chat-heading1 { font-size: 1.25em; font-weight: 700; }
 .chat-heading2 { font-size: 1.1em; font-weight: 600; }
@@ -587,8 +624,8 @@ html.links .app { display: none; }
 @keyframes chat-dot { 0%, 60%, 100% { opacity: .35; transform: none; } 30% { opacity: .8; transform: translateY(-2px); } }
 /* the window's last row under a chat, outside the scroll, so it never moves: Codex's soft card, the text on top and the
    round send button under it at the right */
-.composer { flex: none; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin: 0 32px 18px 16px; padding: 18px 14px 14px 22px;
-  border: 1px solid rgba(0, 0, 0, .06); border-radius: 28px; background: var(--surface); box-shadow: 0 6px 28px rgba(0, 0, 0, .07), 0 1px 3px rgba(0, 0, 0, .04); }
+.composer { flex: none; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin: 0 max(48px, calc((100% - var(--chat-width)) / 2)) 18px max(48px, calc((100% - var(--chat-width)) / 2)); padding: 18px 14px 14px 22px;
+  border: 1px solid rgba(0, 0, 0, .12); border-radius: 13px; background: var(--surface); box-shadow: 0 6px 28px rgba(0, 0, 0, .07), 0 1px 3px rgba(0, 0, 0, .04); }
 .composer[hidden] { display: none; } /* its flex would otherwise win over [hidden] */
 .composer:focus-within { box-shadow: 0 8px 32px rgba(0, 0, 0, .09), 0 1px 3px rgba(0, 0, 0, .05); }
 .composer .ctext { flex: 1 0 100%; min-height: 3em; max-height: 40vh; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 16px; line-height: 1.5; outline: none; }
@@ -613,7 +650,7 @@ html.links .app { display: none; }
 /* Tana's questions (renderer/chat.js): Codex's question card in the composer's place, the same soft card; the question
    bold with "‹ 2 of 3 ›" at its right, the options numbered, the highlighted one on a grey band with ↑↓, the last row a
    free answer, then Dismiss (esc) and a pale blue Continue (↩). */
-.qcard { flex: none; display: flex; flex-direction: column; gap: 2px; margin: 0 32px 18px 16px; padding: 14px 12px 12px; border: 1px solid rgba(0, 0, 0, .06); border-radius: 24px;
+.qcard { flex: none; display: flex; flex-direction: column; gap: 2px; margin: 0 max(48px, calc((100% - var(--chat-width)) / 2)) 18px max(48px, calc((100% - var(--chat-width)) / 2)); padding: 14px 12px 12px; border: 1px solid rgba(0, 0, 0, .06); border-radius: 13px;
   background: var(--surface); box-shadow: 0 6px 28px rgba(0, 0, 0, .07), 0 1px 3px rgba(0, 0, 0, .04); outline: none; }
 .qcard[hidden] { display: none; }
 .qhead { display: flex; align-items: baseline; gap: 12px; padding: 2px 10px 8px; }
@@ -850,7 +887,7 @@ button.ticon { padding: 0; border: 0; background: none; color: inherit; }
 .pbutton { display: inline-flex; align-items: center; padding: 2px; border: 0; border-radius: 6px; background: none; color: #8a8a8a; cursor: pointer; }
 .pbutton svg { display: block; width: 18px; height: 18px; }
 .pbutton.approve:hover:not(:disabled) { background: #d9f0de; color: #17652f; }
-.pbutton.reject:hover { background: #fbdede; color: #8f1b1b; }
+.pbutton.reject:hover { background: rgba(0, 0, 0, .06); color: #555; } /* a trash can: the grey hover every row glyph has, no red */
 .pbutton:disabled { opacity: .35; cursor: default; }
 @keyframes cbadge-sweep { 0%, 18% { transform: translateX(-130%); } 72%, 100% { transform: translateX(130%); } }
 /* ==== Children, empty notes, group headings (renderer/render.js, views.js) ==== */
@@ -1148,8 +1185,8 @@ html.cover .toast { left: calc(var(--pane-x) + var(--pane-w) / 2); bottom: calc(
 [data-theme="dark"] { color-scheme: dark; }
 [data-theme="dark"] body { color: #c9c9c9; background: #1b1d1e; }
 [data-theme="dark"] { --chat-mine: #1e3d7b; --chat-mine-text: #e8eeff; --chat-send: #3d72e0; } /* Codex's dark: a deep saturated blue */
-[data-theme="dark"] .composer { border-color: rgba(255, 255, 255, .07); background: #2a2c2e; box-shadow: 0 4px 20px rgba(0, 0, 0, .25); } /* a lighter card on the page, as Codex draws it */
-[data-theme="dark"] .composer:focus-within { border-color: rgba(255, 255, 255, .11); box-shadow: 0 6px 24px rgba(0, 0, 0, .3); }
+[data-theme="dark"] .composer { border-color: rgba(255, 255, 255, .12); background: #2a2c2e; box-shadow: 0 4px 20px rgba(0, 0, 0, .25); } /* a lighter card on the page, as Codex draws it */
+[data-theme="dark"] .composer:focus-within { border-color: rgba(255, 255, 255, .16); box-shadow: 0 6px 24px rgba(0, 0, 0, .3); }
 [data-theme="dark"] .composer .ctext:empty::before { color: #7d8185; }
 [data-theme="dark"] .composer .ctext .mention { color: #8fc1e1; }
 [data-theme="dark"] .composer-mode:hover { background: rgba(255, 255, 255, .06); }
@@ -1280,7 +1317,6 @@ html.cover .toast { left: calc(var(--pane-x) + var(--pane-w) / 2); bottom: calc(
 [data-theme="dark"] .rail .rrow:focus { background: #2b3237; }
 [data-theme="dark"] .rail .rrow .ricon { color: #aeb4b6; }
 [data-theme="dark"] .rail .rrow .ricon.hue { color: oklch(0.8 0.1 var(--hue)); }
-[data-theme="dark"] .railgrip:hover, [data-theme="dark"] .railgrip.dragging { background: #2f4658; }
 [data-theme="dark"] .rail .rrow .rtitle { color: #e6e8e9; }
 [data-theme="dark"] .rail .rrow.done .rtitle { color: var(--muted); }
 [data-theme="dark"] .rail .rrow.rmeta .rtitle { color: #a8adaf; }
@@ -1298,7 +1334,7 @@ html.cover .toast { left: calc(var(--pane-x) + var(--pane-w) / 2); bottom: calc(
 [data-theme="dark"] .cbadge.unavailable { background: #33383a; color: #a8adaf; }
 [data-theme="dark"] .cbadge.closed { background: none; border-color: #45494b; color: #8c9194; }
 [data-theme="dark"] .pbutton.approve:hover:not(:disabled) { background: #1d3c27; color: #7fd396; }
-[data-theme="dark"] .pbutton.reject:hover { background: #45201f; color: #f0a3a0; }
+[data-theme="dark"] .pbutton.reject:hover { background: rgba(255, 255, 255, .08); color: #c9cccf; }
 [data-theme="dark"] .palette kbd { color: #b7bcbe; background: #303436; }
 [data-theme="dark"] .palette .row.active kbd { background: #42484a; }
 [data-theme="dark"] .recorder h2 { color: #c9c9c9; }

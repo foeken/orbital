@@ -207,7 +207,7 @@ open chat like any other document.
 | `toolCalls` | one progress row first: "Waiting for your input", "Thinking...", "Thought for N seconds" (`completedAt - sentAt`) or "Finished thinking"; a call with `subagentChatUri` becomes a `reference` row to that chat |
 | status cancelled, error or limit_exceeded | a status row, "Error: <errorMessage>" |
 | `attachmentUris` | `reference` rows |
-| `proposals` | a row such as "create · approved" (the operation, then approved / rejected / awaiting approval) with a `reference` row under it to `proposedUri`, or `baseUri` for an update |
+| `proposals` | a row carrying `proposal` (`proposedUri`, `target` = `baseUri` for an update, `operation`, `metadata`, `state` pending / approved / rejected), drawn as a card in the answer (renderer/chat.js `chatProposalEl`): main adds the target's title and glyph, read with `includeProposals` or from the draft itself, and `approvable` / `reason` from `sdk/proposals.js` `refusal` (main/documents.js `proposalCards`) |
 | pending `questionsData` while `askUserQuestion` awaits input | `row.chat.questions` on the message row: the question card in the composer's place (§11) |
 | any other status update ("Sam was added to the chat.") | a row with `row.chat.status`: a centred line (§11) |
 | `hiddenFromChat`, `type: 'context'`, human `isAIInterviewRelay` messages | skipped |

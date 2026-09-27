@@ -23,6 +23,7 @@ function chatDotsEl() {
 // One line of a message: a markdown block (sdk/chat.js blocks), a card for an attachment or proposed document, and
 // what a proposal or a question holds under it.
 function chatPartEls(n, docId) {
+  if (n.proposal) return [chatProposalEl(n)];
   if (n.type === 'reference') {
     const ref = n.reference || {}, target = ref.node || {}, el = document.createElement('div');
     el.className = 'chat-ref';
@@ -39,12 +40,72 @@ function chatMessageEl(n, docId) {
   el.className = 'chat-msg ' + (c.mine ? 'mine' : 'theirs');
   bubble.className = 'bubble';
   if (c.sentAt) bubble.title = new Date(c.sentAt).toLocaleString();
+  const subs = (n.children || []).filter((p) => p.sub); // a subagent's chat: under the thinking line, as in Tana
   for (const part of n.children || []) {
-    if (part.note) { const note = document.createElement('div'); note.className = 'chat-note'; renderSegs(note, part.segments || [], docId); el.append(note); } // "Thought for 12 seconds", an error: above the bubble
+    if (part.sub) continue;
+    if (part.thought) el.append(chatThoughtEl(part, subs, c.id, docId));
+    else if (part.note) { const note = document.createElement('div'); note.className = 'chat-note'; renderSegs(note, part.segments || [], docId); el.append(note); } // an error: above the bubble
     else bubble.append(...chatPartEls(part, docId));
   }
   if (!bubble.childNodes.length && c.streaming) bubble.append(chatDotsEl());
   if (bubble.childNodes.length) el.append(bubble);
+  return el;
+}
+// "Thought for 12 seconds": what Tana did while thinking (a subagent it asked) folds under it, closed until its chevron
+// is pressed, and stays open across renders. With nothing under it, it is a line and has no chevron.
+const chatThoughtsOpen = new Set(); // message ids
+// What Tana's AI proposed in an answer, as a card in it: the proposed thing's glyph and name, what kind of proposal it is
+// and where it stands, and while it waits the Proposals page's approve and reject (renderer/proposals.js). One Orbital
+// cannot approve keeps its approve, disabled, with the reason (main/documents.js proposalCards). The answer is a write
+// to this chat, whose live update draws the card again as approved or rejected.
+const PROPOSAL_KIND = { action: 'Action', workspace: 'Space', instructions: 'Instructions' };
+const PROPOSAL_STATE = { pending: 'awaiting your approval', approved: 'approved', rejected: 'rejected' };
+function chatProposalEl(n) {
+  const p = n.proposal, el = document.createElement('div'), mid = document.createElement('div'), title = document.createElement('div'), sub = document.createElement('div');
+  el.className = 'chat-proposal ' + p.state;
+  const kind = p.operation === 'update' ? 'Change' : p.operation === 'delete' ? 'Deletion' : PROPOSAL_KIND[p.metadata && p.metadata.type] || 'New document';
+  title.className = 'chat-proposal-title'; title.textContent = demoText(p.title || 'Untitled', p.target);
+  sub.className = 'chat-proposal-sub'; sub.textContent = kind + ' · ' + (PROPOSAL_STATE[p.state] || p.state);
+  mid.className = 'chat-proposal-text'; mid.append(title, sub);
+  el.append(addIcon(document.createElement('span'), (p.metadata && p.metadata.type === 'action' && 'sync') || p.icon || 'proposals'), mid); // an action is listed as a plain document: its own glyph
+  if (p.state === 'pending') el.append(proposalButtonsEl(n, (node, approve) => answerChatProposal(node, approve, el))); // an action's approve reads "Send to Slite" (renderer/proposals.js)
+  // the card opens what was proposed, as its link did: here, ⌘ in a pane beside, ⌥ as a tab (palette.js elsewhere)
+  el.title = 'Open';
+  el.onclick = (e) => {
+    if (e.target.closest('.pbutton')) return;
+    const where = elsewhere(e);
+    if (where) run(() => openElsewhere(where, p.target)); else goTo(p.target);
+  };
+  return el;
+}
+function answerChatProposal(node, approve, el) {
+  const p = node.proposal;
+  if (!tana.proposalAnswer || (approve && !p.approvable)) return;
+  const buttons = [...el.querySelectorAll('.pbutton')];
+  buttons.forEach((b) => { b.disabled = true; }); // one answer; the chat's live update redraws the card as it now stands
+  run(async () => {
+    try {
+      const warnings = await tana.proposalAnswer(p.chatUri, p.proposedUri, approve);
+      if (warnings && warnings.length) showError(new Error(warnings.join('; ')));
+    } catch (e) { buttons.forEach((b) => { b.disabled = b.classList.contains('approve') && !p.approvable; }); throw e; }
+  });
+}
+function chatThoughtEl(part, subs, msgId, docId) {
+  const el = document.createElement('div'), head = document.createElement(subs.length ? 'button' : 'div');
+  el.className = 'chat-note chat-thought'; head.className = 'chat-thought-head';
+  renderSegs(head, part.segments || [], docId);
+  el.append(head);
+  if (!subs.length) return el;
+  const box = document.createElement('div'), open = chatThoughtsOpen.has(msgId);
+  box.className = 'chat-sub'; box.hidden = !open;
+  box.append(...subs.flatMap((s) => chatPartEls(s, docId)));
+  head.type = 'button'; head.tabIndex = -1; head.setAttribute('aria-expanded', String(open));
+  head.onclick = () => {
+    const on = !chatThoughtsOpen.has(msgId);
+    if (on) chatThoughtsOpen.add(msgId); else chatThoughtsOpen.delete(msgId);
+    head.setAttribute('aria-expanded', String(on)); box.hidden = !on;
+  };
+  el.append(box);
   return el;
 }
 // The rows of an open chat, as the elements the page shows (renderer/render.js renderOutline)
@@ -78,6 +139,36 @@ function chatStick(parent) {
   const sc = outline.parentElement;
   return parent.docId !== chatShown || sc.scrollHeight - sc.scrollTop - sc.clientHeight < 80;
 }
+// A chat at its bottom stays there when its size changes under it: a part of a message landing late (a reference
+// resolving, an image), or the palette lifting the page over the whole window (a "/" in the composer), which lays the
+// conversation out again at another width and left it far above its end. Scrolled up to read, it stays where it is.
+let chatAtBottom = false;
+// A wrapped bubble is as wide as its longest line. A box whose text wraps takes all the width it may (its max-width),
+// which left an empty strip down its right side, and no CSS shrinks it to its lines; so it is measured after layout,
+// and again when the column's width changes. All reset, then all measured, then all set: three layouts, not one each.
+function fitBubbles() {
+  const bubbles = [...outline.querySelectorAll('.chat-msg.mine .bubble')];
+  for (const b of bubbles) b.style.width = '';
+  const widths = bubbles.map((b) => {
+    // the words only: a range over the whole bubble also reports each paragraph's own box, the full width again
+    const lines = [], walk = document.createTreeWalker(b, NodeFilter.SHOW_TEXT), range = document.createRange();
+    for (let t = walk.nextNode(); t; t = walk.nextNode()) { range.selectNodeContents(t); lines.push(...range.getClientRects()); }
+    const box = b.getBoundingClientRect(), cs = getComputedStyle(b);
+    if (!lines.length) return '';
+    const right = Math.max(...lines.map((r) => r.right)), left = box.left + parseFloat(cs.paddingLeft) + parseFloat(cs.borderLeftWidth);
+    return Math.ceil(right - left + parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) + 2 * parseFloat(cs.borderLeftWidth)) + 1 + 'px'; // +1: a sub-pixel short would wrap the last word
+  });
+  bubbles.forEach((b, i) => { b.style.width = widths[i]; });
+}
+if (typeof ResizeObserver === 'function' && outline.parentElement) {
+  let width = 0;
+  const sc = outline.parentElement, keep = () => {
+    if (chatShown && sc.clientWidth !== width) { width = sc.clientWidth; fitBubbles(); } // the column's width changed: the lines did
+    if (chatShown && chatAtBottom) sc.scrollTop = sc.scrollHeight;
+  };
+  sc.addEventListener('scroll', () => { if (chatShown) chatAtBottom = sc.scrollHeight - sc.scrollTop - sc.clientHeight < 80; }, { passive: true });
+  const seen = new ResizeObserver(keep); seen.observe(outline); seen.observe(sc);
+}
 
 // ---- the composer ----
 // A small rich text field (index.html #composerText): typing is plain text, "@" puts a chip for a node in through the
@@ -90,6 +181,7 @@ const composerSkill = $('composerSkill'), composerMode = $('composerMode');
 // message, or a click on the label, switches it. Remembered while the window is open.
 const chatAi = new Map();
 const chatReadOnly = new Set(); // chats you can read and not write in (chat:answers): their composer takes no typing
+const chatAsking = new Set(); // chats whose chat:answers is out now (chatAfterRender)
 let chatSkill = null; // { uri, label } the message being written runs
 let composerAt = null; // where the caret was when "@" opened the search: the chip goes there
 let skillList = null; // the workspace's skills for the "/" page, read when it opens
@@ -130,8 +222,10 @@ function beforeCaret() {
   return r.toString();
 }
 function composerLink() {
+  document.execCommand('insertText', false, '@'); // typed first, as in a row: a pick replaces it, Escape leaves it (toolbar.js)
   const sel = getSelection();
   composerAt = sel.rangeCount && composerText.contains(sel.anchorNode) ? sel.getRangeAt(0).cloneRange() : null;
+  if (composerAt && composerAt.endContainer.nodeType === 3 && composerAt.endOffset > 0) composerAt.setStart(composerAt.endContainer, composerAt.endOffset - 1); // the range holds the "@", for chatMention to write the chip over
   const box = composerAt && composerAt.getClientRects()[0];
   const rect = box ? { left: box.left, top: box.top, bottom: box.bottom } : composerText.getBoundingClientRect();
   togglePalette('search', { composer: true, text: '', rect });
@@ -229,7 +323,13 @@ function chatAfterRender(parent, stick) {
   const opened = chat && docId !== chatShown;
   if (was !== (docId || '')) {
     composer.dataset.doc = docId || ''; setComposer(docId && chatDrafts.get(docId)); showMode();
-    if (docId && !chatAi.has(docId) && tana.chatAnswers) tana.chatAnswers(docId).then((r) => { if (!chatAi.has(docId)) chatAi.set(docId, !!r.ai); if (r.canWrite === false) chatReadOnly.add(docId); else chatReadOnly.delete(docId); if (composer.dataset.doc === docId) { showMode(); renderSoon(true); } }, () => {}); // renderSoon: waiting questions show once write access is known
+  }
+  // Asked once there is a connection: a chat reopened at launch is drawn before there is one, and the render after it
+  // comes up asks; a failed ask is asked again on the next render.
+  if (docId && connected && !chatAi.has(docId) && !chatAsking.has(docId) && tana.chatAnswers) {
+    chatAsking.add(docId);
+    tana.chatAnswers(docId).then((r) => { if (!chatAi.has(docId)) chatAi.set(docId, !!r.ai); if (r.canWrite === false) chatReadOnly.add(docId); else chatReadOnly.delete(docId); if (composer.dataset.doc === docId) { showMode(); renderSoon(true); } }, () => {}) // renderSoon: waiting questions show once write access is known
+      .finally(() => chatAsking.delete(docId));
   }
   const asking = chat && showQuestions(docId, chatPendingQ); // Tana's questions take the composer's place
   if (!chat) showQuestions(null, null);
@@ -237,7 +337,8 @@ function chatAfterRender(parent, stick) {
   sc.classList.toggle('chatting', chat);
   chatShown = docId;
   if (!chat) return;
-  if (stick) sc.scrollTop = sc.scrollHeight;
+  fitBubbles(); // drawn anew each render, so fitted anew
+  if (stick) { sc.scrollTop = sc.scrollHeight; chatAtBottom = true; }
   if (opened || asking === 'new') requestAnimationFrame(() => { if (palette.hidden && composer.dataset.doc === docId) (asking ? qcard : composerText).focus({ preventScroll: true }); });
 }
 // Access can change while a chat is open (someone shares it with you, or takes it away): a change to its audience or

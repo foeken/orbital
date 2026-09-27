@@ -30,7 +30,7 @@ if (!LINKS && typeof addEventListener === 'function') addEventListener('focus', 
 // The shell hears a page only once its iframe has loaded (shell.js windowOf), so what the first render told before that
 // was lost; its layout message, sent at that load and after every change, has the title and the document told again.
 function retell() {
-  if (titleTold) { toldTitle = null; tellTitle(...titleTold); }
+  retellTitle(true); // with the tab glyph it told (renderer/render.js)
   if (toldDoc !== undefined) { const docId = toldDoc; toldDoc = undefined; tellDoc(docId); }
 }
 // The Graph pane goes where the followed page is: its document, or, for a page on no document, the empty rail. Only

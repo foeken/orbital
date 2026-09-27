@@ -1157,7 +1157,7 @@ palInput.addEventListener('input', () => {
 palInput.addEventListener('keydown', (e) => {
   const mod = e.metaKey || e.ctrlKey;
   if (palPage.keys && palPage.keys(e)) { e.preventDefault(); e.stopPropagation(); } // a page's own keys (Edit choices: ⌘⌫, ⇧⌘↑/↓)
-  else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); backPalette(); }
+  else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (linkCtx) linkCtx.typed = palInput.value; backPalette(); } // what was typed into an "@" search goes on after the "@" (toolbar.js cancelLink)
   else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && palRows.length) { e.preventDefault(); e.stopPropagation(); movePalIndex(e.key === 'ArrowDown' ? 1 : -1); }
   else if (e.key === 'Enter') { // ⌘↩ / ⌥↩ on a row that opens a place: in a pane beside, or a tab in this one (while linking, ⌘↩ creates)
     e.preventDefault(); e.stopPropagation();

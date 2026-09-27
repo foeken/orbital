@@ -9,12 +9,16 @@ function startLink(item, el, [start, end]) {
   // A row still being written into Tana has no block id yet (materialise), so there is nothing to link into: the "@"
   // stays a character, which is what typing one into a brand-new row otherwise tried to save under no id at all.
   if (item.node.kind === 'block' && (item.node.draft || item.busy || typeof item.node.id !== 'string' || !item.node.id)) { insertAtCaret(el, '@'); return; }
+  // At a caret the "@" is typed first, as any key is: it stays if the search is let go of, and a pick replaces it
+  // (linkTo writes the mention over start..end). A selection is linked as it is, with no "@".
+  const at = start === end;
+  if (at) { insertAtCaret(el, '@'); end = start + 1; }
   flush(item.key);
   const segs = readSegs(el);
   // where the dropdown hangs: under the selection (or caret), at its left edge; an empty row has no text box, so the row's own box
   const range = getSelection().rangeCount ? getSelection().getRangeAt(0) : null, rects = range ? range.getClientRects() : [];
   const box = el.getBoundingClientRect(), rect = rects.length ? { left: rects[0].left, top: rects[0].top, bottom: rects[rects.length - 1].bottom } : box;
-  togglePalette('search', { item, segs, start, end, text: plainOf(segs).slice(start, end), rect });
+  togglePalette('search', { item, segs, start, end, at, text: at ? '' : plainOf(segs).slice(start, end), rect });
 }
 async function linkTo(ctx, mention) {
   if (ctx.composer) return chatMention(mention); // "@" in a chat's composer (renderer/chat.js)
@@ -30,7 +34,17 @@ async function linkTo(ctx, mention) {
 function createAndLink(ctx, title = ctx.text) {
   tana.createDocument(title).then((n) => { extra.set(n.id, { ...n, text: n.title || '', hasChildren: true }); return linkTo(ctx, { label: n.title, uri: n.id, ...(n.icon ? { icon: n.icon } : {}) }); }, showError);
 }
-function cancelLink() { const c = linkCtx; linkCtx = null; if (c && c.composer) composerText.focus(); else if (c) placeCaret(c.item.key, c.end); }
+// Escape (palette.js) sets typed: what was typed into the search goes in after the "@" already there, to type on
+// normally. A selection that "@" was going to link stays as it was.
+function cancelLink() {
+  const c = linkCtx; linkCtx = null;
+  if (!c) return;
+  if (c.composer) {
+    composerText.focus();
+    if (c.typed && composerAt) { composerAt.collapse(false); const s = getSelection(); s.removeAllRanges(); s.addRange(composerAt); } // after the "@", which the range holds for a pick to replace
+  } else placeCaret(c.item.key, c.end);
+  if (c.typed && (c.composer || c.at)) document.execCommand('insertText', false, c.typed); // fires 'input', so it saves as typing does
+}
 
 // ---- selection toolbar: marks and block styles for the current selection, like Tana's floating toolbar ----
 // Keyboard first: ⌘B / ⌘I / ⇧⌘S / ⌘E toggle the marks, "@" links, Tab moves into the toolbar (Left/Right between

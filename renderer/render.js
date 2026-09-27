@@ -261,15 +261,23 @@ function render(force = false) {
 // The page's title on its tab in the shell (shell.js): what the header shows, so masked in demo mode, and 'Hidden'
 // while the document's sensitive mark blurs it, and whether it can be typed in, which offers Rename on the tab (issue
 // #441). Told once per change; outside the shell (the mock) there is no tab.
-let toldTitle = null, titleTold = null; // titleTold: the last title and renamable, told again when the shell asks (retell)
-const retellTitle = () => { if (toldTitle) tellTitle(titleEl.classList.contains('sensitive') ? 'Hidden' : titleEl.textContent, toldTitle.endsWith('\ntrue')); };
-function tellTitle(title, renamable) {
-  if (LINKS) { title = 'Graph'; renamable = false; } // its tab names what it is; the document is the followed page's
-  titleTold = [title, renamable];
-  const told = title + '\n' + renamable;
+// The page's glyph goes along (its type's, as its rows draw it: a chat, a task, a meeting; none for a plain document),
+// as markup, which the shell sets in the tab in the tab's own colour.
+let toldTitle = null, toldIcon = '';
+// again: tell it even unchanged — the shell hears a page only once its frame has loaded, so the title a page drew
+// before that (a place reopened at launch) was lost, and with it Rename on the tab (app.js 'layout')
+const retellTitle = (again) => {
+  if (!toldTitle) return;
+  const renamable = toldTitle.split('\n')[1] === 'true';
+  if (again) toldTitle = '';
+  tellTitle(titleEl.classList.contains('sensitive') ? 'Hidden' : titleEl.textContent, renamable, toldIcon);
+};
+function tellTitle(title, renamable, icon = '') {
+  if (LINKS) { title = 'Graph'; renamable = false; icon = iconNode('graph')?.outerHTML || ''; } // its tab names what it is; the document is the followed page's
+  const told = title + '\n' + renamable + '\n' + icon;
   if (told === toldTitle || !window.frameElement) return;
-  toldTitle = told;
-  window.parent.postMessage({ orbital: 'title', title, renamable }, '*');
+  toldTitle = told; toldIcon = icon;
+  window.parent.postMessage({ orbital: 'title', title, renamable, icon }, '*');
 }
 // A task row carries its grey facts — who it is for, who can see it, whether it notifies — after the title. When the
 // title fills the line the browser wraps them onto a line of their own, where they read as a second title rather
@@ -447,9 +455,11 @@ function renderOutline() {
   titleEl.dataset.key = editable ? parent.key : '';
   titleEl.textContent = editable && pending.has(parent.key) ? plainOf(pending.get(parent.key).segs) : parent ? demoText(parent.node.text, parent.node.id) : viewOf() ? viewOf().title : 'Tana';
   blurSensitive(titleEl, parent && parent.docId);
-  tellTitle(titleEl.classList.contains('sensitive') ? 'Hidden' : titleEl.textContent, !!editable);
-  // a view, a saved search or an app page is named by its tab under a tab bar, so its heading goes (styles.css html.listing)
-  document.documentElement.classList.toggle('listing', !parent || appOwned(parent.docId));
+  const pageIcon = parent ? iconOf(parent.node) || nodeIcon(parent.node) : viewOf()?.icon; // nodeIcon: a chat or an agent known by its tag
+  tellTitle(titleEl.classList.contains('sensitive') ? 'Hidden' : titleEl.textContent, !!editable, (pageIcon && iconNode(pageIcon)?.outerHTML) || '');
+  // a view, a saved search, an app page or a chat is named by its tab under a tab bar, so its heading goes (styles.css html.listing)
+  document.documentElement.classList.toggle('listing', !parent || appOwned(parent.docId) || isChatPage(parent));
+  document.documentElement.classList.toggle('chatpage', isChatPage(parent)); // a chat never shows its title: its tab names it, or nothing does (styles.css)
   // zoomed task: its checkbox before the title (toggleDone, like row checkboxes; Cmd+Enter in the title too)
   const zoomedTask = parent && isTask(parent.node);
   titleCheck.hidden = !zoomedTask; titleCheck.checked = zoomedTask && !!parent.node.done;
@@ -837,11 +847,12 @@ function nodeEl(node, docId, parent) {
   // with the end of the row, which walked the caret past everything written after the point that was clicked.
   line.onclick = (e) => { if (!e.metaKey && !e.shiftKey && !reference && !fullref && (e.target === line || e.target === body || e.target.parentElement === text)) setCaret(text, caretAt(text, e.clientX, e.clientY)); };
   if (node.notification) line.onclick = (e) => { if (!e.metaKey && !e.shiftKey && !e.target.closest('.bullet, .chev')) openNotification(node); }; // a click on it opens it, as in Tana
-  if (node.timeline?.uri) line.onclick = (e) => { if (!e.metaKey && !e.shiftKey && !e.target.closest('.chev')) openTimeline(node); }; // and a Timeline row opens the node it is about
+  // and a Timeline row opens the node it is about; ⌘ in a pane beside, ⌥ as a tab (renderer/palette.js openElsewhere)
+  if (node.timeline?.uri) line.onclick = (e) => { if (!e.shiftKey && !e.target.closest('.chev')) openTimeline(node, elsewhere(e)); };
   else if (node.timeline) line.onmousedown = (e) => e.preventDefault(); // one about nothing (an "added to your Inbox" line) takes no click and no caret
   // as does a task listed under one, as itself: goTo reads the real node, where zoomTo would open the read-only copy the
   // Timeline lists, filed under the Timeline in the crumb — a page that looked like the task and could not be edited
-  else if (parent?.node?.timeline) line.onclick = (e) => { if (!e.metaKey && !e.shiftKey && !e.target.closest('.chev, .check, .bullet')) goTo(node.id); };
+  else if (parent?.node?.timeline) line.onclick = (e) => { if (!e.shiftKey && !e.target.closest('.chev, .check, .bullet')) { const where = elsewhere(e); if (where) run(() => openElsewhere(where, node.id)); else goTo(node.id); } };
   else if (clickOpens) line.onclick = (e) => { if (!e.metaKey && !e.shiftKey && !e.target.closest('.chev, .bullet, .check')) { if (e.altKey) run(() => openElsewhere('tab', item.docId, item.node.kind === 'document' ? null : item.node.id)); else zoomTo(item); } }; // .check: a task's box in a table row ticks it and stays; ⌥: as a tab in this pane (⌘-click selects the row)
   if (clickOpens) el.classList.add('opens');
   // a reference row: the bullet opens the target, a click selects the row, and a click on the selected row starts

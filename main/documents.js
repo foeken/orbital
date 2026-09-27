@@ -3,6 +3,7 @@ const db = require('../db');
 const access = require('../sdk/access');
 const content = require('../sdk/content');
 const chat = require('../sdk/chat');
+const proposals = require('../sdk/proposals');
 const { readNode, editable, setEntityType, contentText, ulid, initDocument, STATE_TYPES, setTitle, setState, taskMeta, audienceMetadata, setAssignees } = require('../sdk/node');
 const fields = require('../sdk/fields');
 const { DOC_URI, KINDS, LIVE_ROWS, NOT_CONNECTED, PLAIN_KINDS, S, TAG, deletedNodes, docStates, editability, errText, hueLoaded, idKind, isDeleted, metaSigs, nodeCreators, nodeHues, nodeMeta, now, pageOf, reading, redoStack, report, scheduleRefresh, send, sendChanged, subscribed, summaryCache, typeAttrTitles, typeHues, typeTitles, undoStack, visibleGraphNodes } = require('./state');
@@ -115,7 +116,36 @@ async function resolveReferences(nodes) {
 async function chatOutline(doc) {
   const messages = doc.data.get('messages');
   const names = new Map((await members().catch(() => [])).map((m) => [m.id, m.title]));
-  return resolveReferences(chat.chatRows(messages ? messages.toJSON() : [], { authorName: (uri) => names.get(uri), me: S.me && S.me.userUri, streamingId: doc.data.get('streamingMessageId') }));
+  const rows = await resolveReferences(chat.chatRows(messages ? messages.toJSON() : [], { authorName: (uri) => names.get(uri), me: S.me && S.me.userUri, streamingId: doc.data.get('streamingMessageId') }));
+  await proposalCards(doc.id, rows);
+  return rows;
+}
+// A proposal in a chat is a card in the answer (renderer/chat.js chatProposalEl): what it is called and its glyph, read
+// with includeProposals (a draft is in no other list, so it read "Unavailable reference"), else from the draft itself,
+// as an action's is; and whether Orbital may approve it, the same refusal sdk/proposals.js makes when asked to.
+async function proposalCards(chatUri, rows) {
+  const cards = rows.flatMap((r) => (r.children || []).filter((c) => c.proposal));
+  if (!cards.length) return;
+  const uris = [...new Set(cards.map((c) => c.proposal.target))];
+  const found = new Map(await S.client.graph.listNodes({ nodeIds: uris, includeProposals: true, limit: uris.length }).then((r) => visibleGraphNodes(r.nodes).map((n) => [n.id, toNode(graphRow(n))]), () => []));
+  for (const uri of uris.filter((u) => !found.has(u))) {
+    const title = await document(uri).then((d) => readNode(d).title, () => null);
+    if (title != null) found.set(uri, { title, text: title });
+  }
+  for (const c of cards) {
+    const p = c.proposal, n = found.get(p.target), why = !n ? 'Its document is gone: reject it to clear it' : proposals.refusal(p);
+    Object.assign(p, { chatUri, title: n ? n.text || n.title || 'Untitled' : 'Missing document', icon: n && n.icon, approvable: p.state === 'pending' && !why, reason: why });
+    // an action names the systems it will write to (its actionDerivation), which its approve says, as Tana's "Send to Slite"
+    if (p.metadata.type === 'action' && p.state === 'pending') p.systems = await document(p.target).then((d) => actionSystems(readNode(d)), () => []);
+  }
+}
+// The systems an action will act in, as Tana labels its button: expectedSystems less Tana itself, "microsoft-teams"
+// read as "Microsoft Teams".
+function actionSystems(n) {
+  let d = {};
+  try { d = JSON.parse(n.actionDerivation || '{}') || {}; } catch { /* no derivation: a plain Run */ }
+  return (Array.isArray(d.expectedSystems) ? d.expectedSystems : []).filter((s) => typeof s === 'string' && s !== 'tana')
+    .map((s) => s.split(/[-_\s]+/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join(' '));
 }
 // Send a message in a chat, and ask Tana's AI to answer it when the chat answers by itself (sdk/chat.js), as the chat's
 // own agent (data.agentId, Tana's assistant when there is none). Not an undo step: a message, once sent, is the
@@ -1223,4 +1253,4 @@ const ipc = {
   },
 };
 
-module.exports = { isLiveRef, reliveRefs, followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, pruneSeen, codexIds, setCodex, creatorOf, document, op, historyIds, readOnDemand, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget, ipc };
+module.exports = { actionSystems, isLiveRef, reliveRefs, followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, pruneSeen, codexIds, setCodex, creatorOf, document, op, historyIds, readOnDemand, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget, ipc };

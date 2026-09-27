@@ -81,7 +81,7 @@ function embedsMedia(doc) {
 // other intent runs code on approval that only Tana has.
 function refusal(p) {
   if (p.operation !== 'create') return 'Tana merges ' + (p.operation === 'update' ? 'a change' : 'a deletion') + ' itself: approve it in Tana';
-  if (kindOf(p.metadata && p.metadata.type) !== 'regular') return 'Approve this proposal in Tana';
+  if (!['regular', 'action'].includes(kindOf(p.metadata && p.metadata.type))) return 'Approve this proposal in Tana';
   if (intentsOf(p).some((i) => !i || i.type !== REOWN)) return 'This proposal carries steps only Tana can run: approve it in Tana';
   return null;
 }
@@ -91,7 +91,10 @@ function refusal(p) {
 // change" in the chat as the person who approved. Refused, because Tana would do more than that: a document that embeds
 // media while its proposal asks for it to be re-owned, and a document whose type lives in another space, which Tana
 // moves into that space on approval (its placement self-heal) — a move this SDK does not make.
-async function approve(sync, { chatUri, proposedUri, byUri }) {
+// An action (metadata.type 'action', a tana:action: document) is run first: Tana's server carries it out in the systems
+// it names (execute below, its startActionExecution), and only once it has taken the action on is the proposal approved
+// here, as Tana's ActionProposal approver does (its R_: out of proposal, created in the chat). A refusal writes nothing.
+async function approve(sync, { chatUri, proposedUri, byUri, execute }) {
   if (!/^tana:user-profile:/.test(byUri || '')) throw new Error('approve needs the approver\'s tana:user-profile: uri');
   const chat = await sync.subscribe(chatUri);
   const found = latest(chat, proposedUri);
@@ -99,9 +102,14 @@ async function approve(sync, { chatUri, proposedUri, byUri }) {
   const why = refusal(found.p);
   if (why) throw new Error(why);
   const doc = await sync.subscribe(proposedUri);
-  if (intentsOf(found.p).length && embedsMedia(doc)) throw new Error('Tana copies the images in this document when approved: approve it in Tana');
+  const action = kindOf(found.p.metadata && found.p.metadata.type) === 'action';
+  if (action) {
+    if (!execute) throw new Error('Approve this action in Tana');
+    await execute({ chatUri, actionUri: proposedUri });
+  }
+  if (!action && intentsOf(found.p).length && embedsMedia(doc)) throw new Error('Tana copies the images in this document when approved: approve it in Tana');
   const typeUri = doc.data.get('entityTypeUri');
-  if (typeUri) {
+  if (typeUri && !action) {
     const home = (await sync.subscribe(typeUri)).data.get('ownerUri');
     if (home && home !== doc.data.get('ownerUri')) throw new Error('Tana moves this into its type\'s space when approved: approve it in Tana');
   }
@@ -114,14 +122,28 @@ async function approve(sync, { chatUri, proposedUri, byUri }) {
     data.set('isProposal', false);
     data.set('createdInUri', chatUri);
   });
-  chat.transact((loro) => accepted(loro, byUri, [proposedUri], at));
+  chat.transact((loro) => accepted(loro, byUri, [proposedUri], at, action)); // an action's acceptance stays in the AI's context, as Tana keeps it
   return { uri: proposedUri };
+}
+
+// Run an action proposal on Tana's server: POST <POLARIS_SERVICE_API_AI_URL>/actions/execute, the web client's
+// executeAction. It answers { success, executorChatUri } once it has taken the action on, or { success: false, error }
+// (400, 403, 409) when it will not; the error is Tana's own sentence, thrown as it is.
+async function executeAction({ chatUri, actionUri, getAccessToken, timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+  baseUrl = 'https://home.tana.inc/api/ai', fetch = globalThis.fetch }) {
+  const body = JSON.stringify({ chatUri, actionUri, timezone });
+  const post = async (refresh) => fetch(baseUrl + '/actions/execute', { method: 'POST', body, headers: { 'content-type': 'application/json', authorization: 'Bearer ' + await getAccessToken({ refresh }) } });
+  let r = await post(false);
+  if (r.status === 401) r = await post(true);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.success) throw new Error(j.error === 'ai_cap_exceeded' ? 'You have reached your Tana AI limit' : j.error || j.message || 'Tana could not run this action: HTTP ' + r.status);
+  return j;
 }
 
 // The status message Tana posts after an approval (addAcceptanceStatusMessage): a human message that is a status
 // update, kept out of the AI's context, with the approved documents attached.
-function accepted(loro, byUri, uris, at) {
-  pushMessage(loro, { sentAt: at, fromUserUri: byUri, fromUserType: 'human', isStatusUpdate: true, excludeFromAIContext: true }, 'accepted ' + uris.length + ' change' + (uris.length === 1 ? '' : 's'), uris);
+function accepted(loro, byUri, uris, at, inContext = false) {
+  pushMessage(loro, { sentAt: at, fromUserUri: byUri, fromUserType: 'human', isStatusUpdate: true, excludeFromAIContext: !inContext }, 'accepted ' + uris.length + ' change' + (uris.length === 1 ? '' : 's'), uris);
 }
 
 // Reject any proposal the way Tana does: its entries leave the chat, and the document it proposed (the new one, or the
@@ -141,4 +163,4 @@ async function reject(sync, { chatUri, proposedUri }) {
   return { uri: proposedUri, warnings };
 }
 
-module.exports = { pending, pendingOf, approve, reject, refusal, entries, kindOf, subjectOf };
+module.exports = { pending, pendingOf, approve, reject, refusal, entries, kindOf, subjectOf, executeAction };
