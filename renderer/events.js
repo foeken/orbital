@@ -278,6 +278,10 @@ document.addEventListener('keydown', (e) => {
   else if (mod && (e.key === '0' || (e.shiftKey && (e.key === '+' || e.key === '=' || e.key === '-' || e.key === '_')))) { e.preventDefault(); setZoom(e.key === '0' ? BASE_ZOOM : zoomFactor * (e.key === '-' || e.key === '_' ? 1 / 1.1 : 1.1)); }
   else if (hotkey === 'search') { e.preventDefault(); togglePalette('search'); } // also while the palette is open: it switches it to search
   else if (!palette.hidden) return;
+  // The Links pane has no outline: none of the keys below (⇧⌘⌫, the selection's, entering rows, a first draft) may act
+  // on its hidden page. Only a built-in or recorded key runs, in the page it follows (runAction); its rows answer the
+  // rest themselves, and an Escape with no row (renderer/rail.js).
+  else if (LINKS) { if (hotkey && runAction(hotkey)) e.preventDefault(); }
   else if (sel && document.activeElement === document.body && (e.defaultPrevented || selKey(e))) e.preventDefault(); // selection keys; a Shift+Arrow already handled in the node stops here (focus is on body by now)
   else if (mod && e.shiftKey && e.key === 'Backspace' && document.activeElement === document.body && zoom) { e.preventDefault(); removeZoomedBlock(); }
   else if (hotkey) { if (runAction(hotkey)) e.preventDefault(); } // a row that is not there right now (no rail, nothing to go back to) leaves the key to the browser

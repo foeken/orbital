@@ -40,8 +40,8 @@ function retell() {
 let followingNow = false, followSeq = 0;
 async function follow(docId, doc) {
   if (typeof docId !== 'string' || !docId || docId.startsWith('orbital:')) docId = null; // an app page (Timeline, …) is no document
+  const seq = ++followSeq; // before the check below: back on the document on screen, an older read still on its way is dropped too
   if ((zoom && !zoom.nodeId ? zoom.docId : null) === docId) return;
-  const seq = ++followSeq;
   if (docId && doc && typeof doc === 'object' && !docOf(docId)) extra.set(docId, doc);
   if (docId && !docOf(docId)) { // no row sent: read the one the followed page is on, as goTo would
     try { const n = await tana.node(docId); if (!docOf(docId)) extra.set(docId, { ...n, text: n.title || '', hasChildren: true }); } catch { return; } // unreadable: the followed page says why

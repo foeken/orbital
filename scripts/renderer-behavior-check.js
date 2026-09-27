@@ -1707,6 +1707,7 @@ async function runSyncShortcutCheck() {
     const comboOf = () => '';
     const setZoom = () => {};
     const togglePalette = () => {};
+    const LINKS = false; // a page of its own, with an outline its keys act on (renderer/state.js)
     ${withShims(source.slice(start, end))}
   `, context);
   let prevented = false;
@@ -1816,6 +1817,7 @@ async function runReservedComboCheck() {
     const runAction = (id) => { ran.push(id); return id !== 'gone'; };
     ${sourceBetween('const DEFAULT_HOTKEYS', 'let pinInfo')}
     ${sourceBetween('const KEYNAMES', 'const validCombo')}
+    const LINKS = false; // a page of its own, with an outline its keys act on (renderer/state.js)
     ${withShims(source.slice(start, end))}
     ({ press: (key, mods = {}) => { const e = { key, code: '', metaKey: true, ctrlKey: false, shiftKey: false, altKey: false, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; }, ...mods }; handler(e); return e.defaultPrevented; },
        record: (id, combo) => { hotkeys[id] = combo; }, reset: (id) => { delete hotkeys[id]; }, ran: () => ran.splice(0), chip: (id) => hotkeyFor(id) });
@@ -1951,6 +1953,7 @@ function runZoomShortcutCheck() {
     const filterEl = {}, dropDoc = null, palette = { hidden: true }, tana = {}, hotkeys = {}, sel = null, zoom = null;
     const comboOf = () => '', setZoom = (value) => { zoomFactor = value; calls.push(value); };
     const togglePalette = () => {}, runAction = () => {}, history = () => {}, texts = () => [], setCaret = () => {}, viewOf = () => null, draftDoc = () => {}, render = () => {};
+    const LINKS = false; // a page of its own, with an outline its keys act on (renderer/state.js)
     ${withShims(source.slice(start, end))}
     Object.assign(globalThis, { press: (event) => handler(event), state: () => ({ zoomFactor, calls }) });
   `, context);
@@ -1981,6 +1984,7 @@ function runZoomDeleteCheck() {
     const removeNode = (candidate) => { removed.push(candidate.key); };
     const resolveZoom = () => [item];
     ${removeZoomedBlock}
+    const LINKS = false; // a page of its own, with an outline its keys act on (renderer/state.js)
     ${withShims(source.slice(start, end))}
     Object.assign(globalThis, { press: (event) => handler(event), state: () => ({ removed }) });
   `, context);
@@ -4455,11 +4459,17 @@ function runRailToggleCheck() {
   api.follow('tana:text:d', { id: 'tana:text:d', text: 'D' });
   await older;
   assert.deepEqual(plain(api.state()), { zoom: 'tana:text:d', opened: ['tana:text:a', 'tana:text:b', 'tana:text:d'], asked: ['tana:text:b', 'tana:text:c'], views: [] }, 'a read that lands after a newer follow opens nothing');
+  const away = api.follow('tana:text:e', null);
+  await api.follow('tana:text:d', { id: 'tana:text:d', text: 'D' }); // back on the document on screen before the read lands
+  await away;
+  assert.equal(plain(api.state()).zoom, 'tana:text:d', 'nor one overtaken by a return to the document already on screen');
   await api.follow(null);
   await api.follow('orbital:timeline');
   assert.deepEqual(plain(api.state()).views, ['library'], 'a page on no document (a view, an app page) leaves it on none, once');
   // Only the Links pane draws the rail; every other page hides it and tells the shell its document instead.
   assert.match(functionSource('renderRail'), /if \(!LINKS\) \{ railEl\.hidden = true; return tellDoc\(docId\); \}/, 'a page other than the Links pane draws no rail and names its document');
+  // and no outline key of the page (⇧⌘⌫ above all) reaches the hidden page in the Links pane: its branch comes before them (#463 review)
+  assert.match(source, /else if \(!palette\.hidden\) return;\n(?:\s*\/\/[^\n]*\n)*\s*else if \(LINKS\) \{ if \(hotkey && runAction\(hotkey\)\) e\.preventDefault\(\); \}\n[^]*?removeZoomedBlock\(\)/, 'in the Links pane only its forwarded keys run, never the outline\'s');
   // Anywhere else the Links pane is asked to go — Cmd+K's views, searches and results — is the followed page's move (#463 review)
   const nav = vm.runInNewContext(`
     const LINKS = true, posted = [], toShell = (m) => posted.push(m), palette = { hidden: true }, PANE_ROWS = [['otherPane']]; let followingNow = false;
