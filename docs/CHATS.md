@@ -502,6 +502,12 @@ Read from Tana's web client of 2026-09-27 (ChatPanel, `LoroChatMutations`, the t
    appends the AI message and grows its text, then clears the streaming id. Every step reaches Orbital as a live
    update to the open chat.
 
+**To Tana or to the chat.** Orbital's composer sends each message in one of two modes, switched with Tab in an empty
+message: To Tana asks Tana to answer whatever the chat's rule says, and To the chat keeps it for the people in the
+chat. Such a message carries Tana's own `skipAutoResponse: true` (from its message schema), so no client asks for an
+answer to it, and Tana is still asked when the words mention it. The composer starts at the chat's own rule (step 2),
+which `chat:answers` reads; `chat:send` takes the mode as `{ ai }`.
+
 **Mentions and skills.** A mention in a message is the markdown link `[label](tana:…)` in its text (§3); Tana's AI reads
 the node itself (live: a `[Diagram](tana:skill:…)` mention was answered after a `readSkill` of it). Running a skill is
 what Tana's `runSkill` does from a document's Send to menu: a human message whose `attachmentUris` carry the skill (and

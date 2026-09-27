@@ -600,6 +600,12 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 /* the skill the message runs ("/" first): a pill in front of the text; clicking it, or Backspace at the start, drops it */
 .composer-skill { flex: none; display: inline-flex; align-items: center; gap: 5px; margin-right: auto; padding: 2px 10px; border-radius: 12px; background: var(--chat-mine); color: var(--chat-mine-text); font-size: 13px; font-weight: 500; cursor: pointer; }
 .composer-skill[hidden] { display: none; }
+/* To Tana / To the chat: the mode the next message goes in, at the card's bottom left where Codex keeps its own switch */
+.composer-mode { flex: none; display: inline-flex; align-items: center; gap: 5px; margin-right: auto; align-self: center; padding: 3px 10px; border-radius: 14px; color: var(--muted); font-size: 13px; cursor: pointer; user-select: none; }
+.composer-mode[hidden] { display: none; }
+.composer-mode:hover { background: rgba(0, 0, 0, .05); }
+.composer-mode.ai { color: var(--chat-send); }
+.composer-mode svg { width: 14px; height: 14px; }
 .composer-skill svg { width: 14px; height: 14px; }
 .composer-send { flex: none; width: 40px; height: 40px; border: 0; border-radius: 50%; background: var(--chat-send); color: #fff; font-size: 20px; font-weight: 600; line-height: 1; cursor: pointer; }
 .composer.empty .composer-send { opacity: .4; cursor: default; }
@@ -1049,6 +1055,8 @@ html.cover .toast { left: calc(var(--pane-x) + var(--pane-w) / 2); max-width: mi
 [data-theme="dark"] .composer:focus-within { border-color: rgba(255, 255, 255, .11); box-shadow: 0 6px 24px rgba(0, 0, 0, .3); }
 [data-theme="dark"] .composer .ctext:empty::before { color: #7d8185; }
 [data-theme="dark"] .composer .ctext .mention { color: #8fc1e1; }
+[data-theme="dark"] .composer-mode:hover { background: rgba(255, 255, 255, .06); }
+[data-theme="dark"] .composer-mode.ai { color: #7ea6f5; }
 [data-theme="dark"] .chat-code { background: rgba(255, 255, 255, .07); }
 [data-theme="dark"] .chat-quote { border-left-color: #44484b; }
 [data-theme="dark"] .chat-divider { border-top-color: #3a3d40; }

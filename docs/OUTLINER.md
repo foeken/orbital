@@ -852,7 +852,9 @@ scroll: Enter sends (`chat:send`, main/documents.js `sendChat`), Shift+Enter is 
 message is otherwise only for them; **/** as the
 first thing typed opens a page of the workspace's skills (`searchPreview` over the skills kind), and the one picked sits
 as a pill in front of the text (Backspace at the start or a click drops it) and goes with the message as its
-attachment. Chips are sent as `[label](tana:…)` links. The field is a `contenteditable` of plain text and chips
+attachment. Chips are sent as `[label](tana:…)` links. A label at the card's bottom left says where the message goes, **To Tana** (Tana is asked to
+answer) or **To the chat** (a message for the people in it); it starts at what the chat does by itself, and Tab in an
+empty message or a click on it switches it. Picking a skill switches to To Tana. The field is a `contenteditable` of plain text and chips
 (renderSegs/readSegs); ⌘Z and the other editing keys stay its own rather than reaching the outline. What is typed and not sent is kept per chat while the window is open.
 Opening a chat puts the caret in it. After a send, three dots stand where the answer will be until Tana's answer begins (two minutes
 at most); the answer streams in as live changes to the chat, and a message Tana is still writing with no words yet

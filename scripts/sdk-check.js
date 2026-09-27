@@ -5599,6 +5599,12 @@ async function main() {
       const failed = await send(null, chatDoc.id, 'Again');
       assert.deepEqual([failed.responding, /AI limit/.test(failed.replyError)], [false, true], 'a failed trigger is reported, not thrown');
       assert.deepEqual(chatDoc.data.get('messages').toJSON().filter((m) => !m.hiddenFromChat).map((m) => m.content.text), ['Hello agent', 'Again'], 'and the message it was for stays sent, once');
+      // the composer's mode (Tab): To the chat asks nobody and marks the message the way Tana does; To Tana always asks
+      assert.equal(await backend.handlers.get('chat:answers')(null, chatDoc.id), true, 'alone in a chat, the composer starts at To Tana');
+      const asked = bodies.length, quiet = await send(null, chatDoc.id, 'Just a note', [], { ai: false });
+      assert.deepEqual([quiet.responding, bodies.length, chatDoc.data.get('messages').toJSON().at(-1).skipAutoResponse], [false, asked, true], 'To the chat asks nobody, and says so');
+      answer = { status: 200, body: { success: true, messageId: 'ai000010' } };
+      assert.deepEqual([(await send(null, chatDoc.id, 'Over to you', [], { ai: true })).responding, bodies.length], [true, asked + 1], 'To Tana asks');
       await assert.rejects(send(null, chatDoc.id, 'x', ['not a uri']), /Attachments are Tana documents/);
     } finally { globalThis.fetch = realFetch; }
     console.log("ok  chat:send asks the chat's own agent and keeps a sent message sent when the reply cannot be asked for");

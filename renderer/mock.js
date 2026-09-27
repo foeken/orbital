@@ -475,10 +475,12 @@ function mockApi() {
     },
     // a message goes in at once; Tana's answer follows a moment later, the way live updates bring it
     // mentions come back as chips and a skill as its attachment, the way sdk/chat.js reads what main stored
-    sendChat: async (docId, text, attachments = []) => {
+    chatAnswers: async () => true, // every mock chat is yours alone
+    sendChat: async (docId, text, attachments = [], opts = {}) => {
       const segs = (p) => p.split(/(\[[^\]\n]*\]\([^)\s]+\))/).filter(Boolean).map((t) => { const m = /^\[(.*)\]\((.+)\)$/.exec(t); return m ? { mention: { label: m[1], uri: m[2] } } : { text: t }; });
       (content[docId] ||= []).push(chatMsg(true, [...text.split(/\n{2,}/).map(segs), ...attachments.map((uri) => ({ reference: { uri, label: (all.find((d) => d.id === uri) || {}).text } }))], 0));
       emit(docId);
+      if (opts.ai === false) return { messageId: 'mock', responding: false }; // a message to the chat: nobody is asked
       setTimeout(() => { content[docId].push(chatMsg(false, ['Mock answer to: ' + text], 0, ['Thought for 2 seconds'])); emit(docId); }, 1800);
       return { messageId: 'mock', responding: true }; // main answers replyError beside a saved message when the reply could not be asked for
     },

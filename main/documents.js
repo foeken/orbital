@@ -116,20 +116,29 @@ async function chatOutline(doc) {
 // own agent (data.agentId, Tana's assistant when there is none). Not an undo step: a message, once sent, is the
 // conversation. The answer arrives as live updates to the chat. A reply that could not be asked for does not undo the
 // send: it comes back as replyError beside the saved message, so the renderer does not offer the words again.
+// What a chat's data says about sending: only these keys, since its data map carries megabytes of tool output and
+// prompt snapshot (docs/CHATS.md §1).
+function chatFacts(doc) {
+  const get = (k) => { const v = doc.data.get(k); return v && typeof v.toJSON === 'function' ? v.toJSON() : v; };
+  return Object.fromEntries(['ownerUri', 'agentId', 'aiAutoResponds', 'participants', 'participantUris'].map((k) => [k, get(k)]));
+}
+const isChatId = (id) => typeof id === 'string' && DOC_URI.test(id) && idKind(id) === 'chat';
+// Whether Tana answers a message here by itself: where the composer starts, To Tana or To the chat (renderer/chat.js).
+const chatAnswers = (id) => { if (!isChatId(id)) throw new Error('Not a chat'); return op(id, (doc) => chat.autoResponds(chatFacts(doc))); };
 // attachments: documents the message carries, as Tana's own runSkill attaches the skill it runs (docs/CHATS.md §10).
-async function sendChat(id, text, attachments = []) {
-  if (typeof id !== 'string' || !DOC_URI.test(id) || idKind(id) !== 'chat') throw new Error('Not a chat');
+// opts.ai: the composer's mode. true asks Tana to answer; false is a message for the people in the chat, marked
+// skipAutoResponse, which Tana still answers when it mentions Tana; absent, the chat's own rule decides.
+async function sendChat(id, text, attachments = [], opts = {}) {
+  if (!isChatId(id)) throw new Error('Not a chat');
   if (!Array.isArray(attachments) || !attachments.every((uri) => typeof uri === 'string' && DOC_URI.test(uri))) throw new Error('Attachments are Tana documents');
   if (!S.client || !S.me) throw new Error(NOT_CONNECTED);
   const me = S.me.userUri, user = S.me.user || {};
   const name = (await members().catch(() => [])).find((m) => m.id === me)?.title || [user.firstName || user.first_name, user.lastName || user.last_name].filter(Boolean).join(' ') || user.email;
   const sent = await op(id, (doc) => {
     let messageId;
-    doc.transact((loro) => { messageId = chat.addMessage(loro, { text, byUri: me, senderName: name, attachments }); });
-    // only what is needed: a chat's data map carries megabytes of tool output and prompt snapshot (docs/CHATS.md §1)
-    const get = (k) => { const v = doc.data.get(k); return v && typeof v.toJSON === 'function' ? v.toJSON() : v; };
-    const data = Object.fromEntries(['ownerUri', 'agentId', 'aiAutoResponds', 'participants', 'participantUris'].map((k) => [k, get(k)]));
-    return { messageId, ownerUri: data.ownerUri, agentId: data.agentId, respond: chat.autoResponds(data, text) };
+    const data = chatFacts(doc), respond = typeof opts.ai === 'boolean' ? opts.ai || chat.mentionsTana(text) : chat.autoResponds(data, text);
+    doc.transact((loro) => { messageId = chat.addMessage(loro, { text, byUri: me, senderName: name, attachments, skipAutoResponse: !respond }); });
+    return { messageId, ownerUri: data.ownerUri, agentId: data.agentId, respond };
   });
   if (!sent.respond) return { messageId: sent.messageId, responding: false };
   try {
@@ -1020,7 +1029,8 @@ const ipc = {
   // it follows. setTypeHue rebuilds the rows and announces them itself, since no change event carries appearance.
   'doc:setTypeHue': (_e, typeUri, hue) => setTypeHue(typeUri, hue ?? null),
   'doc:create': (_e, title, opts) => createDocument(title, opts || {}),
-  'chat:send': (_e, id, text, attachments) => sendChat(id, text, attachments || []),
+  'chat:send': (_e, id, text, attachments, opts) => sendChat(id, text, attachments || [], opts || {}),
+  'chat:answers': (_e, id) => chatAnswers(id),
   'chat:new': () => newChat(),
   'history:undo': () => history(undoStack, redoStack, 'undo', 'canUndo'),
   'history:redo': () => history(redoStack, undoStack, 'redo', 'canRedo'),

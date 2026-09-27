@@ -74,7 +74,11 @@ function chatStick(parent) {
 // palette's link search (renderer/toolbar.js linkTo), and "/" as the first thing typed picks a skill for the message to
 // run, shown as a pill in front. Sent, the chips become Tana's [label](tana:…) links and the skill rides along as the
 // message's attachment, as Tana's own runSkill sends one (docs/CHATS.md §10).
-const composerSkill = $('composerSkill');
+const composerSkill = $('composerSkill'), composerMode = $('composerMode');
+// The mode the next message is sent in, per chat: true To Tana (it is asked to answer), false To the chat (a message for
+// the people in it). It starts at what the chat does by itself (chat:answers: alone, Tana answers) and Tab in an empty
+// message, or a click on the label, switches it. Remembered while the window is open.
+const chatAi = new Map();
 let chatSkill = null; // { uri, label } the message being written runs
 let composerAt = null; // where the caret was when "@" opened the search: the chip goes there
 let skillList = null; // the workspace's skills for the "/" page, read when it opens
@@ -84,6 +88,14 @@ function composerChanged() {
   if (empty && !composerText.querySelector('.mention') && composerText.childNodes.length) composerText.replaceChildren(); // :empty shows the placeholder again
   composer.classList.toggle('empty', empty && !chatSkill);
 }
+function showMode() {
+  const ai = chatAi.get(composer.dataset.doc);
+  composerMode.hidden = ai === undefined;
+  composerMode.classList.toggle('ai', !!ai);
+  composerMode.replaceChildren(...[iconNode(ai ? 'chat' : 'member')].filter(Boolean), document.createTextNode(ai ? 'To Tana' : 'To the chat'));
+  composerText.dataset.placeholder = ai === false ? 'Message the chat · @ links · Tab: to Tana' : 'Ask Tana · @ links · / runs a skill' + (ai ? ' · Tab: to the chat' : '');
+}
+function switchMode(docId, ai = !chatAi.get(docId)) { chatAi.set(docId, ai); showMode(); }
 function showSkill() {
   composerSkill.hidden = !chatSkill;
   composerSkill.replaceChildren(...(chatSkill ? [iconNode('skill'), document.createTextNode(demoText(chatSkill.label, chatSkill.uri))].filter(Boolean) : []));
@@ -136,6 +148,7 @@ function openSkillPicker() {
 }
 function pickSkill(n) {
   chatSkill = { uri: n.id, label: n.text || n.title || 'Skill' };
+  switchMode(composer.dataset.doc, true); // a skill is for Tana to run
   showSkill();
   composerText.focus();
 }
@@ -145,14 +158,14 @@ function chatSend() {
   const text = chatMarkdown(draft.segs) || (skill ? 'Run [' + skill.label.replace(/[[\]\n]/g, ' ') + '](' + skill.uri + ')' : '');
   if (!docId || !text || !tana.sendChat) return;
   setComposer(null); chatDrafts.delete(docId);
-  const asked = Date.now();
-  chatWaiting.set(docId, asked);
+  const ai = chatAi.get(docId), asked = Date.now();
+  if (ai !== false) chatWaiting.set(docId, asked); // a message to the chat asks nobody to answer
   // the dots give up after two minutes even when nothing else redraws the page
   setTimeout(() => { if (chatWaiting.get(docId) === asked) { chatWaiting.delete(docId); renderSoon(true); } }, CHAT_WAIT);
   run(async () => {
     let sent;
     // only a message that was not saved comes back to be sent again
-    try { sent = await tana.sendChat(docId, text, skill ? [skill.uri] : []); }
+    try { sent = await tana.sendChat(docId, text, skill ? [skill.uri] : [], ai === undefined ? {} : { ai }); }
     catch (e) { chatWaiting.delete(docId); if (composer.dataset.doc === docId && composer.classList.contains('empty')) setComposer(draft); throw e; }
     if (!sent.responding) chatWaiting.delete(docId);
     await reload(docId);
@@ -164,6 +177,7 @@ function chatSend() {
 composerText.addEventListener('keydown', (e) => {
   const mod = e.metaKey || e.ctrlKey;
   if (e.key === 'Enter' && !e.shiftKey && !e.altKey && !e.isComposing) { e.preventDefault(); chatSend(); return; }
+  if (e.key === 'Tab' && !e.shiftKey && !mod && chatAi.has(composer.dataset.doc) && !plainOf(composerSegs()).trim() && !composerText.querySelector('.mention')) { e.preventDefault(); switchMode(composer.dataset.doc); return; }
   if (e.key === '@' && !mod) { e.preventDefault(); composerLink(); return; }
   if (e.key === '/' && !mod && !chatSkill && !beforeCaret().trim() && tana.searchPreview) { e.preventDefault(); openSkillPicker(); return; }
   if (e.key === 'Backspace' && chatSkill && !beforeCaret()) { e.preventDefault(); chatSkill = null; showSkill(); return; }
@@ -173,6 +187,8 @@ composerText.addEventListener('keydown', (e) => {
 });
 composerText.addEventListener('input', composerChanged);
 composerSkill.onclick = () => { chatSkill = null; showSkill(); composerText.focus(); };
+composerMode.onmousedown = (e) => e.preventDefault(); // the caret stays in the composer
+composerMode.onclick = () => switchMode(composer.dataset.doc);
 composerSend.onmousedown = (e) => e.preventDefault(); // the caret stays in the composer
 composerSend.onclick = chatSend;
 // After the page is drawn: the composer shows under a chat and nowhere else, keeping what was written in each.
@@ -181,7 +197,10 @@ function chatAfterRender(parent, stick) {
   const was = composer.dataset.doc;
   if (was && was !== docId) { if (!composer.classList.contains('empty')) chatDrafts.set(was, { segs: composerSegs(), skill: chatSkill }); else chatDrafts.delete(was); }
   const opened = chat && docId !== chatShown;
-  if (was !== (docId || '')) { composer.dataset.doc = docId || ''; setComposer(docId && chatDrafts.get(docId)); }
+  if (was !== (docId || '')) {
+    composer.dataset.doc = docId || ''; setComposer(docId && chatDrafts.get(docId)); showMode();
+    if (docId && !chatAi.has(docId) && tana.chatAnswers) tana.chatAnswers(docId).then((ai) => { if (!chatAi.has(docId)) chatAi.set(docId, !!ai); if (composer.dataset.doc === docId) showMode(); }, () => {});
+  }
   composer.hidden = !chat;
   sc.classList.toggle('chatting', chat);
   chatShown = docId;
