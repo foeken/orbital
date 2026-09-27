@@ -82,7 +82,8 @@ const savedDoc = (saved) => (!saved ? pair(WORK_SPLIT) : saved.doc && typeof sav
 // the page ids a layout holds (view 'page' + id), in its order; a window without one shows page ''
 const docPages = (doc) => { const ids = Object.entries((doc && doc.views) || {}).filter(([k, v]) => v && v.type === 'page' && k.startsWith('page')).map(([k]) => k.slice(4)); return ids.length ? ids : ['']; };
 // a new page's id: the smallest from 2 up that no page has, loaded, loading or just asked for
-const freeId = () => { let n = 2; while ([...S.windows].some((w) => w.pages.includes(String(n)) || w.panes.some((p) => p.side === String(n)))) n++; return String(n); };
+const taken = (w) => [...w.pages, ...docPages(w.doc), ...w.panes.map((p) => p.side)]; // a layout kept aside while signed out still holds its ids
+const freeId = () => { let n = 2; while ([...S.windows].some((w) => taken(w).includes(String(n)))) n++; return String(n); };
 // another window's layout: one page, under an id no window has
 const onePage = (id) => ({ schema: 1, root: { kind: 'panel', id: 'panel-' + id, views: ['page' + id], selected: 'page' + id }, floating: [], hidden: [], views: { ['page' + id]: { type: 'page', params: { side: id } } } });
 // What a page starts on: its view and place, from the page that opened it or the saved view it is part of, keyed by its
@@ -97,7 +98,7 @@ function setStart(id, keys, suffix = '') {
 // A saved view names page ids, and another window may have one of them open: that page takes a free id instead, with
 // its keys, so no two live pages store their place under one key. '' is only ever the main window's.
 function adoptLayout(win, doc, keys) {
-  const others = new Set([...S.windows].filter((w) => w !== win).flatMap((w) => [...w.pages, ...w.panes.map((p) => p.side)]));
+  const others = new Set([...S.windows].filter((w) => w !== win).flatMap(taken));
   const ids = docPages(doc), used = new Set([...others, ...ids]), map = new Map();
   for (const id of ids) if (id && others.has(id)) { let n = 2; while (used.has(String(n))) n++; used.add(String(n)); map.set(id, String(n)); }
   for (const id of ids) setStart(map.get(id) ?? id, keys, id ? ':' + id : '');

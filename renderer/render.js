@@ -262,6 +262,7 @@ function render(force = false) {
 // while the document's sensitive mark blurs it, and whether it can be typed in, which offers Rename on the tab (issue
 // #441). Told once per change; outside the shell (the mock) there is no tab.
 let toldTitle = null;
+const retellTitle = () => { if (toldTitle) tellTitle(titleEl.classList.contains('sensitive') ? 'Hidden' : titleEl.textContent, toldTitle.endsWith('\ntrue')); };
 function tellTitle(title, renamable) {
   const told = title + '\n' + renamable;
   if (told === toldTitle || !window.frameElement) return;

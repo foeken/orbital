@@ -304,6 +304,7 @@ function blurSensitive(el, ...ids) {
 }
 function refreshSensitive() {
   for (const el of document.querySelectorAll('[data-sensitive]')) el.classList.toggle('sensitive', el.dataset.sensitive.split(' ').some(sensitiveHidden));
+  retellTitle(); // the tab says Hidden while the title is blurred, and the title again once it is shown
 }
 function loadSensitive() {
   if (!sensitiveLoading) sensitiveLoading = Promise.resolve(tana.sensitiveIds ? tana.sensitiveIds() : [])

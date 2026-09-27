@@ -316,7 +316,7 @@ function runSensitiveBlurCheck() {
   }
   const api = vm.runInNewContext(`
     let sensitiveIds = null, sensitiveVisible = false;
-    const isRealId = (id) => typeof id === 'string' && id.startsWith('tana:');
+    const isRealId = (id) => typeof id === 'string' && id.startsWith('tana:'), retellTitle = () => {}; // renderer/render.js: the tab's title
     ${functionSource('sensitiveHidden')}
     ${functionSource('blurSensitive')}
     ${functionSource('refreshSensitive')}
