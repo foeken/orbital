@@ -1,102 +1,136 @@
 ---
 name: orbital-design
-description: Andre's design philosophy for Orbital, visual and interaction, and the mock-first loop he designs in. Use when designing, mocking up, restyling or reviewing any Orbital UI or UX (a new page, surface, component, flow, empty or loading state, animation), before choosing a layout or writing CSS. docs/UI-PATTERNS.md says how to build it; this says what it should be.
+description: Andre's visual and interaction taste for Orbital. Use when designing, mocking up, restyling or reviewing any Orbital UI or UX (a page, surface, component, flow, empty or loading state, animation), before choosing a layout or writing CSS. docs/UI-PATTERNS.md says how to build it; this says what it should look and feel like.
 ---
 
 # Designing for Orbital
 
-[docs/UI-PATTERNS.md](../../../docs/UI-PATTERNS.md) holds the building blocks, tokens, classes and UX conventions, and
-[docs/OUTLINER.md](../../../docs/OUTLINER.md) holds what the app does today. Follow both. This file is the taste
-behind them: how Andre decides what a feature should look and feel like, drawn from what he has asked for, kept
-and pushed back on. The `#n` references are issues in foeken/orbital. Read one when a rule seems not to fit your
-case.
-
-## How a design gets made
-
-1. **Start from current main.** Pull first. A mockup of an old layout gets redone: the first Links pane mockups
-   missed the Trellis panes and had to be drawn again (#462).
-2. **Ask how Tana does it** when the feature is a Tana concept (meetings #465, chats #446, changes, proposals,
-   visibility). Read the bundle and the data, then design Orbital's surface over what Tana already stores and
-   writes. The UI never shows a state the data cannot back.
-3. **Mock before code** for anything new or visibly different. Give 3 or 4 real options. For each, say in one
-   line what it is, what it is good at and what it costs, then name your pick. Draw them in the real window with
-   the mock data (`scripts/shoot.js` below), in light and dark, at full width and in a narrow pane. Post them on
-   the issue. Image generation is fine for a concept sketch when you give it a real screenshot to start from, so
-   the sketch matches the app.
-4. **Build the smallest slice** of the option he picks. "Let's start super simple ... add just that" (#461)
-   shipped the audience line under rows and none of the rest of the mockup. The rest waits until he asks.
-5. **Show screenshots along the way**, both themes, without being asked.
-6. **Read short feedback as direction.** "Too much" means take something away. "Do better on the design" means
-   find one stronger idea, not more pieces: the login splash became ⌘K as the planet with Tana orbiting it
-   (#459). "Copy X's design" means copy it closely, down to radius, shadow, colours and both themes (Codex's
-   chat and question card, #446 and #455), and not mixed with another style (iMessage was dropped for Codex).
+[docs/UI-PATTERNS.md](../../../docs/UI-PATTERNS.md) has the building blocks, tokens and conventions, and
+[docs/OUTLINER.md](../../../docs/OUTLINER.md) has what the app does. This file is the taste behind them, drawn
+from what Andre asked for, kept and pushed back on. `#n` is an issue in foeken/orbital, and "row n" is a row of
+docs/TASKS-HISTORY.md. Read the source when a rule seems not to fit.
 
 ## Visual
 
-- **Tana Outliner's calm is the baseline.** Content comes first and chrome gives way. There is no footer or
-  status bar (history row 11). Header icons show only while the pointer is over their pane (#206). Pills fold
-  away behind a button (#175). Actions that were pills became icon-only header buttons (history rows 317, 319).
-- **Say a thing once, where it belongs.** A tab names its page, so the heading under it goes (#441). App-wide
-  switches sit in the window header and page things sit in the page (the sensitive eye moved up, #448). A
-  window gets one Links pane, not a sidebar in every pane (#462).
-- **Grey unless colour means something.** Icons are monochrome Nucleo line glyphs, in ⌘K (#193) and on the
-  Timeline (#217) too. Colour belongs to a meaning: a type's hue is the node's identity (its glyph, chip and
-  links), plus done green, link blue, error red, meeting gold, and the accent blue for focus and for things
-  happening now (the focused tab, the recording pulse #456). Decorative colour is "too much": the audience
-  colours at the ends of rows were cut for grey glyphs, faces and a count (#461).
-- **Rank by weight and opacity, not boxes or colour.** Past or finished things are drawn quiet (a meeting with no
-  write-up, #214). What still needs you is in the normal text colour (#218). Quiet text must still be readable
-  (AA, #292).
-- **Use hairlines.** Lines are 1px, and panes have no gaps or rounding between them. The header and the tab bars
-  read as one band, with no line under the header (#448). An accent line is thin and bright (1.5px, #450). Only
-  floating things are soft, with a radius and a shadow (the chat composer card, #446).
-- **Show people as faces.** Initial bubbles and a count say who can see something (#461). Avatars say who is here
-  (presence).
-- **Every width holds.** A design must work in a narrow pane (about 560px) as well as in a full window. Nothing
-  important may live only in chrome that a narrow pane drops; visibility vanished that way once (#461).
+**The outline is the design.** Orbital should look like Tana Outliner: a title, then rows. The marker sits in a
+fixed gutter, a guide line runs under the bullet, a chevron shows on hover, and a collapsed bullet has a halo
+(rows 18, 19, 360). Alignment is part of that look, so measure it. The words of every row line up with the title.
+Every field value starts in one column (#145), and a nested reference keeps the gutter an icon needs (#91, #94). A
+field row stays one line, never a whole node twice the height of its neighbours (row 345). A placeholder takes
+the slot of what will land, so nothing shifts when it arrives (row 155).
+
+**Chrome gives way until it is wanted.** There is no footer or status line (row 11). The filter hides until ⌘F
+(row 12), and pills fold away behind a button (#175, row 316). Header icons show only while the pointer is over
+their pane (#206), and they are icon-only, with the key in the tooltip (#196, rows 317, 319). A pill that lists
+choices shows two and an ellipsis rather than growing (#183).
+
+**Say a thing once, where it belongs.** A tab names its page, so the heading under it goes (#441). App-wide
+switches sit in the window header, and a page's own controls sit in the page (#448). A window gets one Links
+pane, not a sidebar per pane (#462). A link needs no person icon beside it (row 16). A toggle shows its state by
+its look, with no "shown/hidden" words (row 58). A section with nothing in it is not drawn (row 269).
+
+**Grey unless colour means something.** Icons are monochrome Nucleo line glyphs, one shade everywhere (rows 15,
+321), including in ⌘K (#193) and on the Timeline (#217). Colour is reserved for meaning:
+
+- a type's hue is its node's identity: bullet, chip and links all take it (rows 48, 63, 334), read as OKLCH so it
+  matches Tana (row 331);
+- green means done, blue means a link, red means an error or leaving, gold means a meeting;
+- the bright accent blue is for focus and for things happening now (the focused tab #450, the recording pulse
+  #456).
+
+Finished work loses its colour: a done task's agent badge turns to a grey outline (row 295). Decoration is "too
+much": audience colours at the end of rows were cut for grey glyphs and faces (#461). A new colour needs a
+meaning nothing else has.
+
+**Rank by weight and opacity.** What is past or settled is quiet: a meeting with no write-up is drawn at low
+opacity (#214), and a done row is struck and grey. What still needs you is in the normal text colour, and so are
+the headings over it (#218). Quiet text must still pass AA (#292). Bold marks the verb or value that matters
+("Priya **completed** …"), not decoration.
+
+**Leave the title room.** A row's facts (assignee, audience, bell) move to its grey line, after a bullet, when the
+title needs the width; they never wrap into what looks like a second title (row 290). A chip shortens to its #
+in its hue and shows the full tag on hover (row 136). A date is spelled out only where a bare weekday would
+mislead, such as last Friday (row 186). A meeting's date rides quietly in the breadcrumb (row 154).
+
+**Draw with hairlines; save softness for what floats.** Lines are 1px. Panes have no gap or rounding between
+them, and the header and the tab bars read as one band with no line under the header (#448). An accent line is
+thin and bright (1.5px, #450). Radius and shadow belong to floating surfaces only: the palette card, menus, the
+chat composer (#446). Measure spacing: a divider sits centred between the sections it separates (#190, #208).
+
+**Show people as faces.** Initial bubbles and a count say who can see something (#461), and avatars say who is
+here (presence). Words come after faces.
+
+**Hold at every width, in both themes.** Every design must work in a narrow pane (about 560px) as well as a full
+window. Nothing important may live only in chrome that a narrow pane drops; a narrow pane once showed no
+visibility at all (#461). Dark is its own charcoal palette, designed rather than inverted (row 86). When copying
+a reference, copy its dark mode too (#446).
 
 ## Interaction
 
-- **Everything orbits ⌘K.** A feature starts as a palette row. A button comes later, and its tooltip names the key
-  (#196). Teach the key rather than hide it: the splash teaches ⌘K and offers the mouse only after 15 seconds.
-  While signed out, the one row that works stays live and every other row is greyed (#459).
-- **An outliner, not a form.** Act in place, on the row you are on. No edit modes, no confirm dialogs (undo
-  instead), and one field with Enter wherever that is enough (Create task, #232). Inside a field, Tab switches
-  what the field does rather than adding a control (the chat composer's human and AI modes, #446).
-- **Leave people where they were.** Focus goes back and the page does not jump. A live change patches its own row,
-  and only what really arrived flashes, never the whole list (#431, history row 245).
-- **Motion answers something.** Motion follows a direct action or new live data, never a reload or a redraw (#185).
-  The loader plays on launch and Reload only (#223). Small delights mark the moments that reward you: ticking off a
-  task (history row 318), a refresh icon's one turn (history row 266), the splash keycaps pressing. Something live
-  pulses softly (recording, #456). Nothing loops without a reason.
-- **Guide in the app's own words.** An empty page says what would fill it and how to start (#356). A first screen
-  says what Orbital is (#367).
-- **Borrow proven patterns and name them.** Use Tana's own surface for a Tana concept, Codex for chat and
-  questions, and Trellis for panes, each copied faithfully.
+**Everything orbits ⌘K.** A feature starts as a palette row, which makes it reachable, recordable and
+findable. A button comes later, and its tooltip names the key (#196). Teach the key rather than hide it: the
+splash teaches ⌘K and offers the mouse only after 15 seconds, and while signed out only the row that works is live
+(#459). A command row starts with a verb, and ends in " …" when it asks something first (row 233).
 
-## Before you show it
+**An outliner, not a form.** Act in place, on the row you are on, with no edit mode and no confirm dialog; undo
+is the safety net. Expanding an empty node gives a draft child with a blinking caret, saved once it has words
+(rows 32, 40). Backspace at the start of a row joins it to the row above (#125). A reference alone on its line is
+the node itself, so you can tick it off there (row 289). One field and Enter beats a dialog (Create task, #232).
+Tab switches what a field does rather than adding a control (the chat composer's human and AI modes, #446).
 
-Check that it works by keyboard alone and has its ⌘K row. Check it in both themes and in a narrow pane. Every
-colour should carry a meaning, and every motion should follow an action or new data. It should say each thing
-once. Take out anything the request did not ask for.
+**Gestures carry meaning.** Dropping a task into a group writes whatever puts it in that group (#169). ⌘ opens a
+node in a new pane and ⌥ in a new tab, the same from a click, ⌘K or ⌘S (#443). A member or a type is not
+zoomable, so its bullet does nothing and looks it (row 331).
+
+**Show every option, and say why one can't run.** Greyed with a reason beats hidden. A palette row that cannot
+run stays in place, greyed, with its hint saying why (#459). Opening ⌘K over a selection offers the actions that
+fit it, never one aimed at nothing (#296).
+
+**Never move things under the user.** A row that falls out of a list while you are still in it only dims, and goes
+once the caret leaves (row 177). Rows you just changed stay where they are until Clean up (#85). Focus goes back
+to where it came from. A live change patches its own row, and only what really arrived flashes, never the whole
+list on a reload (#431, row 245).
+
+**Answer at the moment of the press.** A pressed button eases down. Refresh turns once the instant it is pressed,
+not when its rows come back (row 266). A row arriving tints green, and one leaving tints red (row 177).
+
+**Motion answers something.** It follows a direct action or new live data, never a reload or a redraw (#185).
+The loader plays on launch and Reload only (#223). Delight is for the moments that reward you: ticking off a task
+squashes the box, draws the tick and strikes the title, in the app's own green (row 318). Something live pulses
+softly (the recording dot, row 29, #456). Nothing loops without a reason, and reduced motion stills it all.
+
+**Private stays private, and errors stay out of the way.** Sensitive nodes blur, and every launch starts hidden
+(row 166). Read-only looks read-only. A failed action is a toast that fades; the line under the title is only
+for the session (#247).
+
+**Guide in the app's own words.** An empty page says what would fill it and how to start (#356). The first screen
+says what Orbital is (#367). Help shows the keys at work rather than describing them.
+
+**Tana decides meaning, and good patterns are borrowed.** Show what Tana stores and write what Tana's client
+writes; never draw a state the data cannot back. A Tana concept follows Tana's own surface (meeting page
+#465). Chat and questions copy Codex, and panes follow Trellis, each copied closely and never blended: iMessage was
+dropped for Codex (#446, #455).
+
+## Working with Andre on a design
+
+Pull main first, since a mockup of an old layout is redone (#462). For anything new, show 3 or 4 options in the
+real window before any code, each with one line on what it is good at and what it costs, then name your pick.
+Build only the smallest slice of the option he picks (#461). Read short feedback as direction. "Too much" means
+take something away. "Do better on the design" means one stronger idea, not more pieces (the splash became ⌘K
+as the planet, #459). "Copy X" means copy it closely.
 
 ## Screenshots of the real window
 
-`scripts/shoot.js` serves the checkout and draws shell.html (Trellis panes, header, ⌘K over the window) in
-headless Chromium with the renderer's mock data, then writes `<out>/<name>-<theme>.png`. It opens a loopback
-port and starts Chromium, so run it outside the sandbox. Run it from the checkout, with `node_modules`
-installed:
+`scripts/shoot.js` draws shell.html (Trellis panes, the header, ⌘K over the window) on the renderer's mock data
+in headless Chromium, writing `/tmp/orbital-shots/<name>-<theme>.png`. Run it from the checkout, outside the
+sandbox (it opens a loopback port and starts Chromium):
 
 ```sh
-node .agents/skills/orbital-design/scripts/shoot.js --name work --panes 2                 # light and dark
-node .agents/skills/orbital-design/scripts/shoot.js --name narrow --size 560x760 --themes light
-node .agents/skills/orbital-design/scripts/shoot.js --name splash --signed-out --wait 16000  # past the 15 s button
-node .agents/skills/orbital-design/scripts/shoot.js --name palette --panes 2 --wait 1500 \
+node .agents/skills/orbital-design/scripts/shoot.js --name work --panes 2          # light and dark
+node .agents/skills/orbital-design/scripts/shoot.js --name narrow --size 560x760 --signed-out --wait 16000
+node .agents/skills/orbital-design/scripts/shoot.js --name palette --panes 2 \
   --eval "if (location.search === '?side=2') togglePalette('cmd')"
 ```
 
-`--eval` runs in every page after login, in the renderer's global scope, so any renderer function can set the
-scene. Pick one page with `location.search` (`SIDE` is empty under the mock). To show a proposal before it
-exists, draw it into the mock page this way, or edit a scratch copy of the checkout. For mockups meant for the
-issue, commit the images to a `codex/<topic>-mockups` branch under `docs/mockups/<topic>/` and link them
-from there, as #461 did.
+`--eval` runs in every page after login, in the renderer's global scope. Under the mock, pick a page by
+`location.search` (`SIDE` is empty there).
