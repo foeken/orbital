@@ -1027,11 +1027,12 @@ function closePalette() {
 let covering = false, coverTimer = null;
 const tellCover = (on) => { if (window.frameElement) window.parent.postMessage({ orbital: 'cover', on }, '*'); };
 // The workspace's moves, asked of the shell the same way (shell.js run): [row id, label, Trellis command, icon]. Keys
-// pressed in a page never reach the shell, so each is a row here with its key in DEFAULT_HOTKEYS.
+// pressed in a page never reach the shell, so each is a row here with Trellis's default key in DEFAULT_HOTKEYS.
 const PANE_ROWS = [['otherPane', 'Next pane', 'panel.next', 'otherPane'], ['previousPane', 'Previous pane', 'panel.previous', 'otherPane'],
   ['nextTab', 'Next tab', 'tab.next', 'forward'], ['previousTab', 'Previous tab', 'tab.previous', 'back'],
   ['maximizePane', 'Maximize or restore pane', 'frame.toggle', 'zoomIn'], ['overview', 'Show all panes', 'navigation.overview', 'splitPanes'],
-  ['zoomBack', 'Zoom back', 'navigation.back', 'back'], ['zoomForward', 'Zoom forward', 'navigation.forward', 'forward']];
+  ['zoomBack', 'Zoom back', 'navigation.back', 'back'], ['zoomForward', 'Zoom forward', 'navigation.forward', 'forward'],
+  ['closePane', 'Close pane', 'view.close', 'closePane']];
 const shellRun = (command) => { if (window.frameElement) window.parent.postMessage({ orbital: 'run', command }, '*'); };
 // ---- Saved views: the window's panes, and what each shows, under a name (issue #442) ----
 // A view is the layout main keeps for the window (Trellis's document) and each page's view and place, under the keys
@@ -1146,7 +1147,7 @@ function comboOf(e) {
   if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return mods;
   return mods + (/^(Key|Digit)/.test(e.code) ? e.code.slice(-1) : KEYCODES[e.code] || KEYNAMES[e.key] || (e.key.length === 1 ? e.key.toUpperCase() : e.key));
 }
-const validCombo = (c) => /[⌘⌃]/.test(c) && c.replace(/[⌃⌥⇧⌘]/g, '') !== ''; // ⌘ or ⌃ plus a key, so typing is never hijacked
+const validCombo = (c) => (/[⌘⌃]/.test(c) || /^[⌥⇧]*F\d{1,2}$/.test(c)) && c.replace(/[⌃⌥⇧⌘]/g, '') !== ''; // ⌘ or ⌃ plus a key, or a function key (F6), so typing is never hijacked
 // Combos the outline keydown handler answers to before it looks at hotkeys, so a shortcut on one of them would
 // never fire. That handler treats ⌃ like ⌘ and ignores ⌥, which the normalisation in comboTaken mirrors.
 // Only what is fixed in the handlers is listed here; everything else the outline answers to is a row with a default
@@ -1186,4 +1187,13 @@ document.addEventListener('keydown', (e) => { // capture: the recorder sees ever
   if (plain && e.key === 'Enter') return $('recSave').click();
   if (plain && e.key === 'Backspace') return $('recReset').click();
   rec.combo = comboOf(e); showCombo();
+}, true);
+// The pane keys go to the shell before a row sees them (capture): Trellis's combos include ⌥⌘←/→ and ⇧⌘↩, which a row
+// takes as moving the caret or breaking the line, and F6, which has no ⌘. Only while there are panes to move between,
+// with the palette closed and no key being recorded; alone, a page leaves those keys to the row.
+document.addEventListener('keydown', (e) => {
+  if (windowPanes.pages < 2 || !palette.hidden || rec) return;
+  const row = PANE_ROWS.find(([id]) => hotkeyFor(id) === comboOf(e));
+  if (!row) return;
+  e.preventDefault(); e.stopPropagation(); shellRun(row[2]);
 }, true);

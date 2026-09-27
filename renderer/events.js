@@ -269,7 +269,7 @@ document.addEventListener('keydown', (e) => {
   const mod = e.metaKey || e.ctrlKey, inFilter = document.activeElement === filterEl;
   // every combo, built-in or recorded, is a palette row id (DEFAULT_HOTKEYS in state.js); ⌘K and the text-size keys stay fixed
   // (a key the focused node already answered to — ⌘↑, ⌘↩ — arrives defaultPrevented and must not run twice)
-  const combo = comboOf(e), found = mod && !inFilter && !e.defaultPrevented ? hotkeyIds().find((id) => hotkeyFor(id) === combo) : undefined;
+  const combo = comboOf(e), found = (mod || /^F\d{1,2}$/.test(e.key)) && !inFilter && !e.defaultPrevented ? hotkeyIds().find((id) => hotkeyFor(id) === combo) : undefined; // a function key (F6) needs no ⌘
   // ⌘C copies the current node's link, but only with nothing selected: a text selection is the browser's copy to make,
   // and taking it would break copying a few words out of a node. With no document to copy, runAction finds no row and
   // the key falls through on its own.

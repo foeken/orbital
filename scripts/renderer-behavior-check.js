@@ -1644,7 +1644,7 @@ async function runSyncShortcutCheck() {
   // the shell to run Trellis's command; Swap panes only while the shell says two panes stand side by side.
   order.panes({ pages: 3, swap: false });
   assert.deepEqual(plain(order.labels('').filter((l) => l.startsWith('Window: ')).slice(4, -2)), ['Window: Next pane', 'Window: Previous pane', 'Window: Next tab', 'Window: Previous tab',
-    'Window: Maximize or restore pane', 'Window: Show all panes', 'Window: Zoom back', 'Window: Zoom forward'], 'more pages: the pane rows, and no Swap panes unless the shell says so');
+    'Window: Maximize or restore pane', 'Window: Show all panes', 'Window: Zoom back', 'Window: Zoom forward', 'Window: Close pane'], 'more pages: the pane rows, and no Swap panes unless the shell says so');
   order.panes({ pages: 2, swap: true });
   assert.ok(order.labels('').includes('Window: Swap panes'), 'two panes side by side: Swap panes');
   order.row('maximizePane').run(); order.row('otherPane').run(); order.row('overview').run();
