@@ -145,6 +145,7 @@ const TANA_AGENT_URI = 'tana:agent:2zc7qjfkkengdhfdd846b4qvk2';
 const tanaMentionRows = (q, ctx) => (fuzzyMatch('Tana', q.toLowerCase()) ? [{ icon: 'chat', label: 'Tana', hint: 'Ask Tana to answer', run: () => linkTo(ctx, { label: 'Tana', uri: TANA_AGENT_URI }) }] : []);
 // "/" first: the workspace's skills, in ⌘K's card; Escape goes back to the message with nothing picked
 function openSkillPicker() {
+  palReturn = { composer: true }; // Escape, or a pick, hands the caret back to the message (palette.js returnFocus)
   togglePalette('cmd');
   loadList('skills', () => tana.searchPreview({ types: ['skills'] }), (list) => { skillList = list; });
   openPage('skills', 'Choose a skill to run', { rows: (q) => listRows('Skills', skillList, q, 'No skills in this workspace',
@@ -161,7 +162,10 @@ function pickSkill(n) {
 function restoreDraft(docId, draft) {
   const here = composer.dataset.doc === docId;
   const later = here ? (composer.classList.contains('empty') ? null : { segs: composerSegs(), skill: chatSkill }) : chatDrafts.get(docId);
-  const merged = later ? { segs: [...draft.segs, { text: '\n' }, ...later.segs], skill: later.skill || draft.skill } : draft;
+  // the failed message keeps its own skill (a skill alone was its whole command); a different one written since stays in
+  // the newer words as a chip, since a message runs one skill
+  const laterSkill = later && later.skill && draft.skill && later.skill.uri !== draft.skill.uri ? [{ mention: { label: later.skill.label, uri: later.skill.uri, icon: 'skill' } }, { text: ' ' }] : [];
+  const merged = later ? { segs: [...draft.segs, ...(draft.segs.length ? [{ text: '\n' }] : []), ...laterSkill, ...later.segs], skill: draft.skill || later.skill } : draft;
   if (here) setComposer(merged); else chatDrafts.set(docId, merged);
 }
 function chatSend() {

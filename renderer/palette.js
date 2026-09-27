@@ -1101,6 +1101,7 @@ function returnFocus() {
   const railRow = r && r.rail && railEl.querySelector('.rrow[data-id="' + CSS.escape(r.rail) + '"]');
   if (railRow) railRow.focus();
   else if (r && r.key && !focused()) (r.cell ? placeCell(r.key, r.cell, r.offset) : placeCaret(r.key, r.offset));
+  else if (r && r.composer && !composer.hidden) composerText.focus(); // a chat's composer opened it (renderer/chat.js)
   else if (document.activeElement === palInput) palInput.blur();
 }
 function runRow(r) { if (!r || r.disabled) return; if (!r.keepOpen) closePalette(); r.run(); }
