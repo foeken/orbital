@@ -526,11 +526,14 @@ async function rowInfo(doc) {
   // whose type has moved on is therefore rebuilt from the document below rather than patched.
   if (row && (typeUriOf(row) || null) === (n.entityTypeUri || null)) return toNode({ ...row, title: n.title ?? row.title, done: n.stateType === 'closed' ? 1 : 0, meta: ev || row.meta });
   await resolveHue(doc.id); // cached rows already carry the hue the refresh learned from the graph
-  if (idKind(doc.id) === 'user-profile') return toNode(memberRow(doc.id, n.title || doc.data.get('name') || doc.data.get('displayName') || '', now(), hueOf(n)));
-  if (PLAIN_KINDS.has(idKind(doc.id))) return toNode(kindRow(doc.id, idKind(doc.id), n.title || '', now(), hueOf(n)));
+  // No updatedAt of our own: toNode falls back to nodeMeta — the graph's updateTime, or the time onChange saw an edit.
+  // A current time here made a row jump to the top of a list sorted by last update whenever it was merely read —
+  // expanding it subscribes it, and the bootstrap comes back as a change the renderer patches every copy of the row with.
+  if (idKind(doc.id) === 'user-profile') return toNode(memberRow(doc.id, n.title || doc.data.get('name') || doc.data.get('displayName') || '', undefined, hueOf(n)));
+  if (PLAIN_KINDS.has(idKind(doc.id))) return toNode(kindRow(doc.id, idKind(doc.id), n.title || '', undefined, hueOf(n)));
   const isEvent = n.type === 'event' || doc.id.startsWith('tana:event:');
   await resolveTypes([n.entityTypeUri]);
-  if (!isEvent && !n.stateType) return toNode(plainRow(doc.id, n.title || '', now(), n.entityTypeUri, hueOf(n)));
+  if (!isEvent && !n.stateType) return toNode(plainRow(doc.id, n.title || '', undefined, n.entityTypeUri, hueOf(n)));
   return toNode({
     id: doc.id, title: n.title || '', done: n.stateType === 'closed' ? 1 : 0, icon: isEvent ? 'meeting' : 'task',
     hue: hueWithType(hueOf(n), n.entityTypeUri), meta: isEvent ? eventMeta(n.startTime, n.endTime, true) : null, tags: [nodeTag(isEvent ? TAG.meeting : TAG.task, n), ...typeTag(n.entityTypeUri)],
@@ -793,6 +796,12 @@ async function notifyWatched(id, doc, n, info) {
   S.notify(id, n.title || 'Untitled', 'Edited', 'edit');
   followSummary(id, n.title).catch(() => {});
 }
+// The oplog version each document's last change left. Its first change is the bootstrap, a read; a later one that moved
+// the version is an edit when it was made here, or arrived live from another client, and the row says so until
+// the graph's updateTime catches up (rememberMeta). An import while it bootstraps again (a reconnect's catch-up) is
+// no news of when: the graph's time for it stands, rather than the moment it happened to arrive.
+const versions = new WeakMap();
+const stampedOver = new Map(); // docId -> the update time an edit's stamp replaced, put back when a reset discards the edit
 function onChange(docId, info) {
   try {
     // The app's own settings document is not content: it is applied and nothing else hears about it.
@@ -810,6 +819,20 @@ function onChange(docId, info) {
     }
     const restored = deletedNodes.delete(docId);
     if (restored) db.unnoteDeleted(docId); // back from the dead: off the Recently deleted list, wherever the restore came from
+    // An emptied document (Document.reset on a discard-local resync) starts over: the import after it is a bootstrap again.
+    const version = doc.loro && doc.loro.oplogVersion(), seen = versions.get(doc);
+    if (version && !version.length()) {
+      versions.delete(doc);
+      if (stampedOver.has(docId)) { nodeMeta.set(docId, { ...nodeMeta.get(docId), updatedAt: stampedOver.get(docId) }); stampedOver.delete(docId); }
+    } else if (version) {
+      versions.set(doc, version);
+      const edit = (info && info.origin === 'local') || !S.client.sync.stateOf || S.client.sync.stateOf(docId) === 'live';
+      if (edit && seen && seen.compare(version) !== 0) {
+        const meta = nodeMeta.get(docId) || {};
+        if (!stampedOver.has(docId)) stampedOver.set(docId, meta.updatedAt);
+        nodeMeta.set(docId, { ...meta, updatedAt: now() });
+      }
+    }
     const hueChanged = rememberNodeHue(n);
     const done = n.stateType === 'closed' ? 1 : 0, title = n.title ?? row?.title;
     const rowChanged = row && (title !== row.title || done !== row.done || hueChanged);

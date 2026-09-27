@@ -1746,6 +1746,45 @@ async function main() {
     backend.rememberNodeHue({ id: uncached, title: 'Add self-service temporary budget limit adjustment feature to Penny', createTime: '2026-09-17T14:33:36.288Z', updateTime: '2026-09-17T17:48:39Z', state: { type: 'proposed' } });
     const info = await backend.handlers.get('doc:info')(null, uncached);
     assert.equal(info.updatedAt, '2026-09-17T17:48:39Z', 'doc:info keeps the update time for a task no view has cached');
+    // ...and for a plain document: expanding a Type page's row subscribes it, the bootstrap is patched in through
+    // doc:info, and an invented current time put the row on top of a list sorted by last update.
+    uncachedDoc.data.delete('stateType');
+    assert.equal((await backend.handlers.get('doc:info')(null, uncached)).updatedAt, '2026-09-17T17:48:39Z', 'doc:info keeps the update time for a plain document too');
+    // A real edit is still news: the bootstrap's change is the baseline, and a change after it that moved the document
+    // stamps the row, which the graph's own updateTime replaces once it has caught up.
+    backend.onChange(uncached, { origin: 'remote' });
+    assert.equal((await backend.handlers.get('doc:info')(null, uncached)).updatedAt, '2026-09-17T17:48:39Z', 'the first change is the bootstrap, a read');
+    uncachedDoc.transact((l) => l.getMap('data').set('title', 'Edited elsewhere'));
+    backend.onChange(uncached, { origin: 'remote' });
+    assert.ok((await backend.handlers.get('doc:info')(null, uncached)).updatedAt > '2026-09-17T17:48:39Z', 'an edit after it moves the update time');
+    backend.rememberNodeHue({ id: uncached, title: 'Edited elsewhere', updateTime: '2026-09-17T17:48:39Z' }); // a lagging graph row
+    assert.ok((await backend.handlers.get('doc:info')(null, uncached)).updatedAt > '2026-09-17T17:48:39Z', 'a lagging graph answer does not take the edit back');
+    assert.ok(backend.toNode({ id: uncached, title: 'x', tags: [], updatedAt: '2026-09-17T17:48:39Z' }).updatedAt > '2026-09-17T17:48:39Z', 'nor does a row built with the graph\'s older time');
+    // A document just made here has no graph row yet: its creation time stands in, so a list sorted by update keeps it on top.
+    const made = 'tana:text:' + ulid(), madeDoc = new Document(made);
+    madeDoc.transact((l) => initDocument(l, 'Just made', ME, { now: 1790000000000 }));
+    backend.testRuntime({ me: { userUri: ME }, win: null, client: { sync: { subscribe: async () => madeDoc, getDocument: () => madeDoc }, graph: { listNodes: async () => ({ nodes: [] }) } } });
+    assert.equal((await backend.handlers.get('doc:info')(null, made)).updatedAt, new Date(1790000000000).toISOString(), 'a new document is as new as it was made');
+    // A discard-local resync empties the document and bootstraps it again: a read, not an edit.
+    const reset = 'tana:text:' + ulid(), resetDoc = new Document(reset);
+    resetDoc.transact((l) => initDocument(l, 'Reset', ME, {}));
+    backend.testRuntime({ me: { userUri: ME }, win: null, client: { sync: { subscribe: async () => resetDoc, getDocument: () => resetDoc }, graph: { listNodes: async () => ({ nodes: [] }) } } });
+    backend.rememberNodeHue({ id: reset, title: 'Reset', updateTime: '2026-09-01T10:00:00Z' });
+    backend.onChange(reset, { origin: 'remote' });
+    const snapshot = resetDoc.exportSince();
+    resetDoc.reset(); backend.onChange(reset, { origin: 'remote' });
+    resetDoc.applyRemote([snapshot]); backend.onChange(reset, { origin: 'remote' });
+    assert.equal((await backend.handlers.get('doc:info')(null, reset)).updatedAt, '2026-09-01T10:00:00Z', 'a reset and its bootstrap are no edit');
+    // Nor is a reconnect's catch-up: edits made while away arrive during the bootstrap, and the graph knows when they were made.
+    backend.testRuntime({ me: { userUri: ME }, win: null, client: { sync: { subscribe: async () => resetDoc, getDocument: () => resetDoc, stateOf: () => 'bootstrapping' }, graph: { listNodes: async () => ({ nodes: [] }) } } });
+    resetDoc.transact((l) => l.getMap('data').set('title', 'Edited while away')); backend.onChange(reset, { origin: 'remote' });
+    assert.equal((await backend.handlers.get('doc:info')(null, reset)).updatedAt, '2026-09-01T10:00:00Z', 'a catch-up import keeps the graph time');
+    // An edit made here is one whatever state the document is in; and a reset that discards it takes its time back too.
+    resetDoc.transact((l) => l.getMap('data').set('title', 'Edited offline')); backend.onChange(reset, { origin: 'local' });
+    assert.ok((await backend.handlers.get('doc:info')(null, reset)).updatedAt > '2026-09-01T10:00:00Z', 'a local edit is stamped while the document bootstraps');
+    resetDoc.reset(); backend.onChange(reset, { origin: 'remote' });
+    resetDoc.applyRemote([snapshot]); backend.onChange(reset, { origin: 'remote' });
+    assert.equal((await backend.handlers.get('doc:info')(null, reset)).updatedAt, '2026-09-01T10:00:00Z', 'a reset that discards the edit discards its time');
     console.log('ok  rows carry updatedAt/createdAt/stateType, from the graph and from cached view rows');
   }
 

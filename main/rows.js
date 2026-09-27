@@ -19,13 +19,18 @@ function liveState(n) {
   const live = doc ? readNode(doc).stateType : docStates.get(n.id);
   return STATE_TYPES.includes(live) && live !== n.state.type ? { ...n, state: { ...n.state, type: live } } : n;
 }
+// The later of two update times, either possibly missing: update times only move forward.
+const newer = (a, b) => (a && b ? (Date.parse(b) > Date.parse(a) ? b : a) : a || b);
 function rememberMeta(n) {
   n = liveState(n);
   const createdAt = iso(n.createTime ?? n.createdAt) || (nodeMeta.get(n.id) || {}).createdAt;
   // updateTime exists on graph nodes only — a Loro data map never carries one — so, like the hue, the graph is the
   // one source and a document read must not erase it. Without this a row built without a cached SQLite row (a saved
   // search's rows, a live update patching one) came back with no updatedAt at all and lost its "Updated ..." line.
-  const updatedAt = iso(n.updateTime) || (nodeMeta.get(n.id) || {}).updatedAt;
+  // The newer of the graph's time and the one onChange stamped on an edit: the graph lags, and its older answer must
+  // not take the edit back. A document nothing has told us an update time for — one just created here, before the
+  // graph has indexed it — was last updated no later than it was made.
+  const updatedAt = newer(iso(n.updateTime), (nodeMeta.get(n.id) || {}).updatedAt) || createdAt;
   const state = (n.state && n.state.type) || n.stateType;
   const stateType = STATE_TYPES.includes(state) ? state : undefined;
   // n.stateType means this came from a Loro data map rather than the search index: the document is the source of
@@ -150,7 +155,7 @@ const meetingRow = (n, withDate) => {
 // An event also carries its own window (`start`/`end`), and only an event does: the keys are added rather than always
 // present, so every other kind of node keeps the shape it had. A row restored from the SQLite cache has no window —
 // the cache stores the label, not the times — so a consumer that needs one asks the graph, as the meeting picker does.
-const toNode = (r) => ({ id: r.id, title: r.title, text: r.title, kind: 'document', editable: editability.has(r.id) ? editability.get(r.id) : editable(r, S.me && S.me.userUri), done: r.icon === 'task' ? r.done : undefined, hasChildren: true, icon: PLAIN_KINDS.has(idKind(r.id)) ? (typeIconName(r.id) || idKind(r.id)) : r.icon || undefined, hue: r.hue === undefined ? (nodeHues.has(r.id) ? nodeHues.get(r.id) : cachedNodeHue(r)) : r.hue, tags: r.tags, meta: r.meta || undefined, updatedAt: r.updatedAt || (nodeMeta.get(r.id) || {}).updatedAt, createdAt: r.createdAt || (nodeMeta.get(r.id) || {}).createdAt, createdBy: nodeCreators.get(r.id), stateType: r.stateType || (nodeMeta.get(r.id) || {}).stateType, ...(r.start ? { start: r.start, end: r.end } : {}), ...(r.fields ? { fields: r.fields } : {}) });
+const toNode = (r) => ({ id: r.id, title: r.title, text: r.title, kind: 'document', editable: editability.has(r.id) ? editability.get(r.id) : editable(r, S.me && S.me.userUri), done: r.icon === 'task' ? r.done : undefined, hasChildren: true, icon: PLAIN_KINDS.has(idKind(r.id)) ? (typeIconName(r.id) || idKind(r.id)) : r.icon || undefined, hue: r.hue === undefined ? (nodeHues.has(r.id) ? nodeHues.get(r.id) : cachedNodeHue(r)) : r.hue, tags: r.tags, meta: r.meta || undefined, updatedAt: newer(r.updatedAt, (nodeMeta.get(r.id) || {}).updatedAt), createdAt: r.createdAt || (nodeMeta.get(r.id) || {}).createdAt, createdBy: nodeCreators.get(r.id), stateType: r.stateType || (nodeMeta.get(r.id) || {}).stateType, ...(r.start ? { start: r.start, end: r.end } : {}), ...(r.fields ? { fields: r.fields } : {}) });
 // A typed node's field values as the graph lists them (`attributes`, keyed "<type uri>?attribute=<key>"): one string
 // per value, which is what a row shows of a field (renderer/views.js fieldValues). Verified live on Goal 2026-09-25.
 function fieldValues(n) {
