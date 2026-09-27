@@ -82,6 +82,13 @@ ws.on('camera', () => { mark(); place(); }); // a zoom moves the panes under a c
 // A tab chosen, or the one Trellis selects after a close, takes the keys: its window's focus is what tells main
 // (preload.js page:focus) which page ⌘W and a notification click aim at.
 ws.on('focus', (viewId) => { const win = windowOf(frameOf(viewId)); if (win && !win.document.hasFocus()) win.focus(); });
+// Every key is the pages' (Trellis's keymap is off here), so after a click on the shell's own chrome that changes no
+// focus — the tab already chosen, a divider, a panel menu's Float or Maximize — the page in front takes the keys back,
+// once the click is done and unless a menu is still open.
+document.addEventListener('pointerup', () => setTimeout(() => {
+  if (document.activeElement?.tagName === 'IFRAME' || document.querySelector('[data-trellis-part="menu"]')) return;
+  windowOf(frameOf(ws.getSnapshot().focusedView))?.focus();
+}));
 addEventListener('resize', () => requestAnimationFrame(() => { mark(); place(); })); // after Trellis has laid the panels out again
 sync();
 
