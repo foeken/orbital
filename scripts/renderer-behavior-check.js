@@ -1665,8 +1665,6 @@ async function runSyncShortcutCheck() {
   // Go to Home is the other half: always listed, honest about where it goes, and disabled only where it would do nothing.
   assert.deepEqual(plain([order.row('goHome').hint, order.row('goHome').disabled]), ['My Tasks', false],
     'Go to Home names the Home it would open, read live from the saved search');
-  order.row('goHome').run();
-  assert.deepEqual(plain(order.went()), [SAVED], 'and it opens it through the one goHome every route Home uses');
   order.choose('library', []);
   assert.deepEqual(plain([order.row('goHome').hint, order.row('goHome').disabled]), ['Current', true],
     'standing on Home the row stays, disabled and saying so, rather than disappearing from the list it can be recorded from');
@@ -4411,7 +4409,7 @@ function runNavButtonsCheck() {
     });
   `);
   const away = plain(api.draw({ back: [], forward: [], home: false }));
-  assert.deepEqual(away.map((b) => b.disabled), [false, true], 'away from Home, Back is live with an empty stack (it lands on Home) and Forward is not');
+  assert.deepEqual(away.map((b) => b.disabled), [true, true], 'with nothing behind or ahead, neither arrow is live, Home or not: Back does not go Home (a whole window, issue #444)');
   assert.deepEqual(away.map((b) => b.label), ['Go back', 'Go forward'], 'each says what it is');
   assert.deepEqual(away.map((b) => b.title), ['Go back ⌘[', 'Go forward ⌘]'], 'and carries the combo that does the same thing');
   assert.deepEqual(away.map((b) => b.icons), [1, 1], 'each is drawn with its arrow');
@@ -4433,6 +4431,7 @@ function runRailToggleCheck() {
     let forced = null;
     const render = (force) => { renders++; forced = force === true; };
     let railHidden = pref('railHidden', false) === true;
+    const railNarrow = () => false; // a pane wide enough for it (renderer/rail.js)
     ${functionSource('railOff')}
     ${functionSource('toggleRail')}
     ({
@@ -6195,7 +6194,7 @@ async function runHomeCheck() {
     let navBack = [], navForward = [], navHere = null, navigating = false, caretOnOpen = false, savedPlace = null;
     const SEARCH_ID = 'tana:search:';
     const TIMELINE_PAGE = 'orbital:timeline', run = (fn) => fn(), openWorkView = () => { went.push('workView'); }; // renderer/timeline.js
-    let savedList = []; const savedViews = () => savedList, openSavedView = (v) => { went.push('view ' + v.name); }; // renderer/palette.js
+    let savedList = [], opened = null; const savedViews = () => savedList, openSavedView = (v) => { opened = v; went.push('view ' + v.name); }; // renderer/palette.js
     const isRealId = (id) => typeof id === 'string' && id.startsWith('tana:');
     const onSearchPage = () => !!zoom && !zoom.nodeId && String(zoom.docId || '').startsWith(SEARCH_ID);
     const render = () => { renders++; }, renderSoon = render, flushAll = () => {}, dropDrafts = () => {};
@@ -6205,7 +6204,6 @@ async function runHomeCheck() {
     let listed = [];
     const tana = { searches: () => Promise.resolve(listed) };
     ${sourceBetween('const homeSearch =', 'function sensitiveHidden')}
-    ${functionSource('homeCrumb')}
     ${functionSource('renderCrumbs')}
     const bar = document.createElement('nav');
     const cmdBtn = document.createElement('button'); // the ⌘K button index.html puts in the bar
@@ -6222,13 +6220,12 @@ async function runHomeCheck() {
       list: (rows, online = true) => { listed = rows; connected = online; return loadSearches(); },
       drop: (id) => { searches = searches.filter((s) => s.id !== id); repairHome(); },
       go: (place) => { zoom = place; }, view: (id) => { view = id; zoom = null; },
-      home: () => goHome(),
-      crumb: () => { const el = homeCrumb(); return el && { tag: el.tagName, text: el.textContent, label: el.getAttribute('aria-label'), icon: el.childNodes[0].dataset.icon, click: el.onclick }; },
+      home: () => goHome(), opened: () => opened && opened.keys,
       // the whole bar over the title, as it reads
       crumbs: (docId = OTHER_DOC) => {
         zoom = { docId, nodeId: null };
         renderCrumbs();
-        return bar.childNodes.map((kid) => (kid === cmdBtn ? '[⌘K]' : kid === helpBtn ? '[?]' : kid.tagName === 'button' ? '[Home]' : kid.textContent)).join(' ');
+        return bar.childNodes.map((kid) => (kid === cmdBtn ? '[⌘K]' : kid === helpBtn ? '[?]' : kid.tagName === 'button' ? '[button]' : kid.textContent)).join(' ');
       },
       back: () => navigate(-1), push: (place) => { navBack.push(place); navHere = { view, zoom, key: 'here' }; },
       seed: (place) => { savedPlace = place; ${seed} return savedPlace; },
@@ -6257,21 +6254,13 @@ async function runHomeCheck() {
   await api.list([{ id: SEARCH, text: 'Everything of mine' }]);
   assert.equal(api.name(), 'Everything of mine', 'a renamed search shows its current name');
 
-  // The Home button: the house glyph alone, beside ⌘K, its label saying where it goes, and it goes Home
+  // No Home button on the pages: Home is a window (Go to Home, ⇧⌘H), and the bar is ⌘K and Help, however deep the page
   api.go({ docId: OTHER, nodeId: null });
-  const crumb = api.crumb();
-  assert.deepEqual([crumb.tag, crumb.text, crumb.label, crumb.icon], ['button', '', 'Go to Home: Everything of mine', 'home'],
-    'a zoomed page starts with the Home button: the house glyph and no word, a button like ⌘K, whose label says where it goes');
-  crumb.click();
-  assert.deepEqual(plain(api.went()), [SEARCH], 'and pressing it opens Home');
-  assert.equal(api.crumb().tag, 'button', 'the button stays on Home itself: one fixed way back, always in the same place');
+  assert.equal(api.crumbs(), '[⌘K] [?]', 'the bar over a document is ⌘K and Help, with no Home button and no breadcrumbs');
 
-  // The bar is Home then ⌘K and nothing else: no location behind them, however deep the page
-  assert.equal(api.crumbs(), '[Home] [⌘K] [?]', 'the bar over a document is the Home button, then ⌘K and Help, and no breadcrumbs');
-
-  // Back with nothing to go back to lands on Home; a real prior place still wins
+  // Back with nothing to go back to stays put: one pane's Back must not replace the whole window with Home
   api.back();
-  assert.deepEqual(plain(api.went()), [SEARCH], 'Back from a note with no history goes Home rather than to whichever view is behind it');
+  assert.deepEqual(plain(api.went()), [], 'Back from a note with no history does nothing');
   api.go({ docId: OTHER, nodeId: null });
   api.push({ view: 'inbox', zoom: null, key: 'inbox' });
   api.back();
@@ -6283,27 +6272,24 @@ async function runHomeCheck() {
   assert.deepEqual(plain(api.seed({ docId: OTHER, nodeId: null })), { docId: OTHER, nodeId: null }, 'and a place to restore is left alone');
   assert.deepEqual(plain(api.seed({})), {}, 'and a view left unzoomed (the Library, Types) reopens as that view, not Home');
 
-  // One route Home, whatever page asks for it: the anchor crumb, Back with no history and the Cmd+K row all call this.
+  // A saved-search Home chosen before Home was a window opens as one: a window of one pane on that search
   api.view('library');
   api.home();
-  assert.deepEqual(plain(api.went()), [SEARCH], 'from a view, Home opens the saved search');
-  api.go({ docId: OTHER, nodeId: null });
-  api.home();
-  assert.deepEqual(plain(api.went()), [SEARCH], 'and so does a zoomed note');
+  assert.deepEqual([plain(api.went()), plain(api.opened())], [['view Everything of mine'], { view: 'library', place: JSON.stringify({ docId: SEARCH, nodeId: null }) }],
+    'a saved-search Home is a window of one pane on that search, like every Home');
 
   // Gone: repaired to the Library rather than left pointing at something nothing can open
   api.drop(SEARCH);
   assert.deepEqual([api.id(), api.name(), api.stored().home], ['library', 'Library', 'library'],
     'a deleted Home falls back to the Library and the stale preference is repaired, not left behind');
   api.view('library');
-  assert.equal(api.crumb().tag, 'button', 'and with the Library as Home the button still shows, rather than disappearing with the choice');
-  assert.equal(api.crumbs(), '[Home] [⌘K] [?]', 'and the bar is the same three buttons');
-  // The bar used to be hidden on a view page, which has no location; it now carries the two buttons on every page.
-  assert.doesNotMatch(source, /nav\.hidden =/, 'the bar is never hidden: Home and ⌘K on every page, a view page (the Library, Inbox, Tasks) included');
+  assert.equal(api.crumbs(), '[⌘K] [?]', 'and the bar is the same two buttons');
+  // The bar used to be hidden on a view page, which has no location; it now carries its buttons on every page.
+  assert.doesNotMatch(source, /nav\.hidden =/, 'the bar is never hidden: ⌘K and Help on every page, a view page (the Library, Inbox, Tasks) included');
   assert.deepEqual(plain(api.seed(null)), TIMELINE, 'a Library Home changes nothing about a first launch either');
   api.view('inbox');
   api.home();
-  assert.deepEqual(plain(api.went()), ['view:library'], 'and once it has fallen back, Home is the Library view — no dead saved search is opened');
+  assert.deepEqual([plain(api.went()), plain(api.opened())], [['view Library'], { view: 'library', place: '{}' }], 'and once it has fallen back, Home is a window on the Library view — no dead saved search is opened');
 
   // Set as Home keeps the window as it is: the saved view 'homeView', opened as saved views are; a page is Home on the
   // place that view keeps for it; removed from the list, Home is the Work View again

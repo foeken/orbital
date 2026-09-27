@@ -96,7 +96,7 @@ tana.onChanged((docId, info) => {
     if (!info || info.meta !== false || isTypeId(docId)) refreshRelated(docId); // a type's own change can be its fields, which its page's pills and columns are
     // What this page just typed (main.js typed): the words are already on screen, so the page is not read again and not
     // rebuilt under the caret on every save. The document's copies elsewhere — a list row, a search result — still take
-    // the new title and time, drawn when the caret leaves. Another page, the other half of a split included, never
+    // the new title and time, drawn when the caret leaves. Another page, another pane of this window included, never
     // hears a change as its own and reads it as before (#265).
     if (info && info.own && info.meta === false) { patchDoc(docId).then(() => renderSoon(), showError); return; }
     const work = [patchDoc(docId)];

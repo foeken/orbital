@@ -203,4 +203,5 @@ addEventListener('message', (e) => {
     if (e.data.renamable === true) renamable.add(id); else renamable.delete(id);
   }
   else if (what === 'run') run(String(e.data.command), sourceOf(e.source));
+  else if (what === 'reload') location.reload(); // Cmd+K Reload: the window, every page in it
 });

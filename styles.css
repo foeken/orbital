@@ -1197,6 +1197,7 @@ body.overlaypage, [data-theme="dark"] body.overlaypage { background: transparent
 .help .hclose { position: absolute; top: 10px; right: 10px; z-index: 2; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--muted); cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .help .hclose:hover { background: rgba(0, 0, 0, .06); color: #555; }
 .help i { display: contents; }
+.help p i[data-icon] svg { width: 16px; height: 16px; vertical-align: -3px; opacity: .6; } /* a glyph in the text, as small as the words (Home on Plan your day) */
 .help .hclose svg { width: 16px; height: 16px; }
 /* the pages share one cell, so the card is as tall as the tallest and never jumps; the one on screen slides in from
    the side it comes from */

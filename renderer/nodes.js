@@ -266,7 +266,7 @@ const homeIsSearch = () => home !== 'library' && home !== 'workView' && home !==
 // (app.js calls this when the list lands and when a deletion arrives). Before the first answer nothing is concluded.
 function repairHome() { if (homeIsSearch() && searchesLoaded && !homeSearch()) setHome('library'); }
 const homeId = () => (home === HOME_VIEW && !homeView() ? 'workView' : homeIsSearch() && searchesLoaded && !homeSearch() ? 'library' : home); // a Home window removed from the list leaves the Work View
-// What the Home crumb reads: the search's current title, so a rename in Tana shows through. null while a Home search
+// What Go to Home names: the search's current title, so a rename in Tana shows through. null while a Home search
 // is still unknown — the anchor waits for its name rather than borrowing the Library's.
 const homeName = () => { const s = homeSearch(); return s ? s.text || s.title || 'Untitled search' : { library: 'Library', workView: 'Work View', [HOME_VIEW]: 'Home' }[homeId()] || null; };
 // In the Work View a half is Home on its own page: the Timeline on the left, My Tasks (the search of that name) on the right
@@ -280,8 +280,13 @@ function atHomeView() {
 }
 const atHome = () => (homeId() === 'workView' ? atWorkView() : homeId() === HOME_VIEW ? atHomeView() : zoom ? !zoom.nodeId && zoom.docId === homeId() : homeId() === view);
 function setHome(id) { home = id; setPref('home', id); render(true); }
-// Going Home: the Work View and a Home window are opened as saved views are, a saved search is a document you open, the Library is a view you switch to.
-function goHome() { const id = homeId(); if (id === 'workView') run(openWorkView); else if (id === HOME_VIEW) run(() => openSavedView(homeView())); else if (id !== 'library') goTo(id); else if (view === 'library') { zoom = null; render(true); } else setView('library'); }
+// Going Home opens a window, as a saved view is opened, a saved search is a document you open, the Library is a view you switch to.
+// A Library or saved-search Home, chosen before Home was a window, is a window of one pane on it (issue #444).
+function goHome() {
+  const id = homeId();
+  if (id === 'workView') return run(openWorkView);
+  run(() => openSavedView(id === HOME_VIEW ? homeView() : { name: homeName(), doc: null, keys: { view: 'library', place: id === 'library' ? '{}' : JSON.stringify({ docId: id, nodeId: null }) } }));
+}
 function sensitiveHidden(id) {
   return !sensitiveVisible && typeof id === 'string' && (sensitiveIds === null || sensitiveIds.has(id));
 }

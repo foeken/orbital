@@ -86,10 +86,10 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
 
 ## 4. The page
 
-- **Header row** (issue #200): over the page title, **Home**, **⌘K** and **?**, in that order (`renderCrumbs`), all
-  `.navbtn`s like the buttons at the top right — 24px, an 18px glyph at .4 opacity. Home is the `home` glyph
-  (`homeCrumb`, labelled "Go to Home: <name>"), ⌘K opens the command palette (`togglePalette('cmd')`), ? opens the Help
-  tour (§16). The row is never hidden and there are no breadcrumbs: the title says where you are and Back walks the
+- **Header row** (issue #200): over the page title, **⌘K** and **?** (`renderCrumbs`), `.navbtn`s like the buttons at
+  the top right — 24px, an 18px glyph at .4 opacity. ⌘K opens the command palette (`togglePalette('cmd')`), ? opens the
+  Help tour (§16). Home has no button: it is a window, not a place in the page, so it is Cmd+K Go to Home (⇧⌘H), which
+  the Help tour teaches (issue #444). The row is never hidden and there are no breadcrumbs: the title says where you are and Back walks the
   history. The first glyph lines
   up with the title's left edge, and both sit level with the buttons at the top right. The row is part of the title
   bar's drag area; the buttons opt out of it, and so does the palette's backdrop while it is open (otherwise Electron
@@ -336,12 +336,13 @@ Cmd+K leads with a Selection group for it (§8).
   owns whose title is the event's tagline (`api.summaryUri`, `writeUpOf` in sdk/events.js), from every route; the write-up is
   never repeated in the sidebar ([MEETINGS.md](MEETINGS.md)).
 - **Back and Forward** (⌘[ and ⌘], the arrows at the top right) walk one history per page. Back with nothing to go back
-  to lands on Home.
+  to does nothing: Home is the whole window, which one pane's Back does not replace (issue #444).
 - **Home** is the **Work View** by default (§16), or the window as it was when you chose Cmd+K "Set as Home"
   (`setHome`): its panes and what each shows, kept as the saved view "Home" (`HOME_VIEW`, listed under Saved views, where
   it is removed or, saved again under that name, replaced) and stored as `homeView` in the synced `home` preference. A
   page is at Home on the place that view keeps for it; removed, Home is the Work View again. A Library or saved search
-  chosen as Home before still works, stored as its id (`library` or a `tana:search:` uri). Every route Home goes through
+  chosen as Home before still works, stored as its id (`library` or a `tana:search:` uri), and opens as a window of one
+  pane on it, like every Home. Every route Home goes through
   `goHome`; Cmd+K "Go to Home" names it, and stays listed, disabled with "Current", where you already are. A Home whose saved search is gone from `api.searches()` falls back
   to the Library and the preference is repaired (`repairHome`), but only from a list that could have named it:
   `searchesLoaded` is set only by an answer that lands while connected.
@@ -387,10 +388,10 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
 - **Navigate**: Go back, Go forward, Go to Home, Set as Home, Focus the sidebar, Recently
   deleted, Archived types.
 - **Window**: New window, New pane, New tab, New floating pane; with more than one page Next / Previous pane, Next / Previous
-  tab, Maximize or restore pane, Show all panes, Zoom back / forward and Close pane (panes change places by dragging a tab);
-  Show/Hide sidebar, Reload, Save view…, Remove saved view (its choices also found from the command page).
+  tab, Maximize or restore pane, Show all panes, Zoom back / forward and Close pane (its chip ⌘W, the File menu's Close;
+  panes change places by dragging a tab); Show/Hide sidebar, Reload (the window: every pane), Save view…, Remove saved view (its choices also found from the command page).
 - **Saved views** (issue #442): one row per view, the Work View first. A view is the window's layout (Trellis's
-  document, `window:layout`) and each page's view and place (`view`/`place`, `view:2`/`place:2`, …), under a name,
+  document, `window:layout`, without its zoom: a view opens with every pane shown) and each page's view and place (`view`/`place`, `view:2`/`place:2`, …), under a name,
   in the synced `savedViews` preference. Save view… names the current one, or updates a saved view listed under
   it (narrowed by what is typed; its name and id kept, so Home and a recorded key still find it); choosing a row writes the places back and hands main the layout (`window:setLayout`), which saves it and reloads
   the window, so every page opens where it was saved. Remove saved view takes one off the list, any but the Work View, which is always listed (replaced, never removed).
@@ -436,7 +437,8 @@ Every command row has a stable `id`, and a key is a row with a combo. The built-
 | Expand / Collapse | ⌘↓ / ⌘↑ |
 | Complete / Reopen | ⌘↩ |
 | Today | ⌃⇧D |
-| Reload | ⌘R |
+| Reload (the window, every pane) | ⌘R |
+| Go to Home | ⇧⌘H |
 | New window | ⌥⌘N |
 | New pane (to the right) | ⌘N |
 | Next / Previous pane | ⌘\\ / ⇧⌘\\ |
@@ -718,7 +720,7 @@ A row is picked up by its marker and dropped where a line says it will land (ren
 - **A task dropped on a group changes what it is** (#169). In a view grouped by Responsibility, and on the Timeline's
   Today's Tasks, a drop between rows is a drop on the section under the pointer (its heading outlined, `groupAt`) or
   the Today block. The writes are read off the task as it stands (`groupDropWrites`, in the order `responsibilityOf`
-  reads them), and a task dragged from the other half of a split, whose dataTransfer carries
+  reads them), and a task dragged from another pane, whose dataTransfer carries
   `application/x-orbital-task`, lands the same way:
 
   | Drop into | Writes | Refused |
@@ -775,7 +777,7 @@ A row is picked up by its marker and dropped where a line says it will land (ren
   assignees, restriction, participants, type and field values), and re-reads the sidebar only then (or for a type).
   **`own: true`** is the echo of text this page typed (`sendChanged` sends it to the writing page only, #265): the
   words are on screen, so only the row copies are patched and nothing is re-read or force-rendered; every other page,
-  the other half of a split included, hears a plain change. A document no view lists reloads the roots.
+  another pane of the window included, hears a plain change. A document no view lists reloads the roots.
 - **`onChanged(null)`** is a global change: the refresh wrote every open view's rows into the cache before sending it,
   so the renderer reloads the roots (which carry each view's `truncated` flag) and the pins, and runs no second query.
 - **`onRemoved(id)`** is an explicit deletion: the node is marked gone and leaves pins, recent results, Cmd+K searches
@@ -869,12 +871,15 @@ nothing about them as documents. Each is a place the app remembers, so ⌘R on o
   saved view installed first (`WORK_VIEW`, Cmd+K Saved views): main's two-pane layout (`window:setLayout` 'workView')
   with the Timeline in page '' and `{ myTasks: true }` in page '2', found or made at load. Going Home opens it, the one
   saved under its id if you replaced it, this one if you removed it. A first launch opens it as two panes.
-  On a new account both halves are empty, so an empty page says what would fill it (`emptyText`, renderer/render.js):
+  On a new account both panes are empty, so an empty page says what would fill it (`emptyText`, renderer/render.js):
   the Timeline what shows up there, Notifications and Proposals that there are none, a saved search or a type's page
   "Nothing matches.", with the Create task key after it when the search lists tasks, so an empty My Tasks is where the
   first task starts. Only a document says "No content".
 - **Windows** (issue #137). File › New Window, ⌥⌘N or Cmd+K New window opens another outliner window 24px down and right
-  of the front one. Each window has its own view and page; a new one starts where you last were. What main pushes
+  of the front one, with one page on the place the page that asked was on (`window:new` answers its id). A page's id is
+  unique across windows, since its view and place are stored under it. Only the main window (`win.primary`, the first;
+  the one left when it closes) saves its bounds and layout, so another window never leaves the next launch its single
+  page, and a saved view or Home chosen in another window is laid out in the main window, which comes forward (issue #444). What main pushes
   (`send`) reaches every page of every window; each window's view is refreshed and kept live while any window shows it
   (`openViews`), and each page keeps its own sidebar watch (`watchRelated(id, key)`). A command for one page goes to the
   page used last (`S.pane`): a notification click opens its node there. Closing the last window keeps the app in the
@@ -925,7 +930,7 @@ nothing about them as documents. Each is a place the app remembers, so ⌘R on o
 
 ### Overlays
 
-main lays two pages over the whole window, both halves of a split included, as a transparent view (main.js
+main lays two pages over the whole window, above every pane, as a transparent view (main.js
 `openOverlay`), asked for by renderer/overlays.js; each is its own scope outside the outliner. The page that asked
 keeps its caret and gets the keys back when the overlay closes, with what it had to say (`onOverlayClosed`).
 
@@ -1007,7 +1012,9 @@ A zoomed document shows its relationships in a full-height sidebar beside it (`#
 `api.related(docId)`: its own scroll, a border, a drag handle on its left edge (200-620px, width in localStorage
 `railWidth`), and a toggle at the top right (Cmd+K Show/Hide sidebar). Its rows are edges, not nodes: they open on
 Enter or a click, a task row toggles on Space, and nothing there takes a caret. An empty section is omitted and an
-empty sidebar hidden; a collapsed section is remembered (`railClosed`), and every head carries `aria-expanded`.
+empty sidebar hidden; a collapsed section is remembered (`railClosed`), and every head carries `aria-expanded`. A page
+narrower than 720px (`RAIL_ROOM`, a narrow pane) leaves the sidebar and its toggle out, and draws them again once it is
+wide enough (issue #444).
 
 - Tags on sidebar rows collapse to their `#` and hue and show their label on hover or focus, without changing the
   row's height.

@@ -58,7 +58,9 @@ function restoredBounds(saved, workAreas) {
 // another window is. The shell owns the layout; main keeps which pages there are (each by its id, '' the first, then
 // '2', '3', ...), the layout the window saves, and says what to open or close. What main pushes is shared state and goes to every page
 // (main/state.js send); S.win is the window used last and S.pane its page, which a notification click opens in. The
-// first window takes the saved bounds; the one closed last saves them.
+// first window takes the saved bounds and layout, and it alone saves them (win.primary): another window is for the
+// moment, and one closed last used to leave the next launch its single page (issue #444). A page's id is unique across
+// windows, since its view and place are stored under it.
 S.windows = new Set();
 S.windowViews = new Map(); // page id -> { id, filter }: the view that page shows
 const FOCUS_FRESH_MS = 30000; // a window gaining focus within this long of the last completed refresh does not start another
@@ -80,7 +82,9 @@ const savedDoc = (saved) => (!saved ? pair(WORK_SPLIT) : saved.doc && typeof sav
 // the page ids a layout holds (view 'page' + id), in its order; a window without one shows page ''
 const docPages = (doc) => { const ids = Object.entries((doc && doc.views) || {}).filter(([k, v]) => v && v.type === 'page' && k.startsWith('page')).map(([k]) => k.slice(4)); return ids.length ? ids : ['']; };
 // a new page's id: the smallest from 2 up that no page has, loaded, loading or just asked for
-const freeId = (win) => { let n = 2; while (win.pages.includes(String(n)) || win.panes.some((p) => p.side === String(n))) n++; return String(n); };
+const freeId = () => { let n = 2; while ([...S.windows].some((w) => w.pages.includes(String(n)) || w.panes.some((p) => p.side === String(n)))) n++; return String(n); };
+// another window's layout: one page, under an id no window has
+const onePage = (id) => ({ schema: 1, root: { kind: 'panel', id: 'panel-' + id, views: ['page' + id], selected: 'page' + id }, floating: [], hidden: [], views: { ['page' + id]: { type: 'page', params: { side: id } } } });
 // the page after this one in the layout's order, round to the first (⌘\, where the keys go when one closes)
 function nextPane(page) {
   const win = page.win, order = win.pages.filter((id) => win.panes.some((p) => p.side === id));
@@ -96,7 +100,7 @@ function addPage(e) {
   let side = '';
   try { side = new URL(frame.url).searchParams.get('side') || ''; } catch { /* no url: the first page */ }
   if (!/^([2-9]|[1-9]\d+)$/.test(side)) side = '';
-  if (win.panes.some((p) => p.side === side)) side = freeId(win);
+  if (win.panes.some((p) => p.side === side)) side = freeId();
   const page = { id: frame.processId + ':' + frame.frameToken, frame, win, side,
     isDestroyed: () => frame.isDestroyed() || frame.detached,
     send: (channel, ...args) => { if (!page.isDestroyed()) frame.send(channel, ...args); },
@@ -124,7 +128,7 @@ function fit(win) {
 }
 // A new page (⌘N to the right, a tab, a floating pane; the Work View's '2'), beside the page that asked (from). Its id
 // is main's to give, so the page asking can store its place under it first; the layout report that follows saves it.
-function openPage(win, { id = freeId(win), where = 'right', from, focus = true }) {
+function openPage(win, { id = freeId(), where = 'right', from, focus = true }) {
   win.pages.push(id);
   if (focus) win.focusNext = id;
   tellShell(win, 'open', { id, where, from, focus });
@@ -177,12 +181,14 @@ function createWindow() {
   const win = new BaseWindow({ ...bounds, title: 'Orbital', titleBarStyle: 'hiddenInset', backgroundColor: BACKGROUND.light });
   // saved shortly after a move or resize settles, and once more on close, so a quit or an update relaunch keeps it
   let boundsTimer = null;
-  const saveBounds = () => { clearTimeout(boundsTimer); boundsTimer = null; if (!win.isDestroyed()) db.setSetting('window', { ...win.getNormalBounds(), maximized: win.isMaximized(), doc: win.doc }); };
+  const saveBounds = () => { clearTimeout(boundsTimer); boundsTimer = null; if (!win.isDestroyed() && win.primary) db.setSetting('window', { ...win.getNormalBounds(), maximized: win.isMaximized(), doc: win.doc }); };
   const saveSoon = () => { clearTimeout(boundsTimer); boundsTimer = setTimeout(saveBounds, 500); };
   win.panes = []; win.saveBounds = saveBounds; win.saveSoon = saveSoon; // a layout the shell reports is saved too
   // the layout comes back with the frame it was saved with, and a first launch (nothing saved) opens the Work View, the
-  // Timeline beside My Tasks (renderer/edit.js reads which page it is). Another window opens with one page.
-  win.doc = front ? null : savedDoc(saved);
+  // Timeline beside My Tasks (renderer/edit.js reads which page it is). Another window opens with one page, on the place
+  // the page that asked stores under its id (window:new).
+  win.primary = !front;
+  win.doc = front ? onePage(freeId()) : savedDoc(saved);
   win.pages = docPages(win.doc);
   // nodeIntegrationInSubFrames: preload.js runs in each page's iframe as well, which is what gives a page window.api
   win.shell = new WebContentsView({ webPreferences: { preload: PRELOAD, nodeIntegrationInSubFrames: true } });
@@ -203,12 +209,14 @@ function createWindow() {
     for (const p of [...win.panes]) dropPage(p);
     S.windows.delete(win);
     if (S.win === win) { S.win = [...S.windows].at(-1) || null; S.pane = frontPane(); }
+    if (win.primary && S.win) { S.win.primary = true; S.win.saveBounds(); } // the window left saves from now on
     // A WebContentsView's page outlives its window unless it is closed by hand. waitForBeforeUnload: each page gets its
     // beforeunload (renderer/app.js), which sends the characters still waiting on the 400 ms edit timer and lets go of
     // its presence room and heartbeat before it is gone.
     const wc = win.shell.webContents;
     if (!wc.isDestroyed()) wc.close({ waitForBeforeUnload: true });
   });
+  return win;
 }
 // Cmd+W closes the page you are in while there are more, and the window when it is the last (signed out, one shows).
 // The shell flushes the page and closes it, and its layout report drops it here; the next page takes the keys.
@@ -242,7 +250,7 @@ ipcMain.handle('outline:children', (e, id) => { const page = pageOf(e); return (
 // The renderer's preferences, from the same store: a synchronous snapshot at load (preload reads it before the
 // first paint) and one write per change.
 // the menu shows ⌥⌘N but leaves the key to the renderer's New window row (DEFAULT_HOTKEYS), so it can be re-recorded
-ipcMain.handle('window:new', () => { createWindow(); });
+ipcMain.handle('window:new', () => createWindow().pages[0]); // its page's id, for the page asking to store its place under
 // ⌘N (issue #159) and Cmd+K New tab / New floating pane: a new page beside the one that asked, taking the keys. Answers the
 // new page's id, so the page asking can store its view and place under it for the new one to open on.
 ipcMain.handle('window:split', (e, where) => {
@@ -272,12 +280,14 @@ ipcMain.handle('overlay:close', (e, result) => { closeOverlay([...S.windows].fin
 // theirs, written by the page that asked (renderer/palette.js); the shell reloads, starts from this layout
 // (shell:state) and every page opens where the view was saved.
 ipcMain.handle('window:layout', (e) => pageOf(e)?.win?.doc || null);
+// A saved view is the main window's (win.primary): chosen in another window it is laid out there, which comes forward.
 ipcMain.handle('window:setLayout', (e, doc) => {
-  const win = pageOf(e)?.win;
+  const asked = pageOf(e)?.win, win = [...S.windows].find((w) => w.primary && !w.isDestroyed()) || asked;
   if (doc === 'workView') doc = pair(WORK_SPLIT);
   if (!win || signedOut() || (doc !== null && !(doc && typeof doc === 'object' && Object.values(doc.views || {}).some((v) => v && v.type === 'page')))) return false;
-  win.doc = doc; win.pages = docPages(doc); win.saveBounds();
+  win.primary = true; win.doc = doc; win.pages = docPages(doc); win.saveBounds();
   win.shell.webContents.reload();
+  if (win !== asked) win.focus();
   return true;
 });
 // The shell (preload.js window.shell), synchronous at its start: the layout to start from (null: page '' alone), the

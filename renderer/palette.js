@@ -324,28 +324,28 @@ function paletteRows(q, typed = q) {
   if (tana.inboxMarkAll) rows.push(markAllRow());
   rows.push({ id: 'sync', group: 'Actions', icon: 'sync', label: 'Sync', run: () => run(() => tana.refresh()) });
   // Go back with an empty stack is still a move while you are away from Home, which is where it lands (edit.js)
-  rows.push({ id: 'back', group: 'Navigate', icon: 'back', label: 'Go back', disabled: !navBack.length && atHome(), run: () => navigate(-1) });
+  rows.push({ id: 'back', group: 'Navigate', icon: 'back', label: 'Go back', disabled: !navBack.length, run: () => navigate(-1) });
   rows.push({ id: 'forward', group: 'Navigate', icon: 'forward', label: 'Go forward', disabled: !navForward.length, run: () => navigate(1) });
   // Where Back lands with no history and what the anchor crumb points at, as a row: the same goHome (renderer/nodes.js),
   // so there is one route Home and it reads the choice live. On Home it stays, disabled, saying so — discoverable, and
   // still something ⇧⌘K can record a key against.
   rows.push({ id: 'goHome', group: 'Navigate', icon: 'home', label: 'Go to Home', hint: atHome() ? 'Current' : homeName() || '', disabled: atHome(), run: () => goHome() });
   // Home is the window as it is now, its panes and what each shows: kept as the saved view "Home" (renderer/nodes.js)
-  if (tana.windowLayout) rows.push({ id: 'setHome', group: 'Navigate', icon: 'home', label: 'Set as Home', hint: 'This window as it is', run: () => run(async () => { await saveView('Home', HOME_VIEW); setHome(HOME_VIEW); }) });
+  if (tana.windowLayout) rows.push({ id: 'setHome', group: 'Navigate', icon: 'home', label: 'Set as Home', hint: homeId() === HOME_VIEW ? 'Updates Home to this window' : 'This window as it is', run: () => run(async () => { await saveView('Home', HOME_VIEW); setHome(HOME_VIEW); }) });
   if (!railEl.hidden) rows.push({ id: 'rail', group: 'Navigate', icon: 'rail', label: 'Focus the sidebar', run: () => focusRail() });
   if (tana.deletedList) rows.push({ id: 'recentlyDeleted', group: 'Navigate', icon: 'trash', label: 'Recently deleted', keepOpen: true, run: openTrashPalette });
   if (tana.archivedTypes) rows.push({ id: 'archivedTypes', group: 'Navigate', icon: 'type', label: 'Archived types', keepOpen: true, run: openArchivedPalette });
-  rows.push({ id: 'newWindow', group: 'Window', icon: 'createNew', label: 'New window', run: () => run(() => tana.newWindow()) });
+  rows.push({ id: 'newWindow', group: 'Window', icon: 'createNew', label: 'New window', run: () => run(async () => { const id = await tana.newWindow(); if (id) { localStorage.setItem('view:' + id, view); rememberPlace('place:' + id); } }) }); // it starts where you are, as a new pane does
   // A new page opens on this one: main answers its id before it has loaded, and this page is stored under it (shell.js open)
   const openPage = (where) => run(async () => { const id = await tana.splitWindow(where); if (id) { localStorage.setItem('view:' + id, view); rememberPlace('place:' + id); } });
   rows.push({ id: 'splitView', group: 'Window', icon: 'splitPanes', label: 'New pane', hint: 'To the right', run: () => openPage('right') });
   rows.push({ id: 'newTab', group: 'Window', icon: 'createNew', label: 'New tab', hint: 'Beside this page', run: () => openPage('tab') });
   rows.push({ id: 'floatPane', group: 'Window', icon: 'splitPanes', label: 'New floating pane', run: () => openPage('float') }); // "Float" in a pane's menu floats that pane
   // With more than one page, the workspace's own moves (shell.js run): Trellis does them, this page only asks
-  if (windowPanes.pages > 1) for (const [id, label, command, icon] of PANE_ROWS) rows.push({ id, group: 'Window', icon, label, run: () => shellRun(command) });
+  if (windowPanes.pages > 1) for (const [id, label, command, icon] of PANE_ROWS) rows.push({ id, group: 'Window', icon, label, ...(id === 'closePane' ? { kbd: '⌘W' } : {}), run: () => shellRun(command) }); // ⌘W: the File menu's Close
   // Always reachable, unlike "Focus the sidebar": once the sidebar is hidden there would otherwise be no way back to it.
   if (!railToggle.hidden) rows.push({ id: 'railToggle', group: 'Window', icon: railHidden ? 'railShow' : 'railHide', label: railHidden ? 'Show sidebar' : 'Hide sidebar', run: () => toggleRail() });
-  rows.push({ id: 'reload', group: 'Window', icon: 'reload', label: 'Reload', run: () => location.reload() });
+  rows.push({ id: 'reload', group: 'Window', icon: 'reload', label: 'Reload', hint: 'Every pane', run: () => (window.frameElement ? window.parent.postMessage({ orbital: 'reload' }, '*') : location.reload()) }); // the shell reloads, and every page with it (shell.js)
   if (tana.windowLayout) {
     rows.push({ id: 'saveView', group: 'Window', icon: 'splitPanes', label: 'Save view\u2026', keepOpen: true, run: openSaveViewPalette });
     if (savedViews().some((v) => v.id !== WORK_VIEW.id)) rows.push({ id: 'removeSavedView', group: 'Window', icon: 'trash', label: 'Remove saved view', keepOpen: true, run: openRemoveViewPalette, sub: async () => removeViewRows('') });
@@ -1053,6 +1053,7 @@ function savedViews() {
 const PAGE_KEY = /^(view|place)(:[1-9]\d*)?$/;
 async function saveView(name, id) { // id: kept under that id (Set as Home), else found by name
   const doc = await tana.windowLayout(), keys = {};
+  if (doc) delete doc.navigation; // Trellis's zoom is how you were looking, not the view: a view opens with every pane shown
   const ids = doc ? Object.values(doc.views || {}).filter((v) => v && v.type === 'page').map((v) => String((v.params && v.params.side) || '')) : [''];
   for (const id of ids) for (const key of ['view', 'place']) keys[key + (id ? ':' + id : '')] = localStorage.getItem(key + (id ? ':' + id : ''));
   const old = savedViews().find((v) => (id ? v.id === id : v.name === name)), keep = id || (old && old.id);

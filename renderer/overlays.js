@@ -1,5 +1,5 @@
 'use strict';
-// The pages main lays over the whole window, both halves of a split included (main.js openOverlay): the Help tour
+// The pages main lays over the whole window, above every pane (main.js openOverlay): the Help tour
 // (help.html) and Create task (task.html). This page asks for one in its own theme and keeps its caret meanwhile;
 // main hands it the keys back when the overlay closes, with what the overlay had to say.
 function openOverlay(page) {
@@ -14,7 +14,7 @@ function openHelp() {
   if (!pref('helpSeen', false)) setPref('helpSeen', true);
   openOverlay('help');
 }
-// A first start, from the main half: the right half of the Work View opens beside it and stays quiet. Only once signed
+// A first start, from the first page: the Work View's second pane opens beside it and stays quiet. Only once signed
 // in and connected (renderer/app.js), and only if main says so (help:claim): it answers once the settings document has
 // been read, and yes to one page only. Over the login the tour taught a window nobody could use yet, a new machine went
 // by its own empty copy and showed it to you again, and every open window showed it at once.
