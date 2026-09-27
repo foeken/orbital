@@ -68,13 +68,16 @@ ws.element.addEventListener('pointerdown', (e) => { if (e.target.closest('[data-
 // Until the button is let go. A release the shell never heard (a drag ended outside the window, or where Trellis held
 // the pointer) left every page deaf to the mouse until a reload: the next move with no button down, or the window
 // losing focus, ends it too. The pages pass the pointer through meanwhile, so the shell does hear that move. Trellis's
-// own drag keeps the pages off (data-busy) until it hears a release as well, so that move cancels its drag too.
+// own gestures keep the pages off (data-busy) until they hear a release as well: a tab or panel drag listens on the
+// window, a divider being moved on itself (data-active), so that move cancels whichever is still going. A resize keeps
+// where it got to.
 const released = () => document.body.classList.remove('pressing');
 for (const type of ['pointerup', 'pointercancel', 'blur']) addEventListener(type, released, true);
 addEventListener('pointermove', (e) => {
   if (e.buttons) return;
   released();
-  if (ws.getSnapshot().dragging) dispatchEvent(new PointerEvent('pointercancel', { pointerId: e.pointerId, bubbles: true }));
+  const root = document.querySelector('.trellis');
+  if (root?.hasAttribute('data-busy')) (root.querySelector('[data-trellis-part="divider"][data-active]') || root).dispatchEvent(new PointerEvent('pointercancel', { pointerId: e.pointerId, bubbles: true }));
 }, true);
 // A page closes only after it has sent what it was typing (flush), whether its tab's X, the panel menu, ⌘W or its
 // window asked; the last page never closes from here (main closes the window then).

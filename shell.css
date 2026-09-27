@@ -20,6 +20,7 @@ body.covered .trellis { overflow: visible; contain: none; }
 .trellis [data-trellis-part="divider"]::before { content: ''; position: absolute; background: var(--trellis-border); }
 .trellis [data-trellis-part="divider"][data-axis="x"]::before { top: 0; bottom: 0; left: calc(50% - 0.5px); width: 1px; }
 body.many .trellis [data-trellis-part="divider"][data-axis="x"]::before, body.many .trellis [data-trellis-part="divider"][data-axis="x"]::after { top: var(--trellis-tabbar-height); } /* the line starts under the tab bars: the header and the bars read as one band */
+.trellis [data-trellis-part="panel"]:not([data-floating]) { box-shadow: none; } /* Trellis's ring round a panel ran up the tab bars too; the divider draws the line between docked panes */
 .trellis [data-trellis-part="divider"][data-axis="y"]::before { left: 0; right: 0; top: calc(50% - 0.5px); height: 1px; }
 .trellis [data-trellis-part="divider"][data-axis="x"]::after { left: calc(50% - 0.5px); width: 1px; border-radius: 0; }
 .trellis [data-trellis-part="divider"][data-axis="y"]::after { top: calc(50% - 0.5px); height: 1px; border-radius: 0; }
