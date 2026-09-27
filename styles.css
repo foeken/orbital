@@ -1197,7 +1197,6 @@ body.overlaypage, [data-theme="dark"] body.overlaypage { background: transparent
 .help .hclose { position: absolute; top: 10px; right: 10px; z-index: 2; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--muted); cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .help .hclose:hover { background: rgba(0, 0, 0, .06); color: #555; }
 .help i { display: contents; }
-.help p i[data-icon] svg { width: 16px; height: 16px; vertical-align: -3px; opacity: .6; } /* a glyph in the text, as small as the words (Home on Plan your day) */
 .help .hclose svg { width: 16px; height: 16px; }
 /* the pages share one cell, so the card is as tall as the tallest and never jumps; the one on screen slides in from
    the side it comes from */
@@ -1216,6 +1215,7 @@ body.overlaypage, [data-theme="dark"] body.overlaypage { background: transparent
 .help .hdots { display: flex; gap: 6px; }
 .help .hdots button { width: 7px; height: 7px; padding: 0; border: 0; border-radius: 4px; background: #d8d8d8; cursor: pointer; transition: width var(--dur-base) var(--ease-out), background-color var(--dur-base) var(--ease-out); }
 .help .hdots button.on { width: 20px; background: #508fbb; }
+.help .hact { margin: 18px 28px 0; }
 .help .hfoot > .button:disabled { visibility: hidden; } /* Back on the first page: its place kept, nothing to press */
 
 /* the stage and the few things drawn on it: a palette card, outline rows, a task box, a keycap */
@@ -1287,17 +1287,26 @@ body.overlaypage, [data-theme="dark"] body.overlaypage { background: transparent
 .hv-quick .hv-typed::after { content: 'Call the supplier'; }
 
 /* 6 Your keys: ⇧⌘K on a row, three keys recorded, and the row wears them */
-.hv-keys-demo { flex-direction: column; align-items: center; gap: 14px; padding-top: 36px; }
-.hv-keys-demo .hv-pal { padding: 6px 0; }
-.hv-keys-demo .hv-row { justify-content: flex-start; }
-.hv-own { margin-left: auto; font-size: 12px; }
-.hv-rec { display: flex; gap: 12px; padding: 12px 26px; font-size: 30px; color: #666; background: #fff; border-radius: 10px; box-shadow: 0 0 0 1px rgba(0, 0, 0, .06); opacity: 0; }
+.hv-panes { padding-top: 26px; }
+.hv-ai { align-items: center; padding: 0; }
+.hv-ai svg { width: 72px; height: 72px; color: #1a1a1a; }
+[data-theme="dark"] .hv-ai svg { color: #d0d2d2; }
+.hv-win { display: flex; gap: 1px; width: 470px; height: 176px; overflow: hidden; background: #e4e4e4; border-radius: 10px; box-shadow: 0 0 0 1px rgba(0, 0, 0, .05); }
+.hv-pn { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; background: #fff; overflow: hidden; }
+.hv-pn-b { flex: 0 0 44%; } /* still (reduced motion): the two panes side by side */
+.hv-tabs { flex: none; height: 28px; display: flex; align-items: flex-end; padding-left: 8px; background: #f6f6f6; }
+.hv-tab { padding: 5px 10px; font-size: 12px; white-space: nowrap; background: #fff; border-radius: 6px 6px 0 0; }
+.hv-pn-b .hv-tab { box-shadow: inset 0 2px 0 #508fbb; } /* the focused pane's tab carries the accent, as in the app */
+.hv-body { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; }
+.hv-bar { display: block; width: 82%; height: 8px; border-radius: 4px; background: #ececec; }
+.hv-bar.hv-short { width: 56%; }
 
 @media (prefers-reduced-motion: no-preference) {
   .hpage.on .hv-press { animation: hv-press var(--hv-loop) linear infinite both; }
   .hpage.on .hv-at5 { animation-delay: .3s; } .hpage.on .hv-at10 { animation-delay: .6s; } .hpage.on .hv-at30 { animation-delay: 1.8s; }
   .hpage.on .hv-at35 { animation-delay: 2.1s; } .hpage.on .hv-at42 { animation-delay: 2.52s; } .hpage.on .hv-at50 { animation-delay: 3s; }
-  .hpage.on .hv-at55 { animation-delay: 3.3s; } .hpage.on .hv-at60 { animation-delay: 3.6s; }
+  .hpage.on .hv-at55 { animation-delay: 3.3s; } .hpage.on .hv-at60 { animation-delay: 3.6s; } .hpage.on .hv-at70 { animation-delay: 4.2s; }
+  .hpage.on .hv-pn-b { animation: hv-panes-b var(--hv-loop) var(--ease-out) infinite both; } /* ⌘N opens it, ⌥⌘↓ fills the window, esc steps back */
   .hpage.on .hv-caret { animation: blink 1s steps(1) infinite; }
   /* 1 */
   .hpage.on .hv-moon { animation: hv-moon 7s linear infinite; }
@@ -1330,10 +1339,6 @@ body.overlaypage, [data-theme="dark"] body.overlaypage { background: transparent
   .hpage.on .hv-day .hv-check:not(.hv-inbox)::after { animation: hv-tick-mark var(--hv-loop) infinite both; }
   .hpage.on .hv-day .hv-task:not(:has(.hv-inbox)) .hv-title { animation: hv-strike var(--hv-loop) infinite both; }
   /* 6 */
-  .hpage.on .hv-rec { animation: hv-keys-rec var(--hv-loop) var(--ease-out) infinite both; }
-  .hpage.on .hv-rec span { animation: hv-keys-pop var(--hv-loop) var(--ease-spring) infinite both; }
-  .hpage.on .hv-rec span:nth-child(2) { animation-delay: .36s; } .hpage.on .hv-rec span:nth-child(3) { animation-delay: .72s; }
-  .hpage.on .hv-own { animation: hv-keys-own var(--hv-loop) var(--ease-spring) infinite both; }
 }
 @keyframes hv-press { 0% { opacity: 0; transform: translateY(8px) scale(.9); } 3% { opacity: 1; transform: none; } 6% { transform: translateY(2px) scale(.92); box-shadow: 0 0 0 rgba(0, 0, 0, .14); } 10% { transform: none; } 17% { opacity: 1; } 22%, 100% { opacity: 0; } }
 @keyframes hv-moon { from { offset-distance: 0%; } to { offset-distance: 100%; } }
@@ -1355,9 +1360,7 @@ body.overlaypage, [data-theme="dark"] body.overlaypage { background: transparent
 @keyframes hv-day-quick { 0%, 30% { opacity: 0; transform: translate(-50%, -8px) scale(.97); } 34%, 52% { opacity: 1; transform: translate(-50%, 0); } 56%, 100% { opacity: 0; transform: translate(-50%, 0) scale(.98); } }
 @keyframes hv-type-call { 0%, 35.9% { content: ''; } 36%, 39.9% { content: 'Call'; } 40%, 43.9% { content: 'Call the'; } 44%, 100% { content: 'Call the supplier'; } }
 @keyframes hv-day-new { 0%, 54% { height: 0; opacity: 0; } 60%, 94% { height: 28px; opacity: 1; } 98%, 100% { height: 0; opacity: 0; } }
-@keyframes hv-keys-rec { 0%, 14% { opacity: 0; transform: translateY(6px) scale(.97); } 18%, 54% { opacity: 1; transform: none; } 58%, 100% { opacity: 0; } }
-@keyframes hv-keys-pop { 0%, 26% { opacity: 0; transform: scale(.5); } 30%, 100% { opacity: 1; transform: none; } }
-@keyframes hv-keys-own { 0%, 58% { opacity: 0; transform: scale(.5); } 62%, 94% { opacity: 1; transform: none; } 98%, 100% { opacity: 0; } }
+@keyframes hv-panes-b { 0%, 14% { flex-basis: 0; } 24%, 50% { flex-basis: 44%; } 57%, 70% { flex-basis: 100%; } 77%, 90% { flex-basis: 44%; } 97%, 100% { flex-basis: 0; } }
 
 [data-theme="dark"] .help h2, [data-theme="dark"] .help p b { color: #e2e4e4; }
 [data-theme="dark"] .help :is(p, .hkeys) { color: #adb1b2; }
@@ -1366,8 +1369,12 @@ body.overlaypage, [data-theme="dark"] body.overlaypage { background: transparent
 [data-theme="dark"] .help .hdots button { background: #454b4e; }
 [data-theme="dark"] .help .hdots button.on { background: #6ea8d6; }
 [data-theme="dark"] .hv { --hv-ink: #d0d2d2; --hv-box: #454b4e; --hv-active: #343a3d; --hv-run: #2f4a5f; background: #1d2022; color: #d0d2d2; }
-[data-theme="dark"] .hv :is(.hv-pal, .hv-pane, .hv-quick, .hv-rec, .hv-drop-menu, .hv-press), [data-theme="dark"] .hv-keys kbd { background: #2b2f31; color: #d0d2d2; box-shadow: 0 0 0 1px rgba(255, 255, 255, .08); }
+[data-theme="dark"] .hv :is(.hv-pal, .hv-pane, .hv-quick, .hv-drop-menu, .hv-press), [data-theme="dark"] .hv-keys kbd { background: #2b2f31; color: #d0d2d2; box-shadow: 0 0 0 1px rgba(255, 255, 255, .08); }
 [data-theme="dark"] .hv .hv-input { border-bottom-color: #3a3f42; }
+[data-theme="dark"] .hv-win { background: #3a3f42; box-shadow: 0 0 0 1px rgba(255, 255, 255, .08); }
+[data-theme="dark"] .hv-pn, [data-theme="dark"] .hv-tab { background: #2b2f31; }
+[data-theme="dark"] .hv-tabs { background: #232627; }
+[data-theme="dark"] .hv-bar { background: #3a3f42; }
 [data-theme="dark"] .hv-tl { border-left-color: #3a3f42; color: #adb1b2; }
 [data-theme="dark"] .hv-tl i { color: #e2e4e4; }
 [data-theme="dark"] .hv-moon { background: #e2e4e4; }

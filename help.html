@@ -23,7 +23,7 @@
           <div class="hv-keys"><kbd>⌘K</kbd><kbd>⌘S</kbd><kbd>?</kbd></div>
         </div>
         <h2>Welcome to Orbital</h2>
-        <p>Your Tana as one fast outline, driven from the keyboard. This tour takes a minute. Open it again any time with the <b>?</b> button top left, or <b>Help</b> in <kbd>⌘K</kbd>.</p>
+        <p>Your Tana as one fast outline, driven from the keyboard. Here are the basics; the rest you find as you go. Open this again with the <b>?</b> button top left.</p>
       </section>
       <section class="hpage">
         <div class="hv hv-cmd" aria-hidden="true">
@@ -39,7 +39,7 @@
           <kbd class="hv-press hv-at0">⌘K</kbd><kbd class="hv-press hv-at55">↩</kbd>
         </div>
         <h2>⌘K runs everything</h2>
-        <p>Press <kbd>⌘K</kbd> anywhere and type a few letters of what you want: “pin” finds <b>Pin to today</b>, “sti” finds <b>Set status to Inbox</b>. <kbd>↑</kbd> <kbd>↓</kbd> choose, <kbd>↩</kbd> runs. The list follows your caret, so on a task it offers that task’s status, assignee and pins. Not sure what something is called? Open <kbd>⌘K</kbd> and browse.</p>
+        <p>Press <kbd>⌘K</kbd> anywhere and type what you want: “pin” finds <b>Pin to today</b>, <kbd>↩</kbd> runs it. The list follows your caret and shows each row’s key, so this is where you discover the rest. <kbd>⇧⌘K</kbd> gives a row a key of your own.</p>
       </section>
       <section class="hpage">
         <div class="hv hv-outline" aria-hidden="true">
@@ -53,10 +53,8 @@
           <li><kbd>↩</kbd> new row</li>
           <li><kbd>⇥</kbd> <kbd>⇧⇥</kbd> indent, outdent</li>
           <li><kbd>⌘↩</kbd> complete a task</li>
-          <li><kbd>⌘↑</kbd> <kbd>⌘↓</kbd> fold, unfold</li>
           <li>Click a bullet to zoom in</li>
-          <li><kbd>⌘[</kbd> <kbd>⌘]</kbd> back, forward</li>
-        </ul>
+          </ul>
       </section>
       <section class="hpage">
         <div class="hv hv-link" aria-hidden="true">
@@ -71,8 +69,6 @@
         <ul class="hkeys">
           <li><kbd>⌘S</kbd> search all of Tana</li>
           <li><kbd>@</kbd> in a row links a page, person or meeting</li>
-          <li><kbd>/</kbd> adds a heading, table or image</li>
-          <li><kbd>⌘F</kbd> filters the Library, Inbox, types and saved searches</li>
         </ul>
       </section>
       <section class="hpage">
@@ -83,16 +79,29 @@
           <kbd class="hv-press hv-at30">⇧⌘Space</kbd><kbd class="hv-press hv-at50">↩</kbd>
         </div>
         <h2>Plan your day</h2>
-        <p>Home <i data-icon="home"></i> is the <b>Work View</b>: the Timeline, with what changed and what came in, beside My Tasks. <kbd>⇧⌘H</kbd> brings it back from anywhere, and <b>Set as Home</b> in <kbd>⌘K</kbd> makes the window as it is your Home. New tasks land in your Inbox; tick one to accept it and tick again when it is done. <kbd>⇧⌘Space</kbd> creates a task: type its title, pick a type with <kbd>↑</kbd> <kbd>↓</kbd> and someone with <kbd>⇥</kbd> if you like, and press <kbd>↩</kbd>. <kbd>⌃⇧D</kbd> opens Today.</p>
+        <p>Home is the <b>Work View</b>: the Timeline, with what changed and what came in, beside My Tasks. <kbd>⇧⌘H</kbd> brings it back from anywhere. <kbd>⇧⌘Space</kbd> creates a task.</p>
       </section>
       <section class="hpage">
-        <div class="hv hv-keys-demo" aria-hidden="true">
-          <div class="hv-pal"><div class="hv-row hv-active"><i data-icon="pinDate"></i>Pin to today<kbd class="hv-own">⌃⌥P</kbd></div></div>
-          <div class="hv-rec"><span>⌃</span><span>⌥</span><span>P</span></div>
-          <kbd class="hv-press hv-at10">⇧⌘K</kbd>
+        <div class="hv hv-panes" aria-hidden="true">
+          <div class="hv-win">
+            <div class="hv-pn hv-pn-a"><div class="hv-tabs"><span class="hv-tab">Timeline</span></div><div class="hv-body"><span class="hv-bar"></span><span class="hv-bar hv-short"></span><span class="hv-bar"></span><span class="hv-bar hv-short"></span></div></div>
+            <div class="hv-pn hv-pn-b"><div class="hv-tabs"><span class="hv-tab">My Tasks</span></div><div class="hv-body"><span class="hv-bar"></span><span class="hv-bar"></span><span class="hv-bar hv-short"></span></div></div>
+          </div>
+          <kbd class="hv-press hv-at10">⌘N</kbd><kbd class="hv-press hv-at50">⌥⌘↓</kbd><kbd class="hv-press hv-at70">esc</kbd>
         </div>
-        <h2>Make the keys yours</h2>
-        <p>Highlight any row in <kbd>⌘K</kbd> and press <kbd>⇧⌘K</kbd> to give it your own shortcut. <kbd>⌘N</kbd> opens a pane beside this one, <kbd>⌥⌘N</kbd> another window and <kbd>⌘\</kbd> jumps between the panes.</p>
+        <h2>Work in panes</h2>
+        <ul class="hkeys">
+          <li><kbd>⌘N</kbd> a pane beside this one</li>
+          <li><kbd>⌘</kbd>-click a bullet to open it there</li>
+          <li><kbd>⌥⌘↓</kbd> fill the window, <kbd>esc</kbd> back</li>
+          <li>Drag a tab to move it</li>
+        </ul>
+      </section>
+      <section class="hpage">
+        <div class="hv hv-ai" aria-hidden="true"><i data-icon="chatgpt"></i></div>
+        <h2>Sign in with ChatGPT</h2>
+        <p id="helpAIText">Orbital asks ChatGPT for the small things, such as who to discuss a page with or which type fits. Sign in to turn them on, or later from <kbd>⌘K</kbd>.</p>
+        <div class="hact"><button id="helpChatGPT" class="button">Sign in with ChatGPT</button></div>
       </section>
     </div>
     <footer class="hfoot">

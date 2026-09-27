@@ -168,7 +168,7 @@ function closeOverlay(win, result = {}) {
   const note = typeof result.note === 'string' ? result.note.slice(0, 200) : undefined;
   if (opener && !opener.isDestroyed()) {
     if (!help) opener.focus(); // the tour has the keys now
-    opener.send('overlay:closed', { palette: result.palette === true && !help, note: help ? undefined : note });
+    opener.send('overlay:closed', { palette: result.palette === true && !help, chatgpt: result.chatgpt === true && !help, note: help ? undefined : note });
   }
   if (help && note) win.overlay.later = { opener, note }; // the task's toast waits for the tour: under it, it would be gone first
   const later = view.later; // this was that tour: the toast it held back is due now

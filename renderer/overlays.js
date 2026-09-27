@@ -6,8 +6,13 @@ function openOverlay(page) {
   if (!palette.hidden) closePalette();
   if (tana.openOverlay) tana.openOverlay(page, theme);
 }
-// ⌘K closed it (the key the tour teaches): the palette opens here. A note is the task Create task made.
-if (tana.onOverlayClosed) tana.onOverlayClosed((result) => { if (result.palette) togglePalette('cmd'); if (result.note) showNote(result.note); });
+// ⌘K closed it (the key the tour teaches): the palette opens here; the tour's last page asks for ChatGPT sign-in. A
+// note is the task Create task made.
+if (tana.onOverlayClosed) tana.onOverlayClosed((result) => {
+  if (result.palette) togglePalette('cmd');
+  if (result.chatgpt) startChatGPTLogin();
+  if (result.note) showNote(result.note);
+});
 // Help: from ⌘K Help, the ? button after Home and ⌘K (renderCrumbs), and once by itself on a first start (helpOnce,
 // renderer/app.js); helpSeen is a synced preference, so that is once per person.
 function openHelp() {
