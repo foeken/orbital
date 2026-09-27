@@ -163,10 +163,11 @@ function peopleEl(summary, node) {
   };
   const faces = document.createElement('span'); faces.className = 'faces';
   const count = summary.peopleCount || uris.length; // main sends the first four and how many (main/documents.js doc:taskMeta)
-  faces.append(...uris.slice(0, 4).map(face)); // four bubbles, then "+n"
-  if (count > 4) { const more = document.createElement('span'); more.className = 'face more'; more.textContent = '+' + (count - 4); more.setAttribute('aria-hidden', 'true'); faces.append(more); } // the count after it says how many
-  const el = document.createElement('span'); el.className = 'people';
-  el.append(audienceIcon(summary, node), faces, count === 1 ? '1 person' : count + ' people');
+  faces.append(...uris.slice(0, 4).map(face)); // four bubbles, then the rest: "+n" up to nine people, "and n others" past that
+  const rest = count - 4;
+  if (rest > 0 && count <= 9) { const more = document.createElement('span'); more.className = 'face more'; more.textContent = '+' + rest; more.setAttribute('role', 'img'); more.setAttribute('aria-label', rest + ' more'); faces.append(more); }
+  const el = document.createElement('span'); el.className = 'people'; el.title = count === 1 ? '1 person' : count + ' people';
+  el.append(audienceIcon(summary, node), faces, ...(count > 9 ? ['and ' + rest + ' others'] : []));
   return el;
 }
 // node: the row's document, so its facts open the Cmd+K pickers they describe (Edit assignees, Edit visibility)
