@@ -265,9 +265,13 @@ function toggleReference(node) {
   render(true);
   run(() => tana.setDone(target.id, done));
 }
-function setView(id) { turnPage('swap', () => { dropDrafts(); releaseHeld(); view = id; localStorage.setItem('view' + SIDE, id); zoom = null; sel = null; menu = null; loadView(id); render(true); }); }
+function setView(id) {
+  if (LINKS && !followingNow) return toShell({ orbital: 'open', view: id }); // the Links pane opens a view in the page it follows (renderer/rail.js)
+  turnPage('swap', () => { dropDrafts(); releaseHeld(); view = id; localStorage.setItem('view' + SIDE, id); zoom = null; sel = null; menu = null; loadView(id); render(true); });
+}
 // zoom into a document, switching to its view first when it belongs to another one; from = breadcrumb root instead of the view
 function openDoc(docId, from) {
+  if (LINKS && !followingNow) return toShell({ orbital: 'open', id: docId }); // and a document too: it only follows (renderer/rail.js)
   // Every zoom of a document comes through here, whichever route asked for it — a row, a pin, the rail, a crumb, a
   // mention, a notification, a meeting's write-up redirect — so this is where a deleted node is refused. Opening one
   // put an empty page on screen whose every read came back "Node has been deleted", once per metadata retry.

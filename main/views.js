@@ -500,6 +500,7 @@ const ipc = {
     S.activeView = id;
     S.activeFilter = filter;
     const page = pageOf(e);
+    if (page && page.links) return viewRows(id, filter); // the Links pane (#462) shows no list: no open view, no live query, no refresh
     if (page) S.windowViews.set(page.id, { id, filter }); // this page's view (the checks call with no event)
     await S.refreshing;
     return viewRows(id, filter);

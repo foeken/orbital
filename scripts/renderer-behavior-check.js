@@ -4435,8 +4435,9 @@ function runRailToggleCheck() {
     const extra = new Map(), opened = [], asked = [], views = [];
     const isRealId = (id) => /^tana:[a-z-]+:/.test(String(id || ''));
     const docOf = (id) => extra.get(id);
-    const openDoc = (id) => { opened.push(id); zoom = { docId: id, nodeId: null }; };
-    const goTo = (id) => { asked.push(id); zoom = { docId: id, nodeId: null }; };
+    let followingNow = false; // renderer/rail.js: what follow sets while it moves the pane, so openDoc and setView let it
+    const openDoc = (id) => { opened.push(followingNow ? id : 'not following: ' + id); zoom = { docId: id, nodeId: null }; };
+    const goTo = (id) => { asked.push(followingNow ? id : 'not following: ' + id); zoom = { docId: id, nodeId: null }; };
     const setView = (id) => { views.push(id); zoom = null; };
     ${functionSource('follow')}
     ({ follow, state: () => ({ zoom: zoom && zoom.docId, opened: [...opened], asked: [...asked], views: [...views] }) });
@@ -4452,6 +4453,15 @@ function runRailToggleCheck() {
   assert.deepEqual(plain(api.state()), { zoom: null, opened: ['tana:text:a'], asked: ['tana:text:b'], views: ['library'] }, 'a page on no document (a view, an app page) leaves it on none, once');
   // Only the Links pane draws the rail; every other page hides it and tells the shell its document instead.
   assert.match(functionSource('renderRail'), /if \(!LINKS\) \{ railEl\.hidden = true; return tellDoc\(docId\); \}/, 'a page other than the Links pane draws no rail and names its document');
+  // Anywhere else the Links pane is asked to go — Cmd+K's views, searches and results — is the followed page's move (#463 review)
+  const nav = vm.runInNewContext(`
+    const LINKS = true, posted = [], toShell = (m) => posted.push(m); let followingNow = false;
+    ${functionSource('openDoc')}
+    ${functionSource('setView')}
+    ({ posted, openDoc, setView });
+  `);
+  nav.openDoc('tana:text:x'); nav.setView('library');
+  assert.deepEqual(plain(nav.posted), [{ orbital: 'open', id: 'tana:text:x' }, { orbital: 'open', view: 'library' }], 'in the Links pane, opening a document or a view opens it in the followed page');
   // Following is not navigating: the Links pane keeps no history, so ⌘[ there cannot take it off the followed document (#463 review)
   assert.match(functionSource('noteNavigation'), /if \(navHere && !navigating && !navReplace && !LINKS\) \{ navBack\.push/, 'the Links pane records no Back history');
   // A saved search is a list: no links, and nothing for the Links pane to follow.

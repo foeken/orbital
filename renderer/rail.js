@@ -33,13 +33,18 @@ function retell() {
   if (titleTold) { toldTitle = null; tellTitle(...titleTold); }
   if (toldDoc !== undefined) { const docId = toldDoc; toldDoc = undefined; tellDoc(docId); }
 }
-// The Links pane goes where the followed page is: its document, or, for a page on no document, the empty rail.
-function follow(docId, doc) {
+// The Links pane goes where the followed page is: its document, or, for a page on no document, the empty rail. Only
+// this moves it: anywhere else it is asked to go (Cmd+K, a search, a view) is the followed page's move (openDoc, setView).
+let followingNow = false;
+async function follow(docId, doc) {
   if (typeof docId !== 'string' || !docId || docId.startsWith('orbital:')) docId = null; // an app page (Timeline, …) is no document
   if ((zoom && !zoom.nodeId ? zoom.docId : null) === docId) return;
-  if (!docId) return setView(view);
-  if (doc && typeof doc === 'object' && !docOf(docId)) extra.set(docId, doc);
-  if (docOf(docId)) openDoc(docId); else goTo(docId);
+  followingNow = true;
+  try {
+    if (!docId) return setView(view);
+    if (doc && typeof doc === 'object' && !docOf(docId)) extra.set(docId, doc);
+    if (docOf(docId)) openDoc(docId); else await goTo(docId);
+  } finally { followingNow = false; }
 }
 // A row opens in the page being followed, which takes the keys; outside the shell (the mock) here.
 const openLink = (id) => (LINKS && window.frameElement ? toShell({ orbital: 'open', id }) : goTo(id));

@@ -1101,6 +1101,10 @@ async function main() {
     assert.equal(backend.S.pane && backend.S.pane.frame, fourth, 'the page \u2325\u2318N opened is the one \u2318W and a notification click aim at');
     assert.equal(ask('window:split', leftPage, 'links', { view: 'library', place: '{}' }), '5');
     assert.deepEqual(toShell.splice(0), [['open', { id: '5', where: 'links', from: '', focus: false }]], 'Show links: the Links pane opens beside the page that asked, which keeps the keys (issue #462)');
+    const linksFrame = { ...frame('linksPane', '5'), url: 'file:///orbital/index.html?side=5&links=1' };
+    ask('window:getSide', linksFrame);
+    await backend.handlers.get('view:list')({ sender: shellWc, senderFrame: linksFrame }, 'library');
+    assert.equal(backend.S.windowViews.has('1:linksPane'), false, 'the Links pane shows no list, so it is no open view: no live query, no refresh of rows nobody sees (#463 review)');
     const layoutDoc = { schema: 1, root: { kind: 'panel', views: ['page', 'page2', 'page3'] }, views: {} };
     ask('shell:layout', null, { doc: layoutDoc, pages: ['', '3', '2'] });
     assert.deepEqual([shown.panes.map((p) => p.side).sort(), shown.doc], [['', '2', '3'], layoutDoc], 'a page not in the report is forgotten, and the layout saved');
