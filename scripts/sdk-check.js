@@ -1547,6 +1547,9 @@ async function main() {
       { audience: 'people', people: [ME, 'tana:guest-profile:01exampleo0000000000000000'] }, 'an external guest participant is a person, not an unresolved grant');
     assert.deepEqual(await audienceMetadata(doc(undefined, {}), ME, boundaryOf(ORGDOC), { subscribe: async () => orgDoc({ u: ME }) }),
       { audience: 'everyone', people: [ME] }, 'the organization root is a members-only boundary: everyone in the organization, named by its membership map');
+    const GUEST = 'tana:guest-profile:01exampleo0000000000000000';
+    assert.deepEqual(await audienceMetadata(doc(undefined, { [GUEST]: { type: 'user', role: 'viewer' } }), ME, boundaryOf(ORGDOC), { subscribe: async () => orgDoc({ u: ME }) }),
+      { audience: 'everyone', people: [ME, GUEST] }, 'and a guest shared on the document itself, who can open it too');
     assert.deepEqual(await audienceMetadata(doc(undefined, {}), ME, boundaryOf(ORGDOC), { subscribe: async () => orgDoc({}) }), { audience: 'unknown' });
     assert.deepEqual(await audienceMetadata(doc(undefined, {}), ME, boundaryOf(EVENT), { subscribe: async () => doc(true, {}) }),
       { audience: 'unknown' }, 'a boundary with no participants stays unknown');

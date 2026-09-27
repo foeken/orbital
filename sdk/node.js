@@ -238,14 +238,16 @@ async function audienceMetadata(document, userUri, graph, sync) {
     if (boundary) {
       if (owners.slice(0, at + 1).some(e => e.accessible === false)) return { audience: 'unknown' };
       const owner = await sync.subscribe(boundary.uri);
+      const between = await Promise.all(owners.slice(0, at).map(e => sync.subscribe(e.uri)));
       // The organization root is restricted to its members, so an org boundary means everyone in the
-      // organization (the same membership map access.js checks).
+      // organization (the same membership map access.js checks), plus anyone granted on the way there: a guest or an
+      // outside user shared on the document or an owner in between can open it too (access.js audienceOf).
       if (boundary.uri.startsWith('tana:org:')) {
         const members = Object.values(readNode(owner).memberUserProfileDocUris || {});
-        return members.includes(userUri) ? { audience: 'everyone', people: members.filter(uri => PERSON_URI.test(uri)) } : { audience: 'unknown' };
+        const granted = [direct, ...between.map(taskMeta)].flatMap(m => m.participants.map(p => p.uri));
+        return members.includes(userUri) ? { audience: 'everyone', people: [...new Set([...members, ...granted])].filter(uri => PERSON_URI.test(uri)) } : { audience: 'unknown' };
       }
       if (taskMeta(owner).restricted !== true) return { audience: 'unknown' };
-      const between = await Promise.all(owners.slice(0, at).map(e => sync.subscribe(e.uri)));
       const grants = [...new Map([...between, owner].flatMap(d => taskMeta(d).participants).map(p => [p.uri, p])).values()]; // one grant per person, as audienceOf's Object.assign
       const scope = people(grants);
       if (scope !== 'people') return hidden({ audience: scope }, grants); // 'only-me' or 'unknown'
