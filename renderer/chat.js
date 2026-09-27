@@ -58,7 +58,7 @@ function chatEls(list, docId) {
   });
   // Asked, and no answer has begun: dots where it will be, until one does or it has been two minutes
   const last = msgs.at(-1), asked = chatWaiting.get(docId);
-  if (asked && (Date.now() - asked > CHAT_WAIT || (last && !last.chat.mine))) chatWaiting.delete(docId);
+  if (asked && (Date.now() - asked > CHAT_WAIT || (last && last.chat.author === 'ai'))) chatWaiting.delete(docId); // only Tana's own message ends the wait: in a group chat somebody else may answer first
   else if (asked) { const wait = document.createElement('div'); wait.className = 'chat-msg theirs'; const b = document.createElement('div'); b.className = 'bubble'; b.append(chatDotsEl()); wait.append(b); out.push(wait); }
   return out;
 }
@@ -191,6 +191,8 @@ function chatSend() {
   });
 }
 composerText.addEventListener('keydown', (e) => {
+  // Escape only leaves the composer: taken here, before any page or workspace key (events.js, stepOut in a zoomed pane) sees it
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); composerText.blur(); return; }
   const mod = e.metaKey || e.ctrlKey;
   if (e.key === 'Enter' && !e.shiftKey && !e.altKey && !e.isComposing) { e.preventDefault(); chatSend(); return; }
   if (e.key === 'Tab' && !e.shiftKey && !mod && chatAi.has(composer.dataset.doc) && !plainOf(composerSegs()).trim() && !composerText.querySelector('.mention')) { e.preventDefault(); switchMode(composer.dataset.doc); return; }
@@ -199,7 +201,6 @@ composerText.addEventListener('keydown', (e) => {
   if (e.key === 'Backspace' && chatSkill && !beforeCaret()) { e.preventDefault(); chatSkill = null; showSkill(); return; }
   // the field's own keys stay its own: ⌘Z undoes typing here rather than the last change to a node; ⌘K and the rest go on
   if (!mod || ['z', 'a', 'c', 'x', 'v', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Backspace'].includes(e.key.length === 1 ? e.key.toLowerCase() : e.key)) e.stopPropagation();
-  if (e.key === 'Escape') composerText.blur();
 });
 composerText.addEventListener('input', composerChanged);
 composerSkill.onclick = () => { chatSkill = null; showSkill(); composerText.focus(); };
