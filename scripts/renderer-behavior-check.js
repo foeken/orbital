@@ -4569,12 +4569,13 @@ async function runRestorePlaceCheck() {
     ${sourceBetween('const isRealId =', '\n')}
     ${sourceBetween('const navBack = [], navForward = [];', 'function noteNavigation')}
     ${functionSource('readStoredPlace')}
+    let myTasksId = null; // renderer/nodes.js: the search the Home check knows My Tasks by
     ${functionSource('restorePlace')}
     ({
       remember: (z) => { zoom = z; rememberPlace(); return storage.has('place') ? storage.get('place') : null; },
       store: (value) => { storage.set('place', value); savedPlace = readStoredPlace(); }, // left by the last session, read at load
       firstRight: () => { savedPlace = { myTasks: true }; }, // renderer/edit.js: a first launch's right half
-      myTasks: () => ({ asked, added: [...added] }),
+      myTasks: () => ({ asked, added: [...added], id: myTasksId }),
       seedPlace: () => { ${seed[0]} },
       clear: () => { storage.delete('place'); savedPlace = readStoredPlace(); },
       firstPaint: () => { zoom = null; rememberPlace(); }, // what the boot render records: the view it drew, with no zoom
@@ -4638,7 +4639,7 @@ async function runRestorePlaceCheck() {
   assert.deepEqual(plain([api.state().docId, api.myTasks().asked]), [null, 0], 'the right half of a first launch waits for the connection before asking for My Tasks');
   api.online();
   await api.start();
-  assert.deepEqual(plain([api.state().docId, api.myTasks()]), ['tana:search:mine', { asked: 1, added: ['tana:search:mine'] }],
+  assert.deepEqual(plain([api.state().docId, api.myTasks()]), ['tana:search:mine', { asked: 1, added: ['tana:search:mine'], id: 'tana:search:mine' }],
     'then opens the search main found or made, listed in Cmd+K at once');
   await api.start();
   assert.equal(api.myTasks().asked, 1, 'once per launch');
