@@ -108,6 +108,7 @@ class SyncConnection extends EventEmitter {
   getDocument(id) { const e = this.docs.get(id); return e && e.document; }
   // Subscribed and staying so: false while an unsubscribe waits for local updates to drain (getDocument still answers)
   isLive(id) { const e = this.docs.get(id); return !!e && !e.releasing; }
+  stateOf(id) { const e = this.docs.get(id); return e ? e.state : null; } // 'live' once bootstrapped; anything else is on its way there
 
   // `init(loro)` seeds a new document before bootstrap: the warm start turns MISSING into a create, the full
   // snapshot is the catch-up (§2.1). Without it, an unknown id fails with 'document not found'.

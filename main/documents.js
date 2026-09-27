@@ -797,8 +797,9 @@ async function notifyWatched(id, doc, n, info) {
   followSummary(id, n.title).catch(() => {});
 }
 // The oplog version each document's last change left. Its first change is the bootstrap, a read; a later one that moved
-// the version is an edit (here, from another client, or caught up on a reconnect), and the row says so until the
-// graph's updateTime catches up (rememberMeta).
+// the version while the document was live is an edit (here, or live from another client), and the row says so until
+// the graph's updateTime catches up (rememberMeta). An import while it bootstraps again (a reconnect's catch-up) is
+// no news of when: the graph's time for it stands, rather than the moment it happened to arrive.
 const versions = new WeakMap();
 function onChange(docId, info) {
   try {
@@ -820,7 +821,11 @@ function onChange(docId, info) {
     // An emptied document (Document.reset on a discard-local resync) starts over: the import after it is a bootstrap again.
     const version = doc.loro && doc.loro.oplogVersion(), seen = versions.get(doc);
     if (version && !version.length()) versions.delete(doc);
-    else if (version) { versions.set(doc, version); if (seen && seen.compare(version) !== 0) nodeMeta.set(docId, { ...nodeMeta.get(docId), updatedAt: now() }); }
+    else if (version) {
+      versions.set(doc, version);
+      const live = !S.client.sync.stateOf || S.client.sync.stateOf(docId) === 'live';
+      if (live && seen && seen.compare(version) !== 0) nodeMeta.set(docId, { ...nodeMeta.get(docId), updatedAt: now() });
+    }
     const hueChanged = rememberNodeHue(n);
     const done = n.stateType === 'closed' ? 1 : 0, title = n.title ?? row?.title;
     const rowChanged = row && (title !== row.title || done !== row.done || hueChanged);

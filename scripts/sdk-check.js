@@ -1775,6 +1775,10 @@ async function main() {
     resetDoc.reset(); backend.onChange(reset, { origin: 'remote' });
     resetDoc.applyRemote([snapshot]); backend.onChange(reset, { origin: 'remote' });
     assert.equal((await backend.handlers.get('doc:info')(null, reset)).updatedAt, '2026-09-01T10:00:00Z', 'a reset and its bootstrap are no edit');
+    // Nor is a reconnect's catch-up: edits made while away arrive during the bootstrap, and the graph knows when they were made.
+    backend.testRuntime({ me: { userUri: ME }, win: null, client: { sync: { subscribe: async () => resetDoc, getDocument: () => resetDoc, stateOf: () => 'bootstrapping' }, graph: { listNodes: async () => ({ nodes: [] }) } } });
+    resetDoc.transact((l) => l.getMap('data').set('title', 'Edited while away')); backend.onChange(reset, { origin: 'remote' });
+    assert.equal((await backend.handlers.get('doc:info')(null, reset)).updatedAt, '2026-09-01T10:00:00Z', 'a catch-up import keeps the graph time');
     console.log('ok  rows carry updatedAt/createdAt/stateType, from the graph and from cached view rows');
   }
 
