@@ -10,7 +10,9 @@ const composer = $('composer'), composerText = $('composerText'), composerSend =
 const CHAT_WAIT = 12e4; // how long the dots wait on an answer that has not started to arrive
 let chatShown = null; // the chat drawn last: a chat opened anew goes to its end, and its composer takes the caret
 const chatDrafts = new Map(); // docId -> what was typed there and not sent
-const chatWaiting = new Map(); // docId -> when a message went out that Tana was asked to answer
+// docId -> { asked, id }: a message that went out for Tana to answer, when, and its id once main has written it. Each
+// send has its own, so the dots follow the newest one and only its own answer, one after that message, ends them.
+const chatWaiting = new Map();
 const isChatPage = (parent) => !!parent && !parent.nodeId && String(parent.docId).startsWith('tana:chat:');
 
 function chatDotsEl() {
@@ -57,9 +59,12 @@ function chatEls(list, docId) {
     out.push(chatMessageEl(n, docId));
   });
   // Asked, and no answer has begun: dots where it will be, until one does or it has been two minutes
-  const last = msgs.at(-1), asked = chatWaiting.get(docId);
-  if (asked && (Date.now() - asked > CHAT_WAIT || (last && last.chat.author === 'ai'))) chatWaiting.delete(docId); // only Tana's own message ends the wait: in a group chat somebody else may answer first
-  else if (asked) { const wait = document.createElement('div'); wait.className = 'chat-msg theirs'; const b = document.createElement('div'); b.className = 'bubble'; b.append(chatDotsEl()); wait.append(b); out.push(wait); }
+  // Only Tana's message after the one it was asked about ends the wait: not another person's (a group chat), and not
+  // Tana's answer to an earlier message still arriving.
+  const wait = chatWaiting.get(docId), at = wait && wait.id ? msgs.findIndex((n) => n.chat.id === wait.id) : -1;
+  const answered = at >= 0 && msgs.slice(at + 1).some((n) => n.chat.author === 'ai');
+  if (wait && (Date.now() - wait.asked > CHAT_WAIT || answered)) chatWaiting.delete(docId);
+  else if (wait) { const wait = document.createElement('div'); wait.className = 'chat-msg theirs'; const b = document.createElement('div'); b.className = 'bubble'; b.append(chatDotsEl()); wait.append(b); out.push(wait); }
   return out;
 }
 // Before the page is redrawn: whether it should end at the bottom, which is where a chat opens and where it follows
@@ -174,10 +179,11 @@ function chatSend() {
   const text = chatMarkdown(draft.segs) || (skill ? 'Run [' + skill.label.replace(/[[\]\n]/g, ' ') + '](' + skill.uri + ')' : '');
   if (!docId || !text || !tana.sendChat) return;
   setComposer(null); chatDrafts.delete(docId);
-  const ai = skill ? true : chatAi.get(docId), asked = Date.now();
-  if (ai !== false) chatWaiting.set(docId, asked); // a message to the chat asks nobody to answer
+  const ai = skill ? true : chatAi.get(docId), wait = { asked: Date.now(), id: null };
+  // a message to the chat asks nobody to answer, unless it mentions Tana (main asks then too, sdk/chat.js mentionsTana)
+  if (ai !== false || text.includes('(' + TANA_AGENT_URI + ')') || /@polaris|@tana\b/i.test(text)) chatWaiting.set(docId, wait);
   // this send's own wait only: a newer message sent meanwhile has its own, which an earlier send settling must not clear
-  const stopWaiting = () => { if (chatWaiting.get(docId) !== asked) return false; chatWaiting.delete(docId); return true; };
+  const stopWaiting = () => { if (chatWaiting.get(docId) !== wait) return false; chatWaiting.delete(docId); return true; };
   // the dots give up after two minutes even when nothing else redraws the page
   setTimeout(() => { if (stopWaiting()) renderSoon(true); }, CHAT_WAIT);
   run(async () => {
@@ -185,7 +191,7 @@ function chatSend() {
     // only a message that was not saved comes back to be sent again
     try { sent = await tana.sendChat(docId, text, skill ? [skill.uri] : [], ai === undefined ? {} : { ai }); }
     catch (e) { stopWaiting(); restoreDraft(docId, draft); throw e; }
-    if (!sent.responding) stopWaiting();
+    if (!sent.responding) stopWaiting(); else wait.id = sent.messageId; // from here on its answer can be recognised
     await reload(docId);
     if (zoom && zoom.docId === docId) { outline.parentElement.scrollTop = outline.parentElement.scrollHeight; renderSoon(true); }
     // a reply that could not be asked for is said (run shows it), and the message stays sent: nothing is offered twice

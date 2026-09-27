@@ -193,7 +193,7 @@ function mockApi() {
   const chatMsg = (mine, parts, minsAgo, notes = []) => {
     const id = 'm' + (++seq), who = mine ? 'Robin Vega' : 'Tana AI';
     const children = [...notes.map((t, j) => ({ ...chatPart(id + '.t' + j, t), note: true })), ...parts.map((p, j) => (p && p.reference ? { id: id + '.a' + j, kind: 'block', type: 'reference', editable: false, reference: p.reference, hasChildren: false, children: [] } : chatPart(id + '.b' + j, p)))];
-    return { id, text: who, kind: 'block', editable: false, segments: [{ text: who }], block: 'heading3', heading: 3, chat: { mine, author: mine ? 'tana:user-profile:robin' : 'ai', sentAt: Date.now() - minsAgo * 6e4 }, hasChildren: true, children };
+    return { id, text: who, kind: 'block', editable: false, segments: [{ text: who }], block: 'heading3', heading: 3, chat: { id, mine, author: mine ? 'tana:user-profile:robin' : 'ai', sentAt: Date.now() - minsAgo * 6e4 }, hasChildren: true, children };
   };
   content['tana:chat:mockchat0'] = [
     chatMsg(true, ['Can you draft the Studio memo for Monday?'], 26 * 60),
@@ -478,11 +478,12 @@ function mockApi() {
     chatAnswers: async () => ({ ai: true, canWrite: true }), // every mock chat is yours alone
     sendChat: async (docId, text, attachments = [], opts = {}) => {
       const segs = (p) => p.split(/(\[[^\]\n]*\]\([^)\s]+\))/).filter(Boolean).map((t) => { const m = /^\[(.*)\]\((.+)\)$/.exec(t); return m ? { mention: { label: m[1], uri: m[2] } } : { text: t }; });
-      (content[docId] ||= []).push(chatMsg(true, [...text.split(/\n{2,}/).map(segs), ...attachments.map((uri) => ({ reference: { uri, label: (all.find((d) => d.id === uri) || {}).text } }))], 0));
+      const sent = chatMsg(true, [...text.split(/\n{2,}/).map(segs), ...attachments.map((uri) => ({ reference: { uri, label: (all.find((d) => d.id === uri) || {}).text } }))], 0);
+      (content[docId] ||= []).push(sent);
       emit(docId);
-      if (opts.ai === false) return { messageId: 'mock', responding: false }; // a message to the chat: nobody is asked
+      if (opts.ai === false) return { messageId: sent.chat.id, responding: false }; // a message to the chat: nobody is asked
       setTimeout(() => { content[docId].push(chatMsg(false, ['Mock answer to: ' + text], 0, ['Thought for 2 seconds'])); emit(docId); }, 1800);
-      return { messageId: 'mock', responding: true }; // main answers replyError beside a saved message when the reply could not be asked for
+      return { messageId: sent.chat.id, responding: true }; // main answers replyError beside a saved message when the reply could not be asked for
     },
     newChat: async () => {
       const n = { id: 'tana:chat:mocknew' + (++seq), text: 'New chat', kind: 'document', hasChildren: true, editable: false, icon: 'chat', tags: [{ label: 'chat', color: 'grey' }] };

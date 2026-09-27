@@ -130,7 +130,7 @@ function chatRows(messages, { authorName = () => undefined, aiName = 'Tana AI', 
       segments: [ai ? { text: author, keep: true } : { text: author, person: true }],
       icon: ai ? 'chat' : 'member', block: 'heading3', heading: 3,
       meta: typeof m.sentAt === 'number' ? hm(m.sentAt) + (m.editedAt !== undefined ? ' (edited)' : '') : undefined,
-      chat: { mine: !ai && !!me && m.fromUserUri === me, author: m.fromUserUri || (ai ? 'ai' : ''), sentAt: typeof m.sentAt === 'number' ? m.sentAt : undefined,
+      chat: { id: m.id, mine: !ai && !!me && m.fromUserUri === me, author: m.fromUserUri || (ai ? 'ai' : ''), sentAt: typeof m.sentAt === 'number' ? m.sentAt : undefined,
         ...(m.id && m.id === streamingId ? { streaming: true } : {}) },
       hasChildren: children.length > 0, children,
     }));
