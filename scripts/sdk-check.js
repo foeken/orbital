@@ -5580,6 +5580,31 @@ async function main() {
     console.log('ok  proposals: the graph lists pending ones, approve and reject write what Tana writes, and what Tana would do more for is refused untouched');
   }
 
+  // Sending through main (chat:send): the chat's own agent is asked to answer, and a reply that cannot be asked for comes
+  // back beside the saved message instead of failing the send, which the renderer would offer to send again (#447).
+  {
+    const backend = mainHelpers();
+    const agent = 'tana:agent:' + ulid(), chatDoc = new Document('tana:chat:' + ulid());
+    chatDoc.transact((l) => { initDocument(l, 'Agent chat', ME, { kind: 'chat' }); l.getMap('data').set('agentId', agent); });
+    const sync = { subscribe: async (id) => { if (id !== chatDoc.id) throw new Error('document not found: ' + id); return chatDoc; } };
+    backend.testRuntime({ me: { userUri: ME }, client: { graph: { listNodes: async () => ({ nodes: [] }) }, sync }, session: { getAccessToken: async () => 't' } });
+    const bodies = [], realFetch = globalThis.fetch;
+    let answer = { status: 200, body: { success: true, messageId: 'ai000009' } };
+    globalThis.fetch = async (url, init) => { bodies.push(JSON.parse(init.body)); return { status: answer.status, ok: answer.status === 200, json: async () => answer.body }; };
+    try {
+      const send = backend.handlers.get('chat:send');
+      assert.equal((await send(null, chatDoc.id, 'Hello agent')).responding, true);
+      assert.equal(bodies[0].agentId, agent, "the chat's own agent answers, not Tana's default assistant");
+      answer = { status: 429, body: { success: false, error: 'ai_cap_exceeded' } };
+      const failed = await send(null, chatDoc.id, 'Again');
+      assert.deepEqual([failed.responding, /AI limit/.test(failed.replyError)], [false, true], 'a failed trigger is reported, not thrown');
+      assert.deepEqual(chatDoc.data.get('messages').toJSON().filter((m) => !m.hiddenFromChat).map((m) => m.content.text), ['Hello agent', 'Again'], 'and the message it was for stays sent, once');
+      await assert.rejects(send(null, chatDoc.id, 'x', ['not a uri']), /Attachments are Tana documents/);
+    } finally { globalThis.fetch = realFetch; }
+    console.log("ok  chat:send asks the chat's own agent and keeps a sent message sent when the reply cannot be asked for");
+  }
+
+
   // What the web client shows of a conversation, and how it words the thinking line (docs/CHATS.md §4).
   {
     const chat = require('../sdk/chat');

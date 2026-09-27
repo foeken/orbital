@@ -480,7 +480,7 @@ function mockApi() {
       (content[docId] ||= []).push(chatMsg(true, [...text.split(/\n{2,}/).map(segs), ...attachments.map((uri) => ({ reference: { uri, label: (all.find((d) => d.id === uri) || {}).text } }))], 0));
       emit(docId);
       setTimeout(() => { content[docId].push(chatMsg(false, ['Mock answer to: ' + text], 0, ['Thought for 2 seconds'])); emit(docId); }, 1800);
-      return { messageId: 'mock', responding: true };
+      return { messageId: 'mock', responding: true }; // main answers replyError beside a saved message when the reply could not be asked for
     },
     newChat: async () => {
       const n = { id: 'tana:chat:mocknew' + (++seq), text: 'New chat', kind: 'document', hasChildren: true, editable: false, icon: 'chat', tags: [{ label: 'chat', color: 'grey' }] };

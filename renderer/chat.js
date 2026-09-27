@@ -141,11 +141,20 @@ function chatSend() {
   const text = chatMarkdown(draft.segs) || (skill ? 'Run [' + skill.label.replace(/[[\]\n]/g, ' ') + '](' + skill.uri + ')' : '');
   if (!docId || !text || !tana.sendChat) return;
   setComposer(null); chatDrafts.delete(docId);
-  chatWaiting.set(docId, Date.now());
+  const asked = Date.now();
+  chatWaiting.set(docId, asked);
+  // the dots give up after two minutes even when nothing else redraws the page
+  setTimeout(() => { if (chatWaiting.get(docId) === asked) { chatWaiting.delete(docId); renderSoon(true); } }, CHAT_WAIT);
   run(async () => {
-    try { const sent = await tana.sendChat(docId, text, skill ? [skill.uri] : []); if (!sent.responding) chatWaiting.delete(docId); }
-    catch (e) { chatWaiting.delete(docId); if (composer.dataset.doc === docId && composer.classList.contains('empty')) setComposer(draft); throw e; } // the message comes back to be sent again
-    finally { await reload(docId); if (zoom && zoom.docId === docId) { outline.parentElement.scrollTop = outline.parentElement.scrollHeight; renderSoon(true); } }
+    let sent;
+    // only a message that was not saved comes back to be sent again
+    try { sent = await tana.sendChat(docId, text, skill ? [skill.uri] : []); }
+    catch (e) { chatWaiting.delete(docId); if (composer.dataset.doc === docId && composer.classList.contains('empty')) setComposer(draft); throw e; }
+    if (!sent.responding) chatWaiting.delete(docId);
+    await reload(docId);
+    if (zoom && zoom.docId === docId) { outline.parentElement.scrollTop = outline.parentElement.scrollHeight; renderSoon(true); }
+    // a reply that could not be asked for is said (run shows it), and the message stays sent: nothing is offered twice
+    if (sent.replyError) throw new Error('Sent, but Tana was not asked to answer: ' + sent.replyError);
   });
 }
 composerText.addEventListener('keydown', (e) => {

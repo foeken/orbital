@@ -249,7 +249,9 @@ Read from Tana's web client of 2026-09-27 (ChatPanel, `LoroChatMutations`, the t
    (`ai_cap_exceeded` when the account's AI allowance is spent). A 404 or 408 means the server has not seen the chat
    yet; the web client retries three times (2, 4, 8 s). `agentId` for a plain chat is Tana's own assistant,
    `tana:agent:` + `createDeterministicId('system:tana')`: the first 16 bytes of the name's SHA‑256 as a ULID
-   (`tana:agent:2zc7qjfkkengdhfdd846b4qvk2`). The web client may also send `customContext`, `autoApproveCreates`,
+   (`tana:agent:2zc7qjfkkengdhfdd846b4qvk2`); a chat that names its own agent in `data.agentId` sends that one instead, as
+   Tana's chat panel does. Orbital keeps a failed trigger apart from the send: the message is already in the chat, so
+   `chat:send` answers `{ replyError }` beside it rather than failing, and the composer does not offer it twice. The web client may also send `customContext`, `autoApproveCreates`,
    `model` and coding-tool options; Orbital sends none.
 4. **The answer arrives in the document**: the server sets `data.streamingMessageId` (and `streamingLastActivity`),
    appends the AI message and grows its text, then clears the streaming id. Every step reaches Orbital as a live
