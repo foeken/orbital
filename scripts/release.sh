@@ -22,7 +22,8 @@ npm version "${1:-patch}"
 version=$(node -p "require('./package.json').version")
 # @electron/osx-sign signs the helpers inside-out with the hardened runtime and Electron's entitlements, and
 # @electron/notarize submits, waits and staples the ticket into the bundle. Both already ship with the packager.
-npm run package -- --osx-sign --osx-notarize.keychainProfile="$profile"
+# scripts/package.js turns the profile into the packager's osxSign and osxNotarize options.
+npm run package -- "$profile"
 app="dist/Orbital-darwin-arm64/Orbital.app"
 xcrun stapler validate "$app"
 spctl --assess --type execute -vv "$app" # what Gatekeeper will say on a stranger's Mac, before it is published

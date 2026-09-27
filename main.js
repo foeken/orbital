@@ -547,7 +547,7 @@ if (process.env.TANA_MAIN_TEST) {
 } else {
   app.setName('Orbital');
   // The About panel reads the bundle's plist, which in a dev run is Electron's own name and version; say it here instead.
-  // The icon is named only for a dev run: the packaged app leaves build/icon.png out (package.json --ignore) and
+  // The icon is named only for a dev run: the packaged app leaves build/icon.png out (scripts/package.js ignore) and
   // carries its own, so naming that path there would point at a file the bundle does not have.
   app.setAboutPanelOptions({ applicationName: 'Orbital', applicationVersion: app.getVersion(), version: '', ...(app.isPackaged ? {} : { iconPath: path.join(__dirname, 'build', 'icon.png') }) });
   // Before 'ready': the same session, cache and settings mirror for dev runs, the CLI and the packaged app. The

@@ -2,8 +2,8 @@
 // node scripts/tana-log.js [name.js ...]: a log of Tana's web client, to see what a deploy changed.
 // It fetches every JS file home.tana.inc's index.html reaches (or, given names like shared-rlpSpfd9.js, what those
 // reach: an older build stays served under its old names) and compares the build with the last one logged.
-// The log is .tana-log/ in the main checkout, whichever worktree runs this. It is gitignored, and the package
-// script's --ignore keeps it out of the app:
+// The log is .tana-log/ in the main checkout, whichever worktree runs this. It is gitignored, and
+// scripts/package.js's ignore keeps it out of the app:
 //   assets/<name>    every file once: the names are content hashes, so a name never changes content
 //   snapshots.jsonl  one line per build seen: { at, build, files }
 //   CHANGELOG.md     per new build: chunk names that came or went, protobuf descriptor changes, and the string

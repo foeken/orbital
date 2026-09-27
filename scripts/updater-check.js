@@ -26,11 +26,11 @@ if (process.platform === 'darwin') {
     assert.equal(ok('--verify', '--strict', '-R', signedBy('2DC432GLL2'), bin), false, 'and it is refused once the signature must chain to a Developer ID of the team');
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
-// What the package leaves out (package.json's --ignore, #417): loro-crdt's four builds other than the one node
+// What the package leaves out (scripts/package.js's ignore, #417): loro-crdt's four builds other than the one node
 // requires (16 MB of the 26 MB asar) and the offline checks, while everything the app reads at runtime stays in.
 {
   const path = require('node:path'), root = path.join(__dirname, '..');
-  const ignore = new RegExp(require('../package.json').scripts.package.match(/--ignore='([^']+)'/)[1]);
+  const { ignore } = require('./package');
   const shipped = (file) => !ignore.test('/' + path.relative(root, file).split(path.sep).join('/'));
   for (const file of [require.resolve('loro-crdt'), path.join(path.dirname(require.resolve('loro-crdt')), 'loro_wasm_bg.wasm'),
     'main.js', 'preload.js', 'index.html', 'shell.html', 'shell.js', 'shell.css', 'node_modules/@danfessler/trellis/dist/index.js',
@@ -41,5 +41,17 @@ if (process.platform === 'darwin') {
     'node_modules/loro-crdt/browser', 'scripts/sdk-check.js', 'scripts/fixtures/task-snapshot.b64']) {
     assert.ok(!shipped(path.resolve(root, file)), file + ' is left out of the package');
   }
+}
+// Chromium's languages other than English leave the extracted Electron before it is signed (#414), and nothing else does.
+{
+  const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), { dropLocales } = require('./package');
+  const buildPath = fs.mkdtempSync(path.join(os.tmpdir(), 'orbital-pkg-')), app = path.join(buildPath, 'Electron.app', 'Contents');
+  const dirs = [path.join(app, 'Frameworks', 'Electron Framework.framework', 'Resources'), path.join(app, 'Resources')];
+  try {
+    for (const dir of dirs) for (const name of ['en.lproj', 'en_GB.lproj', 'en_GB_FEMININE.lproj', 'nl.lproj', 'fr_FEMININE.lproj', 'zh_TW.lproj', 'resources.pak']) fs.mkdirSync(path.join(dir, name), { recursive: true });
+    fs.writeFileSync(path.join(dirs[0], 'nl.lproj', 'locale.pak'), '');
+    dropLocales({ buildPath });
+    for (const dir of dirs) assert.deepEqual(fs.readdirSync(dir).sort(), ['en.lproj', 'en_GB.lproj', 'en_GB_FEMININE.lproj', 'resources.pak'], dir);
+  } finally { fs.rmSync(buildPath, { recursive: true, force: true }); }
 }
 console.log('updater ok');
