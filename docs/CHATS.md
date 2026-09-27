@@ -336,8 +336,8 @@ Tana draws as the chat's own agent (§2), so an `ai` message would read as Tana'
    so only an answer, a completed or failed turn, or `createTask`'s 15-minute cap ends the wait. A finished answer is kept
    in `chatAsks` and not read again.
 4. **Drawn on your side**, among the messages at the time it was asked (`at` against each message's `sentAt`): the
-   question in a grey bubble, then under "Codex · only visible for you, on this device" the chat's dots while the task
-   works (read every 4 s while any is running) and the answer, grey too. The paperclip beside a finished answer, or
+   question in a grey bubble, then the chat's dots while the task works (read every 4 s while any is running) and the
+   answer on the other side as a reply, in grey text, each marked with the cloud-slash glyph. Add to message on the name line of a finished answer, or
    Cmd+K Add Codex’s answer to message for the latest one, adds it to the message box, after anything already there: sent
    from there, it is your message, the only way an answer reaches Tana.
 
@@ -353,6 +353,5 @@ latest question, opens it in Codex (`chatAgent:open`: the page names the questio
 **Another agent** is one entry in `AGENTS` (main/chatagents.js), beside `codex`: its `label` and `icon`, `available()`
 (can this device run it; "@" offers only those), `start({ key, prompt, rules })` answering a task id, `read(taskIds)`
 answering `taskId → { state, text }` for the ones still running, and `url(taskId)` to open one in its own app. The
-question, the prompt, the rules, the local record, the grey bubbles, the paperclip and Open are shared, and the page draws every
+question, the prompt, the rules, the local record, the grey bubble, the reply, Add to message and Open are shared, and the page draws every
 label from `chatAgent:list`. Codex is the only entry today.
-

@@ -567,7 +567,7 @@ html.links .app { display: none; }
 .chat-msg .bubble { max-width: 100%; overflow-wrap: anywhere; counter-reset: chat-num; }
 .chat-msg.mine .bubble { max-width: min(80%, 620px); padding: 12px 22px; border-radius: 13px; background: var(--chat-mine); color: var(--chat-mine-text); }
 .bubble > * + * { margin-top: 8px; }
-.chat-name { font-size: 13px; font-weight: 600; color: var(--muted); margin: 0 0 4px; }
+.chat-name { font-size: 14px; font-weight: 600; margin: 0 0 2px; } /* who said a reply: in the text's colour, bold */
 .chat-note { font-size: 14px; color: var(--muted); margin: 0 0 6px; }
 /* "Thought for 1m 28s ›" as Codex draws its "Worked for": grey, a chevron, and a hairline under it across the message */
 .chat-thought { margin: 0 0 16px; padding: 0 0 12px; border-bottom: 1px solid rgba(0, 0, 0, .08); font-size: 15px; }
@@ -617,22 +617,26 @@ button.chat-thought-head[aria-expanded="true"]::after { rotate: 135deg; translat
 .bubble .mention svg { width: 14px; height: 14px; vertical-align: -2px; margin-right: 3px; }
 .theirs .bubble .mention.hue { color: oklch(0.55 0.12 var(--hue)); }
 .bubble .mention.gone { color: inherit; text-decoration: line-through; cursor: default; }
-/* an agent's answer, @Codex's (renderer/chat.js agentAnswerEl): yours alone, so on your side, grey where your own bubble is blue, under a
-   line that says it stays on this Mac; the arrow shares it to the chat, pointing out toward the others */
-.agent-head { display: flex; align-items: center; gap: 5px; margin: 0 6px 4px 0; font-size: 13px; color: var(--muted); opacity: .7; } /* over both local bubbles: said, not shouted */
-.agent-head svg { width: 12px; height: 12px; }
-.agent-head.opens { cursor: pointer; }
-.agent-head.opens:hover { color: inherit; }
-.agent-row { display: flex; align-items: center; justify-content: flex-end; gap: 8px; max-width: min(80%, 660px); }
+/* an @Codex question and its answer (renderer/chat.js agentAskEls): the question on your side, grey where your own
+   bubble is blue, the answer as a reply in grey text; the cloud-slash glyph as a badge on the bubble's top-right corner and plain after Codex's name */
+.chat-msg.agent-local:not(.answer) { margin-bottom: 12px; } /* the question sits with its answer */
+.chat-msg.agent-local .bubble { position: relative; }
+.chat-msg.theirs.agent-local .bubble, .chat-name.agent-local { color: var(--muted); } /* Codex's answer and its name: grey */
+/* on the question bubble's top-right corner, centred on the curve */
+.agent-badge { position: absolute; top: -7px; right: -7px; margin: 0; /* not .bubble > * + *'s gap */ display: grid; place-items: center; width: 22px; height: 22px; border: 1px solid rgba(127, 127, 127, .25); border-radius: 50%; background: var(--surface); color: var(--muted); }
+.agent-badge svg { width: 13px; height: 13px; }
+.chat-name > svg { width: 13px; height: 13px; margin-left: 5px; vertical-align: -2px; color: var(--muted); } /* after Codex's name */
+/* Add to message, after them on Codex's name line: in its grey, underlined when pointed at */
+.agent-add { display: inline-flex; align-items: center; gap: 4px; margin: 0; padding: 0; border: 0; background: none; font: inherit; font-weight: 400; color: inherit; cursor: pointer; vertical-align: top; }
+.agent-sep { margin: 0 7px 0 10px; font-weight: 400; }
+.agent-add { opacity: .6; } /* quieter than the name it follows, full when pointed at */
+.agent-add:hover { opacity: 1; text-decoration: underline; text-underline-offset: 2px; }
+.agent-add svg { width: 14px; height: 14px; }
 .chat-msg[data-key] { scroll-margin: 44px 0 36px; } /* scrolled into view clear of the column's faded edges */
 .chat-msg[data-key]:focus { outline: none; } /* a message selected by ↑↓ (renderer/chat.js selectMsg): the ring goes on what it looks like, and stays while Cmd+K is open */
 .chat-msg.mine.chat-sel .bubble { box-shadow: 0 0 0 2px var(--focus); }
 .chat-msg.theirs.chat-sel { outline: 2px solid var(--focus); outline-offset: 6px; border-radius: 8px; }
 .chat-msg.mine.agent-local .bubble { background: rgba(127, 127, 127, .13); color: inherit; }
-.chat-msg.mine.agent-local.answer .bubble { max-width: 100%; } /* agent-row already holds it to the bubbles' width */
-.agent-clip { flex: none; display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 1px solid rgba(127, 127, 127, .3); border-radius: 50%; background: none; color: var(--muted); cursor: pointer; }
-.agent-clip:hover { color: inherit; }
-.agent-clip svg { width: 15px; height: 15px; }
 .chat-dots { display: inline-flex; gap: 4px; padding: 8px 0; color: var(--muted); }
 .chat-dots i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: .35; }
 @media (prefers-reduced-motion: no-preference) { .chat-dots i { animation: chat-dot var(--dur-loop) infinite; } .chat-dots i:nth-child(2) { animation-delay: .2s; } .chat-dots i:nth-child(3) { animation-delay: .4s; } }
