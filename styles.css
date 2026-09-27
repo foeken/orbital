@@ -889,11 +889,45 @@ body.building :is(#outline, #filtered) { opacity: 0; pointer-events: none; } /* 
 .glyph.icon svg { width: 13px; height: 13px; display: block; }
 .palette .row.active .glyph, .menu .mrow.active .glyph { color: #555; }
 /* ==== Login ==== */
-.login { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 120px 0; }
-.login p { margin: 0; max-width: 360px; text-align: center; color: #666; font-size: 14px; line-height: 1.5; }
+/* Signed out, the page is a welcome that teaches the one key everything starts from: ⌘K, whose palette lists Log in to
+   Tana first. A small planet with three moons on tilted orbits, the words, and two big keycaps that press themselves
+   every few seconds and go down for real under the keys you hold (renderer/app.js loginKeys). The button for the
+   mouse waits 15 s, the animation's delay, for whoever did not take the hint; the moons stand still under reduced motion. */
+.login { display: flex; flex-direction: column; align-items: center; padding: 56px 24px 80px; text-align: center; color: #45484c; }
 .login[hidden] { display: none; }
-.login button { border: 1px solid #ddd; background: #fff; border-radius: 8px; padding: 8px 18px; font-size: 15px; cursor: pointer; }
+.login h2 { margin: 26px 0 8px; font-size: 26px; font-weight: 650; letter-spacing: -.4px; color: #1c2024; }
+.login p { margin: 0; max-width: 380px; font-size: 15px; line-height: 1.6; }
+.login .lstep { max-width: 340px; font-size: 14px; color: var(--muted); }
+.login .lstep kbd { font: inherit; font-size: 13px; line-height: 1; color: #45484c; background: #f1f1f1; border-radius: 5px; padding: 3px 6px; box-shadow: inset 0 -1px 0 rgba(0, 0, 0, .1); }
+.login .lstep b { font-weight: 600; color: #1c2024; }
+.lkeys { display: flex; align-items: center; gap: 12px; margin: 30px 0 20px; font-size: 18px; color: #b0b3b6; }
+.lkeys kbd { font: inherit; font-size: 26px; line-height: 1; min-width: 30px; padding: 16px 17px 18px; border-radius: 12px; background: #fff; color: #333;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .06), 0 4px 0 #e2e4e6, 0 8px 18px rgba(0, 0, 0, .08);
+  transition: transform var(--dur-quick) var(--ease-out), box-shadow var(--dur-quick) var(--ease-out), background-color var(--dur-quick) var(--ease-out), color var(--dur-quick) var(--ease-out); }
+.lkeys kbd.down { transform: translateY(3px); background: #508fbb; color: #fff; box-shadow: 0 0 0 1px #3f7aa3, 0 1px 0 #3f7aa3, 0 3px 10px rgba(80, 143, 187, .35); animation: none; }
+.login .llater { margin-top: 34px; font-size: 14px; color: var(--muted); animation: login-later var(--dur-slow) var(--ease-out) 15s both; }
+@keyframes login-later { from { opacity: 0; visibility: hidden; translate: 0 6px; } to { opacity: 1; visibility: visible; translate: none; } }
+.login button { margin-left: 6px; border: 1px solid #ddd; background: #fff; border-radius: 8px; padding: 6px 14px; font: inherit; font-size: 14px; color: #1c2024; cursor: pointer; }
 .login button:hover { background: #f0f0f0; }
+/* the orbit: each ring an ellipse and its moon riding the same ellipse (offset-path), the ring tilted as a whole so the
+   moon stays round; it passes behind the planet on the far half */
+.lorbit { position: relative; width: 280px; height: 150px; }
+.lplanet { position: absolute; left: 50%; top: 50%; width: 38px; height: 38px; margin: -19px; border-radius: 50%; z-index: 1;
+  background: radial-gradient(circle at 34% 30%, #a9d4ef, #508fbb 58%, #2c648b); box-shadow: 0 8px 28px rgba(80, 143, 187, .4); }
+.lring { position: absolute; inset: 0; rotate: var(--tilt); }
+.lring::before { content: ''; position: absolute; left: 50%; top: 50%; width: calc(var(--rx) * 2); height: calc(var(--ry) * 2); translate: -50% -50%; border: 1px solid rgba(80, 143, 187, .25); border-radius: 50%; }
+.lring i { position: absolute; left: 0; top: 0; width: var(--m); height: var(--m); border-radius: 50%; background: var(--c); box-shadow: 0 0 10px var(--c);
+  offset-path: ellipse(var(--rx) var(--ry) at 50% 50%); offset-rotate: 0deg; offset-distance: var(--at); }
+.lring.r1 { --rx: 72px; --ry: 20px; --tilt: -18deg; --m: 7px; --c: #e0a458; --t: 7s; --at: 30%; }
+.lring.r2 { --rx: 104px; --ry: 30px; --tilt: 10deg; --m: 9px; --c: #7fb6db; --t: 11s; --at: 70%; }
+.lring.r3 { --rx: 136px; --ry: 40px; --tilt: -6deg; --m: 5px; --c: #8cc49a; --t: 17s; --at: 5%; }
+@media (prefers-reduced-motion: no-preference) {
+  .lring i { animation: lmoon var(--t) linear infinite; animation-delay: calc(var(--t) * var(--at) / -100%); }
+  .lkeys kbd { animation: lpress 3.6s var(--ease-out) 1.2s infinite; }
+  .lkeys kbd + span + kbd { animation-delay: 1.35s; }
+}
+@keyframes lmoon { from { offset-distance: 0%; z-index: 2; } 50% { z-index: 2; } 50.1% { z-index: 0; } to { offset-distance: 100%; z-index: 0; } }
+@keyframes lpress { 0%, 58%, 82%, 100% { transform: none; } 62%, 76% { transform: translateY(3px); box-shadow: 0 0 0 1px rgba(0, 0, 0, .06), 0 1px 0 #e2e4e6, 0 3px 8px rgba(0, 0, 0, .06); } }
 
 /* ==== Palette and toast (renderer/palette.js; showNote in renderer/nodes.js) ==== */
 /* command palette (Cmd+K) */
@@ -1144,7 +1178,11 @@ html.cover .toast { left: calc(var(--pane-x) + var(--pane-w) / 2); bottom: calc(
 
 [data-theme="dark"] .skeleton canvas { color: #e8eaec; }
 [data-theme="dark"] .login button { border-color: #454b4e; background: #2a2d2f; color: #c9c9c9; }
-[data-theme="dark"] .login p { color: #9a9a9a; }
+[data-theme="dark"] .login { color: #b7bcbe; }
+[data-theme="dark"] .login :is(h2, .lstep b) { color: #e6e8e8; }
+[data-theme="dark"] .login .lstep kbd { background: #303436; color: #c9c9c9; box-shadow: inset 0 -1px 0 rgba(0, 0, 0, .3); }
+[data-theme="dark"] .lkeys { color: #5c6264; }
+[data-theme="dark"] .lkeys kbd:not(.down) { background: #2b2f31; color: #d0d2d2; box-shadow: 0 0 0 1px rgba(255, 255, 255, .08), 0 4px 0 #1b1d1e, 0 8px 18px rgba(0, 0, 0, .35); }
 [data-theme="dark"] .login button:hover { background: #363a3c; }
 
 [data-theme="dark"] .palette input { color: #c9c9c9; border-bottom-color: #3a3f41; background: #242729; }

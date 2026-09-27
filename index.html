@@ -29,7 +29,14 @@
   <button id="clear" class="clear" title="Clear" tabindex="-1">×</button>
 </div>
 <main class="scroll">
-  <div id="loginBox" class="login" hidden><p>Orbital is a keyboard-first outliner for your Tana workspace. Log in with your Tana account to start.</p><button id="login">Log in to Tana</button></div>
+  <div id="loginBox" class="login" hidden>
+    <div class="lorbit" aria-hidden="true"><span class="lring r1"><i></i></span><span class="lring r2"><i></i></span><span class="lring r3"><i></i></span><span class="lplanet"></span></div>
+    <h2>Welcome to Orbital</h2>
+    <p>Your Tana as one fast outline, driven from the keyboard. Everything starts with one key.</p>
+    <div class="lkeys" role="img" aria-label="Command K"><kbd id="loginCmd">⌘</kbd><span>+</span><kbd id="loginK">K</kbd></div>
+    <p class="lstep">Try it now, then press <kbd>↩</kbd> to <b>Log in to Tana</b>.</p>
+    <p class="llater">Rather use the mouse? <button id="login">Log in to Tana</button></p>
+  </div>
   <div id="fields" class="fields" hidden></div><!-- in the scroll area: a page's fields scroll with its outline, under the header -->
   <div id="outline" class="outline"></div>
   <div id="filtered" class="filtered"></div>

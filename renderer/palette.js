@@ -121,7 +121,9 @@ function rankRows(rows) {
 // typed is the query as it was typed; q is the lowercased one every row is matched against.
 function paletteRows(q, typed = q) {
   const selection = selectionRows();
+  // Signed out, logging in is the first row, so the splash's lesson is ⌘K then ↩ (index.html #loginBox)
   const rows = [...selection];
+  if (signedOut) rows.unshift({ id: 'login', group: 'Get started', icon: 'tana', label: 'Log in to Tana', run: () => tana.login().catch(showError) });
   if (tana.tableOp) rows.push(...tableRows()); // with the caret in a table cell: its rows and columns (renderer/table.js)
   if (tana.inboxSetRead) rows.push(...notificationRows()); // a notification row's own two (renderer/inbox.js)
   if (tana.proposalAnswer) rows.push(...proposalRows()); // a proposal row's approve and reject (renderer/proposals.js)
@@ -312,9 +314,8 @@ function paletteRows(q, typed = q) {
   // The field is shown here rather than left to the render: a render is deferred while the caret is in a row or a
   // selection is frozen, and focusing a still-hidden input does nothing — which is why ⌘F used to need a click first.
   if (!zoom || onSearchPage() || onTypePage()) rows.push({ id: 'filter', group: 'View options', icon: 'filter', label: 'Filter rows by text', run: () => { filterShown = true; showHide(filterRow, true); render(); filterEl.focus(); } });
-  // The app's own rows, in four groups: Actions (getting in, making and finding things, undoing, syncing), Navigate
+  // The app's own rows, in four groups: Actions (making and finding things, undoing, syncing), Navigate
   // (moving between places), Window (windows, panes, the sidebar) and Settings (how it looks, what it hides, accounts).
-  if (signedOut) rows.push({ id: 'login', group: 'Actions', icon: 'tana', label: 'Log in to Tana', run: () => tana.login().catch(showError) });
   if (tana.creationOptions) rows.push({ id: 'create', group: 'Actions', icon: 'createNew', label: 'Create new …', keepOpen: true, run: openCreationPalette, sub: async () => { creationChoices = (await tana.creationOptions()).options || []; return creationRows(''); } });
   if (tana.createDocument) rows.push({ id: 'createTask', group: 'Actions', icon: 'task', label: 'Create task', run: () => openTask() }); // ⇧⌘Space: task.html over the window (renderer/overlays.js)
   if (tana.newChat) rows.push({ id: 'newChat', group: 'Actions', icon: 'chat', label: 'New chat', hint: 'Talk to Tana', run: () => startNewChat() }); // renderer/chat.js
