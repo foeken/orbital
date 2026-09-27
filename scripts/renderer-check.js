@@ -107,12 +107,12 @@ assert.doesNotMatch(source, /loadLibrary|loadChats|loadInbox|taskFilter|libraryF
 assert.match(source, /const chatIcon = \(n\) => n\.icon \|\| \(\(n\.tags \|\| \[\]\)\.some\(\(t\) => t\.label === 'chat'\) \? 'chat' : undefined\);/);
 assert.match(source, /const nodeIcon = \(n\) => chatIcon\(n\) \|\| \(\(n\.tags \|\| \[\]\)\.some\(\(t\) => t\.label === 'agent'\) \? 'agent' : undefined\);/);
 assert.doesNotMatch(source, /pinTree|pinRows/, 'the sidebar pin sections are gone from Cmd+K; only the pin state of the current document is read');
-// A pinned node says so where its audience does, and the mark, the sidebar row and the Cmd+K row all open the one
+// A pinned node says so where its audience does, and the mark and the Cmd+K row both open the one
 // page that lists this document's pins and takes them off (api.pinIds for the mark, api.pinState for the page).
 assert.match(source, /const isPinned = \(id\) => !!pinnedIds && pinnedIds\.has\(id\);/);
 assert.match(source, /function loadPinned\(force\)[\s\S]*tana\.pinIds\(\)/);
 assert.match(source, /if \(summary\.pinned && node && isRealId\(node\.id\)\)[\s\S]*openPinsPalette\(node\)/, 'the row mark opens Edit pins');
-assert.match(source, /if \(isPinned\(node\.id\)\) rows\.push\(\{ id: 'pinned', icon: 'pinned', label: 'Pinned'/, 'and the sidebar carries the same fact');
+assert.doesNotMatch(source, /function railMetaRows\(/, 'the Graph pane has no Details: the page itself and Cmd+K carry what it listed');
 assert.match(source, /id: 'editPins', group: docGroup, icon: 'pinned', label: 'Edit pins'/);
 assert.match(source, /function editPinRows\(q\)[\s\S]*pinAction\('unpin', 'sidebar'\)[\s\S]*pinAction\('unpin', 'today', date\)/, 'every pin the page lists can be taken off');
 assert.match(source, /isPinned\(n\.id\)/, 'a reused row is rebuilt when its pin state changes (rowSig)');
@@ -433,7 +433,7 @@ assert.match(source, /function pickMenuRow\(r, pick\) \{/);
 assert.match(source, /if \(!r\.keepOpen\) menu = null;/);
 assert.match(source, /\['References', data\.notes\]/);
 assert.doesNotMatch(source, /\['Notes', data\.notes\]/);
-assert.match(source, /function railCallRow\(data\) \{/);
+assert.match(source, /function callRow\(data\) \{/);
 assert.match(source, /taskInfoEl\.hidden = !titleTags\.length/); // assignees/visibility moved into the sidebar
 // every zoomed document shows its type, not only a task: only the kind chip (label === the row's icon) is dropped
 assert.match(source, /const titleTags = parent \? visibleTags\(parent\.node\)\.filter\(\(tag\) => tag\.label !== parent\.node\.icon\) : \[\];/);

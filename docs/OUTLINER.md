@@ -502,8 +502,8 @@ viewed.
 
 Pins are stored as [PINNING.md](PINNING.md) describes; this is what the outliner does with them.
 
-- **The pin mark.** A pinned node carries the tack in its facts (`pinned`, build/icons/pin-tack.svg) and a "Pinned" row
-  in the sidebar's Details. What a row knows comes from one `api.pinIds()` read (`pinnedIds`/`isPinned`/`loadPinned`,
+- **The pin mark.** A pinned node carries the tack in its facts (`pinned`, build/icons/pin-tack.svg); Cmd+K Edit pins
+  says where it is pinned. What a row knows comes from one `api.pinIds()` read (`pinnedIds`/`isPinned`/`loadPinned`,
   renderer/nodes.js; main `pinnedUris` over the sidebar collection and the pin-map), re-read whenever a pin is written
   or a global change arrives, and `rowSig` carries it. That is the personal pins only: a node pinned on a meeting and
   nowhere else has no mark (answering that per row is a reverse edge query per view). Pins are personal, so a
@@ -783,7 +783,8 @@ A row is picked up by its marker and dropped where a line says it will land (ren
   Neither enters the undo stack.
 - **Copy link** (`copyLink`) copies the node's home.tana.inc url, which takes the route Tana's own resolver picks for
   the kind: `/t/` a type, `/u/` a person, `/e/` a meeting, `/s/` a space, `/l/` every other document (issue #88).
-  The sidebar's Details carries the same link as "Show in Tana".
+  **Open in Tana** (`openInTana`, the Tana glyph) opens that url in Tana's web app, and on a meeting or its write-up
+  **Join call** (`joinCall`, `callRow`) opens its call link, the readable link as the row's hint.
 
 ## 15. Live updates and rendering
 
@@ -1098,11 +1099,11 @@ and every head carries `aria-expanded`. It never stands alone: the last page bes
 
 - Tags on sidebar rows collapse to their `#` and hue and show their label on hover or focus, without changing the
   row's height.
-- **Details** first: Show in Tana, the meeting's call link, Anyone with the link, Pinned when it is (§9). Who it is for
-  and who can see it are not here: they are the first fields under the title. **Assigned to** (a task) is a chip per
+- **No Details section.** What it listed lives with the page: who it is for and who can see it are the first fields
+  under the title, and Open in Tana, Join call and Edit pins are Cmd+K rows under Current node. **Assigned to** (a task) is a chip per
   person or "Unassigned" and opens the assignee picker; **Visible to** (any document with a known audience) is the
   audience's glyph with a bubble per person as a list row's subtext has them (or the audience's words where it names
-  nobody), "Not visible to …" in red for an assignee it shuts out, and opens the visibility picker, on a meeting's
+  nobody), "Anyone with the link" when Tana's link sharing is on, "Not visible to …" in red for an assignee it shuts out, and opens the visibility picker, on a meeting's
   write-up the event's; a sensitive page has none. Both open on a click, Enter or Space (renderer/fields.js
   `assigneeFieldEl`, `visibilityFieldEl`). A page asks for its fields' data itself (`loadRelated`), with or without a
   Graph pane beside it.

@@ -95,7 +95,8 @@ function assigneeFieldEl(parent) {
 }
 // Who can see the page, drawn under its title as a field after Assigned to (renderer/render.js renderFields): the
 // audience's glyph, a bubble per person as a list row's subtext has them (facesEls), or the audience's words where it
-// names nobody, and who is assigned but shut out. It opens the visibility picker, on a meeting's write-up the event's.
+// names nobody, whether anyone with the link can read it, and who is assigned but shut out. It opens the visibility
+// picker, on a meeting's write-up the event's.
 function visibilityFieldEl(parent) {
   const node = parent.node, summary = taskSummary(node) || documentSummary(node); // either asks for the metadata
   if (!summary || !summary.audience || sensitiveHidden(node.id)) return null; // a sensitive page says nothing about who
@@ -107,6 +108,7 @@ function visibilityFieldEl(parent) {
   const el = document.createElement('div'); el.className = 'fvalue fchoice'; el.tabIndex = 0; el.title = summary.audience.label;
   if (summary.people.length) el.append(...facesEls(summary.people, summary.peopleCount || summary.people.length));
   else { const words = document.createElement('span'); words.className = 'fhint'; words.textContent = summary.audience.label; el.append(words); }
+  if (summary.linkShared) { const link = document.createElement('span'); link.className = 'fhint'; link.textContent = 'Anyone with the link'; el.append(link); } // Tana's own switch, read-only here
   if (summary.hiddenFrom) { const warn = document.createElement('span'); warn.className = 'fhint fwarn'; warn.textContent = 'Not visible to ' + summary.hiddenFrom; el.append(warn); }
   const open = tana.accessOptions ? () => openVisibility(access, summary.scope) : null;
   el.onclick = () => { if (open) open(); };

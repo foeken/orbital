@@ -119,6 +119,12 @@ function rankRows(rows) {
     .map(({ r }) => r);
 }
 // typed is the query as it was typed; q is the lowercased one every row is matched against.
+// A meeting's call link (api.related().call) as Cmd+K Join call, the readable link its hint (masked in demo mode)
+function callRow(data) {
+  const call = data && data.call;
+  if (!call || !call.url || !tana.openExternal) return null; // no call, no row
+  return { id: 'joinCall', icon: 'video', label: 'Join call', hint: demoText(call.label || call.url, 'call'), run: () => run(() => tana.openExternal(call.url)) };
+}
 // palDoc is null while a chat message is selected (renderer/chat.js): Cmd+K and the keys act on the message then,
 // never on the chat document around it, so none of the Current node rows is offered.
 function paletteRows(q, typed = q) {
@@ -194,6 +200,10 @@ function paletteRows(q, typed = q) {
   if (palDoc && tana.nodeLink && isRealId(palDoc.id)) {
     rows.push({ id: 'copyLink', group: docGroup, icon: 'link', label: 'Copy link', run: () => run(async () => copyText(await tana.nodeLink(palDoc.id), 'Link copied')) });
   }
+  // the node in Tana's own web app (what Show in Tana in the Graph pane's Details did)
+  if (palDoc && tana.nodeLink && tana.openExternal && isRealId(palDoc.id)) { const doc = palDoc; rows.push({ id: 'openInTana', group: docGroup, icon: 'tana', label: 'Open in Tana', run: () => run(async () => tana.openExternal(await tana.nodeLink(doc.id))) }); }
+  // a meeting's call, on the meeting and on its write-up: its related read carries the link (callRow)
+  if (palDoc && isRealId(palDoc.id)) { const call = callRow(relatedBy.get(palDoc.id)); if (call) rows.push({ ...call, group: docGroup }); }
   if (palDoc && tana.nodeLink && tana.openExternal && isRealId(palDoc.id)) {
     const doc = palDoc;
     rows.push({ id: 'sendToAgent', group: docGroup, icon: 'robot', label: 'Send to agent', run: () => run(async () => {
