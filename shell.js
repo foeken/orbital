@@ -60,8 +60,13 @@ function mark() {
 // Trellis moves a panel by rewriting its style, and says so (change) before an animated move has landed: a pane dropped
 // at the top, a drag, a zoom. So the bars are marked again on the frame after any panel moves, once per frame.
 let marking = 0;
-new MutationObserver(() => { marking ||= requestAnimationFrame(() => { marking = 0; mark(); }); })
+new MutationObserver(() => { marking ||= requestAnimationFrame(() => { marking = 0; if (!ws.getSnapshot().dragging) mark(); }); }) // a pane being dragged is no top bar
   .observe(ws.element, { subtree: true, attributes: true, attributeFilter: ['style'] });
+// A tab pressed in a bar of several is first reordered in its row, and Trellis stops the pages taking the pointer only
+// once it is pulled out of the row. A page is an iframe, which swallows the pointer as it goes over, so the tab never
+// left: the pages ignore the pointer from the press on (shell.css body.pressing).
+ws.element.addEventListener('pointerdown', (e) => { if (e.target.closest('[data-trellis-part="tab"]')) document.body.classList.add('pressing'); }, true);
+for (const type of ['pointerup', 'pointercancel']) addEventListener(type, () => document.body.classList.remove('pressing'), true);
 // A page closes only after it has sent what it was typing (flush), whether its tab's X, the panel menu, ⌘W or its
 // window asked; the last page never closes from here (main closes the window then).
 const guarded = new Set();
