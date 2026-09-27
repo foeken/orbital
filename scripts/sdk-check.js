@@ -1746,6 +1746,10 @@ async function main() {
     backend.rememberNodeHue({ id: uncached, title: 'Add self-service temporary budget limit adjustment feature to Penny', createTime: '2026-09-17T14:33:36.288Z', updateTime: '2026-09-17T17:48:39Z', state: { type: 'proposed' } });
     const info = await backend.handlers.get('doc:info')(null, uncached);
     assert.equal(info.updatedAt, '2026-09-17T17:48:39Z', 'doc:info keeps the update time for a task no view has cached');
+    // ...and for a plain document: expanding a Type page's row subscribes it, the bootstrap is patched in through
+    // doc:info, and an invented current time put the row on top of a list sorted by last update.
+    uncachedDoc.data.delete('stateType');
+    assert.equal((await backend.handlers.get('doc:info')(null, uncached)).updatedAt, '2026-09-17T17:48:39Z', 'doc:info keeps the update time for a plain document too');
     console.log('ok  rows carry updatedAt/createdAt/stateType, from the graph and from cached view rows');
   }
 
