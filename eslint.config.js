@@ -5,7 +5,7 @@ const js = require('@eslint/js');
 const globals = require('globals');
 
 module.exports = [
-  { ignores: ['node_modules/**', 'dist/**', 'build/**', '.tana-log/**', 'sdk/proto/descriptors.js', 'icons.js'] },
+  { ignores: ['node_modules/**', 'dist/**', 'build/**', '.tana-log/**', 'sdk/proto/descriptors.js', 'icons.js', 'vendor/**'] },
   js.configs.recommended,
   {
     // main.js, main/, sdk/, scripts/, db.js, userdata.js, updater.js, tana-session.js: plain CommonJS on node.

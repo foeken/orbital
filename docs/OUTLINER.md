@@ -852,7 +852,7 @@ nothing about them as documents. Each is a place the app remembers, so ⌘R on o
   Dock (issue #246): ⌘Q quits, the Dock icon opens a window when none is open, and a notification click opens one.
 - **Split view** (issue #159). **Toggle split panes** (⌥⌘N) puts a second page beside yours in the same window, or goes
   back to one. An outliner window is a `BaseWindow` with one view, shell.html, holding a Trellis workspace
-  (`@danfessler/trellis`, shell.js); each page is an iframe of index.html in a Trellis panel, and main keys a page by
+  (vendor/trellis, shell.js); each page is an iframe of index.html in a Trellis panel, and main keys a page by
   its frame, so a half is to main what another window is: each half has its own view, page, history, filter and
   sidebar. The new half opens on the view and place of the one that asked and takes the keyboard. **Go to the other
   half** (⌘\\) moves the keyboard. **Swap panes** (Cmd+K) trades sides; each half takes the other's side marker

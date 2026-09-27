@@ -2,7 +2,7 @@
 // that is the outliner as before. Main keeps what is saved and says what to do (window.shell: state, onCommand,
 // layout); a page talks to this frame itself only to be laid over the whole window while its palette is open
 // (renderer/palette.js coverWindow) and to flush before its iframe goes (renderer/app.js leavePage).
-import { createWorkspace, createDocument, layout as L, DEFAULT_KEYMAP } from './node_modules/@danfessler/trellis/dist/index.js';
+import { createWorkspace, createDocument, layout as L, DEFAULT_KEYMAP } from './vendor/trellis/index.js';
 
 const bridge = window.shell || { state: () => ({ split: false }), onCommand() {}, layout() {} }; // shell.html opened on its own
 const start = bridge.state();

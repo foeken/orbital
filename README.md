@@ -159,9 +159,9 @@ operations, typed fields, chats, pins, access rules, who is in a call, change su
 A window is a shell page (`shell.html`) that lays one or two outliner pages out side by side with
 [Trellis](https://github.com/DanFessler/trellis).
 
-Uses Trellis by DanFessler — github.com/DanFessler/trellis. Trellis is free for non-commercial use;
-commercial use (including at a company) needs a GitHub Sponsorship or an enterprise licence, see
-`node_modules/@danfessler/trellis/LICENSE.md`.
+Uses Trellis by DanFessler — github.com/DanFessler/trellis. Trellis 0.1.0's built files are kept, unmodified, in
+`vendor/trellis/` with its licence: free for non-commercial use; commercial use needs a GitHub Sponsorship or an
+enterprise licence, see `vendor/trellis/LICENSE.md`.
 
 Start with [AGENTS.md](AGENTS.md) for the map and the working rules, then the docs:
 [VIEWS.md](docs/VIEWS.md) (the views and saved searches), [OUTLINER.md](docs/OUTLINER.md) (the UI

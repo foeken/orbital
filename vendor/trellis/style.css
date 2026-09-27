@@ -1,0 +1,900 @@
+/* Trellis — workspace chrome. Every rule is low-specificity (:where) so your CSS wins. */
+
+:where(.trellis) {
+  /* Metrics */
+  --trellis-gap: 6px;
+  --trellis-radius: 10px;
+  --trellis-tab-radius: 7px;
+  --trellis-tabbar-height: 34px;
+  --trellis-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --trellis-font-size: 12.5px;
+  --trellis-tab-max-width: 220px;
+  --trellis-tab-inset: 4px;
+
+  /* Colors: light */
+  --trellis-bg: #dfe0e4;
+  --trellis-panel: #ffffff;
+  --trellis-tabbar: #f1f1f4;
+  --trellis-tab-hover: rgba(15, 17, 25, 0.05);
+  --trellis-tab-active: #ffffff;
+  --trellis-text: #1c1d22;
+  --trellis-text-muted: #636670;
+  --trellis-border: rgba(15, 17, 25, 0.1);
+  --trellis-accent: #3a6ff7;
+  --trellis-accent-contrast: #ffffff;
+  --trellis-stage: #eceef1;
+  --trellis-slot: #cdd0d6;
+  --trellis-menu: #ffffff;
+  --trellis-menu-hover: rgba(15, 17, 25, 0.06);
+  --trellis-shadow-float: 0 1px 2px rgba(10, 12, 20, 0.08), 0 12px 32px -8px rgba(10, 12, 20, 0.22);
+  --trellis-shadow-lifted: 0 2px 4px rgba(10, 12, 20, 0.1), 0 24px 48px -12px rgba(10, 12, 20, 0.35);
+  --trellis-focus-ring: 0 0 0 2px var(--trellis-accent);
+
+  /* Motion */
+  --trellis-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+:where(.trellis[data-theme="medium"]) {
+  --trellis-slot: #2c2c30;
+  --trellis-bg: #1f1f22;
+  --trellis-panel: #45454a;
+  --trellis-tabbar: #38383c;
+  --trellis-tab-hover: rgba(255, 255, 255, 0.06);
+  --trellis-tab-active: #45454a;
+  --trellis-text: #f1f1f3;
+  --trellis-text-muted: #bcbcc3;
+  --trellis-border: rgba(0, 0, 0, 0.28);
+  --trellis-accent: #4d8bff;
+  --trellis-stage: #2a2a2e;
+  --trellis-menu: #3a3a3f;
+  --trellis-menu-hover: rgba(255, 255, 255, 0.08);
+  --trellis-shadow-float: 0 1px 2px rgba(0, 0, 0, 0.3), 0 16px 40px -8px rgba(0, 0, 0, 0.55);
+  --trellis-shadow-lifted: 0 2px 6px rgba(0, 0, 0, 0.35), 0 28px 56px -12px rgba(0, 0, 0, 0.7);
+}
+:where(.trellis[data-theme="dark"]) {
+  --trellis-slot: #1f2024;
+  --trellis-bg: #0c0d0f;
+  --trellis-panel: #1a1b1f;
+  --trellis-tabbar: #141518;
+  --trellis-tab-hover: rgba(255, 255, 255, 0.05);
+  --trellis-tab-active: #1a1b1f;
+  --trellis-text: #e7e8eb;
+  --trellis-text-muted: #9699a3;
+  --trellis-border: rgba(255, 255, 255, 0.07);
+  --trellis-accent: #5b8cff;
+  --trellis-stage: #111215;
+  --trellis-menu: #202126;
+  --trellis-menu-hover: rgba(255, 255, 255, 0.07);
+  --trellis-shadow-float: 0 1px 2px rgba(0, 0, 0, 0.4), 0 16px 40px -8px rgba(0, 0, 0, 0.7);
+  --trellis-shadow-lifted: 0 2px 6px rgba(0, 0, 0, 0.45), 0 28px 60px -12px rgba(0, 0, 0, 0.85);
+}
+:where(.trellis[data-theme="darker"]) {
+  --trellis-slot: #15161a;
+  --trellis-bg: #050506;
+  --trellis-panel: #111215;
+  --trellis-tabbar: #0b0c0e;
+  --trellis-tab-hover: rgba(255, 255, 255, 0.045);
+  --trellis-tab-active: #111215;
+  --trellis-text: #d9dbe0;
+  --trellis-text-muted: #8a8e98;
+  --trellis-border: rgba(255, 255, 255, 0.06);
+  --trellis-accent: #5b8cff;
+  --trellis-stage: #09090b;
+  --trellis-menu: #17181b;
+  --trellis-menu-hover: rgba(255, 255, 255, 0.06);
+  --trellis-shadow-float: 0 1px 2px rgba(0, 0, 0, 0.5), 0 16px 40px -8px rgba(0, 0, 0, 0.8);
+  --trellis-shadow-lifted: 0 2px 6px rgba(0, 0, 0, 0.5), 0 28px 60px -12px rgba(0, 0, 0, 0.9);
+}
+@media (prefers-color-scheme: dark) {
+  :where(.trellis[data-theme="system"]) {
+    --trellis-slot: #1f2024;
+    --trellis-bg: #0c0d0f;
+    --trellis-panel: #1a1b1f;
+    --trellis-tabbar: #141518;
+    --trellis-tab-hover: rgba(255, 255, 255, 0.05);
+    --trellis-tab-active: #1a1b1f;
+    --trellis-text: #e7e8eb;
+    --trellis-text-muted: #9699a3;
+    --trellis-border: rgba(255, 255, 255, 0.07);
+    --trellis-accent: #5b8cff;
+    --trellis-stage: #111215;
+    --trellis-menu: #202126;
+    --trellis-menu-hover: rgba(255, 255, 255, 0.07);
+    --trellis-shadow-float: 0 1px 2px rgba(0, 0, 0, 0.4), 0 16px 40px -8px rgba(0, 0, 0, 0.7);
+    --trellis-shadow-lifted: 0 2px 6px rgba(0, 0, 0, 0.45), 0 28px 60px -12px rgba(0, 0, 0, 0.85);
+  }
+}
+
+/* ------------------------------------------------------------------ root */
+:where(.trellis) {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  contain: strict;
+  isolation: isolate;
+  background: var(--trellis-bg);
+  color: var(--trellis-text);
+  font-family: var(--trellis-font);
+  font-size: var(--trellis-font-size);
+  line-height: 1.3;
+  -webkit-font-smoothing: antialiased;
+  box-sizing: border-box;
+}
+:where(.trellis) :where(*:not([data-trellis-part="content"] *)),
+:where(.trellis) :where(*:not([data-trellis-part="content"] *))::before,
+:where(.trellis) :where(*:not([data-trellis-part="content"] *))::after {
+  box-sizing: border-box;
+}
+:where(.trellis:focus) {
+  outline: none;
+}
+:where(.trellis[data-dragging]) {
+  cursor: grabbing;
+  user-select: none;
+  -webkit-user-select: none;
+}
+:where(.trellis[data-resizing="x"]) {
+  cursor: col-resize;
+  user-select: none;
+}
+:where(.trellis[data-resizing="y"]) {
+  cursor: row-resize;
+  user-select: none;
+}
+:where(.trellis[data-resizing="float"]) {
+  user-select: none;
+}
+:where(.trellis-layer, .trellis-dividers) {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+:where(.trellis-sr) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ slots */
+:where(.trellis [data-trellis-part="backdrop"], .trellis [data-trellis-part="stage-empty"]) {
+  position: absolute;
+  left: 0;
+  top: 0;
+  border-radius: var(--trellis-radius);
+  overflow: hidden;
+}
+:where(.trellis [data-trellis-part="backdrop"]) {
+  z-index: 1;
+  background: var(--trellis-stage);
+}
+:where(.trellis:not([data-has-stage]) [data-trellis-part="backdrop"]) {
+  background: transparent;
+  border-radius: 0;
+}
+:where(.trellis [data-trellis-part="stage-empty"]) {
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+:where(.trellis [data-trellis-part="stage-empty"] > *) {
+  pointer-events: auto;
+}
+:where(.trellis [data-trellis-part="empty"]) {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+}
+:where(.trellis [data-trellis-part="chrome"]) {
+  position: absolute;
+  inset: 0;
+  z-index: 4000;
+  pointer-events: none;
+}
+:where(.trellis [data-trellis-part="chrome"] > *) {
+  pointer-events: auto;
+}
+
+/* ------------------------------------------------------------------ panels */
+:where(.trellis [data-trellis-part="panel"]) {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: auto;
+  background: var(--trellis-panel);
+  border-radius: var(--trellis-radius);
+  box-shadow: 0 0 0 1px var(--trellis-border);
+  will-change: transform;
+}
+:where(.trellis [data-trellis-part="panel"][data-floating]) {
+  box-shadow:
+    0 0 0 1px var(--trellis-border),
+    var(--trellis-shadow-float);
+}
+:where(.trellis[data-dragging] [data-trellis-part="panel"][data-floating]) {
+  box-shadow:
+    0 0 0 1px var(--trellis-border),
+    var(--trellis-shadow-float);
+}
+:where(.trellis [data-trellis-part="panel"][data-lifted]) {
+  box-shadow:
+    0 0 0 1px var(--trellis-border),
+    var(--trellis-shadow-lifted);
+}
+:where(.trellis [data-appearing]) {
+  animation: trellis-appear 220ms var(--trellis-ease) both;
+}
+@keyframes trellis-appear {
+  from {
+    opacity: 0;
+    scale: 0.97;
+  }
+}
+
+/* ------------------------------------------------------------------ tab bar */
+/* Two independent tab options (the `tabs` workspace option):
+ * - fill (data-tab-fill on the root): tabs grow to share the tab row's width. Nothing else changes.
+ * - inset (--trellis-tab-inset, data-tab-bleed at 0): the space between the tabs and the bar's
+ *   top and sides. At 0 the tabs meet the bar's edges.
+ * Neither affects the accessories or the panel menu button, which always sit on the bar itself. */
+:where(.trellis [data-trellis-part="tabbar"]) {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: var(--trellis-tabbar-height);
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 0 2px 0 0;
+  background: var(--trellis-tabbar);
+  border-radius: var(--trellis-radius) var(--trellis-radius) 0 0;
+  box-shadow: inset 0 -1px 0 var(--trellis-border);
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+  overflow: hidden;
+  touch-action: none;
+}
+:where(.trellis [data-trellis-part="tabs"]) {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+  padding: var(--trellis-tab-inset) var(--trellis-tab-inset) 0;
+  /* Room at the end for the selected tab's flared corner, which reaches past the tab. Without it
+   * the flare overflows the row, which then scrolls a few pixels and shifts every tab left. */
+  padding-inline-end: max(var(--trellis-tab-inset), var(--trellis-tab-radius));
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+:where(.trellis [data-trellis-part="tabs"])::-webkit-scrollbar {
+  display: none;
+}
+:where(.trellis [data-trellis-part="tab"]) {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 72px;
+  max-width: var(--trellis-tab-max-width);
+  flex: 0 1 auto;
+  padding: 0 6px 0 10px;
+  border-radius: var(--trellis-tab-radius) var(--trellis-tab-radius) 0 0;
+  color: var(--trellis-text-muted);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: default;
+  outline: none;
+  transition:
+    background-color 120ms,
+    color 120ms;
+}
+/* The right padding assumes the close button's own space; without one, match the left. */
+:where(.trellis [data-trellis-part="tab"]:has(> [data-trellis-part="tab-close"][hidden])) {
+  padding-right: 10px;
+}
+:where(.trellis [data-trellis-part="tab"]:hover) {
+  background: var(--trellis-tab-hover);
+  color: var(--trellis-text);
+}
+/* The selected tab joins the content below it: same fill, flared bottom corners, and it covers
+ * the bar's bottom border. */
+:where(.trellis [data-trellis-part="tab"][data-selected]) {
+  z-index: 1;
+  background: var(--trellis-tab-active);
+  color: var(--trellis-text);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--trellis-text) 7%, transparent);
+}
+:where(.trellis [data-trellis-part="tab"][data-selected])::before,
+:where(.trellis [data-trellis-part="tab"][data-selected])::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  width: var(--trellis-tab-radius);
+  height: var(--trellis-tab-radius);
+  pointer-events: none;
+}
+:where(.trellis [data-trellis-part="tab"][data-selected])::before {
+  right: 100%;
+  background: radial-gradient(
+    circle at 0 0,
+    transparent var(--trellis-tab-radius),
+    var(--trellis-tab-active) calc(var(--trellis-tab-radius) + 0.5px)
+  );
+}
+:where(.trellis [data-trellis-part="tab"][data-selected])::after {
+  left: 100%;
+  background: radial-gradient(
+    circle at 100% 0,
+    transparent var(--trellis-tab-radius),
+    var(--trellis-tab-active) calc(var(--trellis-tab-radius) + 0.5px)
+  );
+}
+/* The focused panel's selected tab carries the accent along its top. */
+:where(.trellis [data-trellis-part="panel"][data-focused] [data-trellis-part="tab"][data-selected]),
+:where(.trellis [data-trellis-part="tabbar"][data-focused] [data-trellis-part="tab"][data-selected]) {
+  background:
+    linear-gradient(var(--trellis-accent), var(--trellis-accent)) center top / 100% 2px no-repeat,
+    var(--trellis-tab-active);
+}
+:where(.trellis [data-trellis-part="tab"]:focus-visible) {
+  box-shadow: inset var(--trellis-focus-ring);
+}
+/* Reordering within the strip: neighbours slide, the dragged tab rides on top. */
+:where(.trellis [data-trellis-part="tab"][data-sorting]) {
+  transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+:where(.trellis [data-trellis-part="tab"][data-dragging]) {
+  z-index: 2;
+  transition: none;
+  background: var(--trellis-tab-active);
+  color: var(--trellis-text);
+  cursor: grabbing;
+}
+/* Fill: tabs share the tab row's width. */
+:where(.trellis[data-tab-fill] [data-trellis-part="tab"]) {
+  flex: 1 1 0;
+  max-width: none;
+}
+:where(.trellis [data-trellis-part="tab-icon"]) {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  color: inherit;
+}
+:where(.trellis [data-trellis-part="tab-icon"]:empty) {
+  display: none;
+}
+:where(.trellis [data-trellis-part="tab-icon"] svg, .trellis [data-trellis-part="tab-icon"] img) {
+  width: 16px;
+  height: 16px;
+}
+:where(.trellis [data-trellis-part="tab-title"]) {
+  /* The title takes any spare width, so the close button always sits at the tab's right edge. */
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+:where(.trellis [data-trellis-part="tab-badge"]) {
+  flex: none;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: var(--trellis-accent);
+  color: var(--trellis-accent-contrast);
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 16px;
+  text-align: center;
+}
+:where(.trellis [data-trellis-part="tab-badge"][data-dot]) {
+  min-width: 8px;
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--trellis-text-muted);
+}
+:where(.trellis [data-trellis-part="tab"][data-selected] [data-trellis-part="tab-badge"][data-dot]) {
+  background: var(--trellis-text);
+}
+/* A dot (e.g. unsaved changes) sits where the close button is, and yields to it on hover. */
+:where(.trellis [data-trellis-part="tab"][data-badge="dot"]:not(:hover) [data-trellis-part="tab-close"]) {
+  display: none;
+}
+:where(.trellis [data-trellis-part="tab"][data-badge="dot"]:hover [data-trellis-part="tab-badge"]) {
+  display: none;
+}
+:where(.trellis [data-trellis-part="tab"][data-badge="dot"] [data-trellis-part="tab-badge"]) {
+  margin: 0 6px;
+}
+:where(.trellis [data-trellis-part="tab-close"], .trellis [data-trellis-part="panel-menu"]) {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  opacity: 0.55;
+  transition:
+    opacity 120ms,
+    background-color 120ms;
+}
+:where(.trellis [data-trellis-part="tab-close"]) {
+  opacity: 0;
+}
+:where(
+  .trellis [data-trellis-part="tab"]:hover [data-trellis-part="tab-close"],
+  .trellis [data-trellis-part="tab"][data-selected] [data-trellis-part="tab-close"]
+) {
+  opacity: 0.55;
+}
+:where(
+  .trellis [data-trellis-part="tab-close"]:hover,
+  .trellis [data-trellis-part="panel-menu"]:hover,
+  .trellis [data-trellis-part="panel-menu"][aria-expanded="true"]
+) {
+  opacity: 1;
+  background: var(--trellis-tab-hover);
+}
+:where(.trellis [data-trellis-part="tab-close"] svg, .trellis [data-trellis-part="panel-menu"] svg) {
+  width: 14px;
+  height: 14px;
+}
+:where(.trellis [data-trellis-part="panel-menu"]) {
+  align-self: center;
+  margin-left: 2px;
+}
+:where(.trellis [data-trellis-part="accessories"]) {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 4px;
+}
+:where(.trellis [data-trellis-part="accessory"]) {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+:where(.trellis [data-trellis-part="accessory"]:empty) {
+  display: none;
+}
+:where(.trellis [hidden]) {
+  display: none !important;
+}
+:where(.trellis [data-trellis-part="panel"][data-tabbar="hidden"] [data-trellis-part="tabbar"]) {
+  display: none;
+}
+:where(.trellis [data-trellis-part="panel"][data-compact] [data-trellis-part="tab-title"]),
+:where(.trellis [data-trellis-part="panel"][data-compact] [data-trellis-part="tab-close"]),
+:where(.trellis [data-trellis-part="panel"][data-compact] [data-trellis-part="accessories"]),
+:where(.trellis [data-trellis-part="panel"][data-compact] [data-trellis-part="tab-badge"]) {
+  display: none;
+}
+
+/* ------------------------------------------------------------------ frame-only and overlay bars */
+/* Too small to use: the panel shows only its icon and the whole frame drags. */
+:where(.trellis [data-trellis-part="frame-icon"]) {
+  display: none;
+}
+:where(.trellis [data-trellis-part="panel"][data-frame-only]) {
+  cursor: grab;
+}
+:where(.trellis [data-trellis-part="panel"][data-frame-only] [data-trellis-part="tabbar"]),
+:where(.trellis [data-trellis-part="panel"][data-frame-only] [data-trellis-part="frame-icon"]) {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--trellis-text-muted);
+}
+:where(.trellis [data-trellis-part="frame-icon"] > *) {
+  width: var(--trellis-frame-icon-size, 24px);
+  height: var(--trellis-frame-icon-size, 24px);
+  font-size: calc(var(--trellis-frame-icon-size, 24px) * 0.6);
+  display: grid;
+  place-items: center;
+}
+/* An overlaid bar floats over content that draws its own title bar underneath. */
+:where(.trellis [data-trellis-part="tabbar"][data-overlay]) {
+  inset: auto;
+  left: 0;
+  top: 0;
+  pointer-events: auto;
+  background: transparent;
+  box-shadow: none;
+}
+:where(.trellis [data-trellis-part="tabbar"][data-overlay] [data-trellis-part="tab"]) {
+  opacity: 0;
+}
+
+/* ------------------------------------------------------------------ surfaces */
+:where(.trellis [data-trellis-part="surface"]) {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: hidden;
+  pointer-events: auto;
+  border-radius: 0 0 var(--trellis-radius) var(--trellis-radius);
+  background: var(--trellis-panel);
+  will-change: transform;
+}
+:where(.trellis [data-trellis-part="content"]) {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  overflow: auto;
+  color: var(--trellis-text);
+}
+:where(.trellis [data-trellis-part="surface"][data-scaled] [data-trellis-part="content"]),
+:where(.trellis[data-busy] [data-trellis-part="content"]) {
+  pointer-events: none;
+  user-select: none;
+}
+:where(.trellis [data-trellis-iframe]) {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: transparent;
+}
+:where(.trellis .trellis-placeholder) {
+  display: grid;
+  place-content: center;
+  gap: 4px;
+  height: 100%;
+  padding: 24px;
+  text-align: center;
+  color: var(--trellis-text-muted);
+}
+:where(.trellis .trellis-placeholder strong) {
+  color: var(--trellis-text);
+  font-weight: 600;
+}
+
+/* Without a bar above it, a surface rounds all four corners. (After the base surface rule:
+ * both have zero specificity, so order decides.) */
+:where(.trellis [data-trellis-part="surface"][data-tabbar="overlay"]) {
+  border-radius: var(--trellis-radius);
+}
+:where(.trellis [data-trellis-part="surface"][data-tabbar="hidden"]) {
+  border-radius: var(--trellis-radius);
+}
+
+/* ------------------------------------------------------------------ dividers */
+:where(.trellis [data-trellis-part="divider"]) {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 20;
+  pointer-events: auto;
+  touch-action: none;
+  outline: none;
+}
+:where(.trellis [data-trellis-part="divider"][data-axis="x"]) {
+  cursor: col-resize;
+}
+:where(.trellis [data-trellis-part="divider"][data-axis="y"]) {
+  cursor: row-resize;
+}
+:where(.trellis [data-trellis-part="divider"])::after {
+  content: "";
+  position: absolute;
+  border-radius: 2px;
+  background: var(--trellis-accent);
+  opacity: 0;
+  transition: opacity 120ms;
+}
+:where(.trellis [data-trellis-part="divider"][data-axis="x"])::after {
+  top: 0;
+  bottom: 0;
+  left: calc(50% - 1.5px);
+  width: 3px;
+}
+:where(.trellis [data-trellis-part="divider"][data-axis="y"])::after {
+  left: 0;
+  right: 0;
+  top: calc(50% - 1.5px);
+  height: 3px;
+}
+:where(.trellis [data-trellis-part="divider"]:hover)::after {
+  opacity: 0.8;
+  transition-delay: 150ms;
+}
+:where(.trellis [data-trellis-part="divider"][data-active])::after,
+:where(.trellis [data-trellis-part="divider"]:focus-visible)::after {
+  opacity: 1;
+  transition-delay: 0ms;
+}
+:where(.trellis .trellis-dividers) {
+  z-index: 20;
+}
+
+/* ------------------------------------------------------------------ floating resize */
+:where(.trellis .trellis-handles) {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+}
+:where(.trellis [data-trellis-part="resize"]) {
+  position: absolute;
+  pointer-events: auto;
+  touch-action: none;
+}
+:where(.trellis [data-trellis-part="resize"][data-dir="n"]) {
+  top: -4px;
+  left: 8px;
+  right: 8px;
+  height: 8px;
+  cursor: ns-resize;
+}
+:where(.trellis [data-trellis-part="resize"][data-dir="s"]) {
+  bottom: -4px;
+  left: 8px;
+  right: 8px;
+  height: 8px;
+  cursor: ns-resize;
+}
+:where(.trellis [data-trellis-part="resize"][data-dir="e"]) {
+  right: -4px;
+  top: 8px;
+  bottom: 8px;
+  width: 8px;
+  cursor: ew-resize;
+}
+:where(.trellis [data-trellis-part="resize"][data-dir="w"]) {
+  left: -4px;
+  top: 8px;
+  bottom: 8px;
+  width: 8px;
+  cursor: ew-resize;
+}
+:where(.trellis [data-trellis-part="resize"][data-dir="ne"]) {
+  right: -5px;
+  top: -5px;
+  width: 14px;
+  height: 14px;
+  cursor: nesw-resize;
+}
+:where(.trellis [data-trellis-part="resize"][data-dir="nw"]) {
+  left: -5px;
+  top: -5px;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+}
+:where(.trellis [data-trellis-part="resize"][data-dir="se"]) {
+  right: -5px;
+  bottom: -5px;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+}
+:where(.trellis [data-trellis-part="resize"][data-dir="sw"]) {
+  left: -5px;
+  bottom: -5px;
+  width: 14px;
+  height: 14px;
+  cursor: nesw-resize;
+}
+
+/* ------------------------------------------------------------------ drag slots */
+/* While dragging, the layout itself reflows to open a slot where the view will land. */
+:where(.trellis [data-trellis-part="drop-slot"], .trellis [data-trellis-part="source-slot"]) {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: none;
+  pointer-events: none;
+  border-radius: var(--trellis-radius);
+}
+:where(.trellis [data-trellis-part="source-slot"][data-visible]) {
+  display: block;
+  z-index: 5;
+  background: transparent;
+}
+:where(.trellis [data-trellis-part="drop-slot"]) {
+  display: grid;
+  place-items: center;
+  z-index: 3000;
+  background: var(--trellis-slot);
+  opacity: 0;
+  transition: opacity 140ms ease-out;
+}
+:where(.trellis [data-trellis-part="drop-slot"][data-visible]) {
+  opacity: 1;
+}
+:where(.trellis [data-trellis-part="drop-slot"][data-kind="tab"]) {
+  background: color-mix(in srgb, var(--trellis-slot) 70%, transparent);
+  box-shadow: inset 0 0 0 2px var(--trellis-accent);
+}
+:where(.trellis [data-trellis-part="drop-label"]) {
+  color: var(--trellis-text-muted);
+  font-weight: 550;
+}
+:where(.trellis[data-dragging] [data-trellis-part="content"]) {
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------------ navigation feedback */
+:where(.trellis [data-trellis-part="snap-preview"], .trellis [data-trellis-part="marquee-target"]) {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 3500;
+  display: none;
+  pointer-events: none;
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.13);
+  border-radius: calc(var(--trellis-radius) + 3px);
+}
+:where(
+  .trellis [data-trellis-part="snap-preview"][data-visible],
+  .trellis [data-trellis-part="marquee-target"][data-visible]
+) {
+  display: block;
+}
+:where(.trellis [data-trellis-part="snap-preview"] span, .trellis [data-trellis-part="marquee-target"] span) {
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  transform: translateX(-50%);
+  padding: 7px 11px;
+  border-radius: 20px;
+  background: rgba(40, 44, 40, 0.75);
+  backdrop-filter: blur(16px);
+  color: #fff;
+  font-size: 10px;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+:where(.trellis [data-trellis-part="marquee"]) {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 3400;
+  display: none;
+  pointer-events: none;
+  border: 1px solid var(--trellis-accent);
+  background: color-mix(in srgb, var(--trellis-accent) 12%, transparent);
+  border-radius: 4px;
+}
+:where(.trellis[data-marquee] [data-trellis-part="marquee"]) {
+  display: block;
+}
+:where(.trellis[data-marquee]) {
+  cursor: crosshair;
+  user-select: none;
+}
+:where(.trellis[data-drag-zoom]) {
+  cursor: zoom-in;
+  user-select: none;
+}
+
+/* ------------------------------------------------------------------ menu */
+:where(.trellis .trellis-menu) {
+  position: absolute;
+  z-index: 5000;
+  min-width: 190px;
+  max-width: 320px;
+  padding: 5px;
+  border-radius: 10px;
+  background: var(--trellis-menu);
+  color: var(--trellis-text);
+  box-shadow:
+    0 0 0 1px var(--trellis-border),
+    0 12px 32px -6px rgba(0, 0, 0, 0.3);
+  pointer-events: auto;
+  outline: none;
+  animation: trellis-menu 120ms var(--trellis-ease);
+}
+@keyframes trellis-menu {
+  from {
+    opacity: 0;
+    translate: 0 -3px;
+  }
+}
+:where(.trellis .trellis-menu-item) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 28px;
+  padding: 0 8px 0 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: default;
+  outline: none;
+}
+:where(
+  .trellis .trellis-menu-item:hover,
+  .trellis .trellis-menu-item:focus-visible,
+  .trellis .trellis-menu-item:focus
+) {
+  background: var(--trellis-menu-hover);
+}
+:where(.trellis .trellis-menu-item[aria-disabled="true"]) {
+  opacity: 0.4;
+}
+:where(.trellis .trellis-menu-item.trellis-danger) {
+  color: #e5484d;
+}
+:where(.trellis .trellis-menu-check, .trellis .trellis-menu-chevron) {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+:where(.trellis .trellis-menu-check svg, .trellis .trellis-menu-chevron svg) {
+  width: 14px;
+  height: 14px;
+}
+:where(.trellis .trellis-menu-label) {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+:where(.trellis .trellis-menu-shortcut) {
+  color: var(--trellis-text-muted);
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+}
+:where(.trellis .trellis-menu-separator) {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--trellis-border);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(.trellis [data-appearing], .trellis .trellis-menu) {
+    animation: none;
+  }
+  :where(.trellis [data-trellis-part="drop-slot"]) {
+    transition: none;
+  }
+}
+
+/* Windows high contrast and other forced-color modes: box-shadows vanish, so draw real borders. */
+@media (forced-colors: active) {
+  :where(.trellis [data-trellis-part="panel"]) {
+    border: 1px solid CanvasText;
+  }
+  :where(.trellis [data-trellis-part="tab"][data-selected]) {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+  :where(.trellis [data-trellis-part="drop-slot"][data-visible]) {
+    border: 2px solid Highlight;
+  }
+  :where(.trellis [data-trellis-part="divider"])::after {
+    background: Highlight;
+  }
+  :where(.trellis .trellis-menu) {
+    border: 1px solid CanvasText;
+  }
+}
