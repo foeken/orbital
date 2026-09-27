@@ -252,29 +252,36 @@ function noteGone(uri, e) {
   return true;
 }
 // ---- Home ----
-// Home is the Work View (the default, a saved view: renderer/timeline.js openWorkView), the Library, or a saved search.
+// Home is the Work View (the default, a saved view: renderer/timeline.js openWorkView), a window you set as Home (Cmd+K
+// Set as Home keeps it as it is: the saved view HOME_VIEW, renderer/palette.js), or, chosen before that, the Library or
+// a saved search.
 // The saved search Home points at, while the list knows it. The list is the only proof we have that a search is still
 // there and still readable: main answers it from the graph, and app.js drops a deleted one from it as the deletion
 // arrives, so a Home that has gone away shows up here as a search nobody lists.
 const homeSearch = () => (homeIsSearch() ? (searches || []).find((s) => s.id === home) : null);
-const homeIsSearch = () => home !== 'library' && home !== 'workView';
+const HOME_VIEW = 'homeView';
+const homeView = () => savedViews().find((v) => v.id === HOME_VIEW) || null;
+const homeIsSearch = () => home !== 'library' && home !== 'workView' && home !== HOME_VIEW;
 // A Home the list has answered on and does not have is stale: it is repaired to the Library rather than left to dangle
 // (app.js calls this when the list lands and when a deletion arrives). Before the first answer nothing is concluded.
 function repairHome() { if (homeIsSearch() && searchesLoaded && !homeSearch()) setHome('library'); }
-const homeId = () => (homeIsSearch() && searchesLoaded && !homeSearch() ? 'library' : home);
+const homeId = () => (home === HOME_VIEW && !homeView() ? 'workView' : homeIsSearch() && searchesLoaded && !homeSearch() ? 'library' : home); // a Home window removed from the list leaves the Work View
 // What the Home crumb reads: the search's current title, so a rename in Tana shows through. null while a Home search
 // is still unknown — the anchor waits for its name rather than borrowing the Library's.
-const homeName = () => { const s = homeSearch(); return s ? s.text || s.title || 'Untitled search' : { library: 'Library', workView: 'Work View' }[homeId()] || null; };
+const homeName = () => { const s = homeSearch(); return s ? s.text || s.title || 'Untitled search' : { library: 'Library', workView: 'Work View', [HOME_VIEW]: 'Home' }[homeId()] || null; };
 // In the Work View a half is Home on its own page: the Timeline on the left, My Tasks (the search of that name) on the right
 // (by the page's own title: a search just made in the other half is not in this one's list yet)
 const atWorkView = () => !!zoom && !zoom.nodeId && (SIDE ? String(zoom.docId).startsWith(SEARCH_ID) && /^my tasks$/i.test(String((docOf(zoom.docId) || {}).text || '').trim()) : zoom.docId === TIMELINE_PAGE);
-const atHome = () => (homeId() === 'workView' ? atWorkView() : zoom ? !zoom.nodeId && zoom.docId === homeId() : homeId() === view);
-// The id this page would set as Home: the Library view, or the saved search you are looking at. Anything else — a
-// note, the Inbox, a space — is not a place to come back to, so the command is not offered there.
-const homeTarget = () => (onSearchPage() ? zoom.docId : !zoom && view === 'library' ? 'library' : null);
+// In a Home window a page is Home on the place that window keeps for it ('place', 'place:2', …; {} is its view)
+function atHomeView() {
+  let p = null;
+  try { p = JSON.parse(homeView().keys['place' + SIDE] || 'null'); } catch { /* not a place */ }
+  return !!p && (p.docId ? !!zoom && zoom.docId === p.docId && (zoom.nodeId || null) === (p.nodeId || null) : !p.myTasks && !zoom && view === homeView().keys['view' + SIDE]);
+}
+const atHome = () => (homeId() === 'workView' ? atWorkView() : homeId() === HOME_VIEW ? atHomeView() : zoom ? !zoom.nodeId && zoom.docId === homeId() : homeId() === view);
 function setHome(id) { home = id; setPref('home', id); render(true); }
-// Going Home: the Work View is opened as ⌘K opens it, a saved search is a document you open, the Library is a view you switch to.
-function goHome() { const id = homeId(); if (id === 'workView') run(openWorkView); else if (id !== 'library') goTo(id); else if (view === 'library') { zoom = null; render(true); } else setView('library'); }
+// Going Home: the Work View and a Home window are opened as saved views are, a saved search is a document you open, the Library is a view you switch to.
+function goHome() { const id = homeId(); if (id === 'workView') run(openWorkView); else if (id === HOME_VIEW) run(() => openSavedView(homeView())); else if (id !== 'library') goTo(id); else if (view === 'library') { zoom = null; render(true); } else setView('library'); }
 function sensitiveHidden(id) {
   return !sensitiveVisible && typeof id === 'string' && (sensitiveIds === null || sensitiveIds.has(id));
 }

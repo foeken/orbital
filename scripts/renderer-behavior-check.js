@@ -168,7 +168,7 @@ const withShims = (src) => {
   // The Home anchor (renderer/nodes.js): the palette's Go back row reads it, Set as Home offers itself from it, and
   // navigate lands on it. A slice that is not about Home gets the shipped default — the Library, and you are on it —
   // so nothing it asserts depends on a choice it never made; the Home harness slices the real ones instead.
-  if (/\b(atHome|homeId|homeTarget|homeName|repairHome|setHome|goHome)\b/.test(src) && !/const homeId =/.test(src)) src = "globalThis.atHome ??= () => true; globalThis.homeId ??= () => 'library'; globalThis.homeName ??= () => 'Library'; globalThis.homeTarget ??= () => null; globalThis.repairHome ??= () => {}; globalThis.setHome ??= () => {}; globalThis.goHome ??= () => {};\n" + src;
+  if (/\b(atHome|homeId|homeName|repairHome|setHome|goHome)\b/.test(src) && !/const homeId =/.test(src)) src = "globalThis.atHome ??= () => true; globalThis.homeId ??= () => 'library'; globalThis.homeName ??= () => 'Library'; globalThis.repairHome ??= () => {}; globalThis.setHome ??= () => {}; globalThis.goHome ??= () => {};\n" + src;
   // Motion (renderer/motion.js) is what no harness looks at: a slice that calls it gets moves that change nothing, and
   // the state change a move wraps runs at once, exactly as it does under reduced motion.
   if (/\b(turnPage|foldRow|foldSection|showHide|rowsQuiet|dismissRow|settleEmpty|settling|slideRail|motionBefore|motionAfter|armGlide|flash|flashAt|playOnce|rowFor|badgeMoved|popRead|popMention|swapPanel|menuMotion|crossfade|growFrom|play|MOTION|motionOK|stillPreferred)\b/.test(src) && !/function motionAfter\(/.test(src)) src = MOTION_SHIM + src;
@@ -1562,7 +1562,7 @@ async function runSyncShortcutCheck() {
     ({ rows: async (q) => { paletteRows(q); await Promise.resolve(); await Promise.resolve(); return paletteRows(q).map((r) => r.label); }, loads: () => loads,
        ids: (q) => paletteRows(q).map((r) => r.id), press: async (id) => { const hit = runAction(id); await Promise.resolve(); return [hit, ran.splice(0)]; } });
   `);
-  assert.deepEqual(plain(await folded.rows('s')), ['Sync', 'Search Tana', 'Set status', 'Smaller text', 'Reset text size', 'Set Work View as Home', 'Hide sidebar', 'Filter rows by text'],
+  assert.deepEqual(plain(await folded.rows('s')), ['Sync', 'Search Tana', 'Set status', 'Smaller text', 'Reset text size', 'Hide sidebar', 'Filter rows by text'],
     'one letter: the first level only, the groups whose best row starts with it first (the shortest such row leading), a letter inside a word last');
   assert.deepEqual(plain(await folded.rows('sesp')), ['Set status to In Progress'], 'two letters in: the level below is folded in and the query reaches into it');
   assert.deepEqual(plain(await folded.rows('seinb')), ['Set status to Inbox'], 'a disabled choice is left out, the others are single rows');
@@ -1635,7 +1635,7 @@ async function runSyncShortcutCheck() {
     'Views: Today', 'Views: This week', 'Views: Inbox', 'Views: Library',
     'View options: Filter by type', 'View options: Filter rows by text',
     'Actions: Log in to Tana', 'Actions: Create new …', 'Actions: Search Tana', 'Actions: Undo', 'Actions: Redo', 'Actions: Sync',
-    'Navigate: Go back', 'Navigate: Go forward', 'Navigate: Go to Home', 'Navigate: Set as Home', 'Navigate: Set Work View as Home', 'Navigate: Focus the sidebar',
+    'Navigate: Go back', 'Navigate: Go forward', 'Navigate: Go to Home', 'Navigate: Focus the sidebar',
     'Window: New window', 'Window: New pane', 'Window: New tab', 'Window: New floating pane', 'Window: Hide sidebar', 'Window: Reload',
     'Settings: Larger text', 'Settings: Smaller text', 'Settings: Reset text size', 'Settings: Toggle dark mode', 'Settings: Edit hidden items', 'Settings: Toggle sensitive visibility', 'Settings: Toggle demo mode',
     'Help: Help',
@@ -1660,14 +1660,8 @@ async function runSyncShortcutCheck() {
   // Nothing matched: one row that carries the query into Cmd+S, under the "No results" heading.
   assert.deepEqual(plain(order.labels('zzqq')), ['No results: Search Tana for \u201Czzqq\u201D'],
     'a query nothing matches offers the Tana search with what was typed');
-  // Set as Home is honest about the page it is on: on the page that already is Home it stays, saying so and doing
-  // nothing, rather than disappearing or pretending to act.
   const SAVED = 'tana:search:01j0myt00000000000000000';
-  assert.deepEqual(plain([order.row('setHome').hint, order.row('setHome').disabled]), ['Current', true],
-    'the Library offering itself as Home while it already is Home says Current and cannot be run');
   order.choose(SAVED, [{ id: SAVED, text: 'My Tasks' }]);
-  assert.deepEqual(plain([order.row('setHome').hint, order.row('setHome').disabled]), ['', false],
-    'and once Home is somewhere else the same row is live again');
   // Go to Home is the other half: always listed, honest about where it goes, and disabled only where it would do nothing.
   assert.deepEqual(plain([order.row('goHome').hint, order.row('goHome').disabled]), ['My Tasks', false],
     'Go to Home names the Home it would open, read live from the saved search');
@@ -6201,6 +6195,7 @@ async function runHomeCheck() {
     let navBack = [], navForward = [], navHere = null, navigating = false, caretOnOpen = false, savedPlace = null;
     const SEARCH_ID = 'tana:search:';
     const TIMELINE_PAGE = 'orbital:timeline', run = (fn) => fn(), openWorkView = () => { went.push('workView'); }; // renderer/timeline.js
+    let savedList = []; const savedViews = () => savedList, openSavedView = (v) => { went.push('view ' + v.name); }; // renderer/palette.js
     const isRealId = (id) => typeof id === 'string' && id.startsWith('tana:');
     const onSearchPage = () => !!zoom && !zoom.nodeId && String(zoom.docId || '').startsWith(SEARCH_ID);
     const render = () => { renders++; }, renderSoon = render, flushAll = () => {}, dropDrafts = () => {};
@@ -6222,7 +6217,7 @@ async function runHomeCheck() {
     ${functionSource('navigate')}
     ${functionSource('loadSearches')}
     ({
-      id: () => homeId(), name: () => homeName(), at: () => atHome(), target: () => homeTarget(),
+      id: () => homeId(), name: () => homeName(), at: () => atHome(), views: (list) => { savedList = list; },
       stored: () => ({ ...stored }), set: (id) => setHome(id), went: () => { const out = [...went]; went.length = 0; return out; },
       list: (rows, online = true) => { listed = rows; connected = online; return loadSearches(); },
       drop: (id) => { searches = searches.filter((s) => s.id !== id); repairHome(); },
@@ -6251,7 +6246,6 @@ async function runHomeCheck() {
   assert.equal(api.at(), false, 'and not anywhere else');
   api.view('library');
   await api.list([{ id: SEARCH, text: 'My Tasks' }]);
-  assert.equal(api.target(), 'library', 'the Library page offers itself as Home');
   api.set(SEARCH);
   assert.deepEqual(plain(api.stored()), { home: SEARCH }, 'choosing a saved search stores its id, not its name, so renaming it in Tana cannot lose the choice');
   assert.deepEqual([api.id(), api.name()], [SEARCH, 'My Tasks'], 'and Home reads as that search');
@@ -6271,8 +6265,6 @@ async function runHomeCheck() {
   crumb.click();
   assert.deepEqual(plain(api.went()), [SEARCH], 'and pressing it opens Home');
   assert.equal(api.crumb().tag, 'button', 'the button stays on Home itself: one fixed way back, always in the same place');
-  api.go({ docId: OTHER, nodeId: null });
-  assert.equal(api.target(), null, 'a note is not a place to come back to, so it does not offer itself as Home');
 
   // The bar is Home then ⌘K and nothing else: no location behind them, however deep the page
   assert.equal(api.crumbs(), '[Home] [⌘K] [?]', 'the bar over a document is the Home button, then ⌘K and Help, and no breadcrumbs');
@@ -6312,6 +6304,20 @@ async function runHomeCheck() {
   api.view('inbox');
   api.home();
   assert.deepEqual(plain(api.went()), ['view:library'], 'and once it has fallen back, Home is the Library view — no dead saved search is opened');
+
+  // Set as Home keeps the window as it is: the saved view 'homeView', opened as saved views are; a page is Home on the
+  // place that view keeps for it; removed from the list, Home is the Work View again
+  api.views([{ id: 'homeView', name: 'Home', doc: null, keys: { place: JSON.stringify({ docId: OTHER, nodeId: null }), view: 'library' } }]);
+  api.set('homeView');
+  assert.deepEqual([api.id(), api.name()], ['homeView', 'Home'], 'Home reads as the window kept');
+  api.go({ docId: OTHER, nodeId: null });
+  assert.equal(api.at(), true, 'a page on the place Home keeps for it is Home');
+  api.go({ docId: SEARCH, nodeId: null });
+  assert.equal(api.at(), false, 'and anywhere else it is not');
+  api.home();
+  assert.deepEqual(plain(api.went()), ['view Home'], 'going Home opens the window it keeps');
+  api.views([]);
+  assert.deepEqual([api.id(), api.name()], ['workView', 'Work View'], 'a Home window removed from the list leaves the Work View as Home');
 }
 
 

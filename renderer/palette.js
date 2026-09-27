@@ -330,12 +330,8 @@ function paletteRows(q, typed = q) {
   // so there is one route Home and it reads the choice live. On Home it stays, disabled, saying so — discoverable, and
   // still something ⇧⌘K can record a key against.
   rows.push({ id: 'goHome', group: 'Navigate', icon: 'home', label: 'Go to Home', hint: atHome() ? 'Current' : homeName() || '', disabled: atHome(), run: () => goHome() });
-  // Choosing where the app comes back to: offered on the Library and on a saved search, the two pages that are places.
-  // On the page that already is Home it stays, disabled and saying so, rather than disappearing or pretending to act.
-  const homeNext = homeTarget();
-  if (homeNext) rows.push({ id: 'setHome', group: 'Navigate', icon: 'home', label: 'Set as Home', hint: homeNext === homeId() ? 'Current' : '', disabled: homeNext === homeId(), run: () => setHome(homeNext) });
-  // The Work View is not a page you stand on, so it is offered from anywhere (and is the Home you start with)
-  rows.push({ id: 'setHomeWorkView', group: 'Navigate', icon: 'home', label: 'Set Work View as Home', hint: homeId() === 'workView' ? 'Current' : '', disabled: homeId() === 'workView', run: () => setHome('workView') });
+  // Home is the window as it is now, its panes and what each shows: kept as the saved view "Home" (renderer/nodes.js)
+  if (tana.windowLayout) rows.push({ id: 'setHome', group: 'Navigate', icon: 'home', label: 'Set as Home', hint: 'This window as it is', run: () => run(async () => { await saveView('Home', HOME_VIEW); setHome(HOME_VIEW); }) });
   if (!railEl.hidden) rows.push({ id: 'rail', group: 'Navigate', icon: 'rail', label: 'Focus the sidebar', run: () => focusRail() });
   if (tana.deletedList) rows.push({ id: 'recentlyDeleted', group: 'Navigate', icon: 'trash', label: 'Recently deleted', keepOpen: true, run: openTrashPalette });
   if (tana.archivedTypes) rows.push({ id: 'archivedTypes', group: 'Navigate', icon: 'type', label: 'Archived types', keepOpen: true, run: openArchivedPalette });
@@ -1042,12 +1038,12 @@ const shellRun = (command) => { if (window.frameElement) window.parent.postMessa
 // and a key recorded for it still find it.
 const savedViews = () => pref('savedViews', [WORK_VIEW]).filter((v) => v && typeof v.name === 'string' && v.keys && typeof v.keys === 'object');
 const PAGE_KEY = /^(view|place)(:[1-9]\d*)?$/;
-async function saveView(name) {
+async function saveView(name, id) { // id: kept under that id (Set as Home), else found by name
   const doc = await tana.windowLayout(), keys = {};
   const ids = doc ? Object.values(doc.views || {}).filter((v) => v && v.type === 'page').map((v) => String((v.params && v.params.side) || '')) : [''];
   for (const id of ids) for (const key of ['view', 'place']) keys[key + (id ? ':' + id : '')] = localStorage.getItem(key + (id ? ':' + id : ''));
-  const old = savedViews().find((v) => v.name === name);
-  setPref('savedViews', [...savedViews().filter((v) => v !== old), { ...(old && old.id ? { id: old.id } : {}), name, doc, keys }]);
+  const old = savedViews().find((v) => (id ? v.id === id : v.name === name)), keep = id || (old && old.id);
+  setPref('savedViews', [...savedViews().filter((v) => v !== old), { ...(keep ? { id: keep } : {}), name, doc, keys }]);
   showNote('Saved view \u201c' + name + '\u201d');
 }
 // plain async, for run() to queue: a queued step that queues another waits on itself

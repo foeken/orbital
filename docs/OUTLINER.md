@@ -331,11 +331,12 @@ Cmd+K leads with a Selection group for it (§8).
   never repeated in the sidebar ([MEETINGS.md](MEETINGS.md)).
 - **Back and Forward** (⌘[ and ⌘], the arrows at the top right) walk one history per page. Back with nothing to go back
   to lands on Home.
-- **Home** is the **Work View** by default (§16), the Library, or any saved search: Cmd+K "Set as Home" (`setHome`) on
-  the Library or a saved search, "Set Work View as Home" (`setHomeWorkView`) anywhere, stored as the target's id
-  (`workView`, `library` or a `tana:search:` uri) in the synced `home` preference, so renaming the search keeps the
-  choice. Every route Home goes through `goHome`; Cmd+K "Go to Home" names it, and like Set as Home stays listed,
-  disabled with "Current", where you already are. A Home whose saved search is gone from `api.searches()` falls back
+- **Home** is the **Work View** by default (§16), or the window as it was when you chose Cmd+K "Set as Home"
+  (`setHome`): its panes and what each shows, kept as the saved view "Home" (`HOME_VIEW`, listed under Saved views, where
+  it is removed or, saved again under that name, replaced) and stored as `homeView` in the synced `home` preference. A
+  page is at Home on the place that view keeps for it; removed, Home is the Work View again. A Library or saved search
+  chosen as Home before still works, stored as its id (`library` or a `tana:search:` uri). Every route Home goes through
+  `goHome`; Cmd+K "Go to Home" names it, and stays listed, disabled with "Current", where you already are. A Home whose saved search is gone from `api.searches()` falls back
   to the Library and the preference is repaired (`repairHome`), but only from a list that could have named it:
   `searchesLoaded` is set only by an answer that lands while connected.
 - **Reopening where you left off.** `rememberPlace` stores `{ docId, nodeId, from, title, icon }` under `place` (per
@@ -377,7 +378,7 @@ Searches, Types, View options, Actions, Navigate, Window, Saved views, Settings,
 - **View options**: the pills by what they do — Filter by type, Filter by status, Filter by assignee, Sort by, Group
   by, each hinting its value — then Clean up, Filter rows by text, Switch to table/outliner and Column widths ….
 - **Actions**: Log in (signed out), Create new …, Create task, Search Tana, Undo, Redo, Mark all as read, Sync.
-- **Navigate**: Go back, Go forward, Go to Home, Set as Home, Set Work View as Home, Focus the sidebar, Recently
+- **Navigate**: Go back, Go forward, Go to Home, Set as Home, Focus the sidebar, Recently
   deleted, Archived types.
 - **Window**: New window, New pane, New tab, New floating pane; with more than one page Next / Previous pane, Next / Previous
   tab, Maximize or restore pane, Show all panes, Zoom back / forward and Close pane (panes change places by dragging a tab);
