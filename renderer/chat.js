@@ -48,16 +48,21 @@ function chatMessageEl(n, docId) {
   return el;
 }
 // The rows of an open chat, as the elements the page shows (renderer/render.js renderOutline)
+let chatPendingQ = null; // the questions Tana waits on in the chat drawn last: its card replaces the composer
 function chatEls(list, docId) {
-  const msgs = list.filter((n) => n.chat), out = [];
+  const rows = list.filter((n) => n.chat), msgs = rows.filter((n) => !n.chat.status), out = [];
   const lefts = new Set(msgs.filter((n) => !n.chat.mine).map((n) => n.chat.author)); // more than one: names over their runs
-  msgs.forEach((n, i) => {
-    const prev = msgs[i - 1];
+  let prev = null;
+  for (const n of rows) {
+    // a status line ("Sam was added to the chat.") stands on its own between the messages, as Tana shows it
+    if (n.chat.status) { const line = document.createElement('div'); line.className = 'chat-status'; line.textContent = demoText(n.text, n.chat.author || docId); out.push(line); prev = null; continue; }
     if (!n.chat.mine && lefts.size > 1 && (!prev || prev.chat.author !== n.chat.author)) {
       const name = document.createElement('div'); name.className = 'chat-name'; name.textContent = demoText(n.text, n.chat.author); out.push(name);
     }
     out.push(chatMessageEl(n, docId));
-  });
+    prev = n;
+  }
+  chatPendingQ = ([...msgs].reverse().find((n) => n.chat.questions) || { chat: {} }).chat.questions || null;
   // Asked, and no answer has begun: dots where it will be, until one does or it has been two minutes
   // Only Tana's message after the one it was asked about ends the wait: not another person's (a group chat), and not
   // Tana's answer to an earlier message still arriving.
@@ -224,21 +229,157 @@ function chatAfterRender(parent, stick) {
   const opened = chat && docId !== chatShown;
   if (was !== (docId || '')) {
     composer.dataset.doc = docId || ''; setComposer(docId && chatDrafts.get(docId)); showMode();
-    if (docId && !chatAi.has(docId) && tana.chatAnswers) tana.chatAnswers(docId).then((r) => { if (!chatAi.has(docId)) chatAi.set(docId, !!r.ai); if (r.canWrite === false) chatReadOnly.add(docId); else chatReadOnly.delete(docId); if (composer.dataset.doc === docId) showMode(); }, () => {});
+    if (docId && !chatAi.has(docId) && tana.chatAnswers) tana.chatAnswers(docId).then((r) => { if (!chatAi.has(docId)) chatAi.set(docId, !!r.ai); if (r.canWrite === false) chatReadOnly.add(docId); else chatReadOnly.delete(docId); if (composer.dataset.doc === docId) { showMode(); renderSoon(true); } }, () => {}); // renderSoon: waiting questions show once write access is known
   }
-  composer.hidden = !chat;
+  const asking = chat && showQuestions(docId, chatPendingQ); // Tana's questions take the composer's place
+  if (!chat) showQuestions(null, null);
+  composer.hidden = !chat || !!asking;
   sc.classList.toggle('chatting', chat);
   chatShown = docId;
   if (!chat) return;
   if (stick) sc.scrollTop = sc.scrollHeight;
-  if (opened) requestAnimationFrame(() => { if (palette.hidden && composer.dataset.doc === docId) composerText.focus({ preventScroll: true }); });
+  if (opened || asking === 'new') requestAnimationFrame(() => { if (palette.hidden && composer.dataset.doc === docId) (asking ? qcard : composerText).focus({ preventScroll: true }); });
 }
 // Access can change while a chat is open (someone shares it with you, or takes it away): a change to its audience or
 // participants (main's meta flag) asks again whether you may write, and leaves the mode you chose alone.
 if (tana.onChanged && tana.chatAnswers) tana.onChanged((chatId, info) => {
   if (!chatId || !String(chatId).startsWith('tana:chat:') || !info || !info.meta || !chatAi.has(chatId)) return;
-  tana.chatAnswers(chatId).then((r) => { if (r.canWrite === false) chatReadOnly.add(chatId); else chatReadOnly.delete(chatId); if (composer.dataset.doc === chatId) showMode(); }, () => {});
+  tana.chatAnswers(chatId).then((r) => { if (r.canWrite === false) chatReadOnly.add(chatId); else chatReadOnly.delete(chatId); if (composer.dataset.doc === chatId) { showMode(); renderSoon(true); } }, () => {});
 });
+// ---- Tana's questions: the Codex question card, in the composer's place ----
+// When Tana's AI asks (askUserQuestion, sdk/chat.js pendingQuestions), the chat's composer gives way to a card like
+// Codex's: one question at a time with "‹ 2 of 3 ›", its options numbered, the last row a free answer ("No, and tell
+// Tana what to do differently"), and Dismiss and Continue. ↑↓ move, 1–9 pick, Space ticks (Select all that apply),
+// ↩ continues (picking the highlighted option when nothing is picked yet), ←→ step between questions, Esc dismisses,
+// which tells Tana to go on with sensible defaults. The last Continue submits, and Tana carries on from the answers.
+const qcard = $('chatQuestion');
+let qs = null; // { docId, messageId, items, index, cursor, answers: { questionId: { selected: Set, custom } }, busy }
+const qDrafts = new Map(); // messageId -> the card as it was left: picked options and typed words wait, as a draft does
+const qEl = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const qAnswer = (q) => (qs.answers[q.id] ||= { selected: new Set(), custom: '' });
+// true when a card is up for this chat; 'new' the first time these questions show, so the card takes the caret
+// Only for a chat you may write in, known to be (chat:answers): a viewer keeps the read-only composer, which says why.
+function showQuestions(docId, pending) {
+  if (!pending || !chatAi.has(docId) || chatReadOnly.has(docId)) { if (qs) qDrafts.set(qs.messageId, qs); qs = null; qcard.hidden = true; return false; }
+  const fresh = !qs || qs.docId !== docId || qs.messageId !== pending.messageId;
+  if (fresh && qs) qDrafts.set(qs.messageId, qs);
+  if (fresh) qs = { ...(qDrafts.get(pending.messageId) || { index: 0, cursor: 0, answers: {} }), docId, messageId: pending.messageId, items: pending.items, busy: false };
+  // drawn anew only when it is new or was away: a live update redrawing it would take the caret out of the free answer
+  if (fresh || qcard.hidden) drawQuestion();
+  qcard.hidden = false;
+  return fresh ? 'new' : true;
+}
+function drawQuestion() {
+  const q = qs.items[qs.index], a = qAnswer(q), n = qs.items.length, last = qs.index === n - 1;
+  const head = qEl('div', 'qhead'), title = qEl('div', 'qtext', demoText(q.question, qs.docId));
+  title.id = 'qtext'; head.append(title);
+  // for a screen reader: the options are radio buttons (or checkboxes) of the question, the highlighted one the active one
+  qcard.setAttribute('role', q.multiSelect ? 'group' : 'radiogroup'); qcard.setAttribute('aria-labelledby', 'qtext');
+  qcard.setAttribute('aria-activedescendant', qs.cursor < q.options.length ? 'qopt' + qs.cursor : '');
+  if (n > 1) {
+    const nav = qEl('div', 'qnav'), step = (label, d, off) => { const b = qEl('button', 'qstep', label); b.type = 'button'; b.tabIndex = -1; b.disabled = off; b.onmousedown = (e) => e.preventDefault(); b.onclick = () => stepQuestion(d); return b; };
+    nav.append(step('‹', -1, qs.index === 0), qEl('span', '', (qs.index + 1) + ' of ' + n), step('›', 1, last)); head.append(nav);
+  }
+  const rows = q.options.map((o, i) => {
+    const r = qEl('div', 'qopt' + (qs.cursor === i ? ' active' : '') + (a.selected.has(o.label) ? ' chosen' : ''));
+    r.id = 'qopt' + i; r.setAttribute('role', q.multiSelect ? 'checkbox' : 'radio'); r.setAttribute('aria-checked', String(a.selected.has(o.label)));
+    r.append(qEl('span', 'qnum', (i + 1) + '.'), qEl('span', 'qlabel', demoText(o.label, qs.docId)));
+    if (o.description) r.append(qEl('span', 'qdesc', demoText(o.description, qs.docId)));
+    if (q.multiSelect || a.selected.has(o.label)) r.append(qEl('span', 'qcheck', a.selected.has(o.label) ? '✓' : ''));
+    if (qs.cursor === i) r.append(qEl('span', 'qarrows', '↑↓'));
+    r.onmousedown = (e) => e.preventDefault();
+    r.onclick = () => { qs.cursor = i; pickOption(i); };
+    return r;
+  });
+  const foot = qEl('div', 'qfoot'), other = qEl('div', 'qopt qother' + (qs.cursor === q.options.length ? ' active' : ''));
+  const input = qEl('input', 'qinput'); input.placeholder = 'No, and tell Tana what to do differently'; input.value = a.custom;
+  input.oninput = () => { a.custom = input.value; if (!q.multiSelect && input.value.trim()) { a.selected.clear(); for (const r of qcard.querySelectorAll('.qopt.chosen')) r.classList.remove('chosen'); } };
+  input.onfocus = () => { qs.cursor = q.options.length; for (const r of qcard.querySelectorAll('.qopt')) r.classList.toggle('active', r === other); };
+  input.onkeydown = (e) => {
+    e.stopPropagation(); // the field's own keys: nothing in the page or the card reads them
+    if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); continueQuestion(); }
+    else if (e.key === 'Escape') { e.preventDefault(); submitQuestions(true); } // Esc dismisses from here too, as the card says
+    else if (e.key === 'ArrowUp' && !input.value) { e.preventDefault(); qs.cursor = Math.max(0, q.options.length - 1); drawQuestion(); qcard.focus(); }
+  };
+  other.append(qEl('span', 'qnum', (q.options.length + 1) + '.'), input);
+  other.onclick = () => input.focus();
+  const button = (cls, label, key, fn) => { const b = qEl('button', cls); b.type = 'button'; b.tabIndex = -1; b.disabled = qs.busy; b.append(label + ' ', qEl('kbd', '', key)); b.onmousedown = (e) => e.preventDefault(); b.onclick = fn; return b; };
+  foot.append(other, button('qdismiss', 'Dismiss', 'esc', () => submitQuestions(true)), button('qcontinue', qs.busy ? 'Sending' : last ? 'Submit' : 'Continue', '↩', () => continueQuestion()));
+  qcard.replaceChildren(head, ...(q.multiSelect ? [qEl('div', 'qhint', 'Select all that apply')] : []), ...rows, foot);
+}
+function pickOption(i) {
+  const q = qs.items[qs.index], a = qAnswer(q), label = q.options[i] && q.options[i].label;
+  if (label === undefined) return;
+  if (q.multiSelect) { if (!a.selected.delete(label)) a.selected.add(label); drawQuestion(); return; }
+  a.selected = new Set([label]); a.custom = '';
+  continueQuestion(); // one answer to a single choice: on to the next, as Codex does
+}
+function stepQuestion(d) {
+  const i = Math.min(qs.items.length - 1, Math.max(0, qs.index + d));
+  if (i !== qs.index) { qs.index = i; qs.cursor = 0; drawQuestion(); qcard.focus(); }
+}
+function continueQuestion() {
+  if (!qs || qs.busy) return;
+  const q = qs.items[qs.index], a = qAnswer(q);
+  if (!q.multiSelect && !a.selected.size && !a.custom.trim() && q.options[qs.cursor]) a.selected = new Set([q.options[qs.cursor].label]);
+  if (qs.index < qs.items.length - 1) { qs.index++; qs.cursor = 0; drawQuestion(); qcard.focus(); return; }
+  submitQuestions(false);
+}
+function submitQuestions(skip) {
+  if (!qs || qs.busy || !tana.answerChat) return;
+  const { docId, messageId } = qs;
+  const answers = skip ? null : Object.fromEntries(Object.entries(qs.answers).map(([id, a]) => [id, { selected: [...a.selected], custom: a.custom.trim() }]));
+  qs.busy = true; drawQuestion();
+  const wait = { asked: Date.now(), id: messageId }; // Tana's next message after the one that asked ends the dots
+  run(async () => {
+    let sent;
+    try { sent = await tana.answerChat(docId, messageId, answers); }
+    catch (e) { if (qs && qs.messageId === messageId) { qs.busy = false; drawQuestion(); } throw e; }
+    qDrafts.delete(messageId); // answered: nothing left to come back to
+    if (sent.responding) {
+      chatWaiting.set(docId, wait);
+      // the dots give up after two minutes even when nothing else redraws the page, as a sent message's do
+      setTimeout(() => { if (chatWaiting.get(docId) === wait) { chatWaiting.delete(docId); renderSoon(true); } }, CHAT_WAIT);
+    }
+    await reload(docId);
+    if (zoom && zoom.docId === docId) renderSoon(true);
+    if (sent.replyError) throw new Error('Answered, but Tana was not asked to go on: ' + sent.replyError);
+  });
+}
+qcard.addEventListener('keydown', (e) => {
+  if (!qs || e.target !== qcard || e.metaKey || e.ctrlKey || e.altKey) return; // ⌘K and the other combos go on to the page
+  const q = qs.items[qs.index], count = q.options.length + 1, digit = /^[1-9]$/.test(e.key) ? Number(e.key) - 1 : -1;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { qs.cursor = (qs.cursor + (e.key === 'ArrowDown' ? 1 : count - 1)) % count; drawQuestion(); if (qs.cursor === q.options.length) qcard.querySelector('.qinput').focus(); else qcard.focus(); }
+  else if (digit >= 0 && digit < q.options.length) { qs.cursor = digit; pickOption(digit); }
+  else if (digit === q.options.length) { qs.cursor = digit; drawQuestion(); qcard.querySelector('.qinput').focus(); }
+  else if (e.key === ' ') { if (qs.cursor < q.options.length) pickOption(qs.cursor); }
+  else if (e.key === 'Enter') { if (!q.multiSelect && qs.cursor < q.options.length && !qAnswer(q).selected.size) pickOption(qs.cursor); else continueQuestion(); }
+  else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') stepQuestion(e.key === 'ArrowLeft' ? -1 : 1);
+  else if (e.key === 'Escape') submitQuestions(true);
+  else return;
+  e.preventDefault(); e.stopPropagation();
+});
+
+// ---- inviting ----
+// ⌘K Invite to chat…: a workspace member joins this chat as an editor (main/documents.js inviteToChat), and the chat
+// says so. Once there are two of you Tana answers only when mentioned, so the composer moves to To the chat.
+function openInvitePicker(docId) {
+  loadMembers();
+  openPage('invite', 'Invite someone to this chat', { back: BACK_TO_COMMANDS, rows: (q) => {
+    loadMembers();
+    if (!members) return [{ group: 'People', label: 'Loading…', disabled: true, note: true }];
+    return members.filter((m) => !m.me && fuzzyMatch(memberName(m.id), q)).map((m) => ({ group: 'People', icon: 'member', label: memberName(m.id), run: () => inviteToChat(docId, m.id) }));
+  } });
+}
+function inviteToChat(docId, uri) {
+  run(async () => {
+    const { name } = await tana.inviteToChat(docId, uri);
+    showNote(name + ' can now read and write in this chat');
+    await reload(docId);
+    if (zoom && zoom.docId === docId) renderSoon(true);
+    if (tana.chatAnswers) { const r = await tana.chatAnswers(docId); chatAi.set(docId, !!r.ai); if (composer.dataset.doc === docId) showMode(); }
+  });
+}
 // ⌘K New chat: a chat with Tana, opened with the caret in its composer
 function startNewChat() {
   return run(async () => { openResult(await tana.newChat()); });

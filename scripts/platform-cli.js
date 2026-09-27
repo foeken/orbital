@@ -694,6 +694,31 @@ commands.chatsend = async () => {
   for (const m of d.messages || []) out((m.hiddenFromChat ? '(hidden) ' : '') + m.fromUserType + ': ' + ((m.content && m.content.text) || '').slice(0, 400));
 };
 
+// chatanswer <chat id> <option label…> [--custom <text>] | --skip: answer the questions Tana is waiting on in a chat the
+// way the question card does (main/documents.js chat:answer; the first question gets the options named, any others
+// none), and print the conversation once Tana has gone on (docs/CHATS.md §11). WRITES.
+commands.chatanswer = async () => {
+  const [id, ...labels] = positional;
+  if (!id) throw new Error('usage: chatanswer <chat id> <option label…> [--custom <text>] | --skip  (WRITES)');
+  backend(await connect());
+  await client.sync.connect();
+  const { ipc } = require('../main/documents');
+  const chatSdk = require('../sdk/chat');
+  const doc = await client.sync.subscribe(id);
+  const asking = (doc.data.get('messages').toJSON() || []).map(chatSdk.pendingQuestions).filter(Boolean).at(-1);
+  if (!asking) throw new Error('Tana is not waiting on any questions in ' + id);
+  out(asking);
+  const first = asking.items[0];
+  const answers = args.includes('--skip') ? null : { [first.id]: { selected: labels.length ? [labels.join(' ')] : [], custom: flag('custom') || '' } };
+  const sent = await ipc['chat:answer'](null, id, asking.messageId, answers);
+  out(sent);
+  const done = () => { const ms = doc.data.toJSON().messages || [], at = ms.findIndex((m) => m.id === sent.messageId); return at >= 0 && ms.slice(at + 1).some((m) => m.fromUserType === 'ai' && m.completedAt); };
+  for (let s = 0; sent.responding && s < 120 && !done(); s++) await new Promise((r) => setTimeout(r, 1000));
+  const asked = (doc.data.get('messages').toJSON() || []).find((m) => m.id === asking.messageId);
+  out({ answered: asked.questionsData.answered, skipped: asked.questionsData.skipped, tool: asked.toolCalls.find((c) => c.name === 'askUserQuestion').status, replied: !!done() });
+  for (const m of doc.data.toJSON().messages || []) out((m.hiddenFromChat ? '(hidden) ' : m.isAIInterviewRelay ? '(relay) ' : '') + m.fromUserType + ': ' + ((m.content && m.content.text) || '').slice(0, 300));
+};
+
 // discusswith <id> <who…>: the Cmd+K "Discuss with …" command through main — the Discussion Task type (found by
 // title, or created in the Library with its field when the workspace has none) and the name in that field. WRITES.
 commands.discusswith = async () => {
@@ -1109,7 +1134,8 @@ const USAGE = [
   '             set-state <id> <proposed|open|closed|not_now|workflow state> | pin <id> <sidebar|today|shared|mute> | unpin <id> <…same> |',
   '             pinto <event|space id> <id> | unpinfrom <event|space id> <id> | settype <id> <tana:type:...|none> |',
   '             set-hue <type uri> <0-360|none> | discusswith <id> <who…> | setfield <id> <type uri?attribute=key> <line…> |',
-  '             chatsend <chat id|new> <text…> [--attach <uri>]   (a message sent as the chat page sends it, and Tana\'s answer)',
+  '             chatsend <chat id|new> <text…> [--attach <uri>]   (a message sent as the chat page sends it, and Tana\'s answer)|',
+  '             chatanswer <chat id> <option label…> [--custom <text>] | --skip   (Tana\'s waiting questions answered as the card does)',
 ].join('\n');
 
 app.whenReady().then(async () => {

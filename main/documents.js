@@ -152,10 +152,62 @@ async function sendChat(id, text, attachments = [], opts = {}) {
     return { messageId, ownerUri: data.ownerUri, agentId: data.agentId, respond };
   });
   if (!sent.respond) return { messageId: sent.messageId, responding: false };
-  try {
-    await chat.triggerReply({ chatUri: id, messageId: sent.messageId, ownerUri: sent.ownerUri, ...(sent.agentId ? { agentId: sent.agentId } : {}), getAccessToken: (o) => S.session.getAccessToken(o) });
-  } catch (e) { return { messageId: sent.messageId, responding: false, replyError: errText(e) }; }
-  return { messageId: sent.messageId, responding: true };
+  return askReply(id, sent.messageId, sent);
+}
+// Ask the chat's agent to go on from a message just written (sendChat's trigger, and the one after answering questions)
+async function askReply(id, messageId, facts) {
+  try { await chat.triggerReply({ chatUri: id, messageId, ownerUri: facts.ownerUri, ...(facts.agentId ? { agentId: facts.agentId } : {}), getAccessToken: (o) => S.session.getAccessToken(o) }); }
+  catch (e) { return { messageId, responding: false, replyError: errText(e) }; }
+  return { messageId, responding: true };
+}
+// Answer Tana's questions on a message (answers: { questionId: { selected: [label], custom } }), or skip them with
+// null, the way Tana's question panel does (sdk/chat.js answerQuestions), then ask Tana to go on (docs/CHATS.md §11).
+async function answerChat(id, messageId, answers) {
+  if (!isChatId(id)) throw new Error('Not a chat');
+  if (typeof messageId !== 'string' || !messageId) throw new Error('Which questions?');
+  if (answers !== null && (typeof answers !== 'object' || Array.isArray(answers))) throw new Error('Answers are per question');
+  if (!S.client || !S.me) throw new Error(NOT_CONNECTED);
+  const written = await op(id, async (doc) => {
+    if (doc.writeDenied || !(await canWriteDoc(doc).catch(() => false))) throw new Error(CHAT_READ_ONLY);
+    let relay;
+    doc.transact((loro) => { relay = chat.answerQuestions(loro, { messageId, answers, byUri: S.me.userUri }); });
+    return { relay, facts: chatFacts(doc) };
+  });
+  return askReply(id, written.relay, written.facts);
+}
+// Invite a workspace member to a chat, as Tana's chat header does: they join its participants as an editor, through
+// the verified sharing rules (sdk/access.js setSharing, everyone already in it kept), and the chat says so. Only a chat
+// with a participant list of its own: one that takes its audience from where it lives (a meeting's, a space's) would
+// be narrowed to these people, so it is shared where it lives instead.
+async function inviteToChat(id, userUri) {
+  if (!isChatId(id)) throw new Error('Not a chat');
+  if (typeof userUri !== 'string' || !/^tana:user-profile:[0-9a-z]{26}$/.test(userUri)) throw new Error('Invite a workspace member');
+  if (!S.client || !S.me) throw new Error(NOT_CONNECTED);
+  // a member of this workspace, known by name, or nobody: the call is refused before the chat's access is touched
+  const member = (await members()).find((m) => m.id === userUri && !m.me);
+  if (!member) throw new Error('Invite a member of this workspace');
+  const name = member.title || member.text || 'A participant';
+  await mut(id, async (doc) => {
+    const ctx = await accessContext();
+    // read after the last await, so this is the list setSharing's own version check starts from (it refuses when the
+    // document moves under it): an invite only ever adds, whatever another client changed meanwhile
+    const n = readNode(doc), people = n.participants || {};
+    if (n.restricted !== true) throw new Error('This chat is shared through where it lives: share that instead');
+    if (people[userUri]) throw new Error(name + ' is already in this chat');
+    // a group grant (type 'group') is outside the verified sharing subset: kept through it, it would be dropped, and every
+    // member of the group would lose the chat. So such a chat is left to Tana.
+    if (Object.values(people).some((p) => !p || p.type !== 'user')) throw new Error('This chat is shared with a group: invite people to it in Tana');
+    const kept = Object.entries(people).filter(([uri, p]) => uri !== S.me.userUri && p && p.type === 'user').map(([uri, p]) => ({ uri, role: p.role }));
+    await access.setSharing(doc, S.me.userUri, { rule: 'people', participants: [...kept, { uri: userUri, role: 'editor' }] }, ctx);
+    // Tana's two lines (its onParticipantAdded and the multiple-participants notice): the first time the chat is shared,
+    // Tana stops answering every message, so the chat says how to ask it
+    doc.transact((loro) => {
+      chat.pushMessage(loro, { sentAt: Date.now(), fromUserUri: userUri, fromUserType: 'ai', isStatusUpdate: true }, name + ' was added to the chat.');
+      if (Object.keys(people).length === 1) chat.pushMessage(loro, { sentAt: Date.now(), fromUserType: 'ai', isStatusUpdate: true }, 'This chat now has multiple participants. Mention @Tana to trigger AI.');
+    });
+  }, true);
+  scheduleRefresh(2000);
+  return { name };
 }
 // A new chat with Tana, from ⌘K: yours alone, and untitled the way Tana starts one (no title, titleAutoGenerated) so
 // its AI names it after the first answer; until then the page calls it "New chat".
@@ -1053,6 +1105,8 @@ const ipc = {
   'chat:send': (_e, id, text, attachments, opts) => sendChat(id, text, attachments || [], opts || {}),
   'chat:answers': (_e, id) => chatAnswers(id),
   'chat:new': () => newChat(),
+  'chat:answer': (_e, id, messageId, answers) => answerChat(id, messageId, answers === undefined ? null : answers),
+  'chat:invite': (_e, id, userUri) => inviteToChat(id, userUri),
   'history:undo': () => history(undoStack, redoStack, 'undo', 'canUndo'),
   'history:redo': () => history(redoStack, undoStack, 'redo', 'canRedo'),
   'doc:delete': (_e, id) => documentAction(id, 'softDelete'),

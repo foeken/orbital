@@ -208,8 +208,9 @@ open chat like any other document.
 | status cancelled, error or limit_exceeded | a status row, "Error: <errorMessage>" |
 | `attachmentUris` | `reference` rows |
 | `proposals` | a row such as "create · approved" (the operation, then approved / rejected / awaiting approval) with a `reference` row under it to `proposedUri`, or `baseUri` for an update |
-| pending `questionsData` while `askUserQuestion` awaits input | one heading per question ("· Select all that apply" when multi-select), its options as bullet rows |
-| `hiddenFromChat`, `type: 'context'`, status updates other than "accepted N changes", human `isAIInterviewRelay` messages | skipped |
+| pending `questionsData` while `askUserQuestion` awaits input | `row.chat.questions` on the message row: the question card in the composer's place (§11) |
+| any other status update ("Sam was added to the chat.") | a row with `row.chat.status`: a centred line (§11) |
+| `hiddenFromChat`, `type: 'context'`, human `isAIInterviewRelay` messages | skipped |
 
 Segments carry `keep` (the app's own words) and `person` (a name), which demo mode reads (docs/OUTLINER.md).
 
@@ -276,3 +277,36 @@ Tana's server names an untitled chat after its first answer and leaves a titled 
 created with the title "New chat" kept it, and one created without a title was "Orbital Test Two Math" by the time
 the answer had finished. Checked with `node scripts/platform-cli.js chatsend new <text…>` (WRITES), which runs
 `chat:new` and `chat:send` and prints the conversation once Tana has answered.
+
+
+## 11. Answering Tana's questions, and inviting people
+
+Read from Tana's web client of 2026-09-27 (its `useQuestionHandling`, the question mutations and `kxt`); sdk/chat.js
+`pendingQuestions`, `answerSummary` and `answerQuestions` do the same, main/documents.js `answerChat` runs them.
+
+- **Waiting.** An AI message is waiting on an answer while its `askUserQuestion` call has `status: 'awaiting_user_input'`
+  and `questionsData` is neither `answered` nor `skipped`. Each question is `{ id, question, multiSelect,
+  options: [{ label, description }], selectedOptions: LoroList<string>, customAnswer: LoroText }`.
+- **Answering** (Submit): each question's `selectedOptions` gets the chosen labels, plus `'__custom__'` when there is a
+  free answer, and `customAnswer` the free text; `questionsData` becomes `answered: true, skipped: false, answeredAt,
+  answeredByUri`. **Skipping** (Dismiss) sets `skipped: true, answered: false` and the same two stamps.
+- **Telling Tana.** Both write one summary: "[User answered AI questions]" and a line per question, `- <first line of
+  the question, " […]" when it has more>: <labels joined by ", ">` with `; Custom: <text>` (or `Custom: <text>`
+  alone, or `(no selection)`), or for a skip "[User skipped AI questions]" and "Please continue with sensible defaults
+  and note assumptions briefly." The summary becomes the waiting call's `output` (`status: 'completed'`,
+  `completedAt`) and the text of a new human message with `isAIInterviewRelay: true, excludeFromAIContext: true`,
+  which the chat hides; that relay's id is what `/chat/trigger` is then asked to answer (§10).
+- Live on 2026-09-27: asked to, Tana put "Pick one: Red or Blue?" in a chat; `node scripts/platform-cli.js chatanswer
+  <chat> Blue` answered it, the call completed, and Tana replied "Blue.".
+
+**Inviting.** Tana's chat header shares the chat like any document and then posts
+`{ fromUserUri: <the new participant>, fromUserType: 'ai', isStatusUpdate: true }` "<name> was added to the chat.";
+when a chat first gets a second participant it also posts "This chat now has multiple participants. Mention @Tana to
+trigger AI." (`fromUserType: 'ai'`, status update). Orbital's `chat:invite` does both, the participant added as an
+editor through `sdk/access.js setSharing` with everyone already in the chat kept. It only does so for a chat with a
+participant list of its own (`restricted: true`); one that takes its audience from its meeting or space would be
+narrowed to these people, so it is refused; so is one with a group grant (`type: 'group'`), which the verified sharing
+subset does not carry and would drop.
+
+**Status lines.** Tana's chat panel shows every message but `hiddenFromChat` ones and interview relays (its `br`),
+status updates included; the app draws one other than "accepted N changes" as a small centred line (`row.chat.status`).

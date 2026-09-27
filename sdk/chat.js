@@ -85,10 +85,16 @@ const MESSAGE_STATUS = { cancelled: 'Cancelled', error: 'Error', limit_exceeded:
 function chatRows(messages, { authorName = () => undefined, aiName = 'Tana AI', me, streamingId } = {}) {
   const rows = [];
   list(messages).forEach((m, i) => {
-    // What the web client hides: the synthetic preamble (hiddenFromChat), injected 'context', every status update
-    // other than "accepted N changes", and a human message relayed for an AI interview.
-    if (!m || m.hiddenFromChat || m.type === 'context' || (m.isStatusUpdate && !accepted(m))) return;
+    // What the web client's chat panel hides (its br): the synthetic preamble (hiddenFromChat), injected 'context', and
+    // a human message relayed for an AI interview, which is how an answer to Tana's questions reaches it.
+    if (!m || m.hiddenFromChat || m.type === 'context') return;
     if (m.fromUserType === 'human' && m.isAIInterviewRelay) return;
+    // Any other status update ("Sam was added to the chat.", the multiple-participants notice) is one line of its own
+    if (m.isStatusUpdate && !accepted(m)) {
+      const line = String((m.content && m.content.text) || '').trim();
+      if (line) rows.push(row('m' + i, line, { chat: { id: m.id, status: true, author: m.fromUserUri || '', sentAt: typeof m.sentAt === 'number' ? m.sentAt : undefined } }));
+      return;
+    }
     const ai = m.fromUserType === 'ai', id = 'm' + i, children = [];
     // keep/person mark the app's own words and a name for demo mode (renderer/segments.js); the conversation is content
     if (list(m.toolCalls).length) { const line = thinking(m, list(m.toolCalls)); children.push(row(id + '.t', line, { note: true, segments: [{ text: line, keep: true }] })); }
@@ -109,19 +115,9 @@ function chatRows(messages, { authorName = () => undefined, aiName = 'Tana AI', 
       const label = (p.operation || 'change') + ' · ' + state;
       children.push(row(id + '.p' + j, label, { segments: [{ text: label, keep: true }], hasChildren: true, children: [reference(id + '.p' + j + '.r', target)] }));
     }
-    const waitingForAnswer = list(m.toolCalls).some((call) => call && call.name === 'askUserQuestion' && call.status === 'awaiting_user_input');
-    if (waitingForAnswer && m.questionsData && !m.questionsData.answered && !m.questionsData.skipped) {
-      for (const [j, question] of list(m.questionsData.questions).entries()) {
-        if (!question || typeof question.question !== 'string') continue;
-        const qid = id + '.q' + j;
-        const options = list(question.options).filter((option) => option && typeof option.label === 'string').map((option, k) => {
-          const text = option.label + (typeof option.description === 'string' && option.description ? ' · ' + option.description : '');
-          return row(qid + '.o' + k, text, { block: 'bullet', segments: [{ text }] });
-        });
-        const text = question.question + (question.multiSelect ? ' · Select all that apply' : '');
-        children.push(row(qid, text, { block: 'heading3', segments: [{ text: question.question }, ...(question.multiSelect ? [{ text: ' · Select all that apply', keep: true }] : [])], hasChildren: options.length > 0, children: options }));
-      }
-    }
+    // Tana's questions (askUserQuestion) waiting on an answer: handed to the renderer as row.chat.questions, which draws
+    // them as the question card in the composer's place (renderer/chat.js) and answers them through answerQuestions
+    const questions = pendingQuestions(m);
     for (const [j, call] of list(m.toolCalls).entries()) {
       if (call && typeof call.subagentChatUri === 'string') children.push(reference(id + '.s' + j, call.subagentChatUri, call.name));
     }
@@ -131,11 +127,73 @@ function chatRows(messages, { authorName = () => undefined, aiName = 'Tana AI', 
       icon: ai ? 'chat' : 'member', block: 'heading3', heading: 3,
       meta: typeof m.sentAt === 'number' ? hm(m.sentAt) + (m.editedAt !== undefined ? ' (edited)' : '') : undefined,
       chat: { id: m.id, mine: !ai && !!me && m.fromUserUri === me, author: m.fromUserUri || (ai ? 'ai' : ''), sentAt: typeof m.sentAt === 'number' ? m.sentAt : undefined,
-        ...(m.id && m.id === streamingId ? { streaming: true } : {}) },
+        ...(m.id && m.id === streamingId ? { streaming: true } : {}), ...(questions ? { questions } : {}) },
       hasChildren: children.length > 0, children,
     }));
   });
   return rows;
+}
+
+// ---- Tana's questions (askUserQuestion) ----
+// Its questionsData (docs/CHATS.md §2, §11): { questions: [{ id, question, multiSelect, options: [{ label, description }],
+// selectedOptions, customAnswer: LoroText }], answered, skipped, answeredAt, answeredByUri }. Pending while the
+// askUserQuestion call waits and nobody has answered or skipped.
+function pendingQuestions(m) {
+  const waiting = list(m.toolCalls).some((call) => call && call.name === 'askUserQuestion' && call.status === 'awaiting_user_input');
+  if (!waiting || !m.questionsData || m.questionsData.answered || m.questionsData.skipped) return null;
+  const items = list(m.questionsData.questions).filter((q) => q && typeof q.question === 'string' && typeof q.id === 'string').map((q) => ({
+    id: q.id, question: q.question, multiSelect: !!q.multiSelect,
+    options: list(q.options).filter((o) => o && typeof o.label === 'string').map((o) => ({ label: o.label, ...(typeof o.description === 'string' && o.description ? { description: o.description } : {}) })),
+  }));
+  return items.length ? { messageId: m.id, items } : null;
+}
+// What Tana tells its AI about the answers (its kxt, word for word): the tool call's output and the relay message.
+const CUSTOM = '__custom__'; // Tana's marker in selectedOptions for the free-text answer
+const oneLine = (s) => String(s).replace(/\s*\r?\n\s*/g, ' ').trim();
+function answerSummary(data) {
+  if (data.skipped) return '[User skipped AI questions]\nPlease continue with sensible defaults and note assumptions briefly.';
+  const out = ['[User answered AI questions]'];
+  for (const [n, q] of list(data.questions).entries()) {
+    const picked = list(q.selectedOptions).filter((o) => o !== CUSTOM).map(oneLine).filter(Boolean);
+    const lines = String(q.question || '').split('\n').map((l) => l.trim()).filter(Boolean);
+    const title = lines.length ? lines[0] + (lines.length > 1 ? ' […]' : '') : 'Q' + (n + 1);
+    const custom = typeof q.customAnswer === 'string' && q.customAnswer.trim() ? oneLine(q.customAnswer) : '';
+    out.push('- ' + title + ': ' + (custom ? (picked.length ? picked.join(', ') + '; Custom: ' + custom : 'Custom: ' + custom) : picked.length ? picked.join(', ') : '(no selection)'));
+  }
+  return out.join('\n');
+}
+// Answer (or skip, answers null) the questions on message messageId as Tana's handleQuestionsSubmit does: the choices
+// and free text into each question, the set marked answered or skipped by you, the waiting askUserQuestion call
+// completed with the summary, and a hidden relay message carrying it, whose id is what Tana is then asked to answer.
+// answers: { [questionId]: { selected: [label], custom: string } }. Returns the relay message id.
+function answerQuestions(loro, { messageId, answers, byUri, now = Date.now() }) {
+  if (!/^tana:user-profile:/.test(byUri || '')) throw new Error('An answer needs who gives it');
+  const messages = loro.getMap('data').get('messages');
+  let m = null;
+  for (let i = 0; messages instanceof LoroList && i < messages.length; i++) { const x = messages.get(i); if (x instanceof LoroMap && x.get('id') === messageId) m = x; }
+  const json = m && m.toJSON();
+  if (!json || !pendingQuestions(json)) throw new Error('These questions are no longer waiting for an answer');
+  const qd = m.get('questionsData'), qs = qd.get('questions');
+  if (answers) {
+    for (let i = 0; i < qs.length; i++) {
+      const q = qs.get(i); if (!(q instanceof LoroMap)) continue;
+      const a = answers[q.get('id')] || {}, labels = new Set(list(q.toJSON().options).map((o) => o && o.label));
+      const custom = typeof a.custom === 'string' ? a.custom.trim() : '';
+      const picked = list(a.selected).filter((l) => labels.has(l));
+      const chosen = q.get('multiSelect') ? picked : picked.slice(0, custom ? 0 : 1);
+      const sel = q.setContainer('selectedOptions', new LoroList());
+      for (const l of [...chosen, ...(custom ? [CUSTOM] : [])]) sel.push(l);
+      q.setContainer('customAnswer', new LoroText()).insert(0, custom);
+    }
+  }
+  qd.set('answered', !!answers); qd.set('skipped', !answers); qd.set('answeredAt', now); qd.set('answeredByUri', byUri);
+  const summary = answerSummary(qd.toJSON());
+  const calls = m.get('toolCalls');
+  for (let i = 0; calls instanceof LoroList && i < calls.length; i++) {
+    const c = calls.get(i);
+    if (c instanceof LoroMap && c.get('name') === 'askUserQuestion' && c.get('status') === 'awaiting_user_input') { c.set('output', summary); c.set('status', 'completed'); c.set('completedAt', now); }
+  }
+  return pushMessage(loro, { sentAt: now, fromUserUri: byUri, fromUserType: 'human', isAIInterviewRelay: true, excludeFromAIContext: true }, summary);
 }
 
 // ---- sending ----
@@ -207,4 +265,4 @@ async function triggerReply({ chatUri, messageId, ownerUri, agentId = TANA_AGENT
   }
 }
 
-module.exports = { chatRows, blocks, segments, plain, hm, pushMessage, addMessage, autoResponds, mentionsTana, triggerReply, deterministicId, TANA_AGENT };
+module.exports = { chatRows, blocks, segments, plain, hm, pushMessage, addMessage, autoResponds, mentionsTana, pendingQuestions, answerSummary, answerQuestions, triggerReply, deterministicId, TANA_AGENT };
