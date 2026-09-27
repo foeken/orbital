@@ -5707,6 +5707,13 @@ async function main() {
       assert.deepEqual([joined.role, joined.type, joined.changedBy, chatDoc.data.get('participants').toJSON()[ME].role], ['editor', 'user', ME, 'admin']);
       assert.deepEqual(lines.map((m) => [m.content.text, m.isStatusUpdate, m.fromUserType]), [['Sam Okafor was added to the chat.', true, 'ai'], ['This chat now has multiple participants. Mention @Tana to trigger AI.', true, 'ai']]);
       await assert.rejects(backend.handlers.get('chat:invite')(null, chatDoc.id, SAM), /already in this chat/);
+      // a group grant is never dropped: such a chat is refused, untouched
+      chatDoc.transact((l) => { const g = l.getMap('data').get('participants').setContainer('tana:group:01examplegroup0000000000000', new LoroMap()); g.set('type', 'group'); g.set('role', 'editor'); });
+      const before = JSON.stringify(chatDoc.data.get('participants').toJSON());
+      chatDoc.transact((l) => l.getMap('data').get('participants').delete(SAM));
+      await assert.rejects(backend.handlers.get('chat:invite')(null, chatDoc.id, SAM), /shared with a group/);
+      assert.equal(chatDoc.data.get('participants').toJSON()['tana:group:01examplegroup0000000000000'].type, 'group');
+      chatDoc.transact((l) => { const p = l.getMap('data').get('participants'); p.delete('tana:group:01examplegroup0000000000000'); const s = p.setContainer(SAM, new LoroMap()); for (const [k, v] of Object.entries(JSON.parse(before)[SAM])) s.set(k, v); });
       // answering Tana's questions asks it to go on from the relay
       chatDoc.transact((l) => {
         const m = l.getMap('data').get('messages').insertContainer(l.getMap('data').get('messages').length, new LoroMap());

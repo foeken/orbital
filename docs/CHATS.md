@@ -305,7 +305,8 @@ when a chat first gets a second participant it also posts "This chat now has mul
 trigger AI." (`fromUserType: 'ai'`, status update). Orbital's `chat:invite` does both, the participant added as an
 editor through `sdk/access.js setSharing` with everyone already in the chat kept. It only does so for a chat with a
 participant list of its own (`restricted: true`); one that takes its audience from its meeting or space would be
-narrowed to these people, so it is refused.
+narrowed to these people, so it is refused; so is one with a group grant (`type: 'group'`), which the verified sharing
+subset does not carry and would drop.
 
 **Status lines.** Tana's chat panel shows every message but `hiddenFromChat` ones and interview relays (its `br`),
 status updates included; the app draws one other than "accepted N changes" as a small centred line (`row.chat.status`).
