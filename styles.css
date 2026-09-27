@@ -623,6 +623,7 @@ button.chat-thought-head[aria-expanded="true"]::after { rotate: 135deg; translat
 .agent-head.opens { cursor: pointer; }
 .agent-head.opens:hover { color: inherit; }
 .agent-row { display: flex; align-items: center; justify-content: flex-end; gap: 8px; max-width: min(80%, 660px); }
+.chat-msg[data-key] { scroll-margin: 44px 0 36px; } /* scrolled into view clear of the column's faded edges */
 .chat-msg[data-key]:focus { outline: none; } /* a message selected by ↑↓ (renderer/chat.js selectMsg): the ring goes on what it looks like, and stays while Cmd+K is open */
 .chat-msg.mine.chat-sel .bubble { box-shadow: 0 0 0 2px var(--focus); }
 .chat-msg.theirs.chat-sel { outline: 2px solid var(--focus); outline-offset: 6px; border-radius: 8px; }

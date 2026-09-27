@@ -296,6 +296,7 @@ document.addEventListener('keydown', (e) => {
   else if (sel && document.activeElement === document.body && (e.defaultPrevented || selKey(e))) e.preventDefault(); // selection keys; a Shift+Arrow already handled in the node stops here (focus is on body by now)
   else if (mod && e.shiftKey && e.key === 'Backspace' && document.activeElement === document.body && zoom) { e.preventDefault(); removeZoomedBlock(); }
   else if (hotkey) { if (runAction(hotkey)) e.preventDefault(); } // a row that is not there right now (no rail, nothing to go back to) leaves the key to the browser
+  else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !mod && !e.shiftKey && document.activeElement === document.body && chatArrow(e.key === 'ArrowUp')) e.preventDefault(); // a chat: its messages (renderer/chat.js)
   else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !mod && document.activeElement === document.body) { // nothing focused: enter the outline
     const all = texts(), el = e.key === 'ArrowDown' ? all[0] : all.at(-1);
     if (el) { e.preventDefault(); setCaret(el, e.key === 'ArrowDown' ? 0 : el.textContent.length); }

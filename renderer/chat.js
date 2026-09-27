@@ -245,6 +245,17 @@ function chatFocus(key) {
   if (el) { el.focus({ preventScroll: true }); el.scrollIntoView({ block: 'nearest' }); }
   return !!el;
 }
+// ↑↓ with nothing focused on a chat page (renderer/events.js): on from the selected message, or into the messages from
+// what is in view, the lowest for ↑ and the highest for ↓
+function chatArrow(up) {
+  const all = chatShown ? chatMsgs() : [];
+  if (!all.length) return false;
+  const at = all.indexOf(msgEl(chatSel));
+  if (at >= 0) { const next = all[at + (up ? -1 : 1)]; if (next) chatFocus(next.dataset.key); else if (up) chatFocus(chatSel); else toComposer(); return true; }
+  const box = outline.parentElement.getBoundingClientRect(), seen = all.filter((el) => { const r = el.getBoundingClientRect(); return r.bottom > box.top && r.top < box.bottom; });
+  chatFocus(((up ? seen.at(-1) : seen[0]) || all.at(-1)).dataset.key);
+  return true;
+}
 function toComposer() { selectMsg(null); if (!composer.hidden) composerText.focus(); else document.activeElement.blur(); }
 // Yours to delete: a local question or answer (both go), or your own message in the chat when you may write in it
 function deletableMsg(docId, key) {
