@@ -5260,8 +5260,11 @@ async function main() {
     assert.deepEqual(live, otherUris, 'a target whose bootstrap failed is subscribed again on the next read');
     sync.subscribe = plain;
     backend.testRuntime({me:{userUri:ME},client:{...refClient}});
-    live.length = 0; await backend.outlineWithReferences(slow);
-    assert.deepEqual(live, [slowUri], 'after a new login a target live on the old client is subscribed on the new one');
+    await backend.outlineWithReferences(many); live.length = 0; await backend.outlineWithReferences(many); // all 50 live on this client
+    const liveBefore = live.length;
+    backend.testRuntime({me:{userUri:ME},client:{...refClient}});
+    live.length = 0; await backend.outlineWithReferences(many);
+    assert.deepEqual([liveBefore, live.length], [0, 50], 'after a new login the targets live on the old client are subscribed on the new one');
     sync.subscribe = plain;
     sync.unsubscribe = async () => {};
     backend.testRuntime({me:{userUri:ME},client:{sync,graph:{listNodes:async q => { requests.push(q); return {nodes:[{id:targetUri,title:'Actual embedded task',state:{type:'open'},appearance:{hue:0}}]}; }}}});
