@@ -71,9 +71,10 @@ const hotkeys = { ...pref('hotkeys', {}) }; // palette row id -> combo ("⇧⌘M
 // The built-in keys are palette rows with a default combo, in the same map the recorder edits: a recorded combo
 // overrides the default, and Reset in the recorder restores it. What is not here is fixed on purpose (⌘K, ⇧⌘K,
 // the text-size keys, ⇧⌘⌫ and the ⇧⌘↑/↓ moves, which act on blocks the palette does not address).
-// The pane keys are Trellis's own defaults (its DEFAULT_KEYMAP; the shell runs the commands), taken before a row's
-// keydown while there are panes (renderer/palette.js), since ⌥⌘←/→ and ⇧⌘↩ would move the caret or break the line there.
-const DEFAULT_HOTKEYS = { createTask: '⇧⌘Space', search: '⌘S', filter: '⌘F', copyLink: '⌘C', back: '⌘[', forward: '⌘]', undo: '⌘Z', redo: '⇧⌘Z', expand: '⌘↓', collapse: '⌘↑', toggleDone: '⌘↩', today: '⌃⇧D', reload: '⌘R', newWindow: '⌥⌘N', splitView: '⌘N', otherPane: 'F6', previousPane: '⇧F6', maximizePane: '⇧⌘↩', overview: '⌥⌘↑', zoomBack: '⌥⌘←', zoomForward: '⌥⌘→', nextTab: '⌥⌘]', previousTab: '⌥⌘[', closePane: '⌥⌘W' }; // "Focus the sidebar" is a palette row with no default key
+// The pane keys (Trellis's commands, run by the shell) keep off what a row's own keydown answers to: ⌥⌘ with ↑ or ↓,
+// and brackets and \ with ⇧ or ⌥; while there are panes they are taken before a row sees them (renderer/palette.js).
+// Close pane has no key of its own: ⌘W closes the pane in front (the File menu).
+const DEFAULT_HOTKEYS = { createTask: '⇧⌘Space', search: '⌘S', filter: '⌘F', copyLink: '⌘C', back: '⌘[', forward: '⌘]', undo: '⌘Z', redo: '⇧⌘Z', expand: '⌘↓', collapse: '⌘↑', toggleDone: '⌘↩', today: '⌃⇧D', reload: '⌘R', newWindow: '⌥⌘N', splitView: '⌘N', otherPane: '⌘\\', previousPane: '⇧⌘\\', maximizePane: '⌥⌘↓', overview: '⌥⌘↑', zoomBack: '⌥⌘[', zoomForward: '⌥⌘]', nextTab: '⇧⌘]', previousTab: '⇧⌘[' }; // "Focus the sidebar" is a palette row with no default key
 const hotkeyFor = (id) => (Object.hasOwn(hotkeys, id) ? hotkeys[id] : DEFAULT_HOTKEYS[id]);
 // A header button's tooltip: what it does and, when it has one, the key that does the same. The label and row id stay
 // on the button so hovering can read the key again (renderer/edit.js), since a key recorded later changes it.

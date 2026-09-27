@@ -439,16 +439,17 @@ Every command row has a stable `id`, and a key is a row with a combo. The built-
 | Reload | ⌘R |
 | New window | ⌥⌘N |
 | New pane (to the right) | ⌘N |
-| Next / Previous pane | F6 / ⇧F6 |
-| Next / Previous tab | ⌥⌘] / ⌥⌘[ |
-| Maximize or restore pane | ⇧⌘↩ |
+| Next / Previous pane | ⌘\\ / ⇧⌘\\ |
+| Next / Previous tab | ⇧⌘] / ⇧⌘[ |
+| Maximize or restore pane | ⌥⌘↓ |
 | Show all panes | ⌥⌘↑ |
-| Zoom back / forward | ⌥⌘← / ⌥⌘→ |
-| Close pane | ⌥⌘W |
+| Zoom back / forward | ⌥⌘[ / ⌥⌘] |
+| Close pane | ⌘W (the File menu) |
 
-The pane keys are Trellis's defaults (its `DEFAULT_KEYMAP`). While a window has more than one page they are taken
-before a row's own keydown (a capture listener in renderer/palette.js), since a row would read ⌥⌘←/→ and ⇧⌘↩ as moving
-the caret or breaking the line; a page alone leaves them to the row. A function key (F6) is a valid combo on its own.
+The pane keys are Orbital's own, kept off what a row types (Trellis's defaults, ⌥⌘←/→ and ⇧⌘↩, move the caret or
+break the line there). While a window has more than one page they are taken before a row's own keydown (a capture
+listener in renderer/palette.js), so a recorded one wins too; a page alone leaves them to the row. A function key (F6)
+is a valid combo on its own.
 
 The document keydown handler finds the row by combo (`hotkeyFor`/`hotkeyIds`) and runs it through `runAction`; with
 the palette closed the current node is whatever is focused, and a row that opens a folded level asks for its choices

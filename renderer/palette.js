@@ -1022,7 +1022,7 @@ function closePalette() {
 let covering = false, coverTimer = null;
 const tellCover = (on) => { if (window.frameElement) window.parent.postMessage({ orbital: 'cover', on }, '*'); };
 // The workspace's moves, asked of the shell the same way (shell.js run): [row id, label, Trellis command, icon]. Keys
-// pressed in a page never reach the shell, so each is a row here with Trellis's default key in DEFAULT_HOTKEYS.
+// pressed in a page never reach the shell, so each is a row here with its key in DEFAULT_HOTKEYS.
 const PANE_ROWS = [['otherPane', 'Next pane', 'panel.next', 'otherPane'], ['previousPane', 'Previous pane', 'panel.previous', 'otherPane'],
   ['nextTab', 'Next tab', 'tab.next', 'forward'], ['previousTab', 'Previous tab', 'tab.previous', 'back'],
   ['maximizePane', 'Maximize or restore pane', 'frame.toggle', 'zoomIn'], ['overview', 'Show all panes', 'navigation.overview', 'splitPanes'],
@@ -1200,8 +1200,8 @@ document.addEventListener('keydown', (e) => { // capture: the recorder sees ever
   if (plain && e.key === 'Backspace') return $('recReset').click();
   rec.combo = comboOf(e); showCombo();
 }, true);
-// The pane keys go to the shell before a row sees them (capture): Trellis's combos include ⌥⌘←/→ and ⇧⌘↩, which a row
-// takes as moving the caret or breaking the line, and F6, which has no ⌘. Only while there are panes to move between,
+// The pane keys go to the shell before a row sees them (capture), whatever they are recorded as: a row reads ⌥ away
+// (⌥⌘↓ as ⌘↓) and a function key has no ⌘ for it to see. Only while there are panes to move between,
 // with the palette closed and no key being recorded; alone, a page leaves those keys to the row.
 document.addEventListener('keydown', (e) => {
   if (windowPanes.pages < 2 || !palette.hidden || rec) return;
