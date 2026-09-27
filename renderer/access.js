@@ -65,6 +65,10 @@ function visibilityPeopleRows(q) {
   if (!palDoc) return [];
   loadMembers();
   const people = (members || []).filter((member) => !member.me && fuzzyMatch(memberName(member.id), q));
+  // who can see it now leads the list, the rest after in member order; ticking one does not move it (the node's own
+  // participants, not the choices being made)
+  const seeing = new Set(((taskMetaById.get(palDoc.id) || {}).participants || []).map((p) => p.uri));
+  people.sort((a, b) => seeing.has(b.id) - seeing.has(a.id));
   const back = { group: 'Visibility', label: 'Back to visibility', keepOpen: true, run: backPalette };
   const apply = { group: 'Visibility', label: 'Apply selected people', disabled: !visibilityPeople.size, keepOpen: true, run: () => applySharing(palDoc, { rule: 'people', participants: [...visibilityPeople].map((uri) => ({ uri, role: visibilityRoles.get(uri) || 'editor' })) }) };
   return [back, apply, ...people.map((member) => ({ group: 'People', icon: 'member', label: memberName(member.id), hint: visibilityPeople.has(member.id) ? '✓' : '', keepOpen: true, run: () => { if (visibilityPeople.has(member.id)) visibilityPeople.delete(member.id); else { visibilityPeople.add(member.id); visibilityRoles.set(member.id, 'editor'); } renderPalette(); } }))];

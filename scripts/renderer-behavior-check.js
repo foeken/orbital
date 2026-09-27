@@ -1344,7 +1344,7 @@ async function runVisibilityPickerCheck() {
     let palDoc = { id: 'tana:text:01j0doc000000000000000000', kind: 'document' };
     let palMode = 'visibilityPeople', closed = false;
     let visibilityPeople = new Set(), visibilityRoles = new Map();
-    const members = [{ id: 'tana:user-profile:01j0person000000000000000', title: 'Member One', me: false }];
+    const members = [{ id: 'tana:user-profile:01j0person000000000000000', title: 'Member One', me: false }, { id: 'tana:user-profile:01j0persontwo0000000000000', title: 'Member Two', me: false }];
     const memberName = (id) => members.find((member) => member.id === id).title;
     const loadMembers = () => {};
     const renderPalette = () => {};
@@ -1367,6 +1367,7 @@ async function runVisibilityPickerCheck() {
       back: () => backPalette(),
       mode: (next) => { palMode = next; palPage = PAGES[next]; closed = false; },
       state: () => ({ calls, selected: [...visibilityPeople], palMode, closed }),
+      order: (participants) => { taskMetaById.set(palDoc.id, { participants }); return visibilityPeopleRows('').filter((row) => row.group === 'People').map((row) => row.label); },
     });
   `);
   const rows = api.rows();
@@ -1386,6 +1387,8 @@ async function runVisibilityPickerCheck() {
   assert.equal(api.state().palMode, 'visibility', 'Escape and the visible Back row return the people step to the mode picker');
   api.mode('visibility'); api.back();
   assert.equal(api.state().closed, true, 'Escape from the visibility mode picker closes the palette');
+  assert.deepEqual(plain(api.order([])), ['Member One', 'Member Two'], 'with nobody given access the people keep member order');
+  assert.deepEqual(plain(api.order([{ uri: 'tana:user-profile:01j0persontwo0000000000000', role: 'editor' }])), ['Member Two', 'Member One'], 'who can see the node now leads the people list');
   assert.match(source, /rules\.has\('me'\)[\s\S]*rules\.has\('people'\)[\s\S]*rules\.has\('inherit'\)/, 'the mode picker preserves every sharing rule reported by the backend');
 }
 
