@@ -98,7 +98,8 @@ function showMode() {
   composerMode.replaceChildren(...[iconNode(ai ? 'chat' : 'member')].filter(Boolean), document.createTextNode(ai ? 'To Tana' : 'To the chat'));
   composerText.dataset.placeholder = readOnly ? 'You can read this chat but not write in it' : ai === false ? 'Message the chat · @ links · Tab: to Tana' : 'Ask Tana · @ links · / runs a skill' + (ai ? ' · Tab: to the chat' : '');
 }
-function switchMode(docId, ai = !chatAi.get(docId)) { chatAi.set(docId, ai); showMode(); }
+// A skill is for Tana to run, so while one is attached the message goes To Tana and the mode stays put
+function switchMode(docId, ai = !chatAi.get(docId)) { if (chatSkill && !ai) return; chatAi.set(docId, ai); showMode(); }
 function showSkill() {
   composerSkill.hidden = !chatSkill;
   composerSkill.replaceChildren(...(chatSkill ? [iconNode('skill'), document.createTextNode(demoText(chatSkill.label, chatSkill.uri))].filter(Boolean) : []));
@@ -161,7 +162,7 @@ function chatSend() {
   const text = chatMarkdown(draft.segs) || (skill ? 'Run [' + skill.label.replace(/[[\]\n]/g, ' ') + '](' + skill.uri + ')' : '');
   if (!docId || !text || !tana.sendChat) return;
   setComposer(null); chatDrafts.delete(docId);
-  const ai = chatAi.get(docId), asked = Date.now();
+  const ai = skill ? true : chatAi.get(docId), asked = Date.now();
   if (ai !== false) chatWaiting.set(docId, asked); // a message to the chat asks nobody to answer
   // the dots give up after two minutes even when nothing else redraws the page
   setTimeout(() => { if (chatWaiting.get(docId) === asked) { chatWaiting.delete(docId); renderSoon(true); } }, CHAT_WAIT);
