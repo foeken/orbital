@@ -3288,6 +3288,8 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
   const renamed = [{ ...three[0], text: 'renamed' }, ...three.slice(1)], edits = page.draw('tana:type:t', renamed).built;
   page.lock();
   assert.equal(page.draw('tana:type:t', renamed).built - edits, 3, 'a page that can no longer be edited rebuilds its rows, so none keeps its old editor');
+  assert.match(functionSource('rowSig'), /\bdemoMode\b/, 'a switch to demo mode rebuilds every reused row, so none keeps a real title on screen');
+  assert.match(functionSource('rowSig'), /typeDefs\(\)/, 'and a table row is rebuilt when a field definition its cells pick from changes');
   // The pills go with it: whether a row still belongs where it sits is decided while they render (needsCleanup), so a
   // render held back by the caret or a frozen selection would otherwise never be able to offer Clean up.
   assert.match(source, /renderDeferred = true; markFalling\(\); refreshRowChrome\(\); if \(pillsDrawn\) renderPills\(true\); return;/,

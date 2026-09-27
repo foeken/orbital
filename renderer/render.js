@@ -332,6 +332,8 @@ function rowSig(n) {
     sensitiveHidden(n.id), isPinned(n.id), meta || (taskMetaLoading.has(n.id) ? 'loading' : null), members ? members.length : 0, open.get(n.id), pending.has(n.id),
     displayKeys().join(','), codexIds.has(n.id), agentStateOf(n.id), agentTaskHosts.get(n.id), pinnedOn(n), n.table,
     n.proposal ? n.proposal.note : null, n.subtext, n.join, tableView(), // which facts the row shows, and as a list or a table: without this a reused row would keep the old ones, a proposal's buttons included
+    tableView() ? typeDefs() : null, // a table cell's picker is made from the page's field definitions (views.js cellPicker)
+    demoMode, // demo mode masks the words and makes every row read-only: a row drawn before the switch shows real titles
     outline.dataset.key]); // and the page it was built for: a row's editability follows its parent, so a view's row is not a type page's
 }
 function renderOutline() {
