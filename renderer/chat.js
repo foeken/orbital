@@ -229,7 +229,7 @@ function chatAfterRender(parent, stick) {
   const opened = chat && docId !== chatShown;
   if (was !== (docId || '')) {
     composer.dataset.doc = docId || ''; setComposer(docId && chatDrafts.get(docId)); showMode();
-    if (docId && !chatAi.has(docId) && tana.chatAnswers) tana.chatAnswers(docId).then((r) => { if (!chatAi.has(docId)) chatAi.set(docId, !!r.ai); if (r.canWrite === false) chatReadOnly.add(docId); else chatReadOnly.delete(docId); if (composer.dataset.doc === docId) showMode(); }, () => {});
+    if (docId && !chatAi.has(docId) && tana.chatAnswers) tana.chatAnswers(docId).then((r) => { if (!chatAi.has(docId)) chatAi.set(docId, !!r.ai); if (r.canWrite === false) chatReadOnly.add(docId); else chatReadOnly.delete(docId); if (composer.dataset.doc === docId) { showMode(); renderSoon(true); } }, () => {}); // renderSoon: waiting questions show once write access is known
   }
   const asking = chat && showQuestions(docId, chatPendingQ); // Tana's questions take the composer's place
   if (!chat) showQuestions(null, null);
@@ -244,7 +244,7 @@ function chatAfterRender(parent, stick) {
 // participants (main's meta flag) asks again whether you may write, and leaves the mode you chose alone.
 if (tana.onChanged && tana.chatAnswers) tana.onChanged((chatId, info) => {
   if (!chatId || !String(chatId).startsWith('tana:chat:') || !info || !info.meta || !chatAi.has(chatId)) return;
-  tana.chatAnswers(chatId).then((r) => { if (r.canWrite === false) chatReadOnly.add(chatId); else chatReadOnly.delete(chatId); if (composer.dataset.doc === chatId) showMode(); }, () => {});
+  tana.chatAnswers(chatId).then((r) => { if (r.canWrite === false) chatReadOnly.add(chatId); else chatReadOnly.delete(chatId); if (composer.dataset.doc === chatId) { showMode(); renderSoon(true); } }, () => {});
 });
 // ---- Tana's questions: the Codex question card, in the composer's place ----
 // When Tana's AI asks (askUserQuestion, sdk/chat.js pendingQuestions), the chat's composer gives way to a card like
@@ -257,22 +257,30 @@ let qs = null; // { docId, messageId, items, index, cursor, answers: { questionI
 const qEl = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const qAnswer = (q) => (qs.answers[q.id] ||= { selected: new Set(), custom: '' });
 // true when a card is up for this chat; 'new' the first time these questions show, so the card takes the caret
+// Only for a chat you may write in, known to be (chat:answers): a viewer keeps the read-only composer, which says why.
 function showQuestions(docId, pending) {
-  if (!pending) { qs = null; qcard.hidden = true; return false; }
+  if (!pending || !chatAi.has(docId) || chatReadOnly.has(docId)) { qs = null; qcard.hidden = true; return false; }
   const fresh = !qs || qs.docId !== docId || qs.messageId !== pending.messageId;
   if (fresh) qs = { docId, messageId: pending.messageId, items: pending.items, index: 0, cursor: 0, answers: {}, busy: false };
-  drawQuestion(); qcard.hidden = false;
+  // drawn anew only when it is new or was away: a live update redrawing it would take the caret out of the free answer
+  if (fresh || qcard.hidden) drawQuestion();
+  qcard.hidden = false;
   return fresh ? 'new' : true;
 }
 function drawQuestion() {
   const q = qs.items[qs.index], a = qAnswer(q), n = qs.items.length, last = qs.index === n - 1;
-  const head = qEl('div', 'qhead'); head.append(qEl('div', 'qtext', demoText(q.question, qs.docId)));
+  const head = qEl('div', 'qhead'), title = qEl('div', 'qtext', demoText(q.question, qs.docId));
+  title.id = 'qtext'; head.append(title);
+  // for a screen reader: the options are radio buttons (or checkboxes) of the question, the highlighted one the active one
+  qcard.setAttribute('role', q.multiSelect ? 'group' : 'radiogroup'); qcard.setAttribute('aria-labelledby', 'qtext');
+  qcard.setAttribute('aria-activedescendant', qs.cursor < q.options.length ? 'qopt' + qs.cursor : '');
   if (n > 1) {
     const nav = qEl('div', 'qnav'), step = (label, d, off) => { const b = qEl('button', 'qstep', label); b.type = 'button'; b.tabIndex = -1; b.disabled = off; b.onmousedown = (e) => e.preventDefault(); b.onclick = () => stepQuestion(d); return b; };
     nav.append(step('‹', -1, qs.index === 0), qEl('span', '', (qs.index + 1) + ' of ' + n), step('›', 1, last)); head.append(nav);
   }
   const rows = q.options.map((o, i) => {
     const r = qEl('div', 'qopt' + (qs.cursor === i ? ' active' : '') + (a.selected.has(o.label) ? ' chosen' : ''));
+    r.id = 'qopt' + i; r.setAttribute('role', q.multiSelect ? 'checkbox' : 'radio'); r.setAttribute('aria-checked', String(a.selected.has(o.label)));
     r.append(qEl('span', 'qnum', (i + 1) + '.'), qEl('span', 'qlabel', demoText(o.label, qs.docId)));
     if (o.description) r.append(qEl('span', 'qdesc', demoText(o.description, qs.docId)));
     if (q.multiSelect || a.selected.has(o.label)) r.append(qEl('span', 'qcheck', a.selected.has(o.label) ? '✓' : ''));
@@ -288,7 +296,8 @@ function drawQuestion() {
   input.onkeydown = (e) => {
     e.stopPropagation(); // the field's own keys: nothing in the page or the card reads them
     if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); continueQuestion(); }
-    else if (e.key === 'Escape' || (e.key === 'ArrowUp' && !input.value)) { e.preventDefault(); qs.cursor = Math.max(0, q.options.length - (e.key === 'Escape' ? 0 : 1)); drawQuestion(); qcard.focus(); }
+    else if (e.key === 'Escape') { e.preventDefault(); submitQuestions(true); } // Esc dismisses from here too, as the card says
+    else if (e.key === 'ArrowUp' && !input.value) { e.preventDefault(); qs.cursor = Math.max(0, q.options.length - 1); drawQuestion(); qcard.focus(); }
   };
   other.append(qEl('span', 'qnum', (q.options.length + 1) + '.'), input);
   other.onclick = () => input.focus();

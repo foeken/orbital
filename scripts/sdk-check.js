@@ -5679,7 +5679,8 @@ async function main() {
     const agent = 'tana:agent:' + ulid(), chatDoc = new Document('tana:chat:' + ulid());
     chatDoc.transact((l) => { initDocument(l, 'Agent chat', ME, { kind: 'chat' }); l.getMap('data').set('agentId', agent); });
     const sync = { subscribe: async (id) => { if (id !== chatDoc.id) throw new Error('document not found: ' + id); return chatDoc; } };
-    backend.testRuntime({ me: { userUri: ME }, client: { graph: { listNodes: async () => ({ nodes: [] }) }, sync }, session: { getAccessToken: async () => 'x.' + Buffer.from(JSON.stringify({ org_id: 'org', role: 'member' })).toString('base64url') + '.y' } });
+    const SAM = 'tana:user-profile:01examplesam00000000000000'; // a workspace member, for the invite below
+    backend.testRuntime({ me: { userUri: ME }, client: { graph: { listNodes: async (q) => ({ nodes: (q.nodeTypes || []).includes('user-profile') ? [{ id: SAM, title: 'Sam Okafor' }] : [] }) }, sync }, session: { getAccessToken: async () => 'x.' + Buffer.from(JSON.stringify({ org_id: 'org', role: 'member' })).toString('base64url') + '.y' } });
     const bodies = [], realFetch = globalThis.fetch;
     let answer = { status: 200, body: { success: true, messageId: 'ai000009' } };
     globalThis.fetch = async (url, init) => { bodies.push(JSON.parse(init.body)); return { status: answer.status, ok: answer.status === 200, json: async () => answer.body }; };
@@ -5699,11 +5700,12 @@ async function main() {
       assert.deepEqual([(await send(null, chatDoc.id, 'Over to you', [], { ai: true })).responding, bodies.length], [true, asked + 1], 'To Tana asks');
       await assert.rejects(send(null, chatDoc.id, 'x', ['not a uri']), /Attachments are Tana documents/);
       // inviting: the member joins as an editor through the sharing rules, and the chat says so, as Tana's does
-      const SAM = 'tana:user-profile:01examplesam00000000000000';
-      assert.deepEqual({ ...await backend.handlers.get('chat:invite')(null, chatDoc.id, SAM) }, { name: 'A participant' });
+      await assert.rejects(backend.handlers.get('chat:invite')(null, chatDoc.id, 'tana:user-profile:01examplestranger000000000'), /member of this workspace/, 'nobody outside the workspace, and nothing written');
+      assert.equal(chatDoc.data.get('participants').toJSON()['tana:user-profile:01examplestranger000000000'], undefined);
+      assert.deepEqual({ ...await backend.handlers.get('chat:invite')(null, chatDoc.id, SAM) }, { name: 'Sam Okafor' });
       const joined = chatDoc.data.get('participants').toJSON()[SAM], lines = chatDoc.data.get('messages').toJSON().slice(-2);
       assert.deepEqual([joined.role, joined.type, joined.changedBy, chatDoc.data.get('participants').toJSON()[ME].role], ['editor', 'user', ME, 'admin']);
-      assert.deepEqual(lines.map((m) => [m.content.text, m.isStatusUpdate, m.fromUserType]), [['A participant was added to the chat.', true, 'ai'], ['This chat now has multiple participants. Mention @Tana to trigger AI.', true, 'ai']]);
+      assert.deepEqual(lines.map((m) => [m.content.text, m.isStatusUpdate, m.fromUserType]), [['Sam Okafor was added to the chat.', true, 'ai'], ['This chat now has multiple participants. Mention @Tana to trigger AI.', true, 'ai']]);
       await assert.rejects(backend.handlers.get('chat:invite')(null, chatDoc.id, SAM), /already in this chat/);
       // answering Tana's questions asks it to go on from the relay
       chatDoc.transact((l) => {

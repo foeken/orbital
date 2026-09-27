@@ -183,7 +183,10 @@ async function inviteToChat(id, userUri) {
   if (!isChatId(id)) throw new Error('Not a chat');
   if (typeof userUri !== 'string' || !/^tana:user-profile:[0-9a-z]{26}$/.test(userUri)) throw new Error('Invite a workspace member');
   if (!S.client || !S.me) throw new Error(NOT_CONNECTED);
-  const name = (await members().catch(() => [])).find((m) => m.id === userUri)?.title || 'A participant';
+  // a member of this workspace, known by name, or nobody: the call is refused before the chat's access is touched
+  const member = (await members()).find((m) => m.id === userUri && !m.me);
+  if (!member) throw new Error('Invite a member of this workspace');
+  const name = member.title || member.text || 'A participant';
   await mut(id, async (doc) => {
     const n = readNode(doc), people = n.participants || {};
     if (n.restricted !== true) throw new Error('This chat is shared through where it lives: share that instead');
