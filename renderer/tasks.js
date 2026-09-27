@@ -165,7 +165,8 @@ function peopleEl(summary, node) {
   faces.append(...uris.slice(0, 4).map(face)); // four bubbles, then "+n"
   if (count > 4) { const more = document.createElement('span'); more.className = 'face more'; more.textContent = '+' + (count - 4); more.setAttribute('aria-hidden', 'true'); faces.append(more); } // the count after it says how many
   const el = document.createElement('span'); el.className = 'people';
-  el.append(audienceIcon(summary, node), faces, count === 1 ? '1 person' : count + ' people');
+  // a sensitive node names nobody: the glyph and how many, no faces (they come back with Toggle sensitive visibility)
+  el.append(...[audienceIcon(summary, node), node && sensitiveHidden(node.id) ? null : faces, count === 1 ? '1 person' : count + ' people'].filter(Boolean));
   return el;
 }
 // node: the row's document, so its facts open the Cmd+K pickers they describe (Edit assignees, Edit visibility)
