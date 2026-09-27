@@ -3,6 +3,11 @@
 // into ordinary read-only outline rows in the vocabulary the renderer already knows (docs/OUTLINER.md §3):
 // one author row per message, its markdown blocks as children, mentions as segments, attachments/proposals as
 // reference rows. Pure and Electron-free so scripts/sdk-check.js can run it offline.
+// Sending (addMessage, triggerReply) is the write half: a message appended the way Tana's addHumanMessageWithTimeContext
+// does, then Tana's AI asked to answer it, as its chat panel does (bundle of 2026-09-27, docs/CHATS.md §10).
+const crypto = require('crypto');
+const { LoroMap, LoroList, LoroText } = require('loro-crdt');
+const { newId } = require('./content');
 
 // Inline markdown of one line: a [label](uri) mention or link, **bold**, `code`, *italic*, ~~strike~~. The text is
 // plain markdown source (no Loro marks at all), so this regex is the whole inline story.
@@ -74,8 +79,10 @@ const list = (v) => (Array.isArray(v) ? v : []);
 const MESSAGE_STATUS = { cancelled: 'Cancelled', error: 'Error', limit_exceeded: 'Limit exceeded' };
 
 // messages: data.messages as plain JSON, in list order (never sorted by sentAt: the preamble shares its millisecond
-// with the first user message). authorName(uri) -> display name, aiName: what to call the assistant.
-function chatRows(messages, { authorName = () => undefined, aiName = 'Tana AI' } = {}) {
+// with the first user message). authorName(uri) -> display name, aiName: what to call the assistant, me: your
+// profile uri, streamingId: data.streamingMessageId. Each message row carries row.chat for the bubbles the renderer
+// draws (renderer/chat.js): whose it is, when it was sent, and whether Tana is still writing it.
+function chatRows(messages, { authorName = () => undefined, aiName = 'Tana AI', me, streamingId } = {}) {
   const rows = [];
   list(messages).forEach((m, i) => {
     // What the web client hides: the synthetic preamble (hiddenFromChat), injected 'context', every status update
@@ -84,11 +91,11 @@ function chatRows(messages, { authorName = () => undefined, aiName = 'Tana AI' }
     if (m.fromUserType === 'human' && m.isAIInterviewRelay) return;
     const ai = m.fromUserType === 'ai', id = 'm' + i, children = [];
     // keep/person mark the app's own words and a name for demo mode (renderer/segments.js); the conversation is content
-    if (list(m.toolCalls).length) { const line = thinking(m, list(m.toolCalls)); children.push(row(id + '.t', line, { segments: [{ text: line, keep: true }] })); }
+    if (list(m.toolCalls).length) { const line = thinking(m, list(m.toolCalls)); children.push(row(id + '.t', line, { note: true, segments: [{ text: line, keep: true }] })); }
     const status = Object.hasOwn(MESSAGE_STATUS, m.status) ? MESSAGE_STATUS[m.status] : undefined;
     if (status) {
       const error = typeof m.errorMessage === 'string' && m.errorMessage.trim() ? ': ' + m.errorMessage : '';
-      children.push(row(id + '.status', status + error, { segments: [{ text: status, keep: true }, ...(error ? [{ text: error }] : [])] }));
+      children.push(row(id + '.status', status + error, { note: true, segments: [{ text: status, keep: true }, ...(error ? [{ text: error }] : [])] }));
     }
     for (const [j, b] of blocks(m.content && m.content.text).entries()) {
       // code keeps its markdown characters; every other block renders its inline markdown as segments
@@ -123,10 +130,78 @@ function chatRows(messages, { authorName = () => undefined, aiName = 'Tana AI' }
       segments: [ai ? { text: author, keep: true } : { text: author, person: true }],
       icon: ai ? 'chat' : 'member', block: 'heading3', heading: 3,
       meta: typeof m.sentAt === 'number' ? hm(m.sentAt) + (m.editedAt !== undefined ? ' (edited)' : '') : undefined,
+      chat: { mine: !ai && !!me && m.fromUserUri === me, author: m.fromUserUri || (ai ? 'ai' : ''), sentAt: typeof m.sentAt === 'number' ? m.sentAt : undefined,
+        ...(m.id && m.id === streamingId ? { streaming: true } : {}) },
       hasChildren: children.length > 0, children,
     }));
   });
   return rows;
 }
 
-module.exports = { chatRows, blocks, segments, plain, hm };
+// ---- sending ----
+// One message map as Tana's lh() writes it: every list and the zeroed usage present, undefined fields left out.
+function pushMessage(loro, fields, text, attachments = []) {
+  const data = loro.getMap('data');
+  const messages = data.get('messages') instanceof LoroList ? data.get('messages') : data.setContainer('messages', new LoroList());
+  const m = messages.insertContainer(messages.length, new LoroMap());
+  for (const [k, v] of Object.entries({ type: 'message', id: newId(), ...fields })) if (v !== undefined) m.set(k, v);
+  m.setContainer('content', new LoroMap()).setContainer('text', new LoroText()).insert(0, text);
+  const list = m.setContainer('attachmentUris', new LoroList());
+  for (const uri of attachments) list.push(uri);
+  m.setContainer('proposals', new LoroList());
+  m.setContainer('toolCalls', new LoroList());
+  const usage = m.setContainer('usage', new LoroMap());
+  for (const [k, v] of Object.entries({ promptTokens: 0, completionTokens: 0, totalTokens: 0, model: '', cost: 0 })) usage.set(k, v);
+  return m.get('id');
+}
+// "Robin Vega — it is now Sunday, September 27, 2026 at 11:52 AM (Europe/Amsterdam)." Tana's Exe, word for word
+const nowLine = (name, now, timezone) => name + ' — it is now ' + new Intl.DateTimeFormat('en-US', { timeZone: timezone, weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(now)) + ' (' + timezone + ').';
+// A human message. The first one of a day (in the sender's zone) is preceded by the hidden line that tells the AI who
+// is speaking and when, recorded in participantTimeContext so the next message that day goes without. Returns its id.
+function addMessage(loro, { text, byUri, senderName, timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', now = Date.now() }) {
+  if (!/^tana:user-profile:/.test(byUri || '')) throw new Error('A message needs its sender');
+  if (typeof text !== 'string' || !text.trim()) throw new Error('Nothing to send');
+  const day = new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(now));
+  const times = loro.getMap('participantTimeContext'), mine = times.get(byUri);
+  const known = mine instanceof LoroMap ? mine.toJSON() : mine && typeof mine === 'object' ? mine : {};
+  if (known.timezone !== timezone || known.lastLocalDate !== day) {
+    pushMessage(loro, { sentAt: now, fromUserType: 'human', isStatusUpdate: true, hiddenFromChat: true }, nowLine(senderName || 'Someone', now, timezone));
+    const entry = times.setContainer(byUri, new LoroMap());
+    entry.set('timezone', timezone); entry.set('lastLocalDate', day);
+  }
+  return pushMessage(loro, { sentAt: now, fromUserUri: byUri, fromUserType: 'human' }, text);
+}
+// Whether Tana's AI answers a message in this chat by itself (its VKt): not when switched off, and only while you are
+// alone in it. With others in the chat it answers when mentioned (Tana's "Mention @Tana to trigger AI").
+function autoResponds(data, text = '') {
+  const people = Object.keys((data && data.participants) || {});
+  const n = people.length || list(data && data.participantUris).length;
+  if (/@tana\b/i.test(text)) return data.aiAutoResponds !== false || n > 1;
+  return data.aiAutoResponds === false ? false : data.aiAutoResponds === true ? n < 2 : n === 1;
+}
+// Tana's createDeterministicId: the first 16 bytes of a name's sha256 as a 26-character ULID (6, 5 and 5 bytes).
+const B32 = '0123456789abcdefghjkmnpqrstvwxyz';
+function deterministicId(name) {
+  const b = crypto.createHash('sha256').update(name).digest();
+  const part = (from, bytes, chars) => { let n = 0n; for (let i = from; i < from + bytes; i++) n = n * 256n + BigInt(b[i]); let s = ''; for (let i = chars - 1; i >= 0; i--) s += B32[Number((n >> BigInt(i * 5)) & 31n)]; return s; };
+  return part(0, 6, 10) + part(6, 5, 8) + part(11, 5, 8);
+}
+const TANA_AGENT = 'tana:agent:' + deterministicId('system:tana'); // Tana's own assistant (its xm), what a plain chat talks to
+// Ask Tana's AI to answer: POST <POLARIS_SERVICE_API_AI_URL>/chat/trigger with the bearer token, the web client's wJ.
+// The server answers 404 or 408 while the chat has not reached it yet, which Tana retries three times, 2 s, 4 s, 8 s.
+// The reply itself arrives as live updates to the chat document (data.streamingMessageId, then the AI message).
+async function triggerReply({ chatUri, messageId, ownerUri, agentId = TANA_AGENT, timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+  getAccessToken, baseUrl = 'https://home.tana.inc/api/ai', fetch = globalThis.fetch, wait = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
+  const body = JSON.stringify({ chatUri, ...(ownerUri ? { ownerUri } : {}), agentId, triggerMessageId: messageId, timezone });
+  const post = async (refresh) => fetch(baseUrl + '/chat/trigger', { method: 'POST', body, headers: { 'content-type': 'application/json', authorization: 'Bearer ' + await getAccessToken({ refresh }) } });
+  for (let attempt = 0; ; attempt++) {
+    let r = await post(false);
+    if (r.status === 401) r = await post(true);
+    if ((r.status === 404 || r.status === 408) && attempt < 3) { await wait(2000 * 2 ** attempt); continue; }
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.success) throw new Error(j.error === 'ai_cap_exceeded' ? 'You have reached your Tana AI limit' : j.error || j.message || 'Tana did not answer: HTTP ' + r.status);
+    return j; // { success, messageId }: the AI message being written
+  }
+}
+
+module.exports = { chatRows, blocks, segments, plain, hm, pushMessage, addMessage, autoResponds, triggerReply, deterministicId, TANA_AGENT };

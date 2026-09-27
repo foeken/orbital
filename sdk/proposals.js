@@ -11,8 +11,8 @@
 //
 // A create proposes a new document, which exists already with data.isProposal set. An update proposes a draft copy
 // (proposedUri) of a real document (baseUri).
-const { LoroMap, LoroList, LoroText } = require('loro-crdt');
-const { newId } = require('./content');
+const { LoroMap, LoroList } = require('loro-crdt');
+const { pushMessage } = require('./chat');
 
 // metadata.type → the approver Tana routes a proposal to (its d_). Only 'regular' is plain documents.
 const KINDS = { workspace: 'space', instructions: 'instructions', action: 'action' };
@@ -121,17 +121,7 @@ async function approve(sync, { chatUri, proposedUri, byUri }) {
 // The status message Tana posts after an approval (addAcceptanceStatusMessage): a human message that is a status
 // update, kept out of the AI's context, with the approved documents attached.
 function accepted(loro, byUri, uris, at) {
-  const data = loro.getMap('data');
-  const messages = data.get('messages') instanceof LoroList ? data.get('messages') : data.setContainer('messages', new LoroList());
-  const m = messages.insertContainer(messages.length, new LoroMap());
-  for (const [k, v] of Object.entries({ type: 'message', id: newId(), sentAt: at, fromUserUri: byUri, fromUserType: 'human', isStatusUpdate: true, excludeFromAIContext: true })) m.set(k, v);
-  m.setContainer('content', new LoroMap()).setContainer('text', new LoroText()).insert(0, 'accepted ' + uris.length + ' change' + (uris.length === 1 ? '' : 's'));
-  const attachments = m.setContainer('attachmentUris', new LoroList());
-  for (const uri of uris) attachments.push(uri);
-  m.setContainer('proposals', new LoroList());
-  m.setContainer('toolCalls', new LoroList());
-  const usage = m.setContainer('usage', new LoroMap());
-  for (const [k, v] of Object.entries({ promptTokens: 0, completionTokens: 0, totalTokens: 0, model: '', cost: 0 })) usage.set(k, v);
+  pushMessage(loro, { sentAt: at, fromUserUri: byUri, fromUserType: 'human', isStatusUpdate: true, excludeFromAIContext: true }, 'accepted ' + uris.length + ' change' + (uris.length === 1 ? '' : 's'), uris);
 }
 
 // Reject any proposal the way Tana does: its entries leave the chat, and the document it proposed (the new one, or the

@@ -120,6 +120,8 @@ contextBridge.exposeInMainWorld('api', {
   onChatGPTStatus: (cb) => ipcRenderer.on('ai:chatgptChanged', (_e, status) => cb(status)),
   onSettings: (cb) => ipcRenderer.on('settings:changed', (_e, synced) => cb(synced)),
   createDocument: (title, opts) => ipcRenderer.invoke('doc:create', title, opts), // nonblank title; opts:{kind:doc|task|meeting|chat|custom|search,typeUri?,query?}; a search requires query and nothing else may carry one; a task may carry a workflow typeUri; returns Node to zoom
+  sendChat: (id, text) => ipcRenderer.invoke('chat:send', id, text), // a message in a chat, and Tana's AI asked to answer it: { messageId, responding }
+  newChat: () => ipcRenderer.invoke('chat:new'), // a new chat with Tana, yours alone: Node to zoom
   taskTypes: () => ipcRenderer.invoke('doc:taskTypes'), // [{ uri, title, hue }]: the workflow types Create task offers (task.html)
   search: (query, scope) => ipcRenderer.invoke('search', query, scope), // scope: { types } or { members } for a link field
   searches: () => ipcRenderer.invoke('search:list'), // saved search documents, newest first

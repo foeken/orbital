@@ -1,6 +1,6 @@
 /* styles.css keeps each component together, in this order (search for "==== <name>"): Base; Window chrome; Fields;
-   Table view; Filter row; Header buttons; Pills and their menus; Page scroll, sidebar and split; Rows; Timeline; Row
-   content; Agent badge and proposal buttons; Children, empty notes, group headings; Loading; Selection toolbar; Login;
+   Table view; Filter row; Header buttons; Pills and their menus; Page scroll, sidebar and split; Rows; Timeline; Chat;
+   Row content; Agent badge and proposal buttons; Children, empty notes, group headings; Loading; Selection toolbar; Login;
    Palette and toast; Key recorder; Dark theme; Presence; Motion; Help tour. docs/UI-PATTERNS.md lists the tokens and
    the component classes. */
 /* ==== Base: reset, tokens (motion, hue, theme), the page body ==== */
@@ -550,6 +550,51 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 [data-theme="dark"] .node.tl > .children .bullet.icon svg, [data-theme="dark"] .node.tl > .children .bullet.icon:hover svg { color: #8a8f95; }
 [data-theme="dark"] .node.tl-done > .line > .bullet.icon svg { color: #fff; background: none; }
 [data-theme="dark"] .node:is(.tl-new, .tl-faint) > .line > .bullet.icon svg { color: #5a5d60; }
+/* ==== Chat (renderer/chat.js): a conversation in the Codex app's style, and the composer under it ==== */
+/* Yours in a light blue bubble on the right; Tana's as plain text across the page; the composer a rounded card whose
+   round blue button sends. --chat-send is that blue, --chat-mine and --chat-mine-text your bubble (dark twins below). */
+:root { --chat-mine: #e6eefb; --chat-mine-text: #1b2b41; --chat-send: #3b82f6; }
+/* a short conversation sits on the composer at the bottom of the window */
+.scroll.chatting { display: flex; flex-direction: column; padding-bottom: 8px; }
+.scroll.chatting > .outline { flex: 1 0 auto; display: flex; flex-direction: column; justify-content: flex-end; }
+.chat-msg { display: flex; flex-direction: column; margin: 0 0 22px; font-size: 16px; line-height: 1.55; }
+.chat-msg.mine { align-items: flex-end; }
+.chat-msg.theirs { align-items: stretch; }
+.chat-msg .bubble { max-width: 100%; overflow-wrap: anywhere; counter-reset: chat-num; }
+.chat-msg.mine .bubble { max-width: min(80%, 620px); padding: 10px 18px; border-radius: 22px; background: var(--chat-mine); color: var(--chat-mine-text); }
+.bubble > * + * { margin-top: 8px; }
+.chat-name { font-size: 13px; font-weight: 600; color: var(--muted); margin: 0 0 4px; }
+.chat-note { font-size: 14px; color: var(--muted); margin: 0 0 6px; }
+.chat-paragraph { white-space: pre-wrap; }
+.chat-heading1 { font-size: 1.25em; font-weight: 700; }
+.chat-heading2 { font-size: 1.1em; font-weight: 600; }
+.chat-heading3 { font-weight: 600; }
+.chat-bullet, .chat-numbered { padding-left: 20px; text-indent: -20px; }
+.chat-bullet::before { content: '•'; display: inline-block; width: 20px; text-indent: 0; }
+.chat-numbered { counter-increment: chat-num; }
+.chat-numbered::before { content: counter(chat-num) '.'; display: inline-block; width: 20px; text-indent: 0; }
+.chat-quote { border-left: 3px solid #d6d6d6; padding-left: 10px; color: var(--muted); }
+.chat-code { margin: 8px 0 0; padding: 8px 10px; border-radius: 8px; background: rgba(0, 0, 0, .05); font: 13px/1.5 ui-monospace, Menlo, monospace; white-space: pre-wrap; }
+.chat-divider { border-top: 1px solid #e3e3e3; }
+.bubble .mention, .bubble a.link, .bubble a.url { color: #508fbb; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.mine .bubble :is(.mention, a.link, a.url) { color: inherit; }
+.bubble .mention svg { width: 14px; height: 14px; vertical-align: -2px; margin-right: 3px; }
+.theirs .bubble .mention.hue { color: oklch(0.55 0.12 var(--hue)); }
+.bubble .mention.gone { color: inherit; text-decoration: line-through; cursor: default; }
+.chat-dots { display: inline-flex; gap: 4px; padding: 8px 0; color: var(--muted); }
+.chat-dots i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: .35; }
+@media (prefers-reduced-motion: no-preference) { .chat-dots i { animation: chat-dot var(--dur-loop) infinite; } .chat-dots i:nth-child(2) { animation-delay: .2s; } .chat-dots i:nth-child(3) { animation-delay: .4s; } }
+@keyframes chat-dot { 0%, 60%, 100% { opacity: .35; transform: none; } 30% { opacity: .8; transform: translateY(-2px); } }
+/* the window's last row under a chat, outside the scroll, so it never moves: a card holding the text, the send button
+   under it at the right */
+.composer { flex: none; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; margin: 4px 32px 16px 16px; padding: 14px 12px 10px 18px;
+  border: 1px solid #e3e3e3; border-radius: 24px; background: var(--surface); box-shadow: 0 2px 10px rgba(0, 0, 0, .05); }
+.composer[hidden] { display: none; } /* its flex would otherwise win over [hidden] */
+.composer:focus-within { border-color: #cfcfcf; }
+.composer textarea { flex: 1 0 100%; field-sizing: content; min-height: 1.5em; max-height: 40vh; resize: none; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; font-size: 16px; line-height: 1.5; outline: none; }
+.composer-send { flex: none; width: 34px; height: 34px; border: 0; border-radius: 50%; background: var(--chat-send); color: #fff; font-size: 18px; font-weight: 700; line-height: 1; cursor: pointer; }
+.composer:has(textarea:placeholder-shown) .composer-send { opacity: .35; cursor: default; }
+
 /* ==== Row content: checkbox, text, facts, chips, images, references, marks, blocks ==== */
 .check {
   flex: none; width: 18px; height: 18px; margin: 3px 8px 0 2px; border-radius: 5px; background: #e4e4e4;
@@ -990,6 +1035,16 @@ html.cover .toast { left: calc(var(--pane-x) + var(--pane-w) / 2); max-width: mi
 /* Dark theme contract: renderer sets document.documentElement.dataset.theme = "dark". */
 [data-theme="dark"] { color-scheme: dark; }
 [data-theme="dark"] body { color: #c9c9c9; background: #1b1d1e; }
+[data-theme="dark"] { --chat-mine: #26344a; --chat-mine-text: #e3ecfa; }
+[data-theme="dark"] .composer { border-color: #3a3d40; box-shadow: none; }
+[data-theme="dark"] .composer:focus-within { border-color: #4a4e52; }
+[data-theme="dark"] .chat-code { background: rgba(255, 255, 255, .07); }
+[data-theme="dark"] .chat-quote { border-left-color: #44484b; }
+[data-theme="dark"] .chat-divider { border-top-color: #3a3d40; }
+[data-theme="dark"] .bubble .mention, [data-theme="dark"] .bubble a.link, [data-theme="dark"] .bubble a.url { color: #8fc1e1; }
+[data-theme="dark"] .mine .bubble :is(.mention, a.link, a.url) { color: inherit; }
+
+
 /* the same step the light theme takes, the other way up: the prose sits back from the headings, not under them */
 [data-theme="dark"] .text { color: #ccd0d3; }
 [data-theme="dark"] .titlebar h1, [data-theme="dark"] .h1 > .line .text, [data-theme="dark"] .h2 > .line .text, [data-theme="dark"] .h3 > .line .text { color: #e8eaec; }

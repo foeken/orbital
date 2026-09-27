@@ -36,6 +36,7 @@
   <div id="outline" class="outline"></div>
   <div id="filtered" class="filtered"></div>
 </main>
+<div id="composer" class="composer" hidden><textarea id="composerText" rows="1" placeholder="Ask Tana" aria-label="Message"></textarea><button id="composerSend" class="composer-send" tabindex="-1" title="Send ↩" aria-label="Send">↑</button></div><!-- under an open chat, outside the scroll so it stays at the window's bottom (renderer/chat.js) -->
 <div id="skeleton" class="skeleton" aria-hidden="true"><canvas></canvas></div>
 </div>
 <div id="railGrip" class="railgrip" title="Drag to resize" hidden></div>
@@ -95,6 +96,7 @@
 <script src="renderer/inbox.js"></script>
 <script src="renderer/proposals.js"></script>
 <script src="renderer/timeline.js"></script>
+<script src="renderer/chat.js"></script>
 <script src="renderer/presence.js"></script>
 <script src="renderer/overlays.js"></script>
 <script src="renderer/app.js"></script>

@@ -833,6 +833,25 @@ nothing about them as documents. Each is a place the app remembers, so ⌘R on o
     (`setPages`); a page too short to scroll keeps reading until it fills the screen. Watched nodes last updated before
     the window are not asked for history. No filters.
 
+### Chats
+
+An open `tana:chat:` is a conversation in the Codex app's style, drawn by renderer/chat.js from the rows sdk/chat.js
+`chatRows` makes (docs/CHATS.md §8), in list order with the newest at the bottom: yours (`row.chat.mine`) in a light
+blue bubble on the right, Tana's and anyone else's as plain text across the page. With more than one other author,
+their name heads each of their runs. The markdown blocks keep their kind (headings, bullets, numbered items, quotes,
+code), mentions and attachments are links that open their node, the thinking line or an error sits in grey above the
+answer, and hovering a message shows when it was sent. The page opens at its end and follows new messages while you
+are within 80 px of it; a short conversation sits at the bottom of the window.
+
+Under it is the composer (`#composer`, a rounded card whose textarea grows with its text and whose round blue button
+sends), the window's last row outside the scroll, so it stays at the bottom whatever the conversation's length or
+scroll: Enter sends (`chat:send`, main/documents.js `sendChat`), Shift+Enter is a new line, Escape leaves it, and ⌘Z and the other editing keys stay the
+textarea's own rather than reaching the outline. What is typed and not sent is kept per chat while the window is open.
+Opening a chat puts the caret in it. After a send, three dots stand where the answer will be until Tana's answer begins (two minutes
+at most); the answer streams in as live changes to the chat, and a message Tana is still writing with no words yet
+shows the dots in its place. A failed send puts the words back. **New chat** (Cmd+K, Actions) makes a chat with
+Tana that is yours alone (`chat:new`) and opens it.
+
 ### Work View, windows and split view
 
 - **Work View** (`workView`, renderer/timeline.js; the default Home): the Timeline on the left and My Tasks on the

@@ -117,7 +117,9 @@ const plainRow = (id, title, updatedAt, typeUri, hue, createdAt) => (isSpace(id)
   : { id, title, done: 0, icon: typeUri ? typeIconName(typeUri) || 'type' : 'doc', hue: hueWithType(hue, typeUri), tags: typeUri ? typeTag(typeUri) : [hue === undefined ? TAG.doc : { ...TAG.doc, hue }], sortKey: updatedAt, updatedAt, createdAt });
 const memberRow = (id, title, updatedAt, hue, createdAt) => ({ id, title, done: 0, icon: 'member', hue, tags: [hue === undefined ? TAG.member : { ...TAG.member, hue }], sortKey: updatedAt, updatedAt, createdAt });
 // chat, canvas, agent and skill each have their own glyph in the renderer's icon set, so the kind is the icon
-const kindRow = (id, kind, title, updatedAt, hue, createdAt) => ({ id, title, done: 0, icon: (kind === 'type' && typeIconName(id)) || (PLAIN_KINDS.has(kind) ? kind : null), hue, tags: [hue === undefined ? { label: kind, color: 'grey' } : { label: kind, hue }], sortKey: updatedAt, updatedAt, createdAt });
+// A chat started here has no title until Tana's AI names it after the first answer (main/documents.js newChat): "New
+// chat" meanwhile, as Tana calls it.
+const kindRow = (id, kind, title, updatedAt, hue, createdAt) => ({ id, title: title || (kind === 'chat' ? 'New chat' : title), done: 0, icon: (kind === 'type' && typeIconName(id)) || (PLAIN_KINDS.has(kind) ? kind : null), hue, tags: [hue === undefined ? { label: kind, color: 'grey' } : { label: kind, hue }], sortKey: updatedAt, updatedAt, createdAt });
 // lowercase type title -> uri for #Type search filters; the type list is loaded once per S.session (and seeds typeTitles)
 async function typesByTitle() {
   S.typesLoaded ||= S.client.graph.listNodes({ nodeTypes: ['type'], limit: 200 }).then(({ nodes }) => { nodes.forEach(rememberType); }, () => { S.typesLoaded = null; });

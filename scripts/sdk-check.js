@@ -5612,6 +5612,43 @@ async function main() {
     assert.ok(readOnly(states), 'status and pending-question rows are read-only');
     console.log('ok  chat visibility and the thinking line follow the web client');
   }
+  // Sending (#chat): a message written as Tana's addHumanMessageWithTimeContext writes it, and the trigger asking its AI
+  // to answer, retried the way the web client retries a chat the server has not seen yet (docs/CHATS.md §10).
+  {
+    const chat = require('../sdk/chat');
+    const doc = new Document('tana:chat:01exampleq0000000000000000');
+    const at = Date.UTC(2026, 8, 27, 9, 52);
+    let first, second;
+    doc.transact((l) => { first = chat.addMessage(l, { text: 'Hello Tana', byUri: ME, senderName: 'Robin Vega', timezone: 'Europe/Amsterdam', now: at }); });
+    doc.transact((l) => { second = chat.addMessage(l, { text: 'And again', byUri: ME, senderName: 'Robin Vega', timezone: 'Europe/Amsterdam', now: at + 6e4 }); });
+    const messages = doc.data.get('messages').toJSON();
+    assert.equal(messages.length, 3, 'the hidden preamble goes before the first message of a day only');
+    assert.deepEqual([messages[0].hiddenFromChat, messages[0].isStatusUpdate, messages[0].content.text], [true, true, 'Robin Vega — it is now Sunday, September 27, 2026 at 11:52 AM (Europe/Amsterdam).']);
+    assert.deepEqual({ ...messages[1], id: undefined }, { type: 'message', id: undefined, sentAt: at, fromUserUri: ME, fromUserType: 'human', content: { text: 'Hello Tana' },
+      attachmentUris: [], proposals: [], toolCalls: [], usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0, model: '', cost: 0 } }, 'a message has the lists and zeroed usage Tana writes');
+    assert.deepEqual([messages[1].id, messages[2].id], [first, second]);
+    assert.deepEqual(doc.loro.getMap('participantTimeContext').toJSON(), { [ME]: { timezone: 'Europe/Amsterdam', lastLocalDate: '2026-09-27' } });
+    assert.throws(() => doc.transact((l) => chat.addMessage(l, { text: '  ', byUri: ME })), /Nothing to send/);
+    const rows = chat.chatRows([...messages, { id: 'ai000001', type: 'message', fromUserType: 'ai', content: { text: '' }, sentAt: at + 7e4 }], { me: ME, streamingId: 'ai000001' });
+    assert.deepEqual(rows.map((r) => [r.chat.mine, !!r.chat.streaming]), [[true, false], [true, false], [false, true]], 'the preamble is hidden; the bubbles know whose they are and which one Tana is writing');
+    // Tana answers by itself while you are alone in a chat, when mentioned with others in it, and never when switched off
+    const OTHER = 'tana:user-profile:01exampler0000000000000000', alone = { participants: { [ME]: {} } }, together = { participants: { [ME]: {}, [OTHER]: {} } };
+    assert.deepEqual([chat.autoResponds(alone), chat.autoResponds(together), chat.autoResponds(together, 'what do you think @Tana?'), chat.autoResponds({ ...alone, aiAutoResponds: false })], [true, false, true, false]);
+    assert.equal(chat.TANA_AGENT, 'tana:agent:' + chat.deterministicId('system:tana'));
+    assert.match(chat.TANA_AGENT, /^tana:agent:[0-9a-hjkmnp-tv-z]{26}$/);
+    // the trigger: 401 refreshes the token once, 404 is retried, and Tana's error comes back in words
+    const calls = [], answers = [{ status: 401 }, { status: 404 }, { status: 200, body: { success: true, messageId: 'ai000002' } }];
+    const fetch = async (url, init) => { calls.push({ url, init }); const a = answers.shift(); return { status: a.status, ok: a.status === 200, json: async () => a.body || {} }; };
+    const tokens = [];
+    const answer = await chat.triggerReply({ chatUri: doc.id, messageId: first, timezone: 'Europe/Amsterdam', fetch, wait: async () => {}, getAccessToken: async ({ refresh }) => { tokens.push(refresh); return 't'; } });
+    assert.equal(answer.messageId, 'ai000002');
+    assert.deepEqual(tokens, [false, true, false], 'a refused token is refreshed once');
+    assert.equal(calls[0].url, 'https://home.tana.inc/api/ai/chat/trigger');
+    assert.deepEqual(JSON.parse(calls[0].init.body), { chatUri: doc.id, agentId: chat.TANA_AGENT, triggerMessageId: first, timezone: 'Europe/Amsterdam' });
+    await assert.rejects(chat.triggerReply({ chatUri: doc.id, messageId: first, wait: async () => {}, getAccessToken: async () => 't',
+      fetch: async () => ({ status: 429, ok: false, json: async () => ({ success: false, error: 'ai_cap_exceeded' }) }) }), /Tana AI limit/);
+    console.log('ok  chat sending writes what Tana writes and asks its AI to answer');
+  }
   // What a call left behind (#31) and its transcript (#24), in the shapes the live documents had on 2026-09-23.
   {
     const { callState, readTranscript } = require('../sdk/calls');
