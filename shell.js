@@ -59,6 +59,11 @@ function mark() {
     bar.toggleAttribute('data-lights', up && r.left < 80);
   }
 }
+// Trellis moves a panel by rewriting its style, and says so (change) before an animated move has landed: a pane dropped
+// at the top, a swap, a zoom. So the bars are marked again on the frame after any panel moves, once per frame.
+let marking = 0;
+new MutationObserver(() => { marking ||= requestAnimationFrame(() => { marking = 0; mark(); }); })
+  .observe(ws.element, { subtree: true, attributes: true, attributeFilter: ['style'] });
 // A page closes only after it has sent what it was typing (flush), whether its tab's X, the panel menu, ⌘W or its
 // window asked; the last page never closes from here (main closes the window then).
 const guarded = new Set();
