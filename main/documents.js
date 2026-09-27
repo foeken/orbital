@@ -123,8 +123,11 @@ function chatFacts(doc) {
   return Object.fromEntries(['ownerUri', 'agentId', 'aiAutoResponds', 'participants', 'participantUris'].map((k) => [k, get(k)]));
 }
 const isChatId = (id) => typeof id === 'string' && DOC_URI.test(id) && idKind(id) === 'chat';
-// Whether Tana answers a message here by itself: where the composer starts, To Tana or To the chat (renderer/chat.js).
-const chatAnswers = (id) => { if (!isChatId(id)) throw new Error('Not a chat'); return op(id, (doc) => chat.autoResponds(chatFacts(doc))); };
+// What the composer needs of a chat (renderer/chat.js): whether Tana answers a message here by itself, where it starts,
+// To Tana or To the chat; and whether you may write in it at all, the verified native check (sdk/access.js) and
+// nothing guessed, so a chat you can only read gets no composer that would leave a message behind that never arrived.
+const chatAnswers = (id) => { if (!isChatId(id)) throw new Error('Not a chat'); return op(id, async (doc) => ({ ai: chat.autoResponds(chatFacts(doc)), canWrite: await canWriteDoc(doc).catch(() => false) })); };
+const CHAT_READ_ONLY = 'You can read this chat but not write in it';
 // attachments: documents the message carries, as Tana's own runSkill attaches the skill it runs (docs/CHATS.md §10).
 // opts.ai: the composer's mode. true asks Tana to answer; false is a message for the people in the chat, marked
 // skipAutoResponse, which Tana still answers when it mentions Tana; absent, the chat's own rule decides.
@@ -134,7 +137,9 @@ async function sendChat(id, text, attachments = [], opts = {}) {
   if (!S.client || !S.me) throw new Error(NOT_CONNECTED);
   const me = S.me.userUri, user = S.me.user || {};
   const name = (await members().catch(() => [])).find((m) => m.id === me)?.title || [user.firstName || user.first_name, user.lastName || user.last_name].filter(Boolean).join(' ') || user.email;
-  const sent = await op(id, (doc) => {
+  const sent = await op(id, async (doc) => {
+    // refused before anything is written: a denied edit stays in the local document, a message that never reached Tana
+    if (!(await canWriteDoc(doc).catch(() => false))) throw new Error(CHAT_READ_ONLY);
     let messageId;
     const data = chatFacts(doc), respond = typeof opts.ai === 'boolean' ? opts.ai || chat.mentionsTana(text) : chat.autoResponds(data, text);
     doc.transact((loro) => { messageId = chat.addMessage(loro, { text, byUri: me, senderName: name, attachments, skipAutoResponse: !respond }); });

@@ -5587,7 +5587,7 @@ async function main() {
     const agent = 'tana:agent:' + ulid(), chatDoc = new Document('tana:chat:' + ulid());
     chatDoc.transact((l) => { initDocument(l, 'Agent chat', ME, { kind: 'chat' }); l.getMap('data').set('agentId', agent); });
     const sync = { subscribe: async (id) => { if (id !== chatDoc.id) throw new Error('document not found: ' + id); return chatDoc; } };
-    backend.testRuntime({ me: { userUri: ME }, client: { graph: { listNodes: async () => ({ nodes: [] }) }, sync }, session: { getAccessToken: async () => 't' } });
+    backend.testRuntime({ me: { userUri: ME }, client: { graph: { listNodes: async () => ({ nodes: [] }) }, sync }, session: { getAccessToken: async () => 'x.' + Buffer.from(JSON.stringify({ org_id: 'org', role: 'member' })).toString('base64url') + '.y' } });
     const bodies = [], realFetch = globalThis.fetch;
     let answer = { status: 200, body: { success: true, messageId: 'ai000009' } };
     globalThis.fetch = async (url, init) => { bodies.push(JSON.parse(init.body)); return { status: answer.status, ok: answer.status === 200, json: async () => answer.body }; };
@@ -5600,12 +5600,17 @@ async function main() {
       assert.deepEqual([failed.responding, /AI limit/.test(failed.replyError)], [false, true], 'a failed trigger is reported, not thrown');
       assert.deepEqual(chatDoc.data.get('messages').toJSON().filter((m) => !m.hiddenFromChat).map((m) => m.content.text), ['Hello agent', 'Again'], 'and the message it was for stays sent, once');
       // the composer's mode (Tab): To the chat asks nobody and marks the message the way Tana does; To Tana always asks
-      assert.equal(await backend.handlers.get('chat:answers')(null, chatDoc.id), true, 'alone in a chat, the composer starts at To Tana');
+      assert.deepEqual({ ...await backend.handlers.get('chat:answers')(null, chatDoc.id) }, { ai: true, canWrite: true }, 'alone in your own chat, the composer starts at To Tana');
       const asked = bodies.length, quiet = await send(null, chatDoc.id, 'Just a note', [], { ai: false });
       assert.deepEqual([quiet.responding, bodies.length, chatDoc.data.get('messages').toJSON().at(-1).skipAutoResponse], [false, asked, true], 'To the chat asks nobody, and says so');
       answer = { status: 200, body: { success: true, messageId: 'ai000010' } };
       assert.deepEqual([(await send(null, chatDoc.id, 'Over to you', [], { ai: true })).responding, bodies.length], [true, asked + 1], 'To Tana asks');
       await assert.rejects(send(null, chatDoc.id, 'x', ['not a uri']), /Attachments are Tana documents/);
+      // a chat you can only read takes nothing: refused before a message is written that would never reach Tana
+      chatDoc.transact((l) => l.getMap('data').get('participants').get(ME).set('role', 'viewer'));
+      const count = chatDoc.data.get('messages').length;
+      await assert.rejects(send(null, chatDoc.id, 'Let me in'), /read this chat but not write/);
+      assert.deepEqual([chatDoc.data.get('messages').length, (await backend.handlers.get('chat:answers')(null, chatDoc.id)).canWrite], [count, false]);
     } finally { globalThis.fetch = realFetch; }
     console.log("ok  chat:send asks the chat's own agent and keeps a sent message sent when the reply cannot be asked for");
   }

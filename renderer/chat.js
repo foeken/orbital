@@ -79,6 +79,7 @@ const composerSkill = $('composerSkill'), composerMode = $('composerMode');
 // the people in it). It starts at what the chat does by itself (chat:answers: alone, Tana answers) and Tab in an empty
 // message, or a click on the label, switches it. Remembered while the window is open.
 const chatAi = new Map();
+const chatReadOnly = new Set(); // chats you can read and not write in (chat:answers): their composer takes no typing
 let chatSkill = null; // { uri, label } the message being written runs
 let composerAt = null; // where the caret was when "@" opened the search: the chip goes there
 let skillList = null; // the workspace's skills for the "/" page, read when it opens
@@ -89,11 +90,13 @@ function composerChanged() {
   composer.classList.toggle('empty', empty && !chatSkill);
 }
 function showMode() {
-  const ai = chatAi.get(composer.dataset.doc);
-  composerMode.hidden = ai === undefined;
+  const docId = composer.dataset.doc, ai = chatAi.get(docId), readOnly = chatReadOnly.has(docId);
+  composer.classList.toggle('readonly', readOnly);
+  composerText.contentEditable = readOnly ? 'false' : 'plaintext-only';
+  composerMode.hidden = ai === undefined || readOnly;
   composerMode.classList.toggle('ai', !!ai);
   composerMode.replaceChildren(...[iconNode(ai ? 'chat' : 'member')].filter(Boolean), document.createTextNode(ai ? 'To Tana' : 'To the chat'));
-  composerText.dataset.placeholder = ai === false ? 'Message the chat · @ links · Tab: to Tana' : 'Ask Tana · @ links · / runs a skill' + (ai ? ' · Tab: to the chat' : '');
+  composerText.dataset.placeholder = readOnly ? 'You can read this chat but not write in it' : ai === false ? 'Message the chat · @ links · Tab: to Tana' : 'Ask Tana · @ links · / runs a skill' + (ai ? ' · Tab: to the chat' : '');
 }
 function switchMode(docId, ai = !chatAi.get(docId)) { chatAi.set(docId, ai); showMode(); }
 function showSkill() {
@@ -199,7 +202,7 @@ function chatAfterRender(parent, stick) {
   const opened = chat && docId !== chatShown;
   if (was !== (docId || '')) {
     composer.dataset.doc = docId || ''; setComposer(docId && chatDrafts.get(docId)); showMode();
-    if (docId && !chatAi.has(docId) && tana.chatAnswers) tana.chatAnswers(docId).then((ai) => { if (!chatAi.has(docId)) chatAi.set(docId, !!ai); if (composer.dataset.doc === docId) showMode(); }, () => {});
+    if (docId && !chatAi.has(docId) && tana.chatAnswers) tana.chatAnswers(docId).then((r) => { if (!chatAi.has(docId)) chatAi.set(docId, !!r.ai); if (r.canWrite === false) chatReadOnly.add(docId); else chatReadOnly.delete(docId); if (composer.dataset.doc === docId) showMode(); }, () => {});
   }
   composer.hidden = !chat;
   sc.classList.toggle('chatting', chat);

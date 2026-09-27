@@ -603,6 +603,8 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 /* To Tana / To the chat: the mode the next message goes in, at the card's bottom left where Codex keeps its own switch */
 .composer-mode { flex: none; display: inline-flex; align-items: center; gap: 5px; margin-right: auto; align-self: center; padding: 3px 10px; border-radius: 14px; color: var(--muted); font-size: 13px; cursor: pointer; user-select: none; }
 .composer-mode[hidden] { display: none; }
+.composer.readonly { opacity: .6; } /* a chat you can only read: the card stays, saying so, and takes no typing */
+.composer.readonly .composer-send { visibility: hidden; }
 .composer-mode:hover { background: rgba(0, 0, 0, .05); }
 .composer-mode.ai { color: var(--chat-send); }
 .composer-mode svg { width: 14px; height: 14px; }

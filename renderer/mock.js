@@ -475,7 +475,7 @@ function mockApi() {
     },
     // a message goes in at once; Tana's answer follows a moment later, the way live updates bring it
     // mentions come back as chips and a skill as its attachment, the way sdk/chat.js reads what main stored
-    chatAnswers: async () => true, // every mock chat is yours alone
+    chatAnswers: async () => ({ ai: true, canWrite: true }), // every mock chat is yours alone
     sendChat: async (docId, text, attachments = [], opts = {}) => {
       const segs = (p) => p.split(/(\[[^\]\n]*\]\([^)\s]+\))/).filter(Boolean).map((t) => { const m = /^\[(.*)\]\((.+)\)$/.exec(t); return m ? { mention: { label: m[1], uri: m[2] } } : { text: t }; });
       (content[docId] ||= []).push(chatMsg(true, [...text.split(/\n{2,}/).map(segs), ...attachments.map((uri) => ({ reference: { uri, label: (all.find((d) => d.id === uri) || {}).text } }))], 0));
