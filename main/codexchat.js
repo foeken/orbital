@@ -83,8 +83,17 @@ async function replies(chatId) {
 }
 
 const isChat = (id) => typeof id === 'string' && /^tana:chat:[0-9a-z]{26}$/.test(id);
+// The task behind a question, opened in Codex by its id, the way the agent badge opens a node's task (main.js
+// codex:open). The page names the question, never a url, so there is nothing here to point somewhere else.
+async function openAsk(chatId, messageId) {
+  const a = asksIn(chatId).find((x) => x.messageId === messageId);
+  if (!a || !agent.THREAD_ID.test(String(a.threadId))) return false;
+  await require('electron').shell.openExternal(agent.TASK + encodeURIComponent(a.threadId));
+  return true;
+}
 const ipc = {
   'codex:ask': (_e, chatId, text) => { if (!isChat(chatId)) throw new Error('Not a chat'); return ask(chatId, text); },
   'codex:replies': (_e, chatId) => (isChat(chatId) ? replies(chatId) : []),
+  'codex:openAsk': (_e, chatId, messageId) => (isChat(chatId) && typeof messageId === 'string' ? openAsk(chatId, messageId) : false),
 };
-module.exports = { ask, replies, askPrompt, answerOf, stateOf, RULES, KEY, ipc };
+module.exports = { ask, replies, openAsk, askPrompt, answerOf, stateOf, RULES, KEY, ipc };

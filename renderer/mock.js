@@ -517,6 +517,7 @@ function mockApi() {
     },
     // @Codex (main/codexchat.js): the question is a message to the chat; the answer is local, here after two and a half seconds
     askCodex: async function (docId, text) { const sent = await this.sendChat(docId, text, [], { ai: false }); (codexAsks[docId] ||= []).push({ messageId: sent.messageId, at: Date.now() }); return { messageId: sent.messageId }; },
+    openCodexAsk: async (docId, messageId) => (codexAsks[docId] || []).some((a) => a.messageId === messageId),
     codexReplies: async (docId) => (codexAsks[docId] || []).map((a) => (Date.now() - a.at < 2500 ? { messageId: a.messageId, state: 'working', text: '' } : { messageId: a.messageId, state: 'done', text: 'Mock answer from Codex, kept on this Mac.' })),
     newChat: async () => {
       const n = { id: 'tana:chat:mocknew' + (++seq), text: 'New chat', kind: 'document', hasChildren: true, editable: false, icon: 'chat', tags: [{ label: 'chat', color: 'grey' }] };

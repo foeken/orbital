@@ -5915,6 +5915,10 @@ async function main() {
       assert.deepEqual([...await replies(null, chatDoc.id)].map((a) => [a.state, a.text]), [['done', 'Made three issues']]);
       assert.deepEqual([(await replies(null, chatDoc.id))[0].text, spawned], ['Made three issues', 2], 'a finished answer is not read again');
       assert.deepEqual([...await replies(null, 'not a chat')], []);
+      // the task behind a question opens in Codex by its id; anything unknown opens nothing
+      assert.equal(await backend.handlers.get('codex:openAsk')(null, chatDoc.id, messageId), true);
+      assert.equal(backend.opened.at(-1), 'codex://threads/01a0b3a3-c000-70b0-896e-08e86986ca10', 'the task this question started');
+      assert.equal(await backend.handlers.get('codex:openAsk')(null, chatDoc.id, 'nosuchid'), false);
       // a task that cannot start leaves the question sent and says why beside it
       backend.agent.createTask = async () => { throw new Error('Codex is not installed on this Mac'); };
       const failed = await ask(null, chatDoc.id, 'again @codex');

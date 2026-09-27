@@ -183,6 +183,8 @@ if (typeof ResizeObserver === 'function' && outline.parentElement) {
 function codexEl(a, docId) {
   const el = document.createElement('div'), head = document.createElement('div'), row = document.createElement('div'), bubble = document.createElement('div');
   el.className = 'chat-msg mine codex'; head.className = 'codex-head'; row.className = 'codex-row'; bubble.className = 'bubble'; bubble.title = CODEX_NOTE;
+  // the line over it opens the Codex task that answered, for the work behind the answer
+  if (tana.openCodexAsk) { head.classList.add('opens'); head.title = 'Open the Codex task'; head.onclick = () => openCodexAsk(docId, a.messageId); }
   head.append(...[iconNode('lock')].filter(Boolean), document.createTextNode('Codex · only visible for you, on this device'));
   if (a.state === 'working') bubble.append(chatDotsEl());
   else { const text = document.createElement('div'); text.className = 'chat-paragraph'; text.textContent = a.state === 'done' ? demoText(a.text, docId) : 'Codex stopped without an answer'; bubble.append(text); }
@@ -199,6 +201,8 @@ function codexEl(a, docId) {
 // The one way an answer reaches Tana: posted to the chat as your message (the arrow, or Cmd+K Share Codex’s answer to chat)
 function shareCodex(docId, text) { run(async () => { await tana.sendChat(docId, text, [], { ai: false }); await reload(docId); renderSoon(true); }); }
 const latestCodexAnswer = (docId) => (codexAnswers.get(docId) || []).filter((a) => a.state === 'done').at(-1);
+const latestCodexAsk = (docId) => (codexAnswers.get(docId) || []).at(-1);
+function openCodexAsk(docId, messageId) { run(async () => { if (!(await tana.openCodexAsk(docId, messageId))) throw new Error('That Codex task is not on this Mac'); }); }
 // Read the chat's answers, and again every few seconds while one is still being worked on
 function codexLoad(docId) {
   if (!tana.codexReplies || codexPolls.has(docId)) return;

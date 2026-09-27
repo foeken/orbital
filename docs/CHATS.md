@@ -336,5 +336,9 @@ it (the chip is written as plain "@Codex") goes through `codex:ask` instead of `
    chat's dots while the task works (read every 4 s while any is running), then the answer. The arrow beside a finished
    answer, or Cmd+K Share Codex’s answer to chat for the latest one, posts it to the chat as your message (`chat:send`, `ai: false`): the only way it reaches Tana.
 
+The task is kept, not only its answer: clicking the "Codex · …" line over an answer, or Cmd+K Open Codex task for the
+latest question, opens it in Codex (`codex:openAsk`: the page names the question, main opens `codex://threads/<id>` from
+`codexAsks`, as the agent badge's `codex:open` does for a node).
+
 A task that cannot start leaves the question sent and says so beside it (`codexError`), as a failed Tana reply does.
 

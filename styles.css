@@ -622,6 +622,8 @@ button.chat-thought-head[aria-expanded="true"]::after { rotate: 135deg; translat
    line that says it stays on this Mac; the arrow shares it to the chat, pointing out toward the others */
 .codex-head { display: flex; align-items: center; gap: 5px; margin: 0 6px 4px 0; font-size: 13px; color: var(--muted); }
 .codex-head svg { width: 12px; height: 12px; }
+.codex-head.opens { cursor: pointer; }
+.codex-head.opens:hover { color: inherit; }
 .codex-row { display: flex; align-items: center; justify-content: flex-end; gap: 8px; max-width: min(80%, 660px); }
 .chat-msg.mine.codex .bubble { max-width: 100%; background: rgba(127, 127, 127, .13); color: inherit; }
 .codex-share { flex: none; display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 1px solid rgba(127, 127, 127, .3); border-radius: 50%; background: none; color: var(--muted); cursor: pointer; }
