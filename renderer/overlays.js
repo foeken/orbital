@@ -13,7 +13,7 @@ if (tana.onOverlayClosed) tana.onOverlayClosed((result) => {
   if (result.chatgpt) startChatGPTLogin();
   if (result.note) showNote(result.note);
 });
-// Help: from ⌘K Help, the ? button after Home and ⌘K (renderCrumbs), and once by itself on a first start (helpOnce,
+// Help: from ⌘K Help, the ? in the window's header (shell.js, renderer/app.js), and once by itself on a first start (helpOnce,
 // renderer/app.js); helpSeen is a synced preference, so that is once per person.
 function openHelp() {
   if (!pref('helpSeen', false)) setPref('helpSeen', true);
@@ -30,10 +30,6 @@ async function helpOnce() {
   setPref('helpSeen', true); // main opened it and marked it; this page's copy follows
   if (!palette.hidden) closePalette(); // what openOverlay does when the page opens it: no palette left under the tour
 }
-const helpBtn = $('navHelp');
-helpBtn.onmousedown = (e) => e.preventDefault(); // the caret stays in its row
-helpBtn.onclick = openHelp;
-addIcon(helpBtn, 'help');
 // Create task (⇧⌘Space, ⌘K "Create task"; task.js). Its page writes through the bridge itself, past the demo guard
 // on `tana` (renderer/state.js), so demo mode refuses it here, in the guard's own words.
 function openTask() {

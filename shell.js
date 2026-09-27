@@ -14,11 +14,11 @@ const single = () => createDocument(L.view('page', { id: 'page', params: { side:
 const usable = (doc) => !!doc && typeof doc === 'object' && Object.values(doc.views || {}).some((v) => v && v.type === 'page');
 let aside = start.signedOut && usable(start.doc) ? start.doc : null;
 
-// The page's own background around it, one 1px line between panes in the colour the split line had, and the app's blue
-// (a link's, styles.css .text a.link) as the accent: the focused tab's top line, a hovered divider, a tab's drop slot
+// The page's own background around it, one 1px line between panes in the colour the split line had, and a bright blue
+// as the accent: the focused tab's top line, a hovered divider, a tab's drop slot
 const tokens = () => theme === 'dark'
-  ? { '--trellis-bg': '#2b2f31', '--trellis-border': '#2b2f31', '--trellis-panel': '#1b1d1e', '--trellis-tabbar': '#232627', '--trellis-accent': '#7fb8dd', '--trellis-gap': '0px', '--trellis-radius': '0px', '--trellis-tabbar-height': '38px' }
-  : { '--trellis-bg': '#ececec', '--trellis-border': '#ececec', '--trellis-panel': '#fff', '--trellis-tabbar': '#f6f6f6', '--trellis-accent': '#508fbb', '--trellis-gap': '0px', '--trellis-radius': '0px', '--trellis-tabbar-height': '38px' };
+  ? { '--trellis-bg': '#2b2f31', '--trellis-border': '#2b2f31', '--trellis-panel': '#1b1d1e', '--trellis-tabbar': '#232627', '--trellis-accent': '#5aa8ff', '--trellis-gap': '0px', '--trellis-radius': '0px', '--trellis-tabbar-height': '38px' }
+  : { '--trellis-bg': '#ececec', '--trellis-border': '#ececec', '--trellis-panel': '#fff', '--trellis-tabbar': '#f6f6f6', '--trellis-accent': '#2f8cf6', '--trellis-gap': '0px', '--trellis-radius': '0px', '--trellis-tabbar-height': '38px' };
 // One page alone is the window as it was: no tab bar and no navigation. With more, each has its tab, titled by the page;
 // a right click on it opens the panel menu, led by Rename where the page's title can be typed in (issue #441).
 // Content keeps its layout down to 280 x 200 and scales below that, which is what zooming out shows.
@@ -47,14 +47,13 @@ const windowOf = (frame) => (frame && loaded.has(frame) ? frame.contentWindow : 
 const sourceOf = (win) => pages().find((v) => windowOf(frameOf(v.id)) === win)?.id;
 const tell = (win) => win?.postMessage({ orbital: 'layout', pages: pages().length }, '*');
 
-// The tab bars along the top are the window's drag region (-webkit-app-region does not work inside an iframe), and the
-// one under the traffic lights starts its tabs clear of them. A floating panel's bar moves the panel.
+// The tab bars along the top drag the window as the header does (-webkit-app-region does not work inside an iframe). A
+// floating panel's bar moves the panel.
 function mark() {
   const top = ws.element.getBoundingClientRect().top;
   for (const bar of ws.element.querySelectorAll('[data-trellis-part="tabbar"]')) {
     const r = bar.getBoundingClientRect(), up = r.height > 0 && r.top - top < 4 && !bar.closest('[data-floating]');
     bar.toggleAttribute('data-top', up);
-    bar.toggleAttribute('data-lights', up && r.left < 80);
   }
 }
 // Trellis moves a panel by rewriting its style, and says so (change) before an animated move has landed: a pane dropped
@@ -66,7 +65,17 @@ new MutationObserver(() => { marking ||= requestAnimationFrame(() => { marking =
 // once it is pulled out of the row. A page is an iframe, which swallows the pointer as it goes over, so the tab never
 // left: the pages ignore the pointer from the press on (shell.css body.pressing).
 ws.element.addEventListener('pointerdown', (e) => { if (e.target.closest('[data-trellis-part="tab"]')) document.body.classList.add('pressing'); }, true);
-for (const type of ['pointerup', 'pointercancel']) addEventListener(type, () => document.body.classList.remove('pressing'), true);
+// Until the button is let go. A release the shell never heard (a drag ended outside the window, or where Trellis held
+// the pointer) left every page deaf to the mouse until a reload: the next move with no button down, or the window
+// losing focus, ends it too. The pages pass the pointer through meanwhile, so the shell does hear that move. Trellis's
+// own drag keeps the pages off (data-busy) until it hears a release as well, so that move cancels its drag too.
+const released = () => document.body.classList.remove('pressing');
+for (const type of ['pointerup', 'pointercancel', 'blur']) addEventListener(type, released, true);
+addEventListener('pointermove', (e) => {
+  if (e.buttons) return;
+  released();
+  if (ws.getSnapshot().dragging) dispatchEvent(new PointerEvent('pointercancel', { pointerId: e.pointerId, bubbles: true }));
+}, true);
 // A page closes only after it has sent what it was typing (flush), whether its tab's X, the panel menu, ⌘W or its
 // window asked; the last page never closes from here (main closes the window then).
 const guarded = new Set();
@@ -127,6 +136,22 @@ function focusPage(viewId) {
   ws.focus(viewId);
   windowOf(frameOf(viewId))?.focus();
 }
+// The header's switches (shell.html) act in the page in front, which takes the keys first (renderer/app.js)
+for (const [id, icon, what] of [['headSensitive', null, 'sensitive'], ['headPalette', 'command', 'palette'], ['headHelp', 'help', 'help']]) {
+  const button = document.getElementById(id);
+  if (icon) button.innerHTML = window.ICONS?.[icon] || ''; // icons.js: our own markup
+  button.onmousedown = (e) => e.preventDefault();
+  button.onclick = () => { const win = windowOf(frameOf(ws.getSnapshot().focusedView)); win?.focus(); win?.postMessage({ orbital: what }, '*'); };
+}
+// The sensitive switch is drawn from the pages' own storage (renderer/document.js): the glyph is the state, an open eye
+// while sensitive items are shown and the crossed one while they are blurred, and it follows a switch from any page.
+function drawSensitive() {
+  const on = localStorage.getItem('sensitiveVisible') === '1', button = document.getElementById('headSensitive'), label = on ? 'Hide sensitive items' : 'Show sensitive items';
+  button.innerHTML = window.ICONS?.[on ? 'visible' : 'hidden'] || '';
+  button.title = label; button.setAttribute('aria-label', label); button.setAttribute('aria-pressed', String(on));
+}
+drawSensitive();
+addEventListener('storage', (e) => { if (e.key === 'sensitiveVisible') drawSensitive(); });
 function rename(viewId) {
   const win = windowOf(frameOf(viewId));
   win?.focus();
@@ -178,12 +203,12 @@ bridge.onCommand((cmd, arg) => {
 });
 
 // ---- the palette over the whole window (issue #409) ----
-// The page asks, and its iframe is laid over the whole workspace, above every other pane, docked or floating; the page
+// The page asks, and its iframe is laid over the whole window, above the header and every other pane, docked or floating; the page
 // draws itself in its own pane and is see-through beside it (styles.css html.cover). Its surface keeps the pane's box,
 // which is where the page reads its pane from. A zoomed or scaled pane scales its iframe too, so the box is divided by it.
 function place() {
   if (!covering) return;
-  const content = covering.parentElement, box = content.getBoundingClientRect(), all = ws.element.getBoundingClientRect(), k = box.width / content.offsetWidth || 1;
+  const content = covering.parentElement, box = content.getBoundingClientRect(), all = { left: 0, top: 0, width: innerWidth, height: innerHeight }, k = box.width / content.offsetWidth || 1; // the whole window, the header too
   covering.style.left = (all.left - box.left) / k + 'px'; covering.style.top = (all.top - box.top) / k + 'px';
   covering.style.width = all.width / k + 'px'; covering.style.height = all.height / k + 'px';
 }

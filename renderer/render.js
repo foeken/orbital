@@ -459,7 +459,6 @@ function renderOutline() {
   for (const tag of titleTags) taskInfoEl.append(chipEl(tag, parent.node.hue));
   blurSensitive(taskInfoEl, parent && parent.docId);
   renderFields(parent, true); // this render already got past the caret guard, so the fields are redrawn with it
-  renderCrumbs();
   renderRail(parent);
   // A saved search is a query you can edit, so it gets the pills too — every other zoomed page is content, not a query.
   const showPills = authed && pillsApply() && (!parent || isSearchDoc(parent.node) || isTypeDoc(parent.node));
@@ -601,12 +600,6 @@ function renderFields(parent, force = false, el = $('fields')) {
   }
   blurSensitive(el, parent && parent.docId);
   if (keep) el.querySelector('.fchoice[data-key="' + CSS.escape(keep) + '"]')?.focus();
-}
-// Home as a button, the same size and look as ⌘K beside it: the two are the whole bar.
-// The bar over the title: ⌘K and Help, and nothing else — the page title says where you are. Home is a window, not a
-// place in this page, so it is Go to Home (⇧⌘H) rather than a button in every pane (issue #444).
-function renderCrumbs() {
-  $('crumbs').replaceChildren($('navPalette'), $('navHelp')); // ⌘K: renderer/palette.js; ?: renderer/overlays.js
 }
 
 // a child row: document children (inside a space) are their own document, so their key, children and edits go by their own id

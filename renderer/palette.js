@@ -961,11 +961,6 @@ function renderPalette() {
   const active = palList.querySelector('.row.active');
   if (active) active.scrollIntoView({ block: 'nearest' });
 }
-// ⌘K as a button, first in the crumbs bar before Home (renderCrumbs), for whoever has not met the key yet: the same toggle the key runs.
-const paletteBtn = $('navPalette');
-paletteBtn.onmousedown = (e) => e.preventDefault(); // the caret stays in its row, so closing the palette puts it back
-paletteBtn.onclick = () => togglePalette('cmd');
-addIcon(paletteBtn, 'command');
 // opens the palette in mode, closes it when already open in that mode; opening one mode closes the other.
 // link = @ linking context; pin = relationship pin context. Both reuse search results.
 function togglePalette(mode, link, pin) {
@@ -1154,8 +1149,8 @@ palette.addEventListener('mousedown', (e) => { if (e.target === palette) closePa
 
 // ---- hotkeys: Cmd+Shift+K on a Cmd+K row records a combo (the synced "hotkeys" preference); the outline dispatches it ----
 const KEYNAMES = { Enter: '↩', Backspace: '⌫', Tab: '⇥', ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', ' ': 'Space' };
-// by the key pressed rather than what it types, which ⌥ and ⇧ change (⌥⌘[ types “, ⇧⌘\ types |)
-const KEYCODES = { BracketLeft: '[', BracketRight: ']', Backslash: '\\' };
+// by the key pressed rather than what it types, which ⌥ and ⇧ change (⌥⌘[ types “, ⇧⌘/ types ?)
+const KEYCODES = { BracketLeft: '[', BracketRight: ']', Backslash: '\\', Slash: '/' };
 // "⌃⌥⇧⌘" + key ("M", "1", "↩"); modifiers alone while only they are pressed
 function comboOf(e) {
   const mods = (e.ctrlKey ? '⌃' : '') + (e.altKey ? '⌥' : '') + (e.shiftKey ? '⇧' : '') + (e.metaKey ? '⌘' : '');

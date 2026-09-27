@@ -364,7 +364,7 @@ function runSensitiveBlurCheck() {
     const store = ${JSON.stringify(stored)};
     const localStorage = { getItem: (key) => (key in store ? store[key] : null), setItem: (key, value) => { store[key] = String(value); } };
     ${sourceBetween('let sensitiveIds = null', '\n')}
-    const refreshSensitive = () => {}, renderSensitiveBtn = () => {};
+    const refreshSensitive = () => {};
     ${functionSource('toggleSensitiveVisibility')}
     ({ shown: () => sensitiveVisible, toggle: () => { toggleSensitiveVisibility(); return { ...store }; } })
   `);
@@ -1848,8 +1848,8 @@ async function runReservedComboCheck() {
   // The pane keys (renderer/state.js): ⌥ and ⇧ change what a bracket or \ types, so the key pressed is what counts
   const keys = vm.runInNewContext(`${sourceLine('const KEYNAMES')}\n${sourceLine('const KEYCODES')}\n${functionSource('comboOf')}\n({ comboOf })`);
   const combo = (key, code, mods) => keys.comboOf({ key, code, metaKey: true, ...mods });
-  assert.deepEqual([combo('“', 'BracketLeft', { altKey: true }), combo('|', 'Backslash', { shiftKey: true }), combo('[', 'BracketLeft'), combo('ArrowDown', 'ArrowDown', { altKey: true })],
-    ['⌥⌘[', '⇧⌘\\', '⌘[', '⌥⌘↓'], 'a bracket or \\ reads as the key pressed, whatever ⌥ or ⇧ makes it type, so the pane keys can match');
+  assert.deepEqual([combo('“', 'BracketLeft', { altKey: true }), combo('|', 'Backslash', { shiftKey: true }), combo('?', 'Slash', { shiftKey: true }), combo('[', 'BracketLeft'), combo('ArrowDown', 'ArrowDown', { altKey: true })],
+    ['⌥⌘[', '⇧⌘\\', '⇧⌘/', '⌘[', '⌥⌘↓'], 'a bracket, \\ or / reads as the key pressed, whatever ⌥ or ⇧ makes it type, so the pane keys can match');
   const defaults = Object.values(vm.runInNewContext('(' + source.match(/const DEFAULT_HOTKEYS = (\{[^\n]*\});/)[1] + ')'));
   assert.equal(new Set(defaults).size, defaults.length, 'no two built-in keys share a combo');
   assert.deepEqual(defaults.filter((c) => api.taken(c, 'none').includes(' already ') && !/shortcut for/.test(api.taken(c, 'none'))), [], 'and none is one the handlers keep fixed');
@@ -6205,11 +6205,8 @@ async function runHomeCheck() {
     let listed = [];
     const tana = { searches: () => Promise.resolve(listed) };
     ${sourceBetween('const homeSearch =', 'function sensitiveHidden')}
-    ${functionSource('renderCrumbs')}
     const bar = document.createElement('nav');
-    const cmdBtn = document.createElement('button'); // the ⌘K button index.html puts in the bar
-    const helpBtn = document.createElement('button'); // and the ? after it
-    const $ = (id) => (id === 'crumbs' ? bar : id === 'navPalette' ? cmdBtn : id === 'navHelp' ? helpBtn : null);
+    const $ = (id) => (id === 'crumbs' ? bar : null);
     const blurSensitive = () => {}, iconSvg = () => '', zoomTo = () => {};
     const viewOf = () => ({ title: 'Library' }), docOf = () => null;
     const OTHER_DOC = 'tana:text:01j0note0000000000000000';
@@ -6222,12 +6219,6 @@ async function runHomeCheck() {
       drop: (id) => { searches = searches.filter((s) => s.id !== id); repairHome(); },
       go: (place) => { zoom = place; }, view: (id) => { view = id; zoom = null; },
       home: () => goHome(), opened: () => opened && opened.keys,
-      // the whole bar over the title, as it reads
-      crumbs: (docId = OTHER_DOC) => {
-        zoom = { docId, nodeId: null };
-        renderCrumbs();
-        return bar.childNodes.map((kid) => (kid === cmdBtn ? '[⌘K]' : kid === helpBtn ? '[?]' : kid.tagName === 'button' ? '[button]' : kid.textContent)).join(' ');
-      },
       back: () => navigate(-1), push: (place) => { navBack.push(place); navHere = { view, zoom, key: 'here' }; },
       seed: (place) => { savedPlace = place; ${seed} return savedPlace; },
     });
@@ -6261,9 +6252,7 @@ async function runHomeCheck() {
   await api.list([{ id: SEARCH, text: 'Everything of mine' }]);
   assert.equal(api.name(), 'Everything of mine', 'a renamed search shows its current name');
 
-  // No Home button on the pages: Home is a window (Go to Home, ⇧⌘H), and the bar is ⌘K and Help, however deep the page
   api.go({ docId: OTHER, nodeId: null });
-  assert.equal(api.crumbs(), '[⌘K] [?]', 'the bar over a document is ⌘K and Help, with no Home button and no breadcrumbs');
 
   // Back with nothing to go back to stays put: one pane's Back must not replace the whole window with Home
   api.back();
@@ -6290,9 +6279,6 @@ async function runHomeCheck() {
   assert.deepEqual([api.id(), api.name(), api.stored().home], ['library', 'Library', 'library'],
     'a deleted Home falls back to the Library and the stale preference is repaired, not left behind');
   api.view('library');
-  assert.equal(api.crumbs(), '[⌘K] [?]', 'and the bar is the same two buttons');
-  // The bar used to be hidden on a view page, which has no location; it now carries its buttons on every page.
-  assert.doesNotMatch(source, /nav\.hidden =/, 'the bar is never hidden: ⌘K and Help on every page, a view page (the Library, Inbox, Tasks) included');
   assert.deepEqual(plain(api.seed(null)), TIMELINE, 'a Library Home changes nothing about a first launch either');
   api.view('inbox');
   api.home();

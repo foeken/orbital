@@ -61,6 +61,9 @@ window.addEventListener('message', (e) => {
   if (e.source !== window.parent || e.source === window) return;
   // flushed once every write this page queued has gone to main: an earlier one still out holds back the last characters
   if (e.data?.orbital === 'flush') { leavePage(); const shell = e.source; queue.then(() => shell.postMessage({ orbital: 'flushed' }, '*')); }
+  else if (e.data?.orbital === 'palette') togglePalette('cmd'); // the window header's ⌘K and ? (shell.js), for the page in front
+  else if (e.data?.orbital === 'help') openHelp();
+  else if (e.data?.orbital === 'sensitive') toggleSensitiveVisibility();
   else if (e.data?.orbital === 'layout') { windowPanes = { pages: e.data.pages }; document.documentElement.classList.toggle('tabbed', e.data.pages > 1); }
   else if (e.data?.orbital === 'rename' && titleEl.dataset.key) { // Rename on the tab (shell.js): the heading back, its words selected (a key only while it can be typed in; isContentEditable reads false while it is hidden)
     document.documentElement.classList.add('renaming');

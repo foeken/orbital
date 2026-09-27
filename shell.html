@@ -9,8 +9,10 @@
 </head>
 <!-- An outliner window (shell.js): the Trellis workspace holding its pages, each an iframe of index.html -->
 <body>
+<!-- the window's header: the traffic lights, and on the right the sensitive switch, ⌘K and Help for the page in front (shell.js); it drags the window -->
+<header class="head"><button id="headSensitive" tabindex="-1"></button><button id="headPalette" tabindex="-1" title="Command palette ⌘K" aria-label="Command palette"></button><button id="headHelp" tabindex="-1" title="Help" aria-label="Help"></button></header>
 <div id="workspace"></div>
-<div class="drag"></div>
+<script src="icons.js"></script>
 <script type="module" src="shell.js"></script>
 </body>
 </html>

@@ -108,7 +108,7 @@ function adoptLayout(win, doc, keys) {
   for (const [k, v] of Object.entries(out.views)) if (v && v.type === 'page') v.params = { ...v.params, side: k.slice(4) };
   return out;
 }
-// the page after this one in the layout's order, round to the first (⌘\, where the keys go when one closes)
+// the page after this one in the layout's order, round to the first (⌘/, where the keys go when one closes)
 function nextPane(page) {
   const win = page.win, order = win.pages.filter((id) => win.panes.some((p) => p.side === id));
   const next = order[(order.indexOf(page.side) + 1) % order.length];

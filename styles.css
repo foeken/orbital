@@ -82,9 +82,7 @@ button { font: inherit; }
 .palette { -webkit-app-region: no-drag; } /* its scrim covers both: Electron would take a click there as a window drag, and it never reaches the mousedown that closes the palette */
 button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -webkit-app-region: no-drag; }
 
-.titlebar { padding: 48px 32px 6px; user-select: none; position: relative; } /* the 4px the scroll area took, so the outline sits where it did */
-html.tabbed .titlebar { padding-top: 16px; } /* under a tab bar (shell.js, renderer/app.js) there are no traffic lights to keep clear of */
-html.tabbed .navbtns { top: 12px; } /* the buttons on the right stay on the crumbs' line, which the 16px above moved up from 48px */
+.titlebar { padding: 16px 32px 6px; user-select: none; position: relative; } /* the traffic lights are in the window's header (shell.html); 6px: the 4px the scroll area took, so the outline sits where it did */
 html.tabbed.listing:not(.renaming) #pagehead { display: none; } /* a view, saved search or app page is named by its tab (renderer/render.js); Rename on the tab brings it back */
 /* with no heading, the icons on both sides sit 19px from the pane's edge, the left ones over the section chevrons
    below, and the gap the heading left under the crumbs closes */
@@ -106,13 +104,9 @@ html.tabbed.listing:not(.renaming) .crumbs { margin-bottom: 4px; }
 #taskInfo { margin-left: 0; margin-top: 6px; white-space: normal; }
 #taskInfo .chip:first-child { margin-left: 0; }
 /* only the two buttons block the drag; the empty band beside them moves the window */
-.crumbs { font-size: 13px; margin-bottom: 14px; } /* 13px: the line the buttons sit in, which is the row's height */
+.crumbs { font-size: 13px; min-height: 1lh; margin-bottom: 14px; } /* the line the buttons on the right sit on, empty now that ⌘K and Help are in the window's header */
 .text a.url { color: #508fbb; text-decoration: underline; cursor: pointer; }
 [data-theme="dark"] .text a.url { color: #7fb8dd; }
-/* Home and ⌘K: in the line without making it taller, 2px apart as the buttons top right are; -3px: the first glyph,
-   not its box, on the title's edge; -1px: level with the buttons top right (measured) */
-.crumbs .navbtn { display: inline-flex; vertical-align: middle; margin: -4px 2px -4px 0; position: relative; top: -1px; }
-.crumbs .navbtn:first-child { margin-left: -3px; }
 .error { font-size: 13px; color: #c0392b; margin-top: 6px; }
 .error button { margin-left: 8px; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; }
 .error[hidden] { display: none; }
@@ -251,7 +245,7 @@ html.tabbed.listing:not(.renaming) .crumbs { margin-bottom: 4px; }
    header band, absolute against .titlebar so they never shift as the crumbs, task meta or fields rows appear and
    disappear beneath them. One row from the right edge, so a button that is not offered (the sidebar toggle on a page
    without a sidebar) leaves no gap: the others move up to the edge. */
-.navbtns { position: absolute; top: 44px; right: 32px; z-index: 1; display: flex; gap: 2px; }
+.navbtns { position: absolute; top: 12px; right: 32px; z-index: 1; display: flex; gap: 2px; }
 /* The top row (Home and Cmd+K, and the buttons on the right) shows only while the mouse is over this page: each half
    of a split is a page of its own, so the half you are not pointing at is just its title and rows. Not :hover: the
    header is a window drag region, where the page hears nothing of the mouse, so hover ended as the pointer reached
@@ -357,8 +351,7 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 /* a real sidebar: full height beside the document, holding its relationships (edges, never editable) */
 .rail { flex: none; width: 272px; height: 100%; overflow-y: auto; user-select: none;
   /* padding-top lines the first section heading up with the breadcrumbs (heading text sits 10px into its button) */
-  border-left: 1px solid #ececec; background: #fafbfc; padding: 38px 12px 32px; }
-html.tabbed .rail { padding-top: 6px; } /* in line with the crumbs again, which moved up as much (html.tabbed .titlebar) */
+  border-left: 1px solid #ececec; background: #fafbfc; padding: 6px 12px 32px; }
 .railgrip { flex: none; width: 5px; margin-right: -1px; cursor: col-resize; z-index: 2; }
 .railgrip:hover, .railgrip.dragging { background: #d8e4f0; }
 .rail .rhead { display: flex; align-items: center; gap: 6px; width: 100%; border: 0; background: none; margin-top: 18px; padding: 10px 6px 4px; cursor: pointer;

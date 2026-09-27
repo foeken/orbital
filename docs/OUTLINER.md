@@ -86,12 +86,14 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
 
 ## 4. The page
 
-- **Header row** (issue #200): over the page title, **⌘K** and **?** (`renderCrumbs`), `.navbtn`s like the buttons at
-  the top right — 24px, an 18px glyph at .4 opacity. ⌘K opens the command palette (`togglePalette('cmd')`), ? opens the
-  Help tour (§16). Home has no button: it is a window, not a place in the page, so it is Cmd+K Go to Home (⇧⌘H), which
-  the Help tour teaches (issue #444). The row is never hidden and there are no breadcrumbs: the title says where you are and Back walks the
-  history. The first glyph lines
-  up with the title's left edge, and both sit level with the buttons at the top right. The row is part of the title
+- **Window header** (shell.html): a 38px band over the panes, with no line under it: the traffic lights, and on the
+  right the app's own switches, **sensitive items** (the eye), **⌘K** and **?**. It drags the window, and each button
+  acts in the page in front, which takes the keys first (shell.js posts `sensitive`, `palette` or `help`;
+  renderer/app.js runs `toggleSensitiveVisibility`, `togglePalette('cmd')` or `openHelp`). The eye is drawn from the
+  pages' `sensitiveVisible` storage and follows a switch from any page. The panes sit below it, so every tab bar has the
+  full width. Home has no button: it is a window, so it is Cmd+K Go to Home (⇧⌘H), which the Help tour teaches (issue
+  #444). There are no breadcrumbs: the title says where you are and Back walks the history.
+- **Header row**: over the page title, the empty line the buttons at the top right sit on. It is part of the title
   bar's drag area; the buttons opt out of it, and so does the palette's backdrop while it is open (otherwise Electron
   takes a click there as a window drag and the backdrop never hears the click that closes it).
 - **Buttons at the top right** (`.navbtns`, one flex row anchored to the right edge of `.titlebar`, so they stay put as
@@ -441,7 +443,7 @@ Every command row has a stable `id`, and a key is a row with a combo. The built-
 | Go to Home | ⇧⌘H |
 | New window | ⌥⌘N |
 | New pane (to the right) | ⌘N |
-| Next / Previous pane | ⌘\\ / ⇧⌘\\ |
+| Next / Previous pane | ⌘/ / ⇧⌘/ |
 | Next / Previous tab | ⇧⌘] / ⇧⌘[ |
 | Maximize or restore pane | ⌥⌘↓ |
 | Show all panes | ⌥⌘↑ |
@@ -907,11 +909,12 @@ nothing about them as documents. Each is a place the app remembers, so ⌘R on o
   a Cmd+K row that posts `{ orbital: 'run', command }` to the shell (renderer/palette.js `PANE_ROWS`, `shellRun`);
   every Trellis key in the shell itself is off. After every change the shell tells each page how many pages the window
   holds (`{ orbital: 'layout' }`, renderer/state.js `windowPanes`), which decides those rows and puts the page under a
-  tab bar (`html.tabbed`: no band kept for the traffic lights).
-  **One page** looks as it always did: no tab bar, no navigation, and the window drags from a 40px strip the shell
-  lays over the page's empty top band, clear of the traffic lights (`-webkit-app-region` does nothing inside an
-  iframe). With more, the tab bars along the top are the drag region, the tabs and buttons excepted, and the one under
-  the traffic lights starts its tabs after them (shell.js `mark`). The line between panes is Trellis's divider,
+  tab bar (`html.tabbed`: a view, search or app page drops its heading).
+  The window's header (§4) holds the traffic lights and drags the window (`-webkit-app-region` does nothing inside an
+  iframe); the panes sit below it. **One page** has no tab bar and no navigation. With more, the tab bars along the
+  top drag the window too, the tabs and buttons excepted (shell.js `mark`), and start at the window's left edge. A
+  tab pressed makes the pages let the pointer pass until it is let go; a release the shell never hears ends on the
+  next move with no button down, which cancels a Trellis drag still going too. The line between panes is Trellis's divider,
   drawn 1px; the panels have no gap and no rounding. The shell reports every committed change (`shell:layout`
   { doc, pages }), which main saves with the window, and starts from it (`shell:state`); signed out it shows page ''
   alone and keeps the layout aside until the login ('auth').
