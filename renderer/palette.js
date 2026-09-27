@@ -401,6 +401,9 @@ function paletteRows(q, typed = q) {
 // but off (Clean up with nothing held, Go back with no history) answers the key by doing nothing: it is the same
 // command either way, so it must not mean one thing while it is live and something else while it is not.
 function runAction(id) {
+  // A key pressed in the Links pane acts in the page it follows, where its rows are meant (#463 review), except the
+  // pane's own rows and the workspace's moves, which ask the shell from wherever they are pressed.
+  if (LINKS && !['railToggle', 'rail', 'reload'].includes(id) && !PANE_ROWS.some(([rowId]) => rowId === id)) { toShell({ orbital: 'action', id }); return true; }
   if (palette.hidden) { palDoc = currentDoc(); palField = fieldAt(document.activeElement); } // a key fires with the palette closed, so the "current node" is whatever is focused now
   const rows = paletteRows(''), row = rows.find((r) => r.id === id);
   if (row) { if (!row.disabled) row.run(); return true; }

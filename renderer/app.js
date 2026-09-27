@@ -81,6 +81,7 @@ window.addEventListener('message', (e) => {
   else if (e.data?.orbital === 'navclick') navRow.querySelector('#' + CSS.escape(String(e.data.id)))?.click(); // a press on its copy in the tab bar
   else if (e.data?.orbital === 'follow' && LINKS) follow(e.data.docId, e.data.doc); // the Links pane: the focused pane's document (renderer/rail.js)
   else if (e.data?.orbital === 'goto') { if (typeof e.data.view === 'string') setView(e.data.view); else if (typeof e.data.id === 'string') goTo(e.data.id); } // what the Links pane opened, opened here
+  else if (e.data?.orbital === 'action' && typeof e.data.id === 'string') runAction(e.data.id); // a key pressed in the Links pane
   else if (e.data?.orbital === 'rename' && titleEl.dataset.key) { // Rename on the tab (shell.js): the heading back, its words selected (a key only while it can be typed in; isContentEditable reads false while it is hidden)
     document.documentElement.classList.add('renaming');
     titleEl.focus();

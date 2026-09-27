@@ -277,6 +277,7 @@ addEventListener('message', (e) => {
   else if (what === 'open') { const id = following(), win = windowOf(frameOf(id)); if (!win) return; focusPage(id); if (typeof e.data.id === 'string' || typeof e.data.view === 'string') win.postMessage({ orbital: 'goto', id: e.data.id, view: e.data.view }, '*'); } // from the Links pane
   else if (what === 'links') { const id = linksView(); if (id) ws.close(id); } // Cmd+K Hide links
   else if (what === 'palette') { const id = following(), win = windowOf(frameOf(id)); if (!win) return; focusPage(id); win.postMessage({ orbital: 'palette', mode: e.data.mode }, '*'); } // Cmd+K or Cmd+S pressed in the Links pane
+  else if (what === 'action') { const id = following(), win = windowOf(frameOf(id)); if (!win) return; focusPage(id); win.postMessage({ orbital: 'action', id: String(e.data.id) }, '*'); } // any other key pressed there
   else if (what === 'focusLinks') focusPage(linksView());
 });
 

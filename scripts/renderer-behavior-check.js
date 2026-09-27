@@ -1560,6 +1560,7 @@ async function runSyncShortcutCheck() {
     const visibilityRows = () => [], moveTargets = async () => [], previewMoveToSpace = () => {};
     ${sourceBetween('const NODE_ROW_ORDER', 'function paletteRows')}
     ${functionSource('paletteRows')}
+    const LINKS = false; // a page of its own: its keys run here (renderer/state.js)
     ${functionSource('runAction')}
     ({ rows: async (q) => { paletteRows(q); await Promise.resolve(); await Promise.resolve(); return paletteRows(q).map((r) => r.label); }, loads: () => loads,
        ids: (q) => paletteRows(q).map((r) => r.id), press: async (id) => { const hit = runAction(id); await Promise.resolve(); return [hit, ran.splice(0)]; } });
@@ -3553,6 +3554,7 @@ async function runClosedPaletteKeysCheck() {
     ${sourceBetween('const NODE_ROW_ORDER', 'function paletteRows')}
     ${sourceBetween('const homeSearch =', 'function sensitiveHidden')}
     ${functionSource('paletteRows')}
+    const LINKS = false; // a page of its own: its keys run here (renderer/state.js)
     ${functionSource('runAction')}
     ${functionSource('loadMeeting')}
     ${functionSource('pinToMeeting')}
@@ -4455,15 +4457,22 @@ function runRailToggleCheck() {
   assert.match(functionSource('renderRail'), /if \(!LINKS\) \{ railEl\.hidden = true; return tellDoc\(docId\); \}/, 'a page other than the Links pane draws no rail and names its document');
   // Anywhere else the Links pane is asked to go — Cmd+K's views, searches and results — is the followed page's move (#463 review)
   const nav = vm.runInNewContext(`
-    const LINKS = true, posted = [], toShell = (m) => posted.push(m), palette = { hidden: true }; let followingNow = false;
+    const LINKS = true, posted = [], toShell = (m) => posted.push(m), palette = { hidden: true }, PANE_ROWS = [['otherPane']]; let followingNow = false;
+    const tana = { summaryUri: () => { posted.push('asked for a write-up'); return Promise.resolve(null); } };
     ${functionSource('openDoc')}
     ${functionSource('setView')}
     ${functionSource('togglePalette')}
-    ({ posted, openDoc, setView, togglePalette });
+    ${functionSource('runAction').replace('  if (palette.hidden) { palDoc', '  return false; // the rest is the page\'s own run (runSyncShortcutCheck)\n  if (palette.hidden) { palDoc')}
+    ${functionSource('followSummary')}
+    ({ posted, openDoc, setView, togglePalette, runAction, followSummary });
   `);
   nav.openDoc('tana:text:x'); nav.setView('library'); nav.togglePalette('cmd'); nav.togglePalette('search');
   assert.deepEqual(plain(nav.posted), [{ orbital: 'open', id: 'tana:text:x' }, { orbital: 'open', view: 'library' }, { orbital: 'palette', mode: 'cmd' }, { orbital: 'palette', mode: 'search' }],
     'in the Links pane, opening a document or a view opens it in the followed page, and Cmd+K / Cmd+S open there too');
+  nav.posted.length = 0;
+  assert.deepEqual([nav.runAction('create'), nav.runAction('railToggle'), nav.runAction('otherPane')], [true, false, false], 'a key pressed in the Links pane is the followed page\'s, but its own rows and the pane moves');
+  nav.followSummary('tana:event:x');
+  assert.deepEqual(plain(nav.posted), [{ orbital: 'action', id: 'create' }], 'the Links pane runs no key of the followed page itself, and never redirects a meeting to its write-up');
   // Following is not navigating: the Links pane keeps no history, so ⌘[ there cannot take it off the followed document (#463 review)
   assert.match(functionSource('noteNavigation'), /if \(navHere && !navigating && !navReplace && !LINKS\) \{ navBack\.push/, 'the Links pane records no Back history');
   // A saved search is a list: no links, and nothing for the Links pane to follow.

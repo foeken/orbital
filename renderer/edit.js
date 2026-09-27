@@ -287,7 +287,8 @@ function openDoc(docId, from) {
 // An event has no content of its own, so a meeting opens at its write-up. Every zoom passes through here, so the
 // redirect behaves the same from a list row, search, the rail, a pin, a breadcrumb or a link.
 function followSummary(docId) {
-  if (!tana.summaryUri || typeof docId !== 'string' || !docId.startsWith('tana:event:')) return;
+  // the Links pane never redirects itself: the page it follows does, and tells it the write-up (renderer/rail.js)
+  if (LINKS || !tana.summaryUri || typeof docId !== 'string' || !docId.startsWith('tana:event:')) return;
   tana.summaryUri(docId).then((uri) => { if (uri && zoom && zoom.docId === docId) { navReplace = true; goTo(uri); } }, () => {}); // the event page is a hop, not a place to come back to
 }
 async function goTo(uri) {
