@@ -27,9 +27,10 @@ async function outlineWithReferences(doc) {
 // ponytail: LIVE_ROWS / 2 targets across every outline on screen; the newest pages win. Hold per page if that matters.
 const liveRefs = new Map();
 let liveRefsClient = null; // the sync client they are live on: a new login starts a new stream, subscribed to none of them
-// Let go of a target nothing holds any more: not a live reference, a view (subscribed), a read or a wait
+// Let go of a target nothing holds any more: not a live reference, a view (subscribed), a read, a wait, or a watch
+// start() subscribes outside those (watched by hand, handed to the agent): letting that go would end its notifications
 function dropRef(uri) {
-  if (liveRefs.has(uri) || subscribed.has(uri) || onDemand.has(uri) || reading.has(uri)) return;
+  if (liveRefs.has(uri) || subscribed.has(uri) || onDemand.has(uri) || reading.has(uri) || notifyWatchedIds().has(uri) || codexIds().includes(uri)) return;
   docStates.delete(uri);
   S.client?.sync?.unsubscribe?.(uri)?.catch(() => {}); // it may settle after a logout, or under the checks' partial clients
 }
@@ -37,8 +38,9 @@ function dropRef(uri) {
 // go once it settles if it was pushed out meanwhile; and a bootstrap that failed (deleted, access gone) is no live
 // reference, so the next read tries again.
 function subscribeRef(uri) {
+  const client = S.client; // a login since then answers for its own client, and an old one's answer changes nothing
   reading.set(uri, (reading.get(uri) || 0) + 1);
-  subscribe(uri).then((doc) => { if (!doc) liveRefs.delete(uri); }).finally(() => { const left = (reading.get(uri) || 1) - 1; if (left > 0) reading.set(uri, left); else { reading.delete(uri); dropRef(uri); } });
+  subscribe(uri).then((doc) => { if (!doc && S.client === client) liveRefs.delete(uri); }).finally(() => { const left = (reading.get(uri) || 1) - 1; if (left > 0) reading.set(uri, left); else { reading.delete(uri); if (S.client === client) dropRef(uri); } });
 }
 // A new login's client (main/views.js start): its stream has none of them, and an outline already on screen is not
 // read again to ask, so they are all subscribed on it now.

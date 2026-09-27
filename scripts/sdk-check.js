@@ -5266,6 +5266,19 @@ async function main() {
     live.length = 0; backend.reliveRefs(); // what start() does once the new client exists, before any outline is read again
     const onNew = live.length; live.length = 0; await backend.outlineWithReferences(many);
     assert.deepEqual([liveBefore, onNew, live.length], [0, 50, 0], 'a new login subscribes the targets live on the old client on the new one, with no outline read again');
+    // A node watched by hand keeps its subscription when it leaves the list: letting it go would end its notifications
+    backend.settings.set('notify', { ...(backend.settings.get('notify') || {}), [manyUris[0]]: true });
+    gone.length = 0; sync.unsubscribe = async (id) => { gone.push(id); };
+    await backend.outlineWithReferences(other); await new Promise((r) => setImmediate(r));
+    assert.ok(!gone.includes(manyUris[0]), 'a reference target watched by hand is not unsubscribed when the list lets it go');
+    // An old login's bootstrap answering after a new login changes nothing: the target stays for the new client
+    let late; sync.subscribe = (id) => { live.push(id); return id === slowUri ? new Promise((r) => { late = r; }) : Promise.resolve({}); };
+    await backend.outlineWithReferences(slow);
+    backend.testRuntime({me:{userUri:ME},client:{...refClient}});
+    late(null); await new Promise((r) => setImmediate(r));
+    live.length = 0; backend.reliveRefs();
+    assert.ok(live.includes(slowUri), 'a target whose old-client bootstrap failed after a new login is still subscribed on the new client');
+    sync.unsubscribe = async () => {};
     sync.subscribe = plain;
     sync.unsubscribe = async () => {};
     backend.testRuntime({me:{userUri:ME},client:{sync,graph:{listNodes:async q => { requests.push(q); return {nodes:[{id:targetUri,title:'Actual embedded task',state:{type:'open'},appearance:{hue:0}}]}; }}}});
