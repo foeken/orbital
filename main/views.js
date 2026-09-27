@@ -496,11 +496,12 @@ const ipc = {
     return VIEWS.map((view) => ({ ...view, truncated: truncatedViews.has(view.id), nodes: (rows[view.id] || []).filter((r) => !isHidden(r.title, rules)).map(toNode) }));
   },
   'view:list': async (e, id, filter) => {
+    // the Links pane (#462) shows no list: no query, no live query, no refresh, and never the view the refresh owns
+    if (pageOf(e)?.links) return { nodes: [], truncated: false };
     preset(id); // validate before changing which view the refresh loop owns
     S.activeView = id;
     S.activeFilter = filter;
     const page = pageOf(e);
-    if (page && page.links) return viewRows(id, filter); // the Links pane (#462) shows no list: no open view, no live query, no refresh
     if (page) S.windowViews.set(page.id, { id, filter }); // this page's view (the checks call with no event)
     await S.refreshing;
     return viewRows(id, filter);

@@ -1103,8 +1103,10 @@ async function main() {
     assert.deepEqual(toShell.splice(0), [['open', { id: '5', where: 'links', from: '', focus: false }]], 'Show links: the Links pane opens beside the page that asked, which keeps the keys (issue #462)');
     const linksFrame = { ...frame('linksPane', '5'), url: 'file:///orbital/index.html?side=5&links=1' };
     ask('window:getSide', linksFrame);
-    await backend.handlers.get('view:list')({ sender: shellWc, senderFrame: linksFrame }, 'library');
-    assert.equal(backend.S.windowViews.has('1:linksPane'), false, 'the Links pane shows no list, so it is no open view: no live query, no refresh of rows nobody sees (#463 review)');
+    const activeBefore = backend.S.activeView, otherView = activeBefore === 'inbox' ? 'library' : 'inbox';
+    const linksRows = own(await backend.handlers.get('view:list')({ sender: shellWc, senderFrame: linksFrame }, otherView));
+    assert.deepEqual([linksRows, backend.S.windowViews.has('1:linksPane'), backend.S.activeView], [{ nodes: [], truncated: false }, false, activeBefore],
+      'the Links pane shows no list: nothing is queried, it is no open view and the refresh keeps its view (#463 review)');
     const layoutDoc = { schema: 1, root: { kind: 'panel', views: ['page', 'page2', 'page3'] }, views: {} };
     ask('shell:layout', null, { doc: layoutDoc, pages: ['', '3', '2'] });
     assert.deepEqual([shown.panes.map((p) => p.side).sort(), shown.doc], [['', '2', '3'], layoutDoc], 'a page not in the report is forgotten, and the layout saved');
