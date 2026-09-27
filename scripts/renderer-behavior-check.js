@@ -1488,9 +1488,9 @@ function runAuthPaletteCheck() {
   const paletteRows = functionSource('paletteRows');
   const api = vm.runInNewContext(`
     let authed, authChecking, connected, signedOut;
-    const loginBox = {}, filtered = {};
+    const loginBox = {}, filtered = {}, pagehead = {};
     const outline = {};
-    const $ = (id) => id === 'loginBox' ? loginBox : id === 'filtered' ? filtered : {};
+    const $ = (id) => id === 'loginBox' ? loginBox : id === 'filtered' ? filtered : id === 'pagehead' ? pagehead : {};
     const showError = () => {};
     const render = () => {};
     const views = [], searches = [], typeListCache = null;
@@ -1511,11 +1511,15 @@ function runAuthPaletteCheck() {
     ${authView}
     ${showStatus}
     ${paletteRows}
-    ({ showStatus, paletteRows, state: () => ({ authed, authChecking, signedOut, loginHidden: loginBox.hidden }) });
+    ({ showStatus, paletteRows, state: () => ({ authed, authChecking, signedOut, loginHidden: loginBox.hidden, headHidden: pagehead.hidden }) });
   `);
   api.showStatus({ authenticated: null, authChecking: false, error: new Error('probe failed') });
-  assert.deepEqual(plain(api.state()), { authed: false, authChecking: false, signedOut: false, loginHidden: true }, 'failed session probe keeps the login button hidden');
+  assert.deepEqual(plain(api.state()), { authed: false, authChecking: false, signedOut: false, loginHidden: true, headHidden: false }, 'failed session probe keeps the login button hidden');
   assert.equal(api.paletteRows('').some((row) => row.id === 'login'), false, 'failed session probe has no Cmd+K login action');
+  api.showStatus({ authenticated: false, authChecking: false });
+  assert.deepEqual([api.state().loginHidden, api.state().headHidden], [false, true], 'signed out, the login shows with no view title above it');
+  api.showStatus({ authenticated: true, authChecking: false });
+  assert.equal(api.state().headHidden, false, 'and the title comes back once signed in');
 }
 
 async function runSyncShortcutCheck() {

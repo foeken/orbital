@@ -22,6 +22,7 @@ function showStatus(s) {
   // go first. Any later reconnect finds the place already spent, so this is boot order only.
   if (connected && !wasConnected) { taskMetaFailed.clear(); loadSearches(); loadWorkspaceTypes(); loadPinned(true); restorePlace().finally(() => { placed = true; loadView(); renderSoon(); helpOnce(); }); } // the types too: a key recorded on a Cmd+K type row finds it before Cmd+K opens; the tour opens over the page it came back to
   $('loginBox').hidden = !state.showLogin;
+  $('pagehead').hidden = state.showLogin; // signed out, the login is the page: no view title above it
   const relogin = !!(state.error && !state.authenticated && !state.signedOut);
   $('errorText').textContent = relogin ? state.error : ''; $('error').hidden = $('errorLogin').hidden = !relogin;
   outline.hidden = $('filtered').hidden = !state.showOutline;
