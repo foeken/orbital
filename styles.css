@@ -729,7 +729,7 @@ button.chat-thought-head[aria-expanded="true"]::after { rotate: 135deg; translat
 .people { display: inline-flex; align-items: center; gap: 6px; vertical-align: top; } /* who can see a row: in its subtext, or in a table row's icons */
 .subtext:has(> .people) { padding: 3px 0 4px; } /* a row whose subtext has faces: a little air above and below them */
 .faces { display: inline-flex; vertical-align: -4px; } /* on a row's subtext and in a page's Visible to field */
-.face { width: 18px; height: 18px; margin-left: -2px; border-radius: 50%; display: grid; place-items: center; font-size: 8px; font-weight: 650;
+.face { width: 18px; height: 18px; margin-left: -2px; border-radius: 50%; display: grid; place-items: center; font-size: 8px; font-weight: 650; line-height: 1; /* its own: a taller line where it sits (a field's 22px) pushed the initials off centre */
   color: #666; background: oklch(calc(0.89 + var(--tone, 0) * 0.012) 0 0); box-shadow: 0 0 0 1.5px #fff; } /* light greys, a small step apart per person: no colour */
 .face:first-child { margin-left: 0; }
 .face.more { background: #eee; color: #666; }
