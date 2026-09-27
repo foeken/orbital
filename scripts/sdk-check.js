@@ -5219,6 +5219,12 @@ async function main() {
     const resolved = await backend.outlineWithReferences(host);
     // the row draws a copy of its target's title: only a subscribed target tells main it was renamed (#413)
     assert.deepEqual(live, [targetUri], 'a resolved reference keeps its target live, so a rename reaches the row');
+    const chatUri = 'tana:chat:' + ulid(); live.length = 0;
+    backend.testRuntime({me:{userUri:ME},client:{sync,graph:{listNodes:async () => ({nodes:[{id:chatUri,title:'A sub-agent chat'}]})}}});
+    const embedTo = (uri) => host.transact(l => l.getMap('content').get('children').get(0).get('attributes').set('tanaUri', uri));
+    embedTo(chatUri); await backend.outlineWithReferences(host); embedTo(targetUri);
+    assert.deepEqual(live, [], 'but not a chat: it bootstraps to megabytes of messages, too much for a title');
+    backend.testRuntime({me:{userUri:ME},client:{sync,graph:{listNodes:async q => { requests.push(q); return {nodes:[{id:targetUri,title:'Actual embedded task',state:{type:'open'},appearance:{hue:0}}]}; }}}});
     assert.equal(resolved[0].id, blockId); assert.equal(resolved[0].reference.node.id, targetUri);
     assert.equal(resolved[0].reference.node.icon, 'task'); assert.equal(resolved[0].reference.node.done, 0);
     assert.equal(resolved[0].reference.node.hue, 0); assert.equal(resolved[1].id, headingId);

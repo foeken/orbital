@@ -52,8 +52,9 @@ async function resolveReferences(nodes) {
   for (const ref of refs) { if (targets.has(ref.uri)) ref.node = targets.get(ref.uri); else if (deleted(ref.uri)) ref.deleted = true; }
   // A reference row draws a copy of its target, which only a live target keeps current: subscribed, its rename reaches
   // the renderer as a change and patches the copy (renderer/app.js patchCopies). A read like any other, let go oldest
-  // first past LIVE_ROWS (releaseOnDemand), so it holds nothing for good (#413).
-  for (const uri of new Set(refs.map((ref) => ref.uri))) if (targets.has(uri)) subscribe(uri).then((doc) => { if (doc) readOnDemand(uri); });
+  // first past LIVE_ROWS (releaseOnDemand), so it holds nothing for good (#413). Not a chat: one bootstraps to megabytes
+  // of messages and tool output (docs/CHATS.md), too much to fetch for a title.
+  for (const uri of new Set(refs.map((ref) => ref.uri))) if (targets.has(uri) && idKind(uri) !== 'chat') subscribe(uri).then((doc) => { if (doc) readOnDemand(uri); });
   // the icon and the hue: a mention says what kind of thing it points at, and is drawn in its type's colour when
   // the target has one (the link's own blue otherwise)
   for (const m of mentions) {
