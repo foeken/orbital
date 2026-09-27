@@ -171,6 +171,9 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   an image named after its person; a guest, whose profile Tana does not let us read, is "Guest". The glyph then leaves
   the facts after the title. A table row, whose subtext is its cells, draws the same line (glyph, bubbles, the rest in
   words) in its icons at the end, whose column widens to 190px when any row has one, and the bare glyph for a row that names nobody. It shows with the Assigned fact, and never on the Timeline, which shows neither the glyph nor the faces (`audienceShown`).
+  Everyone and only you are the exception: the glyph and the word **Everyone** or **Private**, no bubbles, since a
+  bubble per member of the organization or your own face tells you nothing (`AUDIENCES` `word`); the page's Visible to
+  field says the same word.
 - **Block rows: a marker belongs to a list row.** The dot is drawn for `.t-bullet` and the counter for
   `.t-numbered`; text, headings, quotes and code have none, on hover too. A collapsed row keeps its dot, on its halo,
   because that says it has children. A row with no marker is not indented for one: its text starts where the title
@@ -1107,7 +1110,7 @@ and every head carries `aria-expanded`. It never stands alone: the last page bes
 - **No Details section.** What it listed lives with the page: who it is for and who can see it are the first fields
   under the title, and Open in Tana, Join call and Edit pins are Cmd+K rows under Current node. **Assigned to** (a task) is a mention per
   person, drawn as a person in any other field is (no chip), or "Unassigned", and opens the assignee picker; **Visible to** (any document with a known audience) is the
-  audience's glyph with a bubble per person as a list row's subtext has them, one person as a mention drawn as Assigned to draws one (or the audience's words where it names
+  audience's glyph with a bubble per person as a list row's subtext has them, "Everyone" or "Private" for those two audiences, one person as a mention drawn as Assigned to draws one (or the audience's words where it names
   nobody), "Anyone with the link" when Tana's link sharing is on, "Not visible to …" in red for an assignee it shuts out, and opens the visibility picker, on a meeting's
   write-up the event's; a sensitive page, a chat and a saved search have none. Both open on a click, Enter or Space (renderer/fields.js
   `assigneeFieldEl`, `visibilityFieldEl`). A page asks for its fields' data itself (`loadRelated`), with or without a

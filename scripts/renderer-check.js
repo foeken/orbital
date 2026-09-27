@@ -165,13 +165,13 @@ assert.match(source, /Promise\.all\(work\)\.then\(\(\) => renderSoon\(true\), sh
 assert.match(source, /const loading = asking \|\| \(!parent && !outline\.children\.length/);
 assert.match(source, /tana\.setAssignees\(doc\.id, assignees\)/);
 assert.match(source, /const AUDIENCES = \{/);
-assert.match(source, /'only-me': \{ icon: 'lock', label: 'Visible only to you' \}/);
+assert.match(source, /'only-me': \{ icon: 'lock', label: 'Visible only to you', word: 'Private' \}/);
 assert.match(source, /people: \{ icon: 'userLock', label: 'Visible to selected people' \}/);
 assert.match(source, /space: \{ icon: 'houseLock', label: 'Visible to space members' \}/);
 assert.match(source, /function audienceInfo\(audience, audienceSpace\) \{/);
 assert.match(source, /const title = audience\?\.title \|\| audienceSpace\?\.title/);
 assert.match(source, /label: 'Visible to members of ' \+ named/);
-assert.match(source, /everyone: \{ icon: 'users', label: 'Visible to everyone' \}/);
+assert.match(source, /everyone: \{ icon: 'users', label: 'Visible to everyone', word: 'Everyone' \}/);
 assert.match(source, /who\.textContent = summary\.assignees/);
 assert.match(source, /clickable\(who, \(\) => openAssigneePalette\(node\)\)/);
 assert.match(source, /clickable\(icon, \(\) => openVisibility\(node, summary\.scope\)\)/);
