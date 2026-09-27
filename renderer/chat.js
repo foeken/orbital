@@ -258,13 +258,14 @@ function deleteChatMsg(docId, key) {
     renderSoon(true);
   });
 }
-// ⌘K's rows for the message selected, or with none the latest answer and ask (renderer/palette.js)
+// ⌘K's rows for the message selected, under "Message" at the top (renderer/palette.js); with none, the latest answer and
+// ask under Actions. A selected message that is not an ask offers only what it can do: no other ask's rows.
 function chatMessageRows(docId) {
-  const rows = [], sel = msgEl(chatSel) ? chatSel : null, picked = askOf(docId, sel);
-  const answer = picked && picked.state === 'done' ? picked : latestAgentAnswer(docId), ask = picked || latestAgentAsk(docId);
-  if (tana.askAgent && answer) rows.push({ id: 'agentAnswerToMessage', group: 'Actions', icon: 'paperclip', label: 'Add ' + answer.label + '’s answer to message', hint: 'To send as your own words', run: () => answerToComposer(docId, answer.text) });
-  if (tana.openAgentAsk && ask) rows.push({ id: 'openAgentAsk', group: 'Actions', icon: 'robot', label: 'Open ' + ask.label + ' task', hint: picked ? 'The one behind this question' : 'The one behind the last @' + ask.label + ' answer', run: () => openAgentAsk(docId, ask.id) });
-  if (sel && deletableMsg(docId, sel)) rows.push({ id: 'deleteMessage', group: 'Actions', icon: 'trash', label: 'Delete message', hint: picked ? 'The question and its answer, from this device' : 'From the chat, for everyone in it', kbd: '⇧⌘⌫', run: () => deleteChatMsg(docId, sel) });
+  const rows = [], sel = msgEl(chatSel) ? chatSel : null, picked = askOf(docId, sel), group = sel ? 'Message' : 'Actions';
+  const answer = sel ? picked && picked.state === 'done' && picked : latestAgentAnswer(docId), ask = sel ? picked : latestAgentAsk(docId);
+  if (tana.askAgent && answer) rows.push({ id: 'agentAnswerToMessage', group, icon: 'paperclip', label: 'Add ' + answer.label + '’s answer to message', hint: 'To send as your own words', run: () => answerToComposer(docId, answer.text) });
+  if (tana.openAgentAsk && ask) rows.push({ id: 'openAgentAsk', group, icon: 'robot', label: 'Open ' + ask.label + ' task', hint: picked ? 'The one behind this question' : 'The one behind the last @' + ask.label + ' answer', run: () => openAgentAsk(docId, ask.id) });
+  if (sel && deletableMsg(docId, sel)) rows.push({ id: 'deleteMessage', group, icon: 'trash', label: 'Delete message', hint: picked ? 'The question and its answer, from this device' : 'From the chat, for everyone in it', kbd: '⇧⌘⌫', run: () => deleteChatMsg(docId, sel) });
   return rows;
 }
 // a message ↑↓ can land on, with its keys

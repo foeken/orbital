@@ -119,10 +119,15 @@ function rankRows(rows) {
     .map(({ r }) => r);
 }
 // typed is the query as it was typed; q is the lowercased one every row is matched against.
+// palDoc is null while a chat message is selected (renderer/chat.js): Cmd+K and the keys act on the message then,
+// never on the chat document around it, so none of the Current node rows is offered.
 function paletteRows(q, typed = q) {
   const selection = selectionRows();
+  // a selected chat message's own rows lead, under "Message"; the chat's latest-answer rows stay with the Actions
+  const chatRows = (tana.askAgent || tana.deleteChatMessage) && zoom && isChatPage(zoom) ? chatMessageRows(zoom.docId) : [];
   // Signed out, logging in is the first row, so the splash's lesson is ⌘K then ↩ (index.html #loginBox)
   const rows = [...selection];
+  rows.unshift(...chatRows.filter((r) => r.group === 'Message')); // the chat's selection: a message, never beside a row selection
   if (signedOut) rows.unshift({ id: 'login', group: 'Get started', icon: 'tana', label: 'Log in to Tana', run: () => tana.login().catch(showError) });
   if (tana.tableOp) rows.push(...tableRows()); // with the caret in a table cell: its rows and columns (renderer/table.js)
   if (tana.inboxSetRead) rows.push(...notificationRows()); // a notification row's own two (renderer/inbox.js)
@@ -319,7 +324,7 @@ function paletteRows(q, typed = q) {
   if (tana.creationOptions) rows.push({ id: 'create', group: 'Actions', icon: 'createNew', label: 'Create new …', keepOpen: true, run: openCreationPalette, sub: async () => { creationChoices = (await tana.creationOptions()).options || []; return creationRows(''); } });
   if (tana.createDocument) rows.push({ id: 'createTask', group: 'Actions', icon: 'task', label: 'Create task', run: () => openTask() }); // ⇧⌘Space: task.html over the window (renderer/overlays.js)
   if (tana.inviteToChat && zoom && isChatPage(zoom)) { const chatId = zoom.docId; rows.push({ id: 'inviteChat', group: 'Actions', icon: 'member', label: 'Invite to chat…', hint: 'Someone from the workspace', keepOpen: true, run: () => openInvitePicker(chatId) }); } // renderer/chat.js
-  if ((tana.askAgent || tana.deleteChatMessage) && zoom && isChatPage(zoom)) rows.push(...chatMessageRows(zoom.docId)); // the selected message's, or the latest answer's (renderer/chat.js)
+  rows.push(...chatRows.filter((r) => r.group !== 'Message')); // the selected message's, or the latest answer's (renderer/chat.js)
   if (tana.newChat) rows.push({ id: 'newChat', group: 'Actions', icon: 'chat', label: 'New chat', hint: 'Talk to Tana', run: () => startNewChat() }); // renderer/chat.js
   // the keys the outline answers to, as rows: each has a default combo in DEFAULT_HOTKEYS and can be re-recorded
   rows.push({ id: 'search', group: 'Actions', icon: 'search', label: 'Search Tana', keepOpen: true, run: () => togglePalette('search') });
@@ -405,7 +410,7 @@ function runAction(id) {
   // A key pressed in the Graph pane acts in the page it follows, where its rows are meant (#463 review), except the
   // pane's own rows and the workspace's moves, which ask the shell from wherever they are pressed.
   if (LINKS && !['railToggle', 'rail', 'reload'].includes(id) && !PANE_ROWS.some(([rowId]) => rowId === id)) { toShell({ orbital: 'action', id }); return true; }
-  if (palette.hidden) { palDoc = currentDoc(); palField = fieldAt(document.activeElement); } // a key fires with the palette closed, so the "current node" is whatever is focused now
+  if (palette.hidden) { palDoc = document.activeElement && document.activeElement.matches && document.activeElement.matches('.chat-msg[data-key]') ? null : currentDoc(); palField = fieldAt(document.activeElement); } // a key fires with the palette closed, so the "current node" is whatever is focused now
   const rows = paletteRows(''), row = rows.find((r) => r.id === id);
   if (row) { if (!row.disabled) row.run(); return true; }
   // A key pressed with the palette closed may wait on main below (access, participants, spaces). A palette opened in
@@ -999,7 +1004,7 @@ function togglePalette(mode, link, pin) {
     { cmd: { rows: paletteRows }, slash: { rows: slashRows }, pinToday: { rows: todayPickerRows } }[mode] || {}, link ? link.text : '');
   // meetingNow is cleared, not kept: every open re-reads the meeting, because "the meeting I am in" lasts minutes.
   fieldLinkCtx = null;
-  if (mode === 'cmd') { palDoc = currentDoc(); palField = fieldAt(document.activeElement); fieldReturn = palField && palField.key; palTaskCtx = null; meetingNow = undefined; meetingCtx = null; loadPins(); loadWorkspaceTypes(true); subCache.clear(); refreshChatGPTStatus(); }
+  if (mode === 'cmd') { palDoc = document.activeElement && document.activeElement.matches && document.activeElement.matches('.chat-msg[data-key]') ? null : currentDoc(); palField = fieldAt(document.activeElement); fieldReturn = palField && palField.key; palTaskCtx = null; meetingNow = undefined; meetingCtx = null; loadPins(); loadWorkspaceTypes(true); subCache.clear(); refreshChatGPTStatus(); }
   if (mode === 'search') searchNow(); else renderPalette();
   palInput.focus();
 }
