@@ -196,6 +196,7 @@ html.tabbed.listing:not(.renaming) .crumbs { margin-bottom: 4px; }
 /* --fcols: Title and the fact columns, each at the width it was dragged to or its share (renderer/views.js tableCols) */
 .outline.table-view { container-type: inline-size; --slot: 0px; --tcols: var(--fcols); } /* px: the header's type is smaller than a row's */
 .outline.table-view:has(> .node > .line > .body > .tmeta) { --tcols: var(--fcols) 90px; }
+.outline.table-view:has(> .node > .line > .body > .tmeta .people) { --tcols: var(--fcols) 190px; } /* room for who can see a row: glyph, faces, the rest in words */
 .outline.table-view:not(:has(> .node > .line > .body > .tmeta)) > .thead > span:last-child { display: none; } /* the header's blank over the icons */
 .outline.table-view:has(> .node > .line > .cbadge) { --slot: 40px; }
 .outline.table-view > .node > .line > .body, .outline.table-view > .thead { display: grid; grid-template-columns: var(--tcols); column-gap: 16px; align-items: center; }
@@ -725,7 +726,7 @@ button.chat-thought-head[aria-expanded="true"]::after { rotate: 135deg; translat
    need the 8px that separated them from the title taken back off */
 .subtext .tmeta { margin-left: 0; }
 /* who can see a row, at the start of its subtext (renderer/tasks.js peopleEl): the audience glyph, a bubble per person, how many */
-.subtext .people { display: inline-flex; align-items: center; gap: 6px; vertical-align: top; }
+.people { display: inline-flex; align-items: center; gap: 6px; vertical-align: top; } /* who can see a row: in its subtext, or in a table row's icons */
 .subtext:has(> .people) { padding: 3px 0 4px; } /* a row whose subtext has faces: a little air above and below them */
 .faces { display: inline-flex; vertical-align: -4px; } /* on a row's subtext and in a page's Visible to field */
 .face { width: 18px; height: 18px; margin-left: -2px; border-radius: 50%; display: grid; place-items: center; font-size: 8px; font-weight: 650;

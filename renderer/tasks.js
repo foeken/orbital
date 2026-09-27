@@ -187,9 +187,11 @@ function taskMetaEl(summary, docId, node) {
   if (summary.assignees && writable && isTask(node) && tana.setAssignees) { who.title = 'Edit assignees'; clickable(who, () => openAssigneePalette(node)); }
   if (summary.pending) el.append(iconEl('pending', null)); // the answer is still on its way: same slot, same size
   if (summary.assignees === 'Unassigned') { const icon = iconEl('unassigned', null); icon.title = 'Unassigned'; who.prepend(icon); }
-  // a list row says who can see it in its subtext (peopleEl); a table row's subtext is its cells, so there it stays here
+  // a list row says who can see it in its subtext (peopleEl); a table row's subtext is its cells, so there the same
+  // line (glyph, faces, the rest in words) sits here with the row's icons, and the bare glyph where it names nobody
   if (!audienceShown()) { /* the Timeline: nothing about who can see it */ }
-  else if (summary.audience && (tableView() || !audienceUris(summary).length)) el.append(audienceIcon(summary, node));
+  else if (summary.audience && tableView()) el.append(peopleEl(summary, node) || audienceIcon(summary, node));
+  else if (summary.audience && !audienceUris(summary).length) el.append(audienceIcon(summary, node));
   else if (summary.unknownAudience) { const t = document.createElement('span'); t.className = 'mtext'; t.textContent = ' · Visibility unknown'; el.append(t); }
   // Pinned, in the same slot and with the same behaviour as the audience icon beside it: the glyph says the node is
   // pinned somewhere, and a click opens the page that says where and takes it off. Pins are personal, so a node you
