@@ -243,7 +243,7 @@ onRows('click', (e) => {
     e.preventDefault();
     const day = dayOfUri(mention.dataset.uri);
     const where = linkElsewhere(e, mention);
-    if (where) run(async () => openElsewhere(where, day ? (await tana.todayNode(day)).id : mention.dataset.uri));
+    if (where) run(async () => openElsewhere(where, day ? await tana.todayNode(day) : mention.dataset.uri));
     else if (!e.metaKey && !e.shiftKey) { if (day) run(async () => goTo(await tana.todayNode(day))); else goTo(mention.dataset.uri); }
     return;
   }

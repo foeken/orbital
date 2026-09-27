@@ -332,14 +332,18 @@ audience disclosure and preview token are the gate (§14).
 
 **Opening elsewhere** (issue #443): ⌘ opens a place in a new pane beside this one, ⌥ as a new tab in this pane
 (renderer/palette.js `openElsewhere`, which stores the place under the id main gives the new page, as ⌘N does). In Cmd+K
-and Cmd+S that is ⌘↩ / ⌥↩ on a row that opens a place (search results, saved searches, types: rows with `opens`);
-while an @ link is being made ⌘↩ still creates. On the outline it is ⌘-click / ⌥-click on a bullet, and ⌥-click on a
+and Cmd+S that is ⌘↩ / ⌥↩ on a row that opens a place (search results, saved searches, types, Today and This week:
+rows with `opens`, an id or a function finding it), also when pressed before the search has answered; while an @ link
+is being made ⌘↩ still creates. On the outline it is ⌘-click / ⌥-click on a bullet, and ⌥-click on a
 row that opens on a click (⌘-click there keeps selecting the row).
 
 ### Selection
 
 ⌘-click toggles a row in the selection; ⇧-click and ⇧↑/⇧↓ extend one anchored range over siblings (blocks within one
 parent, or documents in a view). Selected rows take a square-cornered highlight and the caret leaves the text.
+⇧↑ past the first sibling selects the parent row, which carries all its children; ⇧↓ with no sibling below selects the
+row itself, children and all. ⇧↓ on a parent ⇧↑ climbed to gives back the selection it climbed from, so ⇧↓ undoes ⇧↑
+step by step.
 ⇧⌘⌫ removes the selected blocks and focuses the row before the range; ⇧⌘↑/↓ and Tab/⇧Tab move the whole range, the
 selection kept; Escape or a plain arrow clears it. Documents in a selection are not deleted or moved by these keys.
 Cmd+K leads with a Selection group for it (§8).

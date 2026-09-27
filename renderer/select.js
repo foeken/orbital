@@ -48,8 +48,14 @@ function rangeSelTo(key, anchor) {
 }
 function extendSel(item, dir) { // grow (or shrink) the range from the focus end; the caret leaves the text
   if (!sel) sel = { keys: new Set([item.key]), anchor: item.key, focus: item.key };
+  // ⇧↓ back on a parent ⇧↑ climbed to: the selection it climbed from comes back, as shrinking a range does
+  if (dir > 0 && sel.below && sel.anchor === sel.focus) { sel = sel.below; leaveText(); return applySel(); }
   const f = nodeElOf(sel.focus), next = f && nodeEls(f)[nodeEls(f).indexOf(f) + dir];
-  if (next) rangeSelTo(next.dataset.key, sel.anchor);
+  if (next) return rangeSelTo(next.dataset.key, sel.anchor);
+  // past the first sibling ⇧↑ takes the parent row, which holds them all; with nothing further the row itself is selected
+  const parent = dir < 0 && items.get(sel.focus)?.parent;
+  if (parent && nodeElOf(parent.key)) { const below = { ...sel, keys: new Set(sel.keys) }; rangeSelTo(parent.key, parent.key); sel.below = below; }
+  else rangeSelTo(sel.focus, sel.anchor);
 }
 function clearSel(key) { sel = null; selectionFrozen = false; render(); if (key) placeCaret(key); }
 // Moving, indenting and outdenting carry the rows as one block, so they need siblings, and a contiguous run of

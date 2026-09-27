@@ -537,6 +537,33 @@ async function runSelectionChecks() {
   arbitrary.extendSel({ key: 'd' }, -1);
   assert.deepEqual(plain(arbitrary.keys()), ['a', 'c'], 'Shift+Up shrinks only that anchored range');
 
+  // Across levels: ⇧↑ on a first child selects its parent (the row that holds the children), ⇧↓ on a last row the row itself
+  const tree = vm.runInNewContext(`
+    const row = (key, list) => { const el = { dataset: { key }, classList: { contains: (c) => c === 'node', add() {}, remove() {} }, parentElement: list }; list.children.push(el); return el; };
+    const top = { children: [] }, kidsList = { children: [] };
+    const els = { p: row('p', top), q: row('q', top), c1: row('c1', kidsList), c2: row('c2', kidsList) };
+    const items = new Map([['p', { key: 'p' }], ['q', { key: 'q' }]]);
+    items.set('c1', { key: 'c1', parent: items.get('p') }); items.set('c2', { key: 'c2', parent: items.get('p') });
+    let sel = null;
+    const nodeElOf = (key) => els[key], nodeEls = (el) => el.parentElement.children, leaveText = () => {}, applySel = () => {};
+    ${functionSource('rangeKeys')}
+    ${functionSource('rangeSelTo')}
+    ${functionSource('extendSel')}
+    ({ press: (key, dir) => { sel = null; extendSel(items.get(key), dir); return { keys: [...sel.keys], anchor: sel.anchor }; }, more: (dir) => { extendSel(null, dir); return [...sel.keys]; } });
+  `);
+  assert.deepEqual(plain(tree.press('c1', -1)), { keys: ['p'], anchor: 'p' }, 'Shift+Up on a first child selects its parent, children and all');
+  assert.deepEqual(plain(tree.more(-1)), ['p'], 'Shift+Up on a first top row stays on it');
+  assert.deepEqual(plain(tree.more(1)), ['c1'], 'Shift+Down steps back down to the child it climbed from');
+  assert.deepEqual(plain(tree.more(1)), ['c1', 'c2'], 'and then extends over the children again');
+  assert.deepEqual(plain(tree.more(-1)), ['c1'], 'Shift+Up shrinks it back');
+  assert.deepEqual(plain(tree.more(-1)), ['p'], 'and climbs to the parent once more');
+  assert.deepEqual(plain(tree.press('c2', -1)), { keys: ['c1', 'c2'], anchor: 'c2' }, 'from the second child Shift+Up takes the first');
+  assert.deepEqual(plain(tree.more(-1)), ['p'], 'then the parent');
+  assert.deepEqual(plain(tree.more(1)), ['c1', 'c2'], 'Shift+Down gives back both children');
+  assert.deepEqual(plain(tree.more(1)), ['c2'], 'and then only the one it started on');
+  assert.deepEqual(plain(tree.press('c2', 1)), { keys: ['c2'], anchor: 'c2' }, 'Shift+Down with nothing below selects the row itself');
+  assert.deepEqual(plain(tree.press('p', -1)), { keys: ['p'], anchor: 'p' }, 'Shift+Up on a top row selects the row itself');
+
   await move.moveSel(move.keys(), 'down');
   assert.deepEqual(plain(move.state()), {
     order: ['a', 'd', 'b', 'c'], sel: { anchor: 'b', focus: 'c' },
@@ -1402,6 +1429,24 @@ async function runVisibilityPickerCheck() {
 }
 
 async function runLinkPaletteCheck() {
+  // ⌘↩ / ⌥↩ open a row elsewhere: Today finds its id when chosen, and an Enter before the search answered keeps its key
+  const open = vm.runInNewContext(`
+    let linkCtx = null, palBusy = false, palMode = 'search', palEnter = null, palIndex = 0, palRows = [], opened = [], pending;
+    const closePalette = () => {}, run = (fn) => (pending = fn()), runRow = (r) => opened.push(['plain', r.label]);
+    const openElsewhere = (where, id) => opened.push([where, id]);
+    ${functionSource('chooseRow')}
+    ${functionSource('settleEnter')}
+    ({ opened, set: (rows, busy) => { palRows = rows; palBusy = busy; }, chooseRow, settleEnter, settle: () => pending });
+  `);
+  open.set([{ label: 'Today', opens: async () => 'tana:text:today' }], false);
+  open.chooseRow(true, 'right'); await open.settle();
+  open.set([{ label: 'Hit', opens: 'tana:text:hit' }], true);
+  open.chooseRow(false, 'tab');
+  open.set([{ label: 'Hit', opens: 'tana:text:hit' }], false);
+  open.settleEnter(); await open.settle();
+  open.chooseRow(false, false);
+  assert.deepEqual(plain(open.opened), [['right', 'tana:text:today'], ['tab', 'tana:text:hit'], ['plain', 'Hit']], '⌘↩ opens Today beside, ⌥↩ during a search opens its first hit as a tab, a plain Enter opens in place');
+
   const resultRows = functionSource('resultRows');
   const searchNow = functionSource('searchNow');
   const start = source.indexOf("palInput.addEventListener('keydown', (e) => {");
@@ -2067,6 +2112,7 @@ async function runPendingSplitDraftCheck() {
     const splitSegs = (segs, offset) => [[], segs];
     const plainOf = (segs) => segs.map((segment) => segment.text).join('');
     const dropPending = () => {}, saveValue = (value) => value, renderSegs = () => {}, scheduleSave = () => {};
+    const flush = (key) => calls.push(['flush', key]);
     const textEl = (key) => (rows.some((node) => 'doc/' + node.id === key) ? { key } : null);
     const caretOffset = () => 0;
     const render = () => { for (const node of rows) items.set('doc/' + node.id, { key: 'doc/' + node.id, docId: 'doc', node }); };
@@ -2094,14 +2140,14 @@ async function runPendingSplitDraftCheck() {
   await context0.start();
   assert.deepEqual(plain(context0.state()), {
     rows: [{ id: 'above', text: 'Hardware capacity need unclear' }, { id: 'fresh', text: '' }, { id: 'source', text: 'Hardware Depreciation Risk' }],
-    calls: [['insertBefore', 'source', '']],
+    calls: [['flush', 'doc/source'], ['insertBefore', 'source', '']],
     focus: { key: 'doc/fresh', offset: 0 },
     kids: 1,
-  }, 'Enter at the start of a node adds an empty sibling in front, keeps the node and its children, and takes the caret there');
+  }, 'Enter at the start of a node saves what was just typed, adds an empty sibling in front, keeps the node and its children, and takes the caret there');
   await context0.undo();
   assert.deepEqual(plain(context0.state()), {
     rows: [{ id: 'above', text: 'Hardware capacity need unclear' }, { id: 'source', text: 'Hardware Depreciation Risk' }],
-    calls: [['insertBefore', 'source', ''], ['undo']],
+    calls: [['flush', 'doc/source'], ['insertBefore', 'source', ''], ['undo']],
     focus: { key: 'doc/source', offset: 0 },
     kids: 1,
   }, 'undoing that Enter puts the caret back in the node it ran on, at the offset it ran at');
@@ -2165,6 +2211,25 @@ async function runPendingSplitDraftCheck() {
     saves: [['doc/inserted', [{ text: 'typed during insert' }]]],
     focus: { key: 'doc/inserted', offset: 19 },
   }, 'typing into the pending draft survives reload and saves to the inserted block');
+
+  // Enter at the end of a row typed faster than its save: the model still holds the first letter, and the render
+  // Enter makes before Tana answers must draw what is on screen, or the words flash out until the reload
+  const stale = vm.runInNewContext(`
+    const source = { id: 's', kind: 'block', block: 'paragraph', text: 'H', segments: [{ text: 'H' }], children: [] };
+    const item = { key: 'doc/s', docId: 'doc', node: source, parent: { node: { kind: 'document' } } };
+    const kids = new Map([['doc', [source]]]), items = new Map();
+    let drawn;
+    const canEditItem = () => true, hasKids = () => false, isOpen = () => false;
+    ${source.match(/const siblingBlock = .*/)[0]}
+    const readSegs = (el) => el.segs, plainOf = (segs) => segs.map((segment) => segment.text).join('');
+    const splitSegs = (segs, offset) => [[{ text: segs[0].text.slice(0, offset) }], [{ text: segs[0].text.slice(offset) }]];
+    const dropPending = () => {}, saveValue = (value) => value, render = () => { drawn ??= source.text; };
+    const textEl = () => null, caretOffset = () => 0, placeCaret = () => {}, renderSegs = () => {}, scheduleSave = () => {};
+    const reload = async () => {}, run = (fn) => fn(), tana = { split: async () => 'n' };
+    ${splitNode}
+    ({ enter: async () => { await splitNode(item, { segs: [{ text: 'Hello' }] }, 5); return drawn; } });
+  `);
+  assert.equal(await stale.enter(), 'Hello', 'Enter at the end of a row with an unsaved tail draws the typed words, not the model the save had not reached yet');
 }
 
 // A row's bullet must sit at the same x in every state, so the chevron gutter can never leave the layout:
@@ -6803,6 +6868,20 @@ async function runEmptyRowAboveCheck() {
   assert.deepEqual(plain(close.run([], true)), { expanded: null, known: false }, 'the last child going takes the expansion with it, so no draft row is left behind');
   assert.deepEqual(plain(close.run(['a'], true)), { expanded: true, known: true }, 'a node that still has children stays open');
   assert.deepEqual(plain(close.run([], false)), { expanded: null, known: false }, 'and a node nobody expanded is left alone');
+
+  // The parent a removed row carries is its node from before the reload, still listing the child that went; the
+  // reloaded rows say it is empty, and they are the ones that count (a draft row was left under a block parent)
+  const stale = vm.runInNewContext(`
+    const open = new Map([['doc/p', true]]);
+    const kids = new Map([['doc', [{ id: 'p', kind: 'block', children: [] }]]]);
+    const childrenOf = (item) => item.node.children || [];
+    const hasKids = (item) => childrenOf(item).length > 0;
+    ${functionSource('locate')}
+    ${functionSource('closeIfEmpty')}
+    closeIfEmpty({ key: 'doc/p', docId: 'doc', node: { id: 'p', kind: 'block', children: [{ id: 'gone' }] } });
+    open.has('doc/p');
+  `);
+  assert.equal(stale, false, 'removing the last child of a block closes it by the reloaded rows, not the stale parent node');
   assert.match(functionSource('closeIfEmpty'), /open\.delete\(/, 'the expansion is dropped rather than set false, so children arriving again show without being expanded a second time');
   assert.match(functionSource('removeNode'), /closeIfEmpty\(item\.parent\);\n\s*render\(true\)/, 'removeNode closes an emptied parent before it draws');
   assert.match(functionSource('removeEmptyAbove'), /closeIfEmpty\(above\.parent\)/, 'so does the removal of the empty row above');

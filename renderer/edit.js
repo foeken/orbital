@@ -72,14 +72,15 @@ async function splitNode(item, el, off) {
   } else if (off === 0 && plainOf(original).length) {
     // Enter at the very start: an empty row goes in front and takes the caret, the node keeps its text and children.
     // Splitting here would move everything into a new node, and into a new child when the node is open.
-    dropPending(item.key);
+    flush(item.key); // the words typed in the last moment are the node's own: saved, not dropped
     await run(async () => { newId = await tana.insertBefore(docId, node.id, ''); await reload(docId); });
   } else {
     dropPending(item.key);
     asChild = hasKids(item) && isOpen(item);
     const list = splitList(asChild ? item : item.parent);
     if (Array.isArray(list)) {
-      if (JSON.stringify(before) !== JSON.stringify(original)) { node.text = plainOf(before); node.segments = before; }
+      // always: the model lags the screen by the pending save just dropped, and the render below draws the model
+      node.text = plainOf(before); node.segments = before;
       addSplitDraft(list, asChild ? 0 : list.indexOf(node) + 1);
     }
     await run(async () => {
@@ -121,7 +122,13 @@ async function shiftNode(item, el, op, arg) {
 // was made to hold a child. When a removal takes the last one away, the expansion goes with it, so no draft row
 // is left standing where the child was. Deleted rather than set false, so children arriving again — an undo, a
 // live update from another client — show without having to be expanded a second time.
-function closeIfEmpty(parent) { if (parent && !hasKids(parent)) open.delete(parent.key); }
+// The parent is the one the row was drawn under, from before the reload: its node still lists the child just removed
+// (a document's rows are read fresh from kids), so a block parent is looked up again in the rows the reload brought.
+function closeIfEmpty(parent) {
+  if (!parent) return;
+  const now = parent.node?.kind === 'block' && locate(kids.get(parent.docId) || [], parent.node.id)?.node;
+  if (!hasKids(now ? { ...parent, node: now } : parent)) open.delete(parent.key);
+}
 async function removeNode(item, el) {
   if (!canEditStructure(item)) return;
   const keys = rowsBeside(el).map(keyOfEl), i = keys.indexOf(item.key);
