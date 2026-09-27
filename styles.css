@@ -983,6 +983,7 @@ body.building :is(#outline, #filtered) { opacity: 0; pointer-events: none; } /* 
 .palette .row.disabled { color: #8a8a8a; cursor: default; }
 .palette .row.disabled:not(.active):hover { background: none; } /* a recordable disabled row can be the active one */
 .palette .row.disabled .ricon { color: #c0c0c0; }
+.palette .row.disabled :is(kbd, .hint) { opacity: .55; } /* its key and hint grey with it */
 .palette .ricon { flex: none; width: 16px; height: 16px; color: #8a8a8a; }
 .palette .ricon svg { display: block; width: 16px; height: 16px; }
 .palette .ricon.dot::before { content: ""; display: block; width: 6px; height: 6px; margin: 5px; border-radius: 50%; background: #555; }

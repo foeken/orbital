@@ -389,9 +389,10 @@ function paletteRows(q, typed = q) {
   // Nothing here matches what was typed, so the words are probably a document's: offer the one thing that can still
   // find it, carrying the query into Cmd+S instead of making it be typed a second time. Its heading is the "No
   // results" line, which renderPalette leaves out once there is a row.
-  if (q && !matched.length) return [{ group: 'No results', icon: 'search', label: 'Search Tana for “' + typed + '”', keepOpen: true,
+  if (q && !matched.length) return [{ group: 'No results', icon: 'search', label: 'Search Tana for “' + typed + '”', keepOpen: true, disabled: signedOut,
     run: () => { togglePalette('search'); palInput.value = typed; searchNow(); } }];
-  return matched.map((r) => { const k = r.id && hotkeyFor(r.id); return k ? { ...r, kbd: k } : r; });
+  // Signed out, logging in is the only thing that works: every other row is greyed out, and runRow refuses it
+  return matched.map((r) => { const k = r.id && hotkeyFor(r.id); return { ...r, ...(k && { kbd: k }), ...(signedOut && r.id !== 'login' && { disabled: true }) }; });
 }
 // a hotkey, recorded or default, runs its palette row's action (views/sync/login by id; documents wherever they live);
 // false when no such row exists right now, so the key can fall through to whatever else it means. A row that is here
