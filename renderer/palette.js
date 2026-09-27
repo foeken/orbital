@@ -341,10 +341,14 @@ function paletteRows(q, typed = q) {
   if (tana.deletedList) rows.push({ id: 'recentlyDeleted', group: 'Navigate', icon: 'trash', label: 'Recently deleted', keepOpen: true, run: openTrashPalette });
   if (tana.archivedTypes) rows.push({ id: 'archivedTypes', group: 'Navigate', icon: 'type', label: 'Archived types', keepOpen: true, run: openArchivedPalette });
   rows.push({ id: 'newWindow', group: 'Window', icon: 'createNew', label: 'New window', run: () => run(() => tana.newWindow()) });
-  // the new right half opens on this page: it reads the right half's view and place, so this page is stored there first
-  rows.push({ id: 'splitView', group: 'Window', icon: 'splitPanes', label: 'Toggle split panes', run: () => { localStorage.setItem('view:2', view); rememberPlace('place:2'); run(() => tana.splitWindow()); } });
-  rows.push({ id: 'otherPane', group: 'Window', icon: 'otherPane', label: 'Go to the other half', run: () => run(() => tana.otherPane()) });
-  rows.push({ id: 'swapPanes', group: 'Window', icon: 'swapPanes', label: 'Swap panes', run: () => run(() => tana.swapPanes()) });
+  // A new page opens on this one: main answers its id before it has loaded, and this page is stored under it (shell.js open)
+  const openPage = (where) => run(async () => { const id = await tana.splitWindow(where); if (id) { localStorage.setItem('view:' + id, view); rememberPlace('place:' + id); } });
+  rows.push({ id: 'splitView', group: 'Window', icon: 'splitPanes', label: 'New pane', hint: 'To the right', run: () => openPage('right') });
+  rows.push({ id: 'newTab', group: 'Window', icon: 'createNew', label: 'New tab', hint: 'Beside this page', run: () => openPage('tab') });
+  rows.push({ id: 'floatPane', group: 'Window', icon: 'splitPanes', label: 'Float pane', run: () => openPage('float') });
+  // With more than one page, the workspace's own moves (shell.js run): Trellis does them, this page only asks
+  if (windowPanes.pages > 1) for (const [id, label, command, icon] of PANE_ROWS) rows.push({ id, group: 'Window', icon, label, run: () => shellRun(command) });
+  if (windowPanes.swap) rows.push({ id: 'swapPanes', group: 'Window', icon: 'swapPanes', label: 'Swap panes', run: () => run(() => tana.swapPanes()) });
   // Always reachable, unlike "Focus the sidebar": once the sidebar is hidden there would otherwise be no way back to it.
   if (!railToggle.hidden) rows.push({ id: 'railToggle', group: 'Window', icon: railHidden ? 'railShow' : 'railHide', label: railHidden ? 'Show sidebar' : 'Hide sidebar', run: () => toggleRail() });
   rows.push({ id: 'reload', group: 'Window', icon: 'reload', label: 'Reload', run: () => location.reload() });
@@ -1005,24 +1009,32 @@ function closePalette() {
   const field = fieldReturn; fieldReturn = null;
   if (field && !focused()) focusField(field); // a field that holds choices is no row: returnFocus cannot find it
 }
-// ---- over both halves of a split (issue #409) ----
-// The palette's scrim and card cover the whole window, not only this half: while it is open the shell lays this
-// page's iframe over the window, above the other half (shell.js cover). The page goes on drawing itself in its half
-// (styles.css html.cover) and is see-through beside it, so the other half shows under the scrim, live. The rows, the
-// node acted on, the keys and the focus stay this page's: nothing of the palette moves. The half is the box Trellis
-// gives the iframe, which stays put while the iframe reaches past it, read in the shell's pixels and scaled to the
-// page's (k, which is 1 unless the two zoom apart). The class follows the page's own size — on once the page is wider
-// than its half, off once it is back — so no frame is drawn out of place while the shell resizes it; any resize
-// places it again. It lets go once the scrim has faded. A page alone is covered too, which changes nothing but the
-// shell's drag strip, gone so the scrim takes its clicks. Outside the shell (the mock) there is no frame and no cover.
+// ---- over every pane of the window (issue #409) ----
+// The palette's scrim and card cover the whole window, not only this pane: while it is open the shell lays this
+// page's iframe over the window, above every other pane, docked or floating (shell.js cover). The page goes on drawing
+// itself in its pane (styles.css html.cover) and is see-through around it, so the others show under the scrim, live.
+// The rows, the node acted on, the keys and the focus stay this page's: nothing of the palette moves. The pane is the
+// box Trellis gives the iframe, which stays put while the iframe reaches past it, read in the shell's pixels and
+// scaled to the page's (k: the two zoom apart, or Trellis scales the pane). The class follows the page's own size — on
+// once the page is larger than its pane, off once it is back — so no frame is drawn out of place while the shell
+// resizes it; any resize places it again. It lets go once the scrim has faded. A page alone is covered too, which
+// changes nothing but the shell's drag strip, gone so the scrim takes its clicks. Outside the shell (the mock) there
+// is no frame and no cover.
 let covering = false, coverTimer = null;
 const tellCover = (on) => { if (window.frameElement) window.parent.postMessage({ orbital: 'cover', on }, '*'); };
+// The workspace's moves, asked of the shell the same way (shell.js run): [row id, label, Trellis command, icon]. Keys
+// pressed in a page never reach the shell, so each is a row here with its key in DEFAULT_HOTKEYS.
+const PANE_ROWS = [['otherPane', 'Next pane', 'panel.next', 'otherPane'], ['previousPane', 'Previous pane', 'panel.previous', 'otherPane'],
+  ['nextTab', 'Next tab', 'tab.next', 'forward'], ['previousTab', 'Previous tab', 'tab.previous', 'back'],
+  ['maximizePane', 'Maximize or restore pane', 'frame.toggle', 'zoomIn'], ['overview', 'Show all panes', 'navigation.overview', 'splitPanes'],
+  ['zoomBack', 'Zoom back', 'navigation.back', 'back'], ['zoomForward', 'Zoom forward', 'navigation.forward', 'forward']];
+const shellRun = (command) => { if (window.frameElement) window.parent.postMessage({ orbital: 'run', command }, '*'); };
 function placeCover() {
   const root = document.documentElement, frame = window.frameElement;
   const half = covering && frame ? frame.parentElement.getBoundingClientRect() : null, box = half && frame.getBoundingClientRect(), k = box ? innerWidth / box.width : 1;
-  const on = !!half && innerWidth > half.width * k + 1;
+  const on = !!half && (innerWidth > half.width * k + 1 || innerHeight > half.height * k + 1);
   root.classList.toggle('cover', on);
-  if (on) { root.style.setProperty('--pane-x', (half.left - box.left) * k + 'px'); root.style.setProperty('--pane-w', half.width * k + 'px'); }
+  if (on) for (const [name, value] of [['x', half.left - box.left], ['y', half.top - box.top], ['w', half.width], ['h', half.height]]) root.style.setProperty('--pane-' + name, value * k + 'px');
 }
 function coverWindow(mode) { // the page shown, or null once the palette has closed
   const on = !!mode && mode !== 'slash' && !palette.classList.contains('anchored'); // the @ and / menus belong to their spot in this half
@@ -1088,11 +1100,13 @@ palette.addEventListener('mousedown', (e) => { if (e.target === palette) closePa
 
 // ---- hotkeys: Cmd+Shift+K on a Cmd+K row records a combo (the synced "hotkeys" preference); the outline dispatches it ----
 const KEYNAMES = { Enter: '↩', Backspace: '⌫', Tab: '⇥', ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', ' ': 'Space' };
+// by the key pressed rather than what it types, which ⌥ and ⇧ change (⌥⌘[ types “, ⇧⌘\ types |)
+const KEYCODES = { BracketLeft: '[', BracketRight: ']', Backslash: '\\' };
 // "⌃⌥⇧⌘" + key ("M", "1", "↩"); modifiers alone while only they are pressed
 function comboOf(e) {
   const mods = (e.ctrlKey ? '⌃' : '') + (e.altKey ? '⌥' : '') + (e.shiftKey ? '⇧' : '') + (e.metaKey ? '⌘' : '');
   if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return mods;
-  return mods + (/^(Key|Digit)/.test(e.code) ? e.code.slice(-1) : KEYNAMES[e.key] || (e.key.length === 1 ? e.key.toUpperCase() : e.key));
+  return mods + (/^(Key|Digit)/.test(e.code) ? e.code.slice(-1) : KEYCODES[e.code] || KEYNAMES[e.key] || (e.key.length === 1 ? e.key.toUpperCase() : e.key));
 }
 const validCombo = (c) => /[⌘⌃]/.test(c) && c.replace(/[⌃⌥⇧⌘]/g, '') !== ''; // ⌘ or ⌃ plus a key, so typing is never hijacked
 // Combos the outline keydown handler answers to before it looks at hotkeys, so a shortcut on one of them would

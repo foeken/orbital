@@ -52,11 +52,11 @@ function restoredBounds(saved, workAreas) {
 }
 
 // Outliner windows (issue #137): Cmd+N opens another, a little down and right of the one in front. A window is a
-// BaseWindow with one WebContentsView, its shell (shell.html), which lays out its pages with Trellis: one, or two side
-// by side (issue #159), each an iframe of index.html and a whole outliner with its own view, place and history. Main
-// keys a page by its frame (main/state.js pageOf), so a page beside another is to it what a page in another window is.
-// The shell owns the geometry — the divider, the halves, the palette laid over both (#409); main keeps which pages there
-// are, which side each is on, and what the window saves. What main pushes is shared state and goes to every page
+// BaseWindow with one WebContentsView, its shell (shell.html), which lays out its pages with Trellis: any number, docked,
+// tabbed or floating (issue #159), each an iframe of index.html and a whole outliner with its own view, place and
+// history. Main keys a page by its frame (main/state.js pageOf), so a page beside another is to it what a page in
+// another window is. The shell owns the layout; main keeps which pages there are (each by its id, '' the first, then
+// '2', '3', ...), the layout the window saves, and says what to open or close. What main pushes is shared state and goes to every page
 // (main/state.js send); S.win is the window used last and S.pane its page, which a notification click opens in. The
 // first window takes the saved bounds; the one closed last saves them.
 S.windows = new Set();
@@ -66,34 +66,45 @@ const BACKGROUND = { light: '#ececec', dark: '#2b2f31' }; // the window behind t
 const PRELOAD = path.join(__dirname, 'preload.js');
 const shellWindow = (wc) => [...S.windows].find((w) => w.shell && w.shell.webContents === wc);
 const tellShell = (win, cmd, arg) => { const wc = win.shell && win.shell.webContents; if (wc && !wc.isDestroyed()) wc.send('shell:command', cmd, arg); };
-// Signed out, every page is the same login button, so the shell shows one page and the split waits; win.split is the
-// choice saved with the window, and it comes back after login (relayout). win.shown: two pages on screen now.
+// Signed out, every page is the same login button, so the shell shows page '' alone and keeps the layout aside for
+// after the login (relayout tells it, 'auth'); main keeps saving the layout it had.
 const signedOut = () => S.status.authChecking === false && S.status.authenticated === false;
-const isSplit = (win) => win.split === true && !signedOut();
-// Each page's side ('' left or alone, '2' the right half) is where the shell shows it, and each page is told
-// (renderer/app.js onSide), whether it is half of a split included. win.panes stays left to right.
-const sortPanes = (win) => win.panes.sort((a, b) => a.side.localeCompare(b.side));
-const tellSides = (win) => { sortPanes(win); for (const p of win.panes) p.send('window:side', p.side, isSplit(win)); };
+// The Work View's layout (renderer/timeline.js): '' beside '2', in Trellis's document format. A first launch opens it,
+// and a window saved split before the workspace (v1: { split: true, splitAt }) comes back as it.
+const pair = (at) => ({ schema: 1, root: { kind: 'split', id: 'split-work', axis: 'x', weights: [at, 1 - at],
+  children: ['', '2'].map((id) => ({ kind: 'panel', id: 'panel-work' + id, views: ['page' + id], selected: 'page' + id })) },
+floating: [], hidden: [], views: { page: { type: 'page', params: { side: '' } }, page2: { type: 'page', params: { side: '2' } } } });
+const savedDoc = (saved) => (!saved ? pair(0.5) : saved.doc && typeof saved.doc === 'object' ? saved.doc
+  : saved.split === true ? pair(saved.splitAt > 0 && saved.splitAt < 1 ? saved.splitAt : 0.5) : null);
+// the page ids a layout holds (view 'page' + id), in its order; a window without one shows page ''
+const docPages = (doc) => { const ids = Object.entries((doc && doc.views) || {}).filter(([k, v]) => v && v.type === 'page' && k.startsWith('page')).map(([k]) => k.slice(4)); return ids.length ? ids : ['']; };
+// a new page's id: the smallest from 2 up that no page has, loaded, loading or just asked for
+const freeId = (win) => { let n = 2; while (win.pages.includes(String(n)) || win.panes.some((p) => p.side === String(n))) n++; return String(n); };
+// the page after this one in the layout's order, round to the first (⌘\, where the keys go when one closes)
+function nextPane(page) {
+  const win = page.win, order = win.pages.filter((id) => win.panes.some((p) => p.side === id));
+  const next = order[(order.indexOf(page.side) + 1) % order.length];
+  return win.panes.find((p) => p.side === next && p !== page) || null;
+}
 // A page registers when its preload asks window:getSide. Only an iframe of a window's shell is a page: the shell itself
-// and the Help tour or Create task are main frames. Its side is its url's, which the page keeps in step (renderer/app.js),
-// so a Reload after a swap registers on the side it is on.
+// and the Help tour or Create task are main frames. Its id is its url's and never changes while it lives; one already
+// taken (which should not happen) gets a free one.
 function addPage(e) {
   const frame = e.senderFrame, win = frame && shellWindow(e.sender);
   if (!win || !frame.parent) return null;
   let side = '';
-  try { side = new URL(frame.url).searchParams.get('side') === '2' ? '2' : ''; } catch { /* no url: the left page */ }
-  // a page still loading when the halves swapped has a url that names the side its neighbour has taken meanwhile
-  if (win.panes.some((p) => p.side === side)) side = side ? '' : '2';
+  try { side = new URL(frame.url).searchParams.get('side') || ''; } catch { /* no url: the first page */ }
+  if (!/^([2-9]|[1-9]\d+)$/.test(side)) side = '';
+  if (win.panes.some((p) => p.side === side)) side = freeId(win);
   const page = { id: frame.processId + ':' + frame.frameToken, frame, win, side,
     isDestroyed: () => frame.isDestroyed() || frame.detached,
     send: (channel, ...args) => { if (!page.isDestroyed()) frame.send(channel, ...args); },
     // the window's keys to the shell, and the shell's to this page's panel and iframe
     focus: () => { const wc = win.shell.webContents; if (!wc.isDestroyed()) wc.focus(); tellShell(win, 'focus', page.side); } };
-  win.panes.push(page); sortPanes(win);
-  // ⌥⌘N gives the new half the keys: it is the page ⌘W and a notification click aim at from now, even before its
-  // document has taken the focus (the shell focuses its iframe once it has loaded). The next page to register, whatever
-  // side a swap meanwhile left it.
-  if (win.focusNext) { win.focusNext = false; S.win = win; S.pane = page; }
+  win.panes.push(page);
+  // ⌥⌘N gives the new page the keys: it is the page ⌘W and a notification click aim at from now, even before its
+  // document has taken the focus (the shell focuses its iframe once it has loaded).
+  if (win.focusNext === side) { win.focusNext = null; S.win = win; S.pane = page; }
   return page;
 }
 // A page gone (its panel closed, a reload, its window closed): what main kept for it goes with it.
@@ -110,25 +121,16 @@ function fit(win) {
   const { width, height } = win.getContentBounds();
   for (const v of [win.shell, win.overlay]) if (v) v.setBounds({ x: 0, y: 0, width, height });
 }
-// The right half opens (⌥⌘N, taking the keys; the Work View). The shell's layout report that follows tells the sides.
-function splitOn(win, focus) {
-  win.split = win.shown = true; win.saveSoon();
-  if (focus) win.focusNext = true;
-  tellShell(win, 'split', focus ? { on: true, focus: '2' } : { on: true });
+// A new page (⌥⌘N to the right, a tab, a floating pane; the Work View's '2'), beside the page that asked (from). Its id
+// is main's to give, so the page asking can store its place under it first; the layout report that follows saves it.
+function openPage(win, { id = freeId(win), where = 'right', from, focus = true }) {
+  win.pages.push(id);
+  if (focus) win.focusNext = id;
+  tellShell(win, 'open', { id, where, from, focus });
+  return id;
 }
-// One half closes (⌘W, the X on the right half, ⌥⌘N from the other): the shell flushes its page and closes its panel,
-// and reports the layout, which drops that page here. The half left takes the keys.
-function closeSide(win, side) {
-  win.split = win.shown = false; win.saveSoon();
-  tellShell(win, 'close', side);
-  const rest = win.panes.find((p) => p.side !== side);
-  if (rest) rest.focus();
-}
-// Signed in or out: a saved split comes back, or waits while every page is the login button.
-const relayout = () => { for (const w of S.windows) if (!w.isDestroyed()) {
-  if (isSplit(w) !== w.shown) { w.shown = isSplit(w); tellShell(w, 'split', { on: w.shown }); }
-  tellSides(w);
-} };
+// Signed in or out: the saved layout comes back, or waits while every page is the login button.
+const relayout = () => { for (const w of S.windows) if (!w.isDestroyed() && w.signedOut !== signedOut()) { w.signedOut = signedOut(); tellShell(w, 'auth', { signedOut: w.signedOut }); } };
 // The Help tour (help.html, issue #230) and Create task (task.html, issue #237): a transparent page of its own laid
 // over the whole window, so it sits above both halves of a split rather than inside the one that asked. Added last, it
 // is on top, and there is one at a time. Closing it hands the keys back to the page that asked, whose caret is where it
@@ -156,7 +158,8 @@ function closeOverlay(win, result = {}) {
   // whichever page is the main half now (the one that asked may have closed meanwhile, ⌘W under Create task). First, so
   // a ⌘K that closed Create task does not leave the palette open under the tour.
   const pending = win.helpPending; win.helpPending = null;
-  const help = !!pending && !win.isDestroyed() && !!win.panes[0] && firstHelp(win.panes[0], pending.theme);
+  const main = win.panes.find((p) => !p.side) || win.panes[0]; // page '' when it is open: the tour's own
+  const help = !!pending && !win.isDestroyed() && !!main && firstHelp(main, pending.theme);
   const note = typeof result.note === 'string' ? result.note.slice(0, 200) : undefined;
   if (opener && !opener.isDestroyed()) {
     if (!help) opener.focus(); // the tour has the keys now
@@ -173,13 +176,13 @@ function createWindow() {
   const win = new BaseWindow({ ...bounds, title: 'Orbital', titleBarStyle: 'hiddenInset', backgroundColor: BACKGROUND.light });
   // saved shortly after a move or resize settles, and once more on close, so a quit or an update relaunch keeps it
   let boundsTimer = null;
-  const saveBounds = () => { clearTimeout(boundsTimer); boundsTimer = null; if (!win.isDestroyed()) db.setSetting('window', { ...win.getNormalBounds(), maximized: win.isMaximized(), split: win.split, splitAt: win.splitAt }); };
+  const saveBounds = () => { clearTimeout(boundsTimer); boundsTimer = null; if (!win.isDestroyed()) db.setSetting('window', { ...win.getNormalBounds(), maximized: win.isMaximized(), doc: win.doc }); };
   const saveSoon = () => { clearTimeout(boundsTimer); boundsTimer = setTimeout(saveBounds, 500); };
-  win.panes = []; win.saveBounds = saveBounds; win.saveSoon = saveSoon; // a split opened, closed or dragged is saved too
-  if (!front && saved && Number.isFinite(saved.splitAt)) win.splitAt = saved.splitAt;
-  // the split comes back with the frame it was saved with, and a first launch (nothing saved) opens split: the Work View,
-  // the Timeline beside My Tasks (renderer/edit.js reads which half it is). Another window opens with one page.
-  win.split = win.shown = !front && (!saved || saved.split === true);
+  win.panes = []; win.saveBounds = saveBounds; win.saveSoon = saveSoon; // a layout the shell reports is saved too
+  // the layout comes back with the frame it was saved with, and a first launch (nothing saved) opens the Work View, the
+  // Timeline beside My Tasks (renderer/edit.js reads which page it is). Another window opens with one page.
+  win.doc = front ? null : savedDoc(saved);
+  win.pages = docPages(win.doc);
   // nodeIntegrationInSubFrames: preload.js runs in each page's iframe as well, which is what gives a page window.api
   win.shell = new WebContentsView({ webPreferences: { preload: PRELOAD, nodeIntegrationInSubFrames: true } });
   win.contentView.addChildView(win.shell); fit(win);
@@ -206,19 +209,16 @@ function createWindow() {
     if (!wc.isDestroyed()) wc.close({ waitForBeforeUnload: true });
   });
 }
-// ⌥⌘N (issue #159): a second page beside the one that asked, opening where it was (the renderer stores its place
-// first) and taking the keys, or back to one page, the one that asked.
-function toggleSplit(page) {
-  const win = page && page.win;
-  if (!win) return;
-  if (isSplit(win)) return closeSide(win, page.side ? '' : '2'); // the other half, loaded yet or not
-  if (!signedOut()) splitOn(win, true);
-}
-// Cmd+W closes the page you are in when there are two on screen, and the window otherwise (signed out, one shows).
+// Cmd+W closes the page you are in while there are more, and the window when it is the last (signed out, one shows).
+// The shell flushes the page and closes it, and its layout report drops it here; the next page takes the keys.
 function closeFront(win, page = S.pane) {
   if (!win) return;
   const target = win.panes && (win.panes.includes(page) ? page : win.panes[0]);
-  if (target && isSplit(win)) closeSide(win, target.side); else win.close();
+  if (!target || signedOut() || win.pages.length < 2) return win.close();
+  const next = nextPane(target);
+  win.pages = win.pages.filter((id) => id !== target.side); // a second ⌘W before the report counts it gone
+  tellShell(win, 'close', target.side);
+  if (next) next.focus();
 }
 
 function createMenu() {
@@ -242,14 +242,18 @@ ipcMain.handle('outline:children', (e, id) => { const page = pageOf(e); return (
 // first paint) and one write per change.
 // the menu shows ⌘N but leaves the key to the renderer's New window row (DEFAULT_HOTKEYS), so it can be re-recorded
 ipcMain.handle('window:new', () => { createWindow(); });
-ipcMain.handle('window:split', (e) => { toggleSplit(pageOf(e)); });
-// ⌘\: the keys go to the other half of a split (nothing to do in a window with one page)
-ipcMain.handle('window:otherPane', (e) => { const page = pageOf(e), other = page && page.win.panes.find((p) => p !== page); if (other) other.focus(); });
-// asked by preload.js on every load, a Reload included: which side this page is ('' left or alone, '2' the right half).
+// ⌥⌘N (issue #159) and Cmd+K New tab / Float pane: a new page beside the one that asked, taking the keys. Answers the
+// new page's id, so the page asking can store its view and place under it for the new one to open on.
+ipcMain.handle('window:split', (e, where) => {
+  const page = pageOf(e);
+  if (!page || signedOut()) return null;
+  return openPage(page.win, { where: ['right', 'tab', 'float'].includes(where) ? where : 'right', from: page.side });
+});
+// asked by preload.js on every load, a Reload included: this page's id ('' the first page, then '2', '3', ...).
 // This is where a page registers (addPage); an overlay asking is no page and gets the defaults.
 ipcMain.on('window:getSide', (e) => {
   const page = pageOf(e) || addPage(e);
-  e.returnValue = { side: page ? page.side : '', split: Boolean(page && isSplit(page.win)) };
+  e.returnValue = { side: page ? page.side : '' };
 });
 // A page taking the keys (preload.js, its window's focus): the window and page a notification click opens in, and ⌘W closes
 ipcMain.on('page:focus', (e) => { const page = pageOf(e); if (page) { S.win = page.win; S.pane = page; } });
@@ -260,44 +264,39 @@ ipcMain.on('page:gone', (e) => {
   if (page) dropPage(page);
   if (win) for (const p of [...win.panes]) if (p.isDestroyed()) dropPage(p);
 });
-// Cmd+K Work View (renderer/timeline.js): the page asking has stored both halves' places. A new right half reads its
-// own at load; a half already open is told to go to its own.
+// Cmd+K Work View (renderer/timeline.js): the page asking has stored the places of pages '' and '2'. A '2' not open yet
+// opens to the right and reads its own at load; a page already open is told to go to its own.
 ipcMain.handle('window:workView', (e) => {
   const page = pageOf(e), win = page && page.win;
   if (!win) return;
-  if (!isSplit(win)) splitOn(win, false);
-  else for (const p of win.panes) if (p !== page) p.send('window:toPlace');
+  if (!win.pages.includes('2')) openPage(win, { id: '2', from: page.side, focus: false });
+  for (const p of win.panes) if (p !== page && (p.side === '' || p.side === '2')) p.send('window:toPlace');
 });
-// The X at the end of the right half's header (renderer/app.js): that half closes, as Cmd+W closes it. Only in a
-// split: a page alone never closes its window from here.
-ipcMain.handle('window:closePane', (e) => { const page = pageOf(e); if (page && isSplit(page.win)) closeFront(page.win, page); });
 ipcMain.handle('overlay:open', (e, which, theme) => { openOverlay(pageOf(e), which, theme); });
 ipcMain.handle('overlay:close', (e, result) => { closeOverlay([...S.windows].find((w) => w.overlay && w.overlay.webContents === e.sender), result && typeof result === 'object' ? result : {}); });
-// Cmd+K Swap panes: the halves change places, each page keeping what it shows; the shell's layout report that follows
-// gives each the other's side, so a restart keeps them there. The divider stays where it is.
+// Cmd+K Swap panes: two panes side by side change places (the shell decides whether they are), each keeping its id.
 ipcMain.handle('window:swapPanes', (e) => {
   const win = pageOf(e)?.win;
-  if (win && win.shown) tellShell(win, 'swap');
+  if (win && win.pages.length > 1) tellShell(win, 'swap');
 });
-// The shell (preload.js window.shell), synchronous at its start: whether to show two pages, where the divider was left,
-// and the theme.
+// The shell (preload.js window.shell), synchronous at its start: the layout to start from (null: page '' alone), the
+// theme, and whether it is signed out (page '' alone, the layout kept aside until 'auth' says otherwise).
 ipcMain.on('shell:state', (e) => {
   const win = shellWindow(e.sender);
-  if (win) win.shown = isSplit(win);
-  e.returnValue = win ? { split: isSplit(win), splitAt: win.splitAt, theme: win.theme || systemTheme() } : { split: false, theme: systemTheme() };
+  if (!win) { e.returnValue = { doc: null, theme: systemTheme(), signedOut: signedOut() }; return; }
+  win.signedOut = signedOut();
+  win.pages = win.signedOut ? [''] : docPages(win.doc);
+  e.returnValue = { doc: win.doc || null, theme: win.theme || systemTheme(), signedOut: win.signedOut };
 });
-// The shell's layout after the divider moved, a page opened or closed, or a swap: order is the sides the pages had, left
-// to right now, so each takes its new side from its old one, and a page not in it is closing. splitAt: the left half's
-// share. Saved with the window, except the split while signed out, when the shell shows the login alone.
+// The shell's layout after every committed change: doc is Trellis's document, pages the ids in it in its order. A page
+// not in it is closing. Saved with the window, except while signed out, when the shell shows the login alone.
 ipcMain.on('shell:layout', (e, layout) => {
   const win = shellWindow(e.sender);
-  if (!win || !layout || !Array.isArray(layout.order)) return;
-  const next = new Map(layout.order.slice(0, 2).map((side, i) => [side, i ? '2' : '']));
-  for (const p of [...win.panes]) if (next.has(p.side)) p.side = next.get(p.side); else dropPage(p);
-  win.shown = next.size > 1;
-  if (!signedOut()) win.split = win.shown;
-  if (win.shown && Number.isFinite(layout.splitAt) && layout.splitAt > 0 && layout.splitAt < 1) win.splitAt = layout.splitAt;
-  tellSides(win); win.saveSoon();
+  if (!win || !layout || !Array.isArray(layout.pages)) return;
+  win.pages = layout.pages.filter((id) => typeof id === 'string');
+  for (const p of [...win.panes]) if (!win.pages.includes(p.side)) dropPage(p);
+  if (signedOut() || !layout.doc || typeof layout.doc !== 'object') return;
+  win.doc = layout.doc; win.saveSoon();
 });
 // a page says which theme it drew itself in (renderer/theme.js): the shell's Trellis theme and the window behind it follow
 ipcMain.on('window:theme', (e, theme) => {
@@ -498,7 +497,7 @@ ipcMain.handle('sync:login', async () => {
 
 if (process.env.TANA_MAIN_TEST) {
   module.exports = { resolveInitialAuth, graphRow, cachedNodeHue, rememberType, VIEWS, toNode, outlineWithReferences, reliveRefs: require('./main/documents').reliveRefs, chatOutline, op, onChange, documentAction, archivedTypes, createDocument, creationOptions, typeChoices, typeCandidates, setType, setTypeHue, discussWith, ai, icons, settings, search, viewFilter, searchCreate, searchTitle, viewRows, spaceChildren, start, refresh, related, watchRelated, weekTitle, weekNode,
-    statusSnapshot: () => ({ ...S.status }), rememberNodeHue, restoredBounds, today,
+    statusSnapshot: () => ({ ...S.status }), rememberNodeHue, restoredBounds, savedDoc, closeFront, today,
     undo: () => history(undoStack, redoStack, 'undo', 'canUndo'), redo: () => history(redoStack, undoStack, 'redo', 'canRedo'), visibleGraphNodes, pinTree, changesOf, summaryChanges, followSummary, announceNewInbox, watchInbox, timelinePage,
     nodePin, dropSearchHeads,
     assignToAgent, // the one handoff both entry points use, so a check can drive the panel through the real path

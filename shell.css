@@ -6,15 +6,23 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #fff; }
 #workspace { position: fixed; inset: 0; }
 /* The hairline between the pages is Trellis's divider (8px wide, on the seam), drawn 1px in the line's colour; hovered
    or dragged, the same 1px turns the darker grey the old grip did (the accent, shell.js tokens). */
-.trellis [data-trellis-part="divider"][data-axis="x"]::before { content: ''; position: absolute; top: 0; bottom: 0; left: calc(50% - 0.5px); width: 1px; background: var(--trellis-border); }
+.trellis [data-trellis-part="divider"]::before { content: ''; position: absolute; background: var(--trellis-border); }
+.trellis [data-trellis-part="divider"][data-axis="x"]::before { top: 0; bottom: 0; left: calc(50% - 0.5px); width: 1px; }
+.trellis [data-trellis-part="divider"][data-axis="y"]::before { left: 0; right: 0; top: calc(50% - 0.5px); height: 1px; }
 .trellis [data-trellis-part="divider"][data-axis="x"]::after { left: calc(50% - 0.5px); width: 1px; border-radius: 0; }
-/* The window drags from the page's empty top band: the crumbs start 48px down (styles.css .titlebar) and
-   -webkit-app-region does not work inside an iframe. Clear of the traffic lights, and gone while a page covers the
-   window, so a click on the palette's scrim reaches the page. */
+.trellis [data-trellis-part="divider"][data-axis="y"]::after { top: calc(50% - 0.5px); height: 1px; border-radius: 0; }
+/* One page: the window drags from the page's empty top band (the crumbs start 48px down, styles.css .titlebar), clear
+   of the traffic lights. More: from the empty part of the tab bars along the top (shell.js mark), the one under the
+   traffic lights starting its tabs after them. Either is gone while a page covers the window, so a click on the
+   palette's scrim reaches the page. */
 .drag { position: fixed; top: 0; left: 80px; right: 0; height: 40px; z-index: 1; -webkit-app-region: drag; }
-body.covered .drag { display: none; }
-/* The page the palette covers the window from (renderer/palette.js coverWindow): its surface is lifted over the
-   other one and lets its iframe reach past it; shell.js sizes the iframe to the workspace. */
-.trellis [data-trellis-part="surface"][data-covering] { z-index: 1000 !important; overflow: visible !important; clip-path: none !important; background: transparent !important; }
-.trellis [data-covering] [data-trellis-part="content"] { overflow: visible !important; }
-.trellis [data-covering] iframe { position: absolute; }
+body.many .drag, body.covered .drag { display: none; }
+.trellis [data-trellis-part="tabbar"][data-top] { -webkit-app-region: drag; }
+.trellis [data-trellis-part="tabbar"][data-top] :is([data-trellis-part="tab"], button) { -webkit-app-region: no-drag; }
+body.covered .trellis [data-trellis-part="tabbar"] { -webkit-app-region: no-drag; }
+.trellis [data-trellis-part="tabbar"][data-lights] [data-trellis-part="tabs"] { padding-left: 76px; }
+/* The page the palette covers the window from (renderer/palette.js coverWindow): everything from its iframe up to the
+   workspace is lifted over the rest and lets the iframe reach past it; shell.js sizes the iframe to the workspace. */
+.trellis [data-covering] { z-index: 1000 !important; overflow: visible !important; clip-path: none !important; contain: none !important; }
+.trellis [data-trellis-part="surface"][data-covering] { background: transparent !important; }
+.trellis [data-covering] > iframe { position: absolute; }

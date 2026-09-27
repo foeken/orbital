@@ -54,35 +54,26 @@ function leavePage() {
 }
 window.addEventListener('beforeunload', leavePage);
 window.addEventListener('pagehide', leavePage);
-// The shell (shell.js), the only frame this page listens to: flush before the iframe goes.
+// The shell (shell.js), the only frame this page listens to: flush before the iframe goes, and what the window holds
+// after every change (windowPanes, for the pane rows in Cmd+K). Under a tab bar the page drops the band it kept for the
+// traffic lights (styles.css html.tabbed).
 window.addEventListener('message', (e) => {
-  if (e.source !== window.parent || e.source === window || e.data?.orbital !== 'flush') return;
-  leavePage(); e.source.postMessage({ orbital: 'flushed' }, '*');
+  if (e.source !== window.parent || e.source === window) return;
+  if (e.data?.orbital === 'flush') { leavePage(); e.source.postMessage({ orbital: 'flushed' }, '*'); }
+  else if (e.data?.orbital === 'layout') { windowPanes = { pages: e.data.pages, swap: e.data.swap === true }; document.documentElement.classList.toggle('tabbed', e.data.pages > 1); }
 });
-// This page changed sides (swapped, or the right half left alone): it saves its view and place under its new side's
-// keys from now on. Its URL says the new side too, since a Reload is a new page to main, asked by the URL's side.
-// A page that becomes the main half (the other one closed) asks for the first-start tour: the one that asked may be gone.
-if (tana.onSide) tana.onSide((side) => { SIDE = side ? ':' + side : ''; closePaneBtn.hidden = SIDE !== ':2'; localStorage.setItem('view' + SIDE, view); rememberPlace(); if (!SIDE) helpOnce(); });
-// The Work View, asked for in the other half: it stored this half's place, and this half goes there (renderer/timeline.js)
+// The Work View, asked for in another page: it stored this page's place, and this page goes there (renderer/timeline.js)
 if (tana.onToPlace) tana.onToPlace(() => {
   const place = readStoredPlace();
   if (!place || !isPlaceId(place.docId)) return;
   goTo(place.docId).then(() => { if (String(place.docId).startsWith(SEARCH_ID)) addSearch({ text: place.title, ...extra.get(place.docId), id: place.docId }); }); // listed in Cmd+K at once, as restorePlace does
 });
 // Whether the pointer is over this page, for the top row (styles.css html.pointer-in). The page is an iframe now, so
-// it hears the pointer leave for anything laid over it too — the other half, the line, the shell's drag strip above
+// it hears the pointer leave for anything laid over it too — another page, the line, the shell's drag strip above
 // the crumbs — and the row fades there.
 const pointerIn = (on) => document.documentElement.classList.toggle('pointer-in', on);
 document.addEventListener('pointerover', () => pointerIn(true));
 document.documentElement.addEventListener('pointerleave', () => pointerIn(false));
-// The right half closes from an X at the far right of its header, after every other button (index.html).
-const closePaneBtn = $('navClosePane');
-closePaneBtn.hidden = SIDE !== ':2';
-closePaneBtn.title = 'Close this pane ⌘W';
-closePaneBtn.setAttribute('aria-label', 'Close this pane'); // icon only, so the name has to come from here
-addIcon(closePaneBtn, 'closePane');
-closePaneBtn.onmousedown = (e) => e.preventDefault(); // the caret stays where it is: the shell's flush (leavePage) sends what it was typing
-closePaneBtn.onclick = () => tana.closePane();
 tana.onChanged((docId, info) => {
   // The Timeline's meetings moved (main/timeline.js): the page is read again where it is on screen, and on arrival elsewhere
   if (docId === TIMELINE_PAGE) { if (zoom?.docId === TIMELINE_PAGE) reload(TIMELINE_PAGE).then(() => renderSoon(true), showError); return; }

@@ -1071,47 +1071,70 @@ async function main() {
     for (const key of ['viewFilter:library', 'notify', 'codex', 'codexPrompt', 'codexTask']) settings.set(key, undefined);
     backend.S.windows.clear(); settings.setPref('theme', undefined); await settings.flush();
     // A window is one shell (shell.html) laying its pages out with Trellis; a page is an iframe of it, registered by its
-    // frame when its preload asks window:getSide, on the side its url names. The shell reports its layout (order: the
-    // sides the pages had, left to right now); main gives each page its new side and saves the split. Commands go to the shell.
+    // frame when its preload asks window:getSide, by the id its url names ('' the first, then '2', '3', ...). The shell
+    // reports its layout (the document and the page ids in it); main saves it and forgets pages gone. Commands go to the shell.
     const own = (v) => JSON.parse(JSON.stringify(v ?? null)); // main runs in its own vm context: its objects, compared as data
     const toShell = [], told = [];
     const shellWc = { isDestroyed: () => false, focus() {}, send: (channel, cmd, arg) => toShell.push([cmd, own(arg)]) };
-    const shown = { isDestroyed: () => false, shell: { webContents: shellWc }, panes: [], split: true, shown: true, saveSoon() {} };
+    const shown = { isDestroyed: () => false, shell: { webContents: shellWc }, panes: [], pages: ['', '2'], doc: null, saveSoon() {}, close() { this.closed = true; } };
     backend.S.windows.add(shown);
     const frame = (name, side) => ({ processId: 1, frameToken: name, url: 'file:///orbital/index.html?side=' + side, parent: {}, detached: false, isDestroyed: () => false, send: (channel, ...args) => told.push([name, channel, ...own(args)]) });
-    const ask = (channel, f, ...args) => { const e = { sender: shellWc, senderFrame: f }; backend.handlers.get(channel)(e, ...args); return own(e.returnValue); };
-    const leftPage = frame('left', ''), rightPage = frame('right', '2');
-    assert.deepEqual(ask('window:getSide', rightPage), { side: '2', split: true }, 'a restored right half that loads first knows it is one');
-    assert.deepEqual(ask('window:getSide', leftPage), { side: '', split: true });
-    assert.deepEqual(shown.panes.map((p) => p.frame.frameToken), ['left', 'right'], 'kept left to right');
-    assert.deepEqual(ask('window:getSide', { ...leftPage, frameToken: 'shell', parent: null }), { side: '', split: false }, 'a main frame (the shell, an overlay) is no page');
+    const ask = (channel, f, ...args) => { const e = { sender: shellWc, senderFrame: f }; const out = backend.handlers.get(channel)(e, ...args); return own(e.returnValue !== undefined ? e.returnValue : out); };
+    const leftPage = frame('left', ''), rightPage = frame('right', '2'), thirdPage = frame('third', '3');
+    assert.deepEqual(ask('window:getSide', rightPage), { side: '2' }, 'a restored page that loads first keeps its own id');
+    assert.deepEqual(ask('window:getSide', leftPage), { side: '' });
+    assert.deepEqual(ask('window:getSide', { ...leftPage, frameToken: 'shell', parent: null }), { side: '' }, 'a main frame (the shell, an overlay) is no page');
     assert.equal(shown.panes.length, 2);
+    assert.equal(ask('window:getSide', frame('twin', '2')).side, '3', 'an id already taken gets the smallest free one');
+    shown.panes.pop();
     ask('window:swapPanes', leftPage);
     assert.deepEqual(toShell.splice(0), [['swap', null]], 'a swap is the shell\u2019s to do');
-    ask('shell:layout', null, { split: true, splitAt: 0.3, order: ['2', ''] });
-    assert.deepEqual(shown.panes.map((p) => [p.frame.frameToken, p.side]), [['right', ''], ['left', '2']], 'its report gives each page the other\u2019s side');
-    assert.deepEqual(told.splice(0), [['right', 'window:side', '', true], ['left', 'window:side', '2', true]], 'and each page is told');
-    assert.equal(shown.splitAt, 0.3, 'the divider is saved with the window');
-    ask('window:closePane', leftPage);
-    assert.deepEqual(toShell.splice(0), [['close', '2'], ['focus', '']], 'the X closes that half in the shell, and the half left takes the keys');
-    ask('shell:layout', null, { split: false, splitAt: 0.3, order: [''] });
-    assert.deepEqual([shown.panes.map((p) => p.frame.frameToken), shown.split], [['right'], false], 'the closed page is forgotten, and the window saves one page');
-    ask('window:split', rightPage);
-    assert.deepEqual(toShell.splice(0), [['split', { on: true, focus: '2' }]], '\u2325\u2318N: a page beside it, taking the keys');
-    // The new half's url says '2', but it registers only once loaded; swapped before that, its neighbour holds '2' now.
-    shown.panes[0].side = '2';
-    const late = frame('late', '2');
-    assert.equal(ask('window:getSide', late).side, '', 'a page loading through a swap takes the side that is free');
-    assert.equal(backend.S.pane && backend.S.pane.frame, late, 'and, opened by \u2325\u2318N, it is the page \u2318W and a notification click aim at');
-    shown.panes = shown.panes.filter((p) => p.frame !== late); shown.panes[0].side = '';
-    // Signed out, every page is the same login button: the shell shows one, and the saved split waits for the login.
+    // ⌥⌘N: a new page to the right of the one that asked, with an id main gives (for its place) and the keys
+    assert.equal(ask('window:split', rightPage), '3');
+    assert.deepEqual(toShell.splice(0), [['open', { id: '3', where: 'right', from: '2', focus: true }]]);
+    assert.equal(ask('window:split', leftPage, 'tab'), '4', 'a New tab is the next free id, even before the first has loaded');
+    assert.deepEqual(toShell.splice(0), [['open', { id: '4', where: 'tab', from: '', focus: true }]]);
+    ask('window:getSide', thirdPage);
+    assert.notEqual(backend.S.pane && backend.S.pane.frame, thirdPage, 'only the page asked for last takes the keys');
+    const fourth = frame('fourth', '4'); ask('window:getSide', fourth);
+    assert.equal(backend.S.pane && backend.S.pane.frame, fourth, 'the page \u2325\u2318N opened is the one \u2318W and a notification click aim at');
+    const layoutDoc = { schema: 1, root: { kind: 'panel', views: ['page', 'page2', 'page3'] }, views: {} };
+    ask('shell:layout', null, { doc: layoutDoc, pages: ['', '3', '2'] });
+    assert.deepEqual([shown.panes.map((p) => p.side).sort(), shown.doc], [['', '2', '3'], layoutDoc], 'a page not in the report is forgotten, and the layout saved');
+    const pageFor = (f) => shown.panes.find((p) => p.frame === f);
+    backend.closeFront(shown, pageFor(thirdPage));
+    assert.deepEqual([toShell.splice(0), shown.pages], [[['close', '3'], ['focus', '2']], ['', '2']], '\u2318W: a page closes in the shell and the next in the layout\u2019s order takes the keys');
+    ask('shell:layout', null, { doc: layoutDoc, pages: ['', '2'] });
+    told.splice(0);
+    // Cmd+K Work View: '' and '2' open go to their stored places; a '2' closed opens again beside the page that asked
+    ask('window:workView', leftPage);
+    assert.deepEqual([toShell.splice(0), told.splice(0).map(([name, channel]) => [name, channel])], [[], [['right', 'window:toPlace']]]);
+    ask('shell:layout', null, { doc: layoutDoc, pages: [''] });
+    ask('window:workView', leftPage);
+    assert.deepEqual(toShell.splice(0), [['open', { id: '2', where: 'right', from: '', focus: false }]], 'the Work View opens \u20182\u2019 and keeps the keys');
+    ask('shell:layout', null, { doc: layoutDoc, pages: [''] });
+    shown.close = () => { shown.closed = true; };
+    backend.closeFront(shown, pageFor(leftPage));
+    assert.deepEqual([toShell.splice(0), shown.closed], [[], true], '\u2318W on the last page closes the window rather than the page');
+    delete shown.close; delete shown.closed;
+    // The saved layout: a first launch opens the Work View, and a v1 split (before the workspace) becomes '' beside '2'.
+    const { savedDoc } = backend, row = (d) => d && [d.root.kind, d.root.weights, Object.keys(d.views)];
+    assert.deepEqual(row(own(savedDoc(null))), ['split', [0.5, 0.5], ['page', 'page2']], 'first launch: the Work View');
+    assert.deepEqual(row(own(savedDoc({ width: 900, split: true, splitAt: 0.3 }))), ['split', [0.3, 0.7], ['page', 'page2']], 'a saved split keeps its divider');
+    assert.equal(savedDoc({ width: 900, split: false }), null, 'a window saved alone opens alone');
+    assert.equal(savedDoc({ width: 900, doc: layoutDoc }), layoutDoc, 'a saved layout comes back as it was');
+    // Signed out, every page is the same login button: the shell shows one, and the saved layout waits for the login.
     const auth = { ...backend.S.status };
+    shown.doc = layoutDoc;
     Object.assign(backend.S.status, { authChecking: false, authenticated: false });
-    assert.equal(ask('shell:state', null).split, false, 'signed out: the shell starts with the login alone');
-    ask('shell:layout', null, { split: false, order: [''] });
-    assert.equal(shown.split, true, 'and the split stays saved for after the login');
-    backend.S.windows.delete(shown);
+    const state = ask('shell:state', null);
+    assert.deepEqual([state.doc, state.signedOut, own(shown.pages)], [layoutDoc, true, ['']], 'signed out: the shell is told so, with the layout to keep aside');
+    ask('shell:layout', null, { doc: { schema: 1, views: {} }, pages: [''] });
+    assert.equal(shown.doc, layoutDoc, 'and the layout stays saved for after the login');
+    ask('window:split', leftPage);
+    assert.deepEqual(toShell.splice(0), [], 'no new page while signed out');
     Object.assign(backend.S.status, auth);
+    backend.S.windows.delete(shown);
     // A node's link opens it in Tana on the route Tana itself picks for its kind (issue #88).
     backend.testRuntime({ me: { orgDocUri: 'tana:org:01ks7rqsrqjn7vwyjhx75r6jg0' } });
     const link = (kind) => backend.handlers.get('doc:link')(null, 'tana:' + kind + ':01m2nrv0v6qj2brghq04t8wv87');

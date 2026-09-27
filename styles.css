@@ -83,6 +83,7 @@ button { font: inherit; }
 button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -webkit-app-region: no-drag; }
 
 .titlebar { padding: 48px 32px 6px; user-select: none; position: relative; } /* the 4px the scroll area took, so the outline sits where it did */
+html.tabbed .titlebar { padding-top: 16px; } /* under a tab bar (shell.js, renderer/app.js) there are no traffic lights to keep clear of */
 .titlebar h1 { margin: 0; font-size: 34px; font-weight: 700; letter-spacing: -0.5px; color: #1c2024; } /* the page title is a heading: the same near-black */
 .titlebar h1[contenteditable] { outline: none; user-select: text; min-height: 1lh; }
 .titlebar h1[contenteditable]:empty { display: inline-block; min-width: 1px; }
@@ -250,7 +251,6 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
    the buttons (renderer/app.js pointer-in). The fade is the one .titlebar's children already have (below). */
 html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 #railToggle { margin-left: 6px; } /* the sidebar's own button, a step apart from the page's */
-#navClosePane { margin-left: 6px; } /* the right half's close, last and a step apart: it is about the window, not the page */
 .navbtn {
   display: flex; align-items: center; justify-content: center;
   width: 24px; height: 24px; padding: 0; border: 0;
@@ -351,6 +351,7 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 .rail { flex: none; width: 272px; height: 100%; overflow-y: auto; user-select: none;
   /* padding-top lines the first section heading up with the breadcrumbs (heading text sits 10px into its button) */
   border-left: 1px solid #ececec; background: #fafbfc; padding: 38px 12px 32px; }
+html.tabbed .rail { padding-top: 6px; } /* in line with the crumbs again, which moved up as much (html.tabbed .titlebar) */
 .railgrip { flex: none; width: 5px; margin-right: -1px; cursor: col-resize; z-index: 2; }
 .railgrip:hover, .railgrip.dragging { background: #d8e4f0; }
 .rail .rhead { display: flex; align-items: center; gap: 6px; width: 100%; border: 0; background: none; margin-top: 18px; padding: 10px 6px 4px; cursor: pointer;
@@ -937,8 +938,8 @@ body.building :is(#outline, #filtered) { opacity: 0; pointer-events: none; } /* 
    Hidden: the body now clips its own sidebar sliding out, which the window did before. What sits at an edge of the
    window sits at the half's edge; what is placed from an element's rect (menus, the toolbar) is there already. */
 html.cover { background: linear-gradient(transparent, transparent); overflow: hidden; }
-html.cover body { margin-left: var(--pane-x); width: var(--pane-w); }
-html.cover .toast { left: calc(var(--pane-x) + var(--pane-w) / 2); max-width: min(480px, calc(var(--pane-w) - 48px)); }
+html.cover body { margin-left: var(--pane-x); margin-top: var(--pane-y); width: var(--pane-w); height: var(--pane-h); }
+html.cover .toast { left: calc(var(--pane-x) + var(--pane-w) / 2); bottom: calc(100% - var(--pane-y) - var(--pane-h) + 24px); max-width: min(480px, calc(var(--pane-w) - 48px)); }
 
 /* ==== Key recorder (renderer/palette.js) ==== */
 /* hotkey recorder (Cmd+Shift+K on a Cmd+K row) */

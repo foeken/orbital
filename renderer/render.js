@@ -258,6 +258,14 @@ function render(force = false) {
   try { renderOutline(); if (typeof syncPresence === 'function') syncPresence(); } finally { rendering = false; playTicks(); }
   fitRowMeta();
 }
+// The page's title on its tab in the shell (shell.js): what the header shows, so masked in demo mode, and 'Hidden'
+// while the document's sensitive mark blurs it. Told once per change; outside the shell (the mock) there is no tab.
+let toldTitle = null;
+function tellTitle(title) {
+  if (title === toldTitle || !window.frameElement) return;
+  toldTitle = title;
+  window.parent.postMessage({ orbital: 'title', title }, '*');
+}
 // A task row carries its grey facts — who it is for, who can see it, whether it notifies — after the title. When the
 // title fills the line the browser wraps them onto a line of their own, where they read as a second title rather
 // than as facts about the first; there they belong with the subtext instead, joined to it by the same separator its
@@ -429,6 +437,7 @@ function renderOutline() {
   titleEl.dataset.key = editable ? parent.key : '';
   titleEl.textContent = editable && pending.has(parent.key) ? plainOf(pending.get(parent.key).segs) : parent ? demoText(parent.node.text, parent.node.id) : viewOf() ? viewOf().title : 'Tana';
   blurSensitive(titleEl, parent && parent.docId);
+  tellTitle(titleEl.classList.contains('sensitive') ? 'Hidden' : titleEl.textContent);
   // zoomed task: its checkbox before the title (toggleDone, like row checkboxes; Cmd+Enter in the title too)
   const zoomedTask = parent && isTask(parent.node);
   titleCheck.hidden = !zoomedTask; titleCheck.checked = zoomedTask && !!parent.node.done;

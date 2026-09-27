@@ -116,15 +116,19 @@ palette. Nothing else moves focus back by hand.
 
 ### A popover over the whole window: `coverWindow` (renderer/palette.js)
 
-In a split window each half is its own page, so anything `position: fixed` covers only that half. A centred, modal
-popover that should cover the window while acting on its half (the palette and the key recorder over it) calls
+In a window of several panes each is its own page, so anything `position: fixed` covers only that pane. A centred,
+modal popover that should cover the window while acting on its pane (the palette and the key recorder over it) calls
 `coverWindow(mode)` as it opens and `coverWindow(null)` as it closes: the shell (shell.js) lays the page's iframe over
-the whole window and the page keeps drawing itself in its half (`html.cover`), see-through beside it. `showPage` and `closePalette` already
+the whole window and the page keeps drawing itself in its pane (`html.cover`), see-through around it. `showPage` and `closePalette` already
 do this, so a palette page needs nothing. A new element fixed to an edge of the window gets an `html.cover` rule in
-styles.css that puts it at the half's edge (`--pane-x`, `--pane-w`), as the toast has; one placed
-from an element's rect is right already. A popover that belongs to a spot in the half (a pill menu, the toolbar, the
-@ and / menus) stays in the half and never covers. A page of its own over the window (Help, Create task) is an
+styles.css that puts it at the pane's edge (`--pane-x`, `--pane-y`, `--pane-w`, `--pane-h`), as the toast has; one placed
+from an element's rect is right already. A popover that belongs to a spot in the pane (a pill menu, the toolbar, the
+@ and / menus) stays in the pane and never covers. A page of its own over the window (Help, Create task) is an
 overlay instead (main.js `openOverlay`).
+
+Anything else a page asks of the window it lives in goes to the shell the same way, with no main in between: its tab's
+title (`tellTitle`, renderer/render.js) and a Trellis command (`shellRun`, renderer/palette.js); the shell answers
+with `{ orbital: 'layout' }` after every change (renderer/app.js, `windowPanes`).
 
 ### Icons: `addIcon` and `iconNode` (renderer/nodes.js)
 

@@ -16,16 +16,16 @@ function openTimeline(node) {
 function timelineViewRow() {
   return { id: 'timeline', group: 'Views', icon: 'timeline', label: 'Timeline', run: () => goTo(TIMELINE_PAGE) };
 }
-// The Work View (Cmd+K, and where a first launch opens, renderer/edit.js): the Timeline on the left and My Tasks on
-// the right of one window. Both halves' places are stored first; main then opens the right half, which reads its own
-// at load, or sends a half already open to its own (onToPlace, renderer/app.js). This half goes to its own.
+// The Work View (Cmd+K, and where a first launch opens, renderer/edit.js): the Timeline in page '' and My Tasks in
+// page '2' of one window. Both places are stored first; main then opens page '2', which reads its own at load, or
+// sends a page already open to its own (onToPlace, renderer/app.js). This page goes to its own, if it is one of them.
 async function openWorkView() {
   const tasks = await tana.myTasks(); // yours, or made the first time (main/views.js myTasks)
   addSearch(tasks);
   const places = { '': { docId: TIMELINE_PAGE, nodeId: null, title: 'Timeline', icon: 'timeline' }, ':2': { docId: tasks.id, nodeId: null, title: tasks.text || tasks.title, icon: tasks.icon } };
   for (const [side, place] of Object.entries(places)) localStorage.setItem('place' + side, JSON.stringify(place));
   await tana.workView();
-  await goTo(places[SIDE].docId);
+  if (places[SIDE]) await goTo(places[SIDE].docId);
 }
 function workViewRow() {
   return { id: 'workView', group: 'Views', icon: 'splitPanes', label: 'Work View', hint: 'Timeline and My Tasks', run: () => run(openWorkView) };

@@ -58,6 +58,8 @@ const withShims = (src) => {
   if (/\bloadRelated\(/.test(src) && !/function loadRelated\(|const loadRelated =/.test(src)) src = 'globalThis.loadRelated ??= () => {};\n' + src;
   // Cmd+K's meeting rows and pages (renderer/meeting.js): a palette harness without that file offers none
   if (/\bmeetingRows\(/.test(src) && !/function meetingRows\(/.test(src)) src = 'globalThis.meetingRows ??= () => [];\n' + src;
+  // the shell's word on this page's window (renderer/state.js): one page, unless the harness says otherwise
+  if (/\bwindowPanes\b/.test(src) && !/let windowPanes =/.test(src)) src = 'globalThis.windowPanes ??= { pages: 1, swap: false };\n' + src;
   if (/\bMEETING_PAGES\b/.test(src) && !/const MEETING_PAGES =/.test(src)) src = 'globalThis.MEETING_PAGES ??= {};\n' + src;
   // Every palette page opens through showPage (renderer/palette.js, #275): the real one, over whatever of the palette's
   // state the harness declares (its own lets win; the rest start empty here).
@@ -1560,7 +1562,7 @@ async function runSyncShortcutCheck() {
     ({ rows: async (q) => { paletteRows(q); await Promise.resolve(); await Promise.resolve(); return paletteRows(q).map((r) => r.label); }, loads: () => loads,
        ids: (q) => paletteRows(q).map((r) => r.id), press: async (id) => { const hit = runAction(id); await Promise.resolve(); return [hit, ran.splice(0)]; } });
   `);
-  assert.deepEqual(plain(await folded.rows('s')), ['Sync', 'Search Tana', 'Set status', 'Swap panes', 'Hide sidebar', 'Toggle split panes', 'Smaller text', 'Reset text size', 'Set Work View as Home', 'Filter rows by text'],
+  assert.deepEqual(plain(await folded.rows('s')), ['Sync', 'Search Tana', 'Set status', 'Smaller text', 'Reset text size', 'Set Work View as Home', 'Hide sidebar', 'Filter rows by text'],
     'one letter: the first level only, the groups whose best row starts with it first (the shortest such row leading), a letter inside a word last');
   assert.deepEqual(plain(await folded.rows('sesp')), ['Set status to In Progress'], 'two letters in: the level below is folded in and the query reaches into it');
   assert.deepEqual(plain(await folded.rows('seinb')), ['Set status to Inbox'], 'a disabled choice is left out, the others are single rows');
@@ -1612,8 +1614,10 @@ async function runSyncShortcutCheck() {
     const railToggle = { hidden: false }, railHidden = false; // sidebar visible here, so both the focus row and the toggle row are built
     const went = []; // Go to Home runs the real goHome, so where it sends you is observable here
     const pinCalls = []; // what a date-pin row asks of api.pin/api.unpin: the op, the target and the day
+    const posted = [], window = { frameElement: {}, parent: { postMessage: (m) => posted.push(m) } }; // the shell this page asks (shellRun)
     const openCreationPalette = () => {}, openHiddenPalette = () => {}, toggleSensitiveVisibility = () => {}, followSystem = () => {}, openVisibilityPalette = () => {}, openMovePalette = () => {}, toggleDatePin = (doc, date) => pinCalls.push([doc.id, date]), copyText = () => {}, togglePalette = () => {}, navigate = () => {}, history = () => {}, focusRail = () => {}, setZoom = () => {}, goTo = (id) => went.push(id), setView = (id) => went.push('view:' + id), openDoc = () => {}, filterEl = {}, render = () => {}, zoomFactor = 1, BASE_ZOOM = 1;
     ${sourceBetween('const NODE_ROW_ORDER', 'function paletteRows')}
+    ${sourceBetween('const PANE_ROWS', 'const shellRun')}${sourceLine('const shellRun')}
     ${sourceBetween('const homeSearch =', 'function sensitiveHidden')}
     const visibilityRows = () => [], moveTargets = async () => [], previewMoveToSpace = () => {};
     ${functionSource('paletteRows')}
@@ -1622,7 +1626,8 @@ async function runSyncShortcutCheck() {
        datePin: (rank) => { const row = paletteRows('').find((r) => r.rank === rank); pinCalls.length = 0; row.run(); return [row.label, ...pinCalls[0]]; },
        pinnedOn: (dates) => { pinInfo.dates.length = 0; pinInfo.dates.push(...dates); },
        went: () => { const out = [...went]; went.length = 0; return out; },
-       choose: (id, list) => { home = id; searches = list || []; } });
+       choose: (id, list) => { home = id; searches = list || []; },
+       panes: (next) => { windowPanes = next; }, posted: () => posted.splice(0) });
   `);
   assert.deepEqual(plain(order.labels('')), [
     'Current node: Zoom in', 'Current node: Set status', 'Current node: Discuss with …', 'Current node: Pin to today', 'Current node: Pin to tomorrow', 'Current node: Pin to date …', 'Current node: Edit pins', 'Current node: Move to …', 'Current node: Move to Library',
@@ -1631,10 +1636,20 @@ async function runSyncShortcutCheck() {
     'View options: Filter by type', 'View options: Filter rows by text',
     'Actions: Log in to Tana', 'Actions: Create new …', 'Actions: Search Tana', 'Actions: Undo', 'Actions: Redo', 'Actions: Sync',
     'Navigate: Go back', 'Navigate: Go forward', 'Navigate: Go to Home', 'Navigate: Set as Home', 'Navigate: Set Work View as Home', 'Navigate: Focus the sidebar',
-    'Window: New window', 'Window: Toggle split panes', 'Window: Go to the other half', 'Window: Swap panes', 'Window: Hide sidebar', 'Window: Reload',
+    'Window: New window', 'Window: New pane', 'Window: New tab', 'Window: Float pane', 'Window: Hide sidebar', 'Window: Reload',
     'Settings: Larger text', 'Settings: Smaller text', 'Settings: Reset text size', 'Settings: Toggle dark mode', 'Settings: Edit hidden items', 'Settings: Toggle sensitive visibility', 'Settings: Toggle demo mode',
     'Help: Help',
   ], 'the palette lists its rows in one fixed, meaningful order');
+  // A window of more pages (the shell's word, renderer/app.js) offers the workspace's moves, each a key's row asking
+  // the shell to run Trellis's command; Swap panes only while the shell says two panes stand side by side.
+  order.panes({ pages: 3, swap: false });
+  assert.deepEqual(plain(order.labels('').filter((l) => l.startsWith('Window: ')).slice(4, -2)), ['Window: Next pane', 'Window: Previous pane', 'Window: Next tab', 'Window: Previous tab',
+    'Window: Maximize or restore pane', 'Window: Show all panes', 'Window: Zoom back', 'Window: Zoom forward'], 'more pages: the pane rows, and no Swap panes unless the shell says so');
+  order.panes({ pages: 2, swap: true });
+  assert.ok(order.labels('').includes('Window: Swap panes'), 'two panes side by side: Swap panes');
+  order.row('maximizePane').run(); order.row('otherPane').run(); order.row('overview').run();
+  assert.deepEqual(plain(order.posted()), [{ orbital: 'run', command: 'frame.toggle' }, { orbital: 'run', command: 'panel.next' }, { orbital: 'run', command: 'navigation.overview' }], 'each asks the shell to run its command');
+  order.panes({ pages: 1, swap: false });
   // The two date pins differ only in the day they name, and each label follows whether that day is already pinned;
   // the press toggles that day (toggleDatePin, which reads the pins again: runClosedPaletteKeysCheck).
   const DOC_ID = 'tana:text:01j0doc000000000000000000';
@@ -1840,6 +1855,14 @@ async function runReservedComboCheck() {
   assert.match(api.taken('⌃⌥L', 'addToday'), /"Later"/, 'and a folded choice, absent right now, by its label');
   assert.equal(api.taken('⇧⌘T', 'view:tasks'), '', 'a row may keep its own combo');
   assert.equal(api.taken('⇧⌘U', 'addToday'), '', 'and a free combo passes');
+  // The pane keys (renderer/state.js): ⌥ and ⇧ change what a bracket or \ types, so the key pressed is what counts
+  const keys = vm.runInNewContext(`${sourceLine('const KEYNAMES')}\n${sourceLine('const KEYCODES')}\n${functionSource('comboOf')}\n({ comboOf })`);
+  const combo = (key, code, mods) => keys.comboOf({ key, code, metaKey: true, ...mods });
+  assert.deepEqual([combo('“', 'BracketLeft', { altKey: true }), combo('|', 'Backslash', { shiftKey: true }), combo('[', 'BracketLeft'), combo('ArrowDown', 'ArrowDown', { altKey: true })],
+    ['⌥⌘[', '⇧⌘\\', '⌘[', '⌥⌘↓'], 'a bracket or \\ reads as the key pressed, whatever ⌥ or ⇧ makes it type, so the pane keys can match');
+  const defaults = Object.values(vm.runInNewContext('(' + source.match(/const DEFAULT_HOTKEYS = (\{[^\n]*\});/)[1] + ')'));
+  assert.equal(new Set(defaults).size, defaults.length, 'no two built-in keys share a combo');
+  assert.deepEqual(defaults.filter((c) => api.taken(c, 'none').includes(' already ') && !/shortcut for/.test(api.taken(c, 'none'))), [], 'and none is one the handlers keep fixed');
 }
 // Cmd+[ and Cmd+] walk the places rendered so far: view switches and zooms, recorded by the render itself, so every
 // way of navigating counts; going back then somewhere new drops the forward places, like a browser.
@@ -8825,7 +8848,6 @@ async function runHelpOnceCheck() {
   assert.deepEqual(plain(await pane(quiet, '', false).go()), { opened: 0, seen: false }, 'signed out or not yet connected: no tour, over the login');
   assert.equal(quiet.asked(), 0, 'and no claim, which main could only answer from this machine\u2019s own copy');
   assert.doesNotMatch(source, /tana\.onOverlayClosed\(\(result\) => \{[^\n]*helpOnce\(\)/, 'a first start that found Create task open is main\u2019s to finish (closeOverlay), not the half that hears the close');
-  assert.match(source, /tana\.onSide\(\(side\) => \{[^\n]*if \(!SIDE\) helpOnce\(\); \}\);/, 'a page that becomes the main half asks, in case the half that asked closed on the way');
   assert.doesNotMatch(source, /then\(restorePlace\)\.then\(helpOnce\)/, 'boot no longer opens it before there is a connection, over the login');
   assert.match(source, /restorePlace\(\)\.finally\(\(\) => \{ placed = true; loadView\(\); renderSoon\(\); helpOnce\(\); \}\)/, 'it opens once connected, over the page the launch came back to');
   console.log('ok  Help tour first start: after login, once across windows, and not again on a machine that has not read your settings yet');
@@ -8838,7 +8860,7 @@ checks.push(runHelpOnceCheck);
 function runCoverCheck() {
   const pane = (half, framed = true) => vm.runInNewContext(`
     const asked = [], timers = [], classes = new Set(), vars = {};
-    let box = { ...half }, innerWidth = half.width;
+    let box = { ...half }, innerWidth = half.width, innerHeight = half.height;
     const MOTION = { quick: 160 }, setTimeout = (fn) => { timers.push(fn); return timers.length; }, clearTimeout = (id) => { if (id) timers[id - 1] = null; };
     const document = { documentElement: { classList: { toggle: (c, on) => (on ? classes.add(c) : classes.delete(c)) }, style: { setProperty: (k, v) => { vars[k] = v; } } } };
     const anchored = new Set(), palette = { classList: { contains: (c) => anchored.has(c) } };
@@ -8849,10 +8871,10 @@ function runCoverCheck() {
     ${sourceLine('const tellCover = ')}
     ${functionSource('coverWindow')}
     ({ coverWindow, placeCover, asked, vars, anchored, covered: () => classes.has('cover'),
-       shell: (next, w) => { box = next; innerWidth = w; placeCover(); }, fade: () => { const due = timers.splice(0).filter(Boolean); due.forEach((fn) => fn()); return due.length; } });
+       shell: (next, w, h = next.height) => { box = next; innerWidth = w; innerHeight = h; placeCover(); }, fade: () => { const due = timers.splice(0).filter(Boolean); due.forEach((fn) => fn()); return due.length; } });
   `, { half, framed });
-  const whole = { left: 0, width: 1000 };
-  const right = pane({ left: 600, width: 400 });
+  const whole = { left: 0, top: 0, width: 1000, height: 700 };
+  const right = pane({ left: 600, top: 0, width: 400, height: 700 });
   right.coverWindow('cmd');
   assert.deepEqual([...right.asked], [true], '⌘K in the right half asks the shell to cover the window');
   assert.equal(right.covered(), false, 'and draws nothing differently until the page really is the whole window');
@@ -8866,16 +8888,22 @@ function runCoverCheck() {
   assert.equal(right.fade(), 0, 'opened again before that: nothing lets go');
   right.coverWindow(null); right.fade();
   assert.deepEqual([...right.asked, right.covered()], [true, false, true], 'faded: it lets go, and stays drawn in its half until the shell has made it that again');
-  right.shell({ left: 600, width: 400 }, 400);
+  right.shell({ left: 600, top: 0, width: 400, height: 700 }, 400);
   assert.equal(right.covered(), false, 'back to its half: drawn as a page again');
   right.anchored.add('anchored'); right.coverWindow('search'); right.anchored.clear(); right.coverWindow('slash');
   assert.equal(right.asked.length, 2, 'the @ link search and the / menu stay in the half they belong to');
   const alone = pane(whole);
   alone.coverWindow('cmd'); alone.shell(whole, 1000); alone.coverWindow(null); alone.fade();
   assert.deepEqual([[...alone.asked], alone.covered()], [[true, false], false], 'a page alone in its window: asked and let go (the shell drops its drag strip under the scrim), drawn as it was');
-  const zoomed = pane({ left: 500, width: 500 });
-  zoomed.coverWindow('cmd'); zoomed.shell(whole, 800);
+  const zoomed = pane({ left: 500, top: 0, width: 500, height: 700 });
+  zoomed.coverWindow('cmd'); zoomed.shell(whole, 800, 560);
   assert.deepEqual([zoomed.covered(), zoomed.vars['--pane-x'], zoomed.vars['--pane-w']], [true, '400px', '400px'], 'a page zoomed apart from the shell: the half in the page\u2019s own pixels');
+  const tabbed = pane({ left: 250, top: 130, width: 560, height: 362 });
+  tabbed.coverWindow('cmd'); tabbed.shell(whole, 1000, 700);
+  assert.deepEqual([tabbed.covered(), ...['x', 'y', 'w', 'h'].map((k) => tabbed.vars['--pane-' + k])], [true, '250px', '130px', '560px', '362px'], 'a pane under a tab bar or floating: placed on both axes');
+  const below = pane({ left: 0, top: 38, width: 1000, height: 662 });
+  below.coverWindow('cmd'); below.shell(whole, 1000, 700);
+  assert.equal(below.vars['--pane-y'], '38px', 'a pane as wide as the window but under a tab bar is covered too');
   const mock = pane(whole, false);
   mock.coverWindow('cmd');
   assert.deepEqual([...mock.asked], [], 'outside the shell (the mock) there is nothing to ask');
