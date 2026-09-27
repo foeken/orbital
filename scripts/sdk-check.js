@@ -1107,6 +1107,15 @@ async function main() {
     const pageFor = (f) => shown.panes.find((p) => p.frame === f);
     backend.closeFront(shown, pageFor(thirdPage));
     assert.deepEqual([toShell.splice(0), shown.pages], [[['close', '3'], ['focus', '2']], ['', '2']], '\u2318W: a page closes in the shell and the next in the layout\u2019s order takes the keys');
+    { // #462: the Links pane follows a page and cannot stand alone, so \u2318W on the last page beside it closes the window
+      const sent = [], linksWin = { closed: false, close() { this.closed = true; }, shell: { webContents: { isDestroyed: () => false, send: (...args) => sent.push(args.slice(1)) } },
+        pages: ['', '5'], panes: [{ side: '', links: false, focus() {} }, { side: '5', links: true, focus() {} }] };
+      for (const p of linksWin.panes) p.win = linksWin;
+      backend.closeFront(linksWin, linksWin.panes[1]);
+      assert.deepEqual([linksWin.closed, sent], [false, [['close', '5']]], '\u2318W in the Links pane closes only it');
+      backend.closeFront(linksWin, linksWin.panes[0]);
+      assert.equal(linksWin.closed, true, 'and on the last page beside it, the window');
+    }
     ask('shell:layout', null, { doc: layoutDoc, pages: ['', '2'] });
     told.splice(0);
     // Cmd+K Saved views: the layout this window has, and one to put it back to, saved and reloaded into. 'workView' is

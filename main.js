@@ -122,11 +122,11 @@ function nextPane(page) {
 function addPage(e) {
   const frame = e.senderFrame, win = frame && shellWindow(e.sender);
   if (!win || !frame.parent) return null;
-  let side = '';
-  try { side = new URL(frame.url).searchParams.get('side') || ''; } catch { /* no url: the first page */ }
+  let side = '', links = false;
+  try { const params = new URL(frame.url).searchParams; side = params.get('side') || ''; links = params.get('links') === '1'; } catch { /* no url: the first page */ }
   if (!/^([2-9]|[1-9]\d+)$/.test(side)) side = '';
   if (win.panes.some((p) => p.side === side)) side = freeId();
-  const page = { id: frame.processId + ':' + frame.frameToken, frame, win, side,
+  const page = { id: frame.processId + ':' + frame.frameToken, frame, win, side, links, // links: the window's Links pane (#462)
     isDestroyed: () => frame.isDestroyed() || frame.detached,
     send: (channel, ...args) => { if (!page.isDestroyed()) frame.send(channel, ...args); },
     // the window's keys to the shell, and the shell's to this page's panel and iframe
@@ -249,7 +249,8 @@ function createWindow() {
 function closeFront(win, page = S.pane) {
   if (!win) return;
   const target = win.panes && (win.panes.includes(page) ? page : win.panes[0]);
-  if (!target || signedOut() || win.pages.length < 2) return win.close();
+  // the last page beside the Links pane closes the window too: the Links pane follows it and cannot stand alone (#462)
+  if (!target || signedOut() || win.pages.length < 2 || (!target.links && win.panes.filter((p) => !p.links).length < 2)) return win.close();
   const next = nextPane(target);
   win.pages = win.pages.filter((id) => id !== target.side); // a second ⌘W before the report counts it gone
   tellShell(win, 'close', target.side);

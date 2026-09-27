@@ -1077,14 +1077,16 @@ hides its outline column (styles.css `html.links`) so it draws only the rail, fu
 follows by zooming into the followed page's document, hidden, which is what gives the rail its row, fields and live
 changes; it records no Recent entry and joins no presence room. Every other page draws no rail and tells the shell
 which document it is on, with its row (`tellDoc`: a view, a saved search, an app page or a draft is none), and that it
-took the keys (`{ orbital: 'focus' }`); the shell follows the last page that did, never the Links pane itself, and
+took the keys (`{ orbital: 'focus' }`); the shell follows the last page that did, never the Links pane itself (and in a
+window restored with the Links pane in front, the page in front or else the first: `following`), and
 sends it `{ orbital: 'follow', docId, doc }` (`follow`: the row opens the document without asking main; none leaves it
 on the view). Each page tells its title and document again on the shell's layout message (`retell`), since what a
 page says before the shell has seen its iframe load is lost. Its rows are edges, not nodes: a click or Enter opens one
 in the followed page, which takes the keys (`openLink`, `{ orbital: 'open', id }`, answered with `goto` there), as
 does a notification opened while it has the keys; a task row toggles on Space, and nothing there takes a caret. A
 document with nothing linked says so; an empty section is omitted; a collapsed section is remembered (`railClosed`),
-and every head carries `aria-expanded`.
+and every head carries `aria-expanded`. It never stands alone: the last page beside it does not close from its tab, and
+⌘W there closes the window (main.js `closeFront`, which knows the Links pane by its `links=1`).
 
 - Tags on sidebar rows collapse to their `#` and hue and show their label on hover or focus, without changing the
   row's height.

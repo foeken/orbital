@@ -53,8 +53,15 @@ const tell = (win) => win?.postMessage({ orbital: 'layout', pages: pages().lengt
 const linksView = () => pages().find((v) => v.params.links)?.id;
 const docs = new Map(); // page view id -> { docId, doc } it last told
 let followed = null;
+const others = () => pages().filter((v) => !v.params.links).map((v) => v.id); // the pages a Links pane can follow
+// The page followed: the last to take the keys, else the one in front, else the first. A restored window may open with
+// the Links pane in front and no page having taken the keys yet (#463 review).
+function following() {
+  if (!others().includes(followed)) { const front = ws.getSnapshot().focusedView; followed = others().includes(front) ? front : others()[0] || null; }
+  return followed;
+}
 function follow() {
-  const told = docs.get(followed) || { docId: null, doc: null };
+  const told = docs.get(following()) || { docId: null, doc: null };
   windowOf(frameOf(linksView()))?.postMessage({ orbital: 'follow', docId: told.docId, doc: told.doc }, '*');
 }
 
@@ -97,7 +104,8 @@ const guarded = new Set();
 function guard() {
   for (const { id } of pages()) if (!guarded.has(id)) {
     guarded.add(id);
-    ws.view(id).guardClose(async () => { if (pages().length < 2) return false; await flush(frameOf(id)); return true; });
+    // the last page never closes from here, nor the last one a Links pane follows: main closes the window then (closeFront)
+    ws.view(id).guardClose(async () => { if (pages().length < 2 || (id !== linksView() && others().length < 2)) return false; await flush(frameOf(id)); return true; });
   }
 }
 ws.on('close', (view) => { guarded.delete(view.id); renamable.delete(view.id); docs.delete(view.id); if (followed === view.id) { followed = null; follow(); } });
@@ -263,9 +271,9 @@ addEventListener('message', (e) => {
   else if (what === 'run') run(String(e.data.command), sourceOf(e.source));
   else if (what === 'reload') reloadAll(); // Cmd+K Reload: the window, every page in it
   else if (what === 'navbtns') drawNav(sourceOf(e.source), String(e.data.html || ''), e.data.on === true);
-  else if (what === 'doc') { const id = sourceOf(e.source); if (!id) return; docs.set(id, { docId: typeof e.data.docId === 'string' ? e.data.docId : null, doc: e.data.doc || null }); if (id === followed) follow(); }
+  else if (what === 'doc') { const id = sourceOf(e.source); if (!id) return; docs.set(id, { docId: typeof e.data.docId === 'string' ? e.data.docId : null, doc: e.data.doc || null }); if (id === following()) follow(); }
   else if (what === 'focus') { const id = sourceOf(e.source); if (id && id !== linksView() && id !== followed) { followed = id; follow(); } }
-  else if (what === 'open') { const win = windowOf(frameOf(followed)); if (!win) return; focusPage(followed); if (typeof e.data.id === 'string') win.postMessage({ orbital: 'goto', id: e.data.id }, '*'); } // from the Links pane
+  else if (what === 'open') { const id = following(), win = windowOf(frameOf(id)); if (!win) return; focusPage(id); if (typeof e.data.id === 'string') win.postMessage({ orbital: 'goto', id: e.data.id }, '*'); } // from the Links pane
   else if (what === 'links') { const id = linksView(); if (id) ws.close(id); } // Cmd+K Hide links
   else if (what === 'focusLinks') focusPage(linksView());
 });
