@@ -220,7 +220,9 @@ function appendTags(el, node) { for (const tag of visibleTags(node)) el.append(c
 const canEditNode = (node) => !!node && node.editable !== false;
 function canEditItem(item) {
   if (!canEditNode(item.node)) return false;
-  for (let parent = item.parent; parent; parent = parent.parent) if (parent.node.kind === 'document') return canEditNode(parent.node);
+  // the document a row belongs to decides; an app page (Proposals, Notifications, the Timeline) lists documents and owns none
+  for (let parent = item.parent; parent; parent = parent.parent) if (parent.node.kind === 'document' && !parent.node.appPage) return canEditNode(parent.node);
+  if (item.parent?.node.appPage) return true; // a document listed on one: its own editability, checked above
   return canEditNode(docOf(item.docId) || item.node);
 }
 // A reference and a divider are read-only rows, but they are still blocks of a writable document: they can be moved and removed.

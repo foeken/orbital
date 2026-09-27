@@ -97,7 +97,7 @@ function chatRows(messages, { authorName = () => undefined, aiName = 'Tana AI', 
     }
     const ai = m.fromUserType === 'ai', id = 'm' + i, children = [];
     // keep/person mark the app's own words and a name for demo mode (renderer/segments.js); the conversation is content
-    if (list(m.toolCalls).length) { const line = thinking(m, list(m.toolCalls)); children.push(row(id + '.t', line, { note: true, segments: [{ text: line, keep: true }] })); }
+    if (list(m.toolCalls).length) { const line = thinking(m, list(m.toolCalls)); children.push(row(id + '.t', line, { note: true, thought: true, segments: [{ text: line, keep: true }] })); }
     const status = Object.hasOwn(MESSAGE_STATUS, m.status) ? MESSAGE_STATUS[m.status] : undefined;
     if (status) {
       const error = typeof m.errorMessage === 'string' && m.errorMessage.trim() ? ': ' + m.errorMessage : '';
@@ -110,16 +110,20 @@ function chatRows(messages, { authorName = () => undefined, aiName = 'Tana AI', 
     for (const [j, uri] of list(m.attachmentUris).entries()) children.push(reference(id + '.a' + j, uri));
     for (const [j, p] of list(m.proposals).entries()) {
       if (!p || typeof p.proposedUri !== 'string') continue;
-      const state = p.approvedAt ? 'approved' : p.rejectedAt ? 'rejected' : 'awaiting approval';
+      const state = p.approvedAt ? 'approved' : p.rejectedAt ? 'rejected' : 'pending';
       const target = p.operation === 'update' && typeof p.baseUri === 'string' ? p.baseUri : p.proposedUri;
+      // a card in the answer (renderer/chat.js): main adds what it is called and whether Orbital may approve it
+      // (main/documents.js chatOutline); operation and metadata are what sdk/proposals.js refusal reads
       const label = (p.operation || 'change') + ' · ' + state;
-      children.push(row(id + '.p' + j, label, { segments: [{ text: label, keep: true }], hasChildren: true, children: [reference(id + '.p' + j + '.r', target)] }));
+      children.push(row(id + '.p' + j, label, { segments: [{ text: label, keep: true }],
+        proposal: { proposedUri: p.proposedUri, target, operation: p.operation || 'create', metadata: p.metadata || {}, state } }));
     }
     // Tana's questions (askUserQuestion) waiting on an answer: handed to the renderer as row.chat.questions, which draws
     // them as the question card in the composer's place (renderer/chat.js) and answers them through answerQuestions
     const questions = pendingQuestions(m);
     for (const [j, call] of list(m.toolCalls).entries()) {
-      if (call && typeof call.subagentChatUri === 'string') children.push(reference(id + '.s' + j, call.subagentChatUri, call.name));
+      // sub: drawn under the thinking line, folded as Tana folds it, not with the answer (renderer/chat.js)
+      if (call && typeof call.subagentChatUri === 'string') children.push({ ...reference(id + '.s' + j, call.subagentChatUri, call.name), sub: true });
     }
     const author = ai ? aiName : authorName(m.fromUserUri) || 'Someone';
     rows.push(row(id, author, {

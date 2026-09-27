@@ -9,6 +9,10 @@ const bridge = window.shell || { state: () => ({ doc: null }), onCommand() {}, l
 const start = bridge.state();
 let theme = start.theme === 'dark' ? 'dark' : 'light', covering = null, last = '', many = null;
 const renamable = new Set(); // the pages whose title can be typed in (renderer/render.js tellTitle): Rename on their tab
+const tabIcons = new Map(); // page id -> the glyph its page told (renderer/render.js tellTitle), our own markup
+// the header buttons drawn per page (drawNav below), and with one page the window header's slot for them; up here
+// because sync() runs at load and clears the slot when the page count crosses one
+const navDrawn = new Map(), headNav = document.getElementById('headNav'), HEAD = '\u0000head';
 // Signed out every page is the same login, so page '' shows alone and the layout waits here for the login ('auth').
 const single = () => createDocument(L.view('page', { id: 'page', params: { side: '' } }));
 const usable = (doc) => !!doc && typeof doc === 'object' && Object.values(doc.views || {}).some((v) => v && v.type === 'page');
@@ -90,12 +94,21 @@ function guard() {
     ws.view(id).guardClose(async () => { if (pages().length < 2) return false; await flush(frameOf(id)); return true; });
   }
 }
-ws.on('close', (view) => { guarded.delete(view.id); renamable.delete(view.id); });
+// The closed page's frame had the keys, and its going leaves them with the shell, where ⌘K and the rest do nothing
+// until a click. The page in front takes them once the frame is gone: a close waits for its page to flush (guardClose)
+// and ⌘W has no click after it, so the pointerup below comes too early or not at all.
+// A tab's glyph in Trellis's icon slot, set again whenever Trellis makes its surfaces anew (a tab moved to another pane)
+const drawTabIcons = () => { for (const s of ws.surfaces()) { const g = tabIcons.get(s.view.id) || ''; if (s.icon.dataset.glyph !== g) { s.icon.dataset.glyph = g; s.icon.innerHTML = g; } } };
+ws.on('surfaces', drawTabIcons);
+ws.on('close', (view) => {
+  guarded.delete(view.id); renamable.delete(view.id); tabIcons.delete(view.id);
+  requestAnimationFrame(() => { if (document.activeElement?.tagName !== 'IFRAME') windowOf(frameOf(ws.getSnapshot().focusedView))?.focus(); });
+});
 
 // Every committed change goes to main once; while signed out the layout aside is the one kept.
 function sync() {
   const tabs = pages().length > 1;
-  if (tabs !== many) { many = tabs; ws.update({ types: types(tabs), navigation: tabs ? 'free' : false }); document.body.classList.toggle('many', tabs); }
+  if (tabs !== many) { many = tabs; ws.update({ types: types(tabs), navigation: tabs ? 'free' : false }); document.body.classList.toggle('many', tabs); headNav.replaceChildren(); navDrawn.delete(HEAD); } // the pages send their buttons again on the layout below, to the tab bars or the header
   guard(); mark(); place(); frames().forEach((f) => tell(windowOf(f))); // place: a divider or a move shifts a covering page's pane
 }
 ws.on('change', (doc) => {
@@ -127,6 +140,12 @@ ws.element.addEventListener('load', (e) => {
   tell(frame.contentWindow);
   // Trellis selects a new window's first pane without focusing it, so the page in front takes the keys once it is in
   if (frame === frameOf(ws.getSnapshot().focusedView) && document.activeElement?.tagName !== 'IFRAME') frame.contentWindow.focus();
+  // Trellis makes a pane the focused one (its tab bold) from a focusin or a press inside it, and neither leaves an
+  // iframe: the page's own are passed on as a focusin on its frame, which Trellis takes without moving the keys, so the
+  // caret stays in the node that was clicked or tabbed into.
+  const focused = () => frame.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+  frame.contentWindow.addEventListener('focus', focused);
+  frame.contentWindow.document.addEventListener('pointerdown', focused, true);
   frame.contentWindow.addEventListener('wheel', (w) => {
     if (!w.ctrlKey || !many) return;
     w.preventDefault();
@@ -243,27 +262,35 @@ addEventListener('message', (e) => {
     if (!id) return;
     ws.setTitle(id, String(e.data.title || '').trim() || 'Orbital');
     if (e.data.renamable === true) renamable.add(id); else renamable.delete(id);
+    tabIcons.set(id, typeof e.data.icon === 'string' ? e.data.icon : ''); drawTabIcons();
   }
   else if (what === 'run') run(String(e.data.command), sourceOf(e.source));
   else if (what === 'reload') reloadAll(); // Cmd+K Reload: the window, every page in it
   else if (what === 'navbtns') drawNav(sourceOf(e.source), String(e.data.html || ''), e.data.on === true);
 });
 
-// ---- a page's header buttons in its tab bar ----
+// ---- a page's header buttons in its tab bar, or with one page in the window's header ----
 // Each page sends its header buttons' markup (renderer/app.js tellNav) and they are drawn in its view's accessory, the
 // slot Trellis shows beside the ⋯ while that page is the selected tab. Ids become data-for, so two pages' copies share
 // none, and a press is sent back as a click on the page's own button; mousedown keeps the caret where it is, as the
 // page's buttons do. Shown while the pointer is over the page (on) or its tab bar (shell.css).
-const navDrawn = new Map();
+// One page has no tab bar: its buttons go in the window's header instead, left of the app's own (shell.css .headnav).
 function drawNav(viewId, html, on) {
-  const slot = viewId && ws.element.querySelector('[data-trellis-part="accessory"][data-view="' + CSS.escape(viewId) + '"]');
+  const slot = !many ? viewId && headNav : viewId && ws.element.querySelector('[data-trellis-part="accessory"][data-view="' + CSS.escape(viewId) + '"]');
   if (!slot) return;
+  const key = many ? viewId : HEAD;
+  if (!many) slot.dataset.view = viewId;
   slot.toggleAttribute('data-pointer', on);
-  if (navDrawn.get(viewId) === html && slot.childElementCount) return; // a redraw would restart Refresh's turn
-  navDrawn.set(viewId, html);
+  if (navDrawn.get(key) === html && slot.childElementCount) return; // a redraw would restart Refresh's turn
+  navDrawn.set(key, html);
   slot.innerHTML = html;
   for (const el of slot.querySelectorAll('[id]')) { el.dataset.for = el.id; el.removeAttribute('id'); }
 }
+headNav.addEventListener('mousedown', (e) => { if (e.target.closest('button')) e.preventDefault(); });
+headNav.addEventListener('click', (e) => {
+  const button = e.target.closest('button[data-for]');
+  if (button) windowOf(frameOf(headNav.dataset.view))?.postMessage({ orbital: 'navclick', id: button.dataset.for }, '*');
+});
 ws.element.addEventListener('mousedown', (e) => { if (e.target.closest('[data-trellis-part="accessory"] button')) e.preventDefault(); });
 ws.element.addEventListener('click', (e) => {
   const button = e.target.closest('[data-trellis-part="accessory"] button[data-for]');

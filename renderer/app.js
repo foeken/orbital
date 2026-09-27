@@ -77,7 +77,7 @@ window.addEventListener('message', (e) => {
   else if (e.data?.orbital === 'palette') togglePalette('cmd'); // the window header's ⌘K and ? (shell.js), for the page in front
   else if (e.data?.orbital === 'help') openHelp();
   else if (e.data?.orbital === 'sensitive') toggleSensitiveVisibility();
-  else if (e.data?.orbital === 'layout') { windowPanes = { pages: e.data.pages }; document.documentElement.classList.toggle('tabbed', e.data.pages > 1); navSent = ''; tellNav(); }
+  else if (e.data?.orbital === 'layout') { windowPanes = { pages: e.data.pages }; document.documentElement.classList.toggle('tabbed', e.data.pages > 1); document.documentElement.classList.add('framed'); navSent = ''; tellNav(); retellTitle(true); } // framed: the shell draws the header buttons, in a tab bar or its header
   else if (e.data?.orbital === 'navclick') navRow.querySelector('#' + CSS.escape(String(e.data.id)))?.click(); // a press on its copy in the tab bar
   else if (e.data?.orbital === 'rename' && titleEl.dataset.key) { // Rename on the tab (shell.js): the heading back, its words selected (a key only while it can be typed in; isContentEditable reads false while it is hidden)
     document.documentElement.classList.add('renaming');

@@ -1,7 +1,7 @@
 'use strict';
 // Proposals (issue #19; main/proposals.js): what Tana's AI proposed from a chat and is waiting on someone to accept,
-// as a page of the proposed documents themselves, newest first. A row is the document as a view draws it, read-only
-// here (Space opens it, its chevron shows what it holds), with a grey line saying where it was proposed and two
+// as a page of the proposed documents themselves, newest first. A row is the document as a view draws it, editable as
+// the document is (Space opens it, its chevron shows what it holds), with a grey line saying where it was proposed and two
 // buttons at its end: approve and reject. Cmd+K carries the same two for the rows you are on, and Proposals sits among
 // the Views with how many are waiting. Orbital approves a proposed new document; a proposed change to an existing one
 // is Tana's to merge, so its row offers reject only and says so.
@@ -58,19 +58,26 @@ function answerProposal(node, approve) {
 }
 
 // The two buttons at the end of a proposal row. A proposal Orbital cannot approve keeps the button, disabled, with main's
-// reason on it, so the row still says what it is waiting for.
-function proposalButtonsEl(node) {
+// reason on it, so the row still says what it is waiting for. answer: what a press does (a chat's card answers in place).
+function proposalButtonsEl(node, answer = answerProposal) {
   const el = document.createElement('span');
   el.className = 'pbuttons';
-  for (const [approve, icon, label] of [[true, 'approve', 'Approve'], [false, 'reject', 'Reject']]) {
+  for (const [approve, kind, label, icon] of [[true, 'approve', 'Approve', 'approve'], [false, 'reject', 'Reject', 'trash']]) { // reject is a plain trash can, as in Tana
     const b = document.createElement('button');
-    b.type = 'button'; b.className = 'pbutton ' + icon; b.tabIndex = -1;
+    b.type = 'button'; b.className = 'pbutton ' + kind; b.tabIndex = -1;
     b.disabled = approve && !node.proposal.approvable;
     b.title = b.disabled ? node.proposal.reason || 'Approve it in Tana' : label;
     b.setAttribute('aria-label', label);
     b.onmousedown = (e) => e.preventDefault(); // the caret stays where it is, as every other row control does
-    b.onclick = (e) => { e.stopPropagation(); answerProposal(node, approve); };
+    b.onclick = (e) => { e.stopPropagation(); answer(node, approve); };
     el.append(addIcon(b, icon));
+  }
+  // an action's approve runs it, so it says where, as Tana's own button does: "Send to Slite" (or Run)
+  const p = node.proposal;
+  if (p.action || (p.metadata && p.metadata.type === 'action')) {
+    const go = el.querySelector('.pbutton.approve'), label = p.systems && p.systems.length ? 'Send to ' + p.systems.join(' & ') : 'Run';
+    go.replaceChildren(label); go.classList.add('send'); go.setAttribute('aria-label', label);
+    if (!go.disabled) go.title = label;
   }
   return el;
 }
@@ -89,6 +96,6 @@ function proposalRows() {
   const group = selected.length ? 'Selection' : 'Current node', approvable = nodes.filter((n) => n.proposal.approvable);
   return [
     { id: 'approveProposal', group, icon: 'approve', label: 'Approve proposal', hint: approvable.length ? '' : 'In Tana', disabled: !approvable.length, run: () => approvable.forEach((n) => answerProposal(n, true)) },
-    { id: 'rejectProposal', group, icon: 'reject', label: 'Reject proposal', run: () => nodes.forEach((n) => answerProposal(n, false)) },
+    { id: 'rejectProposal', group, icon: 'trash', label: 'Reject proposal', run: () => nodes.forEach((n) => answerProposal(n, false)) },
   ];
 }

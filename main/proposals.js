@@ -6,6 +6,8 @@
 const proposals = require('../sdk/proposals');
 const { DOC_URI, NOT_CONNECTED, S, iso } = require('./state');
 const { graphRow, toNode } = require('./rows');
+const { readNode } = require('../sdk/node');
+const { actionSystems, document } = require('./documents');
 
 const PAGE = 'orbital:proposals';
 // Answered here, and still listed as pending by the graph until its index catches up (seconds): kept off the page
@@ -51,21 +53,26 @@ async function rows(meetingId) {
     const yours = up.startsWith('tana:event:') ? mine.has(up) : !up.startsWith('tana:space:') && !(up.startsWith('tana:user-profile:') && up !== S.me.userUri);
     return yours ? 'mine' : 'others';
   };
+  // an action's approve says where it runs, "Send to Slite", from the systems its draft names (main/documents.js)
+  const systems = new Map();
+  for (const p of relevant) if (p.kind === 'action' && found.has(doc(p))) systems.set(p.proposedUri, await document(p.proposedUri).then((d) => actionSystems(readNode(d)), () => []));
   return relevant.map((p) => {
     const n = found.get(doc(p));
     const where = (p.chatTitle || (found.get(p.contextUri) || {}).title || '').trim() || 'a chat';
     const home = n && n.entityType && homes.get(n.entityType);
     // An intent that rules one out is only in the chat, and embedded media only in the document: approve itself refuses
     // those, with its reason. Everything else that would is known here.
-    const why = !n ? WHY.gone : p.operation !== 'create' ? WHY.merge : p.kind !== 'regular' ? WHY.kind : home && home !== n.ownerUri ? WHY.home : null;
-    const proposal = { chatUri: p.chatUri, proposedUri: p.proposedUri, operation: p.operation, approvable: !why, reason: why ? why[1] : null,
+    const why = !n ? WHY.gone : p.operation !== 'create' ? WHY.merge : !['regular', 'action'].includes(p.kind) ? WHY.kind : home && home !== n.ownerUri ? WHY.home : null; // an action runs on Tana's server when approved (sdk/proposals.js)
+    const proposal = { chatUri: p.chatUri, proposedUri: p.proposedUri, operation: p.operation, approvable: !why, reason: why ? why[1] : null, action: p.kind === 'action',
       group: groupOf(p),
       note: VERB[p.operation] + ' in ' + where + (why ? ' · ' + why[0] : ''), proposedAt: iso(p.proposedAt) };
+    if (systems.has(p.proposedUri)) proposal.systems = systems.get(p.proposedUri);
     // A proposal whose document is gone (deleted, or never synced) can still be rejected, which clears it from the chat.
     if (!n) return { id: doc(p), title: 'Missing document', text: 'Missing document', kind: 'document', icon: 'doc', editable: false, hasChildren: false, proposal };
-    // Read-only on the page, whoever may edit the document: Enter on an editable row drafts a sibling, and this page
-    // has nowhere to put one. Opening the row is where it is edited.
-    return { ...toNode(graphRow(n)), editable: false, proposal };
+    // As editable as the document is, as in Tana, where a proposal is edited before it is accepted: here and on its own
+    // page, which the row opens onto. Enter on a row on a page drafts no sibling (renderer/events.js), so nothing lands
+    // on the page itself.
+    return { ...toNode(graphRow(n)), proposal };
   });
 }
 
@@ -74,7 +81,8 @@ async function rows(meetingId) {
 async function answer(chatUri, proposedUri, approve) {
   if (!S.client || !S.me) throw new Error(NOT_CONNECTED);
   if (!/^tana:chat:/.test(chatUri) || !DOC_URI.test(chatUri) || !DOC_URI.test(proposedUri)) throw new Error('Not a proposal');
-  const args = { chatUri, proposedUri, byUri: S.me.userUri };
+  // execute: an action proposal runs on Tana's server before it counts as approved (sdk/proposals.js executeAction)
+  const args = { chatUri, proposedUri, byUri: S.me.userUri, execute: (a) => proposals.executeAction({ ...a, getAccessToken: (o) => S.session.getAccessToken(o) }) };
   const result = approve ? await proposals.approve(S.client.sync, args) : await proposals.reject(S.client.sync, args);
   answered.add(key({ chatUri, proposedUri }));
   return result.warnings || [];

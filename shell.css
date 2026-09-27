@@ -13,6 +13,15 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #fff; }
 [data-theme="dark"] .head button { color: #aaa; }
 [data-theme="dark"] .head button:hover { background: #3a3f42; }
 .head svg { display: block; width: 18px; height: 18px; }
+/* One page (no tab bar): its header buttons (shell.js drawNav) sit in the window's header, left of the app's own, a
+   bullet between the two; shown, as in a tab bar, while the pointer is over the page or the header. */
+.headnav { display: flex; align-items: center; }
+.headnav:empty, .headnav:empty + .headsep { display: none; }
+.headsep { margin: 0 8px; color: #b5b5b5; font-size: 12px; }
+.headsep::before { content: '•'; }
+.head:not(:hover) .headnav:not([data-pointer]) button, .head:not(:hover) .headnav:not([data-pointer]) + .headsep { opacity: 0; }
+.headnav button:disabled:hover { background: none; }
+[data-theme="dark"] .headsep { color: #5b6064; }
 body.signed-out .head button { display: none; } /* signed out, none of them does anything: the login is the whole window */
 body.signed-out .head { background: #fff; } /* and the header is the page's own white, one surface with it */
 [data-theme="dark"] body.signed-out .head { background: #1b1d1e; }
@@ -23,7 +32,11 @@ body.covered .trellis { overflow: visible; contain: none; }
 .trellis [data-trellis-part="divider"]::before { content: ''; position: absolute; background: var(--trellis-border); }
 .trellis [data-trellis-part="divider"][data-axis="x"]::before { top: 0; bottom: 0; left: calc(50% - 1.5px); width: 1px; }
 body.many .trellis [data-trellis-part="divider"][data-axis="x"]::before, body.many .trellis [data-trellis-part="divider"][data-axis="x"]::after { top: var(--trellis-tabbar-height); } /* the line starts under the tab bars: the header and the bars read as one band */
-.trellis [data-trellis-part="panel"]:not([data-floating]) { box-shadow: none; } /* Trellis's ring round a panel ran up the tab bars too; the divider draws the line between docked panes */
+.trellis [data-trellis-part="panel"]:not([data-floating], [data-lifted]) { box-shadow: none; } /* Trellis's ring round a panel ran up the tab bars too; the divider draws the line between docked panes. A pane being dragged (lifted) keeps it, in the line's grey */
+/* The line's own grey is lighter than the tint over where a dragged pane can land, so over that the edge vanished: a
+   dragged pane's ring is a see-through grey, as light as the line on white and still there over the tint. */
+.trellis [data-trellis-part="panel"][data-lifted] { box-shadow: 0 0 0 1px rgba(0, 0, 0, .12), var(--trellis-shadow-lifted); }
+[data-theme="dark"] .trellis [data-trellis-part="panel"][data-lifted] { box-shadow: 0 0 0 1px rgba(255, 255, 255, .1), var(--trellis-shadow-lifted); }
 .trellis [data-trellis-part="divider"][data-axis="y"]::before { left: 0; right: 0; top: calc(50% - 0.5px); height: 1px; }
 .trellis [data-trellis-part="divider"][data-axis="x"]::after { left: calc(50% - 1.5px); width: 1px; border-radius: 0; }
 .trellis [data-trellis-part="divider"][data-axis="y"]::after { top: calc(50% - 0.5px); height: 1px; border-radius: 0; }
@@ -40,21 +53,37 @@ body.covered .trellis [data-trellis-part="tabbar"] { -webkit-app-region: no-drag
 .trellis [data-trellis-part="tab"][data-selected]::before, .trellis [data-trellis-part="tab"][data-selected]::after { display: none; } /* rounded on top only: no flared corners where the tab meets the page */
 .trellis [data-trellis-part="tabs"] { padding-left: 0; gap: 6px; } /* the first tab starts at the pane's edge, against the divider line, now no flare covers Trellis's 4px inset; tabs 6px apart (Trellis's 2px) */
 .trellis [data-trellis-part="tabbar"][data-left] [data-trellis-part="tabs"] { padding-left: 8px; } /* no divider on the window's edge: the first tab stands off it (shell.js mark) */
+/* a tab's glyph (shell.js drawTabIcons): the tab's own colour, whatever hue the type has in the page, and a little smaller than the title */
+.trellis [data-trellis-part="tab-icon"] { color: var(--trellis-text-muted); } /* never bold: the focused tab's title darkens and thickens, its glyph stays as it is */
+.trellis [data-trellis-part="tab-icon"] svg { width: 14px; height: 14px; color: inherit; }
 .trellis [data-trellis-part="panel-menu"] { margin-right: 10px; } /* the pane's ⋯ as far in from the edge as the header's buttons (.head's 12px) */
 /* A page's header buttons in its tab bar (shell.js drawNav), drawn as the header's own and shown while the pointer is
    over the page or the bar; a disabled one stays, faint, and Refresh turns once when pressed (styles.css .navbtn). */
-.trellis [data-trellis-part="accessory"] { gap: 2px; }
-.trellis [data-trellis-part="accessory"] button { -webkit-app-region: no-drag; display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 4px; background: none; color: #777; opacity: .4; cursor: pointer; transition: opacity 240ms cubic-bezier(.2, .8, .2, 1); }
-.trellis [data-trellis-part="accessory"] button[hidden] { display: none; }
-.trellis [data-trellis-part="accessory"] button:hover:not(:disabled) { background: #ddd; opacity: 1; }
-.trellis [data-trellis-part="accessory"] button:disabled { opacity: .15; cursor: default; }
+.trellis [data-trellis-part="accessory"], .headnav { gap: 2px; }
+/* A narrow pane: the tab keeps its room and the page's buttons give theirs up, the ones that no longer fit dropping out
+   whole (onto a hidden second line) from the end; every one of them is also in ⌘K. */
+.trellis [data-trellis-part="tabs"] { min-width: min(160px, 60%); }
+.trellis [data-trellis-part="accessories"], .trellis [data-trellis-part="accessory"] { flex: 0 1 auto; min-width: 0; }
+.trellis [data-trellis-part="accessory"] { flex-wrap: wrap; align-content: flex-start; height: 24px; overflow: hidden; }
+/* Tiny (Trellis's compact and frame-only panes: the tabs are their glyphs, no titles or buttons). Frame-only lays the
+   bar out as a centred grid, which stacked the tab over the ⋯ and squeezed it to 16px: here it stays the one row it
+   is at any width, the glyph tabs full height from the left and the ⋯ at the end; the room rules above are for tabs
+   that carry a title. */
+.trellis [data-trellis-part="panel"]:is([data-compact], [data-frame-only]) [data-trellis-part="tabbar"] { display: flex; align-items: stretch; inset: 0 0 auto 0; height: var(--trellis-tabbar-height); }
+.trellis [data-trellis-part="panel"]:is([data-compact], [data-frame-only]) [data-trellis-part="tabs"] { flex: 1 1 auto; min-width: 0; height: auto; }
+.trellis [data-trellis-part="panel"]:is([data-compact], [data-frame-only]) [data-trellis-part="tab"] { min-width: 0; padding: 0 8px; justify-content: center; }
+.trellis [data-trellis-part="panel"]:is([data-compact], [data-frame-only]) [data-trellis-part="panel-menu"] { margin-right: 6px; }
+.trellis [data-trellis-part="accessory"] button, .headnav button { -webkit-app-region: no-drag; display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 4px; background: none; color: #777; opacity: .4; cursor: pointer; transition: opacity 240ms cubic-bezier(.2, .8, .2, 1); }
+.trellis [data-trellis-part="accessory"] button[hidden], .headnav button[hidden] { display: none; }
+.trellis [data-trellis-part="accessory"] button:hover:not(:disabled), .headnav button:hover:not(:disabled) { background: #ddd; opacity: 1; }
+.trellis [data-trellis-part="accessory"] button:disabled, .headnav button:disabled { opacity: .15; cursor: default; }
 .trellis [data-trellis-part="tabbar"]:not(:hover) [data-trellis-part="accessory"]:not([data-pointer]) button { opacity: 0; }
-.trellis [data-trellis-part="accessory"] [data-for="railToggle"] { margin-left: 6px; }
-.trellis [data-trellis-part="accessory"] svg { display: block; width: 18px; height: 18px; }
-[data-theme="dark"] .trellis [data-trellis-part="accessory"] button { color: #aaa; }
-[data-theme="dark"] .trellis [data-trellis-part="accessory"] button:hover:not(:disabled) { background: #3a3f42; }
+.trellis [data-trellis-part="accessory"] [data-for="railToggle"], .headnav [data-for="railToggle"] { margin-left: 6px; }
+.trellis [data-trellis-part="accessory"] svg, .headnav svg { display: block; width: 18px; height: 18px; }
+[data-theme="dark"] .trellis [data-trellis-part="accessory"] button, [data-theme="dark"] .headnav button { color: #aaa; }
+[data-theme="dark"] .trellis [data-trellis-part="accessory"] button:hover:not(:disabled), [data-theme="dark"] .headnav button:hover:not(:disabled) { background: #3a3f42; }
 @keyframes turn { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: no-preference) { .trellis [data-trellis-part="accessory"] svg.spin { animation: turn 840ms cubic-bezier(.3, 0, .2, 1); transform-origin: 50% 50%; } }
+@media (prefers-reduced-motion: no-preference) { :is(.trellis [data-trellis-part="accessory"], .headnav) svg.spin { animation: turn 840ms cubic-bezier(.3, 0, .2, 1); transform-origin: 50% 50%; } }
 body.pressing .trellis [data-trellis-part="content"] { pointer-events: none; } /* a tab pressed: the pages let the pointer pass (shell.js) */
 /* A tab's or pane's menu open: a press beside it lands in the shell, where Trellis closes the menu, instead of in a page
    (an iframe the shell never hears), which left the menu up until an option was picked. */
