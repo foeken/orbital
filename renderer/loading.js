@@ -24,15 +24,19 @@
   function layout(w, h, from) {
     const c = canvas.getBoundingClientRect();
     const at = (el, dx, dy) => { const r = el && el.getBoundingClientRect(); return r && r.width + r.height ? [Math.round(r.left - c.left + dx), Math.round(r.top - c.top + dy)] : null; };
-    const [cx, cy] = at(document.getElementById('crumbs'), 0, 4) || [32, 52], [tx, ty] = at(document.getElementById('title'), 0, 9) || [32, 84];
+    // a crumb line or a title that is not on the page (a list under a tab bar, a chat) gets no bar: drawn at a guessed
+    // spot instead, it lay across the first rows
+    const crumbAt = at(document.getElementById('crumbs'), 0, 4), titleAt = at(document.getElementById('title'), 0, 9);
+    const [cx, cy] = crumbAt || [32, 52], [tx, ty] = titleAt || [32, 84];
     const tail = box.classList.contains('tail'), last = tail && document.getElementById('outline').lastElementChild;
     let [sx, sy] = at(document.querySelector('.scroll'), 16, 4) || [16, 140];
     if (last) sy = Math.round(last.getBoundingClientRect().bottom - c.top + 16);
-    const k = [w, h, cx, cy, tx, ty, sx, sy, tail].join();
+    const k = [w, h, cx, cy, tx, ty, !!crumbAt, !!titleAt, sx, sy, tail].join();
     if (k === key) return page;
     const items = [], bar = (x, y, bw, bh, a, start, dur) => { items.push({ x, y, w: bw, h: bh, a, start, dur }); return start + dur; };
     let end = 0;
-    if (!tail) { bar(cx, cy, 48, 8, 0.1, 0, 0.5); bar(cx + 58, cy, 72, 8, 0.1, 0.12, 0.5); end = bar(tx, ty, 176, 24, 0.14, 0.1, 0.8); }
+    if (!tail && crumbAt) { bar(cx, cy, 48, 8, 0.1, 0, 0.5); bar(cx + 58, cy, 72, 8, 0.1, 0.12, 0.5); }
+    if (!tail && titleAt) end = bar(tx, ty, 176, 24, 0.14, 0.1, 0.8);
     const avail = Math.max(120, Math.min(w - sx - 47 - 40, 600));
     let y = sy, s = tail ? from : 0.6;
     for (const r of ROWS) {

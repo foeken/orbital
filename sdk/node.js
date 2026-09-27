@@ -115,7 +115,9 @@ function editable(n, userUri) {
   // participants[user] = { type: 'user', role: 'admin' }, so it falls through to the role check below and
   // answers true — the ACL still decides, exactly as it does for text. Unlike 'event' it needs no early
   // return: a search's title is ordinary document data, not a calendar-protected field.
-  if (!['text', 'space', 'event', 'search'].includes(kind)) return false;
+  // 'action' too: an action's body is an ordinary outline (what it will do, in words), and Tana edits it in place,
+  // a proposed one included, before it is approved; the ACL decides as it does for text.
+  if (!['text', 'space', 'event', 'search', 'action'].includes(kind)) return false;
   const role = n.participants && n.participants[userUri] && n.participants[userUri].role;
   if (kind === 'event') return false; // protected title needs organizer + external-calendar write capability, not exposed by our graph contract
   if (role === 'admin' || role === 'editor') return true;
