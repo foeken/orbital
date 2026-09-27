@@ -5334,6 +5334,14 @@ async function main() {
     assert.equal((await backend.handlers.get('doc:info')(null, patchedUri, true)).title, 'patched target');
     gone.length = 0; await backend.outlineWithReferences(many); await new Promise((r) => setImmediate(r));
     assert.ok(gone.includes(patchedUri), 'a reference target whose change was read back is still let go when the list pushes it out');
+    // ...and read back after it was pushed out (its change was already on its way), it is not kept: let go once read
+    gone.length = 0; assert.equal((await backend.handlers.get('doc:info')(null, patchedUri, true)).title, 'patched target');
+    assert.ok(gone.includes(patchedUri), 'a change read back for a target already let go does not subscribe it again for good');
+    // A document live for another holder dropRef cannot see (the settings, the inbox, a hub) keeps its subscription
+    sync.getDocument = (id) => (id === patchedUri ? patchedDoc : undefined);
+    gone.length = 0; await backend.handlers.get('doc:info')(null, patchedUri, true);
+    assert.deepEqual(gone, [], 'a change read back of a document already live is never let go by the read');
+    delete sync.getDocument;
     sync.unsubscribe = async () => {};
     sync.subscribe = plain;
     sync.unsubscribe = async () => {};

@@ -749,16 +749,21 @@ async function document(id, opts = {}) {
   // Held for the length of the wait (main/state.js reading): the refresh sweep must not unsubscribe a bootstrap
   // somebody is awaiting, which rejected the read as 'unsubscribed <id>' whenever a view change raced a doc:info.
   reading.set(id, (reading.get(id) || 0) + 1);
+  // a change read back of a document nobody keeps live (a reference already pushed out) is let go again once read
+  const passing = opts.patch && !(S.client.sync.getDocument && S.client.sync.getDocument(id));
   try {
     const doc = await subscribe(id); // getDocument can expose an empty handle before bootstrap completes
     if (!doc) throw new Error(S.status.error || 'could not subscribe to ' + id);
-    // A live reference's own change read back (renderer/app.js patchDoc) is its list's, not a read: counted here, the
-    // on-demand sweep let it go past LIVE_ROWS and the pages citing it read it back in again (#438). An open still counts.
-    if (!(opts.patch && liveRefs.has(id))) readOnDemand(id);
+    // A change read back (renderer/app.js patchDoc) holds nothing: whatever made it live — a view, a live reference, an
+    // open page, a watch, the settings or inbox — still does. Counted as a read, a reference's read back kept it in the
+    // on-demand list, whose sweep let it go past LIVE_ROWS and had the pages citing it read it back in again; and one
+    // already pushed out of the list was subscribed again for good (#438).
+    if (!opts.patch) readOnDemand(id);
     return doc;
   } finally {
     const left = (reading.get(id) || 1) - 1;
     if (left > 0) reading.set(id, left); else reading.delete(id);
+    if (passing) dropRef(id); // only what this read subscribed: a live document's other holders are not all dropRef's to see
   }
 }
 
