@@ -73,7 +73,11 @@ function pages() {
 function pageOf(e) {
   const frame = e && e.senderFrame;
   if (!frame) return null;
-  for (const w of S.windows || []) for (const p of w.panes || []) if (p.frame === frame) return p;
+  // the same wrapper, or failing that the same process and frame token (main.js addPage's id): Electron keeps one
+  // WebFrameMain per frame today, and the token does not depend on it
+  let id = null;
+  try { id = frame.processId + ':' + frame.frameToken; } catch { /* a frame already gone: only the wrapper can match */ }
+  for (const w of S.windows || []) for (const p of w.panes || []) if (p.frame === frame || p.id === id) return p;
   return null;
 }
 const pageKey = (e) => (pageOf(e) || { id: 'main' }).id; // what a per-page watch is keyed by; 'main' for the checks and overlays

@@ -24,12 +24,13 @@ const timelinePage = require('./main/timeline');
 const icons = require('./main/icons');
 const settings = require('./main/settings');
 const meetings = require('./main/meetings');
+const presence = require('./main/presence');
 
 // A main/ module that answers the renderer keeps its channels beside the code they call, as a table it exports:
 // ipc = { 'channel': (event, ...args) => … }. preload.js names each channel for the page. What main.js registers
 // itself is Electron's: windows, overlays, shell (the Codex handoff opens Codex through it), app paths, and settings
 // sent to the other pages; plus outline:children, which routes between several modules.
-for (const m of [require('./main/documents'), require('./main/views'), require('./main/pins'), inbox, proposalsPage, timelinePage, require('./main/presence'), meetings, require('./main/images'), icons, require('./main/related'), require('./main/rows'), settings]) {
+for (const m of [require('./main/documents'), require('./main/views'), require('./main/pins'), inbox, proposalsPage, timelinePage, presence, meetings, require('./main/images'), icons, require('./main/related'), require('./main/rows'), settings]) {
   for (const [channel, handle] of Object.entries(m.ipc)) ipcMain.handle(channel, handle);
 }
 
@@ -81,12 +82,18 @@ function addPage(e) {
   if (!win || !frame.parent) return null;
   let side = '';
   try { side = new URL(frame.url).searchParams.get('side') === '2' ? '2' : ''; } catch { /* no url: the left page */ }
+  // a page still loading when the halves swapped has a url that names the side its neighbour has taken meanwhile
+  if (win.panes.some((p) => p.side === side)) side = side ? '' : '2';
   const page = { id: frame.processId + ':' + frame.frameToken, frame, win, side,
     isDestroyed: () => frame.isDestroyed() || frame.detached,
     send: (channel, ...args) => { if (!page.isDestroyed()) frame.send(channel, ...args); },
     // the window's keys to the shell, and the shell's to this page's panel and iframe
     focus: () => { const wc = win.shell.webContents; if (!wc.isDestroyed()) wc.focus(); tellShell(win, 'focus', page.side); } };
   win.panes.push(page); sortPanes(win);
+  // ⌥⌘N gives the new half the keys: it is the page ⌘W and a notification click aim at from now, even before its
+  // document has taken the focus (the shell focuses its iframe once it has loaded). The next page to register, whatever
+  // side a swap meanwhile left it.
+  if (win.focusNext) { win.focusNext = false; S.win = win; S.pane = page; }
   return page;
 }
 // A page gone (its panel closed, a reload, its window closed): what main kept for it goes with it.
@@ -94,6 +101,8 @@ function dropPage(page) {
   const win = page.win;
   win.panes = win.panes.filter((p) => p !== page);
   S.windowViews.delete(page.id); unwatchRelated(page.id); dropSearchHeads(page.id);
+  // its viewing heartbeat too: the page's own null may come after this (a window closing), keyed 'main' by then
+  presence.view(null, page.id);
   if (S.pane === page) S.pane = win.panes[0] || null;
 }
 // The shell fills the window; the Help tour or Create task, when open, covers it (openOverlay).
@@ -104,6 +113,7 @@ function fit(win) {
 // The right half opens (⌥⌘N, taking the keys; the Work View). The shell's layout report that follows tells the sides.
 function splitOn(win, focus) {
   win.split = win.shown = true; win.saveSoon();
+  if (focus) win.focusNext = true;
   tellShell(win, 'split', focus ? { on: true, focus: '2' } : { on: true });
 }
 // One half closes (⌘W, the X on the right half, ⌥⌘N from the other): the shell flushes its page and closes its panel,

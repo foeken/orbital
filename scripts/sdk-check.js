@@ -1084,7 +1084,7 @@ async function main() {
     assert.deepEqual(ask('window:getSide', rightPage), { side: '2', split: true }, 'a restored right half that loads first knows it is one');
     assert.deepEqual(ask('window:getSide', leftPage), { side: '', split: true });
     assert.deepEqual(shown.panes.map((p) => p.frame.frameToken), ['left', 'right'], 'kept left to right');
-    assert.deepEqual(ask('window:getSide', { ...leftPage, parent: null }), { side: '', split: false }, 'a main frame (the shell, an overlay) is no page');
+    assert.deepEqual(ask('window:getSide', { ...leftPage, frameToken: 'shell', parent: null }), { side: '', split: false }, 'a main frame (the shell, an overlay) is no page');
     assert.equal(shown.panes.length, 2);
     ask('window:swapPanes', leftPage);
     assert.deepEqual(toShell.splice(0), [['swap', null]], 'a swap is the shell\u2019s to do');
@@ -1098,6 +1098,12 @@ async function main() {
     assert.deepEqual([shown.panes.map((p) => p.frame.frameToken), shown.split], [['right'], false], 'the closed page is forgotten, and the window saves one page');
     ask('window:split', rightPage);
     assert.deepEqual(toShell.splice(0), [['split', { on: true, focus: '2' }]], '\u2325\u2318N: a page beside it, taking the keys');
+    // The new half's url says '2', but it registers only once loaded; swapped before that, its neighbour holds '2' now.
+    shown.panes[0].side = '2';
+    const late = frame('late', '2');
+    assert.equal(ask('window:getSide', late).side, '', 'a page loading through a swap takes the side that is free');
+    assert.equal(backend.S.pane && backend.S.pane.frame, late, 'and, opened by \u2325\u2318N, it is the page \u2318W and a notification click aim at');
+    shown.panes = shown.panes.filter((p) => p.frame !== late); shown.panes[0].side = '';
     // Signed out, every page is the same login button: the shell shows one, and the saved split waits for the login.
     const auth = { ...backend.S.status };
     Object.assign(backend.S.status, { authChecking: false, authenticated: false });

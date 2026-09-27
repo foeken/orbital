@@ -75,9 +75,12 @@ async function close(side) {
 bridge.onCommand(async (cmd, arg) => {
   if (cmd === 'split') {
     const on = arg?.on === true, list = ids();
-    if (on && list.length < 2) show([...list, newPage('2')]);
+    let opened = null;
+    if (on && list.length < 2) { opened = newPage('2'); show([...list, opened]); }
     else if (!on) await close('2');
-    if (arg?.focus != null) focusSide(arg.focus);
+    // a new page takes the focus once its document exists: focused while still loading, its window never hears it
+    const frame = opened && frameOf(opened);
+    if (arg?.focus != null) { if (frame) frame.addEventListener('load', () => focusSide(sides.get(opened)), { once: true }); else focusSide(arg.focus); }
   } else if (cmd === 'close') await close(arg);
   else if (cmd === 'swap') { if (ids().length > 1) show(ids().reverse()); } // the line stays where it is: splitAt is the left share
   else if (cmd === 'focus') focusSide(arg);
