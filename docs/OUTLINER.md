@@ -430,8 +430,8 @@ Every command row has a stable `id`, and a key is a row with a combo. The built-
 | Complete / Reopen | ⌘↩ |
 | Today | ⌃⇧D |
 | Reload | ⌘R |
-| New window | ⌘N |
-| New pane (to the right) | ⌥⌘N |
+| New window | ⌥⌘N |
+| New pane (to the right) | ⌘N |
 | Next / Previous pane | F6 / ⇧F6 |
 | Next / Previous tab | ⌥⌘] / ⌥⌘[ |
 | Maximize or restore pane | ⇧⌘↩ |
@@ -865,7 +865,7 @@ nothing about them as documents. Each is a place the app remembers, so ⌘R on o
   the Timeline what shows up there, Notifications and Proposals that there are none, a saved search or a type's page
   "Nothing matches.", with the Create task key after it when the search lists tasks, so an empty My Tasks is where the
   first task starts. Only a document says "No content".
-- **Windows** (issue #137). File › New Window, ⌘N or Cmd+K New window opens another outliner window 24px down and right
+- **Windows** (issue #137). File › New Window, ⌥⌘N or Cmd+K New window opens another outliner window 24px down and right
   of the front one. Each window has its own view and page; a new one starts where you last were. What main pushes
   (`send`) reaches every page of every window; each window's view is refreshed and kept live while any window shows it
   (`openViews`), and each page keeps its own sidebar watch (`watchRelated(id, key)`). A command for one page goes to the
@@ -875,7 +875,7 @@ nothing about them as documents. Each is a place the app remembers, so ⌘R on o
   workspace (`@danfessler/trellis`, shell.js) of any number of pages, each an iframe of `index.html?side=<id>`: '' the first,
   then '2', '3', ..., an id that never changes while the page lives. Main keys a page by its frame, so a page is to
   main what another window is: each has its own view, place, history, filter and sidebar, stored under its id
-  (`view:3`, `place:3`; renderer/state.js `SIDE`), so a restart or Reload keeps them. **New pane** (⌥⌘N) opens a
+  (`view:3`, `place:3`; renderer/state.js `SIDE`), so a restart or Reload keeps them. **New pane** (⌘N) opens a
   page to the right of yours, **New tab** one in your panel and **Float pane** a floating one: main gives the id
   (`api.splitWindow(where)` answers it) and tells the shell (`shell:command` 'open'), the page that asked stores its
   view and place under that id, and the new page opens there and takes the keyboard. Panes are docked, tabbed or

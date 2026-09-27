@@ -1087,7 +1087,7 @@ async function main() {
     assert.equal(shown.panes.length, 2);
     assert.equal(ask('window:getSide', frame('twin', '2')).side, '3', 'an id already taken gets the smallest free one');
     shown.panes.pop();
-    // ⌥⌘N: a new page to the right of the one that asked, with an id main gives (for its place) and the keys
+    // ⌘N: a new page to the right of the one that asked, with an id main gives (for its place) and the keys
     assert.equal(ask('window:split', rightPage), '3');
     assert.deepEqual(toShell.splice(0), [['open', { id: '3', where: 'right', from: '2', focus: true }]]);
     assert.equal(ask('window:split', leftPage, 'tab'), '4', 'a New tab is the next free id, even before the first has loaded');
