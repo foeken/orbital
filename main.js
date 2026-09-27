@@ -529,19 +529,20 @@ ipcMain.handle('mcp:setHidden', async (e, on) => { const stored = await setMcpHi
 ipcMain.handle('sync:status', () => S.status);
 ipcMain.handle('sync:login', async () => {
   try {
-    await S.session.login();
+    if (!(await S.session.login())) return; // the login window closed: nothing happened, and nothing to say
     await start();
     autoTypeIcons();
   } catch (e) {
     report(e);
   } finally { relayout(); }
 });
-// ⌘K Log out of Tana: the stream closed and the session's cookies cleared, so every window shows the login.
+// ⌘K Log out of Tana: the stream closed and the session's cookies cleared, so every window shows the login. Signed out
+// first: the pages hear it before the reads the closing stream fails, and say nothing of those (renderer/nodes.js showError).
 ipcMain.handle('sync:logout', async () => {
-  stop();
-  await S.session.logout();
   setStatus({ authenticated: false, connected: false, syncing: false, error: null });
   relayout();
+  stop();
+  await S.session.logout();
 });
 
 if (process.env.TANA_MAIN_TEST) {

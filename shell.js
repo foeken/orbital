@@ -13,6 +13,7 @@ const renamable = new Set(); // the pages whose title can be typed in (renderer/
 const single = () => createDocument(L.view('page', { id: 'page', params: { side: '' } }));
 const usable = (doc) => !!doc && typeof doc === 'object' && Object.values(doc.views || {}).some((v) => v && v.type === 'page');
 let aside = start.signedOut && usable(start.doc) ? start.doc : null;
+document.body.classList.toggle('signed-out', !!start.signedOut); // the header's buttons wait for the login (shell.css)
 
 // The page's own background around it, one 1px line between panes in the colour the split line had, and a bright blue
 // as the accent: a hovered divider, a tab's drop slot
@@ -206,6 +207,7 @@ bridge.onCommand((cmd, arg) => {
   else if (cmd === 'run') run(arg);
   else if (cmd === 'reload') reloadAll(); // a saved view opened (main.js window:setLayout)
   else if (cmd === 'auth') {
+    document.body.classList.toggle('signed-out', !!arg?.signedOut);
     if (arg?.signedOut && !aside) { aside = ws.getDocument(); ws.setDocument(single(), { animate: false }); }
     else if (!arg?.signedOut && aside) { const doc = aside; aside = null; ws.setDocument(doc, { animate: false }); }
   } else if (cmd === 'theme') {

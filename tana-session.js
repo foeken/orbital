@@ -44,30 +44,31 @@ function createTanaSession({ partition = 'persist:tana', origin = 'https://home.
     return Boolean(await fetchSession(false));
   }
 
+  // true once signed in; false when the window is closed first, which is a cancel rather than a failure
   function login() {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const win = new BrowserWindow({
         width: 520, height: 720, title: 'Log in to Tana',
         webPreferences: { partition, sandbox: true, contextIsolation: true, nodeIntegration: false },
       });
       // Google & co refuse embedded logins that advertise Electron.
       win.webContents.setUserAgent(win.webContents.getUserAgent().replace(/ (Electron|tana-tasks)\/\S+/g, ''));
-      let done = false, checking = false;
-      const finish = (err) => {
+      let done = false, checking = false, signedIn = false;
+      const finish = () => {
         if (done) return;
         done = true;
         clearInterval(timer);
         if (!win.isDestroyed()) win.close();
-        err ? reject(err) : resolve();
+        resolve(signedIn);
       };
       const check = async () => {
         if (done || checking) return;
         checking = true;
-        try { if (await isAuthenticated()) finish(); } catch { /* not yet */ } finally { checking = false; }
+        try { if (await isAuthenticated()) { signedIn = true; finish(); } } catch { /* not yet */ } finally { checking = false; }
       };
       const timer = setInterval(check, 2000);
       win.webContents.on('did-navigate', check);
-      win.on('closed', () => finish(new Error('login window closed before signing in')));
+      win.on('closed', finish);
       win.loadURL(origin);
       check();
     });
@@ -96,7 +97,8 @@ function createTanaSession({ partition = 'persist:tana', origin = 'https://home.
   }
 
   async function logout() {
-    last = null;
+    await Promise.allSettled(inFlight.values()); // a session lookup still out would set its cookies again after the clear
+    last = null; // after it, or its answer would put the session back
     expiresAt = 0;
     await ses.clearStorageData();
   }
