@@ -189,6 +189,10 @@ Meetings link chats with `EDGE_TYPE_HAS_PIN` and `EDGE_TYPE_BELONGS_TO`, as `doc
 
 ## 8. What the app shows when a chat is opened
 
+The rows below are what main hands the renderer; renderer/chat.js draws them as a conversation of bubbles
+(docs/OUTLINER.md, Chats), reading `row.chat` on each message row: `mine` (its `fromUserUri` is you), `author`,
+`sentAt` and `streaming` (its id is `data.streamingMessageId`). Thinking and status rows carry `note`.
+
 `outline:children` routes a `tana:chat:` id to `chatOutline` (main/documents.js), which reads `data.messages` only when
 the chat is opened and hands it to `chatRows` (sdk/chat.js, pure, checked offline by scripts/sdk-check.js). The rows go
 through the same `resolveReferences` as a document's outline, so attachment and proposal rows get their target's title,
@@ -221,3 +225,54 @@ node scripts/platform-cli.js edges tana:chat:01example10000000000000000
 `rawdoc` prints every root container (`--containers 1` names each container by kind and keeps text marks, which
 `toJSON` drops). `chatlist` exists because `search` has no chat kind (`sdk/query.js searchParams` lists
 text, event, user-profile, space and search).
+
+
+## 10. Sending a message and getting Tana's answer
+
+Read from Tana's web client of 2026-09-27 (ChatPanel, `LoroChatMutations`, the trigger orchestration); sdk/chat.js
+`addMessage`, `autoResponds` and `triggerReply` do the same, and main/documents.js `sendChat` runs them in order.
+
+1. **Write the message** (`addHumanMessageWithTimeContext`). The first message you send in a chat on a given local
+   day is preceded by a hidden status message, "Robin Vega — it is now Sunday, September 27, 2026 at 11:52 AM
+   (Europe/Amsterdam)." (`hiddenFromChat`, `isStatusUpdate`, no `fromUserUri`), and the root map
+   `participantTimeContext[you]` becomes `{ timezone, lastLocalDate: 'YYYY-MM-DD' }`; later messages that day go
+   without. The message itself is `{ type: 'message', id, sentAt, fromUserUri, fromUserType: 'human', content: { text },
+   attachmentUris: [], proposals: [], toolCalls: [], usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0,
+   model: '', cost: 0 } }`, with `id` 8 lowercase alphanumerics. It is an ordinary live update.
+2. **Decide whether Tana answers** (its `VKt`, per chat): not when `data.aiAutoResponds` is `false`; when it is
+   `true`, while fewer than two people are in the chat; unset, only when exactly one is (people: the keys of
+   `data.participants`, else `data.participantUris`). A message that mentions Tana triggers it regardless; Orbital
+   counts what Tana's own rule (its `v$`) counts: a link to Tana's agent, `[Tana](tana:agent:…)`, which the composer's
+   "@" inserts when you pick Tana, or "@Tana" / "@polaris" in the text.
+3. **Ask for the answer**: `POST https://home.tana.inc/api/ai/chat/trigger` (`POLARIS_SERVICE_API_AI_URL` +
+   `/chat/trigger`) with the session bearer token and JSON `{ chatUri, ownerUri?, agentId, triggerMessageId,
+   timezone }`, answered `{ success: true, messageId }` (the AI message being written) or `{ success: false, error }`
+   (`ai_cap_exceeded` when the account's AI allowance is spent). A 404 or 408 means the server has not seen the chat
+   yet; the web client retries three times (2, 4, 8 s). `agentId` for a plain chat is Tana's own assistant,
+   `tana:agent:` + `createDeterministicId('system:tana')`: the first 16 bytes of the name's SHA‑256 as a ULID
+   (`tana:agent:2zc7qjfkkengdhfdd846b4qvk2`); a chat that names its own agent in `data.agentId` sends that one instead, as
+   Tana's chat panel does. Orbital keeps a failed trigger apart from the send: the message is already in the chat, so
+   `chat:send` answers `{ replyError }` beside it rather than failing, and the composer does not offer it twice. The web client may also send `customContext`, `autoApproveCreates`,
+   `model` and coding-tool options; Orbital sends none.
+4. **The answer arrives in the document**: the server sets `data.streamingMessageId` (and `streamingLastActivity`),
+   appends the AI message and grows its text, then clears the streaming id. Every step reaches Orbital as a live
+   update to the open chat.
+
+**To Tana or to the chat.** Orbital's composer sends each message in one of two modes, switched with Tab in an empty
+message: To Tana asks Tana to answer whatever the chat's rule says, and To the chat keeps it for the people in the
+chat. Such a message carries Tana's own `skipAutoResponse: true` (from its message schema), so no client asks for an
+answer to it, and Tana is still asked when the words mention it. The composer starts at the chat's own rule (step 2),
+which `chat:answers` reads; `chat:send` takes the mode as `{ ai }`.
+
+**Mentions and skills.** A mention in a message is the markdown link `[label](tana:…)` in its text (§3); Tana's AI reads
+the node itself (live: a `[Diagram](tana:skill:…)` mention was answered after a `readSkill` of it). Running a skill is
+what Tana's `runSkill` does from a document's Send to menu: a human message whose `attachmentUris` carry the skill (and
+there, the document), its text the instruction. Orbital's "/" sends the skill as the message's attachment the same way,
+with "Run [skill](uri)" as the text when nothing else is written; `chatsend --attach <uri>` does it from the CLI.
+
+A new chat from Orbital is the kind Tana's own "new chat" makes: a `tana:chat:` with you as its only participant,
+no owner, no title and `titleAutoGenerated: true`; the app calls it "New chat" until then (main/rows.js `kindRow`).
+Tana's server names an untitled chat after its first answer and leaves a titled one alone: live on 2026-09-27 a chat
+created with the title "New chat" kept it, and one created without a title was "Orbital Test Two Math" by the time
+the answer had finished. Checked with `node scripts/platform-cli.js chatsend new <text…>` (WRITES), which runs
+`chat:new` and `chat:send` and prints the conversation once Tana has answered.

@@ -1,6 +1,6 @@
 /* styles.css keeps each component together, in this order (search for "==== <name>"): Base; Window chrome; Fields;
-   Table view; Filter row; Header buttons; Pills and their menus; Page scroll and sidebar; Rows; Timeline; Row
-   content; Agent badge and proposal buttons; Children, empty notes, group headings; Loading; Selection toolbar; Login;
+   Table view; Filter row; Header buttons; Pills and their menus; Page scroll and sidebar; Rows; Timeline; Chat;
+   Row content; Agent badge and proposal buttons; Children, empty notes, group headings; Loading; Selection toolbar; Login;
    Palette and toast; Key recorder; Dark theme; Presence; Motion; Help tour. docs/UI-PATTERNS.md lists the tokens and
    the component classes. */
 /* ==== Base: reset, tokens (motion, hue, theme), the page body ==== */
@@ -539,6 +539,68 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 [data-theme="dark"] .node.tl > .children .bullet.icon svg, [data-theme="dark"] .node.tl > .children .bullet.icon:hover svg { color: #8a8f95; }
 [data-theme="dark"] .node.tl-done > .line > .bullet.icon svg { color: #fff; background: none; }
 [data-theme="dark"] .node:is(.tl-new, .tl-faint) > .line > .bullet.icon svg { color: #5a5d60; }
+/* ==== Chat (renderer/chat.js): a conversation in the Codex app's style, and the composer under it ==== */
+/* Yours in a light blue bubble on the right; Tana's as plain text across the page; the composer a rounded card whose
+   round blue button sends. --chat-send is that blue, --chat-mine and --chat-mine-text your bubble (dark twins below). */
+:root { --chat-mine: #e6eefb; --chat-mine-text: #1b2b41; --chat-send: #3b82f6; }
+/* a short conversation sits on the composer at the bottom of the window */
+/* the conversation fades out under the header and into the composer, as in Codex: a mask, so it works on any theme */
+.scroll.chatting { display: flex; flex-direction: column; padding-top: 28px; padding-bottom: 24px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 36px, #000 calc(100% - 28px), transparent 100%); mask-image: linear-gradient(to bottom, transparent 0, #000 36px, #000 calc(100% - 28px), transparent 100%); }
+.scroll.chatting > .outline { flex: 1 0 auto; display: flex; flex-direction: column; justify-content: flex-end; }
+.chat-msg { display: flex; flex-direction: column; margin: 0 0 24px; font-size: 16px; line-height: 1.6; }
+.chat-msg.mine { align-items: flex-end; }
+.chat-msg.theirs { align-items: stretch; }
+.chat-msg .bubble { max-width: 100%; overflow-wrap: anywhere; counter-reset: chat-num; }
+.chat-msg.mine .bubble { max-width: min(80%, 620px); padding: 12px 22px; border-radius: 26px; background: var(--chat-mine); color: var(--chat-mine-text); }
+.bubble > * + * { margin-top: 8px; }
+.chat-name { font-size: 13px; font-weight: 600; color: var(--muted); margin: 0 0 4px; }
+.chat-note { font-size: 14px; color: var(--muted); margin: 0 0 6px; }
+.chat-paragraph { white-space: pre-wrap; }
+.chat-heading1 { font-size: 1.25em; font-weight: 700; }
+.chat-heading2 { font-size: 1.1em; font-weight: 600; }
+.chat-heading3 { font-weight: 600; }
+.chat-bullet, .chat-numbered { padding-left: 20px; text-indent: -20px; }
+.chat-bullet::before { content: '•'; display: inline-block; width: 20px; text-indent: 0; }
+.chat-numbered { counter-increment: chat-num; }
+.chat-numbered::before { content: counter(chat-num) '.'; display: inline-block; width: 20px; text-indent: 0; }
+.chat-quote { border-left: 3px solid #d6d6d6; padding-left: 10px; color: var(--muted); }
+.chat-code { margin: 8px 0 0; padding: 8px 10px; border-radius: 8px; background: rgba(0, 0, 0, .05); font: 13px/1.5 ui-monospace, Menlo, monospace; white-space: pre-wrap; }
+.chat-divider { border-top: 1px solid #e3e3e3; }
+.bubble .mention, .bubble a.link, .bubble a.url { color: #508fbb; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.mine .bubble :is(.mention, a.link, a.url) { color: inherit; }
+.bubble .mention svg { width: 14px; height: 14px; vertical-align: -2px; margin-right: 3px; }
+.theirs .bubble .mention.hue { color: oklch(0.55 0.12 var(--hue)); }
+.bubble .mention.gone { color: inherit; text-decoration: line-through; cursor: default; }
+.chat-dots { display: inline-flex; gap: 4px; padding: 8px 0; color: var(--muted); }
+.chat-dots i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: .35; }
+@media (prefers-reduced-motion: no-preference) { .chat-dots i { animation: chat-dot var(--dur-loop) infinite; } .chat-dots i:nth-child(2) { animation-delay: .2s; } .chat-dots i:nth-child(3) { animation-delay: .4s; } }
+@keyframes chat-dot { 0%, 60%, 100% { opacity: .35; transform: none; } 30% { opacity: .8; transform: translateY(-2px); } }
+/* the window's last row under a chat, outside the scroll, so it never moves: Codex's soft card, the text on top and the
+   round send button under it at the right */
+.composer { flex: none; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin: 0 32px 18px 16px; padding: 18px 14px 14px 22px;
+  border: 1px solid rgba(0, 0, 0, .06); border-radius: 28px; background: var(--surface); box-shadow: 0 6px 28px rgba(0, 0, 0, .07), 0 1px 3px rgba(0, 0, 0, .04); }
+.composer[hidden] { display: none; } /* its flex would otherwise win over [hidden] */
+.composer:focus-within { box-shadow: 0 8px 32px rgba(0, 0, 0, .09), 0 1px 3px rgba(0, 0, 0, .05); }
+.composer .ctext { flex: 1 0 100%; min-height: 3em; max-height: 40vh; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 16px; line-height: 1.5; outline: none; }
+.composer .ctext:empty::before { content: attr(data-placeholder); color: #9a9a9a; pointer-events: none; }
+.composer .ctext .mention { color: #508fbb; cursor: default; }
+.composer .ctext .mention svg { width: 14px; height: 14px; vertical-align: -2px; margin-right: 3px; }
+/* the skill the message runs ("/" first): a pill in front of the text; clicking it, or Backspace at the start, drops it */
+.composer-skill { flex: none; display: inline-flex; align-items: center; gap: 5px; margin-right: auto; padding: 2px 10px; border-radius: 12px; background: var(--chat-mine); color: var(--chat-mine-text); font-size: 13px; font-weight: 500; cursor: pointer; }
+.composer-skill[hidden] { display: none; }
+/* To Tana / To the chat: the mode the next message goes in, at the card's bottom left where Codex keeps its own switch */
+.composer-mode { flex: none; display: inline-flex; align-items: center; gap: 5px; margin-right: auto; align-self: center; padding: 3px 10px; border-radius: 14px; color: var(--muted); font-size: 13px; cursor: pointer; user-select: none; }
+.composer-mode[hidden] { display: none; }
+.composer.readonly { opacity: .6; } /* a chat you can only read: the card stays, saying so, and takes no typing */
+.composer.readonly .composer-send { visibility: hidden; }
+.composer-mode:hover { background: rgba(0, 0, 0, .05); }
+.composer-mode.ai { color: var(--chat-send); }
+.composer-mode svg { width: 14px; height: 14px; }
+.composer-skill svg { width: 14px; height: 14px; }
+.composer-send { flex: none; width: 40px; height: 40px; border: 0; border-radius: 50%; background: var(--chat-send); color: #fff; font-size: 20px; font-weight: 600; line-height: 1; cursor: pointer; }
+.composer.empty .composer-send { opacity: .4; cursor: default; }
+
 /* ==== Row content: checkbox, text, facts, chips, images, references, marks, blocks ==== */
 .check {
   flex: none; width: 18px; height: 18px; margin: 3px 8px 0 2px; border-radius: 5px; background: #e4e4e4;
@@ -978,6 +1040,20 @@ html.cover .toast { left: calc(var(--pane-x) + var(--pane-w) / 2); bottom: calc(
 /* Dark theme contract: renderer sets document.documentElement.dataset.theme = "dark". */
 [data-theme="dark"] { color-scheme: dark; }
 [data-theme="dark"] body { color: #c9c9c9; background: #1b1d1e; }
+[data-theme="dark"] { --chat-mine: #1e3d7b; --chat-mine-text: #e8eeff; --chat-send: #3d72e0; } /* Codex's dark: a deep saturated blue */
+[data-theme="dark"] .composer { border-color: rgba(255, 255, 255, .07); background: #2a2c2e; box-shadow: 0 4px 20px rgba(0, 0, 0, .25); } /* a lighter card on the page, as Codex draws it */
+[data-theme="dark"] .composer:focus-within { border-color: rgba(255, 255, 255, .11); box-shadow: 0 6px 24px rgba(0, 0, 0, .3); }
+[data-theme="dark"] .composer .ctext:empty::before { color: #7d8185; }
+[data-theme="dark"] .composer .ctext .mention { color: #8fc1e1; }
+[data-theme="dark"] .composer-mode:hover { background: rgba(255, 255, 255, .06); }
+[data-theme="dark"] .composer-mode.ai { color: #7ea6f5; }
+[data-theme="dark"] .chat-code { background: rgba(255, 255, 255, .07); }
+[data-theme="dark"] .chat-quote { border-left-color: #44484b; }
+[data-theme="dark"] .chat-divider { border-top-color: #3a3d40; }
+[data-theme="dark"] .bubble .mention, [data-theme="dark"] .bubble a.link, [data-theme="dark"] .bubble a.url { color: #8fc1e1; }
+[data-theme="dark"] .mine .bubble :is(.mention, a.link, a.url) { color: inherit; }
+
+
 /* the same step the light theme takes, the other way up: the prose sits back from the headings, not under them */
 [data-theme="dark"] .text { color: #ccd0d3; }
 [data-theme="dark"] .titlebar h1, [data-theme="dark"] .h1 > .line .text, [data-theme="dark"] .h2 > .line .text, [data-theme="dark"] .h3 > .line .text { color: #e8eaec; }

@@ -317,6 +317,7 @@ function paletteRows(q, typed = q) {
   if (signedOut) rows.push({ id: 'login', group: 'Actions', icon: 'tana', label: 'Log in to Tana', run: () => tana.login().catch(showError) });
   if (tana.creationOptions) rows.push({ id: 'create', group: 'Actions', icon: 'createNew', label: 'Create new …', keepOpen: true, run: openCreationPalette, sub: async () => { creationChoices = (await tana.creationOptions()).options || []; return creationRows(''); } });
   if (tana.createDocument) rows.push({ id: 'createTask', group: 'Actions', icon: 'task', label: 'Create task', run: () => openTask() }); // ⇧⌘Space: task.html over the window (renderer/overlays.js)
+  if (tana.newChat) rows.push({ id: 'newChat', group: 'Actions', icon: 'chat', label: 'New chat', hint: 'Talk to Tana', run: () => startNewChat() }); // renderer/chat.js
   // the keys the outline answers to, as rows: each has a default combo in DEFAULT_HOTKEYS and can be re-recorded
   rows.push({ id: 'search', group: 'Actions', icon: 'search', label: 'Search Tana', keepOpen: true, run: () => togglePalette('search') });
   rows.push({ id: 'undo', group: 'Actions', icon: 'undo', label: 'Undo', run: () => history('undo') });
@@ -571,6 +572,7 @@ function resultRows(nodes, group) {
   // a link field that holds something can be emptied here too, as an options field can; last, so Enter never clears
   if (field && group === undefined && choiceValues(field).length && fuzzyMatch('Clear value', palInput.value.trim())) rows.push({ group: field.field.label || 'Value', icon: 'none', label: 'Clear value', run: () => writeChoice(field, []) });
   if (!ctx) return rows;
+  if (ctx.composer) rows.unshift(...tanaMentionRows(palInput.value.trim(), ctx)); // a chat's "@" can ask Tana itself (renderer/chat.js)
   const title = ctx.text || palInput.value.trim(); // "@" at a caret has no selection: what is typed becomes the new document's title
   if (!title) return rows;
   // words that read as a day ("friday", "12 oct", "tomorrow": parseDay) also offer that date, first, as Tana's "@" does
@@ -1099,6 +1101,7 @@ function returnFocus() {
   const railRow = r && r.rail && railEl.querySelector('.rrow[data-id="' + CSS.escape(r.rail) + '"]');
   if (railRow) railRow.focus();
   else if (r && r.key && !focused()) (r.cell ? placeCell(r.key, r.cell, r.offset) : placeCaret(r.key, r.offset));
+  else if (r && r.composer && !composer.hidden) composerText.focus(); // a chat's composer opened it (renderer/chat.js)
   else if (document.activeElement === palInput) palInput.blur();
 }
 function runRow(r) { if (!r || r.disabled) return; if (!r.keepOpen) closePalette(); r.run(); }

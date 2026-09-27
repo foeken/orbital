@@ -188,6 +188,22 @@ function mockApi() {
   // the values of the mock's options and link fields, one line each; the second link points at a type the field does not list
   content['mockdoc1|tana:type:mock0?attribute=lvl00001'] = [block('Medium'), block('Urgent')];
   content['mockdoc1|tana:type:mock0?attribute=src00001'] = [block([{ mention: { label: 'Decision log', uri: 'mockdoc3', type: 'tana:type:mock1' } }]), block([{ mention: { label: 'Studio LT charter', uri: 'mockspacedoc0', type: 'tana:type:mock2' } }])];
+  // a conversation in the shape sdk/chat.js chatRows makes, which renderer/chat.js draws as bubbles
+  const chatPart = (id, p) => { const [, bullet] = /^- (.*)$/.exec(p) || []; return { id, text: bullet ?? p, kind: 'block', editable: false, block: bullet ? 'bullet' : 'paragraph', segments: typeof p === 'string' ? [{ text: bullet ?? p }] : p, hasChildren: false, children: [] }; };
+  const chatMsg = (mine, parts, minsAgo, notes = []) => {
+    const id = 'm' + (++seq), who = mine ? 'Robin Vega' : 'Tana AI';
+    const children = [...notes.map((t, j) => ({ ...chatPart(id + '.t' + j, t), note: true })), ...parts.map((p, j) => (p && p.reference ? { id: id + '.a' + j, kind: 'block', type: 'reference', editable: false, reference: p.reference, hasChildren: false, children: [] } : chatPart(id + '.b' + j, p)))];
+    return { id, text: who, kind: 'block', editable: false, segments: [{ text: who }], block: 'heading3', heading: 3, chat: { id, mine, author: mine ? 'tana:user-profile:robin' : 'ai', sentAt: Date.now() - minsAgo * 6e4 }, hasChildren: true, children };
+  };
+  content['tana:chat:mockchat0'] = [
+    chatMsg(true, ['Can you draft the Studio memo for Monday?'], 26 * 60),
+    chatMsg(false, ['Here is a first draft, based on the leadership notes:', '- Studio becomes a way of working, not an entity', '- Two pilots start in October', '- We review both at the offsite', { reference: { uri: 'mockdoc0', label: 'Studio memo (draft)' } }], 26 * 60 - 1, ['Thought for 14 seconds']),
+    chatMsg(true, ['Make it shorter'], 25 * 60),
+    chatMsg(true, ['and a bit friendlier'], 25 * 60 - 1),
+    chatMsg(false, ['Done: three short paragraphs, and a warmer opening.'], 25 * 60 - 2),
+    chatMsg(true, ['Perfect, thanks!'], 6),
+    chatMsg(false, [[{ text: 'Happy to help. Shall I pin it to ' }, { mention: { label: 'Leadership sync', uri: 'mockmeeting2' } }, { text: '?' }]], 5),
+  ];
   const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGPoyroWu7WKIX9dU1fWNQAuWQbA8sXmUwAAAABJRU5ErkJggg==';
   const changed = [], removed = [], statusCbs = [], deleted = new Map(), sensitive = new Set(), codexAssigned = new Set(), codexPrompts = new Map();
   let status = { authenticated: false, authChecking: false, connected: false, syncing: false, lastSync: null, error: null };
@@ -455,6 +471,23 @@ function mockApi() {
       if (typeUri) n.typeUri = typeUri;
       created[n.id] = n; content[n.id] = []; all.push(n);
       if (nativeKind !== 'doc') unlisted.push(n);
+      return info(n);
+    },
+    // a message goes in at once; Tana's answer follows a moment later, the way live updates bring it
+    // mentions come back as chips and a skill as its attachment, the way sdk/chat.js reads what main stored
+    chatAnswers: async () => ({ ai: true, canWrite: true }), // every mock chat is yours alone
+    sendChat: async (docId, text, attachments = [], opts = {}) => {
+      const segs = (p) => p.split(/(\[[^\]\n]*\]\([^)\s]+\))/).filter(Boolean).map((t) => { const m = /^\[(.*)\]\((.+)\)$/.exec(t); return m ? { mention: { label: m[1], uri: m[2] } } : { text: t }; });
+      const sent = chatMsg(true, [...text.split(/\n{2,}/).map(segs), ...attachments.map((uri) => ({ reference: { uri, label: (all.find((d) => d.id === uri) || {}).text } }))], 0);
+      (content[docId] ||= []).push(sent);
+      emit(docId);
+      if (opts.ai === false) return { messageId: sent.chat.id, responding: false }; // a message to the chat: nobody is asked
+      setTimeout(() => { content[docId].push(chatMsg(false, ['Mock answer to: ' + text], 0, ['Thought for 2 seconds'])); emit(docId); }, 1800);
+      return { messageId: sent.chat.id, responding: true }; // main answers replyError beside a saved message when the reply could not be asked for
+    },
+    newChat: async () => {
+      const n = { id: 'tana:chat:mocknew' + (++seq), text: 'New chat', kind: 'document', hasChildren: true, editable: false, icon: 'chat', tags: [{ label: 'chat', color: 'grey' }] };
+      created[n.id] = n; content[n.id] = []; all.push(n);
       return info(n);
     },
     // the third kind of pin: the meetings and spaces this document hangs on, which are pins on those documents

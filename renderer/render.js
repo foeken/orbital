@@ -392,7 +392,8 @@ function renderOutline() {
       list = groups.flatMap((g) => (g.collapsed ? [] : g.nodes));
     }
     list = withDraftTail(list, parent); // an open node always has a row to type in; a read-only one (every chat) never does
-    outline.replaceChildren(...(groups
+    const chat = isChatPage(parent), stick = chat && chatStick(parent); // a chat is a conversation, not an outline (renderer/chat.js)
+    outline.replaceChildren(...(chat ? chatEls(list, parent.docId) : groups
       ? groups.flatMap((g) => [...(g.title ? [groupHeadEl(g)] : []), ...(g.collapsed ? [] : g.nodes.flatMap((n, i) => [row(n), ...(timelineTopEnds(n, g.nodes[i + 1]) ? [timelineDividerEl()] : [])])), ...(g.more ? [groupMoreEl(g)] : [])])
       : list.map(row)));
     if (parent.docId === TIMELINE_PAGE && tana.timelinePages && kids.get(TIMELINE_PAGE) && !timelinePartial && timelinePages < TIMELINE_MAX_PAGES) outline.append(timelineOlderEl()); // three days a page: more as the end comes into view, once the first page is whole
@@ -401,8 +402,10 @@ function renderOutline() {
     // A node opens at its top, however far down the draft tail the caret goes (the caretOnOpen block below parks it
     // there without scrolling). caretOnOpen is still set through both renders of an open — the "Loading…" one and the
     // one the children arrive on, which grows the content — so both land at the top; later renders are left alone.
-    if (caretOnOpen) outline.parentElement.scrollTop = 0;
+    if (caretOnOpen && !chat) outline.parentElement.scrollTop = 0;
+    chatAfterRender(parent, stick);
   } else {
+    chatAfterRender(null);
     const v = viewOf(), docs = v ? v.nodes : [];
     const shown = pageRows(docs, filterEl.value.trim().toLowerCase()); // Default leaves the view's own order alone
     list = shown.list; hidden = shown.hidden;
@@ -526,6 +529,7 @@ function emptyText(parent) {
   if (id === TIMELINE_PAGE) return 'Nothing yet. Changes to the nodes you watch, and tasks added to your Inbox, show up here.';
   if (id === INBOX_PAGE) return 'No notifications yet.';
   if (id === PROPOSALS_PAGE) return 'No proposals waiting.';
+  if (isChatPage(parent)) return 'No messages yet. Say something to Tana below.';
   if (!isSearchDoc(parent.node) && !isTypeDoc(parent.node)) return 'No content';
   const filter = filters.get(id), key = hotkeyFor('createTask');
   return 'Nothing matches.' + (filter && tasksInFilter(filter) && key ? ' ' + key + ' creates a task.' : '');

@@ -2274,6 +2274,7 @@ function runPaletteSkipCheck() {
     const isTypeDoc = (n) => n.id.startsWith('tana:type:'), hotkeys = {}, DEFAULT_HOTKEYS = { createTask: '⇧⌘Space' };
     const filters = new Map([['tana:search:mine', { types: ['tasks'] }], ['tana:search:meet', { types: ['meetings'] }]]);
     ${sourceLine('const isSearchDoc =')}
+    ${sourceLine('const isChatPage =')}
     ${sourceLine('const hotkeyFor =')}
     ${sourceLine('const tasksInFilter =')}
     ${functionSource('emptyText')}
@@ -2283,6 +2284,7 @@ function runPaletteSkipCheck() {
   assert.equal(emptyText.text('tana:search:mine'), 'Nothing matches. ⇧⌘Space creates a task.', 'an empty My Tasks names the key that makes one');
   assert.equal(emptyText.text('tana:search:meet'), 'Nothing matches.', 'a search that lists no tasks does not');
   assert.equal(emptyText.text('tana:text:doc'), 'No content', 'a document still has no content');
+  assert.match(emptyText.text('tana:chat:c'), /^No messages yet\./, 'an empty chat points at its composer');
   emptyText.record('⌃⌥T');
   assert.equal(emptyText.text('tana:search:mine'), 'Nothing matches. ⌃⌥T creates a task.', 'the key named is the one recorded');
   emptyText.record('');
@@ -3288,6 +3290,7 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     let animView = null, caretOnOpen = false;
     const ensureLoaded = () => {}, loadSearchFilter = () => {}, previewRows = () => {}, withDraftTail = (list) => list, mkItem = () => {};
     const isSearchDoc = () => false, isTypeDoc = (n) => n.id.startsWith('tana:type:');
+    const isChatPage = () => false, chatAfterRender = () => {}; // renderer/chat.js: none of these pages is a chat
     let writable = true; const canEditNode = () => writable;
     const childrenOf = (item) => kids.get(item.docId), pageRows = (list) => ({ list, groups: null, hidden: 0 });
     const rowSig = (n) => n.text + '|' + outline.dataset.key;
@@ -3786,8 +3789,8 @@ function runDraftTailCheck() {
   assert.match(source, /flushAll\(\); dropDrafts\(\); caretOnOpen = true;/, 'both routes into a node (zoomTo, openDoc) ask for it');
   assert.match(source, /el\.focus\(\{ preventScroll: true \}\); setCaret\(el, 0\); scrollOnType = true;/,
     'the caret is parked in the draft tail without scrolling the open to the bottom of a long node');
-  assert.match(source, /if \(caretOnOpen\) outline\.parentElement\.scrollTop = 0;/,
-    'and the open itself lands at the top, through both the "Loading…" render and the one the children arrive on');
+  assert.match(source, /if \(caretOnOpen && !chat\) outline\.parentElement\.scrollTop = 0;/,
+    'and the open itself lands at the top, through both the "Loading…" render and the one the children arrive on (a chat at its end, renderer/chat.js)');
 }
 
 // Opening a node puts the caret in the draft tail at the bottom while the page stays at the top; the first character
