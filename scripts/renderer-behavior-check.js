@@ -1879,6 +1879,7 @@ function runHistoryCheck() {
 
     const render = () => { rendered++; noteNavigation(); }; // what renderOutline does at its end
     ${sourceBetween('const navBack = [], navForward = [];', 'function noteNavigation')}
+    const LINKS = false; // a page of its own, which keeps a history (renderer/state.js)
     ${functionSource('noteNavigation')}
     ${functionSource('navigate')}
     ({
@@ -4451,6 +4452,8 @@ function runRailToggleCheck() {
   assert.deepEqual(plain(api.state()), { zoom: null, opened: ['tana:text:a'], asked: ['tana:text:b'], views: ['library'] }, 'a page on no document (a view, an app page) leaves it on none, once');
   // Only the Links pane draws the rail; every other page hides it and tells the shell its document instead.
   assert.match(functionSource('renderRail'), /if \(!LINKS\) \{ railEl\.hidden = true; return tellDoc\(docId\); \}/, 'a page other than the Links pane draws no rail and names its document');
+  // Following is not navigating: the Links pane keeps no history, so ⌘[ there cannot take it off the followed document (#463 review)
+  assert.match(functionSource('noteNavigation'), /if \(navHere && !navigating && !navReplace && !LINKS\) \{ navBack\.push/, 'the Links pane records no Back history');
   // A saved search is a list: no links, and nothing for the Links pane to follow.
   assert.match(source, /!String\(parent\.docId\)\.startsWith\(SEARCH_ID\) \? parent\.docId : null;/,
     'renderRail gives a saved search no links');

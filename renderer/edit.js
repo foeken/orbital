@@ -320,7 +320,8 @@ function rememberPlace() { localStorage.setItem('place' + SIDE, placeJSON()); }
 function noteNavigation() {
   const here = navPlace();
   if (navHere && navHere.key === here.key) return;
-  if (navHere && !navigating && !navReplace) { navBack.push(navHere); navForward.length = 0; if (navBack.length > 100) navBack.shift(); }
+  // the Links pane goes where the page it follows is (renderer/rail.js follow), which is no place of its own to go back to
+  if (navHere && !navigating && !navReplace && !LINKS) { navBack.push(navHere); navForward.length = 0; if (navBack.length > 100) navBack.shift(); }
   navReplace = false;
   const previousDoc = navHere?.zoom?.docId;
   const id = here.zoom?.docId;
