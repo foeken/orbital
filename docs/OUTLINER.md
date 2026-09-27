@@ -741,7 +741,9 @@ A row is picked up by its marker and dropped where a line says it will land (ren
 ## 15. Live updates and rendering
 
 - **`onChanged(docId, info)`** is one document's change. The renderer patches that row from one `doc:info` call
-  (`patchDoc`) wherever it is listed — views, zoomed lists in `kids`, the extras — and its copies (`patchCopies`), and
+  (`patchDoc`) wherever it is listed — views, zoomed lists in `kids`, the extras — and its copies (`patchCopies`:
+  reference rows and sidebar rows of any document; reading an outline subscribes the targets of its references as
+  on-demand reads, so a rename reaches them, #413), and
   reloads its page and fields when open. It keeps the row's cached metadata unless `info.meta` is true (main compares
   assignees, restriction, participants, type and field values), and re-reads the sidebar only then (or for a type).
   **`own: true`** is the echo of text this page typed (`sendChanged` sends it to the writing page only, #265): the

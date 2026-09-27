@@ -5214,9 +5214,74 @@ async function main() {
     assert.deepEqual(raw.reference, {uri:targetUri});
     assert.throws(() => outline.setText(host, blockId, 'overwrite'), /Reference blocks/);
     assert.deepEqual(host.toJSON(), before, 'reads and rejected text writes preserve the native embed');
-    const requests = [];
-    backend.testRuntime({me:{userUri:ME},client:{graph:{listNodes:async q => { requests.push(q); return {nodes:[{id:targetUri,title:'Actual embedded task',state:{type:'open'},appearance:{hue:0}}]}; }}}});
+    const requests = [], live = [], sync = {subscribe:async (id) => { live.push(id); return {}; }, unsubscribe:async () => {}};
+    backend.testRuntime({me:{userUri:ME},client:{sync,graph:{listNodes:async q => { requests.push(q); return {nodes:[{id:targetUri,title:'Actual embedded task',state:{type:'open'},appearance:{hue:0}}]}; }}}});
     const resolved = await backend.outlineWithReferences(host);
+    // the row draws a copy of its target's title: only a subscribed target tells main it was renamed (#413)
+    assert.deepEqual(live, [targetUri], 'a resolved reference keeps its target live, so a rename reaches the row');
+    const chatUri = 'tana:chat:' + ulid(); live.length = 0;
+    backend.testRuntime({me:{userUri:ME},client:{sync,graph:{listNodes:async () => ({nodes:[{id:chatUri,title:'A sub-agent chat'}]})}}});
+    const embedTo = (uri) => host.transact(l => l.getMap('content').get('children').get(0).get('attributes').set('tanaUri', uri));
+    embedTo(chatUri); await backend.outlineWithReferences(host); embedTo(targetUri);
+    assert.ok(!live.includes(chatUri), 'but not a chat: it bootstraps to megabytes of messages, too much for a title');
+    const many = new Document('tana:text:' + ulid()), manyUris = [];
+    many.transact(l => initDocument(l, 'many references', ME));
+    let last = outline.readOutline(many)[0].id;
+    for (let i = 1; i < 60; i++) last = outline.insertAfter(many, last, 'r' + i);
+    many.transact(l => { const rows = l.getMap('content').get('children'); for (let i = 0; i < rows.length; i++) { const uri = 'tana:text:' + ulid(); manyUris.push(uri); rows.get(i).set('nodeName', 'embed'); rows.get(i).get('attributes').set('tanaUri', uri); } });
+    const refClient = {sync,graph:{listNodes:async (q) => ({nodes:(q.nodeIds || []).map((id) => ({id, title:id}))})}}; // one client: a new one starts afresh
+    backend.testRuntime({me:{userUri:ME},client:refClient});
+    await backend.outlineWithReferences(many);
+    assert.deepEqual([manyUris.length, live.filter((uri) => manyUris.includes(uri)).length], [60, 50], 'a page of 60 references keeps its first 50 live');
+    // Read again, a page subscribes nothing twice; the next page's references are kept live and push the oldest out
+    const gone = []; sync.unsubscribe = async (id) => { gone.push(id); };
+    live.length = 0; await backend.outlineWithReferences(many);
+    assert.deepEqual(live, [], 'reading a page again subscribes none of its references a second time');
+    gone.length = 0;
+    const other = new Document('tana:text:' + ulid()), otherUris = [];
+    other.transact(l => { initDocument(l, 'more references', ME); });
+    other.transact(l => { const rows = l.getMap('content').get('children'); const uri = 'tana:text:' + ulid(); otherUris.push(uri); rows.get(0).set('nodeName', 'embed'); rows.get(0).get('attributes').set('tanaUri', uri); });
+    live.length = 0; await backend.outlineWithReferences(other);
+    assert.deepEqual([live, gone], [otherUris, [manyUris[0]]], 'the next page\u2019s reference is kept live and the oldest let go: no page is turned away, and none is read again for it');
+    // Pushed out while still loading, a target is let go once its bootstrap settles, so none outlives the cap
+    const slow = new Document('tana:text:' + ulid()), slowUri = 'tana:text:' + ulid();
+    slow.transact(l => { initDocument(l, 'slow reference', ME); });
+    slow.transact(l => { const row = l.getMap('content').get('children').get(0); row.set('nodeName', 'embed'); row.get('attributes').set('tanaUri', slowUri); });
+    let settle; const plain = sync.subscribe;
+    sync.subscribe = (id) => (id === slowUri ? new Promise((r) => { settle = r; }) : plain(id));
+    await backend.outlineWithReferences(slow);
+    await backend.outlineWithReferences(many); // 50 newer ones: the slow target is pushed out while it loads
+    gone.length = 0; settle({}); await new Promise((r) => setImmediate(r));
+    assert.ok(gone.includes(slowUri), 'a target pushed out while it loaded is let go once it settles');
+    // A bootstrap that failed is tried again on the next read, and a new login (a new client) subscribes afresh
+    sync.subscribe = async (id) => { live.push(id); return id === otherUris[0] ? null : {}; };
+    live.length = 0; await backend.outlineWithReferences(other); await new Promise((r) => setImmediate(r));
+    live.length = 0; await backend.outlineWithReferences(other);
+    assert.deepEqual(live, otherUris, 'a target whose bootstrap failed is subscribed again on the next read');
+    sync.subscribe = plain;
+    backend.testRuntime({me:{userUri:ME},client:{...refClient}});
+    await backend.outlineWithReferences(many); live.length = 0; await backend.outlineWithReferences(many); // all 50 live on this client
+    const liveBefore = live.length;
+    backend.testRuntime({me:{userUri:ME},client:{...refClient}});
+    live.length = 0; backend.reliveRefs(); // what start() does once the new client exists, before any outline is read again
+    const onNew = live.length; live.length = 0; await backend.outlineWithReferences(many);
+    assert.deepEqual([liveBefore, onNew, live.length], [0, 50, 0], 'a new login subscribes the targets live on the old client on the new one, with no outline read again');
+    // A node watched by hand keeps its subscription when it leaves the list: letting it go would end its notifications
+    backend.settings.set('notify', { ...(backend.settings.get('notify') || {}), [manyUris[0]]: true });
+    gone.length = 0; sync.unsubscribe = async (id) => { gone.push(id); };
+    await backend.outlineWithReferences(other); await new Promise((r) => setImmediate(r));
+    assert.ok(!gone.includes(manyUris[0]), 'a reference target watched by hand is not unsubscribed when the list lets it go');
+    // An old login's bootstrap answering after a new login changes nothing: the target stays for the new client
+    let late; sync.subscribe = (id) => { live.push(id); return id === slowUri ? new Promise((r) => { late = r; }) : Promise.resolve({}); };
+    await backend.outlineWithReferences(slow);
+    backend.testRuntime({me:{userUri:ME},client:{...refClient}});
+    late(null); await new Promise((r) => setImmediate(r));
+    live.length = 0; backend.reliveRefs();
+    assert.ok(live.includes(slowUri), 'a target whose old-client bootstrap failed after a new login is still subscribed on the new client');
+    sync.unsubscribe = async () => {};
+    sync.subscribe = plain;
+    sync.unsubscribe = async () => {};
+    backend.testRuntime({me:{userUri:ME},client:{sync,graph:{listNodes:async q => { requests.push(q); return {nodes:[{id:targetUri,title:'Actual embedded task',state:{type:'open'},appearance:{hue:0}}]}; }}}});
     assert.equal(resolved[0].id, blockId); assert.equal(resolved[0].reference.node.id, targetUri);
     assert.equal(resolved[0].reference.node.icon, 'task'); assert.equal(resolved[0].reference.node.done, 0);
     assert.equal(resolved[0].reference.node.hue, 0); assert.equal(resolved[1].id, headingId);
@@ -5229,7 +5294,7 @@ async function main() {
     // while staying an ordinary editable block, and only for as long as nothing else is on the line.
     const mentionUri = 'tana:text:01examplem0000000000000000';
     const mention = {mention:{uri:mentionUri,label:'Stale label'}};
-    backend.testRuntime({me:{userUri:ME},client:{graph:{listNodes:async()=>({nodes:[{id:mentionUri,title:'Mentioned task',state:{type:'open'}}]})}}});
+    backend.testRuntime({me:{userUri:ME},client:{sync,graph:{listNodes:async()=>({nodes:[{id:mentionUri,title:'Mentioned task',state:{type:'open'}}]})}}});
     outline.setText(host, headingId, [mention]);
     const full = (await backend.outlineWithReferences(host))[1];
     assert.equal(full.id, headingId); assert.equal(full.type, undefined, 'the block keeps its own identity rather than becoming a native embed');
@@ -5366,7 +5431,7 @@ async function main() {
         toolCalls: [{ id: 'call_1', name: 'extractOutcome', subagentChatUri: subUri, status: 'completed' }] });
     });
     const graphed = [];
-    backend.testRuntime({ me: { userUri: ME }, client: { graph: { listNodes: async (q) => {
+    backend.testRuntime({ me: { userUri: ME }, client: { sync: { subscribe: async () => null }, graph: { listNodes: async (q) => {
       graphed.push(q);
       if (q.nodeTypes && q.nodeTypes[0] === 'user-profile') return { nodes: [{ id: ME, title: 'Robin Vega' }] };
       return { nodes: Array.from(q.nodeIds || []).map((id) => ({ id, title: 'Target ' + id.split(':')[1] })) };

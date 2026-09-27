@@ -19,6 +19,46 @@ async function outlineWithReferences(doc) {
 // The reference rows of any outline (content embeds, chat attachments and proposals) resolved in one place.
 // A block whose whole content is one mention is Tana's full-reference presentation: it is resolved like a native
 // embed so the row can show the node it points at, while keeping its own identity and its editable text.
+// The targets of the references read last, newest at the end: their own small list, apart from the on-demand reads, so
+// neither sweep sees them. Past the limit the oldest is let go (unless something else holds it), silently: its copy
+// keeps the title it was read with, as a view's rows past LIVE_ROWS do. In the on-demand list a let-go target made the
+// page that cites it read itself again and subscribe it again, every refresh; and a shared budget there filled up
+// and turned the next page's references away for good.
+// ponytail: LIVE_ROWS / 2 targets across every outline on screen; the newest pages win. Hold per page if that matters.
+const liveRefs = new Map();
+let liveRefsClient = null; // the sync client they are live on: a new login starts a new stream, subscribed to none of them
+// Let go of a target nothing holds any more: not a live reference, a view (subscribed), a read, a wait, or a watch
+// start() subscribes outside those (watched by hand, handed to the agent): letting that go would end its notifications
+function dropRef(uri) {
+  if (liveRefs.has(uri) || subscribed.has(uri) || onDemand.has(uri) || reading.has(uri) || notifyWatchedIds().has(uri) || codexIds().includes(uri)) return;
+  docStates.delete(uri);
+  S.client?.sync?.unsubscribe?.(uri)?.catch(() => {}); // it may settle after a logout, or under the checks' partial clients
+}
+// Held while it bootstraps (main/state.js reading), as document() holds its read: a sweep must not unsubscribe it; let
+// go once it settles if it was pushed out meanwhile; and a bootstrap that failed (deleted, access gone) is no live
+// reference, so the next read tries again.
+function subscribeRef(uri) {
+  const client = S.client; // a login since then answers for its own client, and an old one's answer changes nothing
+  reading.set(uri, (reading.get(uri) || 0) + 1);
+  subscribe(uri).then((doc) => { if (!doc && S.client === client) liveRefs.delete(uri); }).finally(() => { const left = (reading.get(uri) || 1) - 1; if (left > 0) reading.set(uri, left); else { reading.delete(uri); if (S.client === client) dropRef(uri); } });
+}
+// A new login's client (main/views.js start): its stream has none of them, and an outline already on screen is not
+// read again to ask, so they are all subscribed on it now.
+function reliveRefs() {
+  liveRefsClient = S.client;
+  if (!S.client || !S.client.sync) return liveRefs.clear(); // no stream (logged out, or a check's partial client): nothing is live
+  for (const uri of liveRefs.keys()) subscribeRef(uri);
+}
+function keepLive(uris) {
+  if (liveRefsClient !== S.client) reliveRefs();
+  for (const uri of uris.slice(0, LIVE_ROWS / 2)) {
+    if (liveRefs.delete(uri)) { liveRefs.set(uri, true); continue; } // already live: now the newest
+    liveRefs.set(uri, true);
+    subscribeRef(uri);
+  }
+  for (const uri of [...liveRefs.keys()].slice(0, Math.max(0, liveRefs.size - LIVE_ROWS / 2))) { liveRefs.delete(uri); dropRef(uri); }
+}
+const isLiveRef = (uri) => liveRefs.has(uri); // a view's sweep leaves these alone (main/views.js viewRows)
 async function resolveReferences(nodes) {
   const refs = [], mentions = [];
   const lone = n => !n.children?.length && n.segments?.length === 1 && n.segments[0].mention;
@@ -50,6 +90,10 @@ async function resolveReferences(nodes) {
   // targets from the answer above, plus anything deleted from this app.
   const deleted = uri => deletedNodes.has(uri);
   for (const ref of refs) { if (targets.has(ref.uri)) ref.node = targets.get(ref.uri); else if (deleted(ref.uri)) ref.deleted = true; }
+  // A reference row draws a copy of its target, which only a live target keeps current: subscribed, its rename reaches
+  // the renderer as a change and patches the copy (renderer/app.js patchCopies, #413). Not a chat: one bootstraps to
+  // megabytes of messages and tool output (docs/CHATS.md), too much to fetch for a title.
+  keepLive([...new Set(refs.map((ref) => ref.uri))].filter((uri) => targets.has(uri) && idKind(uri) !== 'chat'));
   // the icon and the hue: a mention says what kind of thing it points at, and is drawn in its type's colour when
   // the target has one (the link's own blue otherwise)
   for (const m of mentions) {
@@ -1037,4 +1081,4 @@ const ipc = {
   },
 };
 
-module.exports = { followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, pruneSeen, codexIds, setCodex, creatorOf, document, op, historyIds, readOnDemand, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget, ipc };
+module.exports = { isLiveRef, reliveRefs, followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, pruneSeen, codexIds, setCodex, creatorOf, document, op, historyIds, readOnDemand, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget, ipc };

@@ -142,9 +142,9 @@ tana.onChanged((docId, info) => {
     Promise.all(work).then(renderSoon, showError);
   }
 });
-// A task is also drawn from copies of its own: a reference to it inside an open note (reference.node) and a sidebar row
-// (relatedBy). A change to the task brings their state and title along, or those rows keep the old box until their note
-// or sidebar reloads.
+// A document is also drawn from copies of its own: a reference to it inside an open note (reference.node) and a sidebar
+// row (relatedBy). A change to it brings their title (and a task's state) along, or those rows keep the old ones until
+// their note or sidebar reloads (#413).
 function patchCopies(docId, state) {
   const changes = Object.fromEntries(Object.entries(state).filter(([, value]) => value !== undefined));
   const walk = (rows) => { for (const n of rows || []) { if (n.reference && n.reference.uri === docId && n.reference.node) Object.assign(n.reference.node, changes); walk(n.children); } };
@@ -160,7 +160,7 @@ async function patchDoc(docId) {
   let fresh;
   try { fresh = asDoc(await tana.node(docId)); } catch (e) { noteGone(docId, e); return loadRoots(); } // deleted or unreadable: the lists decide
   deletedIds.delete(docId); // it answered, so it is not gone: an undo of a delete brings the rows and the chips back
-  if (isTask(fresh)) patchCopies(docId, { text: fresh.text, title: fresh.title, done: fresh.done, stateType: fresh.stateType });
+  patchCopies(docId, { text: fresh.text, title: fresh.title, done: fresh.done, stateType: fresh.stateType });
   if (extra.has(docId)) Object.assign(extra.get(docId), fresh);
   for (const s of views) for (const n of s.nodes) if (n.id === docId) Object.assign(n, fresh);
   // A zoomed page that lists documents — a saved search, a space — holds its rows in kids, not in any view, so a
