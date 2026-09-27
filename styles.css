@@ -84,11 +84,11 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 
 .titlebar { padding: 48px 32px 6px; user-select: none; position: relative; } /* the 4px the scroll area took, so the outline sits where it did */
 html.tabbed .titlebar { padding-top: 16px; } /* under a tab bar (shell.js, renderer/app.js) there are no traffic lights to keep clear of */
+html.tabbed .navbtns { top: 12px; } /* the buttons on the right stay on the crumbs' line, which the 16px above moved up from 48px */
 html.tabbed.listing:not(.renaming) #pagehead { display: none; } /* a view, saved search or app page is named by its tab (renderer/render.js); Rename on the tab brings it back */
-/* with no heading, the buttons on the right come up to the crumbs' line (the 4px above them .navbtns keeps at the
-   48px band) and the gap it left under the crumbs closes */
-html.tabbed.listing:not(.renaming) .navbtns { top: 12px; right: 16px; }
-/* and the icons on both sides sit 19px from the pane's edge, the left ones over the section chevrons below */
+/* with no heading, the icons on both sides sit 19px from the pane's edge, the left ones over the section chevrons
+   below, and the gap the heading left under the crumbs closes */
+html.tabbed.listing:not(.renaming) .navbtns { right: 16px; }
 html.tabbed.listing:not(.renaming) .titlebar { padding-left: 19px; }
 html.tabbed.listing:not(.renaming) .crumbs { margin-bottom: 4px; }
 .titlebar h1 { margin: 0; font-size: 34px; font-weight: 700; letter-spacing: -0.5px; color: #1c2024; } /* the page title is a heading: the same near-black */
