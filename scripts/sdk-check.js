@@ -5224,6 +5224,14 @@ async function main() {
     const embedTo = (uri) => host.transact(l => l.getMap('content').get('children').get(0).get('attributes').set('tanaUri', uri));
     embedTo(chatUri); await backend.outlineWithReferences(host); embedTo(targetUri);
     assert.deepEqual(live, [], 'but not a chat: it bootstraps to megabytes of messages, too much for a title');
+    const many = new Document('tana:text:' + ulid()), manyUris = [];
+    many.transact(l => initDocument(l, 'many references', ME));
+    let last = outline.readOutline(many)[0].id;
+    for (let i = 1; i < 60; i++) last = outline.insertAfter(many, last, 'r' + i);
+    many.transact(l => { const rows = l.getMap('content').get('children'); for (let i = 0; i < rows.length; i++) { const uri = 'tana:text:' + ulid(); manyUris.push(uri); rows.get(i).set('nodeName', 'embed'); rows.get(i).get('attributes').set('tanaUri', uri); } });
+    backend.testRuntime({me:{userUri:ME},client:{sync,graph:{listNodes:async () => ({nodes:manyUris.map((id) => ({id, title:id}))})}}});
+    await backend.outlineWithReferences(many);
+    assert.deepEqual([manyUris.length, live.length], [60, 50], 'a page of 60 references keeps its first 50 live: inside the on-demand cap, so the sweep does not let them go and have the page read and subscribe them again');
     backend.testRuntime({me:{userUri:ME},client:{sync,graph:{listNodes:async q => { requests.push(q); return {nodes:[{id:targetUri,title:'Actual embedded task',state:{type:'open'},appearance:{hue:0}}]}; }}}});
     assert.equal(resolved[0].id, blockId); assert.equal(resolved[0].reference.node.id, targetUri);
     assert.equal(resolved[0].reference.node.icon, 'task'); assert.equal(resolved[0].reference.node.done, 0);

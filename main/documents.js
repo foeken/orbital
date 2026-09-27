@@ -54,7 +54,11 @@ async function resolveReferences(nodes) {
   // the renderer as a change and patches the copy (renderer/app.js patchCopies). A read like any other, let go oldest
   // first past LIVE_ROWS (releaseOnDemand), so it holds nothing for good (#413). Not a chat: one bootstraps to megabytes
   // of messages and tool output (docs/CHATS.md), too much to fetch for a title.
-  for (const uri of new Set(refs.map((ref) => ref.uri))) if (targets.has(uri) && idKind(uri) !== 'chat') subscribe(uri).then((doc) => { if (doc) readOnDemand(uri); });
+  // ponytail: the first LIVE_ROWS / 2 only, so a page's own references stay well inside the on-demand cap: past it the
+  // sweep let them go, the page was read again for citing them, and that subscribed them all again, every refresh.
+  // The rest keep the title they were read with, as a view's rows past LIVE_ROWS do; page them if a page ever needs more.
+  const live = [...new Set(refs.map((ref) => ref.uri))].filter((uri) => targets.has(uri) && idKind(uri) !== 'chat').slice(0, LIVE_ROWS / 2);
+  for (const uri of live) subscribe(uri).then((doc) => { if (doc) readOnDemand(uri); });
   // the icon and the hue: a mention says what kind of thing it points at, and is drawn in its type's colour when
   // the target has one (the link's own blue otherwise)
   for (const m of mentions) {
