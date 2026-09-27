@@ -3904,7 +3904,8 @@ function runRowAudienceCheck() {
         // the gap is styles.css's .tmeta > .ticon:not(:first-child) (renderer-check pins the rule): 6px after anything
         const sub = body.children.find((child) => child.className === 'subtext') || { children: [] }, people = sub.children.find((child) => child.className === 'people');
         return { icons: icons ? icons.map((icon) => icon.attrs['aria-label'] || (icon.children[0] || { attrs: {} }).attrs['data-icon']) : null, gaps: icons ? icons.map((icon) => (icon.className === 'ticon' ? (info.children.indexOf(icon) ? '6px' : '0') : null)) : null, pending: info ? info.className.includes('pending') : null, sub: sub.value || null, chips: body.children.filter((child) => child.className === 'chip').length, fetched: [...fetched], observed: observed.map((watched) => watched.dataset.metaFor),
-          people: people ? [people.children[0].attrs['aria-label'], ...people.children[1].children.map((face) => face.value), people.children[2]] : null };
+          people: people ? [people.children[0].attrs['aria-label'], ...people.children[1].children.map((face) => face.value), people.children[2]] : null,
+          names: people ? people.children[1].children.map((face) => face.attrs['aria-label'] || null) : null };
       },
       onScreen: () => { watching(observed.map((target) => ({ isIntersecting: true, target }))); return [...fetched]; },
       display: (keys) => { displayNow = keys; },
@@ -3927,6 +3928,9 @@ function runRowAudienceCheck() {
   const shared = row(doc, { assignees: [], audience: 'people', people: ['tana:user-profile:me', 'tana:user-profile:sam'] });
   assert.deepEqual(shared.people, ['Visible to selected people', '?', 'S', '2 people'], 'the subtext leads with the audience, a bubble per person and the count');
   assert.deepEqual(shared.icons, [], 'and the end of the line no longer repeats the audience');
+  assert.deepEqual(shared.names, ['Unknown person', 'Sam'], 'every bubble is an image with the person\'s name, a fallback when there is none');
+  const guest = row(doc, { assignees: [], audience: 'people', people: ['tana:user-profile:sam', 'tana:guest-profile:x'] });
+  assert.deepEqual([guest.people[2], guest.names[1]], ['G', 'Guest'], 'a guest, whose profile cannot be read, is named as one');
   assert.equal(row(doc, { assignees: [], audience: 'everyone' }).people, null, 'no member list yet: no bubbles, and the glyph stays where it was');
   // The space sub-line used to be unconditional; it is now the Display pill's "Lives in", which ships off. Both
   // directions are pinned: wiring it back to always-on would otherwise pass every test in this file.

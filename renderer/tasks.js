@@ -143,23 +143,26 @@ function audienceIcon(summary, node) {
   return icon;
 }
 // Who can see a row, at the start of its subtext (#461): the audience's glyph, a bubble per person and how many.
-// Everyone is the org's member list; the others are the audience's own participants (sdk/node.js audienceMetadata).
+// main names them (sdk/node.js audienceMetadata): everyone is the organization's membership, the others the grants.
+function audienceUris(summary) { return (summary && summary.audience && displayOn('assigned') && summary.people) || []; }
+// a guest's profile is not readable (the graph refuses the kind, a subscribe finds no document), so a guest is named as one
+function isGuest(uri) { return uri.startsWith('tana:guest-profile:'); }
 function peopleEl(summary, node) {
-  if (!summary || !summary.audience || !displayOn('assigned')) return null;
-  loadMembers(); // the bubbles' initials, and everyone's count
-  const uris = summary.scope === 'everyone' ? (members || []).map((m) => m.id) : summary.people || [];
+  const uris = audienceUris(summary);
   if (!uris.length) return null;
+  loadMembers(); // the bubbles' names
   const face = (uri) => {
-    const f = document.createElement('span'), name = memberName(uri), known = !name.startsWith('tana:');
-    f.className = 'face'; f.textContent = known ? name.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase() : '?';
-    if (known) f.title = name;
+    const f = document.createElement('span'), found = memberName(uri), known = !found.startsWith('tana:');
+    const name = known ? found : isGuest(uri) ? 'Guest' : 'Unknown person';
+    f.className = 'face'; f.textContent = known || isGuest(uri) ? name.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase() : '?';
+    f.setAttribute('role', 'img'); f.setAttribute('aria-label', name); f.title = name;
     let hue = 0; for (const c of uri) hue = (hue * 31 + c.charCodeAt(0)) % 360; // one colour per person, the same on every row
     f.style.setProperty('--hue', hue);
     return f;
   };
   const faces = document.createElement('span'); faces.className = 'faces';
   faces.append(...uris.slice(0, 4).map(face)); // four bubbles, then "+n"
-  if (uris.length > 4) { const more = document.createElement('span'); more.className = 'face more'; more.textContent = '+' + (uris.length - 4); faces.append(more); }
+  if (uris.length > 4) { const more = document.createElement('span'); more.className = 'face more'; more.textContent = '+' + (uris.length - 4); more.setAttribute('aria-hidden', 'true'); faces.append(more); } // the count after it says how many
   const el = document.createElement('span'); el.className = 'people';
   el.append(audienceIcon(summary, node), faces, uris.length === 1 ? '1 person' : uris.length + ' people');
   return el;
@@ -176,7 +179,7 @@ function taskMetaEl(summary, docId, node) {
   if (summary.pending) el.append(iconEl('pending', null)); // the answer is still on its way: same slot, same size
   if (summary.assignees === 'Unassigned') { const icon = iconEl('unassigned', null); icon.title = 'Unassigned'; who.prepend(icon); }
   // a list row says who can see it in its subtext (peopleEl); a table row's subtext is its cells, so there it stays here
-  if (summary.audience && (tableView() || !peopleEl(summary, node))) el.append(audienceIcon(summary, node));
+  if (summary.audience && (tableView() || !audienceUris(summary).length)) el.append(audienceIcon(summary, node));
   else if (summary.unknownAudience) { const t = document.createElement('span'); t.className = 'mtext'; t.textContent = ' · Visibility unknown'; el.append(t); }
   // Pinned, in the same slot and with the same behaviour as the audience icon beside it: the glyph says the node is
   // pinned somewhere, and a click opens the page that says where and takes it off. Pins are personal, so a node you

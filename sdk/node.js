@@ -219,9 +219,8 @@ async function audienceMetadata(document, userUri, graph, sync) {
     return participants.length === 1 && participants[0].uri === userUri ? 'only-me' : 'people';
   };
   // people: who a restricted audience is (#461); hiddenFrom: the assignees outside it, who were given work they cannot
-  // open. The document's own grants count beside the boundary's, as in access.js audienceOf; everyone and unknown
-  // audiences name nobody.
-  // ponytail: grants on owners between the document and its boundary are not read; add them if a false mark shows up.
+  // open. The grants on the document and on every owner up to the boundary count beside the boundary's, as in
+  // access.js audienceOf; everyone is the organization's membership, and an unknown audience names nobody.
   const hidden = (result, participants = []) => {
     if (!['only-me', 'people', 'space'].includes(result.audience)) return result;
     const seen = new Set([...direct.participants, ...participants].map(p => p.uri));
@@ -234,25 +233,27 @@ async function audienceMetadata(document, userUri, graph, sync) {
   if (direct.restricted !== false && direct.restricted !== undefined) return { audience: 'unknown' };
   try {
     const chain = await graph.getOwnerChain(document.id);
-    const boundary = (chain.entries || []).find(e => e.uri !== document.id && e.restricted === true);
+    const owners = (chain.entries || []).filter(e => e.uri !== document.id), at = owners.findIndex(e => e.restricted === true);
+    const boundary = owners[at];
     if (boundary) {
-      if (boundary.accessible === false) return { audience: 'unknown' };
+      if (owners.slice(0, at + 1).some(e => e.accessible === false)) return { audience: 'unknown' };
       const owner = await sync.subscribe(boundary.uri);
       // The organization root is restricted to its members, so an org boundary means everyone in the
       // organization (the same membership map access.js checks).
       if (boundary.uri.startsWith('tana:org:')) {
-        const members = readNode(owner).memberUserProfileDocUris || {};
-        return { audience: Object.values(members).includes(userUri) ? 'everyone' : 'unknown' };
+        const members = Object.values(readNode(owner).memberUserProfileDocUris || {});
+        return members.includes(userUri) ? { audience: 'everyone', people: members.filter(uri => PERSON_URI.test(uri)) } : { audience: 'unknown' };
       }
-      const meta = taskMeta(owner);
-      if (meta.restricted !== true) return { audience: 'unknown' };
-      const scope = people(meta.participants);
-      if (scope !== 'people') return hidden({ audience: scope }, meta.participants); // 'only-me' or 'unknown'
+      if (taskMeta(owner).restricted !== true) return { audience: 'unknown' };
+      const between = await Promise.all(owners.slice(0, at).map(e => sync.subscribe(e.uri)));
+      const grants = [...new Map([...between, owner].flatMap(d => taskMeta(d).participants).map(p => [p.uri, p])).values()]; // one grant per person, as audienceOf's Object.assign
+      const scope = people(grants);
+      if (scope !== 'people') return hidden({ audience: scope }, grants); // 'only-me' or 'unknown'
       // An inherited boundary with explicit user participants is as determinate as a direct one: the audience is
       // that participant set (access.js audienceOf agrees). Only a space boundary additionally names a space.
-      if (!boundary.uri.startsWith('tana:space:')) return hidden({ audience: 'people' }, meta.participants);
+      if (!boundary.uri.startsWith('tana:space:')) return hidden({ audience: 'people' }, grants);
       const title = readNode(owner).title;
-      return hidden({ audience: 'space', audienceSpace: { uri: boundary.uri, ...(typeof title === 'string' && title.trim() ? { title } : {}) } }, meta.participants);
+      return hidden({ audience: 'space', audienceSpace: { uri: boundary.uri, ...(typeof title === 'string' && title.trim() ? { title } : {}) } }, grants);
     }
     return { audience: chain.effectivelyRestricted === false ? 'everyone' : 'unknown' };
   } catch { return { audience: 'unknown' }; }

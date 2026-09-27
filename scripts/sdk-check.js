@@ -1546,7 +1546,7 @@ async function main() {
     assert.deepEqual(await audienceMetadata(doc(true, { ...meOnly, 'tana:guest-profile:01exampleo0000000000000000': { type: 'user', role: 'attendee' } }), ME),
       { audience: 'people', people: [ME, 'tana:guest-profile:01exampleo0000000000000000'] }, 'an external guest participant is a person, not an unresolved grant');
     assert.deepEqual(await audienceMetadata(doc(undefined, {}), ME, boundaryOf(ORGDOC), { subscribe: async () => orgDoc({ u: ME }) }),
-      { audience: 'everyone' }, 'the organization root is a members-only boundary: everyone in the organization');
+      { audience: 'everyone', people: [ME] }, 'the organization root is a members-only boundary: everyone in the organization, named by its membership map');
     assert.deepEqual(await audienceMetadata(doc(undefined, {}), ME, boundaryOf(ORGDOC), { subscribe: async () => orgDoc({}) }), { audience: 'unknown' });
     assert.deepEqual(await audienceMetadata(doc(undefined, {}), ME, boundaryOf(EVENT), { subscribe: async () => doc(true, {}) }),
       { audience: 'unknown' }, 'a boundary with no participants stays unknown');
@@ -1561,6 +1561,14 @@ async function main() {
       { audience: 'people', people: [ME, OTHER], hiddenFrom: [SAM] }, 'inside a meeting Sam is not invited to');
     assert.deepEqual(await audienceMetadata(assigned(undefined, { [SAM]: { type: 'user', role: 'editor' } }), ME, boundaryOf(EVENT), { subscribe: async () => doc(true, shared) }),
       { audience: 'people', people: [SAM, ME] }, 'a grant on the document itself counts beside the boundary');
+    // a grant on an owner between the document and its boundary counts too (access.js audienceOf), once per person
+    const FOLDER = 'tana:text:01examplef0000000000000000';
+    const viaFolder = { getOwnerChain: async () => ({ entries: [{ uri: FOLDER, accessible: true }, { uri: EVENT, restricted: true, accessible: true }], effectivelyRestricted: true }) };
+    const folderGrants = (grants) => ({ subscribe: async (uri) => (uri === FOLDER ? doc(undefined, grants) : doc(true, meOnly)) });
+    assert.deepEqual(await audienceMetadata(assigned(undefined, {}), ME, viaFolder, folderGrants({ [SAM]: { type: 'user', role: 'editor' } })),
+      { audience: 'people', people: [SAM, ME] }, 'Sam, granted on the folder in between, can see it');
+    assert.deepEqual(await audienceMetadata(assigned(undefined, {}), ME, viaFolder, folderGrants(meOnly)),
+      { audience: 'only-me', people: [ME], hiddenFrom: [SAM] }, 'the same person granted twice is still only me');
     console.log('ok  audience: direct/inherited restrictions, everyone and unresolved groups');
   }
 
