@@ -192,7 +192,9 @@ function agentAskEls(a, docId) {
   const q = document.createElement('div'), qb = document.createElement('div');
   q.className = 'chat-msg mine agent-local'; qb.className = 'bubble'; qb.title = AGENT_NOTE;
   selectable(q, 'q:' + a.id);
-  const words = document.createElement('div'); words.className = 'chat-paragraph'; words.textContent = demoText(a.question, docId);
+  const words = document.createElement('div'); words.className = 'chat-paragraph';
+  // the agent it asks stands out: "@Codex" in bold, the rest as typed
+  words.append(...demoText(a.question, docId).split(new RegExp('(@' + a.label + '\\b)', 'i')).map((part, i) => { if (!(i % 2)) return part; const b = document.createElement('strong'); b.textContent = part; return b; }));
   const qhead = document.createElement('div'); qhead.className = 'agent-head'; qhead.append(...[iconNode('lock')].filter(Boolean), document.createTextNode('Only visible for you, on this device'));
   qb.append(words); q.append(qhead, qb); // the question is as private as its answer, and says so too
   const el = document.createElement('div'), head = document.createElement('div'), row = document.createElement('div'), bubble = document.createElement('div');
