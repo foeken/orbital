@@ -193,7 +193,8 @@ function agentAskEls(a, docId) {
   q.className = 'chat-msg mine agent-local'; qb.className = 'bubble'; qb.title = AGENT_NOTE;
   selectable(q, 'q:' + a.id);
   const words = document.createElement('div'); words.className = 'chat-paragraph'; words.textContent = demoText(a.question, docId);
-  qb.append(words); q.append(qb);
+  const qhead = document.createElement('div'); qhead.className = 'agent-head'; qhead.append(...[iconNode('lock')].filter(Boolean), document.createTextNode('Only visible for you, on this device'));
+  qb.append(words); q.append(qhead, qb); // the question is as private as its answer, and says so too
   const el = document.createElement('div'), head = document.createElement('div'), row = document.createElement('div'), bubble = document.createElement('div');
   el.className = 'chat-msg mine agent-local answer'; head.className = 'agent-head'; row.className = 'agent-row'; bubble.className = 'bubble'; bubble.title = AGENT_NOTE;
   selectable(el, 'a:' + a.id);

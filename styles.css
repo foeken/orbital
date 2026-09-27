@@ -619,7 +619,7 @@ button.chat-thought-head[aria-expanded="true"]::after { rotate: 135deg; translat
 .bubble .mention.gone { color: inherit; text-decoration: line-through; cursor: default; }
 /* an agent's answer, @Codex's (renderer/chat.js agentAnswerEl): yours alone, so on your side, grey where your own bubble is blue, under a
    line that says it stays on this Mac; the arrow shares it to the chat, pointing out toward the others */
-.agent-head { display: flex; align-items: center; gap: 5px; margin: 0 6px 4px 0; font-size: 13px; color: var(--muted); }
+.agent-head { display: flex; align-items: center; gap: 5px; margin: 0 6px 4px 0; font-size: 13px; color: var(--muted); opacity: .7; } /* over both local bubbles: said, not shouted */
 .agent-head svg { width: 12px; height: 12px; }
 .agent-head.opens { cursor: pointer; }
 .agent-head.opens:hover { color: inherit; }
@@ -639,11 +639,11 @@ button.chat-thought-head[aria-expanded="true"]::after { rotate: 135deg; translat
 @keyframes chat-dot { 0%, 60%, 100% { opacity: .35; transform: none; } 30% { opacity: .8; transform: translateY(-2px); } }
 /* the window's last row under a chat, outside the scroll, so it never moves: Codex's soft card, the text on top and the
    round send button under it at the right */
-.composer { flex: none; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin: 0 max(48px, calc((100% - var(--chat-width)) / 2)) 18px max(48px, calc((100% - var(--chat-width)) / 2)); padding: 18px 14px 14px 22px;
+.composer { flex: none; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin: 0 max(48px, calc((100% - var(--chat-width)) / 2)) 18px max(48px, calc((100% - var(--chat-width)) / 2)); padding: 14px 14px 14px 22px;
   border: 1px solid rgba(0, 0, 0, .12); border-radius: 13px; background: var(--surface); box-shadow: 0 6px 28px rgba(0, 0, 0, .07), 0 1px 3px rgba(0, 0, 0, .04); }
 .composer[hidden] { display: none; } /* its flex would otherwise win over [hidden] */
 .composer:focus-within { box-shadow: 0 8px 32px rgba(0, 0, 0, .09), 0 1px 3px rgba(0, 0, 0, .05); }
-.composer .ctext { flex: 1 0 100%; min-height: 3em; max-height: 40vh; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 16px; line-height: 1.5; outline: none; }
+.composer .ctext { flex: 1 0 100%; min-height: 2em; max-height: 40vh; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 16px; line-height: 1.5; outline: none; }
 .composer .ctext:empty::before { content: attr(data-placeholder); color: #9a9a9a; pointer-events: none; }
 .composer .ctext .mention { color: #508fbb; cursor: default; }
 .composer .ctext .mention svg { width: 14px; height: 14px; vertical-align: -2px; margin-right: 3px; }
