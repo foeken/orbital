@@ -5342,6 +5342,15 @@ async function main() {
     gone.length = 0; await backend.handlers.get('doc:info')(null, patchedUri, true);
     assert.deepEqual(gone, [], 'a change read back of a document already live is never let go by the read');
     delete sync.getDocument;
+    // Two panes reading the same change back at once: the one that subscribed it may finish first; the last one lets go
+    const opened = new Set(); let settleBoth; const both = new Promise((r) => { settleBoth = () => r(patchedDoc); });
+    sync.getDocument = (id) => (opened.has(id) ? patchedDoc : undefined);
+    sync.subscribe = (id) => { opened.add(id); return both; };
+    gone.length = 0;
+    const first = backend.handlers.get('doc:info')(null, patchedUri, true), second = backend.handlers.get('doc:info')(null, patchedUri, true);
+    settleBoth(); await Promise.all([first, second]);
+    assert.deepEqual(gone, [patchedUri], 'two reads back of the same change let go once, when the last is done');
+    delete sync.getDocument;
     sync.unsubscribe = async () => {};
     sync.subscribe = plain;
     sync.unsubscribe = async () => {};

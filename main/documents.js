@@ -26,6 +26,7 @@ async function outlineWithReferences(doc) {
 // and turned the next page's references away for good.
 // ponytail: LIVE_ROWS / 2 targets across every outline on screen; the newest pages win. Hold per page if that matters.
 const liveRefs = new Map();
+const passingReads = new Set(); // documents a change read back subscribed, let go when their last read is done (document())
 let liveRefsClient = null; // the sync client they are live on: a new login starts a new stream, subscribed to none of them
 // Let go of a target nothing holds any more: not a live reference, a view (subscribed), a read, a wait, or a watch
 // start() subscribes outside those (watched by hand, handed to the agent): letting that go would end its notifications
@@ -749,8 +750,9 @@ async function document(id, opts = {}) {
   // Held for the length of the wait (main/state.js reading): the refresh sweep must not unsubscribe a bootstrap
   // somebody is awaiting, which rejected the read as 'unsubscribed <id>' whenever a view change raced a doc:info.
   reading.set(id, (reading.get(id) || 0) + 1);
-  // a change read back of a document nobody keeps live (a reference already pushed out) is let go again once read
-  const passing = opts.patch && !(S.client.sync.getDocument && S.client.sync.getDocument(id));
+  // a change read back of a document nobody keeps live (a reference already pushed out) is let go again once the last
+  // read of it is done, whichever read that is (two panes may read the same change back at once)
+  if (opts.patch && !(S.client.sync.getDocument && S.client.sync.getDocument(id))) passingReads.add(id);
   try {
     const doc = await subscribe(id); // getDocument can expose an empty handle before bootstrap completes
     if (!doc) throw new Error(S.status.error || 'could not subscribe to ' + id);
@@ -762,8 +764,8 @@ async function document(id, opts = {}) {
     return doc;
   } finally {
     const left = (reading.get(id) || 1) - 1;
-    if (left > 0) reading.set(id, left); else reading.delete(id);
-    if (passing) dropRef(id); // only what this read subscribed: a live document's other holders are not all dropRef's to see
+    // only what a read back subscribed: a live document's other holders are not all dropRef's to see
+    if (left > 0) reading.set(id, left); else { reading.delete(id); if (passingReads.delete(id)) dropRef(id); }
   }
 }
 
