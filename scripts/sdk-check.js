@@ -1750,6 +1750,13 @@ async function main() {
     // doc:info, and an invented current time put the row on top of a list sorted by last update.
     uncachedDoc.data.delete('stateType');
     assert.equal((await backend.handlers.get('doc:info')(null, uncached)).updatedAt, '2026-09-17T17:48:39Z', 'doc:info keeps the update time for a plain document too');
+    // A real edit is still news: the bootstrap's change is the baseline, and a change after it that moved the document
+    // stamps the row, which the graph's own updateTime replaces once it has caught up.
+    backend.onChange(uncached, { origin: 'remote' });
+    assert.equal((await backend.handlers.get('doc:info')(null, uncached)).updatedAt, '2026-09-17T17:48:39Z', 'the first change is the bootstrap, a read');
+    uncachedDoc.transact((l) => l.getMap('data').set('title', 'Edited elsewhere'));
+    backend.onChange(uncached, { origin: 'remote' });
+    assert.ok((await backend.handlers.get('doc:info')(null, uncached)).updatedAt > '2026-09-17T17:48:39Z', 'an edit after it moves the update time');
     console.log('ok  rows carry updatedAt/createdAt/stateType, from the graph and from cached view rows');
   }
 

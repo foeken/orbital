@@ -526,9 +526,9 @@ async function rowInfo(doc) {
   // whose type has moved on is therefore rebuilt from the document below rather than patched.
   if (row && (typeUriOf(row) || null) === (n.entityTypeUri || null)) return toNode({ ...row, title: n.title ?? row.title, done: n.stateType === 'closed' ? 1 : 0, meta: ev || row.meta });
   await resolveHue(doc.id); // cached rows already carry the hue the refresh learned from the graph
-  // No updatedAt of our own: toNode falls back to the graph's updateTime. A current time here made a row jump to the
-  // top of a list sorted by last update whenever it was merely read — expanding it subscribes it, and the bootstrap
-  // comes back as a change the renderer patches every copy of the row with.
+  // No updatedAt of our own: toNode falls back to nodeMeta — the graph's updateTime, or the time onChange saw an edit.
+  // A current time here made a row jump to the top of a list sorted by last update whenever it was merely read —
+  // expanding it subscribes it, and the bootstrap comes back as a change the renderer patches every copy of the row with.
   if (idKind(doc.id) === 'user-profile') return toNode(memberRow(doc.id, n.title || doc.data.get('name') || doc.data.get('displayName') || '', undefined, hueOf(n)));
   if (PLAIN_KINDS.has(idKind(doc.id))) return toNode(kindRow(doc.id, idKind(doc.id), n.title || '', undefined, hueOf(n)));
   const isEvent = n.type === 'event' || doc.id.startsWith('tana:event:');
@@ -796,6 +796,10 @@ async function notifyWatched(id, doc, n, info) {
   S.notify(id, n.title || 'Untitled', 'Edited', 'edit');
   followSummary(id, n.title).catch(() => {});
 }
+// The oplog version each document's last change left. Its first change is the bootstrap, a read; a later one that moved
+// the version is an edit (here, from another client, or caught up on a reconnect), and the row says so until the
+// graph's updateTime catches up (rememberMeta).
+const versions = new WeakMap();
 function onChange(docId, info) {
   try {
     // The app's own settings document is not content: it is applied and nothing else hears about it.
@@ -813,6 +817,9 @@ function onChange(docId, info) {
     }
     const restored = deletedNodes.delete(docId);
     if (restored) db.unnoteDeleted(docId); // back from the dead: off the Recently deleted list, wherever the restore came from
+    const version = doc.loro && doc.loro.oplogVersion(), seen = versions.get(doc);
+    if (version) versions.set(doc, version);
+    if (seen && seen.compare(version) !== 0) nodeMeta.set(docId, { ...nodeMeta.get(docId), updatedAt: now() });
     const hueChanged = rememberNodeHue(n);
     const done = n.stateType === 'closed' ? 1 : 0, title = n.title ?? row?.title;
     const rowChanged = row && (title !== row.title || done !== row.done || hueChanged);
