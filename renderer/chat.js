@@ -176,14 +176,16 @@ function chatSend() {
   setComposer(null); chatDrafts.delete(docId);
   const ai = skill ? true : chatAi.get(docId), asked = Date.now();
   if (ai !== false) chatWaiting.set(docId, asked); // a message to the chat asks nobody to answer
+  // this send's own wait only: a newer message sent meanwhile has its own, which an earlier send settling must not clear
+  const stopWaiting = () => { if (chatWaiting.get(docId) !== asked) return false; chatWaiting.delete(docId); return true; };
   // the dots give up after two minutes even when nothing else redraws the page
-  setTimeout(() => { if (chatWaiting.get(docId) === asked) { chatWaiting.delete(docId); renderSoon(true); } }, CHAT_WAIT);
+  setTimeout(() => { if (stopWaiting()) renderSoon(true); }, CHAT_WAIT);
   run(async () => {
     let sent;
     // only a message that was not saved comes back to be sent again
     try { sent = await tana.sendChat(docId, text, skill ? [skill.uri] : [], ai === undefined ? {} : { ai }); }
-    catch (e) { chatWaiting.delete(docId); restoreDraft(docId, draft); throw e; }
-    if (!sent.responding) chatWaiting.delete(docId);
+    catch (e) { stopWaiting(); restoreDraft(docId, draft); throw e; }
+    if (!sent.responding) stopWaiting();
     await reload(docId);
     if (zoom && zoom.docId === docId) { outline.parentElement.scrollTop = outline.parentElement.scrollHeight; renderSoon(true); }
     // a reply that could not be asked for is said (run shows it), and the message stays sent: nothing is offered twice
