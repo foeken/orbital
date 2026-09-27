@@ -231,6 +231,12 @@ const latestAgentAsk = (docId) => (agentAnswers.get(docId) || []).at(-1);
 // the local ones), and it is what ⌘K's message rows act on: Delete message, and for an agent's answer Add to message
 // (also Enter) and Open task. It is kept across a redraw, which replaces every message.
 let chatSel = null;
+// The selection is drawn with a class (chat-sel: the outline's own .selected is a row band), not :focus alone, so it stays on while Cmd+K has the focus
+function selectMsg(key) {
+  chatSel = key;
+  for (const el of outline.querySelectorAll('.chat-msg.chat-sel')) el.classList.toggle('chat-sel', el.dataset.key === key);
+  const el = msgEl(key); if (el) el.classList.add('chat-sel');
+}
 const msgEl = (key) => (key ? outline.querySelector('.chat-msg[data-key="' + CSS.escape(key) + '"]') : null);
 const chatMsgs = () => [...outline.querySelectorAll('.chat-msg[data-key]')];
 const askOf = (docId, key) => (/^[qa]:/.test(key || '') ? (agentAnswers.get(docId) || []).find((a) => a.id === key.slice(2)) : null);
@@ -239,7 +245,7 @@ function chatFocus(key) {
   if (el) { el.focus({ preventScroll: true }); el.scrollIntoView({ block: 'nearest' }); }
   return !!el;
 }
-function toComposer() { chatSel = null; if (!composer.hidden) composerText.focus(); else document.activeElement.blur(); }
+function toComposer() { selectMsg(null); if (!composer.hidden) composerText.focus(); else document.activeElement.blur(); }
 // Yours to delete: a local question or answer (both go), or your own message in the chat when you may write in it
 function deletableMsg(docId, key) {
   const el = msgEl(key);
@@ -251,7 +257,7 @@ function deleteChatMsg(docId, key) {
   if (!deletableMsg(docId, key)) return;
   const a = askOf(docId, key), gone = a ? ['q:' + a.id, 'a:' + a.id] : [key];
   const keys = chatMsgs().map((el) => el.dataset.key), at = keys.indexOf(gone[0]), rest = keys.filter((k) => !gone.includes(k));
-  chatSel = keys.slice(0, at).filter((k) => !gone.includes(k)).at(-1) || rest[0] || null; // the one above takes the selection
+  selectMsg(keys.slice(0, at).filter((k) => !gone.includes(k)).at(-1) || rest[0] || null); // the one above takes the selection
   run(async () => {
     if (a) { await tana.deleteAgentAsk(docId, a.id); agentAnswers.set(docId, (agentAnswers.get(docId) || []).filter((x) => x.id !== a.id)); }
     else { await tana.deleteChatMessage(docId, key); await reload(docId); }
@@ -269,8 +275,8 @@ function chatMessageRows(docId) {
   return rows;
 }
 // a message ↑↓ can land on, with its keys
-function selectable(el, key) { el.dataset.key = key; el.tabIndex = -1; el.onfocus = () => { chatSel = key; }; el.onkeydown = chatKey; }
-document.addEventListener('mousedown', (e) => { if (!(e.target.closest && e.target.closest('.chat-msg[data-key], #palette'))) chatSel = null; }, true);
+function selectable(el, key) { el.dataset.key = key; el.tabIndex = -1; el.classList.toggle('chat-sel', key === chatSel); el.onfocus = () => selectMsg(key); el.onkeydown = chatKey; }
+document.addEventListener('mousedown', (e) => { if (!(e.target.closest && e.target.closest('.chat-msg[data-key], #palette')) && chatSel) selectMsg(null); }, true);
 function chatKey(e) {
   const m = e.currentTarget;
   if (!chatShown || e.target !== m) return;
@@ -462,7 +468,7 @@ composerText.addEventListener('paste', (e) => {
   const at = sel.getRangeAt(0).cloneRange();
   tana.node(uri).then((n) => { composerAt = at; chatMention({ label: n.title || uri, uri }); }, showError);
 });
-composerText.addEventListener('focus', () => { chatSel = null; });
+composerText.addEventListener('focus', () => selectMsg(null));
 composerSkill.onclick = () => { chatSkill = null; showSkill(); composerText.focus(); };
 composerSend.onmousedown = (e) => e.preventDefault(); // the caret stays in the composer
 composerSend.onclick = chatSend;
@@ -472,7 +478,7 @@ function chatAfterRender(parent, stick) {
   const was = composer.dataset.doc;
   if (was && was !== docId) { if (!composer.classList.contains('empty')) chatDrafts.set(was, { segs: composerSegs(), skill: chatSkill }); else chatDrafts.delete(was); }
   const opened = chat && docId !== chatShown;
-  if (opened) chatSel = null;
+  if (opened) selectMsg(null);
   if (was !== (docId || '')) {
     composer.dataset.doc = docId || ''; setComposer(docId && chatDrafts.get(docId)); showMode();
   }
