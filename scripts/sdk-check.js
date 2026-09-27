@@ -5214,7 +5214,7 @@ async function main() {
     assert.deepEqual(raw.reference, {uri:targetUri});
     assert.throws(() => outline.setText(host, blockId, 'overwrite'), /Reference blocks/);
     assert.deepEqual(host.toJSON(), before, 'reads and rejected text writes preserve the native embed');
-    const requests = [], live = [], sync = {subscribe:async (id) => { live.push(id); return null; }, unsubscribe:async () => {}};
+    const requests = [], live = [], sync = {subscribe:async (id) => { live.push(id); return {}; }, unsubscribe:async () => {}};
     backend.testRuntime({me:{userUri:ME},client:{sync,graph:{listNodes:async q => { requests.push(q); return {nodes:[{id:targetUri,title:'Actual embedded task',state:{type:'open'},appearance:{hue:0}}]}; }}}});
     const resolved = await backend.outlineWithReferences(host);
     // the row draws a copy of its target's title: only a subscribed target tells main it was renamed (#413)
@@ -5229,7 +5229,8 @@ async function main() {
     let last = outline.readOutline(many)[0].id;
     for (let i = 1; i < 60; i++) last = outline.insertAfter(many, last, 'r' + i);
     many.transact(l => { const rows = l.getMap('content').get('children'); for (let i = 0; i < rows.length; i++) { const uri = 'tana:text:' + ulid(); manyUris.push(uri); rows.get(i).set('nodeName', 'embed'); rows.get(i).get('attributes').set('tanaUri', uri); } });
-    backend.testRuntime({me:{userUri:ME},client:{sync,graph:{listNodes:async () => ({nodes:manyUris.map((id) => ({id, title:id}))})}}});
+    const refClient = {sync,graph:{listNodes:async (q) => ({nodes:(q.nodeIds || []).map((id) => ({id, title:id}))})}}; // one client: a new one starts afresh
+    backend.testRuntime({me:{userUri:ME},client:refClient});
     await backend.outlineWithReferences(many);
     assert.deepEqual([manyUris.length, live.length], [60, 50], 'a page of 60 references keeps its first 50 live');
     // Read again, a page subscribes nothing twice; the next page's references are kept live and push the oldest out
@@ -5240,20 +5241,27 @@ async function main() {
     const other = new Document('tana:text:' + ulid()), otherUris = [];
     other.transact(l => { initDocument(l, 'more references', ME); });
     other.transact(l => { const rows = l.getMap('content').get('children'); const uri = 'tana:text:' + ulid(); otherUris.push(uri); rows.get(0).set('nodeName', 'embed'); rows.get(0).get('attributes').set('tanaUri', uri); });
-    backend.testRuntime({me:{userUri:ME},client:{sync,graph:{listNodes:async () => ({nodes:[...manyUris, ...otherUris].map((id) => ({id, title:id}))})}}});
     live.length = 0; await backend.outlineWithReferences(other);
     assert.deepEqual([live, gone], [otherUris, [manyUris[0]]], 'the next page\u2019s reference is kept live and the oldest let go: no page is turned away, and none is read again for it');
     // Pushed out while still loading, a target is let go once its bootstrap settles, so none outlives the cap
     const slow = new Document('tana:text:' + ulid()), slowUri = 'tana:text:' + ulid();
     slow.transact(l => { initDocument(l, 'slow reference', ME); });
     slow.transact(l => { const row = l.getMap('content').get('children').get(0); row.set('nodeName', 'embed'); row.get('attributes').set('tanaUri', slowUri); });
-    backend.testRuntime({me:{userUri:ME},client:{sync,graph:{listNodes:async () => ({nodes:[...manyUris, ...otherUris, slowUri].map((id) => ({id, title:id}))})}}});
     let settle; const plain = sync.subscribe;
     sync.subscribe = (id) => (id === slowUri ? new Promise((r) => { settle = r; }) : plain(id));
     await backend.outlineWithReferences(slow);
     await backend.outlineWithReferences(many); // 50 newer ones: the slow target is pushed out while it loads
-    gone.length = 0; settle(null); await new Promise((r) => setImmediate(r));
+    gone.length = 0; settle({}); await new Promise((r) => setImmediate(r));
     assert.ok(gone.includes(slowUri), 'a target pushed out while it loaded is let go once it settles');
+    // A bootstrap that failed is tried again on the next read, and a new login (a new client) subscribes afresh
+    sync.subscribe = async (id) => { live.push(id); return id === otherUris[0] ? null : {}; };
+    live.length = 0; await backend.outlineWithReferences(other); await new Promise((r) => setImmediate(r));
+    live.length = 0; await backend.outlineWithReferences(other);
+    assert.deepEqual(live, otherUris, 'a target whose bootstrap failed is subscribed again on the next read');
+    sync.subscribe = plain;
+    backend.testRuntime({me:{userUri:ME},client:{...refClient}});
+    live.length = 0; await backend.outlineWithReferences(slow);
+    assert.deepEqual(live, [slowUri], 'after a new login a target live on the old client is subscribed on the new one');
     sync.subscribe = plain;
     sync.unsubscribe = async () => {};
     backend.testRuntime({me:{userUri:ME},client:{sync,graph:{listNodes:async q => { requests.push(q); return {nodes:[{id:targetUri,title:'Actual embedded task',state:{type:'open'},appearance:{hue:0}}]}; }}}});
