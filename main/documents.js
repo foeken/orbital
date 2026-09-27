@@ -752,7 +752,9 @@ async function document(id, opts = {}) {
   try {
     const doc = await subscribe(id); // getDocument can expose an empty handle before bootstrap completes
     if (!doc) throw new Error(S.status.error || 'could not subscribe to ' + id);
-    readOnDemand(id);
+    // A live reference's own change read back (renderer/app.js patchDoc) is its list's, not a read: counted here, the
+    // on-demand sweep let it go past LIVE_ROWS and the pages citing it read it back in again (#438). An open still counts.
+    if (!(opts.patch && liveRefs.has(id))) readOnDemand(id);
     return doc;
   } finally {
     const left = (reading.get(id) || 1) - 1;
@@ -972,7 +974,7 @@ const typed = (e, own, fn) => { if (own !== true || !e) return fn(); S.writer = 
 const LINK_ROUTES = { type: 't', 'user-profile': 'u', event: 'e', space: 's' };
 // What the renderer asks this module (preload.js names each channel for the page; main.js registers the table).
 const ipc = {
-  'doc:info': (_e, id) => op(id, info),
+  'doc:info': (_e, id, patch) => op(id, info, { patch: patch === true }),
   'doc:creationOptions': () => creationOptions(),
   'doc:taskTypes': () => taskTypes(), // Create task's picker: the workflow types a task can be made with
   // A document's type: the choices it can be given (with the ones it cannot, and why), and the change itself.

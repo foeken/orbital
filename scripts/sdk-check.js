@@ -5325,6 +5325,15 @@ async function main() {
     late(null); await new Promise((r) => setImmediate(r));
     live.length = 0; backend.reliveRefs();
     assert.ok(live.includes(slowUri), 'a target whose old-client bootstrap failed after a new login is still subscribed on the new client');
+    // Its change read back by the renderer (patchDoc: doc:info, patch) is no on-demand read: pushed out, it is let go (#438)
+    const patched = new Document('tana:text:' + ulid()), patchedUri = 'tana:text:' + ulid(), patchedDoc = new Document(patchedUri);
+    patchedDoc.transact(l => initDocument(l, 'patched target', ME));
+    patched.transact(l => { initDocument(l, 'patched reference', ME); const row = l.getMap('content').get('children').get(0); row.set('nodeName', 'embed'); row.get('attributes').set('tanaUri', patchedUri); });
+    sync.subscribe = async (id) => (id === patchedUri ? patchedDoc : {});
+    await backend.outlineWithReferences(patched); await new Promise((r) => setImmediate(r));
+    assert.equal((await backend.handlers.get('doc:info')(null, patchedUri, true)).title, 'patched target');
+    gone.length = 0; await backend.outlineWithReferences(many); await new Promise((r) => setImmediate(r));
+    assert.ok(gone.includes(patchedUri), 'a reference target whose change was read back is still let go when the list pushes it out');
     sync.unsubscribe = async () => {};
     sync.subscribe = plain;
     sync.unsubscribe = async () => {};
