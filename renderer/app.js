@@ -90,10 +90,10 @@ titleEl.addEventListener('blur', () => document.documentElement.classList.remove
 // and the line they sat on above the title goes. The page keeps its own row, laid out but unseen (styles.css), so its
 // animations still end — Clean up hides once its exit has played — and sends its markup on every change, with whether
 // the pointer is here; a press on the copy is a click on the button here (navclick above).
-const navRow = document.querySelector('.navbtns');
+const navRow = $('navbtns');
 let navSent = '';
 function tellNav() {
-  const on = document.documentElement.classList.contains('pointer-in'), html = navRow.innerHTML;
+  const on = document.documentElement.classList.contains('pointer-in'), html = navRow.hidden ? '' : navRow.innerHTML; // hidden: the login screen
   if (window.parent === window || navSent === on + html) return;
   navSent = on + html;
   window.parent.postMessage({ orbital: 'navbtns', html, on }, '*');
