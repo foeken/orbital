@@ -2790,6 +2790,32 @@ async function main() {
     await warm.refresh(); // announced and closed, the rule lets it go now, and the prune with it
     await settle();
     assert.equal(warmBanners.length, 1, 'and not again');
+    // A watched task whose subscribe fails keeps its stored pair: the watch rule still follows it and retries, and a
+    // prune by `subscribed` alone left that retry nothing to compare with, so the completion went unannounced.
+    // Its own instance: warm holds the pairs in memory from before this task existed, and has spent a catch-up banner.
+    const flaky = task('Send the invoice', 'closed');
+    const graphWarm = runtime.client.graph.listNodes, subscribeBefore = runtime.client.sync.subscribe;
+    runtime.client.graph.listNodes = async (p) => (p.createdBy
+      ? { nodes: [...(await graphWarm(p)).nodes, { id: flaky.id, assignedTo: [COLLEAGUE], state: { type: 'closed' } }] }
+      : graphWarm(p));
+    let flakyTries = 0;
+    runtime.client.sync.subscribe = async (id) => {
+      if (id === flaky.id && ++flakyTries === 1) throw new Error('connection reset'); // the first try only
+      return subscribeBefore(id);
+    };
+    const retry = mainHelpers(); retry.testRuntime(runtime);
+    const retryBanners = []; retry.S.notify = (id, title, body) => retryBanners.push([id, body]);
+    await retry.refresh();
+    await settle();
+    assert.equal(flakyTries, 1, 'the watch rule tried to subscribe it, and that failed');
+    assert.deepEqual(kept(flaky.id), [flaky.id], 'a task the watch rule follows keeps its stored pair when its subscribe fails');
+    await retry.refresh();
+    retry.onChange(flaky.id, { origin: 'remote' }); // the retry's bootstrap
+    await settle();
+    assert.equal(flakyTries, 2, 'the next refresh subscribes it again');
+    assert.deepEqual(retryBanners, [[flaky.id, 'Now Completed by Sam Rivera']],
+      'and the completion made while the app was closed is announced once that subscribe works');
+    runtime.client.sync.subscribe = subscribeBefore;
     runtime.client.graph.listNodes = graphBefore;
     // Another tab from the same user has a different nonce but the same user hash in its peer id.
     const ownPeer = '65536', otherOwnPeer = '65537', colleaguePeer = '131072';

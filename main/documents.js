@@ -585,12 +585,15 @@ function rememberSeen(id, sig) {
   seenPairs[id] = pair;
   db.setSetting('notifySeen', seenPairs);
 }
-// Down to what is still followed: subscribed by a view or the watch rule, or watched by hand or handed to the agent
-// (start subscribes those outside `subscribed`). Only the refresh calls it, once those are subscribed: pruning on every
-// write ran at launch before anything was, and the settings document's first write cut 42 stored pairs to 1 (#427).
-function pruneSeen() {
+// Down to what is still followed: subscribed, or found by this refresh (`followed`: the watch rule's set and the rows
+// the views keep live), or watched by hand or handed to the agent (start subscribes those outside `subscribed`).
+// `followed` counts on its own because a subscribe that fails drops its id from `subscribed` (subscribe above) while
+// the rule still follows it; the retry's bootstrap needs the stored pair to announce what moved meanwhile.
+// Only the refresh calls it, once those are subscribed: pruning on every write ran at launch before anything was,
+// and the settings document's first write cut 42 stored pairs to 1 (#427).
+function pruneSeen(followed = new Set()) {
   seenPairs ||= storedPairs();
-  const held = new Set([...notifyWatchedIds(), ...codexIds()]);
+  const held = new Set([...followed, ...notifyWatchedIds(), ...codexIds()]);
   const next = Object.fromEntries(Object.entries(seenPairs).filter(([id]) => subscribed.has(id) || held.has(id)));
   if (Object.keys(next).length === Object.keys(seenPairs).length) return;
   seenPairs = next;
