@@ -2778,14 +2778,17 @@ async function main() {
     await settle();
     assert.deepEqual(kept(finished.id, idle.id, byHand, forgotten), [finished.id, idle.id, byHand, forgotten],
       'the first document to arrive at launch prunes none of the stored pairs');
-    await warm.refresh();
+    const subscribeBefore = runtime.client.sync.subscribe;
+    runtime.client.sync.subscribe = async (id) => { if (id === idle.id) throw new Error('offline'); return subscribeBefore(id); };
+    await warm.refresh(); // idle's subscribe fails: the rule still follows it, so its pair must stay for the retry
+    runtime.client.sync.subscribe = subscribeBefore;
+    assert.deepEqual(kept(finished.id, idle.id, byHand, forgotten), [finished.id, idle.id, byHand],
+      'the refresh prunes only what nothing follows any more: a node watched by hand, or one whose subscribe failed, keeps its pair');
     warm.onChange(finished.id, { origin: 'remote' });
     warm.onChange(idle.id, { origin: 'remote' });
     await settle();
     assert.deepEqual(warmBanners, [[finished.id, 'Now Completed by Sam Rivera']],
       'the watched task completed while the app was closed is announced once, the unchanged one not at all');
-    assert.deepEqual(kept(finished.id, idle.id, byHand, forgotten), [finished.id, idle.id, byHand],
-      'the refresh prunes only what nothing follows any more: a node watched by hand keeps its pair');
     warm.onChange(finished.id, { origin: 'remote' });
     await warm.refresh(); // announced and closed, the rule lets it go now, and the prune with it
     await settle();

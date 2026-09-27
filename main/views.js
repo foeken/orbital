@@ -400,7 +400,7 @@ async function doRefresh() {
     let watching = true;
     try { await refreshWatched(); } catch { watching = false; /* the watch set keeps what it had, like the badge keeps its number */ }
     for (const v of openViews()) await viewRows(v.id, v.filter); // each window's view, once, each settling its live query
-    if (watching) pruneSeen(); // now that the watch rule and the views have subscribed what they follow (#427)
+    if (watching) pruneSeen(ruleWatched); // now that the watch rule and the views have subscribed what they follow (#427)
     send('outline:changed', null);
     setStatus({ syncing: false, lastSync: now() });
     // The badge rides the same refresh the views do, in its own try and deliberately silent: a number on the app icon
