@@ -310,3 +310,49 @@ subset does not carry and would drop.
 
 **Status lines.** Tana's chat panel shows every message but `hiddenFromChat` ones and interview relays (its `br`),
 status updates included; the app draws one other than "accepted N changes" as a small centred line (`row.chat.status`).
+
+
+## 12. @Codex: a question and its answer on this Mac, never in Tana
+
+main/chatagents.js, renderer/chat.js (issue #468). "@" in the composer offers **Codex** after Tana; a message that mentions
+it (the chip is written as plain "@Codex") goes through `chatAgent:ask` instead of `chat:send`, and nothing of it is
+written to Tana. Tana has no author for an agent's words: a message is `human` with a `fromUserUri`, or `ai`, which
+Tana draws as the chat's own agent (§2), so an `ai` message would read as Tana's answer to everyone in the chat, and a
+`human` one as yours. Both the question and the answer stay in Orbital:
+
+1. **A Codex task on this Mac** is started with main/agent.js `createTask` (the Assign to Agent path, keyed by the chat, so
+   its workspace is `agent-workspaces/tana-chat-…`). Its prompt is the question and the whole conversation, oldest first,
+   `Name: text` per message, mentions left as `[label](tana:…)` for its Tana tools to read. Its developer instructions
+   (`thread/start` `developerInstructions`, `RULES`) say the question and answer are shown to the asker alone and never
+   saved to Tana, to answer only what was asked, and never to write to Tana. A task that cannot start keeps nothing, and
+   the words go back to the composer.
+2. **The question stays local**: `chatAsks` (chat → `[{ id, question, agent, taskId, at, state, text }]`, `id` a local
+   uuid) is not in main/settings.js `SYNCED`, so it lives in this Mac's SQLite only. Another machine, and everyone else in
+   the chat, sees nothing of it.
+3. **The answer is read, never written.** `chatAgent:replies` asks each agent for its running tasks; Codex reads the latest turn of each
+   (`thread/turns/list`, `limit: 1`, `itemsView: 'full'`): its `agentMessage` with `phase: 'final_answer'`, or once the
+   turn has completed the last one. Read from a second app-server, a turn still running on the one that started it shows
+   as `interrupted` with no answer (verified live 2026-09-27: `interrupted` at 3 s, `completed` with the answer at 6 s),
+   so only an answer, a completed or failed turn, or `createTask`'s 15-minute cap ends the wait. A finished answer is kept
+   in `chatAsks` and not read again.
+4. **Drawn on your side**, among the messages at the time it was asked (`at` against each message's `sentAt`): the
+   question in a grey bubble, then under "Codex · only visible for you, on this device" the chat's dots while the task
+   works (read every 4 s while any is running) and the answer, grey too. The paperclip beside a finished answer, or
+   Cmd+K Add Codex’s answer to message for the latest one, adds it to the message box, after anything already there: sent
+   from there, it is your message, the only way an answer reaches Tana.
+
+Deleting: a question and its answer go together (`chatAgent:delete`, forgotten from `chatAsks`; the task stays in
+Codex). Your own messages in the chat are deleted as Tana's "Delete message" deletes them, the entry spliced out of
+`data.messages` (sdk/chat.js `deleteMessage`, `chat:delete`), never the AI's or anyone else's. An ask from the build
+that wrote the question to the chat kept only that message's id; its question is read back from the chat once.
+
+The task is kept, not only its answer: clicking the "Codex · …" line over an answer, or Cmd+K Open Codex task for the
+latest question, opens it in Codex (`chatAgent:open`: the page names the question, main opens the agent's `url`, for Codex
+`codex://threads/<id>`, from `chatAsks`, as the agent badge's `codex:open` does for a node).
+
+**Another agent** is one entry in `AGENTS` (main/chatagents.js), beside `codex`: its `label` and `icon`, `available()`
+(can this device run it; "@" offers only those), `start({ key, prompt, rules })` answering a task id, `read(taskIds)`
+answering `taskId → { state, text }` for the ones still running, and `url(taskId)` to open one in its own app. The
+question, the prompt, the rules, the local record, the grey bubbles, the paperclip and Open are shared, and the page draws every
+label from `chatAgent:list`. Codex is the only entry today.
+

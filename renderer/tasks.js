@@ -144,29 +144,37 @@ function audienceIcon(summary, node) {
 }
 // Who can see a row, at the start of its subtext (#461): the audience's glyph, a bubble per person and how many.
 // main names them (sdk/node.js audienceMetadata): everyone is the organization's membership, the others the grants.
-function audienceUris(summary) { return (summary && summary.audience && displayOn('assigned') && summary.people) || []; }
+function audienceUris(summary) { return (summary && summary.audience && displayOn('assigned') && audienceShown() && summary.people) || []; }
+// the Timeline says what happened and who did it, not who can see it: no audience icon or faces there
+function audienceShown() { return !(zoom && zoom.docId === TIMELINE_PAGE); }
 // a guest's profile is not readable (the graph refuses the kind, a subscribe finds no document), so a guest is named as one
 function isGuest(uri) { return uri.startsWith('tana:guest-profile:'); }
 function peopleEl(summary, node) {
   const uris = audienceUris(summary);
-  if (!uris.length) return null;
+  // a sensitive node says nothing about who can see it: no glyph, faces or count (back with Toggle sensitive visibility)
+  if (!uris.length || (node && sensitiveHidden(node.id))) return null;
+  const el = document.createElement('span'); el.className = 'people';
+  el.append(audienceIcon(summary, node), ...facesEls(uris, summary.peopleCount || uris.length));
+  return el;
+}
+// A bubble each for the first four people, then the rest: "+n" up to nine people, "and n others" past that. The list
+// row's subtext (peopleEl) and the page's Visible to field (renderer/fields.js) both draw them.
+function facesEls(uris, count) {
   loadMembers(); // the bubbles' names
   const face = (uri) => {
     const f = document.createElement('span'), found = memberName(uri), known = !found.startsWith('tana:');
     const name = known ? found : isGuest(uri) ? 'Guest' : 'Unknown person';
     f.className = 'face'; f.textContent = known || isGuest(uri) ? name.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase() : '?';
     f.setAttribute('role', 'img'); f.setAttribute('aria-label', name); f.title = name;
-    let hue = 0; for (const c of uri) hue = (hue * 31 + c.charCodeAt(0)) % 360; // one colour per person, the same on every row
-    f.style.setProperty('--hue', hue);
+    let tone = 0; for (const c of uri) tone = (tone * 31 + c.charCodeAt(0)) % 6; // one of six light greys per person, the same on every row
+    f.style.setProperty('--tone', tone);
     return f;
   };
-  const faces = document.createElement('span'); faces.className = 'faces';
-  const count = summary.peopleCount || uris.length; // main sends the first four and how many (main/documents.js doc:taskMeta)
-  faces.append(...uris.slice(0, 4).map(face)); // four bubbles, then "+n"
-  if (count > 4) { const more = document.createElement('span'); more.className = 'face more'; more.textContent = '+' + (count - 4); more.setAttribute('aria-hidden', 'true'); faces.append(more); } // the count after it says how many
-  const el = document.createElement('span'); el.className = 'people';
-  el.append(audienceIcon(summary, node), faces, count === 1 ? '1 person' : count + ' people');
-  return el;
+  const faces = document.createElement('span'); faces.className = 'faces'; faces.title = count === 1 ? '1 person' : count + ' people'; // main sends the first four and how many (main/documents.js doc:taskMeta)
+  faces.append(...uris.slice(0, 4).map(face));
+  const rest = count - 4;
+  if (rest > 0 && count <= 9) { const more = document.createElement('span'); more.className = 'face more'; more.textContent = '+' + rest; more.setAttribute('role', 'img'); more.setAttribute('aria-label', rest + ' more'); faces.append(more); }
+  return [faces, ...(count > 9 ? ['and ' + rest + ' others'] : [])];
 }
 // node: the row's document, so its facts open the Cmd+K pickers they describe (Edit assignees, Edit visibility)
 function taskMetaEl(summary, docId, node) {
@@ -179,8 +187,11 @@ function taskMetaEl(summary, docId, node) {
   if (summary.assignees && writable && isTask(node) && tana.setAssignees) { who.title = 'Edit assignees'; clickable(who, () => openAssigneePalette(node)); }
   if (summary.pending) el.append(iconEl('pending', null)); // the answer is still on its way: same slot, same size
   if (summary.assignees === 'Unassigned') { const icon = iconEl('unassigned', null); icon.title = 'Unassigned'; who.prepend(icon); }
-  // a list row says who can see it in its subtext (peopleEl); a table row's subtext is its cells, so there it stays here
-  if (summary.audience && (tableView() || !audienceUris(summary).length)) el.append(audienceIcon(summary, node));
+  // a list row says who can see it in its subtext (peopleEl); a table row's subtext is its cells, so there the same
+  // line (glyph, faces, the rest in words) sits here with the row's icons, and the bare glyph where it names nobody
+  if (!audienceShown()) { /* the Timeline: nothing about who can see it */ }
+  else if (summary.audience && tableView()) el.append(peopleEl(summary, node) || audienceIcon(summary, node));
+  else if (summary.audience && !audienceUris(summary).length) el.append(audienceIcon(summary, node));
   else if (summary.unknownAudience) { const t = document.createElement('span'); t.className = 'mtext'; t.textContent = ' · Visibility unknown'; el.append(t); }
   // Pinned, in the same slot and with the same behaviour as the audience icon beside it: the glyph says the node is
   // pinned somewhere, and a click opens the page that says where and takes it off. Pins are personal, so a node you

@@ -14,6 +14,15 @@ const chatDrafts = new Map(); // docId -> what was typed there and not sent
 // send has its own, so the dots follow the newest one and only its own answer, one after that message, ends them.
 const chatWaiting = new Map();
 const isChatPage = (parent) => !!parent && !parent.nodeId && String(parent.docId).startsWith('tana:chat:');
+// @Codex and any other agent on this device (main/chatagents.js, docs/CHATS.md §12): the agents "@" offers, and the
+// questions asked in a chat with their answers, which live on this device only and never reach Tana. chatId -> [{ id,
+// question, agent, label, at, state: working|done|failed, text }], read when the chat opens and while one runs.
+let chatAgents = []; // [{ id, label, icon }] this device can run, from main once at load
+if (tana.chatAgents) tana.chatAgents().then((list) => { chatAgents = list; }, () => {});
+const agentAnswers = new Map(), agentPolls = new Map(); // agentPolls: docId -> read again once the read out now is back
+const AGENT_URI = 'orbital:agent:'; // an "@" chip for an agent, written into the message as plain "@Label"
+const AGENT_NOTE = 'Only visible for you, on this device. Never saved to Tana.';
+const askedAgent = (text) => chatAgents.find((a) => new RegExp('(^|\\s)@' + a.label + '\\b', 'i').test(text));
 
 function chatDotsEl() {
   const el = document.createElement('span'); el.className = 'chat-dots'; el.setAttribute('aria-label', 'Tana is writing');
@@ -38,6 +47,7 @@ function chatPartEls(n, docId) {
 function chatMessageEl(n, docId) {
   const c = n.chat, el = document.createElement('div'), bubble = document.createElement('div');
   el.className = 'chat-msg ' + (c.mine ? 'mine' : 'theirs');
+  if (c.id) selectable(el, c.id);
   bubble.className = 'bubble';
   if (c.sentAt) bubble.title = new Date(c.sentAt).toLocaleString();
   const subs = (n.children || []).filter((p) => p.sub); // a subagent's chat: under the thinking line, as in Tana
@@ -114,7 +124,11 @@ function chatEls(list, docId) {
   const rows = list.filter((n) => n.chat), msgs = rows.filter((n) => !n.chat.status), out = [];
   const lefts = new Set(msgs.filter((n) => !n.chat.mine).map((n) => n.chat.author)); // more than one: names over their runs
   let prev = null;
+  // the questions asked of an agent on this device, and their answers, where they were asked among the messages
+  const asks = [...(agentAnswers.get(docId) || [])].sort((a, b) => a.at - b.at);
+  const asksUntil = (t) => { while (asks.length && !(asks[0].at > t)) { out.push(...agentAskEls(asks.shift(), docId)); prev = null; } };
   for (const n of rows) {
+    if (n.chat.sentAt) asksUntil(n.chat.sentAt - 1);
     // a status line ("Sam was added to the chat.") stands on its own between the messages, as Tana shows it
     if (n.chat.status) { const line = document.createElement('div'); line.className = 'chat-status'; line.textContent = demoText(n.text, n.chat.author || docId); out.push(line); prev = null; continue; }
     if (!n.chat.mine && lefts.size > 1 && (!prev || prev.chat.author !== n.chat.author)) {
@@ -123,6 +137,7 @@ function chatEls(list, docId) {
     out.push(chatMessageEl(n, docId));
     prev = n;
   }
+  asksUntil(Infinity);
   chatPendingQ = ([...msgs].reverse().find((n) => n.chat.questions) || { chat: {} }).chat.questions || null;
   // Asked, and no answer has begun: dots where it will be, until one does or it has been two minutes
   // Only Tana's message after the one it was asked about ends the wait: not another person's (a group chat), and not
@@ -169,16 +184,150 @@ if (typeof ResizeObserver === 'function' && outline.parentElement) {
   sc.addEventListener('scroll', () => { if (chatShown) chatAtBottom = sc.scrollHeight - sc.scrollTop - sc.clientHeight < 80; }, { passive: true });
   const seen = new ResizeObserver(keep); seen.observe(outline); seen.observe(sc);
 }
+// ---- the agents' questions and answers ----
+// Two grey bubbles on your side, neither of them in Tana: the question, then under a line that says they are yours
+// alone the dots while the task works and then its answer. The paperclip beside an answer puts it in the message box,
+// to send as your own words.
+function agentAskEls(a, docId) {
+  const q = document.createElement('div'), qb = document.createElement('div');
+  q.className = 'chat-msg mine agent-local'; qb.className = 'bubble'; qb.title = AGENT_NOTE;
+  selectable(q, 'q:' + a.id);
+  const words = document.createElement('div'); words.className = 'chat-paragraph'; words.textContent = demoText(a.question, docId);
+  const qhead = document.createElement('div'); qhead.className = 'agent-head'; qhead.append(...[iconNode('lock')].filter(Boolean), document.createTextNode('Only visible for you, on this device'));
+  qb.append(words); q.append(qhead, qb); // the question is as private as its answer, and says so too
+  const el = document.createElement('div'), head = document.createElement('div'), row = document.createElement('div'), bubble = document.createElement('div');
+  el.className = 'chat-msg mine agent-local answer'; head.className = 'agent-head'; row.className = 'agent-row'; bubble.className = 'bubble'; bubble.title = AGENT_NOTE;
+  selectable(el, 'a:' + a.id);
+  // the line over it opens the agent's task that answered, for the work behind the answer
+  if (tana.openAgentAsk) { head.classList.add('opens'); head.title = 'Open the ' + a.label + ' task'; head.onclick = () => openAgentAsk(docId, a.id); }
+  head.append(...[iconNode('lock')].filter(Boolean), document.createTextNode(a.label + ' · only visible for you, on this device'));
+  if (a.state === 'working') bubble.append(chatDotsEl());
+  else { const text = document.createElement('div'); text.className = 'chat-paragraph'; text.textContent = a.state === 'done' ? demoText(a.text, docId) : a.label + ' stopped without an answer'; bubble.append(text); }
+  if (a.state === 'done') {
+    const clip = document.createElement('button');
+    clip.type = 'button'; clip.className = 'agent-clip'; clip.tabIndex = -1; clip.title = 'Add to your message'; clip.setAttribute('aria-label', 'Add to your message');
+    clip.append(...[iconNode('paperclip')].filter(Boolean));
+    clip.onclick = () => answerToComposer(docId, a.text);
+    row.append(clip);
+  }
+  row.append(bubble); el.append(head, row);
+  return [q, el];
+}
+// The one way an answer reaches Tana: added after whatever is in the message box, to be sent as your message (the
+// paperclip, or Cmd+K Add …’s answer to message)
+function answerToComposer(docId, text) {
+  if (composer.dataset.doc !== docId || chatReadOnly.has(docId)) return;
+  const had = composer.classList.contains('empty') ? [] : composerSegs();
+  setComposer({ segs: [...had, ...(had.length ? [{ text: '\n' }] : []), { text }], skill: chatSkill });
+  composerText.focus();
+  const end = document.createRange(); end.selectNodeContents(composerText); end.collapse(false);
+  getSelection().removeAllRanges(); getSelection().addRange(end);
+}
+const latestAgentAnswer = (docId) => (agentAnswers.get(docId) || []).filter((a) => a.state === 'done').at(-1);
+const latestAgentAsk = (docId) => (agentAnswers.get(docId) || []).at(-1);
+
+// ---- the messages, by keyboard ----
+// ↑ at the start of the message box selects the last message; ↑↓ walk the messages, ↓ past the last one or Esc goes
+// back to the box. The selected message is the one focused (data-key: Tana's message id, or q:/a: and an ask's id for
+// the local ones), and it is what ⌘K's message rows act on: Delete message, and for an agent's answer Add to message
+// (also Enter) and Open task. It is kept across a redraw, which replaces every message.
+let chatSel = null;
+// The selection is drawn with a class (chat-sel: the outline's own .selected is a row band), not :focus alone, so it stays on while Cmd+K has the focus
+function selectMsg(key) {
+  chatSel = key;
+  for (const el of outline.querySelectorAll('.chat-msg.chat-sel')) el.classList.toggle('chat-sel', el.dataset.key === key);
+  const el = msgEl(key); if (el) el.classList.add('chat-sel');
+}
+const msgEl = (key) => (key ? outline.querySelector('.chat-msg[data-key="' + CSS.escape(key) + '"]') : null);
+const chatMsgs = () => [...outline.querySelectorAll('.chat-msg[data-key]')];
+const askOf = (docId, key) => (/^[qa]:/.test(key || '') ? (agentAnswers.get(docId) || []).find((a) => a.id === key.slice(2)) : null);
+function chatFocus(key) {
+  const el = msgEl(key);
+  if (el) { el.focus({ preventScroll: true }); el.scrollIntoView({ block: 'nearest' }); }
+  return !!el;
+}
+// ↑↓ with nothing focused on a chat page (renderer/events.js): on from the selected message, or into the messages from
+// what is in view, the lowest for ↑ and the highest for ↓
+function chatArrow(up) {
+  const all = chatShown ? chatMsgs() : [];
+  if (!all.length) return false;
+  const at = all.indexOf(msgEl(chatSel));
+  if (at >= 0) { const next = all[at + (up ? -1 : 1)]; if (next) chatFocus(next.dataset.key); else if (up) chatFocus(chatSel); else toComposer(); return true; }
+  const box = outline.parentElement.getBoundingClientRect(), seen = all.filter((el) => { const r = el.getBoundingClientRect(); return r.bottom > box.top && r.top < box.bottom; });
+  chatFocus(((up ? seen.at(-1) : seen[0]) || all.at(-1)).dataset.key);
+  return true;
+}
+function toComposer() { selectMsg(null); if (!composer.hidden) composerText.focus(); else document.activeElement.blur(); }
+// Yours to delete: a local question or answer (both go), or your own message in the chat when you may write in it
+function deletableMsg(docId, key) {
+  const el = msgEl(key);
+  if (!el || chatShown !== docId) return false;
+  if (askOf(docId, key)) return !!tana.deleteAgentAsk;
+  return el.classList.contains('mine') && !chatReadOnly.has(docId) && !!tana.deleteChatMessage;
+}
+function deleteChatMsg(docId, key) {
+  if (!deletableMsg(docId, key)) return;
+  const a = askOf(docId, key), gone = a ? ['q:' + a.id, 'a:' + a.id] : [key];
+  const keys = chatMsgs().map((el) => el.dataset.key), at = keys.indexOf(gone[0]), rest = keys.filter((k) => !gone.includes(k));
+  selectMsg(keys.slice(0, at).filter((k) => !gone.includes(k)).at(-1) || rest[0] || null); // the one above takes the selection
+  run(async () => {
+    if (a) { await tana.deleteAgentAsk(docId, a.id); agentAnswers.set(docId, (agentAnswers.get(docId) || []).filter((x) => x.id !== a.id)); }
+    else { await tana.deleteChatMessage(docId, key); await reload(docId); }
+    renderSoon(true);
+  });
+}
+// ⌘K's rows for the message selected, under "Message" at the top (renderer/palette.js); with none, the latest answer and
+// ask under Actions. A selected message that is not an ask offers only what it can do: no other ask's rows.
+function chatMessageRows(docId) {
+  const rows = [], sel = msgEl(chatSel) ? chatSel : null, picked = askOf(docId, sel), group = sel ? 'Message' : 'Actions';
+  const answer = sel ? picked && picked.state === 'done' && picked : latestAgentAnswer(docId), ask = sel ? picked : latestAgentAsk(docId);
+  if (tana.askAgent && answer) rows.push({ id: 'agentAnswerToMessage', group, icon: 'paperclip', label: 'Add ' + answer.label + '’s answer to message', hint: 'To send as your own words', run: () => answerToComposer(docId, answer.text) });
+  if (tana.openAgentAsk && ask) rows.push({ id: 'openAgentAsk', group, icon: 'robot', label: 'Open ' + ask.label + ' task', hint: picked ? 'The one behind this question' : 'The one behind the last @' + ask.label + ' answer', run: () => openAgentAsk(docId, ask.id) });
+  if (sel && deletableMsg(docId, sel)) rows.push({ id: 'deleteMessage', group, icon: 'trash', label: 'Delete message', hint: picked ? 'The question and its answer, from this device' : 'From the chat, for everyone in it', kbd: '⇧⌘⌫', run: () => deleteChatMsg(docId, sel) });
+  return rows;
+}
+// a message ↑↓ can land on, with its keys
+function selectable(el, key) { el.dataset.key = key; el.tabIndex = -1; el.classList.toggle('chat-sel', key === chatSel); el.onfocus = () => selectMsg(key); el.onkeydown = chatKey; }
+document.addEventListener('mousedown', (e) => { if (!(e.target.closest && e.target.closest('.chat-msg[data-key], #palette')) && chatSel) selectMsg(null); }, true);
+function chatKey(e) {
+  const m = e.currentTarget;
+  if (!chatShown || e.target !== m) return;
+  const mod = e.metaKey || e.ctrlKey, key = m.dataset.key, all = chatMsgs(), i = all.indexOf(m);
+  if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && !mod && !e.shiftKey && !e.altKey) {
+    const next = all[i + (e.key === 'ArrowUp' ? -1 : 1)];
+    if (next) chatFocus(next.dataset.key); else if (e.key === 'ArrowDown') toComposer();
+  } else if (e.key === 'Escape') toComposer();
+  else if (e.key === 'Enter' && !mod && askOf(chatShown, key) && key.startsWith('a:') && askOf(chatShown, key).state === 'done') answerToComposer(chatShown, askOf(chatShown, key).text);
+  else if (e.key === 'Backspace' && mod && e.shiftKey && deletableMsg(chatShown, key)) deleteChatMsg(chatShown, key);
+  else return;
+  e.preventDefault(); e.stopPropagation();
+}
+function openAgentAsk(docId, id) { run(async () => { if (!(await tana.openAgentAsk(docId, id))) throw new Error('That task is not on this device'); }); }
+// Read the chat's answers, and again every few seconds while one is still being worked on. Asked while a read is out
+// (a question just asked), it reads once more when that one is back, which did not know the question yet.
+function agentLoad(docId) {
+  if (!tana.agentReplies) return;
+  if (agentPolls.has(docId)) { agentPolls.set(docId, true); return; }
+  agentPolls.set(docId, false);
+  tana.agentReplies(docId).then((list) => {
+    const again = agentPolls.get(docId);
+    agentPolls.delete(docId);
+    agentAnswers.set(docId, list);
+    if (zoom && zoom.docId === docId) renderSoon(true);
+    if (again) agentLoad(docId);
+    else if (list.some((a) => a.state === 'working')) setTimeout(() => { if (chatShown === docId) agentLoad(docId); }, 4000);
+  }, () => agentPolls.delete(docId));
+}
 
 // ---- the composer ----
 // A small rich text field (index.html #composerText): typing is plain text, "@" puts a chip for a node in through the
 // palette's link search (renderer/toolbar.js linkTo), and "/" as the first thing typed picks a skill for the message to
 // run, shown as a pill in front. Sent, the chips become Tana's [label](tana:…) links and the skill rides along as the
 // message's attachment, as Tana's own runSkill sends one (docs/CHATS.md §10).
-const composerSkill = $('composerSkill'), composerMode = $('composerMode');
+const composerSkill = $('composerSkill');
 // The mode the next message is sent in, per chat: true To Tana (it is asked to answer), false To the chat (a message for
 // the people in it). It starts at what the chat does by itself (chat:answers: alone, Tana answers) and Tab in an empty
-// message, or a click on the label, switches it. Remembered while the window is open.
+// message switches it; the empty message's placeholder says which it is. Remembered while the window is open.
 const chatAi = new Map();
 const chatReadOnly = new Set(); // chats you can read and not write in (chat:answers): their composer takes no typing
 const chatAsking = new Set(); // chats whose chat:answers is out now (chatAfterRender)
@@ -195,9 +344,6 @@ function showMode() {
   const docId = composer.dataset.doc, ai = chatAi.get(docId), readOnly = chatReadOnly.has(docId);
   composer.classList.toggle('readonly', readOnly);
   composerText.contentEditable = readOnly ? 'false' : 'plaintext-only';
-  composerMode.hidden = ai === undefined || readOnly;
-  composerMode.classList.toggle('ai', !!ai);
-  composerMode.replaceChildren(...[iconNode(ai ? 'chat' : 'member')].filter(Boolean), document.createTextNode(ai ? 'To Tana' : 'To the chat'));
   composerText.dataset.placeholder = readOnly ? 'You can read this chat but not write in it' : ai === false ? 'Message the chat · @ links · Tab: to Tana' : 'Ask Tana · @ links · / runs a skill' + (ai ? ' · Tab: to the chat' : '');
 }
 // A skill is for Tana to run, so while one is attached the message goes To Tana and the mode stays put
@@ -213,7 +359,7 @@ function setComposer(draft) {
   showSkill();
 }
 // The message as Tana stores it: markdown, a mention as [label](uri), which is also how sdk/chat.js reads one back
-const chatMarkdown = (segs) => segs.map((s) => ('mention' in s ? '[' + String(s.mention.label).replace(/[[\]\n]/g, ' ') + '](' + s.mention.uri + ')' : s.text)).join('').replace(/\u00a0/g, ' ').trim();
+const chatMarkdown = (segs) => segs.map((s) => ('mention' in s ? (String(s.mention.uri).startsWith(AGENT_URI) ? '@' + s.mention.label : '[' + String(s.mention.label).replace(/[[\]\n]/g, ' ') + '](' + s.mention.uri + ')') : s.text)).join('').replace(/\u00a0/g, ' ').trim();
 // the text before the caret, to tell "/" typed first from one typed later
 function beforeCaret() {
   const sel = getSelection();
@@ -247,6 +393,8 @@ function chatMention(mention) {
 // message is otherwise only for them. Offered first in the composer's "@" search while what is typed fits its name.
 const TANA_AGENT_URI = 'tana:agent:2zc7qjfkkengdhfdd846b4qvk2';
 const tanaMentionRows = (q, ctx) => (fuzzyMatch('Tana', q.toLowerCase()) ? [{ icon: 'chat', label: 'Tana', hint: 'Ask Tana to answer', run: () => linkTo(ctx, { label: 'Tana', uri: TANA_AGENT_URI }) }] : []);
+// and the agents on this device: their answer is shown to you alone and never written to Tana (main/chatagents.js)
+const agentMentionRows = (q, ctx) => chatAgents.filter((a) => fuzzyMatch(a.label, q.toLowerCase())).map((a) => ({ icon: a.icon, label: a.label, hint: 'Ask ' + a.label + ' · the answer stays on this device', run: () => linkTo(ctx, { label: a.label, uri: AGENT_URI + a.id, icon: a.icon }) }));
 // "/" first: the workspace's skills, in ⌘K's card; Escape goes back to the message with nothing picked
 function openSkillPicker() {
   palReturn = { composer: true }; // Escape, or a pick, hands the caret back to the message (palette.js returnFocus)
@@ -278,6 +426,16 @@ function chatSend() {
   const text = chatMarkdown(draft.segs) || (skill ? 'Run [' + skill.label.replace(/[[\]\n]/g, ' ') + '](' + skill.uri + ')' : '');
   if (!docId || !text || !tana.sendChat) return;
   setComposer(null); chatDrafts.delete(docId);
+  // @Codex and the like: the question goes to that agent on this device, and stays here with its answer; not to Tana
+  const agent = !skill && tana.askAgent && askedAgent(text);
+  if (agent) {
+    run(async () => {
+      try { await tana.askAgent(docId, agent.id, text); } catch (e) { restoreDraft(docId, draft); throw e; }
+      agentLoad(docId);
+      if (zoom && zoom.docId === docId) { outline.parentElement.scrollTop = outline.parentElement.scrollHeight; renderSoon(true); }
+    });
+    return;
+  }
   const ai = skill ? true : chatAi.get(docId), wait = { asked: Date.now(), id: null };
   // a message to the chat asks nobody to answer, unless it mentions Tana (main asks then too, sdk/chat.js mentionsTana)
   if (ai !== false || text.includes('(' + TANA_AGENT_URI + ')') || /@polaris|@tana\b/i.test(text)) chatWaiting.set(docId, wait);
@@ -301,6 +459,8 @@ composerText.addEventListener('keydown', (e) => {
   // Escape only leaves the composer: taken here, before any page or workspace key (events.js, stepOut in a zoomed pane) sees it
   if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); composerText.blur(); return; }
   const mod = e.metaKey || e.ctrlKey;
+  // ↑ at the very start: up into the messages, the newest first (chatKey walks on from there)
+  if (e.key === 'ArrowUp' && !mod && !e.shiftKey && !e.altKey && !beforeCaret() && chatMsgs().length) { e.preventDefault(); e.stopPropagation(); chatFocus(chatMsgs().at(-1).dataset.key); return; }
   if (e.key === 'Enter' && !e.shiftKey && !e.altKey && !e.isComposing) { e.preventDefault(); chatSend(); return; }
   if (e.key === 'Tab' && !e.shiftKey && !mod && chatAi.has(composer.dataset.doc) && !plainOf(composerSegs()).trim() && !composerText.querySelector('.mention')) { e.preventDefault(); switchMode(composer.dataset.doc); return; }
   if (e.key === '@' && !mod) { e.preventDefault(); composerLink(); return; }
@@ -310,9 +470,18 @@ composerText.addEventListener('keydown', (e) => {
   if (!mod || ['z', 'a', 'c', 'x', 'v', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Backspace'].includes(e.key.length === 1 ? e.key.toLowerCase() : e.key)) e.stopPropagation();
 });
 composerText.addEventListener('input', composerChanged);
+// A pasted Tana node link becomes a chip for that node where the caret was, as it becomes a reference in a row
+// (renderer/events.js paste, the same tanaNodeUri): the title is read first, so a link to something unreadable puts
+// nothing in and says why. Anything else pastes as plain text.
+composerText.addEventListener('paste', (e) => {
+  const uri = e.clipboardData && tana.node && tanaNodeUri(e.clipboardData.getData('text/plain')), sel = getSelection();
+  if (!uri || !sel.rangeCount || !composerText.contains(sel.anchorNode)) return;
+  e.preventDefault();
+  const at = sel.getRangeAt(0).cloneRange();
+  tana.node(uri).then((n) => { composerAt = at; chatMention({ label: n.title || uri, uri }); }, showError);
+});
+composerText.addEventListener('focus', () => selectMsg(null));
 composerSkill.onclick = () => { chatSkill = null; showSkill(); composerText.focus(); };
-composerMode.onmousedown = (e) => e.preventDefault(); // the caret stays in the composer
-composerMode.onclick = () => switchMode(composer.dataset.doc);
 composerSend.onmousedown = (e) => e.preventDefault(); // the caret stays in the composer
 composerSend.onclick = chatSend;
 // After the page is drawn: the composer shows under a chat and nowhere else, keeping what was written in each.
@@ -321,6 +490,7 @@ function chatAfterRender(parent, stick) {
   const was = composer.dataset.doc;
   if (was && was !== docId) { if (!composer.classList.contains('empty')) chatDrafts.set(was, { segs: composerSegs(), skill: chatSkill }); else chatDrafts.delete(was); }
   const opened = chat && docId !== chatShown;
+  if (opened) selectMsg(null);
   if (was !== (docId || '')) {
     composer.dataset.doc = docId || ''; setComposer(docId && chatDrafts.get(docId)); showMode();
   }
@@ -332,6 +502,7 @@ function chatAfterRender(parent, stick) {
       .finally(() => chatAsking.delete(docId));
   }
   const asking = chat && showQuestions(docId, chatPendingQ); // Tana's questions take the composer's place
+  if (opened) agentLoad(docId);
   if (!chat) showQuestions(null, null);
   composer.hidden = !chat || !!asking;
   sc.classList.toggle('chatting', chat);
@@ -339,6 +510,8 @@ function chatAfterRender(parent, stick) {
   if (!chat) return;
   fitBubbles(); // drawn anew each render, so fitted anew
   if (stick) { sc.scrollTop = sc.scrollHeight; chatAtBottom = true; }
+  // the redraw replaced the message that was selected: select it again, unless focus has gone somewhere else meanwhile
+  if (chatSel && palette.hidden && (document.activeElement === document.body || outline.contains(document.activeElement)) && document.activeElement.dataset.key !== chatSel) chatFocus(chatSel);
   if (opened || asking === 'new') requestAnimationFrame(() => { if (palette.hidden && composer.dataset.doc === docId) (asking ? qcard : composerText).focus({ preventScroll: true }); });
 }
 // Access can change while a chat is open (someone shares it with you, or takes it away): a change to its audience or

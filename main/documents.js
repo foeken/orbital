@@ -205,6 +205,17 @@ async function answerChat(id, messageId, answers) {
   });
   return askReply(id, written.relay, written.facts);
 }
+// Delete one of your own messages from a chat (sdk/chat.js deleteMessage), for everyone in it. Not an undo step, as
+// sending is not: Tana's own Delete message has no undo either.
+async function deleteChatMessage(id, messageId) {
+  if (!isChatId(id)) throw new Error('Not a chat');
+  if (typeof messageId !== 'string' || !messageId) throw new Error('Which message?');
+  if (!S.client || !S.me) throw new Error(NOT_CONNECTED);
+  await op(id, async (doc) => {
+    if (doc.writeDenied || !(await canWriteDoc(doc).catch(() => false))) throw new Error(CHAT_READ_ONLY);
+    doc.transact((loro) => chat.deleteMessage(loro, { messageId, byUri: S.me.userUri }));
+  });
+}
 // Invite a workspace member to a chat, as Tana's chat header does: they join its participants as an editor, through
 // the verified sharing rules (sdk/access.js setSharing, everyone already in it kept), and the chat says so. Only a chat
 // with a participant list of its own: one that takes its audience from where it lives (a meeting's, a space's) would
@@ -1159,6 +1170,7 @@ const ipc = {
   'chat:answers': (_e, id) => chatAnswers(id),
   'chat:new': () => newChat(),
   'chat:answer': (_e, id, messageId, answers) => answerChat(id, messageId, answers === undefined ? null : answers),
+  'chat:delete': (_e, id, messageId) => deleteChatMessage(id, messageId),
   'chat:invite': (_e, id, userUri) => inviteToChat(id, userUri),
   'history:undo': () => history(undoStack, redoStack, 'undo', 'canUndo'),
   'history:redo': () => history(redoStack, undoStack, 'redo', 'canRedo'),

@@ -56,6 +56,9 @@ const withShims = (src) => {
   if (/\bBULK\b/.test(src) && !/const BULK =/.test(src)) src = sourceLine('const BULK').replace('const BULK =', 'globalThis.BULK ??=') + '\n' + src;
   if (/\brenderFields\(/.test(src) && !/function renderFields\(|const renderFields =/.test(src)) src = 'globalThis.renderFields ??= () => {};\n' + src;
   if (/\bloadRelated\(/.test(src) && !/function loadRelated\(|const loadRelated =/.test(src)) src = 'globalThis.loadRelated ??= () => {};\n' + src;
+  // Cmd+K Join call (renderer/palette.js callRow) reads the page's related data: a harness without either offers none
+  if (/\bcallRow\(/.test(src) && !/function callRow\(/.test(src)) src = 'globalThis.callRow ??= () => null;\n' + src;
+  if (/\brelatedBy\b/.test(src) && !/(const|let) relatedBy\b/.test(src)) src = 'globalThis.relatedBy ??= new Map();\n' + src;
   // Cmd+K's meeting rows and pages (renderer/meeting.js): a palette harness without that file offers none
   if (/\bmeetingRows\(/.test(src) && !/function meetingRows\(/.test(src)) src = 'globalThis.meetingRows ??= () => [];\n' + src;
   // the shell's word on this page's window (renderer/state.js): one page, unless the harness says otherwise
@@ -130,7 +133,9 @@ const withShims = (src) => {
   if (/\bsubtextEl\(/.test(src) && !/function subtextEl\(/.test(src)) src = functionSource('subtextEl') + '\nglobalThis.shownFieldValues ??= (node) => (node.fields ? displayKeys().flatMap((k) => node.fields[k] || []) : []);\n' + src;
   // a row's facts share their icon and click helpers with who can see it (renderer/tasks.js peopleEl), which the
   // subtext leads with; a harness with no member list sees nobody's bubbles
-  if (/\b(clickable|iconEl|audienceIcon|peopleEl)\(/.test(src) && !/function clickable\(/.test(src)) src = sourceBetween('function clickable(', '// node: the row') + '\nglobalThis.loadMembers ??= () => {}; globalThis.memberName ??= (id) => id; globalThis.members ??= null;\n' + src;
+  if (/\b(clickable|iconEl|audienceIcon|peopleEl)\(/.test(src) && !/function clickable\(/.test(src)) src = sourceBetween('function clickable(', '// node: the row') + '\nglobalThis.loadMembers ??= () => {}; globalThis.memberName ??= (id) => id; globalThis.members ??= null; globalThis.sensitiveHidden ??= () => false;\n' + src;
+  // the Timeline hides who can see a row (renderer/tasks.js audienceShown): a harness that is not about it is not on it
+  if (/\baudienceShown\(/.test(src)) src = (/let zoom\b/.test(src) ? '' : 'globalThis.zoom ??= null;\n') + (/const TIMELINE_PAGE =/.test(src) ? '' : "globalThis.TIMELINE_PAGE ??= 'orbital:timeline';\n") + src;
   // a type's page (renderer/nodes.js): a harness that is not about one is never on one
   if (/\bfieldType\(/.test(src) && !/const fieldType =/.test(src)) src = 'globalThis.fieldType ??= () => (onTypePage() ? zoom.docId : null);\n' + src; // nor on a page narrowed to one type
   if (/\b(isTypeDoc|onTypePage|isTypeId|opensOnClick)\b/.test(src) && !/const isTypeId =/.test(src)) src = "globalThis.isTypeId ??= (id) => /^tana:type:[^|?]+$/.test(String(id || '')); globalThis.isTypeDoc ??= (node) => !!node && isTypeId(node.id); globalThis.onTypePage ??= () => false; globalThis.opensOnClick ??= (item) => isTypeDoc(item.node) && !String(item.docId || '').includes('|tana:type:');\n" + src;
@@ -394,8 +399,6 @@ function runSensitiveBlurCheck() {
     'all hidden outline rows use the same thin bar regardless of their text style');
   assert.match(styles, /\.outline \.body\.sensitive \.meta\s*\{\s*font-size:\s*inherit;/, 'hidden assignees use the same font metrics as their row');
   assert.match(styles, /\.pagehead h1\s*\{[^}]*flex:\s*1;[^}]*min-width:\s*0;[^}]*overflow-wrap:\s*anywhere;/, 'a masked zoom title wraps before the details rail');
-  assert.match(source, /if \(sensitiveIds\?\.has\(docId\)\) meta\.unshift\(\{ id: 'sensitive', icon: 'hidden', label: 'Sensitive', run: null \}\);/,
-    'the zoom Details rail names the local classification Sensitive');
   assert.doesNotMatch(rule[1], /pointer-events|user-select/, 'blur does not block focus, clicks or selection');
   assert.ok(source.indexOf('const selection = selectionRows();') < source.indexOf("id: 'sensitiveVisibility'"),
     'the frequently used Mark/Unmark command (a selection row, current node included) ranks before the visibility toggle');
@@ -2219,7 +2222,7 @@ function runInlineFieldsCheck() {
     const relatedBy = new Map([['doc', { fields: [{ key: 'tana:type:test?attribute=who', label: 'Discuss with', segments: [{ text: 'Rob Schuurman' }] }] }]]);
     const kids = new Map(), loaded = [], built = [];
     let fieldsDeferred = false;
-    const iconSvg = () => '', blurSensitive = () => {}, canEditItem = (item) => item.node.editable !== false;
+    const iconSvg = () => '', blurSensitive = () => {}, canEditItem = (item) => item.node.editable !== false, isTask = () => false, tana = {}; // not a task, no metadata: neither Assigned to nor Visible to
     const mkItem = (docId, node, parent) => ({ docId, node, parent });
     const ensureLoaded = (host) => loaded.push(host.docId);
     const renderSegs = (el, segments) => { el.textContent = segments.map(s => s.text).join(''); };
@@ -2633,68 +2636,36 @@ async function runSidebarRowsCheck() {
     const loadAccess = () => {}, loadTaskMeta = () => {};
     const run = (fn) => fn();
     const tana = { taskMeta: async () => ({}), setAssignees: async () => {}, accessOptions: async () => ({}), pinState: async () => ({}), nodeLink: async (id) => 'https://home.tana.inc/l/' + id, openExternal: async (url) => calls.push(['open', url]) };
-    ${functionSource('railCallRow')}
-    ${functionSource('railMetaRows')}
+    const demoText = (text) => text;
+    ${functionSource('callRow')}
     ${functionSource('openVisibility')}
     ${functionSource('banSvg')}
     ${functionSource('visibilityRows')}
-    ({ rows: (node, value, accessNode) => { summary = value; return railMetaRows(node, accessNode); }, call: (data) => railCallRow(data), calls: () => calls,
+    ({ call: (data) => callRow(data), calls: () => calls,
+       open: (node, scope) => openVisibility(node, scope), // what the Visible to field under the title runs (renderer/fields.js)
        pin: (id) => { pinnedHere.add(id); },
        known: (id, meta, access) => { if (meta) taskMetaById.set(id, meta); else taskMetaById.delete(id); if (access) accessById.set(id, access); else accessById.delete(id); },
        permission: (access, loading) => { palDoc = { id: 'doc' }; accessById.delete('doc'); accessLoading.delete('doc'); if (access) accessById.set('doc', access); if (loading) accessLoading.add('doc'); return visibilityRows(''); },
        opened: () => ({ doc: palDoc && palDoc.id, hidden: palette.hidden }) });
   `);
-  assert.deepEqual(plain(api.rows({ id: 'doc' }, null).map((row) => [row.id, row.icon, row.label])),
-    [['showInTana', 'tana', 'Show in Tana']], 'the Tana link keeps Details present without task metadata');
-  const rows = api.rows({ id: 'doc' }, { assignees: 'Sam Okafor', audience: { icon: 'lock', label: 'Visible only to you' } });
-  assert.deepEqual(plain(rows.map((row) => [row.id, row.icon, row.label, typeof row.run])), [
-    ['assignees', 'member', 'Assigned to Sam Okafor', 'function'],
-    ['visibility', 'lock', 'Visible only to you', 'function'],
-    ['showInTana', 'tana', 'Show in Tana', 'function'],
-  ], 'assignees and visibility read as plain rows and both can be opened');
-  rows[0].run(); rows[1].run();
-  assert.deepEqual(plain(api.calls()), [['assignees', 'doc'], ['visibility', 'doc']], 'the rows open the pickers the palette already uses');
-  api.rows({ id: 'writeup' }, { audience: { icon: 'userLock', label: 'Visible to selected people' }, scope: 'people' }, { id: 'event' })[0].run();
-  assert.deepEqual(plain(api.calls().at(-1)), ['visibility', 'event'], 'a followed meeting write-up checks visibility on its event hub');
-  assert.deepEqual(plain(api.rows({ id: 'doc' }, { assignees: 'Unassigned', audience: null, unknownAudience: true }).map((row) => row.label)),
-    ['Unassigned', 'Show in Tana'], 'an audience that cannot be verified is left out instead of rendering an empty row');
-  assert.deepEqual(plain(api.rows({ id: 'doc', editable: false }, { assignees: 'Sam', audience: { icon: 'lock', label: 'Visible only to you' } }).map((row) => row.run === null)),
-    [true, false, false], 'read-only body editing does not disable sharing or the Tana link');
-  // link sharing is its own fact: a public document says so, even when it is not a task and has no assignee
-  assert.deepEqual(plain(api.rows({ id: 'doc' }, { assignees: 'Sam', audience: { icon: 'lock', label: 'Visible only to you' }, linkShared: true }).map((row) => [row.id, row.icon])),
-    [['assignees', 'member'], ['visibility', 'lock'], ['linkShared', 'globe'], ['showInTana', 'tana']], 'a link-shared node adds a globe row');
-  assert.deepEqual(plain(api.rows({ id: 'doc' }, { assignees: 'Sam', hiddenFrom: 'Sam', audience: { icon: 'lock', label: 'Visible only to you' } }).slice(0, 3).map((row) => [row.id, row.icon, row.label])),
-    [['assignees', 'member', 'Assigned to Sam'], ['hiddenFrom', 'userAlert', 'Not visible to Sam'], ['visibility', 'lock', 'Visible only to you']], 'an assignee who cannot see the node is warned about under the assignees');
-  assert.deepEqual(plain(api.rows({ id: 'doc' }, { assignees: '', audience: null, linkShared: true }).map((row) => [row.id, row.label])),
-    [['linkShared', 'Anyone with the link'], ['showInTana', 'Show in Tana']], 'a public document with no assignee still reports that anyone with the link can read it');
-  // A pinned node says so in Details too, and that row opens the page its pins are taken off from
-  api.pin('pinnedDoc');
-  const pinnedRows = api.rows({ id: 'pinnedDoc' }, { assignees: '', audience: { icon: 'lock', label: 'Visible only to you' } });
-  assert.deepEqual(plain(pinnedRows.map((row) => [row.id, row.icon, row.label])),
-    [['visibility', 'lock', 'Visible only to you'], ['pinned', 'pinned', 'Pinned'], ['showInTana', 'tana', 'Show in Tana']], 'a pinned node carries the tack beside its audience');
-  pinnedRows[1].run();
-  assert.deepEqual(plain(api.calls().at(-1)), ['pins', 'pinnedDoc'], 'and that row opens Edit pins for it');
-  assert.ok(!api.rows({ id: 'doc' }, { assignees: '', audience: { icon: 'lock', label: 'Visible only to you' } }).some((row) => row.id === 'pinned'), 'an unpinned node has no such row');
-  await api.rows({ id: 'doc' }, null)[0].run();
-  assert.deepEqual(plain(api.calls().at(-1)), ['open', 'https://home.tana.inc/l/doc'], 'Show in Tana reuses nodeLink and openExternal');
   assert.deepEqual(plain(api.permission(null, true)), [{ group: 'Visibility', label: 'Checking permission…', disabled: true }], 'visibility explains while permission loads');
   const denied = plain(api.permission({ sharing: false, reason: 'Only the event organizer can change access' }));
   assert.match(denied[0].svg, /<line[^>]+><\/line><circle/, 'the attendee reason uses the supplied ban icon');
   delete denied[0].svg;
   assert.deepEqual(denied, [{ group: 'Visibility', label: 'Only the event organizer can change access', disabled: true }], 'an attendee sees the backend reason');
 
-  assert.equal(api.call(null), null, 'no relations, no call row');
-  assert.equal(api.call({ pinned: [] }), null, 'a meeting without a call link renders nothing');
+  assert.equal(api.call(null), null, 'no relations, no Join call');
+  assert.equal(api.call({ pinned: [] }), null, 'a meeting without a call link offers none');
   const call = api.call({ call: { url: 'https://meet.google.com/klm-nopq-rst', label: 'meet.google.com/klm-nopq-rst' } });
-  assert.deepEqual(plain([call.id, call.icon, call.label]), ['call', 'video', 'meet.google.com/klm-nopq-rst'], 'the call row shows the readable link with the video icon');
+  assert.deepEqual(plain([call.id, call.icon, call.label, call.hint]), ['joinCall', 'video', 'Join call', 'meet.google.com/klm-nopq-rst'], 'Cmd+K Join call names the readable link, with the video icon');
   call.run();
   assert.deepEqual(plain(api.calls().at(-1)), ['open', 'https://meet.google.com/klm-nopq-rst'], 'it joins through api.openExternal');
-  assert.ok(/video/.test(fs.readFileSync(require.resolve('../icons.js'), 'utf8')), 'icons.js carries the video icon the call row asks for');
-  assert.ok(/tana/.test(fs.readFileSync(require.resolve('../icons.js'), 'utf8')), 'icons.js carries the Tana icon the link row asks for');
+  assert.ok(/video/.test(fs.readFileSync(require.resolve('../icons.js'), 'utf8')), 'icons.js carries the video icon Join call asks for');
+  assert.ok(/tana/.test(fs.readFileSync(require.resolve('../icons.js'), 'utf8')), 'icons.js carries the Tana icon Open in Tana asks for');
 
   // "Visible to selected people" opens the people list only after permission is known; attendees must see the reason.
   const people = { assignees: 'Sam', scope: 'people', audience: { icon: 'userLock', label: 'Visible to selected people' } };
-  const visibility = (node, value) => api.rows(node, value).find((row) => row.id === 'visibility');
+  const visibility = (node, value) => ({ run: () => api.open(node, value.scope) }); // the Visible to field's click
   api.known('doc', { participants: [] });
   visibility({ id: 'doc' }, people).run();
   assert.deepEqual(plain(api.calls().at(-1)), ['visibility', 'doc'], 'permission still loading starts at the explanatory visibility level');
@@ -3915,11 +3886,12 @@ function runRowAudienceCheck() {
         // the gap is styles.css's .tmeta > .ticon:not(:first-child) (renderer-check pins the rule): 6px after anything
         const sub = body.children.find((child) => child.className === 'subtext') || { children: [] }, people = sub.children.find((child) => child.className === 'people');
         return { icons: icons ? icons.map((icon) => icon.attrs['aria-label'] || (icon.children[0] || { attrs: {} }).attrs['data-icon']) : null, gaps: icons ? icons.map((icon) => (icon.className === 'ticon' ? (info.children.indexOf(icon) ? '6px' : '0') : null)) : null, pending: info ? info.className.includes('pending') : null, sub: sub.value || null, chips: body.children.filter((child) => child.className === 'chip').length, fetched: [...fetched], observed: observed.map((watched) => watched.dataset.metaFor),
-          people: people ? [people.children[0].attrs['aria-label'], ...people.children[1].children.map((face) => face.value), people.children[2]] : null,
+          people: people ? [people.children[0].attrs['aria-label'], ...people.children[1].children.map((face) => face.value), people.children[2] || null] : null,
           names: people ? people.children[1].children.map((face) => face.attrs['aria-label'] || null) : null };
       },
       onScreen: () => { watching(observed.map((target) => ({ isIntersecting: true, target }))); return [...fetched]; },
       display: (keys) => { displayNow = keys; },
+      timeline: (on) => { globalThis.zoom = on ? { docId: TIMELINE_PAGE, nodeId: null } : null; },
     });
   `, { structuredClone });
   const doc = { id: 'tana:text:doc1', kind: 'document', text: 'Charter', icon: 'doc', hasChildren: true, editable: true };
@@ -3937,7 +3909,14 @@ function runRowAudienceCheck() {
   // #461: an audience that names its people says who under the title (its glyph, a bubble each, how many) and the
   // glyph leaves the end of the line; one that names nobody (here: no member list for everyone) keeps it there
   const shared = row(doc, { assignees: [], audience: 'people', people: ['tana:user-profile:me', 'tana:user-profile:sam'] });
-  assert.deepEqual(shared.people, ['Visible to selected people', '?', 'S', '2 people'], 'the subtext leads with the audience, a bubble per person and the count');
+  assert.deepEqual(shared.people, ['Visible to selected people', '?', 'S', null], 'the subtext leads with the audience and a bubble per person, and no count after them');
+  api.timeline(true);
+  const onTimeline = row(doc, { assignees: [], audience: 'people', people: ['tana:user-profile:me', 'tana:user-profile:sam'] });
+  assert.deepEqual([onTimeline.people, onTimeline.icons, row(doc, spaceMeta).icons], [null, [], []], 'the Timeline shows nothing of who can see a row: no faces, no audience icon');
+  api.timeline(false);
+  const five = ['me', 'sam', 'ana', 'bo', 'cy'].map((k) => 'tana:user-profile:' + k);
+  assert.deepEqual(row(doc, { assignees: [], audience: 'people', people: five.slice(0, 4), peopleCount: 9 }).people.slice(-2), ['+5', null], 'up to nine people the rest is a +n bubble');
+  assert.deepEqual(row(doc, { assignees: [], audience: 'people', people: five.slice(0, 4), peopleCount: 12 }).people.slice(-2), ['?', 'and 8 others'], 'past nine it is words after four bubbles, and no bubble for the rest');
   assert.deepEqual(shared.icons, [], 'and the end of the line no longer repeats the audience');
   assert.deepEqual(shared.names, ['Unknown person', 'Sam'], 'every bubble is an image with the person\'s name, a fallback when there is none');
   const guest = row(doc, { assignees: [], audience: 'people', people: ['tana:user-profile:sam', 'tana:guest-profile:x'] });
@@ -4483,7 +4462,9 @@ function runRailToggleCheck() {
   await api.follow('orbital:timeline');
   assert.deepEqual(plain(api.state()).views, ['library'], 'a page on no document (a view, an app page) leaves it on none, once');
   // Only the Graph pane draws the rail; every other page hides it and tells the shell its document instead.
-  assert.match(functionSource('renderRail'), /if \(!LINKS\) \{ railEl\.hidden = true; return tellDoc\(docId\); \}/, 'a page other than the Graph pane draws no rail and names its document');
+  // It still reads the document's related data: the fields under its title come with that read, and without it a page
+  // opened with no Graph pane beside it showed no fields at all.
+  assert.match(functionSource('renderRail'), /if \(!LINKS\) \{ railEl\.hidden = true; if \(docId\) loadRelated\(docId\); return tellDoc\(docId\); \}/, 'a page other than the Graph pane draws no rail, still reads what its fields need, and names its document');
   // and no outline key of the page (⇧⌘⌫ above all) reaches the hidden page in the Graph pane: its branch comes before them (#463 review)
   assert.match(source, /else if \(!palette\.hidden\) return;\n(?:\s*\/\/[^\n]*\n)*\s*else if \(LINKS\) \{ if \(hotkey && runAction\(hotkey\)\) e\.preventDefault\(\); \}\n[^]*?removeZoomedBlock\(\)/, 'in the Graph pane only its forwarded keys run, never the outline\'s');
   // Anywhere else the Graph pane is asked to go — Cmd+K's views, searches and results — is the followed page's move (#463 review)
@@ -6158,7 +6139,7 @@ function runRailChangesCheck() {
     const draw = (changes, parent, docId) => {
       appended.length = 0;
       const sectionHeadSrc = 0;
-      ${sourceBetween('  const sectionHead = (label) => {', '  if (meta.length && sectionHead')}
+      ${sourceBetween('  const sectionHead = (label) => {', '  for (const [label, rows, pinHub] of groups) {')}
       ${sourceBetween("  // Last section: the node's history", '  if (keep)')}
       const flat = (el) => [el, ...(el.childNodes || []).filter((k) => k && k.nodeType === 1).flatMap(flat)];
       const partOf = (el, cls) => flat(el).filter((k) => k.className === cls)[0];

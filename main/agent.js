@@ -303,7 +303,9 @@ const stopOwnedTasks = () => { for (const e of [...owned.values()]) e.stop(); ow
 // Creates the task, starts its first turn and answers with the id. The turn runs in this child, which is kept alive
 // while the work runs so it is not cut off half way; the user watches it in Codex meanwhile, because both read the
 // same store.
-async function createTask({ nodeUri, prompt, model, userData, host, timeoutMs = 30000, runMs = 15 * 60 * 1000 }) {
+// instructions: developer instructions for the whole thread (thread/start developerInstructions), for a task that has
+// rules to keep beyond its first message (main/chatagents.js).
+async function createTask({ nodeUri, prompt, model, instructions, userData, host, timeoutMs = 30000, runMs = 15 * 60 * 1000 }) {
   let id = null, cap = null, gone = false;
   // Let go the moment the turn ends, not on a timer: the fixed cap left a finished task locked behind this writer
   // for a quarter of an hour, which is the "open in another app" card the user was shown. The thread is handed back
@@ -325,6 +327,7 @@ async function createTask({ nodeUri, prompt, model, userData, host, timeoutMs = 
     await rpc.ready;
     const params = { cwd: agentWorkspace(userData, nodeUri), ephemeral: false };
     if (model) params.model = model; // absent means Codex's own default
+    if (instructions) params.developerInstructions = instructions;
     const started = await rpc.call('thread/start', params);
     id = started && started.thread && started.thread.id;
     if (!id) throw new Error('Codex did not return a task id');

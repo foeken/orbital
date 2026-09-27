@@ -82,11 +82,7 @@ window.addEventListener('message', (e) => {
   else if (e.data?.orbital === 'follow' && LINKS) follow(e.data.docId, e.data.doc); // the Graph pane: the focused pane's document (renderer/rail.js)
   else if (e.data?.orbital === 'goto') { if (typeof e.data.view === 'string') setView(e.data.view); else if (typeof e.data.id === 'string') goTo(e.data.id); } // what the Graph pane opened, opened here
   else if (e.data?.orbital === 'action' && typeof e.data.id === 'string') runAction(e.data.id); // a key pressed in the Graph pane
-  else if (e.data?.orbital === 'rename' && titleEl.dataset.key) { // Rename on the tab (shell.js): the heading back, its words selected (a key only while it can be typed in; isContentEditable reads false while it is hidden)
-    document.documentElement.classList.add('renaming');
-    titleEl.focus();
-    getSelection().selectAllChildren(titleEl);
-  }
+  else if (e.data?.orbital === 'rename') renameTitle(); // Rename on the tab (shell.js)
 });
 titleEl.addEventListener('blur', () => document.documentElement.classList.remove('renaming'));
 // Under a tab bar (html.tabbed) the header buttons are drawn in this page's tab bar, beside its ⋯ (shell.js navbtns),

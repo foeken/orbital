@@ -166,10 +166,11 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   rewriting the subtext and asks again.
 - **Who can see it** (#461). When the audience names its people (`audienceMetadata` returns them for only me,
   selected people and a space, and the organization's membership for everyone), the subtext leads with the audience
-  glyph, a bubble of initials for each of the first four people, then "+n", and the count (`peopleEl`; `doc:taskMeta`
+  glyph and a bubble of initials for each of the first four people, then the rest as a "+n" bubble up to nine people or as "and n others" past nine, with no count after them (the line's tooltip says how many; `peopleEl`; `doc:taskMeta`
   sends those four and `peopleCount`, and reads the owners on demand, so they are let go like any read). Each bubble is
   an image named after its person; a guest, whose profile Tana does not let us read, is "Guest". The glyph then leaves
-  the facts after the title. A table row keeps it there, because its subtext is its cells. It shows with the Assigned fact.
+  the facts after the title. A table row, whose subtext is its cells, draws the same line (glyph, bubbles, the rest in
+  words) in its icons at the end, whose column widens to 190px when any row has one, and the bare glyph for a row that names nobody. It shows with the Assigned fact, and never on the Timeline, which shows neither the glyph nor the faces (`audienceShown`).
 - **Block rows: a marker belongs to a list row.** The dot is drawn for `.t-bullet` and the counter for
   `.t-numbered`; text, headings, quotes and code have none, on hover too. A collapsed row keeps its dot, on its halo,
   because that says it has children. A row with no marker is not indented for one: its text starts where the title
@@ -502,8 +503,8 @@ viewed.
 
 Pins are stored as [PINNING.md](PINNING.md) describes; this is what the outliner does with them.
 
-- **The pin mark.** A pinned node carries the tack in its facts (`pinned`, build/icons/pin-tack.svg) and a "Pinned" row
-  in the sidebar's Details. What a row knows comes from one `api.pinIds()` read (`pinnedIds`/`isPinned`/`loadPinned`,
+- **The pin mark.** A pinned node carries the tack in its facts (`pinned`, build/icons/pin-tack.svg); Cmd+K Edit pins
+  says where it is pinned. What a row knows comes from one `api.pinIds()` read (`pinnedIds`/`isPinned`/`loadPinned`,
   renderer/nodes.js; main `pinnedUris` over the sidebar collection and the pin-map), re-read whenever a pin is written
   or a global change arrives, and `rowSig` carries it. That is the personal pins only: a node pinned on a meeting and
   nowhere else has no mark (answering that per row is a reverse edge query per view). Pins are personal, so a
@@ -783,7 +784,8 @@ A row is picked up by its marker and dropped where a line says it will land (ren
   Neither enters the undo stack.
 - **Copy link** (`copyLink`) copies the node's home.tana.inc url, which takes the route Tana's own resolver picks for
   the kind: `/t/` a type, `/u/` a person, `/e/` a meeting, `/s/` a space, `/l/` every other document (issue #88).
-  The sidebar's Details carries the same link as "Show in Tana".
+  **Open in Tana** (`openInTana`, the Tana glyph) opens that url in Tana's web app, and on a meeting or its write-up
+  **Join call** (`joinCall`, `callRow`) opens its call link, the readable link as the row's hint.
 
 ## 15. Live updates and rendering
 
@@ -898,18 +900,18 @@ are within 80 px of it; a short conversation sits at the bottom of the pane.
 Under it is the composer (`#composer`, a rounded card whose textarea grows with its text and whose round blue button
 sends), the pane's last row outside the scroll, so it stays at the bottom whatever the conversation's length or
 scroll: Enter sends (`chat:send`, main/documents.js `sendChat`), Shift+Enter is a new line, and Escape leaves it.
-**@** opens the link search as a dropdown at the caret and puts the node picked (or created) in as a chip, with
+**@** opens the link search as a dropdown at the caret and puts the node picked (or created) in as a chip (a pasted Tana link, home.tana.inc or a bare uri, becomes that node's chip too, as it becomes a reference in a row), with
 **Tana** offered first while what is typed fits it: mentioned, Tana answers in a chat with other people in it, where a
 message is otherwise only for them; **/** as the
 first thing typed opens a page of the workspace's skills (`searchPreview` over the skills kind), and the one picked sits
 as a pill in front of the text (Backspace at the start or a click drops it) and goes with the message as its
-attachment. Chips are sent as `[label](tana:…)` links. A label at the card's bottom left says where the message goes, **To Tana** (Tana is asked to
-answer) or **To the chat** (a message for the people in it); it starts at what the chat does by itself, and Tab in an
-empty message or a click on it switches it. Picking a skill switches to To Tana, and it stays there while the skill is attached. The field is a `contenteditable` of plain text and chips
+attachment. Chips are sent as `[label](tana:…)` links. A message goes **To Tana** (Tana is asked to
+answer) or **To the chat** (a message for the people in it), which the empty message's placeholder says; it starts at what the chat does by itself, and Tab in an
+empty message switches it. Picking a skill switches to To Tana, and it stays there while the skill is attached. The field is a `contenteditable` of plain text and chips
 (renderSegs/readSegs); ⌘Z and the other editing keys stay its own rather than reaching the outline. What is typed and not sent is kept per chat while the window is open.
 Opening a chat puts the caret in it. After a send, three dots stand where the answer will be until Tana's answer begins (two minutes
 at most); the answer streams in as live changes to the chat, and a message Tana is still writing with no words yet
-shows the dots in its place. A failed send puts the words back. **New chat** (Cmd+K, Actions) makes a chat with
+shows the dots in its place. A failed send puts the words back. **@Codex** (offered after Tana in "@") asks a Codex task on this Mac instead, and nothing of it reaches Tana: the question shows on your side in a grey bubble where it was asked, under "Only visible for you, on this device", and the answer under it in another, "Codex · only visible for you, on this device" (both labels quieter than the text), with dots until it arrives; the paperclip beside it, or Cmd+K **Add Codex’s answer to message**, adds it to the message box to send as your own words (docs/CHATS.md §12). The questions and answers are kept on this Mac, so they are there again after a restart. **By keyboard**: ↑ at the very start of the message box selects the newest message, and ↑↓ with nothing focused go on from the selected message or, with none, select the lowest (↑) or highest (↓) message in view; ↑↓ walk the messages (a focus ring on the bubble, or around a message without one), ↓ past the last or Esc goes back to the box, Enter on a Codex answer adds it to the message box, and ⇧⌘⌫ or Cmd+K **Delete message** deletes the selected message when it is yours: your own message in the chat for everyone, as Tana's Delete message does (`chat:delete`), or a Codex question with its answer from this Mac (`chatAgent:delete`). The selection survives a redraw. With a message selected, Cmd+K opens with that message's own rows under **Message** at the top (Delete message; for a Codex question or answer also Add … answer to message and Open … task), and nothing that acts on the chat document itself (the Current node rows: pins, link, visibility, move, delete, export) is offered, nor does a recorded key for one of them act; with none selected, Add … answer and Open … task act on the latest ask, under Actions. **New chat** (Cmd+K, Actions) makes a chat with
 Tana that is yours alone (`chat:new`) and opens it.
 
 When Tana's AI asks questions (`row.chat.questions`, docs/CHATS.md §11), the composer gives way to a question card
@@ -956,7 +958,8 @@ chat." shows as a centred status line, as other status lines do.
   bar a view, a saved search or an app page drops its heading, which the tab already names (`html.listing`, issue
   #441); a document keeps its own. A right click on a tab opens the panel menu, led by **Rename** when the page's title
   can be typed in: the shell posts `{ orbital: 'rename' }` and the page shows its heading (`html.renaming`) with its
-  words selected until it loses the focus. ⌘W, a tab's X and the
+  words selected until it loses the focus (renderer/document.js `renameTitle`); Cmd+K **Rename** under Current node does the same, with or
+  without a tab. ⌘W, a tab's X and the
   panel menu's Close close a page; the shell's close guard first asks the page to flush (renderer/app.js
   `leavePage`, also run on pagehide): the pending edit is sent and its presence room left. The last page never closes
   from inside: ⌘W closes the window then. The panel menu has no Hide, since a hidden page would have no way back.
@@ -1097,8 +1100,14 @@ and every head carries `aria-expanded`. It never stands alone: the last page bes
 
 - Tags on sidebar rows collapse to their `#` and hue and show their label on hover or focus, without changing the
   row's height.
-- **Details** first: Show in Tana, the meeting's call link, the assignee, the visibility (which opens the people picker
-  directly when set to selected people), Pinned when it is (§9).
+- **No Details section.** What it listed lives with the page: who it is for and who can see it are the first fields
+  under the title, and Open in Tana, Join call and Edit pins are Cmd+K rows under Current node. **Assigned to** (a task) is a mention per
+  person, drawn as a person in any other field is (no chip), or "Unassigned", and opens the assignee picker; **Visible to** (any document with a known audience) is the
+  audience's glyph with a bubble per person as a list row's subtext has them, one person's name alone (or the audience's words where it names
+  nobody), "Anyone with the link" when Tana's link sharing is on, "Not visible to …" in red for an assignee it shuts out, and opens the visibility picker, on a meeting's
+  write-up the event's; a sensitive page has none. Both open on a click, Enter or Space (renderer/fields.js
+  `assigneeFieldEl`, `visibilityFieldEl`). A page asks for its fields' data itself (`loadRelated`), with or without a
+  Graph pane beside it.
 - **Sections**: Pinned (a meeting's or space's `EDGE_TYPE_HAS_PIN` items, read from the hub's own `pinnedItems` too,
   since a pin just written is there before its edge), Outcomes (documents it owns that carry a task state), Proposals
   (on a meeting's write-up: the proposed documents from chats the meeting owns, #106), References (documents it owns

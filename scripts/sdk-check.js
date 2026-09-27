@@ -5883,6 +5883,78 @@ async function main() {
     console.log("ok  chat:send asks the chat's own agent and keeps a sent message sent when the reply cannot be asked for");
   }
 
+  // Asking an agent from a chat (main/chatagents.js, #468), with Codex, the only agent: nothing is written to the chat, the
+  // task gets the question with the whole chat and the rules, the question stays on this device, and the answer is read
+  // back and kept.
+  {
+    const backend = mainHelpers();
+    const chatDoc = new Document('tana:chat:' + ulid());
+    chatDoc.transact((l) => initDocument(l, 'Team chat', ME, { kind: 'chat' }));
+    const sync = { subscribe: async (id) => { if (id !== chatDoc.id) throw new Error('document not found: ' + id); return chatDoc; } };
+    backend.testRuntime({ me: { userUri: ME }, client: { graph: { listNodes: async (q) => ({ nodes: (q.nodeTypes || []).includes('user-profile') ? [{ id: ME, title: 'Robin Vega' }] : [] }) }, sync }, userData: '/tmp/orbital-chatagents-check', session: { getAccessToken: async () => 'x.' + Buffer.from(JSON.stringify({ org_id: 'org', role: 'member' })).toString('base64url') + '.y' } });
+    const realFetch = globalThis.fetch, created = [];
+    let fetched = 0;
+    globalThis.fetch = async () => { fetched++; return { status: 200, ok: true, json: async () => ({ success: true }) }; };
+    const realCreate = backend.agent.createTask, realRpc = backend.agent.appServerRpc;
+    backend.agent.createTask = async (opts) => { created.push(opts); return '01a0b3a3-c000-70b0-896e-08e86986ca10'; };
+    try {
+      const askAgent = backend.handlers.get('chatAgent:ask'), ask = (e, id, text) => askAgent(e, id, 'codex', text), replies = backend.handlers.get('chatAgent:replies');
+      // offered only where it can run
+      const realBin = backend.agent.codexBin;
+      backend.agent.codexBin = () => null;
+      assert.deepEqual([...await backend.handlers.get('chatAgent:list')(null)], [], 'no Codex on this device, no agent to offer');
+      backend.agent.codexBin = () => '/usr/local/bin/codex';
+      assert.deepEqual([...await backend.handlers.get('chatAgent:list')(null)].map((a) => ({ ...a })), [{ id: 'codex', label: 'Codex', icon: 'robot' }]);
+      backend.agent.codexBin = realBin;
+      await assert.rejects(askAgent(null, chatDoc.id, 'claude', '@Claude hi'), /No such agent/, 'only the agents in the table');
+      await backend.handlers.get('chat:send')(null, chatDoc.id, 'The actions are in', [], { ai: false });
+      await assert.rejects(ask(null, chatDoc.id, 'no mention here'), /Mention @Codex/);
+      const before = chatDoc.data.get('messages').toJSON().length;
+      const { id } = await ask(null, chatDoc.id, '@Codex turn these into issues');
+      assert.deepEqual([chatDoc.data.get('messages').toJSON().length, fetched], [before, 0], 'nothing is written to the chat, and Tana is not asked');
+      assert.deepEqual([created.length, created[0].nodeUri, created[0].host], [1, chatDoc.id, 'local'], 'one Codex task on this Mac');
+      assert.match(created[0].prompt, /^turn these into issues\n[\s\S]*Robin Vega: The actions are in$/, 'the task gets the question and the whole chat, oldest first');
+      assert.match(created[0].instructions, /Neither is saved to Tana/, 'and the rules for the whole thread');
+      assert.equal(backend.settings.isSynced('chatAsks'), false, 'the question and its task stay on this Mac');
+      // the answer: the latest turn's final answer, read once and then kept
+      let spawned = 0, turn = { status: 'interrupted', items: [{ type: 'agentMessage', phase: 'commentary', text: 'Looking' }] };
+      backend.agent.appServerRpc = () => { spawned++; return { ready: Promise.resolve(), call: async (m) => { assert.equal(m, 'thread/turns/list'); return { data: [turn] }; }, stop() {} }; };
+      assert.deepEqual([...await replies(null, chatDoc.id)].map((a) => [a.id, a.question, a.state]), [[id, '@Codex turn these into issues', 'working']], 'a turn still running elsewhere reads as interrupted, and progress is not the answer');
+      turn = { status: 'completed', items: [{ type: 'agentMessage', phase: 'commentary', text: 'Looking' }, { type: 'agentMessage', phase: 'final_answer', text: 'Made three issues' }] };
+      assert.deepEqual([...await replies(null, chatDoc.id)].map((a) => [a.state, a.text]), [['done', 'Made three issues']]);
+      assert.deepEqual([(await replies(null, chatDoc.id))[0].text, spawned], ['Made three issues', 2], 'a finished answer is not read again');
+      // kept on this Mac: read again from the database, as after a restart
+      backend.settings.reset();
+      assert.deepEqual([...await replies(null, chatDoc.id)].map((a) => [a.id, a.question, a.text]), [[id, '@Codex turn these into issues', 'Made three issues']], 'the question and its answer are still there after a restart');
+      // an ask from the build that wrote its question to the chat: its words are read back from the chat once
+      const said = chatDoc.data.get('messages').toJSON().find((m) => m.content && m.content.text === 'The actions are in');
+      const kept = backend.settings.get('chatAsks');
+      backend.settings.set('chatAsks', { ...kept, [chatDoc.id]: [...kept[chatDoc.id], { messageId: said.id, agent: 'codex', taskId: 't-old', at: 1, state: 'done', text: 'Old answer' }] });
+      assert.deepEqual([...await replies(null, chatDoc.id)].map((a) => [a.id, a.question]), [[id, '@Codex turn these into issues'], [said.id, 'The actions are in']], 'an older ask gets its question back');
+      // forgotten: gone from this device, the chat untouched
+      await backend.handlers.get('chatAgent:delete')(null, chatDoc.id, said.id);
+      assert.deepEqual([...await replies(null, chatDoc.id)].map((a) => a.id), [id]);
+      // your own message deleted from the chat, as Tana's Delete message does; the AI's is refused
+      const del = backend.handlers.get('chat:delete');
+      chatDoc.transact((l) => require('../sdk/chat').pushMessage(l, { fromUserType: 'ai', sentAt: 2 }, 'Tana says hi'));
+      await assert.rejects(del(null, chatDoc.id, chatDoc.data.get('messages').toJSON().at(-1).id), /Only your own/);
+      await del(null, chatDoc.id, said.id);
+      assert.deepEqual(chatDoc.data.get('messages').toJSON().filter((m) => !m.hiddenFromChat).map((m) => m.content.text), ['Tana says hi'], 'your message is gone, the rest stays');
+      await assert.rejects(del(null, chatDoc.id, said.id), /not in this chat/);
+      assert.deepEqual([...await replies(null, 'not a chat')], []);
+      // the task behind a question opens in Codex by its id; anything unknown opens nothing
+      assert.equal(await backend.handlers.get('chatAgent:open')(null, chatDoc.id, id), true);
+      assert.equal(backend.opened.at(-1), 'codex://threads/01a0b3a3-c000-70b0-896e-08e86986ca10', 'the task this question started');
+      assert.equal(await backend.handlers.get('chatAgent:open')(null, chatDoc.id, 'nosuchid'), false);
+      // a task that cannot start leaves nothing behind: no message, no question kept
+      backend.agent.createTask = async () => { throw new Error('Codex is not installed on this Mac'); };
+      await assert.rejects(ask(null, chatDoc.id, 'again @codex'), /not installed/);
+      assert.deepEqual([chatDoc.data.get('messages').toJSON().length, (await replies(null, chatDoc.id)).length], [before, 1]);
+    } finally { globalThis.fetch = realFetch; backend.agent.createTask = realCreate; backend.agent.appServerRpc = realRpc; }
+    console.log('ok  chatAgent:ask keeps the question and its answer on this Mac across a restart, hands the whole chat to a local Codex task, reads its answer back once; chat:delete deletes only your own messages');
+  }
+
+
 
   // What the web client shows of a conversation, and how it words the thinking line (docs/CHATS.md §4).
   {

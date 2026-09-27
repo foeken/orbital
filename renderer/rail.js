@@ -167,43 +167,6 @@ function railKey(e, node, row) {
   else if (e.key === 'ArrowLeft' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); toggleRailSection(row.dataset.section); } // collapse the section the focused row is in
   else if (e.key === 'ArrowRight' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); if (railClosed.has(row.dataset.section)) toggleRailSection(row.dataset.section); }
 }
-// A meeting's call link (api.related().call), at the very top of the sidebar so it can be joined from there.
-function railCallRow(data) {
-  const call = data && data.call;
-  if (!call || !call.url || !tana.openExternal) return null; // no call, no row
-  return { id: 'call', icon: 'video', label: demoText(call.label || call.url, 'call'), run: () => run(() => tana.openExternal(call.url)) }; // a call link names the meeting: masked in demo mode
-}
-// The zoomed task's own metadata, at the top of the sidebar: who it is assigned to and who can see it. Both open the
-// pickers the palette already uses (api.setAssignees / api.setSharing). Nothing known, nothing shown.
-function railMetaRows(node, accessNode = node) {
-  // The sidebar describes any document, not only tasks: a doc can be link-shared or live in a space too.
-  const summary = taskSummary(node) || documentSummary(node);
-  const writable = canEditNode(node);
-  const rows = summary?.assignees ? [{
-    id: 'assignees',
-    icon: summary.assignees === 'Unassigned' ? 'unassigned' : 'member',
-    label: summary.assignees === 'Unassigned' ? 'Unassigned' : 'Assigned to ' + summary.assignees,
-    run: writable && tana.taskMeta && tana.setAssignees ? () => openAssigneePalette(node) : null,
-  }] : [];
-  if (summary?.hiddenFrom) rows.push({ // the same warning a list row carries, opening the same picker
-    id: 'hiddenFrom', icon: 'userAlert', label: 'Not visible to ' + summary.hiddenFrom,
-    run: tana.accessOptions ? () => openVisibility(accessNode, summary.scope) : null,
-  });
-  if (summary?.audience) rows.push({ // an unverifiable audience is not a row: there is nothing to show or change
-    id: 'visibility', icon: summary.audience.icon, label: summary.audience.label,
-    run: tana.accessOptions ? () => openVisibility(accessNode, summary.scope) : null,
-  });
-  // link sharing is a separate fact from the Tana audience, and read-only here: Tana owns that switch
-  if (summary?.linkShared) rows.push({ id: 'linkShared', icon: 'globe', label: 'Anyone with the link', run: null });
-  // Pinned to the sidebar or to a date, like the mark on a list row: the row opens the page that lists those pins
-  // and takes them off. A pin is personal, so write access to the node has nothing to do with it.
-  if (isPinned(node.id)) rows.push({ id: 'pinned', icon: 'pinned', label: 'Pinned', run: tana.pinState ? () => openPinsPalette(node) : null });
-  if (tana.nodeLink && tana.openExternal && isRealId(node.id)) rows.push({
-    id: 'showInTana', icon: 'tana', label: 'Show in Tana',
-    run: () => run(async () => tana.openExternal(await tana.nodeLink(node.id))),
-  });
-  return rows;
-}
 function railMetaEl(row) {
   const el = document.createElement('div');
   el.className = 'rrow rmeta' + (row.run ? '' : ' fixed'); // not .meta: that is the grey inline meta text of an outline row
@@ -272,7 +235,8 @@ function railPinAction(pinHub, docId) {
 // A saved search is a list, like the views: no links (issue #234).
 function renderRail(parent) {
   const docId = parent && parent.node.kind === 'document' && !parent.node.draft && !String(parent.docId).startsWith(SEARCH_ID) ? parent.docId : null;
-  if (!LINKS) { railEl.hidden = true; return tellDoc(docId); }
+  // a page is no Graph pane, but its fields under the title come with the same read (api.related): still asked for here
+  if (!LINKS) { railEl.hidden = true; if (docId) loadRelated(docId); return tellDoc(docId); }
   const active = document.activeElement, keep = active && active.classList && active.classList.contains('rrow') ? active.dataset.id : null;
   railEl.replaceChildren();
   railEl.hidden = false;
@@ -281,17 +245,13 @@ function renderRail(parent) {
   if (!docId) return note('Open a document to see its graph.');
   loadRelated(docId);
   const data = relatedBy.get(docId);
-  // Event views immediately follow their write-up document. Sharing still belongs to the event itself.
-  const accessNode = data?.pinHub?.startsWith('tana:event:') ? { id: data.pinHub } : parent.node;
-  const meta = railMetaRows(parent.node, accessNode);
-  if (sensitiveIds?.has(docId)) meta.unshift({ id: 'sensitive', icon: 'hidden', label: 'Sensitive', run: null });
-  const call = railCallRow(data);
-  if (call) meta.unshift(call);
+  // No Details: who it is for and who can see it are fields under the title (renderer/fields.js), and opening it in
+  // Tana, joining its call and its pins are Cmd+K rows (renderer/palette.js)
   // "Notes" is what api.related calls them; in the sidebar they read as References
   const groups = railGroups(data);
   const changes = (data && data.changes) || [];
-  if (!groups.length && !meta.length && !changes.length) return note(data === undefined || data === null ? '' : 'Nothing links here yet.');
-  const sectionHead = (label) => { // every sidebar section collapses the same way, Details included
+  if (!groups.length && !changes.length) return note(data === undefined || data === null ? '' : 'Nothing links here yet.');
+  const sectionHead = (label) => { // every sidebar section collapses the same way
     const head = document.createElement('button');
     head.className = 'rhead' + (railClosed.has(label) ? ' closed' : '');
     head.tabIndex = -1; head.innerHTML = CHEV; head.append(label);
@@ -300,7 +260,6 @@ function renderRail(parent) {
     railEl.append(head);
     return !railClosed.has(label);
   };
-  if (meta.length && sectionHead('Details')) for (const row of meta) { const el = railMetaEl(row); el.dataset.section = 'Details'; railEl.append(el); }
   for (const [label, rows, pinHub] of groups) {
     if (!sectionHead(label)) continue;
     for (const node of rows) { const row = railRow(asDoc(node)); row.dataset.section = label; railEl.append(row); }

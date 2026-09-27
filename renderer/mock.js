@@ -216,6 +216,7 @@ function mockApi() {
   ] };
   content['tana:chat:mockchat4'] = [chatMsg(true, ['Can you rewrite the data clause in the agreement?'], 4), asking];
   const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGPoyroWu7WKIX9dU1fWNQAuWQbA8sXmUwAAAABJRU5ErkJggg==';
+  const agentAsks = {}; // chatId -> [{ id, question, at }] (askAgent), never in the chat
   const changed = [], removed = [], statusCbs = [], deleted = new Map(), sensitive = new Set(), codexAssigned = new Set(), codexPrompts = new Map();
   let status = { authenticated: false, authChecking: false, connected: false, syncing: false, lastSync: null, error: null };
   const emit = (docId) => setTimeout(() => changed.forEach((cb) => cb(docId)), 0);
@@ -514,6 +515,13 @@ function mockApi() {
       setTimeout(() => { content[docId].push(chatMsg(false, ['Mock answer to: ' + text], 0, ['Thought for 2 seconds'])); emit(docId); }, 1800);
       return { messageId: sent.chat.id, responding: true }; // main answers replyError beside a saved message when the reply could not be asked for
     },
+    // @Codex (main/chatagents.js): the question is a message to the chat; the answer is local, here after two and a half seconds
+    chatAgents: async () => [{ id: 'codex', label: 'Codex', icon: 'robot' }],
+    askAgent: async (docId, agent, text) => { const id = 'mockask' + (++seq); (agentAsks[docId] ||= []).push({ id, question: text, at: Date.now() }); return { id }; },
+    deleteAgentAsk: async (docId, id) => { agentAsks[docId] = (agentAsks[docId] || []).filter((a) => a.id !== id); },
+    deleteChatMessage: async (docId, messageId) => { content[docId] = (content[docId] || []).filter((m) => !(m.chat && m.chat.mine && m.chat.id === messageId)); emit(docId); },
+    openAgentAsk: async (docId, id) => (agentAsks[docId] || []).some((a) => a.id === id),
+    agentReplies: async (docId) => (agentAsks[docId] || []).map((a) => ({ id: a.id, question: a.question, at: a.at, agent: 'codex', label: 'Codex', ...(Date.now() - a.at < 2500 ? { state: 'working', text: '' } : { state: 'done', text: 'Mock answer from Codex, kept on this device.' }) })),
     newChat: async () => {
       const n = { id: 'tana:chat:mocknew' + (++seq), text: 'New chat', kind: 'document', hasChildren: true, editable: false, icon: 'chat', tags: [{ label: 'chat', color: 'grey' }] };
       created[n.id] = n; content[n.id] = []; all.push(n);
