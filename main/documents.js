@@ -57,8 +57,16 @@ async function resolveReferences(nodes) {
   // ponytail: the first LIVE_ROWS / 2 only, so a page's own references stay well inside the on-demand cap: past it the
   // sweep let them go, the page was read again for citing them, and that subscribed them all again, every refresh.
   // The rest keep the title they were read with, as a view's rows past LIVE_ROWS do; page them if a page ever needs more.
-  const live = [...new Set(refs.map((ref) => ref.uri))].filter((uri) => targets.has(uri) && idKind(uri) !== 'chat').slice(0, LIVE_ROWS / 2);
-  for (const uri of live) subscribe(uri).then((doc) => { if (doc) readOnDemand(uri); });
+  // The half is of all on-demand reads, not of each page's: several outlines on screen share the one cap. A target
+  // already read keeps its place (it moves to the newest end); a new one takes what room is left.
+  let room = LIVE_ROWS / 2 - onDemand.size;
+  const live = [...new Set(refs.map((ref) => ref.uri))].filter((uri) => targets.has(uri) && idKind(uri) !== 'chat')
+    .slice(0, LIVE_ROWS / 2).filter((uri) => onDemand.has(uri) || room-- > 0);
+  for (const uri of live) {
+    // held while it bootstraps (main/state.js reading), as document() holds its read: a sweep must not unsubscribe it
+    reading.set(uri, (reading.get(uri) || 0) + 1);
+    subscribe(uri).then((doc) => { if (doc) readOnDemand(uri); }).finally(() => { const left = (reading.get(uri) || 1) - 1; if (left > 0) reading.set(uri, left); else reading.delete(uri); });
+  }
   // the icon and the hue: a mention says what kind of thing it points at, and is drawn in its type's colour when
   // the target has one (the link's own blue otherwise)
   for (const m of mentions) {

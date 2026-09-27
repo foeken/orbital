@@ -5232,6 +5232,16 @@ async function main() {
     backend.testRuntime({me:{userUri:ME},client:{sync,graph:{listNodes:async () => ({nodes:manyUris.map((id) => ({id, title:id}))})}}});
     await backend.outlineWithReferences(many);
     assert.deepEqual([manyUris.length, live.length], [60, 50], 'a page of 60 references keeps its first 50 live: inside the on-demand cap, so the sweep does not let them go and have the page read and subscribe them again');
+    // The 50 are of all on-demand reads: a second outline on screen finds the room taken and subscribes none of its own
+    live.length = 0; sync.subscribe = async (id) => { live.push(id); return {}; };
+    await backend.outlineWithReferences(many); await new Promise((r) => setImmediate(r));
+    const other = new Document('tana:text:' + ulid()), otherUris = [];
+    other.transact(l => { initDocument(l, 'more references', ME); });
+    other.transact(l => { const rows = l.getMap('content').get('children'); const uri = 'tana:text:' + ulid(); otherUris.push(uri); rows.get(0).set('nodeName', 'embed'); rows.get(0).get('attributes').set('tanaUri', uri); });
+    backend.testRuntime({me:{userUri:ME},client:{sync,graph:{listNodes:async () => ({nodes:[...manyUris, ...otherUris].map((id) => ({id, title:id}))})}}});
+    live.length = 0; await backend.outlineWithReferences(other);
+    assert.deepEqual(live, [], 'the room is shared: a second page past it keeps its references as read');
+    sync.subscribe = async (id) => { live.push(id); return null; };
     backend.testRuntime({me:{userUri:ME},client:{sync,graph:{listNodes:async q => { requests.push(q); return {nodes:[{id:targetUri,title:'Actual embedded task',state:{type:'open'},appearance:{hue:0}}]}; }}}});
     assert.equal(resolved[0].id, blockId); assert.equal(resolved[0].reference.node.id, targetUri);
     assert.equal(resolved[0].reference.node.icon, 'task'); assert.equal(resolved[0].reference.node.done, 0);
