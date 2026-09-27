@@ -1,14 +1,14 @@
 'use strict';
-// The Links pane (issue #462): what the document on screen is linked to (api.related). Rows here are edges, not nodes:
+// The Graph pane (issue #462): what the document on screen is linked to (api.related). Rows here are edges, not nodes:
 // they open, and a task row toggles, but nothing here ever takes a caret (docs/OUTLINER.md §18).
 // A window has at most one: a page the shell opened with links=1 (shell.js), which draws only #rail, full width, for
 // the document of the pane it follows — the focused one. Every other page draws no rail and tells the shell which
-// document it is on (tellDoc), which the shell passes to the Links pane (follow).
+// document it is on (tellDoc), which the shell passes to the Graph pane (follow).
 const railEl = $('rail');
 const toShell = (msg) => { if (window.frameElement) window.parent.postMessage(msg, '*'); };
 if (LINKS) {
   document.documentElement.classList.add('links'); // styles.css: the outline column goes, the rail fills the page
-  addEventListener('focus', () => { if (!railEl.contains(document.activeElement)) focusRail(); }); // the keys arrive in its rows (Focus links, a click on its tab)
+  addEventListener('focus', () => { if (!railEl.contains(document.activeElement)) focusRail(); }); // the keys arrive in its rows (Focus graph, a click on its tab)
   // With no row to hold the keys (nothing linked, every section folded, rows still coming) Escape gives them back all the
   // same, before the page's own Escape (renderer/events.js) steps the workspace out instead; a row answers it itself (railMove)
   document.addEventListener('keydown', (e) => {
@@ -17,7 +17,7 @@ if (LINKS) {
     e.preventDefault(); e.stopImmediatePropagation(); toShell({ orbital: 'open' });
   }, true);
 }
-// A page tells the shell which document it is on, once per change, with the row it has for it, so the Links pane can
+// A page tells the shell which document it is on, once per change, with the row it has for it, so the Graph pane can
 // open it without asking main. A view, a saved search, an app page or a draft is none. Focus says which page to follow.
 let toldDoc;
 function tellDoc(docId) {
@@ -33,7 +33,7 @@ function retell() {
   if (titleTold) { toldTitle = null; tellTitle(...titleTold); }
   if (toldDoc !== undefined) { const docId = toldDoc; toldDoc = undefined; tellDoc(docId); }
 }
-// The Links pane goes where the followed page is: its document, or, for a page on no document, the empty rail. Only
+// The Graph pane goes where the followed page is: its document, or, for a page on no document, the empty rail. Only
 // this moves it: anywhere else it is asked to go (Cmd+K, a search, a view) is the followed page's move (openDoc, setView).
 // A follow that has to read its document first applies only if no newer one began meanwhile (followSeq): a pane focused
 // while an older read was on its way must not be taken over by it (#463 review).
@@ -278,7 +278,7 @@ function renderRail(parent) {
   railEl.hidden = false;
   watchRail(docId);
   const note = (text) => { const el = document.createElement('div'); el.className = 'rempty'; el.textContent = text; railEl.append(el); };
-  if (!docId) return note('Open a document to see what it links to.');
+  if (!docId) return note('Open a document to see its graph.');
   loadRelated(docId);
   const data = relatedBy.get(docId);
   // Event views immediately follow their write-up document. Sharing still belongs to the event itself.

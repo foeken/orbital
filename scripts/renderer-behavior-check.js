@@ -1565,7 +1565,7 @@ async function runSyncShortcutCheck() {
     ({ rows: async (q) => { paletteRows(q); await Promise.resolve(); await Promise.resolve(); return paletteRows(q).map((r) => r.label); }, loads: () => loads,
        ids: (q) => paletteRows(q).map((r) => r.id), press: async (id) => { const hit = runAction(id); await Promise.resolve(); return [hit, ran.splice(0)]; } });
   `);
-  assert.deepEqual(plain(await folded.rows('s')), ['Sync', 'Search Tana', 'Set status', 'Show links', 'Smaller text', 'Reset text size', 'Filter rows by text'],
+  assert.deepEqual(plain(await folded.rows('s')), ['Sync', 'Search Tana', 'Set status', 'Show graph', 'Smaller text', 'Reset text size', 'Filter rows by text'],
     'one letter: the first level only, the groups whose best row starts with it first (the shortest such row leading), a letter inside a word last');
   assert.deepEqual(plain(await folded.rows('sesp')), ['Set status to In Progress'], 'two letters in: the level below is folded in and the query reaches into it');
   assert.deepEqual(plain(await folded.rows('seinb')), ['Set status to Inbox'], 'a disabled choice is left out, the others are single rows');
@@ -1617,7 +1617,7 @@ async function runSyncShortcutCheck() {
     const pinCalls = []; // what a date-pin row asks of api.pin/api.unpin: the op, the target and the day
     const posted = [], window = { frameElement: {}, parent: { postMessage: (m) => posted.push(m) } }; // the shell this page asks (shellRun)
     const zoom = null, railEl = { hidden: false }, navBack = [], navForward = [], sensitiveVisible = false;
-    const LINKS = false, toShell = (m) => posted.push(m); // a page of its own, asking the shell about the Links pane (renderer/rail.js)
+    const LINKS = false, toShell = (m) => posted.push(m); // a page of its own, asking the shell about the Graph pane (renderer/rail.js)
     const openCreationPalette = () => {}, openHiddenPalette = () => {}, toggleSensitiveVisibility = () => {}, followSystem = () => {}, openVisibilityPalette = () => {}, openMovePalette = () => {}, toggleDatePin = (doc, date) => pinCalls.push([doc.id, date]), copyText = () => {}, togglePalette = () => {}, navigate = () => {}, history = () => {}, focusRail = () => {}, setZoom = () => {}, goTo = (id) => went.push(id), setView = (id) => went.push('view:' + id), openDoc = () => {}, filterEl = {}, render = () => {}, zoomFactor = 1, BASE_ZOOM = 1;
     ${sourceBetween('const NODE_ROW_ORDER', 'function paletteRows')}
     ${sourceBetween('const PANE_ROWS', 'const shellRun')}${sourceLine('const shellRun')}
@@ -1639,7 +1639,7 @@ async function runSyncShortcutCheck() {
     'View options: Filter by type', 'View options: Filter rows by text',
     'Actions: Create new …', 'Actions: Search Tana', 'Actions: Undo', 'Actions: Redo', 'Actions: Sync',
     'Navigate: Go back', 'Navigate: Go forward', 'Navigate: Go to Home',
-    'Window: New window', 'Window: New pane', 'Window: New tab', 'Window: New floating pane', 'Window: Show links', 'Window: Reload',
+    'Window: New window', 'Window: New pane', 'Window: New tab', 'Window: New floating pane', 'Window: Show graph', 'Window: Reload',
     'Settings: Larger text', 'Settings: Smaller text', 'Settings: Reset text size', 'Settings: Toggle dark mode', 'Settings: Edit hidden items', 'Settings: Toggle sensitive visibility', 'Settings: Toggle demo mode',
     'Help: Help',
   ], 'the palette lists its rows in one fixed, meaningful order');
@@ -1650,9 +1650,9 @@ async function runSyncShortcutCheck() {
     'Window: Maximize or restore pane', 'Window: Show all panes', 'Window: Zoom back', 'Window: Zoom forward', 'Window: Close pane'], 'more pages: the pane rows');
   order.row('maximizePane').run(); order.row('otherPane').run(); order.row('overview').run();
   assert.deepEqual(plain(order.posted()), [{ orbital: 'run', command: 'frame.toggle' }, { orbital: 'run', command: 'panel.next' }, { orbital: 'run', command: 'navigation.overview' }], 'each asks the shell to run its command');
-  // The window's Links pane (issue #462): once there is one, a row focuses it and the toggle hides it, both asked of the shell
+  // The window's Graph pane (issue #462): once there is one, a row focuses it and the toggle hides it, both asked of the shell
   order.panes({ pages: 2, links: true });
-  assert.deepEqual(plain(order.labels('').filter((l) => /links/.test(l))), ['Navigate: Focus links', 'Window: Hide links'], 'with a Links pane: focus it, or hide it');
+  assert.deepEqual(plain(order.labels('').filter((l) => /graph/.test(l))), ['Navigate: Focus graph', 'Window: Hide graph'], 'with a Graph pane: focus it, or hide it');
   order.row('railToggle').run(); order.row('rail').run();
   assert.deepEqual(plain(order.posted()), [{ orbital: 'links' }, { orbital: 'focusLinks' }], 'both ask the shell, which keeps the one pane');
   order.panes({ pages: 1 });
@@ -4433,7 +4433,7 @@ function runNavButtonsCheck() {
   assert.deepEqual(both.map((b) => b.icons), [1, 1], 'and a redraw does not stack a second glyph in the button');
 }
 
-// The Links pane (issue #462) goes where the page it follows is: that page's document, opened from the row the page
+// The Graph pane (issue #462) goes where the page it follows is: that page's document, opened from the row the page
 // sent so main is not asked, or nothing for a page on no document; the same document again moves nothing.
 function runRailToggleCheck() {
   return (async () => {
@@ -4466,11 +4466,11 @@ function runRailToggleCheck() {
   await api.follow(null);
   await api.follow('orbital:timeline');
   assert.deepEqual(plain(api.state()).views, ['library'], 'a page on no document (a view, an app page) leaves it on none, once');
-  // Only the Links pane draws the rail; every other page hides it and tells the shell its document instead.
-  assert.match(functionSource('renderRail'), /if \(!LINKS\) \{ railEl\.hidden = true; return tellDoc\(docId\); \}/, 'a page other than the Links pane draws no rail and names its document');
-  // and no outline key of the page (⇧⌘⌫ above all) reaches the hidden page in the Links pane: its branch comes before them (#463 review)
-  assert.match(source, /else if \(!palette\.hidden\) return;\n(?:\s*\/\/[^\n]*\n)*\s*else if \(LINKS\) \{ if \(hotkey && runAction\(hotkey\)\) e\.preventDefault\(\); \}\n[^]*?removeZoomedBlock\(\)/, 'in the Links pane only its forwarded keys run, never the outline\'s');
-  // Anywhere else the Links pane is asked to go — Cmd+K's views, searches and results — is the followed page's move (#463 review)
+  // Only the Graph pane draws the rail; every other page hides it and tells the shell its document instead.
+  assert.match(functionSource('renderRail'), /if \(!LINKS\) \{ railEl\.hidden = true; return tellDoc\(docId\); \}/, 'a page other than the Graph pane draws no rail and names its document');
+  // and no outline key of the page (⇧⌘⌫ above all) reaches the hidden page in the Graph pane: its branch comes before them (#463 review)
+  assert.match(source, /else if \(!palette\.hidden\) return;\n(?:\s*\/\/[^\n]*\n)*\s*else if \(LINKS\) \{ if \(hotkey && runAction\(hotkey\)\) e\.preventDefault\(\); \}\n[^]*?removeZoomedBlock\(\)/, 'in the Graph pane only its forwarded keys run, never the outline\'s');
+  // Anywhere else the Graph pane is asked to go — Cmd+K's views, searches and results — is the followed page's move (#463 review)
   const nav = vm.runInNewContext(`
     const LINKS = true, posted = [], toShell = (m) => posted.push(m), palette = { hidden: true }, PANE_ROWS = [['otherPane']]; let followingNow = false;
     const tana = { summaryUri: () => { posted.push('asked for a write-up'); return Promise.resolve(null); } };
@@ -4483,14 +4483,14 @@ function runRailToggleCheck() {
   `);
   nav.openDoc('tana:text:x'); nav.setView('library'); nav.togglePalette('cmd'); nav.togglePalette('search');
   assert.deepEqual(plain(nav.posted), [{ orbital: 'open', id: 'tana:text:x' }, { orbital: 'open', view: 'library' }, { orbital: 'palette', mode: 'cmd' }, { orbital: 'palette', mode: 'search' }],
-    'in the Links pane, opening a document or a view opens it in the followed page, and Cmd+K / Cmd+S open there too');
+    'in the Graph pane, opening a document or a view opens it in the followed page, and Cmd+K / Cmd+S open there too');
   nav.posted.length = 0;
-  assert.deepEqual([nav.runAction('create'), nav.runAction('railToggle'), nav.runAction('otherPane')], [true, false, false], 'a key pressed in the Links pane is the followed page\'s, but its own rows and the pane moves');
+  assert.deepEqual([nav.runAction('create'), nav.runAction('railToggle'), nav.runAction('otherPane')], [true, false, false], 'a key pressed in the Graph pane is the followed page\'s, but its own rows and the pane moves');
   nav.followSummary('tana:event:x');
-  assert.deepEqual(plain(nav.posted), [{ orbital: 'action', id: 'create' }], 'the Links pane runs no key of the followed page itself, and never redirects a meeting to its write-up');
-  // Following is not navigating: the Links pane keeps no history, so ⌘[ there cannot take it off the followed document (#463 review)
-  assert.match(functionSource('noteNavigation'), /if \(navHere && !navigating && !navReplace && !LINKS\) \{ navBack\.push/, 'the Links pane records no Back history');
-  // A saved search is a list: no links, and nothing for the Links pane to follow.
+  assert.deepEqual(plain(nav.posted), [{ orbital: 'action', id: 'create' }], 'the Graph pane runs no key of the followed page itself, and never redirects a meeting to its write-up');
+  // Following is not navigating: the Graph pane keeps no history, so ⌘[ there cannot take it off the followed document (#463 review)
+  assert.match(functionSource('noteNavigation'), /if \(navHere && !navigating && !navReplace && !LINKS\) \{ navBack\.push/, 'the Graph pane records no Back history');
+  // A saved search is a list: no links, and nothing for the Graph pane to follow.
   assert.match(source, /!String\(parent\.docId\)\.startsWith\(SEARCH_ID\) \? parent\.docId : null;/,
     'renderRail gives a saved search no links');
   })();
@@ -7988,7 +7988,7 @@ async function runDeletedNodeCheck() {
     const showError = (e) => errors.push(String((e && e.message) || e));
     const render = () => { renders++; }, renderSoon = () => { renders++; }, patchMeta = () => {}, renderPalette = () => {};
     const flushAll = () => {}, dropDrafts = () => {}, releaseHeld = () => {}, recordRecent = () => {};
-    const LINKS = false; // a page of its own, not the Links pane (renderer/state.js)
+    const LINKS = false; // a page of its own, not the Graph pane (renderer/state.js)
     const sectionOf = () => null, allDocs = () => [], docOf = () => null, followSummary = (id) => opened.push(id);
     const atHome = () => false, goHome = () => { view = 'home'; };
     const setTimeout = () => 0;
@@ -8808,7 +8808,7 @@ async function runLateSettingsCheck() {
     'a choice made while the answer was on its way is newer, so it keeps its value, and the rest of the answer still applies');
   assert.match(source, /if \(tana\.onSettings\) tana\.onSettings\(applySettings\);\nif \(tana\.prefsNow\) catchUpSettings\(\);/, 'it asks after it starts listening, so no change can fall between the two');
   assert.match(functionSource('applySettings'), /railClosed\.clear\(\); for \(const key of pref\('railClosed', \[\]\)\) railClosed\.add\(key\);/,
-    'and what it applies reaches the Links pane too, whose folded sections were copied at load');
+    'and what it applies reaches the Graph pane too, whose folded sections were copied at load');
   console.log('ok  settings: a change sent before the page listened is still applied');
 }
 checks.push(runLateSettingsCheck);

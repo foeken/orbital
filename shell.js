@@ -47,15 +47,15 @@ const loaded = new WeakSet();
 const windowOf = (frame) => (frame && loaded.has(frame) ? frame.contentWindow : null);
 const sourceOf = (win) => pages().find((v) => windowOf(frameOf(v.id)) === win)?.id;
 const tell = (win) => win?.postMessage({ orbital: 'layout', pages: pages().length, links: !!linksView() }, '*');
-// The Links pane (issue #462, renderer/rail.js): one page per window opened with links=1, showing the links of the
+// The Graph pane (issue #462, renderer/rail.js): one page per window opened with links=1, showing the links of the
 // document the page it follows is on. It follows the page that last took the keys, never itself; each page says which
-// document it is on (its row too, so the Links pane opens it without asking main), and a row opened there opens in it.
+// document it is on (its row too, so the Graph pane opens it without asking main), and a row opened there opens in it.
 const linksView = () => pages().find((v) => v.params.links)?.id;
 const docs = new Map(); // page view id -> { docId, doc } it last told
 let followed = null;
-const others = () => pages().filter((v) => !v.params.links).map((v) => v.id); // the pages a Links pane can follow
+const others = () => pages().filter((v) => !v.params.links).map((v) => v.id); // the pages a Graph pane can follow
 // The page followed: the last to take the keys, else the one in front, else the first. A restored window may open with
-// the Links pane in front and no page having taken the keys yet (#463 review).
+// the Graph pane in front and no page having taken the keys yet (#463 review).
 function following() {
   if (!others().includes(followed)) { const front = ws.getSnapshot().focusedView; followed = others().includes(front) ? front : others()[0] || null; }
   return followed;
@@ -104,7 +104,7 @@ const guarded = new Set();
 function guard() {
   for (const { id } of pages()) if (!guarded.has(id)) {
     guarded.add(id);
-    // the last page never closes from here, nor the last one a Links pane follows: main closes the window then (closeFront)
+    // the last page never closes from here, nor the last one a Graph pane follows: main closes the window then (closeFront)
     ws.view(id).guardClose(async () => { if (pages().length < 2 || (id !== linksView() && others().length < 2)) return false; await flush(frameOf(id)); return true; });
   }
 }
@@ -114,7 +114,7 @@ ws.on('close', (view) => { guarded.delete(view.id); renamable.delete(view.id); d
 function sync() {
   const tabs = pages().length > 1;
   if (tabs !== many) { many = tabs; ws.update({ types: types(tabs), navigation: tabs ? 'free' : false }); document.body.classList.toggle('many', tabs); }
-  guard(); mark(); place(); frames().forEach((f) => tell(windowOf(f))); // place: a divider or a move shifts a covering page's pane
+  guard(); mark(); place(); drawLinks(); frames().forEach((f) => tell(windowOf(f))); // place: a divider or a move shifts a covering page's pane
 }
 ws.on('change', (doc) => {
   sync();
@@ -160,12 +160,18 @@ function focusPage(viewId) {
   ws.focus(viewId);
   windowOf(frameOf(viewId))?.focus();
 }
-// The header's switches (shell.html) act in the page in front, which takes the keys first (renderer/app.js)
-for (const [id, icon, what] of [['headSensitive', null, 'sensitive'], ['headPalette', 'command', 'palette'], ['headHelp', 'help', 'help']]) {
+// The header's switches (shell.html) act in the page in front, which takes the keys first (renderer/app.js); Graph runs
+// its Cmd+K Show/Hide graph row there (renderer/palette.js railToggle), so it opens beside that page.
+for (const [id, icon, msg] of [['headSensitive', null, { orbital: 'sensitive' }], ['headPalette', 'command', { orbital: 'palette' }], ['headHelp', 'help', { orbital: 'help' }], ['headLinks', 'graph', { orbital: 'action', id: 'railToggle' }]]) {
   const button = document.getElementById(id);
   if (icon) button.innerHTML = window.ICONS?.[icon] || ''; // icons.js: our own markup
   button.onmousedown = (e) => e.preventDefault();
-  button.onclick = () => { const win = windowOf(frameOf(ws.getSnapshot().focusedView)); win?.focus(); win?.postMessage({ orbital: what }, '*'); };
+  button.onclick = () => { const win = windowOf(frameOf(ws.getSnapshot().focusedView)); win?.focus(); win?.postMessage(msg, '*'); };
+}
+// The Graph switch shows its state by its look (shell.css): full strength while the window has a Graph pane.
+function drawLinks() {
+  const on = !!linksView(), button = document.getElementById('headLinks'), label = on ? 'Hide graph' : 'Show graph';
+  button.title = label; button.setAttribute('aria-label', label); button.setAttribute('aria-pressed', String(on));
 }
 // The sensitive switch is drawn from the pages' own storage (renderer/document.js): the glyph is the state, an open eye
 // while sensitive items are shown and the crossed one while they are blurred, and it follows a switch from any page.
@@ -209,7 +215,7 @@ function open({ id, where, from, focus }) {
   if (links && linksView()) { focusPage(linksView()); return bridge.layout({ doc: ws.getDocument(), pages: pages().map((v) => v.params.side) }); }
   if (links && viewOf(from)) followed = viewOf(from);
   const beside = ws.view(viewOf(from) || '')?.panelId || ws.getSnapshot().focusedPanel;
-  // the Links pane takes about 320px of the pane it opens beside: under Trellis's 280px minimum its content would be scaled down
+  // the Graph pane takes about 320px of the pane it opens beside: under Trellis's 280px minimum its content would be scaled down
   const share = links ? Math.min(0.5, 320 / (frameOf(viewOf(from))?.getBoundingClientRect().width || innerWidth)) : undefined;
   const placement = where === 'float' ? 'float' : !beside ? 'side' : where === 'tab' ? { into: beside } : { beside, edge: where === 'left' ? 'left' : 'right', ...(links ? { share } : {}) };
   const { id: viewId } = ws.open('page', { id: 'page' + id, params: links ? { side: id, links: true } : { side: id }, placement, focus: false });
@@ -274,9 +280,9 @@ addEventListener('message', (e) => {
   else if (what === 'navbtns') drawNav(sourceOf(e.source), String(e.data.html || ''), e.data.on === true);
   else if (what === 'doc') { const id = sourceOf(e.source); if (!id) return; docs.set(id, { docId: typeof e.data.docId === 'string' ? e.data.docId : null, doc: e.data.doc || null }); if (id === following()) follow(); }
   else if (what === 'focus') { const id = sourceOf(e.source); if (id && id !== linksView() && id !== followed) { followed = id; follow(); } }
-  else if (what === 'open') { const id = following(), win = windowOf(frameOf(id)); if (!win) return; focusPage(id); if (typeof e.data.id === 'string' || typeof e.data.view === 'string') win.postMessage({ orbital: 'goto', id: e.data.id, view: e.data.view }, '*'); } // from the Links pane
-  else if (what === 'links') { const id = linksView(); if (id) ws.close(id); } // Cmd+K Hide links
-  else if (what === 'palette') { const id = following(), win = windowOf(frameOf(id)); if (!win) return; focusPage(id); win.postMessage({ orbital: 'palette', mode: e.data.mode }, '*'); } // Cmd+K or Cmd+S pressed in the Links pane
+  else if (what === 'open') { const id = following(), win = windowOf(frameOf(id)); if (!win) return; focusPage(id); if (typeof e.data.id === 'string' || typeof e.data.view === 'string') win.postMessage({ orbital: 'goto', id: e.data.id, view: e.data.view }, '*'); } // from the Graph pane
+  else if (what === 'links') { const id = linksView(); if (id) ws.close(id); } // Cmd+K Hide graph
+  else if (what === 'palette') { const id = following(), win = windowOf(frameOf(id)); if (!win) return; focusPage(id); win.postMessage({ orbital: 'palette', mode: e.data.mode }, '*'); } // Cmd+K or Cmd+S pressed in the Graph pane
   else if (what === 'action') { const id = following(), win = windowOf(frameOf(id)); if (!win) return; focusPage(id); win.postMessage({ orbital: 'action', id: String(e.data.id) }, '*'); } // any other key pressed there
   else if (what === 'focusLinks') focusPage(linksView());
 });

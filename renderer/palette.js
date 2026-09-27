@@ -335,7 +335,7 @@ function paletteRows(q, typed = q) {
   rows.push({ id: 'goHome', group: 'Navigate', icon: 'home', label: 'Go to Home', hint: atHome() ? 'Current' : homeName() || '', disabled: atHome(), run: () => goHome() });
   // Home is the window as it is now, its panes and what each shows: kept as the saved view "Home" (renderer/nodes.js)
   if (tana.windowLayout) rows.push({ id: 'setHome', group: 'Navigate', icon: 'home', label: 'Set as Home', hint: homeId() === HOME_VIEW ? 'Updates Home to this window' : 'This window as it is', run: () => run(async () => { await saveView('Home', HOME_VIEW); setHome(HOME_VIEW); }) });
-  if (windowPanes.links) rows.push({ id: 'rail', group: 'Navigate', icon: 'rail', label: 'Focus links', run: () => (LINKS ? focusRail() : toShell({ orbital: 'focusLinks' })) });
+  if (windowPanes.links) rows.push({ id: 'rail', group: 'Navigate', icon: 'graph', label: 'Focus graph', run: () => (LINKS ? focusRail() : toShell({ orbital: 'focusLinks' })) });
   if (tana.deletedList) rows.push({ id: 'recentlyDeleted', group: 'Navigate', icon: 'trash', label: 'Recently deleted', keepOpen: true, run: openTrashPalette });
   if (tana.archivedTypes) rows.push({ id: 'archivedTypes', group: 'Navigate', icon: 'type', label: 'Archived types', keepOpen: true, run: openArchivedPalette });
   // A new page starts where you are: main hands it this view and place with its id, before it reads them (main.js starts)
@@ -346,8 +346,8 @@ function paletteRows(q, typed = q) {
   rows.push({ id: 'floatPane', group: 'Window', icon: 'splitPanes', label: 'New floating pane', run: () => openPage('float') }); // "Float" in a pane's menu floats that pane
   // With more than one page, the workspace's own moves (shell.js run): Trellis does them, this page only asks
   if (windowPanes.pages > 1) for (const [id, label, command, icon] of PANE_ROWS) rows.push({ id, group: 'Window', icon, label, ...(id === 'closePane' ? { kbd: '⌘W' } : {}), run: () => shellRun(command) }); // ⌘W: the File menu's Close
-  // The window's Links pane (issue #462, renderer/rail.js): opened beside this page on this place, or closed by the shell
-  rows.push({ id: 'railToggle', group: 'Window', icon: windowPanes.links ? 'railHide' : 'railShow', label: windowPanes.links ? 'Hide links' : 'Show links', run: () => (windowPanes.links ? toShell({ orbital: 'links' }) : run(() => tana.splitWindow('links', { view, place: placeJSON() }))) });
+  // The window's Graph pane (issue #462, renderer/rail.js): opened beside this page on this place, or closed by the shell
+  rows.push({ id: 'railToggle', group: 'Window', icon: 'graph', label: windowPanes.links ? 'Hide graph' : 'Show graph', run: () => (windowPanes.links ? toShell({ orbital: 'links' }) : run(() => tana.splitWindow('links', { view, place: placeJSON() }))) });
   rows.push({ id: 'reload', group: 'Window', icon: 'reload', label: 'Reload', hint: 'Every pane', run: () => (window.frameElement ? window.parent.postMessage({ orbital: 'reload' }, '*') : location.reload()) }); // the shell reloads, and every page with it (shell.js)
   if (tana.windowLayout) {
     rows.push({ id: 'saveView', group: 'Window', icon: 'splitPanes', label: 'Save view\u2026', keepOpen: true, run: openSaveViewPalette });
@@ -401,7 +401,7 @@ function paletteRows(q, typed = q) {
 // but off (Clean up with nothing held, Go back with no history) answers the key by doing nothing: it is the same
 // command either way, so it must not mean one thing while it is live and something else while it is not.
 function runAction(id) {
-  // A key pressed in the Links pane acts in the page it follows, where its rows are meant (#463 review), except the
+  // A key pressed in the Graph pane acts in the page it follows, where its rows are meant (#463 review), except the
   // pane's own rows and the workspace's moves, which ask the shell from wherever they are pressed.
   if (LINKS && !['railToggle', 'rail', 'reload'].includes(id) && !PANE_ROWS.some(([rowId]) => rowId === id)) { toShell({ orbital: 'action', id }); return true; }
   if (palette.hidden) { palDoc = currentDoc(); palField = fieldAt(document.activeElement); } // a key fires with the palette closed, so the "current node" is whatever is focused now
@@ -981,7 +981,7 @@ function renderPalette() {
 // opens the palette in mode, closes it when already open in that mode; opening one mode closes the other.
 // link = @ linking context; pin = relationship pin context. Both reuse search results.
 function togglePalette(mode, link, pin) {
-  // The Links pane has no outline for Cmd+K or Cmd+S to act on: they open in the page it follows (shell.js), whose rows
+  // The Graph pane has no outline for Cmd+K or Cmd+S to act on: they open in the page it follows (shell.js), whose rows
   // (views, Create new …, results) are meant for it (#463 review). A picker one of its own rows opens stays here.
   if (LINKS && palette.hidden && !link && !pin && (mode === 'cmd' || mode === 'search')) return toShell({ orbital: 'palette', mode });
   const show = palette.hidden || palMode !== mode || !!link || !!pin;

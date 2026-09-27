@@ -264,7 +264,7 @@ function render(force = false) {
 let toldTitle = null, titleTold = null; // titleTold: the last title and renamable, told again when the shell asks (retell)
 const retellTitle = () => { if (toldTitle) tellTitle(titleEl.classList.contains('sensitive') ? 'Hidden' : titleEl.textContent, toldTitle.endsWith('\ntrue')); };
 function tellTitle(title, renamable) {
-  if (LINKS) { title = 'Links'; renamable = false; } // its tab names what it is; the document is the followed page's
+  if (LINKS) { title = 'Graph'; renamable = false; } // its tab names what it is; the document is the followed page's
   titleTold = [title, renamable];
   const told = title + '\n' + renamable;
   if (told === toldTitle || !window.frameElement) return;

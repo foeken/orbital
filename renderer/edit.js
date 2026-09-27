@@ -266,7 +266,7 @@ function toggleReference(node) {
   run(() => tana.setDone(target.id, done));
 }
 function setView(id) {
-  if (LINKS && !followingNow) return toShell({ orbital: 'open', view: id }); // the Links pane opens a view in the page it follows (renderer/rail.js)
+  if (LINKS && !followingNow) return toShell({ orbital: 'open', view: id }); // the Graph pane opens a view in the page it follows (renderer/rail.js)
   turnPage('swap', () => { dropDrafts(); releaseHeld(); view = id; localStorage.setItem('view' + SIDE, id); zoom = null; sel = null; menu = null; loadView(id); render(true); });
 }
 // zoom into a document, switching to its view first when it belongs to another one; from = breadcrumb root instead of the view
@@ -280,14 +280,14 @@ function openDoc(docId, from) {
   const s = from ? null : sectionOf(docId);
   if (s && s.id !== view) { releaseHeld(); view = s.id; localStorage.setItem('view' + SIDE, view); }
   const doc = allDocs().find((d) => d.id === docId) || extra.get(docId);
-  if (doc && !LINKS) recordRecent(doc); // the Links pane follows other pages there: not a place you went
+  if (doc && !LINKS) recordRecent(doc); // the Graph pane follows other pages there: not a place you went
   turnPage('in', () => { zoom = { docId, nodeId: null, from }; render(true); });
   followSummary(docId);
 }
 // An event has no content of its own, so a meeting opens at its write-up. Every zoom passes through here, so the
 // redirect behaves the same from a list row, search, the rail, a pin, a breadcrumb or a link.
 function followSummary(docId) {
-  // the Links pane never redirects itself: the page it follows does, and tells it the write-up (renderer/rail.js)
+  // the Graph pane never redirects itself: the page it follows does, and tells it the write-up (renderer/rail.js)
   if (LINKS || !tana.summaryUri || typeof docId !== 'string' || !docId.startsWith('tana:event:')) return;
   tana.summaryUri(docId).then((uri) => { if (uri && zoom && zoom.docId === docId) { navReplace = true; goTo(uri); } }, () => {}); // the event page is a hop, not a place to come back to
 }
@@ -325,7 +325,7 @@ function rememberPlace() { localStorage.setItem('place' + SIDE, placeJSON()); }
 function noteNavigation() {
   const here = navPlace();
   if (navHere && navHere.key === here.key) return;
-  // the Links pane goes where the page it follows is (renderer/rail.js follow), which is no place of its own to go back to
+  // the Graph pane goes where the page it follows is (renderer/rail.js follow), which is no place of its own to go back to
   if (navHere && !navigating && !navReplace && !LINKS) { navBack.push(navHere); navForward.length = 0; if (navBack.length > 100) navBack.shift(); }
   navReplace = false;
   const previousDoc = navHere?.zoom?.docId;

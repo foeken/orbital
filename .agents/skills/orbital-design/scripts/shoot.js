@@ -4,7 +4,8 @@
 // Chromium over the DevTools protocol: no dependency, only the chrome-headless-shell Playwright keeps in its cache.
 // Run from the checkout (it serves the working directory):
 //   node .agents/skills/orbital-design/scripts/shoot.js [--name x] [--size 1440x900] [--panes 1|2] [--themes light,dark]
-//        [--signed-out] [--eval 'js run in every page after login'] [--wait ms] [--out dir]
+//        [--signed-out] [--graph] [--eval 'js run in every page after login'] [--wait ms] [--out dir]
+// --graph: the second pane is the window's Graph pane (links=1), which the mock cannot open from Cmd+K
 // Writes <out>/<name>-<theme>.png (default /tmp/orbital-shots) and prints the paths.
 const http = require('http'), fs = require('fs'), path = require('path'), os = require('os'), { spawn } = require('child_process');
 
@@ -13,14 +14,15 @@ const root = process.cwd();
 if (!fs.existsSync(path.join(root, 'shell.html'))) { console.error('Run from the Orbital checkout'); process.exit(1); }
 const [w, h] = String(arg('size', '1440x900')).split('x').map(Number);
 const name = arg('name', 'shot'), out = arg('out', '/tmp/orbital-shots'), wait = Number(arg('wait', 800));
-const themes = String(arg('themes', 'light,dark')).split(','), panes = Number(arg('panes', 1)), code = arg('eval', '');
+const graph = arg('graph', false) === true, themes = String(arg('themes', 'light,dark')).split(','), panes = graph ? 2 : Number(arg('panes', 1)), code = arg('eval', '');
 const cache = path.join(os.homedir(), 'Library/Caches/ms-playwright');
 const chrome = process.env.CHROME || (fs.existsSync(cache) && fs.readdirSync(cache).filter((d) => d.startsWith('chromium_headless_shell-')).sort().reverse()
   .map((d) => path.join(cache, d, 'chrome-headless-shell-mac-arm64/chrome-headless-shell')).find((f) => fs.existsSync(f)));
 if (!chrome) { console.error('No chrome-headless-shell: run npx playwright install chromium-headless-shell, or set CHROME'); process.exit(1); }
 // main.js pair(): the Work View's two pages, as main hands them to the shell
 const pair = { schema: 1, root: { kind: 'split', id: 'split-work', axis: 'x', weights: [0.6, 0.4], children: ['', '2'].map((id) => ({ kind: 'panel', id: 'panel-work' + id, views: ['page' + id], selected: 'page' + id })) },
-  floating: [], hidden: [], views: { page: { type: 'page', params: { side: '' } }, page2: { type: 'page', params: { side: '2' } } } };
+  floating: [], hidden: [], views: { page: { type: 'page', params: { side: '' } }, page2: { type: 'page', params: { side: '2', ...(graph ? { links: true } : {}) } } } };
+if (graph) pair.root.weights = [0.72, 0.28];
 const TYPES = { '.js': 'text/javascript', '.css': 'text/css', '.html': 'text/html', '.svg': 'image/svg+xml', '.json': 'application/json', '.png': 'image/png' };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
