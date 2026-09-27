@@ -70,7 +70,7 @@ ws.on('close', (view) => guarded.delete(view.id));
 function sync() {
   const tabs = pages().length > 1;
   if (tabs !== many) { many = tabs; ws.update({ types: types(tabs), navigation: tabs ? 'free' : false }); document.body.classList.toggle('many', tabs); }
-  guard(); mark(); frames().forEach((f) => tell(windowOf(f)));
+  guard(); mark(); place(); frames().forEach((f) => tell(windowOf(f))); // place: a divider or a swap moves a covering page's pane
 }
 ws.on('change', (doc) => {
   sync();
