@@ -85,6 +85,29 @@ const docPages = (doc) => { const ids = Object.entries((doc && doc.views) || {})
 const freeId = () => { let n = 2; while ([...S.windows].some((w) => w.pages.includes(String(n)) || w.panes.some((p) => p.side === String(n)))) n++; return String(n); };
 // another window's layout: one page, under an id no window has
 const onePage = (id) => ({ schema: 1, root: { kind: 'panel', id: 'panel-' + id, views: ['page' + id], selected: 'page' + id }, floating: [], hidden: [], views: { ['page' + id]: { type: 'page', params: { side: id } } } });
+// What a page starts on: its view and place, from the page that opened it or the saved view it is part of, keyed by its
+// id and handed over with that id (window:getSide), so its preload stores them before the page reads them. Written by
+// the page that asked, they raced the new page's load. A key set to null is cleared; one left out keeps what is stored.
+const starts = new Map();
+function setStart(id, keys, suffix = '') {
+  const start = {};
+  for (const key of ['view', 'place']) { const v = keys && typeof keys === 'object' ? keys[key + suffix] : undefined; if (v === null || (typeof v === 'string' && v.length < 20000)) start[key] = v; }
+  if (Object.keys(start).length) starts.set(id, start); else starts.delete(id);
+}
+// A saved view names page ids, and another window may have one of them open: that page takes a free id instead, with
+// its keys, so no two live pages store their place under one key. '' is only ever the main window's.
+function adoptLayout(win, doc, keys) {
+  const others = new Set([...S.windows].filter((w) => w !== win).flatMap((w) => [...w.pages, ...w.panes.map((p) => p.side)]));
+  const ids = docPages(doc), used = new Set([...others, ...ids]), map = new Map();
+  for (const id of ids) if (id && others.has(id)) { let n = 2; while (used.has(String(n))) n++; used.add(String(n)); map.set(id, String(n)); }
+  for (const id of ids) setStart(map.get(id) ?? id, keys, id ? ':' + id : '');
+  if (!map.size) return doc;
+  const swap = (s) => (typeof s === 'string' && s.startsWith('page') && map.has(s.slice(4)) ? 'page' + map.get(s.slice(4)) : s);
+  const walk = (v) => (Array.isArray(v) ? v.map(walk) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [swap(k), walk(x)])) : swap(v));
+  const out = walk(doc);
+  for (const [k, v] of Object.entries(out.views)) if (v && v.type === 'page') v.params = { ...v.params, side: k.slice(4) };
+  return out;
+}
 // the page after this one in the layout's order, round to the first (⌘\, where the keys go when one closes)
 function nextPane(page) {
   const win = page.win, order = win.pages.filter((id) => win.panes.some((p) => p.side === id));
@@ -250,19 +273,23 @@ ipcMain.handle('outline:children', (e, id) => { const page = pageOf(e); return (
 // The renderer's preferences, from the same store: a synchronous snapshot at load (preload reads it before the
 // first paint) and one write per change.
 // the menu shows ⌥⌘N but leaves the key to the renderer's New window row (DEFAULT_HOTKEYS), so it can be re-recorded
-ipcMain.handle('window:new', () => createWindow().pages[0]); // its page's id, for the page asking to store its place under
+ipcMain.handle('window:new', (e, start) => { const id = createWindow().pages[0]; setStart(id, start); return id; }); // its one page starts where the asking page is
 // ⌘N (issue #159) and Cmd+K New tab / New floating pane: a new page beside the one that asked, taking the keys. Answers the
 // new page's id, so the page asking can store its view and place under it for the new one to open on.
-ipcMain.handle('window:split', (e, where) => {
+ipcMain.handle('window:split', (e, where, start) => {
   const page = pageOf(e);
   if (!page || signedOut()) return null;
-  return openPage(page.win, { where: ['right', 'tab', 'float'].includes(where) ? where : 'right', from: page.side });
+  const id = freeId();
+  setStart(id, start);
+  return openPage(page.win, { id, where: ['right', 'tab', 'float'].includes(where) ? where : 'right', from: page.side });
 });
 // asked by preload.js on every load, a Reload included: this page's id ('' the first page, then '2', '3', ...).
 // This is where a page registers (addPage); an overlay asking is no page and gets the defaults.
 ipcMain.on('window:getSide', (e) => {
   const page = pageOf(e) || addPage(e);
-  e.returnValue = { side: page ? page.side : '' };
+  const side = page ? page.side : '', start = page && starts.get(side);
+  if (start) starts.delete(side);
+  e.returnValue = start ? { side, start } : { side };
 });
 // A page taking the keys (preload.js, its window's focus): the window and page a notification click opens in, and ⌘W closes
 ipcMain.on('page:focus', (e) => { const page = pageOf(e); if (page) { S.win = page.win; S.pane = page; } });
@@ -281,10 +308,11 @@ ipcMain.handle('overlay:close', (e, result) => { closeOverlay([...S.windows].fin
 // (shell:state) and every page opens where the view was saved.
 ipcMain.handle('window:layout', (e) => pageOf(e)?.win?.doc || null);
 // A saved view is the main window's (win.primary): chosen in another window it is laid out there, which comes forward.
-ipcMain.handle('window:setLayout', (e, doc) => {
+ipcMain.handle('window:setLayout', (e, doc, keys) => {
   const asked = pageOf(e)?.win, win = [...S.windows].find((w) => w.primary && !w.isDestroyed()) || asked;
   if (doc === 'workView') doc = pair(WORK_SPLIT);
   if (!win || signedOut() || (doc !== null && !(doc && typeof doc === 'object' && Object.values(doc.views || {}).some((v) => v && v.type === 'page')))) return false;
+  doc = adoptLayout(win, doc, keys);
   win.primary = true; win.doc = doc; win.pages = docPages(doc); win.saveBounds();
   win.shell.webContents.reload();
   if (win !== asked) win.focus();

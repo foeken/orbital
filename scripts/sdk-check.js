@@ -1087,12 +1087,14 @@ async function main() {
     assert.equal(shown.panes.length, 2);
     assert.equal(ask('window:getSide', frame('twin', '2')).side, '3', 'an id already taken gets the smallest free one');
     shown.panes.pop();
-    // ⌘N: a new page to the right of the one that asked, with an id main gives (for its place) and the keys
-    assert.equal(ask('window:split', rightPage), '3');
+    // ⌘N: a new page to the right of the one that asked, with an id main gives and the keys. It starts where the asking
+    // page is: main hands it that view and place with its id, for its preload to store before the page reads them.
+    assert.equal(ask('window:split', rightPage, 'right', { view: 'library', place: '{}', other: 'x' }), '3');
     assert.deepEqual(toShell.splice(0), [['open', { id: '3', where: 'right', from: '2', focus: true }]]);
     assert.equal(ask('window:split', leftPage, 'tab'), '4', 'a New tab is the next free id, even before the first has loaded');
     assert.deepEqual(toShell.splice(0), [['open', { id: '4', where: 'tab', from: '', focus: true }]]);
-    ask('window:getSide', thirdPage);
+    assert.deepEqual(ask('window:getSide', thirdPage), { side: '3', start: { view: 'library', place: '{}' } }, 'a new page gets its start with its id');
+    assert.deepEqual(ask('window:getSide', thirdPage), { side: '3' }, 'once');
     assert.notEqual(backend.S.pane && backend.S.pane.frame, thirdPage, 'only the page asked for last takes the keys');
     const fourth = frame('fourth', '4'); ask('window:getSide', fourth);
     assert.equal(backend.S.pane && backend.S.pane.frame, fourth, 'the page \u2325\u2318N opened is the one \u2318W and a notification click aim at');
@@ -1112,6 +1114,15 @@ async function main() {
     assert.deepEqual([reloads, shown.doc], [0, layoutDoc]);
     assert.equal(ask('window:setLayout', leftPage, 'workView'), true);
     assert.deepEqual([reloads, own(shown.pages), Object.keys(shown.doc.views), own(shown.doc.root.weights)], [1, ['', '2'], ['page', 'page2'], [0.6, 0.4]], 'the Work View: 60/40, saved and reloaded into');
+    // A saved view's page id open in another window: the view's page takes a free id, with its keys and its start
+    const elsewhere = { isDestroyed: () => false, panes: [], pages: ['2'] };
+    backend.S.windows.add(elsewhere);
+    assert.equal(ask('window:setLayout', leftPage, 'workView', { place: 'timeline', 'place:2': 'mine', view: 5 }), true);
+    const moved = own(shown.doc);
+    assert.deepEqual([own(shown.pages), Object.keys(moved.views), moved.views.page3.params.side, moved.root.children[1].views, moved.root.children[1].selected], [['', '3'], ['page', 'page3'], '3', ['page3'], 'page3'],
+      'a page id another window has open is not reused');
+    assert.deepEqual([ask('window:getSide', leftPage), ask('window:getSide', frame('moved', '3'))], [{ side: '', start: { place: 'timeline' } }, { side: '3', start: { place: 'mine' } }], 'each page starts on its own keys');
+    backend.S.windows.delete(elsewhere); shown.panes = shown.panes.filter((p) => p.frame.frameToken !== 'moved');
     delete shellWc.reload; delete shown.saveBounds;
     ask('shell:layout', null, { doc: layoutDoc, pages: [''] });
     shown.close = () => { shown.closed = true; };

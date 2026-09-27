@@ -335,9 +335,9 @@ function paletteRows(q, typed = q) {
   if (!railEl.hidden) rows.push({ id: 'rail', group: 'Navigate', icon: 'rail', label: 'Focus the sidebar', run: () => focusRail() });
   if (tana.deletedList) rows.push({ id: 'recentlyDeleted', group: 'Navigate', icon: 'trash', label: 'Recently deleted', keepOpen: true, run: openTrashPalette });
   if (tana.archivedTypes) rows.push({ id: 'archivedTypes', group: 'Navigate', icon: 'type', label: 'Archived types', keepOpen: true, run: openArchivedPalette });
-  rows.push({ id: 'newWindow', group: 'Window', icon: 'createNew', label: 'New window', run: () => run(async () => { const id = await tana.newWindow(); if (id) { localStorage.setItem('view:' + id, view); rememberPlace('place:' + id); } }) }); // it starts where you are, as a new pane does
-  // A new page opens on this one: main answers its id before it has loaded, and this page is stored under it (shell.js open)
-  const openPage = (where) => run(async () => { const id = await tana.splitWindow(where); if (id) { localStorage.setItem('view:' + id, view); rememberPlace('place:' + id); } });
+  // A new page starts where you are: main hands it this view and place with its id, before it reads them (main.js starts)
+  rows.push({ id: 'newWindow', group: 'Window', icon: 'createNew', label: 'New window', run: () => run(() => tana.newWindow({ view, place: placeJSON() })) });
+  const openPage = (where) => run(() => tana.splitWindow(where, { view, place: placeJSON() }));
   rows.push({ id: 'splitView', group: 'Window', icon: 'splitPanes', label: 'New pane', hint: 'To the right', run: () => openPage('right') });
   rows.push({ id: 'newTab', group: 'Window', icon: 'createNew', label: 'New tab', hint: 'Beside this page', run: () => openPage('tab') });
   rows.push({ id: 'floatPane', group: 'Window', icon: 'splitPanes', label: 'New floating pane', run: () => openPage('float') }); // "Float" in a pane's menu floats that pane
@@ -1033,10 +1033,8 @@ const shellRun = (command) => { if (window.frameElement) window.parent.postMessa
 // this pane. Main gives the new page its id, and it opens on the place stored under that id (shell.js open, edit.js).
 const elsewhere = (e) => (e.metaKey || e.ctrlKey ? 'right' : e.altKey ? 'tab' : null);
 async function openElsewhere(where, docId, nodeId = null) {
-  const id = await tana.splitWindow(where), d = docOf(docId) || {};
-  if (!id) return;
-  localStorage.setItem('view:' + id, view);
-  localStorage.setItem('place:' + id, JSON.stringify({ docId, nodeId, title: d.text ?? d.title, icon: d.icon }));
+  const d = docOf(docId) || {};
+  await tana.splitWindow(where, { view, place: JSON.stringify({ docId, nodeId, title: d.text ?? d.title, icon: d.icon }) });
 }
 // ---- Saved views: the window's panes, and what each shows, under a name (issue #442) ----
 // A view is the layout main keeps for the window (Trellis's document) and each page's view and place, under the keys
@@ -1060,10 +1058,11 @@ async function saveView(name, id) { // id: kept under that id (Set as Home), els
   setPref('savedViews', [...savedViews().filter((v) => v !== old), { ...(keep ? { id: keep } : {}), name, doc, keys }]);
   showNote((old ? 'Updated' : 'Saved') + ' view \u201c' + name + '\u201d');
 }
-// plain async, for run() to queue: a queued step that queues another waits on itself
+// plain async, for run() to queue: a queued step that queues another waits on itself. Main hands each page its keys as
+// it loads (main.js starts), under the id it ends up with when another window has that id open.
 async function openSavedView(v) {
-  for (const [key, value] of Object.entries(v.keys)) if (PAGE_KEY.test(key)) { if (typeof value === 'string') localStorage.setItem(key, value); else localStorage.removeItem(key); }
-  if (!(await tana.setWindowLayout(v.doc || null))) showNote('This view could not be opened', true);
+  const keys = Object.fromEntries(Object.entries(v.keys).filter(([key]) => PAGE_KEY.test(key)).map(([key, value]) => [key, typeof value === 'string' ? value : null]));
+  if (!(await tana.setWindowLayout(v.doc || null, keys))) showNote('This view could not be opened', true);
 }
 // A new name saves a new view; each saved view below, narrowed by what is typed, is updated to this window (its name
 // and id kept, so Home, the Work View and a key recorded for it still find it).

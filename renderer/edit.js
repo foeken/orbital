@@ -311,11 +311,12 @@ const navPlace = () => ({ view, zoom: zoom && { ...zoom }, key: JSON.stringify([
 // So is a view with nothing zoomed (the Library, Types, a view's own list): it is stored as {} rather than removed,
 // because "nothing stored" is what makes a launch open Home, and a reload on the Library used to land there.
 const isPlaceId = (id) => isRealId(id) || String(id || '').startsWith('orbital:');
-function rememberPlace(key = 'place' + SIDE) {
+function placeJSON() { // what rememberPlace stores, and what a pane or window opened from here starts on
   const doc = zoom ? docOf(zoom.docId) : null; // a row the app does not have simply stores no title: the next launch opens on the view, as before
-  if (zoom && isPlaceId(zoom.docId)) localStorage.setItem(key, JSON.stringify({ docId: zoom.docId, nodeId: zoom.nodeId || null, from: zoom.from, title: doc ? doc.text : undefined, icon: doc ? doc.icon : undefined }));
-  else localStorage.setItem(key, '{}'); // the view itself (view + SIDE holds which one)
+  if (zoom && isPlaceId(zoom.docId)) return JSON.stringify({ docId: zoom.docId, nodeId: zoom.nodeId || null, from: zoom.from, title: doc ? doc.text : undefined, icon: doc ? doc.icon : undefined });
+  return '{}'; // the view itself (view + SIDE holds which one)
 }
+function rememberPlace() { localStorage.setItem('place' + SIDE, placeJSON()); }
 function noteNavigation() {
   const here = navPlace();
   if (navHere && navHere.key === here.key) return;

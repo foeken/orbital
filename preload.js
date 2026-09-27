@@ -18,7 +18,14 @@ if (window.top !== window) {
   window.addEventListener('focus', () => ipcRenderer.send('page:focus'));
   window.addEventListener('pagehide', () => ipcRenderer.send('page:gone'));
 }
-const pane = ipcRenderer.sendSync('window:getSide'); // { side }: this page's id in its window (main.js)
+const pane = ipcRenderer.sendSync('window:getSide'); // { side, start? }: this page's id in its window (main.js)
+// what the page that opened this one, or the saved view it is part of, has it start on: stored before the page reads it
+try {
+  for (const [key, value] of Object.entries(pane.start || {})) {
+    const name = key + (pane.side ? ':' + pane.side : '');
+    if (value === null) localStorage.removeItem(name); else localStorage.setItem(name, value);
+  }
+} catch { /* no storage: the page opens where it last was, and still gets window.api below */ }
 
 contextBridge.exposeInMainWorld('api', {
   side: pane.side, // this page's id, fixed for its life: '' the first page, then '2', '3', ... (renderer/state.js SIDE)
@@ -41,12 +48,12 @@ contextBridge.exposeInMainWorld('api', {
   todayNode: (offset, findOnly) => ipcRenderer.invoke('doc:todayNode', offset, findOnly === true), // the date-titled node pinned to that day (0 today, 1 tomorrow, or 'YYYY-MM-DD'), created if missing unless findOnly (demo mode)
   setDemoMode: (on) => ipcRenderer.send('app:demoMode', on === true), // demo mode is on in the outliner: main posts no notification banners
   weekNode: (findOnly) => ipcRenderer.invoke('doc:weekNode', findOnly === true), // the "Week 38 (2026)" document (ISO week), created if missing unless findOnly; not linked to the day nodes
-  newWindow: () => ipcRenderer.invoke('window:new'), // another outliner window (File › New Window)
+  newWindow: (start) => ipcRenderer.invoke('window:new', start), // another outliner window (File › New Window), starting on { view, place }
   // a new page in this window, taking the keys: 'right' of this one (⌘N, the default), a 'tab' beside it, or 'float'.
   // Answers its id (null signed out), for storing its view and place under before it loads.
-  splitWindow: (where) => ipcRenderer.invoke('window:split', where),
+  splitWindow: (where, start) => ipcRenderer.invoke('window:split', where, start),
   windowLayout: () => ipcRenderer.invoke('window:layout'), // this window's layout (Trellis's document), null for one page never rearranged
-  setWindowLayout: (doc) => ipcRenderer.invoke('window:setLayout', doc), // true: the window reloads into it
+  setWindowLayout: (doc, keys) => ipcRenderer.invoke('window:setLayout', doc, keys), // true: the window reloads into it, each page on its keys
   windowTheme: (theme) => ipcRenderer.send('window:theme', theme), // 'light' | 'dark': the shell's Trellis theme and the window behind it follow the page
   openOverlay: (page, theme) => ipcRenderer.invoke('overlay:open', page, theme), // 'help' | 'task' over this whole window (main.js openOverlay), in this page's theme
   closeOverlay: (result) => ipcRenderer.invoke('overlay:close', result), // help.html and task.html: done; { palette?: true, note?: string } for the page that asked
