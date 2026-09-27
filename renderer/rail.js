@@ -35,16 +35,20 @@ function retell() {
 }
 // The Links pane goes where the followed page is: its document, or, for a page on no document, the empty rail. Only
 // this moves it: anywhere else it is asked to go (Cmd+K, a search, a view) is the followed page's move (openDoc, setView).
-let followingNow = false;
+// A follow that has to read its document first applies only if no newer one began meanwhile (followSeq): a pane focused
+// while an older read was on its way must not be taken over by it (#463 review).
+let followingNow = false, followSeq = 0;
 async function follow(docId, doc) {
   if (typeof docId !== 'string' || !docId || docId.startsWith('orbital:')) docId = null; // an app page (Timeline, …) is no document
   if ((zoom && !zoom.nodeId ? zoom.docId : null) === docId) return;
+  const seq = ++followSeq;
+  if (docId && doc && typeof doc === 'object' && !docOf(docId)) extra.set(docId, doc);
+  if (docId && !docOf(docId)) { // no row sent: read the one the followed page is on, as goTo would
+    try { const n = await tana.node(docId); if (!docOf(docId)) extra.set(docId, { ...n, text: n.title || '', hasChildren: true }); } catch { return; } // unreadable: the followed page says why
+    if (seq !== followSeq) return;
+  }
   followingNow = true;
-  try {
-    if (!docId) return setView(view);
-    if (doc && typeof doc === 'object' && !docOf(docId)) extra.set(docId, doc);
-    if (docOf(docId)) openDoc(docId); else await goTo(docId);
-  } finally { followingNow = false; }
+  try { if (docId) openDoc(docId); else setView(view); } finally { followingNow = false; }
 }
 // A row opens in the page being followed, which takes the keys; outside the shell (the mock) here.
 const openLink = (id) => (LINKS && window.frameElement ? toShell({ orbital: 'open', id }) : goTo(id));

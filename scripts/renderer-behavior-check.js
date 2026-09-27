@@ -4432,27 +4432,32 @@ function runNavButtonsCheck() {
 // The Links pane (issue #462) goes where the page it follows is: that page's document, opened from the row the page
 // sent so main is not asked, or nothing for a page on no document; the same document again moves nothing.
 function runRailToggleCheck() {
+  return (async () => {
   const api = vm.runInNewContext(`
     let zoom = null, view = 'library';
     const extra = new Map(), opened = [], asked = [], views = [];
-    const isRealId = (id) => /^tana:[a-z-]+:/.test(String(id || ''));
     const docOf = (id) => extra.get(id);
-    let followingNow = false; // renderer/rail.js: what follow sets while it moves the pane, so openDoc and setView let it
+    let followingNow = false, followSeq = 0; // renderer/rail.js: what follow sets while it moves the pane, so openDoc and setView let it
     const openDoc = (id) => { opened.push(followingNow ? id : 'not following: ' + id); zoom = { docId: id, nodeId: null }; };
-    const goTo = (id) => { asked.push(followingNow ? id : 'not following: ' + id); zoom = { docId: id, nodeId: null }; };
-    const setView = (id) => { views.push(id); zoom = null; };
+    const setView = (id) => { views.push(followingNow ? id : 'not following: ' + id); zoom = null; };
+    const tana = { node: (id) => { asked.push(id); return Promise.resolve({ id, title: id.slice(-1).toUpperCase() }); } }; // main answers after this turn
     ${functionSource('follow')}
     ({ follow, state: () => ({ zoom: zoom && zoom.docId, opened: [...opened], asked: [...asked], views: [...views] }) });
   `);
-  api.follow('tana:text:a', { id: 'tana:text:a', text: 'A' });
+  await api.follow('tana:text:a', { id: 'tana:text:a', text: 'A' });
   assert.deepEqual(plain(api.state()), { zoom: 'tana:text:a', opened: ['tana:text:a'], asked: [], views: [] }, 'a followed document opens from the row its page sent, without a read from main');
-  api.follow('tana:text:a', { id: 'tana:text:a', text: 'A' });
+  await api.follow('tana:text:a', { id: 'tana:text:a', text: 'A' });
   assert.deepEqual(plain(api.state()).opened, ['tana:text:a'], 'the same document again (a focus that changed nothing) moves nothing');
-  api.follow('tana:text:b', null);
-  assert.deepEqual(plain(api.state()).asked, ['tana:text:b'], 'a document with no row sent is read the usual way (goTo)');
-  api.follow(null);
-  api.follow('orbital:timeline');
-  assert.deepEqual(plain(api.state()), { zoom: null, opened: ['tana:text:a'], asked: ['tana:text:b'], views: ['library'] }, 'a page on no document (a view, an app page) leaves it on none, once');
+  await api.follow('tana:text:b', null);
+  assert.deepEqual(plain(api.state()), { zoom: 'tana:text:b', opened: ['tana:text:a', 'tana:text:b'], asked: ['tana:text:b'], views: [] }, 'a document with no row sent is read first, then opened');
+  // a newer follow while an older one is still reading: the older answer is dropped when it lands (#463 review)
+  const older = api.follow('tana:text:c', null);
+  api.follow('tana:text:d', { id: 'tana:text:d', text: 'D' });
+  await older;
+  assert.deepEqual(plain(api.state()), { zoom: 'tana:text:d', opened: ['tana:text:a', 'tana:text:b', 'tana:text:d'], asked: ['tana:text:b', 'tana:text:c'], views: [] }, 'a read that lands after a newer follow opens nothing');
+  await api.follow(null);
+  await api.follow('orbital:timeline');
+  assert.deepEqual(plain(api.state()).views, ['library'], 'a page on no document (a view, an app page) leaves it on none, once');
   // Only the Links pane draws the rail; every other page hides it and tells the shell its document instead.
   assert.match(functionSource('renderRail'), /if \(!LINKS\) \{ railEl\.hidden = true; return tellDoc\(docId\); \}/, 'a page other than the Links pane draws no rail and names its document');
   // Anywhere else the Links pane is asked to go — Cmd+K's views, searches and results — is the followed page's move (#463 review)
@@ -4478,6 +4483,7 @@ function runRailToggleCheck() {
   // A saved search is a list: no links, and nothing for the Links pane to follow.
   assert.match(source, /!String\(parent\.docId\)\.startsWith\(SEARCH_ID\) \? parent\.docId : null;/,
     'renderRail gives a saved search no links');
+  })();
 }
 
 // A saved search is a query you can edit, so the pills serve it too, keyed by the document rather than the view.
