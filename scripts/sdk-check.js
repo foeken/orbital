@@ -1757,6 +1757,11 @@ async function main() {
     uncachedDoc.transact((l) => l.getMap('data').set('title', 'Edited elsewhere'));
     backend.onChange(uncached, { origin: 'remote' });
     assert.ok((await backend.handlers.get('doc:info')(null, uncached)).updatedAt > '2026-09-17T17:48:39Z', 'an edit after it moves the update time');
+    // A document just made here has no graph row yet: its creation time stands in, so a list sorted by update keeps it on top.
+    const made = 'tana:text:' + ulid(), madeDoc = new Document(made);
+    madeDoc.transact((l) => initDocument(l, 'Just made', ME, { now: 1790000000000 }));
+    backend.testRuntime({ me: { userUri: ME }, win: null, client: { sync: { subscribe: async () => madeDoc, getDocument: () => madeDoc }, graph: { listNodes: async () => ({ nodes: [] }) } } });
+    assert.equal((await backend.handlers.get('doc:info')(null, made)).updatedAt, new Date(1790000000000).toISOString(), 'a new document is as new as it was made');
     console.log('ok  rows carry updatedAt/createdAt/stateType, from the graph and from cached view rows');
   }
 

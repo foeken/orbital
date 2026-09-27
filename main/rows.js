@@ -25,7 +25,9 @@ function rememberMeta(n) {
   // updateTime exists on graph nodes only — a Loro data map never carries one — so, like the hue, the graph is the
   // one source and a document read must not erase it. Without this a row built without a cached SQLite row (a saved
   // search's rows, a live update patching one) came back with no updatedAt at all and lost its "Updated ..." line.
-  const updatedAt = iso(n.updateTime) || (nodeMeta.get(n.id) || {}).updatedAt;
+  // A document nothing has told us an update time for — one just created here, before the graph has indexed it — was
+  // last updated no later than it was made.
+  const updatedAt = iso(n.updateTime) || (nodeMeta.get(n.id) || {}).updatedAt || createdAt;
   const state = (n.state && n.state.type) || n.stateType;
   const stateType = STATE_TYPES.includes(state) ? state : undefined;
   // n.stateType means this came from a Loro data map rather than the search index: the document is the source of
