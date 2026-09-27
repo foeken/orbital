@@ -171,12 +171,14 @@ function addMessage(loro, { text, byUri, senderName, attachments = [], timezone 
   }
   return pushMessage(loro, { sentAt: now, fromUserUri: byUri, fromUserType: 'human' }, text, attachments);
 }
-// Whether Tana's AI answers a message in this chat by itself (its VKt): not when switched off, and only while you are
-// alone in it. With others in the chat it answers when mentioned (Tana's "Mention @Tana to trigger AI").
+// Whether Tana's AI answers a message in this chat (its VKt, and its v$ for a mention): by itself only while you are
+// alone in it and it is not switched off; with others in the chat, or switched off, when the message mentions Tana:
+// a link to its own agent, [Tana](tana:agent:…), which the composer's "@" inserts, or "@Tana" / "@polaris" typed out.
+const mentionsTana = (text) => String(text).includes('(' + TANA_AGENT + ')') || /@polaris|@tana\b/i.test(text);
 function autoResponds(data, text = '') {
   const people = Object.keys((data && data.participants) || {});
   const n = people.length || list(data && data.participantUris).length;
-  if (/@tana\b/i.test(text)) return data.aiAutoResponds !== false || n > 1;
+  if (mentionsTana(text)) return true;
   return data.aiAutoResponds === false ? false : data.aiAutoResponds === true ? n < 2 : n === 1;
 }
 // Tana's createDeterministicId: the first 16 bytes of a name's sha256 as a 26-character ULID (6, 5 and 5 bytes).

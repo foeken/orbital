@@ -123,6 +123,10 @@ function chatMention(mention) {
   getSelection().removeAllRanges(); getSelection().addRange(range);
   composerChanged();
 }
+// Tana's own assistant (sdk/chat.js TANA_AGENT): mentioned, it answers in a chat with other people in it, where a
+// message is otherwise only for them. Offered first in the composer's "@" search while what is typed fits its name.
+const TANA_AGENT_URI = 'tana:agent:2zc7qjfkkengdhfdd846b4qvk2';
+const tanaMentionRows = (q, ctx) => (fuzzyMatch('Tana', q.toLowerCase()) ? [{ icon: 'chat', label: 'Tana', hint: 'Ask Tana to answer', run: () => linkTo(ctx, { label: 'Tana', uri: TANA_AGENT_URI }) }] : []);
 // "/" first: the workspace's skills, in ⌘K's card; Escape goes back to the message with nothing picked
 function openSkillPicker() {
   togglePalette('cmd');

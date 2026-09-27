@@ -847,7 +847,9 @@ are within 80 px of it; a short conversation sits at the bottom of the window.
 Under it is the composer (`#composer`, a rounded card whose textarea grows with its text and whose round blue button
 sends), the window's last row outside the scroll, so it stays at the bottom whatever the conversation's length or
 scroll: Enter sends (`chat:send`, main/documents.js `sendChat`), Shift+Enter is a new line, and Escape leaves it.
-**@** opens the link search as a dropdown at the caret and puts the node picked (or created) in as a chip; **/** as the
+**@** opens the link search as a dropdown at the caret and puts the node picked (or created) in as a chip, with
+**Tana** offered first while what is typed fits it: mentioned, Tana answers in a chat with other people in it, where a
+message is otherwise only for them; **/** as the
 first thing typed opens a page of the workspace's skills (`searchPreview` over the skills kind), and the one picked sits
 as a pill in front of the text (Backspace at the start or a click drops it) and goes with the message as its
 attachment. Chips are sent as `[label](tana:…)` links. The field is a `contenteditable` of plain text and chips

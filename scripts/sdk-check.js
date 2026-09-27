@@ -5663,6 +5663,9 @@ async function main() {
     // Tana answers by itself while you are alone in a chat, when mentioned with others in it, and never when switched off
     const OTHER = 'tana:user-profile:01exampler0000000000000000', alone = { participants: { [ME]: {} } }, together = { participants: { [ME]: {}, [OTHER]: {} } };
     assert.deepEqual([chat.autoResponds(alone), chat.autoResponds(together), chat.autoResponds(together, 'what do you think @Tana?'), chat.autoResponds({ ...alone, aiAutoResponds: false })], [true, false, true, false]);
+    // the composer's "@" mentions Tana as a link to its agent, which Tana's own rule (its v$) counts as asking it
+    assert.equal(chat.autoResponds(together, 'what do you think [Tana](' + chat.TANA_AGENT + ')?'), true);
+    assert.ok(fs.readFileSync(require('node:path').join(__dirname, '..', 'renderer', 'chat.js'), 'utf8').includes("TANA_AGENT_URI = '" + chat.TANA_AGENT + "'"), 'the renderer mentions the same agent');
     assert.equal(chat.TANA_AGENT, 'tana:agent:' + chat.deterministicId('system:tana'));
     assert.match(chat.TANA_AGENT, /^tana:agent:[0-9a-hjkmnp-tv-z]{26}$/);
     // the trigger: 401 refreshes the token once, 404 is retried, and Tana's error comes back in words
