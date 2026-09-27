@@ -153,6 +153,7 @@ function open({ id, where, from, focus }) {
 // A Trellis command a page's key or palette row asked for (maximize, overview, back, forward, next pane or tab), run
 // from that page's panel; the keys stay in the page that has the focus afterwards.
 function run(command, from) {
+  if (command === 'navigation.stepOut') return many && ws.navigation.stepOut(); // Escape nothing in the page took (renderer/events.js): one zoom level out
   if (!many || !Object.hasOwn(DEFAULT_KEYMAP, command)) return;
   if (from) ws.focus(from);
   ws.run(command);

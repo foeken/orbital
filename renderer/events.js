@@ -287,4 +287,7 @@ document.addEventListener('keydown', (e) => {
   }
   else if (e.key === 'Enter' && !mod && document.activeElement === document.body && !zoom && viewOf() && !viewOf().nodes.length) { e.preventDefault(); draftDoc(null); } // empty view: first draft
   else if (e.key === 'Escape' && document.activeElement === document.body && filterEl.value) { filterEl.value = ''; filterShown = false; render(); }
+  // Escape nothing here used (a row, the selection and the filter answer it first) backs out of one zoom level of the
+  // panes, as Escape does in Trellis, which never hears a key pressed in a page (shell.js run)
+  else if (e.key === 'Escape' && !e.defaultPrevented && document.activeElement === document.body && windowPanes.pages > 1) shellRun('navigation.stepOut');
 });
