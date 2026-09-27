@@ -409,7 +409,7 @@ async function restorePlace() {
     if (!connected && !zoom) return;
     savedPlace = null;
     if (zoom) return; // somewhere else already
-    try { const n = await tana.myTasks(); saved = { docId: n.id, nodeId: null }; } catch { return; } // the view it is on is the fallback
+    try { const n = await tana.myTasks(); saved = { docId: n.id, nodeId: null }; myTasksId = n.id; } catch { return; } // the view it is on is the fallback; the id for the Home check (renderer/nodes.js), a search just made included
     if (zoom) return;
   }
   // Somewhere else already — a link, a notification — wins. The page seeded above is this same place, so it does not.
