@@ -17,7 +17,7 @@ const helpDots = helpPages.map((_, i) => {
   return d;
 });
 document.getElementById('helpDots').append(...helpDots);
-let helpAt = 0, helpPalette = false;
+let helpAt = 0, helpPalette = false, helpChatGPT = false;
 function showHelpPage(n) {
   helpAt = Math.max(0, Math.min(helpPages.length - 1, n));
   helpPages.forEach((p, i) => { p.classList.toggle('on', i === helpAt); p.classList.toggle('before', i < helpAt); p.inert = i !== helpAt; });
@@ -28,9 +28,16 @@ function showHelpPage(n) {
 }
 function helpStep(dir) { if (helpAt + dir >= helpPages.length) helpEl.close(); else showHelpPage(helpAt + dir); }
 // Every way out (Esc, the ×, the scrim, the last Next, ⌘K) ends here
-helpEl.addEventListener('close', () => { if (helpApi && helpApi.closeOverlay) helpApi.closeOverlay({ palette: helpPalette }); });
+helpEl.addEventListener('close', () => { if (helpApi && helpApi.closeOverlay) helpApi.closeOverlay({ palette: helpPalette, chatgpt: helpChatGPT }); });
 helpBack.onclick = () => helpStep(-1);
 helpNext.onclick = () => helpStep(1);
+// The last page: sign in with ChatGPT happens on its ⌘K page in the page that asked (renderer/agent.js startChatGPTLogin).
+// Signed in already, the line says so instead, at the button's height: the card is as tall as its tallest page, so a
+// line that came or went would move it after it had opened.
+document.getElementById('helpChatGPT').onclick = () => { helpChatGPT = true; helpEl.close(); };
+if (helpApi && helpApi.chatgptStatus) helpApi.chatgptStatus().then((s) => {
+  if (s && s.signedIn) document.getElementById('helpAI').textContent = 'Signed in with ChatGPT' + (s.email ? ' as ' + s.email : '');
+}, () => {});
 document.getElementById('helpClose').onclick = () => helpEl.close();
 helpEl.addEventListener('mousedown', (e) => { if (e.target === helpEl) helpEl.close(); }); // the scrim, as with the palette
 // ⌘K, the key the tour teaches, closes it and opens the palette in the page that asked

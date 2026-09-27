@@ -1,5 +1,5 @@
 /* styles.css keeps each component together, in this order (search for "==== <name>"): Base; Window chrome; Fields;
-   Table view; Filter row; Header buttons; Pills and their menus; Page scroll, sidebar and split; Rows; Timeline; Row
+   Table view; Filter row; Header buttons; Pills and their menus; Page scroll and sidebar; Rows; Timeline; Row
    content; Agent badge and proposal buttons; Children, empty notes, group headings; Loading; Selection toolbar; Login;
    Palette and toast; Key recorder; Dark theme; Presence; Motion; Help tour. docs/UI-PATTERNS.md lists the tokens and
    the component classes. */
@@ -82,7 +82,13 @@ button { font: inherit; }
 .palette { -webkit-app-region: no-drag; } /* its scrim covers both: Electron would take a click there as a window drag, and it never reaches the mousedown that closes the palette */
 button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -webkit-app-region: no-drag; }
 
-.titlebar { padding: 48px 32px 6px; user-select: none; position: relative; } /* the 4px the scroll area took, so the outline sits where it did */
+.titlebar { padding: 16px 32px 6px; user-select: none; position: relative; } /* the traffic lights are in the window's header (shell.html); 6px: the 4px the scroll area took, so the outline sits where it did */
+html.tabbed.listing:not(.renaming) #pagehead { display: none; } /* a view, saved search or app page is named by its tab (renderer/render.js); Rename on the tab brings it back */
+/* with no heading, the icons on both sides sit 19px from the pane's edge, the left ones over the section chevrons
+   below, and the gap the heading left under the crumbs closes */
+html.tabbed.listing:not(.renaming) .navbtns { right: 16px; }
+html.tabbed.listing:not(.renaming) .titlebar { padding-left: 19px; }
+html.tabbed.listing:not(.renaming) .crumbs { margin-bottom: 4px; }
 .titlebar h1 { margin: 0; font-size: 34px; font-weight: 700; letter-spacing: -0.5px; color: #1c2024; } /* the page title is a heading: the same near-black */
 .titlebar h1[contenteditable] { outline: none; user-select: text; min-height: 1lh; }
 .titlebar h1[contenteditable]:empty { display: inline-block; min-width: 1px; }
@@ -98,13 +104,9 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
 #taskInfo { margin-left: 0; margin-top: 6px; white-space: normal; }
 #taskInfo .chip:first-child { margin-left: 0; }
 /* only the two buttons block the drag; the empty band beside them moves the window */
-.crumbs { font-size: 13px; margin-bottom: 14px; } /* 13px: the line the buttons sit in, which is the row's height */
+.crumbs { font-size: 13px; min-height: 1lh; margin-bottom: 14px; } /* the line the buttons on the right sit on, empty now that ⌘K and Help are in the window's header */
 .text a.url { color: #508fbb; text-decoration: underline; cursor: pointer; }
 [data-theme="dark"] .text a.url { color: #7fb8dd; }
-/* Home and ⌘K: in the line without making it taller, 2px apart as the buttons top right are; -3px: the first glyph,
-   not its box, on the title's edge; -1px: level with the buttons top right (measured) */
-.crumbs .navbtn { display: inline-flex; vertical-align: middle; margin: -4px 2px -4px 0; position: relative; top: -1px; }
-.crumbs .navbtn:first-child { margin-left: -3px; }
 .error { font-size: 13px; color: #c0392b; margin-top: 6px; }
 .error button { margin-left: 8px; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; }
 .error[hidden] { display: none; }
@@ -243,14 +245,13 @@ button, input, a, [contenteditable], [tabindex], .railgrip, .error, .fields { -w
    header band, absolute against .titlebar so they never shift as the crumbs, task meta or fields rows appear and
    disappear beneath them. One row from the right edge, so a button that is not offered (the sidebar toggle on a page
    without a sidebar) leaves no gap: the others move up to the edge. */
-.navbtns { position: absolute; top: 44px; right: 32px; z-index: 1; display: flex; gap: 2px; }
+.navbtns { position: absolute; top: 12px; right: 32px; z-index: 1; display: flex; gap: 2px; }
 /* The top row (Home and Cmd+K, and the buttons on the right) shows only while the mouse is over this page: each half
    of a split is a page of its own, so the half you are not pointing at is just its title and rows. Not :hover: the
    header is a window drag region, where the page hears nothing of the mouse, so hover ended as the pointer reached
    the buttons (renderer/app.js pointer-in). The fade is the one .titlebar's children already have (below). */
 html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 #railToggle { margin-left: 6px; } /* the sidebar's own button, a step apart from the page's */
-#navClosePane { margin-left: 6px; } /* the right half's close, last and a step apart: it is about the window, not the page */
 .navbtn {
   display: flex; align-items: center; justify-content: center;
   width: 24px; height: 24px; padding: 0; border: 0;
@@ -345,26 +346,14 @@ html:not(.pointer-in) :is(#crumbs, .navbtns) { opacity: 0; }
 @media (prefers-reduced-motion: no-preference) { .menu .msearch .mcaret { animation: blink 1s steps(1) infinite; } }
 .menu .mdiv { height: 1px; margin: 6px 4px; background: #e6e6e6; }
 
-/* ==== Page scroll, sidebar and split (renderer/rail.js, app.js) ==== */
+/* ==== Page scroll and sidebar (renderer/rail.js, app.js) ==== */
 .scroll { position: relative; flex: 1; overflow-y: auto; padding: 4px 32px 40px 16px; } /* 4px at the top: the first row's focus ring (2px, 2px out) is drawn outside the row, and a scroll box clips at its edge; relative: the loading animation fills it */
 /* a real sidebar: full height beside the document, holding its relationships (edges, never editable) */
 .rail { flex: none; width: 272px; height: 100%; overflow-y: auto; user-select: none;
   /* padding-top lines the first section heading up with the breadcrumbs (heading text sits 10px into its button) */
-  border-left: 1px solid #ececec; background: #fafbfc; padding: 38px 12px 32px; }
+  border-left: 1px solid #ececec; background: #fafbfc; padding: 6px 12px 32px; }
 .railgrip { flex: none; width: 5px; margin-right: -1px; cursor: col-resize; z-index: 2; }
 .railgrip:hover, .railgrip.dragging { background: #d8e4f0; }
-/* each half of a split: its inner edge drags the line between the halves, which the right half draws (renderer/app.js
-   splitGrip). Hovered, both halves draw their half of the swap pill, 13px either side of the line. */
-.splitgrip { position: fixed; left: 0; top: 0; bottom: 0; width: 5px; cursor: col-resize; z-index: 5; -webkit-app-region: no-drag; }
-.splitgrip.left { left: auto; right: 0; }
-.splitgrip:not(.left)::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 1px; background: #ececec; }
-.splitgrip:not(.left):is(:hover, .on, .dragging)::before { background: #c8c8c8; }
-.splitpill { position: absolute; top: 50%; left: -13px; width: 26px; height: 28px; margin-top: -14px; box-sizing: border-box; display: none; place-items: center;
-  border: 1px solid #e3e3e3; border-radius: 8px; background: #fff; color: #8a8a8a; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04); }
-.splitgrip.left .splitpill { left: auto; right: -13px; }
-.splitpill { cursor: pointer; } /* a button on the line: it swaps the panes (renderer/app.js), the line around it resizes */
-.splitgrip:is(:hover, .on, .dragging) .splitpill { display: grid; }
-.splitpill svg { width: 16px; height: 16px; }
 .rail .rhead { display: flex; align-items: center; gap: 6px; width: 100%; border: 0; background: none; margin-top: 18px; padding: 10px 6px 4px; cursor: pointer;
   font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
 .rail .rhead:first-child { margin-top: 0; } /* the three groups read as separate blocks, the first one starts at the top */
@@ -942,16 +931,15 @@ body.building :is(#outline, #filtered) { opacity: 0; pointer-events: none; } /* 
 .palette.anchored .group { font-size: 12px; padding: 8px 10px 4px; }
 .palette.anchored .row { font-size: 14px; padding: 6px 10px; }
 .palette.anchored .hint { font-size: 13px; }
-/* The palette over both halves of a split (issue #409, renderer/palette.js coverWindow): the page is laid over the whole
-   window and draws itself in its own half, see-through beside it, so only the palette and its scrim reach across.
+/* The palette over both halves of a split (issue #409, renderer/palette.js coverWindow): the page's iframe is laid over
+   the whole window (shell.js cover) and the page draws itself in its own half, see-through beside it, so only the
+   palette and its scrim reach across.
    The root's own (transparent) background keeps the body's on the body: a root with none paints the body's everywhere.
    Hidden: the body now clips its own sidebar sliding out, which the window did before. What sits at an edge of the
    window sits at the half's edge; what is placed from an element's rect (menus, the toolbar) is there already. */
 html.cover { background: linear-gradient(transparent, transparent); overflow: hidden; }
-html.cover body { margin-left: var(--pane-x); width: var(--pane-w); }
-html.cover .splitgrip { left: var(--pane-x); }
-html.cover .splitgrip.left { left: calc(var(--pane-x) + var(--pane-w) - 5px); right: auto; }
-html.cover .toast { left: calc(var(--pane-x) + var(--pane-w) / 2); max-width: min(480px, calc(var(--pane-w) - 48px)); }
+html.cover body { margin-left: var(--pane-x); margin-top: var(--pane-y); width: var(--pane-w); height: var(--pane-h); }
+html.cover .toast { left: calc(var(--pane-x) + var(--pane-w) / 2); bottom: calc(100% - var(--pane-y) - var(--pane-h) + 24px); max-width: min(480px, calc(var(--pane-w) - 48px)); }
 
 /* ==== Key recorder (renderer/palette.js) ==== */
 /* hotkey recorder (Cmd+Shift+K on a Cmd+K row) */
@@ -1100,9 +1088,6 @@ html.cover .toast { left: calc(var(--pane-x) + var(--pane-w) / 2); max-width: mi
 [data-theme="dark"] .rail .rrow .ricon.hue { color: oklch(0.8 0.1 var(--hue)); }
 [data-theme="dark"] .rail { border-left-color: #2b2f31; background: #191c1d; }
 [data-theme="dark"] .railgrip:hover, [data-theme="dark"] .railgrip.dragging { background: #2f4658; }
-[data-theme="dark"] .splitgrip:not(.left)::before { background: #2b2f31; }
-[data-theme="dark"] .splitgrip:not(.left):is(:hover, .on, .dragging)::before { background: #4a5053; }
-[data-theme="dark"] .splitpill { border-color: #34373a; background: #232628; color: #9aa0a3; }
 [data-theme="dark"] .rail .rrow .rtitle { color: #e6e8e9; }
 [data-theme="dark"] .rail .rrow.done .rtitle { color: var(--muted); }
 [data-theme="dark"] .rail .rrow.rmeta .rtitle { color: #a8adaf; }
@@ -1223,6 +1208,7 @@ body.overlaypage, [data-theme="dark"] body.overlaypage { background: transparent
 .help .hdots { display: flex; gap: 6px; }
 .help .hdots button { width: 7px; height: 7px; padding: 0; border: 0; border-radius: 4px; background: #d8d8d8; cursor: pointer; transition: width var(--dur-base) var(--ease-out), background-color var(--dur-base) var(--ease-out); }
 .help .hdots button.on { width: 20px; background: #508fbb; }
+.help .hact { display: flex; align-items: center; gap: 8px; height: 38px; margin-top: 14px; } /* the button or the account: one height, so the card never moves */
 .help .hfoot > .button:disabled { visibility: hidden; } /* Back on the first page: its place kept, nothing to press */
 
 /* the stage and the few things drawn on it: a palette card, outline rows, a task box, a keycap */
@@ -1294,17 +1280,26 @@ body.overlaypage, [data-theme="dark"] body.overlaypage { background: transparent
 .hv-quick .hv-typed::after { content: 'Call the supplier'; }
 
 /* 6 Your keys: ⇧⌘K on a row, three keys recorded, and the row wears them */
-.hv-keys-demo { flex-direction: column; align-items: center; gap: 14px; padding-top: 36px; }
-.hv-keys-demo .hv-pal { padding: 6px 0; }
-.hv-keys-demo .hv-row { justify-content: flex-start; }
-.hv-own { margin-left: auto; font-size: 12px; }
-.hv-rec { display: flex; gap: 12px; padding: 12px 26px; font-size: 30px; color: #666; background: #fff; border-radius: 10px; box-shadow: 0 0 0 1px rgba(0, 0, 0, .06); opacity: 0; }
+.hv-panes { padding-top: 26px; }
+.hv-ai { align-items: center; padding: 0; }
+.hv-ai svg { width: 72px; height: 72px; color: #1a1a1a; }
+[data-theme="dark"] .hv-ai svg { color: #d0d2d2; }
+.hv-win { display: flex; gap: 1px; width: 470px; height: 176px; overflow: hidden; background: #e4e4e4; border-radius: 10px; box-shadow: 0 0 0 1px rgba(0, 0, 0, .05); }
+.hv-pn { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; background: #fff; overflow: hidden; }
+.hv-pn-b { flex: 0 0 44%; } /* still (reduced motion): the two panes side by side */
+.hv-tabs { flex: none; height: 28px; display: flex; align-items: flex-end; padding-left: 8px; background: #f6f6f6; }
+.hv-tab { padding: 5px 10px; font-size: 12px; white-space: nowrap; background: #fff; border-radius: 6px 6px 0 0; }
+.hv-pn-b .hv-tab { box-shadow: inset 0 2px 0 #508fbb; } /* the focused pane's tab carries the accent, as in the app */
+.hv-body { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; }
+.hv-bar { display: block; width: 82%; height: 8px; border-radius: 4px; background: #ececec; }
+.hv-bar.hv-short { width: 56%; }
 
 @media (prefers-reduced-motion: no-preference) {
   .hpage.on .hv-press { animation: hv-press var(--hv-loop) linear infinite both; }
   .hpage.on .hv-at5 { animation-delay: .3s; } .hpage.on .hv-at10 { animation-delay: .6s; } .hpage.on .hv-at30 { animation-delay: 1.8s; }
   .hpage.on .hv-at35 { animation-delay: 2.1s; } .hpage.on .hv-at42 { animation-delay: 2.52s; } .hpage.on .hv-at50 { animation-delay: 3s; }
-  .hpage.on .hv-at55 { animation-delay: 3.3s; } .hpage.on .hv-at60 { animation-delay: 3.6s; }
+  .hpage.on .hv-at55 { animation-delay: 3.3s; } .hpage.on .hv-at60 { animation-delay: 3.6s; } .hpage.on .hv-at70 { animation-delay: 4.2s; }
+  .hpage.on .hv-pn-b { animation: hv-panes-b var(--hv-loop) var(--ease-out) infinite both; } /* ⌘N opens it, ⌥⌘↓ fills the window, esc steps back */
   .hpage.on .hv-caret { animation: blink 1s steps(1) infinite; }
   /* 1 */
   .hpage.on .hv-moon { animation: hv-moon 7s linear infinite; }
@@ -1337,10 +1332,6 @@ body.overlaypage, [data-theme="dark"] body.overlaypage { background: transparent
   .hpage.on .hv-day .hv-check:not(.hv-inbox)::after { animation: hv-tick-mark var(--hv-loop) infinite both; }
   .hpage.on .hv-day .hv-task:not(:has(.hv-inbox)) .hv-title { animation: hv-strike var(--hv-loop) infinite both; }
   /* 6 */
-  .hpage.on .hv-rec { animation: hv-keys-rec var(--hv-loop) var(--ease-out) infinite both; }
-  .hpage.on .hv-rec span { animation: hv-keys-pop var(--hv-loop) var(--ease-spring) infinite both; }
-  .hpage.on .hv-rec span:nth-child(2) { animation-delay: .36s; } .hpage.on .hv-rec span:nth-child(3) { animation-delay: .72s; }
-  .hpage.on .hv-own { animation: hv-keys-own var(--hv-loop) var(--ease-spring) infinite both; }
 }
 @keyframes hv-press { 0% { opacity: 0; transform: translateY(8px) scale(.9); } 3% { opacity: 1; transform: none; } 6% { transform: translateY(2px) scale(.92); box-shadow: 0 0 0 rgba(0, 0, 0, .14); } 10% { transform: none; } 17% { opacity: 1; } 22%, 100% { opacity: 0; } }
 @keyframes hv-moon { from { offset-distance: 0%; } to { offset-distance: 100%; } }
@@ -1362,9 +1353,7 @@ body.overlaypage, [data-theme="dark"] body.overlaypage { background: transparent
 @keyframes hv-day-quick { 0%, 30% { opacity: 0; transform: translate(-50%, -8px) scale(.97); } 34%, 52% { opacity: 1; transform: translate(-50%, 0); } 56%, 100% { opacity: 0; transform: translate(-50%, 0) scale(.98); } }
 @keyframes hv-type-call { 0%, 35.9% { content: ''; } 36%, 39.9% { content: 'Call'; } 40%, 43.9% { content: 'Call the'; } 44%, 100% { content: 'Call the supplier'; } }
 @keyframes hv-day-new { 0%, 54% { height: 0; opacity: 0; } 60%, 94% { height: 28px; opacity: 1; } 98%, 100% { height: 0; opacity: 0; } }
-@keyframes hv-keys-rec { 0%, 14% { opacity: 0; transform: translateY(6px) scale(.97); } 18%, 54% { opacity: 1; transform: none; } 58%, 100% { opacity: 0; } }
-@keyframes hv-keys-pop { 0%, 26% { opacity: 0; transform: scale(.5); } 30%, 100% { opacity: 1; transform: none; } }
-@keyframes hv-keys-own { 0%, 58% { opacity: 0; transform: scale(.5); } 62%, 94% { opacity: 1; transform: none; } 98%, 100% { opacity: 0; } }
+@keyframes hv-panes-b { 0%, 14% { flex-basis: 0; } 24%, 50% { flex-basis: 44%; } 57%, 70% { flex-basis: 100%; } 77%, 90% { flex-basis: 44%; } 97%, 100% { flex-basis: 0; } }
 
 [data-theme="dark"] .help h2, [data-theme="dark"] .help p b { color: #e2e4e4; }
 [data-theme="dark"] .help :is(p, .hkeys) { color: #adb1b2; }
@@ -1373,8 +1362,12 @@ body.overlaypage, [data-theme="dark"] body.overlaypage { background: transparent
 [data-theme="dark"] .help .hdots button { background: #454b4e; }
 [data-theme="dark"] .help .hdots button.on { background: #6ea8d6; }
 [data-theme="dark"] .hv { --hv-ink: #d0d2d2; --hv-box: #454b4e; --hv-active: #343a3d; --hv-run: #2f4a5f; background: #1d2022; color: #d0d2d2; }
-[data-theme="dark"] .hv :is(.hv-pal, .hv-pane, .hv-quick, .hv-rec, .hv-drop-menu, .hv-press), [data-theme="dark"] .hv-keys kbd { background: #2b2f31; color: #d0d2d2; box-shadow: 0 0 0 1px rgba(255, 255, 255, .08); }
+[data-theme="dark"] .hv :is(.hv-pal, .hv-pane, .hv-quick, .hv-drop-menu, .hv-press), [data-theme="dark"] .hv-keys kbd { background: #2b2f31; color: #d0d2d2; box-shadow: 0 0 0 1px rgba(255, 255, 255, .08); }
 [data-theme="dark"] .hv .hv-input { border-bottom-color: #3a3f42; }
+[data-theme="dark"] .hv-win { background: #3a3f42; box-shadow: 0 0 0 1px rgba(255, 255, 255, .08); }
+[data-theme="dark"] .hv-pn, [data-theme="dark"] .hv-tab { background: #2b2f31; }
+[data-theme="dark"] .hv-tabs { background: #232627; }
+[data-theme="dark"] .hv-bar { background: #3a3f42; }
 [data-theme="dark"] .hv-tl { border-left-color: #3a3f42; color: #adb1b2; }
 [data-theme="dark"] .hv-tl i { color: #e2e4e4; }
 [data-theme="dark"] .hv-moon { background: #e2e4e4; }

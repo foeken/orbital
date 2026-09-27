@@ -7,7 +7,7 @@ const { completedInWindow, filterToSearchQuery, liveTrigger, searchQueryParams, 
 const { everyoneOnly } = require('../sdk/access');
 const { readSearch } = require('../sdk/node');
 const { callOf, writeUpOf } = require('../sdk/events');
-const { DOC_URI, LIVE_ROWS, NOT_CONNECTED, PIN_HUBS, PLAIN_KINDS, S, idKind, isSpace, send, summaryCache, typeAttrTitles, typeTitles } = require('./state');
+const { DOC_URI, LIVE_ROWS, NOT_CONNECTED, PIN_HUBS, PLAIN_KINDS, S, idKind, isSpace, pageKey, send, summaryCache, typeAttrTitles, typeTitles } = require('./state');
 const { graphRow, rememberNodeHue, resolveTypes, toNode } = require('./rows');
 const { canWriteDoc, op, readOnDemand, resolveReferences, subscribe } = require('./documents');
 const { rows: proposalRows } = require('./proposals');
@@ -337,7 +337,7 @@ async function related(id) {
 // again. Only for one page at a time, like the presence room: a new page, or none, closes the last one's queries.
 // The first answer says nothing — related() has just read the same edges — and neither does a changed edge: a mention's
 // properties move with every edit of the text around it, and no section is drawn from them.
-// One per window (issue #137): each window's page keeps its own sidebar live, keyed by the window's webContents id.
+// One per page (issue #137): each page keeps its own sidebar live, keyed by its page id (main/state.js pageKey).
 const watching = new Map(); // window -> { id, client, ready: Promise<boolean>, handles: Promise<[handle|null]> }
 // The saved search's live query, rebuilt whenever the query stored on the search document changes: a Save that widens
 // the search while it is open must widen what wakes it too (PR #152 review). The first answer counts as well: a
@@ -406,7 +406,7 @@ const watchedPages = () => [...watching.values()].map((w) => w.id); // each page
 // What the renderer asks this module (preload.js names each channel for the page; main.js registers the table).
 const ipc = {
   'doc:related': (_e, id) => related(id), // { summary, tagline, pinned[], outcomes[], proposals[], notes[], backlinks[] }
-  'doc:watchRelated': (e, id) => watchRelated(id, e && e.sender ? e.sender.id : 'main'), // the page on screen (null: none): its sidebar's edges pushed as 'related:changed'
+  'doc:watchRelated': (e, id) => watchRelated(id, pageKey(e)), // the page on screen (null: none): its sidebar's edges pushed as 'related:changed'
   'doc:summaryUri': (_e, id) => summaryUri(id), // where a meeting should actually open, or null
   // what the pills would find if they were saved: a staged edit has to change the rows, or the pills read as broken
   'search:preview': (_e, filter) => searchPreview(filter),

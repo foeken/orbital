@@ -41,6 +41,11 @@ module.exports = [
     languageOptions: { sourceType: 'script', globals: globals.browser },
     rules: { 'no-unused-vars': ['error', { vars: 'local', args: 'none' }] },
   },
+  {
+    // The window's shell (shell.html): an ES module importing Trellis, its own scope like the pages above.
+    files: ['shell.js'],
+    languageOptions: { sourceType: 'module', globals: globals.browser },
+  },
 ];
 
 function rendererGlobals() {

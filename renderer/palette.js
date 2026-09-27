@@ -37,7 +37,7 @@ const NODE_ROW_ORDER = ['fieldValue', 'fieldKind', 'fieldCount', 'fieldChoices',
   'archive', 'delete'];
 const DOC_KIND = /^tana:text:/; // the Discussion Task type applies to documents, so a meeting is not offered that row
 const nodeRank = (r) => { const i = NODE_ROW_ORDER.indexOf(r.rank || r.id); return i < 0 ? NODE_ROW_ORDER.length : i; };
-const VIEW_ORDER = ['workView', 'timeline', 'today', 'week', 'inbox', 'notifications', 'proposals', 'library', 'types'];
+const VIEW_ORDER = ['timeline', 'today', 'week', 'inbox', 'notifications', 'proposals', 'library', 'types'];
 // Matching a row, tiered the way Raycast ranks a title (its manual: aliases first, then the title's fuzzy score, which
 // favours the first letters of words). Best first:
 //   0  the label starts with the query      "in"    → **In**box
@@ -300,13 +300,12 @@ function paletteRows(q, typed = q) {
   if (tana.inboxUnread) viewRows.push(notificationsViewRow()); // Tana's notifications, what came in from other people
   if (tana.proposalAnswer) viewRows.push(proposalsViewRow()); // what Tana's AI proposed and is waiting on you to accept
   if (tana.children) viewRows.push(timelineViewRow()); // what happened to what you watch, and what landed in your Inbox
-  if (tana.workView) viewRows.push(workViewRow()); // the Timeline beside My Tasks
   const viewRank = (r) => { const i = VIEW_ORDER.indexOf(r.id.replace(/^view:/, '')); return i < 0 ? VIEW_ORDER.length : i; };
   rows.push(...viewRows.sort((a, b) => viewRank(a) - viewRank(b)));
   // Saved searches are places too: their own heading, under the views, each opening the search document
-  rows.push(...searches.map((s) => ({ id: 'search:' + s.id, group: 'Searches', icon: 'search', label: s.text || s.title || 'Untitled search', run: () => goTo(s.id) })));
+  rows.push(...searches.map((s) => ({ id: 'search:' + s.id, group: 'Searches', icon: 'search', label: s.text || s.title || 'Untitled search', opens: s.id, run: () => goTo(s.id) })));
   // So is every workspace type: its page lists its documents. Drawn in its own glyph, without its hue.
-  rows.push(...(typeListCache || []).map((t) => ({ id: 'type:' + t.uri, group: 'Types', icon: typeGlyph(t.uri), label: t.title || 'Untitled type', run: () => goTo(t.uri) })));
+  rows.push(...(typeListCache || []).map((t) => ({ id: 'type:' + t.uri, group: 'Types', icon: typeGlyph(t.uri), label: t.title || 'Untitled type', opens: t.uri, run: () => goTo(t.uri) })));
   rows.push(...pillCommandRows());
   // ⌘F arrives as runAction('filter'), which only fires if this row exists right now — so a saved search page has to
   // offer it, or the key falls through to the browser exactly as it did before.
@@ -325,29 +324,33 @@ function paletteRows(q, typed = q) {
   if (tana.inboxMarkAll) rows.push(markAllRow());
   rows.push({ id: 'sync', group: 'Actions', icon: 'sync', label: 'Sync', run: () => run(() => tana.refresh()) });
   // Go back with an empty stack is still a move while you are away from Home, which is where it lands (edit.js)
-  rows.push({ id: 'back', group: 'Navigate', icon: 'back', label: 'Go back', disabled: !navBack.length && atHome(), run: () => navigate(-1) });
+  rows.push({ id: 'back', group: 'Navigate', icon: 'back', label: 'Go back', disabled: !navBack.length, run: () => navigate(-1) });
   rows.push({ id: 'forward', group: 'Navigate', icon: 'forward', label: 'Go forward', disabled: !navForward.length, run: () => navigate(1) });
   // Where Back lands with no history and what the anchor crumb points at, as a row: the same goHome (renderer/nodes.js),
   // so there is one route Home and it reads the choice live. On Home it stays, disabled, saying so — discoverable, and
   // still something ⇧⌘K can record a key against.
   rows.push({ id: 'goHome', group: 'Navigate', icon: 'home', label: 'Go to Home', hint: atHome() ? 'Current' : homeName() || '', disabled: atHome(), run: () => goHome() });
-  // Choosing where the app comes back to: offered on the Library and on a saved search, the two pages that are places.
-  // On the page that already is Home it stays, disabled and saying so, rather than disappearing or pretending to act.
-  const homeNext = homeTarget();
-  if (homeNext) rows.push({ id: 'setHome', group: 'Navigate', icon: 'home', label: 'Set as Home', hint: homeNext === homeId() ? 'Current' : '', disabled: homeNext === homeId(), run: () => setHome(homeNext) });
-  // The Work View is not a page you stand on, so it is offered from anywhere (and is the Home you start with)
-  rows.push({ id: 'setHomeWorkView', group: 'Navigate', icon: 'home', label: 'Set Work View as Home', hint: homeId() === 'workView' ? 'Current' : '', disabled: homeId() === 'workView', run: () => setHome('workView') });
+  // Home is the window as it is now, its panes and what each shows: kept as the saved view "Home" (renderer/nodes.js)
+  if (tana.windowLayout) rows.push({ id: 'setHome', group: 'Navigate', icon: 'home', label: 'Set as Home', hint: homeId() === HOME_VIEW ? 'Updates Home to this window' : 'This window as it is', run: () => run(async () => { await saveView('Home', HOME_VIEW); setHome(HOME_VIEW); }) });
   if (!railEl.hidden) rows.push({ id: 'rail', group: 'Navigate', icon: 'rail', label: 'Focus the sidebar', run: () => focusRail() });
   if (tana.deletedList) rows.push({ id: 'recentlyDeleted', group: 'Navigate', icon: 'trash', label: 'Recently deleted', keepOpen: true, run: openTrashPalette });
   if (tana.archivedTypes) rows.push({ id: 'archivedTypes', group: 'Navigate', icon: 'type', label: 'Archived types', keepOpen: true, run: openArchivedPalette });
-  rows.push({ id: 'newWindow', group: 'Window', icon: 'createNew', label: 'New window', run: () => run(() => tana.newWindow()) });
-  // the new right half opens on this page: it reads the right half's view and place, so this page is stored there first
-  rows.push({ id: 'splitView', group: 'Window', icon: 'splitPanes', label: 'Toggle split panes', run: () => { localStorage.setItem('view:2', view); rememberPlace('place:2'); run(() => tana.splitWindow()); } });
-  rows.push({ id: 'otherPane', group: 'Window', icon: 'otherPane', label: 'Go to the other half', run: () => run(() => tana.otherPane()) });
-  rows.push({ id: 'swapPanes', group: 'Window', icon: 'swapPanes', label: 'Swap panes', run: () => run(() => tana.swapPanes()) });
+  // A new page starts where you are: main hands it this view and place with its id, before it reads them (main.js starts)
+  rows.push({ id: 'newWindow', group: 'Window', icon: 'createNew', label: 'New window', run: () => run(() => tana.newWindow({ view, place: placeJSON() })) });
+  const openPage = (where) => run(() => tana.splitWindow(where, { view, place: placeJSON() }));
+  rows.push({ id: 'splitView', group: 'Window', icon: 'splitPanes', label: 'New pane', hint: 'To the right', run: () => openPage('right') });
+  rows.push({ id: 'newTab', group: 'Window', icon: 'createNew', label: 'New tab', hint: 'Beside this page', run: () => openPage('tab') });
+  rows.push({ id: 'floatPane', group: 'Window', icon: 'splitPanes', label: 'New floating pane', run: () => openPage('float') }); // "Float" in a pane's menu floats that pane
+  // With more than one page, the workspace's own moves (shell.js run): Trellis does them, this page only asks
+  if (windowPanes.pages > 1) for (const [id, label, command, icon] of PANE_ROWS) rows.push({ id, group: 'Window', icon, label, ...(id === 'closePane' ? { kbd: '⌘W' } : {}), run: () => shellRun(command) }); // ⌘W: the File menu's Close
   // Always reachable, unlike "Focus the sidebar": once the sidebar is hidden there would otherwise be no way back to it.
   if (!railToggle.hidden) rows.push({ id: 'railToggle', group: 'Window', icon: railHidden ? 'railShow' : 'railHide', label: railHidden ? 'Show sidebar' : 'Hide sidebar', run: () => toggleRail() });
-  rows.push({ id: 'reload', group: 'Window', icon: 'reload', label: 'Reload', run: () => location.reload() });
+  rows.push({ id: 'reload', group: 'Window', icon: 'reload', label: 'Reload', hint: 'Every pane', run: () => (window.frameElement ? window.parent.postMessage({ orbital: 'reload' }, '*') : location.reload()) }); // the shell reloads, and every page with it (shell.js)
+  if (tana.windowLayout) {
+    rows.push({ id: 'saveView', group: 'Window', icon: 'splitPanes', label: 'Save view\u2026', keepOpen: true, run: openSaveViewPalette });
+    if (savedViews().some((v) => v.id !== WORK_VIEW.id)) rows.push({ id: 'removeSavedView', group: 'Window', icon: 'trash', label: 'Remove saved view', keepOpen: true, run: openRemoveViewPalette, sub: async () => removeViewRows('') });
+    for (const v of savedViews()) rows.push({ id: v.id || 'savedView:' + v.name, group: 'Saved views', icon: 'splitPanes', label: v.name, run: () => run(() => openSavedView(v)) });
+  }
   // text size stays on the fixed keys (their characters depend on the keyboard layout), so the chips are literal
   rows.push({ id: 'textLarger', group: 'Settings', icon: 'textLarger', label: 'Larger text', kbd: '⇧⌘+', run: () => setZoom(zoomFactor * 1.1) });
   rows.push({ id: 'textSmaller', group: 'Settings', icon: 'textSmaller', label: 'Smaller text', kbd: '⇧⌘-', run: () => setZoom(zoomFactor / 1.1) });
@@ -564,7 +567,7 @@ function openResult(n, from) {
 function resultRows(nodes, group) {
   nodes = nodes.map(asDoc);
   const ctx = linkCtx, pin = pinCtx, field = fieldLinkCtx; // field: a link field picking its value (renderer/fields.js)
-  const rows = nodes.map((n) => ({ ...docRow(n, n.meta, () => (field ? pickLink(field, n) : ctx ? linkTo(ctx, { label: n.title ?? n.text, uri: n.id, ...(n.icon ? { icon: n.icon } : {}), ...(n.hue != null ? { hue: n.hue } : {}) }) : pin ? pinResult(pin, n) : openResult(n, 'Search'))), group }));
+  const rows = nodes.map((n) => ({ ...docRow(n, n.meta, () => (field ? pickLink(field, n) : ctx ? linkTo(ctx, { label: n.title ?? n.text, uri: n.id, ...(n.icon ? { icon: n.icon } : {}), ...(n.hue != null ? { hue: n.hue } : {}) }) : pin ? pinResult(pin, n) : openResult(n, 'Search'))), ...(field || ctx || pin ? {} : { opens: n.id }), group }));
   // a link field that holds something can be emptied here too, as an options field can; last, so Enter never clears
   if (field && group === undefined && choiceValues(field).length && fuzzyMatch('Clear value', palInput.value.trim())) rows.push({ group: field.field.label || 'Value', icon: 'none', label: 'Clear value', run: () => writeChoice(field, []) });
   if (!ctx) return rows;
@@ -958,11 +961,6 @@ function renderPalette() {
   const active = palList.querySelector('.row.active');
   if (active) active.scrollIntoView({ block: 'nearest' });
 }
-// ⌘K as a button, first in the crumbs bar before Home (renderCrumbs), for whoever has not met the key yet: the same toggle the key runs.
-const paletteBtn = $('navPalette');
-paletteBtn.onmousedown = (e) => e.preventDefault(); // the caret stays in its row, so closing the palette puts it back
-paletteBtn.onclick = () => togglePalette('cmd');
-addIcon(paletteBtn, 'command');
 // opens the palette in mode, closes it when already open in that mode; opening one mode closes the other.
 // link = @ linking context; pin = relationship pin context. Both reuse search results.
 function togglePalette(mode, link, pin) {
@@ -1005,29 +1003,92 @@ function closePalette() {
   const field = fieldReturn; fieldReturn = null;
   if (field && !focused()) focusField(field); // a field that holds choices is no row: returnFocus cannot find it
 }
-// ---- over both halves of a split (issue #409) ----
-// The palette's scrim and card cover the whole window, not only this half: while it is open main lays this page over
-// the window, above the other half (main.js coverWindow), and answers with this half's place, { x, width } in window
-// pixels. The page goes on drawing itself there (styles.css html.cover) and is see-through beside it, so the other
-// half shows under the scrim, live. The rows, the node acted on, the keys and the focus stay this page's: nothing of
-// the palette moves. The class follows the page's own size — on once the page is wider than its half, off once it is
-// back — so no frame is drawn with the page out of place while main resizes it. It lets go once the scrim has faded.
-let coverHalf = null, coverTimer = null;
+// ---- over every pane of the window (issue #409) ----
+// The palette's scrim and card cover the whole window, not only this pane: while it is open the shell lays this
+// page's iframe over the window, above every other pane, docked or floating (shell.js cover). The page goes on drawing
+// itself in its pane (styles.css html.cover) and is see-through around it, so the others show under the scrim, live.
+// The rows, the node acted on, the keys and the focus stay this page's: nothing of the palette moves. The pane is the
+// box Trellis gives the iframe, which stays put while the iframe reaches past it, read in the shell's pixels and
+// scaled to the page's (k: the two zoom apart, or Trellis scales the pane). The class follows the page's own size — on
+// once the page is larger than its pane, off once it is back — so no frame is drawn out of place while the shell
+// resizes it; any resize places it again. It lets go once the scrim has faded. A page alone is covered too, which
+// changes nothing but the shell's drag strip, gone so the scrim takes its clicks. Outside the shell (the mock) there
+// is no frame and no cover.
+let covering = false, coverTimer = null;
+const tellCover = (on) => { if (window.frameElement) window.parent.postMessage({ orbital: 'cover', on }, '*'); };
+// The workspace's moves, asked of the shell the same way (shell.js run): [row id, label, Trellis command, icon]. Keys
+// pressed in a page never reach the shell, so each is a row here with its key in DEFAULT_HOTKEYS.
+const PANE_ROWS = [['otherPane', 'Next pane', 'panel.next', 'otherPane'], ['previousPane', 'Previous pane', 'panel.previous', 'otherPane'],
+  ['nextTab', 'Next tab', 'tab.next', 'forward'], ['previousTab', 'Previous tab', 'tab.previous', 'back'],
+  ['maximizePane', 'Maximize or restore pane', 'frame.toggle', 'zoomIn'], ['overview', 'Show all panes', 'navigation.overview', 'splitPanes'],
+  ['zoomBack', 'Zoom back', 'navigation.back', 'back'], ['zoomForward', 'Zoom forward', 'navigation.forward', 'forward'],
+  ['closePane', 'Close pane', 'view.close', 'closePane']];
+const shellRun = (command) => { if (window.frameElement) window.parent.postMessage({ orbital: 'run', command }, '*'); };
+// Opening a place somewhere other than this page (issue #443): ⌘ a pane beside this one (as ⌘N opens one), ⌥ a tab in
+// this pane. Main gives the new page its id, and it opens on the place stored under that id (shell.js open, edit.js).
+const elsewhere = (e) => (e.metaKey || e.ctrlKey ? 'right' : e.altKey ? 'tab' : null);
+async function openElsewhere(where, docId, nodeId = null) {
+  const d = docOf(docId) || {};
+  await tana.splitWindow(where, { view, place: JSON.stringify({ docId, nodeId, title: d.text ?? d.title, icon: d.icon }) });
+}
+// ---- Saved views: the window's panes, and what each shows, under a name (issue #442) ----
+// A view is the layout main keeps for the window (Trellis's document) and each page's view and place, under the keys
+// the pages read at load: 'view' and 'place' for page '', 'view:2' and 'place:2' for page '2'. Opening one writes those
+// back and hands main the layout, which reloads the window, so every page comes back where it was when saved. The list
+// follows you (pref savedViews): a view names places, like a saved search does. It starts with the Work View
+// (renderer/timeline.js), which is replaced like any other and never removed; replaced by name, a view keeps its id, so Home
+// and a key recorded for it still find it.
+// The Work View cannot be removed: a list without it (an older one, another machine's) still starts with it.
+function savedViews() {
+  const list = pref('savedViews', [WORK_VIEW]).filter((v) => v && typeof v.name === 'string' && v.keys && typeof v.keys === 'object');
+  return list.some((v) => v.id === WORK_VIEW.id) ? list : [WORK_VIEW, ...list];
+}
+const PAGE_KEY = /^(view|place)(:[1-9]\d*)?$/;
+async function saveView(name, id) { // id: kept under that id (Set as Home), else found by name
+  const doc = await tana.windowLayout(), keys = {};
+  if (doc) delete doc.navigation; // Trellis's zoom is how you were looking, not the view: a view opens with every pane shown
+  const ids = doc ? Object.values(doc.views || {}).filter((v) => v && v.type === 'page').map((v) => String((v.params && v.params.side) || '')) : [''];
+  for (const id of ids) for (const key of ['view', 'place']) keys[key + (id ? ':' + id : '')] = localStorage.getItem(key + (id ? ':' + id : ''));
+  const old = savedViews().find((v) => (id ? v.id === id : v.name === name)), keep = id || (old && old.id);
+  setPref('savedViews', [...savedViews().filter((v) => v !== old), { ...(keep ? { id: keep } : {}), name, doc, keys }]);
+  showNote((old ? 'Updated' : 'Saved') + ' view \u201c' + name + '\u201d');
+}
+// plain async, for run() to queue: a queued step that queues another waits on itself. Main hands each page its keys as
+// it loads (main.js starts), under the id it ends up with when another window has that id open.
+async function openSavedView(v) {
+  const keys = Object.fromEntries(Object.entries(v.keys).filter(([key]) => PAGE_KEY.test(key)).map(([key, value]) => [key, typeof value === 'string' ? value : null]));
+  if (!(await tana.setWindowLayout(v.doc || null, keys))) showNote('This view could not be opened', true);
+}
+// A new name saves a new view; each saved view below, narrowed by what is typed, is updated to this window (its name
+// and id kept, so Home, the Work View and a key recorded for it still find it).
+function saveViewRows(q, typed) {
+  const name = typed.trim(), views = savedViews(), group = 'Save view \u00b7 the panes in this window and what each shows';
+  const rows = views.filter((v) => v.name.toLowerCase().includes(q)).map((v) => ({ group: 'Update a saved view', icon: 'splitPanes', label: v.name, hint: 'To this window', run: () => run(() => saveView(v.name, v.id)) }));
+  if (name && !views.some((v) => v.name === name)) rows.unshift({ group, icon: 'createNew', label: 'Save view \u201c' + name + '\u201d', run: () => run(() => saveView(name)) });
+  else if (!name && !rows.length) rows.push({ group, icon: 'splitPanes', label: 'Type a name for this view', disabled: true });
+  return rows;
+}
+function openSaveViewPalette() { openPage('saveView', 'Name a new view, or pick one to update\u2026', { rows: saveViewRows, back: BACK_TO_COMMANDS, typed: true }); }
+function removeViewRows(q) {
+  return savedViews().filter((v) => v.id !== WORK_VIEW.id && v.name.toLowerCase().includes(q)).map((v) => ({ group: 'Remove saved view', icon: 'trash', label: v.name,
+    run: () => { setPref('savedViews', savedViews().filter((w) => w.name !== v.name || (w.id || null) !== (v.id || null))); showNote('Removed view \u201c' + v.name + '\u201d'); } }));
+}
+function openRemoveViewPalette() { openPage('removeView', 'Remove saved view\u2026', { rows: removeViewRows, back: BACK_TO_COMMANDS }); }
 function placeCover() {
-  const root = document.documentElement, z = zoomFactor || 1; // main counts window pixels, the page CSS pixels (text size)
-  const on = !!coverHalf && innerWidth > coverHalf.width / z + 1;
+  const root = document.documentElement, frame = window.frameElement;
+  const half = covering && frame ? frame.parentElement.getBoundingClientRect() : null, box = half && frame.getBoundingClientRect(), k = box ? innerWidth / box.width : 1;
+  const on = !!half && (innerWidth > half.width * k + 1 || innerHeight > half.height * k + 1);
   root.classList.toggle('cover', on);
-  if (on) { root.style.setProperty('--pane-x', coverHalf.x / z + 'px'); root.style.setProperty('--pane-w', coverHalf.width / z + 'px'); }
+  if (on) for (const [name, value] of [['x', half.left - box.left], ['y', half.top - box.top], ['w', half.width], ['h', half.height]]) root.style.setProperty('--pane-' + name, value * k + 'px');
 }
 function coverWindow(mode) { // the page shown, or null once the palette has closed
   const on = !!mode && mode !== 'slash' && !palette.classList.contains('anchored'); // the @ and / menus belong to their spot in this half
   clearTimeout(coverTimer); coverTimer = null;
-  if (!tana.coverWindow || on === !!coverHalf) return;
-  if (on) { coverHalf = tana.coverWindow(true); placeCover(); } // null alone in the window: nothing to cover
-  else coverTimer = setTimeout(() => { coverHalf = null; tana.coverWindow(false); }, MOTION.quick);
+  if (!window.frameElement || on === covering) return;
+  if (on) { covering = true; tellCover(true); placeCover(); }
+  else coverTimer = setTimeout(() => { covering = false; tellCover(false); }, MOTION.quick);
 }
 addEventListener('resize', placeCover);
-if (tana.onCover) tana.onCover((half) => { if (coverHalf) { coverHalf = half; placeCover(); } });
 // back to the node that had the caret when the palette opened (the @ link path places its own caret); with nothing to
 // return to (a row selection, the sidebar) the hidden input must not keep the keys, so it lets go of the focus
 // Where the focus goes back to when the palette closes: the caret's row, or the sidebar row the palette was opened from
@@ -1077,20 +1138,26 @@ palInput.addEventListener('keydown', (e) => {
   if (palPage.keys && palPage.keys(e)) { e.preventDefault(); e.stopPropagation(); } // a page's own keys (Edit choices: ⌘⌫, ⇧⌘↑/↓)
   else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); backPalette(); }
   else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && palRows.length) { e.preventDefault(); e.stopPropagation(); movePalIndex(e.key === 'ArrowDown' ? 1 : -1); }
-  else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); chooseRow(mod); }
+  else if (e.key === 'Enter') { // ⌘↩ / ⌥↩ on a row that opens a place: in a pane beside, or a tab in this one (while linking, ⌘↩ creates)
+    e.preventDefault(); e.stopPropagation();
+    const r = palRows[palIndex], where = !linkCtx && r && r.opens && !r.disabled && elsewhere(e);
+    if (where) { closePalette(); run(() => openElsewhere(where, r.opens)); } else chooseRow(mod);
+  }
   else if (mod && e.shiftKey && e.key.toLowerCase() === 'k') { e.preventDefault(); e.stopPropagation(); const r = palRows[palIndex]; if (palMode === 'cmd' && r && r.id) openRecorder(r); }
 });
 palette.addEventListener('mousedown', (e) => { if (e.target === palette) closePalette(); });
 
 // ---- hotkeys: Cmd+Shift+K on a Cmd+K row records a combo (the synced "hotkeys" preference); the outline dispatches it ----
 const KEYNAMES = { Enter: '↩', Backspace: '⌫', Tab: '⇥', ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', ' ': 'Space' };
+// by the key pressed rather than what it types, which ⌥ and ⇧ change (⌥⌘[ types “, ⇧⌘/ types ?)
+const KEYCODES = { BracketLeft: '[', BracketRight: ']', Backslash: '\\', Slash: '/' };
 // "⌃⌥⇧⌘" + key ("M", "1", "↩"); modifiers alone while only they are pressed
 function comboOf(e) {
   const mods = (e.ctrlKey ? '⌃' : '') + (e.altKey ? '⌥' : '') + (e.shiftKey ? '⇧' : '') + (e.metaKey ? '⌘' : '');
   if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return mods;
-  return mods + (/^(Key|Digit)/.test(e.code) ? e.code.slice(-1) : KEYNAMES[e.key] || (e.key.length === 1 ? e.key.toUpperCase() : e.key));
+  return mods + (/^(Key|Digit)/.test(e.code) ? e.code.slice(-1) : KEYCODES[e.code] || KEYNAMES[e.key] || (e.key.length === 1 ? e.key.toUpperCase() : e.key));
 }
-const validCombo = (c) => /[⌘⌃]/.test(c) && c.replace(/[⌃⌥⇧⌘]/g, '') !== ''; // ⌘ or ⌃ plus a key, so typing is never hijacked
+const validCombo = (c) => (/[⌘⌃]/.test(c) || /^[⌥⇧]*F\d{1,2}$/.test(c)) && c.replace(/[⌃⌥⇧⌘]/g, '') !== ''; // ⌘ or ⌃ plus a key, or a function key (F6), so typing is never hijacked
 // Combos the outline keydown handler answers to before it looks at hotkeys, so a shortcut on one of them would
 // never fire. That handler treats ⌃ like ⌘ and ignores ⌥, which the normalisation in comboTaken mirrors.
 // Only what is fixed in the handlers is listed here; everything else the outline answers to is a row with a default
@@ -1130,4 +1197,13 @@ document.addEventListener('keydown', (e) => { // capture: the recorder sees ever
   if (plain && e.key === 'Enter') return $('recSave').click();
   if (plain && e.key === 'Backspace') return $('recReset').click();
   rec.combo = comboOf(e); showCombo();
+}, true);
+// The pane keys go to the shell before a row sees them (capture), whatever they are recorded as: a row reads ⌥ away
+// (⌥⌘↓ as ⌘↓) and a function key has no ⌘ for it to see. Only while there are panes to move between,
+// with the palette closed and no key being recorded; alone, a page leaves those keys to the row.
+document.addEventListener('keydown', (e) => {
+  if (windowPanes.pages < 2 || !palette.hidden || rec) return;
+  const row = PANE_ROWS.find(([id]) => hotkeyFor(id) === comboOf(e));
+  if (!row) return;
+  e.preventDefault(); e.stopPropagation(); shellRun(row[2]);
 }, true);

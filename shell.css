@@ -1,0 +1,43 @@
+/* The window's shell (shell.html, shell.js): the pages fill it edge to edge with a hairline between them, as one
+   page did before Trellis; its own tokens are set from shell.js because they follow the page's theme. */
+html, body { margin: 0; height: 100%; overflow: hidden; background: #fff; }
+[data-theme="dark"] { color-scheme: dark; } /* as the page's own (styles.css): an iframe whose color-scheme differs is drawn opaque, and a covering page must be see-through */
+[data-theme="dark"] body { background: #1b1d1e; }
+/* The header holds the traffic lights and, on the right, the app's own switches (sensitive items, ⌘K, Help) and drags the window; the panes fill the rest, their tab bars the
+   full width. Above the header only while a page covers the window (its palette's scrim goes over both). */
+.head { position: fixed; top: 0; left: 0; right: 0; height: 38px; box-sizing: border-box; display: flex; align-items: center; justify-content: flex-end; gap: 2px; padding: 0 12px 0 80px;
+  background: #f6f6f6; -webkit-app-region: drag; user-select: none; }
+[data-theme="dark"] .head { background: #232627; }
+.head button { -webkit-app-region: no-drag; display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 4px; background: none; color: #777; opacity: .5; cursor: pointer; }
+.head button:hover { background: #ddd; opacity: 1; }
+[data-theme="dark"] .head button { color: #aaa; }
+[data-theme="dark"] .head button:hover { background: #3a3f42; }
+.head svg { display: block; width: 18px; height: 18px; }
+#workspace { position: fixed; inset: 38px 0 0; z-index: 1; }
+body.covered .trellis { overflow: visible; contain: none; }
+/* The hairline between the pages is Trellis's divider (8px wide, on the seam), drawn 1px in the line's colour; hovered
+   or dragged, the same 1px turns the app's blue (the accent, shell.js tokens). */
+.trellis [data-trellis-part="divider"]::before { content: ''; position: absolute; background: var(--trellis-border); }
+.trellis [data-trellis-part="divider"][data-axis="x"]::before { top: 0; bottom: 0; left: calc(50% - 0.5px); width: 1px; }
+body.many .trellis [data-trellis-part="divider"][data-axis="x"]::before, body.many .trellis [data-trellis-part="divider"][data-axis="x"]::after { top: var(--trellis-tabbar-height); } /* the line starts under the tab bars: the header and the bars read as one band */
+.trellis [data-trellis-part="panel"]:not([data-floating]) { box-shadow: none; } /* Trellis's ring round a panel ran up the tab bars too; the divider draws the line between docked panes */
+.trellis [data-trellis-part="divider"][data-axis="y"]::before { left: 0; right: 0; top: calc(50% - 0.5px); height: 1px; }
+.trellis [data-trellis-part="divider"][data-axis="x"]::after { left: calc(50% - 0.5px); width: 1px; border-radius: 0; }
+.trellis [data-trellis-part="divider"][data-axis="y"]::after { top: calc(50% - 0.5px); height: 1px; border-radius: 0; }
+/* The empty part of the tab bars along the top drags the window too (shell.js mark), except while a page covers the
+   window, so a click on the palette's scrim reaches the page. */
+.trellis [data-trellis-part="tabbar"][data-top] { -webkit-app-region: drag; }
+.trellis [data-trellis-part="tabbar"][data-top] :is([data-trellis-part="tab"], button) { -webkit-app-region: no-drag; }
+body.covered .trellis [data-trellis-part="tabbar"] { -webkit-app-region: no-drag; }
+/* the focused pane's tab: a finer line than Trellis's 2px, in a brighter blue (shell.js tokens) */
+.trellis :is([data-trellis-part="panel"], [data-trellis-part="tabbar"])[data-focused] [data-trellis-part="tab"][data-selected] {
+  background: linear-gradient(var(--trellis-accent), var(--trellis-accent)) center top / 100% 1.5px no-repeat, var(--trellis-tab-active); }
+body.pressing .trellis [data-trellis-part="content"] { pointer-events: none; } /* a tab pressed: the pages let the pointer pass (shell.js) */
+/* A tab's or pane's menu open: a press beside it lands in the shell, where Trellis closes the menu, instead of in a page
+   (an iframe the shell never hears), which left the menu up until an option was picked. */
+body:has([data-trellis-part="menu"]) .trellis [data-trellis-part="content"] { pointer-events: none; }
+/* The page the palette covers the window from (renderer/palette.js coverWindow): everything from its iframe up to the
+   workspace is lifted over the rest and lets the iframe reach past it; shell.js sizes the iframe to the workspace. */
+.trellis [data-covering] { z-index: 1000 !important; overflow: visible !important; clip-path: none !important; contain: none !important; }
+.trellis [data-trellis-part="surface"][data-covering] { background: transparent !important; }
+.trellis [data-covering] > iframe { position: absolute; }

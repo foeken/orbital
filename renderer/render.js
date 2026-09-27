@@ -258,6 +258,16 @@ function render(force = false) {
   try { renderOutline(); if (typeof syncPresence === 'function') syncPresence(); } finally { rendering = false; playTicks(); }
   fitRowMeta();
 }
+// The page's title on its tab in the shell (shell.js): what the header shows, so masked in demo mode, and 'Hidden'
+// while the document's sensitive mark blurs it, and whether it can be typed in, which offers Rename on the tab (issue
+// #441). Told once per change; outside the shell (the mock) there is no tab.
+let toldTitle = null;
+function tellTitle(title, renamable) {
+  const told = title + '\n' + renamable;
+  if (told === toldTitle || !window.frameElement) return;
+  toldTitle = told;
+  window.parent.postMessage({ orbital: 'title', title, renamable }, '*');
+}
 // A task row carries its grey facts — who it is for, who can see it, whether it notifies — after the title. When the
 // title fills the line the browser wraps them onto a line of their own, where they read as a second title rather
 // than as facts about the first; there they belong with the subtext instead, joined to it by the same separator its
@@ -429,6 +439,9 @@ function renderOutline() {
   titleEl.dataset.key = editable ? parent.key : '';
   titleEl.textContent = editable && pending.has(parent.key) ? plainOf(pending.get(parent.key).segs) : parent ? demoText(parent.node.text, parent.node.id) : viewOf() ? viewOf().title : 'Tana';
   blurSensitive(titleEl, parent && parent.docId);
+  tellTitle(titleEl.classList.contains('sensitive') ? 'Hidden' : titleEl.textContent, !!editable);
+  // a view, a saved search or an app page is named by its tab under a tab bar, so its heading goes (styles.css html.listing)
+  document.documentElement.classList.toggle('listing', !parent || appOwned(parent.docId));
   // zoomed task: its checkbox before the title (toggleDone, like row checkboxes; Cmd+Enter in the title too)
   const zoomedTask = parent && isTask(parent.node);
   titleCheck.hidden = !zoomedTask; titleCheck.checked = zoomedTask && !!parent.node.done;
@@ -446,7 +459,6 @@ function renderOutline() {
   for (const tag of titleTags) taskInfoEl.append(chipEl(tag, parent.node.hue));
   blurSensitive(taskInfoEl, parent && parent.docId);
   renderFields(parent, true); // this render already got past the caret guard, so the fields are redrawn with it
-  renderCrumbs();
   renderRail(parent);
   // A saved search is a query you can edit, so it gets the pills too — every other zoomed page is content, not a query.
   const showPills = authed && pillsApply() && (!parent || isSearchDoc(parent.node) || isTypeDoc(parent.node));
@@ -589,25 +601,6 @@ function renderFields(parent, force = false, el = $('fields')) {
   blurSensitive(el, parent && parent.docId);
   if (keep) el.querySelector('.fchoice[data-key="' + CSS.escape(keep) + '"]')?.focus();
 }
-// Home as a button, the same size and look as ⌘K beside it: the two are the whole bar.
-function homeCrumb() {
-  const name = homeName();
-  if (!name) return null; // only while a Home search is still loading
-  const b = document.createElement('button');
-  b.className = 'navbtn'; b.tabIndex = -1;
-  addIcon(b, 'home');
-  b.setAttribute('aria-label', 'Go to Home: ' + name); // the role; the name it points at is in the label and tooltip
-  b.title = 'Go to Home: ' + name;
-  b.onmousedown = (e) => e.preventDefault(); // the caret stays where it is, as with the other header buttons
-  b.onclick = () => goHome();
-  return b;
-}
-// The bar over the title: Home, then ⌘K and Help, and nothing else — the page title says where you are. Home is always
-// shown, even on Home itself or with the Library as Home: one fixed way back beats a button that comes and goes.
-function renderCrumbs() {
-  const nav = $('crumbs');
-  nav.replaceChildren(...[homeCrumb(), $('navPalette'), $('navHelp')].filter(Boolean)); // ⌘K: renderer/palette.js; ?: renderer/overlays.js; Home: null only while a Home search loads
-}
 
 // a child row: document children (inside a space) are their own document, so their key, children and edits go by their own id
 const childEl = (n, item) => nodeEl(n, n.kind === 'document' ? n.id : item.docId, item);
@@ -749,7 +742,12 @@ function nodeEl(node, docId, parent) {
   // the drag from exactly this default and preventDefault would quietly stop it from ever beginning. Ending an
   // edit is what reaching for another row means anyway, and the row being left flushes as it blurs.
   bullet.onmousedown = (e) => { if (!bullet.draggable) e.preventDefault(); };
-  if (!node.draft && opens) bullet.onclick = () => (reference || fullref ? openReference(node) : zoomTo(item));
+  // ⌘-click opens it in a pane beside this one, ⌥-click as a tab in this pane (renderer/palette.js openElsewhere)
+  if (!node.draft && opens) bullet.onclick = (e) => {
+    const where = e && elsewhere(e), ref = reference || fullref;
+    if (where && (!ref || node.reference?.uri)) return run(() => (ref ? openElsewhere(where, node.reference.uri) : openElsewhere(where, item.docId, item.node.kind === 'document' ? null : item.node.id)));
+    if (ref) openReference(node); else zoomTo(item);
+  };
   // A notification's bullet is its read state, and the row action that flips it (renderer/inbox.js)
   if (node.notification) { bullet.title = node.unread ? 'Mark as read' : 'Mark as unread'; bullet.onclick = () => setNotificationRead(node, !!node.unread); }
   line.append(chev, bullet);
@@ -835,7 +833,7 @@ function nodeEl(node, docId, parent) {
   // as does a task listed under one, as itself: goTo reads the real node, where zoomTo would open the read-only copy the
   // Timeline lists, filed under the Timeline in the crumb — a page that looked like the task and could not be edited
   else if (parent?.node?.timeline) line.onclick = (e) => { if (!e.metaKey && !e.shiftKey && !e.target.closest('.chev, .check, .bullet')) goTo(node.id); };
-  else if (clickOpens) line.onclick = (e) => { if (!e.metaKey && !e.shiftKey && !e.target.closest('.chev, .bullet, .check')) zoomTo(item); }; // .check: a task's box in a table row ticks it and stays
+  else if (clickOpens) line.onclick = (e) => { if (!e.metaKey && !e.shiftKey && !e.target.closest('.chev, .bullet, .check')) { if (e.altKey) run(() => openElsewhere('tab', item.docId, item.node.kind === 'document' ? null : item.node.id)); else zoomTo(item); } }; // .check: a task's box in a table row ticks it and stays; ⌥: as a tab in this pane (⌘-click selects the row)
   if (clickOpens) el.classList.add('opens');
   // a reference row: the bullet opens the target, a click selects the row, and a click on the selected row starts
   // editing it — a native embed takes the caret where it was clicked, while a full reference has nothing to click

@@ -33,14 +33,17 @@ let searches = [];           // [{ id, title, icon, … }] saved search document
 // Marked `added`, loadSearches keeps such an entry until the graph's answer has it; deleting it drops it like any other.
 function addSearch(n) { if (!n || typeof n.id !== 'string' || !n.id.startsWith(SEARCH_ID)) return; searches = [{ ...n, added: true }, ...searches.filter((s) => s.id !== n.id)]; }
 let searchesLoaded = false;  // whether that list has answered once: until it has, a Home search is trusted, not repaired away
-// Home: the page this app comes back to — the Work View, the Library, or a saved search, kept as the target's own id
-// ("workView", "library" or a tana:search: document id) rather than its name, so renaming the search in Tana keeps the
-// choice and only changes what it reads. It is the Home button on every page and where Back lands with nothing to go
-// back to. The Work View is the default, the Library the fallback for a search that is gone (nodes.js).
+// Home: the window this app comes back to (Go to Home, ⇧⌘H) — the Work View, the window kept by Set as Home ('homeView'),
+// or, chosen before Home was a window, the Library or a saved search, kept as its own id so renaming the search in Tana
+// keeps the choice; those open as a window of one pane. The Work View is the default, the Library the fallback for a
+// search that is gone (nodes.js).
 let home = pref('home', 'workView');
-// The right half of a split (main.js addPane, api.side) keeps its own view and place, so a restart reopens both halves
-// where they were; main says so when a page changes sides (onSide in renderer/app.js).
+// Every page of a window (shell.js) keeps its own view and place under its id, which never changes while it lives:
+// '' the first page, then '2', '3', ... (main.js addPage, api.side), so a restart reopens each page where it was.
 let SIDE = typeof window !== 'undefined' && window.api && window.api.side ? ':' + window.api.side : '';
+// What the shell says of this page's window after every change (renderer/app.js): how many pages it holds. The pane
+// rows in Cmd+K are offered from it.
+let windowPanes = { pages: 1 };
 let view = localStorage.getItem('view' + SIDE) || 'library'; // active view id; the outline shows one view at a time
 // Views that no longer exist. A stored one would leave the app on a page with no filter, no rows and no way back,
 // so it lands in the Library, which lists every kind those pages used to list one of.
@@ -68,7 +71,10 @@ const hotkeys = { ...pref('hotkeys', {}) }; // palette row id -> combo ("⇧⌘M
 // The built-in keys are palette rows with a default combo, in the same map the recorder edits: a recorded combo
 // overrides the default, and Reset in the recorder restores it. What is not here is fixed on purpose (⌘K, ⇧⌘K,
 // the text-size keys, ⇧⌘⌫ and the ⇧⌘↑/↓ moves, which act on blocks the palette does not address).
-const DEFAULT_HOTKEYS = { createTask: '⇧⌘Space', search: '⌘S', filter: '⌘F', copyLink: '⌘C', back: '⌘[', forward: '⌘]', undo: '⌘Z', redo: '⇧⌘Z', expand: '⌘↓', collapse: '⌘↑', toggleDone: '⌘↩', today: '⌃⇧D', reload: '⌘R', newWindow: '⌘N', splitView: '⌥⌘N', otherPane: '⌘\\' }; // "Focus the sidebar" is a palette row with no default key
+// The pane keys (Trellis's commands, run by the shell) keep off what a row's own keydown answers to: ⌥⌘ with ↑ or ↓,
+// and brackets and \ with ⇧ or ⌥; while there are panes they are taken before a row sees them (renderer/palette.js).
+// Close pane has no key of its own: ⌘W closes the pane in front (the File menu).
+const DEFAULT_HOTKEYS = { createTask: '⇧⌘Space', search: '⌘S', filter: '⌘F', copyLink: '⌘C', back: '⌘[', forward: '⌘]', undo: '⌘Z', redo: '⇧⌘Z', expand: '⌘↓', collapse: '⌘↑', toggleDone: '⌘↩', today: '⌃⇧D', reload: '⌘R', newWindow: '⌥⌘N', splitView: '⌘N', otherPane: '⌘/', previousPane: '⇧⌘/', maximizePane: '⌥⌘↓', overview: '⌥⌘↑', zoomBack: '⌥⌘[', zoomForward: '⌥⌘]', nextTab: '⇧⌘]', previousTab: '⇧⌘[', goHome: '⇧⌘H' }; // "Focus the sidebar" is a palette row with no default key
 const hotkeyFor = (id) => (Object.hasOwn(hotkeys, id) ? hotkeys[id] : DEFAULT_HOTKEYS[id]);
 // A header button's tooltip: what it does and, when it has one, the key that does the same. The label and row id stay
 // on the button so hovering can read the key again (renderer/edit.js), since a key recorded later changes it.

@@ -260,11 +260,11 @@ const reset = () => { cache = null; docId = null; opening = null; settled = fals
 // filters, watch choices and agent marks were left out and a stale page wrote its old filter back). docId: the
 // document a choice is about, whose metadata the other pages read again, since that is where its watch state and its
 // agent badge are drawn.
-function tellOthers(sender, docId) {
+function tellOthers(from, docId) { // from: the page handle that wrote it (main/state.js pageOf), or null
   const next = prefs();
-  for (const w of S.windows || []) if (!w.isDestroyed()) for (const p of w.panes) if (p.webContents !== sender && !p.webContents.isDestroyed()) {
-    p.webContents.send('settings:changed', next);
-    if (docId) p.webContents.send('outline:changed', docId, { meta: true });
+  for (const w of S.windows || []) if (!w.isDestroyed()) for (const p of w.panes) if (p !== from && !p.isDestroyed()) {
+    p.send('settings:changed', next);
+    if (docId) p.send('outline:changed', docId, { meta: true });
   }
 }
 
