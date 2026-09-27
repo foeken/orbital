@@ -70,7 +70,7 @@ async function setPin(on) {
 
 const commands = {
   async login() {
-    await session.login();
+    if (!(await session.login())) return out('login cancelled');
     out('logged in as ' + ((await session.info()).user || {}).email);
   },
   async whoami() {

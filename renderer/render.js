@@ -432,7 +432,9 @@ function renderOutline() {
   let asking = false;
   // the Timeline's "Show three more days" is a way to more rows, not a row: an empty Timeline still says so, above it
   if (parent && !list.length && ![...outline.children].some((el) => !el.classList.contains('tl-older'))) {
-    asking = !signedOut && !(kids.has(parent.docId) && kids.get(parent.docId) !== null); // signed out, nothing is on its way: the login shows
+    // signed out, nothing is on its way: the login shows. A Timeline part with no rows in it is not an answer yet
+    // either: the rest is still coming, so the whole-page loader stays rather than "Nothing yet" over a loader's tail.
+    asking = !signedOut && (!(kids.has(parent.docId) && kids.get(parent.docId) !== null) || (parent.docId === TIMELINE_PAGE && timelinePartial));
     const note = document.createElement('div');
     note.className = 'empty-note'; note.textContent = emptyText(parent);
     if (!asking) outline.prepend(note);
@@ -812,7 +814,7 @@ function nodeEl(node, docId, parent) {
     if (taskInfo) body.append(taskMetaEl(taskInfo, display.id, display));
     else if (observeMeta(el, display)) body.append(taskMetaEl({ assignees: '', pending: true })); // hold the slot: the real icon lands in the same place, so the row never shifts
   } else if (!taskInfo) observeMeta(el, display); // "Lives in" reads the same answer, so the fetch still goes out
-  if (displayOn('type')) appendTags(body, display);
+  if (displayOn('type') && !(zoom?.docId === TIMELINE_PAGE && isTask(display))) appendTags(body, display); // the Timeline's tasks go without their # chip
   // when it was made, when it last moved and where it lives, as one grey line under the title (renderer/views.js)
   // what a Timeline edit put there (renderer/timeline.js): Tana's longer words, quoted between the headline and who did it
   if (node.timeline && (node.timeline.change || node.timeline.detail)) {

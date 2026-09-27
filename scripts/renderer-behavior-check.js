@@ -105,6 +105,8 @@ const withShims = (src) => {
   if (/\btypeGlyphs\b/.test(src) && !/const typeGlyphs =/.test(src)) src = 'globalThis.typeGlyphs ??= new Map();\n' + src;
   // what has a page of its own (renderer/nodes.js): a harness that is not about members or types keeps every document zoomable
   if (/\bzoomable\(/.test(src) && !/const zoomable =/.test(src)) src = 'globalThis.zoomable ??= (node) => !!node;\n' + src;
+  // the Timeline's page id (renderer/timeline.js): a row asks whether it is drawn there
+  if (/\bTIMELINE_PAGE\b/.test(src) && !/const TIMELINE_PAGE =/.test(src)) src = "globalThis.TIMELINE_PAGE ??= 'orbital:timeline';\n" + src;
   // a related answer draws the page's fields and sidebar at once when a render would wait (renderer/rail.js loadRelated): a harness with no page has nothing to draw
   if (/\bloadRelated\b/.test(src) && !/let zoom\b/.test(src) && !/const zoom\b/.test(src)) src = 'globalThis.zoom ??= null;\n' + src;
   // Deleted nodes (renderer/nodes.js) are one Set the whole app shares. A harness that is not about deletion gets
@@ -7078,8 +7080,9 @@ async function runToastCheck() {
   }
   const api = vm.runInNewContext(`
     const $ = (id) => nodes.get(id) || null;
+    let signedOut = false;
     ${sourceBetween('let toastTimer', 'const run =')}
-    ({ showNote, showError });
+    ({ showNote, showError, signOut: () => { signedOut = true; } });
   `, { nodes, setTimeout: (fn, ms) => { timers.push({ fn, ms, live: true }); return timers.length; }, clearTimeout: (i) => { if (timers[i - 1]) timers[i - 1].live = false; } });
   api.showNote('Link copied');
   assert.deepEqual([nodes.get('toast').textContent, nodes.get('toast').classes.has('show')], ['Link copied', true], 'a notice is the toast');
@@ -7093,6 +7096,9 @@ async function runToastCheck() {
   assert.ok(!timers[1].live && !nodes.get('toast').classes.has('error'), 'a newer notice restarts the clock and is no longer red');
   for (const t of timers.filter((t) => t.live)) t.fn();
   assert.deepEqual([nodes.get('toast').textContent, nodes.get('toast').classes.has('show')], ['Classified as Project (91%)', false], 'and the toast fades on its own');
+  api.signOut();
+  api.showError(new Error('unsubscribed tana:text:x'));
+  assert.equal(nodes.get('toast').textContent, 'Classified as Project (91%)', 'signed out, what the old session still fails shows nothing');
   console.log('ok  toast: notices and errors fade at the foot of the window and leave the relogin line alone');
 }
 

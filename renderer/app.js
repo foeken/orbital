@@ -24,10 +24,11 @@ function showStatus(s) {
   if (connected && !wasConnected) { taskMetaFailed.clear(); loadSearches(); loadWorkspaceTypes(); loadPinned(true); restorePlace().finally(() => { placed = true; loadView(); renderSoon(); helpOnce(); }); } // the types too: a key recorded on a Cmd+K type row finds it before Cmd+K opens; the tour opens over the page it came back to
   $('loginBox').hidden = !state.showLogin;
   $('pagehead').hidden = state.showLogin; // signed out, the login is the page: no view title above it
+  $('navbtns').hidden = state.showLogin; // nor back, forward or the page's buttons
   const relogin = !!(state.error && !state.authenticated && !state.signedOut);
   $('errorText').textContent = relogin ? state.error : ''; $('error').hidden = $('errorLogin').hidden = !relogin;
   outline.hidden = $('filtered').hidden = !state.showOutline;
-  if (!relogin && state.error && state.error !== statusError) showError(state.error);
+  if (!relogin && !state.showLogin && state.error && state.error !== statusError) showError(state.error); // the login screen says nothing of a login that did not work: try again
   statusError = state.error;
   render(); // auth/connection state drives the skeleton; a newly visible outline applies the view's opening scroll
 }

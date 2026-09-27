@@ -119,7 +119,7 @@ function showNote(note, error = false) {
   el.textContent = note; el.classList.toggle('error', error); el.classList.add('show');
   clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), error ? 6000 : 2500); // a newer toast gets its own time
 }
-const showError = (e) => { if (e) showNote(String(e.message || e), true); };
+const showError = (e) => { if (e && !signedOut) showNote(String(e.message || e), true); }; // signed out, what still fails is the old session's
 const run = (fn) => (queue = queue.then(fn).then((value) => { showError(null); return value; }, showError));
 // A row on its way out is not a keyboard stop.
 // A field that holds choices (renderer/fields.js) is one stop, and a caret stop all the same.

@@ -13,6 +13,9 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #fff; }
 [data-theme="dark"] .head button { color: #aaa; }
 [data-theme="dark"] .head button:hover { background: #3a3f42; }
 .head svg { display: block; width: 18px; height: 18px; }
+body.signed-out .head button { display: none; } /* signed out, none of them does anything: the login is the whole window */
+body.signed-out .head { background: #fff; } /* and the header is the page's own white, one surface with it */
+[data-theme="dark"] body.signed-out .head { background: #1b1d1e; }
 #workspace { position: fixed; inset: 38px 0 0; z-index: 1; }
 body.covered .trellis { overflow: visible; contain: none; }
 /* The hairline between the pages is Trellis's divider (8px wide, on the seam), drawn 1px in the line's colour; hovered
