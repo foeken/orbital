@@ -129,10 +129,13 @@ function chatEls(list, docId) {
     if (!n.chat.mine && lefts.size > 1 && (!prev || prev.chat.author !== n.chat.author)) {
       const name = document.createElement('div'); name.className = 'chat-name'; name.textContent = demoText(n.text, n.chat.author); out.push(name);
     }
+    // an answer shared to the chat: the agent's words, drawn on its side
+    const relayed = n.chat.mine && (agentAnswers.get(docId) || []).find((a) => a.shared === n.chat.id);
+    if (relayed) { out.push(sharedAnswerEl(n, relayed, docId)); prev = null; continue; }
     out.push(chatMessageEl(n, docId));
     prev = n;
-    // an agent's answer to this question, drawn under it on your side: yours alone, never in Tana
-    const asked = n.chat.mine && (agentAnswers.get(docId) || []).find((a) => a.messageId === n.chat.id);
+    // an agent's answer to this question, drawn under it on your side: yours alone, never in Tana, until it is shared
+    const asked = n.chat.mine && (agentAnswers.get(docId) || []).find((a) => a.messageId === n.chat.id && !a.shared);
     if (asked) { out.push(agentAnswerEl(asked, docId)); prev = null; }
   }
   chatPendingQ = ([...msgs].reverse().find((n) => n.chat.questions) || { chat: {} }).chat.questions || null;
@@ -186,25 +189,42 @@ if (typeof ResizeObserver === 'function' && outline.parentElement) {
 // The arrow beside it posts the answer to the chat as your message, the one way it reaches Tana.
 function agentAnswerEl(a, docId) {
   const el = document.createElement('div'), head = document.createElement('div'), row = document.createElement('div'), bubble = document.createElement('div');
-  el.className = 'chat-msg mine agent-answer'; head.className = 'agent-head'; row.className = 'agent-row'; bubble.className = 'bubble'; bubble.title = AGENT_NOTE;
-  // the line over it opens the agent's task that answered, for the work behind the answer
-  if (tana.openAgentAsk) { head.classList.add('opens'); head.title = 'Open the ' + a.label + ' task'; head.onclick = () => openAgentAsk(docId, a.messageId); }
-  head.append(...[iconNode('lock')].filter(Boolean), document.createTextNode(a.label + ' · only visible for you, on this device'));
+  el.className = 'chat-msg mine agent-answer'; row.className = 'agent-row'; bubble.className = 'bubble'; bubble.title = AGENT_NOTE;
+  agentHead(head, a, docId, a.label + ' · only visible for you, on this device');
+  head.prepend(...[iconNode('lock')].filter(Boolean));
   if (a.state === 'working') bubble.append(chatDotsEl());
   else { const text = document.createElement('div'); text.className = 'chat-paragraph'; text.textContent = a.state === 'done' ? demoText(a.text, docId) : a.label + ' stopped without an answer'; bubble.append(text); }
   if (a.state === 'done') {
     const share = document.createElement('button');
     share.type = 'button'; share.className = 'agent-share'; share.tabIndex = -1; share.title = 'Share to chat, as your message'; share.setAttribute('aria-label', 'Share to chat');
     share.append(...[iconNode('forward')].filter(Boolean));
-    share.onclick = () => shareAnswer(docId, a.text);
+    share.onclick = () => shareAnswer(docId, a.messageId);
     row.append(share);
   }
   row.append(bubble); el.append(head, row);
   return el;
 }
+// The line over an answer; it opens the agent's task that answered, for the work behind the answer
+function agentHead(head, a, docId, words) {
+  head.className = 'agent-head'; head.textContent = words;
+  if (tana.openAgentAsk) { head.classList.add('opens'); head.title = 'Open the ' + a.label + ' task'; head.onclick = () => openAgentAsk(docId, a.messageId); }
+}
+// A shared answer: your message in Tana (it has no other author for it), drawn here on the agent's side under its name
+function sharedAnswerEl(n, a, docId) {
+  const el = chatMessageEl({ ...n, chat: { ...n.chat, mine: false } }, docId), head = document.createElement('div');
+  agentHead(head, a, docId, a.label + ' · shared by you');
+  el.prepend(head);
+  return el;
+}
 // The one way an answer reaches Tana: posted to the chat as your message (the arrow, or Cmd+K Share …’s answer to chat)
-function shareAnswer(docId, text) { run(async () => { await tana.sendChat(docId, text, [], { ai: false }); await reload(docId); renderSoon(true); }); }
-const latestAgentAnswer = (docId) => (agentAnswers.get(docId) || []).filter((a) => a.state === 'done').at(-1);
+function shareAnswer(docId, messageId) {
+  run(async () => {
+    const { messageId: shared } = await tana.shareAgentAnswer(docId, messageId), a = (agentAnswers.get(docId) || []).find((x) => x.messageId === messageId);
+    if (a) a.shared = shared;
+    await reload(docId); renderSoon(true);
+  });
+}
+const latestAgentAnswer = (docId) => (agentAnswers.get(docId) || []).filter((a) => a.state === 'done' && !a.shared).at(-1);
 const latestAgentAsk = (docId) => (agentAnswers.get(docId) || []).at(-1);
 function openAgentAsk(docId, messageId) { run(async () => { if (!(await tana.openAgentAsk(docId, messageId))) throw new Error('That task is not on this device'); }); }
 // Read the chat's answers, and again every few seconds while one is still being worked on

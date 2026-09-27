@@ -11,7 +11,7 @@ const { members } = require('./rows');
 const { op, sendChat } = require('./documents');
 const { S, errText } = require('./state');
 
-const KEY = 'chatAsks'; // chatId -> [{ messageId, agent, taskId, at, state?, text? }], a finished answer kept so it is read once
+const KEY = 'chatAsks'; // chatId -> [{ messageId, agent, taskId, at, state?, text?, shared? }], a finished answer kept so it is read once
 const GIVE_UP = 15 * 60 * 1000; // a task quiet for longer is not coming back (main/agent.js createTask's own cap)
 // What every agent's task keeps to for its whole life: the chat may flow in, only the asker sees what comes out.
 const RULES = [
@@ -93,7 +93,7 @@ async function ask(chatId, agentId, text) {
 // cost a read, one read per agent.
 async function replies(chatId) {
   const asks = asksIn(chatId);
-  const out = () => asks.map(({ messageId, agent: id, state, text }) => ({ messageId, agent: id, label: (AGENTS[id] || {}).label || id, state: state || 'working', text: text || '' }));
+  const out = () => asks.map(({ messageId, agent: id, state, text, shared }) => ({ messageId, agent: id, label: (AGENTS[id] || {}).label || id, state: state || 'working', text: text || '', ...(shared ? { shared } : {}) }));
   const running = asks.filter((x) => !x.state && AGENTS[x.agent]);
   if (!running.length) return out();
   for (const id of new Set(running.map((x) => x.agent))) {
@@ -106,6 +106,17 @@ async function replies(chatId) {
   }
   remember(chatId, asks);
   return out();
+}
+// Share an answer: posted to the chat as your message, the only author Tana has for it (a message is human or Tana's own
+// AI, docs/CHATS.md §2), and the message it became kept beside the answer, so Orbital draws it on the agent's side.
+async function share(chatId, messageId) {
+  const asks = asksIn(chatId), x = asks.find((y) => y.messageId === messageId);
+  if (!x || x.state !== 'done' || !x.text) throw new Error('No answer to share');
+  if (x.shared) return { messageId: x.shared };
+  const sent = await sendChat(chatId, x.text, [], { ai: false });
+  x.shared = sent.messageId;
+  remember(chatId, asks);
+  return { messageId: sent.messageId };
 }
 // The task behind a question, opened in its agent's app by id, as the agent badge opens a node's task (main.js
 // codex:open). The page names the question, never a url, so there is nothing here to point somewhere else.
@@ -121,6 +132,7 @@ const ipc = {
   'chatAgent:list': () => list(),
   'chatAgent:ask': (_e, chatId, agentId, text) => { if (!isChat(chatId)) throw new Error('Not a chat'); return ask(chatId, agentId, text); },
   'chatAgent:replies': (_e, chatId) => (isChat(chatId) ? replies(chatId) : []),
+  'chatAgent:share': (_e, chatId, messageId) => { if (!isChat(chatId) || typeof messageId !== 'string') throw new Error('Not a chat'); return share(chatId, messageId); },
   'chatAgent:open': (_e, chatId, messageId) => (isChat(chatId) && typeof messageId === 'string' ? open(chatId, messageId) : false),
 };
-module.exports = { AGENTS, list, ask, replies, open, askPrompt, codexAnswer, RULES, KEY, ipc };
+module.exports = { AGENTS, list, ask, replies, share, open, askPrompt, codexAnswer, RULES, KEY, ipc };

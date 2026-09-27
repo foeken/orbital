@@ -519,7 +519,8 @@ function mockApi() {
     chatAgents: async () => [{ id: 'codex', label: 'Codex', icon: 'robot' }],
     askAgent: async function (docId, agent, text) { const sent = await this.sendChat(docId, text, [], { ai: false }); (agentAsks[docId] ||= []).push({ messageId: sent.messageId, at: Date.now() }); return { messageId: sent.messageId }; },
     openAgentAsk: async (docId, messageId) => (agentAsks[docId] || []).some((a) => a.messageId === messageId),
-    agentReplies: async (docId) => (agentAsks[docId] || []).map((a) => ({ messageId: a.messageId, agent: 'codex', label: 'Codex', ...(Date.now() - a.at < 2500 ? { state: 'working', text: '' } : { state: 'done', text: 'Mock answer from Codex, kept on this device.' }) })),
+    agentReplies: async (docId) => (agentAsks[docId] || []).map((a) => ({ messageId: a.messageId, agent: 'codex', label: 'Codex', ...(a.shared ? { shared: a.shared } : {}), ...(Date.now() - a.at < 2500 ? { state: 'working', text: '' } : { state: 'done', text: 'Mock answer from Codex, kept on this device.' }) })),
+    shareAgentAnswer: async function (docId, messageId) { const a = (agentAsks[docId] || []).find((x) => x.messageId === messageId); a.shared ||= (await this.sendChat(docId, 'Mock answer from Codex, kept on this device.', [], { ai: false })).messageId; return { messageId: a.shared }; },
     newChat: async () => {
       const n = { id: 'tana:chat:mocknew' + (++seq), text: 'New chat', kind: 'document', hasChildren: true, editable: false, icon: 'chat', tags: [{ label: 'chat', color: 'grey' }] };
       created[n.id] = n; content[n.id] = []; all.push(n);

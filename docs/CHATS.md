@@ -324,7 +324,7 @@ it (the chip is written as plain "@Codex") goes through `chatAgent:ask` instead 
    `Name: text` per message, mentions left as `[label](tana:…)` for its Tana tools to read. Its developer instructions
    (`thread/start` `developerInstructions`, `RULES`) say the answer is shown to the asker alone and never saved to Tana,
    to answer only what was asked, and never to write to Tana.
-3. **The link stays local**: `chatAsks` (chat → `[{ messageId, agent, taskId, at, state, text }]`) is not in
+3. **The link stays local**: `chatAsks` (chat → `[{ messageId, agent, taskId, at, state, text, shared }]`) is not in
    main/settings.js `SYNCED`, so it lives in this Mac's SQLite only. Another machine sees the question and nothing else.
 4. **The answer is read, never written.** `chatAgent:replies` asks each agent for its running tasks; Codex reads the latest turn of each
    (`thread/turns/list`, `limit: 1`, `itemsView: 'full'`): its `agentMessage` with `phase: 'final_answer'`, or once the
@@ -334,7 +334,12 @@ it (the chip is written as plain "@Codex") goes through `chatAgent:ask` instead 
    in `chatAsks` and not read again.
 5. **Drawn on your side**: under the question, a grey bubble headed "Codex · only visible for you, on this device", the
    chat's dots while the task works (read every 4 s while any is running), then the answer. The arrow beside a finished
-   answer, or Cmd+K Share Codex’s answer to chat for the latest one, posts it to the chat as your message (`chat:send`, `ai: false`): the only way it reaches Tana.
+   answer, or Cmd+K Share Codex’s answer to chat for the latest one, posts it to the chat as your message
+   (`chatAgent:share`: `sendChat` with `ai: false`): the only way it reaches Tana. Tana has no author for it but you: a
+   message is `human` with a `fromUserUri`, or `ai`, which Tana draws as the chat's own agent (§2), so an `ai` message
+   would read as Tana's answer to everyone in the chat. The message it became is kept as `shared` beside the answer, and
+   Orbital draws that message on the left under "Codex · shared by you" in place of the grey bubble. Tana, and Orbital
+   on another Mac, show it as your message.
 
 The task is kept, not only its answer: clicking the "Codex · …" line over an answer, or Cmd+K Open Codex task for the
 latest question, opens it in Codex (`chatAgent:open`: the page names the question, main opens the agent's `url`, for Codex

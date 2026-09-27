@@ -5923,6 +5923,13 @@ async function main() {
       turn = { status: 'completed', items: [{ type: 'agentMessage', phase: 'commentary', text: 'Looking' }, { type: 'agentMessage', phase: 'final_answer', text: 'Made three issues' }] };
       assert.deepEqual([...await replies(null, chatDoc.id)].map((a) => [a.state, a.text]), [['done', 'Made three issues']]);
       assert.deepEqual([(await replies(null, chatDoc.id))[0].text, spawned], ['Made three issues', 2], 'a finished answer is not read again');
+      // shared: posted as your message for the chat only, and the answer keeps the message it became; once
+      const share = backend.handlers.get('chatAgent:share'), shared = await share(null, chatDoc.id, messageId);
+      const posted = chatDoc.data.get('messages').toJSON().at(-1);
+      assert.deepEqual([posted.id, posted.content.text, posted.fromUserType, posted.skipAutoResponse, fetched], [shared.messageId, 'Made three issues', 'human', true, 0], 'shared as your message, and Tana is not asked');
+      assert.equal((await replies(null, chatDoc.id))[0].shared, shared.messageId, 'the answer knows the message it became');
+      assert.deepEqual([(await share(null, chatDoc.id, messageId)).messageId, chatDoc.data.get('messages').toJSON().at(-1).id], [shared.messageId, shared.messageId], 'sharing again posts nothing');
+      await assert.rejects(share(null, chatDoc.id, 'nosuchid'), /No answer to share/);
       assert.deepEqual([...await replies(null, 'not a chat')], []);
       // the task behind a question opens in Codex by its id; anything unknown opens nothing
       assert.equal(await backend.handlers.get('chatAgent:open')(null, chatDoc.id, messageId), true);
