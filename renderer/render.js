@@ -341,7 +341,7 @@ function rowSig(n) {
     n.updatedAt, n.createdAt, n.createdBy, n.fields, // the subtext's times, author and field values: they arrive after the row and a reused row would still show none
     sensitiveHidden(n.id), isPinned(n.id), meta || (taskMetaLoading.has(n.id) ? 'loading' : null), members ? members.length : 0, open.get(n.id), pending.has(n.id),
     displayKeys().join(','), codexIds.has(n.id), agentStateOf(n.id), agentTaskHosts.get(n.id), pinnedOn(n), n.table,
-    n.proposal ? n.proposal.note : null, n.subtext, n.join, tableView(), // which facts the row shows, and as a list or a table: without this a reused row would keep the old ones, a proposal's buttons included
+    n.proposal ? n.proposal.note : null, n.subtext, n.join, n.timeline && n.timeline.recording, tableView(), // which facts the row shows, and as a list or a table: without this a reused row would keep the old ones, a proposal's buttons included
     tableView() ? typeDefs() : null, // a table cell's picker is made from the page's field definitions (views.js cellPicker)
     demoMode, // demo mode masks the words and makes every row read-only: a row drawn before the switch shows real titles
     outline.dataset.key]); // and the page it was built for: a row's editability follows its parent, so a view's row is not a type page's
@@ -722,7 +722,7 @@ function nodeEl(node, docId, parent) {
   const heading = headingOf(node); // a heading arrives as node.heading or as the heading1-3 block type
   // an image draws a marker only where a list row would: on its own it is the picture and nothing else
   const blockClass = node.kind === 'block' ? ' t-' + (isDivider(node) ? 'divider' : isImage(node) ? (node.block || 'image') : blockTypeOf(node)) : '';
-  el.className = 'node ' + node.kind + (reference ? ' reference' : '') + (fullref ? ' fullref' : '') + (gone ? ' gone' : '') + blockClass + (heading ? ' h' + heading : '') + (display.done ? ' done' : '') + (has ? ' has' : '') + (has && !opened ? ' collapsed' : '') + (node.draft || node.upload ? ' draft' : '') + ((node.notification || node.timeline) && node.unread ? ' unread' : '') + (node.timeline ? ' tl tl-' + node.timeline.tone : '') + (node.timeline?.today ? ' tl-today' : '') + (node.timeline?.upcoming ? ' tl-upcoming' : '');
+  el.className = 'node ' + node.kind + (reference ? ' reference' : '') + (fullref ? ' fullref' : '') + (gone ? ' gone' : '') + blockClass + (heading ? ' h' + heading : '') + (display.done ? ' done' : '') + (has ? ' has' : '') + (has && !opened ? ' collapsed' : '') + (node.draft || node.upload ? ' draft' : '') + ((node.notification || node.timeline) && node.unread ? ' unread' : '') + (node.timeline ? ' tl tl-' + node.timeline.tone : '') + (node.timeline?.today ? ' tl-today' : '') + (node.timeline?.upcoming ? ' tl-upcoming' : '') + (node.timeline?.recording ? ' tl-recording' : '');
   if (node.start != null) el.style.counterSet = 'ol ' + (node.start - 1); // a numbered list counting from its own start (sdk/content.js); the row's increment makes it start
   el.dataset.key = item.key;
   el.dataset.body = [display.text, display.done ? 1 : 0, display.stateType || ''].join('\n'); // what an edit elsewhere would change (motionAfter)

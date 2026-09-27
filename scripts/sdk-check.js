@@ -2979,7 +2979,11 @@ async function main() {
     // still to come today (a second from now, so the end of the day cannot overtake it), shown only once asked for below
     const soon = { id: 'tana:event:' + ulid(), title: 'Standup', calendarEvent: { startTime: new Date(Date.now() + 1000).toISOString(), endTime: new Date(Date.now() + 1000 + 15 * 6e4).toISOString(), roster: [person('Ann Bakker')], location: 'https://meet.example/abc; Room 5', actionUrl: 'https://teams.example/join/2' } };
     let meetingsAsked = null, soonToo = false;
-    let liveDoc = null; const sent = [], historyAsks = [];
+    let liveDoc = null, callsLive = null; const sent = [], historyAsks = [], syncHeard = [];
+    // the call Board prep owns (#recording): a recording under way, as Tana's call schema keeps it
+    const CALL = 'tana:call:' + ulid(), callDoc = new Document(CALL);
+    const recordingStatus = (status) => callDoc.transact((l) => { const m = l.getMap('recordings').setContainer('r1', new LoroMap()); m.set('recordingId', 'r1'); m.set('status', status); });
+    recordingStatus('recording');
     const summaries = new Map([[watched.id, [
       { title: 'Task status changed to Completed', authors: [COLLEAGUE], endTime: ago(0.05 * H) }, // the same move the node's state already tells
       { title: 'Added the Q4 numbers from Rob', authors: [COLLEAGUE], endTime: ago(0.2 * H) },
@@ -3005,8 +3009,12 @@ async function main() {
           listEdges: async ({ fromNodeIds }) => ({ edges: [[viaMcp.id, MCP_CHAT], [viaMcpToo.id, MCP_CHAT], [viaAi.id, AI_CHAT]].filter(([f]) => fromNodeIds.includes(f)).map(([fromNodeId, toNodeId]) => ({ fromNodeId, toNodeId, type: 'EDGE_TYPE_CREATED_IN' })) }),
         },
         history: { listChanges: async ({ uri }) => { historyAsks.push(uri); return { summaries: summaries.get(uri) || [] }; } },
-        sync: { getDocument: (uri) => liveDocs.get(uri) || null, unsubscribe: async () => {},
-          subscribe: async (uri, init) => { if (uri.startsWith('tana:liveQuery:')) { liveDoc = new Document(uri); liveDoc.transact(init); return liveDoc; } return uri === ME ? profile : uri === pinMapUri ? pinMap : null; } },
+        sync: { getDocument: (uri) => liveDocs.get(uri) || null, unsubscribe: async () => {}, on: (event, fn) => syncHeard.push(fn),
+          subscribe: async (uri, init) => {
+            if (uri.startsWith('tana:liveQuery:')) { const d = new Document(uri); d.transact(init); if (d.data.toJSON().query.types.includes('call')) callsLive = d; else liveDoc = d; return d; }
+            if (uri === CALL) { liveDocs.set(CALL, callDoc); return callDoc; }
+            return uri === ME ? profile : uri === pinMapUri ? pinMap : null;
+          } },
       } });
     // through JSON: rows are built in the main-process vm, whose arrays fail a deep compare on their prototype alone
     const read = async () => JSON.parse(JSON.stringify((await backend.timelinePage.rows()).map((r) => [r.text, r.timeline.change || r.timeline.note, r.icon || null, r.timeline.tone, r.unread, r.children.map((c) => c.text)])));
@@ -3047,6 +3055,18 @@ async function main() {
     assert.equal(pageSends(), 1, 'a renamed meeting re-reads the page');
     answerLive([], 4);
     assert.equal(pageSends(), 2, 'and so does a meeting that is gone');
+    // Recording: the read also asked for the calls the meetings under way own; a call recording now marks its meeting
+    const callQuery = callsLive.data.toJSON().query;
+    assert.deepEqual(JSON.parse(JSON.stringify([callQuery.types, callQuery.ownerUris])), [['call'], [going.id]], 'the calls asked for are the ones the meetings under way own');
+    const recordingOf = async () => (await backend.timelinePage.rows()).find((r) => r.timeline.uri === going.id).timeline.recording === true;
+    assert.equal(await recordingOf(), false, 'no call yet, nothing recording');
+    callsLive.transact((loro) => { const data = loro.getMap('data'), nodes = data.get('result').setContainer('nodes', new LoroList()); nodes.push({ uri: CALL, type: 'call', ownerUri: going.id, updatedAt: 1 }); data.set('state', 'ready'); data.set('resultForVersion', 1); });
+    await new Promise((r) => setImmediate(r));
+    assert.equal(pageSends(), 3, 'a call that is recording re-reads the page');
+    assert.equal(await recordingOf(), true, 'and its meeting is drawn recording');
+    recordingStatus('processing'); for (const fn of syncHeard) fn(CALL);
+    assert.equal(pageSends(), 4, 'the recording stopping re-reads it again');
+    assert.equal(await recordingOf(), false, 'and the mark goes');
     assert.deepEqual(JSON.parse(JSON.stringify((await backend.timelinePage.rows())[1].segments)), [{ text: 'Rob Jansen ', person: true }, { text: 'completed', marks: { bold: true } }, { text: ' ' }, { text: 'Contract renewal', content: true, marks: { strike: true } }],
       'the person plain, the verb bold, and a finished node struck through; demo mode masks the name and title and keeps the verb');
     const rows = await backend.timelinePage.rows();

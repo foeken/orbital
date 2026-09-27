@@ -26,6 +26,7 @@ const { graphRow, hm, isAllDay, members, rememberNodeHue, toNode } = require('./
 const { notifySilencedIds, notifyWatchedIds } = require('./documents');
 const { inboxFrom } = require('./views');
 const { openLiveQuery } = require('../sdk/livequery');
+const { callState } = require('../sdk/calls');
 
 const PAGE = 'orbital:timeline';
 // Inbox to In Progress is a task being taken on, so it reads as accepted, the way Tana's own box accepts it first
@@ -111,6 +112,44 @@ function watchMeetings(me, since) {
   };
   const opened = live = openLiveQuery(S.client.sync, { types: ['event'], hasParticipantUris: [me], eventStartTimeMin: since, eventStartTimeMax: end.getTime(), orderBy: ['-updatedAt'], limit: 200 },
     { label: 'Orbital timeline meetings', onRows }).then((h) => { h.on('error', () => { if (live === opened) live = null; }); return h; }, () => { if (live === opened) live = null; return null; }); // refused, now or later: the next read asks again
+}
+// Recording: a meeting under way whose call is recording now gets a pulsing marker (renderer/render.js, styles.css
+// .tl-recording). Tana's own rule (activeRecording in its call schema): an entry in the call's recordings root with
+// status 'recording'. The call is the tana:call: document the meeting owns, and it only exists once somebody joins, so a
+// live query over the calls these meetings own says when one appears; each is kept live, and a recording starting or
+// stopping reads the page again. Set by every read, like the meetings' query; the same meetings keep what is open.
+const recording = new Set(); // event uris whose call records now
+const heldCalls = new Map(); // call uri -> { event, ours }; ours: subscribed here, so let go here
+let callQ = null, callKey = null, callClient = null;
+function checkCall(uri) {
+  const c = heldCalls.get(uri), doc = c && S.client.sync.getDocument(uri);
+  if (!doc) return;
+  const on = callState(doc).recordings.some((r) => r.status === 'recording');
+  if (on === recording.has(c.event)) return;
+  if (on) recording.add(c.event); else recording.delete(c.event);
+  send('outline:changed', PAGE);
+}
+function watchCalls(events) {
+  const client = S.client, key = events.join(' ');
+  if (callClient === client && callKey === key) return;
+  if (callClient !== client) { // a new connection has none of the old one's documents
+    heldCalls.clear(); recording.clear(); callQ = null; callClient = client;
+    client.sync.on('change', (id) => { if (S.client === client && heldCalls.has(id)) checkCall(id); });
+  }
+  callKey = key;
+  if (callQ) callQ.then((h) => h && h.close().catch(() => {}));
+  callQ = null;
+  for (const [uri, c] of heldCalls) if (!events.includes(c.event)) { heldCalls.delete(uri); recording.delete(c.event); if (c.ours) client.sync.unsubscribe(uri).catch(() => {}); }
+  if (!events.length) return;
+  const onRows = ({ added, changed }) => {
+    for (const row of [...added, ...changed]) {
+      if (heldCalls.has(row.uri) || !events.includes(row.ownerUri)) continue;
+      heldCalls.set(row.uri, { event: row.ownerUri, ours: !client.sync.getDocument(row.uri) }); // somebody else's subscription is not ours to drop
+      client.sync.subscribe(row.uri).then(() => checkCall(row.uri), () => heldCalls.delete(row.uri));
+    }
+  };
+  const opened = callQ = openLiveQuery(client.sync, { types: ['call'], ownerUris: events, limit: 50 }, { label: 'Orbital timeline calls', onRows })
+    .then((h) => { h.on('error', () => { if (callQ === opened) callKey = null; }); return h; }, () => { if (callQ === opened) callKey = null; return null; }); // refused: the next read asks again
 }
 
 // The page is five reads that do not wait on each other — what happened to the nodes you watch, what agents moved,
@@ -219,7 +258,7 @@ async function rows(progress) {
       const ev = n.calendarEvent || {}, going = Date.parse(ev.endTime || '') > Date.now(), bare = !going && !String(ev.tagline || ev.summary || '').trim();
       // still under way: joined from Tana (row.join, the meeting's id: renderer/timeline.js opens it there)
       return { kind: 'meeting', uri: n.id, title: n.title, at: Date.parse(ev.startTime), icon: 'meeting', tone: bare ? 'faint' : 'meeting', note: meetingNote(ev, me, myEmail),
-        join: going ? n.id : undefined, end: going ? Date.parse(ev.endTime) : undefined };
+        join: going ? n.id : undefined, end: going ? Date.parse(ev.endTime) : undefined, recording: going && recording.has(n.id) };
     });
     // Upcoming meetings: today's still to start, earliest first, under Today's Tasks as a block of their own. Each opens
     // the meeting; its grey line says when and who (renderer/views.js subtextOf, node.subtext). No meetings, no block.
@@ -254,6 +293,7 @@ async function rows(progress) {
   }, (e) => { failed = true; throw e; })));
   if (fresh) { markFrom = seen; db.setSetting('timelineSeen', now); }
   watchMeetings(me, since);
+  watchCalls(got.meetings.events.filter((e) => e.end).map((e) => e.uri));
   // The page is read again at the next moment a meeting moves: one starting (out of Upcoming meetings, into the timeline)
   // or one under way ending (its Join button goes, and without a summary it turns quiet). The read it causes sets the next.
   clearTimeout(startTimer);
@@ -303,7 +343,7 @@ function pageOf(got, seen, now, date) {
       kind: 'block', block: 'bullet', icon: e.icon, editable: false, hasChildren: children.length > 0, children,
       createdAt: iso(e.at), unread: e.kind !== 'meeting' && (e.tasks || [e]).some((t) => t.at > seen), // a meeting is on your calendar: not news
       // an "added to your Inbox" line opens nothing: the rows under it open themselves, one task or six
-      join: e.join, timeline: { uri: e.kind === 'inbox' ? null : e.uri, note, change, detail, tone: e.tone } };
+      join: e.join, timeline: { uri: e.kind === 'inbox' ? null : e.uri, note, change, detail, tone: e.tone, recording: e.recording || undefined } };
   })];
 }
 
