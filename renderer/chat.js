@@ -454,6 +454,16 @@ composerText.addEventListener('keydown', (e) => {
   if (!mod || ['z', 'a', 'c', 'x', 'v', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Backspace'].includes(e.key.length === 1 ? e.key.toLowerCase() : e.key)) e.stopPropagation();
 });
 composerText.addEventListener('input', composerChanged);
+// A pasted Tana node link becomes a chip for that node where the caret was, as it becomes a reference in a row
+// (renderer/events.js paste, the same tanaNodeUri): the title is read first, so a link to something unreadable puts
+// nothing in and says why. Anything else pastes as plain text.
+composerText.addEventListener('paste', (e) => {
+  const uri = e.clipboardData && tana.node && tanaNodeUri(e.clipboardData.getData('text/plain')), sel = getSelection();
+  if (!uri || !sel.rangeCount || !composerText.contains(sel.anchorNode)) return;
+  e.preventDefault();
+  const at = sel.getRangeAt(0).cloneRange();
+  tana.node(uri).then((n) => { composerAt = at; chatMention({ label: n.title || uri, uri }); }, showError);
+});
 composerText.addEventListener('focus', () => { chatSel = null; });
 composerSkill.onclick = () => { chatSkill = null; showSkill(); composerText.focus(); };
 composerMode.onmousedown = (e) => e.preventDefault(); // the caret stays in the composer
