@@ -97,7 +97,8 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   pages' `sensitiveVisible` storage and follows a switch from any page. The panes sit below it, so every tab bar has the
   full width. Home has no button: it is a window, so it is Cmd+K Go to Home (⇧⌘H), which the Help tour teaches (issue
   #444). There are no breadcrumbs: the title says where you are and Back walks the history.
-- **Header row**: over the page title, the empty line the buttons at the top right sit on. It is part of the title
+- **Header row**: over the page title, the empty line the buttons at the top right sit on, while the page is alone in
+  its window. It is part of the title
   bar's drag area; the buttons opt out of it, and so does the palette's backdrop while it is open (otherwise Electron
   takes a click there as a window drag and the backdrop never hears the click that closes it).
 - **Buttons at the top right** (`.navbtns`, one flex row anchored to the right edge of `.titlebar`, so they stay put as
@@ -108,6 +109,11 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   them when the move does nothing and puts the current combo in the tooltip. Every header button with a Cmd+K row
   names its key the same way through `keyTitle` (renderer/state.js), read again when the pointer arrives, so a key
   re-recorded with ⇧⌘K shows through. The header row shows only while the pointer is over that page.
+  Among other pages (`html.tabbed`) the row and its line go, and the buttons are drawn in the page's tab bar beside
+  its ⋯, in the Trellis accessory that shows while the page is the selected tab: the page sends the row's markup on
+  every change (renderer/app.js `tellNav`), the shell draws it (shell.js `drawNav`) and sends a press back as a click
+  on the page's own button, which stays laid out but unseen so its animations still end. There they show while the
+  pointer is over the page or the tab bar, and a tooltip names the key as of the page's last render.
 - **Title.** The view's name, or the zoomed node's title. Zoomed into an editable document the title is editable in
   place (the usual debounce and flush; Enter blurs and focuses the first child; Escape restores). Titles are plain
   strings in Tana, so "@" in a title inserts the linked item's title as text. User profiles, meetings and unsupported

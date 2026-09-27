@@ -246,4 +246,27 @@ addEventListener('message', (e) => {
   }
   else if (what === 'run') run(String(e.data.command), sourceOf(e.source));
   else if (what === 'reload') reloadAll(); // Cmd+K Reload: the window, every page in it
+  else if (what === 'navbtns') drawNav(sourceOf(e.source), String(e.data.html || ''), e.data.on === true);
 });
+
+// ---- a page's header buttons in its tab bar ----
+// Each page sends its header buttons' markup (renderer/app.js tellNav) and they are drawn in its view's accessory, the
+// slot Trellis shows beside the ⋯ while that page is the selected tab. Ids become data-for, so two pages' copies share
+// none, and a press is sent back as a click on the page's own button; mousedown keeps the caret where it is, as the
+// page's buttons do. Shown while the pointer is over the page (on) or its tab bar (shell.css).
+const navDrawn = new Map();
+function drawNav(viewId, html, on) {
+  const slot = viewId && ws.element.querySelector('[data-trellis-part="accessory"][data-view="' + CSS.escape(viewId) + '"]');
+  if (!slot) return;
+  slot.toggleAttribute('data-pointer', on);
+  if (navDrawn.get(viewId) === html && slot.childElementCount) return; // a redraw would restart Refresh's turn
+  navDrawn.set(viewId, html);
+  slot.innerHTML = html;
+  for (const el of slot.querySelectorAll('[id]')) { el.dataset.for = el.id; el.removeAttribute('id'); }
+}
+ws.element.addEventListener('mousedown', (e) => { if (e.target.closest('[data-trellis-part="accessory"] button')) e.preventDefault(); });
+ws.element.addEventListener('click', (e) => {
+  const button = e.target.closest('[data-trellis-part="accessory"] button[data-for]');
+  if (button) windowOf(frameOf(button.closest('[data-view]').dataset.view))?.postMessage({ orbital: 'navclick', id: button.dataset.for }, '*');
+});
+ws.on('close', (view) => navDrawn.delete(view.id));
