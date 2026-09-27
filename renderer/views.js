@@ -281,6 +281,9 @@ const fieldKey = (def) => fieldType() + '?attribute=' + def.key;
 const PILL_FIELDS = ['options', 'link', 'member', 'date'];
 const displayList = () => [...typeDefs().map((d) => [fieldKey(d), d.title || 'Untitled field']), ...DISPLAY.filter(([id]) => !(noTasks() && ['status', 'assigned'].includes(id)))];
 const displayKeys = () => {
+  // The Timeline has no Display pill, and pillKey() there is the last list view's: it wore that view's choice (the
+  // Library's Updated and no boxes). It shows each task's box and assignee; its own lines say when.
+  if (zoom && zoom.docId === TIMELINE_PAGE) return ['status', 'assigned'];
   const k = pillKey(), chosen = displayPref[k] ?? arranged(k, 'display');
   // a field the type no longer defines (or another type's, once the Type pill moved) is dropped: the menu cannot offer
   // it, so nothing could turn it off. Until the definitions are in, the page's own type's keys are kept as they are.

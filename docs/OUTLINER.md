@@ -864,6 +864,8 @@ nothing about them as documents. Each is a place the app remembers, so ⌘R on o
   (about a second): the change summaries of every node you watch (the watch rule plus your choices, less what you
   silenced; sdk/history.js, twelve at a time), and the tasks assigned to you in the last two weeks with the chat each
   came from (`EDGE_TYPE_CREATED_IN`). It reads in parts and sends them on `timeline:part`.
+  Its task rows show their box and assignee and nothing else, whatever any view's Display chose (`displayKeys`): the
+  page has no Display pill, and borrowing the last list view's made them change with it.
   - **Now**: first **Today's Tasks** (tasks-2 icon): incomplete tasks pinned to today or earlier and completed ones
     pinned to today, future pins excluded; with none, "All done - Add more", where Add more opens a search of your
     open tasks and pins the choice to today. Then, when any are left, **Upcoming meetings**: today's meetings still to
