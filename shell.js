@@ -161,7 +161,7 @@ function rename(viewId) {
   win?.postMessage({ orbital: 'rename' }, '*');
 }
 // A page is told to send what it is typing and leave its presence room before its iframe goes (what beforeunload did
-// when each page was a view main closed); it answers, or half a second passes.
+// when each page was a view main closed); it answers once its writes have gone to main, or three seconds pass.
 const flush = (frame) => new Promise((done) => {
   const win = windowOf(frame);
   if (!win) return done();
@@ -171,6 +171,14 @@ const flush = (frame) => new Promise((done) => {
   addEventListener('message', heard);
   win.postMessage({ orbital: 'flush' }, '*');
 });
+// The window reloads (a saved view opened, Cmd+K Reload) once every page has sent what it was typing, as a close waits
+let reloadingAll = false;
+async function reloadAll() {
+  if (reloadingAll) return;
+  reloadingAll = true;
+  await Promise.all(frames().map(flush));
+  location.reload();
+}
 // A new page beside the one that asked: to its right, as a tab in its panel, or floating. It takes the keys once its
 // document exists: focused while still loading, its window never hears it.
 function open({ id, where, from, focus }) {
@@ -195,6 +203,7 @@ bridge.onCommand((cmd, arg) => {
   else if (cmd === 'close') { const id = viewOf(arg); if (id) ws.close(id); }
   else if (cmd === 'focus') focusPage(viewOf(arg));
   else if (cmd === 'run') run(arg);
+  else if (cmd === 'reload') reloadAll(); // a saved view opened (main.js window:setLayout)
   else if (cmd === 'auth') {
     if (arg?.signedOut && !aside) { aside = ws.getDocument(); ws.setDocument(single(), { animate: false }); }
     else if (!arg?.signedOut && aside) { const doc = aside; aside = null; ws.setDocument(doc, { animate: false }); }
@@ -233,5 +242,5 @@ addEventListener('message', (e) => {
     if (e.data.renamable === true) renamable.add(id); else renamable.delete(id);
   }
   else if (what === 'run') run(String(e.data.command), sourceOf(e.source));
-  else if (what === 'reload') location.reload(); // Cmd+K Reload: the window, every page in it
+  else if (what === 'reload') reloadAll(); // Cmd+K Reload: the window, every page in it
 });

@@ -1109,12 +1109,15 @@ async function main() {
     told.splice(0);
     // Cmd+K Saved views: the layout this window has, and one to put it back to, saved and reloaded into. 'workView' is
     // the Work View's own, '' beside '2'; a layout without a page is refused and changes nothing.
-    let reloads = 0; shellWc.reload = () => { reloads++; }; shown.saveBounds = () => {};
+    const reloads = () => toShell.splice(0).filter(([cmd]) => cmd === 'reload').length; shown.saveBounds = () => {};
     assert.deepEqual(ask('window:layout', leftPage), layoutDoc);
     assert.equal(ask('window:setLayout', leftPage, { schema: 1, views: {} }), false, 'a layout with no page is refused');
-    assert.deepEqual([reloads, shown.doc], [0, layoutDoc]);
+    assert.deepEqual([reloads(), shown.doc], [0, layoutDoc]);
     assert.equal(ask('window:setLayout', leftPage, 'workView'), true);
-    assert.deepEqual([reloads, own(shown.pages), Object.keys(shown.doc.views), own(shown.doc.root.weights)], [1, ['', '2'], ['page', 'page2'], [0.6, 0.4]], 'the Work View: 60/40, saved and reloaded into');
+    assert.deepEqual([reloads(), own(shown.pages), Object.keys(shown.doc.views), own(shown.doc.root.weights)], [1, ['', '2'], ['page', 'page2'], [0.6, 0.4]], 'the Work View: 60/40, saved and reloaded into (the shell flushes every page first)');
+    ask('shell:layout', null, { doc: layoutDoc, pages: [''] });
+    assert.deepEqual(own(shown.pages), ['', '2'], 'what the shell reports before its reload is the old layout, and is not saved');
+    ask('shell:state', null);
     // A saved view's page id open in another window: the view's page takes a free id, with its keys and its start
     const elsewhere = { isDestroyed: () => false, panes: [], pages: ['2'] };
     backend.S.windows.add(elsewhere);
@@ -1122,9 +1125,10 @@ async function main() {
     const moved = own(shown.doc);
     assert.deepEqual([own(shown.pages), Object.keys(moved.views), moved.views.page3.params.side, moved.root.children[1].views, moved.root.children[1].selected], [['', '3'], ['page', 'page3'], '3', ['page3'], 'page3'],
       'a page id another window has open is not reused');
-    assert.deepEqual([ask('window:getSide', leftPage), ask('window:getSide', frame('moved', '3'))], [{ side: '', start: { place: 'timeline' } }, { side: '3', start: { place: 'mine' } }], 'each page starts on its own keys');
+    assert.deepEqual([ask('window:getSide', leftPage), ask('window:getSide', frame('moved', '3'))], [{ side: '', start: { place: 'timeline' } }, { side: '3', start: { place: 'mine', as: '2' } }], 'each page starts on its own keys, a moved one knowing its id in the view');
+    ask('shell:state', null); toShell.splice(0);
     backend.S.windows.delete(elsewhere); shown.panes = shown.panes.filter((p) => p.frame.frameToken !== 'moved');
-    delete shellWc.reload; delete shown.saveBounds;
+    delete shown.saveBounds;
     ask('shell:layout', null, { doc: layoutDoc, pages: [''] });
     shown.close = () => { shown.closed = true; };
     backend.closeFront(shown, pageFor(leftPage));

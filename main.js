@@ -101,6 +101,7 @@ function adoptLayout(win, doc, keys) {
   const ids = docPages(doc), used = new Set([...others, ...ids]), map = new Map();
   for (const id of ids) if (id && others.has(id)) { let n = 2; while (used.has(String(n))) n++; used.add(String(n)); map.set(id, String(n)); }
   for (const id of ids) setStart(map.get(id) ?? id, keys, id ? ':' + id : '');
+  for (const [id, to] of map) starts.set(to, { ...starts.get(to), as: id }); // the id it has in the view, for its Home check (renderer/nodes.js)
   if (!map.size) return doc;
   const swap = (s) => (typeof s === 'string' && s.startsWith('page') && map.has(s.slice(4)) ? 'page' + map.get(s.slice(4)) : s);
   const walk = (v) => (Array.isArray(v) ? v.map(walk) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [swap(k), walk(x)])) : swap(v));
@@ -315,7 +316,7 @@ ipcMain.handle('window:setLayout', (e, doc, keys) => {
   if (!win || signedOut() || (doc !== null && !(doc && typeof doc === 'object' && Object.values(doc.views || {}).some((v) => v && v.type === 'page')))) return false;
   doc = adoptLayout(win, doc, keys);
   win.primary = true; win.doc = doc; win.pages = docPages(doc); win.saveBounds();
-  win.shell.webContents.reload();
+  win.reloading = true; tellShell(win, 'reload'); // the shell has every page send what it was typing first; what it reports meanwhile is the old layout
   if (win !== asked) win.focus();
   return true;
 });
@@ -324,7 +325,7 @@ ipcMain.handle('window:setLayout', (e, doc, keys) => {
 ipcMain.on('shell:state', (e) => {
   const win = shellWindow(e.sender);
   if (!win) { e.returnValue = { doc: null, theme: systemTheme(), signedOut: signedOut() }; return; }
-  win.signedOut = signedOut();
+  win.signedOut = signedOut(); win.reloading = false;
   win.pages = win.signedOut ? [''] : docPages(win.doc);
   e.returnValue = { doc: win.doc || null, theme: win.theme || systemTheme(), signedOut: win.signedOut };
 });
@@ -332,7 +333,7 @@ ipcMain.on('shell:state', (e) => {
 // not in it is closing. Saved with the window, except while signed out, when the shell shows the login alone.
 ipcMain.on('shell:layout', (e, layout) => {
   const win = shellWindow(e.sender);
-  if (!win || !layout || !Array.isArray(layout.pages)) return;
+  if (!win || win.reloading || !layout || !Array.isArray(layout.pages)) return;
   win.pages = layout.pages.filter((id) => typeof id === 'string');
   for (const p of [...win.panes]) if (!win.pages.includes(p.side)) dropPage(p);
   if (signedOut() || !layout.doc || typeof layout.doc !== 'object') return;

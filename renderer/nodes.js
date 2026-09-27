@@ -275,8 +275,9 @@ const atWorkView = () => !!zoom && !zoom.nodeId && (SIDE ? String(zoom.docId).st
 // In a saved view a page is Home on the place that view keeps for it ('place', 'place:2', …; {} is its view)
 function atSavedView(v) {
   let p = null;
-  try { p = JSON.parse(v.keys['place' + SIDE] || 'null'); } catch { /* not a place */ }
-  return !!p && (p.docId ? !!zoom && zoom.docId === p.docId && (zoom.nodeId || null) === (p.nodeId || null) : !p.myTasks && !zoom && view === v.keys['view' + SIDE]);
+  const as = typeof window !== 'undefined' && window.api && window.api.savedAs ? ':' + window.api.savedAs : SIDE; // a page given another id than the view's (main.js adoptLayout)
+  try { p = JSON.parse(v.keys['place' + as] || 'null'); } catch { /* not a place */ }
+  return !!p && (p.docId ? !!zoom && zoom.docId === p.docId && (zoom.nodeId || null) === (p.nodeId || null) : !p.myTasks && !zoom && view === v.keys['view' + as]);
 }
 // the Work View as installed ('workView' its layout) or as updated from Save view, which is judged by its own keys
 const workViewNow = () => savedViews().find((v) => v.id === WORK_VIEW.id);

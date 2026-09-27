@@ -22,6 +22,7 @@ const pane = ipcRenderer.sendSync('window:getSide'); // { side, start? }: this p
 // what the page that opened this one, or the saved view it is part of, has it start on: stored before the page reads it
 try {
   for (const [key, value] of Object.entries(pane.start || {})) {
+    if (key !== 'view' && key !== 'place') continue;
     const name = key + (pane.side ? ':' + pane.side : '');
     if (value === null) localStorage.removeItem(name); else localStorage.setItem(name, value);
   }
@@ -29,6 +30,7 @@ try {
 
 contextBridge.exposeInMainWorld('api', {
   side: pane.side, // this page's id, fixed for its life: '' the first page, then '2', '3', ... (renderer/state.js SIDE)
+  savedAs: pane.start && pane.start.as, // the id it has in the saved view it opened in, when another window had that one (renderer/nodes.js)
   zoom: (factor) => { webFrame.setZoomFactor(factor); return webFrame.getZoomFactor(); },
   systemTheme: () => ipcRenderer.invoke('theme:system'), // 'dark' | 'light' right now
   onSystemTheme: (fn) => ipcRenderer.on('theme:system', (_e, theme) => fn(theme)), // macOS appearance changed
