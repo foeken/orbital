@@ -310,3 +310,31 @@ subset does not carry and would drop.
 
 **Status lines.** Tana's chat panel shows every message but `hiddenFromChat` ones and interview relays (its `br`),
 status updates included; the app draws one other than "accepted N changes" as a small centred line (`row.chat.status`).
+
+
+## 12. @Codex: a question in the chat, the answer on this Mac
+
+main/codexchat.js, renderer/chat.js (issue #468). "@" in the composer offers **Codex** after Tana; a message that mentions
+it (the chip is written as plain "@Codex") goes through `codex:ask` instead of `chat:send`:
+
+1. **The question is a message to the chat** (`sendChat` with `ai: false`, so `skipAutoResponse` and nobody is asked;
+   Tana still answers when the words mention it). Everyone in the chat sees what was asked.
+2. **A Codex task on this Mac** is started with main/agent.js `createTask` (the Assign to Agent path, keyed by the chat, so
+   its workspace is `agent-workspaces/tana-chat-…`). Its prompt is the question and the whole conversation, oldest first,
+   `Name: text` per message, mentions left as `[label](tana:…)` for its Tana tools to read. Its developer instructions
+   (`thread/start` `developerInstructions`, `RULES`) say the answer is shown to the asker alone and never saved to Tana,
+   to answer only what was asked, and never to write to Tana.
+3. **The link stays local**: `codexAsks` (chat → `[{ messageId, threadId, at, state, text }]`) is not in
+   main/settings.js `SYNCED`, so it lives in this Mac's SQLite only. Another machine sees the question and nothing else.
+4. **The answer is read, never written.** `codex:replies` reads the latest turn of each running task
+   (`thread/turns/list`, `limit: 1`, `itemsView: 'full'`): its `agentMessage` with `phase: 'final_answer'`, or once the
+   turn has completed the last one. Read from a second app-server, a turn still running on the one that started it shows
+   as `interrupted` with no answer (verified live 2026-09-27: `interrupted` at 3 s, `completed` with the answer at 6 s),
+   so only an answer, a completed or failed turn, or `createTask`'s 15-minute cap ends the wait. A finished answer is kept
+   in `codexAsks` and not read again.
+5. **Drawn on your side**: under the question, a grey bubble headed "Codex · only visible to you, not saved to Tana", the
+   chat's dots while the task works (read every 4 s while any is running), then the answer. The arrow beside a finished
+   answer, or Cmd+K Share Codex’s answer to chat for the latest one, posts it to the chat as your message (`chat:send`, `ai: false`): the only way it reaches Tana.
+
+A task that cannot start leaves the question sent and says so beside it (`codexError`), as a failed Tana reply does.
+

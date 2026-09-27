@@ -5883,6 +5883,47 @@ async function main() {
     console.log("ok  chat:send asks the chat's own agent and keeps a sent message sent when the reply cannot be asked for");
   }
 
+  // @Codex in a chat (main/codexchat.js, #468): the question is a message to the chat that asks nobody, the Codex task
+  // gets it with the whole chat and the rules, the link stays on this Mac, and the answer is read back and kept.
+  {
+    const backend = mainHelpers();
+    const chatDoc = new Document('tana:chat:' + ulid());
+    chatDoc.transact((l) => initDocument(l, 'Team chat', ME, { kind: 'chat' }));
+    const sync = { subscribe: async (id) => { if (id !== chatDoc.id) throw new Error('document not found: ' + id); return chatDoc; } };
+    backend.testRuntime({ me: { userUri: ME }, client: { graph: { listNodes: async (q) => ({ nodes: (q.nodeTypes || []).includes('user-profile') ? [{ id: ME, title: 'Robin Vega' }] : [] }) }, sync }, userData: '/tmp/orbital-codexchat-check', session: { getAccessToken: async () => 'x.' + Buffer.from(JSON.stringify({ org_id: 'org', role: 'member' })).toString('base64url') + '.y' } });
+    const realFetch = globalThis.fetch, created = [];
+    let fetched = 0;
+    globalThis.fetch = async () => { fetched++; return { status: 200, ok: true, json: async () => ({ success: true }) }; };
+    const realCreate = backend.agent.createTask, realRpc = backend.agent.appServerRpc;
+    backend.agent.createTask = async (opts) => { created.push(opts); return '01a0b3a3-c000-70b0-896e-08e86986ca10'; };
+    try {
+      const ask = backend.handlers.get('codex:ask'), replies = backend.handlers.get('codex:replies');
+      await backend.handlers.get('chat:send')(null, chatDoc.id, 'The actions are in', [], { ai: false });
+      await assert.rejects(ask(null, chatDoc.id, 'no mention here'), /Mention @Codex/);
+      const { messageId } = await ask(null, chatDoc.id, '@Codex turn these into issues');
+      const last = chatDoc.data.get('messages').toJSON().at(-1);
+      assert.deepEqual([last.id, last.content.text, last.skipAutoResponse, fetched], [messageId, '@Codex turn these into issues', true, 0], 'the question is a message to the chat, and Tana is not asked');
+      assert.deepEqual([created.length, created[0].nodeUri, created[0].host], [1, chatDoc.id, 'local'], 'one Codex task on this Mac');
+      assert.match(created[0].prompt, /^turn these into issues\n[\s\S]*Robin Vega: The actions are in\nRobin Vega: @Codex turn these into issues$/, 'the task gets the question and the whole chat, oldest first');
+      assert.match(created[0].instructions, /never saved to Tana/, 'and the rules for the whole thread');
+      assert.equal(backend.settings.isSynced('codexAsks'), false, 'the link from a question to its task stays on this Mac');
+      // the answer: the latest turn's final answer, read once and then kept
+      let spawned = 0, turn = { status: 'interrupted', items: [{ type: 'agentMessage', phase: 'commentary', text: 'Looking' }] };
+      backend.agent.appServerRpc = () => { spawned++; return { ready: Promise.resolve(), call: async (m) => { assert.equal(m, 'thread/turns/list'); return { data: [turn] }; }, stop() {} }; };
+      assert.deepEqual([...await replies(null, chatDoc.id)].map((a) => [a.messageId, a.state]), [[messageId, 'working']], 'a turn still running elsewhere reads as interrupted, and progress is not the answer');
+      turn = { status: 'completed', items: [{ type: 'agentMessage', phase: 'commentary', text: 'Looking' }, { type: 'agentMessage', phase: 'final_answer', text: 'Made three issues' }] };
+      assert.deepEqual([...await replies(null, chatDoc.id)].map((a) => [a.state, a.text]), [['done', 'Made three issues']]);
+      assert.deepEqual([(await replies(null, chatDoc.id))[0].text, spawned], ['Made three issues', 2], 'a finished answer is not read again');
+      assert.deepEqual([...await replies(null, 'not a chat')], []);
+      // a task that cannot start leaves the question sent and says why beside it
+      backend.agent.createTask = async () => { throw new Error('Codex is not installed on this Mac'); };
+      const failed = await ask(null, chatDoc.id, 'again @codex');
+      assert.deepEqual([chatDoc.data.get('messages').toJSON().at(-1).id, /not installed/.test(failed.codexError)], [failed.messageId, true]);
+    } finally { globalThis.fetch = realFetch; backend.agent.createTask = realCreate; backend.agent.appServerRpc = realRpc; }
+    console.log('ok  codex:ask writes the question for the chat only, hands the whole chat to a local Codex task, and reads its answer back once');
+  }
+
+
 
   // What the web client shows of a conversation, and how it words the thinking line (docs/CHATS.md §4).
   {

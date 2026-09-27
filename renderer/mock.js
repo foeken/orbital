@@ -216,6 +216,7 @@ function mockApi() {
   ] };
   content['tana:chat:mockchat4'] = [chatMsg(true, ['Can you rewrite the data clause in the agreement?'], 4), asking];
   const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGPoyroWu7WKIX9dU1fWNQAuWQbA8sXmUwAAAABJRU5ErkJggg==';
+  const codexAsks = {}; // chatId -> [{ messageId, at }] (askCodex)
   const changed = [], removed = [], statusCbs = [], deleted = new Map(), sensitive = new Set(), codexAssigned = new Set(), codexPrompts = new Map();
   let status = { authenticated: false, authChecking: false, connected: false, syncing: false, lastSync: null, error: null };
   const emit = (docId) => setTimeout(() => changed.forEach((cb) => cb(docId)), 0);
@@ -514,6 +515,9 @@ function mockApi() {
       setTimeout(() => { content[docId].push(chatMsg(false, ['Mock answer to: ' + text], 0, ['Thought for 2 seconds'])); emit(docId); }, 1800);
       return { messageId: sent.chat.id, responding: true }; // main answers replyError beside a saved message when the reply could not be asked for
     },
+    // @Codex (main/codexchat.js): the question is a message to the chat; the answer is local, here after two and a half seconds
+    askCodex: async function (docId, text) { const sent = await this.sendChat(docId, text, [], { ai: false }); (codexAsks[docId] ||= []).push({ messageId: sent.messageId, at: Date.now() }); return { messageId: sent.messageId }; },
+    codexReplies: async (docId) => (codexAsks[docId] || []).map((a) => (Date.now() - a.at < 2500 ? { messageId: a.messageId, state: 'working', text: '' } : { messageId: a.messageId, state: 'done', text: 'Mock answer from Codex, kept on this Mac.' })),
     newChat: async () => {
       const n = { id: 'tana:chat:mocknew' + (++seq), text: 'New chat', kind: 'document', hasChildren: true, editable: false, icon: 'chat', tags: [{ label: 'chat', color: 'grey' }] };
       created[n.id] = n; content[n.id] = []; all.push(n);

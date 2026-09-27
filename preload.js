@@ -142,6 +142,8 @@ contextBridge.exposeInMainWorld('api', {
   chatAnswers: (id) => ipcRenderer.invoke('chat:answers', id), // { ai, canWrite }: whether Tana answers there by itself, and whether you may write in it
   newChat: () => ipcRenderer.invoke('chat:new'),
   answerChat: (id, messageId, answers) => ipcRenderer.invoke('chat:answer', id, messageId, answers), // answers { questionId: { selected, custom } }, or null to skip; then Tana goes on: { messageId, responding, replyError? }
+  askCodex: (id, text) => ipcRenderer.invoke('codex:ask', id, text), // writes the @Codex question to the chat and starts a Codex task on this Mac: { messageId, codexError? }
+  codexReplies: (id) => ipcRenderer.invoke('codex:replies', id), // the @Codex questions in this chat with their answers, local only: [{ messageId, state: working|done|failed, text }]
   inviteToChat: (id, userUri) => ipcRenderer.invoke('chat:invite', id, userUri), // a workspace member joins the chat as an editor: { name } // a new chat with Tana, yours alone: Node to zoom
   taskTypes: () => ipcRenderer.invoke('doc:taskTypes'), // [{ uri, title, hue }]: the workflow types Create task offers (task.html)
   search: (query, scope) => ipcRenderer.invoke('search', query, scope), // scope: { types } or { members } for a link field
