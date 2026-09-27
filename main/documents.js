@@ -26,21 +26,24 @@ async function outlineWithReferences(doc) {
 // and turned the next page's references away for good.
 // ponytail: LIVE_ROWS / 2 targets across every outline on screen; the newest pages win. Hold per page if that matters.
 const liveRefs = new Map();
+// Let go of a target nothing holds any more: not a live reference, a view (subscribed), a read or a wait
+function dropRef(uri) {
+  if (liveRefs.has(uri) || subscribed.has(uri) || onDemand.has(uri) || reading.has(uri)) return;
+  docStates.delete(uri);
+  S.client.sync.unsubscribe(uri).catch(() => {});
+}
 function keepLive(uris) {
   for (const uri of uris.slice(0, LIVE_ROWS / 2)) {
     if (liveRefs.delete(uri)) { liveRefs.set(uri, true); continue; } // already live: now the newest
     liveRefs.set(uri, true);
     // held while it bootstraps (main/state.js reading), as document() holds its read: a sweep must not unsubscribe it
     reading.set(uri, (reading.get(uri) || 0) + 1);
-    subscribe(uri).finally(() => { const left = (reading.get(uri) || 1) - 1; if (left > 0) reading.set(uri, left); else reading.delete(uri); });
+    // ...and let go once it settles if it was pushed out meanwhile, which skipped it while it was still loading
+    subscribe(uri).finally(() => { const left = (reading.get(uri) || 1) - 1; if (left > 0) reading.set(uri, left); else { reading.delete(uri); dropRef(uri); } });
   }
-  for (const uri of [...liveRefs.keys()].slice(0, Math.max(0, liveRefs.size - LIVE_ROWS / 2))) {
-    liveRefs.delete(uri);
-    if (subscribed.has(uri) || onDemand.has(uri) || reading.has(uri)) continue; // a view, a read or a wait still has it
-    docStates.delete(uri);
-    S.client.sync.unsubscribe(uri).catch(() => {});
-  }
+  for (const uri of [...liveRefs.keys()].slice(0, Math.max(0, liveRefs.size - LIVE_ROWS / 2))) { liveRefs.delete(uri); dropRef(uri); }
 }
+const isLiveRef = (uri) => liveRefs.has(uri); // a view's sweep leaves these alone (main/views.js viewRows)
 async function resolveReferences(nodes) {
   const refs = [], mentions = [];
   const lone = n => !n.children?.length && n.segments?.length === 1 && n.segments[0].mention;
@@ -1063,4 +1066,4 @@ const ipc = {
   },
 };
 
-module.exports = { followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, pruneSeen, codexIds, setCodex, creatorOf, document, op, historyIds, readOnDemand, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget, ipc };
+module.exports = { isLiveRef, followSummary, outlineWithReferences, resolveReferences, chatOutline, customCreation, creationOptions, taskTypes, createDocument, typeChoices, typeCandidates, typeList, setType, setTypeHue, discussWith, setField, defineField, addTypeField, info, setSensitive, sensitiveIds, subscribe, invalidateDeleted, onChange, notifyState, setNotify, notifyDefault, notifyOn, notifyWatchedIds, notifySilencedIds, pruneSeen, codexIds, setCodex, creatorOf, document, op, historyIds, readOnDemand, releaseOnDemand, mut, mutTasks, moveBlock, referenceIn, documentAction, archivedTypes, history, linkShared, metaSig, accessContext, canWriteDoc, moveTarget, ipc };

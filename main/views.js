@@ -8,7 +8,7 @@ const { liveTrigger, parseQuery, searchParams, needsTypes, viewParams, completed
 const { readSearch, searchDisplay, searchSort, setSearchQuery, setSearchView } = require('../sdk/node');
 const { LIVE_ROWS, NOT_CONNECTED, S, VIEWS, deletedNodes, docStates, errText, idKind, isDeleted, isMcp, memberTitle, now, reading, truncatedViews, typeTitles, redoStack, report, scheduleRefresh, send, setStatus, subscribed, undoStack, visibleGraphNodes } = require('./state');
 const { graphRow, members, rememberNodeHue, resolveTypes, toNode, typesByTitle } = require('./rows');
-const { codexIds, createDocument, creatorOf, document, historyIds, mut, op, notifySilencedIds, notifyWatchedIds, onChange, pruneSeen, releaseOnDemand, subscribe } = require('./documents');
+const { codexIds, createDocument, creatorOf, document, historyIds, isLiveRef, mut, op, notifySilencedIds, notifyWatchedIds, onChange, pruneSeen, releaseOnDemand, subscribe } = require('./documents');
 const { watchedPages, withSearchHeads } = require('./related');
 const presence = require('./presence');
 const settings = require('./settings');
@@ -84,7 +84,7 @@ async function viewRows(id, filter) {
     // Leaving a filtered view must not discard a document whose local undo step still points at its Loro handle.
     // ...and neither is a document an on-demand read is still waiting for: unsubscribing a bootstrap in flight
     // rejects it as 'unsubscribed <id>' under the reader (main/state.js reading).
-    const held = (nodeId) => shown.has(nodeId) || watched.has(nodeId) || deletedNodes.has(nodeId) || history.has(nodeId) || reading.has(nodeId) || onScreen.has(nodeId);
+    const held = (nodeId) => shown.has(nodeId) || watched.has(nodeId) || deletedNodes.has(nodeId) || history.has(nodeId) || reading.has(nodeId) || onScreen.has(nodeId) || isLiveRef(nodeId);
     const gone = [];
     for (const nodeId of subscribed) if (!held(nodeId)) { subscribed.delete(nodeId); docStates.delete(nodeId); S.client.sync.unsubscribe(nodeId).catch(() => {}); gone.push(nodeId); }
     gone.push(...releaseOnDemand(held)); // what reads opened, oldest first, past LIVE_ROWS of them (main/documents.js)

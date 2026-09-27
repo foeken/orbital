@@ -5243,6 +5243,18 @@ async function main() {
     backend.testRuntime({me:{userUri:ME},client:{sync,graph:{listNodes:async () => ({nodes:[...manyUris, ...otherUris].map((id) => ({id, title:id}))})}}});
     live.length = 0; await backend.outlineWithReferences(other);
     assert.deepEqual([live, gone], [otherUris, [manyUris[0]]], 'the next page\u2019s reference is kept live and the oldest let go: no page is turned away, and none is read again for it');
+    // Pushed out while still loading, a target is let go once its bootstrap settles, so none outlives the cap
+    const slow = new Document('tana:text:' + ulid()), slowUri = 'tana:text:' + ulid();
+    slow.transact(l => { initDocument(l, 'slow reference', ME); });
+    slow.transact(l => { const row = l.getMap('content').get('children').get(0); row.set('nodeName', 'embed'); row.get('attributes').set('tanaUri', slowUri); });
+    backend.testRuntime({me:{userUri:ME},client:{sync,graph:{listNodes:async () => ({nodes:[...manyUris, ...otherUris, slowUri].map((id) => ({id, title:id}))})}}});
+    let settle; const plain = sync.subscribe;
+    sync.subscribe = (id) => (id === slowUri ? new Promise((r) => { settle = r; }) : plain(id));
+    await backend.outlineWithReferences(slow);
+    await backend.outlineWithReferences(many); // 50 newer ones: the slow target is pushed out while it loads
+    gone.length = 0; settle(null); await new Promise((r) => setImmediate(r));
+    assert.ok(gone.includes(slowUri), 'a target pushed out while it loaded is let go once it settles');
+    sync.subscribe = plain;
     sync.unsubscribe = async () => {};
     backend.testRuntime({me:{userUri:ME},client:{sync,graph:{listNodes:async q => { requests.push(q); return {nodes:[{id:targetUri,title:'Actual embedded task',state:{type:'open'},appearance:{hue:0}}]}; }}}});
     assert.equal(resolved[0].id, blockId); assert.equal(resolved[0].reference.node.id, targetUri);
