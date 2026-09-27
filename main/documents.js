@@ -19,6 +19,28 @@ async function outlineWithReferences(doc) {
 // The reference rows of any outline (content embeds, chat attachments and proposals) resolved in one place.
 // A block whose whole content is one mention is Tana's full-reference presentation: it is resolved like a native
 // embed so the row can show the node it points at, while keeping its own identity and its editable text.
+// The targets of the references read last, newest at the end: their own small list, apart from the on-demand reads, so
+// neither sweep sees them. Past the limit the oldest is let go (unless something else holds it), silently: its copy
+// keeps the title it was read with, as a view's rows past LIVE_ROWS do. In the on-demand list a let-go target made the
+// page that cites it read itself again and subscribe it again, every refresh; and a shared budget there filled up
+// and turned the next page's references away for good.
+// ponytail: LIVE_ROWS / 2 targets across every outline on screen; the newest pages win. Hold per page if that matters.
+const liveRefs = new Map();
+function keepLive(uris) {
+  for (const uri of uris.slice(0, LIVE_ROWS / 2)) {
+    if (liveRefs.delete(uri)) { liveRefs.set(uri, true); continue; } // already live: now the newest
+    liveRefs.set(uri, true);
+    // held while it bootstraps (main/state.js reading), as document() holds its read: a sweep must not unsubscribe it
+    reading.set(uri, (reading.get(uri) || 0) + 1);
+    subscribe(uri).finally(() => { const left = (reading.get(uri) || 1) - 1; if (left > 0) reading.set(uri, left); else reading.delete(uri); });
+  }
+  for (const uri of [...liveRefs.keys()].slice(0, Math.max(0, liveRefs.size - LIVE_ROWS / 2))) {
+    liveRefs.delete(uri);
+    if (subscribed.has(uri) || onDemand.has(uri) || reading.has(uri)) continue; // a view, a read or a wait still has it
+    docStates.delete(uri);
+    S.client.sync.unsubscribe(uri).catch(() => {});
+  }
+}
 async function resolveReferences(nodes) {
   const refs = [], mentions = [];
   const lone = n => !n.children?.length && n.segments?.length === 1 && n.segments[0].mention;
@@ -51,22 +73,9 @@ async function resolveReferences(nodes) {
   const deleted = uri => deletedNodes.has(uri);
   for (const ref of refs) { if (targets.has(ref.uri)) ref.node = targets.get(ref.uri); else if (deleted(ref.uri)) ref.deleted = true; }
   // A reference row draws a copy of its target, which only a live target keeps current: subscribed, its rename reaches
-  // the renderer as a change and patches the copy (renderer/app.js patchCopies). A read like any other, let go oldest
-  // first past LIVE_ROWS (releaseOnDemand), so it holds nothing for good (#413). Not a chat: one bootstraps to megabytes
-  // of messages and tool output (docs/CHATS.md), too much to fetch for a title.
-  // ponytail: the first LIVE_ROWS / 2 only, so a page's own references stay well inside the on-demand cap: past it the
-  // sweep let them go, the page was read again for citing them, and that subscribed them all again, every refresh.
-  // The rest keep the title they were read with, as a view's rows past LIVE_ROWS do; page them if a page ever needs more.
-  // The half is of all on-demand reads, not of each page's: several outlines on screen share the one cap. A target
-  // already read keeps its place (it moves to the newest end); a new one takes what room is left.
-  let room = LIVE_ROWS / 2 - onDemand.size;
-  const live = [...new Set(refs.map((ref) => ref.uri))].filter((uri) => targets.has(uri) && idKind(uri) !== 'chat')
-    .slice(0, LIVE_ROWS / 2).filter((uri) => onDemand.has(uri) || room-- > 0);
-  for (const uri of live) {
-    // held while it bootstraps (main/state.js reading), as document() holds its read: a sweep must not unsubscribe it
-    reading.set(uri, (reading.get(uri) || 0) + 1);
-    subscribe(uri).then((doc) => { if (doc) readOnDemand(uri); }).finally(() => { const left = (reading.get(uri) || 1) - 1; if (left > 0) reading.set(uri, left); else reading.delete(uri); });
-  }
+  // the renderer as a change and patches the copy (renderer/app.js patchCopies, #413). Not a chat: one bootstraps to
+  // megabytes of messages and tool output (docs/CHATS.md), too much to fetch for a title.
+  keepLive([...new Set(refs.map((ref) => ref.uri))].filter((uri) => targets.has(uri) && idKind(uri) !== 'chat'));
   // the icon and the hue: a mention says what kind of thing it points at, and is drawn in its type's colour when
   // the target has one (the link's own blue otherwise)
   for (const m of mentions) {
