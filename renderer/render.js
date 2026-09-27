@@ -347,9 +347,12 @@ function renderOutline() {
   let list, hidden = 0;
   // An unchanged, collapsed row is reused; anything expanded or different is rebuilt. Views and result pages (a saved
   // search, a type) list documents keyed by their id, so both go through this; an outline's blocks do not.
-  const before = new Map([...outline.children].filter((el) => el.classList.contains('node')).map((el) => [el.dataset.key, el]));
+  const reuse = !parent || isSearchDoc(parent.node) || isTypeDoc(parent.node); // an outline, Proposals and the Timeline rebuild
+  const before = new Map(reuse ? [...outline.children].filter((el) => el.classList.contains('node')).map((el) => [el.dataset.key, el]) : []);
   const rowEl = (n) => {
-    const old = before.get(n.id), sig = rowSig(n);
+    // and whether the page lets its rows be edited (canEditItem reads the nearest document above): a row drawn before
+    // access changed must not keep its old contenteditable, box and drag handle
+    const old = before.get(n.id), sig = rowSig(n) + (parent ? canEditNode(parent.node) : '');
     if (old && old.dataset.sig === sig && !old.classList.contains('leaving') && !old.querySelector(':scope > .children')) { mkItem(n.id, n, parent); return old; }
     const el = parent ? childEl(n, parent) : nodeEl(n, n.id, null); el.dataset.sig = sig; return el; // childEl: a block row keeps its page's document
   };

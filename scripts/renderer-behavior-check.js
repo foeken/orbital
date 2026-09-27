@@ -3271,19 +3271,23 @@ const definitions = 'const onSearchPage = () => false, pillKey = () => view, set
     let animView = null, caretOnOpen = false;
     const ensureLoaded = () => {}, loadSearchFilter = () => {}, previewRows = () => {}, withDraftTail = (list) => list, mkItem = () => {};
     const isSearchDoc = () => false, isTypeDoc = (n) => n.id.startsWith('tana:type:');
+    let writable = true; const canEditNode = () => writable;
     const childrenOf = (item) => kids.get(item.docId), pageRows = (list) => ({ list, groups: null, hidden: 0 });
     const rowSig = (n) => n.text + '|' + outline.dataset.key;
     const nodeEl = (n, docId) => { built++; return { dataset: { key: docId }, classList: { contains: (c) => c === 'node' }, querySelector: () => null }; };
     ${sourceLine('const childEl')}
     function draw(parent) { outline.dataset.key = parent.key; ${sourceBetween('  let list, hidden = 0;', "  outline.classList.toggle('table-view'")} }
     const page = (id, list) => { kids.set(id, list); return { key: id, docId: id, node: { id, kind: 'document' } }; };
-    ({ draw: (id, list) => { draw(page(id, list)); return { built, els: [...kept] }; } });
+    ({ draw: (id, list) => { draw(page(id, list)); return { built, els: [...kept] }; }, lock: () => { writable = false; } });
   `);
   const three = ['a', 'b', 'c'].map((id) => ({ id: 'tana:text:' + id, text: id, kind: 'document' }));
   const first = page.draw('tana:type:t', three), again = page.draw('tana:type:t', three);
   assert.equal(again.built - first.built, 0, 'a type page redrawn with nothing changed rebuilds none of its rows');
   assert.ok(again.els.every((el, i) => el === first.els[i]), 'it puts the same row elements back');
   assert.equal(page.draw('tana:type:t', [{ ...three[0], text: 'renamed' }, ...three.slice(1)]).built - again.built, 1, 'a changed row is the only one rebuilt');
+  const renamed = [{ ...three[0], text: 'renamed' }, ...three.slice(1)], edits = page.draw('tana:type:t', renamed).built;
+  page.lock();
+  assert.equal(page.draw('tana:type:t', renamed).built - edits, 3, 'a page that can no longer be edited rebuilds its rows, so none keeps its old editor');
   // The pills go with it: whether a row still belongs where it sits is decided while they render (needsCleanup), so a
   // render held back by the caret or a frozen selection would otherwise never be able to offer Clean up.
   assert.match(source, /renderDeferred = true; markFalling\(\); refreshRowChrome\(\); if \(pillsDrawn\) renderPills\(true\); return;/,
