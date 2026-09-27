@@ -3902,6 +3902,18 @@ function runCaretOnOpenScrollCheck() {
 
 // Every list row says who can see it, not only task rows, and the metadata request waits for the row to be on screen.
 function runRowAudienceCheck() {
+  // The Timeline has no Display pill; it used to read the last list view's (a Library showing Updated and no Status
+  // drew Timeline tasks with "Updated just now" and no box). It has its own now, whatever the view chose.
+  const display = vm.runInNewContext(`
+    let zoom = null;
+    const TIMELINE_PAGE = 'orbital:timeline', displayPref = { library: ['updated', 'creator'] }, arranged = () => undefined;
+    const pillKey = () => 'library', onTypePage = () => false, fieldType = () => null, relatedBy = new Map(), isFieldKey = () => false;
+    ${sourceBetween('const DISPLAY_DEFAULT =', '\n// On a type')}
+    ${sourceBetween('const displayKeys =', 'const displayOn =')}
+    (page) => { zoom = page ? { docId: page, nodeId: null } : null; return displayKeys().join(); };
+  `);
+  assert.equal(display(null), 'updated,creator', 'a list view shows what its Display chose');
+  assert.equal(display('orbital:timeline'), 'status,assigned', 'the Timeline shows each task\'s box and assignee, not the last view\'s Updated');
   const api = vm.runInNewContext(`
     const items = new Map(), open = new Map(), pending = new Map();
     const docOf = () => ({ editable: true });
