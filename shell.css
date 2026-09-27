@@ -5,7 +5,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #fff; }
 [data-theme="dark"] body { background: #1b1d1e; }
 #workspace { position: fixed; inset: 0; }
 /* The hairline between the pages is Trellis's divider (8px wide, on the seam), drawn 1px in the line's colour; hovered
-   or dragged, the same 1px turns the darker grey the old grip did (the accent, shell.js tokens). */
+   or dragged, the same 1px turns the app's blue (the accent, shell.js tokens). */
 .trellis [data-trellis-part="divider"]::before { content: ''; position: absolute; background: var(--trellis-border); }
 .trellis [data-trellis-part="divider"][data-axis="x"]::before { top: 0; bottom: 0; left: calc(50% - 0.5px); width: 1px; }
 .trellis [data-trellis-part="divider"][data-axis="y"]::before { left: 0; right: 0; top: calc(50% - 0.5px); height: 1px; }

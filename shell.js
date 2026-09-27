@@ -14,10 +14,11 @@ const single = () => createDocument(L.view('page', { id: 'page', params: { side:
 const usable = (doc) => !!doc && typeof doc === 'object' && Object.values(doc.views || {}).some((v) => v && v.type === 'page');
 let aside = start.signedOut && usable(start.doc) ? start.doc : null;
 
-// The page's own background around it, and one 1px line between panes in the colour the split line had
+// The page's own background around it, one 1px line between panes in the colour the split line had, and the app's blue
+// (a link's, styles.css .text a.link) as the accent: the focused tab's top line, a hovered divider, a tab's drop slot
 const tokens = () => theme === 'dark'
-  ? { '--trellis-bg': '#2b2f31', '--trellis-border': '#2b2f31', '--trellis-panel': '#1b1d1e', '--trellis-tabbar': '#232627', '--trellis-accent': '#4a5053', '--trellis-gap': '0px', '--trellis-radius': '0px', '--trellis-tabbar-height': '38px' }
-  : { '--trellis-bg': '#ececec', '--trellis-border': '#ececec', '--trellis-panel': '#fff', '--trellis-tabbar': '#f6f6f6', '--trellis-accent': '#c8c8c8', '--trellis-gap': '0px', '--trellis-radius': '0px', '--trellis-tabbar-height': '38px' };
+  ? { '--trellis-bg': '#2b2f31', '--trellis-border': '#2b2f31', '--trellis-panel': '#1b1d1e', '--trellis-tabbar': '#232627', '--trellis-accent': '#7fb8dd', '--trellis-gap': '0px', '--trellis-radius': '0px', '--trellis-tabbar-height': '38px' }
+  : { '--trellis-bg': '#ececec', '--trellis-border': '#ececec', '--trellis-panel': '#fff', '--trellis-tabbar': '#f6f6f6', '--trellis-accent': '#508fbb', '--trellis-gap': '0px', '--trellis-radius': '0px', '--trellis-tabbar-height': '38px' };
 // One page alone is the window as it was: no tab bar and no navigation. With more, each has its tab, titled by the page;
 // a right click on it opens the panel menu, led by Rename where the page's title can be typed in (issue #441).
 // Content keeps its layout down to 280 x 200 and scales below that, which is what zooming out shows.
