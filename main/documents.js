@@ -1076,7 +1076,10 @@ const ipc = {
     const n = readNode(doc);
     metaSigs.set(id, metaSig(n)); // from here on, only a change to these fields invalidates the renderer's copy
     // watched rides along: the creator is a graph fact, already cached for anything a view has listed
-    return { ...taskMeta(doc), ...await audienceMetadata(doc, S.me.userUri, S.client.graph, S.client.sync), linkShared: await linkShared(id), watched: notifyOn(n, await creatorOf(id)) };
+    // the owners it reads are reads on demand, let go with the rest (releaseOnDemand); a row draws four people and a
+    // count, so the organization's whole membership does not travel with every row
+    const { people, ...audience } = await audienceMetadata(doc, S.me.userUri, S.client.graph, { subscribe: (uri) => document(uri) });
+    return { ...taskMeta(doc), ...audience, ...(people ? { people: people.slice(0, 4), peopleCount: people.length } : {}), linkShared: await linkShared(id), watched: notifyOn(n, await creatorOf(id)) };
   }),
   // Access has native capability checks independent of the outliner's editable-body support.
   // Watching a node for changes: on by default where you were given access to the document itself and are not its

@@ -3648,6 +3648,34 @@ async function main() {
     console.log('ok  reads past LIVE_ROWS are let go oldest first, never the page on screen or an undoable one');
   }
 
+  // A row's audience (#461): the owners doc:taskMeta reads are reads on demand, let go like any other, and the answer
+  // carries four people and a count, never the organization's whole membership per row.
+  {
+    const backend = mainHelpers(), cache = require('../db'); cache.open(':memory:');
+    const { LIVE_ROWS } = require('../main/state');
+    const docs = new Map(), unsubscribed = [];
+    const make = (title) => { const d = new Document('tana:text:' + ulid()); d.transact((l) => initDocument(l, title, ME)); docs.set(d.id, d); return d.id; };
+    const org = new Document('tana:org:' + ulid()), people = [ME, ...Array.from({ length: 5 }, () => 'tana:user-profile:' + ulid())];
+    org.transact((l) => l.getMap('data').set('memberUserProfileDocUris', Object.fromEntries(people.map((uri, i) => ['m' + i, uri]))));
+    docs.set(org.id, org);
+    const row = make('Everyone sees it');
+    docs.get(row).transact((l) => l.getMap('data').delete('restricted')); // inherits: the organization is its boundary
+    backend.testRuntime({ me: { userUri: ME }, activeView: 'library', win: null, client: {
+      sync: { subscribe: async (id) => docs.get(id) || null, getDocument: (id) => docs.get(id), unsubscribe: async (id) => { unsubscribed.push(id); } },
+      graph: { listNodes: async (p) => ({ nodes: p.nodeIds ? p.nodeIds.map((id) => ({ id })) : [] }),
+        getOwnerChain: async () => ({ entries: [{ uri: row, restricted: false, accessible: true }, { uri: org.id, restricted: true, accessible: true }], effectivelyRestricted: true }) },
+    } });
+    const asked = backend.handlers.get('doc:taskMeta')(null, row);
+    while (!backend.timers.length) await new Promise(setImmediate); // the link-share lookup is batched on a timer, run here by hand
+    backend.timers.shift().fn();
+    const meta = await asked;
+    assert.deepEqual([meta.audience, meta.people.length, meta.people.every((uri) => people.includes(uri)), meta.peopleCount], ['everyone', 4, true, 6], 'four people and how many');
+    for (let i = 0; i <= LIVE_ROWS; i++) await backend.handlers.get('doc:info')(null, make('Row ' + i));
+    await backend.handlers.get('view:list')(null, 'library');
+    assert.ok(unsubscribed.includes(org.id), 'the organization it read is let go with the older reads');
+    console.log('ok  a row\'s audience: four people and a count, and the owners it read are reads on demand');
+  }
+
   // A change to what the rows are built from — a type's icon or colour — refreshes after it. A refresh already running
   // may have built its rows before the change, and answering the change with that run left the old icon in the cache
   // the page then reloads from (#390).

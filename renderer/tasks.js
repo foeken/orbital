@@ -108,7 +108,7 @@ function taskSummary(node, lazy) {
   if (meta.assignees.length) loadMembers(); // names need the member list; loading it re-renders when it arrives
   const scope = typeof meta.audience === 'string' ? meta.audience : meta.audience?.scope;
   const hiddenFrom = (meta.hiddenFrom || []).map(memberName).join(', '); // assigned, but outside the audience (sdk/node.js)
-  return { assignees: meta.assignees.length ? meta.assignees.map(memberName).join(', ') : 'Unassigned', hiddenFrom, audience: audienceInfo(meta.audience, meta.audienceSpace), people: meta.people || [], scope, unknownAudience: scope === 'unknown', linkShared: !!meta.linkShared, watched: !!meta.watched, pinned: isPinned(node.id) };
+  return { assignees: meta.assignees.length ? meta.assignees.map(memberName).join(', ') : 'Unassigned', hiddenFrom, audience: audienceInfo(meta.audience, meta.audienceSpace), people: meta.people || [], peopleCount: meta.peopleCount, scope, unknownAudience: scope === 'unknown', linkShared: !!meta.linkShared, watched: !!meta.watched, pinned: isPinned(node.id) };
 }
 // the same facts for a document that is not a task: no assignee, but it can be shared or public
 function documentSummary(node, lazy) {
@@ -117,7 +117,7 @@ function documentSummary(node, lazy) {
   if (!meta) { if (!lazy) loadTaskMeta(node.id); return null; }
   const audience = audienceInfo(meta.audience, meta.audienceSpace);
   if (!audience && !meta.linkShared && !meta.watched && !isPinned(node.id)) return null;
-  return { assignees: '', audience, people: meta.people || [], scope: typeof meta.audience === 'string' ? meta.audience : meta.audience?.scope, unknownAudience: false, linkShared: !!meta.linkShared, watched: !!meta.watched, pinned: isPinned(node.id) };
+  return { assignees: '', audience, people: meta.people || [], peopleCount: meta.peopleCount, scope: typeof meta.audience === 'string' ? meta.audience : meta.audience?.scope, unknownAudience: false, linkShared: !!meta.linkShared, watched: !!meta.watched, pinned: isPinned(node.id) };
 }
 // a click on a row's fact opens its picker and leaves the caret where it is, as every other row control does
 function clickable(target, open) {
@@ -161,10 +161,11 @@ function peopleEl(summary, node) {
     return f;
   };
   const faces = document.createElement('span'); faces.className = 'faces';
+  const count = summary.peopleCount || uris.length; // main sends the first four and how many (main/documents.js doc:taskMeta)
   faces.append(...uris.slice(0, 4).map(face)); // four bubbles, then "+n"
-  if (uris.length > 4) { const more = document.createElement('span'); more.className = 'face more'; more.textContent = '+' + (uris.length - 4); more.setAttribute('aria-hidden', 'true'); faces.append(more); } // the count after it says how many
+  if (count > 4) { const more = document.createElement('span'); more.className = 'face more'; more.textContent = '+' + (count - 4); more.setAttribute('aria-hidden', 'true'); faces.append(more); } // the count after it says how many
   const el = document.createElement('span'); el.className = 'people';
-  el.append(audienceIcon(summary, node), faces, uris.length === 1 ? '1 person' : uris.length + ' people');
+  el.append(audienceIcon(summary, node), faces, count === 1 ? '1 person' : count + ' people');
   return el;
 }
 // node: the row's document, so its facts open the Cmd+K pickers they describe (Edit assignees, Edit visibility)

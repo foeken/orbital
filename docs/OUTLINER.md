@@ -156,7 +156,8 @@ one per page or feature (`onInbox`, `onRelatedChanged`, `onTimelinePart`, `onSet
   rewriting the subtext and asks again.
 - **Who can see it** (#461). When the audience names its people (`audienceMetadata` returns them for only me,
   selected people and a space, and the organization's membership for everyone), the subtext leads with the audience
-  glyph, a bubble of initials for each of the first four people, then "+n", and the count (`peopleEl`). Each bubble is
+  glyph, a bubble of initials for each of the first four people, then "+n", and the count (`peopleEl`; `doc:taskMeta`
+  sends those four and `peopleCount`, and reads the owners on demand, so they are let go like any read). Each bubble is
   an image named after its person; a guest, whose profile Tana does not let us read, is "Guest". The glyph then leaves
   the facts after the title. A table row keeps it there, because its subtext is its cells. It shows with the Assigned fact.
 - **Block rows: a marker belongs to a list row.** The dot is drawn for `.t-bullet` and the counter for
