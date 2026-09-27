@@ -593,9 +593,7 @@ button.chat-thought-head[aria-expanded="true"]::after { rotate: 135deg; translat
 .chat-proposal-title { font-weight: 500; overflow-wrap: anywhere; }
 .chat-proposal-sub { font-size: 14px; color: var(--muted); }
 .chat-proposal.rejected .chat-proposal-title { color: var(--muted); text-decoration: line-through; } /* settled: quiet, as a done row is */
-.chat-proposal.approved .chat-proposal-sub { color: #17652f; }
 [data-theme="dark"] .chat-proposal { border-color: rgba(255, 255, 255, .12); }
-[data-theme="dark"] .chat-proposal.approved .chat-proposal-sub { color: #6fae82; }
 /* a subagent's chat under the line: a quiet link in the line's grey, its glyph the size of the text (outside a bubble,
    the .bubble .mention rules below do not reach it, and an unsized glyph filled the page) */
 .chat-sub .mention { color: inherit; cursor: pointer; }
