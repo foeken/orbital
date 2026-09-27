@@ -5363,6 +5363,12 @@ async function main() {
     const whileRead = gone.includes(patchedUri);
     settleRead(); await inFlight;
     assert.deepEqual([whileRead, gone.includes(patchedUri)], [false, true], 'a target pushed out while its change was read back is let go once the read is done');
+    // ...and one whose let-go had already started (unsubscribe waiting on local updates) when its change was read back:
+    // the read's subscribe cancels that let-go, so the read lets it go again once done
+    sync.isLive = () => false; sync.subscribe = async () => patchedDoc;
+    gone.length = 0; await backend.handlers.get('doc:info')(null, patchedUri, true);
+    assert.ok(gone.includes(patchedUri), 'a change read back while its document was being let go lets it go again once read');
+    delete sync.isLive;
     delete sync.getDocument;
     sync.unsubscribe = async () => {};
     sync.subscribe = plain;

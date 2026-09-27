@@ -756,7 +756,9 @@ async function document(id, opts = {}) {
   reading.set(id, (reading.get(id) || 0) + 1);
   // a change read back of a document nobody keeps live (a reference already pushed out) is let go again once the last
   // read of it is done, whichever read that is (two panes may read the same change back at once)
-  if (opts.patch && !(S.client.sync.getDocument && S.client.sync.getDocument(id))) passingReads.add(id);
+  // (a document being let go counts as not live: this read's subscribe cancels that let-go, so the read owes it again)
+  const sync = S.client.sync, live = sync.isLive ? sync.isLive(id) : !!(sync.getDocument && sync.getDocument(id));
+  if (opts.patch && !live) passingReads.add(id);
   try {
     const doc = await subscribe(id); // getDocument can expose an empty handle before bootstrap completes
     if (!doc) throw new Error(S.status.error || 'could not subscribe to ' + id);
